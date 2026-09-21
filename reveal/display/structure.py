@@ -819,8 +819,10 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
         _render_typed_structure_output(analyzer, structure, json_format, category_filter, config=config)
         return
 
-    # Handle outline mode
-    if args and getattr(args, 'outline', False):
+    # Handle outline mode. --format json has no separate outline shape: the
+    # standard structure JSON already carries names, lines and nesting, so fall
+    # through to it rather than silently printing text (BACK-1322).
+    if args and getattr(args, 'outline', False) and output_format != 'json':
         _handle_outline_mode(analyzer, structure, path, is_fallback, fallback_lang, config=config)  # type: ignore[arg-type]
         return
 

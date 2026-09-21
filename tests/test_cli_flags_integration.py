@@ -371,5 +371,41 @@ class TestHTMLCLIFlags(unittest.TestCase):
             os.unlink(temp_file)
 
 
+class TestOutlineWithJsonFormat(unittest.TestCase):
+    """BACK-1322: `<file> --outline --format json` used to ignore --format and
+    print the text outline; help advertises it as the structured-output form."""
+
+    def _run(self, suffix, content, *args):
+        with tempfile.NamedTemporaryFile(mode='w', suffix=suffix, delete=False) as f:
+            f.write(content)
+            path = f.name
+        try:
+            return _run_reveal_direct(path, *args)
+        finally:
+            os.unlink(path)
+
+    def test_python_outline_json_is_structure_json(self):
+        import json
+        result = self._run('.py', 'def alpha():\n    pass\n\nclass Beta:\n    def m(self):\n        pass\n',
+                           '--outline', '--format', 'json')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        names = {f['name'] for f in payload['structure']['functions']}
+        self.assertIn('alpha', names)
+        self.assertEqual([c['name'] for c in payload['structure']['classes']], ['Beta'])
+
+    def test_markdown_outline_json_is_json(self):
+        import json
+        result = self._run('.md', '# Title\n\n## Sub\n\ntext\n', '--outline', '--format', 'json')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['type'], 'markdown')
+
+    def test_outline_without_json_still_text(self):
+        result = self._run('.py', 'def alpha():\n    pass\n', '--outline')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('alpha', result.stdout)
+        self.assertFalse(result.stdout.lstrip().startswith('{'))
+
+
 if __name__ == '__main__':
     unittest.main()
