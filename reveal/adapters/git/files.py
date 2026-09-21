@@ -608,7 +608,7 @@ def _read_blame_ignore_revs(workdir: Optional[str]) -> List[str]:
     if not os.path.exists(revs_path):
         return []
     shas: List[str] = []
-    with open(revs_path) as f:
+    with open(revs_path, encoding='utf-8', errors='replace') as f:
         for line in f:
             sha = line.split('#')[0].strip()
             if sha and len(sha) >= 7:

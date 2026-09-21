@@ -59,7 +59,7 @@ def _apply_yaml_config_file(config_path: Path, config: Dict[str, Any]) -> bool:
     import yaml
     if not config_path.exists():
         return False
-    with open(config_path) as f:
+    with open(config_path, encoding='utf-8') as f:
         loaded_raw = yaml.safe_load(f)
     if not loaded_raw or not isinstance(loaded_raw, dict):
         return False

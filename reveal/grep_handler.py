@@ -57,7 +57,7 @@ def handle_grep(path: str, pattern: str, args: Namespace) -> None:
 
     file_path = Path(path)
     try:
-        content = file_path.read_text(errors='replace')
+        content = file_path.read_text(encoding='utf-8', errors='replace')
     except OSError as e:
         print(f"Error: cannot read {path}: {e}", file=sys.stderr)
         sys.exit(1)
@@ -312,7 +312,7 @@ def _collect_dir_results(
                 except ValueError:
                     pass
             try:
-                content = fpath.read_text(errors='replace')
+                content = fpath.read_text(encoding='utf-8', errors='replace')
             except (OSError, UnicodeDecodeError):
                 continue
             lines = content.splitlines()

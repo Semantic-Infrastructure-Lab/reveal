@@ -86,9 +86,9 @@ class N009(BaseRule):
         if nginx_conf is None:
             return False
         try:
-            with open(nginx_conf) as fh:
+            with open(nginx_conf, encoding='utf-8', errors='replace') as fh:
                 conf_content = nginx_strip_comments(fh.read())
-        except OSError:
+        except (OSError, ValueError):
             return False
         for http_block in nginx_extract_http_blocks(conf_content):
             if self.SERVER_TOKENS_OFF.search(http_block):
@@ -98,9 +98,9 @@ class N009(BaseRule):
                 if resolved is None:
                     continue
                 try:
-                    with open(resolved) as fh:
+                    with open(resolved, encoding='utf-8', errors='replace') as fh:
                         if self.SERVER_TOKENS_OFF.search(nginx_strip_comments(fh.read())):
                             return True
-                except OSError:
+                except (OSError, ValueError):
                     pass
         return False

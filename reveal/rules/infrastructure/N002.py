@@ -113,10 +113,10 @@ class N002(BaseRule):
             if resolved is None:
                 return True  # can't verify — suppress rather than false-positive
             try:
-                with open(resolved) as fh:
+                with open(resolved, encoding='utf-8', errors='replace') as fh:
                     if pattern.search(nginx_strip_comments(fh.read())):
                         return True
-            except OSError:
+            except (OSError, ValueError):
                 return True  # unreadable — suppress
         return False
 
@@ -131,10 +131,10 @@ class N002(BaseRule):
                 if resolved is None:
                     continue  # can't verify — don't assume a global setting exists
                 try:
-                    with open(resolved) as fh:
+                    with open(resolved, encoding='utf-8', errors='replace') as fh:
                         if pattern.search(nginx_strip_comments(fh.read())):
                             return True
-                except OSError:
+                except (OSError, ValueError):
                     pass
         return False
 
@@ -153,9 +153,9 @@ class N002(BaseRule):
         if nginx_conf is None:
             return False
         try:
-            with open(nginx_conf) as fh:
+            with open(nginx_conf, encoding='utf-8', errors='replace') as fh:
                 conf_content = nginx_strip_comments(fh.read())
-        except OSError:
+        except (OSError, ValueError):
             return False
         return self._http_blocks_have_directive(conf_content, nginx_conf, pattern)
 

@@ -71,7 +71,7 @@ class N010(BaseRule):
                 if resolved is None or resolved in reported_snippets:
                     continue
                 try:
-                    with open(resolved) as fh:
+                    with open(resolved, encoding='utf-8', errors='replace') as fh:
                         snippet = fh.read()
                     if self.XSS_PROTECTION_PATTERN.search(snippet):
                         reported_snippets.add(resolved)
@@ -88,7 +88,7 @@ class N010(BaseRule):
                             suggestion="Remove X-XSS-Protection line from snippet",
                             context=f"include {include_path}",
                         ))
-                except OSError:
+                except (OSError, ValueError):
                     pass
 
         return detections

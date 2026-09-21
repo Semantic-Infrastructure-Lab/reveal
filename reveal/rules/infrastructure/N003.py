@@ -102,11 +102,11 @@ class N003(BaseRule):
                 present.update(self.MINIMUM_HEADERS)
                 continue
             try:
-                with open(resolved) as fh:
+                with open(resolved, encoding='utf-8', errors='replace') as fh:
                     inc_content = nginx_strip_comments(fh.read())
                 for hm in self.HEADER_PATTERN.finditer(inc_content):
                     present.add(hm.group(1))
-            except OSError:
+            except (OSError, ValueError):
                 # Can't read the file — suppress rather than false-positive
                 present.update(self.MINIMUM_HEADERS)
 

@@ -81,9 +81,9 @@ def scaffold_analyzer(
     analyzers_dir.mkdir(parents=True, exist_ok=True)
     tests_dir.mkdir(parents=True, exist_ok=True)
     docs_dir.mkdir(parents=True, exist_ok=True)
-    analyzer_file.write_text(analyzer_content)
-    test_file.write_text(test_content)
-    doc_file.write_text(doc_content)
+    analyzer_file.write_text(analyzer_content, encoding='utf-8')
+    test_file.write_text(test_content, encoding='utf-8')
+    doc_file.write_text(doc_content, encoding='utf-8')
 
     return {
         'analyzer_file': str(analyzer_file),

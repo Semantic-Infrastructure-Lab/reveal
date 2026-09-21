@@ -108,16 +108,17 @@ def _write_scaffold_files(names: dict, paths: dict) -> None:
     )
 
     paths['adapter_dir'].mkdir(parents=True, exist_ok=True)
-    paths['init_file'].write_text(init_content)
-    paths['adapter_file'].write_text(adapter_content)
-    paths['renderer_file'].write_text(renderer_content)
+    paths['init_file'].write_text(init_content, encoding='utf-8')
+    paths['adapter_file'].write_text(adapter_content, encoding='utf-8')
+    paths['renderer_file'].write_text(renderer_content, encoding='utf-8')
 
     paths['test_file'].parent.mkdir(parents=True, exist_ok=True)
-    paths['test_file'].write_text(test_content)
+    paths['test_file'].write_text(test_content, encoding='utf-8')
 
     paths['doc_file'].parent.mkdir(parents=True, exist_ok=True)
     paths['doc_file'].write_text(
-        f"# {names['class_name']} Adapter\n\nTODO: Document {names['uri_scheme']} adapter usage.\n"
+        f"# {names['class_name']} Adapter\n\nTODO: Document {names['uri_scheme']} adapter usage.\n",
+        encoding='utf-8',
     )
 
 

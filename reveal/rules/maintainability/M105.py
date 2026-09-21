@@ -83,7 +83,7 @@ class M105(BaseRule):
         main_content_parts = []
         for source in wiring_sources:
             try:
-                main_content_parts.append(source.read_text())
+                main_content_parts.append(source.read_text(encoding='utf-8', errors='replace'))
             except Exception as e:
                 logger.warning(f"Could not read {source}: {e}")
         main_content = '\n'.join(main_content_parts)
