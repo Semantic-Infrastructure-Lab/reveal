@@ -109,7 +109,9 @@ its totals sum to the flat `total`.
   `Runtime.getRuntime().exec` (Java/Kotlin), `Command::new` (Rust, only when
   imported from a `process` module), `Process.Start`/`ProcessStartInfo` (C#),
   `Process()` (Swift), `system`/backticks/`Open3` (Ruby). A launcher held in a
-  variable (`rt.exec(...)`) is not detected.
+  variable (`rt.exec(...)`) is not detected. For those eight languages the
+  patterns live in one rule table (`reveal/adapters/ast/surface_rules_subprocess.py`);
+  TypeScript/JavaScript, PHP and C++ detect it in their own scanners.
 - Confidence is `medium` — treat results as a map to review, not a
   compliance-grade inventory.
 

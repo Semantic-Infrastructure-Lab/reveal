@@ -3,10 +3,8 @@
 Two kinds of test:
   * shape tests: one small sample per language, asserting the exact facts emitted, so
     every language yields the same four fact shapes;
-  * coverage tests: every subprocess entry the existing per-language scanners report
-    (BACK-1319 conformance rows) must have a matching fact on the same line, which is
-    the property the rule layer (BACK-1331) depends on to migrate a category without
-    losing sites.
+  * the rule layer's coverage check (every reported site has a fact on its line) lives in
+    tests/test_surface_rules.py, generated from the rule tables.
 """
 
 import pytest
@@ -14,11 +12,6 @@ import pytest
 from reveal.adapters.ast.surface_facts import (
     LANGUAGES, Call, Import, New, Subshell, extract_facts, extract_file_facts,
 )
-from test_surface_conformance import ROWS, _scan
-
-EXT_LANG = {'py': 'python', 'go': 'go', 'java': 'java', 'kt': 'kotlin', 'rb': 'ruby',
-            'rs': 'rust', 'cs': 'csharp', 'swift': 'swift'}
-
 
 def _calls(facts):
     return [(f.path, f.args) for f in facts if isinstance(f, Call)]
@@ -94,6 +87,13 @@ def test_chained_call_keeps_only_the_final_member():
     assert ('exec', ('ls',)) in _calls(facts)
 
 
+def test_qualified_ignores_line_breaks_inside_a_chain():
+    src = 'class A { void f() throws Exception {\n  Runtime.getRuntime()\n      .exec("ls");\n} }\n'
+    call = [f for f in extract_facts(src, 'java') if isinstance(f, Call) and f.name == 'exec'][0]
+    assert call.qualified == 'Runtime.getRuntime().exec'
+    assert call.chained
+
+
 def test_lookalike_is_still_a_plain_call_fact():
     """Facts are neutral: `clap::Command::new` and `process::Command::new` look alike here.
     Telling them apart is the rule layer's job, via the Import facts."""
@@ -101,15 +101,6 @@ def test_lookalike_is_still_a_plain_call_fact():
     facts = extract_facts(src, 'rust')
     assert Import('clap::Command', (), '', 1) in facts
     assert Call('Command', 'new', ('app',), 2, '::') in facts
-
-
-@pytest.mark.parametrize('lang,ext,category,code,expected', ROWS, ids=[f'{r[0]}-{r[2]}' for r in ROWS])
-def test_facts_cover_every_site_the_scanners_report(lang, ext, category, code, expected, tmp_path):
-    entries = _scan(lang, ext, code, tmp_path)[category]
-    assert entries
-    fact_lines = {f.line for f in extract_facts(code, EXT_LANG[ext]) if not isinstance(f, Import)}
-    missing = [e for e in entries if e['line'] not in fact_lines]
-    assert not missing, f'{lang}: scanner sites with no fact on their line: {missing}'
 
 
 def test_extract_file_facts_dispatch_and_decline(tmp_path):

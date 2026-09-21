@@ -3,6 +3,8 @@
 import ast
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from .surface_rules import apply_ast_rules
 from .nav_surface_common import _add_once
 
 _NET_PACKAGES: frozenset = frozenset({
@@ -38,17 +40,6 @@ _SDK_PACKAGES: frozenset = frozenset({
     'mistralai', 'groq', 'together', 'replicate', 'huggingface_hub',
 })
 
-# BACK-1319: process launchers, matched on the import-resolved dotted name so a
-# local `run()` or an unrelated `.system()` method is not a subprocess surface.
-_SUBPROCESS_CALLS: frozenset = frozenset({
-    'subprocess.run', 'subprocess.Popen', 'subprocess.call',
-    'subprocess.check_call', 'subprocess.check_output',
-    'subprocess.getoutput', 'subprocess.getstatusoutput',
-    'os.system', 'os.popen', 'pty.spawn',
-    'asyncio.create_subprocess_exec', 'asyncio.create_subprocess_shell',
-})
-_SUBPROCESS_PREFIXES: tuple = ('os.exec', 'os.spawn', 'os.posix_spawn')
-
 _WRITE_MODES: frozenset = frozenset({'w', 'wb', 'a', 'ab', 'x', 'xb'})
 
 # BACK-1338: a `.write` target longer than this is an expression (the data
@@ -70,12 +61,13 @@ def scan_file_surface(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
         tree = ast.parse(source, filename=file_path)
     except (SyntaxError, OSError):
         return {k: [] for k in _EMPTY}
-    return _scan_tree(tree, file_path)
+    return _scan_tree(tree, file_path, source)
 
 
 def _scan_tree(
     tree: ast.Module,
     file_path: str,
+    source: Optional[str] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
     surfaces: Dict[str, List[Dict[str, Any]]] = {k: [] for k in _EMPTY}
     # BACK-534: resolve @command decorators against real click/typer provenance,
@@ -106,12 +98,13 @@ def _scan_tree(
             _process_function_def(node, file_path, surfaces, aliases, cli_groups, mcp_instances, http_apps,
                                   mcp_registrars)
         elif isinstance(node, ast.Call):
-            _process_call(node, file_path, aliases, surfaces, delegating_writes)
+            _process_call(node, file_path, surfaces, delegating_writes)
         elif isinstance(node, ast.Subscript):
             # BACK-777: os.environ['X'] (read or write) is ast.Subscript, not
             # ast.Call — _process_call's dispatch never sees it.
             _process_subscript(node, file_path, surfaces)
 
+    apply_ast_rules(surfaces, tree, file_path, source)
     return surfaces
 
 
@@ -214,7 +207,6 @@ def _process_function_def(
 def _process_call(
     node: ast.Call,
     file_path: str,
-    aliases: Dict[str, str],
     surfaces: Dict[str, List[Dict[str, Any]]],
     delegating_writes: Optional[set] = None,
 ) -> None:
@@ -230,13 +222,6 @@ def _process_call(
                 'file': file_path,
                 'line': node.lineno,
             })
-    elif _resolved_subprocess_call(node.func, aliases):
-        surfaces['subprocess'].append({
-            'type': 'subprocess',
-            'name': _resolved_subprocess_call(node.func, aliases),
-            'file': file_path,
-            'line': node.lineno,
-        })
     elif _is_fs_write(func_str, node) and id(node) not in (delegating_writes or ()):
         target = _truncate(_extract_first_arg(node) or '?')
         surfaces['fs'].append({
@@ -266,21 +251,6 @@ def _process_call(
                 'file': file_path,
                 'line': node.lineno,
             })
-
-
-def _resolved_subprocess_call(func: ast.expr, aliases: Dict[str, str]) -> str:
-    """Import-resolved dotted name if `func` launches a process, else ''."""
-    parts: List[str] = []
-    node = func
-    while isinstance(node, ast.Attribute):
-        parts.append(node.attr)
-        node = node.value
-    if not isinstance(node, ast.Name) or node.id not in aliases:
-        return ''
-    dotted = '.'.join([aliases[node.id]] + parts[::-1])
-    if dotted in _SUBPROCESS_CALLS or dotted.startswith(_SUBPROCESS_PREFIXES):
-        return dotted
-    return ''
 
 
 def _is_mock_patch_decorator(deco: str) -> bool:

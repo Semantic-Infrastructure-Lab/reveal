@@ -10,6 +10,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from .nav_surface_common import _get_text, _get_line, _add_once, categorize_by_prefix
+from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +44,6 @@ _ASPNET_ROUTE_ATTRIBUTES: Dict[str, str] = {
 _FS_WRITE_CONSTRUCTORS: frozenset = frozenset({'StreamWriter', 'FileStream'})
 _FS_WRITE_STATIC_METHODS: frozenset = frozenset({'WriteAllText', 'WriteAllBytes', 'AppendAllText'})
 
-# BACK-1319: `Process.Start(..)` and `new Process()` / `new ProcessStartInfo(..)`.
-_SUBPROCESS_CONSTRUCTORS: frozenset = frozenset({'Process', 'ProcessStartInfo'})
-
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
 
@@ -66,11 +64,15 @@ def scan_file_surface_csharp(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
 
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:
     surfaces: Dict[str, List[Dict[str, Any]]] = {k: [] for k in _EMPTY_KEYS}
+    rules = RuleScan('csharp', content_bytes)
+    rule_kinds, visit = rules.kinds, rules.visit
 
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
         kind = _zero_arg(node, 'kind')
+        if kind in rule_kinds:
+            visit(node, kind)
 
         if kind == 'using_directive':
             _process_using(node, file_path, content_bytes, surfaces)
@@ -84,6 +86,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
         for ch in reversed(_children(node)):
             stack.append(ch)
 
+    rules.apply(surfaces, file_path)
     return surfaces
 
 
@@ -255,10 +258,6 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
                 'type': 'env_var', 'name': key, 'expr': 'Environment.GetEnvironmentVariable',
                 'file': file_path, 'line': line,
             })
-    elif obj == 'Process' and method == 'Start':
-        surfaces['subprocess'].append({
-            'type': 'subprocess', 'name': 'Process.Start', 'file': file_path, 'line': line,
-        })
     elif obj == 'File' and method in _FS_WRITE_STATIC_METHODS:
         surfaces['fs'].append({
             'type': 'fs_write', 'name': f'File.{method}', 'file': file_path, 'line': line,
@@ -270,12 +269,7 @@ def _process_object_creation(node: Any, file_path: str, content_bytes: bytes,
     for ch in _children(node):
         if _zero_arg(ch, 'kind') == 'identifier':
             type_name = _get_text(ch, content_bytes)
-            if type_name in _SUBPROCESS_CONSTRUCTORS:
-                surfaces['subprocess'].append({
-                    'type': 'subprocess', 'name': f'new {type_name}()',
-                    'file': file_path, 'line': _get_line(node),
-                })
-            elif type_name in _FS_WRITE_CONSTRUCTORS:
+            if type_name in _FS_WRITE_CONSTRUCTORS:
                 surfaces['fs'].append({
                     'type': 'fs_write', 'name': f'new {type_name}()',
                     'file': file_path, 'line': _get_line(node),

@@ -35,10 +35,10 @@ Still ❌ (no shared node shape with the languages above): C++.
 """
 
 import logging
-import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from .nav_surface_common import _get_text, _get_line, _add_once
+from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
 
@@ -74,11 +74,6 @@ _HTTP_VERBS: frozenset = frozenset({
     'get', 'post', 'put', 'delete', 'patch', 'head', 'options',
 })
 
-# BACK-1319: std/tokio `process::Command::new`. A bare `Command::new` is only a
-# subprocess when the file imports it from a `process` module -- clap's
-# `Command::new("app")` is a CLI builder, not a process launch.
-_PROCESS_COMMAND_IMPORT = re.compile(r'\bprocess::(?:Command\b|\{[^}]*\bCommand\b)')
-
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
 
@@ -99,6 +94,8 @@ def scan_file_surface_rust(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
 
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:
     surfaces: Dict[str, List[Dict[str, Any]]] = {k: [] for k in _EMPTY_KEYS}
+    rules = RuleScan('rust', content_bytes)
+    rule_kinds, visit = rules.kinds, rules.visit
     root = tree_root(tree)
 
     # CLI: only a top-level `fn main` is the crate entrypoint.
@@ -108,22 +105,22 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
                 'type': 'main', 'name': 'main', 'file': file_path, 'line': _get_line(child),
             })
 
-    bare_command_is_process = bool(
-        _PROCESS_COMMAND_IMPORT.search(content_bytes.decode('utf-8', errors='replace')))
-
     stack = [root]
     while stack:
         node = stack.pop()
         kind = _zero_arg(node, 'kind')
+        if kind in rule_kinds:
+            visit(node, kind)
         if kind == 'use_declaration':
             _process_use(node, file_path, content_bytes, surfaces)
         elif kind == 'attribute_item':
             _process_attribute(node, file_path, content_bytes, surfaces)
         elif kind == 'call_expression':
-            _process_call(node, file_path, content_bytes, surfaces, bare_command_is_process)
+            _process_call(node, file_path, content_bytes, surfaces)
         for ch in reversed(_children(node)):
             stack.append(ch)
 
+    rules.apply(surfaces, file_path)
     return surfaces
 
 
@@ -250,8 +247,7 @@ def _route_call_verb(call_node: Any, content_bytes: bytes) -> str:
 
 
 def _process_call(node: Any, file_path: str, content_bytes: bytes,
-                  surfaces: Dict[str, List[Dict[str, Any]]],
-                  bare_command_is_process: bool = False) -> None:
+                  surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     fn = _call_function_child(node)
     if fn is None:
         return
@@ -266,12 +262,6 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
                     'type': 'env_var', 'name': key, 'expr': path_text,
                     'file': file_path, 'line': line,
                 })
-            return
-        if path_text.endswith('process::Command::new') or \
-                (path_text == 'Command::new' and bare_command_is_process):
-            surfaces['subprocess'].append({
-                'type': 'subprocess', 'name': 'Command::new', 'file': file_path, 'line': line,
-            })
             return
         if path_text.endswith('fs::write') or path_text.endswith('File::create'):
             surfaces['fs'].append({

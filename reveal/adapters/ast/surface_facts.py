@@ -15,7 +15,7 @@ See internal-docs/design/SURFACE_RULE_TABLE_ARCHITECTURE_2026-09-20.md.
 import ast
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -23,6 +23,7 @@ from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
 from reveal.core.callees import (
     CHAIN_COLLAPSE,
+    CHAIN_FULL,
     callee_name_from_node,
     extract_by_kind,
     is_misparsed_call,
@@ -34,6 +35,9 @@ logger = logging.getLogger(__name__)
 # A string-literal argument is its text; any other argument is None, so positions hold.
 Args = Tuple[Optional[str], ...]
 
+CallFilter = Callable[[str, str], bool]     # (collapsed receiver, name) -> could a rule match?
+NewFilter = Callable[[str], bool]           # (type name) -> could a rule match?
+
 
 @dataclass(frozen=True)
 class Call:
@@ -42,6 +46,13 @@ class Call:
     args: Args
     line: int
     sep: str = '.'         # separator between receiver and name in the source form
+    # Full callee text with any receiver chain kept (`Runtime.getRuntime().exec`); `receiver`
+    # collapses a call on a call result to `.member`, this does not. Whitespace-free, so a chain
+    # split over lines (`Runtime.getRuntime()\n  .exec(..)`) matches. Not part of equality.
+    qualified: str = field(default='', compare=False)
+    # True when the call is made on the RESULT of another call (`a.b().exec()`): `receiver`
+    # is then '' although the call is not bare, so rules must not read '' as "no receiver".
+    chained: bool = False
 
     @property
     def path(self) -> str:
@@ -244,6 +255,7 @@ class _Lang:
     import_kinds: Dict[str, Callable[[Any, Callable], List[Import]]]
     new_kinds: frozenset = frozenset()
     subshell_kinds: frozenset = frozenset()
+    check_misparse: bool = False        # C++ only: `call_expression` also parses some declarations
 
 
 _JAVA_LIKE = _dotted_import(('scoped_identifier', 'identifier'))
@@ -259,7 +271,7 @@ _LANGS: Dict[str, _Lang] = {
                     {'using_directive': _dotted_import(('qualified_name', 'identifier'))},
                     new_kinds=frozenset({'object_creation_expression'})),
     'cpp': _Lang('cpp', frozenset({'call_expression'}), {'preproc_include': _cpp_include},
-                 new_kinds=frozenset({'new_expression'})),
+                 new_kinds=frozenset({'new_expression'}), check_misparse=True),
     'php': _Lang('php', frozenset({'function_call_expression', 'member_call_expression',
                                    'scoped_call_expression'}),
                  {'namespace_use_declaration': _dotted_import(('qualified_name', 'name'))},
@@ -291,50 +303,120 @@ def _ruby_call_is_real(node: Any) -> bool:
     return node.child_by_field_name('method') is not None
 
 
-def _call_fact(node: Any, get_text: Callable, call_kinds: frozenset) -> Optional[Call]:
-    if not _zero_arg(node, 'child_count') or is_misparsed_call(_zero_arg(node, 'kind'), node):
-        return None
+def _callee_name(node: Any, get_text: Callable, call_kinds: frozenset, chain: str) -> Optional[str]:
     handled, name = extract_by_kind(_zero_arg(node, 'kind'), node, get_text,
-                                    call_node_types=call_kinds, chain_receiver=CHAIN_COLLAPSE)
-    if not handled:
-        first = node.child(0)
-        name = callee_name_from_node(first, get_text, call_node_types=call_kinds,
-                                     chain_receiver=CHAIN_COLLAPSE) if first is not None else None
+                                    call_node_types=call_kinds, chain_receiver=chain)
+    if handled:
+        return name
+    first = node.child(0)
+    if first is None:
+        return None
+    return callee_name_from_node(first, get_text, call_node_types=call_kinds, chain_receiver=chain)
+
+
+def _call_fact(node: Any, get_text: Callable, call_kinds: frozenset,
+               want: Optional[CallFilter] = None, check_misparse: bool = False) -> Optional[Call]:
+    if not _zero_arg(node, 'child_count'):
+        return None
+    name = _callee_name(node, get_text, call_kinds, CHAIN_COLLAPSE)
     if not name:
         return None
     receiver, short, sep = _split_path(name)
-    return Call(receiver, short, _args_of(node, get_text), _line(node), sep)
+    if want is not None and not want(receiver, short):
+        return None
+    if check_misparse and is_misparsed_call(_zero_arg(node, 'kind'), node):
+        return None                     # a C++ member-function-pointer declaration, not a call
+    qualified = re.sub(r'\s+', '', _callee_name(node, get_text, call_kinds, CHAIN_FULL) or name)
+    return Call(receiver, short, _args_of(node, get_text), _line(node), sep, qualified,
+                chained=name.startswith('.'))
 
 
-def _new_fact(node: Any, get_text: Callable, call_kinds: frozenset) -> Optional[New]:
+def _new_fact(node: Any, get_text: Callable, call_kinds: frozenset,
+              want: Optional[NewFilter] = None) -> Optional[New]:
     handled, name = extract_by_kind(_zero_arg(node, 'kind'), node, get_text,
                                     call_node_types=call_kinds, chain_receiver=CHAIN_COLLAPSE)
     if not (handled and name):
         return None
     type_name = re.sub(r'<.*>$', '', re.sub(r'^new\s+', '', name))
+    if want is not None and not want(type_name):
+        return None
     return New(type_name, _args_of(node, get_text), _line(node))
 
 
-def _walk_tree(root: Any, spec: _Lang, get_text: Callable) -> List[Fact]:
-    facts: List[Fact] = []
+class FactCollector:
+    """Collects facts one node at a time, so a scanner can feed it from the tree walk it
+    already does instead of paying for a second one.
+
+    `want_call` / `want_new` are optional prefilters (built from the rule tables): a call
+    whose (receiver, name) no rule could match is skipped before its args and qualified
+    text are extracted. That is where the cost is, since most calls match nothing.
+    Imports, subshells and everything the filters accept are always kept.
+
+    `needles`: literal byte strings, at least one of which must occur in the source for any
+    call or `new` to be able to match. When none does, call and `new` nodes are not visited
+    at all for this file (a substring test over the bytes, far cheaper than naming callees).
+    """
+
+    def __init__(self, language: str, content: bytes, want_call: Optional[CallFilter] = None,
+                 want_new: Optional[NewFilter] = None,
+                 needles: Optional[Tuple[bytes, ...]] = None) -> None:
+        self._spec = _LANGS[language]
+        self._get_text = _text(content)
+        self._want_call = want_call
+        self._want_new = want_new
+        self._facts: List[Fact] = []
+        spec = self._spec
+        # Later entries win when a kind has two roles: call > import > new > subshell.
+        self._dispatch: Dict[str, Callable[[Any, str], None]] = {}
+        can_match = needles is None or any(n in content for n in needles)
+        for kinds, handler in ((spec.subshell_kinds, self._visit_subshell),
+                               (spec.new_kinds if can_match else (), self._visit_new),
+                               (spec.import_kinds, self._visit_import),
+                               (spec.call_kinds if can_match else (), self._visit_call)):
+            for k in kinds:
+                self._dispatch[k] = handler
+
+    @property
+    def kinds(self) -> frozenset:
+        """Node kinds `visit` reacts to; a caller may skip `visit` for any other kind."""
+        return frozenset(self._dispatch)
+
+    def visit(self, node: Any, kind: str) -> None:
+        # Hot path: called for every node of every scanned file, and nearly all match nothing.
+        handler = self._dispatch.get(kind)
+        if handler is not None:
+            handler(node, kind)
+
+    def _visit_call(self, node: Any, kind: str) -> None:
+        if kind == 'call' and not _ruby_call_is_real(node):
+            return
+        fact = _call_fact(node, self._get_text, self._spec.call_kinds, self._want_call,
+                          self._spec.check_misparse)
+        if fact:
+            self._facts.append(fact)
+
+    def _visit_import(self, node: Any, kind: str) -> None:
+        self._facts.extend(self._spec.import_kinds[kind](node, self._get_text))
+
+    def _visit_new(self, node: Any, kind: str) -> None:
+        fact = _new_fact(node, self._get_text, self._spec.call_kinds, self._want_new)
+        if fact:
+            self._facts.append(fact)
+
+    def _visit_subshell(self, node: Any, kind: str) -> None:
+        self._facts.append(Subshell(_line(node)))
+
+    def facts(self) -> List[Fact]:
+        return sorted(self._facts, key=lambda f: f.line)
+
+
+def _walk_tree(root: Any, collector: FactCollector) -> List[Fact]:
     stack = [root]
     while stack:
         node = stack.pop()
-        kind = _zero_arg(node, 'kind')
-        if kind in spec.import_kinds:
-            facts.extend(spec.import_kinds[kind](node, get_text))
-        elif kind in spec.new_kinds:
-            fact = _new_fact(node, get_text, spec.call_kinds)
-            if fact:
-                facts.append(fact)
-        elif kind in spec.subshell_kinds:
-            facts.append(Subshell(_line(node)))
-        elif kind in spec.call_kinds and (kind != 'call' or _ruby_call_is_real(node)):
-            fact = _call_fact(node, get_text, spec.call_kinds)
-            if fact:
-                facts.append(fact)
+        collector.visit(node, _zero_arg(node, 'kind'))
         stack.extend(reversed(_children(node)))
-    return sorted(facts, key=lambda f: f.line)
+    return collector.facts()
 
 
 # ── Python: ast walk emitting the same facts ────────────────────────────────
@@ -350,8 +432,8 @@ def _dotted(node: ast.AST) -> Optional[str]:
     return None
 
 
-def _python_facts(source: str) -> List[Fact]:
-    tree = ast.parse(source)
+def python_facts_from_ast(tree: ast.AST) -> List[Fact]:
+    """Facts from an already-parsed Python module (the scanner's own `ast` tree)."""
     facts: List[Fact] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -361,6 +443,7 @@ def _python_facts(source: str) -> List[Fact]:
             facts.extend(Import(module, (a.name,), a.asname or '', node.lineno) for a in node.names)
         elif isinstance(node, ast.Call):
             path = _dotted(node.func)
+            chained = path is None
             if path is None:
                 if isinstance(node.func, ast.Attribute):    # call on a call result: `.attr`
                     path = '.' + node.func.attr
@@ -370,20 +453,25 @@ def _python_facts(source: str) -> List[Fact]:
             args = tuple(
                 a.value if isinstance(a, ast.Constant) and isinstance(a.value, str) else None
                 for a in node.args)
-            facts.append(Call(receiver, name, args, node.lineno, sep))
+            qualified = ast.unparse(node.func) if chained else path
+            facts.append(Call(receiver, name, args, node.lineno, sep, qualified, chained))
     return sorted(facts, key=lambda f: f.line)
 
 
 # ── entry points ────────────────────────────────────────────────────────────
 
+def facts_from_tree(tree: Any, content: bytes, language: str) -> List[Fact]:
+    """All facts from an already-parsed tree-sitter tree."""
+    return _walk_tree(tree_root(tree), FactCollector(language, content))
+
+
 def extract_facts(source: str, language: str) -> List[Fact]:
     """Neutral facts for `source`, ordered by line. `language` is one of `LANGUAGES`."""
     if language == 'python':
-        return _python_facts(source)
-    spec = _LANGS[language]
+        return python_facts_from_ast(ast.parse(source))
     from tree_sitter_language_pack import get_parser   # lazy, like the nav_surface_* scanners
-    tree = ts_parse(get_parser(spec.parser), source)
-    return _walk_tree(tree_root(tree), spec, _text(source.encode('utf-8')))
+    tree = ts_parse(get_parser(_LANGS[language].parser), source)
+    return facts_from_tree(tree, source.encode('utf-8'), language)
 
 
 def extract_file_facts(file_path: str) -> Optional[List[Fact]]:

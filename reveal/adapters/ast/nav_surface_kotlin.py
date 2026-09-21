@@ -22,6 +22,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from .nav_surface_common import _get_text, _get_line, _add_once, categorize_by_prefix
+from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
 
@@ -78,10 +79,6 @@ _FILES_WRITE_METHODS: frozenset = frozenset({
     'write', 'writeString', 'newBufferedWriter', 'newOutputStream',
 })
 
-# BACK-1319: process launchers -- `ProcessBuilder(..)` and `Runtime.getRuntime().exec(..)`.
-_SUBPROCESS_CONSTRUCTORS: frozenset = frozenset({'ProcessBuilder'})
-_RUNTIME_GETTER = 'Runtime.getRuntime()'
-
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
 
@@ -102,6 +99,8 @@ def scan_file_surface_kotlin(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
 
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:
     surfaces: Dict[str, List[Dict[str, Any]]] = {k: [] for k in _EMPTY_KEYS}
+    rules = RuleScan('kotlin', content_bytes)
+    rule_kinds, visit = rules.kinds, rules.visit
     root = tree_root(tree)
 
     # CLI entrypoint: a top-level `fun main` (direct child of the file only, so a
@@ -117,6 +116,8 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
     while stack:
         node = stack.pop()
         kind = _zero_arg(node, 'kind')
+        if kind in rule_kinds:
+            visit(node, kind)
 
         if kind == 'import_header':
             _process_import(node, file_path, content_bytes, surfaces)
@@ -128,6 +129,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
         for ch in reversed(_children(node)):
             stack.append(ch)
 
+    rules.apply(surfaces, file_path)
     return surfaces
 
 
@@ -229,10 +231,6 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
                 'methods': _KTOR_ROUTE_VERBS[verb], 'decorator': verb,
                 'file': file_path, 'line': line,
             })
-        elif verb in _SUBPROCESS_CONSTRUCTORS:
-            _add_once(surfaces['subprocess'], {
-                'type': 'subprocess', 'name': f'{verb}()', 'file': file_path, 'line': line,
-            })
         elif verb in _FS_WRITE_CONSTRUCTORS:
             _add_once(surfaces['fs'], {
                 'type': 'fs_write', 'name': f'{verb}()', 'file': file_path, 'line': line,
@@ -242,10 +240,6 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
     # env: System.getenv("KEY")
     if _zero_arg(callee, 'kind') == 'navigation_expression':
         receiver, method = _navigation_receiver_and_method(callee, content_bytes)
-        if receiver == _RUNTIME_GETTER and method == 'exec':
-            _add_once(surfaces['subprocess'], {
-                'type': 'subprocess', 'name': 'Runtime.exec', 'file': file_path, 'line': line,
-            })
         if method in _FS_WRITE_EXTENSIONS or (receiver == 'Files' and method in _FILES_WRITE_METHODS):
             name = f'Files.{method}' if receiver == 'Files' else f'File.{method}'
             _add_once(surfaces['fs'], {

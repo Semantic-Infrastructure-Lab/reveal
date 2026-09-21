@@ -22,6 +22,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from .nav_surface_common import _get_text, _get_line, _add_once
+from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +52,6 @@ _VAPOR_ROUTE_VERBS: Dict[str, str] = {
     'delete': 'DELETE',
 }
 
-# BACK-1319: Foundation `Process()` (legacy `NSTask()`) and the static `Process.run(..)`.
-_SUBPROCESS_CONSTRUCTORS: frozenset = frozenset({'Process', 'NSTask'})
-
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
 
@@ -74,11 +72,15 @@ def scan_file_surface_swift(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
 
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:
     surfaces: Dict[str, List[Dict[str, Any]]] = {k: [] for k in _EMPTY_KEYS}
+    rules = RuleScan('swift', content_bytes)
+    rule_kinds, visit = rules.kinds, rules.visit
 
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
         kind = _zero_arg(node, 'kind')
+        if kind in rule_kinds:
+            visit(node, kind)
 
         if kind == 'import_declaration':
             _process_import(node, file_path, content_bytes, surfaces)
@@ -90,6 +92,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
         for ch in reversed(_children(node)):
             stack.append(ch)
 
+    rules.apply(surfaces, file_path)
     return surfaces
 
 
@@ -186,23 +189,10 @@ def _is_subscript(value_arguments_node: Any) -> bool:
 def _process_call(node: Any, file_path: str, content_bytes: bytes,
                   surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     children = _children(node)
-    if children and _zero_arg(children[0], 'kind') == 'simple_identifier' and \
-            _get_text(children[0], content_bytes) in _SUBPROCESS_CONSTRUCTORS:
-        _add_once(surfaces['subprocess'], {
-            'type': 'subprocess', 'name': f'{_get_text(children[0], content_bytes)}()',
-            'file': file_path, 'line': _get_line(node),
-        })
-        return
     if not children or _zero_arg(children[0], 'kind') != 'navigation_expression':
         return
     receiver, method = _navigation_receiver_and_method(children[0], content_bytes)
     if method is None:
-        return
-    if receiver == 'Process' and method == 'run':
-        _add_once(surfaces['subprocess'], {
-            'type': 'subprocess', 'name': 'Process.run',
-            'file': file_path, 'line': _get_line(node),
-        })
         return
     suffix = _call_suffix(node)
     if suffix is None:

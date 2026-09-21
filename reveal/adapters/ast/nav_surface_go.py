@@ -43,6 +43,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from .nav_surface_common import _get_text, _get_line, _add_once, categorize_by_prefix
+from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +101,6 @@ _FS_WRITE: Dict[str, frozenset] = {
 }
 
 # os/exec process launchers (BACK-1319).
-_SUBPROCESS_METHODS: frozenset = frozenset({'Command', 'CommandContext'})
 
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
@@ -122,12 +122,16 @@ def scan_file_surface_go(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
 
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:
     surfaces: Dict[str, List[Dict[str, Any]]] = {k: [] for k in _EMPTY_KEYS}
+    rules = RuleScan('go', content_bytes)
+    rule_kinds, visit = rules.kinds, rules.visit
     is_main_package = _package_name(tree, content_bytes) == 'main'
 
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
         kind = _zero_arg(node, 'kind')
+        if kind in rule_kinds:
+            visit(node, kind)
 
         if kind == 'import_spec':
             _process_import(node, file_path, content_bytes, surfaces)
@@ -139,6 +143,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
         for ch in reversed(_children(node)):
             stack.append(ch)
 
+    rules.apply(surfaces, file_path)
     return surfaces
 
 
@@ -238,14 +243,6 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
     if receiver in _FS_WRITE and field in _FS_WRITE[receiver]:
         surfaces['fs'].append({
             'type': 'fs_write', 'name': f'{receiver}.{field}',
-            'file': file_path, 'line': line,
-        })
-        return
-
-    # subprocess: exec.Command / exec.CommandContext
-    if receiver == 'exec' and field in _SUBPROCESS_METHODS:
-        surfaces['subprocess'].append({
-            'type': 'subprocess', 'name': f'exec.{field}',
             'file': file_path, 'line': line,
         })
         return
