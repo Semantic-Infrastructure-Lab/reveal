@@ -1465,7 +1465,7 @@ cat domains.txt | xargs -P 10 -I {} sh -c 'reveal domain://{} --check'
    - **Workaround**: Use ssl:// directly for deep SSL inspection
 
 4. **Requires dnspython**
-   - **Dependency**: `pip install dnspython`
+   - **Dependency**: `pip install reveal-cli[dns]` (or `pip install dnspython`)
    - **Impact**: Won't work without dnspython
    - **Workaround**: Install dependency
 
@@ -1568,7 +1568,7 @@ reveal ssl://example.com/dates
 
 **Solution**:
 ```bash
-pip install dnspython
+pip install reveal-cli[dns]
 ```
 
 ---
@@ -2041,7 +2041,7 @@ A: Propagation validation queries all authoritative nameservers (typically 2-4 s
 
 **Q: Do I need to install dnspython?**
 
-A: Yes. Run `pip install dnspython`. Without it, DNS operations will fail.
+A: Yes. Run `pip install reveal-cli[dns]`. Without it, DNS operations will fail.
 
 ---
 
