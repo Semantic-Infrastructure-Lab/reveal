@@ -23,6 +23,12 @@ from .core import iter_tree as _iter_tree
 from .core.treesitter_compat import _zero_arg, node_sexp
 from .core import tree_root
 from .core import ts_parse
+from .core.node_taxonomy import (
+    DEF_NODES as _DEF_NODES,
+    CLASS_NODES as _CLASS_NODES,
+    STRUCT_NODES as _STRUCT_NODES,
+    IMPORT_NODES as _IMPORT_NODES,
+)
 
 # Suppress tree-sitter deprecation warnings (centralized in core module)
 suppress_treesitter_warnings()
@@ -103,31 +109,37 @@ def _structure_cache_max_files() -> int:
 # TREE-SITTER NODE TYPE CONSTANTS
 # =============================================================================
 # BACK-814: FUNCTION_NODE_TYPES/CLASS_NODE_TYPES/STRUCT_NODE_TYPES/
-# IMPORT_NODE_TYPES/ELEMENT_TYPE_MAP are defined at the BOTTOM of this file
-# (after TreeSitterAnalyzer), derived from node_taxonomy.py's DEF_NODES/
-# CLASS_NODES/STRUCT_NODES/IMPORT_NODES — the actual single source of truth
+# IMPORT_NODE_TYPES/ELEMENT_TYPE_MAP are derived from node_taxonomy.py's
+# DEF_NODES/CLASS_NODES/STRUCT_NODES/IMPORT_NODES -- the single source of truth
 # for "which tree-sitter node kinds mean X across every supported grammar"
 # (see that module's docstring for the BACK-427/430/431/478 history this
-# consolidates). Per-node-kind provenance/corpus comments now live there too.
+# consolidates). Per-node-kind provenance/corpus comments live there too.
 #
-# Placed at module end, not here, because a module-level import of
-# node_taxonomy.py (which lives under reveal.adapters.ast) triggers that
-# package's __init__ chain, which transitively imports analyzers/python.py,
-# which does `from ..treesitter import TreeSitterAnalyzer` — a genuine
-# circular import if TreeSitterAnalyzer isn't bound yet (confirmed live: this
-# was tried at the top of the file first and failed with exactly that
-# ImportError). By the time Python re-enters this partially-initialized
-# module via that cycle, TreeSitterAnalyzer is already defined, so the import
-# succeeds. Same shape nav_exits.py/nav_calls.py already solve for
-# CALL_NODE_TYPES via a function-local deferred import — this can't use that
-# exact form because ELEMENT_TYPE_MAP is consumed at true module scope
-# elsewhere in this file's history; module-end placement covers that too
-# since nothing calls into TreeSitterAnalyzer before this module finishes
-# importing.
+# node_taxonomy lives in reveal.core (BACK-911), which has no dependency on
+# analyzers or adapters, so importing it at the top of this file is safe and
+# does not pull the adapters package into the analyzer import graph (BACK-1359).
+# It used to be imported from reveal.adapters.ast, which forced a module-end
+# deferred import and made `import reveal.treesitter` load every adapter.
 #
 # MAINTENANCE: to add new language support, edit node_taxonomy.py's families,
 # not tuples here.
 # =============================================================================
+
+# arrow_function is deliberately excluded: JS-family arrow functions are
+# extracted via a dedicated path (_extract_arrow_functions/file_handler.py),
+# not this generic node-kind scan, to avoid double-extracting every nested
+# callback arrow expression as a false top-level function.
+FUNCTION_NODE_TYPES = tuple(_DEF_NODES - {'arrow_function'})
+CLASS_NODE_TYPES = tuple(_CLASS_NODES)
+STRUCT_NODE_TYPES = tuple(_STRUCT_NODES)
+IMPORT_NODE_TYPES = tuple(_IMPORT_NODES)
+
+# Mapping from element type to node types (for element extraction)
+ELEMENT_TYPE_MAP = {
+    'function': FUNCTION_NODE_TYPES,
+    'class': CLASS_NODE_TYPES,
+    'struct': STRUCT_NODE_TYPES,
+}
 
 # Node types for call expression extraction (call graph)
 CALL_NODE_TYPES = {
@@ -2024,37 +2036,3 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 calls.append(name)
                 seen_calls.add(name)
         return decision_count + 1, max_depth, calls
-
-
-
-# =============================================================================
-# Deferred derivation of the node-type constants declared near the top of
-# this file (BACK-814) — see the comment there for why this must live here,
-# at module end, rather than at the top: a module-level import of
-# node_taxonomy.py at this file's top would trigger a circular import
-# (adapters.ast's package __init__ chain reaches back into this module
-# before TreeSitterAnalyzer is bound). By this point in the file,
-# TreeSitterAnalyzer is fully defined, so the same import here is safe.
-# =============================================================================
-from .adapters.ast.node_taxonomy import (  # noqa: E402
-    DEF_NODES as _DEF_NODES,
-    CLASS_NODES as _CLASS_NODES,
-    STRUCT_NODES as _STRUCT_NODES,
-    IMPORT_NODES as _IMPORT_NODES,
-)
-
-# arrow_function is deliberately excluded: JS-family arrow functions are
-# extracted via a dedicated path (_extract_arrow_functions/file_handler.py),
-# not this generic node-kind scan, to avoid double-extracting every nested
-# callback arrow expression as a false top-level function.
-FUNCTION_NODE_TYPES = tuple(_DEF_NODES - {'arrow_function'})
-CLASS_NODE_TYPES = tuple(_CLASS_NODES)
-STRUCT_NODE_TYPES = tuple(_STRUCT_NODES)
-IMPORT_NODE_TYPES = tuple(_IMPORT_NODES)
-
-# Mapping from element type to node types (for element extraction)
-ELEMENT_TYPE_MAP = {
-    'function': FUNCTION_NODE_TYPES,
-    'class': CLASS_NODE_TYPES,
-    'struct': STRUCT_NODE_TYPES,
-}
