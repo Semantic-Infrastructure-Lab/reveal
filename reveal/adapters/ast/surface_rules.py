@@ -94,7 +94,12 @@ class Subshell:
 
 @dataclass(frozen=True)
 class Import:
-    """An import of `module` or anything beneath it (segment-aligned prefix)."""
+    """An import of `module` or anything beneath it (segment-aligned prefix).
+
+    An entry containing `*` is a glob over the whole module text instead (`aws_sdk_*`,
+    `aws-sdk-*`); `*` also crosses separators. Use it for families that share a name prefix
+    but have no common segment: Rust crates (`aws_sdk_s3`), Ruby gems (`aws-sdk-s3`).
+    """
     module: Names = ()
 
 
@@ -210,6 +215,12 @@ def _call_fields(rule_match: Call, call: CallFact,
     return {'path': path, 'receiver': receiver, 'name': name, 'key': key or ''}
 
 
+def _module_matches(wanted: str, module: str) -> bool:
+    if '*' in wanted:
+        return fnmatchcase(module, wanted)
+    return module == wanted or any(module.startswith(wanted + sep) for sep in _SEGMENT_SEPARATORS)
+
+
 def _match_fields(m: Match, fact: Fact, aliases: Dict[str, str]) -> Optional[Dict[str, str]]:
     if isinstance(m, Call) and isinstance(fact, CallFact):
         return _call_fields(m, fact, aliases)
@@ -219,8 +230,7 @@ def _match_fields(m: Match, fact: Fact, aliases: Dict[str, str]) -> Optional[Dic
         return {}
     if isinstance(m, Import) and isinstance(fact, ImportFact):
         wanted = _names(m.module)
-        if not wanted or any(fact.module == w or fact.module.startswith(w + sep)
-                             for w in wanted for sep in _SEGMENT_SEPARATORS):
+        if not wanted or any(_module_matches(w, fact.module) for w in wanted):
             return {'module': fact.module}
     return None
 

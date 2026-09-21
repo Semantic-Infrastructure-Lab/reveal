@@ -22,9 +22,10 @@ shape but walks Ruby's grammar for the two dominant web frameworks:
 env access: ``ENV['KEY']`` (``element_reference`` on the ``ENV`` constant) and
 ``ENV.fetch('KEY')`` (a ``call`` on the ``ENV`` constant).
 
-network/db/sdk egress: ``require``/``require_relative`` taxonomy of common
-gems. Ruby's stdlib HTTP client (``net/http``) ships as a require, unlike
-PHP's curl/PDO which are language constructs — so it's tracked here.
+network/db/sdk egress: ``require``/``require_relative`` of common gems, matched by
+the ``Import`` rule tables in ``surface_rules_imports.py`` (BACK-1334 b). Ruby's
+stdlib HTTP client (``net/http``) ships as a require, unlike PHP's curl/PDO which
+are language constructs — so it's tracked there.
 
 No CLI entrypoint category: like PHP, Ruby scripts have no standard ``main``
 node (execution starts at top-of-file), so surfacing one honestly is N/A.
@@ -33,7 +34,7 @@ node (execution starts at top-of-file), so surfacing one honestly is N/A.
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line, _add_once
+from .nav_surface_common import _get_text, _get_line
 from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
@@ -41,19 +42,6 @@ logger = logging.getLogger(__name__)
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
 from reveal.core.treesitter_compat import _zero_arg
-
-_NET_GEMS: frozenset = frozenset({
-    'net/http', 'faraday', 'httparty', 'excon', 'typhoeus', 'rest-client',
-})
-
-_DB_GEMS: frozenset = frozenset({
-    'active_record', 'activerecord', 'sequel', 'mongo', 'mongoid', 'redis',
-    'pg', 'mysql2', 'sqlite3',
-})
-
-_SDK_GEMS: frozenset = frozenset({
-    'aws-sdk', 'stripe', 'twilio-ruby', 'google/cloud', 'sendgrid-ruby', 'mailgun-ruby',
-})
 
 # Sinatra/Rails DSL verbs → HTTP method. 'resources'/'resource' are excluded:
 # they fan out into many routes with no single explicit path, so surfacing
@@ -69,12 +57,6 @@ _ROUTE_VERBS: Dict[str, str] = {
 }
 
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
-
-_PACKAGE_TAXONOMY: tuple = (
-    (_NET_GEMS, 'network'),
-    (_DB_GEMS, 'db'),
-    (_SDK_GEMS, 'sdk'),
-)
 
 
 def scan_file_surface_ruby(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
@@ -172,13 +154,6 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
     # because a receiver can itself be an `identifier` (e.g. `http.get(url)`).
     has_receiver = any(_zero_arg(c, 'kind') == '.' for c in children)
 
-    if name in ('require', 'require_relative') and not has_receiver:
-        args = _arg_list_child(node)
-        strings = _string_arg_texts(args, content_bytes) if args else []
-        if strings:
-            _categorize_gem(strings[0], file_path, _get_line(node), surfaces)
-        return
-
     if name == 'fetch' and children and _zero_arg(children[0], 'kind') == 'constant' and \
             _get_text(children[0], content_bytes) == 'ENV':
         args = _arg_list_child(node)
@@ -201,16 +176,6 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
             'methods': _ROUTE_VERBS[name], 'decorator': name,
             'target': to, 'file': file_path, 'line': _get_line(node),
         })
-
-
-def _categorize_gem(name: str, file_path: str, line: int,
-                     surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    for packages, category in _PACKAGE_TAXONOMY:
-        for prefix in packages:
-            if name == prefix or name.startswith(prefix + '/') or name.startswith(prefix + '-'):
-                entry = {'type': 'import', 'name': name, 'file': file_path, 'line': line}
-                _add_once(surfaces[category], entry)
-                return
 
 
 def _process_element_reference(node: Any, file_path: str, content_bytes: bytes,

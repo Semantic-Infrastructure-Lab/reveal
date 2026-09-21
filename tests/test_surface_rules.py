@@ -310,9 +310,9 @@ def test_documented_env_parity_deltas(lang, code, expected, tmp_path):
     assert sorted(e['name'] for e in _scan(lang, code, tmp_path, 'env')) == expected
 
 
-# ── import-shaped network/db/sdk tables (BACK-1334 slice a) ────────────────
+# ── import-shaped network/db/sdk tables (BACK-1334 slices a, b) ────────────
 
-IMPORT_LANGS = ('go', 'java', 'kotlin', 'csharp')
+IMPORT_LANGS = ('go', 'java', 'kotlin', 'csharp', 'rust', 'swift', 'ruby')
 IMPORT_CATEGORIES = ('network', 'db', 'sdk')
 
 
@@ -334,6 +334,9 @@ def test_import_modules_are_disjoint_across_categories(lang):
     twice; the old code filed it under the first only. Keeping the tables disjoint makes those
     the same thing."""
     def overlaps(a, b):
+        if '*' in a + b:        # a glob covers everything with its literal prefix
+            a, b = a.replace('*', ''), b.replace('*', '')
+            return a.startswith(b) or b.startswith(a)
         return any(a == b or a.startswith(b + s) or b.startswith(a + s) for s in ('.', '/', '::'))
     mods = [(c, m) for c in IMPORT_CATEGORIES for m in _import_modules(lang, c)]
     clashes = [(c1, m1, c2, m2) for i, (c1, m1) in enumerate(mods) for c2, m2 in mods[i + 1:]
@@ -361,8 +364,51 @@ def test_import_modules_are_disjoint_across_categories(lang):
     ('csharp', 'using S = System.Net.Http;\nclass A {}\n', 'network', ['System.Net.Http']),
     ('csharp', 'using static System.Data.X;\nusing AmazonX;\nclass A {}\n', 'db', ['System.Data.X']),
     ('csharp', 'using Amazon.S3;\nusing AmazonX;\nclass A {}\n', 'sdk', ['Amazon.S3']),
+    # Rust: crate roots match exactly; `aws_sdk_` / `azure_` / `google_cloud_` are name-prefix
+    # families. Brace and nested-brace imports are flattened to one entry per path; the replaced
+    # scanner dropped them all (BACK-1334 b: a silent false negative, now fixed).
+    ('rust', 'use reqwest::{Client, Url};\nuse reqwestx::Y;\nuse ureq as u;\nuse std::io;\n',
+     'network', ['reqwest::Client', 'reqwest::Url', 'ureq']),
+    ('rust', 'use sqlx::{postgres::{PgPool, PgRow}};\nuse mysqlx::Z;\n', 'db',
+     ['sqlx::postgres::PgPool', 'sqlx::postgres::PgRow']),
+    ('rust', 'use aws_sdk_s3::Client;\nuse aws_config;\nuse azure_core::Foo;\nuse xaws_sdk_s3::Y;\n',
+     'sdk', ['aws_config', 'aws_sdk_s3::Client', 'azure_core::Foo']),
+    # Swift: the top-level module decides; `import struct M.T` names the type under it.
+    ('swift', 'import Moya\nimport AlamofireX\nimport Foundation\n', 'network', ['Moya']),
+    ('swift', 'import struct GRDB.Database\nimport PostgresNIO\n', 'db',
+     ['GRDB.Database', 'PostgresNIO']),
+    ('swift', 'import FirebaseCore.Sub\nimport class Sentry.Client\n', 'sdk',
+     ['FirebaseCore.Sub', 'Sentry.Client']),
+    # Ruby: a gem matches by name, `gem/...` and `gem-...`; only a literal, receiver-less
+    # `require` / `require_relative` counts. A dynamic string is no entry (the replaced scanner
+    # reported the literal prefix of `"pg#{x}"` as `pg`).
+    ('ruby', "require 'faraday/multipart'\nrequire 'net/http/persistent'\nrequire 'net/httpx'\n"
+             "Foo.require 'faraday'\nrequire_relative 'rest-client'\n", 'network',
+     ['faraday/multipart', 'net/http/persistent', 'rest-client']),
+    ('ruby', "require 'redis-client'\nrequire 'redisx'\nrequire \"pg#{x}\"\nrequire x\n"
+             "begin; require 'mongo'; rescue LoadError; end\n", 'db', ['mongo', 'redis-client']),
+    ('ruby', "require 'aws-sdk-s3'\nrequire 'aws-sdk'\nrequire 'google/cloud/storage'\n"
+             "require 'aws-sdkx'\n", 'sdk', ['aws-sdk', 'aws-sdk-s3', 'google/cloud/storage']),
 ], ids=['go-sdk-alias', 'go-db-blank-dot', 'go-net-grouped-and-single', 'java-static-and-wildcard',
-        'java-wildcard-package', 'kotlin-alias', 'csharp-alias', 'csharp-static', 'csharp-prefix'])
+        'java-wildcard-package', 'kotlin-alias', 'csharp-alias', 'csharp-static', 'csharp-prefix',
+        'rust-brace-imports', 'rust-nested-braces', 'rust-prefix-families', 'swift-module',
+        'swift-import-kinds', 'swift-submodule', 'ruby-network-requires', 'ruby-db-dynamic-strings',
+        'ruby-dash-and-slash'])
 def test_import_edge_forms_match_the_replaced_scanners(lang, code, category, expected, tmp_path):
     assert sorted(e['name'] for e in _scan(lang, code, tmp_path, category)) == expected
     assert all(e['type'] == 'import' for e in _scan(lang, code, tmp_path, category))
+
+
+def test_import_glob_crosses_separators_and_needs_a_literal_prefix():
+    """`aws-sdk-*` is a whole-text glob: it takes `aws-sdk-s3/client` but not `xaws-sdk-s3`."""
+    from reveal.adapters.ast.surface_facts import Import
+    match = sr.Import(module='aws-sdk-*')
+    assert sr._match_fields(match, Import('aws-sdk-s3/client'), {}) == {'module': 'aws-sdk-s3/client'}
+    assert sr._match_fields(match, Import('xaws-sdk-s3'), {}) is None
+    assert sr._match_fields(match, Import('aws-sdk'), {}) is None
+
+
+def test_ruby_require_facts_are_kept_when_no_call_rule_can_match(tmp_path):
+    """Imports are always kept; the needle gate only spares call facts (BACK-1334 b)."""
+    assert [e['name'] for e in _scan('ruby', "require 'faraday'\nputs 1\n", tmp_path, 'network')] \
+        == ['faraday']

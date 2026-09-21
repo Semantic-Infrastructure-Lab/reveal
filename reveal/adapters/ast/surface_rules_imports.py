@@ -1,4 +1,5 @@
-"""`network` / `db` / `sdk` rule tables, import-shaped (BACK-1334 slice a: Go, Java, Kotlin, C#).
+"""`network` / `db` / `sdk` rule tables, import-shaped (BACK-1334 slices a-b: Go, Java, Kotlin, C#,
+Rust, Swift, Ruby).
 
 Each row says "importing this module, or anything beneath it, is a network / database / vendor-SDK
 surface". They replace the per-language `_*_TAXONOMY` tuples that `categorize_by_prefix` walked;
@@ -9,8 +10,13 @@ counter-example (`<module>x` must not match: prefixes are segment-aligned). A fi
 module from two categories reports it under both; the tables keep their modules disjoint and a
 test pins that, so first-match-wins across categories (the old behavior) cannot differ.
 
-Not yet rule-driven: Rust, Swift, Ruby, C++, PHP, Python, TypeScript/JavaScript (BACK-1334
-slices b-d; several match by root name or plain string prefix, not by segment).
+A module containing `*` is a glob for a name-prefix family with no shared segment (Rust
+`aws_sdk_*`, Ruby `aws-sdk-*`); its example fills the `*` with `x` and its lookalike prefixes an `x`.
+Ruby gems are matched as `gem`, `gem/...` and `gem-...` (the old scanner's rule), so each gem
+generates a `gem` row and a `gem-*` row.
+
+Not yet rule-driven: C++, PHP, Python, TypeScript/JavaScript (BACK-1334 slices c-d; several
+match by plain string prefix, not by segment).
 """
 
 from .surface_rules import Import, Rule, register_table
@@ -23,7 +29,14 @@ _SOURCES = {
     'java': ('import {m};\nclass A {{}}\n', 'import {m}x;\nclass A {{}}\n'),
     'kotlin': ('import {m}\nfun main() {{}}\n', 'import {m}x\nfun main() {{}}\n'),
     'csharp': ('using {m};\nclass A {{}}\n', 'using {m}x;\nclass A {{}}\n'),
+    'rust': ('use {m};\nfn main() {{}}\n', 'use {m}x;\nfn main() {{}}\n'),
+    'swift': ('import {m}\n', 'import {m}x\n'),
+    'ruby': ("require '{m}'\n", "require '{m}x'\n"),
 }
+
+# Ruby gem names are also matched with a `-` suffix (`aws-sdk` covers `aws-sdk-s3`), which is not
+# a segment separator, so each gem gets a second, glob row.
+_DASH_FAMILIES = frozenset({'ruby'})
 
 _MODULES = {
     'network': {
@@ -36,6 +49,10 @@ _MODULES = {
                    'java.net.URL', 'java.net.URLConnection', 'java.net.HttpURLConnection',
                    'java.net.http', 'okhttp3', 'retrofit2', 'org.apache.http', 'io.ktor.client'),
         'csharp': ('System.Net.Http', 'RestSharp'),
+        'rust': ('reqwest', 'hyper', 'isahc', 'ureq', 'tonic', 'tungstenite',
+                 'tokio_tungstenite', 'awc'),
+        'swift': ('Alamofire', 'Moya', 'AsyncHTTPClient', 'NIOHTTP1', 'NIOHTTP2'),
+        'ruby': ('net/http', 'faraday', 'httparty', 'excon', 'typhoeus', 'rest-client'),
     },
     'db': {
         'go': ('database/sql', 'gorm.io/gorm', 'github.com/jmoiron/sqlx',
@@ -49,6 +66,12 @@ _MODULES = {
                    'org.jetbrains.exposed'),
         'csharp': ('System.Data', 'Microsoft.EntityFrameworkCore', 'Dapper', 'Npgsql',
                    'MongoDB.Driver', 'StackExchange.Redis'),
+        'rust': ('sqlx', 'diesel', 'tokio_postgres', 'postgres', 'mysql', 'mysql_async', 'redis',
+                 'mongodb', 'rusqlite', 'sea_orm', 'deadpool_postgres'),
+        'swift': ('GRDB', 'SQLite', 'RealmSwift', 'MongoKitten', 'Fluent', 'FluentKit',
+                  'PostgresKit', 'MySQLKit', 'PostgresNIO'),
+        'ruby': ('active_record', 'activerecord', 'sequel', 'mongo', 'mongoid', 'redis', 'pg',
+                 'mysql2', 'sqlite3'),
     },
     'sdk': {
         'go': ('github.com/stripe/stripe-go', 'github.com/aws/aws-sdk-go',
@@ -60,8 +83,29 @@ _MODULES = {
         'kotlin': ('com.amazonaws', 'software.amazon.awssdk', 'com.google.cloud', 'com.azure',
                    'com.stripe', 'com.twilio', 'com.slack.api'),
         'csharp': ('AWSSDK', 'Amazon', 'Azure', 'Google.Cloud', 'Stripe', 'Twilio'),
+        # Old Rust taxonomy: exact crates plus the prefixes aws_sdk_ / aws_config / azure_ /
+        # google_cloud_. `azure_core` and `google_cloud_storage` were exact entries under those
+        # prefixes, so the globs cover them. `aws_config` is now exact (was a bare startswith).
+        'rust': ('stripe', 'rusoto_core', 'rusoto_s3', 'twilio', 'octocrab', 'aws_sdk_*',
+                 'aws_config', 'azure_*', 'google_cloud_*'),
+        'swift': ('Stripe', 'StripeKit', 'Soto', 'AWSSDKSwift', 'FirebaseCore',
+                  'FirebaseFirestore', 'FirebaseAuth', 'Sentry'),
+        'ruby': ('aws-sdk', 'stripe', 'twilio-ruby', 'google/cloud', 'sendgrid-ruby',
+                 'mailgun-ruby'),
     },
 }
+
+
+def _forms(lang: str, module: str) -> tuple:
+    """(pattern, module the example imports, module the lookalike imports)."""
+    if '*' in module:
+        concrete = module.replace('*', 'x')
+        return module, concrete, 'x' + concrete
+    return module, module, module + 'x'
+
+
+def _patterns(lang: str, module: str) -> tuple:
+    return (module, module + '-*') if lang in _DASH_FAMILIES else (module,)
 
 
 def _rows(category: str) -> tuple:
@@ -69,10 +113,12 @@ def _rows(category: str) -> tuple:
     for lang, modules in _MODULES[category].items():
         example, lookalike = _SOURCES[lang]
         for m in modules:
-            rows.append(Rule(category, lang, Import(module=m), '{module}',
-                             example=example.format(m=m),
-                             counter_examples=(lookalike.format(m=m),),
-                             entry_type='import'))
+            for pattern in _patterns(lang, m):
+                pattern, hit, miss = _forms(lang, pattern)
+                rows.append(Rule(category, lang, Import(module=pattern), '{module}',
+                                 example=example.format(m=hit),
+                                 counter_examples=(lookalike.format(m=miss),),
+                                 entry_type='import'))
     return tuple(rows)
 
 

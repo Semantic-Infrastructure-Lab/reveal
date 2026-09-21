@@ -12,16 +12,17 @@ shape but walks Swift's grammar:
 - **CLI entrypoint**: the ``@main`` attribute on a type declaration.
 - **env**: Vapor's ``Environment.get("KEY")`` and
   ``ProcessInfo.processInfo.environment["KEY"]``.
-- **network/db/sdk**: ``import`` module-name taxonomy. ``Foundation`` (which
-  contains ``URLSession``) is deliberately *not* classed as network — it is
-  imported almost everywhere and would flood the read; only dedicated HTTP/DB/
-  SDK modules are tracked, the same curated approach as the other scanners.
+- **network/db/sdk**: ``import`` modules, matched by the ``Import`` rule tables in
+  ``surface_rules_imports.py`` (BACK-1334 b). ``Foundation`` (which contains
+  ``URLSession``) is deliberately *not* classed as network — it is imported almost
+  everywhere and would flood the read; only dedicated HTTP/DB/SDK modules are
+  tracked, the same curated approach as the other scanners.
 """
 
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line, _add_once
+from .nav_surface_common import _get_text, _get_line
 from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
@@ -29,20 +30,6 @@ logger = logging.getLogger(__name__)
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
 from reveal.core.treesitter_compat import _zero_arg
-
-_NET_MODULES: frozenset = frozenset({
-    'Alamofire', 'Moya', 'AsyncHTTPClient', 'NIOHTTP1', 'NIOHTTP2',
-})
-
-_DB_MODULES: frozenset = frozenset({
-    'GRDB', 'SQLite', 'RealmSwift', 'MongoKitten', 'Fluent', 'FluentKit',
-    'PostgresKit', 'MySQLKit', 'PostgresNIO',
-})
-
-_SDK_MODULES: frozenset = frozenset({
-    'Stripe', 'StripeKit', 'Soto', 'AWSSDKSwift', 'FirebaseCore',
-    'FirebaseFirestore', 'FirebaseAuth', 'Sentry',
-})
 
 _VAPOR_ROUTE_VERBS: Dict[str, str] = {
     'get': 'GET',
@@ -82,9 +69,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
         if kind in rule_kinds:
             visit(node, kind)
 
-        if kind == 'import_declaration':
-            _process_import(node, file_path, content_bytes, surfaces)
-        elif kind == 'call_expression':
+        if kind == 'call_expression':
             _process_call(node, file_path, content_bytes, surfaces)
         elif kind == 'attribute':
             _process_attribute(node, file_path, content_bytes, surfaces)
@@ -94,34 +79,6 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
 
     rules.apply(surfaces, file_path)
     return surfaces
-
-
-_MODULE_TAXONOMY: tuple = (
-    (_NET_MODULES, 'network'),
-    (_DB_MODULES, 'db'),
-    (_SDK_MODULES, 'sdk'),
-)
-
-
-def _process_import(node: Any, file_path: str, content_bytes: bytes,
-                    surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    for ch in _children(node):
-        if _zero_arg(ch, 'kind') == 'identifier':
-            module = _get_text(ch, content_bytes)
-            _categorize_module(module, file_path, _get_line(node), surfaces)
-            return
-
-
-def _categorize_module(module: str, file_path: str, line: int,
-                       surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    # Swift imports may be submodule-qualified (e.g. `import Firebase.Firestore`);
-    # match on the first (top-level module) segment.
-    top = module.split('.')[0]
-    for modules, category in _MODULE_TAXONOMY:
-        if top in modules:
-            entry = {'type': 'import', 'name': module, 'file': file_path, 'line': line}
-            _add_once(surfaces[category], entry)
-            return
 
 
 def _string_literal_text(node: Any, content_bytes: bytes) -> str:

@@ -262,9 +262,23 @@ class _Lang:
     new_kinds: frozenset = frozenset()
     subshell_kinds: frozenset = frozenset()
     check_misparse: bool = False        # C++ only: `call_expression` also parses some declarations
+    # Imports spelled as calls (Ruby `require 'x'`): node -> Import facts, run on every call node.
+    call_imports: Optional[Callable[[Any, Callable], List[Import]]] = None
 
 
 _JAVA_LIKE = _dotted_import(('scoped_identifier', 'identifier'))
+
+
+def _ruby_require(node: Any, get_text: Callable) -> List[Import]:
+    """`require 'x'` / `require_relative 'x'` (no receiver, first string argument)."""
+    method = node.child_by_field_name('method')
+    if method is None or node.child_by_field_name('receiver') is not None:
+        return []
+    if get_text(method) not in ('require', 'require_relative'):
+        return []
+    module = next((a for a in _args_of(node, get_text) if a), None)
+    return [Import(module, line=_line(node))] if module else []
+
 
 _LANGS: Dict[str, _Lang] = {
     'go': _Lang('go', frozenset({'call_expression'}), {'import_spec': _go_import}),
@@ -283,7 +297,8 @@ _LANGS: Dict[str, _Lang] = {
                  {'namespace_use_declaration': _dotted_import(('qualified_name', 'name'))},
                  new_kinds=frozenset({'object_creation_expression'}),
                  subshell_kinds=frozenset({'shell_command_expression'})),
-    'ruby': _Lang('ruby', frozenset({'call'}), {}, subshell_kinds=frozenset({'subshell'})),
+    'ruby': _Lang('ruby', frozenset({'call'}), {}, subshell_kinds=frozenset({'subshell'}),
+                  call_imports=_ruby_require),
     'swift': _Lang('swift', frozenset({'call_expression'}),
                    {'import_declaration': _dotted_import(('identifier',))}),
     'typescript': _Lang('typescript', frozenset({'call_expression'}),
@@ -375,10 +390,11 @@ class FactCollector:
         # Later entries win when a kind has two roles: call > import > new > subshell.
         self._dispatch: Dict[str, Callable[[Any, str], None]] = {}
         can_match = needles is None or any(n in content for n in needles)
+        self._can_match = can_match
         for kinds, handler in ((spec.subshell_kinds, self._visit_subshell),
                                (spec.new_kinds if can_match else (), self._visit_new),
                                (spec.import_kinds, self._visit_import),
-                               (spec.call_kinds if can_match else (), self._visit_call)):
+                               (spec.call_kinds if can_match or spec.call_imports else (), self._visit_call)):
             for k in kinds:
                 self._dispatch[k] = handler
 
@@ -396,6 +412,10 @@ class FactCollector:
     def _visit_call(self, node: Any, kind: str) -> None:
         if kind == 'call' and not _ruby_call_is_real(node):
             return
+        if self._spec.call_imports:
+            self._facts.extend(self._spec.call_imports(node, self._get_text))
+            if not self._can_match:      # imports are always kept; calls only when a rule could match
+                return
         fact = _call_fact(node, self._get_text, self._spec.call_kinds, self._want_call,
                           self._spec.check_misparse)
         if fact:

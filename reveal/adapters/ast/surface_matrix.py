@@ -53,11 +53,11 @@ _HAND_CODED: Dict[str, frozenset] = {
     'java': frozenset({'cli', 'http'}),
     'csharp': frozenset({'cli', 'http'}),
     'php': frozenset({'http', 'env', 'fs', 'subprocess', *_IMPORT_TAXONOMY}),
-    'swift': frozenset({'cli', 'http', 'env', *_IMPORT_TAXONOMY}),
+    'swift': frozenset({'cli', 'http', 'env'}),
     'kotlin': frozenset({'cli', 'http'}),
-    'ruby': frozenset({'http', 'env', *_IMPORT_TAXONOMY}),
+    'ruby': frozenset({'http', 'env'}),
     'go': frozenset({'cli', 'http'}),
-    'rust': frozenset({'cli', 'http', *_IMPORT_TAXONOMY}),
+    'rust': frozenset({'cli', 'http'}),
     'cpp': frozenset({'cli', 'http', 'env', 'fs', *_IMPORT_TAXONOMY}),
 }
 

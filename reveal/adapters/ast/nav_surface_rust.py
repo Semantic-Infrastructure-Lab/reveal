@@ -28,8 +28,8 @@ shape but walks Rust's grammar:
   child of the source file — a method named `main` inside an `impl` is not the
   crate entrypoint and is excluded).
 
-- **network/db/sdk egress**: `use`-path crate-root taxonomy (Rust crate roots
-  are the first `::` segment; underscore form, e.g. `aws_sdk_s3`).
+- **network/db/sdk egress**: `use` paths, matched by the `Import` rule tables in
+  `surface_rules_imports.py` (BACK-1334 b).
 
 Still ❌ (no shared node shape with the languages above): C++.
 """
@@ -37,7 +37,7 @@ Still ❌ (no shared node shape with the languages above): C++.
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line, _add_once
+from .nav_surface_common import _get_text, _get_line
 from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
@@ -45,30 +45,6 @@ logger = logging.getLogger(__name__)
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
 from reveal.core.treesitter_compat import _zero_arg
-
-_NET_CRATES: frozenset = frozenset({
-    'reqwest', 'hyper', 'isahc', 'ureq', 'tonic', 'tungstenite',
-    'tokio_tungstenite', 'awc',
-})
-
-_DB_CRATES: frozenset = frozenset({
-    'sqlx', 'diesel', 'tokio_postgres', 'postgres', 'mysql', 'mysql_async',
-    'redis', 'mongodb', 'rusqlite', 'sea_orm', 'deadpool_postgres',
-})
-
-_SDK_CRATES: frozenset = frozenset({
-    'stripe', 'rusoto_core', 'rusoto_s3', 'twilio', 'google_cloud_storage',
-    'azure_core', 'octocrab',
-})
-
-# aws-sdk crates share a common `aws_sdk_*` prefix; handled as a prefix rule.
-_SDK_PREFIXES: tuple = ('aws_sdk_', 'aws_config', 'azure_', 'google_cloud_')
-
-_CRATE_TAXONOMY: tuple = (
-    (_NET_CRATES, 'network'),
-    (_DB_CRATES, 'db'),
-    (_SDK_CRATES, 'sdk'),
-)
 
 _HTTP_VERBS: frozenset = frozenset({
     'get', 'post', 'put', 'delete', 'patch', 'head', 'options',
@@ -111,9 +87,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
         kind = _zero_arg(node, 'kind')
         if kind in rule_kinds:
             visit(node, kind)
-        if kind == 'use_declaration':
-            _process_use(node, file_path, content_bytes, surfaces)
-        elif kind == 'attribute_item':
+        if kind == 'attribute_item':
             _process_attribute(node, file_path, content_bytes, surfaces)
         elif kind == 'call_expression':
             _process_call(node, file_path, content_bytes, surfaces)
@@ -139,48 +113,6 @@ def _string_content(node: Any, content_bytes: bytes) -> Optional[str]:
         if _zero_arg(ch, 'kind') == 'string_content':
             return _get_text(ch, content_bytes)
     return _get_text(node, content_bytes).strip('"')
-
-
-def _crate_root(node: Any, content_bytes: bytes) -> Optional[str]:
-    """First `::` segment of a use path (the crate root)."""
-    if _zero_arg(node, 'kind') == 'use_as_clause':
-        node = next((c for c in _children(node) if _zero_arg(c, 'kind') in ('scoped_identifier', 'identifier')), node)
-    if _zero_arg(node, 'kind') == 'scoped_identifier':
-        for ch in _children(node):
-            if _zero_arg(ch, 'kind') == 'identifier':
-                return _get_text(ch, content_bytes)
-            if _zero_arg(ch, 'kind') == 'scoped_identifier':
-                return _crate_root(ch, content_bytes)
-    if _zero_arg(node, 'kind') == 'identifier':
-        return _get_text(node, content_bytes)
-    return None
-
-
-def _process_use(node: Any, file_path: str, content_bytes: bytes,
-                 surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    target = next((c for c in _children(node)
-                   if _zero_arg(c, 'kind') in ('scoped_identifier', 'use_as_clause', 'identifier',
-                                   'scoped_use_list', 'use_list')), None)
-    if target is None:
-        return
-    crate = _crate_root(target, content_bytes)
-    if crate is None:
-        return
-    line = _get_line(node)
-    full = _get_text(target, content_bytes).split(' as ')[0].strip()
-    _categorize_crate(crate, full, file_path, line, surfaces)
-
-
-def _categorize_crate(crate: str, full: str, file_path: str, line: int,
-                      surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    for prefix in _SDK_PREFIXES:
-        if crate.startswith(prefix):
-            _add_once(surfaces['sdk'], {'type': 'import', 'name': full, 'file': file_path, 'line': line})
-            return
-    for crates, category in _CRATE_TAXONOMY:
-        if crate in crates:
-            _add_once(surfaces[category], {'type': 'import', 'name': full, 'file': file_path, 'line': line})
-            return
 
 
 def _attribute_verb_and_path(attr_item: Any, content_bytes: bytes):
