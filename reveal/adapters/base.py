@@ -146,6 +146,12 @@ class ResourceAdapter(ABC):
     # ssl, help, ...) and for those that already validate it themselves.
     RESOURCE_IS_PATH: bool = False
 
+    # The query fragment that lifts this adapter's own default result cap, e.g.
+    # 'top=1000000'. The CLI injects it for `--all` ("show all results, no
+    # limit") unless the URI already sets that key (BACK-1229). None = the
+    # adapter has no cap to lift, or handles --all itself (claude://, overview://).
+    ALL_RESULTS_QUERY: Optional[str] = None
+
     # help://relationships cluster membership, declared at the adapter
     # definition site so it can't drift from help.py's hand-maintained
     # dicts (BACK-1156). None = not shown in any cluster. Most adapters

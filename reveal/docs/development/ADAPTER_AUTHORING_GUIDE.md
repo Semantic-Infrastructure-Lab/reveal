@@ -82,6 +82,11 @@ class MyAdapter(ResourceAdapter):
     # topics and other non-path resources.
     # RESOURCE_IS_PATH = True
 
+    # If your adapter caps results by default, name the query fragment that
+    # lifts the cap; `reveal myscheme://x --all` then injects it (unless the
+    # URI already sets that key) instead of silently keeping the cap (BACK-1229).
+    # ALL_RESULTS_QUERY = 'top=1000000'
+
     def __init__(self, resource: str = '', query: str = None, **kwargs):
         # super().__init__() sets self.resource/self.query/self.query_params
         # (empty dict) and the compose()/record_composed_error() accumulators

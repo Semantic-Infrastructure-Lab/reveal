@@ -292,6 +292,7 @@ class HotspotsAdapter(ResourceAdapter):
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
+    ALL_RESULTS_QUERY = 'top=1000000'  # default top=10 per ranking; --all lifts it (BACK-1229)
 
     def __init__(self, resource: str, query: Optional[str] = None):
         self.path = str(Path(resource).expanduser())
@@ -312,6 +313,7 @@ class HotspotsAdapter(ResourceAdapter):
                 {'uri': 'hotspots://src', 'description': 'Hotspots in a directory'},
                 {'uri': 'hotspots://.?top=20', 'description': 'Top 20 hotspot files'},
                 {'uri': 'hotspots://.?functions_only=true', 'description': 'Only complex functions'},
+                {'uri': 'reveal hotspots://. --all', 'description': 'Lift the default top-10 cap on both rankings'},
             ],
             'features': [
                 'File-level hotspots via StatsAdapter (quality score, complexity, issues)',

@@ -204,6 +204,7 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
     resource = _inject_exclude_flag(resource, scheme, args)
     resource = _inject_since_until_flags(resource, scheme, args)
     resource = _inject_respect_gitignore_flag(resource, scheme, args)
+    resource = _inject_all_flag(resource, scheme, args)
     _warn_unsupported_structural_flags(resource, scheme, args)
 
     # Look up adapter from registry
@@ -373,6 +374,28 @@ def _inject_respect_gitignore_flag(resource: str, scheme: str, args: 'Namespace'
 # Each flag's argparse default, so "was this actually typed" can be told
 # apart from "left at default" (--depth 0 must count as set, not falsy).
 _STRUCTURAL_FLAG_DEFAULTS = {'depth': None, 'ext': None, 'type': None, 'fast': False}
+
+
+def _inject_all_flag(resource: str, scheme: str, args: 'Namespace') -> str:
+    """Inject --all into the URI query string for adapters that declare how to
+    lift their own result cap (ResourceAdapter.ALL_RESULTS_QUERY, BACK-1229).
+    `reveal 'hotspots://.' --all` was accepted and silently still showed the
+    default top 10 per ranking, while the help promises "no limit". Skip
+    injection if the URI already sets that key -- URI takes precedence, same as
+    --sort/--limit/--exclude. Adapters with no declared fragment are untouched:
+    those either have no cap or (claude://, overview://) handle --all themselves.
+    """
+    if not getattr(args, 'all', False):
+        return resource
+    from ...adapters.base import get_adapter_class
+    fragment = getattr(get_adapter_class(scheme), 'ALL_RESULTS_QUERY', None)
+    if not isinstance(fragment, str) or not fragment:
+        return resource
+    key = fragment.partition('=')[0]
+    query = resource.partition('?')[2]
+    if any(pair.partition('=')[0] == key for pair in query.split('&')):
+        return resource
+    return f"{resource}{'&' if '?' in resource else '?'}{fragment}"
 
 
 def _warn_unsupported_structural_flags(resource: str, scheme: str, args: 'Namespace') -> None:
