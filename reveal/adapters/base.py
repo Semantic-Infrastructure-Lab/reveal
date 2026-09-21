@@ -138,6 +138,14 @@ class ResourceAdapter(ABC):
     # substituting '.' would misread it as a literal host/path instead.
     CANONICAL_EMPTY_RESOURCE: str = '.'
 
+    # True = the resource (the part of the URI before '?') names a filesystem
+    # path. The CLI router then rejects a nonexistent one with exit 1 before
+    # constructing the adapter (BACK-1321): otherwise a typo'd path reads as a
+    # confirmed-empty result ("Total: 0", exit 0), the silent-wrong-answer class.
+    # Leave False for adapters whose resource is not a path (env, sqlite, mysql,
+    # ssl, help, ...) and for those that already validate it themselves.
+    RESOURCE_IS_PATH: bool = False
+
     # help://relationships cluster membership, declared at the adapter
     # definition site so it can't drift from help.py's hand-maintained
     # dicts (BACK-1156). None = not shown in any cluster. Most adapters

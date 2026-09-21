@@ -75,6 +75,13 @@ class MyAdapter(ResourceAdapter):
     # adapters. See reveal/adapters/base.py's LEGACY_INIT docstring.
     LEGACY_INIT = False
 
+    # Set True only if the resource (the part before '?') is a filesystem
+    # path: the CLI then exits 1 with "Path not found" for a nonexistent one
+    # instead of handing your adapter a typo to report as an empty result
+    # (BACK-1321). Leave the default (False) for hosts, connection strings,
+    # topics and other non-path resources.
+    # RESOURCE_IS_PATH = True
+
     def __init__(self, resource: str = '', query: str = None, **kwargs):
         # super().__init__() sets self.resource/self.query/self.query_params
         # (empty dict) and the compose()/record_composed_error() accumulators

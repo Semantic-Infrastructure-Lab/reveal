@@ -273,6 +273,7 @@ class CallsAdapter(ResourceAdapter):
 
     BUDGET_LIST_FIELD = 'levels'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
 
     @staticmethod
     def get_help() -> Dict[str, Any]:

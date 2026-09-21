@@ -569,6 +569,7 @@ class OverviewAdapter(ResourceAdapter):
     HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
 
     def __init__(self, resource: str, query: Optional[str] = None):
         self.path = str(Path(resource).expanduser())

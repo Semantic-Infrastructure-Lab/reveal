@@ -402,6 +402,7 @@ class DependsAdapter(ResourceAdapter):
     _AUTOLOAD_DENSITY_THRESHOLD = 0.15
     _AUTOLOAD_MIN_FILES = 20
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
 
     def __init__(self, resource: str = '', query: Optional[str] = None):
         """Initialize depends adapter.

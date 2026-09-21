@@ -407,6 +407,22 @@ def _warn_unsupported_structural_flags(resource: str, scheme: str, args: 'Namesp
         )
 
 
+def _reject_missing_path(adapter_class: type, scheme: str, resource: str, args: 'Namespace') -> None:
+    """Exit 1 when a path-taking adapter (RESOURCE_IS_PATH) is given a path that
+    does not exist (BACK-1321). One shared check instead of per-adapter ones, so
+    a typo'd path can no longer read as a clean empty result with exit 0."""
+    if getattr(adapter_class, 'RESOURCE_IS_PATH', False) is not True:
+        return
+    path = resource.partition('?')[0]
+    if not path or os.path.exists(path):
+        return
+    msg = f"Path not found: {path}"
+    print(f"Error ({scheme}://): {msg}", file=sys.stderr)
+    if getattr(args, 'format', 'text') == 'json':
+        _emit_adapter_error_envelope(scheme, resource, msg, args)
+    sys.exit(1)
+
+
 def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
                            scheme: str, resource: str, element: Optional[str],
                            args: 'Namespace') -> None:
@@ -426,6 +442,7 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
     # Initialize adapter via from_uri.  Use _default_from_uri when adapter_class is
     # not a real type (e.g. a Mock callable in tests) or lacks from_uri.
     from ...adapters.base import _default_from_uri
+    _reject_missing_path(adapter_class, scheme, resource, args)
     try:
         if isinstance(adapter_class, type) and hasattr(adapter_class, 'from_uri'):
             adapter = adapter_class.from_uri(scheme, resource, element)

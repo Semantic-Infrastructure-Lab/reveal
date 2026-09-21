@@ -94,6 +94,7 @@ class AstAdapter(ResourceAdapter):
     STABILITY = Stability.STABLE
     BUDGET_LIST_FIELD = 'results'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
