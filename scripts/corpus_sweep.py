@@ -6,7 +6,7 @@ complexity silently dropped) plus Java/Dart/Swift nav-call gaps while ~2,300
 fixture tests stayed green. Run them before a release, or after touching
 complexity / call extraction.
 
-Three sweeps, all over a deterministic sample of ~/.cache/reveal-corpus
+Four sweeps, all over a deterministic sample of ~/.cache/reveal-corpus
 (materialize with scripts/fetch_corpus.py):
 
   agree       analyzer calls (get_structure) vs nav calls (range_calls) per
@@ -15,6 +15,10 @@ Three sweeps, all over a deterministic sample of ~/.cache/reveal-corpus
   complexity  per-function complexity for the current tree vs --base-ref
               (built via `git archive`, no stash, no checkout). Reports how
               many files/functions changed per language and examples.
+  surface     every surface:// scanner entry (all categories) for the current tree vs
+              --base-ref, over EVERY corpus file (use -n 0), diffed site by site as
+              (category, type, name, line). The parity guard for surface rule-table
+              migrations (BACK-1329): a migration that must not change behavior shows 0 diffs.
   raw         unnormalized before/after dump (full structure dicts, raw nav
               callee/first_arg/line tuples) for --base-ref. Shows what changed,
               where `agree` only shows that agreement held.
@@ -109,6 +113,8 @@ def sample_files(lang: str, n: int, seed: int) -> list[Path]:
             if f.endswith(exts) and MIN_BYTES < p.stat().st_size < MAX_BYTES and not _minified(p):
                 files.append(p)
     files.sort()  # os.walk order is filesystem-dependent; shuffle from a stable base
+    if n <= 0:  # 0 = every file (surface parity needs the whole corpus, not a sample)
+        return files
     random.Random(seed).shuffle(files)
     return sorted(files[:n])
 
@@ -287,6 +293,41 @@ def worker_raw(langs: list[str], n: int) -> dict:
     return out
 
 
+SURFACE_SCANNERS = {  # corpus language -> (module under reveal.adapters.ast, function)
+    "go": ("nav_surface_go", "scan_file_surface_go"), "java": ("nav_surface_java", "scan_file_surface_java"),
+    "kotlin": ("nav_surface_kotlin", "scan_file_surface_kotlin"),
+    "csharp": ("nav_surface_csharp", "scan_file_surface_csharp"),
+    "rust": ("nav_surface_rust", "scan_file_surface_rust"),
+    "swift": ("nav_surface_swift", "scan_file_surface_swift"),
+    "ruby": ("nav_surface_ruby", "scan_file_surface_ruby"),
+    "cpp": ("nav_surface_cpp", "scan_file_surface_cpp"), "php": ("nav_surface_php", "scan_file_surface_php"),
+    "typescript": ("nav_surface_ts", "scan_file_surface_ts"),
+    "javascript": ("nav_surface_ts", "scan_file_surface_ts"),
+    "python": ("nav_surface", "scan_file_surface"),
+}
+
+
+def worker_surface(langs: list[str], n: int) -> dict:
+    """Every surface entry per file: {file: sorted [category, type, name, line, expr]} or {"error": ...}."""
+    import importlib
+
+    out: dict = {}
+    for lang in langs:
+        if lang not in SURFACE_SCANNERS:
+            continue
+        mod, fn = SURFACE_SCANNERS[lang]
+        scan = getattr(importlib.import_module(f"reveal.adapters.ast.{mod}"), fn)
+        for p in sample_files(lang, n, AGREE_SEED):
+            try:
+                found = scan(str(p))
+                out[rel_name(p, lang)] = sorted(
+                    [cat, str(e.get("type")), str(e.get("name")), e.get("line", 0), str(e.get("expr", ""))]
+                    for cat, entries in found.items() for e in entries)
+            except Exception as e:  # noqa: BLE001 - a sweep must survive one bad file
+                out[rel_name(p, lang)] = {"error": type(e).__name__}
+    return out
+
+
 def run_worker(src: Path, sweep: str, langs: list[str], n: int, topn: int) -> dict:
     """Run one sweep against the reveal tree at `src` in a fresh interpreter."""
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
@@ -365,6 +406,39 @@ def print_raw(rep: dict) -> None:
             print(f"    {ex}")
 
 
+def diff_surface(base: dict, head: dict) -> dict:
+    """Per-language site counts plus every site only in base (`removed`) or only in head (`added`)."""
+    rep: dict = {}
+    for name in sorted(base.keys() & head.keys()):
+        lang = name.split("/", 1)[0]
+        r = rep.setdefault(lang, {"files": 0, "sites": 0, "by_category": {}, "removed": [], "added": []})
+        r["files"] += 1
+        b, h = base[name], head[name]
+        for side in (b, h):
+            if isinstance(side, dict):  # error marker: surface it rather than compare
+                r["removed" if side is b else "added"].append([name, "ERROR", side["error"], 0, ""])
+        if isinstance(b, dict) or isinstance(h, dict):
+            continue
+        r["sites"] += len(h)
+        for cat, *_ in h:
+            r["by_category"][cat] = r["by_category"].get(cat, 0) + 1
+        bs, hs = {tuple(x) for x in b}, {tuple(x) for x in h}
+        r["removed"] += [[name, *x] for x in sorted(bs - hs)]
+        r["added"] += [[name, *x] for x in sorted(hs - bs)]
+    return rep
+
+
+def print_surface(rep: dict) -> None:
+    for lang, r in rep.items():
+        cats = ", ".join(f"{k}={v}" for k, v in sorted(r["by_category"].items()))
+        verdict = "IDENTICAL" if not (r["removed"] or r["added"]) else \
+            f"{len(r['removed'])} removed, {len(r['added'])} added"
+        print(f"{lang:11} {r['files']:>6} files  {r['sites']:>6} sites ({cats})  {verdict}")
+        for tag in ("removed", "added"):
+            for ex in r[tag][:8]:
+                print(f"    {tag:8} {ex}")
+
+
 def print_agree(head: dict, base: dict | None) -> None:
     print(f"{'lang':<11}{'files':>6}{'err':>5}{'jaccard':>10}{'only-an':>9}{'only-nav':>9}" + ("   base" if base else ""))
     for lang, r in head.items():
@@ -385,10 +459,10 @@ def print_complexity(rep: dict) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("sweep", choices=["agree", "complexity", "raw", "_worker"])
+    ap.add_argument("sweep", choices=["agree", "complexity", "raw", "surface", "_worker"])
     ap.add_argument("langs", nargs="*", help="languages to sweep (default: all present in the corpus)")
     ap.add_argument("-n", type=int, default=60, help="files sampled per language (default 60)")
-    ap.add_argument("--base-ref", help="git ref to compare against (required for complexity)")
+    ap.add_argument("--base-ref", help="git ref to compare against (required for complexity, raw, surface)")
     ap.add_argument("-o", "--out", help="write the full JSON report here")
     ap.add_argument("--min-jaccard", type=float,
                     help="agree: exit 1 if any language's analyzer/nav agreement is below this (pre-release gate)")
@@ -407,6 +481,8 @@ def main(argv: list[str] | None = None) -> int:
             result = worker_agree(langs, args.n, args.topn)
         elif sweep == "raw":
             result = worker_raw(langs, args.n)
+        elif sweep == "surface":
+            result = worker_surface(langs, args.n)
         else:
             result = worker_complexity(langs, args.n)
         Path(args.out).write_text(json.dumps(result))
@@ -420,9 +496,10 @@ def main(argv: list[str] | None = None) -> int:
     if not present:
         print(f"corpus not found at {corpus_dir()} -- run scripts/fetch_corpus.py; nothing to sweep")
         return 0
-    if args.sweep in ("complexity", "raw") and not args.base_ref:
+    if args.sweep in ("complexity", "raw", "surface") and not args.base_ref:
         ap.error(f"{args.sweep} needs --base-ref (it diffs base vs current tree)")
 
+    exit_code = 0
     head = run_worker(REPO, args.sweep, present, args.n, args.topn)
     base = None
     if args.base_ref:
@@ -433,6 +510,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.sweep == "agree":
         print_agree(head, base)
         full = {"head": head, "base": base}
+    elif args.sweep == "surface":
+        rep = diff_surface(base, head)
+        print_surface(rep)
+        full = {"summary": rep}
+        if any(r["removed"] or r["added"] for r in rep.values()):
+            exit_code = 1
     elif args.sweep == "raw":
         rep = diff_raw(base, head)
         print_raw(rep)
@@ -451,7 +534,7 @@ def main(argv: list[str] | None = None) -> int:
         if low:
             print(f"\n❌ agreement below floor: " + ", ".join(f"{k}={v}" for k, v in low.items()))
             return 1
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":
