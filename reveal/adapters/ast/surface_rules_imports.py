@@ -15,11 +15,14 @@ A module containing `*` is a glob for a name-prefix family with no shared segmen
 Ruby gems are matched as `gem`, `gem/...` and `gem-...` (the old scanner's rule), so each gem
 generates a `gem` row and a `gem-*` row.
 
+Socket-client Call/New rows for `network` live in `surface_rules_sockets.py` (BACK-1334 slice e).
+
 Not yet rule-driven: C++, PHP, Python, TypeScript/JavaScript (BACK-1334 slices c-d; several
 match by plain string prefix, not by segment).
 """
 
 from .surface_rules import Import, Rule, register_table
+from .surface_rules_sockets import RULES as _SOCKET_RULES
 
 # lang -> (example for module `{m}`, lookalike that must not match). The lookalike appends a
 # letter to the last segment, so it shares the prefix text but not a segment boundary.
@@ -122,5 +125,8 @@ def _rows(category: str) -> tuple:
     return tuple(rows)
 
 
+# A category has one table: `network` also carries the socket-client Call/New rows.
+_EXTRA = {'network': _SOCKET_RULES}
+
 for _category in _MODULES:
-    register_table(_category, _rows(_category))
+    register_table(_category, _rows(_category) + _EXTRA.get(_category, ()))

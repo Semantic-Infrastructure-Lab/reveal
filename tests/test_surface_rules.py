@@ -317,7 +317,7 @@ IMPORT_CATEGORIES = ('network', 'db', 'sdk')
 
 
 def _import_modules(lang, category):
-    return [r.match.module for r in sr.rules_for(category, lang)]
+    return [r.match.module for r in sr.rules_for(category, lang) if isinstance(r.match, sr.Import)]
 
 
 @pytest.mark.parametrize('lang', IMPORT_LANGS)
@@ -412,3 +412,25 @@ def test_ruby_require_facts_are_kept_when_no_call_rule_can_match(tmp_path):
     """Imports are always kept; the needle gate only spares call facts (BACK-1334 b)."""
     assert [e['name'] for e in _scan('ruby', "require 'faraday'\nputs 1\n", tmp_path, 'network')] \
         == ['faraday']
+
+
+@pytest.mark.parametrize('lang,code,expected', [
+    ('go', 'package main\nimport "net"\nfunc f() { net.Dial("tcp", "a:1"); net.DialTimeout("tcp", "b:2", 1) }\n',
+     ['net.Dial', 'net.DialTimeout']),
+    ('rust', 'use std::net::TcpStream;\nfn f() { TcpStream::connect("a:1"); }\n', ['TcpStream::connect']),
+    ('ruby', "s = TCPSocket.open('a', 1)\nSocket.tcp('b', 2)\n", ['Socket.tcp', 'TCPSocket.open']),
+    ('csharp', 'class A { void F() { new TcpClient("a", 1); new UdpClient(); } }\n',
+     ['new TcpClient()', 'new UdpClient()']),
+    ('swift', 'func f() {\n  URLSession.shared.dataTask(with: u)\n  let s = URLSession(configuration: .default)\n}\n',
+     ['URLSession()', 'URLSession.shared.dataTask']),
+], ids=['go', 'rust', 'ruby', 'csharp', 'swift'])
+def test_socket_clients_are_network_call_entries(lang, code, expected, tmp_path):
+    """The stdlib clients import rows cannot see (BACK-1334 e); a listener is not one."""
+    entries = _scan(lang, code, tmp_path, 'network')
+    assert sorted(e['name'] for e in entries) == expected
+    assert {e['type'] for e in entries} == {'call'}
+
+
+def test_a_listening_socket_is_not_a_network_client(tmp_path):
+    assert _scan('go', 'package main\nimport "net"\nfunc f() { net.Listen("tcp", ":80") }\n',
+                 tmp_path, 'network') == []
