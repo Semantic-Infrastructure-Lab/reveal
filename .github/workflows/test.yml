@@ -16,6 +16,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ['3.10', '3.12', '3.14']
+        include:
+          # BACK-1357: ubuntu-latest becomes Ubuntu 26.04 from 2026-10-19
+          # (actions/runner-images#14748). Test it ahead of the switch; the
+          # ubuntu-latest-only steps below stay on the 24.04 leg.
+          - os: ubuntu-26.04
+            python-version: '3.12'
 
     steps:
       - name: Checkout code
@@ -142,6 +148,12 @@ jobs:
       matrix:
         python-version: ['3.12', '3.14']
         lp-version: ['1.12.5', '1.14.3']  # 1.12.5: first post-vendored-parser release; 1.14.3: current upstream
+        include:
+          # BACK-1327: pyproject.toml declares tree-sitter-language-pack>=1.8.1;
+          # test that floor so the declaration cannot silently rot. Full suite
+          # verified green at 1.8.1 locally (2026-09-21).
+          - python-version: '3.12'
+            lp-version: '1.8.1'
 
     steps:
       - name: Checkout code
