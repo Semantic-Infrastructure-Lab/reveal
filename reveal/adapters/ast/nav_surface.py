@@ -11,6 +11,10 @@ _NET_PACKAGES: frozenset = frozenset({
     'grpc', 'websocket', 'websockets',
 })
 
+# BACK-1338: urllib submodules that perform no I/O (URL parsing / exception
+# classes). `urllib` itself and urllib.request stay network.
+_NON_IO_NET_MODULES: frozenset = frozenset({'urllib.parse', 'urllib.error'})
+
 _DB_PACKAGES: frozenset = frozenset({
     'psycopg2', 'psycopg', 'pymysql', 'MySQLdb', 'sqlite3',
     'pymongo', 'motor', 'redis', 'aioredis', 'elasticsearch',
@@ -46,6 +50,10 @@ _SUBPROCESS_CALLS: frozenset = frozenset({
 _SUBPROCESS_PREFIXES: tuple = ('os.exec', 'os.spawn', 'os.posix_spawn')
 
 _WRITE_MODES: frozenset = frozenset({'w', 'wb', 'a', 'ab', 'x', 'xb'})
+
+# BACK-1338: a `.write` target longer than this is an expression (the data
+# being written), not a path; cap it so one entry cannot be a whole call tree.
+_MAX_TARGET_LEN = 60
 
 _EMPTY: Dict[str, List] = {k: [] for k in ('cli', 'http', 'mcp', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')}
 
@@ -85,14 +93,20 @@ def _scan_tree(
     # decorator-name match mistakes any object with a same-named method for
     # an HTTP surface.
     http_apps = _collect_http_apps(tree, aliases)
+    # BACK-1339: tools registered through a project decorator factory that
+    # calls `<mcp>.tool(...)(fn)` internally are still MCP tools.
+    mcp_registrars = _collect_mcp_registrars(tree, mcp_instances)
+    # BACK-1338: `.write` calls inside a stream wrapper's own write() method.
+    delegating_writes = _collect_delegating_writes(tree)
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             _process_import(node, file_path, aliases, surfaces)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            _process_function_def(node, file_path, surfaces, aliases, cli_groups, mcp_instances, http_apps)
+            _process_function_def(node, file_path, surfaces, aliases, cli_groups, mcp_instances, http_apps,
+                                  mcp_registrars)
         elif isinstance(node, ast.Call):
-            _process_call(node, file_path, aliases, surfaces)
+            _process_call(node, file_path, aliases, surfaces, delegating_writes)
         elif isinstance(node, ast.Subscript):
             # BACK-777: os.environ['X'] (read or write) is ast.Subscript, not
             # ast.Call — _process_call's dispatch never sees it.
@@ -138,6 +152,8 @@ def _check_network_import(
     # config, because the root of any google import is always 'google'.
     parts = name.split('.')
     prefixes = ['.'.join(parts[:i]) for i in range(1, len(parts) + 1)]
+    if any(p in _NON_IO_NET_MODULES for p in prefixes):
+        return
     if any(p in _NET_PACKAGES for p in prefixes):
         _add_once(surfaces['network'], {'type': 'import', 'name': name, 'file': file_path, 'line': line})
     elif any(p in _DB_PACKAGES for p in prefixes):
@@ -154,11 +170,13 @@ def _process_function_def(
     cli_groups: Optional[set] = None,
     mcp_instances: Optional[set] = None,
     http_apps: Optional[set] = None,
+    mcp_registrars: Optional[set] = None,
 ) -> None:
     aliases = aliases or {}
     cli_groups = cli_groups or set()
     mcp_instances = mcp_instances or set()
     http_apps = http_apps or set()
+    mcp_registrars = mcp_registrars or set()
     for decorator in node.decorator_list:
         deco_str = _unparse_expr(decorator)
 
@@ -183,7 +201,7 @@ def _process_function_def(
                 'file': file_path,
                 'line': node.lineno,
             })
-        elif _mcp_tool_has_provenance(decorator, aliases, mcp_instances):
+        elif _mcp_tool_has_provenance(decorator, aliases, mcp_instances, mcp_registrars):
             surfaces['mcp'].append({
                 'type': 'tool',
                 'name': node.name,
@@ -198,6 +216,7 @@ def _process_call(
     file_path: str,
     aliases: Dict[str, str],
     surfaces: Dict[str, List[Dict[str, Any]]],
+    delegating_writes: Optional[set] = None,
 ) -> None:
     func_str = _unparse_expr(node.func)
 
@@ -218,8 +237,8 @@ def _process_call(
             'file': file_path,
             'line': node.lineno,
         })
-    elif _is_fs_write(func_str, node):
-        target = _extract_first_arg(node) or '?'
+    elif _is_fs_write(func_str, node) and id(node) not in (delegating_writes or ()):
+        target = _truncate(_extract_first_arg(node) or '?')
         surfaces['fs'].append({
             'type': 'fs_write',
             'name': func_str,
@@ -458,7 +477,8 @@ def _http_route_has_provenance(deco: ast.expr, aliases: Dict[str, str], http_app
 # mistakes any unrelated `.tool()`-shaped decorator — e.g. LangChain's
 # `@tool` — for an MCP tool registration.
 _MCP_FRAMEWORK_ROOTS: frozenset = frozenset({'mcp', 'fastmcp'})
-_MCP_CONSTRUCTORS: frozenset = frozenset({'FastMCP'})
+# `MCPServer` is the official SDK's low-level server class (reveal's own).
+_MCP_CONSTRUCTORS: frozenset = frozenset({'FastMCP', 'MCPServer'})
 
 
 def _resolves_to_mcp_framework(name: Optional[str], aliases: Dict[str, str]) -> bool:
@@ -498,9 +518,13 @@ def _collect_mcp_instances(tree: ast.Module, aliases: Dict[str, str]) -> set:
     return instances
 
 
-def _mcp_tool_has_provenance(deco: ast.expr, aliases: Dict[str, str], mcp_instances: set) -> bool:
+def _mcp_tool_has_provenance(
+    deco: ast.expr, aliases: Dict[str, str], mcp_instances: set, mcp_registrars: Optional[set] = None,
+) -> bool:
     """True when a `tool`-shaped decorator actually resolves to mcp/fastmcp."""
     func = deco.func if isinstance(deco, ast.Call) else deco
+    if isinstance(func, ast.Name) and func.id in (mcp_registrars or ()):
+        return True
     if isinstance(func, ast.Name):
         # bare @tool (e.g. `from mcp.server.fastmcp import tool`)
         return _resolves_to_mcp_framework(func.id, aliases)
@@ -510,6 +534,41 @@ def _mcp_tool_has_provenance(deco: ast.expr, aliases: Dict[str, str], mcp_instan
             return True
         return _resolves_to_mcp_framework(_leftmost_name(base), aliases)
     return False
+
+
+def _collect_mcp_registrars(tree: ast.Module, mcp_instances: set) -> set:
+    """Module-level functions that register a tool on an MCP instance via
+    `<mcp>.tool(...)(fn)` — a decorator factory wrapping `@mcp.tool()` (BACK-1339).
+    Only the outermost function is named, so an inner helper called `decorator`
+    elsewhere in the file is not swept in."""
+    registrars: set = set()
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for call in ast.walk(node):
+            inner = call.func if isinstance(call, ast.Call) else None
+            if (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute)
+                    and inner.func.attr == 'tool'
+                    and isinstance(inner.func.value, ast.Name)
+                    and inner.func.value.id in mcp_instances):
+                registrars.add(node.name)
+                break
+    return registrars
+
+
+def _collect_delegating_writes(tree: ast.Module) -> set:
+    """ids of `.write`/`.writelines` calls made inside a method that is itself
+    named write/writelines — a stream wrapper forwarding to another writer,
+    whose real sink is elsewhere (BACK-1338)."""
+    ids: set = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in ('write', 'writelines'):
+            ids.update(id(c) for c in ast.walk(node) if isinstance(c, ast.Call))
+    return ids
+
+
+def _truncate(text: str) -> str:
+    return text if len(text) <= _MAX_TARGET_LEN else text[:_MAX_TARGET_LEN - 1] + '…'
 
 
 def _is_env_access(func_str: str) -> bool:

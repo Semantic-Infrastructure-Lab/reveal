@@ -2231,5 +2231,120 @@ class TestNavSurfaceCpp(unittest.TestCase):
         self.assertEqual(len(result['http']), 0)
 
 
+class TestPythonSurfacePrecision(unittest.TestCase):
+    """BACK-1338 / BACK-1339: precision and recall gaps seen on reveal's own tree."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _surfaces(self, source):
+        _write(self.tmp, 'mod.py', source)
+        return _scan_surface(Path(self.tmp))['surfaces']
+
+    def test_urllib_parse_and_error_are_not_network(self):
+        s = self._surfaces('''\
+            import urllib.parse
+            from urllib.parse import urlparse, parse_qs
+            from urllib import parse
+            import urllib.error
+        ''')
+        self.assertEqual(s['network'], [])
+
+    def test_urllib_request_and_socket_still_network(self):
+        s = self._surfaces('''\
+            import urllib.request
+            from urllib import request
+            import socket
+        ''')
+        self.assertEqual({e['name'] for e in s['network']}, {'urllib.request', 'socket'})
+
+    def test_delegating_write_method_is_not_fs(self):
+        s = self._surfaces('''\
+            class Tee:
+                def write(self, data):
+                    self.original.write(data)
+                    self.capture.write(data)
+                def writelines(self, lines):
+                    self.original.writelines(lines)
+        ''')
+        self.assertEqual(s['fs'], [])
+
+    def test_write_outside_a_write_method_still_fs(self):
+        s = self._surfaces('''\
+            def save(path, data):
+                with open(path, 'w') as f:
+                    f.write(data)
+        ''')
+        self.assertEqual({e['name'] for e in s['fs']}, {'open', 'f.write'})
+
+    def test_long_write_target_truncated(self):
+        s = self._surfaces('''\
+            def save(f):
+                f.write(build_something_very_long(alpha_argument, beta_argument, gamma_argument, delta_argument))
+        ''')
+        target = s['fs'][0]['target']
+        self.assertLessEqual(len(target), 60)
+        self.assertTrue(target.endswith('…'))
+
+    def test_mcpserver_constructor_detected(self):
+        s = self._surfaces('''\
+            from mcp.server import MCPServer
+
+            server = MCPServer("demo")
+
+            @server.tool()
+            def ping() -> str:
+                return "pong"
+        ''')
+        self.assertEqual([e['name'] for e in s['mcp']], ['ping'])
+
+    def test_decorator_factory_registering_tools_detected(self):
+        # reveal's own shape: @mcp_tool(...) wraps `mcp.tool(...)(wrapper)`.
+        s = self._surfaces('''\
+            from mcp.server import MCPServer
+
+            mcp = MCPServer("demo")
+
+            def mcp_tool(*, title=None):
+                def decorator(fn):
+                    def wrapper(*a, **k):
+                        return fn(*a, **k)
+                    mcp.tool(title=title)(wrapper)
+                    return fn
+                return decorator
+
+            @mcp_tool(title="A")
+            def alpha() -> str:
+                return "a"
+
+            @mcp_tool(title="B")
+            def beta() -> str:
+                return "b"
+        ''')
+        self.assertEqual([e['name'] for e in s['mcp']], ['alpha', 'beta'])
+
+    def test_unrelated_decorator_factory_not_mcp(self):
+        # Same factory shape, but it never touches an MCP instance.
+        s = self._surfaces('''\
+            from mcp.server import MCPServer
+
+            mcp = MCPServer("demo")
+
+            def logged(fn):
+                def decorator(*a):
+                    return fn(*a)
+                return decorator
+
+            @logged
+            def helper():
+                pass
+        ''')
+        self.assertEqual(s['mcp'], [])
+
+
 if __name__ == '__main__':
     unittest.main()
