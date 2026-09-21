@@ -39,7 +39,7 @@ dependencies = [
     "tree-sitter>=0.25.2,<0.26.0",  # Semantic parsing for all languages. Upper bound: 0.26.0 has a reference-counting bug in tree_sitter/binding/point.c (Point.row/.column getters return a borrowed ref instead of a new ref) that corrupts pymalloc's free-list under real workloads -- non-deterministic SIGSEGV/SIGBUS, node-count/size-dependent (BACK-1161). Root-caused and reproduced (11-line repro, ~100 AST nodes) 2026-08-22; fixed upstream unreleased as py-tree-sitter commit afb3836 (merged 2026-07-08, 8 days after v0.26.0 shipped) -- lift this ceiling once a released version contains that commit.
     "tree-sitter-language-pack>=1.8.1",  # Language grammar support (1.x: 305 languages, abi3 wheel). Ceiling that used to sit at <1.12.5 is gone -- BACK-620/BACK-1158 migrated reveal onto the new core-tree-sitter accessor API (zero-arg Node/TreeCursor accessors as properties, parse() takes bytes) that language-pack>=1.12.5 exposes, so pinning language-pack low to keep the vendored old-API parser is no longer needed. See BACK-573 design doc for the full migration arc.
     "beautifulsoup4>=4.12.0",  # HTML parsing for HTML analyzer (uses stdlib html.parser)
-    "cryptography>=41.0.0",  # SSL certificate parsing for ssl:// adapter
+    "cryptography>=41.0.0",  # ssl:// cert parsing. Core on purpose: it is the ONLY parser for certs that fail verification (expired/self-signed/mismatched) -- the cases ssl:// exists for. Prebuilt wheels, ~15MB (BACK-1342 rejected).
 ]
 
 [project.optional-dependencies]
@@ -53,6 +53,7 @@ dev = [
     "dnspython>=2.0.0",  # Required for DNS adapter tests
     "mcp>=2.0.0",  # Required for MCP server tests. Migrated off FastMCP to mcp.server.MCPServer (BACK-895).
     "pygit2>=1.14.0",  # Required for git:// adapter tests
+    "openpyxl>=3.1.0",  # Required for xlsx:// tests (else they importorskip silently in CI)
 ]
 # DEPRECATED in v0.8.0: tree-sitter is now included by default
 # Kept for backward compatibility (install commands with [treesitter] still work)
@@ -70,6 +71,10 @@ database = [
 # Git repository inspection (git:// adapter)
 git = [
     "pygit2>=1.14.0",  # Stable libgit2 bindings with Python 3.10-3.12 support
+]
+# DNS records for domain:// (/dns, /mail, /ns-audit); domain:// degrades without it
+dns = [
+    "dnspython>=2.0.0",  # DNS resolver; graceful degradation if absent
 ]
 # Domain registration data (domain:// /whois element and registrar info)
 whois = [

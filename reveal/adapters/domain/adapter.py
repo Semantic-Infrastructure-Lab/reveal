@@ -757,9 +757,9 @@ class DomainAdapter(ResourceAdapter):
             return {
                 'type': 'domain_whois',
                 'domain': self.domain,
-                'error': 'python-whois not installed',
+                'error': 'python-whois not installed (pip install reveal-cli[whois])',
                 'next_steps': [
-                    'Install python-whois: pip install python-whois',
+                    'Install python-whois: pip install reveal-cli[whois]',
                     f"View DNS instead: reveal domain://{self.domain}/dns",
                 ],
             }

@@ -128,7 +128,7 @@ class TestGetDnsSummary:
 
             result = get_dns_summary('example.com')
 
-            assert result['error'] == 'dnspython not installed'
+            assert result['error'] == 'dnspython not installed (pip install reveal-cli[dns])'
             assert result['nameservers'] == []
             assert result['a_records'] == []
             assert result['has_mx'] is False

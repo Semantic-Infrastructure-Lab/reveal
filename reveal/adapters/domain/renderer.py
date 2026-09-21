@@ -490,7 +490,7 @@ class DomainRenderer(TypeDispatchRenderer):
         if 'dnspython' in error_msg:
             print("Error: dnspython is not installed", file=sys.stderr)
             print("", file=sys.stderr)
-            print("Install with: pip install dnspython", file=sys.stderr)
+            print("Install with: pip install reveal-cli[dns]", file=sys.stderr)
         elif 'Domain URI requires' in error_msg:
             print(f"Error: {error_msg}", file=sys.stderr)
             print("", file=sys.stderr)
