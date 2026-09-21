@@ -99,7 +99,10 @@ _FS_WRITE: Dict[str, frozenset] = {
     'ioutil': frozenset({'WriteFile'}),
 }
 
-_EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs')
+# os/exec process launchers (BACK-1319).
+_SUBPROCESS_METHODS: frozenset = frozenset({'Command', 'CommandContext'})
+
+_EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
 
 def scan_file_surface_go(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
@@ -235,6 +238,14 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
     if receiver in _FS_WRITE and field in _FS_WRITE[receiver]:
         surfaces['fs'].append({
             'type': 'fs_write', 'name': f'{receiver}.{field}',
+            'file': file_path, 'line': line,
+        })
+        return
+
+    # subprocess: exec.Command / exec.CommandContext
+    if receiver == 'exec' and field in _SUBPROCESS_METHODS:
+        surfaces['subprocess'].append({
+            'type': 'subprocess', 'name': f'exec.{field}',
             'file': file_path, 'line': line,
         })
         return

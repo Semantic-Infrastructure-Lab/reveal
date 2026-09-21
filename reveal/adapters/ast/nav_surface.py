@@ -34,9 +34,20 @@ _SDK_PACKAGES: frozenset = frozenset({
     'mistralai', 'groq', 'together', 'replicate', 'huggingface_hub',
 })
 
+# BACK-1319: process launchers, matched on the import-resolved dotted name so a
+# local `run()` or an unrelated `.system()` method is not a subprocess surface.
+_SUBPROCESS_CALLS: frozenset = frozenset({
+    'subprocess.run', 'subprocess.Popen', 'subprocess.call',
+    'subprocess.check_call', 'subprocess.check_output',
+    'subprocess.getoutput', 'subprocess.getstatusoutput',
+    'os.system', 'os.popen', 'pty.spawn',
+    'asyncio.create_subprocess_exec', 'asyncio.create_subprocess_shell',
+})
+_SUBPROCESS_PREFIXES: tuple = ('os.exec', 'os.spawn', 'os.posix_spawn')
+
 _WRITE_MODES: frozenset = frozenset({'w', 'wb', 'a', 'ab', 'x', 'xb'})
 
-_EMPTY: Dict[str, List] = {k: [] for k in ('cli', 'http', 'mcp', 'env', 'network', 'db', 'sdk', 'fs')}
+_EMPTY: Dict[str, List] = {k: [] for k in ('cli', 'http', 'mcp', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')}
 
 # mock.patch / mocker.patch / unittest.mock.patch decorators contain ".patch("
 # which would otherwise be mistaken for an HTTP PATCH route.
@@ -200,6 +211,13 @@ def _process_call(
                 'file': file_path,
                 'line': node.lineno,
             })
+    elif _resolved_subprocess_call(node.func, aliases):
+        surfaces['subprocess'].append({
+            'type': 'subprocess',
+            'name': _resolved_subprocess_call(node.func, aliases),
+            'file': file_path,
+            'line': node.lineno,
+        })
     elif _is_fs_write(func_str, node):
         target = _extract_first_arg(node) or '?'
         surfaces['fs'].append({
@@ -229,6 +247,21 @@ def _process_call(
                 'file': file_path,
                 'line': node.lineno,
             })
+
+
+def _resolved_subprocess_call(func: ast.expr, aliases: Dict[str, str]) -> str:
+    """Import-resolved dotted name if `func` launches a process, else ''."""
+    parts: List[str] = []
+    node = func
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name) or node.id not in aliases:
+        return ''
+    dotted = '.'.join([aliases[node.id]] + parts[::-1])
+    if dotted in _SUBPROCESS_CALLS or dotted.startswith(_SUBPROCESS_PREFIXES):
+        return dotted
+    return ''
 
 
 def _is_mock_patch_decorator(deco: str) -> bool:

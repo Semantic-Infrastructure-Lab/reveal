@@ -51,7 +51,11 @@ _SPRING_ROUTE_ANNOTATIONS: Dict[str, str] = {
 _FS_WRITE_CONSTRUCTORS: frozenset = frozenset({'FileWriter', 'FileOutputStream', 'PrintWriter'})
 _FS_WRITE_METHODS: frozenset = frozenset({'write', 'newBufferedWriter'})
 
-_EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs')
+# BACK-1319: process launchers -- `new ProcessBuilder(..)` and `Runtime.getRuntime().exec(..)`.
+_SUBPROCESS_CONSTRUCTORS: frozenset = frozenset({'ProcessBuilder'})
+_RUNTIME_GETTER = 'Runtime.getRuntime()'
+
+_EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
 
 def scan_file_surface_java(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
@@ -206,6 +210,15 @@ def _process_method(node: Any, file_path: str, content_bytes: bytes,
 def _process_call(node: Any, file_path: str, content_bytes: bytes,
                    surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     children = _children(node)
+    if children and _zero_arg(children[0], 'kind') == 'method_invocation' \
+            and _get_text(children[0], content_bytes) == _RUNTIME_GETTER:
+        idents = [c for c in children if _zero_arg(c, 'kind') == 'identifier']
+        if idents and _get_text(idents[-1], content_bytes) == 'exec':
+            surfaces['subprocess'].append({
+                'type': 'subprocess', 'name': 'Runtime.exec',
+                'file': file_path, 'line': _get_line(node),
+            })
+        return
     # method_invocation: identifier '.' identifier argument_list  (obj.method(...))
     idents = [c for c in children if _zero_arg(c, 'kind') == 'identifier']
     if len(idents) < 2:
@@ -231,7 +244,12 @@ def _process_object_creation(node: Any, file_path: str, content_bytes: bytes,
     for ch in _children(node):
         if _zero_arg(ch, 'kind') == 'type_identifier':
             type_name = _get_text(ch, content_bytes)
-            if type_name in _FS_WRITE_CONSTRUCTORS:
+            if type_name in _SUBPROCESS_CONSTRUCTORS:
+                surfaces['subprocess'].append({
+                    'type': 'subprocess', 'name': f'new {type_name}()',
+                    'file': file_path, 'line': _get_line(node),
+                })
+            elif type_name in _FS_WRITE_CONSTRUCTORS:
                 surfaces['fs'].append({
                     'type': 'fs_write', 'name': f'new {type_name}()',
                     'file': file_path, 'line': _get_line(node),

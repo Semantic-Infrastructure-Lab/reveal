@@ -79,6 +79,12 @@ suspiciously small result on a mixed-language repo.
   detected.
 - Dynamic surface registrations (plugin-loaded routes, runtime-constructed
   subprocess commands) are not tracked.
+- `subprocess` is matched by call shape, not data flow: `subprocess.*`/`os.system`
+  (Python, resolved through imports), `exec.Command` (Go), `ProcessBuilder` and
+  `Runtime.getRuntime().exec` (Java/Kotlin), `Command::new` (Rust, only when
+  imported from a `process` module), `Process.Start`/`ProcessStartInfo` (C#),
+  `Process()` (Swift), `system`/backticks/`Open3` (Ruby). A launcher held in a
+  variable (`rt.exec(...)`) is not detected.
 - Confidence is `medium` — treat results as a map to review, not a
   compliance-grade inventory.
 

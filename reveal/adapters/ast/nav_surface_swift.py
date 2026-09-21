@@ -51,7 +51,10 @@ _VAPOR_ROUTE_VERBS: Dict[str, str] = {
     'delete': 'DELETE',
 }
 
-_EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs')
+# BACK-1319: Foundation `Process()` (legacy `NSTask()`) and the static `Process.run(..)`.
+_SUBPROCESS_CONSTRUCTORS: frozenset = frozenset({'Process', 'NSTask'})
+
+_EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
 
 def scan_file_surface_swift(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
@@ -183,10 +186,23 @@ def _is_subscript(value_arguments_node: Any) -> bool:
 def _process_call(node: Any, file_path: str, content_bytes: bytes,
                   surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     children = _children(node)
+    if children and _zero_arg(children[0], 'kind') == 'simple_identifier' and \
+            _get_text(children[0], content_bytes) in _SUBPROCESS_CONSTRUCTORS:
+        _add_once(surfaces['subprocess'], {
+            'type': 'subprocess', 'name': f'{_get_text(children[0], content_bytes)}()',
+            'file': file_path, 'line': _get_line(node),
+        })
+        return
     if not children or _zero_arg(children[0], 'kind') != 'navigation_expression':
         return
     receiver, method = _navigation_receiver_and_method(children[0], content_bytes)
     if method is None:
+        return
+    if receiver == 'Process' and method == 'run':
+        _add_once(surfaces['subprocess'], {
+            'type': 'subprocess', 'name': 'Process.run',
+            'file': file_path, 'line': _get_line(node),
+        })
         return
     suffix = _call_suffix(node)
     if suffix is None:

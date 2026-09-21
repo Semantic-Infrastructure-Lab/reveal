@@ -67,7 +67,18 @@ _ROUTE_VERBS: Dict[str, str] = {
     'options': 'OPTIONS',
 }
 
-_EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs')
+# BACK-1319: Kernel process launchers (bare) and receiver forms on well-known
+# process-owning constants. `Open3.*` is the whole module; the others are listed
+# by method so `Process.pid` / `IO.read` are not launches.
+_SUBPROCESS_BARE: frozenset = frozenset({'system', 'exec', 'spawn'})
+_SUBPROCESS_RECEIVER: Dict[str, Any] = {
+    'Kernel': frozenset({'system', 'exec', 'spawn'}),
+    'Process': frozenset({'spawn', 'exec'}),
+    'IO': frozenset({'popen'}),
+    'Open3': None,  # every Open3 method launches a process
+}
+
+_EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
 _PACKAGE_TAXONOMY: tuple = (
     (_NET_GEMS, 'network'),
@@ -103,6 +114,10 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
             _process_call(node, file_path, content_bytes, surfaces)
         elif kind == 'element_reference':
             _process_element_reference(node, file_path, content_bytes, surfaces)
+        elif kind == 'subshell':
+            _add_once(surfaces['subprocess'], {
+                'type': 'subprocess', 'name': '`...`', 'file': file_path, 'line': _get_line(node),
+            })
 
         for ch in reversed(_children(node)):
             stack.append(ch)
@@ -165,6 +180,23 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
     # not. Checking child kinds directly (not `children[0] is ident`) matters
     # because a receiver can itself be an `identifier` (e.g. `http.get(url)`).
     has_receiver = any(_zero_arg(c, 'kind') == '.' for c in children)
+
+    if not has_receiver and name in _SUBPROCESS_BARE:
+        _add_once(surfaces['subprocess'], {
+            'type': 'subprocess', 'name': name, 'file': file_path, 'line': _get_line(node),
+        })
+        return
+
+    if has_receiver and children and _zero_arg(children[0], 'kind') == 'constant':
+        receiver = _get_text(children[0], content_bytes)
+        if receiver in _SUBPROCESS_RECEIVER:
+            methods = _SUBPROCESS_RECEIVER[receiver]
+            if methods is None or name in methods:
+                _add_once(surfaces['subprocess'], {
+                    'type': 'subprocess', 'name': f'{receiver}.{name}',
+                    'file': file_path, 'line': _get_line(node),
+                })
+            return
 
     if name in ('require', 'require_relative') and not has_receiver:
         args = _arg_list_child(node)
