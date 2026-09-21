@@ -201,10 +201,16 @@ def _dotted_import(kinds: Tuple[str, ...]) -> Callable[[Any, Callable], List[Imp
         clauses = [c for c in _children(node)
                    if _zero_arg(c, 'kind') == 'namespace_use_clause'] or [node]
         for clause in clauses:
-            mod = _find(clause, *kinds)
+            kids = _children(clause)
+            eq = next((i for i, c in enumerate(kids) if _zero_arg(c, 'kind') == '='), None)
+            if eq is not None:                    # C# `using Alias = Ns.Type;`: target follows `=`
+                mod = next((c for c in kids[eq + 1:] if _zero_arg(c, 'kind') in kinds), None)
+                alias = kids[eq - 1] if eq else None
+            else:
+                mod = _find(clause, *kinds)
+                alias = clause.child_by_field_name('alias') or _find(clause, 'import_alias')
             if mod is None:
                 continue
-            alias = clause.child_by_field_name('alias') or _find(clause, 'import_alias')
             alias_text = get_text(alias) if alias else ''
             if alias is not None and _zero_arg(alias, 'kind') == 'import_alias':
                 alias_text = alias_text.replace('as', '', 1).strip()     # Kotlin `as F`

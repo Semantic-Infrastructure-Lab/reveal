@@ -308,3 +308,61 @@ def test_string_arg_takes_the_first_literal_and_skips_calls_with_none():
         'kotlin-interpolated'])
 def test_documented_env_parity_deltas(lang, code, expected, tmp_path):
     assert sorted(e['name'] for e in _scan(lang, code, tmp_path, 'env')) == expected
+
+
+# ── import-shaped network/db/sdk tables (BACK-1334 slice a) ────────────────
+
+IMPORT_LANGS = ('go', 'java', 'kotlin', 'csharp')
+IMPORT_CATEGORIES = ('network', 'db', 'sdk')
+
+
+def _import_modules(lang, category):
+    return [r.match.module for r in sr.rules_for(category, lang)]
+
+
+@pytest.mark.parametrize('lang', IMPORT_LANGS)
+def test_import_categories_are_rule_driven_and_populated(lang):
+    """A language silently losing a category would read as `db: 0`."""
+    for category in IMPORT_CATEGORIES:
+        assert category in sr.rule_categories(lang)
+        assert _import_modules(lang, category), f'{lang}/{category} has no rows'
+
+
+@pytest.mark.parametrize('lang', IMPORT_LANGS)
+def test_import_modules_are_disjoint_across_categories(lang):
+    """Each category is scanned on its own, so an import matching two categories would be reported
+    twice; the old code filed it under the first only. Keeping the tables disjoint makes those
+    the same thing."""
+    def overlaps(a, b):
+        return any(a == b or a.startswith(b + s) or b.startswith(a + s) for s in ('.', '/', '::'))
+    mods = [(c, m) for c in IMPORT_CATEGORIES for m in _import_modules(lang, c)]
+    clashes = [(c1, m1, c2, m2) for i, (c1, m1) in enumerate(mods) for c2, m2 in mods[i + 1:]
+               if c1 != c2 and overlaps(m1, m2)]
+    assert not clashes
+
+
+@pytest.mark.parametrize('lang,code,category,expected', [
+    # Go: aliased, blank and dot imports are still imports; a longer path is beneath the module.
+    ('go', 'package main\nimport (\n\tstr "github.com/stripe/stripe-go/v72"\n\t_ "database/sql"\n'
+           '\t. "gorm.io/gorm"\n\t"net/httpx"\n)\n', 'sdk', ['github.com/stripe/stripe-go/v72']),
+    ('go', 'package main\nimport (\n\t_ "database/sql"\n\t. "gorm.io/gorm"\n\t"net/httpx"\n)\n',
+     'db', ['database/sql', 'gorm.io/gorm']),
+    ('go', 'package main\nimport (\n\t"net/httpx"\n\t"net/http"\n)\nimport "google.golang.org/grpc"\n',
+     'network', ['google.golang.org/grpc', 'net/http']),
+    # Java: a static import names the member; a wildcard names the package, which is only a row
+    # when the package itself is (`java.net.*` is not egress: URI, InetAddress...).
+    ('java', 'import static java.net.URL.foo;\nimport java.net.*;\nclass A {}\n',
+     'network', ['java.net.URL.foo']),
+    ('java', 'import java.sql.*;\nimport java.netx.Y;\nclass A {}\n', 'db', ['java.sql']),
+    # Kotlin: an `as` alias does not change the imported module.
+    ('kotlin', 'import java.net.URL as U\nfun main() {}\n', 'network', ['java.net.URL']),
+    # C#: `using Alias = Ns.Type;` imports the target, not the alias (the fact layer used to
+    # read the alias as the module); `using static` names the type.
+    ('csharp', 'using S = System.Net.Http;\nclass A {}\n', 'network', ['System.Net.Http']),
+    ('csharp', 'using static System.Data.X;\nusing AmazonX;\nclass A {}\n', 'db', ['System.Data.X']),
+    ('csharp', 'using Amazon.S3;\nusing AmazonX;\nclass A {}\n', 'sdk', ['Amazon.S3']),
+], ids=['go-sdk-alias', 'go-db-blank-dot', 'go-net-grouped-and-single', 'java-static-and-wildcard',
+        'java-wildcard-package', 'kotlin-alias', 'csharp-alias', 'csharp-static', 'csharp-prefix'])
+def test_import_edge_forms_match_the_replaced_scanners(lang, code, category, expected, tmp_path):
+    assert sorted(e['name'] for e in _scan(lang, code, tmp_path, category)) == expected
+    assert all(e['type'] == 'import' for e in _scan(lang, code, tmp_path, category))

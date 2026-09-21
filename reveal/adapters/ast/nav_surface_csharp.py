@@ -9,7 +9,7 @@ network/db/sdk egress.
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from .nav_surface_common import _get_text, _get_line, _add_once, categorize_by_prefix
+from .nav_surface_common import _get_text, _get_line
 from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
@@ -17,17 +17,6 @@ logger = logging.getLogger(__name__)
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
 from reveal.core.treesitter_compat import _zero_arg
-
-_NET_PACKAGES: frozenset = frozenset({'System.Net.Http', 'RestSharp'})
-
-_DB_PACKAGES: frozenset = frozenset({
-    'System.Data', 'Microsoft.EntityFrameworkCore', 'Npgsql', 'MongoDB.Driver',
-    'StackExchange.Redis', 'Dapper',
-})
-
-_SDK_PACKAGES: frozenset = frozenset({
-    'Stripe', 'Twilio', 'Azure', 'Amazon', 'AWSSDK', 'Google.Cloud',
-})
 
 # ASP.NET Core route attributes → inferred HTTP method. [Route] alone carries
 # no verb (it's often paired with an Http* attribute on the same method, or
@@ -72,9 +61,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
         if kind in rule_kinds:
             visit(node, kind)
 
-        if kind == 'using_directive':
-            _process_using(node, file_path, content_bytes, surfaces)
-        elif kind == 'method_declaration':
+        if kind == 'method_declaration':
             _process_method(node, file_path, content_bytes, surfaces)
 
         for ch in reversed(_children(node)):
@@ -82,26 +69,6 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
 
     rules.apply(surfaces, file_path)
     return surfaces
-
-
-def _process_using(node: Any, file_path: str, content_bytes: bytes,
-                    surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    target = None
-    for ch in _children(node):
-        if _zero_arg(ch, 'kind') in ('qualified_name', 'identifier'):
-            target = ch
-    if target is None:
-        return
-    module = _get_text(target, content_bytes)
-    line = _get_line(node)
-    categorize_by_prefix(module, file_path, line, surfaces, _PACKAGE_TAXONOMY, '.')
-
-
-_PACKAGE_TAXONOMY: tuple = (
-    (_NET_PACKAGES, 'network'),
-    (_DB_PACKAGES, 'db'),
-    (_SDK_PACKAGES, 'sdk'),
-)
 
 
 def _attribute_name(attribute_node: Any, content_bytes: bytes) -> Optional[str]:

@@ -463,3 +463,4 @@ def apply_ast_rules(surfaces: Dict[str, List[Dict[str, Any]]], tree: ast.AST, fi
 from . import surface_rules_subprocess  # noqa: E402,F401  (registers its table)
 from . import surface_rules_fs  # noqa: E402,F401
 from . import surface_rules_env  # noqa: E402,F401
+from . import surface_rules_imports  # noqa: E402,F401

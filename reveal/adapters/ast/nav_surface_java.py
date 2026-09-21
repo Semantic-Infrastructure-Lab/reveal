@@ -10,7 +10,7 @@ entrypoint, and import-root taxonomy for network/db/sdk egress.
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line, _add_once, categorize_by_prefix
+from .nav_surface_common import _get_text, _get_line
 from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
@@ -18,24 +18,6 @@ logger = logging.getLogger(__name__)
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
 from reveal.core.treesitter_compat import _zero_arg
-
-_NET_PACKAGES: frozenset = frozenset({
-    'java.net.http', 'okhttp3', 'org.apache.http', 'org.apache.hc', 'retrofit2',
-    # JDK classic networking (BACK-1090): exact classes, not `java.net` -- URI,
-    # URLEncoder, InetAddress etc. are not egress.
-    'java.net.URL', 'java.net.HttpURLConnection', 'java.net.URLConnection',
-    'java.net.Socket', 'java.net.ServerSocket', 'java.net.DatagramSocket',
-})
-
-_DB_PACKAGES: frozenset = frozenset({
-    'java.sql', 'javax.persistence', 'jakarta.persistence', 'org.hibernate',
-    'redis.clients.jedis', 'com.mongodb', 'org.springframework.data',
-})
-
-_SDK_PACKAGES: frozenset = frozenset({
-    'com.stripe', 'com.twilio', 'com.slack.api', 'software.amazon.awssdk',
-    'com.amazonaws', 'com.google.cloud', 'com.microsoft.azure', 'com.azure',
-})
 
 # Spring MVC route annotations → inferred HTTP method (RequestMapping needs
 # its own 'method' element to know the verb; left as ANY here — a precise
@@ -80,9 +62,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
         if kind in rule_kinds:
             visit(node, kind)
 
-        if kind == 'import_declaration':
-            _process_import(node, file_path, content_bytes, surfaces)
-        elif kind == 'method_declaration':
+        if kind == 'method_declaration':
             _process_method(node, file_path, content_bytes, surfaces)
 
         for ch in reversed(_children(node)):
@@ -90,33 +70,6 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
 
     rules.apply(surfaces, file_path)
     return surfaces
-
-
-def _import_dotted_name(node: Any, content_bytes: bytes) -> str:
-    """Flatten a scoped_identifier (or bare identifier) import target to 'a.b.c',
-    dropping a trailing '*' wildcard segment."""
-    text = _get_text(node, content_bytes)
-    return text.rstrip('*').rstrip('.')
-
-
-def _process_import(node: Any, file_path: str, content_bytes: bytes,
-                     surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    target = None
-    for ch in _children(node):
-        if _zero_arg(ch, 'kind') in ('scoped_identifier', 'identifier'):
-            target = ch
-    if target is None:
-        return
-    module = _import_dotted_name(target, content_bytes)
-    line = _get_line(node)
-    categorize_by_prefix(module, file_path, line, surfaces, _PACKAGE_TAXONOMY, '.')
-
-
-_PACKAGE_TAXONOMY: tuple = (
-    (_NET_PACKAGES, 'network'),
-    (_DB_PACKAGES, 'db'),
-    (_SDK_PACKAGES, 'sdk'),
-)
 
 
 def _annotation_name(annotation_node: Any, content_bytes: bytes) -> Optional[str]:

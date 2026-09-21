@@ -21,7 +21,7 @@ shape but walks Kotlin's grammar for its two dominant web frameworks:
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line, categorize_by_prefix
+from .nav_surface_common import _get_text, _get_line
 from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
@@ -29,25 +29,6 @@ logger = logging.getLogger(__name__)
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
 from reveal.core.treesitter_compat import _zero_arg
-
-_NET_PACKAGES: frozenset = frozenset({
-    'okhttp3', 'retrofit2', 'io.ktor.client', 'java.net.http', 'org.apache.http',
-    # JDK classic networking (BACK-1090): exact classes, not `java.net` -- URI,
-    # URLEncoder, InetAddress etc. are not egress.
-    'java.net.URL', 'java.net.HttpURLConnection', 'java.net.URLConnection',
-    'java.net.Socket', 'java.net.ServerSocket', 'java.net.DatagramSocket',
-})
-
-_DB_PACKAGES: frozenset = frozenset({
-    'java.sql', 'javax.persistence', 'jakarta.persistence', 'org.hibernate',
-    'org.jetbrains.exposed', 'com.mongodb', 'org.springframework.data',
-    'redis.clients.jedis',
-})
-
-_SDK_PACKAGES: frozenset = frozenset({
-    'com.stripe', 'com.twilio', 'software.amazon.awssdk', 'com.amazonaws',
-    'com.google.cloud', 'com.azure', 'com.slack.api',
-})
 
 # Ktor bare-verb route builders → HTTP method.
 _KTOR_ROUTE_VERBS: Dict[str, str] = {
@@ -110,9 +91,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
         if kind in rule_kinds:
             visit(node, kind)
 
-        if kind == 'import_header':
-            _process_import(node, file_path, content_bytes, surfaces)
-        elif kind == 'call_expression':
+        if kind == 'call_expression':
             _process_call(node, file_path, content_bytes, surfaces)
         elif kind == 'function_declaration':
             _process_annotations(node, file_path, content_bytes, surfaces)
@@ -133,21 +112,6 @@ def _function_name(func_node: Any, content_bytes: bytes) -> Optional[str]:
             return _get_text(ch, content_bytes)
     return None
 
-
-_PACKAGE_TAXONOMY: tuple = (
-    (_NET_PACKAGES, 'network'),
-    (_DB_PACKAGES, 'db'),
-    (_SDK_PACKAGES, 'sdk'),
-)
-
-
-def _process_import(node: Any, file_path: str, content_bytes: bytes,
-                    surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    for ch in _children(node):
-        if _zero_arg(ch, 'kind') == 'identifier':
-            module = _get_text(ch, content_bytes)
-            categorize_by_prefix(module, file_path, _get_line(node), surfaces, _PACKAGE_TAXONOMY, '.')
-            return
 
 
 def _string_content(string_node: Any, content_bytes: bytes) -> str:

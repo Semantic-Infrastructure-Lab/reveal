@@ -42,7 +42,7 @@ Rust, C++.
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line, _add_once, categorize_by_prefix
+from .nav_surface_common import _get_text, _get_line
 from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
@@ -50,31 +50,6 @@ logger = logging.getLogger(__name__)
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
 from reveal.core.treesitter_compat import _zero_arg
-
-_NET_MODULES: frozenset = frozenset({
-    'net/http', 'net/rpc', 'google.golang.org/grpc',
-    'github.com/gorilla/websocket', 'github.com/go-resty/resty',
-})
-
-_DB_MODULES: frozenset = frozenset({
-    'database/sql', 'gorm.io/gorm', 'github.com/jmoiron/sqlx',
-    'go.mongodb.org/mongo-driver', 'github.com/redis/go-redis',
-    'github.com/go-redis/redis', 'github.com/lib/pq',
-    'github.com/go-sql-driver/mysql', 'github.com/jackc/pgx',
-})
-
-_SDK_MODULES: frozenset = frozenset({
-    'github.com/stripe/stripe-go', 'github.com/aws/aws-sdk-go',
-    'github.com/aws/aws-sdk-go-v2', 'cloud.google.com/go',
-    'github.com/twilio/twilio-go', 'github.com/slack-go/slack',
-    'github.com/Azure/azure-sdk-for-go',
-})
-
-_MODULE_TAXONOMY: tuple = (
-    (_NET_MODULES, 'network'),
-    (_DB_MODULES, 'db'),
-    (_SDK_MODULES, 'sdk'),
-)
 
 # HTTP-verb selector fields → normalised method. Both the upper-case forms
 # (Gin/Echo) and the title-case forms (Chi/gorilla) are listed explicitly
@@ -126,9 +101,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
         if kind in rule_kinds:
             visit(node, kind)
 
-        if kind == 'import_spec':
-            _process_import(node, file_path, content_bytes, surfaces)
-        elif kind == 'function_declaration' and is_main_package:
+        if kind == 'function_declaration' and is_main_package:
             _process_function(node, file_path, content_bytes, surfaces)
         elif kind == 'call_expression':
             _process_call(node, file_path, content_bytes, surfaces)
@@ -155,15 +128,6 @@ def _string_literal_text(node: Any, content_bytes: bytes) -> str:
         if _zero_arg(ch, 'kind') == 'interpreted_string_literal_content':
             return _get_text(ch, content_bytes)
     return _get_text(node, content_bytes).strip('"`')
-
-
-def _process_import(node: Any, file_path: str, content_bytes: bytes,
-                    surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    for ch in _children(node):
-        if _zero_arg(ch, 'kind') == 'interpreted_string_literal':
-            module = _string_literal_text(ch, content_bytes)
-            categorize_by_prefix(module, file_path, _get_line(node), surfaces, _MODULE_TAXONOMY, '/')
-            return
 
 
 def _function_name(node: Any, content_bytes: bytes) -> Optional[str]:
