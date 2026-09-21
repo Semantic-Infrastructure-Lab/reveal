@@ -49,9 +49,16 @@ RULES = (
                   '    await asyncio.create_subprocess_exec("ls")\n')),
 
     # ── Go ──────────────────────────────────────────────────────────────────
+    # `exec.Command` is a launch only when the file imports `os/exec`: another package
+    # named `exec` (a k8s exec helper, a test double) is a lookalike. An aliased import
+    # (`e "os/exec"`) satisfies the import but not `receiver='exec'`; it was never matched.
     Rule(_C, 'go', Call(receiver='exec', name=('Command', 'CommandContext')), '{path}',
+         requires=ImportedFrom('os/exec'),
          example='package main\nimport "os/exec"\nfunc f() { exec.Command("ls").Run() }\n',
-         counter_examples=('package main\nfunc f(c cfg) { c.Command("x") }\n',)),
+         counter_examples=(
+             'package main\nfunc f(c cfg) { c.Command("x") }\n',
+             'package main\nimport "k8s.io/utils/exec"\nfunc f() { exec.Command("x") }\n',
+         )),
 
     # ── Java ────────────────────────────────────────────────────────────────
     Rule(_C, 'java', New(type='ProcessBuilder'), 'new {type}()',

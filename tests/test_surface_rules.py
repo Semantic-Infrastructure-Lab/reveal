@@ -134,7 +134,7 @@ def test_first_matching_rule_wins_per_site():
 
 
 def test_scan_category_dedupes_on_name_and_line():
-    code = 'package main\nfunc f(){ exec.Command("a"); exec.Command("b") }\n'
+    code = 'package main\nimport "os/exec"\nfunc f(){ exec.Command("a"); exec.Command("b") }\n'
     facts = extract_facts(code, 'go')
     assert len(sr.scan_category('subprocess', 'go', facts, 'x.go')) == 1
 
