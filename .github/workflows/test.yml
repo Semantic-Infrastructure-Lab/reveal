@@ -44,6 +44,10 @@ jobs:
             python scripts/check_windows_compat.py --warn
           fi
 
+      - name: Text-encoding ratchet (Windows cp1252 guard)
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        run: python scripts/check_text_encoding.py
+
       - name: Test CLI basics
         shell: bash
         run: |

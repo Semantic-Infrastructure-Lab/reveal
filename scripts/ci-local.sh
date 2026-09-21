@@ -86,6 +86,7 @@ fi
 
 step "Windows compatibility checks"
 "$PY" scripts/check_windows_compat.py --warn >>"$LOG" 2>&1 || fail "windows compat"
+"$PY" scripts/check_text_encoding.py >>"$LOG" 2>&1 || { tail -8 "$LOG"; fail "text encoding (bare read_text/open breaks on Windows)"; }
 
 step "CLI basics"
 "$VENV/bin/reveal" --version >>"$LOG" 2>&1 && "$VENV/bin/reveal" --list-supported >>"$LOG" 2>&1 || fail "CLI basics"

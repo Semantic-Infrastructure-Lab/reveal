@@ -19,7 +19,7 @@ def _emitted_categories(module: str) -> set:
     Three spellings exist: `surfaces['cat']`, an import-taxonomy tuple `(TABLE, 'cat')`,
     and `category, kind = 'cat', ...` (PHP).
     """
-    tree = ast.parse((_AST_DIR / f'{module}.py').read_text())
+    tree = ast.parse((_AST_DIR / f'{module}.py').read_text(encoding='utf-8'))
     found = set()
     for node in ast.walk(tree):
         if (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
