@@ -562,7 +562,7 @@ class TestSSLHealthCheck(unittest.TestCase):
             subject={'commonName': 'example.com'},
             issuer={'organizationName': 'Test CA'},
             not_before=now - timedelta(days=30),
-            not_after=now + timedelta(days=days_valid),
+            not_after=now + timedelta(days=days_valid, hours=12),  # pad: int-day truncation must not flip on clock ticks
             serial_number='123',
             version=3,
             san=['example.com', 'www.example.com'],
