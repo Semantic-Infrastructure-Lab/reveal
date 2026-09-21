@@ -12,6 +12,8 @@
 #                             self-validation, and the B006 ratchet (none run in the plain pytest)
 #   - local caches/env     -> REVEAL_DISK_CACHE=0 (stale ~/.reveal/cache, BACK-1294) and
 #                             PYTHONPYCACHEPREFIX unset (stale bytecode)
+#   - Windows text encoding -> re-runs pytest under an ASCII locale (PYTHONUTF8=0 LC_ALL=C, no
+#                             PYTHONIOENCODING) and runs scripts/check_text_encoding.py
 # What it cannot do: run Windows or macOS. scripts/check_windows_compat.py is the local guard
 # for the Windows path class; anything else Windows-specific still needs CI.
 #
@@ -81,6 +83,12 @@ if [[ $RUN_TESTS -eq 1 ]]; then
     step "Run tests (pytest tests/)"
     "$PY" -m pytest tests/ -q -p no:cacheprovider -n auto >>"$LOG" 2>&1 \
         || { grep -E '^FAILED |^ERROR ' "$LOG" | head -30; fail "pytest"; }
+    tail -1 "$LOG"
+
+    step "Run tests under an ASCII locale (Windows cp1252 stand-in)"
+    env -u PYTHONIOENCODING PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 LC_ALL=C \
+        "$PY" -m pytest tests/ -q -p no:cacheprovider -n auto >>"$LOG" 2>&1 \
+        || { grep -E '^FAILED |^ERROR ' "$LOG" | tail -30; fail "pytest under ASCII locale"; }
     tail -1 "$LOG"
 fi
 
