@@ -34,7 +34,7 @@ class TestL001BrokenInternalLinks(unittest.TestCase):
         """Helper: Create markdown file in temp directory."""
         path = os.path.join(self.temp_dir, filename)
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
         return path
 

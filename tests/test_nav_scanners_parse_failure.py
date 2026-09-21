@@ -65,7 +65,7 @@ def test_parse_failure_logs_warning_and_returns_empty_shape(
     scan_fn = getattr(module, func_name)
 
     fake_file = tmp_path / 'sample.src'
-    fake_file.write_text('irrelevant — get_parser is mocked to raise')
+    fake_file.write_text('irrelevant — get_parser is mocked to raise', encoding='utf-8')
 
     with patch('tree_sitter_language_pack.get_parser', side_effect=RuntimeError('grammar unavailable')):
         with caplog.at_level('WARNING', logger=module_path):

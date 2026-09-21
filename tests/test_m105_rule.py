@@ -140,7 +140,7 @@ class TestM105Integration:
         if not handlers_path.exists():
             pytest.skip("handlers_scaffold.py not found")
 
-        content = handlers_path.read_text()
+        content = handlers_path.read_text(encoding='utf-8')
         rule = M105()
 
         # Check that we find handlers

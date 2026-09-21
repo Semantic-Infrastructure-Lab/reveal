@@ -158,7 +158,7 @@ def test_mcp_server_docstrings_have_no_stale_adapter_count():
     found here instead of in a public .md file), so no digit is allowed in
     that phrasing at all — not even one that happens to match today's count."""
     mcp_server = Path(__file__).parent.parent / "reveal" / "mcp_server.py"
-    source = mcp_server.read_text()
+    source = mcp_server.read_text(encoding='utf-8')
     match = re.search(r"any of (\d+) adapters", source)
     assert match is None, (
         f"mcp_server.py hardcodes an adapter count ({match.group(1)!r}) in a "

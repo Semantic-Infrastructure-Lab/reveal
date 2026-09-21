@@ -89,14 +89,14 @@ def _kind_is_handled(text: str, kind: str) -> bool:
 def _with_shared(text: str) -> str:
     """A file that delegates to callee_name_from_node inherits its kinds."""
     if "callee_name_from_node(" in text:
-        return text + "".join(f.read_text() for f in sorted(SHARED_CALLEES_DIR.glob("*.py")))
+        return text + "".join(f.read_text(encoding="utf-8") for f in sorted(SHARED_CALLEES_DIR.glob("*.py")))
     return text
 
 
 @pytest.mark.parametrize("kind", sorted(REQUIRED_IN_BOTH))
 def test_callee_dispatch_kind_handled_in_both_files(kind):
-    nav_text = _with_shared(NAV_CALLS.read_text())
-    ts_text = _with_shared(TREESITTER.read_text())
+    nav_text = _with_shared(NAV_CALLS.read_text(encoding="utf-8"))
+    ts_text = _with_shared(TREESITTER.read_text(encoding="utf-8"))
 
     in_nav = _kind_is_handled(nav_text, kind)
     in_ts = _kind_is_handled(ts_text, kind)

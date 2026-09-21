@@ -109,7 +109,7 @@ class TestAdapterScaffold:
 
             # Read adapter file and check for class name
             adapter_file = Path(result['adapter_file'])
-            content = adapter_file.read_text()
+            content = adapter_file.read_text(encoding='utf-8')
             assert 'MyCustomAdapter' in content
 
     def test_scaffold_adapter_uri_scheme_normalization(self):
@@ -126,7 +126,7 @@ class TestAdapterScaffold:
 
             # Read adapter file and check scheme is normalized
             adapter_file = Path(result['adapter_file'])
-            content = adapter_file.read_text()
+            content = adapter_file.read_text(encoding='utf-8')
             assert 'custom' in content.lower()
 
     def test_scaffold_adapter_existing_files_no_force(self):
@@ -172,7 +172,7 @@ class TestAdapterScaffold:
 
             assert 'error' not in result2
             # File should be overwritten
-            content = adapter_file.read_text()
+            content = adapter_file.read_text(encoding='utf-8')
             assert "# Modified content" not in content
 
     def test_scaffold_adapter_no_output_dir_not_in_project(self):
@@ -281,7 +281,7 @@ class TestAnalyzerScaffold:
 
             # Read analyzer file and check extension has dot
             analyzer_file = Path(result['analyzer_file'])
-            content = analyzer_file.read_text()
+            content = analyzer_file.read_text(encoding='utf-8')
             assert '.xyz' in content
 
     def test_scaffold_analyzer_name_normalization(self):
@@ -306,7 +306,7 @@ class TestAnalyzerScaffold:
             result = scaffold_analyzer('my_custom_lang', '.mcl', output_dir=output_dir)
 
             analyzer_file = Path(result['analyzer_file'])
-            content = analyzer_file.read_text()
+            content = analyzer_file.read_text(encoding='utf-8')
             assert 'MyCustomLang' in content
 
     def test_scaffold_analyzer_existing_files_no_force(self):
@@ -337,7 +337,7 @@ class TestAnalyzerScaffold:
             analyzer_file = Path(result1['analyzer_file'])
 
             # Modify file
-            original_content = analyzer_file.read_text()
+            original_content = analyzer_file.read_text(encoding='utf-8')
             analyzer_file.write_text("# Modified")
 
             # Create again with force
@@ -345,7 +345,7 @@ class TestAnalyzerScaffold:
 
             assert 'error' not in result2
             # File should be overwritten
-            content = analyzer_file.read_text()
+            content = analyzer_file.read_text(encoding='utf-8')
             assert "# Modified" not in content
 
     def test_scaffold_analyzer_no_output_dir(self):
@@ -477,7 +477,7 @@ class TestRuleScaffold:
             result2 = scaffold_rule('C999', 'test', output_dir=output_dir, force=True)
 
             assert 'error' not in result2
-            content = rule_file.read_text()
+            content = rule_file.read_text(encoding='utf-8')
             assert "# Modified" not in content
 
     def test_scaffold_rule_no_output_dir(self):
@@ -523,7 +523,7 @@ class TestRuleScaffold:
             result = scaffold_rule('C999', 'test', category='test', output_dir=output_dir, force=True)
 
             # __init__.py should still have custom content
-            assert init_file.read_text() == "# Custom init content"
+            assert init_file.read_text(encoding='utf-8') == "# Custom init content"
 
     def test_get_rule_prefix_and_severity(self):
         """Test _get_rule_prefix_and_severity mapping."""
@@ -556,7 +556,7 @@ class TestRuleScaffold:
             result = scaffold_rule('C999', 'test', output_dir=output_dir)
 
             rule_file = Path(result['rule_file'])
-            content = rule_file.read_text()
+            content = rule_file.read_text(encoding='utf-8')
             assert 'RulePrefix.C' in content
 
     def test_scaffold_rule_unknown_prefix_category_value(self):
@@ -569,7 +569,7 @@ class TestRuleScaffold:
             result = scaffold_rule('X999', 'test', output_dir=output_dir)
 
             rule_file = Path(result['rule_file'])
-            content = rule_file.read_text()
+            content = rule_file.read_text(encoding='utf-8')
             assert '"X"' in content
             assert 'RulePrefix.X' not in content
 

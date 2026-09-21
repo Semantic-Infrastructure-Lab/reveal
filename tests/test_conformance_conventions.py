@@ -15,7 +15,7 @@ from conftest import _run_reveal_direct
 pytestmark = pytest.mark.conformance
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "conventions"
-EXPECTED = yaml.safe_load((FIXTURES_DIR / "expected.yaml").read_text())
+EXPECTED = yaml.safe_load((FIXTURES_DIR / "expected.yaml").read_text(encoding="utf-8"))
 
 
 @pytest.fixture(params=sorted(EXPECTED))

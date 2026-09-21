@@ -630,7 +630,7 @@ class TestImportGraph:
             "# the other branch then short-circuits on that `visited` flag before\n"
             "# it can walk back through x to close its own, different cycle. So\n"
             "# which cycle is reported for this exact graph flips with neighbor\n"
-            "# iteration order — i.e. with the interpreter's PYTHONHASHSEED.\n"
+            "# iteration order - i.e. with the interpreter's PYTHONHASHSEED.\n"
             "g.add_dependency(d, x)\n"
             "g.add_dependency(x, d)\n"
             "g.add_dependency(d, y)\n"

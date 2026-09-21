@@ -28,7 +28,7 @@ from conftest import _run_reveal_direct
 pytestmark = pytest.mark.conformance
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "conformance"
-EXPECTED = yaml.safe_load((FIXTURES_DIR / "expected.yaml").read_text())
+EXPECTED = yaml.safe_load((FIXTURES_DIR / "expected.yaml").read_text(encoding="utf-8"))
 
 EXTENSIONS = {
     "python": "py", "c": "c", "cpp": "cpp", "csharp": "cs", "go": "go",
@@ -254,7 +254,7 @@ def test_architecture_resolves_same_project_edge(edge_lang, tmp_path):
     for rel, src in ((importer_rel, importer_src), (imported_rel, imported_src)):
         p = tmp_path / rel
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(src)
+        p.write_text(src, encoding="utf-8")
 
     out = _run("architecture", str(tmp_path), "--format", "json")
     facts = json.loads(out)["facts"]

@@ -909,7 +909,7 @@ class TestMcpServerRegistration(unittest.TestCase):
         if not guide_path.exists():
             self.skipTest("MCP_SETUP.md not found")
 
-        content = guide_path.read_text()
+        content = guide_path.read_text(encoding='utf-8')
         # Matches e.g. "6 tools" in the help_description frontmatter or body
         m = re.search(r'(\d+)\s+tools', content)
         self.assertIsNotNone(m, "MCP_SETUP.md should state a tool count")
