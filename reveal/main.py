@@ -197,16 +197,24 @@ def _dispatch_subcommand() -> bool:
     return True
 
 
-def _setup_windows_console() -> None:
-    """Configure Windows console for UTF-8/emoji support."""
-    if sys.platform != 'win32':
-        return
+def _setup_console() -> None:
+    """Make stdout/stderr unable to crash on non-ASCII output.
 
-    os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
-    if hasattr(sys.stdout, 'reconfigure'):
-        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-    if hasattr(sys.stderr, 'reconfigure'):
-        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    Windows: force UTF-8 (emoji/box-drawing support).  Elsewhere: keep the stream's
+    declared encoding but never raise on an unencodable character -- a C/POSIX locale
+    or a cp1252 pipe would otherwise die with UnicodeEncodeError on '→' or '✅'
+    (BACK-1351).  Unencodable characters print as '?'.
+    """
+    windows = sys.platform == 'win32'
+    if windows:
+        os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
+    for stream in (sys.stdout, sys.stderr):
+        if not hasattr(stream, 'reconfigure'):
+            continue
+        if windows:
+            stream.reconfigure(encoding='utf-8', errors='replace')
+        elif (getattr(stream, 'encoding', None) or '').lower().replace('_', '-') not in ('utf-8', 'utf8'):
+            stream.reconfigure(errors='replace')
 
 
 def _setup_copy_mode() -> Optional[Tuple[Any, io.StringIO, Any]]:
@@ -267,7 +275,7 @@ def _preprocess_sort_arg() -> None:
 def main() -> None:
     """Main CLI entry point."""
     _configure_stderr_logging()
-    _setup_windows_console()
+    _setup_console()
     _preprocess_sort_arg()
 
     perf_enabled = _perf_flag_present()
