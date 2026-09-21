@@ -58,6 +58,13 @@ Python, TypeScript/JavaScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust,
 and C++. A tree that's mostly outside this set triggers a coverage warning
 rather than a false-clean "no surfaces" verdict.
 
+Not every language detects every category. A `0` can mean "scanned, found
+nothing" or "no detector exists", so the scan reports a `matrix` for the languages
+it met: `cells` maps language -> category -> `rules` | `scanner` | `not_applicable`
+| `not_implemented`, and `not_implemented` inverts that to category -> languages.
+The text report lists those gaps ("fs: Ruby, Swift") so they are not read as clean
+results. The single source of truth is `reveal/adapters/ast/surface_matrix.py`.
+
 ## Reading The Output
 
 `surfaces` groups entries by category (`cli`, `http`, `mcp`, `env`, `network`,

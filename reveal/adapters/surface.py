@@ -28,6 +28,7 @@ from ..utils.path_utils import (
     is_test_basename_for_language,
 )
 from ..utils.query import parse_query_params
+from .ast.surface_matrix import CATEGORIES, coverage_matrix
 from ..utils.results import ResultBuilder
 from ..defaults import TEST_DIR_PREFIX as _TEST_DIR_PREFIX
 
@@ -71,21 +72,22 @@ class _SurfaceScanner:
     extensions: frozenset
     module: str
     func: str
+    language: str  # coverage-matrix column (ast/surface_matrix.py)
 
 
 # Registration order does not matter — lookup is by extension, not position.
 _SURFACE_SCANNERS: tuple = (
-    _SurfaceScanner(frozenset({'.py'}), 'reveal.adapters.ast.nav_surface', 'scan_file_surface'),
-    _SurfaceScanner(frozenset({'.ts', '.tsx', '.js', '.jsx'}), 'reveal.adapters.ast.nav_surface_ts', 'scan_file_surface_ts'),
-    _SurfaceScanner(frozenset({'.java'}), 'reveal.adapters.ast.nav_surface_java', 'scan_file_surface_java'),
-    _SurfaceScanner(frozenset({'.cs'}), 'reveal.adapters.ast.nav_surface_csharp', 'scan_file_surface_csharp'),
-    _SurfaceScanner(frozenset({'.php'}), 'reveal.adapters.ast.nav_surface_php', 'scan_file_surface_php'),
-    _SurfaceScanner(frozenset({'.swift'}), 'reveal.adapters.ast.nav_surface_swift', 'scan_file_surface_swift'),
-    _SurfaceScanner(frozenset({'.kt', '.kts'}), 'reveal.adapters.ast.nav_surface_kotlin', 'scan_file_surface_kotlin'),
-    _SurfaceScanner(frozenset({'.rb'}), 'reveal.adapters.ast.nav_surface_ruby', 'scan_file_surface_ruby'),
-    _SurfaceScanner(frozenset({'.go'}), 'reveal.adapters.ast.nav_surface_go', 'scan_file_surface_go'),
-    _SurfaceScanner(frozenset({'.rs'}), 'reveal.adapters.ast.nav_surface_rust', 'scan_file_surface_rust'),
-    _SurfaceScanner(frozenset({'.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh'}), 'reveal.adapters.ast.nav_surface_cpp', 'scan_file_surface_cpp'),
+    _SurfaceScanner(frozenset({'.py'}), 'reveal.adapters.ast.nav_surface', 'scan_file_surface', 'python'),
+    _SurfaceScanner(frozenset({'.ts', '.tsx', '.js', '.jsx'}), 'reveal.adapters.ast.nav_surface_ts', 'scan_file_surface_ts', 'typescript'),
+    _SurfaceScanner(frozenset({'.java'}), 'reveal.adapters.ast.nav_surface_java', 'scan_file_surface_java', 'java'),
+    _SurfaceScanner(frozenset({'.cs'}), 'reveal.adapters.ast.nav_surface_csharp', 'scan_file_surface_csharp', 'csharp'),
+    _SurfaceScanner(frozenset({'.php'}), 'reveal.adapters.ast.nav_surface_php', 'scan_file_surface_php', 'php'),
+    _SurfaceScanner(frozenset({'.swift'}), 'reveal.adapters.ast.nav_surface_swift', 'scan_file_surface_swift', 'swift'),
+    _SurfaceScanner(frozenset({'.kt', '.kts'}), 'reveal.adapters.ast.nav_surface_kotlin', 'scan_file_surface_kotlin', 'kotlin'),
+    _SurfaceScanner(frozenset({'.rb'}), 'reveal.adapters.ast.nav_surface_ruby', 'scan_file_surface_ruby', 'ruby'),
+    _SurfaceScanner(frozenset({'.go'}), 'reveal.adapters.ast.nav_surface_go', 'scan_file_surface_go', 'go'),
+    _SurfaceScanner(frozenset({'.rs'}), 'reveal.adapters.ast.nav_surface_rust', 'scan_file_surface_rust', 'rust'),
+    _SurfaceScanner(frozenset({'.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh'}), 'reveal.adapters.ast.nav_surface_cpp', 'scan_file_surface_cpp', 'cpp'),
 )
 
 # `.h` defaults to C in the registry (BACK-630) — content-sniffed C++ headers
@@ -183,9 +185,7 @@ def _scan_surface(
     path: Path, type_filter: str = '', source_only: bool = False, by: str = '', depth: int = 0,
 ) -> Dict[str, Any]:
     collected = _collect_source_files(path, source_only=source_only)
-    surfaces: Dict[str, List[Dict[str, Any]]] = {
-        k: [] for k in ('cli', 'http', 'mcp', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
-    }
+    surfaces: Dict[str, List[Dict[str, Any]]] = {k: [] for k in CATEGORIES}
 
     unsupported_language = ''
     if not any(collected.values()):
@@ -201,9 +201,11 @@ def _scan_surface(
     census, coverage = census_and_coverage_for_path(path, _supported_coverage_languages())
     scope = census.to_scope_dict(capability_tiers=capability_tiers_for(census.language_extensions))
 
+    scanned_languages = set()
     for spec, file_list in collected.items():
         if not file_list:
             continue
+        scanned_languages.add(spec.language)
         scan_fn = _load_scanner(spec)
         for file_path in file_list:
             for cat, entries in scan_fn(str(file_path)).items():
@@ -211,6 +213,9 @@ def _scan_surface(
 
     if type_filter:
         surfaces = {k: v for k, v in surfaces.items() if k == type_filter}
+
+    # BACK-1332: which of the 0s above are "not implemented" rather than "found none".
+    matrix = coverage_matrix(scanned_languages, tuple(surfaces))
 
     _relativize_surface_paths(surfaces, path)
 
@@ -241,6 +246,7 @@ def _scan_surface(
         'path': str(path),
         'total': total,
         'surfaces': surfaces,
+        'matrix': matrix,
         **by_dir,
         'unsupported_language': unsupported_language,
         'coverage': coverage.to_scope_dict('surface'),
@@ -261,6 +267,25 @@ def _scan_surface(
             ],
         },
     }
+
+
+_LANGUAGE_NAMES = {
+    'python': 'Python', 'typescript': 'TypeScript/JavaScript', 'java': 'Java', 'csharp': 'C#',
+    'php': 'PHP', 'swift': 'Swift', 'kotlin': 'Kotlin', 'ruby': 'Ruby', 'go': 'Go',
+    'rust': 'Rust', 'cpp': 'C++',
+}
+
+
+def _render_not_implemented(report: Dict[str, Any]) -> None:
+    """BACK-1332: say which zero counts are missing detectors, not clean results."""
+    missing = report.get('matrix', {}).get('not_implemented', {})
+    if not missing:
+        return
+    print("Not implemented for scanned languages (a 0 here is not a clean result):")
+    for category, langs in missing.items():
+        names = ', '.join(_LANGUAGE_NAMES.get(lang, lang) for lang in langs)
+        print(f"  {category}: {names}")
+    print()
 
 
 def _render_report(report: Dict[str, Any], top: int = None) -> None:
@@ -285,6 +310,7 @@ def _render_report(report: Dict[str, Any], top: int = None) -> None:
         unit = 'directories' if 'by_dir' in report else 'per category'
         print(f"Showing top {top} {unit}  (use --top N or omit for all)")
     print()
+    _render_not_implemented(report)
 
     if total == 0:
         if not warning:
