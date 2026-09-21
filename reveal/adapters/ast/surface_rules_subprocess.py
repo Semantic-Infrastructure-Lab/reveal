@@ -4,8 +4,8 @@ One row per call shape that launches a process. Every row carries an example tha
 match and, where a lookalike exists, counter-examples that must not: over-matching is the
 failure mode of a name-based table (clap's `Command::new`, Ruby's `Process.pid`, ...).
 
-Not yet rule-driven: TypeScript/JavaScript, PHP and C++ still detect subprocess in their
-own scanners (TS/PHP need binding-resolution hooks, BACK-1335).
+Not yet rule-driven: TypeScript/JavaScript and PHP still detect subprocess in their own
+scanners (they need binding-resolution hooks, BACK-1335).
 """
 
 from .surface_rules import Call, ImportedFrom, New, Rule, Subshell, register_table
@@ -108,6 +108,19 @@ RULES = (
     Rule(_C, 'csharp', New(type=('Process', 'ProcessStartInfo')), 'new {type}()',
          example=('using System.Diagnostics;\n'
                   'class A { void F() { var p = new ProcessStartInfo("ls"); } }\n')),
+
+    # ── C++ ─────────────────────────────────────────────────────────────────
+    # Free functions only: a method (`o.system()`) or another namespace's (`foo::system()`)
+    # is not the libc launch.
+    Rule(_C, 'cpp',
+         Call(receiver='', name=('system', 'popen', '_popen', 'posix_spawn', 'posix_spawnp',
+                                 'execl', 'execlp', 'execle', 'execv', 'execvp', 'execve')),
+         '{path}',
+         example='#include <cstdlib>\nvoid f() { system("ls"); }\n',
+         counter_examples=(
+             'void f(Obj o) { o.system("x"); foo::system("x"); o.execvp("x"); }\n',)),
+    Rule(_C, 'cpp', Call(receiver='std', name='system'), '{path}',
+         example='#include <cstdlib>\nvoid f() { std::system("ls"); }\n'),
 
     # ── Swift ───────────────────────────────────────────────────────────────
     Rule(_C, 'swift', Call(receiver='', name=('Process', 'NSTask')), '{name}()',

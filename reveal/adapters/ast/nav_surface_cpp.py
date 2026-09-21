@@ -28,6 +28,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from .nav_surface_common import _get_text, _get_line, _add_once, normalize_cpp_macro_class_modifiers
+from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +64,6 @@ _ENV_FUNCS: frozenset = frozenset({'getenv', 'std::getenv', 'secure_getenv'})
 _FS_CALL_FUNCS: frozenset = frozenset({'fopen', 'freopen'})
 _OFSTREAM_TYPES: frozenset = frozenset({'ofstream', 'std::ofstream', 'std::fstream', 'fstream'})
 
-_SUBPROCESS_FUNCS: frozenset = frozenset({
-    'system', 'std::system', 'popen', '_popen', 'posix_spawn', 'posix_spawnp',
-    'execl', 'execlp', 'execle', 'execv', 'execvp', 'execve',
-})
-
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
 
@@ -89,11 +85,16 @@ def scan_file_surface_cpp(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
 
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:
     surfaces: Dict[str, List[Dict[str, Any]]] = {k: [] for k in _EMPTY_KEYS}
+    rules = RuleScan('cpp', content_bytes)
+    rule_kinds, visit = rules.kinds, rules.visit
 
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
         kind = _zero_arg(node, 'kind')
+        if kind in rule_kinds:
+            visit(node, kind)
+
         if kind == 'preproc_include':
             _process_include(node, file_path, content_bytes, surfaces)
         elif kind == 'call_expression':
@@ -105,6 +106,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
         for ch in reversed(_children(node)):
             stack.append(ch)
 
+    rules.apply(surfaces, file_path)
     return surfaces
 
 
@@ -196,11 +198,6 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
                     'type': 'env_var', 'name': key, 'expr': fn_text,
                     'file': file_path, 'line': line,
                 })
-            return
-        if fn_text in _SUBPROCESS_FUNCS:
-            surfaces['subprocess'].append({
-                'type': 'subprocess', 'name': fn_text, 'file': file_path, 'line': line,
-            })
             return
         if fn_text in _FS_CALL_FUNCS:
             surfaces['fs'].append({

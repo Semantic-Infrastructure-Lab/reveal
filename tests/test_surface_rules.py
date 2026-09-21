@@ -14,7 +14,7 @@ from reveal.adapters.ast.surface_facts import extract_facts
 from reveal.adapters.surface import _scan_surface
 
 EXT = {'python': 'py', 'go': 'go', 'java': 'java', 'kotlin': 'kt', 'ruby': 'rb',
-       'rust': 'rs', 'csharp': 'cs', 'swift': 'swift'}
+       'rust': 'rs', 'csharp': 'cs', 'swift': 'swift', 'cpp': 'cpp'}
 RULES = sr.all_rules()
 RULE_IDS = [f'{r.category}-{r.lang}-{i}' for i, r in enumerate(RULES)]
 
@@ -59,7 +59,7 @@ def test_every_site_the_scanner_reports_has_a_fact_on_its_line(rule, tmp_path):
     assert {e['line'] for e in entries} <= fact_lines
 
 
-def test_subprocess_is_rule_driven_for_the_eight_pilot_languages():
+def test_subprocess_is_rule_driven_for_every_table_language():
     """A language silently dropping out of the table would read as `subprocess: 0`."""
     assert {r.lang for r in RULES if r.category == 'subprocess'} == set(EXT)
     for lang in EXT:
@@ -224,7 +224,14 @@ def test_register_table_rejects_a_foreign_category():
     ('python', 'import os.path\nos.system("x")\n', ['os.system']),
     # Python: a relative `from . import os` is a local module, not the stdlib one.
     ('python', 'from . import os\nos.system("x")\n', []),
-], ids=['rust-comment', 'ruby-scope-call', 'ruby-kernel-scope', 'python-os-path', 'python-relative'])
+    # C++: a global-scope `::system` is the libc call; the old exact-text match missed it.
+    ('cpp', 'void f(){ ::system("a"); }\n', ['system']),
+    # C++: entries dedupe on name+line, as in every migrated category.
+    ('cpp', 'void f(){ system("a"); system("b"); }\n', ['system']),
+    # C++: methods and other namespaces' `system` are not the libc launch (unchanged).
+    ('cpp', 'void f(Obj o){ o.system("a"); foo::system("b"); std::popen("c", "r"); }\n', []),
+], ids=['rust-comment', 'ruby-scope-call', 'ruby-kernel-scope', 'python-os-path', 'python-relative',
+        'cpp-global-scope', 'cpp-same-line-dedupe', 'cpp-lookalikes'])
 def test_documented_parity_deltas(lang, code, expected, tmp_path):
     assert sorted(e['name'] for e in _scan(lang, code, tmp_path, 'subprocess')) == expected
 
