@@ -1,117 +1,32 @@
-"""Default CLI argument namespace for internal routing (MCP server and test helpers)."""
+"""Default CLI argument namespace for internal routing (MCP server and test helpers).
+
+The defaults ARE the parser's defaults: they are read off ``create_argument_parser`` once,
+so a flag added to the parser is present here with its real default and cannot drift.
+A hand-kept copy had lost 36 dests and disagreed on ``depth`` (BACK-1362).
+"""
 
 from __future__ import annotations
 
+import copy
 from argparse import Namespace
+from functools import lru_cache
 
-_DEFAULT_ARGS: dict = dict(
-    path=None,
-    element=None,
-    format='text',
-    copy=False,
-    verbose=False,
-    no_breadcrumbs=False,
-    disable_breadcrumbs=False,
-    stdin=False,
-    meta=False,
-    list_supported=False,
-    languages=False,
-    adapters=False,
-    explain_file=False,
-    capabilities=False,
-    show_ast=False,
-    language_info=None,
-    agent_help=False,
-    discover=False,
-    head=None,
-    tail=None,
-    range=None,
-    name=None,
-    grep=None,
-    ignore_case=False,
-    sort=None,
-    desc=False,
-    asc=False,
-    type=None,
-    all=False,
-    since=None,
-    until=None,
-    with_stats=False,
-    base_path=None,
-    no_fallback=False,
-    depth=3,
-    max_entries=200,
-    dir_limit=50,
-    fast=False,
-    respect_gitignore=True,
-    exclude=None,
-    ext=None,
-    files=False,
-    outline=False,
-    hotspots=False,
-    code_only=False,
-    typed=False,
-    filter=None,
-    decorator_stats=False,
-    check=False,
-    config=None,
-    select=None,
-    ignore=None,
-    no_group=False,
-    recursive=False,
-    rules=False,
-    schema=False,
-    explain=None,
-    severity=None,
-    advanced=False,
-    only_failures=False,
-    batch=False,
-    fields=None,
-    max_items=None,
-    max_snippet_chars=None,
-    links=False,
-    link_type=None,
-    domain=None,
-    code=False,
-    language=None,
-    inline=False,
-    frontmatter=False,
-    related=False,
-    related_depth=1,
-    related_all=False,
-    related_flat=False,
-    related_limit=100,
-    section=None,
-    metadata=False,
-    semantic=None,
-    scripts=None,
-    styles=None,
-    validate_schema=None,
-    list_schemas=False,
-    summary=False,
-    expiring_within=None,
-    validate_nginx=False,
-    local_certs=False,
-    extract=None,
-    canonical_only=False,
-    check_acl=False,
-    validate_nginx_acme=False,
-    check_conflicts=False,
-    cpanel_certs=False,
-    diagnose=False,
-    log_path=None,
-    dns_verified=False,
-    check_live=False,
-    user=None,
-    # pack-specific
-    content=False,
-    focus=None,
-    budget='2000',
-)
+# Dests read by `pack` internals that no main-parser flag defines (the pack subcommand
+# owns them). Kept here so pack routed through _default_args still has them.
+_PACK_EXTRAS: dict = dict(content=False, focus=None, budget='2000')
+
+
+@lru_cache(maxsize=1)
+def _parser_defaults() -> dict:
+    from .parser import create_argument_parser
+
+    # full_help=False: don't let a stray --help-all in sys.argv change what is built.
+    parser = create_argument_parser('0', full_help=False)
+    return {**_PACK_EXTRAS, **vars(parser.parse_args([]))}
 
 
 def _default_args(**overrides) -> Namespace:
     """Return a Namespace with all reveal CLI defaults for internal routing functions."""
-    defaults = dict(_DEFAULT_ARGS)
+    defaults = copy.deepcopy(_parser_defaults())
     defaults.update(overrides)
     return Namespace(**defaults)
