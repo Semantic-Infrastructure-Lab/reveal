@@ -267,6 +267,12 @@ def extract_element(self, element_type, name):
 
 ### Common Pitfalls
 
+**Text encoding (breaks on Windows only):** pass `encoding='utf-8'` to every text-mode
+`open()` / `read_text()` / `write_text()` (`errors='replace'` when reading user files). Windows
+defaults to cp1252, so a bare call passes on Linux/macOS and fails on Windows CI.
+`scripts/check_text_encoding.py` blocks new offenders; details in
+`internal-docs/design/ENCODING_ROBUSTNESS_2026-09-21.md`.
+
 ```python
 # ❌ Zero-indexed lines (editors use 1-indexed)
 {'line': 0, 'name': 'main'}
