@@ -141,8 +141,8 @@ class TestPackagesSubRoute(unittest.TestCase):
         self.assertGreater(result['count'], 0)
 
     def test_known_package_details(self):
-        # 'pip' should always be installed
-        result = self.adapter.get_element('packages/pip')
+        # 'pytest' is always installed wherever these tests run (pip is not: uv venvs omit it)
+        result = self.adapter.get_element('packages/pytest')
         self.assertIsNotNone(result)
         # Should have name field or an error/not-found indicator
         self.assertIsInstance(result, dict)
@@ -157,13 +157,13 @@ class TestPackagesSubRoute(unittest.TestCase):
         importlib.metadata.distribution() call with zero indication the
         answer might be ambiguous -- even though python://doctor's
         check_editable_conflicts() already detects exactly this for the
-        same installed state. Simulates a conflict for 'pip' (always
+        same installed state. Simulates a conflict for 'pytest' (always
         installed) since this environment's real editable-conflict state
         would make the test environment-dependent otherwise."""
         fake_issue = {
             'category': 'editable_conflict',
-            'package': 'pip',
-            'message': "Multiple editable .pth files for 'pip'",
+            'package': 'pytest',
+            'message': "Multiple editable .pth files for 'pytest'",
             'impact': 'Version conflicts - imports may load unexpected version',
             'severity': 'high',
             'details': [{'version': '1.0', 'path': '/fake/a.pth'},
@@ -173,7 +173,7 @@ class TestPackagesSubRoute(unittest.TestCase):
             'reveal.adapters.python.doctor.check_editable_conflicts',
             return_value=([fake_issue], [], []),
         ):
-            result = self.adapter.get_element('packages/pip')
+            result = self.adapter.get_element('packages/pytest')
         self.assertEqual(result.get('editable_conflict'), fake_issue)
 
     def test_no_editable_conflict_omits_field(self):
@@ -181,7 +181,7 @@ class TestPackagesSubRoute(unittest.TestCase):
             'reveal.adapters.python.doctor.check_editable_conflicts',
             return_value=([], [], []),
         ):
-            result = self.adapter.get_element('packages/pip')
+            result = self.adapter.get_element('packages/pytest')
         self.assertNotIn('editable_conflict', result)
 
 
