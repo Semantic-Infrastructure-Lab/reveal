@@ -62,7 +62,7 @@ Not every language detects every category. A `0` can mean "scanned, found
 nothing" or "no detector exists", so the scan reports a `matrix` for the languages
 it met: `cells` maps language -> category -> `rules` | `scanner` | `not_applicable`
 | `not_implemented`, and `not_implemented` inverts that to category -> languages.
-The text report lists those gaps ("fs: Ruby, Swift") so they are not read as clean
+The text report lists those gaps ("mcp: Go, Rust") so they are not read as clean
 results. The single source of truth is `reveal/adapters/ast/surface_matrix.py`.
 
 ## Reading The Output
@@ -118,6 +118,12 @@ its totals sum to the flat `total`.
   `Process()` (Swift), `system`/backticks/`Open3` (Ruby). A launcher held in a
   variable (`rt.exec(...)`) is not detected. For those eight languages the
   patterns live in one rule table (`reveal/adapters/ast/surface_rules_subprocess.py`);
+  TypeScript/JavaScript, PHP and C++ detect it in their own scanners.
+- `fs` covers writes only, matched by call shape: `os.WriteFile`/`os.Create` (Go),
+  `Files.write`, `new FileWriter()` (Java/Kotlin), `File.WriteAllText`, `new StreamWriter()`
+  (C#), `fs::write`/`File::create` (Rust), `File.write`/`FileUtils.mkdir_p` (Ruby),
+  `FileManager.default.createFile` (Swift). Swift's `data.write(to:)` is not detected. Those
+  languages share one rule table (`reveal/adapters/ast/surface_rules_fs.py`); Python,
   TypeScript/JavaScript, PHP and C++ detect it in their own scanners.
 - Confidence is `medium` — treat results as a map to review, not a
   compliance-grade inventory.

@@ -49,8 +49,6 @@ _SPRING_ROUTE_ANNOTATIONS: Dict[str, str] = {
     'RequestMapping': 'ANY',
 }
 
-_FS_WRITE_CONSTRUCTORS: frozenset = frozenset({'FileWriter', 'FileOutputStream', 'PrintWriter'})
-_FS_WRITE_METHODS: frozenset = frozenset({'write', 'newBufferedWriter'})
 
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
@@ -88,8 +86,6 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
             _process_method(node, file_path, content_bytes, surfaces)
         elif kind == 'method_invocation':
             _process_call(node, file_path, content_bytes, surfaces)
-        elif kind == 'object_creation_expression':
-            _process_object_creation(node, file_path, content_bytes, surfaces)
 
         for ch in reversed(_children(node)):
             stack.append(ch)
@@ -226,23 +222,7 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
                 'type': 'env_var', 'name': key, 'expr': 'System.getenv',
                 'file': file_path, 'line': line,
             })
-    elif method in _FS_WRITE_METHODS and obj == 'Files':
-        surfaces['fs'].append({
-            'type': 'fs_write', 'name': f'Files.{method}', 'file': file_path, 'line': line,
-        })
 
-
-def _process_object_creation(node: Any, file_path: str, content_bytes: bytes,
-                              surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    for ch in _children(node):
-        if _zero_arg(ch, 'kind') == 'type_identifier':
-            type_name = _get_text(ch, content_bytes)
-            if type_name in _FS_WRITE_CONSTRUCTORS:
-                surfaces['fs'].append({
-                    'type': 'fs_write', 'name': f'new {type_name}()',
-                    'file': file_path, 'line': _get_line(node),
-                })
-            return
 
 
 def _first_string_arg(call_node: Any, content_bytes: bytes) -> Optional[str]:

@@ -67,13 +67,15 @@ class Call:
     `receiver`: None = any, '' = bare call only (not a call on another call's result), else
     exact match on the collapsed receiver path. `qualified` matches the full callee text with
     the receiver chain kept (`Runtime.getRuntime().exec`). `resolved` matches on the
-    import-resolved path instead of the source spelling.
+    import-resolved path instead of the source spelling. `bare=False` rejects an unqualified
+    `name(...)`, for extension functions that only make sense on a receiver.
     """
     name: Names = ()
     receiver: Optional[str] = None
     receiver_endswith: str = ''
     qualified: Optional[str] = None
     resolved: bool = False
+    bare: Optional[bool] = None     # False = needs a receiver (a call on a call result counts)
 
 
 @dataclass(frozen=True)
@@ -122,6 +124,7 @@ class Rule:
     example: str                          # source that must produce an entry from THIS rule
     counter_examples: Tuple[str, ...] = ()  # lookalikes that must produce no entry at all
     requires: Optional[ImportedFrom] = None
+    entry_type: str = ''                  # the entry's `type` field; '' = the category name
 
     def __post_init__(self) -> None:
         if self.category not in CATEGORIES:
@@ -181,6 +184,8 @@ def _call_fields(rule_match: Call, call: CallFact,
         path, receiver, name = call.path, call.receiver, call.name
     if rule_match.receiver is not None and receiver != rule_match.receiver:
         return None
+    if rule_match.bare is False and not call.receiver and not call.chained:
+        return None
     if rule_match.receiver == '' and call.chained:      # `a.b().exec()` is not a bare `exec()`
         return None
     if rule_match.receiver_endswith and not _segment_suffix(receiver, rule_match.receiver_endswith):
@@ -231,11 +236,12 @@ def scan_category(category: str, lang: str, facts: List[Fact],
     """Surface entries for one category of one file, in the scanners' entry shape."""
     entries: List[Dict[str, Any]] = []
     seen = set()
-    for _rule, fact, name in rule_matches(rules_for(category, lang), facts):
+    for rule, fact, name in rule_matches(rules_for(category, lang), facts):
         key = (name, fact.line)
         if key not in seen:
             seen.add(key)
-            entries.append({'type': category, 'name': name, 'file': file_path, 'line': fact.line})
+            entries.append({'type': rule.entry_type or category, 'name': name,
+                            'file': file_path, 'line': fact.line})
     return entries
 
 
@@ -430,3 +436,4 @@ def apply_ast_rules(surfaces: Dict[str, List[Dict[str, Any]]], tree: ast.AST, fi
 
 
 from . import surface_rules_subprocess  # noqa: E402,F401  (registers its table)
+from . import surface_rules_fs  # noqa: E402,F401

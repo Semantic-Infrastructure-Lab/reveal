@@ -263,11 +263,6 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
                     'file': file_path, 'line': line,
                 })
             return
-        if path_text.endswith('fs::write') or path_text.endswith('File::create'):
-            surfaces['fs'].append({
-                'type': 'fs_write', 'name': path_text, 'file': file_path, 'line': line,
-            })
-            return
         # Actix-web programmatic routing: web::resource("/path") / web::scope("/path").
         # The verb lives on a chained `.route(web::get()...)` and a resource may
         # bind several, so method is reported as ANY; the DD value is the path.

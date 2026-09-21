@@ -41,8 +41,6 @@ _ASPNET_ROUTE_ATTRIBUTES: Dict[str, str] = {
     'Route': 'ANY',
 }
 
-_FS_WRITE_CONSTRUCTORS: frozenset = frozenset({'StreamWriter', 'FileStream'})
-_FS_WRITE_STATIC_METHODS: frozenset = frozenset({'WriteAllText', 'WriteAllBytes', 'AppendAllText'})
 
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
@@ -80,8 +78,6 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
             _process_method(node, file_path, content_bytes, surfaces)
         elif kind == 'invocation_expression':
             _process_call(node, file_path, content_bytes, surfaces)
-        elif kind == 'object_creation_expression':
-            _process_object_creation(node, file_path, content_bytes, surfaces)
 
         for ch in reversed(_children(node)):
             stack.append(ch)
@@ -258,23 +254,7 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
                 'type': 'env_var', 'name': key, 'expr': 'Environment.GetEnvironmentVariable',
                 'file': file_path, 'line': line,
             })
-    elif obj == 'File' and method in _FS_WRITE_STATIC_METHODS:
-        surfaces['fs'].append({
-            'type': 'fs_write', 'name': f'File.{method}', 'file': file_path, 'line': line,
-        })
 
-
-def _process_object_creation(node: Any, file_path: str, content_bytes: bytes,
-                              surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    for ch in _children(node):
-        if _zero_arg(ch, 'kind') == 'identifier':
-            type_name = _get_text(ch, content_bytes)
-            if type_name in _FS_WRITE_CONSTRUCTORS:
-                surfaces['fs'].append({
-                    'type': 'fs_write', 'name': f'new {type_name}()',
-                    'file': file_path, 'line': _get_line(node),
-                })
-            return
 
 
 def _first_string_arg(call_node: Any, content_bytes: bytes) -> Optional[str]:

@@ -21,7 +21,7 @@ shape but walks Kotlin's grammar for its two dominant web frameworks:
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line, _add_once, categorize_by_prefix
+from .nav_surface_common import _get_text, _get_line, categorize_by_prefix
 from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
@@ -69,15 +69,6 @@ _SPRING_ROUTE_ANNOTATIONS: Dict[str, str] = {
     'PatchMapping': 'PATCH',
     'RequestMapping': 'ANY',
 }
-
-# Filesystem writes (BACK-1090): kotlin.io File/Path extensions, JDK writer
-# constructors and java.nio.file.Files. PrintWriter is left out (unlike Java's
-# list): `PrintWriter(System.out)` is a common non-file use.
-_FS_WRITE_EXTENSIONS: frozenset = frozenset({'writeText', 'writeBytes', 'appendText', 'appendBytes'})
-_FS_WRITE_CONSTRUCTORS: frozenset = frozenset({'FileWriter', 'FileOutputStream'})
-_FILES_WRITE_METHODS: frozenset = frozenset({
-    'write', 'writeString', 'newBufferedWriter', 'newOutputStream',
-})
 
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
@@ -231,20 +222,11 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
                 'methods': _KTOR_ROUTE_VERBS[verb], 'decorator': verb,
                 'file': file_path, 'line': line,
             })
-        elif verb in _FS_WRITE_CONSTRUCTORS:
-            _add_once(surfaces['fs'], {
-                'type': 'fs_write', 'name': f'{verb}()', 'file': file_path, 'line': line,
-            })
         return
 
     # env: System.getenv("KEY")
     if _zero_arg(callee, 'kind') == 'navigation_expression':
         receiver, method = _navigation_receiver_and_method(callee, content_bytes)
-        if method in _FS_WRITE_EXTENSIONS or (receiver == 'Files' and method in _FILES_WRITE_METHODS):
-            name = f'Files.{method}' if receiver == 'Files' else f'File.{method}'
-            _add_once(surfaces['fs'], {
-                'type': 'fs_write', 'name': name, 'file': file_path, 'line': line,
-            })
         if receiver == 'System' and method == 'getenv':
             vargs = _value_arguments(suffix)
             key = _first_string_arg(vargs, content_bytes) if vargs else None

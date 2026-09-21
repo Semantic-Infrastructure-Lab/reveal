@@ -56,7 +56,8 @@ def test_every_registered_scanner_owns_one_matrix_column():
 def test_rule_table_cells_are_reported_as_rules():
     assert sm.cell_status('go', 'subprocess') == sm.RULES
     assert sm.cell_status('typescript', 'subprocess') == sm.SCANNER
-    assert sm.cell_status('ruby', 'fs') == sm.NOT_IMPLEMENTED
+    assert sm.cell_status('ruby', 'fs') == sm.RULES
+    assert sm.cell_status('ruby', 'mcp') == sm.NOT_IMPLEMENTED
 
 
 def test_matrix_is_total_over_languages_and_categories():
@@ -67,9 +68,9 @@ def test_matrix_is_total_over_languages_and_categories():
 
 
 def test_not_applicable_is_honoured_and_removes_the_gap(monkeypatch):
-    monkeypatch.setitem(sm._NOT_APPLICABLE, 'ruby', frozenset({'fs'}))
-    assert sm.cell_status('ruby', 'fs') == sm.NOT_APPLICABLE
-    assert 'fs' not in sm.coverage_matrix(['ruby'])['not_implemented']
+    monkeypatch.setitem(sm._NOT_APPLICABLE, 'ruby', frozenset({'mcp'}))
+    assert sm.cell_status('ruby', 'mcp') == sm.NOT_APPLICABLE
+    assert 'mcp' not in sm.coverage_matrix(['ruby'])['not_implemented']
 
 
 def test_unknown_language_is_entirely_not_implemented():
@@ -84,9 +85,9 @@ def _scan(tmp_path, files, **kw):
 
 def test_scan_reports_the_gap_instead_of_a_silent_zero(tmp_path):
     report = _scan(tmp_path, {'a.rb': 'x = 1\n'})
-    assert report['surfaces']['fs'] == []
-    assert report['matrix']['cells']['ruby']['fs'] == sm.NOT_IMPLEMENTED
-    assert report['matrix']['not_implemented']['fs'] == ['ruby']
+    assert report['surfaces']['mcp'] == []
+    assert report['matrix']['cells']['ruby']['mcp'] == sm.NOT_IMPLEMENTED
+    assert 'ruby' in report['matrix']['not_implemented']['mcp']
 
 
 def test_matrix_covers_only_languages_the_scan_met(tmp_path):
@@ -96,16 +97,16 @@ def test_matrix_covers_only_languages_the_scan_met(tmp_path):
 
 
 def test_type_filter_narrows_the_matrix_to_that_category(tmp_path):
-    report = _scan(tmp_path, {'a.rb': 'x = 1\n', 'b.py': 'x = 1\n'}, type_filter='fs')
-    assert report['matrix']['not_implemented'] == {'fs': ['ruby']}
-    assert all(set(row) == {'fs'} for row in report['matrix']['cells'].values())
+    report = _scan(tmp_path, {'a.rb': 'x = 1\n', 'b.py': 'x = 1\n'}, type_filter='mcp')
+    assert report['matrix']['not_implemented'] == {'mcp': ['ruby']}
+    assert all(set(row) == {'mcp'} for row in report['matrix']['cells'].values())
 
 
 def test_text_report_names_the_languages_with_no_detector(tmp_path, capsys):
     _render_report(_scan(tmp_path, {'a.rb': 'x = 1\n', 'b.swift': 'let x = 1\n'}))
     out = capsys.readouterr().out
     assert 'Not implemented for scanned languages' in out
-    assert 'fs: Swift, Ruby' in out or 'fs: Ruby, Swift' in out
+    assert 'mcp: Swift, Ruby' in out or 'mcp: Ruby, Swift' in out
     assert 'No external surfaces detected' in out
 
 

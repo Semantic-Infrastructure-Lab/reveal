@@ -94,12 +94,6 @@ _HTTP_HANDLER_FIELDS: frozenset = frozenset({'HandleFunc', 'Handle'})
 
 _ENV_READ_METHODS: frozenset = frozenset({'Getenv', 'LookupEnv'})
 
-# os./ioutil. filesystem-write functions (write-capable opens included).
-_FS_WRITE: Dict[str, frozenset] = {
-    'os': frozenset({'WriteFile', 'Create', 'OpenFile', 'Mkdir', 'MkdirAll'}),
-    'ioutil': frozenset({'WriteFile'}),
-}
-
 # os/exec process launchers (BACK-1319).
 
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
@@ -237,14 +231,6 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
                 'type': 'env_var', 'name': key, 'expr': f'os.{field}',
                 'file': file_path, 'line': line,
             })
-        return
-
-    # filesystem writes: os./ioutil. write functions
-    if receiver in _FS_WRITE and field in _FS_WRITE[receiver]:
-        surfaces['fs'].append({
-            'type': 'fs_write', 'name': f'{receiver}.{field}',
-            'file': file_path, 'line': line,
-        })
         return
 
     # HTTP routes — verb (Gin/Echo/Chi) or HandleFunc/Handle (net/http, mux).

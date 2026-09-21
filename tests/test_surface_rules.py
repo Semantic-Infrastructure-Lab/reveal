@@ -225,3 +225,27 @@ def test_register_table_rejects_a_foreign_category():
 ], ids=['rust-comment', 'ruby-scope-call', 'ruby-kernel-scope', 'python-os-path', 'python-relative'])
 def test_documented_parity_deltas(lang, code, expected, tmp_path):
     assert sorted(e['name'] for e in _scan(lang, code, tmp_path, 'subprocess')) == expected
+
+
+# ── fs table (BACK-1333) ────────────────────────────────────────────────────
+
+@pytest.mark.parametrize('lang,code,expected', [
+    # Rust: the old check was a plain string `endswith`, so any `...fs::write` counted.
+    ('rust', 'fn f(){\n  myfs::write("a", b"x");\n  MyFile::create("a");\n}\n', []),
+    ('rust', 'fn f(){\n  tokio::fs::write("a", b"x");\n  std::fs::File::create("a");\n}\n',
+     ['std::fs::File::create', 'tokio::fs::write']),
+], ids=['rust-lookalike-suffix', 'rust-real-paths'])
+def test_documented_fs_parity_deltas(lang, code, expected, tmp_path):
+    assert sorted(e['name'] for e in _scan(lang, code, tmp_path, 'fs')) == expected
+
+
+def test_fs_entries_keep_the_fs_write_type(tmp_path):
+    entries = _scan('go', 'package main\nfunc f(){ os.WriteFile("a", nil, 0) }\n', tmp_path, 'fs')
+    assert [(e['type'], e['name']) for e in entries] == [('fs_write', 'os.WriteFile')]
+
+
+def test_bare_false_needs_a_receiver_but_accepts_a_call_on_a_call_result():
+    rules = (_rule(sr.Call(name='writeText', bare=False), lang='kotlin'),)
+    assert _entries(rules, 'fun f() {\n  writeText("x")\n}\n', 'kotlin') == []
+    assert _entries(rules, 'fun f(a: File) {\n  a.writeText("x")\n}\n', 'kotlin') == ['a.writeText']
+    assert len(_entries(rules, 'fun f() {\n  getFile().writeText("x")\n}\n', 'kotlin')) == 1
