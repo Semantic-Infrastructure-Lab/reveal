@@ -55,7 +55,7 @@ def scan_file_contracts_go(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     empty: Dict[str, List[Dict[str, Any]]] = {'interfaces': [], 'structs': [], 'methods': []}
     try:
         from tree_sitter_language_pack import get_parser
-        source = Path(file_path).read_text(errors='replace')
+        source = Path(file_path).read_text(errors='replace', encoding='utf-8')
         parser = get_parser('go')
         tree = ts_parse(parser, source)
     except Exception as e:

@@ -279,7 +279,7 @@ def _suggest_reveal_type_if_variable(query: str, path: str) -> None:
     if re.search(r'[|+*?\\[\]{}()]', term):
         return
     try:
-        content = file_path.read_text(errors='replace')
+        content = file_path.read_text(errors='replace', encoding='utf-8')
     except OSError:
         return
     if term not in content:

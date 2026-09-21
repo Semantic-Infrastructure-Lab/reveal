@@ -1280,7 +1280,7 @@ class DependsAdapter(ResourceAdapter):
             if not call_names:
                 continue
             try:
-                text = file_path.read_text(errors='ignore')
+                text = file_path.read_text(errors='ignore', encoding='utf-8')
             except OSError:
                 continue
             # `name + '('` (not bare `name`), so `defined(` — extremely

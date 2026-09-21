@@ -57,7 +57,7 @@ _MOCK_PATCH_SUBSTRINGS: tuple = ('unittest.mock.patch(',)
 def scan_file_surface(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     """Parse one Python file and return categorised surface entries."""
     try:
-        source = Path(file_path).read_text(errors='replace')
+        source = Path(file_path).read_text(errors='replace', encoding='utf-8')
         tree = ast.parse(source, filename=file_path)
     except (SyntaxError, OSError):
         return {k: [] for k in _EMPTY}

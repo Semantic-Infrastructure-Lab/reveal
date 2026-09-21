@@ -154,7 +154,7 @@ def resolve_git_adapter(resource: str) -> Dict[str, Any]:
 
             # Create temporary file or use in-memory analysis
             # Most analyzers can work with content directly
-            with tempfile.NamedTemporaryFile(mode='w', suffix=os.path.splitext(file_path)[1], delete=False) as f:
+            with tempfile.NamedTemporaryFile(mode='w', suffix=os.path.splitext(file_path)[1], delete=False, encoding='utf-8') as f:
                 f.write(content)
                 temp_path = f.name
 
@@ -186,7 +186,7 @@ def resolve_git_file(git_ref: str, path: str) -> Dict[str, Any]:
     content = _read_blob_text(repo, commit, path)
 
     # Write to temp file for analysis
-    with tempfile.NamedTemporaryFile(mode='w', suffix=Path(path).suffix, delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode='w', suffix=Path(path).suffix, delete=False, encoding='utf-8') as f:
         f.write(content)
         temp_path = f.name
 
@@ -209,7 +209,7 @@ def _fetch_and_analyze_git_file(git_ref: str, file_path: str) -> Dict[str, Any]:
     commit = _resolve_commit(repo, git_ref)
     content = _read_blob_text(repo, commit, file_path)
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix=Path(file_path).suffix, delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode='w', suffix=Path(file_path).suffix, delete=False, encoding='utf-8') as f:
         f.write(content)
         temp_path = f.name
 

@@ -118,7 +118,7 @@ def _analyze_blob_content(content: str, subpath: str) -> Dict[str, Any]:
     from reveal.registry import get_analyzer
 
     suffix = Path(subpath).suffix
-    with tempfile.NamedTemporaryFile(mode='w', suffix=suffix, delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode='w', suffix=suffix, delete=False, encoding='utf-8') as f:
         f.write(content)
         temp_path = f.name
 
@@ -172,7 +172,7 @@ def get_file_diff(
                empty_tree, str(commit.id), '--', subpath]
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, errors='replace')
+        result = subprocess.run(cmd, capture_output=True, text=True, errors='replace', encoding='utf-8')
     except FileNotFoundError as e:
         # BACK-1166: match _check_pygit2()'s style of actionable guidance
         # instead of letting a raw errno bubble up through main.py's
@@ -441,7 +441,7 @@ def _commit_diff_contains(
     if subpath:
         cmd += ['--', subpath]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, errors='replace')
+        result = subprocess.run(cmd, capture_output=True, text=True, errors='replace', encoding='utf-8')
         for line in result.stdout.splitlines():
             if (line and line[0] in ('+', '-')
                     and not line.startswith('+++')
@@ -958,7 +958,7 @@ def _get_element_content_at_commit(
         file_lines = content.splitlines()
 
         suffix = Path(filepath).suffix or '.txt'
-        with tempfile.NamedTemporaryFile(mode='w', suffix=suffix, delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix=suffix, delete=False, encoding='utf-8') as f:
             f.write(content)
             tmp_path = f.name
 

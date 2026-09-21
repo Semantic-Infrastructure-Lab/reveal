@@ -142,7 +142,7 @@ def _run_diff(git_range: str) -> Dict[str, Any]:
         # writes an arbitrary file) instead of a revision.
         result = subprocess.run(
             ['git', 'diff', '--name-only', '--end-of-options', parts[0], parts[1]],
-            capture_output=True, text=True, timeout=10
+            capture_output=True, text=True, timeout=10, encoding='utf-8', errors='replace'
         )
         files = [f for f in result.stdout.splitlines() if f.strip()]
         return {'status': 'ok', 'changed_files': files, 'count': len(files)}
@@ -267,13 +267,13 @@ def _changed_files(git_range: str) -> List[Path]:
         # --end-of-options: same git-argument-injection defense as _run_diff above.
         result = subprocess.run(
             ['git', 'diff', '--name-only', '--end-of-options', git_range],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, timeout=10, encoding='utf-8', errors='replace',
         )
         if result.returncode != 0:
             return []
         toplevel = subprocess.run(
             ['git', 'rev-parse', '--show-toplevel'],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, timeout=10, encoding='utf-8', errors='replace',
         )
         root = Path(toplevel.stdout.strip()) if toplevel.returncode == 0 else Path.cwd()
         files: List[Path] = []

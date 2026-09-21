@@ -147,7 +147,7 @@ def detect_autoload_regime(path: Path) -> Optional[Dict[str, str]]:
                 seen_frameworks.add(framework)
                 continue
             try:
-                if needle in candidate.read_text(errors='ignore'):
+                if needle in candidate.read_text(errors='ignore', encoding='utf-8'):
                     seen_frameworks.add(framework)
             except OSError:
                 continue

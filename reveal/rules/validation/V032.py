@@ -124,7 +124,7 @@ class V032(BaseRule):
         # than parsed as a git option.
         log = subprocess.run(
             ['git', 'log', '--end-of-options', f'{tag}..{ref}', '--format=%H %cI'],
-            cwd=project_root, capture_output=True, text=True, timeout=10
+            cwd=project_root, capture_output=True, text=True, timeout=10, encoding='utf-8', errors='replace'
         )
         if log.returncode != 0 or not log.stdout.strip():
             return None, 0
@@ -151,7 +151,7 @@ class V032(BaseRule):
         try:
             result = subprocess.run(
                 ['git', 'rev-parse', '--verify', '--quiet', '--end-of-options', ref],
-                cwd=project_root, capture_output=True, text=True, timeout=10
+                cwd=project_root, capture_output=True, text=True, timeout=10, encoding='utf-8', errors='replace'
             )
         except subprocess.TimeoutExpired:
             return False

@@ -300,7 +300,7 @@ def run_pattern_detection(
     also_json = getattr(args, 'also_json', None)
     if isinstance(also_json, (str, os.PathLike)) and output_format != 'json':
         try:
-            with open(also_json, 'w') as f:
+            with open(also_json, 'w', encoding='utf-8') as f:
                 f.write(safe_json_dumps(_build_detections_json(
                     path, rendered_detections, parse_degraded=parse_degraded,
                     rule_errors=rule_errors, no_snippets=no_snippets,

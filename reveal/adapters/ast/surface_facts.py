@@ -480,7 +480,7 @@ def extract_file_facts(file_path: str) -> Optional[List[Fact]]:
     if language is None:
         return None
     try:
-        return extract_facts(Path(file_path).read_text(errors='replace'), language)
+        return extract_facts(Path(file_path).read_text(errors='replace', encoding='utf-8'), language)
     except Exception as e:
         logger.warning("surface facts (%s) failed to parse %s: %s", language, file_path, e)
         return None

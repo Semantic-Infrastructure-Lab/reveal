@@ -61,7 +61,7 @@ def write_also_json(result, args) -> None:
     path = getattr(args, 'also_json', None)
     if not path or getattr(args, 'format', 'text') == 'json':
         return
-    with open(path, 'w') as f:
+    with open(path, 'w', encoding='utf-8') as f:
         print_json_result(result, file=f)
 
 

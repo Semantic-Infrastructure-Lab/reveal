@@ -49,7 +49,7 @@ def scan_file_surface_csharp(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     """Parse one C# file and return categorised surface entries."""
     try:
         from tree_sitter_language_pack import get_parser
-        source = Path(file_path).read_text(errors='replace')
+        source = Path(file_path).read_text(errors='replace', encoding='utf-8')
         parser = get_parser('c_sharp')
         tree = ts_parse(parser, source)
     except Exception as e:

@@ -166,7 +166,7 @@ def _check_code(path: Path, args: Namespace):
             )
     select = getattr(args, 'select', None) or 'B,S,I,C'
     cmd = ['reveal', 'check', str(path), f'--select={select}', '--only-failures', '--format=json']
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, encoding='utf-8', errors='replace')
     output = result.stdout.strip()
 
     try:
@@ -211,7 +211,7 @@ def _check_uri(scheme: str, uri: str, args: Namespace):
     # today, whatever's added tomorrow), so a hung remote host can't block the
     # call forever. Mirrors _check_code's timeout=120 below.
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, encoding='utf-8', errors='replace')
     except subprocess.TimeoutExpired:
         return 2, f"{scheme}: timed out"
     combined = (result.stdout + result.stderr).strip()
@@ -231,7 +231,7 @@ def _check_nginx(path: Path, args: Namespace):
     from reveal.rules import RuleRegistry
 
     try:
-        content = path.read_text(errors='replace')
+        content = path.read_text(errors='replace', encoding='utf-8')
     except OSError as exc:
         return 1, f"nginx: cannot read {path}: {exc}"
 

@@ -27,13 +27,13 @@ def _git_state(cwd: Path) -> Optional[Dict[str, Any]]:
     try:
         commit = subprocess.run(
             ['git', 'rev-parse', 'HEAD'],
-            cwd=cwd, capture_output=True, text=True, timeout=5,
+            cwd=cwd, capture_output=True, text=True, timeout=5, encoding='utf-8', errors='replace',
         )
         if commit.returncode != 0:
             return None
         status = subprocess.run(
             ['git', 'status', '--porcelain'],
-            cwd=cwd, capture_output=True, text=True, timeout=5,
+            cwd=cwd, capture_output=True, text=True, timeout=5, encoding='utf-8', errors='replace',
         )
         return {
             'commit': commit.stdout.strip()[:12],

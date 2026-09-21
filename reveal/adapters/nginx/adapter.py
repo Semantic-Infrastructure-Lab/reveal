@@ -282,7 +282,7 @@ def _find_artifact_files(search_dir: str) -> List[str]:
 def _config_file_has_domain(conf_file: str, domain: str) -> bool:
     """Return True if the config file has a server_name directive for domain."""
     try:
-        content = Path(conf_file).read_text(errors='replace')
+        content = Path(conf_file).read_text(errors='replace', encoding='utf-8')
     except OSError:
         return False
     return any(
@@ -418,7 +418,7 @@ def _find_upstream_definitions(
                 if os.path.abspath(cf) == norm_config:
                     continue
                 try:
-                    cf_content = Path(cf).read_text(errors='replace')
+                    cf_content = Path(cf).read_text(errors='replace', encoding='utf-8')
                 except OSError:
                     continue
                 for name in list(unresolved):
@@ -692,7 +692,7 @@ def _collect_site_records(search_dirs: List[str]) -> List[Dict]:
             continue
         for conf_file in _iter_nginx_configs(search_dir):
             try:
-                content = Path(conf_file).read_text(errors='replace')
+                content = Path(conf_file).read_text(errors='replace', encoding='utf-8')
             except OSError:
                 continue
             site_records.append({
@@ -943,7 +943,7 @@ class NginxUriAdapter(ResourceAdapter):
             return None, None, None
 
         try:
-            content = Path(config_path).read_text(errors='replace')
+            content = Path(config_path).read_text(errors='replace', encoding='utf-8')
         except OSError:
             return config_path, None, None
 
@@ -992,7 +992,7 @@ class NginxUriAdapter(ResourceAdapter):
                 continue
             for conf_file in _iter_nginx_configs(search_dir):
                 try:
-                    content = Path(conf_file).read_text(errors='replace')
+                    content = Path(conf_file).read_text(errors='replace', encoding='utf-8')
                 except OSError:
                     continue
 

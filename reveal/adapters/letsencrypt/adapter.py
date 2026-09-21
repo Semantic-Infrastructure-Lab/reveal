@@ -84,7 +84,7 @@ def _collect_nginx_cert_paths(nginx_dirs: List[str]) -> List[str]:
             if not conf_file.is_file():
                 continue
             try:
-                for line in conf_file.read_text(errors='replace').splitlines():
+                for line in conf_file.read_text(errors='replace', encoding='utf-8').splitlines():
                     m = _SSL_CERT_RE.match(line)
                     if m:
                         paths.append(m.group(1).strip().strip('"\''))

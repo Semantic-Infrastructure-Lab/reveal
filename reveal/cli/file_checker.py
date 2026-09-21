@@ -1278,7 +1278,7 @@ def _write_also_json_report(path: str, *args, **kwargs) -> None:
     """
     import json
     try:
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write(json.dumps(_build_json_report(*args, **kwargs), indent=2))
     except OSError as e:
         print(f"Warning: --also-json could not write {path}: {e}", file=sys.stderr)

@@ -39,7 +39,7 @@ def scan_file_contracts_cpp(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     empty: Dict[str, List[Dict[str, Any]]] = {'classes': []}
     try:
         from tree_sitter_language_pack import get_parser
-        source = Path(file_path).read_text(errors='replace')
+        source = Path(file_path).read_text(errors='replace', encoding='utf-8')
         source = normalize_cpp_macro_class_modifiers(source)
         parser = get_parser('cpp')
         tree = ts_parse(parser, source)

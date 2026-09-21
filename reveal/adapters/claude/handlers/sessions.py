@@ -71,7 +71,7 @@ def _scan_jsonl_for_title(jsonl_path: Path) -> Optional[str]:
     """
     text_fallback: Optional[str] = None
     try:
-        with open(jsonl_path, 'r', errors='replace') as fh:
+        with open(jsonl_path, 'r', errors='replace', encoding='utf-8') as fh:
             for i, line in enumerate(fh):
                 if i > 50:
                     break

@@ -92,7 +92,7 @@ def _acl_grants_nobody(path: str, perm: str) -> Optional[bool]:
     try:
         result = subprocess.run(
             ['getfacl', '--omit-header', path],
-            capture_output=True, text=True, timeout=3,
+            capture_output=True, text=True, timeout=3, encoding='utf-8', errors='replace',
         )
         if result.returncode != 0:
             return False

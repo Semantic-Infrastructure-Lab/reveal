@@ -76,7 +76,7 @@ def scan_file_surface_ts(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     try:
         from tree_sitter_language_pack import get_parser
         path = Path(file_path)
-        source = path.read_text(errors='replace')
+        source = path.read_text(errors='replace', encoding='utf-8')
         lang = 'tsx' if path.suffix in ('.tsx', '.jsx') else 'typescript'
         parser = get_parser(lang)
         tree = ts_parse(parser, source)

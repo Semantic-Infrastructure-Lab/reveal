@@ -107,7 +107,7 @@ def _scan_test_file(names: Set[str], conv: LanguageConventions, fname: str, full
     if not (conv.test_symbol_patterns and (is_test_file or conv.colocated_test_symbols)):
         return
     try:
-        content = Path(full).read_text(errors='replace')
+        content = Path(full).read_text(errors='replace', encoding='utf-8')
     except OSError:
         return
     for pat in conv.test_symbol_patterns:
