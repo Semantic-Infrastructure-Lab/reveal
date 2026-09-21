@@ -388,6 +388,8 @@ reveal surface [PATH] [--type TYPE] [--format FORMAT]
 | `--type TYPE` | Filter to one surface type (see table below) |
 | `--top N` | Show only the top N entries per surface type (default: all) |
 | `--source-only` | Exclude test files/dirs (`test_*.py`, `tests/`, `*.spec.ts`, etc.) |
+| `--by dir` | Per-directory counts by category (which layer owns which boundary); `--top N` then caps directories |
+| `--depth N` | With `--by dir`: roll directories up to their first N path segments (default 0: full directory) |
 | `--format` | `text` (default), `json`, `typed`, `grep` |
 
 ### Surface Types

@@ -10,7 +10,7 @@ from __future__ import annotations
 import importlib
 import os
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Dict, List, Optional
 
 from reveal.reveal_types import CONTRACT_VERSION
@@ -162,7 +162,26 @@ def _relativize_surface_paths(surfaces: Dict[str, List[Dict[str, Any]]], base_pa
                 entry['file'] = to_relative_display(entry['file'], base_path)
 
 
-def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) -> Dict[str, Any]:
+def _rollup_by_dir(surfaces: Dict[str, List[Dict[str, Any]]], depth: int = 0) -> List[Dict[str, Any]]:
+    """Count entries per (directory, category) so the output answers "which layer
+    owns DB access / shells out / reads env" without inferring layering from
+    paths (BACK-1337). `depth` keeps only the first N path segments of each
+    directory (0 = the full directory). Busiest directories first; ties by name."""
+    rollup: Dict[str, Dict[str, int]] = {}
+    for category, entries in surfaces.items():
+        for entry in entries:
+            parts = PurePosixPath(str(entry.get('file') or '.').replace(os.sep, '/')).parent.parts
+            if depth > 0:
+                parts = parts[:depth]
+            counts = rollup.setdefault('/'.join(parts) or '.', {})
+            counts[category] = counts.get(category, 0) + 1
+    rows = [{'dir': d, 'total': sum(c.values()), 'counts': c} for d, c in rollup.items()]
+    return sorted(rows, key=lambda r: (-r['total'], r['dir']))
+
+
+def _scan_surface(
+    path: Path, type_filter: str = '', source_only: bool = False, by: str = '', depth: int = 0,
+) -> Dict[str, Any]:
     collected = _collect_source_files(path, source_only=source_only)
     surfaces: Dict[str, List[Dict[str, Any]]] = {
         k: [] for k in ('cli', 'http', 'mcp', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
@@ -217,10 +236,12 @@ def _scan_surface(path: Path, type_filter: str = '', source_only: bool = False) 
             test_origin_count += is_test_origin
 
     total = sum(len(v) for v in surfaces.values())
+    by_dir = {'by_dir': _rollup_by_dir(surfaces, depth)} if by == 'dir' else {}
     return {
         'path': str(path),
         'total': total,
         'surfaces': surfaces,
+        **by_dir,
         'unsupported_language': unsupported_language,
         'coverage': coverage.to_scope_dict('surface'),
         'scope': scope,
@@ -261,7 +282,8 @@ def _render_report(report: Dict[str, Any], top: int = None) -> None:
         print()
     print(f"Total surface entries: {total}")
     if top is not None:
-        print(f"Showing top {top} per category  (use --top N or omit for all)")
+        unit = 'directories' if 'by_dir' in report else 'per category'
+        print(f"Showing top {top} {unit}  (use --top N or omit for all)")
     print()
 
     if total == 0:
@@ -277,6 +299,10 @@ def _render_report(report: Dict[str, Any], top: int = None) -> None:
         print()
         return
 
+    if 'by_dir' in report:
+        _render_by_dir(report['by_dir'], top)
+        return
+
     for key, label in _SURFACE_LABELS.items():
         entries = surfaces.get(key, [])
         if not entries:
@@ -290,6 +316,20 @@ def _render_report(report: Dict[str, Any], top: int = None) -> None:
             print(f"  … {truncated} more (use --top {len(entries)} or --type {key} to see all)")
         print()
 
+    print("ℹ Taxonomy-based — project-specific clients outside known libraries not detected.")
+    print()
+
+
+def _render_by_dir(rows: List[Dict[str, Any]], top: Optional[int]) -> None:
+    shown = rows[:top] if top is not None else rows
+    width = max((len(r['dir']) for r in shown), default=0)
+    print(f"By directory ({len(rows)}):")
+    for row in shown:
+        cells = '  '.join(f"{cat} {row['counts'][cat]}" for cat in _SURFACE_LABELS if cat in row['counts'])
+        print(f"  {row['dir']:<{width}}  {row['total']:>4}  {cells}")
+    if len(rows) > len(shown):
+        print(f"  … {len(rows) - len(shown)} more directories (use --top {len(rows)} to see all)")
+    print()
     print("ℹ Taxonomy-based — project-specific clients outside known libraries not detected.")
     print()
 
@@ -380,16 +420,18 @@ class SurfaceAdapter(ResourceAdapter):
         return {
             'name': 'surface',
             'description': 'Map every external surface the system touches: CLI, HTTP routes, env vars, network, filesystem writes.',
-            'syntax': 'surface://<path>[?type=cli|http|mcp|env|network|db|sdk|fs|subprocess&source_only=true]',
+            'syntax': 'surface://<path>[?type=cli|http|mcp|env|network|db|sdk|fs|subprocess&source_only=true&by=dir&depth=N]',
             'examples': [
                 {'uri': 'surface://src', 'description': 'All surfaces in src/'},
                 {'uri': 'surface://.?type=env', 'description': 'Only env vars'},
                 {'uri': 'surface://.?source_only=true', 'description': 'Production code only (exclude tests)'},
+                {'uri': 'surface://.?by=dir&depth=2', 'description': 'Which directories touch which boundary kinds (two levels deep)'},
             ],
             'features': [
                 'Detects CLI arguments/subcommands, HTTP routes, MCP tool registrations',
                 'Detects environment variable reads, network/db/sdk imports',
                 'Detects filesystem writes and subprocess/shell execution',
+                'by=dir rolls entries up per directory (counts per category) to show which layers own which boundaries',
                 'Covers Python, TypeScript/JavaScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++',
             ],
             'notes': [
@@ -411,6 +453,8 @@ class SurfaceAdapter(ResourceAdapter):
             'query_params': {
                 'type': {'type': 'string', 'description': 'Filter to one surface type', 'examples': ['type=env']},
                 'source_only': {'type': 'boolean', 'description': 'Exclude test files/directories', 'examples': ['source_only=true']},
+                'by': {'type': 'string', 'description': "Group entries: 'dir' adds a by_dir rollup (counts per category per directory)", 'examples': ['by=dir']},
+                'depth': {'type': 'integer', 'description': 'With by=dir: keep only the first N path segments of each directory (0 = full directory)', 'examples': ['depth=2']},
             },
             'elements': {},
             'supports_batch': False,
@@ -447,7 +491,20 @@ class SurfaceAdapter(ResourceAdapter):
         _source_only_raw = self.query_params.get('source_only')
         source_only = str(_source_only_raw).lower() == 'true' if _source_only_raw is not None else False
 
-        report = _scan_surface(Path(self.path), type_filter=type_filter, source_only=source_only)
+        by = str(self.query_params.get('by') or '')
+        if by not in ('', 'dir'):
+            raise ValueError(f"surface: unknown by={by!r} (supported: dir)")
+        # int() rather than str(): coerce_value() turns a literal 0/1 into bool
+        # (see BACK-1211 above), and int(True) == 1 recovers the number.
+        try:
+            depth = int(self.query_params.get('depth') or 0)
+        except (TypeError, ValueError):
+            raise ValueError(f"surface: depth must be an integer, got {self.query_params.get('depth')!r}")
+        if depth < 0:
+            raise ValueError("surface: depth must be >= 0")
+
+        report = _scan_surface(Path(self.path), type_filter=type_filter, source_only=source_only,
+                               by=by, depth=depth)
 
         warnings = []
         coverage_warning = report.get('coverage', {}).get('warning', '')

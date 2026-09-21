@@ -44,6 +44,7 @@ def create_surface_parser() -> argparse.ArgumentParser:
             "  reveal surface . --type env             # Only env vars\n"
             "  reveal surface . --source-only          # Production code only (exclude tests)\n"
             "  reveal surface . --source-only --type sdk  # SDK egress, production only\n"
+            "  reveal surface . --by dir --depth 2     # Which layers touch which boundary kinds\n"
         )
     )
     parser.add_argument(
@@ -71,6 +72,19 @@ def create_surface_parser() -> argparse.ArgumentParser:
         default=False,
         help='Exclude test files and directories from the scan (test_*.py, *_test.py, conftest.py, tests/, __tests__/, *.test.ts, *.spec.ts, etc.)'
     )
+    parser.add_argument(
+        '--by',
+        choices=['dir'],
+        default='',
+        help='Group entries: dir = per-directory counts by category (which layer owns which boundary)'
+    )
+    parser.add_argument(
+        '--depth',
+        metavar='N',
+        type=int,
+        default=0,
+        help='With --by dir: roll directories up to their first N path segments (default 0: full directory)'
+    )
     return parser
 
 
@@ -84,7 +98,10 @@ def run_surface(args: Namespace) -> None:
     top = getattr(args, 'top', None)
     source_only = getattr(args, 'source_only', False)
 
-    query = f'type={type_filter}&source_only={"true" if source_only else "false"}'
+    by = getattr(args, 'by', '')
+    depth = getattr(args, 'depth', 0)
+
+    query = f'type={type_filter}&source_only={"true" if source_only else "false"}&by={by}&depth={depth}'
     result = SurfaceAdapter(str(path), query).get_structure()
 
     if args.format == 'json':

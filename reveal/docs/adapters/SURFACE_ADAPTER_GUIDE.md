@@ -24,10 +24,12 @@ reveal surface . --top 20
 reveal surface . --type env
 reveal surface . --source-only
 reveal surface . --source-only --type sdk
+reveal surface . --by dir --depth 2
 
 reveal 'surface://src'
 reveal 'surface://.?type=env'
 reveal 'surface://.?source_only=true'
+reveal 'surface://.?by=dir&depth=2'
 ```
 
 Use JSON when another tool or agent will rank, filter, or store the result:
@@ -43,9 +45,12 @@ reveal 'surface://.?type=env' --format json
 |-----------|--------|---------|
 | `type` | `cli`, `http`, `mcp`, `env`, `network`, `db`, `sdk`, `fs`, `subprocess` | Filter to one surface category. |
 | `source_only` | `true`, `false` (default) | Exclude test files and directories (`test_*.py`, `*_test.py`, `conftest.py`, `tests/`, `__tests__/`, `*.test.ts`, `*.spec.ts`, etc.). |
+| `by` | `dir` | Add a per-directory rollup (see below). |
+| `depth` | integer >= 0 (default `0`) | With `by=dir`: keep only the first N path segments of each directory, so `depth=2` folds `app/api/util` into `app/api`. `0` keeps the full directory. |
 
 The CLI subcommand form additionally supports `--top N` to cap entries shown
-per category in text output (JSON always returns all entries).
+per category in text output (JSON always returns all entries). With `--by dir`,
+`--top N` caps directories instead.
 
 ## Language Coverage
 
@@ -63,6 +68,24 @@ category-specific fields (`name`, `type`, `methods`, `path`, `target`, ...).
 understood — check `coverage.warning` before trusting an empty or
 suspiciously small result on a mixed-language repo.
 
+### Per-directory rollup
+
+`--by dir` (or `?by=dir`) answers "which layer owns DB access, shells out, or
+reads env" without inferring layering from paths. Text output replaces the
+per-category listing with one line per directory, busiest first:
+
+```
+By directory (3):
+  app/api     4  env 3  subprocess 1
+  app/db      2  env 1  db 1
+  .           1  env 1
+```
+
+JSON keeps `surfaces` unchanged and adds `by_dir`, a list of
+`{"dir", "total", "counts": {category: n}}` rows in the same order. The key is
+absent unless `by=dir` is requested. It honours `type` and `source_only`, and
+its totals sum to the flat `total`.
+
 ## Good Review Questions
 
 - Does every network/db/sdk import correspond to a boundary the team actually
@@ -72,6 +95,8 @@ suspiciously small result on a mixed-language repo.
   interface?
 - With `--source-only`, does production code reach further than tests
   exercise?
+- With `--by dir`, does each boundary kind sit in the layer that should own it,
+  or is it scattered across the tree?
 
 ## Limits
 

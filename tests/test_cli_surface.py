@@ -2346,5 +2346,101 @@ class TestPythonSurfacePrecision(unittest.TestCase):
         self.assertEqual(s['mcp'], [])
 
 
+class TestSurfaceByDir(unittest.TestCase):
+    """BACK-1337: per-directory rollup answering "which layer touches which
+    boundary kinds"."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        _write(self.tmp, 'app/db/repo.py', '''\
+            import sqlite3
+            import os
+            KEY = os.environ.get('DB_URL')
+        ''')
+        _write(self.tmp, 'app/api/routes.py', '''\
+            import os
+            A = os.environ.get('A')
+            B = os.environ.get('B')
+            C = os.environ.get('C')
+        ''')
+        _write(self.tmp, 'app/api/util/run.py', '''\
+            import subprocess
+            def go():
+                subprocess.run(['ls'])
+        ''')
+        _write(self.tmp, 'top.py', "import os\nX = os.environ.get('X')\n")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _by_dir(self, query=''):
+        from reveal.adapters.surface import SurfaceAdapter
+        result = SurfaceAdapter(self.tmp, 'by=dir' + query).get_structure()
+        return {r['dir']: r for r in result['by_dir']}, result
+
+    def test_counts_per_directory_and_category(self):
+        rows, _ = self._by_dir()
+        self.assertEqual(rows['app/db']['counts'], {'db': 1, 'env': 1})
+        self.assertEqual(rows['app/api']['counts'], {'env': 3})
+        self.assertEqual(rows['app/api/util']['counts'], {'subprocess': 1})
+        self.assertEqual(rows['.']['counts'], {'env': 1})
+        self.assertEqual(rows['app/api']['total'], 3)
+
+    def test_sorted_busiest_first_then_by_name(self):
+        _, result = self._by_dir()
+        totals = [(r['total'], r['dir']) for r in result['by_dir']]
+        self.assertEqual(totals, sorted(totals, key=lambda t: (-t[0], t[1])))
+        self.assertEqual(result['by_dir'][0]['dir'], 'app/api')
+
+    def test_depth_rolls_subdirectories_up(self):
+        rows, _ = self._by_dir('&depth=2')
+        self.assertEqual(rows['app/api']['counts'], {'env': 3, 'subprocess': 1})
+        self.assertNotIn('app/api/util', rows)
+
+    def test_depth_one_survives_bool_coercion(self):
+        # coerce_value() turns a literal 1 into True; depth=1 must still mean 1.
+        rows, _ = self._by_dir('&depth=1')
+        self.assertEqual(set(rows), {'app', '.'})
+        self.assertEqual(rows['app']['total'], 6)
+
+    def test_rollup_totals_match_flat_total(self):
+        _, result = self._by_dir()
+        self.assertEqual(sum(r['total'] for r in result['by_dir']), result['total'])
+
+    def test_type_filter_respected(self):
+        rows, result = self._by_dir('&type=subprocess')
+        self.assertEqual(set(rows), {'app/api/util'})
+
+    def test_absent_unless_requested(self):
+        from reveal.adapters.surface import SurfaceAdapter
+        self.assertNotIn('by_dir', SurfaceAdapter(self.tmp, '').get_structure())
+
+    def test_invalid_by_and_depth_rejected(self):
+        from reveal.adapters.surface import SurfaceAdapter
+        for query in ('by=file', 'by=dir&depth=-1', 'by=dir&depth=abc'):
+            with self.assertRaises(ValueError, msg=query):
+                SurfaceAdapter(self.tmp, query).get_structure()
+
+    def test_text_render_and_top(self):
+        import contextlib
+        _, result = self._by_dir()
+        buf = StringIO()
+        with contextlib.redirect_stdout(buf):
+            _render_report(result, top=2)
+        out = buf.getvalue()
+        self.assertIn('By directory (4):', out)
+        self.assertIn('Showing top 2 directories', out)
+        self.assertIn('env 3', out)
+        self.assertIn('… 2 more directories', out)
+        self.assertNotIn('Environment variables (', out)
+
+    def test_cli_flags(self):
+        args = create_surface_parser().parse_args(['x', '--by', 'dir', '--depth', '2'])
+        self.assertEqual((args.by, args.depth), ('dir', 2))
+        with self.assertRaises(SystemExit):
+            create_surface_parser().parse_args(['x', '--by', 'file'])
+
+
 if __name__ == '__main__':
     unittest.main()
