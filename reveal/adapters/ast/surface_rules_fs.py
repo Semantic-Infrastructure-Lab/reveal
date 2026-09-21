@@ -9,7 +9,7 @@ PHP (binding resolution, BACK-1335) and C++ (an `ofstream` declaration is not a 
 `new`, so it needs a declaration fact).
 """
 
-from .surface_rules import Call, New, Rule, register_table
+from .surface_rules_model import Call, New, Rule
 
 _C = 'fs'
 _T = 'fs_write'
@@ -86,4 +86,4 @@ RULES = (
          ('import Foundation\nfunc f() {\n  FileManager.default.fileExists(atPath: p)\n}\n',)),
 )
 
-register_table(_C, RULES)
+TABLES = {_C: RULES}

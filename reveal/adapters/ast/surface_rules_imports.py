@@ -21,7 +21,7 @@ Not yet rule-driven: C++, PHP, Python, TypeScript/JavaScript (BACK-1334 slices c
 match by plain string prefix, not by segment).
 """
 
-from .surface_rules import Import, Rule, register_table
+from .surface_rules_model import Import, Rule
 from .surface_rules_sockets import RULES as _SOCKET_RULES
 
 # lang -> (example for module `{m}`, lookalike that must not match). The lookalike appends a
@@ -128,5 +128,4 @@ def _rows(category: str) -> tuple:
 # A category has one table: `network` also carries the socket-client Call/New rows.
 _EXTRA = {'network': _SOCKET_RULES}
 
-for _category in _MODULES:
-    register_table(_category, _rows(_category) + _EXTRA.get(_category, ()))
+TABLES = {category: _rows(category) + _EXTRA.get(category, ()) for category in _MODULES}

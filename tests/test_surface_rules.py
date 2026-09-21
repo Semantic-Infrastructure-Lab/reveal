@@ -434,3 +434,75 @@ def test_socket_clients_are_network_call_entries(lang, code, expected, tmp_path)
 def test_a_listening_socket_is_not_a_network_client(tmp_path):
     assert _scan('go', 'package main\nimport "net"\nfunc f() { net.Listen("tcp", ":80") }\n',
                  tmp_path, 'network') == []
+
+
+# ── registration layering (BACK-1360) ───────────────────────────────────────
+# Table modules used to import the engine and the engine imported them back at the bottom
+# of the file: the repo's only import cycle, and a pattern each new category would copy.
+# Now: model <- tables <- engine, and the engine builds one explicit ALL_TABLES.
+
+import ast
+import importlib
+import pathlib
+import types
+
+_AST_DIR = pathlib.Path(sr.__file__).parent
+_MODEL = 'surface_rules_model'
+_TABLE_FILES = sorted(p.stem for p in _AST_DIR.glob('surface_rules_*.py') if p.stem != _MODEL)
+
+
+def _sibling_imports(stem):
+    """Names of the sibling modules that `<stem>.py` imports (relative or absolute)."""
+    tree = ast.parse((_AST_DIR / f'{stem}.py').read_text(encoding='utf-8'))
+    found = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module:
+                found.add(node.module.split('.')[-1])
+            found.update(a.name for a in node.names)
+        elif isinstance(node, ast.Import):
+            found.update(a.name.split('.')[-1] for a in node.names)
+    return found
+
+
+def test_table_modules_are_found():
+    assert {'surface_rules_env', 'surface_rules_fs', 'surface_rules_imports',
+            'surface_rules_sockets', 'surface_rules_subprocess'} <= set(_TABLE_FILES)
+
+
+@pytest.mark.parametrize('stem', _TABLE_FILES)
+def test_table_modules_do_not_import_the_engine(stem):
+    assert 'surface_rules' not in _sibling_imports(stem), (
+        f'{stem} imports the engine; table modules import surface_rules_model only (BACK-1360)')
+
+
+def test_model_is_a_leaf():
+    siblings = {n for n in _sibling_imports(_MODEL)
+                if n == 'surface_rules' or n.startswith('surface_rules_')}
+    assert siblings == set(), f'surface_rules_model must not import {sorted(siblings)}'
+
+
+@pytest.mark.parametrize('stem', _TABLE_FILES)
+def test_every_rule_a_table_module_defines_reaches_a_registered_table(stem):
+    """A module whose rows never reach ALL_TABLES is silently dead (the sockets rows once
+    reached the `network` table only through another table module's import)."""
+    module = importlib.import_module(f'reveal.adapters.ast.{stem}')
+    registered = set(sr.all_rules())
+    if hasattr(module, 'TABLES'):
+        assert module in sr._TABLE_MODULES, f'{stem} exports TABLES but is not in _TABLE_MODULES'
+    for rule in getattr(module, 'RULES', ()):
+        assert rule in registered, f'{stem}: {rule.category}/{rule.lang} row is in no registered table'
+
+
+def test_all_tables_is_the_live_registry_at_import():
+    assert set(sr.ALL_TABLES) == set(sr._TABLES)
+    assert all(sr.ALL_TABLES[c] is sr._TABLES[c] for c in sr.ALL_TABLES)
+
+
+def test_a_category_claimed_by_two_modules_is_rejected():
+    def module(name):
+        return types.SimpleNamespace(
+            __name__=name, TABLES={'subprocess': (_rule(sr.Subshell(), name='x', lang='ruby'),)})
+
+    with pytest.raises(ValueError, match='defined twice'):
+        sr._collect_tables((module('one'), module('two')))

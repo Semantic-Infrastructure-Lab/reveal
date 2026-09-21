@@ -8,7 +8,7 @@ Not yet rule-driven: Python, TypeScript/JavaScript, Ruby and PHP (subscript and 
 forms such as `ENV['X']` and `process.env.X`, which have no fact yet), C++ and Swift.
 """
 
-from .surface_rules import Call, Rule, register_table
+from .surface_rules_model import Call, Rule
 
 _C = 'env'
 _T = 'env_var'
@@ -40,4 +40,4 @@ RULES = (
          ('fn f(k: &str) { std::env::var(k).ok(); std::env::args(); }\n',)),
 )
 
-register_table(_C, RULES)
+TABLES = {_C: RULES}

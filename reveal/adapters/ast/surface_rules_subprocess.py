@@ -8,7 +8,7 @@ Not yet rule-driven: TypeScript/JavaScript and PHP still detect subprocess in th
 scanners (they need binding-resolution hooks, BACK-1335).
 """
 
-from .surface_rules import Call, ImportedFrom, New, Rule, Subshell, register_table
+from .surface_rules_model import Call, ImportedFrom, New, Rule, Subshell
 
 _C = 'subprocess'
 
@@ -137,4 +137,4 @@ RULES = (
                   '  try Process.run(url, arguments: [])\n}\n')),
 )
 
-register_table(_C, RULES)
+TABLES = {_C: RULES}

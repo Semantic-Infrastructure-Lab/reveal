@@ -13,7 +13,7 @@ categories' business). `URLSession` is matched on `URLSession.shared.<task>` and
 rows already flag them).
 """
 
-from .surface_rules import Call, ImportedFrom, New, Rule
+from .surface_rules_model import Call, ImportedFrom, New, Rule
 
 _C = 'network'
 

@@ -25,19 +25,23 @@ See internal-docs/design/SURFACE_RULE_TABLE_ARCHITECTURE_2026-09-20.md.
 
 import ast
 import re
-from dataclasses import dataclass
 from functools import lru_cache
 from fnmatch import fnmatchcase
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from .surface_facts import LANGUAGES, CallFilter, FactCollector, NewFilter, python_facts_from_ast
+from .surface_facts import CallFilter, FactCollector, NewFilter, python_facts_from_ast
 from .surface_facts import Call as CallFact
 from .surface_facts import Fact
 from .surface_facts import Import as ImportFact
 from .surface_facts import New as NewFact
 from .surface_facts import Subshell as SubshellFact
-
-Names = Union[str, Tuple[str, ...]]
+from .surface_rules_model import (  # noqa: F401  (re-exported: callers use `surface_rules.Rule` etc.)
+    CATEGORIES, Call, Import, ImportedFrom, Match, Names, New, Rule, Subshell, _PLACEHOLDERS,
+    check_table,
+)
+# Rule tables import only the model, never this module (BACK-1360), so importing them here,
+# at the top, cannot cycle. A new category module is added to _TABLE_MODULES, and only there.
+from . import surface_rules_env, surface_rules_fs, surface_rules_imports, surface_rules_subprocess
 
 _SEGMENT_SEPARATORS = ('::', '.', '/')
 
@@ -56,106 +60,6 @@ def _segment_suffix(text: str, suffix: str) -> bool:
     if text == suffix:
         return True
     return any(text.endswith(sep + suffix) for sep in _SEGMENT_SEPARATORS)
-
-
-# ── match kinds ─────────────────────────────────────────────────────────────
-
-@dataclass(frozen=True)
-class Call:
-    """A call site.
-
-    `receiver`: None = any, '' = bare call only (not a call on another call's result), else
-    exact match on the collapsed receiver path. `qualified` matches the full callee text with
-    the receiver chain kept (`Runtime.getRuntime().exec`). `resolved` matches on the
-    import-resolved path instead of the source spelling. `bare=False` rejects an unqualified
-    `name(...)`, for extension functions that only make sense on a receiver.
-    """
-    name: Names = ()
-    receiver: Optional[str] = None
-    receiver_endswith: str = ''
-    qualified: Optional[str] = None
-    resolved: bool = False
-    bare: Optional[bool] = None     # False = needs a receiver (a call on a call result counts)
-    # True = the call must pass a string-literal argument; the first one is offered as `{key}`.
-    # A call with none (`System.getenv()`, a variable key, an interpolated string) is no match.
-    string_arg: bool = False
-
-
-@dataclass(frozen=True)
-class New:
-    """A language-level constructor expression (`new Foo(..)`)."""
-    type: Names = ()
-
-
-@dataclass(frozen=True)
-class Subshell:
-    """Backticks / `%x(..)`."""
-
-
-@dataclass(frozen=True)
-class Import:
-    """An import of `module` or anything beneath it (segment-aligned prefix).
-
-    An entry containing `*` is a glob over the whole module text instead (`aws_sdk_*`,
-    `aws-sdk-*`); `*` also crosses separators. Use it for families that share a name prefix
-    but have no common segment: Rust crates (`aws_sdk_s3`), Ruby gems (`aws-sdk-s3`).
-    """
-    module: Names = ()
-
-
-Match = Union[Call, New, Subshell, Import]
-
-
-@dataclass(frozen=True)
-class ImportedFrom:
-    """Provenance: the file imports `module` (segment-aligned suffix of an import path)."""
-    module: str
-
-
-# Entry-name placeholders each match kind can fill.
-_PLACEHOLDERS: Dict[type, Tuple[str, ...]] = {
-    Call: ('path', 'receiver', 'name', 'key'),
-    New: ('type',),
-    Subshell: (),
-    Import: ('module',),
-}
-
-CATEGORIES = ('cli', 'http', 'mcp', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
-
-
-@dataclass(frozen=True)
-class Rule:
-    category: str
-    lang: str
-    match: Match
-    entry_name: str                       # `str.format` template, see _PLACEHOLDERS
-    example: str                          # source that must produce an entry from THIS rule
-    counter_examples: Tuple[str, ...] = ()  # lookalikes that must produce no entry at all
-    requires: Optional[ImportedFrom] = None
-    entry_type: str = ''                  # the entry's `type` field; '' = the category name
-    entry_expr: str = ''                  # template for the entry's `expr` field; '' = no `expr`
-
-    def __post_init__(self) -> None:
-        if self.category not in CATEGORIES:
-            raise ValueError(f'unknown category {self.category!r}')
-        if self.lang not in LANGUAGES:
-            raise ValueError(f'unknown language {self.lang!r}')
-        if not self.example.strip():
-            raise ValueError(f'{self.category}/{self.lang}: a rule needs an example')
-        fields = {f: 'x' for f in _PLACEHOLDERS[type(self.match)]}
-        try:
-            self.entry_name.format(**fields)
-        except (KeyError, IndexError) as e:
-            raise ValueError(f'entry_name {self.entry_name!r} uses {e} not offered by '
-                             f'{type(self.match).__name__}') from None
-        try:
-            self.entry_expr.format(**fields)
-        except (KeyError, IndexError) as e:
-            raise ValueError(f'entry_expr {self.entry_expr!r} uses {e} not offered by '
-                             f'{type(self.match).__name__}') from None
-        if isinstance(self.match, Call) and not self.match.string_arg and (
-                '{key}' in self.entry_name or '{key}' in self.entry_expr):
-            raise ValueError('{key} needs Call(string_arg=True)')
 
 
 # ── engine ──────────────────────────────────────────────────────────────────
@@ -282,7 +186,29 @@ def scan_category(category: str, lang: str, facts: List[Fact],
 
 # ── registry ────────────────────────────────────────────────────────────────
 
-_TABLES: Dict[str, Tuple[Rule, ...]] = {}
+# Category order here is the reporting order (`rule_categories`, `all_rules`).
+_TABLE_MODULES = (
+    surface_rules_subprocess,
+    surface_rules_fs,
+    surface_rules_env,
+    surface_rules_imports,
+)
+
+
+def _collect_tables(modules) -> Dict[str, Tuple[Rule, ...]]:
+    """Merge each module's `TABLES`; a category claimed twice is a bug, not an override."""
+    tables: Dict[str, Tuple[Rule, ...]] = {}
+    for module in modules:
+        for category, rules in module.TABLES.items():
+            if category in tables:
+                raise ValueError(f'{category}: rule table defined twice (again in {module.__name__})')
+            check_table(category, rules)
+            tables[category] = rules
+    return tables
+
+
+ALL_TABLES: Dict[str, Tuple[Rule, ...]] = _collect_tables(_TABLE_MODULES)
+_TABLES: Dict[str, Tuple[Rule, ...]] = dict(ALL_TABLES)   # live registry; tests swap entries
 
 
 def _reset_caches() -> None:
@@ -291,10 +217,8 @@ def _reset_caches() -> None:
 
 
 def register_table(category: str, rules: Tuple[Rule, ...]) -> None:
-    """Install a category's rule table (one module per category, imported below)."""
-    bad = [r for r in rules if r.category != category]
-    if bad:
-        raise ValueError(f'{category}: table holds rules for {sorted({r.category for r in bad})}')
+    """Install or replace a category's table in the live registry, validating it first."""
+    check_table(category, rules)
     _TABLES[category] = rules
     _reset_caches()
 
@@ -468,9 +392,3 @@ def apply_ast_rules(surfaces: Dict[str, List[Dict[str, Any]]], tree: ast.AST, fi
     else:
         facts = python_facts_from_ast(tree)
     apply_rules(surfaces, 'python', facts, file_path)
-
-
-from . import surface_rules_subprocess  # noqa: E402,F401  (registers its table)
-from . import surface_rules_fs  # noqa: E402,F401
-from . import surface_rules_env  # noqa: E402,F401
-from . import surface_rules_imports  # noqa: E402,F401
