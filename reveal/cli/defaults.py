@@ -13,7 +13,7 @@ from functools import lru_cache
 
 # Dests read by `pack` internals that no main-parser flag defines (the pack subcommand
 # owns them). Kept here so pack routed through _default_args still has them.
-_PACK_EXTRAS: dict = dict(content=False, focus=None, budget='2000')
+_PACK_EXTRAS: dict = {'content': False, 'focus': None, 'budget': '2000'}
 
 
 @lru_cache(maxsize=1)
