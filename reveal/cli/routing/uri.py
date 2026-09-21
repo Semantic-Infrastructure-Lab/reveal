@@ -205,6 +205,7 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
     resource = _inject_since_until_flags(resource, scheme, args)
     resource = _inject_respect_gitignore_flag(resource, scheme, args)
     resource = _inject_all_flag(resource, scheme, args)
+    resource = _inject_verbose_flag(resource, scheme, args)
     _warn_unsupported_structural_flags(resource, scheme, args)
 
     # Look up adapter from registry
@@ -385,10 +386,28 @@ def _inject_all_flag(resource: str, scheme: str, args: 'Namespace') -> str:
     --sort/--limit/--exclude. Adapters with no declared fragment are untouched:
     those either have no cap or (claude://, overview://) handle --all themselves.
     """
-    if not getattr(args, 'all', False):
+    return _inject_declared_fragment(resource, scheme, getattr(args, 'all', False),
+                                     'ALL_RESULTS_QUERY')
+
+
+def _inject_verbose_flag(resource: str, scheme: str, args: 'Namespace') -> str:
+    """Inject --verbose into the URI query string for adapters that declare it
+    (ResourceAdapter.VERBOSE_QUERY, BACK-1361). `reveal 'imports://src?circular'
+    --verbose` was accepted and printed the same truncated output as without it,
+    while the renderer itself advised "Run with --verbose". The adapter has always
+    honored `&verbose`; this makes the flag mean the same thing. URI wins.
+    """
+    return _inject_declared_fragment(resource, scheme, getattr(args, 'verbose', False),
+                                     'VERBOSE_QUERY')
+
+
+def _inject_declared_fragment(resource: str, scheme: str, enabled: bool, attr: str) -> str:
+    """Append the query fragment an adapter declares in `attr`, if `enabled` and the
+    URI does not already set that key."""
+    if not enabled:
         return resource
     from ...adapters.base import get_adapter_class
-    fragment = getattr(get_adapter_class(scheme), 'ALL_RESULTS_QUERY', None)
+    fragment = getattr(get_adapter_class(scheme), attr, None)
     if not isinstance(fragment, str) or not fragment:
         return resource
     key = fragment.partition('=')[0]

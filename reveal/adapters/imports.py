@@ -219,6 +219,11 @@ _SCHEMA_QUERY_PARAMS = {
         'description': 'Score each directory as a component: cohesion (internal/outgoing imports), coupling (incoming), top bridge file',
         'examples': ['imports://src?components']
     },
+    'verbose': {
+        'type': 'flag',
+        'description': 'Show everything instead of a summary: every file in a cycle group plus its cycle edges, all unused imports, all violations. Same as the CLI --verbose',
+        'examples': ['imports://src?circular&verbose']
+    },
 }
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -939,6 +944,7 @@ class ImportsAdapter(ResourceAdapter):
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
+    VERBOSE_QUERY = 'verbose'  # `--verbose` == `&verbose` (BACK-1361)
 
     def __init__(self, resource: str = '.', query: Optional[str] = None):
         """Initialize imports adapter.

@@ -152,6 +152,13 @@ class ResourceAdapter(ABC):
     # adapter has no cap to lift, or handles --all itself (claude://, overview://).
     ALL_RESULTS_QUERY: Optional[str] = None
 
+    # The query fragment that turns on this adapter's own verbose output, e.g.
+    # 'verbose'. The CLI injects it for `--verbose` unless the URI already sets
+    # that key (BACK-1361), so the flag and the `&verbose` spelling agree.
+    # None = the adapter does not read a verbose query param (it may still
+    # handle --verbose itself, e.g. overview://).
+    VERBOSE_QUERY: Optional[str] = None
+
     # help://relationships cluster membership, declared at the adapter
     # definition site so it can't drift from help.py's hand-maintained
     # dicts (BACK-1156). None = not shown in any cluster. Most adapters

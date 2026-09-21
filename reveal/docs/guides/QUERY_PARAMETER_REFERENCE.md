@@ -67,7 +67,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
   ```
   Detects imports that violate architectural layer boundaries (if configured).
 
-- **`verbose`** (flag, combine with `circular`) - Show the actual cycle path (A→B→C→A) for each circular dependency group
+- **`verbose`** (flag, combine with `circular`) - Show the actual cycle path (A→B→C→A) for each circular dependency group, and every file in it. Same as the CLI `--verbose`: `reveal 'imports://src?circular' --verbose`
   ```bash
   reveal 'imports://src?circular&verbose'
   ```
