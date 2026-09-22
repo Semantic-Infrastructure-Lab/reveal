@@ -12,7 +12,7 @@ from typing import Any, List, Optional, TYPE_CHECKING
 
 from ...errors import NotApplicableError
 from ...utils import print_json_result, write_also_json
-from .flag_specs import inject_query_flags
+from .flag_specs import exclude_fragment, inject_query_flags
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -253,7 +253,7 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:
 
     if exclude_values and scheme in _EXCLUDE_AWARE_SCHEMES and 'exclude=' not in resource:
         sep = '&' if '?' in resource else '?'
-        resource = f"{resource}{sep}exclude={','.join(exclude_values)}"
+        resource = f"{resource}{sep}{exclude_fragment(exclude_values)}"
 
     # BACK-1257: every other path-walking scheme gets exclusion by publishing
     # the scope for the shared directory-pruning predicate (see

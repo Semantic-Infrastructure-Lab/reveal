@@ -40,6 +40,7 @@ from reveal.adapters.overview import (  # noqa: F401 - re-exported for back-comp
     _run_scope,
     _run_stats,
 )
+from reveal.cli.routing.flag_specs import exclude_fragment, inject_query_flags
 
 
 def create_overview_parser() -> argparse.ArgumentParser:
@@ -117,19 +118,18 @@ def run_overview(args: Namespace) -> None:
     top = UNLIMITED_TOP if (getattr(args, 'all', False) or getattr(args, 'verbose', False)) else args.top
     no_git = getattr(args, 'no_git', False)
     no_imports = getattr(args, 'no_imports', False)
-    respect_gitignore = getattr(args, 'respect_gitignore', True)
-    exclude = getattr(args, 'exclude', None) or []
 
+    # Same injection the overview:// URI form gets in handle_uri: --no-gitignore via the
+    # adapter's declared CLI_QUERY_FLAGS, --exclude via the shared ?exclude= format.
     query = (
-        f'top={top}&no_git={"true" if no_git else "false"}'
+        f'?top={top}&no_git={"true" if no_git else "false"}'
         f'&no_imports={"true" if no_imports else "false"}'
-        f'&respect_gitignore={"true" if respect_gitignore else "false"}'
     )
+    query = inject_query_flags(query, 'overview', args)
+    exclude = exclude_fragment(getattr(args, 'exclude', None))
     if exclude:
-        # No URL-decoding anywhere in this query-string pipeline (matches
-        # the rest of overview's unencoded top=/no_git=-style params) — a
-        # pattern containing '&' or '=' isn't representable here.
-        query += f'&exclude={",".join(exclude)}'
+        query += f'&{exclude}'
+    query = query[1:]
     result = OverviewAdapter(str(path), query).get_structure()
 
     if args.format == 'json':

@@ -10,8 +10,10 @@ Rules that apply to every flag here:
   - an adapter that does not declare the flag is left alone -- and, for flags whose
     absence means "ignored" (`warn_unsupported`), the user is told which schemes do.
 
-Not covered here, on purpose: --exclude (walk-scope side channel plus REVEAL_IGNORE),
---sort and --limit (see handle_uri); they are not "declare a fragment" shaped.
+Not covered here, on purpose: --exclude's walk-scope side channel plus REVEAL_IGNORE,
+--sort and --limit (see handle_uri); they are not "declare a fragment" shaped. --exclude's
+query *format* for the adapters that read ?exclude= lives here, in `exclude_fragment`, so the
+`overview` subcommand and the URI form cannot drift apart.
 """
 
 from __future__ import annotations
@@ -55,6 +57,15 @@ FLAG_SPECS: tuple[FlagSpec, ...] = (
     FlagSpec('all', '--all', _switch('all')),
     FlagSpec('verbose', '--verbose', _switch('verbose')),
 )
+
+
+def exclude_fragment(patterns: Any) -> str:
+    """The `exclude=` query fragment for overview://, stats:// and pack:// ('' if none).
+
+    Patterns are comma-joined and the adapters split on ',' with no decoding, so a pattern
+    that itself contains ',' (or '&'/'=') is not representable and is silently split.
+    """
+    return f"exclude={','.join(patterns)}" if patterns else ''
 
 
 def _has_key(resource: str, key: str) -> bool:
