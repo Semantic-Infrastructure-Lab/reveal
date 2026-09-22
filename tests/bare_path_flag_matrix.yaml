@@ -1,0 +1,146 @@
+# Hand-derived for tests/test_bare_path_flag_matrix.py (BACK-1362, bare-path dimension).
+# `review` is one of: honored (proven by PROBES), not-applicable (proven by
+# test_not_applicable_cell_output_is_identical, `reason` required), forwarded (a pure
+# passthrough into another invocation path already covered by a different matrix, `see`
+# required, no new classification here).
+shapes:
+  dir_tree:
+    verbose:
+      review: not-applicable
+      reason: bare directory-tree truncation is capped by --max-entries/--dir-limit, not
+        --verbose/--all (the tool's own overflow message says "use --max-entries 0", not
+        "use --verbose") -- same "different, already-declared escape hatch" shape as
+        contracts/health's --verbose in the subcommand matrix.
+    all:
+      review: not-applicable
+      reason: same as verbose -- --max-entries 0 is the unlimited escape hatch here, not --all.
+    since:
+      review: not-applicable
+      reason: a plain directory tree has no per-item timestamp filter surfaced anywhere in
+        show_directory_tree; git-scoped since/until belongs to git://, not a bare listing.
+    until:
+      review: not-applicable
+      reason: same as since.
+    respect_gitignore:
+      review: honored
+  dir_files:
+    verbose:
+      review: not-applicable
+      reason: same as dir_tree -- --max-entries 0 is the escape hatch for --files' 200-entry cap.
+    all:
+      review: not-applicable
+      reason: same as verbose.
+    since:
+      review: not-applicable
+      reason: --files sorts by mtime but has no since/until filter; unlike git://, mtime-based
+        date filtering was never implemented here -- a feature gap, not a routing-seam bug.
+    until:
+      review: not-applicable
+      reason: same as since.
+    respect_gitignore:
+      review: honored
+  dir_meta:
+    verbose:
+      review: not-applicable
+      reason: --meta is a fixed-shape aggregate summary (file count/size/mtime/extension
+        histogram) -- there is no truncated list for --verbose/--all to unlock.
+    all:
+      review: not-applicable
+      reason: same as verbose.
+    since:
+      review: not-applicable
+      reason: aggregate stats only report newest/oldest mtime, not a filterable per-item list.
+    until:
+      review: not-applicable
+      reason: same as since.
+    respect_gitignore:
+      review: honored
+      reason: 'BACK-1362 fix this session: _collect_dir_stats previously walked raw os.walk()
+        with zero filtering -- .gitignore, --exclude, and even .git/ internals were all
+        silently counted. Now shares display.filtering.PathFilter with the tree/files/grep
+        views (reveal/cli/routing/file.py).'
+  dir_grep:
+    verbose:
+      review: not-applicable
+      reason: directory --grep results are never truncated at all currently (no cap exists to
+        lift) -- unlike the tree/files views, there's no "use --max-entries 0" analog either.
+    all:
+      review: not-applicable
+      reason: same as verbose.
+    since:
+      review: not-applicable
+      reason: text search has no per-item date dimension.
+    until:
+      review: not-applicable
+      reason: same as since.
+    respect_gitignore:
+      review: honored
+  file_default:
+    verbose:
+      review: not-applicable
+      reason: 'a bare file''s structural outline already has its own truncation flag,
+        --max-items (BACK-1202), not --verbose/--all -- same "different, already-declared
+        escape hatch" shape as the directory views.'
+    all:
+      review: not-applicable
+      reason: same as verbose.
+    since:
+      review: not-applicable
+      reason: no per-item date dimension in a single file's structural view.
+    until:
+      review: not-applicable
+      reason: same as since.
+    respect_gitignore:
+      review: not-applicable
+      reason: a single resolved file has no directory walk for .gitignore to apply to.
+  file_grep:
+    verbose:
+      review: not-applicable
+      reason: single-file grep results are never truncated (no cap exists to lift).
+    all:
+      review: not-applicable
+      reason: same as verbose.
+    since:
+      review: not-applicable
+      reason: text search has no per-item date dimension.
+    until:
+      review: not-applicable
+      reason: same as since.
+    respect_gitignore:
+      review: not-applicable
+      reason: a single resolved file has no directory walk for .gitignore to apply to.
+  dir_ast_or_file_ast:
+    verbose:
+      review: forwarded
+      see: "reveal <path> --name/--type/--sort forwards into handle_uri(_build_ast_query_from_flags(...))
+        exactly like a URI invocation -- see tests/flag_routing_matrix.yaml's `ast` adapter row
+        for the honored/not-applicable verdict per flag; nothing new to classify here."
+    all:
+      review: forwarded
+      see: same as verbose -- tests/flag_routing_matrix.yaml, `ast` adapter row.
+    since:
+      review: forwarded
+      see: same as verbose -- tests/flag_routing_matrix.yaml, `ast` adapter row.
+    until:
+      review: forwarded
+      see: same as verbose -- tests/flag_routing_matrix.yaml, `ast` adapter row.
+    respect_gitignore:
+      review: forwarded
+      see: same as verbose -- tests/flag_routing_matrix.yaml, `ast` adapter row.
+  check_passthrough:
+    verbose:
+      review: forwarded
+      see: "reveal <path> --check forwards args wholesale into cli.commands.check.run_check --
+        see tests/subcommand_flag_matrix.yaml's `check` row; nothing new to classify here."
+    all:
+      review: forwarded
+      see: same as verbose -- tests/subcommand_flag_matrix.yaml, `check` row.
+    since:
+      review: forwarded
+      see: same as verbose -- tests/subcommand_flag_matrix.yaml, `check` row.
+    until:
+      review: forwarded
+      see: same as verbose -- tests/subcommand_flag_matrix.yaml, `check` row.
+    respect_gitignore:
+      review: forwarded
+      see: same as verbose -- tests/subcommand_flag_matrix.yaml, `check` row.

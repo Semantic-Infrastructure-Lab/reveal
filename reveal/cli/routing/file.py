@@ -73,21 +73,37 @@ def _stat_one_file(fpath: Path, ext_counts: dict) -> Optional[tuple]:
     return stat.st_size, stat.st_mtime
 
 
-def _collect_dir_stats(path: Path) -> tuple:
+def _collect_dir_stats(
+    path: Path, respect_gitignore: bool = True, exclude_patterns: Optional[list] = None,
+) -> tuple:
     """Walk a directory and collect file count, size, mtime, extension counts.
+
+    BACK-1362: unlike show_directory_tree/show_file_list, this used to walk raw
+    os.walk() with no filtering at all -- .git internals, node_modules, and
+    gitignored files were all silently counted, and --no-gitignore/--exclude
+    (declared on every bare-path invocation) had no effect. Now uses the same
+    PathFilter the sibling views share.
 
     Returns:
         (ext_counts, total_files, total_size, newest_mtime, oldest_mtime)
     """
     from collections import defaultdict
+    from ...display.filtering import PathFilter
+    path_filter = PathFilter(
+        root_path=path, respect_gitignore=respect_gitignore,
+        exclude_patterns=exclude_patterns, include_defaults=True)
     ext_counts: dict = defaultdict(int)
     total_files = 0
     total_size = 0
     newest_mtime = 0.0
     oldest_mtime = float('inf')
-    for root, _dirs, files in os.walk(path):
+    for root, dirs, files in os.walk(path):
+        dirs[:] = [d for d in dirs if not path_filter.should_filter(Path(root) / d)]
         for fname in files:
-            result = _stat_one_file(Path(root) / fname, ext_counts)
+            fpath = Path(root) / fname
+            if path_filter.should_filter(fpath):
+                continue
+            result = _stat_one_file(fpath, ext_counts)
             if result is None:
                 continue
             size, mtime = result
@@ -124,7 +140,9 @@ def _show_directory_meta(path: Path, args: 'Namespace') -> None:
     import datetime
     from ...utils import safe_json_dumps, format_size
 
-    ext_counts, total_files, total_size, newest_mtime, oldest_mtime = _collect_dir_stats(path)
+    ext_counts, total_files, total_size, newest_mtime, oldest_mtime = _collect_dir_stats(
+        path, respect_gitignore=getattr(args, 'respect_gitignore', True),
+        exclude_patterns=getattr(args, 'exclude', None))
     meta = {
         'path': str(path), 'name': path.name,
         'total_files': total_files, 'total_size': total_size,
