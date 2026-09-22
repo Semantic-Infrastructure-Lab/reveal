@@ -174,34 +174,8 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
                 file=sys.stderr,
             )
 
-    # Inject --sort/--desc CLI flags into URI query string for adapters that support them.
-    # Skip injection if URI already has an explicit sort= param — URI takes precedence.
-    sort_field = getattr(args, 'sort', None)
-    if sort_field and 'sort=' not in resource:
-        if getattr(args, 'desc', False) and not sort_field.startswith('-'):
-            sort_field = f"-{sort_field}"
-        sep = '&' if '?' in resource else '?'
-        resource = f"{resource}{sep}sort={sort_field}"
-
-    # Inject --limit into the URI query string for resource-adapter result
-    # capping (BACK-1108). Only the URI form (?limit=N) actually reached
-    # ResultControl -- the CLI flag was parsed, accepted, and silently
-    # discarded for every URI-scheme target, a real ~200-result truncation
-    # in a language-consistency study relied on the flag actually working.
-    # --limit's argparse default (50) is shared with the unrelated `check`
-    # text-output cap (file_checker.py), so a default value alone can't
-    # distinguish "user asked for a cap" from "user didn't mention it" --
-    # only inject when --limit was actually typed, detected via sys.argv
-    # (same technique used for --help-all in parser.py). Skip injection if
-    # the URI already has an explicit limit= param — URI takes precedence.
-    if 'limit=' not in resource and any(
-        a == '--limit' or a.startswith('--limit=') for a in sys.argv
-    ):
-        limit_value = getattr(args, 'limit', None)
-        if limit_value is not None:
-            sep = '&' if '?' in resource else '?'
-            resource = f"{resource}{sep}limit={limit_value}"
-
+    # --sort/--limit/--since/--until/... become query fragments here (flag_specs.FLAG_SPECS);
+    # a value already in the URI wins over the flag.
     resource = _inject_exclude_flag(resource, scheme, args)
     resource = inject_query_flags(resource, scheme, args)
     _warn_unsupported_structural_flags(resource, scheme, args)

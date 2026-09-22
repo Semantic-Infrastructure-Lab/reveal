@@ -542,19 +542,16 @@ class TestHandleUri(unittest.TestCase):
         self.assertIn('limit=5', captured['resource'])
 
     def test_limit_not_injected_when_flag_absent(self):
-        """--limit's argparse default (50, shared with the unrelated `check`
-        text-output cap) must NOT be injected just because args.limit has a
-        value -- only an explicitly-typed --limit should change URI-mode
-        behavior, or every unlimited-by-default resource query would
-        silently start capping at 50."""
+        """--limit's argparse default is None (the unrelated `check` text-output cap
+        of 50 is applied by check itself), so an untyped --limit injects nothing --
+        otherwise every unlimited-by-default resource query would silently cap."""
         captured = {}
 
         def capture_adapter(adapter_class, scheme, resource, element, args):
             captured['resource'] = resource
 
-        mock_args = Namespace(format='text', sort=None, desc=False, limit=50)
-        with patch('sys.argv', ['reveal', 'ast://src']), \
-             patch('reveal.cli.routing.uri.handle_adapter', side_effect=capture_adapter):
+        mock_args = Namespace(format='text', sort=None, desc=False, limit=None)
+        with patch('reveal.cli.routing.uri.handle_adapter', side_effect=capture_adapter):
             handle_uri('ast://src', None, mock_args)
 
         self.assertEqual(captured['resource'], 'src')

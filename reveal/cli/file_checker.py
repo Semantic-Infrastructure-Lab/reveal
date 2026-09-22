@@ -1381,7 +1381,9 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     max_snippet_chars = getattr(args, 'max_snippet_chars', None)
     max_items = getattr(args, 'max_items', None)
     severity = getattr(args, 'severity', None)
-    limit = getattr(args, 'limit', 50)
+    limit = getattr(args, 'limit', None)
+    if limit is None:  # --limit not typed (parser default is None; URI targets share the flag)
+        limit = 50
 
     def scan_disclosures_all() -> List[str]:
         return _get_scan_disclosures() + _python_only_rule_disclosures(files_to_check, select, ignore)

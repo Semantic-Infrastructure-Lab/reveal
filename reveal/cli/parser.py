@@ -410,10 +410,11 @@ def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
                         help='Explain a specific rule (e.g., "B001")')
     parser.add_argument('--severity', type=str, metavar='LEVEL',
                         help='Minimum severity level to report: low, medium, high, critical. Default: show all')
-    parser.add_argument('--limit', type=int, metavar='N', default=50,
+    parser.add_argument('--limit', type=int, metavar='N', default=None,
                         help='Cap text output to the first N files with issues, then print a "+N more files" '
                              'summary footer instead of continuing (BACK-539; a large monorepo can otherwise '
-                             'print 100K+ lines). Set to 0 to disable the cap. Ignored for --format json.')
+                             'print 100K+ lines). Default 50 for check; set to 0 to disable the cap. '
+                             'Ignored for --format json. On URI targets it becomes ?limit=N.')
 
 
 def _strip_path_quotes(value: str) -> str:

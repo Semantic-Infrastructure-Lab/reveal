@@ -10,8 +10,8 @@ Rules that apply to every flag here:
   - an adapter that does not declare the flag is left alone -- and, for flags whose
     absence means "ignored" (`warn_unsupported`), the user is told which schemes do.
 
-Not covered here, on purpose: --exclude's walk-scope side channel plus REVEAL_IGNORE,
---sort and --limit (see handle_uri); they are not "declare a fragment" shaped. --exclude's
+Not covered here, on purpose: --exclude's walk-scope side channel plus REVEAL_IGNORE, which
+is not "declare a fragment" shaped. --exclude's
 query *format* for the adapters that read ?exclude= lives here, in `exclude_fragment`, so the
 `overview` subcommand and the URI form cannot drift apart.
 """
@@ -31,6 +31,8 @@ class FlagSpec:
     value: Callable[[Any], Any | None]    # args -> value to inject; None = flag not set
     warn_unsupported: bool = False        # note when the adapter declares no support
     already_scoped: tuple[str, ...] = ()  # raw URI substrings meaning "caller scoped it"
+    universal: str | None = None          # fragment for EVERY adapter (query-control keys the
+                                          # generic result pipeline reads, e.g. sort=, limit=)
 
 
 def _typed(dest: str) -> Callable[[Any], Any | None]:
@@ -39,6 +41,18 @@ def _typed(dest: str) -> Callable[[Any], Any | None]:
 
 def _switch(dest: str) -> Callable[[Any], bool | None]:
     return lambda args: True if getattr(args, dest, False) else None
+
+
+def _set(dest: str) -> Callable[[Any], Any | None]:
+    # Unlike _typed, a falsy value counts: --limit 0 is a real request (no cap).
+    return lambda args: getattr(args, dest, None)
+
+
+def _sort(args: Any) -> str | None:
+    field = getattr(args, 'sort', None)
+    if not field:
+        return None
+    return f'-{field}' if getattr(args, 'desc', False) and not field.startswith('-') else field
 
 
 def _no_gitignore(args: Any) -> bool | None:
@@ -56,6 +70,10 @@ FLAG_SPECS: tuple[FlagSpec, ...] = (
     # nginx, overview), so a missing declaration is not evidence of a dropped flag.
     FlagSpec('all', '--all', _switch('all')),
     FlagSpec('verbose', '--verbose', _switch('verbose')),
+    # Result-control keys every adapter's query pipeline understands, so no declaration.
+    # --limit's argparse default is None ('typed or not'); `check` applies its own cap of 50.
+    FlagSpec('sort', '--sort', _sort, universal='sort={value}'),
+    FlagSpec('limit', '--limit', _set('limit'), universal='limit={value}'),
 )
 
 
@@ -91,7 +109,7 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
         value = spec.value(args)
         if value is None:
             continue
-        fragment = declared.get(spec.dest)
+        fragment = spec.universal or declared.get(spec.dest)
         if fragment:
             fragment = fragment.replace('{value}', str(value))
             if not _has_key(resource, fragment.partition('=')[0]) and not any(

@@ -130,3 +130,45 @@ def test_all_and_verbose_inject_where_declared():
 
 def test_namespace_missing_the_flags_is_tolerated():
     assert inject_query_flags('.', 'git', Namespace()) == '.'
+
+
+# --- universal specs: --sort / --limit (BACK-1376) ---------------------------------
+
+def test_sort_and_desc_inject_on_any_scheme():
+    assert _inject('env://', 'env', sort='name', desc=True)[0] == 'env://?sort=-name'
+
+
+def test_sort_already_negated_is_not_double_negated():
+    assert _inject('ast://x', 'ast', sort='-lines', desc=True)[0] == 'ast://x?sort=-lines'
+
+
+def test_limit_zero_is_a_real_request():
+    assert _inject('ast://x', 'ast', limit=0)[0] == 'ast://x?limit=0'
+
+
+def test_limit_left_at_parser_default_injects_nothing():
+    args = _default_args()
+    assert args.limit is None
+    assert inject_query_flags('ast://x', 'ast', args) == 'ast://x'
+
+
+def test_uri_limit_wins_and_key_match_is_exact():
+    assert _inject('ast://x?limit=5', 'ast', limit=9)[0] == 'ast://x?limit=5'
+    assert _inject('ast://x?dir_limit=5', 'ast', limit=9)[0] == 'ast://x?dir_limit=5&limit=9'
+
+
+def test_check_still_caps_at_50_when_limit_is_not_typed(tmp_path, capsys):
+    """--limit's parser default is None (so URI routing can tell 'typed'); `check` must still
+    apply its own 50-file cap (BACK-539) and honor a typed value or 0."""
+    from reveal.cli.file_checker import handle_recursive_check
+    for i in range(55):
+        (tmp_path / f'm{i}.py').write_text('import os\nimport sys\n')
+
+    def footer(**flags):
+        with pytest.raises(SystemExit):  # issues found -> non-zero exit
+            handle_recursive_check(tmp_path, _default_args(format='text', **flags))
+        return capsys.readouterr().out
+
+    assert '(--limit 50)' in footer()
+    assert '(--limit 3)' in footer(limit=3)
+    assert 'more files' not in footer(limit=0)
