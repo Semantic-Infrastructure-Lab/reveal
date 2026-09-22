@@ -92,7 +92,12 @@ def run_hotspots(args: Namespace) -> None:
         print(f"Error: path '{args.path}' does not exist", file=sys.stderr)
         sys.exit(1)
 
-    top = args.top
+    # BACK-1362: --verbose was declared (inherited from the global options
+    # parser) but never read here, so it silently did nothing -- give it the
+    # same "lift the cap" meaning hotspots://...?all=true already has (the
+    # subcommand has no --all of its own).
+    from reveal.adapters.overview import UNLIMITED_TOP
+    top = UNLIMITED_TOP if getattr(args, 'verbose', False) else args.top
     min_cx = args.min_complexity
     functions_only = getattr(args, 'functions_only', False)
     files_only = getattr(args, 'files_only', False)

@@ -86,8 +86,14 @@ def run_testability(args: Namespace) -> None:
         sys.exit(1)
 
     tests: List[str] | None = getattr(args, 'tests', None)
+    # BACK-1362: --verbose was declared (inherited from the global options
+    # parser) but never read here, so it silently did nothing -- same
+    # "lift the default cap" meaning --verbose already has on overview/ast/
+    # hotspots URIs (BACK-1226/1379).
+    from reveal.adapters.overview import UNLIMITED_TOP
+    top = UNLIMITED_TOP if getattr(args, 'verbose', False) else max(0, int(args.top))
     query_parts = [
-        f'top={max(0, int(args.top))}',
+        f'top={top}',
         f'min_patches={max(1, int(args.min_patches))}',
         f'min_categories={max(1, int(args.min_categories))}',
         f'include_unresolved={"true" if getattr(args, "include_unresolved", False) else "false"}',

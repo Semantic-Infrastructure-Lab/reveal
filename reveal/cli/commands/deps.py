@@ -90,7 +90,12 @@ def run_deps(args: Namespace) -> None:
         print(f"Error: path '{args.path}' does not exist", file=sys.stderr)
         sys.exit(1)
 
-    top = args.top
+    # BACK-1362: --verbose was declared (inherited from the global options
+    # parser) but never read here, so it silently did nothing -- same
+    # "lift the default cap" meaning --verbose already has on overview/ast/
+    # hotspots URIs (BACK-1226/1379).
+    from reveal.adapters.overview import UNLIMITED_TOP
+    top = UNLIMITED_TOP if getattr(args, 'verbose', False) else args.top
     no_unused = getattr(args, 'no_unused', False)
     no_circular = getattr(args, 'no_circular', False)
 
