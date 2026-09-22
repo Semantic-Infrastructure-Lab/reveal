@@ -180,7 +180,10 @@ class StatsAdapter(ResourceAdapter):
 
     BUDGET_LIST_FIELD = 'files'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
-    CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # --no-gitignore (BACK-1202)
+    CLI_QUERY_FLAGS = {
+        'respect_gitignore': 'respect_gitignore=false',  # --no-gitignore (BACK-1202)
+        'all': 'top=1000000',  # lifts the hotspots=true top=10 default (BACK-1379)
+    }
 
     @staticmethod
     def get_help() -> Dict[str, Any]:

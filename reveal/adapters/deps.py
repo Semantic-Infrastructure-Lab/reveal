@@ -327,6 +327,8 @@ def _render_deps(report: Dict[str, Any], top: int) -> None:
 class DepsRenderer:
     """Renderer for deps:// results."""
 
+    ACCEPTS_TOP = True  # render_structure(top=) is fed by handle_uri (--all/--verbose, BACK-1379)
+
     @staticmethod
     def render_structure(result: Dict[str, Any], format: str = 'text', top: int = 10) -> None:
         if format == 'json':

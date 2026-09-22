@@ -95,6 +95,7 @@ class AstAdapter(ResourceAdapter):
     BUDGET_LIST_FIELD = 'results'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
+    CLI_QUERY_FLAGS = {'all': 'limit=1000000'}  # lifts the 200-result auto-cap (BACK-1379)
 
     @staticmethod
     def get_help() -> Dict[str, Any]:

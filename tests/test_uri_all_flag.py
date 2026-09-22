@@ -27,6 +27,16 @@ def test_hotspots_declares_top():
     assert adapters_base.get_adapter_class('hotspots').CLI_QUERY_FLAGS['all'] == 'top=1000000'
 
 
+@pytest.mark.parametrize('scheme,fragment', [
+    ('ast', 'limit=1000000'), ('calls', 'top=1000000'), ('patches', 'limit=1000000'),
+    ('testability', 'top=1000000'), ('stats', 'top=1000000'), ('git', 'limit=1000000'),
+])
+def test_back1379_adapters_declare_all(scheme, fragment):
+    from reveal import adapters  # noqa: F401
+    assert adapters_base.get_adapter_class(scheme).CLI_QUERY_FLAGS['all'] == fragment
+    assert inject_query_flags('src', scheme, _args(all=True)) == f'src?{fragment}'
+
+
 def test_all_injects_fragment():
     assert inject_query_flags('src', 'hotspots', _args(all=True)) == 'src?top=1000000'
     assert inject_query_flags('src?functions_only=true', 'hotspots', _args(all=True)) \
@@ -47,7 +57,7 @@ def test_without_all_flag_nothing_changes():
     assert inject_query_flags('src', 'hotspots', _args()) == 'src'
 
 
-@pytest.mark.parametrize('scheme', ['surface', 'claude', 'overview', 'stats', 'nosuchscheme'])
+@pytest.mark.parametrize('scheme', ['surface', 'claude', 'overview', 'nosuchscheme'])
 def test_adapters_without_declaration_untouched(scheme):
     assert inject_query_flags('src', scheme, _args(all=True)) == 'src'
 

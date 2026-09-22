@@ -12,7 +12,7 @@ Channels by which a flag reaches a URI adapter (only these exist):
   declared          adapter lists the flag in CLI_QUERY_FLAGS; handle_uri injects it
   structure-param   get_structure() has a parameter named after the flag (auto-discovered)
   adapter-reads-args  adapter/renderer module reads `args.<flag>` itself
-  routing-special   hard-coded in cli/routing/uri.py (overview:// only)
+  routing-special   renderer declares ACCEPTS_TOP (all/verbose -> its render_structure(top=))
 A flag with no channel is accepted and silently does nothing. Each such cell must be
 classified `not-applicable` (with a reason) or stays `unreviewed` -- the honest
 "nobody has decided yet", which is the backlog this matrix exists to make visible.
@@ -35,9 +35,10 @@ REVEAL_PKG = Path(__file__).resolve().parent.parent / 'reveal'
 # The global flags routed by cli/routing/flag_specs.py (a test below keeps this in step).
 FLAGS = ('verbose', 'all', 'since', 'until', 'respect_gitignore')
 
-# cli/routing/uri.py::_render_structure_top_kwargs forwards both flags to this renderer.
-# The dynamic test below is what catches this going stale.
-ROUTING_SPECIAL = {'overview': {'verbose', 'all'}}
+# Adapters whose --all/--verbose reach a renderer-level `top` kwarg via ACCEPTS_TOP
+# (handle_uri._render_structure_top_kwargs, BACK-1226/BACK-1379) are detected below,
+# not hard-coded here -- ROUTING_SPECIAL is only for routing that isn't derivable that way.
+ROUTING_SPECIAL = {}
 
 # Routing/parser modules read args.<flag> to implement the seam itself, not to honor it.
 _SEAM_FILES = {'cli/parser.py', 'cli/routing/uri.py', 'main.py'}
@@ -55,6 +56,15 @@ PROBES = {
     ('git', 'until'): ('git://{tree}', '1970-01-02'),
     ('stats', 'respect_gitignore'): ('stats://{tree}', False),
     ('overview', 'respect_gitignore'): ('overview://{tree}', False),
+    # BACK-1379: adapters whose --all now lifts a real default cap.
+    ('ast', 'all'): ('ast://reveal', True),
+    ('calls', 'all'): ('calls://reveal?rank=callers', True),
+    ('patches', 'all'): ('patches://tests', True),
+    ('testability', 'all'): ('testability://reveal', True),
+    ('stats', 'all'): ('stats://reveal?hotspots=true', True),
+    ('architecture', 'all'): ('architecture://reveal', True),
+    ('deps', 'all'): ('deps://reveal', True),
+    ('git', 'all'): ('git://.?type=log', True),
 }
 
 
@@ -111,6 +121,7 @@ def derive_matrix():
 
     from reveal import adapters  # noqa: F401  (registers every scheme)
     from reveal.adapters import base
+    from reveal.adapters.base import get_renderer_class
 
     readers = {flag: _flag_readers(flag) for flag in FLAGS}
     matrix = {}
@@ -122,6 +133,8 @@ def derive_matrix():
         params = (set(inspect.signature(cls.get_structure).parameters)
                   if hasattr(cls, 'get_structure') else set())
         declared = dict(getattr(cls, 'CLI_QUERY_FLAGS', {}))
+        renderer_cls = get_renderer_class(scheme)
+        accepts_top = getattr(renderer_cls, 'ACCEPTS_TOP', False) is True
         cells = {}
         for flag in FLAGS:
             via = []
@@ -131,6 +144,8 @@ def derive_matrix():
                 via.append('structure-param')
             if any(r.startswith(scope) for r in readers[flag]):
                 via.append('adapter-reads-args')
+            if accepts_top and flag in ('all', 'verbose'):
+                via.append('routing-special')
             if flag in ROUTING_SPECIAL.get(scheme, ()):
                 via.append('routing-special')
             cells[flag] = via

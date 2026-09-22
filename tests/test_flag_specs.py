@@ -120,7 +120,7 @@ def test_note_lists_every_declaring_scheme():
 def test_all_and_verbose_stay_silent_on_adapters_without_a_declaration():
     """Many adapters honor --all/--verbose themselves (claude, nginx, overview), so a
     missing declaration is not evidence the flag is ignored: no note."""
-    assert _inject('.', 'ast', all=True, verbose=True) == ('.', '')
+    assert _inject('.', 'env', all=True, verbose=True) == ('.', '')
 
 
 def test_all_and_verbose_inject_where_declared():

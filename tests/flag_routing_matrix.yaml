@@ -5,8 +5,8 @@
 adapters:
   architecture:
     all:
-      review: unreviewed
-      via: []
+      via:
+      - routing-special
     respect_gitignore:
       review: unreviewed
       via: []
@@ -17,12 +17,12 @@ adapters:
       review: unreviewed
       via: []
     verbose:
-      review: unreviewed
-      via: []
+      via:
+      - routing-special
   ast:
     all:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     respect_gitignore:
       review: unreviewed
       via: []
@@ -53,8 +53,8 @@ adapters:
       via: []
   calls:
     all:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     respect_gitignore:
       review: unreviewed
       via: []
@@ -69,7 +69,9 @@ adapters:
       via: []
   classify:
     all:
-      review: unreviewed
+      reason: get_structure lists every file already (classify.py:216-249); no [:N]
+        slice to lift
+      review: not-applicable
       via: []
     respect_gitignore:
       review: unreviewed
@@ -133,7 +135,9 @@ adapters:
       via: []
   cpanel:
     all:
-      review: unreviewed
+      reason: no result-count query param; domain/ssl/acl-check listings return every
+        row (cpanel/adapter.py:704-717)
+      review: not-applicable
       via: []
     respect_gitignore:
       review: unreviewed
@@ -149,7 +153,9 @@ adapters:
       via: []
   depends:
     all:
-      review: unreviewed
+      reason: top_n is None unless the caller passes ?top=N; unclamped by default
+        (depends.py:523-524)
+      review: not-applicable
       via: []
     respect_gitignore:
       review: unreviewed
@@ -165,8 +171,8 @@ adapters:
       via: []
   deps:
     all:
-      review: unreviewed
-      via: []
+      via:
+      - routing-special
     respect_gitignore:
       review: unreviewed
       via: []
@@ -177,11 +183,13 @@ adapters:
       review: unreviewed
       via: []
     verbose:
-      review: unreviewed
-      via: []
+      via:
+      - routing-special
   diff:
     all:
-      review: unreviewed
+      reason: output is "what changed" (additions/removals/modifications), not a ranked/truncatable
+        list
+      review: not-applicable
       via: []
     respect_gitignore:
       review: unreviewed
@@ -197,7 +205,9 @@ adapters:
       via: []
   domain:
     all:
-      review: unreviewed
+      reason: single-domain detail view; only per-field string previews exist, not
+        a results list
+      review: not-applicable
       via: []
     respect_gitignore:
       review: unreviewed
@@ -213,7 +223,9 @@ adapters:
       via: []
   env:
     all:
-      review: unreviewed
+      reason: get_structure returns every var already (env.py:302-341); confirmed
+        live, output identical
+      review: not-applicable
       via: []
     respect_gitignore:
       review: unreviewed
@@ -229,8 +241,8 @@ adapters:
       via: []
   git:
     all:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     respect_gitignore:
       review: unreviewed
       via: []
@@ -277,7 +289,9 @@ adapters:
       via: []
   imports:
     all:
-      review: unreviewed
+      reason: ?rank= is unclamped by default (imports.py:207-210); the one real cap
+        (groups[:5]) belongs to --verbose, already declared
+      review: not-applicable
       via: []
     respect_gitignore:
       review: unreviewed
@@ -293,7 +307,9 @@ adapters:
       - declared
   json:
     all:
-      review: unreviewed
+      reason: no default cap found in adapter or legacy modes; confirmed live, output
+        identical
+      review: not-applicable
       via: []
     respect_gitignore:
       review: unreviewed
@@ -309,7 +325,9 @@ adapters:
       via: []
   letsencrypt:
     all:
-      review: unreviewed
+      reason: cert inventory is meant to be exhaustive (orphan/duplicate detection
+        needs every cert); no cap in code
+      review: not-applicable
       via: []
     respect_gitignore:
       review: unreviewed
@@ -325,7 +343,9 @@ adapters:
       via: []
   markdown:
     all:
-      review: unreviewed
+      reason: apply_pagination only slices when limit is explicitly set (markdown/results.py:103-118);
+        confirmed live, output identical
+      review: not-applicable
       via: []
     respect_gitignore:
       review: unreviewed
@@ -389,7 +409,9 @@ adapters:
       - routing-special
   pack:
     all:
-      review: unreviewed
+      reason: budget-constrained curation (?budget=) is the adapter's purpose; --all
+        would contradict it
+      review: not-applicable
       via: []
     respect_gitignore:
       review: unreviewed
@@ -405,8 +427,8 @@ adapters:
       via: []
   patches:
     all:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     respect_gitignore:
       review: unreviewed
       via: []
@@ -421,7 +443,8 @@ adapters:
       via: []
   python:
     all:
-      review: unreviewed
+      reason: get_packages_list has no [:N] slicing; confirmed live, output identical
+      review: not-applicable
       via: []
     respect_gitignore:
       review: unreviewed
@@ -437,7 +460,9 @@ adapters:
       via: []
   reveal:
     all:
-      review: unreviewed
+      reason: self-introspection metadata (adapters/rules/analyzers) is small and
+        fixed-size, not paginated
+      review: not-applicable
       via: []
     respect_gitignore:
       review: unreviewed
@@ -453,7 +478,8 @@ adapters:
       via: []
   sqlite:
     all:
-      review: unreviewed
+      reason: schema/health inspection only, no row-listing feature exists to cap
+      review: not-applicable
       via: []
     respect_gitignore:
       review: unreviewed
@@ -469,7 +495,8 @@ adapters:
       via: []
   ssl:
     all:
-      review: unreviewed
+      reason: single-certificate detail view; no list-of-many-certs output type exists
+      review: not-applicable
       via: []
     respect_gitignore:
       review: unreviewed
@@ -485,8 +512,8 @@ adapters:
       via: []
   stats:
     all:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     respect_gitignore:
       via:
       - declared
@@ -501,7 +528,9 @@ adapters:
       via: []
   surface:
     all:
-      review: unreviewed
+      reason: top defaults to None (surface.py:291,336) -- already unclamped; confirmed
+        live, output identical
+      review: not-applicable
       via: []
     respect_gitignore:
       review: unreviewed
@@ -517,8 +546,8 @@ adapters:
       via: []
   testability:
     all:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     respect_gitignore:
       review: unreviewed
       via: []
