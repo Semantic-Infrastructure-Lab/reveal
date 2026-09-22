@@ -64,7 +64,7 @@ PROBES = {
     ('stats', 'all'): ('stats://reveal?hotspots=true', True),
     ('architecture', 'all'): ('architecture://reveal', True),
     ('deps', 'all'): ('deps://reveal', True),
-    ('git', 'all'): ('git://.?type=log', True),
+    ('git', 'all'): ('git://{tree}?type=log', True),
 }
 
 
@@ -255,6 +255,16 @@ def probe_tree(tmp_path_factory):
     subprocess.run([*git, 'add', 'a.py', '.gitignore'], check=True)
     subprocess.run([*git, 'commit', '-q', '-m', 'init', '--date', '2020-01-01T00:00:00'],
                    check=True, env={**__import__('os').environ, 'GIT_COMMITTER_DATE': '2020-01-01T00:00:00'})
+    # git://{tree}?type=log's default cap is 20 commits (refs.get_ref_structure); add
+    # enough follow-up commits that --all (limit=1000000, BACK-1379) visibly differs
+    # from the default instead of both showing the same short history.
+    log_path = root / 'log.txt'
+    for i in range(1, 26):
+        log_path.write_text(f'commit {i}\n', encoding='utf-8')
+        subprocess.run([*git, 'add', 'log.txt'], check=True)
+        date = f'2020-01-{i + 1:02d}T00:00:00'
+        subprocess.run([*git, 'commit', '-q', '-m', f'log {i}', '--date', date],
+                       check=True, env={**__import__('os').environ, 'GIT_COMMITTER_DATE': date})
     return root
 
 
