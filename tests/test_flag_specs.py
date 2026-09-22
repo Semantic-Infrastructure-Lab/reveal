@@ -162,7 +162,7 @@ def test_check_still_caps_at_50_when_limit_is_not_typed(tmp_path, capsys):
     apply its own 50-file cap (BACK-539) and honor a typed value or 0."""
     from reveal.cli.file_checker import handle_recursive_check
     for i in range(55):
-        (tmp_path / f'm{i}.py').write_text('import os\nimport sys\n')
+        (tmp_path / f'm{i}.py').write_text('import os\nimport sys\n', encoding='utf-8')
 
     def footer(**flags):
         with pytest.raises(SystemExit):  # issues found -> non-zero exit

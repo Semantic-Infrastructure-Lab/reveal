@@ -79,16 +79,16 @@ def _fixture(tmp_path):
     for i, (ext, src) in enumerate({'py': 'def f(): pass\n', 'go': 'package m\nfunc F(){}\n',
                                     'rb': 'def f; end\n'}.items(), 1):
         (tmp_path / f'pkg{i}').mkdir()
-        (tmp_path / f'pkg{i}' / f'm{i}.{ext}').write_text(src)
-    (tmp_path / '.gitignore').write_text('ignored/\n')
+        (tmp_path / f'pkg{i}' / f'm{i}.{ext}').write_text(src, encoding='utf-8')
+    (tmp_path / '.gitignore').write_text('ignored/\n', encoding='utf-8')
     (tmp_path / 'ignored').mkdir()
-    (tmp_path / 'ignored' / 'z.py').write_text('x = 1\n')
+    (tmp_path / 'ignored' / 'z.py').write_text('x = 1\n', encoding='utf-8')
     return tmp_path
 
 
 def _json(cmd, cwd):
-    out = subprocess.run([sys.executable, '-m', 'reveal', *cmd], capture_output=True, text=True, cwd=cwd,
-                         check=False)
+    out = subprocess.run([sys.executable, '-m', 'reveal', *cmd], capture_output=True, text=True,
+                         encoding='utf-8', cwd=cwd, check=False)
     data = json.loads(out.stdout)
     for volatile in ('meta', 'provenance', 'contract_version', 'type', 'source', 'source_type',
                      'generated_at', 'path'):
