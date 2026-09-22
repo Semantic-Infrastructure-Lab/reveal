@@ -69,6 +69,17 @@ PROBES = {
     ('git', 'verbose'): ('git://{tree}/a.py?type=blame', True),
     ('depends', 'verbose'): ('depends://reveal/adapters', True),
     ('pack', 'verbose'): ('pack://reveal/adapters', True),
+    # BACK-1379: respect_gitignore slice.
+    ('classify', 'respect_gitignore'): ('classify://{tree}', False),
+    # BACK-1379: since/until slice. A future since= always excludes every real
+    # commit regardless of clone depth (unlike an --all results cap, this isn't
+    # sensitive to how much history the checkout under test has) -- {tree}'s
+    # trivial single-line files don't clear stats://'s hotspot-complexity
+    # threshold at all (verified: 0-diff), so this points at a real target.
+    # No probe for codex/since+until: its only fixture path is monkeypatching
+    # CODEX_HOME/CODEX_DB (see tests/adapters/test_codex_adapter.py), which a
+    # (uri, value) PROBES tuple can't express.
+    ('stats', 'since'): ('stats://reveal/adapters/stats?hotspots=true', '2099-01-01'),
 }
 
 

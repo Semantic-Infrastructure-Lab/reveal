@@ -108,7 +108,9 @@ def test_no_gitignore_injects_the_declared_fragment():
 def test_unsupported_flag_gets_a_note_naming_the_supporting_schemes():
     out, err = _inject('.', 'ast', since='2026-01-01')
     assert out == '.'
-    assert '--since has no effect on ast://' in err and 'only git://' in err
+    # Not a fixed list -- schemes gain since/until support over time (BACK-1379);
+    # just confirm the note names ast:// and includes a real supporting scheme.
+    assert '--since has no effect on ast://' in err and 'git://' in err
 
 
 def test_note_lists_every_declaring_scheme():

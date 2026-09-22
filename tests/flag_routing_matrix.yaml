@@ -11,10 +11,14 @@ adapters:
       review: unreviewed
       via: []
     since:
-      review: unreviewed
+      reason: module/package dependency graph, no per-item timestamp anywhere in the
+        file (architecture.py:530); existing warn_unsupported note is correct
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: module/package dependency graph, no per-item timestamp anywhere in the
+        file (architecture.py:530); existing warn_unsupported note is correct
+      review: not-applicable
       via: []
     verbose:
       via:
@@ -27,10 +31,14 @@ adapters:
       review: unreviewed
       via: []
     since:
-      review: unreviewed
+      reason: returns AST nodes (functions/classes); no per-node date field exists
+        anywhere in ast/*.py; confirmed live -- output unchanged with --since
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: returns AST nodes (functions/classes); no per-node date field exists
+        anywhere in ast/*.py; confirmed live -- output unchanged with --since
+      review: not-applicable
       via: []
     verbose:
       reason: any unrecognized ?key becomes a structural-attribute filter (generic
@@ -43,7 +51,9 @@ adapters:
       review: unreviewed
       via: []
     respect_gitignore:
-      review: unreviewed
+      reason: resource is a fixed AutoSSL log directory (adapter.py:25 AUTOSSL_LOG_DIR),
+        not a git-tracked project checkout; no .gitignore concept applies
+      review: not-applicable
       via: []
     since:
       review: unreviewed
@@ -64,10 +74,16 @@ adapters:
       review: unreviewed
       via: []
     since:
-      review: unreviewed
+      reason: caller/callee graph and confidence scores; mtime_ns is used only as
+        a cache key (invalidation), never exposed as a per-result field or filterable
+        (calls/index.py)
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: caller/callee graph and confidence scores; mtime_ns is used only as
+        a cache key (invalidation), never exposed as a per-result field or filterable
+        (calls/index.py)
+      review: not-applicable
       via: []
     verbose:
       reason: 'CLI_QUERY_FLAGS declares only ''all''; render_structure(result, format)
@@ -81,13 +97,17 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     since:
-      review: unreviewed
+      reason: static content classification (vendored/generated/etc), no date field
+        anywhere in the file (classify.py)
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: static content classification (vendored/generated/etc), no date field
+        anywhere in the file (classify.py)
+      review: not-applicable
       via: []
     verbose:
       reason: 'get_structure(**kwargs) has no query validation and no detail hook;
@@ -99,7 +119,9 @@ adapters:
       via:
       - adapter-reads-args
     respect_gitignore:
-      review: unreviewed
+      reason: enumerates session .jsonl logs under CONVERSATION_BASE (~/.claude/projects/,
+        adapter.py:728,397-469) -- a fixed session-log directory, no .gitignore semantics
+      review: not-applicable
       via: []
     since:
       via:
@@ -115,14 +137,16 @@ adapters:
       review: unreviewed
       via: []
     respect_gitignore:
-      review: unreviewed
+      reason: reads Codex's own SQLite-backed session store (adapter.py:213, sqlite3),
+        not a filesystem tree walk
+      review: not-applicable
       via: []
     since:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     until:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     verbose:
       reason: 'get_structure(**kwargs) has no per-item detail toggle; confirmed live:
         ''Unknown query param verbose'' warning (adapter.py:213). Distinct from BACK-1384
@@ -137,10 +161,14 @@ adapters:
       review: unreviewed
       via: []
     since:
-      review: unreviewed
+      reason: interface/type-alias/abstract-class extraction, no timestamp field anywhere;
+        only 'since' hits are unrelated English prose
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: interface/type-alias/abstract-class extraction, no timestamp field anywhere;
+        only 'since' hits are unrelated English prose
+      review: not-applicable
       via: []
     verbose:
       reason: 'render_structure(result, format) has no verbose param, no detail-level
@@ -155,13 +183,19 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      review: unreviewed
+      reason: queries a live cPanel account via socket/API (adapter.py:624), not a
+        filesystem tree walk
+      review: not-applicable
       via: []
     since:
-      review: unreviewed
+      reason: cert audit exposes only forward-looking days_until_expiry/not_after
+        (cpanel/adapter.py:261-320), never an occurrence date since/until could bound
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: cert audit exposes only forward-looking days_until_expiry/not_after
+        (cpanel/adapter.py:261-320), never an occurrence date since/until could bound
+      review: not-applicable
       via: []
     verbose:
       reason: 'no query-string parsing at all -- the whole string after ''//'' is
@@ -179,10 +213,14 @@ adapters:
       review: unreviewed
       via: []
     since:
-      review: unreviewed
+      reason: static import/dependency graph; no per-file change-date is read anywhere
+        in the file
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: static import/dependency graph; no per-file change-date is read anywhere
+        in the file
+      review: not-applicable
       via: []
     verbose:
       via:
@@ -195,10 +233,14 @@ adapters:
       review: unreviewed
       via: []
     since:
-      review: unreviewed
+      reason: dependency listing (deps.py:432), no date/timestamp anywhere in the
+        file
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: dependency listing (deps.py:432), no date/timestamp anywhere in the
+        file
+      review: not-applicable
       via: []
     verbose:
       via:
@@ -210,13 +252,21 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      review: unreviewed
+      reason: diffs two already-resolved git resources via parse_diff_uris (adapter.py:118)
+        -- git-history comparison, not a working-tree walk
+      review: not-applicable
       via: []
     since:
-      review: unreviewed
+      reason: diffs two explicitly-given refs/files (diff/adapter.py:118); not a filterable
+        list of dated items -- 'modified' elsewhere in the file is an unrelated diff-summary
+        count key
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: diffs two explicitly-given refs/files (diff/adapter.py:118); not a filterable
+        list of dated items -- 'modified' elsewhere in the file is an unrelated diff-summary
+        count key
+      review: not-applicable
       via: []
     verbose:
       reason: 'get_structure(**kwargs) has no query-string splitting; confirmed live:
@@ -231,13 +281,19 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      review: unreviewed
+      reason: does DNS/SSL lookups for one domain name (adapter.py:608); already rejects
+        all query params with an explicit warning, confirmed live
+      review: not-applicable
       via: []
     since:
-      review: unreviewed
+      reason: WHOIS/DNS/SSL lookups; only date-shaped fields are forward-looking expiration_date/days_until_expiry,
+        same class as cpanel/ssl/letsencrypt
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: WHOIS/DNS/SSL lookups; only date-shaped fields are forward-looking expiration_date/days_until_expiry,
+        same class as cpanel/ssl/letsencrypt
+      review: not-applicable
       via: []
     verbose:
       reason: 'no query-string channel by design; confirmed live: adapter itself prints
@@ -251,13 +307,19 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      review: unreviewed
+      reason: reads os.environ directly (env.py:302) -- process environment variables,
+        no filesystem walk
+      review: not-applicable
       via: []
     since:
-      review: unreviewed
+      reason: lists live env vars (env.py:302) -- a point-in-time snapshot, no per-var
+        date field
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: lists live env vars (env.py:302) -- a point-in-time snapshot, no per-var
+        date field
+      review: not-applicable
       via: []
     verbose:
       reason: 'no query-string parsing at all -- anything after ''?'' is treated as
@@ -270,7 +332,12 @@ adapters:
       via:
       - declared
     respect_gitignore:
-      review: unreviewed
+      reason: 'operates entirely via git history/blame (pygit2), never walks the working-tree
+        filesystem directly (grep for os.walk/rglob/gitignore across adapters/git/
+        returns nothing); untracked/ignored files never appear in git log/blame output
+        by definition, confirmed live: --no-gitignore prints the standard unsupported
+        note and output is identical to the default'
+      review: not-applicable
       via: []
     since:
       via:
@@ -286,13 +353,20 @@ adapters:
       review: unreviewed
       via: []
     respect_gitignore:
-      review: unreviewed
+      reason: self-introspection over reveal's own static help/schema data (help.py:615);
+        the rglob calls at :518,543,550 walk reveal's own fixed docs/ tree, not a
+        caller-supplied project path
+      review: not-applicable
       via: []
     since:
-      review: unreviewed
+      reason: static, hand-written help/example data (help.py:615), no date field
+        anywhere
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: static, hand-written help/example data (help.py:615), no date field
+        anywhere
+      review: not-applicable
       via: []
     verbose:
       reason: 'top-level get_structure(**kwargs) has no query parsing; confirmed live:
@@ -308,10 +382,16 @@ adapters:
       review: unreviewed
       via: []
     since:
-      review: unreviewed
+      reason: function-level complexity/length hotspots; no git-churn integration
+        in this adapter (unlike stats://, which does have one) -- no per-item date
+        exists
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: function-level complexity/length hotspots; no git-churn integration
+        in this adapter (unlike stats://, which does have one) -- no per-item date
+        exists
+      review: not-applicable
       via: []
     verbose:
       reason: 'CLI_QUERY_FLAGS declares only ''all''; render_structure(result, format,
@@ -329,10 +409,14 @@ adapters:
       review: unreviewed
       via: []
     since:
-      review: unreviewed
+      reason: import-graph/cycle/violation detection; mtime_ns is used only as a cache-fingerprint
+        component, never surfaced as a queryable per-result field
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: import-graph/cycle/violation detection; mtime_ns is used only as a cache-fingerprint
+        component, never surfaced as a queryable per-result field
+      review: not-applicable
       via: []
     verbose:
       via:
@@ -344,13 +428,21 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      review: unreviewed
+      reason: operates on one JSON file's parsed structure (adapter.py:48,64), not
+        a directory walk
+      review: not-applicable
       via: []
     since:
-      review: unreviewed
+      reason: generic JSON query/filter engine with no canonical date field; a data
+        file's own date field (if any) is already filterable via the generic ?field>value=
+        syntax
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: generic JSON query/filter engine with no canonical date field; a data
+        file's own date field (if any) is already filterable via the generic ?field>value=
+        syntax
+      review: not-applicable
       via: []
     verbose:
       reason: 'get_structure(**kwargs) has no query validation; confirmed live: ?verbose=1
@@ -365,13 +457,19 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      review: unreviewed
+      reason: walks a fixed certbot config directory (adapter.py:250, iterdir/glob
+        at :65,83,159,166) -- infra config, not a git-tracked checkout
+      review: not-applicable
       via: []
     since:
-      review: unreviewed
+      reason: only not_after (forward-looking expiry) per cert, no issuance/occurrence
+        date -- same class as cpanel/domain/ssl
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: only not_after (forward-looking expiry) per cert, no issuance/occurrence
+        date -- same class as cpanel/domain/ssl
+      review: not-applicable
       via: []
     verbose:
       reason: 'get_structure(...) has no detail-level concept; confirmed live: ''Unknown
@@ -405,13 +503,18 @@ adapters:
       review: unreviewed
       via: []
     respect_gitignore:
-      review: unreviewed
+      reason: queries a live MySQL connection (adapter.py:328), no filesystem walk
+      review: not-applicable
       via: []
     since:
-      review: unreviewed
+      reason: live server health/performance introspection; UNIX_TIMESTAMP() computes
+        one scalar (server_start_time), not a per-item timestamped list to filter
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: live server health/performance introspection; UNIX_TIMESTAMP() computes
+        one scalar (server_start_time), not a per-item timestamped list to filter
+      review: not-applicable
       via: []
     verbose:
       reason: no query-param whitelist or verbose-shaped hook found in code (adapter.py:328);
@@ -425,13 +528,21 @@ adapters:
       via:
       - adapter-reads-args
     respect_gitignore:
-      review: unreviewed
+      reason: globs nginx config files under /etc/nginx-style paths (adapter.py:953,
+        glob.glob at :236,239,267,269,415) -- infra config, not a git-tracked checkout
+      review: not-applicable
       via: []
     since:
-      review: unreviewed
+      reason: vhost/config inspection with no date field in get_structure()'s output;
+        the one date-shaped field (last_seen) belongs to a separate diagnose subcommand
+        path unreachable from the nginx:// URI
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: vhost/config inspection with no date field in get_structure()'s output;
+        the one date-shaped field (last_seen) belongs to a separate diagnose subcommand
+        path unreachable from the nginx:// URI
+      review: not-applicable
       via: []
     verbose:
       via:
@@ -462,10 +573,16 @@ adapters:
       review: unreviewed
       via: []
     since:
-      review: unreviewed
+      reason: candidate file scoring/budget selection has no per-item date field;
+        the module's 'since_ref' concept is the MCP pack tool's own git-ref diff parameter,
+        an unrelated feature sharing a keyword
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: candidate file scoring/budget selection has no per-item date field;
+        the module's 'since_ref' concept is the MCP pack tool's own git-ref diff parameter,
+        an unrelated feature sharing a keyword
+      review: not-applicable
       via: []
     verbose:
       via:
@@ -478,10 +595,14 @@ adapters:
       review: unreviewed
       via: []
     since:
-      review: unreviewed
+      reason: static scan of test files for mock.patch() call sites, grouped by target/test/file;
+        no date field, no git integration
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: static scan of test files for mock.patch() call sites, grouped by target/test/file;
+        no date field, no git integration
+      review: not-applicable
       via: []
     verbose:
       reason: 'CLI_QUERY_FLAGS declares only ''all''; get_structure(**kwargs) has
@@ -495,13 +616,21 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      review: unreviewed
+      reason: lists installed interpreter packages (adapter.py:148, get_packages)
+        -- reads Python environment metadata, not a project directory walk
+      review: not-applicable
       via: []
     since:
-      review: unreviewed
+      reason: build_date/source_mtime/pyc_mtime are single-scalar environment facts
+        or single-file staleness checks, not a per-item filterable field in a listable
+        result
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: build_date/source_mtime/pyc_mtime are single-scalar environment facts
+        or single-file staleness checks, not a per-item filterable field in a listable
+        result
+      review: not-applicable
       via: []
     verbose:
       reason: 'no query-string parsing at all, same shape as env://; confirmed live:
@@ -516,13 +645,19 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      review: unreviewed
+      reason: returns fixed self-introspection metadata (adapter.py:78, registered
+        adapters/rules/analyzers) -- no filesystem walk over a target path
+      review: not-applicable
       via: []
     since:
-      review: unreviewed
+      reason: self-introspection of reveal's own config/capabilities (adapter.py:78),
+        no date field anywhere
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: self-introspection of reveal's own config/capabilities (adapter.py:78),
+        no date field anywhere
+      review: not-applicable
       via: []
     verbose:
       reason: 'get_structure(**kwargs) has no query validation; confirmed live: ?verbose=1
@@ -535,13 +670,21 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      review: unreviewed
+      reason: operates on one .db file via sqlite3 (adapter.py:112,160), no directory
+        walk
+      review: not-applicable
       via: []
     since:
-      review: unreviewed
+      reason: returns DB-level metadata and table schema (columns/indexes), not row-level
+        query results -- no WHERE-style filtering surface exists to bind since/until
+        to
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: returns DB-level metadata and table schema (columns/indexes), not row-level
+        query results -- no WHERE-style filtering surface exists to bind since/until
+        to
+      review: not-applicable
       via: []
     verbose:
       reason: 'get_structure(**kwargs) has no query validation; confirmed live against
@@ -555,13 +698,24 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      review: unreviewed
+      reason: probes one host's certificate over the network (adapter.py:402); the
+        only glob.glob use locates an nginx config path for a cert-file hint, not
+        a project tree walk
+      review: not-applicable
       via: []
     since:
-      review: unreviewed
+      reason: certs carry not_before/not_after and a domain scan can return multiple
+        results, but no since/until filter code exists anywhere in ssl/*.py, and the
+        semantic is ambiguous for a live cert-validity check (unlike overview/markdown/autossl,
+        there's no partial implementation to build on)
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: certs carry not_before/not_after and a domain scan can return multiple
+        results, but no since/until filter code exists anywhere in ssl/*.py, and the
+        semantic is ambiguous for a live cert-validity check (unlike overview/markdown/autossl,
+        there's no partial implementation to build on)
+      review: not-applicable
       via: []
     verbose:
       reason: 'extra cert detail (chain, subject, etc.) is already reachable via separate
@@ -577,8 +731,8 @@ adapters:
       via:
       - declared
     since:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     until:
       review: unreviewed
       via: []
@@ -599,10 +753,14 @@ adapters:
       review: unreviewed
       via: []
     since:
-      review: unreviewed
+      reason: attack-surface/taxonomy rule matching against source; no date field
+        anywhere in the file
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: attack-surface/taxonomy rule matching against source; no date field
+        anywhere in the file
+      review: not-applicable
       via: []
     verbose:
       reason: 'render_structure(result, format, top) has no verbose param, no detail-level
@@ -617,10 +775,14 @@ adapters:
       review: unreviewed
       via: []
     since:
-      review: unreviewed
+      reason: testability scoring (mock pressure, coupling); no date field in the
+        file
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: testability scoring (mock pressure, coupling); no date field in the
+        file
+      review: not-applicable
       via: []
     verbose:
       reason: 'CLI_QUERY_FLAGS declares only ''all''; render_structure(result, format)
@@ -642,10 +804,14 @@ adapters:
       review: unreviewed
       via: []
     since:
-      review: unreviewed
+      reason: call-graph trace from an entry point; no date field anywhere in the
+        file
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: call-graph trace from an entry point; no date field anywhere in the
+        file
+      review: not-applicable
       via: []
     verbose:
       reason: 'render_structure(result, format) has no verbose param, no detail-level
@@ -657,13 +823,18 @@ adapters:
       review: unreviewed
       via: []
     respect_gitignore:
-      review: unreviewed
+      reason: operates on one spreadsheet file (xlsx.py:599,647), no directory walk
+      review: not-applicable
       via: []
     since:
-      review: unreviewed
+      reason: spreadsheet cell/sheet introspection; data-dependent, no canonical date
+        field the adapter itself recognizes -- same class as json/sqlite
+      review: not-applicable
       via: []
     until:
-      review: unreviewed
+      reason: spreadsheet cell/sheet introspection; data-dependent, no canonical date
+        field the adapter itself recognizes -- same class as json/sqlite
+      review: not-applicable
       via: []
     verbose:
       reason: 'render_structure(result, format) has no verbose param; confirmed live:
