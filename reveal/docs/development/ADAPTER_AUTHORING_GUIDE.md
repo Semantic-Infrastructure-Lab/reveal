@@ -85,10 +85,18 @@ class MyAdapter(ResourceAdapter):
     # Global CLI flags your adapter honors through a query param: {flag: fragment}.
     # The router appends the fragment when the flag is in effect (unless the URI
     # already sets that key), so `--all` and `?top=...` mean the same thing instead
-    # of the flag being accepted and silently ignored (BACK-1229, BACK-1361).
-    # Flags the router knows: --all, --verbose, --since, --until, --no-gitignore
-    # (spelled `respect_gitignore`); `{value}` in a fragment is the flag's value.
+    # of the flag being accepted and silently ignored (BACK-1229, BACK-1361, BACK-1379).
+    # Flags that need a per-adapter declaration here: --all, --verbose, --since,
+    # --until, --no-gitignore (spelled `respect_gitignore`); `{value}` in a fragment
+    # is the flag's value. --sort/--limit reach every adapter automatically (universal
+    # specs, no declaration needed) via reveal/utils/query_control.py's ResultControl.
     # CLI_QUERY_FLAGS = {'all': 'top=1000000', 'since': 'since={value}'}
+    #
+    # If your cap lives in the RENDERER (a `top:` kwarg on render_structure(), not a
+    # query param get_structure() reads -- e.g. a per-section display limit), a query
+    # fragment can't reach it. Set `ACCEPTS_TOP = True` on the renderer class instead;
+    # cli/routing/uri.py's handle_uri forwards --all/--verbose there directly
+    # (see reveal/adapters/overview.py's OverviewRenderer for the pattern, BACK-1226).
 
     def __init__(self, resource: str = '', query: str = None, **kwargs):
         # super().__init__() sets self.resource/self.query/self.query_params
