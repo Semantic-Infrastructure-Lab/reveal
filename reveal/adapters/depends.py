@@ -113,6 +113,11 @@ _SCHEMA_QUERY_PARAMS = {
         ),
         'examples': ["depends://src/server.c?root=src"],
     },
+    'verbose': {
+        'type': 'flag',
+        'description': 'Show full import detail per dependent instead of a summary. Same as the CLI --verbose',
+        'examples': ['depends://src?verbose'],
+    },
 }
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -229,6 +234,9 @@ class DependsRenderer:
         if format == 'json':
             print_json_result(result)
             return
+
+        # verbose from query (?verbose) takes precedence over caller arg (BACK-1379)
+        verbose = result.get('verbose', verbose)
 
         result_type = result.get('type')
         if result_type == 'module_dependents':
@@ -403,6 +411,13 @@ class DependsAdapter(ResourceAdapter):
     _AUTOLOAD_MIN_FILES = 20
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
+    # BACK-1379: render_structure() already has a real verbose branch (below) but
+    # handle_uri never forwards a verbose= kwarg through the URI path (only
+    # ACCEPTS_TOP renderers get kwargs forwarded, and this isn't one) -- so
+    # --verbose was a silent no-op on depends://. Same fix as imports:// (BACK-1361):
+    # declare the flag, read it back out of the query in get_structure(), and have
+    # render_structure prefer result['verbose'] over its own kwarg default.
+    CLI_QUERY_FLAGS = {'verbose': 'verbose'}
 
     def __init__(self, resource: str = '', query: Optional[str] = None):
         """Initialize depends adapter.
@@ -524,9 +539,14 @@ class DependsAdapter(ResourceAdapter):
         top_n = int(top_n_raw) if top_n_raw else None
 
         if target_path.is_file():
-            return self._format_file_dependents(target_path)
+            result = self._format_file_dependents(target_path)
         else:
-            return self._format_directory_summary(target_path, top_n=top_n, fmt=fmt)
+            result = self._format_directory_summary(target_path, top_n=top_n, fmt=fmt)
+        # BACK-1379: carry ?verbose through the result dict since handle_uri
+        # doesn't forward a verbose= render kwarg for this renderer.
+        if 'verbose' in self._query_params or kwargs.get('verbose', False):
+            result['verbose'] = True
+        return result
 
     def _validated_root_override(self, target_path: Path) -> Optional[Path]:
         """BACK-610: resolve and validate the ``?root=DIR`` query param, if any.

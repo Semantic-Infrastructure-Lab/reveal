@@ -885,6 +885,8 @@ class PackRenderer:
         if format == 'json':
             print_json_result(result)
             return
+        # verbose from query (?verbose) takes precedence over caller arg (BACK-1379)
+        verbose = result.get('verbose', verbose)
         path = Path(result['path'])
         selected = result['files']
         meta = result['meta']
@@ -909,6 +911,15 @@ class PackAdapter(ResourceAdapter):
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
+    # BACK-1379: render_structure() already has a real verbose branch (per-file
+    # token/line breakdown, see _render_pack) but handle_uri never forwards a
+    # verbose= kwarg through the URI path (only ACCEPTS_TOP renderers get kwargs
+    # forwarded, and this isn't one) -- so --verbose was a silent no-op on
+    # pack://, even though it already worked on the `pack` CLI subcommand. Same
+    # fix as imports:// (BACK-1361): declare the flag, read it back out of the
+    # query in get_structure(), and have render_structure prefer
+    # result['verbose'] over its own kwarg default.
+    CLI_QUERY_FLAGS = {'verbose': 'verbose'}
 
     def __init__(self, resource: str, query: Optional[str] = None):
         self.path = str(Path(resource).expanduser())
@@ -968,6 +979,7 @@ class PackAdapter(ResourceAdapter):
                 'since': {'type': 'string', 'description': 'Git ref to diff against; changed files boosted to top priority', 'examples': ['since=main']},
                 'content': {'type': 'boolean', 'description': 'Include tiered file content (full/structure/name_only)', 'examples': ['content=true']},
                 'architecture': {'type': 'boolean', 'description': 'Boost high fan-in files; include an architecture hint', 'examples': ['architecture=true']},
+                'verbose': {'type': 'flag', 'description': 'Show per-file token/line-count breakdown. Same as the CLI --verbose', 'examples': ['pack://src?verbose']},
             },
             'elements': {},
             'supports_batch': False,
@@ -1058,6 +1070,10 @@ class PackAdapter(ResourceAdapter):
         }
         if emit_content:
             report['content'] = _collect_file_contents(selected)
+        # BACK-1379: carry ?verbose through the result dict since handle_uri
+        # doesn't forward a verbose= render kwarg for this renderer.
+        if 'verbose' in self.query_params:
+            report['verbose'] = True
 
         return ResultBuilder.create(
             result_type='pack',
