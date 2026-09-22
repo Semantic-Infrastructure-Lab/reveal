@@ -98,7 +98,7 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
                     token in resource for token in spec.already_scoped):
                 resource = f"{resource}{'&' if '?' in resource else '?'}{fragment}"
         elif spec.warn_unsupported:
-            aware = '/'.join(f'{s}://' for s in _supporting_schemes(spec.dest))
+            aware = ', '.join(f'{s}://' for s in _supporting_schemes(spec.dest))
             print(f"Note: {spec.option} has no effect on {scheme}:// -- only {aware} support it.",
                   file=sys.stderr)
     return resource

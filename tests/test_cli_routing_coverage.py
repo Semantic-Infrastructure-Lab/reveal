@@ -655,35 +655,20 @@ class TestRenderStructureTopForwarding:
         adapter.get_structure.return_value = {}
         return adapter
 
-    def test_overview_renderer_gets_unlimited_top_with_all_flag(self):
-        renderer_cls = MagicMock()
-        renderer_cls.__name__ = 'OverviewRenderer'
-        args = _args(all=True, verbose=False, top=5)
-        _render_structure(self._adapter(), renderer_cls, args)
-        _, kwargs = renderer_cls.render_structure.call_args
-        assert kwargs['top'] >= 10**6
-
-    def test_overview_renderer_gets_unlimited_top_with_verbose_flag(self):
-        renderer_cls = MagicMock()
-        renderer_cls.__name__ = 'OverviewRenderer'
-        args = _args(all=False, verbose=True, top=5)
-        _render_structure(self._adapter(), renderer_cls, args)
-        _, kwargs = renderer_cls.render_structure.call_args
-        assert kwargs['top'] >= 10**6
-
-    def test_overview_renderer_gets_explicit_top(self):
-        renderer_cls = MagicMock()
-        renderer_cls.__name__ = 'OverviewRenderer'
-        args = _args(all=False, verbose=False, top=20)
-        _render_structure(self._adapter(), renderer_cls, args)
-        _, kwargs = renderer_cls.render_structure.call_args
-        assert kwargs['top'] == 20
+    @pytest.mark.parametrize('flag', ['all', 'verbose'])
+    def test_overview_renderer_gets_unlimited_top(self, flag):
+        # The real renderer: a mock matched by name would hide a lost ACCEPTS_TOP declaration.
+        from reveal.adapters.overview import OverviewRenderer
+        args = _args(**{flag: True})
+        with patch.object(OverviewRenderer, 'render_structure') as render:
+            _render_structure(self._adapter(), OverviewRenderer, args)
+        assert render.call_args.kwargs['top'] >= 10**6
 
     def test_overview_renderer_gets_no_top_kwarg_when_unset(self):
         """No --top/--all/--verbose passed: let render_structure keep its own default."""
         renderer_cls = MagicMock()
-        renderer_cls.__name__ = 'OverviewRenderer'
-        args = _args()  # no top/all/verbose attributes at all
+        renderer_cls.ACCEPTS_TOP = True
+        args = _args()  # no all/verbose attributes at all
         _render_structure(self._adapter(), renderer_cls, args)
         _, kwargs = renderer_cls.render_structure.call_args
         assert 'top' not in kwargs

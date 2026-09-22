@@ -306,17 +306,19 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:
 # is no adapter-side support to inject into, so the honest fix is a warning
 # (same convention as the --grep/BACK-351 and markdown --links/BACK-357 notes
 # in handle_uri()) rather than a silent drop or a guessed semantic.
-# Each flag's argparse default, so "was this actually typed" can be told
+# Compared against the parser's own default, so "was this actually typed" can be told
 # apart from "left at default" (--depth 0 must count as set, not falsy).
-_STRUCTURAL_FLAG_DEFAULTS = {'depth': None, 'ext': None, 'type': None, 'fast': False}
+_STRUCTURAL_FLAGS = ('depth', 'ext', 'type', 'fast')
 
 
 def _warn_unsupported_structural_flags(resource: str, scheme: str, args: 'Namespace') -> None:
     """Warn when --depth/--ext/--type/--fast were explicitly set but this
     scheme's adapter has no way to honor them (BACK-1202)."""
+    from ..defaults import _parser_defaults
+    defaults = _parser_defaults()
     ignored = [
-        f'--{flag_name}' for flag_name, default in _STRUCTURAL_FLAG_DEFAULTS.items()
-        if getattr(args, flag_name, default) != default
+        f'--{flag_name}' for flag_name in _STRUCTURAL_FLAGS
+        if getattr(args, flag_name, defaults[flag_name]) != defaults[flag_name]
     ]
     if not ignored:
         return
@@ -739,37 +741,9 @@ def _build_adapter_kwargs(adapter, args: 'Namespace', scheme: Optional[str] = No
     if 'uri' in sig.parameters and scheme and resource is not None:
         kwargs['uri'] = f"{scheme}://{resource}"
 
-    # Map CLI args to adapter params (only if param exists and value is not None)
-    param_mapping = {
-        'hotspots': 'hotspots',
-        'code_only': 'code_only',
-        'min_lines': 'min_lines',
-        'max_lines': 'max_lines',
-        'min_complexity': 'min_complexity',
-        'max_complexity': 'max_complexity',
-        'min_functions': 'min_functions',
-        'dns_verified': 'dns_verified',
-        'only_failures': 'only_failures',
-        'summary': 'summary',
-        'user': 'user',
-        'check_live': 'check_live',
-        'check_orphans': 'check_orphans',
-        'check_duplicates': 'check_duplicates',
-        'audit': 'audit',
-        'probe_http': 'probe_http',
-        'probe': 'probe',
-    }
-
-    for arg_name, param_name in param_mapping.items():
-        if param_name in sig.parameters:
-            value = getattr(args, arg_name, None)
-            if value is not None:
-                kwargs[param_name] = value
-
-    # Auto-discover: any get_structure() param whose name matches an args attribute
-    # and hasn't already been populated above — eliminates the need to hand-maintain
-    # param_mapping for every new CLI flag (BACK-354).
-    _skip = set(param_mapping.values()) | {'uri', 'self'}
+    # Any get_structure() param whose name matches an args attribute is filled from it
+    # (BACK-354); nothing to hand-maintain when a CLI flag is added.
+    _skip = {'uri', 'self'}
     for param_name, param in sig.parameters.items():
         if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
             continue
@@ -937,27 +911,26 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
 
 
 def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace') -> dict:
-    """Forward --top/--all/--verbose to render_structure() for overview:// only (BACK-1226).
+    """Forward --all/--verbose to render_structure() for overview:// only (BACK-1226).
 
     render_structure(result, args.format) never passed args.top/all/verbose through
     for ANY URI-invoked renderer, so overview://'s per-section caps (Components,
     Entry points, Language, Hotspots) were unreachable via --all/--verbose and even
     via a working ?top=N query string (the resolved top never left get_structure()).
 
-    Scoped to OverviewRenderer specifically rather than fixed generically: sibling
+    Scoped to renderers that declare ACCEPTS_TOP (only OverviewRenderer) rather than fixed generically: sibling
     renderers declare differently-typed/shaped 'top' params (hotspots.py top:int=10,
     deps.py top:int=10, architecture.py top:int=5 plus a second no_imports param,
     contracts.py/trace.py have no top param at all) that were never designed to
     receive a value from here, and forwarding blind would either crash them or
     silently change behavior nobody asked this ticket to touch.
     """
-    if getattr(renderer_class, '__name__', '') != 'OverviewRenderer':
+    if getattr(renderer_class, 'ACCEPTS_TOP', False) is not True:
         return {}
     if getattr(args, 'all', False) or getattr(args, 'verbose', False):
         from ...adapters.overview import UNLIMITED_TOP
         return {'top': UNLIMITED_TOP}
-    top = getattr(args, 'top', None)
-    return {'top': top} if top is not None else {}
+    return {}
 
 def handle_adapter(adapter_class: type, scheme: str, resource: str,
                    element: Optional[str], args: 'Namespace') -> None:
