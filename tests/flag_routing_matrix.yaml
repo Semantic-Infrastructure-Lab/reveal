@@ -69,8 +69,7 @@ adapters:
       via: []
   classify:
     all:
-      reason: get_structure lists every file already (classify.py:216-249); no [:N]
-        slice to lift
+      reason: get_structure lists every file already (classify.py:216-249); no [:N] slice to lift
       review: not-applicable
       via: []
     respect_gitignore:
@@ -135,8 +134,7 @@ adapters:
       via: []
   cpanel:
     all:
-      reason: no result-count query param; domain/ssl/acl-check listings return every
-        row (cpanel/adapter.py:704-717)
+      reason: no result-count query param; domain/ssl/acl-check listings return every row (cpanel/adapter.py:704-717)
       review: not-applicable
       via: []
     respect_gitignore:
@@ -153,8 +151,7 @@ adapters:
       via: []
   depends:
     all:
-      reason: top_n is None unless the caller passes ?top=N; unclamped by default
-        (depends.py:523-524)
+      reason: top_n is None unless the caller passes ?top=N; unclamped by default (depends.py:523-524)
       review: not-applicable
       via: []
     respect_gitignore:
@@ -187,8 +184,7 @@ adapters:
       - routing-special
   diff:
     all:
-      reason: output is "what changed" (additions/removals/modifications), not a ranked/truncatable
-        list
+      reason: output is "what changed" (additions/removals/modifications), not a ranked/truncatable list
       review: not-applicable
       via: []
     respect_gitignore:
@@ -205,8 +201,7 @@ adapters:
       via: []
   domain:
     all:
-      reason: single-domain detail view; only per-field string previews exist, not
-        a results list
+      reason: single-domain detail view; only per-field string previews exist, not a results list
       review: not-applicable
       via: []
     respect_gitignore:
@@ -223,8 +218,7 @@ adapters:
       via: []
   env:
     all:
-      reason: get_structure returns every var already (env.py:302-341); confirmed
-        live, output identical
+      reason: get_structure returns every var already (env.py:302-341); confirmed live, output identical
       review: not-applicable
       via: []
     respect_gitignore:
@@ -289,8 +283,8 @@ adapters:
       via: []
   imports:
     all:
-      reason: ?rank= is unclamped by default (imports.py:207-210); the one real cap
-        (groups[:5]) belongs to --verbose, already declared
+      reason: ?rank= is unclamped by default (imports.py:207-210); the one real cap (groups[:5]) belongs
+        to --verbose, already declared
       review: not-applicable
       via: []
     respect_gitignore:
@@ -307,8 +301,7 @@ adapters:
       - declared
   json:
     all:
-      reason: no default cap found in adapter or legacy modes; confirmed live, output
-        identical
+      reason: no default cap found in adapter or legacy modes; confirmed live, output identical
       review: not-applicable
       via: []
     respect_gitignore:
@@ -325,8 +318,8 @@ adapters:
       via: []
   letsencrypt:
     all:
-      reason: cert inventory is meant to be exhaustive (orphan/duplicate detection
-        needs every cert); no cap in code
+      reason: cert inventory is meant to be exhaustive (orphan/duplicate detection needs every cert);
+        no cap in code
       review: not-applicable
       via: []
     respect_gitignore:
@@ -409,8 +402,8 @@ adapters:
       - routing-special
   pack:
     all:
-      reason: budget-constrained curation (?budget=) is the adapter's purpose; --all
-        would contradict it
+      reason: budget-constrained curation (?budget=) is the adapter's purpose; --all would contradict
+        it
       review: not-applicable
       via: []
     respect_gitignore:
@@ -460,8 +453,7 @@ adapters:
       via: []
   reveal:
     all:
-      reason: self-introspection metadata (adapters/rules/analyzers) is small and
-        fixed-size, not paginated
+      reason: self-introspection metadata (adapters/rules/analyzers) is small and fixed-size, not paginated
       review: not-applicable
       via: []
     respect_gitignore:
@@ -528,8 +520,7 @@ adapters:
       via: []
   surface:
     all:
-      reason: top defaults to None (surface.py:291,336) -- already unclamped; confirmed
-        live, output identical
+      reason: top defaults to None (surface.py:291,336) -- already unclamped; confirmed live, output identical
       review: not-applicable
       via: []
     respect_gitignore:
@@ -562,7 +553,12 @@ adapters:
       via: []
   trace:
     all:
-      review: unreviewed
+      reason: --all conventionally lifts a RESULTS cap (top=N/limit=N); trace's cap (trace.py:26-30, default
+        depth=2) is a BFS TRAVERSAL-DEPTH bound, a different axis -- 'show all' would mean 'traverse arbitrarily
+        deep', which risks a runaway walk on a large or cyclic call graph (sibling code in calls/adapter.py:412
+        deliberately clamps depth for the same reason). --depth=N is already the documented, working escape
+        hatch for a user who wants more.
+      review: not-applicable
       via: []
     respect_gitignore:
       review: unreviewed
