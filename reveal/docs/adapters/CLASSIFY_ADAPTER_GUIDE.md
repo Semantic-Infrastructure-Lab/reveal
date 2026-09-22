@@ -21,9 +21,13 @@ reveal 'classify://src' --format json
 
 ## Query Parameters
 
-None. `classify://` always walks the full target directory (respecting
-`.gitignore`, `REVEAL_IGNORE`/`config.yaml`'s `ignore:`, and the same
-well-known skip directories as `stats://`).
+`classify://` walks the full target directory (respecting `REVEAL_IGNORE`/
+`config.yaml`'s `ignore:` and the same well-known skip directories as
+`stats://`), skipping gitignored files by default.
+
+- `respect_gitignore` (boolean, default `true`) — set to `false` (or pass
+  `--no-gitignore` on the CLI) to include gitignored files:
+  `classify://src?respect_gitignore=false`
 
 ## Reading The Output
 

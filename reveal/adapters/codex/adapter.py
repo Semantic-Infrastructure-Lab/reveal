@@ -61,6 +61,13 @@ class CodexAdapter(ResourceAdapter):
     ~/.codex/sessions/**/*.jsonl (per-session JSONL files).
     """
     HELP_CLUSTER = 'Sessions & Docs'
+    # BACK-1379: get_structure already reads since/until from query_params and
+    # threads them into _h_search_sessions/_h_filter_sessions (below), but nothing
+    # declared the flag, so --since/--until were silently dropped on the CLI path
+    # (confirmed live: 79 -> 0 matches with a manually-appended &since=, but no
+    # effect via --since alone). Only takes effect with ?search= or ?filter= —
+    # the bare list mode (_h_list_sessions) ignores since/until entirely.
+    CLI_QUERY_FLAGS = {'since': 'since={value}', 'until': 'until={value}'}
 
     # Base paths — override with env vars for testing / SSH
     CODEX_HOME: Path = (

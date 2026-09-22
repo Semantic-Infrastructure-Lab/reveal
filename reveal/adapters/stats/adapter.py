@@ -183,6 +183,13 @@ class StatsAdapter(ResourceAdapter):
     CLI_QUERY_FLAGS = {
         'respect_gitignore': 'respect_gitignore=false',  # --no-gitignore (BACK-1202)
         'all': 'top=1000000',  # lifts the hotspots=true top=10 default (BACK-1379)
+        # BACK-1379: get_structure already reads since from query_params and threads
+        # it into get_churn_counts() to bound hotspots=true's churn scoring, but
+        # nothing declared the flag, so --since was silently dropped on the CLI path
+        # (confirmed live: 2 -> 1 hotspots with a manually-appended &since=, no
+        # effect via --since alone). No 'until' entry -- get_churn_counts() has no
+        # until parameter to bind to (BACK-1379 follow-up filed separately).
+        'since': 'since={value}',
     }
 
     @staticmethod

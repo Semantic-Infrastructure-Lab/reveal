@@ -81,7 +81,7 @@ def _apply_locale_fanout(rows: List[Dict[str, Any]]) -> None:
                 row['provenance'] = 'vendor'
 
 
-def _classify_directory(directory: Path) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+def _classify_directory(directory: Path, respect_gitignore: bool = True) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
     """Returns (rows, excluded_by_extension).
 
     BACK-1241: the population here is gated on find_analyzable_files() ->
@@ -95,7 +95,8 @@ def _classify_directory(directory: Path) -> Tuple[List[Dict[str, Any]], Dict[str
     """
     rows = []
     excluded_by_extension: Dict[str, int] = {}
-    for file_path in find_analyzable_files(directory, excluded_by_extension=excluded_by_extension):
+    for file_path in find_analyzable_files(
+            directory, respect_gitignore=respect_gitignore, excluded_by_extension=excluded_by_extension):
         rel = Path(get_file_display_path(file_path, directory))
         provenance = classify_path_provenance(rel.parts[:-1], rel.name)
         if provenance is None and looks_vendored_by_banner(file_path):
@@ -149,6 +150,12 @@ class ClassifyAdapter(ResourceAdapter):
 
     HELP_CLUSTER = 'Code Analysis'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    # BACK-1379: _classify_directory already calls find_analyzable_files(), which
+    # defaults respect_gitignore=True -- but nothing here ever passed False, so
+    # --no-gitignore was silently swallowed (confirmed live: identical file count
+    # with/without the flag) even though the underlying gitignore-aware walker
+    # (shared with stats:// and overview://) already supports disabling it.
+    CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}
 
     def __init__(self, resource: str, query: Optional[str] = None):
         self.path = str(Path(resource).expanduser())
@@ -188,7 +195,13 @@ class ClassifyAdapter(ResourceAdapter):
             'adapter': 'classify',
             'description': 'Provenance classification for every analyzable file in a directory (see summary.excluded for what has no registered analyzer)',
             'uri_syntax': 'classify://<dir>',
-            'query_params': {},
+            'query_params': {
+                'respect_gitignore': {
+                    'type': 'boolean',
+                    'description': 'Skip gitignored files (default true). Same as the CLI --no-gitignore (which sets this to false)',
+                    'examples': ['classify://src?respect_gitignore=false'],
+                },
+            },
             'elements': {},
             'supports_batch': False,
             'supports_advanced': False,
@@ -218,7 +231,8 @@ class ClassifyAdapter(ResourceAdapter):
         require_path_exists(path)
 
         directory = path if path.is_dir() else path.parent
-        rows, excluded_by_extension = _classify_directory(directory)
+        respect_gitignore = str(self.query_params.get('respect_gitignore', True)).lower() != 'false'
+        rows, excluded_by_extension = _classify_directory(directory, respect_gitignore=respect_gitignore)
 
         by_provenance: Dict[str, int] = {}
         for row in rows:
