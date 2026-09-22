@@ -71,15 +71,20 @@ PROBES = {
     ('pack', 'verbose'): ('pack://reveal/adapters', True),
     # BACK-1379: respect_gitignore slice.
     ('classify', 'respect_gitignore'): ('classify://{tree}', False),
-    # BACK-1379: since/until slice. A future since= always excludes every real
-    # commit regardless of clone depth (unlike an --all results cap, this isn't
-    # sensitive to how much history the checkout under test has) -- {tree}'s
-    # trivial single-line files don't clear stats://'s hotspot-complexity
-    # threshold at all (verified: 0-diff), so this points at a real target.
+    # BACK-1379/BACK-1388: since/until slice. Originally pointed at a real repo file
+    # (reveal/adapters/stats) on the theory that a future since= excludes every real
+    # commit "regardless of clone depth" -- wrong: that file's churn score is only
+    # legible with the many real commits a full dev clone has. CI's actual checkout
+    # (actions/checkout, depth 1) has exactly one commit for every file, so
+    # since=2099-01-01 (0 touches) vs. unfiltered (1 touch) didn't move the rendered
+    # score enough to differ -- byte-identical on every one of 15 CI jobs, reproduced
+    # locally via `git clone --depth 1`. Fixed the same way as the git-all bug
+    # (BACK-1379): build the commit history the probe needs inside the test itself
+    # (churn_tree) instead of trusting the ambient checkout's depth.
     # No probe for codex/since+until: its only fixture path is monkeypatching
     # CODEX_HOME/CODEX_DB (see tests/adapters/test_codex_adapter.py), which a
     # (uri, value) PROBES tuple can't express.
-    ('stats', 'since'): ('stats://reveal/adapters/stats?hotspots=true', '2099-01-01'),
+    ('stats', 'since'): ('stats://{churn_tree}?hotspots=true', '2099-01-01'),
 }
 
 
@@ -283,10 +288,52 @@ def probe_tree(tmp_path_factory):
     return root
 
 
+@pytest.fixture(scope='module')
+def churn_tree(tmp_path_factory):
+    """A file with real complexity (clears the hotspot threshold) churned across many
+    commits entirely within this fixture -- unlike a path into the ambient repo, its
+    history doesn't depend on how deep the checkout under test happens to be."""
+    import subprocess
+    import os as _os
+
+    root = tmp_path_factory.mktemp('churn_tree')
+    code = (
+        'def complex_func(x):\n'
+        '    if x > 0:\n'
+        '        if x > 10:\n'
+        '            if x > 100:\n'
+        '                return "huge"\n'
+        '            return "big"\n'
+        '        for i in range(x):\n'
+        '            if i % 2 == 0:\n'
+        '                x += 1\n'
+        '            elif i % 3 == 0:\n'
+        '                x -= 1\n'
+        '        return x\n'
+        '    elif x < 0:\n'
+        '        while x < 0:\n'
+        '            x += 1\n'
+        '    return x\n'
+    )
+    (root / 'a.py').write_text(code, encoding='utf-8')
+    git = ['git', '-C', str(root), '-c', 'user.name=t', '-c', 'user.email=t@t']
+    subprocess.run([*git, 'init', '-q'], check=True)
+    subprocess.run([*git, 'add', 'a.py'], check=True)
+    subprocess.run([*git, 'commit', '-q', '-m', 'init', '--date', '2020-01-01T00:00:00'],
+                   check=True, env={**_os.environ, 'GIT_COMMITTER_DATE': '2020-01-01T00:00:00'})
+    for i in range(1, 26):
+        (root / 'a.py').write_text(f'{code}\n# churn {i}\n', encoding='utf-8')
+        subprocess.run([*git, 'add', 'a.py'], check=True)
+        date = f'2020-01-{i + 1:02d}T00:00:00'
+        subprocess.run([*git, 'commit', '-q', '-m', f'churn {i}', '--date', date],
+                       check=True, env={**_os.environ, 'GIT_COMMITTER_DATE': date})
+    return root
+
+
 @pytest.mark.parametrize('scheme,flag', sorted(PROBES))
-def test_honored_cell_changes_output(scheme, flag, probe_tree):
+def test_honored_cell_changes_output(scheme, flag, probe_tree, churn_tree):
     uri, value = PROBES[scheme, flag]
-    uri = uri.replace('{tree}', str(probe_tree))
+    uri = uri.replace('{tree}', str(probe_tree)).replace('{churn_tree}', str(churn_tree))
     assert _render(uri) != _render(uri, **{flag: value}), (
         f'{scheme}:// claims a channel for --{flag} but the output is identical on {uri}')
 
