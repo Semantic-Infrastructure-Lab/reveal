@@ -65,6 +65,10 @@ PROBES = {
     ('architecture', 'all'): ('architecture://reveal', True),
     ('deps', 'all'): ('deps://reveal', True),
     ('git', 'all'): ('git://{tree}?type=log', True),
+    # BACK-1379: --verbose slice.
+    ('git', 'verbose'): ('git://{tree}/a.py?type=blame', True),
+    ('depends', 'verbose'): ('depends://reveal/adapters', True),
+    ('pack', 'verbose'): ('pack://reveal/adapters', True),
 }
 
 
