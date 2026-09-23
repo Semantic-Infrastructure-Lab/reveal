@@ -46,7 +46,8 @@ _TS_EXTENSIONS: frozenset = frozenset({'.ts', '.tsx'})
 # since JS has no interface/type-alias/abstract-class grammar — correctly
 # absent rather than a gap) so it shares the classifier with zero code changes.
 _INTERFACE_FAMILY_EXTENSIONS: frozenset = frozenset({
-    '.ts', '.tsx', '.js', '.jsx', '.java', '.cs', '.php', '.swift', '.kt', '.kts',
+    '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts',
+    '.java', '.cs', '.php', '.swift', '.kt', '.kts',
 })
 
 

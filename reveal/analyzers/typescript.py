@@ -98,6 +98,8 @@ class _TypeScriptBase(
 
 
 @register('.ts', name='TypeScript', icon='')
+@register('.mts', name='TypeScript Module', icon='')
+@register('.cts', name='TypeScript CommonJS', icon='')
 class TypeScriptAnalyzer(_TypeScriptBase):
     """TypeScript (.ts) file analyzer."""
     language = 'typescript'

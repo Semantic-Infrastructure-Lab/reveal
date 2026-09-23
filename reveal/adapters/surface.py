@@ -78,7 +78,7 @@ class _SurfaceScanner:
 # Registration order does not matter — lookup is by extension, not position.
 _SURFACE_SCANNERS: tuple = (
     _SurfaceScanner(frozenset({'.py'}), 'reveal.adapters.ast.nav_surface', 'scan_file_surface', 'python'),
-    _SurfaceScanner(frozenset({'.ts', '.tsx', '.js', '.jsx'}), 'reveal.adapters.ast.nav_surface_ts', 'scan_file_surface_ts', 'typescript'),
+    _SurfaceScanner(frozenset({'.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts'}), 'reveal.adapters.ast.nav_surface_ts', 'scan_file_surface_ts', 'typescript'),
     _SurfaceScanner(frozenset({'.java'}), 'reveal.adapters.ast.nav_surface_java', 'scan_file_surface_java', 'java'),
     _SurfaceScanner(frozenset({'.cs'}), 'reveal.adapters.ast.nav_surface_csharp', 'scan_file_surface_csharp', 'csharp'),
     _SurfaceScanner(frozenset({'.php'}), 'reveal.adapters.ast.nav_surface_php', 'scan_file_surface_php', 'php'),

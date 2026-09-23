@@ -500,7 +500,7 @@ class JavaScriptExtractor(LanguageExtractor):
     - Dynamic imports: await import('./module')
     """
 
-    extensions = {'.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'}
+    extensions = {'.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.mts', '.cts'}
     language_name = 'JavaScript/TypeScript'
 
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
@@ -1154,6 +1154,7 @@ class JavaScriptExtractor(LanguageExtractor):
         '.js': ['.ts', '.tsx', '.d.ts'],
         '.jsx': ['.tsx'],
         '.mjs': ['.mts'],
+        '.cjs': ['.cts'],
     }
 
     def _resolve_relative_js(self, module_path: str, base_path: Path) -> Optional[Path]:
@@ -1237,7 +1238,7 @@ class JavaScriptExtractor(LanguageExtractor):
             # specifiers with no dot at all, instead of returning None.
 
         # Try with common JavaScript extensions
-        for ext in ['.js', '.ts', '.jsx', '.tsx', '.mjs']:
+        for ext in ['.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs', '.mts', '.cts']:
             file_path = Path(str(target) + ext)
             if file_path.exists() and file_path.is_file():
                 return file_path.resolve()

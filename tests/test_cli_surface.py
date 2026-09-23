@@ -54,7 +54,9 @@ class TestIsTestFile(unittest.TestCase):
         # make test_origin silently always False for that language.
         samples = {
             '.py': 'test_user.py', '.ts': 'user.test.ts', '.tsx': 'user.test.tsx',
-            '.js': 'user.test.js', '.jsx': 'user.test.jsx', '.java': 'UserTest.java',
+            '.js': 'user.test.js', '.jsx': 'user.test.jsx', '.mjs': 'user.test.mjs',
+            '.cjs': 'user.test.cjs', '.mts': 'user.test.mts', '.cts': 'user.test.cts',
+            '.java': 'UserTest.java',
             '.cs': 'UserTests.cs', '.php': 'UserTest.php', '.swift': 'UserTests.swift',
             '.kt': 'UserTest.kt', '.kts': 'UserTest.kts', '.rb': 'user_spec.rb',
             '.go': 'user_test.go', '.rs': 'user_test.rs',
@@ -2444,3 +2446,18 @@ class TestSurfaceByDir(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+@pytest.mark.parametrize('ext', ['.js', '.mjs', '.cjs', '.mts', '.cts'])
+def test_every_js_ts_module_extension_is_scanned(tmp_path, ext):
+    """BACK-1403: identical .mjs code produced 0 surface entries while coverage
+    claimed the file was analyzed; .mts/.cts had no analyzer at all."""
+    from reveal.adapters.surface import _scan_surface
+    from reveal.adapters.contracts import _INTERFACE_FAMILY_EXTENSIONS
+    from reveal.registry import get_analyzer
+    (tmp_path / f"s{ext}").write_text(
+        "const r = fetch('http://x');\nconst h = process.env.HOST;\n", encoding='utf-8')
+    report = _scan_surface(tmp_path)
+    assert [e['name'] for e in report['surfaces']['env']] == ['HOST']
+    assert ext in _INTERFACE_FAMILY_EXTENSIONS
+    assert get_analyzer(f"x{ext}", allow_fallback=False) is not None
