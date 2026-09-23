@@ -101,6 +101,7 @@ class JupyterAnalyzer(FileAnalyzer):
                 source=self.path,
                 error=self.parse_error,
                 contract_version=CONTRACT_VERSION,
+                _has_errors=True,
                 cells=[],
                 cell_counts={},
                 kernel='unknown',

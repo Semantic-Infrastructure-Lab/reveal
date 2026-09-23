@@ -150,3 +150,36 @@ class TestSingleFileCheckContractDisclosure:
         out = capsys.readouterr().out
 
         assert '"warning"' not in out
+
+
+class TestMalformedDataFilesAreDisclosed:
+    """BACK-1404: a malformed config/data file read "✅ No issues found" -- its
+    analyzer either overrode get_structure (tree-sitter JSON/YAML/TOML) or had
+    its own parser fail (XML, notebooks, JSONL) without saying so."""
+
+    @pytest.mark.parametrize('name, body', [
+        ('t.json', '{"a": 1, "b": [1, 2\n'),
+        ('b.yaml', 'a:\n  b: 1\n c: [\n'),
+        ('b.toml', '[section\nkey = "unterminated\n'),
+        ('b.xml', '<root><a></root>\n'),
+        ('b.ipynb', '{"cells": [\n'),
+        ('b.jsonl', '{"a": 1}\n{"b": \n'),
+    ])
+    def test_malformed_file_is_a_warning(self, tmp_path, name, body):
+        path = tmp_path / name
+        path.write_text(body, encoding='utf-8')
+        _, _, status = check_and_collect_file(path, tmp_path, None, None)
+        assert status['status'] == 'warning', status
+
+    @pytest.mark.parametrize('name, body', [
+        ('ok.json', '{"a": 1, "b": [1, 2]}\n'),
+        ('ok.yaml', 'a:\n  b: 1\nc: [1, 2]\n'),
+        ('ok.toml', '[section]\nkey = "v"\n'),
+        ('ok.xml', '<root><a/></root>\n'),
+        ('ok.jsonl', '{"a": 1}\n{"b": 2}\n'),
+    ])
+    def test_well_formed_file_is_ok(self, tmp_path, name, body):
+        path = tmp_path / name
+        path.write_text(body, encoding='utf-8')
+        _, _, status = check_and_collect_file(path, tmp_path, None, None)
+        assert status['status'] == 'ok', status

@@ -103,6 +103,7 @@ class JsonlAnalyzer(FileAnalyzer):
         all_records = []
         record_types: Dict[str, int] = {}
         total_records = 0
+        malformed = 0
 
         for i, line in enumerate(self.lines, 1):
             line = line.strip()
@@ -127,6 +128,7 @@ class JsonlAnalyzer(FileAnalyzer):
 
             except json.JSONDecodeError as e:
                 # Track malformed records
+                malformed += 1
                 all_records.append({
                     'line_start': i,
                     'name': '⚠️ Invalid JSON',
@@ -149,13 +151,16 @@ class JsonlAnalyzer(FileAnalyzer):
                                 sorted(record_types.items(), key=lambda x: -x[1])),
         }
 
-        return ResultBuilder.create(
+        result = ResultBuilder.create(
             result_type='jsonl_structure',
             source=self.path,
             data={'records': [summary] + selected_records},
             contract_version=CONTRACT_VERSION,
-            confidence=1.0,
+            confidence=1.0 if not malformed else 0.5,
         )
+        if malformed:
+            result['_has_errors'] = True
+        return result
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract a specific JSONL record.

@@ -198,6 +198,20 @@ def _format_detections_text(
     _print_truncation_footer()
 
 
+def structure_parse_degraded(analyzer: Any, structure: Any) -> bool:
+    """True when the file did not parse cleanly, so "no issues" is not a clean bill.
+
+    `_has_errors` (BACK-1084) is set by TreeSitterAnalyzer.get_structure and by
+    analyzers whose own parser failed (XML, notebooks, JSONL). Tree-sitter
+    analyzers that override get_structure (JSON, YAML, TOML, ...) never set it,
+    so their tree is asked directly (BACK-1404: truncated JSON read "✅ No issues").
+    """
+    if isinstance(structure, dict) and structure.get('_has_errors'):
+        return True
+    has_recovery = getattr(analyzer, '_has_recovery_artifacts', None)
+    return bool(has_recovery and has_recovery())
+
+
 def run_pattern_detection(
     analyzer: FileAnalyzer,
     path: str,
@@ -248,7 +262,7 @@ def run_pattern_detection(
     # BACK-1083: a tree-sitter recovery parse (structure['_has_errors'], set by
     # BACK-1084) means rules ran against fabricated/partial structure — surface
     # that instead of letting "0 detections" read as "clean file".
-    parse_degraded = isinstance(structure, dict) and bool(structure.get('_has_errors'))
+    parse_degraded = structure_parse_degraded(analyzer, structure)
 
     # Apply severity filter if requested
     if severity_arg:

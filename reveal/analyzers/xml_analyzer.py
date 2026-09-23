@@ -275,6 +275,7 @@ class XmlAnalyzer(FileAnalyzer):
                 error=f'XML parse error: {e}',
                 contract_version=CONTRACT_VERSION,
                 message='Failed to parse XML file',
+                _has_errors=True,
             )
         except Exception as e:
             logger.debug(f"Error analyzing XML {self.path}: {e}")
