@@ -52,6 +52,22 @@ class TestRenderDiffSection(unittest.TestCase):
     def test_unavailable_status_renders_nothing(self):
         self.assertEqual(self._capture({'status': 'unavailable'}), "")
 
+    def test_adapter_payload_shows_structural_summary(self):
+        """BACK-1401: the diff adapter nests its result under data.summary;
+        reading top-level keys printed "0 files modified" for every range."""
+        out = self._capture({'status': 'ok', 'data': {'summary': {
+            'functions': {'added': 5, 'removed': 1, 'modified': 2},
+            'classes': {'added': 0, 'removed': 0, 'modified': 0},
+            'imports': {'added': 1, 'removed': 0}}}})
+        self.assertIn("functions +5 -1 ~2", out)
+        self.assertIn("imports +1", out)
+        self.assertNotIn("classes", out)
+
+    def test_adapter_payload_without_changes_says_none(self):
+        out = self._capture({'status': 'ok', 'data': {'summary': {
+            'functions': {'added': 0}, 'classes': {}, 'imports': {}}}})
+        self.assertIn("Structural changes: none", out)
+
     def test_ok_status_shows_count(self):
         out = self._capture({'status': 'ok', 'changed_files': ['a.py', 'b.py'], 'count': 2})
         self.assertIn("2 files modified", out)
@@ -89,30 +105,31 @@ class TestRenderViolationsSection(unittest.TestCase):
         self.assertIn("No violations", out)
 
     def test_violations_shows_count(self):
-        v = [{'severity': 'error', 'rule': 'B001', 'file': 'a.py', 'line': 1, 'message': 'bad'}]
+        v = [{'severity': 'high', 'rule': 'B001', 'file': 'a.py', 'line': 1, 'message': 'bad'}]
         out = self._capture(v)
         self.assertIn("1", out)
         self.assertIn("B001", out)
 
     def test_violations_grouped_by_severity(self):
         violations = [
-            {'severity': 'error', 'rule': 'B001', 'file': 'a.py', 'line': 1, 'message': 'x'},
-            {'severity': 'warning', 'rule': 'C001', 'file': 'b.py', 'line': 2, 'message': 'y'},
+            {'severity': 'medium', 'rule': 'C901', 'file': 'b.py', 'line': 2, 'message': 'y'},
+            {'severity': 'critical', 'rule': 'N002', 'file': 'a.py', 'line': 1, 'message': 'x'},
+            {'severity': 'high', 'rule': 'B001', 'file': 'a.py', 'line': 1, 'message': 'x'},
         ]
         out = self._capture(violations)
-        self.assertIn("Critical", out)
-        self.assertIn("Warning", out)
+        self.assertLess(out.index("Critical"), out.index("High"))
+        self.assertLess(out.index("High"), out.index("Medium"))
 
     def test_verbose_shows_file_locations(self):
-        v = [{'severity': 'error', 'rule': 'B001', 'file': 'a.py', 'line': 42, 'message': 'bad thing'}]
+        v = [{'severity': 'high', 'rule': 'B001', 'file': 'a.py', 'line': 42, 'message': 'bad thing'}]
         out = self._capture(v, verbose=True)
         self.assertIn("a.py", out)
         self.assertIn("42", out)
 
-    def test_missing_severity_defaults_to_warning(self):
+    def test_missing_severity_defaults_to_medium(self):
         v = [{'rule': 'X001', 'file': 'a.py', 'line': 1, 'message': 'thing'}]
         out = self._capture(v)
-        self.assertIn("Warning", out)
+        self.assertIn("Medium", out)
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +152,11 @@ class TestRenderHotspotsSection(unittest.TestCase):
         out = self._capture(h)
         self.assertIn("src/auth.py", out)
         self.assertIn("72", out)
+
+    def test_quality_score_rendered_out_of_100(self):
+        out = self._capture([{'file': 'b.py', 'quality_score': 60.0, 'max_complexity': 31}])
+        self.assertIn("quality: 60/100  complexity: 31", out)
+        self.assertNotIn("{", out)
 
     def test_handles_missing_keys(self):
         h = [{'path': 'src/app.py', 'score': 80}]
@@ -193,15 +215,22 @@ class TestRenderRecommendation(unittest.TestCase):
         self.assertIn("Ready for review", out)
 
     def test_warnings_only(self):
-        v = [{'severity': 'warning', 'rule': 'C001'}]
+        v = [{'severity': 'medium', 'rule': 'C901'}]
         out = self._capture(v)
         self.assertIn("warning", out.lower())
 
-    def test_critical_blocks_merge(self):
-        v = [{'severity': 'error', 'rule': 'B001'}]
+    def test_high_blocks_merge(self):
+        v = [{'severity': 'high', 'rule': 'B001'}]
         out = self._capture(v)
-        self.assertIn("critical", out.lower())
+        self.assertIn("high/critical", out)
         self.assertIn("before merge", out)
+
+    def test_incomplete_check_is_not_ready(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _render_recommendation([], ['quality check failed: boom'])
+        self.assertIn("incomplete", buf.getvalue())
+        self.assertNotIn("Ready for review", buf.getvalue())
 
 
 # ---------------------------------------------------------------------------
@@ -328,8 +357,11 @@ class TestRunCheck(unittest.TestCase):
 
     @patch('reveal.cli.file_checker.load_gitignore_patterns', side_effect=Exception("fail"))
     def test_exception_returns_empty_list(self, _mock):
-        result = _run_check(Path('/tmp'), 'B,S')
+        errors = []
+        result = _run_check(Path('/tmp'), 'B,S', errors=errors)
         self.assertEqual(result, [])
+        self.assertEqual(len(errors), 1)
+        self.assertIn("quality check failed", errors[0])
 
     @patch('reveal.cli.file_checker._check_files_json')
     def test_files_param_scopes_to_existing_files(self, mock_check):
@@ -377,6 +409,20 @@ class TestRunHotspots(unittest.TestCase):
         ]
         result = _run_hotspots(None, files=[Path('a.py'), Path('b.py')])
         self.assertEqual([h['file'] for h in result], ['b.py', 'a.py'])
+
+    @patch('reveal.adapters.stats.adapter.StatsAdapter')
+    def test_per_file_stats_shape_is_flattened_and_perfect_files_dropped(self, MockAdapter):
+        """BACK-1401: a single-file stats target returns `files` entries with
+        `quality`/`complexity` as dicts; they rendered as raw Python dicts and
+        every 100/100 file was listed as needing attention."""
+        def stats(score, cx):
+            return {'files': [{'file': f'q{score}.py', 'quality': {'score': score, 'check_issues': 1},
+                               'complexity': {'average': cx, 'max': cx, 'min': cx}}]}
+        MockAdapter.return_value.get_structure.side_effect = [stats(100.0, 2), stats(60.0, 31), stats(90.0, 4)]
+        result = _run_hotspots(None, files=[Path('a.py'), Path('b.py'), Path('c.py')])
+        self.assertEqual([h['file'] for h in result], ['q60.0.py', 'q90.0.py'])
+        self.assertEqual(result[0]['quality_score'], 60.0)
+        self.assertEqual(result[0]['max_complexity'], 31)
 
     @patch('reveal.adapters.stats.adapter.StatsAdapter')
     def test_one_bad_file_does_not_sink_others(self, MockAdapter):
@@ -443,10 +489,10 @@ class TestRunReview(unittest.TestCase):
             self.assertEqual(ctx.exception.code, 0)
 
     @patch('reveal.cli.commands.review._run_check',
-           return_value=[{'severity': 'error', 'rule': 'B001'}])
+           return_value=[{'severity': 'high', 'rule': 'B001'}])
     @patch('reveal.cli.commands.review._run_hotspots', return_value=[])
     @patch('reveal.cli.commands.review._run_complexity', return_value=[])
-    def test_critical_violations_exits_2(self, mock_cx, mock_hs, mock_chk):
+    def test_high_violations_exits_2(self, mock_cx, mock_hs, mock_chk):
         with tempfile.TemporaryDirectory() as d:
             args = self._args(d)
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
@@ -455,7 +501,7 @@ class TestRunReview(unittest.TestCase):
             self.assertEqual(ctx.exception.code, 2)
 
     @patch('reveal.cli.commands.review._run_check',
-           return_value=[{'severity': 'warning', 'rule': 'C001'}])
+           return_value=[{'severity': 'medium', 'rule': 'C901'}])
     @patch('reveal.cli.commands.review._run_hotspots', return_value=[])
     @patch('reveal.cli.commands.review._run_complexity', return_value=[])
     def test_warnings_only_exits_1(self, mock_cx, mock_hs, mock_chk):
@@ -466,6 +512,7 @@ class TestRunReview(unittest.TestCase):
                     run_review(args)
             self.assertEqual(ctx.exception.code, 1)
 
+    @patch('reveal.cli.commands.review._git_range_error', return_value=None)
     @patch('reveal.cli.commands.review._changed_files',
            return_value=[Path('/tmp/a.py')])
     @patch('reveal.cli.commands.review._run_diff',
@@ -474,7 +521,7 @@ class TestRunReview(unittest.TestCase):
     @patch('reveal.cli.commands.review._run_hotspots', return_value=[])
     @patch('reveal.cli.commands.review._run_complexity', return_value=[])
     def test_git_range_scopes_quality_to_changed_files(
-            self, mock_cx, mock_hs, mock_chk, mock_diff, mock_changed):
+            self, mock_cx, mock_hs, mock_chk, mock_diff, mock_changed, _mock_valid):
         args = self._args('main..feature', fmt='json')
         buf = io.StringIO()
         with redirect_stdout(buf), redirect_stderr(io.StringIO()):
@@ -502,6 +549,44 @@ class TestRunReview(unittest.TestCase):
             data = json.loads(buf.getvalue())
             self.assertIn('sections', data)
             self.assertIn('target', data)
+            self.assertEqual((data['overall_status'], data['exit_code']), ('pass', 0))
+
+    def test_check_failure_exits_3_incomplete(self):
+        def failing_check(path, select, files=None, errors=None):
+            errors.append('quality check failed: boom')
+            return []
+        with tempfile.TemporaryDirectory() as d, \
+                patch('reveal.cli.commands.review._run_check', side_effect=failing_check), \
+                patch('reveal.cli.commands.review._run_hotspots', return_value=[]), \
+                patch('reveal.cli.commands.review._run_complexity', return_value=[]):
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as ctx:
+                    run_review(self._args(d, fmt='json'))
+        self.assertEqual(ctx.exception.code, 3)
+        data = json.loads(buf.getvalue())
+        self.assertEqual(data['overall_status'], 'incomplete')
+        self.assertEqual(data['errors'], ['quality check failed: boom'])
+
+    @patch('reveal.cli.commands.review._git_range_error', return_value="unknown revision: 'nope'")
+    @patch('reveal.cli.commands.review._run_check')
+    def test_invalid_range_exits_2_without_reviewing(self, mock_chk, _mock_err):
+        buf, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(buf), redirect_stderr(err):
+            with self.assertRaises(SystemExit) as ctx:
+                run_review(self._args('main..nope', fmt='json'))
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertEqual(json.loads(buf.getvalue())['overall_status'], 'error')
+        self.assertIn("unknown revision", err.getvalue())
+        mock_chk.assert_not_called()
+
+    @patch('reveal.cli.commands.review._run_check')
+    def test_missing_path_exits_2(self, mock_chk):
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as ctx:
+                run_review(self._args('/nonexistent/review/target'))
+        self.assertEqual(ctx.exception.code, 2)
+        mock_chk.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -622,3 +707,95 @@ class TestRenderComplexitySpikesSection(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# End to end against a real git repository (BACK-1401). The unit tests above
+# mock payload shapes; these pin the shapes review actually receives.
+# ---------------------------------------------------------------------------
+
+import os
+import re
+import shutil
+import subprocess
+
+_GUIDE = Path(__file__).resolve().parent.parent / 'reveal' / 'docs' / 'guides' / 'SUBCOMMANDS_GUIDE.md'
+
+_MEDIUM_ONLY = "def branchy(x):\n" + "".join(
+    f"    if x == {i}:\n        return {i}\n" for i in range(12)) + "    return -1\n"
+_HIGH = "def swallow():\n    try:\n        return 1\n    except:\n        return 0\n"
+
+
+class TestReviewAgainstRealRepo(unittest.TestCase):
+
+    def setUp(self):
+        self.repo = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        self._git('init', '-q', '-b', 'main')
+        self._commit('base.py', "def ok():\n    return 1\n")
+
+    def _git(self, *args):
+        subprocess.run(['git', '-c', 'user.name=t', '-c', 'user.email=t@t', *args],
+                       cwd=self.repo, check=True, capture_output=True)
+
+    def _commit(self, name, content):
+        (self.repo / name).write_text(content)
+        self._git('add', name)
+        self._git('commit', '-q', '-m', name)
+
+    def _review(self, *args):
+        env = {**os.environ, 'REVEAL_DISK_CACHE': '0'}
+        return subprocess.run([sys.executable, '-m', 'reveal', 'review', *args],
+                              cwd=self.repo, capture_output=True, text=True, env=env, timeout=120, check=False)
+
+    def test_unknown_revision_is_a_usage_error(self):
+        r = self._review('main..nonexistentbranch')
+        self.assertEqual(r.returncode, 2, r.stdout)
+        self.assertIn("unknown revision: 'nonexistentbranch'", r.stderr)
+        self.assertNotIn("Ready for review", r.stdout)
+
+    def test_outside_a_repository_is_a_usage_error(self):
+        with tempfile.TemporaryDirectory() as not_a_repo:
+            env = {**os.environ, 'GIT_CEILING_DIRECTORIES': str(Path(not_a_repo).parent)}
+            r = subprocess.run([sys.executable, '-m', 'reveal', 'review', 'HEAD~1..HEAD'],
+                               cwd=not_a_repo, capture_output=True, text=True, env=env, timeout=120, check=False)
+        self.assertEqual(r.returncode, 2, r.stdout)
+        self.assertIn("not inside a git repository", r.stderr)
+
+    def test_text_headline_reports_the_real_structural_change(self):
+        self._commit('branchy.py', _MEDIUM_ONLY)
+        r = self._review('HEAD~1..HEAD')
+        self.assertIn("Structural changes: functions +1", r.stdout)
+        self.assertIn("quality: ", r.stdout)
+        self.assertNotIn("{'score'", r.stdout)
+
+    def test_severity_decides_status_and_exit_code(self):
+        self._commit('branchy.py', _MEDIUM_ONLY)
+        warn = self._review('HEAD~1..HEAD', '--format', 'json')
+        self._commit('swallow.py', _HIGH)
+        fail = self._review('HEAD~1..HEAD', '--format', 'json')
+        self.assertEqual((json.loads(warn.stdout)['overall_status'], warn.returncode), ('warn', 1))
+        self.assertEqual((json.loads(fail.stdout)['overall_status'], fail.returncode), ('fail', 2))
+
+    @unittest.skipUnless(shutil.which('jq'), 'jq not installed')
+    def test_documented_ci_gates_work(self):
+        """Every `reveal review` line in the guide's CI/CD block, run verbatim
+        (C13: `.overall_status` did not exist and `severity=="error"` never
+        matched, so both documented gates passed on anything)."""
+        section = _GUIDE.read_text().split('### CI/CD Integration', 1)[1].split('```bash', 1)[1]
+        gates = [ln for ln in section.split('```', 1)[0].splitlines() if ln.startswith('reveal review')]
+        self.assertEqual(len(gates), 3, gates)
+        cli = f"{sys.executable} -m reveal"
+        env = {**os.environ, 'REVEAL_DISK_CACHE': '0'}
+
+        def outcomes():
+            return [subprocess.run(re.sub(r'^reveal ', cli + ' ', g).replace('main..HEAD', 'HEAD~1..HEAD'),
+                                   shell=True, cwd=self.repo, capture_output=True, env=env,
+                                   timeout=120, check=False).returncode == 0 for g in gates]
+
+        self._commit('clean.py', "def fine():\n    return 2\n")
+        self.assertEqual(outcomes(), [True, True, True], 'clean change')
+        self._commit('branchy.py', _MEDIUM_ONLY)
+        self.assertEqual(outcomes(), [False, True, True], 'medium-only change')
+        self._commit('swallow.py', _HIGH)
+        self.assertEqual(outcomes(), [False, False, False], 'high-severity change')

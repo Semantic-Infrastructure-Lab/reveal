@@ -79,29 +79,38 @@ reveal review HEAD~3..HEAD         # Review last 3 commits
 
 ### Output Sections
 
-1. **Structural changes** — files modified (git range mode only)
-2. **Violations** — quality rule failures by severity (error / warning / info)
-3. **Hotspots** — files with highest complexity or churn, with quality scores
+1. **Structural changes** — functions/classes/imports added, removed and modified (git range mode only), plus complexity spikes
+2. **Violations** — quality rule failures by severity (`critical` / `high` / `medium` / `low`, the same levels as `reveal check`)
+3. **Hotspots** — files below 100/100 quality, ranked by churn×complexity
 4. **Complex functions** — functions above complexity threshold
 5. **Recommendation** — pass/fail summary
 
+JSON carries the same result as `overall_status` (`pass` / `warn` / `fail` / `incomplete`, or `error` for an invalid target) and `exit_code`.
+
 ### Exit Codes
 
-| Code | Meaning |
-|------|---------|
-| `0` | No errors |
-| `1` | Warnings only |
-| `2` | Errors found |
+| Code | `overall_status` | Meaning |
+|------|------------------|---------|
+| `0` | `pass` | No violations |
+| `1` | `warn` | Only `medium`/`low` violations |
+| `2` | `fail` | A `high` or `critical` violation |
+| `2` | `error` | Invalid invocation: unknown revision in the range, not inside a git repository, or a path that does not exist (nothing was reviewed) |
+| `3` | `incomplete` | The quality check failed or could not analyze some files, so an empty violation list is not proof the change is clean |
 
 ### CI/CD Integration
 
 ```bash
-# Gate on errors only
-reveal review . --format json | jq '.sections.violations | map(select(.severity=="error")) | length == 0'
+# Fail on anything but a clean review
+reveal review main..HEAD
 
-# Gate on any violations
-reveal review main..HEAD --format json | jq '.overall_status == "pass"'
+# Fail on high/critical issues only; warnings pass
+reveal review main..HEAD --format json | jq -e '.overall_status == "pass" or .overall_status == "warn"'
+
+# The same gate written against the violations themselves
+reveal review main..HEAD --format json | jq -e '.exit_code != 3 and (.sections.violations | map(select(.severity=="high" or .severity=="critical")) | length == 0)'
 ```
+
+`jq -e` is what makes the jq line a gate: without it jq prints `false` and exits 0.
 
 ### Examples
 

@@ -184,7 +184,7 @@ reveal review main..HEAD --select B,S
 # JSON for CI/automated processing
 reveal review main..HEAD --format json
 
-# CI gate: exit 0 clean, exit 1 warnings, exit 2 errors
+# CI gate: exit 0 clean, 1 warnings, 2 high/critical issues or invalid range, 3 incomplete
 reveal review main..HEAD || exit 1
 
 # See exactly what changed structurally (lower level)

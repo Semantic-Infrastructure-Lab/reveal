@@ -212,7 +212,7 @@ reveal diff://git://main/.:git://HEAD/. --format json | \
 # JSON for automated processing
 reveal review main..HEAD --format json
 
-# Use as a CI gate (exit codes: 0=clean, 1=warnings, 2=errors)
+# Use as a CI gate (exit codes: 0=clean, 1=warnings, 2=high/critical issues or invalid range, 3=incomplete)
 reveal review main..HEAD || exit 1
 ```
 

@@ -44,16 +44,29 @@ def create_review_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# Severities that make a review fail (exit 2). `check` severities are
+# low/medium/high/critical (rules.base.Severity); only N002 emits critical.
+BLOCKING_SEVERITIES = ('high', 'critical')
+
+
 def run_review(args: Namespace) -> None:
     """Run the review workflow."""
     target = args.target
     is_git_range = '..' in target and not Path(target).exists()
+
+    if is_git_range:
+        range_error = _git_range_error(target)
+        if range_error:
+            _exit_invalid_target(target, range_error, args.format)
+    elif not Path(target).exists():
+        _exit_invalid_target(target, f"path does not exist: {target}", args.format)
 
     report: Dict[str, Any] = {
         'target': target,
         'is_diff': is_git_range,
         'sections': {},
     }
+    errors: List[str] = []
 
     print(f"Review: {target}", file=sys.stderr)
     print("━" * 40, file=sys.stderr)
@@ -79,7 +92,7 @@ def run_review(args: Namespace) -> None:
 
     # Step 3: Quality check
     print("  Checking quality rules…", file=sys.stderr)
-    violations = _run_check(path, args.select, files=changed_files)
+    violations = _run_check(path, args.select, files=changed_files, errors=errors)
     report['sections']['violations'] = violations
     # BACK-1051: `review` is a composite command wrapping `check` — it must
     # propagate a capped-scan disclosure (I002/D005) rather than swallowing
@@ -100,6 +113,10 @@ def run_review(args: Namespace) -> None:
     complexity = _run_complexity(path, files=changed_files)
     report['sections']['complexity'] = complexity
 
+    if errors:
+        report['errors'] = errors
+    report['overall_status'], report['exit_code'] = _review_outcome(violations, errors)
+
     # Render
     if args.format == 'json':
         from reveal.utils.results import add_cli_contract_fields
@@ -118,9 +135,50 @@ def run_review(args: Namespace) -> None:
     else:
         _render_report(report, args.verbose)
 
-    # Exit code: 0=clean, 1=warnings, 2=critical
-    critical = sum(1 for v in violations if v.get('severity') in ('error', 'critical'))
-    sys.exit(2 if critical > 0 else (1 if violations else 0))
+    sys.exit(report['exit_code'])
+
+
+def _review_outcome(violations: List[Dict[str, Any]], errors: List[str]) -> tuple:
+    """(overall_status, exit_code): fail/2 on a blocking-severity issue,
+    incomplete/3 when the quality pass could not check everything (so an
+    empty violation list is not proof of a clean change), warn/1, pass/0."""
+    if any(v.get('severity') in BLOCKING_SEVERITIES for v in violations):
+        return 'fail', 2
+    if errors:
+        return 'incomplete', 3
+    if violations:
+        return 'warn', 1
+    return 'pass', 0
+
+
+def _git_range_error(git_range: str) -> Optional[str]:
+    """Why `git_range` can't be reviewed, or None. Without this an unknown
+    ref or a cwd outside any repo produced an empty diff and a passing review."""
+    def git(*cmd: str) -> subprocess.CompletedProcess:
+        return subprocess.run(['git', *cmd], capture_output=True, text=True, timeout=10,
+                              encoding='utf-8', errors='replace', check=False)
+    try:
+        if git('rev-parse', '--show-toplevel').returncode != 0:
+            return f"not inside a git repository (cwd: {Path.cwd()})"
+        sep = '...' if '...' in git_range else '..'
+        for rev in git_range.split(sep, 1):
+            # An empty side means HEAD, as in git itself (`main..`).
+            rev = rev or 'HEAD'
+            if git('rev-parse', '--verify', '--quiet', '--end-of-options',
+                   f'{rev}^{{commit}}').returncode != 0:
+                return f"unknown revision: {rev!r}"
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"could not run git: {e}"
+    return None
+
+
+def _exit_invalid_target(target: str, reason: str, output_format: str) -> None:
+    """Usage error: exit 2 like any other invalid invocation, never a review."""
+    if output_format == 'json':
+        print(json.dumps({'target': target, 'overall_status': 'error',
+                          'exit_code': 2, 'error': reason}, indent=2))
+    print(f"Error: cannot review {target!r}: {reason}", file=sys.stderr)
+    sys.exit(2)
 
 
 def _run_diff(git_range: str) -> Dict[str, Any]:
@@ -151,12 +209,16 @@ def _run_diff(git_range: str) -> Dict[str, Any]:
 
 
 def _run_check(path: Optional[Path], select: str,
-               files: Optional[List[Path]] = None) -> List[Dict[str, Any]]:
+               files: Optional[List[Path]] = None,
+               errors: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """Run quality check and return violations.
 
     When `files` is given (a diff-scoped review), only those files are checked.
     Otherwise `path` (a directory or single file) is walked as before.
+    A check that fails, or files it could not analyze, are appended to `errors`.
     """
+    if errors is None:
+        errors = []
     try:
         from reveal.cli.file_checker import (
             collect_files_to_check, load_gitignore_patterns, _check_files_json,
@@ -176,7 +238,10 @@ def _run_check(path: Optional[Path], select: str,
         else:
             return []
         select_list = select.split(',') if select else None
-        _, _, file_results, _, _ = _check_files_json(check_files, directory, select_list, None)
+        _, _, file_results, files_errored, _ = _check_files_json(
+            check_files, directory, select_list, None)
+        if files_errored:
+            errors.append(f"quality check could not analyze {files_errored} file(s)")
         violations: List[Dict[str, Any]] = []
         for fr in file_results:
             for d in fr.get('detections', []):
@@ -184,12 +249,13 @@ def _run_check(path: Optional[Path], select: str,
                     'file': fr['file'],
                     'line': d.get('line', ''),
                     'rule': d.get('rule_code', ''),
-                    'severity': d.get('severity', 'warning'),
+                    'severity': d.get('severity', 'medium'),
                     'message': d.get('message', ''),
                 })
         return violations
     except Exception as e:
         print(f"Warning: lint check failed, skipping: {e}", file=sys.stderr)
+        errors.append(f"quality check failed: {e}")
         return []
 
 
@@ -209,15 +275,36 @@ def _run_hotspots(path: Optional[Path],
                 adapter = StatsAdapter(str(target), 'hotspots=true')
                 data = adapter.get_structure(hotspots=True)
                 found = data.get('hotspots', data.get('files', [])) or []
-                hotspots.extend(found)
+                hotspots.extend(_as_hotspot(h) for h in found)
             except Exception as e:
                 print(f"Warning: hotspot analysis failed for {target}, skipping: {e}", file=sys.stderr)
                 continue
+        hotspots = [h for h in hotspots if not _is_perfect_quality(h)]
         hotspots.sort(key=_hotspot_score, reverse=True)
         return hotspots[:10]
     except Exception as e:
         print(f"Warning: hotspot analysis failed, skipping: {e}", file=sys.stderr)
         return []
+
+
+def _as_hotspot(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """Flatten a per-file stats entry (a single-file target returns `files`,
+    with `quality`/`complexity` as dicts) into the directory `hotspots` shape."""
+    quality = entry.get('quality')
+    if not isinstance(quality, dict):
+        return entry
+    complexity = entry.get('complexity')
+    return {
+        'file': entry.get('file', '?'),
+        'quality_score': quality.get('score'),
+        'max_complexity': complexity.get('max') if isinstance(complexity, dict) else complexity,
+        'check_issues': quality.get('check_issues', 0),
+    }
+
+
+def _is_perfect_quality(h: Dict[str, Any]) -> bool:
+    score = h.get('quality_score')
+    return isinstance(score, (int, float)) and score >= 100
 
 
 def _hotspot_score(h: Dict[str, Any]) -> float:
@@ -226,6 +313,9 @@ def _hotspot_score(h: Dict[str, Any]) -> float:
         val = h.get(key)
         if isinstance(val, (int, float)):
             return float(val)
+    quality = h.get('quality_score')
+    if isinstance(quality, (int, float)):
+        return 100.0 - float(quality)
     return 0.0
 
 
@@ -319,6 +409,11 @@ def _extract_complexity_spikes(diff_data: Dict[str, Any], threshold: int = 5) ->
 def _render_diff_section(diff: Dict[str, Any]) -> None:
     if not diff or diff.get('status') != 'ok':
         return
+    summary = (diff.get('data') or {}).get('summary')
+    if summary is not None:
+        _render_structural_summary(summary)
+        return
+    # git --name-only fallback (the diff adapter failed)
     changed = diff.get('changed_files', [])
     count = diff.get('count', len(changed))
     print(f"\nStructural changes: {count} files modified")
@@ -331,19 +426,34 @@ def _render_diff_section(diff: Dict[str, Any]) -> None:
         print(f"  ... and {count - 5} more")
 
 
+def _render_structural_summary(summary: Dict[str, Any]) -> None:
+    """The diff adapter's summary: {functions|classes: {added, removed,
+    modified}, imports: {added, removed}}."""
+    parts = []
+    for kind in ('functions', 'classes', 'imports'):
+        counts = summary.get(kind) or {}
+        changes = [f"{sign}{counts[key]}" for key, sign in
+                   (('added', '+'), ('removed', '-'), ('modified', '~')) if counts.get(key)]
+        if changes:
+            parts.append(f"{kind} {' '.join(changes)}")
+    print(f"\nStructural changes: {', '.join(parts) if parts else 'none'}")
+
+
+_SEVERITY_ORDER = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
+
+
 def _render_violations_section(violations: list, verbose: bool) -> None:
     if not violations:
         print("\nNo violations found ✅")
         return
     by_sev: Dict[str, list] = {}
     for v in violations:
-        by_sev.setdefault(v.get('severity', 'warning'), []).append(v)
+        by_sev.setdefault(v.get('severity', 'medium'), []).append(v)
 
     print(f"\nIssues found ({len(violations)}):")
-    _sev_order = {'error': 0, 'warning': 1, 'info': 2}
-    for sev, items in sorted(by_sev.items(), key=lambda x: _sev_order.get(x[0], 3)):
-        label = {'error': 'Critical', 'warning': 'Warning', 'info': 'Info'}.get(sev, sev.title())
-        codes = list(set(i.get('rule', '?') for i in items[:3]))
+    for sev, items in sorted(by_sev.items(), key=lambda x: _SEVERITY_ORDER.get(x[0], 4)):
+        label = sev.title()
+        codes = sorted(set(i.get('rule', '?') for i in items[:3]))
         print(f"  {label:10} [{len(items)}]  " + ', '.join(codes) + ('...' if len(items) > 3 else ''))
         if verbose:
             for item in items[:5]:
@@ -369,7 +479,11 @@ def _render_hotspots_section(hotspots: list) -> None:
     for h in hotspots[:5]:
         name = h.get('file', h.get('path', '?'))
         quality = h.get('quality_score', h.get('quality', h.get('score', '?')))
-        complexity = h.get('complexity', h.get('max_complexity', ''))
+        if isinstance(quality, (int, float)):
+            quality = f"{quality:g}/100"
+        complexity = h.get('max_complexity', h.get('complexity', ''))
+        if not complexity:
+            complexity = (h.get('details') or {}).get('complexity', '')
         cx_str = f"  complexity: {complexity}" if complexity else ""
         print(f"  {name:40} quality: {quality}{cx_str}")
 
@@ -383,11 +497,15 @@ def _render_complexity_section(complex_fns: list) -> None:
         print(f"  {fn.get('name', '?')} (complexity: {fn.get('complexity', '?')})  {loc}")
 
 
-def _render_recommendation(violations: list) -> None:
-    critical = sum(1 for v in violations if v.get('severity') in ('error', 'critical'))
+def _render_recommendation(violations: list, errors: Optional[List[str]] = None) -> None:
+    blocking = sum(1 for v in violations if v.get('severity') in BLOCKING_SEVERITIES)
     print()
-    if critical > 0:
-        print(f"Recommendation: Address {critical} critical issue(s) before merge. ❌")
+    if blocking > 0:
+        print(f"Recommendation: Address {blocking} high/critical issue(s) before merge. ❌")
+    elif errors:
+        for e in errors:
+            print(f"⚠️  {e}")
+        print("Recommendation: Review incomplete — the quality check did not cover every file. ⚠️")
     elif violations:
         print(f"Recommendation: {len(violations)} warning(s) — review before merge. ⚠️")
     else:
@@ -401,6 +519,8 @@ def _render_report(report: Dict[str, Any], verbose: bool) -> None:
     print()
     print(f"Review: {report['target']}")
     print("━" * 50)
+    if 'scoped_files' in report:
+        print(f"\nChanged files checked: {report['scoped_files']}")
     _render_diff_section(sections.get('diff', {}))
     _render_complexity_spikes_section(sections.get('complexity_spikes', []))
     violations = sections.get('violations', [])
@@ -409,4 +529,4 @@ def _render_report(report: Dict[str, Any], verbose: bool) -> None:
     _render_complexity_section(sections.get('complexity', []))
     for reason in report.get('scan_disclosures', []):
         print(f"⚠️  {reason}")
-    _render_recommendation(violations)
+    _render_recommendation(violations, report.get('errors'))
