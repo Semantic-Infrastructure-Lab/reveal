@@ -1055,3 +1055,20 @@ class TestHelpDiscovery(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_ast_sort_by_lines_alias_and_unknown_sort_field(tmp_path):
+    """BACK-1423: `sort=-lines` (the help://examples/quality recipe) matched no
+    field and silently returned the results unsorted; an unknown sort field
+    gave no warning."""
+    from reveal.adapters.ast.adapter import AstAdapter
+    (tmp_path / 'm.py').write_text(
+        'def short():\n    return 1\n\n'
+        'def long():\n    a = 1\n    b = 2\n    c = 3\n    return a + b + c\n\n'
+        'def mid():\n    x = 1\n    return x\n', encoding='utf-8')
+    result = AstAdapter(str(tmp_path), 'type=function&sort=-lines').get_structure()
+    assert [e['name'] for e in result['results']] == ['long', 'mid', 'short']
+    assert not [w for w in result['meta']['warnings'] if w.get('type') == 'unknown_sort_field']
+    result = AstAdapter(str(tmp_path), 'type=function&sort=-bogus').get_structure()
+    warning = [w for w in result['meta']['warnings'] if w.get('type') == 'unknown_sort_field']
+    assert warning and 'line_count' in warning[0]['message']

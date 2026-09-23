@@ -1,6 +1,7 @@
 """Core AST query adapter."""
 
 import os
+from dataclasses import replace
 from reveal.reveal_types import CONTRACT_VERSION
 
 from pathlib import Path
@@ -26,6 +27,9 @@ from ...utils.query import (
     ResultControl
 )
 from ...utils.results import ResultBuilder
+
+# Filter aliases that name a differently-named element field (see filtering.py).
+_SORT_FIELD_ALIASES = {'lines': 'line_count'}
 
 # Suppress tree-sitter warnings (centralized in core module)
 suppress_treesitter_warnings()
@@ -248,8 +252,13 @@ class AstAdapter(ResourceAdapter):
         # Apply filters
         filtered = apply_filters(structures, self.query)
 
-        # Apply result control (sort, limit, offset)
-        controlled = apply_result_control(filtered, self.result_control)
+        # Apply result control (sort, limit, offset). `lines` is the filter
+        # alias for line_count; as a sort key it matched no field and the
+        # results came back unsorted (BACK-1423).
+        control = self.result_control
+        if control.sort_field in _SORT_FIELD_ALIASES:
+            control = replace(control, sort_field=_SORT_FIELD_ALIASES[control.sort_field])
+        controlled = apply_result_control(filtered, control)
 
         # Auto-cap large unfiltered result sets to prevent accidental token floods.
         # Applies only when no explicit limit was set by the user.
@@ -275,6 +284,17 @@ class AstAdapter(ResourceAdapter):
         degraded_warning = _degraded_conformance_warning(controlled)
         if degraded_warning:
             meta['warnings'].append(degraded_warning)
+
+        if control.sort_field and filtered and not any(control.sort_field in e for e in filtered):
+            sortable = sorted({k for e in filtered[:200] for k, v in e.items()
+                               if isinstance(v, (int, float, str)) and not k.startswith('_')})
+            meta['warnings'].append({
+                'type': 'unknown_sort_field',
+                'message': (
+                    f"sort field '{control.sort_field}' is not a field of any result, so "
+                    f"results are unsorted. Sortable: {', '.join(sortable)}"
+                ),
+            })
 
         # Disclose when a zero-result query traces to a filter key that never
         # appeared on any scanned element — typo vs. genuine zero (BACK-1111)
