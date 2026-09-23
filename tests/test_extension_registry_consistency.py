@@ -11,7 +11,6 @@ silently skipped by one of them.
 """
 
 from collections import defaultdict
-from pathlib import Path
 
 import pytest
 
@@ -96,6 +95,18 @@ def test_rules_cover_every_extension_of_their_languages():
     from reveal.rules.maintainability._m104_treesitter import SUPPORTED_LANGUAGES
     assert extensions_for_languages(*SUPPORTED_LANGUAGES) <= set(M104.file_patterns)
     assert JS_TS <= set(B005.file_patterns)
+    from reveal.rules.bugs.B006 import B006
+    assert JS_TS | extensions_for_languages('cpp') <= set(B006.file_patterns)
+
+
+@pytest.mark.parametrize('ext', ['.tsx', '.mts', '.cts'])
+def test_b006_flags_a_silent_catch_in_every_ts_extension(ext):
+    """B006 skipped .tsx/.mts/.cts entirely; each takes the right grammar now."""
+    from reveal.rules.bugs.B006 import B006
+    src = 'export function f() {\n  try { g(); } catch (e) {}\n}\n'
+    if ext == '.tsx':
+        src += 'export const V = () => <div>{f()}</div>;\n'
+    assert [d.rule_code for d in B006().check(f'x{ext}', None, src)] == ['B006']
 
 
 def test_testability_scans_every_js_ts_test_extension():

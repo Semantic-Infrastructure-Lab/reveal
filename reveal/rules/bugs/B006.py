@@ -42,11 +42,13 @@ ellipsis catch-all) remains open — see BACK-1011.
 
 import ast
 import re
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin, TreeSitterParsingMixin
 from ...core import node_children, _zero_arg
+from ...registry import JS_TS_LANGUAGES, extensions_for_languages, language_for_extension
 
 
 class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
@@ -56,12 +58,10 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     message = "Broad exception handler with no visible failure signal can hide bugs"
     category = RulePrefix.B
     severity = Severity.MEDIUM
-    file_patterns = [
-        '.py', '.cs', '.java',
-        '.js', '.jsx', '.mjs', '.cjs', '.ts',
-        '.php', '.kt', '.kts', '.swift',
-        '.cpp', '.cc', '.cxx', '.hpp', '.hh', '.h++',
-    ]
+    # Every extension of these languages, from the registry (BACK-1255: the hand
+    # list missed .tsx, .mts, .cts and .hxx). The JS/TS slugs are grammar names.
+    _CATCH_LANGUAGES = ('python', 'csharp', 'java', *JS_TS_LANGUAGES, 'php', 'kotlin', 'swift', 'cpp')
+    file_patterns = sorted(extensions_for_languages(*_CATCH_LANGUAGES))
     version = "1.8.0"
 
     _CS_LANGUAGE = 'csharp'
@@ -84,8 +84,6 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         'error', 'warn', 'warning', 'severe', 'fatal', 'critical', 'printStackTrace',
     })
 
-    _JS_LANGUAGE = 'javascript'
-    _TS_LANGUAGE = 'typescript'
     # console.* is always emitted (no configurable level like a backend
     # logger), so ANY console method counts as visible — unlike the
     # Debug/Trace exclusion elsewhere in this rule. error/warn(ing) on any
@@ -184,22 +182,15 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         Returns:
             List of detections
         """
-        if file_path.endswith('.cs'):
-            return self._check_csharp(file_path, content)
-        if file_path.endswith('.java'):
-            return self._check_java(file_path, content)
-        if file_path.endswith(('.js', '.jsx', '.mjs', '.cjs')):
-            return self._check_js_like(file_path, content, self._JS_LANGUAGE)
-        if file_path.endswith('.ts'):
-            return self._check_js_like(file_path, content, self._TS_LANGUAGE)
-        if file_path.endswith('.php'):
-            return self._check_php(file_path, content)
-        if file_path.endswith(('.kt', '.kts')):
-            return self._check_kotlin(file_path, content)
-        if file_path.endswith('.swift'):
-            return self._check_swift(file_path, content)
-        if file_path.endswith(('.cpp', '.cc', '.cxx', '.hpp', '.hh', '.h++')):
-            return self._check_cpp(file_path, content)
+        language = language_for_extension(Path(file_path).suffix)
+        if language in JS_TS_LANGUAGES:
+            return self._check_js_like(file_path, content, language)
+        checker = {
+            'csharp': self._check_csharp, 'java': self._check_java, 'php': self._check_php,
+            'kotlin': self._check_kotlin, 'swift': self._check_swift, 'cpp': self._check_cpp,
+        }.get(language or '')
+        if checker is not None:
+            return checker(file_path, content)
 
         tree, detections = self._parse_python_or_skip(content, file_path)
         if tree is None:
