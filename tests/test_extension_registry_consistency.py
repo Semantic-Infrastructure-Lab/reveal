@@ -89,14 +89,18 @@ def test_contracts_extension_sets_match_the_registry():
     assert _CPP_EXTENSIONS == extensions_for_languages('cpp')
 
 
-def test_rules_cover_every_extension_of_their_languages():
-    from reveal.rules.bugs.B005 import B005
-    from reveal.rules.maintainability.M104 import M104
-    from reveal.rules.maintainability._m104_treesitter import SUPPORTED_LANGUAGES
-    assert extensions_for_languages(*SUPPORTED_LANGUAGES) <= set(M104.file_patterns)
-    assert JS_TS <= set(B005.file_patterns)
-    from reveal.rules.bugs.B006 import B006
-    assert JS_TS | extensions_for_languages('cpp') <= set(B006.file_patterns)
+def test_rules_claim_whole_languages_never_part_of_one():
+    """A rule claiming one extension of a language claims all of them. Hand lists
+    in B001/B005/B006/M104/U502 each held part of a family (.hxx, .mts, .tsx,
+    .cjs, .bash, .markdown missing)."""
+    from reveal.rules import RuleRegistry
+    # I001/I002/I005 take the import extractors' extensions: .mm but not .m (BACK-664).
+    allowed_missing = {'.m'}
+    for rule in RuleRegistry.get_rules():
+        claimed = {p for p in rule.file_patterns if p.startswith('.') and '*' not in p}
+        for lang in {language_for_extension(p) for p in claimed} - {None}:
+            missing = extensions_for_languages(lang) - claimed - allowed_missing
+            assert not missing, f'{rule.code} claims {lang} but not {sorted(missing)}'
 
 
 @pytest.mark.parametrize('ext', ['.tsx', '.mts', '.cts'])

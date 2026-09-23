@@ -13,11 +13,13 @@ content, exactly as it does in Python. See BACK-1011 note #1.
 """
 
 import ast
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin, TreeSitterParsingMixin
 from ...core import node_children, _zero_arg
+from ...registry import extensions_for_languages, language_for_extension
 
 
 class B001(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
@@ -27,7 +29,8 @@ class B001(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     message = "Bare except clause catches all exceptions including SystemExit"
     category = RulePrefix.B
     severity = Severity.HIGH
-    file_patterns = ['.py', '.cs', '.cpp', '.cc', '.cxx', '.hpp', '.hh', '.h++']
+    # Registry-derived (BACK-1255: the hand list missed .hxx).
+    file_patterns = sorted(extensions_for_languages('python', 'csharp', 'cpp'))
     version = "1.1.0"
 
     _CS_LANGUAGE = 'csharp'
@@ -57,9 +60,10 @@ class B001(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         Returns:
             List of detections
         """
-        if file_path.endswith('.cs'):
+        language = language_for_extension(Path(file_path).suffix)
+        if language == 'csharp':
             return self._check_csharp(file_path, content)
-        if file_path.endswith(('.cpp', '.cc', '.cxx', '.hpp', '.hh', '.h++')):
+        if language == 'cpp':
             return self._check_cpp(file_path, content)
 
         tree, detections = self._parse_python_or_skip(content, file_path)

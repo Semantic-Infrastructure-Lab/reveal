@@ -14,6 +14,7 @@ except ImportError:
     import tomli as tomllib  # Python < 3.11 fallback
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from ...registry import extensions_for_languages
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,9 @@ class U502(BaseRule):
     message = "URL doesn't match canonical project URL"
     category = RulePrefix.U
     severity = Severity.MEDIUM
-    file_patterns = ['.py', '.md', '.rst', '.txt', '.sh', '.yaml', '.yml', '.toml']
+    # Markdown and shell come from the registry, so .markdown/.bash are scanned too (BACK-1255).
+    file_patterns = ['.py', '.rst', '.txt', '.yaml', '.yml', '.toml',
+                     *sorted(extensions_for_languages('markdown', 'bash'))]
     version = "1.0.0"
 
     # Pattern to find GitHub URLs
