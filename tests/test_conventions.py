@@ -324,3 +324,90 @@ class TestEntryPointAndReexportFiles:
             assert _is_reexport_file(f), f
         for f in ('pkg/core.py', 'src/lib.rs', 'src/main.ts'):
             assert not _is_reexport_file(f), f
+
+
+class TestConstructorsOverridesAndFrameworkHooks:
+    """BACK-1392: the ?uncalled caveat said constructors were excluded; outside
+    JS/TS/Ruby they were not, nor were overrides and framework-invoked methods.
+    Each case keeps one genuinely dead method, which must still be reported."""
+
+    @pytest.fixture(autouse=True)
+    def _no_disk_cache(self, monkeypatch):
+        monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
+
+    def _uncalled(self, tmp_path, name, body):
+        _write(tmp_path, name, body)
+        return sorted(e['name'] for e in find_uncalled(str(tmp_path))['entries'])
+
+    def test_java_constructors_including_private_and_annotated(self, tmp_path):
+        body = ('class Svc {\n'
+                '    private Svc() {}\n'
+                '    @Inject\n'
+                '    public Svc(int x) { }\n'
+                '    int Legacy() { return 1; }\n'   # a method named like a type: has a return type
+                '    void dead() {}\n'
+                '    enum Kind {\n        A;\n        Kind() {}\n    }\n'
+                '}\n')
+        assert self._uncalled(tmp_path, 'Svc.java', body) == ['Legacy', 'dead']
+
+    def test_csharp_ctor_actions_override_and_middleware(self, tmp_path):
+        body = ('public class Ctl : ControllerBase {\n'
+                '    public Ctl(int x) {}\n'
+                '    [HttpGet("items")]\n'
+                '    public int List() { return 1; }\n'
+                '    protected override Task HandleRequirementAsync(object c) { return null; }\n'
+                '    public Task InvokeAsync(object ctx) { return null; }\n'
+                '    public int Dead() { return 2; }\n'
+                '}\n')
+        assert self._uncalled(tmp_path, 'Ctl.cs', body) == ['Dead']
+
+    def test_kotlin_override_and_dagger(self, tmp_path):
+        body = ('class D : B() {\n'
+                '    override fun f() {}\n'
+                '    @Provides fun provide(): Int = 1\n'
+                '    @Binds\n    fun bind(x: Int): Int\n'
+                '    fun dead() {}\n'
+                '}\n')
+        assert self._uncalled(tmp_path, 'D.kt', body) == ['dead']
+
+    def test_swift_init_operators_and_override(self, tmp_path):
+        body = ('struct P: Equatable {\n'
+                '    init(x: Int) {}\n'
+                '    static func == (l: P, r: P) -> Bool { return true }\n'
+                '}\n'
+                'class V: UIView {\n'
+                '    override func layoutSubviews() {}\n'
+                '    deinit {}\n'
+                '    func dead() {}\n'
+                '}\n')
+        assert self._uncalled(tmp_path, 'p.swift', body) == ['dead']
+
+    def test_dart_constructors_and_override_annotation(self, tmp_path):
+        body = ('class Foo extends StatefulWidget {\n'
+                '  const Foo();\n'
+                '  Foo.named();\n'
+                '  factory Foo.make() => Foo();\n'
+                '  @override\n'
+                '  State<Foo> createState() => _FooState();\n'
+                '  helper() => 1;\n'            # untyped lower-case method is not a constructor
+                '  void dead() {}\n'
+                '}\n')
+        assert self._uncalled(tmp_path, 'w.dart', body) == ['dead', 'helper']
+
+    def test_cpp_in_class_ctor_and_header_declared_override(self, tmp_path):
+        _write(tmp_path, 'node.h', 'class Node : public Base {\n'
+                                   'public:\n'
+                                   '    Node() {}\n'
+                                   '    explicit Node(int x) {}\n'
+                                   '    void ready() override;\n'
+                                   '    void dead();\n'
+                                   '};\n')
+        body = 'void Node::ready() {}\nvoid Node::dead() {}\n'
+        assert self._uncalled(tmp_path, 'node.cpp', body) == ['Node::dead']
+
+    def test_godot_hooks_only_in_gdclass_classes(self, tmp_path):
+        _write(tmp_path, 'sprite.h', 'class Sprite : public Node2D {\n    GDCLASS(Sprite, Node2D);\n};\n')
+        _write(tmp_path, 'sprite.cpp', 'void Sprite::_bind_methods() {}\nvoid Sprite::_notification(int w) {}\n')
+        _write(tmp_path, 'plain.h', 'class Plain {};\n')
+        body = 'bool Plain::_get(int k) { return false; }\n'
+        assert self._uncalled(tmp_path, 'plain.cpp', body) == ['Plain::_get']

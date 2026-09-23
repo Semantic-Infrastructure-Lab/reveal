@@ -174,6 +174,13 @@ JVM_ENTRY_POINT_DECORATORS: FrozenSet[str] = frozenset({
     'KafkaListener', 'RabbitListener', 'JmsListener',
     'PostConstruct', 'PreDestroy', 'Override',
     'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS',
+    # Dagger/Hilt: module methods are called by generated component code (BACK-1392).
+    'Provides', 'Binds', 'BindsInstance', 'BindsOptionalOf', 'Multibinds',
+})
+# ASP.NET Core actions/routes and Azure Functions, as captured `[Attr(...)]` names (BACK-1392).
+CSHARP_ENTRY_POINT_DECORATORS: FrozenSet[str] = frozenset({
+    'HttpGet', 'HttpPost', 'HttpPut', 'HttpPatch', 'HttpDelete', 'HttpHead', 'HttpOptions',
+    'Route', 'AcceptVerbs', 'FunctionName', 'Function',
 })
 
 # --- stdlib classification (BACK-1275) --------------------------------------
@@ -367,11 +374,19 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
             }),
         ),
         LanguageConventions(family='php', entry_point_files=frozenset({'index.php'})),
-        LanguageConventions(family='swift', entry_point_files=frozenset({'main.swift'})),
+        LanguageConventions(
+            family='swift', entry_point_files=frozenset({'main.swift'}),
+            # `P(x:)` indexes under the type name, never `init`; operators run on `a == b`.
+            implicit_names=frozenset({'init', 'deinit'}),
+            implicit_name_pattern=re.compile(r'^[^\w`]'),
+        ),
         LanguageConventions(
             family='csharp', test_annotation_markers=_CSHARP_TEST_MARKERS,
             entry_point_files=frozenset({'program.cs', 'startup.cs'}),
-            implicit_names=frozenset({'Main'}),
+            # ASP.NET Core resolves middleware Invoke/InvokeAsync and Startup's
+            # Configure/ConfigureServices by name, through reflection.
+            implicit_names=frozenset({'Main', 'Invoke', 'InvokeAsync', 'Configure', 'ConfigureServices'}),
+            entry_point_decorators=CSHARP_ENTRY_POINT_DECORATORS,
             stdlib_key=_prefix_stdlib_key('System'),
         ),
         LanguageConventions(

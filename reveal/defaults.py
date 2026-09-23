@@ -279,6 +279,10 @@ CALL_GRAPH_DEFAULT_DISPATCH_VOCAB = 'runtime dispatch mechanisms specific to thi
 # 2,235 uncalled entries (16.3%) on one real corpus. See
 # conventions.py's LanguageConventions for the matching exclusion
 # logic -- this dict is the disclosure half, that's the enforcement half.
+_CPP_IMPLICIT_EXCLUSIONS = (
+    'main and test-registration macros; in C++ also constructors, destructors, operators, '
+    'methods declared override/final, and Godot GDCLASS hooks (_bind_methods, _notification, ...)'
+)
 CALL_GRAPH_IMPLICIT_EXCLUSION_VOCAB: Dict[str, str] = {
     'python': '__dunder__ methods and @property/@classmethod/@staticmethod',
     'ruby': "initialize (invoked by .new), included/extended/inherited/method_missing/"
@@ -288,9 +292,23 @@ CALL_GRAPH_IMPLICIT_EXCLUSION_VOCAB: Dict[str, str] = {
     'tsx': 'constructor methods and get/set accessors (invoked by `new` / property access, never a call expression)',
     'go': 'main and init (invoked by the runtime) and Test*/Benchmark*/Example*/Fuzz* functions in _test.go files (invoked by `go test`)',
     'rust': 'main and #[test]/#[bench] functions (invoked by the runtime / test harness)',
+    # BACK-1392: constructors are recognized by their declaration shape (no return type),
+    # overrides by the `override` keyword or an @Override/@override annotation.
+    'java': 'constructors, @Override methods, main, and Spring/JAX-RS/Dagger-registered methods '
+            '(@GetMapping, @Bean, @Provides, ...)',
+    'csharp': 'constructors, override methods, Main, ASP.NET actions ([HttpGet], [Route], ...) '
+              'and middleware/Startup methods invoked by name (Invoke, Configure, ...)',
+    'cpp': _CPP_IMPLICIT_EXCLUSIONS,
+    # .h counts as C, so a header-heavy C++ tree can be C-dominant: same (C/C++) text.
+    'c': _CPP_IMPLICIT_EXCLUSIONS,
+    'kotlin': 'override functions, main, and Spring/Dagger-registered functions (@Bean, @Provides, ...)',
+    'swift': 'init/deinit, operator functions (==, <, ...) and override methods',
+    'dart': 'constructors (including named and factory constructors) and @override methods '
+            '(Flutter build/createState/initState, ...)',
 }
 CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB = (
-    "constructors and language-runtime-invoked lifecycle hooks specific to this language"
+    "no language-specific conventions for this language: constructors and framework-invoked "
+    "methods may be listed"
 )
 
 

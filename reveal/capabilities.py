@@ -423,11 +423,11 @@ _TIER1: Dict[str, LanguageCapability] = {
         known_limitations=[
             "BACK-1391: calls://?uncalled lists methods referenced only as "
             "a function pointer (`&Class::method`, e.g. Godot's "
-            "ClassDB::bind_method) -- 778 of Godot scene/2d's 976 uncalled.",
-            "BACK-1392: in-class constructors and virtual overrides reached "
-            "only through a base-class call are not excluded from "
-            "calls://?uncalled (out-of-line `Foo::Foo`, `~Foo`, operators "
-            "and `main` are).",
+            "ClassDB::bind_method) -- 778 of Godot scene/2d's 805 uncalled.",
+            "calls://?uncalled excludes a virtual method only when some "
+            "declaration of its name says `override`/`final` (BACK-1392); a "
+            "pre-C++11 override without the keyword, reached only through a "
+            "base-class pointer, is still listed.",
             "BACK-1414: header declarations without a body (pure-virtual "
             "`= 0` methods) are missing from the outline.",
             "A preprocessor branch with mismatched brace nesting collapses "

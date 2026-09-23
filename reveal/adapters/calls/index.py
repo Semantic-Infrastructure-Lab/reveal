@@ -10,6 +10,7 @@ per directory when any file changes (simple and correct).
 """
 
 import os
+import re
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple
@@ -744,6 +745,110 @@ def _has_noqa_uncalled(
     return False
 
 
+# Families whose constructors are declared as `[modifiers] TypeName(...)` with no
+# return type, so a definition line of that shape is a constructor (BACK-1392).
+_CTOR_SHAPE_FAMILIES = frozenset({'java', 'csharp', 'c', 'dart'})
+_CTOR_MODIFIERS = (r'(?:public|private|protected|internal|static|explicit|inline|constexpr'
+                   r'|const|external|factory|extern|unsafe)')
+_ANNOTATION_PREFIX = r'(?:(?:@[\w.]+(?:\([^)]*\))?|\[[^\]]*\])\s*)*'
+# Families where `override` is a declaration keyword/annotation (Python has no keyword;
+# its typing.override arrives as a decorator).
+_OVERRIDE_FAMILIES = frozenset({'java', 'csharp', 'c', 'dart', 'kotlin', 'swift', 'scala'})
+_OVERRIDE_ANNOTATION = re.compile(r'@[Oo]verride\b')
+
+
+def _definition_line(lines: List[str], line_no: int, name: str) -> int:
+    """1-based line of `name(`'s definition at or just after `line_no` (analyzers
+    may report a leading annotation's line as the start), or 0."""
+    call = re.compile(rf'(?<![\w.]){re.escape(name)}\s*[(<]')
+    for ln in range(line_no, min(line_no + 5, len(lines) + 1)):
+        if ln >= 1 and call.search(lines[ln - 1]):
+            return ln
+    return 0
+
+
+def _is_constructor_definition(name: str, family: str, file_path: str, line_no: int,
+                               cache: Dict[str, List[str]]) -> bool:
+    """A Java/C#/C++/Dart constructor: only modifiers and annotations precede the
+    type name on its definition line (a method always has a return type). They are
+    invoked by `new T()` / `T()` / enum constants / DI, or deliberately never
+    (a private utility-class constructor), not by a call to their name."""
+    if family not in _CTOR_SHAPE_FAMILIES or file_path.endswith('.c'):
+        return False
+    head = name.split('.', 1)[0]
+    # Dart methods may omit their return type; its type names are UpperCamel.
+    if family == 'dart' and not head[:1].isupper():
+        return False
+    lines = _read_lines(file_path, cache)
+    ln = _definition_line(lines, line_no, name)
+    if not ln:
+        return False
+    shape = rf'^\s*{_ANNOTATION_PREFIX}(?:{_CTOR_MODIFIERS}\s+)*{re.escape(name)}\s*[(<]'
+    return re.match(shape, lines[ln - 1]) is not None
+
+
+# `name(...) [const] [noexcept] override|final` in a C++ class body.
+_CPP_OVERRIDE_DECL = re.compile(
+    r'(~?\w+)\s*\([^;{}]*\)\s*(?:const\s*)?(?:noexcept(?:\([^)]*\))?\s*)?(?:override|final)\b')
+
+
+# Godot's GDCLASS macro generates the code that calls these by name (Object's
+# notification and property reflection); the class itself never calls them.
+_GODOT_GDCLASS_HOOKS = frozenset({
+    '_bind_methods', '_bind_compatibility_methods', '_notification', '_validate_property',
+    '_set', '_get', '_get_property_list', '_property_can_revert', '_property_get_revert',
+})
+
+
+def _uses_gdclass(file_path: str, cache: Dict[str, List[str]]) -> bool:
+    """The definition's file, or its same-stem header, declares a Godot GDCLASS."""
+    path = Path(file_path)
+    for candidate in (path, path.with_suffix('.h'), path.with_suffix('.hpp')):
+        if any('GDCLASS(' in line for line in _read_lines(str(candidate), cache)):
+            return True
+    return False
+
+
+def _cpp_override_names(structures: List[Dict[str, Any]], cache: Dict[str, List[str]]) -> Set[str]:
+    """Method names declared `override`/`final` in any scanned C/C++ file. The
+    keyword lives on the in-class declaration (usually a header), not on the
+    out-of-line `Node2D::_notification(...)` definition it names."""
+    names: Set[str] = set()
+    for file_struct in structures:
+        file_path = file_struct.get('file', '')
+        if _lang_family(file_path) != 'c' or file_path.endswith('.c'):
+            continue
+        text = ''.join(_read_lines(file_path, cache))
+        if 'override' in text or 'final' in text:
+            names.update(_CPP_OVERRIDE_DECL.findall(text))
+    return names
+
+
+def _is_override_definition(name: str, family: str, file_path: str, line_no: int,
+                            signature: str, cache: Dict[str, List[str]]) -> bool:
+    """`override` modifier (C#, Kotlin, Swift, Scala, C++ `) override`) or an
+    `@Override`/`@override` annotation (Java, Dart) on the definition. An override
+    is reached through its base type -- usually a framework's -- the same
+    reason trait-impl methods are excluded (BACK-1291)."""
+    if family not in _OVERRIDE_FAMILIES:
+        return False
+    if re.search(r'\boverride\b', signature):
+        return True
+    lines = _read_lines(file_path, cache)
+    ln = _definition_line(lines, line_no, name)
+    if not ln:
+        return False
+    if re.search(r'\boverride\b', lines[ln - 1].replace(name, '', 1)):
+        return True
+    # Annotation lines directly above the definition (and any it was reported at).
+    above = ln - 1
+    while above >= 1 and lines[above - 1].strip().startswith(('@', '[')):
+        if _OVERRIDE_ANNOTATION.search(lines[above - 1]):
+            return True
+        above -= 1
+    return False
+
+
 def _has_test_annotation(
     file_path: str,
     line_no: int,
@@ -879,6 +984,7 @@ def find_uncalled(
     file_lines: Dict[str, List[str]] = {}
     structures = collect_structures(str(directory))
     extra_implicit_decorators = _project_entry_point_decorators(directory)
+    cpp_overrides = _cpp_override_names(structures, file_lines)
 
     total_defined = 0
     test_entrypoints_excluded = 0
@@ -925,6 +1031,19 @@ def find_uncalled(
             if name in called_names or _bare_callee_name(name) in called_names:
                 continue
             if line_no and _has_noqa_uncalled(file_path, line_no, file_lines):
+                continue
+            family = _lang_family(file_path)
+            if family == 'c' and (
+                _bare_callee_name(name) in cpp_overrides
+                or (_bare_callee_name(name) in _GODOT_GDCLASS_HOOKS
+                    and _uses_gdclass(file_path, file_lines))
+            ):
+                continue
+            if line_no and (
+                _is_constructor_definition(name, family, file_path, line_no, file_lines)
+                or _is_override_definition(name, family, file_path, line_no,
+                                           elem.get('signature', ''), file_lines)
+            ):
                 continue
             if not include_test_framework and _is_test_entry_point(
                 name, file_path, line_no, decorator_names, file_lines
