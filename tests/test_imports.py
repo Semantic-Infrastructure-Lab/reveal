@@ -2273,3 +2273,44 @@ class TestJsonFormatDoesNotLeakAbsolutePaths:
 
         assert not self._leaks(result['cycles'], root)
         assert not self._leaks(result['cycle_paths'], root)
+
+
+class TestRespectsRevealYamlIgnore:
+    """BACK-1362: _discover_candidate_files() walked with only the hardcoded
+    is_skippable_dir() check -- .reveal.yaml's `ignore:` key (and REVEAL_IGNORE) had no
+    effect here, unlike check/stats:///scope-census reporting, which all honor it via
+    RevealConfig.should_ignore(). Since architecture://'s Components/entry-points/
+    core-abstractions all source from this same ImportsAdapter walk, the gap reached
+    those too, not just imports:///deps:// directly."""
+
+    def setup_method(self):
+        from reveal.config import RevealConfig
+        RevealConfig._cache.clear()
+
+    def teardown_method(self):
+        from reveal.config import RevealConfig
+        RevealConfig._cache.clear()
+
+    def _tree(self, tmp_path):
+        (tmp_path / '.reveal.yaml').write_text(
+            'root: true\nignore:\n  - "vendor/**"\n', encoding='utf-8')
+        (tmp_path / 'a.py').write_text('import os\n\ndef a():\n    return 1\n', encoding='utf-8')
+        vendor = tmp_path / 'vendor'
+        vendor.mkdir()
+        (vendor / 'b.py').write_text('import sys\n\ndef b():\n    return 2\n', encoding='utf-8')
+        return tmp_path
+
+    def test_ignored_directory_excluded_from_imports_scan(self, tmp_path):
+        root = self._tree(tmp_path)
+        result = ImportsAdapter(str(root)).get_structure()
+        scanned = {Path(f).name for f in result.get('files', {})}
+        assert 'b.py' not in scanned
+        assert 'a.py' in scanned
+
+    def test_ignored_directory_excluded_from_architecture_components(self, tmp_path):
+        from reveal.adapters.architecture import ArchitectureAdapter
+        root = self._tree(tmp_path)
+        result = ArchitectureAdapter(str(root)).get_structure()
+        components = result['facts']['components']
+        assert not any(c.get('component', '').startswith('vendor') for c in components), (
+            f'ignore:-excluded vendor/ still appeared in architecture:// Components: {components}')

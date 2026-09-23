@@ -1172,10 +1172,25 @@ class ImportsAdapter(ResourceAdapter):
             if target_path.suffix in supported_exts or ext in code_exts:
                 candidates.append(target_path)
         else:
+            # BACK-1362: REVEAL_IGNORE / .reveal.yaml 'ignore:' patterns were wired into
+            # utils.path_utils._walk_code_files (BACK-1201) as the single-source-of-truth
+            # walker, but this adapter's own walk (imports://, deps://, and
+            # architecture://'s Components/entry-points/core-abstractions, which all
+            # source from this same graph) never adopted it -- ignore: silently had no
+            # effect here while check/stats:///census reporting all honored it.
+            from ..config import RevealConfig  # deferred: cli/config cycle
+            config = RevealConfig.get(start_path=target_path)
             for root, dirs, filenames in os.walk(str(target_path)):
-                dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
+                root_path = Path(root)
+                dirs[:] = [
+                    d for d in dirs
+                    if not is_skippable_dir(root_path, d) and not d.startswith('.')
+                    and not config.should_ignore(root_path / d)
+                ]
                 for fname in filenames:
-                    fp = Path(root) / fname
+                    fp = root_path / fname
+                    if config.should_ignore(fp):
+                        continue
                     file_index.setdefault(fname, []).append(fp)
                     if fp.suffix in supported_exts or fp.suffix.lower() in code_exts:
                         candidates.append(fp)

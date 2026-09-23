@@ -1,5 +1,6 @@
 """Argument parsing and validation for reveal CLI."""
 
+import os
 import sys
 import argparse
 import shutil
@@ -202,14 +203,34 @@ More:
 '''
 
 
+def _format_default() -> str:
+    """BACK-1362: REVEAL_FORMAT was documented (CONFIGURATION_GUIDE.md) and merged into
+    RevealConfig's dict, but nothing ever read config['output']['format'] back out --
+    a fully dead env var, confirmed by `test_reveal_format` only asserting the config
+    dict got populated, never that any output changed. Wired here as the parser default
+    (shared by every subcommand via _build_global_options_parser, plus the main parser),
+    the same seam --format itself already uses; an explicit --format on the command line
+    still wins (argparse defaults only apply when the flag is absent)."""
+    _CHOICES = ('text', 'json', 'typed', 'grep')
+    value = os.environ.get('REVEAL_FORMAT')
+    if not value:
+        return 'text'
+    if value not in _CHOICES:
+        print(f"Note: REVEAL_FORMAT={value!r} is not one of {_CHOICES} -- ignoring, using 'text'",
+              file=sys.stderr)
+        return 'text'
+    return value
+
+
 def _add_global_options(target) -> None:
     """Add global output flags to a parser or argument group.
 
     Called by both _build_global_options_parser() (for subcommand inheritance)
     and create_argument_parser() (for the main parser's named group).
     """
-    target.add_argument('--format', choices=['text', 'json', 'typed', 'grep'], default='text',
-                        help='Output format (text, json, typed [typed JSON with types/relationships], grep)')
+    target.add_argument('--format', choices=['text', 'json', 'typed', 'grep'], default=_format_default(),
+                        help='Output format (text, json, typed [typed JSON with types/relationships], grep). '
+                             'Defaults to $REVEAL_FORMAT if set.')
     target.add_argument('--also-json', metavar='PATH', default=None,
                         help='BACK-1184: also write the result as JSON to PATH, in addition to '
                              '--format\'s primary output -- one invocation, one parse, both a '

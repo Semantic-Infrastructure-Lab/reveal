@@ -114,3 +114,44 @@ def test_copy_restores_stdout_after_a_subcommand(monkeypatch, tree, clipboard):
 def test_no_copy_flag_means_no_clipboard_write(monkeypatch, tree, clipboard):
     _run(monkeypatch, 'overview', str(tree))
     assert clipboard == []
+
+
+# ------------------------------------------------------------- REVEAL_FORMAT (BACK-1362)
+#
+# Documented in CONFIGURATION_GUIDE.md and merged into RevealConfig's dict by
+# config._load_from_env(), but nothing ever read config['output']['format'] back out --
+# a fully dead env var (test_config.py::test_reveal_format only asserted the dict got
+# populated, never that any output changed). Fixed by using it as --format's parser
+# default (reveal.cli.parser._format_default), the same seam every subcommand and the
+# main parser both already share for --format itself.
+
+def test_reveal_format_env_var_sets_default_on_bare_path(monkeypatch, tree, capsys):
+    monkeypatch.setenv('REVEAL_FORMAT', 'json')
+    _run(monkeypatch, str(tree / 'a.py'))
+    assert capsys.readouterr().out.lstrip().startswith('{')
+
+
+def test_reveal_format_env_var_sets_default_on_a_uri(monkeypatch, tree, capsys):
+    monkeypatch.setenv('REVEAL_FORMAT', 'json')
+    _run(monkeypatch, f'stats://{tree}')
+    assert capsys.readouterr().out.lstrip().startswith('{')
+
+
+def test_reveal_format_env_var_sets_default_on_a_subcommand(monkeypatch, tree, capsys):
+    monkeypatch.setenv('REVEAL_FORMAT', 'json')
+    _run(monkeypatch, 'overview', str(tree))
+    assert capsys.readouterr().out.lstrip().startswith('{')
+
+
+def test_explicit_format_flag_overrides_reveal_format_env_var(monkeypatch, tree, capsys):
+    monkeypatch.setenv('REVEAL_FORMAT', 'json')
+    _run(monkeypatch, str(tree / 'a.py'), '--format', 'text')
+    assert not capsys.readouterr().out.lstrip().startswith('{')
+
+
+def test_invalid_reveal_format_env_var_warns_and_falls_back_to_text(monkeypatch, tree, capsys):
+    monkeypatch.setenv('REVEAL_FORMAT', 'bogus')
+    _run(monkeypatch, str(tree / 'a.py'))
+    captured = capsys.readouterr()
+    assert 'REVEAL_FORMAT' in captured.err
+    assert not captured.out.lstrip().startswith('{')
