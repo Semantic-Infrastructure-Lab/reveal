@@ -339,9 +339,14 @@ pytest tests/
 
 ```bash
 scripts/ci-local.sh                # Python 3.12, latest deps: pytest + the CI-only steps
-scripts/ci-local.sh --python 3.14
+scripts/ci-local.sh --matrix       # 3.10, 3.12 and 3.14 in turn, like CI (~25 min; use tmux)
+scripts/ci-local.sh --matrix -- tests/test_foo.py   # quick: only the tests you touched, per Python
 scripts/ci-local.sh --lp 1.12.5    # force a tree-sitter-language-pack version (CI compat-matrix)
 ```
+
+A 3.12-only run is not enough: 3.10 rejects PEP 701 f-strings (a nested same-type quote), and 3.14
+tokenizes t-strings natively, and both reached GitHub CI from a green local run. The script's
+header also lists the Windows-only pitfalls worth checking by hand before you push.
 
 Your dev environment drifts from CI (dependency versions, Python version, stale `~/.reveal/cache`),
 so a plain local `pytest` can pass while every CI job fails -- that is exactly how a

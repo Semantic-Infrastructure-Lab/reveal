@@ -168,12 +168,14 @@ fi
 # 12. CI parity (scripts/ci-local.sh)
 # The steps above run in THIS machine's environment, which drifts from CI (older
 # tree-sitter-language-pack => vendored Node API; CI-only V-series/B006/Windows-lint steps).
-# ci-local.sh reproduces CI's environment and steps. Skip with SKIP_CI_PARITY=1 (not for a release).
-check_step "CI Parity (CI environment + CI-only steps)" 12 12
+# ci-local.sh reproduces CI's environment and steps, on every Python in CI's matrix: a 3.12-only
+# run missed py3.10/3.14 failures that GitHub then caught (BACK-1438).
+# Skip with SKIP_CI_PARITY=1 (not for a release).
+check_step "CI Parity (CI environment + CI-only steps, Python 3.10/3.12/3.14)" 12 12
 
 if [ "${SKIP_CI_PARITY:-0}" = "1" ]; then
     echo -e "${YELLOW}⚠ CI parity SKIPPED (SKIP_CI_PARITY=1)${NC}"
-elif "$SCRIPT_DIR/ci-local.sh"; then
+elif "$SCRIPT_DIR/ci-local.sh" --matrix; then
     echo -e "${GREEN}✓ CI parity run passed${NC}"
 else
     echo -e "${RED}✗ CI parity run failed (see log path above)${NC}"

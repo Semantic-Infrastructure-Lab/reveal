@@ -85,7 +85,8 @@ This validates:
 Fix any errors before proceeding.
 
 `./scripts/pre-release-check.sh` runs the full gate set (its last step, CI parity, runs
-`scripts/ci-local.sh`: a CI-equivalent venv plus the CI-only steps -- see CONTRIBUTING.md "Testing";
+`scripts/ci-local.sh --matrix`: a CI-equivalent venv per Python 3.10/3.12/3.14 plus the CI-only
+steps -- see CONTRIBUTING.md "Testing";
 `SKIP_CI_PARITY=1` skips it), including two
 regression-only ratchets that need the maintainer environment:
 - **mypy** (`scripts/check_mypy_baseline.py`) fails if any (file, error-code) count rose
