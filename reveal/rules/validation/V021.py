@@ -46,6 +46,7 @@ import ast
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
+from ...utils.pyparse import parse_python
 
 
 class V021(BaseRule):
@@ -141,7 +142,7 @@ class V021(BaseRule):
     def _imports_re_module(self, content: str) -> bool:
         """Check if file imports the 're' module."""
         try:
-            tree = ast.parse(content)
+            tree = parse_python(content)
             return any(
                 (isinstance(n, ast.Import) and any(a.name == 're' for a in n.names)) or
                 (isinstance(n, ast.ImportFrom) and n.module == 're')

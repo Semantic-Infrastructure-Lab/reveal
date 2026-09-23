@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import Any, Dict, FrozenSet, Iterable, Iterator, List, Optional, Set, Tuple
 
 from ..utils.path_utils import is_skippable_dir
+from ..utils.pyparse import parse_python
 
 _TypeAliasStmt = getattr(ast, 'TypeAlias', None)  # `type X = ...`, Python 3.12+
 
@@ -135,7 +136,7 @@ def iter_python_files(path: str) -> Iterator[str]:
 
 def parse_file(file_path: str) -> Optional[ast.Module]:
     try:
-        return ast.parse(Path(file_path).read_text(encoding='utf-8', errors='replace'))
+        return parse_python(Path(file_path).read_text(encoding='utf-8', errors='replace'), file_path)
     except (SyntaxError, OSError, ValueError):
         return None
 

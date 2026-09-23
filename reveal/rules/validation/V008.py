@@ -22,6 +22,7 @@ import ast
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
+from ...utils.pyparse import parse_python
 
 
 @dataclass
@@ -76,7 +77,7 @@ class V008(BaseRule):
         """Check a single analyzer file for get_structure signature issues."""
         try:
             content = analyzer_path.read_text(encoding='utf-8')
-            tree = ast.parse(content)
+            tree = parse_python(content, str(analyzer_path))
             return self._find_get_structure_violations(tree, analyzer_path)
         except Exception:
             # Don't fail the check if we can't parse the file

@@ -30,6 +30,7 @@ from typing import Dict, Iterator, List, Any, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
+from ...utils.pyparse import parse_python
 from ...utils.path_utils import is_skippable_dir, resolve_project_root
 
 logger = logging.getLogger(__name__)
@@ -188,7 +189,7 @@ class D005(BaseRule, ASTParsingMixin):
         Returns list of (canonical_key, lineno, var_name, value_frozenset).
         """
         try:
-            tree = ast.parse(content)
+            tree = parse_python(content)
         except SyntaxError:
             return []
 

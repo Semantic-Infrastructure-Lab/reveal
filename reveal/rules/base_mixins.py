@@ -10,6 +10,7 @@ import logging
 from typing import Optional
 
 from ..core import _zero_arg
+from ..utils.pyparse import parse_python
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ def _cached_ast_parse(content: str, file_path: str) -> Optional[ast.AST]:
     maxsize=4 keeps memory bounded while covering all rules on one file.
     """
     try:
-        return ast.parse(content, filename=file_path)
+        return parse_python(content, file_path)
     except SyntaxError as e:
         logger.warning(f"AST parse failed (syntax error) for {file_path}: {e}")
         return None

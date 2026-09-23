@@ -12,6 +12,7 @@ from typing import List, Dict, Any, Optional, Set
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...utils.path_utils import is_test_path, is_unsafe_scan_root
+from ...utils.pyparse import parse_python
 
 logger = logging.getLogger(__name__)
 
@@ -452,7 +453,7 @@ class M102(BaseRule):
     def _has_meaningful_code(self, content: str) -> bool:
         """Check if file has more than just comments and docstrings."""
         try:
-            tree = ast.parse(content)
+            tree = parse_python(content)
             # Check for any non-trivial content
             for node in ast.walk(tree):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,

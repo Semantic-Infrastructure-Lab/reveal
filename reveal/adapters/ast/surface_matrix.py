@@ -24,6 +24,10 @@ from .surface_rules import rule_categories
 
 CATEGORIES: Tuple[str, ...] = ('cli', 'http', 'mcp', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
+# Not a category: a scanner lists files it could not parse under this key, so
+# the report can say they contributed nothing instead of counting them as clean.
+UNPARSED_KEY = '_unparsed'
+
 RULES = 'rules'
 SCANNER = 'scanner'
 NOT_APPLICABLE = 'not_applicable'

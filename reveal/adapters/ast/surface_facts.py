@@ -21,6 +21,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
+from reveal.utils.pyparse import parse_python
 from reveal.core.callees import (
     CHAIN_COLLAPSE,
     CHAIN_FULL,
@@ -494,7 +495,7 @@ def facts_from_tree(tree: Any, content: bytes, language: str) -> List[Fact]:
 def extract_facts(source: str, language: str) -> List[Fact]:
     """Neutral facts for `source`, ordered by line. `language` is one of `LANGUAGES`."""
     if language == 'python':
-        return python_facts_from_ast(ast.parse(source))
+        return python_facts_from_ast(parse_python(source))
     from tree_sitter_language_pack import get_parser   # lazy, like the nav_surface_* scanners
     tree = ts_parse(get_parser(_LANGS[language].parser), source)
     return facts_from_tree(tree, source.encode('utf-8'), language)

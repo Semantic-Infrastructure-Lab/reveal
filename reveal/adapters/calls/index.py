@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple
 
 from ..ast.analysis import collect_structures, is_code_file
+from ...utils.pyparse import parse_python
 from ..ast.call_graph import build_alias_map, build_symbol_map, resolve_callees as _resolve_callees
 from ...conventions import conventions_for, family_for_path, is_builtin_anywhere
 from ...defaults import TEST_FRAMEWORK_CALLEE_NAMES
@@ -287,7 +288,7 @@ def _python_referenced_names(directory: Path) -> Set[str]:
         try:
             if is_unsafe_scan_root(py_file.parent):
                 continue
-            tree = _ast.parse(py_file.read_text(encoding='utf-8', errors='ignore'))
+            tree = parse_python(py_file.read_text(encoding='utf-8', errors='ignore'), str(py_file))
         except (OSError, SyntaxError, ValueError, RecursionError):
             continue
 

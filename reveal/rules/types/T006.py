@@ -26,6 +26,7 @@ from typing import Any, Dict, FrozenSet, List, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
+from ...utils.pyparse import parse_python
 from ...analyzers._python_dict_usage import (
     SCHEMA_MIN_SHARED_KEYS,
     best_typeddict_match,
@@ -257,7 +258,7 @@ def _build_index(project_root: Path) -> Dict[str, Any]:
         if not _DEFINES_TYPE_FACTS.search(text):
             continue
         try:
-            tree = ast.parse(text)
+            tree = parse_python(text, str(file_path))
         except (SyntaxError, ValueError):
             continue
         trees.append(tree)

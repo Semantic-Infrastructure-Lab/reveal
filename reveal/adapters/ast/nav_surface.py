@@ -5,7 +5,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .surface_rules import apply_ast_rules
+from ...utils.pyparse import parse_python
 from .nav_surface_common import _add_once
+from .surface_matrix import UNPARSED_KEY
 
 _NET_PACKAGES: frozenset = frozenset({
     'requests', 'httpx', 'httpcore', 'aiohttp', 'urllib', 'urllib3', 'socket',
@@ -58,9 +60,9 @@ def scan_file_surface(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     """Parse one Python file and return categorised surface entries."""
     try:
         source = Path(file_path).read_text(errors='replace', encoding='utf-8')
-        tree = ast.parse(source, filename=file_path)
-    except (SyntaxError, OSError):
-        return {k: [] for k in _EMPTY}
+        tree = parse_python(source, file_path)
+    except (SyntaxError, ValueError, OSError):
+        return {**{k: [] for k in _EMPTY}, UNPARSED_KEY: [file_path]}
     return _scan_tree(tree, file_path, source)
 
 

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from ..utils.path_utils import is_test_basename_for_language
+from ..utils.pyparse import parse_python
 from ..core.treesitter_compat import _zero_arg, suppress_treesitter_warnings, tree_root, ts_parse
 from ..utils.path_utils import is_skippable_dir
 
@@ -425,7 +426,7 @@ def group_patches(
 def _scan_file(file_path: Path) -> List[PatchUse]:
     try:
         source = file_path.read_text(encoding='utf-8', errors='replace')
-        tree = ast.parse(source, filename=str(file_path))
+        tree = parse_python(source, str(file_path))
     except (OSError, SyntaxError):
         return []
 

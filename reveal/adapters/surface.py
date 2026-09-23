@@ -28,7 +28,7 @@ from ..utils.path_utils import (
     is_test_basename_for_language,
 )
 from ..utils.query import parse_query_params
-from .ast.surface_matrix import CATEGORIES, coverage_matrix
+from .ast.surface_matrix import CATEGORIES, UNPARSED_KEY, coverage_matrix
 from ..utils.results import ResultBuilder
 from ..defaults import TEST_DIR_PREFIX as _TEST_DIR_PREFIX
 
@@ -202,13 +202,16 @@ def _scan_surface(
     scope = census.to_scope_dict(capability_tiers=capability_tiers_for(census.language_extensions))
 
     scanned_languages = set()
+    unparsed: List[str] = []
     for spec, file_list in collected.items():
         if not file_list:
             continue
         scanned_languages.add(spec.language)
         scan_fn = _load_scanner(spec)
         for file_path in file_list:
-            for cat, entries in scan_fn(str(file_path)).items():
+            result = scan_fn(str(file_path))
+            unparsed.extend(result.pop(UNPARSED_KEY, []))
+            for cat, entries in result.items():
                 surfaces[cat].extend(entries)
 
     if type_filter:
@@ -218,6 +221,8 @@ def _scan_surface(
     matrix = coverage_matrix(scanned_languages, tuple(surfaces))
 
     _relativize_surface_paths(surfaces, path)
+    from ..utils.path_utils import to_relative_display
+    unparsed_files = sorted(to_relative_display(f, path) for f in unparsed)
 
     # BACK-1244: 'http' entries come from AST call-shape matching alone
     # (verb('/path', ...)) -- a real route declaration and an RSpec/pytest
@@ -249,6 +254,7 @@ def _scan_surface(
         'matrix': matrix,
         **by_dir,
         'unsupported_language': unsupported_language,
+        'unparsed_files': unparsed_files,
         'coverage': coverage.to_scope_dict('surface'),
         'scope': scope,
         '_meta': {
@@ -264,9 +270,17 @@ def _scan_surface(
                     "itself) -- see each entry's 'test_origin' field, or pass source_only=true to "
                     "exclude them"
                 ] if test_origin_count else []),
+                *([_unparsed_note(unparsed_files)] if unparsed_files else []),
             ],
         },
     }
+
+
+def _unparsed_note(unparsed_files: List[str]) -> str:
+    shown = ', '.join(unparsed_files[:5])
+    more = f" (+{len(unparsed_files) - 5} more)" if len(unparsed_files) > 5 else ''
+    return (f"{len(unparsed_files)} file(s) could not be parsed and contribute no entries: "
+            f"{shown}{more}")
 
 
 _LANGUAGE_NAMES = {
@@ -304,6 +318,9 @@ def _render_report(report: Dict[str, Any], top: int = None) -> None:
     warning = report.get('coverage', {}).get('warning', '')
     if warning:
         print(warning)
+        print()
+    if report.get('unparsed_files'):
+        print(f"⚠ {_unparsed_note(report['unparsed_files'])}")
         print()
     print(f"Total surface entries: {total}")
     if top is not None:
@@ -537,6 +554,8 @@ class SurfaceAdapter(ResourceAdapter):
         coverage_warning = report.get('coverage', {}).get('warning', '')
         if coverage_warning:
             warnings.append({'code': 'W-SURFACE-1', 'message': coverage_warning})
+        if report['unparsed_files']:
+            warnings.append({'code': 'W-SURFACE-2', 'message': _unparsed_note(report['unparsed_files'])})
 
         return ResultBuilder.create(
             result_type='surface_scan',
