@@ -633,6 +633,8 @@ class ImportsRenderer:
         print(f"  Total Imports: {total_imports}")
         if total_files <= 1:
             print("  Cycles Found:  N/A (single-file scan — use imports://dir/ to detect cycles)")
+        elif not total_imports:
+            print("  Cycles Found:  N/A (no imports found)")
         else:
             print(f"  Cycles Found:  {'❌ Yes' if has_cycles else '✅ No'}")
         print()

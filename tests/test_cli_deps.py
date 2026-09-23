@@ -747,3 +747,39 @@ class TestRunDeps(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestHonestSummaryAndRunnableNextSteps:
+    """BACK-1405 / BACK-1420."""
+
+    def _summary(self, analysis, meta):
+        buf = StringIO()
+        with patch('sys.stdout', buf):
+            _render_summary(analysis, 0, 0, meta)
+        return buf.getvalue()
+
+    def _analysis(self, files, imports):
+        return {'total_files': files, 'total_imports': imports,
+                'external_packages': [], 'stdlib_packages': []}
+
+    def test_no_imports_is_not_a_clean_bill(self):
+        out = self._summary(self._analysis(0, 0), {'scanned_files': 58})
+        assert '58 files (0 with imports)' in out
+        assert '✅' not in out
+        assert 'no imports found' in out
+
+    def test_failed_and_unsupported_files_are_shown(self):
+        out = self._summary(self._analysis(3, 9), {
+            'scanned_files': 40, 'files_failed_count': 30,
+            'unsupported_extensions': {'.m': 2}})
+        assert '30 file(s) could not be analyzed' in out
+        assert 'No import extraction for: .m (2)' in out
+        assert '✅ no circular deps' in out
+
+    def test_next_steps_name_the_scanned_path(self, tmp_path):
+        buf = StringIO()
+        with patch('sys.stdout', buf):
+            _render_next_steps(tmp_path)
+        out = buf.getvalue()
+        assert f"imports://{tmp_path}?circular" in out
+        assert 'imports://. ' not in out

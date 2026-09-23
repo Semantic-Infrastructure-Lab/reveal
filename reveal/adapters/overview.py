@@ -490,14 +490,15 @@ def _render_git_log(history: List[Dict[str, Any]], foreign_root: Optional[str] =
         print(f"  {age_str}  {msg}  [{sha}]")
 
 
-def _render_next_steps() -> None:
+def _render_next_steps(path: str) -> None:
+    """Commands for the scanned path, runnable from any cwd (BACK-1420)."""
     print("\nNext steps")
-    print("  reveal hotspots .                    # Full hotspot breakdown")
-    print("  reveal check .                       # Run quality rules")
-    print("  reveal deps .                        # Dependency graph")
-    print("  reveal 'imports://.?rank=fan-in'     # Full fan-in ranking")
-    print("  reveal 'imports://.?entrypoints'     # All entry points")
-    print("  reveal pack .                        # Agent context snapshot")
+    print(f"  reveal hotspots {path}                    # Full hotspot breakdown")
+    print(f"  reveal check {path}                       # Run quality rules")
+    print(f"  reveal deps {path}                        # Dependency graph")
+    print(f"  reveal 'imports://{path}?rank=fan-in'     # Full fan-in ranking")
+    print(f"  reveal 'imports://{path}?entrypoints'     # All entry points")
+    print(f"  reveal pack {path}                        # Agent context snapshot")
     print()
 
 
@@ -529,7 +530,7 @@ def _render_overview(report: Dict[str, Any], top: int) -> None:
     # the body rather than inline because they describe the report as a whole.
     from ..utils.warning_render import render_meta_warnings
     render_meta_warnings(report, heading="Caveats")
-    _render_next_steps()
+    _render_next_steps(path_str)
 
 
 class OverviewRenderer:

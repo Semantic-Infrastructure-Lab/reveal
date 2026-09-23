@@ -183,14 +183,21 @@ def _analyse_imports(files: Dict[str, List[Dict[str, Any]]], base_path: Path) ->
 
 # ── Renderers ──────────────────────────────────────────────────────────────────
 
-def _render_summary(analysis: Dict[str, Any], cycle_count: int, unused_count: int) -> None:
+def _render_summary(analysis: Dict[str, Any], cycle_count: int, unused_count: int,
+                    meta: Optional[Dict[str, Any]] = None) -> None:
+    meta = meta or {}
     total_files = analysis['total_files']
     total_imports = analysis['total_imports']
     ext_pkgs = len(analysis['external_packages'])
     stdlib_pkgs = len(analysis['stdlib_packages'])
+    scanned = meta.get('scanned_files', total_files)
 
+    # BACK-1405: `total_files` counts files WITH imports; alone it read "0 files ✅"
+    # for 58 scanned PHP files whose includes are all computed paths.
+    files_part = (f"{scanned:,} files ({total_files:,} with imports)"
+                  if scanned != total_files else f"{total_files:,} files")
     parts = [
-        f"{total_files:,} files",
+        files_part,
         f"{total_imports:,} imports",
         f"{ext_pkgs} unresolved packages",
         f"{stdlib_pkgs} stdlib packages",
@@ -199,14 +206,23 @@ def _render_summary(analysis: Dict[str, Any], cycle_count: int, unused_count: in
     health_parts = []
     if cycle_count:
         health_parts.append(f"❌ {cycle_count} circular dep(s)")
-    else:
+    elif total_imports:
         health_parts.append("✅ no circular deps")
+    else:
+        health_parts.append("— no imports found, so nothing to check for cycles")
     if unused_count:
         health_parts.append(f"⚠️  {unused_count} unused import(s)")
 
     print(f"\nSummary   {' · '.join(parts)}")
     if health_parts:
         print(f"Health    {' · '.join(health_parts)}")
+    failed = meta.get('files_failed_count') or 0
+    if failed:
+        print(f"          ⚠ {failed} file(s) could not be analyzed; their imports are missing above")
+    unsupported = meta.get('unsupported_extensions') or {}
+    if unsupported:
+        listing = ', '.join(f"{ext} ({n})" for ext, n in unsupported.items())
+        print(f"          ⚠ No import extraction for: {listing}")
 
 
 def _render_external_packages(analysis: Dict[str, Any], top: int) -> None:
@@ -245,7 +261,7 @@ def _render_circular(cycles: List, cycle_count: int, base_path: Path, top: int) 
         parts = [to_relative_display(fp, base_path) for fp in cycle]
         print(f"  ❌ {' → '.join(parts)}")
     if cycle_count > top:
-        print(f"  ... and {cycle_count - top} more  (run: reveal 'imports://. ?circular')")
+        print(f"  ... and {cycle_count - top} more  (run: reveal '{_imports_uri(base_path)}?circular')")
 
 
 def _render_unused(unused: List[Dict[str, Any]], base_path: Path, top: int) -> None:
@@ -263,7 +279,7 @@ def _render_unused(unused: List[Dict[str, Any]], base_path: Path, top: int) -> N
         name_str = f".{', '.join(names)}" if names else ''
         print(f"  ⚠️  {rel}:{line}  {module}{name_str}")
     if count > top:
-        print(f"  ... and {count - top} more  (run: reveal 'imports://. ?unused')")
+        print(f"  ... and {count - top} more  (run: reveal '{_imports_uri(base_path)}?unused')")
 
 
 def _render_top_importers(analysis: Dict[str, Any], top: int) -> None:
@@ -281,11 +297,17 @@ def _render_top_importers(analysis: Dict[str, Any], top: int) -> None:
         print(f"  {f:<50} {c:>3}  {bar}")
 
 
-def _render_next_steps() -> None:
+def _imports_uri(path: Path) -> str:
+    """The imports:// URI for the scanned path, runnable from any cwd (BACK-1420)."""
+    return f"imports://{path}"
+
+
+def _render_next_steps(path: Path) -> None:
+    uri = _imports_uri(path)
     print("\nNext steps")
-    print("  reveal 'imports://. ?circular'    # Full circular dep list")
-    print("  reveal 'imports://. ?unused'      # All unused imports")
-    print("  reveal 'imports://. ?violations'  # Layer violation check")
+    print(f"  reveal '{uri}?circular'    # Full circular dep list")
+    print(f"  reveal '{uri}?unused'      # All unused imports")
+    print(f"  reveal '{uri}?violations'  # Layer violation check")
     print()
 
 
@@ -316,7 +338,7 @@ def _render_deps(report: Dict[str, Any], top: int) -> None:
     if warning:
         print(f"\n{warning}")
 
-    _render_summary(analysis, cycle_count, len(unused))
+    _render_summary(analysis, cycle_count, len(unused), base_meta)
     not_checked_note = unused_not_checked_line(base_meta.get('unused_not_checked_extensions') or {})
     if not_checked_note:
         print(f"          {not_checked_note}")
@@ -324,7 +346,7 @@ def _render_deps(report: Dict[str, Any], top: int) -> None:
     _render_circular(cycles, cycle_count, Path(path_str), top)
     _render_unused(unused, Path(path_str), top)
     _render_top_importers(analysis, top)
-    _render_next_steps()
+    _render_next_steps(Path(path_str))
 
 
 class DepsRenderer:
