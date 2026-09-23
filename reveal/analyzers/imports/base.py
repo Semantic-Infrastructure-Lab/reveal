@@ -198,6 +198,12 @@ def get_all_extensions() -> Set[str]:
     return set(_EXTRACTOR_REGISTRY.keys())
 
 
+def extension_detects_unused(ext: str) -> bool:
+    """True when the extractor for `ext` judges unused imports (BACK-1398)."""
+    extractor_cls = _EXTRACTOR_REGISTRY.get(ext)
+    return bool(extractor_cls and extractor_cls.detects_unused)
+
+
 def get_supported_languages() -> List[str]:
     """Get list of all supported language names.
 
@@ -276,6 +282,9 @@ class LanguageExtractor(ABC):
     # Subclasses MUST define these class variables
     extensions: ClassVar[Set[str]]  # {'.py', '.pyi'}
     language_name: ClassVar[str]    # 'Python'
+    # False when extract_symbols() is not implemented and every import is
+    # skip_unused: an empty unused list then means "not checked", never "clean".
+    detects_unused: ClassVar[bool] = True
 
     def __init__(self) -> None:
         # Set by _get_tree_analyzer() when a file this extractor claims to

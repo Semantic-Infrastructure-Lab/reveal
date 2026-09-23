@@ -41,8 +41,11 @@ reveal deps . --format json
 
 `base` is the raw `imports://` file map. `circular` carries `cycles` and a
 `count`. `unused` is a flat list of unused-import entries (`file`, `line`,
-`module`, `names`). Text rendering additionally derives third-party/stdlib
-package usage counts and a "top importers" ranking from `base`.
+`module`, `names`). An empty `unused` covers only languages with unused-import
+detection (Python, JS/TS, Go, Rust); the rest are listed in
+`base.metadata.unused_not_checked_extensions` and the text Health line says
+"Unused imports not checked" for them. Text rendering additionally derives
+third-party/stdlib package usage counts and a "top importers" ranking from `base`.
 
 ## Good Review Questions
 

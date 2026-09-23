@@ -238,6 +238,25 @@ def _python_only_rule_disclosures(files, select, ignore) -> List[str]:
     return [note] if note else []
 
 
+def _i001_not_checked_disclosures(files, select, ignore) -> List[str]:
+    """BACK-1398: I001 runs on every language with an import extractor but only
+    judges the ones with unused-import detection; say so for the rest."""
+    if not _rule_will_run("I001", select, ignore):
+        return []
+    from reveal.adapters.imports import _unused_not_checked
+    from reveal.analyzers.imports.base import get_all_extensions
+    from reveal.capabilities import W_CAP_UNUSED_NOT_CHECKED
+    extractable = get_all_extensions()
+    not_checked = _unused_not_checked(Path(f) for f in files if Path(f).suffix in extractable)
+    if not not_checked:
+        return []
+    listing = ", ".join(f"{ext} ({n})" for ext, n in not_checked.items())
+    return [
+        f"{W_CAP_UNUSED_NOT_CHECKED}: I001 has no unused-import detection for these languages; "
+        f"{sum(not_checked.values())} file(s) were not checked by it: {listing}."
+    ]
+
+
 def _get_scan_disclosures() -> List[str]:
     """BACK-1051: collect every capped-scan disclosure recorded in this
     process by rules with a shared-index/graph scan ceiling (I002, D005, T006).
@@ -1386,7 +1405,9 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         limit = 50
 
     def scan_disclosures_all() -> List[str]:
-        return _get_scan_disclosures() + _python_only_rule_disclosures(files_to_check, select, ignore)
+        return (_get_scan_disclosures()
+                + _python_only_rule_disclosures(files_to_check, select, ignore)
+                + _i001_not_checked_disclosures(files_to_check, select, ignore))
 
     # Check files based on output format
     files_degraded = 0

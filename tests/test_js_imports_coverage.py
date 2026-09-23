@@ -303,10 +303,14 @@ class TestParseDestructuredNames:
         assert 'bar' in result
 
     def test_renamed_destructure(self):
+        """`{ foo: bar }` binds bar -- recorded 'foo as bar' like Python's
+        `from m import foo as bar` (BACK-1395; was just 'foo')."""
         e = JavaScriptExtractor()
-        result = e._parse_destructured_names('{ foo: bar }')
-        assert 'foo' in result
-        assert 'bar' not in result
+        assert e._parse_destructured_names('{ foo: bar }') == ['foo as bar']
+
+    def test_destructure_default_value_dropped(self):
+        e = JavaScriptExtractor()
+        assert e._parse_destructured_names('{ foo = 1, bar }') == ['foo', 'bar']
 
     def test_single_name(self):
         e = JavaScriptExtractor()
@@ -1317,3 +1321,37 @@ class TestResolveRelativeJs:
         e = JavaScriptExtractor()
         result = e._resolve_relative_js('./no.such.module', tmp_path)
         assert result is None
+
+
+class TestUnusedImportFalsePositives:
+    """BACK-1395 end to end through I001 (repro: earthly-sea-0922 v/t.ts; VS Code
+    src/vs/base had 79/80 flags false). Only the genuinely unused import may fire."""
+
+    def _flags(self, tmp_path, name, code):
+        from reveal.rules.imports.I001 import I001
+        p = tmp_path / name
+        p.write_text(code)
+        return [d.suggestion for d in I001().check(str(p), None, code)]
+
+    def test_typescript_shapes(self, tmp_path):
+        code = (
+            "import './x.css';\n"
+            "import { a as b } from './m';\n"
+            "import { type Id, other } from './types';\n"
+            "import { DEFAULT } from './consts';\n"
+            "import { alphaT } from './alpha';\n"
+            "import { reallyUnused } from './dead';\n"
+            "let hook: typeof import('mocha').Test;\n"
+            "export function f(x: number = DEFAULT, y: Id = other) { return b(); }\n"
+            "export const o = { alphaT };\n"
+        )
+        assert self._flags(tmp_path, 't.ts', code) == ['Remove unused import: `reallyUnused`']
+
+    def test_commonjs_shapes(self, tmp_path):
+        code = (
+            "require('./polyfill');\n"
+            "const { foo: bar, baz = 2 } = require('./m');\n"
+            "const unusedLib = require('./lib');\n"
+            "module.exports = () => bar(baz);\n"
+        )
+        assert self._flags(tmp_path, 'c.js', code) == ['Remove unused import: `unusedLib`']

@@ -577,6 +577,7 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 
     # Subclasses MUST set these.
     spec: ClassVar[_ImportSpec]
+    detects_unused = False
 
     def extract_imports(
         self,

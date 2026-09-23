@@ -3736,6 +3736,7 @@ def process():
 **I001: Unused import**
 - Import is never referenced in the file
 - Applies to Python, JS/TS, Rust, Go (multi-language)
+- Other languages with an import extractor (Java, C#, Kotlin, PHP, ...) are not checked: `imports://?unused`/`deps` say "Unused imports not checked", recursive `check` adds a W-CAP-2 note (BACK-1398)
 
 **I002: Circular dependency**
 - Module A imports B which imports A (directly or transitively)

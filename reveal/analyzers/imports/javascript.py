@@ -602,6 +602,11 @@ class JavaScriptExtractor(LanguageExtractor):
         for node in analyzer._find_nodes_by_type('type_identifier'):
             symbols.add(analyzer._get_node_text(node))
 
+        # `{ alphaT }` in an object literal reads alphaT; the grammar gives it
+        # its own kind, never `identifier` (BACK-1395).
+        for node in analyzer._find_nodes_by_type('shorthand_property_identifier'):
+            symbols.add(analyzer._get_node_text(node))
+
         return symbols
 
     def _extract_module_path_from_import(self, node, analyzer) -> Optional[str]:
@@ -635,13 +640,20 @@ class JavaScriptExtractor(LanguageExtractor):
         return None
 
     def _parse_named_imports_child(self, child, analyzer) -> list:
-        """Extract imported names from a named_imports node."""
+        """Extract imported names from a named_imports node, `'a as b'` when aliased.
+
+        Read by grammar field: the first child is the `type` keyword in an inline
+        `{ type Id }`, and `{ a as b }` binds `b`, not `a` (BACK-1395).
+        """
         names = []
         for subchild in _children(child):
             if _zero_arg(subchild, 'kind') == 'import_specifier':
-                spec_children = _children(subchild)
-                if spec_children:
-                    names.append(analyzer._get_node_text(spec_children[0]))
+                name_node = subchild.child_by_field_name('name')
+                if name_node is None:
+                    continue
+                name = analyzer._get_node_text(name_node)
+                alias_node = subchild.child_by_field_name('alias')
+                names.append(f"{name} as {analyzer._get_node_text(alias_node)}" if alias_node else name)
         return names
 
     def _parse_import_clause_data(self, import_clause, analyzer) -> tuple:
@@ -816,10 +828,11 @@ class JavaScriptExtractor(LanguageExtractor):
         imported_names = []
         names_str = left_side.strip('{}')
         for name in names_str.split(','):
-            name = name.strip()
-            # Handle renaming: { foo: bar }
+            name = name.split('=')[0].strip()
+            # { foo: bar } binds bar (BACK-1395)
             if ':' in name:
-                name = name.split(':')[0].strip()
+                original, local = (part.strip() for part in name.split(':', 1))
+                name = f"{original} as {local}" if local and local != original else original
             if name:
                 imported_names.append(name)
         return imported_names
@@ -908,10 +921,15 @@ class JavaScriptExtractor(LanguageExtractor):
 
         parent_type = _zero_arg(_zero_arg(node, 'parent'), 'kind')
 
+        # A TS parameter's `pattern` is the binding; its default `value`
+        # (`x = DEFAULT`) is a use (BACK-1395).
+        if parent_type in ('required_parameter', 'optional_parameter'):
+            value = _zero_arg(node, 'parent').child_by_field_name('value')
+            return value is not None and _zero_arg(value, 'start_byte') == _zero_arg(node, 'start_byte')
+
         # Skip definition contexts
         if parent_type in ('function_declaration', 'class_declaration', 'method_definition',
-                          'formal_parameters', 'required_parameter', 'optional_parameter',
-                          'rest_parameter'):
+                          'formal_parameters', 'rest_parameter'):
             return False
 
         # For variable declarations, check if this is the identifier being declared

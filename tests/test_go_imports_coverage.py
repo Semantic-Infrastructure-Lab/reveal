@@ -299,6 +299,44 @@ class TestCreateImport:
         stmt = self._make('v2')
         assert stmt.imported_names == ['v2']
 
+    def test_major_version_suffix_keeps_the_suffix_as_an_alternative(self):
+        """BACK-1397: `k8s.io/api/core/v1` declares `package v1` -- the suffix
+        IS the name there, unlike klog/v2."""
+        stmt = self._make('k8s.io/api/core/v1')
+        assert stmt.imported_names == ['core']
+        assert stmt.alt_names == ('v1',)
+
+    def test_gopkg_in_dot_version_suffix_stripped(self):
+        assert self._make('gopkg.in/yaml.v3').imported_names == ['yaml']
+
+    def test_go_prefix_and_suffix_offered_as_alternatives(self):
+        assert self._make('github.com/mattn/go-sqlite3').alt_names == ('sqlite3',)
+        assert self._make('gopkg.in/square/go-jose.v2').alt_names == ('jose',)
+
+    def test_aliased_import_has_no_alternatives(self):
+        assert self._make('k8s.io/api/core/v1', alias='corev1').alt_names == ()
+
+
+class TestGoUnusedImportNames:
+    """BACK-1397 end to end through I001 (repro: earthly-sea-0922 gov1/a.go)."""
+
+    def _i001(self, tmp_path, code):
+        from reveal.rules.imports.I001 import I001
+        path = _write_go(tmp_path, 'a.go', code)
+        return I001().check(str(path), None, path.read_text())
+
+    def test_versioned_paths_used_by_their_real_package_name(self, tmp_path):
+        code = ('package x\n\nimport (\n\t"k8s.io/api/core/v1"\n\t"github.com/foo/bar/v2"\n'
+                '\t"gopkg.in/yaml.v3"\n\t"github.com/mattn/go-sqlite3"\n)\n\n'
+                'func F() *v1.Pod { bar.Do(); yaml.Marshal(nil); sqlite3.Version(); return nil }\n')
+        assert self._i001(tmp_path, code) == []
+
+    def test_unused_versioned_import_still_flagged_in_go_syntax(self, tmp_path):
+        code = 'package x\n\nimport "k8s.io/api/core/v1"\n\nfunc F() {}\n'
+        [d] = self._i001(tmp_path, code)
+        assert d.context == 'import "k8s.io/api/core/v1"'
+        assert 'from ' not in d.suggestion
+
 
 # ─── _is_usage_context ───────────────────────────────────────────────────────
 

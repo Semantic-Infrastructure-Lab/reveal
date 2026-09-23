@@ -78,6 +78,24 @@ def _module_label(path: str) -> str:
     return '/'.join(p.parts[-2:]) if p.name == '__init__.py' else p.name
 
 
+def _unused_not_checked(scanned_files) -> Dict[str, int]:
+    from ..analyzers.imports.base import extension_detects_unused
+    tally: Dict[str, int] = {}
+    for fp in scanned_files:
+        if not extension_detects_unused(fp.suffix):
+            ext = fp.suffix.lower()
+            tally[ext] = tally.get(ext, 0) + 1
+    return dict(sorted(tally.items()))
+
+
+def unused_not_checked_line(not_checked: Dict[str, int]) -> str:
+    """'Unused imports not checked for X' disclosure (empty if none) -- BACK-1398."""
+    if not not_checked:
+        return ''
+    exts = ', '.join(f'{ext} ({n} file{"s" if n != 1 else ""})' for ext, n in not_checked.items())
+    return f"⚠ Unused imports not checked — no unused-import detection for: {exts}"
+
+
 def coverage_warning_line(unsupported: Dict[str, int]) -> str:
     """One-line 'N files skipped, no import support for X' warning (empty if none).
 
@@ -488,14 +506,20 @@ class ImportsRenderer:
             exts = ', '.join(f'{ext} ({n} file{"s" if n != 1 else ""})' for ext, n in sorted(unsupported.items()))
             print(f"  ⚠ Not analyzed — no import extractor for: {exts}\n")
 
+        not_checked = result.get('metadata', {}).get('unused_not_checked_extensions') or {}
+        note = unused_not_checked_line(not_checked)
+        if note:
+            print(f"  {note}\n")
+
         # scanned_files (files with a working extractor), not total_files
         # (files with >=1 import statement) — a file can be fully, correctly
         # analyzed and still have zero imports (BACK-431: real WordPress
         # source with no `use`/`require` at all), and total_files would
         # wrongly read as "unchecked" in that case.
-        analyzed_files = result.get('metadata', {}).get('scanned_files', 0)
-        if count == 0 and analyzed_files > 0:
-            print("  ✅ No unused imports found!\n")
+        judged_files = result.get('metadata', {}).get('scanned_files', 0) - sum(not_checked.values())
+        if count == 0 and judged_files > 0:
+            scope = f" in the {judged_files} checked file(s)" if not_checked else ""
+            print(f"  ✅ No unused imports found{scope}!\n")
         elif count == 0:
             pass
         else:
@@ -1058,6 +1082,9 @@ class ImportsAdapter(ResourceAdapter):
             'analyzer': 'imports',
             # Recognized code files whose language has no import extractor yet.
             'unsupported_extensions': dict(sorted(self._unsupported_extensions.items())),
+            # BACK-1398: scanned files whose language has an import extractor but
+            # no unused-import detection -- their 0 unused is "not checked".
+            'unused_not_checked_extensions': _unused_not_checked(self._scanned_files),
             # Files with a supported language that tree-sitter could not parse
             # (BACK-982) -- included in scanned_files but their imports/symbols
             # are incomplete, not confirmed-empty; has_cycles can under-report

@@ -100,6 +100,9 @@ _CONFORMANCE_LEVELS = frozenset({
 # pointed at a tree that also holds other languages.
 
 W_CAP_PYTHON_ONLY = "W-CAP-1"
+# Unused-import detection (I001, imports://?unused) not implemented for a
+# language that does have an import extractor (BACK-1398).
+W_CAP_UNUSED_NOT_CHECKED = "W-CAP-2"
 
 
 @dataclass(frozen=True)
@@ -343,6 +346,12 @@ _TIER1: Dict[str, LanguageCapability] = {
             "as an independent variable to --varflow/--deps. Left open: "
             "blanket-excluding token_tree would also hide genuine variable "
             "references inside common macros like println!.",
+            "Unused imports (BACK-1396): a trait imported only for its methods "
+            "is recognized for `as _`, std/rayon/itertools/anyhow traits and "
+            "`*Ext` names; any other trait (e.g. a workspace or third-party "
+            "trait called only as `.method()`) and names used only inside a "
+            "macro's expansion still read as unused. Meilisearch "
+            "index-scheduler: 51 -> 7 flags, all 7 of that kind.",
         ],
         validation=[
             MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "Meilisearch, ripgrep"),
@@ -543,7 +552,7 @@ _TIER1: Dict[str, LanguageCapability] = {
             "all, unlike Swift's node of the same name."
         ),
         varflow=VARFLOW_VERIFIED,
-        imports_unused=None,
+        imports_unused=False,
         import_resolution=(
             "Generic extractor (imports/generic.py), added BACK-488. Resolves "
             "`import com.pkg.Bar` → com/pkg/Bar.kt by package-path suffix when "
@@ -577,7 +586,7 @@ _TIER1: Dict[str, LanguageCapability] = {
             "implicit-member shorthand (.someCase) are fieldless."
         ),
         varflow=VARFLOW_VERIFIED,
-        imports_unused=None,
+        imports_unused=False,
         import_resolution=(
             "Generic extractor (imports/generic.py), added BACK-488. `import "
             "Foo` resolves to Foo.swift only where a module maps 1:1 to a lone "
@@ -677,8 +686,10 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "throw_expression, not throw_statement."
         ),
         varflow=VARFLOW_SMOKE_TESTED,
-        imports_unused=None,
-        import_resolution="No import extractor registered.",
+        imports_unused=False,
+        import_resolution=(
+            "Generic extractor (imports/generic.py), added BACK-514. `import a.b.C` -> a/b/C.scala, peeling nested (BACK-551) and object members (BACK-557); selector/wildcard imports are skipped, never fabricated."
+        ),
         known_limitations=[
             "val/var_definition WRITE-as-READ mislabeling and "
             "throw_expression invisibility to --exits/--returns were "
@@ -709,8 +720,10 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "--outline and file_handler's nav-flag range resolution."
         ),
         varflow=VARFLOW_SMOKE_TESTED,
-        imports_unused=None,
-        import_resolution="No import extractor registered.",
+        imports_unused=False,
+        import_resolution=(
+            "Generic extractor (imports/generic.py), added BACK-514. Relative `./x.dart` imports and `package:name/path.dart` URIs via each pubspec.yaml (BACK-621); `export`/`part` directives are not matched."
+        ),
         known_limitations=[
             "Was the worst blindness of tier B: every Dart function's body "
             "was silently truncated to its one-line signature until the "
@@ -747,8 +760,10 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "plain-identifier case."
         ),
         varflow=VARFLOW_SMOKE_TESTED,
-        imports_unused=None,
-        import_resolution="No import extractor registered.",
+        imports_unused=False,
+        import_resolution=(
+            "Generic extractor (imports/generic.py), added BACK-514. `require(\"a.b\")` -> a/b.lua, or a/b/init.lua for directory modules (BACK-621)."
+        ),
         known_limitations=[
             "VarFlowWalker (used directly by --varflow) lacked "
             "member-access exclusion generally — found via Kong real-corpus "
@@ -776,8 +791,10 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "one node's children rather than nesting."
         ),
         varflow=VARFLOW_SMOKE_TESTED,
-        imports_unused=None,
-        import_resolution="No import extractor registered.",
+        imports_unused=False,
+        import_resolution=(
+            "Bespoke extractor (imports/zig.py), added BACK-514. `@import(\"foo.zig\")` resolves file-relative; `std`/`builtin`/build-graph module names have no backing file and are skipped."
+        ),
         known_limitations=[
             "Was total blindness for every single-function nav flag "
             "('could not find function or method') until ZigAnalyzer."
@@ -808,8 +825,10 @@ _SMOKE: Dict[str, LanguageCapability] = {
             "segments distinguishing real calls from property reads."
         ),
         varflow=VARFLOW_SMOKE_TESTED,
-        imports_unused=None,
-        import_resolution="No import extractor registered.",
+        imports_unused=False,
+        import_resolution=(
+            "Generic extractor (imports/generic.py), added BACK-514. `extends \"res://x.gd\"` and preload()/load() resolve project-relative; `extends Foo` via Godot `class_name Foo` (BACK-621)."
+        ),
         known_limitations=[
             "var x = f() was invisible to --varflow entirely until the "
             "name-kind leaf case was added (found via the smoke fixture).",

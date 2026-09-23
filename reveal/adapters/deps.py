@@ -310,13 +310,16 @@ def _render_deps(report: Dict[str, Any], top: int) -> None:
     # print it. On a Rails/Django/Laravel codebase the entire dependency report
     # below describes the small explicit import graph, not real usage -- the
     # one caveat a reader most needs, and the only adapter that withheld it.
-    from .imports import autoload_regime_warning
-    regime = (report.get('base', {}).get('metadata', {}) or {}).get('autoload_regime')
-    warning = autoload_regime_warning(regime)
+    from .imports import autoload_regime_warning, unused_not_checked_line
+    base_meta = report.get('base', {}).get('metadata', {}) or {}
+    warning = autoload_regime_warning(base_meta.get('autoload_regime'))
     if warning:
         print(f"\n{warning}")
 
     _render_summary(analysis, cycle_count, len(unused))
+    not_checked_note = unused_not_checked_line(base_meta.get('unused_not_checked_extensions') or {})
+    if not_checked_note:
+        print(f"          {not_checked_note}")
     _render_external_packages(analysis, top)
     _render_circular(cycles, cycle_count, Path(path_str), top)
     _render_unused(unused, Path(path_str), top)

@@ -654,3 +654,43 @@ class TestCreateImport:
         extractor = RustExtractor()
         stmt = extractor._create_import(Path('f.rs'), 1, 'serde::Serialize')
         assert not stmt.is_relative
+
+    def test_alias_records_the_bound_name(self):
+        stmt = RustExtractor._create_import(Path('f.rs'), 1, 'std::io::Result', alias='IoResult')
+        assert stmt.imported_names == ['Result as IoResult']
+
+    def test_underscore_alias_and_method_traits_are_not_judged(self):
+        assert RustExtractor._create_import(Path('f.rs'), 1, 'std::io::Read', alias='_').skip_unused
+        assert RustExtractor._create_import(Path('f.rs'), 1, 'std::fmt::Write').skip_unused
+        assert RustExtractor._create_import(Path('f.rs'), 1, 'futures::StreamExt').skip_unused
+        assert not RustExtractor._create_import(Path('f.rs'), 1, 'std::time::Duration').skip_unused
+
+
+class TestUnusedImportUsageContexts:
+    """BACK-1396 end to end through I001 (repro: earthly-sea-0922 rsuse/src/lib.rs)."""
+
+    CODE = """\
+use std::fmt::{self, Display};
+use std::fmt::Write;
+use std::io::Read as _;
+use std::io::Result as IoResult;
+use std::{io as MyIo};
+use std::time::Duration;
+use std::time::Instant;
+use crate::consts::LIMIT;
+
+pub struct D;
+impl Display for D {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { Ok(()) }
+}
+pub fn params(x: Duration) -> IoResult<()> { let _ = x; Ok(()) }
+pub fn value() -> usize { let n = LIMIT; n }
+pub fn mac(s: &mut String) { writeln!(s, "x").unwrap(); }
+pub fn nested(e: MyIo::Error) { let _ = e; }
+"""
+
+    def test_only_the_genuinely_unused_import_is_flagged(self, tmp_path):
+        from reveal.rules.imports.I001 import I001
+        p = _write_rs(tmp_path, 'lib.rs', self.CODE)
+        flagged = [d.suggestion for d in I001().check(str(p), None, self.CODE)]
+        assert flagged == ['Remove unused import: `Instant`']

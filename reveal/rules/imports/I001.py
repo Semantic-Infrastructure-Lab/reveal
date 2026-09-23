@@ -38,15 +38,19 @@ class I001(BaseRule):
         """One detection per unused name (matches Ruff F401); the decision itself
         lives in analyzers/imports/unused.py, shared with imports://?unused."""
         detections: List[Detection] = []
+        # Non-Python imports are quoted from source, not re-rendered in Python
+        # syntax (`from k8s.io/api/core/v1 import core`, BACK-1397).
+        source_context = stmt.source_line.strip() if not file_path.endswith(('.py', '.pyi')) else ''
         for entry in unused_entries(stmt, symbols_used, frozenset(exports)):
             if is_named_import(stmt):
-                context = f"from {stmt.module_name} import {entry}"
+                context = source_context or f"from {stmt.module_name} import {entry}"
                 suggestion = f"Remove unused import: `{bound_name(entry)}`"
             else:
                 context = f"import {stmt.module_name}"
                 if stmt.alias:
                     context += f" as {stmt.alias}"
-                suggestion = f"Remove unused import: {context}"
+                suggestion = f"Remove unused import: {source_context or context}"
+                context = source_context or context
             detections.append(self.create_detection(
                 file_path=file_path,
                 line=stmt.line_number,

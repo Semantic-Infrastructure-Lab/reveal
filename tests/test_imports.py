@@ -1766,13 +1766,14 @@ class TestImportsRenderer:
         with >=1 import) to gate the checkmark, which wrongly suppressed it
         for exactly this case — `scanned_files` (files with a working
         extractor, regardless of whether they had imports) is the correct
-        gate."""
+        gate. (Python, not PHP: PHP has no unused-import detection, so a PHP
+        file is "not checked" rather than clean -- BACK-1398.)"""
         from reveal.adapters.imports import ImportsRenderer
         from io import StringIO
         import sys
 
-        test_file = tmp_path / "test.php"
-        test_file.write_text("<?php\nfunction f() { return 1; }\n")
+        test_file = tmp_path / "test.py"
+        test_file.write_text("def f():\n    return 1\n")
 
         adapter = ImportsAdapter(str(test_file), 'unused')
         result = adapter.get_structure()
@@ -2170,6 +2171,56 @@ class TestCoverageWarningLine:
         line = coverage_warning_line({'.rb': 2, '.ex': 5})
         assert line.index('.ex') < line.index('.rb')
         assert '7 code file(s)' in line
+
+
+class TestUnusedNotChecked:
+    """BACK-1398: Java/C#/Kotlin/... have an import extractor but no unused-import
+    detection; their zero must read as "not checked", never "✅ clean"."""
+
+    JAVA = "package x;\n\nimport java.util.List;\nimport java.util.Map;\n\npublic class A {\n    public int f() { return 1; }\n}\n"
+
+    def _render(self, result, capsys):
+        from reveal.adapters.imports import ImportsRenderer
+        ImportsRenderer.render_structure(result, format='text')
+        return capsys.readouterr().out
+
+    def test_java_only_declines_instead_of_clean(self, tmp_path, capsys):
+        (tmp_path / "A.java").write_text(self.JAVA)
+        result = ImportsAdapter(str(tmp_path), 'unused').get_structure()
+        assert result['metadata']['unused_not_checked_extensions'] == {'.java': 1}
+        out = self._render(result, capsys)
+        assert '✅' not in out
+        assert 'not checked' in out and '.java (1 file)' in out
+
+    def test_mixed_tree_scopes_the_clean_claim_to_checked_files(self, tmp_path, capsys):
+        (tmp_path / "A.java").write_text(self.JAVA)
+        (tmp_path / "b.py").write_text("import os\nprint(os.name)\n")
+        result = ImportsAdapter(str(tmp_path), 'unused').get_structure()
+        out = self._render(result, capsys)
+        assert '.java (1 file)' in out
+        assert '✅ No unused imports found in the 1 checked file(s)!' in out
+
+    def test_detecting_language_has_no_not_checked_entry(self, tmp_path):
+        (tmp_path / "b.py").write_text("import os\nprint(os.name)\n")
+        result = ImportsAdapter(str(tmp_path), 'unused').get_structure()
+        assert result['metadata']['unused_not_checked_extensions'] == {}
+
+    def test_check_discloses_i001_gap_unless_deselected(self, tmp_path):
+        from reveal.cli.file_checker import _i001_not_checked_disclosures
+        (tmp_path / "A.java").write_text(self.JAVA)
+        (tmp_path / "b.py").write_text("x = 1\n")
+        files = sorted(tmp_path.iterdir())
+        notes = _i001_not_checked_disclosures(files, None, None)
+        assert len(notes) == 1 and 'W-CAP-2' in notes[0] and '.java (1)' in notes[0]
+        assert _i001_not_checked_disclosures(files, ['C901'], None) == []
+        assert _i001_not_checked_disclosures(files, None, ['I001']) == []
+        assert _i001_not_checked_disclosures([tmp_path / "b.py"], None, None) == []
+
+    def test_deps_text_carries_the_note(self, tmp_path, capsys):
+        from reveal.adapters.deps import DepsAdapter, DepsRenderer
+        (tmp_path / "A.java").write_text(self.JAVA)
+        DepsRenderer.render_structure(DepsAdapter(str(tmp_path)).get_structure(), format='text')
+        assert 'Unused imports not checked' in capsys.readouterr().out
 
 
 class TestFanInEntrypointsRelativeDisplay:

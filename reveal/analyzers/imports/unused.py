@@ -14,8 +14,13 @@ if TYPE_CHECKING:  # types.py imports this module for ImportGraph.find_unused_im
     from .types import ImportStatement
 
 # Imports that bring names into scope without a bindable local name, so usage of
-# the imported items never shows up as the import's own name (BACK-420).
-UNJUDGED_IMPORT_TYPES = frozenset({'star_import', 'glob_use', 'dot_import'})
+# the imported items never shows up as the import's own name (BACK-420), and JS
+# imports that bind nothing at all: `import './x.css'`, bare `require('./x')`,
+# and an `import('x')` expression, which is itself the use (BACK-1395).
+UNJUDGED_IMPORT_TYPES = frozenset({
+    'star_import', 'glob_use', 'dot_import',
+    'side_effect_import', 'side_effect_require', 'dynamic_import',
+})
 
 
 def has_suppression_comment(source_line: str) -> bool:
@@ -76,6 +81,8 @@ def unused_entries(stmt: 'ImportStatement', symbols_used: Set[str],
     Names re-exported via `__all__` (`exports`) count as used.
     """
     if should_skip_import(stmt):
+        return []
+    if any(alt in symbols_used for alt in stmt.alt_names):
         return []
     if is_named_import(stmt):
         return [name for name in stmt.imported_names

@@ -36,6 +36,45 @@ _RUST_STD_CRATES = frozenset({'std', 'core', 'alloc'})
 # share TreeSitterAnalyzer.get_structure()'s structure cache (BACK-535).
 _IMPORTS_CACHE = ImportsDiskCache("rust_imports")
 
+# Traits imported only so their methods resolve (`use std::io::Read;` then
+# `f.read_to_string(..)`, `use std::fmt::Write;` then `writeln!(s, ..)`): the
+# trait's name never appears again, so a name-based check reads them as unused
+# (BACK-1396). Without type information these are not judged (skip_unused).
+# Names ending in `Ext` are extension traits by convention and are included.
+# A crate-local trait used only via methods is still not recognized.
+_METHOD_SYNTAX_TRAITS = frozenset({
+    'Read', 'Write', 'BufRead', 'Seek', 'FromStr', 'Hash', 'Hasher', 'BuildHasher',
+    'Borrow', 'BorrowMut', 'Any', 'Error', 'Future', 'Iterator', 'DoubleEndedIterator',
+    'ExactSizeIterator', 'Extend', 'FromIterator', 'IntoIterator', 'Sum', 'Product',
+    'AsRawFd', 'FromRawFd', 'IntoRawFd',
+    'ParallelIterator', 'IndexedParallelIterator', 'IntoParallelIterator',
+    'IntoParallelRefIterator', 'IntoParallelRefMutIterator', 'ParallelBridge',
+    'ParallelExtend', 'ParallelSlice', 'ParallelSliceMut',
+    'Itertools', 'Context', 'Rng', 'RngCore', 'SeedableRng', 'Digest', 'Instrument',
+})
+
+
+def _is_method_syntax_trait(name: str) -> bool:
+    return name in _METHOD_SYNTAX_TRAITS or (len(name) > 3 and name.endswith('Ext'))
+
+
+def _is_field(parent, field: str, node) -> bool:
+    """True when `node` is `parent`'s child in the named grammar field."""
+    child = parent.child_by_field_name(field)
+    return (child is not None
+            and _zero_arg(child, 'start_byte') == _zero_arg(node, 'start_byte')
+            and _zero_arg(child, 'end_byte') == _zero_arg(node, 'end_byte'))
+
+
+# A `name` child of these is a definition; every other child (an `impl`'s
+# trait/type, a function's return type) is a use.
+_NAMED_DEFINITION_KINDS = frozenset({
+    'function_item', 'function_signature_item', 'struct_item', 'enum_item',
+    'trait_item', 'type_item', 'union_item', 'mod_item',
+})
+# A `pattern` child of these binds a new name; the `type` child is a use.
+_BINDING_KINDS = frozenset({'parameter', 'let_declaration'})
+
 
 def _line_text(analyzer, line_number: int) -> str:
     """Full source line for a 1-indexed line number, or "" if out of range.
@@ -373,15 +412,16 @@ class RustExtractor(LanguageExtractor):
             import_type = 'glob_use'
             module_name = use_path  # Keep ::* in module_name
             imported_names = ['*']
-        elif alias:
-            import_type = 'aliased_use'
-            module_name = use_path
-            imported_names = [imported_name or use_path.split('::')[-1]]
         else:
-            import_type = 'rust_use'
             module_name = use_path
-            # Extract the final item (what's actually imported)
-            imported_names = [imported_name or use_path.split('::')[-1]]
+            item = imported_name or use_path.split('::')[-1]
+            import_type = 'aliased_use' if alias else 'rust_use'
+            # `X as Y` binds Y, which is what the code uses (BACK-1396).
+            imported_names = [f"{item} as {alias}" if alias else item]
+            # `as _` binds nothing (trait methods only), and a method-syntax
+            # trait's name never recurs -- neither can be judged by name.
+            if alias == '_' or _is_method_syntax_trait(item):
+                skip_unused = True
 
         return ImportStatement(
             file_path=file_path,
@@ -415,31 +455,19 @@ class RustExtractor(LanguageExtractor):
                 return False
             current = _zero_arg(current, 'parent')
 
-        parent_type = _zero_arg(_zero_arg(node, 'parent'), 'kind')
+        parent = _zero_arg(node, 'parent')
+        parent_type = _zero_arg(parent, 'kind')
 
-        # Skip definition contexts
-        # Note: 'function_signature_item' removed - it was filtering return types as definitions
-        # Parameter names are still filtered by 'parameters' and 'parameter'
-        # Note: 'field_declaration' is deliberately NOT skipped. A struct
-        # field's *type* identifier (`pub user_provided: RoaringBitmap`) has
-        # field_declaration as its parent, and that type is a real usage of the
-        # imported name (BACK-420). The field *name* is a separate 'field_identifier'
-        # node (still skipped below), and extract_symbols only walks
-        # identifier/type_identifier, so dropping field_declaration cannot let a
-        # field name leak in as a false usage.
-        if parent_type in ('function_item', 'struct_item', 'enum_item', 'trait_item',
-                          'type_item', 'impl_item', 'mod_item',
-                          'parameters', 'parameter',
-                          'field_identifier'):
-            return False
-
-        # For let bindings (let x = ...)
-        if parent_type == 'let_declaration':
-            # Pattern on left side of = is a definition
-            # This is simplified - Rust patterns can be complex
-            return False
-
-        return True
+        # Decided by grammar field, not parent kind: `fn f(x: Duration)` and
+        # `impl Display for D` put the *type* directly under parameter/impl_item,
+        # and a kind-based skip dropped it with the binding (BACK-1396; the same
+        # class BACK-420 fixed for field_declaration, whose field name is a
+        # separate field_identifier that extract_symbols never walks).
+        if parent_type in _NAMED_DEFINITION_KINDS:
+            return not _is_field(parent, 'name', node)
+        if parent_type in _BINDING_KINDS:
+            return not _is_field(parent, 'pattern', node)
+        return parent_type != 'parameters'
 
     def _get_root_identifier(self, field_expr_node, analyzer):
         """Extract root identifier from field expression chain.

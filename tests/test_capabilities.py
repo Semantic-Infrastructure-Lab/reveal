@@ -86,6 +86,17 @@ class TestLanguageCapabilityFieldValidation(unittest.TestCase):
         for name, cap in CAPABILITIES.items():
             self.assertIn(cap.imports_unused, (True, False, None), name)
 
+    def test_imports_unused_matches_the_registered_extractor(self):
+        """BACK-1398: Scala/Dart/Lua/Zig/GDScript/Kotlin/Swift kept
+        imports_unused=None ("no extractor") long after they gained one."""
+        from reveal.analyzers.imports.base import _EXTRACTOR_REGISTRY
+        for ext, extractor_cls in _EXTRACTOR_REGISTRY.items():
+            cap = get_capability_for_extension(ext)
+            if cap is None:
+                continue
+            self.assertIs(cap.imports_unused, extractor_cls.detects_unused,
+                          f"{ext} ({cap.language}) vs {extractor_cls.__name__}")
+
     def test_known_limitations_is_a_list_of_strings(self):
         for name, cap in CAPABILITIES.items():
             self.assertIsInstance(cap.known_limitations, list, name)

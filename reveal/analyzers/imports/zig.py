@@ -50,6 +50,7 @@ class ZigImportExtractor(LanguageExtractor):
 
     extensions = {'.zig'}
     language_name = 'Zig'
+    detects_unused = False
 
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
         """Extract all @import(...) calls, cached cross-invocation on disk

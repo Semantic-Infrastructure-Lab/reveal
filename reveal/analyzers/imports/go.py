@@ -17,15 +17,35 @@ from ...core import node_children as _children
 from ...core.treesitter_compat import _zero_arg
 
 # Go modules' semantic-import-versioning convention: a major version >= 2
-# suffixes the import path (`k8s.io/klog/v2`, `gopkg.in/yaml.v3`-style
-# module paths use `/v2`, `/v3`, ...), but the package's actual declared
-# name (`package klog`) is the segment BEFORE the suffix, not the suffix
-# itself. Deriving the local name from the raw last path segment reads
-# `k8s.io/klog/v2` as package "v2" — which never matches real usage
-# (`klog.FromContext(...)`), so every unaliased v2+ import falsely reports
-# as unused (BACK-431 feature-breadth pass, found via real Kubernetes
-# source using `k8s.io/klog/v2` throughout).
+# suffixes the import path (`k8s.io/klog/v2`), and the package's declared name
+# is usually the segment BEFORE the suffix (`package klog`, BACK-431) -- but
+# not always: `k8s.io/api/core/v1` declares `package v1` (BACK-1397). Both are
+# offered as candidates; see _go_package_name_candidates().
 _GO_MAJOR_VERSION_SUFFIX = re.compile(r'^v[0-9]+$')
+# gopkg.in's `pkg.vN` form (`gopkg.in/yaml.v3` declares `package yaml`).
+_GOPKG_IN_VERSION_SUFFIX = re.compile(r'\.v[0-9]+$')
+
+
+def _go_package_name_candidates(package_path: str) -> List[str]:
+    """Plausible local names for an unaliased import, most likely first.
+
+    The name is whatever the target's `package` clause says, which the path only
+    suggests: `k8s.io/klog/v2` is `klog` but `k8s.io/api/core/v1` is `v1`, and
+    `github.com/mattn/go-sqlite3` is `sqlite3` (BACK-1397). A use of any of them
+    counts, so a wrong guess can no longer flag a used import.
+    """
+    segments = package_path.split('/')
+    last = segments[-1]
+    if _GO_MAJOR_VERSION_SUFFIX.match(last) and len(segments) > 1:
+        raw = [segments[-2], last]
+    else:
+        raw = [_GOPKG_IN_VERSION_SUFFIX.sub('', last)]
+    names: List[str] = []
+    for name in raw:
+        for variant in (name, re.sub(r'^go-|[-.]go$', '', name)):
+            if variant not in names:
+                names.append(variant)
+    return names
 
 logger = logging.getLogger(__name__)
 
@@ -229,16 +249,15 @@ class GoExtractor(LanguageExtractor):
         # path basename, so imported_names must be the alias or the import reads
         # as falsely unused (BACK-420). Blank imports ('_') bind no name; dot
         # imports ('.') pull names into scope directly (skipped by I001 anyway).
-        path_segments = package_path.split('/')
-        package_name = path_segments[-1]
-        if _GO_MAJOR_VERSION_SUFFIX.match(package_name) and len(path_segments) > 1:
-            package_name = path_segments[-2]
+        alt_names: tuple = ()
         if alias == '_':
             imported_names = []
         elif alias and alias not in ('.', '_'):
             imported_names = [alias]
         else:
-            imported_names = [package_name]
+            candidates = _go_package_name_candidates(package_path)
+            imported_names = [candidates[0]]
+            alt_names = tuple(candidates[1:])
 
         return ImportStatement(
             file_path=file_path,
@@ -249,6 +268,7 @@ class GoExtractor(LanguageExtractor):
             import_type=import_type,
             alias=alias,
             source_line=source_line,
+            alt_names=alt_names,
         )
 
     def _is_usage_context(self, node) -> bool:

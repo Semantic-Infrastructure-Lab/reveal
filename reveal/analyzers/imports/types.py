@@ -31,6 +31,9 @@ class ImportStatement:
     level: int = 0  # Relative import level: 0=absolute, 1='.', 2='..', etc.
     skip_unused: bool = False  # True when unused-detection is unreliable for this
                                # import (e.g. C/C++ #include, namespace/require imports)
+    alt_names: Tuple[str, ...] = ()  # Other spellings the one bound name may take; a use
+                               # of any counts (Go: the name is the target's `package`
+                               # clause, which the import path only suggests -- BACK-1397)
     resolved_path: Optional[Path] = None  # Set by ImportsAdapter._resolve_dependencies
                                # once resolve_import() finds a real in-tree file for
                                # this statement. None means "did not resolve" — may

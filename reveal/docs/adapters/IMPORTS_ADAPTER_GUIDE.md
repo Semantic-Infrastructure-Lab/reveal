@@ -580,7 +580,9 @@ Swift/Kotlin in BACK-488; Scala/Dart/Lua/Zig/GDScript in BACK-514.)
 > other tree-sitter-parseable code files may not have an import extractor yet.
 > Rather than silently reporting zero imports for such a file, `imports://`
 > prints a "code file(s) skipped — no import support for: …" note so a low count
-> is never mistaken for a clean result.
+> is never mistaken for a clean result. Likewise `?unused`, `deps`, and recursive
+> `check` (W-CAP-2) say "Unused imports not checked" for the 📦/📝 languages
+> instead of reporting ✅ (metadata field `unused_not_checked_extensions`).
 
 ### Language-Specific Examples
 
@@ -1571,7 +1573,8 @@ reveal 'imports://src?violations'
 ## Limitations
 
 1. **Language support**
-   - ✅ Fully supported: Python, JS/TS, Go, Rust, Java, C++
+   - ✅ Fully supported (incl. `?unused`): Python, JS/TS, Go, Rust
+   - 📦/📝 Every other language in [Supported Languages](#supported-languages): listing/graph only, `?unused` not checked
    - ⚠️ Partial: Dynamic imports (`__import__`, `require()`)
    - ❌ Not supported: Custom import mechanisms
 
