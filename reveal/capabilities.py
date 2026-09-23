@@ -421,9 +421,10 @@ _TIER1: Dict[str, LanguageCapability] = {
             "claimed (skip_unused always set)."
         ),
         known_limitations=[
-            "BACK-1391: calls://?uncalled lists methods referenced only as "
-            "a function pointer (`&Class::method`, e.g. Godot's "
-            "ClassDB::bind_method) -- 778 of Godot scene/2d's 805 uncalled.",
+            "calls://?uncalled counts any other occurrence of a name as a use "
+            "(`&Class::method`, callbacks, BACK-1391), so a dead function that "
+            "shares its name with an unrelated identifier is not listed; one "
+            "referenced only from a non-code file (Redis commands.def) is.",
             "calls://?uncalled excludes a virtual method only when some "
             "declaration of its name says `override`/`final` (BACK-1392); a "
             "pre-C++11 override without the keyword, reached only through a "

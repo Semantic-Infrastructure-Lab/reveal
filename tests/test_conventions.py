@@ -411,3 +411,10 @@ class TestConstructorsOverridesAndFrameworkHooks:
         _write(tmp_path, 'plain.h', 'class Plain {};\n')
         body = 'bool Plain::_get(int k) { return false; }\n'
         assert self._uncalled(tmp_path, 'plain.cpp', body) == ['Plain::_get']
+
+    def test_gtest_macro_is_a_test_entry_point_not_a_constructor(self, tmp_path):
+        _write(tmp_path, 'lib_tests.cpp', 'TEST(Suite, Works) {\n    int x = 1;\n}\n')
+        result = find_uncalled(str(tmp_path))
+        assert (result['entries'], result['test_entrypoints_excluded']) == ([], 1)
+        listed = find_uncalled(str(tmp_path), include_test_framework=True)
+        assert [e['name'] for e in listed['entries']] == ['TEST']

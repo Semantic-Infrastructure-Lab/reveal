@@ -97,11 +97,15 @@ def build_meta(path: str, *, uncalled: bool = False) -> Dict[str, Any]:
             dominant, CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB
         )
     else:
+        dominant = ''
         confidence = CALL_GRAPH_DEFAULT_CONFIDENCE
         vocab = CALL_GRAPH_DEFAULT_DISPATCH_VOCAB
         implicit_vocab = CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB
 
-    warnings = list(_CALL_GRAPH_WARNINGS)
+    # W-CALLS-2..4 (MRO, importlib, eval/exec) are Python concepts: printed on a
+    # C or PHP scan they described a failure mode that does not exist there
+    # (BACK-1391). Kept when the language is unknown.
+    warnings = list(_CALL_GRAPH_WARNINGS if dominant in ('python', '') else _CALL_GRAPH_WARNINGS[:1])
     warnings[0] = {'code': 'W-CALLS-1', 'message': f'Dynamic dispatch ({vocab}) is not resolved.'}
     if uncalled:
         warnings.append(_UNCALLED_DERIVED_SIGNAL_WARNING)

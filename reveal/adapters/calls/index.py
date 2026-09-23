@@ -775,6 +775,8 @@ def _is_constructor_definition(name: str, family: str, file_path: str, line_no: 
     (a private utility-class constructor), not by a call to their name."""
     if family not in _CTOR_SHAPE_FAMILIES or file_path.endswith('.c'):
         return False
+    if name in conventions_for(family).test_lifecycle_names:  # TEST(...), TEST_F(...)
+        return False
     head = name.split('.', 1)[0]
     # Dart methods may omit their return type; its type names are UpperCamel.
     if family == 'dart' and not head[:1].isupper():
@@ -926,6 +928,36 @@ def _project_entry_point_decorators(directory: Path) -> FrozenSet[str]:
         return frozenset()
 
 
+def _drop_referenced(entries: List[Dict[str, Any]],
+                     structures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """BACK-1391: drop candidates a non-Python file uses without calling them
+    (callbacks, function pointers, module/class-body calls, PHP hook strings,
+    Ruby symbols). Python files get the same treatment from
+    _python_referenced_names before this point."""
+    candidates: Dict[str, Set[str]] = {}
+    for e in entries:
+        candidates.setdefault(_lang_family(e['file']), set()).add(_bare_callee_name(e['name']))
+    candidates.pop('python', None)
+    if not candidates:
+        return entries
+    definition_counts: Dict[Tuple[str, str], int] = {}
+    defined_in_file: Dict[str, Dict[str, int]] = {}
+    for file_struct in structures:
+        file_path = file_struct.get('file', '')
+        family = _lang_family(file_path)
+        for elem in file_struct.get('elements', []):
+            if elem.get('category') in ('functions', 'methods', 'tests') and elem.get('name'):
+                bare = _bare_callee_name(elem['name'])
+                definition_counts[(family, bare)] = definition_counts.get((family, bare), 0) + 1
+                here = defined_in_file.setdefault(file_path, {})
+                here[bare] = here.get(bare, 0) + 1
+    from .references import non_python_referenced_names
+    referenced = non_python_referenced_names(
+        (fs.get('file', '') for fs in structures), candidates, definition_counts, defined_in_file)
+    return [e for e in entries
+            if _bare_callee_name(e['name']) not in referenced.get(_lang_family(e['file']), ())]
+
+
 def find_uncalled(
     path: str,
     only_functions: bool = False,
@@ -1039,16 +1071,17 @@ def find_uncalled(
                     and _uses_gdclass(file_path, file_lines))
             ):
                 continue
+            # Before the constructor check: `TEST(Suite, Name) {` has a constructor's shape.
+            if not include_test_framework and _is_test_entry_point(
+                name, file_path, line_no, decorator_names, file_lines
+            ):
+                test_entrypoints_excluded += 1
+                continue
             if line_no and (
                 _is_constructor_definition(name, family, file_path, line_no, file_lines)
                 or _is_override_definition(name, family, file_path, line_no,
                                            elem.get('signature', ''), file_lines)
             ):
-                continue
-            if not include_test_framework and _is_test_entry_point(
-                name, file_path, line_no, decorator_names, file_lines
-            ):
-                test_entrypoints_excluded += 1
                 continue
 
             entries.append({
@@ -1066,6 +1099,7 @@ def find_uncalled(
                 'provenance': provenance_for_display_path(file_path, directory),
             })
 
+    entries = _drop_referenced(entries, structures)
     entries.sort(key=lambda e: (_uncalled_entry_mtime(e), e['file'], e['line']))
     total_uncalled = len(entries)
     if top > 0:
