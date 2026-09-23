@@ -25,7 +25,7 @@ _EXPECTED_JSON_SITES = {
     'overview.py': 1,
     'pack.py': 1,
     'surface.py': 1,
-    'review.py': 1,
+    'review.py': 2,
     'contracts.py': 1,
     'health.py': 1,
     'testability.py': 1,

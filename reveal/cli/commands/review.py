@@ -175,8 +175,12 @@ def _git_range_error(git_range: str) -> Optional[str]:
 def _exit_invalid_target(target: str, reason: str, output_format: str) -> None:
     """Usage error: exit 2 like any other invalid invocation, never a review."""
     if output_format == 'json':
-        print(json.dumps({'target': target, 'overall_status': 'error',
-                          'exit_code': 2, 'error': reason}, indent=2))
+        from reveal.utils.results import add_cli_contract_fields
+        payload = {'target': target, 'overall_status': 'error', 'exit_code': 2, 'error': reason}
+        print(json.dumps(add_cli_contract_fields(
+            payload, result_type='review', source=target,
+            source_type='git_range' if '..' in target else 'directory',
+        ), indent=2))
     print(f"Error: cannot review {target!r}: {reason}", file=sys.stderr)
     sys.exit(2)
 
