@@ -1727,9 +1727,21 @@ Go, C#, PHP, C, Python (2,633 edges) and JS all 100.00% (Go 1 FP, C 29 FP); Lua
 anonymous-callback blind spot (BACK-1313/1314); Ruby 99.80% against an oracle now
 stricter (it counts paren-less calls), which also exposed and fixed a real analyzer
 bug where a paren-less call used as a receiver was mis-resolved (~3.5% of edges);
-C++ unchanged at 95.73% (same 146 misses, FP 632 → 683, uninvestigated); re-run after BACK-1390/1432 (2026-09-22): C++ 96.26% (reference-returning and nested out-of-line definitions were misnamed or dropped), C re-confirmed at 100.00% (2,826/2,826, 33 FP) -- but only after remapping the oracle's stale `/tmp` file paths: most per-language oracles still store `/tmp` paths and currently cannot reproduce their figures as committed (BACK-1433). Java, Swift,
+C++ unchanged at 95.73% (same 146 misses, FP 632 → 683, uninvestigated); re-run after BACK-1390/1432 (2026-09-22): C++ 96.26% (reference-returning and nested out-of-line definitions were misnamed or dropped), C re-confirmed at 100.00% (2,826/2,826, 33 FP). Java, Swift,
 Zig, GDScript, Dart, Kotlin, Scala, TS and Rust were re-run earlier in the program
 and match their stored figures (Rust's stored 95.27% predates BACK-733).
+
+**Every oracle re-run at `f94c9c66`+ (BACK-1433, 2026-09-22, `--sample 20`).** The oracles
+had stored absolute paths under the `/tmp` roots they were built in, so after the corpus
+moved to `~/.cache/reveal-corpus-calls-oracle/` 14 of 16 harnesses silently measured 0%;
+they now store corpus-relative paths. All 21 harness/oracle pairs reproduce: 100.00% for
+Python (2,633/2,633, 0 FP; forward `?callees=` 467/467; depth=2 9,969/9,969, 1 FP), C
+(33 FP), C# (2,828), Go (4,418, 1 FP), Java (4,009), PHP (5,585), TypeScript (2,557),
+three.js (2,752), Excalidraw (2,484), Lua (3,507, 32 FP), GDScript (2,678, 18 FP), Scala
+(1,651) and Dart (4,785 -- up from the stored 97.55%); Rust 100.00% (3,259) with FP up to
+92, as expected once BACK-1393 extracts calls inside macros the `syn` oracle cannot see;
+Kotlin 99.79%, Swift 99.79%, Ruby 99.80% and Zig 99.98%, as stored; C++ 96.26% (715 FP),
+as re-measured after BACK-1432.
 
 Full methodology, per-corpus commit/snapshot, and the harness scripts
 (`build_oracle*.py`/`.rb`/`.go`/`.js`/`.php`/C# `Program.cs`, `main.rs`, Kotlin
