@@ -108,6 +108,8 @@ def _i002_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
     except Exception:
         # Documented fallback (see docstring): caller degrades to the old
         # per-worker build behaviour when the shared cache can't be built.
+        logging.warning("check: shared-index preload failed; workers will build it "
+                        "themselves", exc_info=True)
         return {}
 
 
@@ -161,6 +163,8 @@ def _d005_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
     except Exception:
         # Documented fallback (see docstring): caller degrades to the old
         # per-worker build behaviour when the shared cache can't be built.
+        logging.warning("check: shared-index preload failed; workers will build it "
+                        "themselves", exc_info=True)
         return {}
 
 

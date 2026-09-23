@@ -358,7 +358,9 @@ class TestRunCheck(unittest.TestCase):
     @patch('reveal.cli.file_checker.load_gitignore_patterns', side_effect=Exception("fail"))
     def test_exception_returns_empty_list(self, _mock):
         errors = []
-        result = _run_check(Path('/tmp'), 'B,S', errors=errors)
+        # A directory that exists on every OS, so the patched gitignore loader
+        # is what fails (on Windows '/tmp' is not a directory and a real check ran).
+        result = _run_check(Path(tempfile.gettempdir()), 'B,S', errors=errors)
         self.assertEqual(result, [])
         self.assertEqual(len(errors), 1)
         self.assertIn("quality check failed", errors[0])
@@ -715,7 +717,6 @@ if __name__ == '__main__':
 # ---------------------------------------------------------------------------
 
 import os
-import re
 import shutil
 import subprocess
 
@@ -778,6 +779,7 @@ class TestReviewAgainstRealRepo(unittest.TestCase):
         self.assertEqual((json.loads(fail.stdout)['overall_status'], fail.returncode), ('fail', 2))
 
     @unittest.skipUnless(shutil.which('jq'), 'jq not installed')
+    @unittest.skipIf(sys.platform == 'win32', "the documented gates use POSIX-shell quoting")
     def test_documented_ci_gates_work(self):
         """Every `reveal review` line in the guide's CI/CD block, run verbatim
         (C13: `.overall_status` did not exist and `severity=="error"` never
@@ -789,7 +791,7 @@ class TestReviewAgainstRealRepo(unittest.TestCase):
         env = {**os.environ, 'REVEAL_DISK_CACHE': '0'}
 
         def outcomes():
-            return [subprocess.run(re.sub(r'^reveal ', cli + ' ', g).replace('main..HEAD', 'HEAD~1..HEAD'),
+            return [subprocess.run((cli + g[len('reveal'):]).replace('main..HEAD', 'HEAD~1..HEAD'),
                                    shell=True, cwd=self.repo, capture_output=True, env=env,
                                    timeout=120, check=False).returncode == 0 for g in gates]
 

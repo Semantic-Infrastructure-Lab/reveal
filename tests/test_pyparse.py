@@ -1,6 +1,7 @@
 """BACK-1394: Python 3.14 syntax must not make stdlib-ast consumers skip a file."""
 
 import ast
+import sys
 import warnings
 
 import pytest
@@ -29,10 +30,16 @@ class TestDownlevel:
         ("try:\n    f()\nexcept* A, B:\n    pass\n", "try:\n    f()\nexcept* (A, B):\n    pass\n"),
         ("try:\n    f()\nexcept m.A, errs()[0], (B, C):\n    pass\n",
          "try:\n    f()\nexcept (m.A, errs()[0], (B, C)):\n    pass\n"),
+    ])
+    def test_rewrites(self, src, expected):
+        assert downlevel_source(src) == expected
+
+    @pytest.mark.skipif(sys.version_info >= (3, 14), reason='3.14 tokenizes t-strings natively')
+    @pytest.mark.parametrize('src, expected', [
         ('x = t"hi {name!r:>10}"\n', 'x = f"hi {name!r:>10}"\n'),
         ('x = rt"{a}" + Tr"{b}" + T"""{c}"""\n', 'x = rf"{a}" + Fr"{b}" + F"""{c}"""\n'),
     ])
-    def test_rewrites(self, src, expected):
+    def test_rewrites_template_strings(self, src, expected):
         assert downlevel_source(src) == expected
 
     @pytest.mark.parametrize('src', [
@@ -55,7 +62,7 @@ class TestParsePython:
         assert [e.id for e in handler.type.elts] == ['ValueError', 'TypeError']
 
     def test_template_string_interpolations_are_visible(self):
-        tree = parse_python('d = {}\nx = t"{d["k"]} {g()}"\n')
+        tree = parse_python('d = {}\nx = t"{d[\'k\']} {g()}"\n')
         assert any(isinstance(n, ast.Call) and n.func.id == 'g' for n in ast.walk(tree))
 
     def test_genuinely_invalid_source_raises_the_original_error(self):
