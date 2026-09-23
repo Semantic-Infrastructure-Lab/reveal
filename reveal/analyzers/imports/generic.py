@@ -63,6 +63,7 @@ from ...core import node_children as _children
 from ...core import tree_root
 from ...core.treesitter_compat import _zero_arg
 from ...defaults import SKIP_DIRECTORIES
+from ...registry import extensions_for_languages
 from ...utils.path_utils import is_skippable_dir
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
 from .types import ImportStatement
@@ -2878,7 +2879,8 @@ class CppImportExtractor(_GenericTreeSitterImportExtractor):
     # registration) and .mm (Obj-C++, parses with tree-sitter's 'objc'
     # grammar but produces the same preproc_include nodes as C/C++ — verified
     # empirically) were previously unresolved by the import graph.
-    extensions = {'.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh', '.mm'}
+    # The C++ set is the registry's (BACK-1255: the hand list missed .h++).
+    extensions = set(extensions_for_languages('cpp')) | {'.mm'}
     language_name = 'C++'
     spec = _CPP_SPEC
 

@@ -9,7 +9,7 @@ This module provides commands for understanding how reveal analyzes files:
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
-from ..registry import get_analyzer, get_all_analyzers, get_markdown_extensions
+from ..registry import get_analyzer, get_all_analyzers, get_markdown_extensions, language_for_extension
 from ..core import node_children as _children
 from ..core import tree_root
 from ..core.treesitter_compat import _zero_arg
@@ -655,70 +655,65 @@ def _get_extractable_types(ext: str, is_fallback: bool) -> list:
     Note: 'method' is NOT a standalone type. Use Class.method syntax instead.
     Only types that map to category_to_type in structure.py are listed.
     """
-    # Code files (tree-sitter based)
-    # Note: methods extracted via hierarchical syntax (Class.method), not as separate type
-    code_extensions = {
-        '.py': ['function', 'class', 'import'],
-        '.pyi': ['function', 'class', 'import'],
-        '.js': ['function', 'class'],
-        '.jsx': ['function', 'class'],
-        '.ts': ['function', 'class', 'interface', 'type'],
-        '.tsx': ['function', 'class', 'interface', 'type'],
-        '.java': ['function', 'class', 'interface'],
-        '.go': ['function', 'struct', 'interface'],
-        '.rs': ['function', 'class', 'struct'],
-        '.rb': ['function', 'class', 'module'],
-        '.c': ['function', 'struct'],
-        '.cpp': ['function', 'class', 'struct'],
-        '.cs': ['function', 'class', 'interface'],
-        '.swift': ['function', 'class', 'struct'],
-        '.kt': ['function', 'class', 'interface'],
-        '.scala': ['function', 'class'],
-        '.php': ['function', 'class'],
-        '.lua': ['function'],
-        '.gd': ['function', 'class'],  # GDScript
-        '.sh': ['function'],
-        '.bash': ['function'],
-        '.ps1': ['function'],  # PowerShell
-        '.bat': ['function'],  # Windows Batch (labels)
-        '.cmd': ['function'],  # Windows Command
-        '.zig': ['function', 'struct', 'test', 'union'],
-        # Infrastructure languages
-        '.tf': ['resource', 'variable', 'output', 'module'],
-        '.tfvars': ['variable'],
-        '.hcl': ['resource', 'variable', 'output', 'module'],
-        # API definition languages
-        '.graphql': ['query', 'mutation', 'type', 'interface', 'enum'],
-        '.gql': ['query', 'mutation', 'type', 'interface', 'enum'],
-        '.proto': ['message', 'service', 'rpc', 'enum'],
-    }
-
-    # Data/config files
-    data_extensions = {
-        '.md': ['section'],  # headings map to section; code_block requires --code flag
-        '.markdown': ['section'],
-        '.json': ['key'],
-        '.yaml': ['key'],
-        '.yml': ['key'],
-        '.toml': ['section', 'key'],  # TOML tables map to section
-        '.csv': ['row'],  # row number extraction (e.g., reveal data.csv 5)
-        '.tsv': ['row'],
-        '.ini': ['section', 'key'],
-        '.properties': ['key'],
-        '.xml': ['element'],  # element by tag name
-        '.jsonl': ['record'],
-        '.ipynb': ['cell'],
-    }
-
-    if ext in code_extensions:
-        return code_extensions[ext]
-    elif ext in data_extensions:
-        return data_extensions[ext]
-    elif is_fallback:
+    if ext in _EXTRACTABLE_BY_EXTENSION:
+        return _EXTRACTABLE_BY_EXTENSION[ext]
+    language = language_for_extension(ext)
+    if language in _EXTRACTABLE_BY_LANGUAGE:
+        return _EXTRACTABLE_BY_LANGUAGE[language]
+    if is_fallback:
         # Generic fallback for tree-sitter supported languages
         return ['function', 'class']
-    else:
-        return []
+    return []
+
+
+# Keyed by language_for_extension() slug, so every extension of a language
+# answers: an extension-keyed table reported no types for .mts/.cts/.kts/.hpp/
+# .h++, which have dedicated analyzers (BACK-1255).
+# Note: methods extracted via hierarchical syntax (Class.method), not as separate type
+_EXTRACTABLE_BY_LANGUAGE: Dict[str, List[str]] = {
+    'python': ['function', 'class', 'import'],
+    'javascript': ['function', 'class'],
+    'typescript': ['function', 'class', 'interface', 'type'],
+    'tsx': ['function', 'class', 'interface', 'type'],
+    'java': ['function', 'class', 'interface'],
+    'go': ['function', 'struct', 'interface'],
+    'rust': ['function', 'class', 'struct'],
+    'ruby': ['function', 'class', 'module'],
+    'c': ['function', 'struct'],
+    'cpp': ['function', 'class', 'struct'],
+    'csharp': ['function', 'class', 'interface'],
+    'swift': ['function', 'class', 'struct'],
+    'kotlin': ['function', 'class', 'interface'],
+    'scala': ['function', 'class'],
+    'php': ['function', 'class'],
+    'lua': ['function'],
+    'gdscript': ['function', 'class'],
+    'bash': ['function'],
+    'powershell': ['function'],
+    'zig': ['function', 'struct', 'test', 'union'],
+    'hcl': ['resource', 'variable', 'output', 'module'],  # .tf/.hcl
+    'graphql': ['query', 'mutation', 'type', 'interface', 'enum'],
+    'proto': ['message', 'service', 'rpc', 'enum'],
+    'markdown': ['section'],  # headings map to section; code_block requires --code flag
+    'json': ['key'],
+    'yaml': ['key'],
+    'toml': ['section', 'key'],  # TOML tables map to section
+}
+
+# Extensions whose types differ from their language's, or that have no language slug.
+_EXTRACTABLE_BY_EXTENSION: Dict[str, List[str]] = {
+    '.pyi': ['function', 'class', 'import'],
+    '.tfvars': ['variable'],
+    '.bat': ['function'],  # Windows Batch (labels)
+    '.cmd': ['function'],  # Windows Command
+    '.csv': ['row'],  # row number extraction (e.g., reveal data.csv 5)
+    '.tsv': ['row'],
+    '.ini': ['section', 'key'],
+    '.properties': ['key'],
+    '.xml': ['element'],  # element by tag name
+    '.jsonl': ['record'],
+    '.ipynb': ['cell'],
+}
 
 
 # Maps element type → list of example query suffixes (formatted with file_name)

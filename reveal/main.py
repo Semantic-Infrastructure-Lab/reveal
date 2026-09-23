@@ -2,7 +2,6 @@
 
 import sys
 import os
-import logging
 import io
 import re
 import json
@@ -17,7 +16,7 @@ from collections.abc import Callable
 
 
 from .logging_setup import configure_stderr_logging
-from .registry import get_all_analyzers, TREESITTER_EXTENSION_MAP
+from .registry import display_name_for_extension, fallback_languages, get_all_analyzers
 from . import __version__
 from .utils import copy_to_clipboard, check_for_updates
 from .cli.global_flags import apply_global_flags
@@ -497,65 +496,15 @@ def _get_tree_sitter_fallbacks(registered_analyzers: dict[str, Any]) -> List[Tup
     Returns:
         list: Available fallback languages as (display_name, ext) tuples
     """
-    try:
-        import warnings
-        warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
-        from tree_sitter_language_pack import get_language
-    except ImportError:
-        return []
-
-    # Human-readable display names for --help output.
-    # Extensions not listed here fall back to the lang name from TREESITTER_EXTENSION_MAP.
-    display_names = {
-        '.c': 'C',
-        '.h': 'C/C++ Header',
-        '.cpp': 'C++',
-        '.cc': 'C++',
-        '.cxx': 'C++',
-        '.hpp': 'C++ Header',
-        '.hxx': 'C++ Header',
-        '.java': 'Java',
-        '.cs': 'C#',
-        '.rb': 'Ruby',
-        '.php': 'PHP',
-        '.swift': 'Swift',
-        '.scala': 'Scala',
-        '.lua': 'Lua',
-        '.r': 'R',
-        '.elm': 'Elm',
-        '.ex': 'Elixir',
-        '.exs': 'Elixir',
-        '.zig': 'Zig',
-        '.m': 'Objective-C',
-        '.mm': 'Objective-C++',
-        '.sql': 'SQL',
-        '.hs': 'Haskell',
-        '.ml': 'OCaml',
-        '.mli': 'OCaml',
-        '.ocaml': 'OCaml',
-        '.erl': 'Erlang',
-        '.hrl': 'Erlang',
-        '.v': 'Verilog',
-        '.sv': 'SystemVerilog',
-        '.svh': 'SystemVerilog',
-    }
-    fallback_languages = {
-        ext: (lang, display_names.get(ext, lang))
-        for ext, lang in TREESITTER_EXTENSION_MAP.items()
-    }
-
-    available_fallbacks = []
-    for ext, (lang, display_name) in fallback_languages.items():
-        if ext in registered_analyzers:
-            continue
-
-        try:
-            get_language(lang)  # type: ignore[arg-type]
-            available_fallbacks.append((display_name, ext))
-        except Exception as e:
-            logging.debug(f"Tree-sitter language {lang} not available: {e}")
-
-    return available_fallbacks
+    # registry.fallback_languages() is the one answer to "what routes to a
+    # fallback" (BACK-1255); only the labels are decided here. These three are
+    # finer than display_name_for_extension(), which keeps .m/.mm as one name.
+    labels = {'.mm': 'Objective-C++', '.sv': 'SystemVerilog', '.svh': 'SystemVerilog'}
+    return [
+        (labels.get(ext) or display_name_for_extension(ext) or grammar, ext)
+        for ext, grammar in fallback_languages().items()
+        if ext not in registered_analyzers
+    ]
 
 
 def _print_fallback_languages(fallbacks: List[Tuple[str, str]]) -> None:
@@ -570,7 +519,8 @@ def _print_fallback_languages(fallbacks: List[Tuple[str, str]]) -> None:
     print("\nTree-Sitter Auto-Supported (basic):")
     for name, ext in sorted(fallbacks):
         print(f"  {name:20s} {ext}")
-    print(f"\nTotal: {len(fallbacks)} additional languages via fallback")
+    languages = len({name for name, _ in fallbacks})
+    print(f"\nTotal: {languages} additional languages ({len(fallbacks)} extensions) via fallback")
     print("Note: These work automatically but may have basic support.")
     print("Note: Contributions for full analyzers welcome!")
 

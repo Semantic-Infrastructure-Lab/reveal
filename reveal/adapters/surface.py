@@ -17,7 +17,9 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..capabilities import capability_tiers_for
-from ..registry import _is_cpp_header_content, language_for_extension
+from ..registry import (
+    JS_TS_LANGUAGES, _is_cpp_header_content, extensions_for_languages, language_for_extension,
+)
 from ..utils import print_json_result
 from ..utils.path_utils import (
     census_and_coverage_for_path,
@@ -75,19 +77,25 @@ class _SurfaceScanner:
     language: str  # coverage-matrix column (ast/surface_matrix.py)
 
 
+def _scanner(languages: tuple, module: str, func: str, column: str) -> '_SurfaceScanner':
+    # Extensions come from the registry, never a local list (BACK-1255): a newly
+    # registered extension (.mts/.cts, .h++) is scanned without touching this table.
+    return _SurfaceScanner(extensions_for_languages(*languages), f'reveal.adapters.ast.{module}', func, column)
+
+
 # Registration order does not matter — lookup is by extension, not position.
 _SURFACE_SCANNERS: tuple = (
-    _SurfaceScanner(frozenset({'.py'}), 'reveal.adapters.ast.nav_surface', 'scan_file_surface', 'python'),
-    _SurfaceScanner(frozenset({'.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts'}), 'reveal.adapters.ast.nav_surface_ts', 'scan_file_surface_ts', 'typescript'),
-    _SurfaceScanner(frozenset({'.java'}), 'reveal.adapters.ast.nav_surface_java', 'scan_file_surface_java', 'java'),
-    _SurfaceScanner(frozenset({'.cs'}), 'reveal.adapters.ast.nav_surface_csharp', 'scan_file_surface_csharp', 'csharp'),
-    _SurfaceScanner(frozenset({'.php'}), 'reveal.adapters.ast.nav_surface_php', 'scan_file_surface_php', 'php'),
-    _SurfaceScanner(frozenset({'.swift'}), 'reveal.adapters.ast.nav_surface_swift', 'scan_file_surface_swift', 'swift'),
-    _SurfaceScanner(frozenset({'.kt', '.kts'}), 'reveal.adapters.ast.nav_surface_kotlin', 'scan_file_surface_kotlin', 'kotlin'),
-    _SurfaceScanner(frozenset({'.rb'}), 'reveal.adapters.ast.nav_surface_ruby', 'scan_file_surface_ruby', 'ruby'),
-    _SurfaceScanner(frozenset({'.go'}), 'reveal.adapters.ast.nav_surface_go', 'scan_file_surface_go', 'go'),
-    _SurfaceScanner(frozenset({'.rs'}), 'reveal.adapters.ast.nav_surface_rust', 'scan_file_surface_rust', 'rust'),
-    _SurfaceScanner(frozenset({'.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh'}), 'reveal.adapters.ast.nav_surface_cpp', 'scan_file_surface_cpp', 'cpp'),
+    _scanner(('python',), 'nav_surface', 'scan_file_surface', 'python'),
+    _scanner(JS_TS_LANGUAGES, 'nav_surface_ts', 'scan_file_surface_ts', 'typescript'),
+    _scanner(('java',), 'nav_surface_java', 'scan_file_surface_java', 'java'),
+    _scanner(('csharp',), 'nav_surface_csharp', 'scan_file_surface_csharp', 'csharp'),
+    _scanner(('php',), 'nav_surface_php', 'scan_file_surface_php', 'php'),
+    _scanner(('swift',), 'nav_surface_swift', 'scan_file_surface_swift', 'swift'),
+    _scanner(('kotlin',), 'nav_surface_kotlin', 'scan_file_surface_kotlin', 'kotlin'),
+    _scanner(('ruby',), 'nav_surface_ruby', 'scan_file_surface_ruby', 'ruby'),
+    _scanner(('go',), 'nav_surface_go', 'scan_file_surface_go', 'go'),
+    _scanner(('rust',), 'nav_surface_rust', 'scan_file_surface_rust', 'rust'),
+    _scanner(('cpp',), 'nav_surface_cpp', 'scan_file_surface_cpp', 'cpp'),
 )
 
 # `.h` defaults to C in the registry (BACK-630) — content-sniffed C++ headers

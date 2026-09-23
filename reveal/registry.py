@@ -555,6 +555,69 @@ def language_for_extension(ext: str) -> Optional[str]:
     return lang or TREESITTER_EXTENSION_MAP.get(ext)
 
 
+def extensions_for_languages(*languages: str) -> FrozenSet[str]:
+    """Every extension that language_for_extension() resolves to one of *languages*.
+
+    The inverse view, for consumers that support a set of languages and need the
+    extensions to scan or match. Deriving instead of listing means a newly
+    registered extension reaches every consumer at once: hand-kept lists in
+    surface/contracts/M104/B005 each missed `.mts`/`.cts` when those were
+    registered (BACK-1403, BACK-1255). Reads the registry as it stands, which is
+    complete whenever any reveal module runs, because reveal/__init__.py imports
+    every analyzer first; extensions registered later by plugins are not included.
+    """
+    wanted = set(languages)
+    known = set(_ANALYZER_REGISTRY) | set(TREESITTER_EXTENSION_MAP)
+    return frozenset(ext for ext in known if language_for_extension(ext) in wanted)
+
+
+# language_for_extension() slugs of the JavaScript/TypeScript family, which share
+# one grammar family and so one scanner in surface/contracts/testability.
+JS_TS_LANGUAGES = ('javascript', 'typescript', 'tsx')
+
+
+def js_ts_grammar(ext: str) -> str:
+    """tree-sitter grammar for a JS/TS-family file: 'typescript' or 'tsx'.
+
+    Only TypeScript proper (.ts/.mts/.cts) needs the 'typescript' grammar, whose
+    `<T>expr` type assertions 'tsx' cannot parse. JavaScript has no type
+    assertions and often carries JSX even in plain .js, which only 'tsx' parses:
+    on 2,314 real .js/.mjs/.cjs/.jsx files 'tsx' failed on 5 and 'typescript' on 8,
+    and 'tsx' never failed on a file 'typescript' parsed cleanly (BACK-1255).
+    """
+    return 'typescript' if language_for_extension(ext) == 'typescript' else 'tsx'
+
+
+def fallback_languages() -> Dict[str, str]:
+    """Extensions served only by a dynamic tree-sitter fallback: {ext: grammar}.
+
+    Exactly what get_analyzer() routes through _try_treesitter_fallback — no
+    dedicated (non-fallback) analyzer is registered, the extension is in
+    TREESITTER_EXTENSION_MAP, and the installed language pack has the grammar.
+    The single source for every "supported via fallback" listing: a curated list
+    in cli/languages.py once advertised Julia, Perl, Nim and seven more that
+    reveal could not open at all (BACK-1255).
+    """
+    from .core import suppress_treesitter_warnings
+    try:
+        from tree_sitter_language_pack import get_parser
+    except ImportError:
+        return {}
+    suppress_treesitter_warnings()
+    result = {}
+    for ext, grammar in TREESITTER_EXTENSION_MAP.items():
+        cls = _ANALYZER_REGISTRY.get(ext)
+        if cls is not None and not getattr(cls, 'is_fallback', False):
+            continue
+        try:
+            get_parser(grammar)
+        except Exception as e:
+            logger.debug("tree-sitter grammar %s unavailable for %s: %s", grammar, ext, e)
+            continue
+        result[ext] = grammar
+    return result
+
+
 # Coarse per-language display name, layered on top of language_for_extension()
 # for consumers that want a human-readable label rather than the tree-sitter
 # slug (e.g. 'csharp' -> 'C#'). Deliberately covers only languages that need
@@ -566,7 +629,7 @@ LANGUAGE_DISPLAY_NAMES: Dict[str, str] = {
     'php': 'PHP', 'gdscript': 'GDScript', 'sql': 'SQL',
     'yaml': 'YAML', 'json': 'JSON', 'toml': 'TOML', 'graphql': 'GraphQL',
     'powershell': 'PowerShell', 'bash': 'Shell', 'hcl': 'HCL',
-    'proto': 'Protobuf',
+    'proto': 'Protobuf', 'ocaml': 'OCaml',
 }
 
 # Same-language, different-desired-name overrides, keyed by *extension* rather

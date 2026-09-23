@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .surface import _supported_coverage_languages
-from ..registry import _is_cpp_header_content
+from ..registry import JS_TS_LANGUAGES, _is_cpp_header_content, extensions_for_languages
 from ..utils import print_json_result
 from ..utils.exclusions import path_is_excluded
 from ..utils.path_utils import (
@@ -32,8 +32,6 @@ _CONTRACT_PATH_HINTS: frozenset = frozenset({
 })
 
 
-_TS_EXTENSIONS: frozenset = frozenset({'.ts', '.tsx'})
-
 # BACK-403 pt 2: languages whose grammar has a distinct interface/abstract-class
 # shape close enough to TS's ('interfaces'/'types'/'classes' categories, an
 # is_abstract flag on classes) that they share _scan_contracts_ts's classifier
@@ -45,110 +43,24 @@ _TS_EXTENSIONS: frozenset = frozenset({'.ts', '.tsx'})
 # no overrides, emitting the same 'classes' category (no interfaces/types,
 # since JS has no interface/type-alias/abstract-class grammar — correctly
 # absent rather than a gap) so it shares the classifier with zero code changes.
-_INTERFACE_FAMILY_EXTENSIONS: frozenset = frozenset({
-    '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts',
-    '.java', '.cs', '.php', '.swift', '.kt', '.kts',
-})
+# Every extension set here comes from the registry (BACK-1255): the hand-kept
+# ones missed .mts/.cts (BACK-1403) and .h++.
+_INTERFACE_FAMILY_EXTENSIONS: frozenset = extensions_for_languages(
+    *JS_TS_LANGUAGES, 'java', 'csharp', 'php', 'swift', 'kotlin')
+_CPP_EXTENSIONS: frozenset = extensions_for_languages('cpp')
 
 
-def _has_python_files(path: Path) -> bool:
-    if path.is_file():
-        return path.suffix == '.py'
-    for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
-        for fname in filenames:
-            if fname.endswith('.py'):
-                return True
-    return False
+def _suffix_in(extensions: frozenset) -> Callable[[Path], bool]:
+    def matches(fpath: Path) -> bool:
+        return fpath.suffix.lower() in extensions
+    return matches
 
 
-def _has_interface_family_files(path: Path) -> bool:
-    if path.is_file():
-        return path.suffix.lower() in _INTERFACE_FAMILY_EXTENSIONS
-    for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
-        for fname in filenames:
-            if Path(fname).suffix.lower() in _INTERFACE_FAMILY_EXTENSIONS:
-                return True
-    return False
-
-
-def _has_ruby_files(path: Path) -> bool:
-    if path.is_file():
-        return path.suffix.lower() == '.rb'
-    for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
-        for fname in filenames:
-            if fname.endswith('.rb'):
-                return True
-    return False
-
-
-def _collect_ruby_files(path: Path) -> List[Path]:
-    if path.is_file():
-        return [path] if path.suffix.lower() == '.rb' else []
-    files: List[Path] = []
-    for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
-        for fname in filenames:
-            if fname.endswith('.rb'):
-                fpath = Path(os.path.join(root, fname))
-                if not path_is_excluded(fpath):
-                    files.append(fpath)
-    return files
-
-
-def _has_go_files(path: Path) -> bool:
-    if path.is_file():
-        return path.suffix.lower() == '.go'
-    for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
-        for fname in filenames:
-            if fname.endswith('.go'):
-                return True
-    return False
-
-
-def _collect_go_files(path: Path) -> List[Path]:
-    if path.is_file():
-        return [path] if path.suffix.lower() == '.go' else []
-    files: List[Path] = []
-    for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
-        for fname in filenames:
-            if fname.endswith('.go'):
-                fpath = Path(os.path.join(root, fname))
-                if not path_is_excluded(fpath):
-                    files.append(fpath)
-    return files
-
-
-def _has_rust_files(path: Path) -> bool:
-    if path.is_file():
-        return path.suffix.lower() == '.rs'
-    for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
-        for fname in filenames:
-            if fname.endswith('.rs'):
-                return True
-    return False
-
-
-def _collect_rust_files(path: Path) -> List[Path]:
-    if path.is_file():
-        return [path] if path.suffix.lower() == '.rs' else []
-    files: List[Path] = []
-    for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
-        for fname in filenames:
-            if fname.endswith('.rs'):
-                fpath = Path(os.path.join(root, fname))
-                if not path_is_excluded(fpath):
-                    files.append(fpath)
-    return files
-
-
-_CPP_EXTENSIONS: frozenset = frozenset({'.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh'})
+_is_interface_family_file = _suffix_in(_INTERFACE_FAMILY_EXTENSIONS)
+_is_python_file = _suffix_in(extensions_for_languages('python'))
+_is_ruby_file = _suffix_in(extensions_for_languages('ruby'))
+_is_go_file = _suffix_in(extensions_for_languages('go'))
+_is_rust_file = _suffix_in(extensions_for_languages('rust'))
 
 # BACK-630: `.h` is ambiguous between C and C++ (registry.py routes it to C by
 # default). A header-only C++ class (Godot-style abstract base with no .cpp)
@@ -165,28 +77,42 @@ def _is_cpp_file(fpath: Path) -> bool:
     return False
 
 
-def _has_cpp_files(path: Path) -> bool:
+def _walk_matching(path: Path, matches: Callable[[Path], bool]) -> Iterator[Path]:
+    """Files under *path* (or *path* itself) that *matches* accepts, skipping
+    vendored/build and dot directories."""
     if path.is_file():
-        return _is_cpp_file(path)
-    for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
-        for fname in filenames:
-            if _is_cpp_file(Path(os.path.join(root, fname))):
-                return True
-    return False
-
-
-def _collect_cpp_files(path: Path) -> List[Path]:
-    if path.is_file():
-        return [path] if _is_cpp_file(path) else []
-    files: List[Path] = []
+        if matches(path):
+            yield path
+        return
     for root, dirs, filenames in os.walk(str(path)):
         dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
         for fname in filenames:
             fpath = Path(os.path.join(root, fname))
-            if _is_cpp_file(fpath) and not path_is_excluded(fpath):
-                files.append(fpath)
-    return files
+            if matches(fpath):
+                yield fpath
+
+
+def _has_files(path: Path, matches: Callable[[Path], bool]) -> bool:
+    return next(_walk_matching(path, matches), None) is not None
+
+
+def _collect_files(path: Path, matches: Callable[[Path], bool]) -> List[Path]:
+    """Files a scanner reads: as _walk_matching, minus user exclusions (an
+    explicitly named single file is never excluded)."""
+    if path.is_file():
+        return [path] if matches(path) else []
+    return [f for f in _walk_matching(path, matches) if not path_is_excluded(f)]
+
+
+# Each contract scanner and the files that make it active, in merge order.
+_CONTRACT_LANGUAGES: Tuple[Tuple[str, Callable[[Path], bool]], ...] = (
+    ('ts', _is_interface_family_file),
+    ('ruby', _is_ruby_file),
+    ('go', _is_go_file),
+    ('rust', _is_rust_file),
+    ('cpp', _is_cpp_file),
+    ('python', _is_python_file),
+)
 
 
 def _scan_contracts(
@@ -206,26 +132,7 @@ def _scan_contracts(
     unchanged — only the polyglot case gets the new `by_language` shape,
     since that case was never correct before and had no shape to preserve.
     """
-    is_interface_family = _has_interface_family_files(path)
-    is_ruby = _has_ruby_files(path)
-    is_go = _has_go_files(path)
-    is_rust = _has_rust_files(path)
-    is_cpp = _has_cpp_files(path)
-    has_python = _has_python_files(path)
-
-    active: List[str] = []
-    if is_interface_family:
-        active.append('ts')
-    if is_ruby:
-        active.append('ruby')
-    if is_go:
-        active.append('go')
-    if is_rust:
-        active.append('rust')
-    if is_cpp:
-        active.append('cpp')
-    if has_python:
-        active.append('python')
+    active = [name for name, matches in _CONTRACT_LANGUAGES if _has_files(path, matches)]
 
     unsupported_language = detect_non_python_language(path) if not active else ''
 
@@ -502,7 +409,7 @@ def _scan_contracts_ruby(
 
     modules: List[Dict[str, Any]] = []
     classes: List[Dict[str, Any]] = []
-    for file_path in _collect_ruby_files(path):
+    for file_path in _collect_files(path, _is_ruby_file):
         scanned = scan_file_contracts_ruby(str(file_path))
         modules.extend(scanned['modules'])
         classes.extend(scanned['classes'])
@@ -552,7 +459,7 @@ def _scan_contracts_go(
     interfaces: List[Dict[str, Any]] = []
     structs: List[Dict[str, Any]] = []
     struct_methods: Dict[str, Dict[str, Dict[str, Any]]] = {}
-    for file_path in _collect_go_files(path):
+    for file_path in _collect_files(path, _is_go_file):
         scanned = scan_file_contracts_go(str(file_path))
         interfaces.extend(scanned['interfaces'])
         structs.extend(scanned['structs'])
@@ -639,7 +546,7 @@ def _scan_contracts_rust(
 
     traits: List[Dict[str, Any]] = []
     impls: List[Dict[str, Any]] = []
-    for file_path in _collect_rust_files(path):
+    for file_path in _collect_files(path, _is_rust_file):
         scanned = scan_file_contracts_rust(str(file_path))
         traits.extend(scanned['interfaces'])
         impls.extend(scanned['impls'])
@@ -703,7 +610,7 @@ def _scan_contracts_cpp(
     from reveal.adapters.ast.nav_contracts_cpp import scan_file_contracts_cpp
 
     classes: List[Dict[str, Any]] = []
-    for file_path in _collect_cpp_files(path):
+    for file_path in _collect_files(path, _is_cpp_file):
         scanned = scan_file_contracts_cpp(str(file_path))
         classes.extend(scanned['classes'])
 

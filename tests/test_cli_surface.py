@@ -62,7 +62,7 @@ class TestIsTestFile(unittest.TestCase):
             '.go': 'user_test.go', '.rs': 'user_test.rs',
             '.cpp': 'user_test.cpp', '.hpp': 'user_tests.hpp',
             '.cc': 'user_tests.cc', '.cxx': 'user_tests.cxx',
-            '.hxx': 'user_tests.hxx', '.hh': 'user_tests.hh',
+            '.hxx': 'user_tests.hxx', '.hh': 'user_tests.hh', '.h++': 'user_tests.h++',
         }
         covered_extensions = {ext for spec in _SURFACE_SCANNERS for ext in spec.extensions}
         for ext in covered_extensions:

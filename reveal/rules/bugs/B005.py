@@ -42,7 +42,10 @@ class B005(BaseRule, ASTParsingMixin):
     message = "Import references non-existent or unresolvable module"
     category = RulePrefix.B
     severity = Severity.HIGH
-    file_patterns = ['.py', '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs']
+    # JS/TS files are checked through JavaScriptExtractor's resolver, so they are
+    # exactly the extensions it claims (registry-derived, BACK-1255).
+    _JS_LIKE_EXTENSIONS = frozenset(JavaScriptExtractor.extensions)
+    file_patterns = ['.py', *sorted(_JS_LIKE_EXTENSIONS)]
     version = "1.1.0"
 
     def _check_import_statement(self,
@@ -166,7 +169,7 @@ class B005(BaseRule, ASTParsingMixin):
         Returns:
             List of detections for dead imports
         """
-        if file_path.endswith(('.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs')):
+        if Path(file_path).suffix.lower() in self._JS_LIKE_EXTENSIONS:
             return self._check_js_like(file_path)
 
         tree, detections = self._parse_python_or_skip(content, file_path)

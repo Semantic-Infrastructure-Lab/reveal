@@ -358,7 +358,9 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         LanguageConventions(
             family='c',
             entry_point_files=frozenset({'main.c', 'main.cpp', 'main.cc'}),
-            test_file_patterns=(re.compile(r'^(.+)_tests\.(?:cpp|cc|cxx|hpp|hxx|hh|h)$'),),
+            # Any extension: the family is already chosen by extension via the
+            # registry, and a re-listed set here missed .h++ (BACK-1255).
+            test_file_patterns=(re.compile(r'^(.+)_tests\.[^.]+$'),),
             implicit_names=frozenset({'main'}),
             implicit_name_pattern=re.compile(
                 r'^(?:.*::)?(?:operator\b.*|~\w+)$'  # operators, destructors
@@ -406,7 +408,7 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
             entry_point_decorators=JVM_ENTRY_POINT_DECORATORS,
             stdlib_key=_prefix_stdlib_key('kotlin', 'java', 'javax'),
             test_name_prefixes=('test',), test_prefixes_in_test_files_only=True,
-            test_file_patterns=(re.compile(r'^(.+?)Tests?\.kt$'), re.compile(r'^Test(.+)\.kt$')),
+            test_file_patterns=(re.compile(r'^(.+?)Tests?\.kts?$'), re.compile(r'^Test(.+)\.kts?$')),
             test_symbol_patterns=(re.compile(r'(?:void|fun)\s+`?test(\w+)', re.MULTILINE),),
         ),
         LanguageConventions(

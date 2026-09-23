@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Set, Optional, Tuple
 
 from .types import ImportStatement
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
+from ...registry import JS_TS_LANGUAGES, extensions_for_languages
 from ...core import node_children as _children
 from ...core.treesitter_compat import _zero_arg
 
@@ -500,7 +501,7 @@ class JavaScriptExtractor(LanguageExtractor):
     - Dynamic imports: await import('./module')
     """
 
-    extensions = {'.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.mts', '.cts'}
+    extensions = set(extensions_for_languages(*JS_TS_LANGUAGES))  # registry-derived (BACK-1255)
     language_name = 'JavaScript/TypeScript'
 
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:

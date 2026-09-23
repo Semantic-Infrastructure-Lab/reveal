@@ -161,54 +161,19 @@ def list_supported_languages() -> str:
 def _get_fallback_languages() -> List[Tuple[str, List[str]]]:
     """Get list of languages supported via tree-sitter fallback.
 
+    Exactly the extensions get_analyzer() routes to a dynamic fallback. A curated
+    map here once advertised Julia, Perl, Nim, Crystal, Scheme, VHDL, Nix, Thrift,
+    GLSL and CUDA, none of which reveal could open (BACK-1255).
+
     Returns:
-        List of (language_name, [extensions]) tuples
+        List of (language_name, [extensions]) tuples, sorted by language
     """
-    # Common tree-sitter languages and their extensions
-    # This is a curated list of widely-used languages that tree-sitter-language-pack supports
-    fallback_map = {
-        'kotlin': ['.kt', '.kts'],
-        'swift': ['.swift'],
-        'dart': ['.dart'],
-        'elixir': ['.ex', '.exs'],
-        'elm': ['.elm'],
-        'erlang': ['.erl', '.hrl'],
-        'haskell': ['.hs', '.lhs'],
-        'julia': ['.jl'],
-        'ocaml': ['.ml', '.mli'],
-        'perl': ['.pl', '.pm'],
-        'r': ['.r', '.R'],
-        'scheme': ['.scm', '.ss'],
-        'zig': ['.zig'],
-        'nim': ['.nim'],
-        'crystal': ['.cr'],
-        'verilog': ['.v', '.vh'],
-        'vhdl': ['.vhd', '.vhdl'],
-        'terraform': ['.tf'],
-        'nix': ['.nix'],
-        'proto': ['.proto'],
-        'thrift': ['.thrift'],
-        'glsl': ['.glsl', '.vert', '.frag'],
-        'cuda': ['.cu', '.cuh'],
-    }
+    from ..registry import fallback_languages
 
-    # Filter to only languages that tree-sitter-language-pack actually supports
-    # by testing if we can import the parser
-    supported = []
-    try:
-        from tree_sitter_language_pack import get_parser
-        for lang, exts in fallback_map.items():
-            try:
-                get_parser(lang)  # type: ignore[arg-type]  # language is validated at runtime
-                supported.append((lang, exts))
-            except Exception:
-                # Language not available in this version
-                pass
-    except ImportError:
-        # tree-sitter not installed
-        pass
-
-    return supported
+    by_language: Dict[str, List[str]] = {}
+    for ext, grammar in fallback_languages().items():
+        by_language.setdefault(grammar, []).append(ext)
+    return [(lang, sorted(exts)) for lang, exts in sorted(by_language.items())]
 
 
 def get_language_info(language: str) -> Dict:

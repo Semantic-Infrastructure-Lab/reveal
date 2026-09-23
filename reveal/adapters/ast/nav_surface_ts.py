@@ -70,15 +70,14 @@ def scan_file_surface_ts(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
 
     BACK-631: plain JS/JSX share this scanner — the extraction below is generic
     tree-walking (env vars, HTTP routes, FS writes, ...) with no type-annotation
-    dependency, so TS's grammar (a JS superset) parses plain .js fine; .jsx
-    needs the JSX-aware 'tsx' grammar just like .tsx does.
+    dependency. js_ts_grammar() picks the grammar (JS takes JSX-aware 'tsx').
     """
     try:
         from tree_sitter_language_pack import get_parser
+        from reveal.registry import js_ts_grammar
         path = Path(file_path)
         source = path.read_text(errors='replace', encoding='utf-8')
-        lang = 'tsx' if path.suffix in ('.tsx', '.jsx') else 'typescript'
-        parser = get_parser(lang)
+        parser = get_parser(js_ts_grammar(path.suffix))
         tree = ts_parse(parser, source)
     except Exception as e:
         logger.warning("surface scan (TS/JS) failed to parse %s: %s", file_path, e)

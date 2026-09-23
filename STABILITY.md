@@ -63,7 +63,7 @@ This document defines what users and AI agents can safely depend on in reveal. I
 - **Session-analysis adapters:** `claude://` (Claude Code sessions), `codex://` (OpenAI Codex CLI sessions)
 - **Test-hygiene adapters:** `patches://` (mock/patch pressure scanning)
 - **Quality rules (extended):** the majority of the current 55-rule set (D, I, L, M, N, R, T, U, F, V series) — run `reveal --rules` for the live list; only the core set above is Stable
-- **Languages (full support):** C#, Scala, PHP, Ruby, Lua, Kotlin, Swift, Dart, HCL/Terraform, GraphQL, Protobuf, Zig, GDScript, Bash, SQL — see `reveal --languages` for the current full roster (89 languages total across explicit analyzers + tree-sitter fallback, growing)
+- **Languages (full support):** C#, Scala, PHP, Ruby, Lua, Kotlin, Swift, Dart, HCL/Terraform, GraphQL, Protobuf, Zig, GDScript, Bash, SQL — see `reveal --languages` for the current full roster (81 languages total across explicit analyzers + tree-sitter fallback, growing)
 - **Features:**
   - Schema validation (`--validate-schema`)
   - Configuration system (`.reveal.yaml`)

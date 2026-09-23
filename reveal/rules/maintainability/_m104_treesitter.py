@@ -209,6 +209,9 @@ _EXTRACTORS = {
     'java': _extract_java,
 }
 
+# Grammar names M104 can check; M104 derives its extensions from these (BACK-1255).
+SUPPORTED_LANGUAGES = tuple(_EXTRACTORS)
+
 
 def extract_collections(
     language: str, root: Any, content_bytes: bytes,

@@ -34,7 +34,8 @@ from tree_sitter_language_pack import get_parser
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
 from ...core.treesitter_compat import tree_root, ts_parse
-from ._m104_treesitter import extract_collections
+from ...registry import extensions_for_languages, language_for_extension
+from ._m104_treesitter import SUPPORTED_LANGUAGES, extract_collections
 
 
 class M104(BaseRule, ASTParsingMixin):
@@ -44,17 +45,15 @@ class M104(BaseRule, ASTParsingMixin):
     message = "Hardcoded list detected"
     category = RulePrefix.M
     severity = Severity.LOW
-    file_patterns = ['.py', '.js', '.jsx', '.mjs', '.ts', '.tsx', '.go', '.rs', '.java']
-
-    # Extension -> tree-sitter-language-pack language name, for the
-    # non-Python check path. `.py` is handled separately via `ast`.
+    # Extension -> tree-sitter grammar for the non-Python check path (`.py` is
+    # handled separately via `ast`): every extension the registry maps to a
+    # language with a collection extractor. Registry slugs for these languages
+    # are the grammar names. The hand-kept map missed .cjs/.mts/.cts (BACK-1255).
     _TS_LANGUAGE_BY_EXT = {
-        '.js': 'javascript', '.jsx': 'javascript', '.mjs': 'javascript',
-        '.ts': 'typescript', '.tsx': 'tsx',
-        '.go': 'go',
-        '.rs': 'rust',
-        '.java': 'java',
+        ext: language_for_extension(ext)
+        for ext in extensions_for_languages(*SUPPORTED_LANGUAGES)
     }
+    file_patterns = ['.py', *sorted(_TS_LANGUAGE_BY_EXT)]
 
     # Minimum list size to flag (smaller lists are often intentional)
     MIN_LIST_SIZE = 5

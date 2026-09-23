@@ -30,6 +30,7 @@ from reveal.core.callees import (
     is_misparsed_call,
 )
 from reveal.core.treesitter_compat import _zero_arg
+from reveal.registry import extensions_for_languages, js_ts_grammar
 
 logger = logging.getLogger(__name__)
 
@@ -309,15 +310,20 @@ _LANGS: Dict[str, _Lang] = {
                  new_kinds=frozenset({'new_expression'})),
 }
 
-EXTENSION_LANGUAGE: Dict[str, str] = {
-    '.py': 'python', '.go': 'go', '.rs': 'rust', '.java': 'java', '.kt': 'kotlin', '.kts': 'kotlin',
-    '.cs': 'csharp', '.cpp': 'cpp', '.cc': 'cpp', '.cxx': 'cpp', '.hpp': 'cpp', '.hh': 'cpp',
-    '.h': 'cpp', '.php': 'php', '.rb': 'ruby', '.swift': 'swift',
-    '.ts': 'typescript', '.js': 'typescript', '.mjs': 'typescript', '.cjs': 'typescript',
-    '.tsx': 'tsx', '.jsx': 'tsx',
-}
-
 LANGUAGES = tuple(sorted({'python', *_LANGS}))
+
+
+def _extension_language() -> Dict[str, str]:
+    """{extension: key of LANGUAGES}, derived from the registry (BACK-1255): the
+    hand-kept table missed .mts/.cts/.hxx/.h++. JavaScript takes its grammar's key
+    ('tsx'), and `.h` is claimed for C++, the superset grammar, as before."""
+    table = {ext: lang for lang in LANGUAGES for ext in extensions_for_languages(lang)}
+    table.update({ext: js_ts_grammar(ext) for ext in extensions_for_languages('javascript')})
+    table['.h'] = 'cpp'
+    return table
+
+
+EXTENSION_LANGUAGE: Dict[str, str] = _extension_language()
 
 
 def _ruby_call_is_real(node: Any) -> bool:

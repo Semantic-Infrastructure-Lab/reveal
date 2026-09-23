@@ -8,7 +8,7 @@ from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
 
-@register('.cpp', '.cc', '.cxx', '.hpp', '.hh', '.h++', name='C++', icon='⚙️')
+@register('.cpp', '.cc', '.cxx', '.hpp', '.hxx', '.hh', '.h++', name='C++', icon='⚙️')
 class CppAnalyzer(TreeSitterAnalyzer):
     """C++ file analyzer.
 

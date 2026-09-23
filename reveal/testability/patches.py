@@ -15,6 +15,7 @@ from ..utils.path_utils import is_test_basename_for_language
 from ..utils.pyparse import parse_python
 from ..core.treesitter_compat import _zero_arg, suppress_treesitter_warnings, tree_root, ts_parse
 from ..utils.path_utils import is_skippable_dir
+from ..registry import JS_TS_LANGUAGES, extensions_for_languages, js_ts_grammar
 
 suppress_treesitter_warnings()
 
@@ -75,7 +76,7 @@ def iter_python_test_files(paths: Sequence[str | Path]) -> List[Path]:
     return iter_test_files(paths, extensions=('.py',))
 
 
-_TS_TEST_EXTENSIONS = frozenset({'.ts', '.tsx', '.js', '.jsx'})
+_TS_TEST_EXTENSIONS = extensions_for_languages(*JS_TS_LANGUAGES)  # incl. .test.mjs/.mts (BACK-1255)
 
 
 
@@ -273,9 +274,8 @@ def _scan_file_ts(file_path: Path) -> List[PatchUse]:
         return []
 
     src_bytes = source.encode('utf-8', errors='replace')
-    lang = 'tsx' if file_path.suffix in ('.tsx', '.jsx') else 'typescript'
     try:
-        parser = get_parser(lang)
+        parser = get_parser(js_ts_grammar(file_path.suffix))
         tree = ts_parse(parser, source)
         root = tree_root(tree)
     except Exception as exc:
