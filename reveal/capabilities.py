@@ -336,10 +336,10 @@ _TIER1: Dict[str, LanguageCapability] = {
             "one real Meilisearch file before the fix)."
         ),
         known_limitations=[
-            "BACK-428 (open, documented in tests/fixtures/conformance/"
-            "expected.yaml): --exits/--returns only recognize explicit "
-            "`return`; the `?` postfix operator and bare tail-expression "
-            "implicit returns are invisible to both flags.",
+            "BACK-1393: calls inside macro arguments (`format!(\"{}\", h())`, "
+            "`vec![k()]`) are recovered best-effort from the unparsed token "
+            "tree (an identifier followed by a `(...)` group), with bare "
+            "names; a tuple-struct pattern inside `matches!` reads as a call.",
             "BACK-431 Issue G (documented-not-fixed): a macro invocation's "
             "body (`token_tree`, e.g. lazy_static!{...}) has no internal AST "
             "structure to tree-sitter, so every identifier inside one reads "
@@ -421,25 +421,24 @@ _TIER1: Dict[str, LanguageCapability] = {
             "claimed (skip_unused always set)."
         ),
         known_limitations=[
-            "BACK-450 (open): for_range_loop has no --varflow dispatch case "
-            "— the loop variable/iterable aren't classified WRITE/READ, "
-            "though --outline/--ifmap/--loopmap/--exits already see the "
-            "loop correctly.",
-            "BACK-451 (open): named `Class.method` extraction fails for "
-            "C++ (method-under-class nesting doesn't resolve); "
-            "`:LINE-RANGE` is the working workaround.",
-            "BACK-421 Part 2 (open): Class::method qualifiers are stripped "
-            "during name extraction, losing class association for "
-            "out-of-line method definitions.",
-            "BACK-421 Part 3 (open, pinned in expected.yaml L20): "
-            "--exits/--returns/--ifmap/--mutations miss macro-hidden early "
-            "returns (e.g. CHECK_OR_RETURN(...)) since tree-sitter sees only "
-            "the unexpanded macro call.",
+            "BACK-1391: calls://?uncalled lists methods referenced only as "
+            "a function pointer (`&Class::method`, e.g. Godot's "
+            "ClassDB::bind_method) -- 778 of Godot scene/2d's 976 uncalled.",
+            "BACK-1392: in-class constructors and virtual overrides reached "
+            "only through a base-class call are not excluded from "
+            "calls://?uncalled (out-of-line `Foo::Foo`, `~Foo`, operators "
+            "and `main` are).",
+            "BACK-1414: header declarations without a body (pure-virtual "
+            "`= 0` methods) are missing from the outline.",
+            "A preprocessor branch with mismatched brace nesting collapses "
+            "its whole enclosing function into a parse error -- a "
+            "tree-sitter-cpp limitation (it does not preprocess), closed as "
+            "won't-fix in BACK-642.",
         ],
         validation=[
             MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "Godot, assimp"),
             MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 83.3, "Godot"),
-            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 95.73, "assimp",
+            MeasuredRecall(RECALL_SIGNAL_CALL_GRAPH, 96.26, "assimp",
                             sample_note="Godot sample 450 of 7,230 oracle edges (6.2%)"),
         ],
     ),

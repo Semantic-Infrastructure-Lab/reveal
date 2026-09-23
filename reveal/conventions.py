@@ -345,10 +345,26 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
             implicit_names=frozenset({'main'}),
             test_decorators=frozenset({'test', 'bench', 'rstest'}),
         ),
+        # C++ operators run from expression syntax (`a == b`) and destructors at
+        # scope exit, never by a call to their name; an out-of-line constructor
+        # (`Foo::Foo`) is reached by `Foo(...)`/declaration, which indexes as `Foo`.
         LanguageConventions(
             family='c',
             entry_point_files=frozenset({'main.c', 'main.cpp', 'main.cc'}),
             test_file_patterns=(re.compile(r'^(.+)_tests\.(?:cpp|cc|cxx|hpp|hxx|hh|h)$'),),
+            implicit_names=frozenset({'main'}),
+            implicit_name_pattern=re.compile(
+                r'^(?:.*::)?(?:operator\b.*|~\w+)$'  # operators, destructors
+                r'|^(?:.*::)?(\w+)::\1$'  # out-of-line constructor Foo::Foo
+            ),
+            # Test-registration macros (GoogleTest, Catch2/doctest, Boost.Test) parse as a
+            # function named after the macro; gtest fixture hooks are virtual overrides.
+            test_lifecycle_names=frozenset({
+                'TEST', 'TEST_F', 'TEST_P', 'TYPED_TEST', 'TYPED_TEST_P',
+                'TEST_CASE', 'TEST_CASE_METHOD', 'SCENARIO', 'TEMPLATE_TEST_CASE',
+                'BOOST_AUTO_TEST_CASE', 'BOOST_FIXTURE_TEST_CASE',
+                'SetUp', 'TearDown', 'SetUpTestSuite', 'TearDownTestSuite',
+            }),
         ),
         LanguageConventions(family='php', entry_point_files=frozenset({'index.php'})),
         LanguageConventions(family='swift', entry_point_files=frozenset({'main.swift'})),

@@ -78,6 +78,49 @@ class RustAnalyzer(TreeSitterAnalyzer):
             parent = _zero_arg(parent, 'parent')
         return False
 
+    # Keywords a token tree can hold right before a `(...)` group (`match (a, b)`).
+    _TOKEN_TREE_NON_CALLS = frozenset({
+        'match', 'while', 'if', 'for', 'in', 'return', 'as', 'else', 'loop', 'let',
+        'mut', 'ref', 'move', 'where', 'unsafe', 'async', 'await', 'dyn', 'impl', 'fn',
+    })
+    # Nested items get their own entries; attribute arguments (`cfg(all(...))`) are not calls.
+    _TOKEN_TREE_SKIP = frozenset({
+        'function_item', 'attribute_item', 'inner_attribute_item', 'macro_definition',
+    })
+
+    def _implicit_call_nodes(self, func_node) -> List[Any]:
+        """BACK-1393: calls inside macro arguments (`format!("{}", h())`, `vec![k()]`,
+        `assert_eq!(m(), 3)`). tree-sitter leaves those as a flat, unparsed token_tree
+        with no call_expression, so an identifier directly followed by a `(...)` group
+        is taken as a call. Best-effort: a tuple-struct pattern inside `matches!`
+        (`Some(_)`) reads the same way."""
+        found: List[Any] = []
+        stack = list(_children(func_node))
+        while stack:
+            node = stack.pop()
+            kind = _zero_arg(node, 'kind')
+            if kind in self._TOKEN_TREE_SKIP:
+                continue
+            if kind == 'token_tree':
+                self._token_tree_calls(node, found)
+                continue
+            stack.extend(_children(node))
+        found.sort(key=lambda n: _zero_arg(n, 'start_byte'))
+        return found
+
+    def _token_tree_calls(self, tree, found: List[Any]) -> None:
+        kids = _children(tree)
+        for i, child in enumerate(kids):
+            kind = _zero_arg(child, 'kind')
+            if kind == 'token_tree':
+                self._token_tree_calls(child, found)
+            elif kind == 'identifier' and i + 1 < len(kids):
+                group = kids[i + 1]
+                if (_zero_arg(group, 'kind') == 'token_tree'
+                        and self._get_node_text(group).startswith('(')
+                        and self._get_node_text(child) not in self._TOKEN_TREE_NON_CALLS):
+                    found.append(child)
+
     def _extract_decorators(self, node) -> List[str]:
         """Rust attributes (BACK-1087, D1 Phase-2b): unlike every other
         Phase-2a/2b language (Java/C#/Kotlin/Swift/PHP all attach annotations

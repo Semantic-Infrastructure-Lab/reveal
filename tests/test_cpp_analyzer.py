@@ -879,6 +879,41 @@ public:
         finally:
             os.unlink(temp_path)
 
+    def test_function_names_through_every_declarator_shape(self):
+        """BACK-1432: reference returns were dropped or named after the return
+        type/macro, conversion operators dropped, and nested or templated
+        out-of-line qualifiers collapsed to the outer name."""
+        code = '''#define _FORCE_INLINE_ inline
+struct L {
+    L &operator+=(int d) { return *this; }
+    operator bool() const { return true; }
+    int &at(int i) { return v; }
+    _FORCE_INLINE_ const int &get_v() const { return v; }
+    friend std::ostream &operator<<(std::ostream &o, const L &l) { return o; }
+    int v;
+};
+const int &S::get_v() const { return v; }
+int &&rref(int &&x) { return static_cast<int &&>(x); }
+void a::B::c() {}
+template <typename T> T Box<T>::get() const { return T(); }
+L::operator bool() const { return true; }
+std::string Foo::bar() { return ""; }
+auto f() -> int & { static int x; return x; }
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            temp_path = f.name
+        try:
+            structure = CppAnalyzer(temp_path).get_structure()
+            names = sorted(fn['name'] for fn in structure.get('functions', []))
+            self.assertEqual(names, sorted([
+                'operator+=', 'operator bool', 'at', 'get_v', 'operator<<',
+                'S::get_v', 'rref', 'a::B::c', 'Box::get', 'L::operator bool',
+                'Foo::bar', 'f',
+            ]))
+        finally:
+            os.unlink(temp_path)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1563,7 +1563,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # PRIORITY 1: For C/C++ functions, look inside declarators FIRST —
         # these contain the actual function/variable name, not the type.
         for child in kids:
-            if _zero_arg(child, 'kind') in ('function_declarator', 'pointer_declarator', 'declarator'):
+            if _zero_arg(child, 'kind') in (
+                'function_declarator', 'pointer_declarator', 'reference_declarator', 'declarator',
+            ):
                 # Recursively search for identifier (may be nested deep)
                 name = self._find_identifier_in_tree(child)
                 if name:
@@ -1685,6 +1687,17 @@ class TreeSitterAnalyzer(FileAnalyzer):
         ):
             return self._dart_constructor_name(node)
 
+        # C/C++ `function_definition` names its declarator by grammar field. A
+        # child scan cannot tell `std::string Foo::bar()`'s return type from its
+        # declarator (both can be qualified_identifier), and reference returns
+        # (`const T &Foo::get()`) wrap the declarator in reference_declarator.
+        if _zero_arg(node, 'kind') == 'function_definition':
+            declarator = node.child_by_field_name('declarator')
+            if declarator is not None:
+                name = self._find_identifier_in_tree(declarator)
+                if name:
+                    return name
+
         kids = _children(node)
         for strategy in (
             # Scala operator-name defs first: the `operator_identifier` right
@@ -1745,15 +1758,35 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if _zero_arg(node, 'kind') in ('operator_name', 'destructor_name'):
             return self._get_node_text(node)
 
+        # Conversion operator (`operator bool() const`): the name is everything
+        # before the parameter list, whitespace-normalized.
+        if _zero_arg(node, 'kind') == 'operator_cast':
+            text = self._get_node_text(node)
+            for child in _children(node):
+                if _zero_arg(child, 'kind') == 'abstract_function_declarator':
+                    text = text[:_zero_arg(child, 'start_byte') - _zero_arg(node, 'start_byte')]
+                    break
+            return ' '.join(text.split())
+
         if _zero_arg(node, 'kind') == 'qualified_identifier':
-            parts = [
-                self._get_node_text(child)
-                for child in _children(node)
-                if _zero_arg(child, 'kind') in (
+            parts = []
+            for child in _children(node):
+                kind = _zero_arg(child, 'kind')
+                if kind in (
                     'identifier', 'namespace_identifier', 'field_identifier',
                     'type_identifier', 'operator_name', 'destructor_name',
-                )
-            ]
+                ):
+                    parts.append(self._get_node_text(child))
+                elif kind in ('template_type', 'template_function'):
+                    # `Box<T>::get` -> `Box::get`: template arguments are not part of the name.
+                    name_node = child.child_by_field_name('name')
+                    if name_node is not None:
+                        parts.append(self._get_node_text(name_node))
+                elif kind in ('qualified_identifier', 'operator_cast'):
+                    # `a::B::c` nests; `L::operator bool` ends in a conversion operator.
+                    inner = self._find_identifier_in_tree(child)
+                    if inner:
+                        parts.append(inner)
             if parts:
                 return '::'.join(parts)
 

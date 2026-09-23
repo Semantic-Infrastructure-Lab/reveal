@@ -266,6 +266,34 @@ pub fn process_data(input: Vec<String>) -> HashMap<String, usize> {
         finally:
             os.unlink(temp_path)
 
+    def test_calls_inside_macro_arguments(self):
+        """BACK-1393: macro arguments are an unparsed token_tree, so calls inside
+        format!/vec!/assert_eq! were invisible to calls/uncalled/trace."""
+        code = '''fn run(x: &X, c: bool) -> String {
+    let v = vec![k(), x.meth(1), Foo::new(2)];
+    assert_eq!(m(), if c { a() } else { 0 });
+    let _ = matches!(match (c, c) { _ => 1 }, 1);
+    #[cfg(all(test, feature = "x"))]
+    let _t = 1;
+    fn nested() { println!("{}", only_nested()); }
+    format!("{} {:?} {}", h(), v, inner!(z(), |t| t.get(0)))
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.rs', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            temp_path = f.name
+        try:
+            functions = {fn['name']: fn for fn in RustAnalyzer(temp_path).get_structure()['functions']}
+            run_calls = set(functions['run']['calls'])
+            for called in ('k', 'meth', 'new', 'm', 'a', 'h', 'z', 'get'):
+                self.assertIn(called, run_calls)
+            # keyword before `(`, attribute arguments, and the nested fn's own calls are not run's
+            for not_called in ('match', 'all', 'only_nested'):
+                self.assertNotIn(not_called, run_calls)
+            self.assertIn('only_nested', functions['nested']['calls'])
+        finally:
+            os.unlink(temp_path)
+
 
 if __name__ == '__main__':
     unittest.main()

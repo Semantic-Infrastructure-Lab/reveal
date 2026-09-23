@@ -220,11 +220,18 @@ def _bfs_level(
     current_targets: Set[str],
     visited_callers: Set[Tuple[str, str]],
 ) -> Tuple[List[Dict[str, Any]], Set[str]]:
-    """Run one BFS level: return (level_records, next_targets)."""
+    """Run one BFS level: return (level_records, next_targets).
+
+    A qualified target (`Foo::run`, and every caller name fed back in as the
+    next level's target) is also looked up by its bare name, which is how call
+    sites are indexed (BACK-1390).
+    """
     level_records: List[Dict[str, Any]] = []
     next_targets: Set[str] = set()
     for t in sorted(current_targets):
-        for record in index.get(t, []):
+        bare = _bare_callee_name(t)
+        records = index.get(t, []) + (index.get(bare, []) if bare != t else [])
+        for record in records:
             key = (record['file'], record['caller'])
             if key in visited_callers:
                 continue
@@ -912,7 +919,9 @@ def find_uncalled(
                 lang_family=_lang_family(file_path),
             ):
                 continue
-            if name in called_names:
+            # BACK-1390: definitions can be qualified (C++ `Foo::run`, Lua `M:run`)
+            # while call sites index under the bare name (`f.run()` -> `run`).
+            if name in called_names or _bare_callee_name(name) in called_names:
                 continue
             if line_no and _has_noqa_uncalled(file_path, line_no, file_lines):
                 continue

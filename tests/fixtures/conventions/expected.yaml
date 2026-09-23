@@ -57,6 +57,13 @@ java:
     org.junit.Test: unresolved
     org.apache.commons.lang3.StringUtils: unresolved
   has_test_hint: {used: true}
+cpp:
+  uncalled: ['Lib::orphan']             # out-of-line defs match bare call names; ctor/dtor/operator/main implicit (BACK-1390)
+  test_entrypoints_excluded: 1          # GoogleTest TEST(LibTest, Used)
+  imports:
+    xfail: BACK-1427
+    expected: {vector: stdlib, boost/optional.hpp: unresolved}
+  has_test_hint: {'Lib::used': true}
 ruby:
   uncalled: [caller_fn, orphan]         # caller_fn calls `used` paren-less (BACK-1297)
   test_entrypoints_excluded: 0

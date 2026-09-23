@@ -470,6 +470,60 @@ void run2() {
         self.assertEqual(result['total_callers'], 2)
 
 
+class TestCppOutOfLineDefinitions(unittest.TestCase):
+    """BACK-1390: out-of-line definitions are named `Foo::run` while call sites
+    index under the bare name (`f.run()` -> `run`), so ?uncalled listed 97% of
+    Godot scene/2d as dead and ?target=Foo::run found 0 callers."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        _write(self.tmpdir, 'a.h', '''
+class Foo {
+public:
+    Foo();
+    ~Foo();
+    int helper() const;
+    int run();
+    int orphan();
+    bool operator==(const Foo &o) const;
+    int inline_helper() const { return 1; }
+};
+''')
+        _write(self.tmpdir, 'a.cpp', '''
+#include "a.h"
+Foo::Foo() {}
+Foo::~Foo() {}
+int Foo::helper() const { return 2; }
+int Foo::run() { return helper() + this->helper() + inline_helper(); }
+int Foo::orphan() { return 3; }
+bool Foo::operator==(const Foo &o) const { return true; }
+namespace ns { struct Bar { void go(); }; }
+void ns::Bar::go() {}
+int free_fn() { Foo f; return f.run(); }
+int main() { return free_fn(); }
+''')
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_uncalled_matches_qualified_definitions_by_bare_name(self):
+        from reveal.adapters.calls.index import find_uncalled
+        names = sorted(e['name'] for e in find_uncalled(self.tmpdir)['entries'])
+        # ctor/dtor/operator/main are runtime-invoked; helper/run are called.
+        self.assertEqual(names, ['Foo::orphan', 'ns::Bar::go'])
+
+    def test_qualified_target_finds_bare_call_sites(self):
+        result = find_callers(self.tmpdir, 'Foo::helper', depth=1)
+        self.assertEqual(result['total_callers'], 1)
+        self.assertEqual(result['levels'][0]['callers'][0]['caller'], 'Foo::run')
+
+    def test_transitive_callers_walk_through_qualified_callers(self):
+        result = find_callers(self.tmpdir, 'helper', depth=3)
+        chain = [lvl['callers'][0]['caller'] for lvl in result['levels']]
+        self.assertEqual(chain, ['Foo::run', 'free_fn', 'main'])
+
+
 # ---------------------------------------------------------------------------
 # Unit: cross-directory caller hint (BUG-148)
 # ---------------------------------------------------------------------------

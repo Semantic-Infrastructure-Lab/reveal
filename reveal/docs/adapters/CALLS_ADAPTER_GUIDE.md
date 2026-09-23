@@ -546,6 +546,8 @@ trigger() {
 
 `?uncalled` uses static name matching and cannot see runtime dispatch. Common sources of false positives: framework entry points (`@mcp.tool()`, `@app.route()`), console scripts wired in `pyproject.toml`, dispatch table functions (`_RENDERERS = {'key': fn}`), and functions called only at module level outside any function body.
 
+Outside Python, the largest source is a function used without being called — passed as a value, callback or function pointer (C `qsort(..., cmp)`, C++ `&Class::method` in Godot's `ClassDB::bind_method`, Go `wg.Go(l.run)`, PHP hook strings); that suppression is Python-only today (BACK-1391). C/C++ `main`, operator overloads, destructors, out-of-line constructors (`Foo::Foo`) and GoogleTest/Catch2 `TEST(...)` bodies are excluded as runtime-invoked; in-class C++ constructors and virtual overrides reached only through a base class are not yet (BACK-1392). Rust calls inside macro arguments (`format!("{}", h())`) are recovered best-effort from the macro's token tree (BACK-1393).
+
 Add `# noqa: uncalled` to a `def` line to exclude a specific function from results. The suppression is narrow — the function still appears in all other `calls://` queries.
 
 ---
