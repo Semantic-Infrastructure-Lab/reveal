@@ -323,7 +323,7 @@ class TestGoUnusedImportNames:
     def _i001(self, tmp_path, code):
         from reveal.rules.imports.I001 import I001
         path = _write_go(tmp_path, 'a.go', code)
-        return I001().check(str(path), None, path.read_text())
+        return I001().check(str(path), None, path.read_text(encoding='utf-8'))
 
     def test_versioned_paths_used_by_their_real_package_name(self, tmp_path):
         code = ('package x\n\nimport (\n\t"k8s.io/api/core/v1"\n\t"github.com/foo/bar/v2"\n'

@@ -1330,7 +1330,7 @@ class TestUnusedImportFalsePositives:
     def _flags(self, tmp_path, name, code):
         from reveal.rules.imports.I001 import I001
         p = tmp_path / name
-        p.write_text(code)
+        p.write_text(code, encoding='utf-8')
         return [d.suggestion for d in I001().check(str(p), None, code)]
 
     def test_typescript_shapes(self, tmp_path):

@@ -1773,7 +1773,7 @@ class TestImportsRenderer:
         import sys
 
         test_file = tmp_path / "test.py"
-        test_file.write_text("def f():\n    return 1\n")
+        test_file.write_text("def f():\n    return 1\n", encoding='utf-8')
 
         adapter = ImportsAdapter(str(test_file), 'unused')
         result = adapter.get_structure()
@@ -2185,7 +2185,7 @@ class TestUnusedNotChecked:
         return capsys.readouterr().out
 
     def test_java_only_declines_instead_of_clean(self, tmp_path, capsys):
-        (tmp_path / "A.java").write_text(self.JAVA)
+        (tmp_path / "A.java").write_text(self.JAVA, encoding='utf-8')
         result = ImportsAdapter(str(tmp_path), 'unused').get_structure()
         assert result['metadata']['unused_not_checked_extensions'] == {'.java': 1}
         out = self._render(result, capsys)
@@ -2193,22 +2193,22 @@ class TestUnusedNotChecked:
         assert 'not checked' in out and '.java (1 file)' in out
 
     def test_mixed_tree_scopes_the_clean_claim_to_checked_files(self, tmp_path, capsys):
-        (tmp_path / "A.java").write_text(self.JAVA)
-        (tmp_path / "b.py").write_text("import os\nprint(os.name)\n")
+        (tmp_path / "A.java").write_text(self.JAVA, encoding='utf-8')
+        (tmp_path / "b.py").write_text("import os\nprint(os.name)\n", encoding='utf-8')
         result = ImportsAdapter(str(tmp_path), 'unused').get_structure()
         out = self._render(result, capsys)
         assert '.java (1 file)' in out
         assert '✅ No unused imports found in the 1 checked file(s)!' in out
 
     def test_detecting_language_has_no_not_checked_entry(self, tmp_path):
-        (tmp_path / "b.py").write_text("import os\nprint(os.name)\n")
+        (tmp_path / "b.py").write_text("import os\nprint(os.name)\n", encoding='utf-8')
         result = ImportsAdapter(str(tmp_path), 'unused').get_structure()
         assert result['metadata']['unused_not_checked_extensions'] == {}
 
     def test_check_discloses_i001_gap_unless_deselected(self, tmp_path):
         from reveal.cli.file_checker import _i001_not_checked_disclosures
-        (tmp_path / "A.java").write_text(self.JAVA)
-        (tmp_path / "b.py").write_text("x = 1\n")
+        (tmp_path / "A.java").write_text(self.JAVA, encoding='utf-8')
+        (tmp_path / "b.py").write_text("x = 1\n", encoding='utf-8')
         files = sorted(tmp_path.iterdir())
         notes = _i001_not_checked_disclosures(files, None, None)
         assert len(notes) == 1 and 'W-CAP-2' in notes[0] and '.java (1)' in notes[0]
@@ -2218,7 +2218,7 @@ class TestUnusedNotChecked:
 
     def test_deps_text_carries_the_note(self, tmp_path, capsys):
         from reveal.adapters.deps import DepsAdapter, DepsRenderer
-        (tmp_path / "A.java").write_text(self.JAVA)
+        (tmp_path / "A.java").write_text(self.JAVA, encoding='utf-8')
         DepsRenderer.render_structure(DepsAdapter(str(tmp_path)).get_structure(), format='text')
         assert 'Unused imports not checked' in capsys.readouterr().out
 

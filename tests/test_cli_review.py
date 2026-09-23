@@ -739,14 +739,14 @@ class TestReviewAgainstRealRepo(unittest.TestCase):
                        cwd=self.repo, check=True, capture_output=True)
 
     def _commit(self, name, content):
-        (self.repo / name).write_text(content)
+        (self.repo / name).write_text(content, encoding='utf-8')
         self._git('add', name)
         self._git('commit', '-q', '-m', name)
 
     def _review(self, *args):
         env = {**os.environ, 'REVEAL_DISK_CACHE': '0'}
         return subprocess.run([sys.executable, '-m', 'reveal', 'review', *args],
-                              cwd=self.repo, capture_output=True, text=True, env=env, timeout=120, check=False)
+                              cwd=self.repo, capture_output=True, text=True, env=env, timeout=120, check=False, encoding='utf-8')
 
     def test_unknown_revision_is_a_usage_error(self):
         r = self._review('main..nonexistentbranch')
@@ -758,7 +758,7 @@ class TestReviewAgainstRealRepo(unittest.TestCase):
         with tempfile.TemporaryDirectory() as not_a_repo:
             env = {**os.environ, 'GIT_CEILING_DIRECTORIES': str(Path(not_a_repo).parent)}
             r = subprocess.run([sys.executable, '-m', 'reveal', 'review', 'HEAD~1..HEAD'],
-                               cwd=not_a_repo, capture_output=True, text=True, env=env, timeout=120, check=False)
+                               cwd=not_a_repo, capture_output=True, text=True, env=env, timeout=120, check=False, encoding='utf-8')
         self.assertEqual(r.returncode, 2, r.stdout)
         self.assertIn("not inside a git repository", r.stderr)
 
@@ -782,7 +782,7 @@ class TestReviewAgainstRealRepo(unittest.TestCase):
         """Every `reveal review` line in the guide's CI/CD block, run verbatim
         (C13: `.overall_status` did not exist and `severity=="error"` never
         matched, so both documented gates passed on anything)."""
-        section = _GUIDE.read_text().split('### CI/CD Integration', 1)[1].split('```bash', 1)[1]
+        section = _GUIDE.read_text(encoding='utf-8').split('### CI/CD Integration', 1)[1].split('```bash', 1)[1]
         gates = [ln for ln in section.split('```', 1)[0].splitlines() if ln.startswith('reveal review')]
         self.assertEqual(len(gates), 3, gates)
         cli = f"{sys.executable} -m reveal"
