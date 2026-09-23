@@ -682,7 +682,8 @@ def reveal_trace(path: str, entry_point: str, depth: int = 2) -> str:
 
     Args:
         path: Source directory to analyse
-        entry_point: Entry-point function name to start the trace from
+        entry_point: Entry-point function name to start the trace from; use
+            'path/to/file.py:name' to pick one of several same-named definitions
         depth: Call levels to expand, 1-5 (default 2)
     """
     from pathlib import Path

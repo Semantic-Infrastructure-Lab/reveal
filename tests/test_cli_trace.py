@@ -14,7 +14,6 @@ from unittest.mock import patch
 import pytest
 
 from reveal.cli.commands.trace import (
-    _bfs_depth,
     _build_trace,
     _collect_function_index,
     _effects_from_calls,
@@ -240,38 +239,6 @@ class TestCollectFunctionIndex(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# _bfs_depth
-# ---------------------------------------------------------------------------
-
-class TestBfsDepth(unittest.TestCase):
-
-    def _make_bfs(self):
-        return {
-            'levels': [
-                {'level': 1, 'callees': [
-                    {'caller': 'root', 'callee': 'a'},
-                    {'caller': 'root', 'callee': 'b'},
-                ]},
-                {'level': 2, 'callees': [
-                    {'caller': 'a', 'callee': 'c'},
-                ]},
-            ]
-        }
-
-    def test_root_is_zero(self):
-        self.assertEqual(_bfs_depth('root', 'root', self._make_bfs()), 0)
-
-    def test_level1_callee(self):
-        self.assertEqual(_bfs_depth('a', 'root', self._make_bfs()), 1)
-
-    def test_level2_callee(self):
-        self.assertEqual(_bfs_depth('c', 'root', self._make_bfs()), 2)
-
-    def test_unknown_returns_minus_one(self):
-        self.assertEqual(_bfs_depth('z', 'root', self._make_bfs()), -1)
-
-
-# ---------------------------------------------------------------------------
 # _relpath
 # ---------------------------------------------------------------------------
 
@@ -354,13 +321,104 @@ class TestBuildTrace(unittest.TestCase):
                                               'effects': [],
                                               'calls': [],
                                               'depth': 0,
-                                              'resolved': False}])
+                                              'resolved': False,
+                                              'ambiguous': False}])
 
     def test_effects_populated_for_callee(self):
         self._make_two_file_project()
         report = _build_trace(self.tmpdir, 'main', 2)
         callee_frame = next(f for f in report['frames'] if f['name'] == 'do_work')
         self.assertTrue(any('file' in e for e in callee_frame['effects']))
+
+
+class TestSameNameDefinitions(unittest.TestCase):
+    """BACK-1399: frames are per definition. Keyed by bare name, two unrelated
+    run()s rendered as one frame `run [b.py:1] calls: beta, alpha`."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        _write(self.tmpdir, 'a.py', """\
+            def run():
+                alpha()
+
+            def alpha():
+                pass
+        """)
+        _write(self.tmpdir, 'b.py', """\
+            def run():
+                beta()
+
+            def beta():
+                pass
+        """)
+
+    def _frames(self, root, depth=2):
+        return _build_trace(self.tmpdir, root, depth)
+
+    def test_each_root_definition_keeps_its_own_callees(self):
+        report = self._frames('run')
+        runs = [(os.path.basename(f['file']), f['calls']) for f in report['frames'] if f['name'] == 'run']
+        self.assertEqual(runs, [('a.py', ['alpha']), ('b.py', ['beta'])])
+        self.assertIn("'run' has 2 definitions", report['warnings'][0])
+
+    def test_callees_render_under_their_own_caller(self):
+        names = [f['name'] for f in self._frames('run')['frames']]
+        self.assertEqual(names, ['run', 'alpha', 'run', 'beta'])
+
+    def test_file_selector_picks_one_definition(self):
+        report = self._frames('b.py:run')
+        self.assertEqual([f['name'] for f in report['frames']], ['run', 'beta'])
+        self.assertEqual(report['warnings'], [])
+
+    def test_ambiguous_callee_is_marked_not_merged(self):
+        _write(self.tmpdir, 'main.py', """\
+            def main():
+                run()
+        """)
+        frames = self._frames('main')['frames']
+        run = next(f for f in frames if f['name'] == 'run')
+        self.assertTrue(run['ambiguous'])
+        self.assertEqual(sorted(os.path.basename(c['file']) for c in run['candidates']), ['a.py', 'b.py'])
+        self.assertNotIn('alpha', [f['name'] for f in frames])
+
+    def test_ambiguous_callee_resolves_through_the_callers_import(self):
+        _write(self.tmpdir, 'main.py', """\
+            from b import run
+
+            def main():
+                run()
+        """)
+        frames = self._frames('main')['frames']
+        self.assertEqual([(f['name'], os.path.basename(f['file'])) for f in frames],
+                         [('main', 'main.py'), ('run', 'b.py'), ('beta', 'b.py')])
+
+    def test_ambiguous_callee_resolves_to_a_same_file_definition(self):
+        _write(self.tmpdir, 'c.py', """\
+            def main():
+                run()
+
+            def run():
+                gamma()
+
+            def gamma():
+                pass
+        """)
+        names = [f['name'] for f in self._frames('main')['frames']]
+        self.assertEqual(names, ['main', 'run', 'gamma'])
+
+    def test_anonymous_class_callee_is_not_named_after_its_body(self):
+        _write(self.tmpdir, 'Exec.java', """\
+            class Exec {
+                void go() {
+                    pool.submit(new AbstractRunnable() {
+                        public void doRun() { executePipelines(); executePipelines(); }
+                    }.wrap());
+                }
+            }
+        """)
+        frames = _build_trace(self.tmpdir, 'go', 1)['frames']
+        self.assertTrue(all(len(f['name']) <= 80 and '\n' not in f['name'] for f in frames),
+                        [f['name'] for f in frames])
 
 
 class TestRenderTrace(unittest.TestCase):

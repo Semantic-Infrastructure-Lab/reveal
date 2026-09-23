@@ -1,7 +1,7 @@
 """trace:// adapter - execution narrative from an entry-point function.
 
-Walks the call graph from a named entry point (BFS via calls:// machinery)
-and builds a depth-indented narrative: each frame shows the function
+Walks the call graph depth-first from a named entry point, one frame per
+definition, and builds a depth-indented narrative: each frame shows the function
 location, its parameters, classified side-effects, and what it calls next.
 Scan/render logic lives here (BACK-901/BACK-960); `cli/commands/trace.py` is
 a thin argparse shim over this adapter, unchanged in its own CLI/MCP
@@ -12,8 +12,9 @@ tool both keep working exactly as before).
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -24,117 +25,217 @@ from ..utils.results import ResultBuilder
 
 
 def _build_trace(path: str, root: str, depth: int) -> Dict[str, Any]:
-    """Build a trace report: BFS call tree augmented with per-function info."""
-    from reveal.adapters.calls.index import _lang_family, find_callees_recursive
+    """Build a trace report: a depth-first walk over *definitions* (file:line),
+    frames in pre-order so each renders under its caller.
 
-    bfs = find_callees_recursive(path, root, depth=depth)
-    func_index = _collect_function_index(path)
+    Keyed by definition, not by name (BACK-1399): the old name-keyed BFS merged
+    every same-named function into one frame, so two unrelated `run()`s
+    reported each other's callees. `root` may be `path/to/file.py:name` to pick
+    one definition; an ambiguous bare name traces each definition separately.
+    """
+    from reveal.adapters.ast.analysis import collect_structures
 
-    # children map: name → ordered list of callee names
-    children: Dict[str, List[str]] = {}
-    # BACK-405: only trust a bare-name lookup in func_index for a callee that
-    # the (language-scoped) BFS actually resolved, and only against the
-    # language family(ies) it resolved through — otherwise a same-named
-    # definition in an unrelated language (e.g. a Python `def write` next to
-    # a C `write()` syscall) renders as if it were the real target.
-    resolved_families: Dict[str, Set[str]] = {}
-    for lvl in bfs.get('levels', []):
-        for entry in lvl['callees']:
-            caller = entry['caller']
-            callee = entry['callee']
-            children.setdefault(caller, [])
-            if callee not in children[caller]:
-                children[caller].append(callee)
-            if entry['resolved']:
-                resolved_families.setdefault(callee, set()).add(
-                    _lang_family(entry['caller_file'])
-                )
+    index = _definition_index(collect_structures(path))
+    file_filter, root_name = _split_root(root)
+    roots = [d for d in index.get(root_name, []) if _path_matches(d['file'], file_filter)]
 
-    # BFS visit order so frames render root-first, then level 1, level 2 …
-    visited_order: List[str] = [root]
-    seen: Set[str] = {root}
-    for lvl in bfs.get('levels', []):
-        for entry in lvl['callees']:
-            callee = entry['callee']
-            if callee not in seen:
-                seen.add(callee)
-                visited_order.append(callee)
+    warnings: List[str] = []
+    if len(roots) > 1:
+        where = ', '.join(f"{_relpath(d['file'], path)}:{d['line']}" for d in roots[:5])
+        more = f" (+{len(roots) - 5} more)" if len(roots) > 5 else ''
+        warnings.append(
+            f"'{root_name}' has {len(roots)} definitions ({where}{more}); each is traced "
+            f"separately -- pick one with --from <file>:{root_name}"
+        )
 
-    frames = []
-    for name in visited_order:
-        candidates = func_index.get(name, [])
-        if name == root:
-            info = candidates[0] if candidates else {}
-        else:
-            families = resolved_families.get(name)
-            info = (
-                next((c for c in candidates if _lang_family(c['file']) in families), {})
-                if families else {}
-            )
-        level = _bfs_depth(name, root, bfs)
-        frame: Dict[str, Any] = {
-            'name': name,
-            'file': info.get('file', ''),
-            'line': info.get('line', 0),
-            'params': info.get('params', []),
-            'effects': info.get('effects', []),
-            'calls': children.get(name, []),
-            'depth': level,
-            'resolved': bool(info),
-        }
-        frames.append(frame)
+    walker = _TraceWalker(index, depth)
+    for defn in roots:
+        walker.expand(root_name, defn, 0)
+    frames = walker.frames or [_frame(root, None, 0)]
+    if walker.ambiguous_names:
+        warnings.append(
+            f"{len(walker.ambiguous_names)} callee name(s) match several definitions and are "
+            f"not expanded: {', '.join(sorted(walker.ambiguous_names)[:5])}"
+        )
 
     return {
         'root': root,
         'path': path,
         'depth': depth,
         'frames': frames,
-        'total_resolved': bfs.get('total_resolved', 0),
-        'total_unresolved': bfs.get('total_unresolved', 0),
+        'warnings': warnings,
+        'total_resolved': walker.resolved,
+        'total_unresolved': walker.unresolved,
     }
 
 
-def _bfs_depth(name: str, root: str, bfs: Dict[str, Any]) -> int:
-    if name == root:
-        return 0
-    for lvl in bfs.get('levels', []):
-        for entry in lvl['callees']:
-            if entry['callee'] == name:
-                return lvl['level']
-    return -1
+_ROOT_WITH_FILE = re.compile(r'^(?P<file>.+\.[A-Za-z0-9_+]+):(?P<name>[^:].*)$')
+_MAX_EXTERNAL_NAME = 80
 
 
-def _collect_function_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
-    """Scan all files under *path* via collect_structures and return name → [info, ...].
+def _split_root(root: str) -> Tuple[str, str]:
+    """`src/a.py:run` -> ('src/a.py', 'run'); `run` / `Foo::run` -> ('', name)."""
+    m = _ROOT_WITH_FILE.match(root)
+    return (m.group('file'), m.group('name')) if m else ('', root)
 
-    Returns every same-named definition (not just the first) so callers can
-    disambiguate by language family (BACK-405) instead of silently picking
-    whichever definition happened to be scanned first.
-    """
-    from reveal.adapters.ast.analysis import collect_structures
+
+def _path_matches(file_path: str, file_filter: str) -> bool:
+    if not file_filter:
+        return True
+    want = Path(file_filter)
+    if want.is_absolute():
+        return Path(file_path).resolve() == want.resolve()
+    return Path(file_path).parts[-len(want.parts):] == want.parts
+
+
+def _short_callee(call: str) -> str:
+    """Display text for an unresolved callee: an anonymous class or lambda
+    body is part of the call expression and must not become the name."""
+    text = re.sub(r'\{.*\}', '{...}', ' '.join(call.split()), flags=re.S)
+    return text if len(text) <= _MAX_EXTERNAL_NAME else text[:_MAX_EXTERNAL_NAME - 3] + '...'
+
+
+def _frame(name: str, defn: Optional[Dict[str, Any]], depth: int) -> Dict[str, Any]:
+    return {
+        'name': name,
+        'file': defn['file'] if defn else '',
+        'line': defn['line'] if defn else 0,
+        'params': defn['params'] if defn else [],
+        'effects': defn['effects'] if defn else [],
+        'calls': [],
+        'depth': depth,
+        'resolved': defn is not None,
+        'ambiguous': False,
+    }
+
+
+class _TraceWalker:
+    """Expands definitions depth-first; each definition gets one frame."""
+
+    def __init__(self, index: Dict[str, List[Dict[str, Any]]], max_depth: int) -> None:
+        self.index = index
+        self.max_depth = max_depth
+        self.frames: List[Dict[str, Any]] = []
+        self.resolved = 0
+        self.unresolved = 0
+        self.ambiguous_names: Set[str] = set()
+        self._expanded: Set[Tuple[str, int, str]] = set()
+        self._leaf_names: Set[str] = set()
+        self._symbol_maps: Dict[str, Dict[str, Optional[str]]] = {}
+
+    def expand(self, name: str, defn: Dict[str, Any], depth: int) -> None:
+        self._expanded.add((defn['file'], defn['line'], name))
+        frame = _frame(name, defn, depth)
+        self.frames.append(frame)
+        if depth >= self.max_depth:
+            return
+        targets = []
+        for call in defn['calls']:
+            label, target = self._resolve(call, defn['file'])
+            if label not in frame['calls']:
+                frame['calls'].append(label)
+                targets.append((label, target))
+        for label, target in targets:
+            if target is None:
+                self.unresolved += 1
+                self._leaf(label, depth + 1, resolved=False)
+            elif isinstance(target, list):
+                self.resolved += 1
+                self.ambiguous_names.add(label)
+                self._leaf(label, depth + 1, resolved=False, candidates=target)
+            else:
+                self.resolved += 1
+                if (target['file'], target['line'], label) not in self._expanded:
+                    self.expand(label, target, depth + 1)
+
+    def _leaf(self, label: str, depth: int, resolved: bool,
+              candidates: Optional[List[Dict[str, Any]]] = None) -> None:
+        """External and ambiguous callees: one frame per name, never expanded."""
+        if label in self._leaf_names:
+            return
+        self._leaf_names.add(label)
+        frame = _frame(label, None, depth)
+        frame['resolved'] = resolved
+        if candidates:
+            frame['ambiguous'] = True
+            frame['candidates'] = [{'file': c['file'], 'line': c['line']} for c in candidates]
+        self.frames.append(frame)
+
+    def _resolve(self, call: str, caller_file: str) -> Tuple[str, Any]:
+        """(label, target): target is one definition, a list of candidate
+        definitions when the name is ambiguous, or None when external."""
+        from reveal.adapters.calls.index import _bare_callee_name, _lang_family
+
+        tail = _bare_callee_name(call)
+        family = _lang_family(caller_file)
+        candidates = [d for d in self.index.get(tail, [])
+                      if not family or _lang_family(d['file']) == family]
+        if not candidates:
+            return _short_callee(call), None
+        if len(candidates) == 1:
+            return tail, candidates[0]
+        return tail, self._disambiguate(call, tail, caller_file, candidates) or candidates
+
+    def _disambiguate(self, call: str, tail: str, caller_file: str,
+                      candidates: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """The one candidate the caller's own file or its imports point at.
+        A bare call prefers a same-file definition (it shadows imports); a
+        qualified one (`strings.rtrim`, `h.run`) prefers the module it names."""
+        qualifier = call.split('.')[0] if '.' in call else ''
+        imported = self._symbol_map(caller_file).get(qualifier or tail)
+        imported_path = Path(imported).resolve() if imported else None
+        via_import = [c for c in candidates if imported_path and Path(c['file']).resolve() == imported_path]
+        same_file = [c for c in candidates if c['file'] == caller_file]
+        for group in ((via_import, same_file) if qualifier else (same_file, via_import)):
+            if len(group) == 1:
+                return group[0]
+        return None
+
+    def _symbol_map(self, file_path: str) -> Dict[str, Optional[str]]:
+        if file_path not in self._symbol_maps:
+            from reveal.adapters.ast.call_graph import build_symbol_map
+            self._symbol_maps[file_path] = build_symbol_map(file_path)
+        return self._symbol_maps[file_path]
+
+
+def _definition_index(structures: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    """name -> every definition of it: file, line, params, effects and calls
+    (language builtins dropped, as in calls://)."""
     from reveal.adapters.ast.nav_effects import classify_call
+    from reveal.adapters.calls.index import _lang_family
+    from reveal.conventions import conventions_for
     from reveal.registry import language_for_extension
 
-    structures = collect_structures(path)
     index: Dict[str, List[Dict[str, Any]]] = {}
-
     for file_struct in structures:
         file_path = file_struct.get('file', '')
         language = language_for_extension(Path(file_path).suffix)
+        builtins = conventions_for(_lang_family(file_path)).builtins
         for elem in file_struct.get('elements', []):
-            if elem.get('category') not in ('functions', 'methods'):
+            # 'tests' so a Zig test block can be a root (BACK-663).
+            if elem.get('category') not in ('functions', 'methods', 'tests'):
                 continue
             name = elem.get('name', '')
             if not name:
                 continue
+            calls = elem.get('calls', [])
             index.setdefault(name, []).append({
                 'file': file_path,
                 'line': elem.get('line', 0),
                 'params': _params_from_signature(elem.get('signature', ''), name),
-                'effects': _effects_from_calls(elem.get('calls', []), classify_call, language),
+                'effects': _effects_from_calls(calls, classify_call, language),
+                'calls': [c for c in calls if c.split('.')[-1] not in builtins] if builtins else calls,
             })
-
+    # collect_structures' file order is not stable; frames and candidates must be.
+    for defs in index.values():
+        defs.sort(key=lambda d: (d['file'], d['line']))
     return index
+
+
+def _collect_function_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
+    """Every definition under *path*, by name (see _definition_index)."""
+    from reveal.adapters.ast.analysis import collect_structures
+    return _definition_index(collect_structures(path))
 
 
 def _split_top_level_commas(text: str) -> List[str]:
@@ -230,6 +331,8 @@ def _render_trace(report: Dict[str, Any]) -> None:
     print(f"Trace: {root}  (depth {depth})")
     print(f"Project: {path}")
     print(f"Resolved: {total_r}  External/unresolved: {total_u}")
+    for warning in report.get('warnings', []):
+        print(f"⚠ {warning}")
     print()
 
     if not frames:
@@ -246,7 +349,12 @@ def _render_trace(report: Dict[str, Any]) -> None:
             rel = _relpath(frame['file'], path)
             loc = f"  [{rel}:{frame['line']}]" if frame['line'] else f"  [{rel}]"
 
-        marker = '' if frame['resolved'] else '  [external]'
+        if frame.get('ambiguous'):
+            where = ', '.join(f"{_relpath(c['file'], path)}:{c['line']}" for c in frame['candidates'][:3])
+            more = ', ...' if len(frame['candidates']) > 3 else ''
+            marker = f"  [ambiguous: {len(frame['candidates'])} definitions -- {where}{more}]"
+        else:
+            marker = '' if frame['resolved'] else '  [external]'
         print(f"{indent}{name}{loc}{marker}")
 
         inner = indent + '  '
@@ -299,7 +407,9 @@ class TraceAdapter(ResourceAdapter):
                 {'uri': "trace://src?from=handle_request&depth=4", 'description': 'Trace 4 levels deep'},
             ],
             'features': [
-                'BFS call-graph walk via the same machinery as calls://',
+                'Depth-first walk, one frame per definition: two unrelated functions named run() are never merged',
+                'from=<file>:<name> picks one definition; a bare name with several traces each and warns',
+                'Callees with several same-named definitions resolve via the same file, then imports, else [ambiguous]',
                 'Each frame: file/line, parameters, classified side-effects, and what it calls next',
                 'Unresolved (external/stdlib) callees marked [external]',
             ],
@@ -321,7 +431,7 @@ class TraceAdapter(ResourceAdapter):
             'description': 'Execution narrative: BFS call-graph walk from a named entry point',
             'uri_syntax': 'trace://<path>?from=<FUNC>&depth=2',
             'query_params': {
-                'from': {'type': 'string', 'description': 'Entry-point function to start the trace from (required)', 'examples': ['from=main']},
+                'from': {'type': 'string', 'description': 'Entry-point function to start the trace from (required); `<file>:<name>` picks one of several same-named definitions', 'examples': ['from=main', 'from=src/app.py:run']},
                 'depth': {'type': 'integer', 'description': 'How many call levels to expand (clamped 1-5, default 2)', 'examples': ['depth=4']},
             },
             'elements': {},
@@ -344,7 +454,7 @@ class TraceAdapter(ResourceAdapter):
                 {'uri': 'trace://src?from=main', 'description': 'Trace from main()', 'output_type': 'trace', 'task': 'debugging'},
             ],
             'notes': [
-                'Built on calls:// BFS machinery (find_callees_recursive) — not an independent scan.',
+                'Frames are per definition (file:line), in call order. A callee name with several definitions resolves through the same file, then the caller\'s imports; otherwise it is marked ambiguous and not expanded (BACK-1399).',
             ],
         }
 

@@ -17,7 +17,6 @@ from pathlib import Path
 from reveal.adapters.trace import (  # noqa: F401 - re-exported for back-compat
     TraceAdapter,
     TraceRenderer,
-    _bfs_depth,
     _build_trace,
     _collect_function_index,
     _effects_from_calls,
@@ -43,7 +42,7 @@ def create_trace_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         '--from', dest='root', required=True, metavar='FUNC',
-        help='Entry-point function to start the trace from',
+        help='Entry-point function to start the trace from; FILE:FUNC picks one of several same-named definitions',
     )
     parser.add_argument(
         '--depth', type=int, default=2, metavar='N',

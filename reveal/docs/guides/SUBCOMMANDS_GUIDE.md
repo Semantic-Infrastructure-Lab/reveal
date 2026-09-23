@@ -184,7 +184,7 @@ reveal health ./src ssl://api.example.com mysql://localhost
 #   targets: [src/, ssl://api.example.com]
 
 # CI/CD: fail on warnings or failures
-reveal health . --format json | jq '.exit_code == 0'
+reveal health . --format json | jq -e '.exit_code == 0'
 ```
 
 ### See Also
@@ -311,7 +311,7 @@ reveal trace [PATH] --from FUNC [--depth N] [--format {text,json}]
 
 | Flag | Description |
 |------|-------------|
-| `--from FUNC` | Entry-point function to start the trace from (required) |
+| `--from FUNC` | Entry-point function to start the trace from (required). `FILE:FUNC` (e.g. `src/app.py:run`) picks one of several same-named definitions |
 | `--depth N` | Call levels to expand, 1–5 (default: 2) |
 | `--format` | Output format: `text` (default) or `json` |
 
@@ -331,11 +331,16 @@ Each frame is labelled with detected side-effects:
 
 Unresolved (external/stdlib) callees appear with an `[external]` marker.
 
+### Same-Named Functions
+
+Frames are per definition, in call order, so two unrelated functions named `run` are never merged into one frame. A bare `--from run` with several definitions traces each one separately and prints a warning naming them; `--from path/to/file.py:run` traces just that one. A callee whose name matches several definitions resolves to the one in the caller's own file, then to the one the caller imports; otherwise it is shown as `[ambiguous: N definitions -- a.py:3, b.py:9]` and not expanded, rather than guessing.
+
 ### Examples
 
 ```bash
 reveal trace src/ --from main               # Trace from main(), depth 2
 reveal trace src/ --from process_order --depth 3
+reveal trace src/ --from src/jobs/runner.py:run   # One of several run() definitions
 reveal trace . --from handle_request --format json  # Machine-readable output
 ```
 
