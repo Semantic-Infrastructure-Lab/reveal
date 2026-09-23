@@ -60,8 +60,9 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     severity = Severity.MEDIUM
     # Every extension of these languages, from the registry (BACK-1255: the hand
     # list missed .tsx, .mts, .cts and .hxx). The JS/TS slugs are grammar names.
-    _CATCH_LANGUAGES = ('python', 'csharp', 'java', *JS_TS_LANGUAGES, 'php', 'kotlin', 'swift', 'cpp')
-    file_patterns = sorted(extensions_for_languages(*_CATCH_LANGUAGES))
+    # Python, the primary, first.
+    _CATCH_LANGUAGES = ('csharp', 'java', *JS_TS_LANGUAGES, 'php', 'kotlin', 'swift', 'cpp')
+    file_patterns = ['.py', *sorted(extensions_for_languages(*_CATCH_LANGUAGES))]
     version = "1.8.0"
 
     _CS_LANGUAGE = 'csharp'

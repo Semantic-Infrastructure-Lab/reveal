@@ -29,8 +29,8 @@ class B001(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     message = "Bare except clause catches all exceptions including SystemExit"
     category = RulePrefix.B
     severity = Severity.HIGH
-    # Registry-derived (BACK-1255: the hand list missed .hxx).
-    file_patterns = sorted(extensions_for_languages('python', 'csharp', 'cpp'))
+    # Registry-derived (BACK-1255: the hand list missed .hxx); Python, the primary, first.
+    file_patterns = ['.py', *sorted(extensions_for_languages('csharp', 'cpp'))]
     version = "1.1.0"
 
     _CS_LANGUAGE = 'csharp'
