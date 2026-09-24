@@ -20,7 +20,7 @@ Design (BACK-466 part 1):
   A rule may still override via an explicit class attribute for a genuine
   exception.
 - **"Verified" means correctness-verified (BACK-432), capped honestly.** A
-  universal rule *applies* to all ~85 languages but was fixture-verified on the 13
+  universal rule *applies* to every supported language but was fixture-verified on the 13
   tier-1 families — so that is what it claims. The gap between "applies to" and
   "verified on" is the whole point of the badge.
 - **Format rules name their format.** nginx/markdown/Dockerfile rules were

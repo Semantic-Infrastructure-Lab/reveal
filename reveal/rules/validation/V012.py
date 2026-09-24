@@ -5,7 +5,7 @@ actually reports. Prevents documentation drift when languages are added.
 
 Example violation:
     - A doc claims: "305+ languages"
-    - `reveal --languages` reports: "Total: 84 languages supported"
+    - `reveal --languages` reports: "Total: 51 languages supported"
     - Result: an overclaim the tool itself contradicts (reveal file.f90 errors)
 
 How it counts:

@@ -51,6 +51,14 @@ def test_hxx_uses_the_cpp_analyzer_not_the_fallback():
     assert '.hxx' not in fallback_languages()
 
 
+@pytest.mark.parametrize('ext', ['.py', '.pyi'])
+def test_python_stubs_use_the_python_analyzer(ext):
+    # BACK-1467: `reveal x.pyi` printed "No analyzer found"
+    cls = get_analyzer(f'x{ext}', allow_fallback=False)
+    assert cls is not None and cls.__name__ == 'PythonAnalyzer'
+    assert language_for_extension(ext) == 'python'
+
+
 def test_fallback_languages_route_to_a_fallback_analyzer():
     for ext in fallback_languages():
         cls = get_analyzer(f'x{ext}')
@@ -95,7 +103,9 @@ def test_rules_claim_whole_languages_never_part_of_one():
     .cjs, .bash, .markdown missing)."""
     from reveal.rules import RuleRegistry
     # I001/I002/I005 take the import extractors' extensions: .mm but not .m (BACK-664).
-    allowed_missing = {'.m'}
+    # .pyi stubs are declarations only: body rules have nothing to read, and M102
+    # would call every stub an orphan (nothing imports a .pyi by path; BACK-1467).
+    allowed_missing = {'.m', '.pyi'}
     for rule in RuleRegistry.get_rules():
         claimed = {p for p in rule.file_patterns if p.startswith('.') and '*' not in p}
         for lang in {language_for_extension(p) for p in claimed} - {None}:
@@ -137,7 +147,6 @@ def test_convention_test_file_patterns_accept_every_family_extension(languages, 
 
 # Extractor extensions deliberately outside their languages' registry family.
 _EXTRACTOR_EXTRAS = {
-    'PythonExtractor': {'.pyi'},     # stubs: no analyzer, but imports are real
     'CppImportExtractor': {'.mm'},   # Obj-C++ includes (BACK-664); .m stays out
 }
 

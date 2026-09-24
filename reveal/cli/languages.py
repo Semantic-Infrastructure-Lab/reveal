@@ -51,6 +51,23 @@ def _collect_language_support():
     return explicit_extensions, fallback_languages, AMBIGUOUS_EXTENSIONS
 
 
+def _group_by_language(explicit_extensions: Dict[str, dict]) -> List[dict]:
+    """One entry per language, not per extension.
+
+    The total used to count extension rows, so C++ (.cpp, .hpp, ...) counted
+    once per extension and adding .pyi made Python count twice. Sorted by name;
+    the capability comes from the first extension's analyzer class.
+    """
+    groups: Dict[str, dict] = {}
+    for ext, info in sorted(explicit_extensions.items()):
+        name = str(info['name'])
+        group = groups.setdefault(name, {
+            'name': name, 'icon': info['icon'], 'class': info['class'], 'extensions': [],
+        })
+        group['extensions'].append(ext)
+    return sorted(groups.values(), key=lambda g: g['name'].lower())
+
+
 def build_languages_payload() -> dict:
     """Structured language-support catalog, for help://languages (BACK-846).
 
@@ -63,13 +80,13 @@ def build_languages_payload() -> dict:
     explicit_extensions, fallback_languages, ambiguous = _collect_language_support()
 
     explicit = []
-    for ext, info in sorted(explicit_extensions.items(), key=lambda x: str(x[1]['name']).lower()):
-        cap = get_capability(info['class'])
+    for group in _group_by_language(explicit_extensions):
+        cap = get_capability(group['class'])
         explicit.append({
-            'name': info['name'],
-            'extension': ext,
+            'name': group['name'],
+            'extensions': group['extensions'],
             'conformance_level': cap.conformance_level if cap else None,
-            'content_dependent': ext in ambiguous,
+            'content_dependent': [ext for ext in group['extensions'] if ext in ambiguous],
         })
 
     fallback = [
@@ -95,6 +112,7 @@ def list_supported_languages() -> str:
         Formatted string showing explicit and fallback language support
     """
     explicit_extensions, fallback_languages, AMBIGUOUS_EXTENSIONS = _collect_language_support()
+    languages = _group_by_language(explicit_extensions)
 
     # Format output
     lines = []
@@ -102,24 +120,21 @@ def list_supported_languages() -> str:
     lines.append("=" * 70)
 
     # Explicit analyzers section
-    lines.append(f"\n✅ Explicit Analyzers ({len(explicit_extensions)})")
+    lines.append(f"\n✅ Explicit Analyzers ({len(languages)})")
     lines.append("-" * 70)
     lines.append("Full analysis with language-specific features\n")
 
-    # Group by extension
     from ..capabilities import get_capability
 
-    explicit_sorted = sorted(explicit_extensions.items(), key=lambda x: str(x[1]['name']).lower())
-    for ext, info in explicit_sorted:
-        name = info['name']
-        icon = info['icon']
-        cap = get_capability(info['class'])
+    for group in languages:
+        cap = get_capability(group['class'])
         tag = f" [{cap.conformance_level}]" if cap else ""
-        # BACK-583: this line's class is only the registry's last-registered
-        # winner for extensions registered by more than one analyzer — real
-        # dispatch resolves those by content/path sniffing instead.
-        marker = " *" if ext in AMBIGUOUS_EXTENSIONS else ""
-        lines.append(f"  {icon} {name:20} ({ext}){tag}{marker}")
+        # BACK-583: an extension registered by more than one analyzer is
+        # dispatched by content/path sniffing, not by this row's class.
+        exts = ', '.join(
+            f"{ext} *" if ext in AMBIGUOUS_EXTENSIONS else ext for ext in group['extensions']
+        )
+        lines.append(f"  {group['icon']} {group['name']:20} ({exts}){tag}")
 
     # Fallback section
     lines.append(f"\n🔄 Tree-sitter Fallback ({len(fallback_languages)})")
@@ -133,7 +148,7 @@ def list_supported_languages() -> str:
         lines.append(f"  📄 {lang:20} ({ext_str})")
 
     # Total
-    total = len(explicit_extensions) + len(fallback_languages)
+    total = len(languages) + len(fallback_languages)
     lines.append(f"\n{'='*70}")
     lines.append(f"Total: {total} languages supported")
     lines.append(

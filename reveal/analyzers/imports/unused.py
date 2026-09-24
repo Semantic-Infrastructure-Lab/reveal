@@ -53,8 +53,22 @@ def should_skip_import(stmt: 'ImportStatement') -> bool:
         or stmt.is_type_checking          # used only in type hints
         or stmt.skip_unused               # language lacks reliable symbol-usage semantics
         or has_suppression_comment(stmt.source_line)
-        or stmt.file_path.name == '__init__.py'  # re-export pattern: imports are public API
+        or stmt.file_path.name in ('__init__.py', '__init__.pyi')  # re-export pattern: imports are public API
     )
+
+
+_PYTHON_SUFFIXES = ('.py', '.pyi')
+
+
+def _is_explicit_reexport(stmt: 'ImportStatement', entry: str = '') -> bool:
+    """PEP 484 redundant alias (`import X as X`, `from m import X as X`): the
+    documented way to re-export a name from a module or stub, never unused."""
+    if stmt.file_path.suffix not in _PYTHON_SUFFIXES:
+        return False
+    if entry:
+        name, _, alias = entry.partition(' as ')
+        return bool(alias) and name.strip() == alias.strip()
+    return stmt.alias is not None and stmt.alias == stmt.module_name
 
 
 def is_named_import(stmt: 'ImportStatement') -> bool:
@@ -78,15 +92,17 @@ def unused_entries(stmt: 'ImportStatement', symbols_used: Set[str],
     `[]` means the import is used (or is not judged). For a named import each
     unused name is returned (`'X as Y'` entries verbatim); for `import X`,
     `import X as Y` and namespace imports the single bound name is returned.
-    Names re-exported via `__all__` (`exports`) count as used.
+    Names re-exported via `__all__` (`exports`) or a PEP 484 redundant alias
+    count as used.
     """
-    if should_skip_import(stmt):
+    if should_skip_import(stmt) or _is_explicit_reexport(stmt):
         return []
     if any(alt in symbols_used for alt in stmt.alt_names):
         return []
     if is_named_import(stmt):
         return [name for name in stmt.imported_names
-                if bound_name(name) not in symbols_used and bound_name(name) not in exports]
+                if bound_name(name) not in symbols_used and bound_name(name) not in exports
+                and not _is_explicit_reexport(stmt, name)]
     if stmt.import_type == 'namespace_import':
         name = stmt.alias or ''
     else:

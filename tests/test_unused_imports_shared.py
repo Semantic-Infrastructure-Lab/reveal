@@ -30,6 +30,14 @@ FILES = {
         'package p\n\nimport (\n\t"fmt"\n\t"os"\n\t_ "embed"\n)\n\nfunc f() { fmt.Println() }\n'
     ),
     'a.rs': "use std::io;\nuse std::fmt::{self, Display};\nfn f(_: &dyn Display) {}\n",
+    # BACK-1467: stubs are analyzed; `X as X` is a PEP 484 re-export, a plain import is private
+    'a.pyi': (
+        "from typing import Any\n"
+        "from .core import Engine as Engine, Helper\n"
+        "import os as os\n"
+        "import sys\n"
+        "x: Any\n"
+    ),
 }
 
 
@@ -77,3 +85,23 @@ def test_used_namespace_import_is_not_flagged_but_unused_one_is(tree):
 def test_eslint_disable_suppresses_in_both(tree):
     assert 4 not in _i001_lines(tree / 'a.js')
     assert 4 not in {u['line'] for u in _adapter(tree / 'a.js')['unused']}
+
+
+def test_redundant_alias_is_a_reexport_not_unused(tree):
+    unused = {u['line']: u['unused_names'] for u in _adapter(tree / 'a.pyi')['unused']}
+    assert unused[2] == ['Helper']  # `Engine as Engine` re-exports, Helper is private
+    assert 3 not in unused          # `import os as os`
+    assert 4 in unused              # `import sys`
+    assert (tree / 'a.pyi').exists() and _i001_lines(tree / 'a.pyi') == [2, 4]
+
+
+def test_redundant_alias_in_a_py_module_is_a_reexport(tmp_path):
+    path = tmp_path / 'm.py'
+    path.write_text("from .core import Engine as Engine\nimport os as os\n", encoding='utf-8')
+    assert _i001_lines(path) == []
+
+
+def test_init_stub_is_skipped_like_init_module(tmp_path):
+    path = tmp_path / '__init__.pyi'
+    path.write_text("import sys\n", encoding='utf-8')
+    assert _i001_lines(path) == []

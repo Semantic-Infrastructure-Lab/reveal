@@ -68,6 +68,23 @@ class TestListSupportedLanguages(unittest.TestCase):
         self.assertIn("Total:", result)
         self.assertIn("languages supported", result)
 
+    def test_total_counts_languages_not_extensions(self):
+        """C++ (.cpp, .hpp, ...) and Python (.py, .pyi) are one language each; the
+        total used to count extension rows and read 81 when it was 51."""
+        import re
+        from reveal.cli.languages import build_languages_payload
+        result = list_supported_languages()
+        cpp_rows = [line for line in result.splitlines() if re.search(r'\sC\+\+\s', line)]
+        self.assertEqual(len(cpp_rows), 1)
+        self.assertIn('.hpp', cpp_rows[0])
+        payload = build_languages_payload()
+        names = [entry['name'] for entry in payload['explicit']]
+        self.assertEqual(len(names), len(set(names)))
+        python = next(e for e in payload['explicit'] if e['name'] == 'Python')
+        self.assertEqual(python['extensions'], ['.py', '.pyi'])
+        total = int(re.search(r'Total:\s*(\d+)', result).group(1))
+        self.assertEqual(total, payload['total'])
+
     def test_explicit_section_format(self):
         """Test that explicit analyzers section is properly formatted."""
         result = list_supported_languages()

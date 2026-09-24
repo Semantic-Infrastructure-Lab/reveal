@@ -8,7 +8,7 @@ from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
 
-@register('.py', name='Python', icon='')
+@register('.py', '.pyi', name='Python', icon='')
 class PythonAnalyzer(TreeSitterAnalyzer):
     """Python file analyzer.
 

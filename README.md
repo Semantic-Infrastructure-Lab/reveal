@@ -2,7 +2,7 @@
 
 **Reveal is how AI agents understand codebases without wasting tokens.**
 
-A local-first, adapter-driven semantic inspection layer — progressive disclosure enforced by design. One CLI, 35 URI adapters, 81 languages. Structure before content, always. Engineers and AI systems use the same tool, the same syntax, the same progressive drill-down.
+A local-first, adapter-driven semantic inspection layer — progressive disclosure enforced by design. One CLI, 35 URI adapters, 51 languages and file formats. Structure before content, always. Engineers and AI systems use the same tool, the same syntax, the same progressive drill-down.
 
 ```bash
 reveal src/auth.py validate_token           # What does this function do?
@@ -168,7 +168,7 @@ The most-used adapters; `reveal --adapters` lists every one.
 
 | Adapter | What it queries |
 |---------|-----------------|
-| `ast://` | Functions, classes, complexity, decorators — 81 languages |
+| `ast://` | Functions, classes, complexity, decorators — 51 languages |
 | `calls://` | Cross-file call graph: callers, callees, coupling metrics, dead code |
 | `depends://` | Inverse module dependency graph: who imports this module |
 | `diff://` | Structural diff between branches or commits (with per-function complexity delta) |

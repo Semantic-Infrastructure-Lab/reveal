@@ -3121,7 +3121,7 @@ exit 0
 
 **reveal auto-detects and provides structure for:**
 
-### Programming Languages (81 total — run `reveal --languages` for the live explicit-vs-fallback breakdown)
+### Programming Languages (51 total — run `reveal --languages` for the live explicit-vs-fallback breakdown)
 Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Scala, Swift, Kotlin, Dart, Elixir, Zig, GDScript, Bash, PowerShell, SQL, PHP, Ruby, Lua, and more — plus a tree-sitter fallback (basic structure only) for any other supported grammar
 
 **Structure provided:** Functions, classes, methods, imports, decorators, complexity
