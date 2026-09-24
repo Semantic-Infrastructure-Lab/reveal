@@ -4,6 +4,10 @@ This test would have caught the bug where MANIFEST.in referenced old paths
 (reveal/AGENT_HELP.md) that were moved to reveal/docs/AGENT_HELP.md.
 """
 
+import contextlib
+import hashlib
+import os
+import time
 import unittest
 import subprocess
 import tarfile
@@ -17,12 +21,39 @@ import pytest
 pytestmark = pytest.mark.contract
 
 
-# One worker for the whole class: under xdist's default 'load' distribution each
-# worker that received one of these tests ran setUpClass, so several
-# 'python -m build' runs shared the repo root's reveal_cli-X.Y.Z/ sdist staging
-# dir and one deleted it under another ("No such file ... BENCHMARKS.md",
-# CI py3.10/macOS, 2026-09-24). Needs --dist loadgroup (pyproject addopts).
-@pytest.mark.xdist_group("packaging_build")
+@contextlib.contextmanager
+def _exclusive_build(project_root: Path, timeout: float = 600.0):
+    """Serialize 'python -m build' across processes for one checkout.
+
+    Under xdist each worker that receives one of this class's tests runs
+    setUpClass, and every build stages the sdist in the repo root's
+    reveal_cli-X.Y.Z/ directory -- so concurrent builds deleted that tree
+    under each other ("No such file ... BENCHMARKS.md", CI py3.10/macOS,
+    2026-09-24). An O_EXCL lock file works on every CI platform and leaves
+    xdist's test distribution untouched."""
+    key = hashlib.sha1(str(project_root.resolve()).encode('utf-8')).hexdigest()[:12]
+    lock = Path(tempfile.gettempdir()) / f'reveal-packaging-build-{key}.lock'
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            break
+        except FileExistsError:
+            with contextlib.suppress(OSError):
+                if time.time() - lock.stat().st_mtime > timeout:
+                    lock.unlink()  # stale: its owner died mid-build
+                    continue
+            if time.monotonic() > deadline:
+                raise RuntimeError(f"Timed out waiting for {lock}")
+            time.sleep(0.25)
+    try:
+        yield
+    finally:
+        os.close(fd)
+        with contextlib.suppress(OSError):
+            lock.unlink()
+
+
 class TestPackagingManifest(unittest.TestCase):
     """Test that MANIFEST.in accurately includes all necessary files."""
 
@@ -31,14 +62,15 @@ class TestPackagingManifest(unittest.TestCase):
         """Build the package once for all tests."""
         cls.project_root = Path(__file__).parent.parent
         cls.temp_dir = Path(tempfile.mkdtemp())
-        
+
         # Build the package in temp directory
-        result = subprocess.run(
-            ['python', '-m', 'build', '--outdir', str(cls.temp_dir)],
-            cwd=cls.project_root,
-            capture_output=True,
-            text=True
-        )
+        with _exclusive_build(cls.project_root):
+            result = subprocess.run(
+                ['python', '-m', 'build', '--outdir', str(cls.temp_dir)],
+                cwd=cls.project_root,
+                capture_output=True,
+                text=True
+            )
         
         if result.returncode != 0:
             raise RuntimeError(f"Package build failed: {result.stderr}")
