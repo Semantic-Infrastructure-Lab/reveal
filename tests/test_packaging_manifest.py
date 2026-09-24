@@ -17,6 +17,12 @@ import pytest
 pytestmark = pytest.mark.contract
 
 
+# One worker for the whole class: under xdist's default 'load' distribution each
+# worker that received one of these tests ran setUpClass, so several
+# 'python -m build' runs shared the repo root's reveal_cli-X.Y.Z/ sdist staging
+# dir and one deleted it under another ("No such file ... BENCHMARKS.md",
+# CI py3.10/macOS, 2026-09-24). Needs --dist loadgroup (pyproject addopts).
+@pytest.mark.xdist_group("packaging_build")
 class TestPackagingManifest(unittest.TestCase):
     """Test that MANIFEST.in accurately includes all necessary files."""
 

@@ -130,7 +130,10 @@ python_functions = ["test_*"]
 # Coverage removed from default opts - use 'pytest --cov=reveal' for coverage
 # Parallel by default via pytest-xdist (~2.5x speedup); override with '-n 0' for
 # serial runs (needed for --pdb / -s interactive debugging under xdist).
-addopts = "-v -n auto -p no:postgresql -p no:redis -p no:deepeval"
+# --dist loadgroup: ungrouped tests distribute as with 'load'; a class marked
+# @pytest.mark.xdist_group stays on one worker (test_packaging_manifest.py builds
+# the sdist in the repo root, and two concurrent builds race on its staging dir).
+addopts = "-v -n auto --dist loadgroup -p no:postgresql -p no:redis -p no:deepeval"
 markers = [
     "unit: fast unit tests (< 0.1s each)",
     "integration: integration tests (subprocess-based, slower)",
