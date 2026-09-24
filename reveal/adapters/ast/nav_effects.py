@@ -1535,6 +1535,23 @@ _RECEIVER_VERB_FILTER: Dict[str, frozenset] = {
         'getfiles', 'enumeratefiles', 'metadata', 'read', 'openread',
         'openwrite', 'create', 'appendalltext', 'appendalllines',
         'appendtext',
+        # BACK-1468: the list above missed the rest of Node `fs` (+`fs.promises`)
+        # and VS Code `workspace.fs`, so TS sideeffects 'file' recall fell 29 ->
+        # 24/31 when this filter landed. Taken from the JS/TS corpora's verb
+        # histogram on fs-like receivers (stat 142, statsync 41, mkdtemp 28,
+        # access 27, readdirectory 21, create*stream 41, realpath 21, ...);
+        # every one has ZERO `file|files|directory|paths|fs.<verb>(` sites in
+        # samples/java (44K files), so none reopens BACK-637's local-var FP.
+        # The collection verbs that dominate `files.*` there (push/map/includes/
+        # get/filter) stay out, and so does fs.watch (observes, doesn't do I/O).
+        'stat', 'statsync', 'lstat', 'lstatsync', 'fstat', 'fstatsync',
+        'access', 'accesssync', 'realpath', 'realpathsync',
+        'readdirectory', 'opendir', 'opendirsync',
+        'rmdir', 'rmdirsync', 'mkdtemp', 'mkdtempsync', 'cp', 'cpsync',
+        'createreadstream', 'createwritestream', 'open', 'opensync',
+        'chmod', 'chmodsync', 'chown', 'chownsync', 'truncate',
+        'truncatesync', 'symlink', 'symlinksync', 'readlink',
+        'readlinksync', 'utimes', 'utimessync',
     }),
 }
 

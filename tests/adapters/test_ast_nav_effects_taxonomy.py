@@ -1177,6 +1177,75 @@ class TestTypeScriptEffectsBack547(unittest.TestCase):
         )
 
 
+class TestBack1468NodeFsVerbFilter(unittest.TestCase):
+    """BACK-1468: BACK-637's 'file' verb allowlist omitted Node fs.stat/realpath
+    and VS Code workspace.fs.stat/readDirectory, dropping TS sideeffects 'file'
+    recall 29 -> 24/31. The six call shapes below are the sampled VS Code
+    functions that lost 'file'."""
+
+    def test_sampled_vscode_fs_calls_classify_as_file(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        for callee in (
+            'fs.promises.stat', 'fs.promises.realpath', 'fs.stat',
+            'workspace.fs.stat', 'vscode.workspace.fs.stat',
+            'workspace.fs.readDirectory',
+        ):
+            with self.subTest(callee=callee):
+                self.assertEqual(classify_call(callee, language='typescript'), 'file')
+
+    def test_other_node_fs_verbs_classify_as_file(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        for callee in (
+            'fs.statSync', 'fs.lstat', 'fs.access', 'fs.accessSync',
+            'fs.realpathSync', 'fs.mkdtemp', 'fs.rmdir', 'fs.cpSync',
+            'fs.createReadStream', 'fs.createWriteStream', 'fs.chmod',
+            'fs.symlinkSync', 'fs.readlink', 'fs.promises.open',
+        ):
+            with self.subTest(callee=callee):
+                self.assertEqual(classify_call(callee, language='typescript'), 'file')
+
+    def test_collection_verbs_on_files_local_still_not_file(self):
+        # BACK-637's false-positive side, never pinned by a test until now:
+        # a `files` local var doing Collection/Stream/Array ops is not I/O.
+        from reveal.adapters.ast.nav_effects import classify_call
+        for callee, lang in (
+            ('files.iterator', 'java'), ('files.size', 'java'),
+            ('files.forEach', 'java'), ('files.stream', 'java'),
+            ('files.push', 'typescript'), ('files.map', 'typescript'),
+            ('files.includes', 'typescript'), ('fs.watch', 'typescript'),
+        ):
+            with self.subTest(callee=callee):
+                self.assertIsNone(classify_call(callee, language=lang))
+
+    def test_collect_effects_end_to_end_on_typescript_source(self):
+        from reveal.adapters.ast.nav_effects import collect_effects
+        parser = ts.get_parser('typescript')
+        src = textwrap.dedent("""
+        async function f(uri, workspace) {
+            fs.readFileSync('a');
+            await fs.promises.stat('a');
+            await fs.promises.realpath('a');
+            fs.statSync('a');
+            await workspace.fs.readDirectory(uri);
+            await workspace.fs.stat(uri);
+        }
+        """).lstrip('\n')
+        content_bytes = src.encode('utf-8')
+        tree = ts_parse(parser, src)
+        root = tree_root(tree)
+
+        def get_text(node):
+            return content_bytes[
+                _zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')
+            ].decode('utf-8')
+
+        effects = collect_effects(root, 1, 999, get_text, language='typescript')
+        self.assertEqual(
+            [e['line'] for e in effects if e['kind'] == 'file'],
+            [2, 3, 4, 5, 6, 7],
+        )
+
+
 class TestCollectEffects(unittest.TestCase):
 
     def setUp(self):
