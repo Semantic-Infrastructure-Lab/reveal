@@ -195,6 +195,39 @@ class TestMemberResolution:
         for element in ("FileAccess.get_bytes", "get_bytes", "FileAccess::get_bytes"):
             assert _span(_extract(analyzer, element)) == (3, 5), element
 
+    @pytest.mark.parametrize("element, span", [
+        ("Vec.operator+", (3, 3)),       # inline in the struct
+        ("Vec.operator==", (8, 10)),     # out-of-line Vec::operator==
+        ("Vec.operator()", (5, 5)),
+        ("Vec.~Vec", (6, 6)),
+    ])
+    def test_cpp_operator_and_destructor_members(self, tmp_path, element, span):
+        # CC6: `Vec.operator+` failed the Parent.member syntax check and fell
+        # through to a bare-name lookup of the literal string.
+        analyzer = _analyzer(tmp_path, "v.cpp", (
+            "struct Vec {\n"
+            "  int x;\n"
+            "  Vec operator+(const Vec &o) const { return Vec{x + o.x}; }\n"
+            "  bool operator==(const Vec &o) const;\n"
+            "  int operator()(int i) const { return i; }\n"
+            "  ~Vec() {}\n"
+            "};\n"
+            "bool Vec::operator==(const Vec &o) const {\n"
+            "  return x == o.x;\n"
+            "}\n"
+        ))
+        assert _span(_extract(analyzer, element)) == span
+
+    @pytest.mark.parametrize("element, kind", [
+        ("Vec.operator<<=", "hierarchical"),
+        ("Outer.Inner.m", "hierarchical"),
+        ("v1.2.3", "name"),
+        ("rr.php sentinel locking", "name"),
+        ("a.operator new", "name"),
+    ])
+    def test_member_path_syntax(self, element, kind):
+        assert _parse_element_syntax(element)["type"] == kind
+
     def test_direct_member_wins_over_nested_class_member(self, tmp_path):
         analyzer = _analyzer(tmp_path, "a.py", (
             "class Outer:\n"

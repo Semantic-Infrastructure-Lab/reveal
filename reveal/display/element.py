@@ -55,6 +55,12 @@ _TYPE_TO_CATEGORY = {
 }
 
 
+_HIERARCHICAL_PATH = (
+    r'^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*'
+    r'\.(?:[A-Za-z_]\w*|~[A-Za-z_]\w*|operator(?:\(\)|\[\]|[^\w\s.()\[\]]+))$'
+)
+
+
 def _parse_element_syntax(element: str):
     """Parse element syntax to determine extraction type.
 
@@ -107,8 +113,10 @@ def _parse_element_syntax(element: str):
 
     # Check for hierarchical extraction (Class.method, Outer.Inner.method)
     # Require identifier(.identifier)+: every part a bare identifier (no spaces),
-    # not version strings like [0.50.0] or v1.2.3, and not headings like "rr.php sentinel locking"
-    if '.' in element and re.match(r'^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+$', element):
+    # not version strings like [0.50.0] or v1.2.3, and not headings like "rr.php sentinel locking".
+    # The last part may also be a C++ destructor or operator (`Vec.~Vec`,
+    # `Vec.operator+`, `Vec.operator()`); no overloadable operator contains '.'.
+    if '.' in element and re.match(_HIERARCHICAL_PATH, element):
         return {'type': 'hierarchical'}
 
     # Default: name-based extraction
