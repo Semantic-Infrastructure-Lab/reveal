@@ -1803,8 +1803,12 @@ can hide a systemic callee-, caller-, or grammar-level bug.
 ## Re-running this yourself
 
 Every loop's harness is a plain script pair — `build_oracle.*` (produces the
-independent ground truth) and `diff_recall.py` (diffs it against a live reveal
-run) — checked in alongside its findings, not hidden in this repo's history:
+independent ground truth) and a diff script that compares it against a live reveal
+run — checked in alongside its findings, not hidden in this repo's history. The
+import-recall diff scripts are per-loop (`diff_recall*.py`, `diff_oracle*.py`); the
+call-graph and side-effect loops each share one table-driven `recall_harness.py`. All of
+them exit non-zero, with the reason, when a run measured nothing (a missing corpus,
+errored queries, or 0 hits), instead of printing a recall figure:
 
 ```
 # Import/dependency recall — one directory per language, both corpora each
