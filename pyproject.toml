@@ -150,6 +150,11 @@ filterwarnings = [
     # Ignore warning about TestAdapter class in adapters/test.py having __init__
     # This is not a test class, it's the test:// URI adapter implementation
     "ignore:cannot collect test class 'TestAdapter' because it has a __init__ constructor:pytest.PytestCollectionWarning",
+    # Text I/O in reveal/ that falls back to the locale encoding (cp1252 on Windows) fails the
+    # test that reaches it. Only fires when PYTHONWARNDEFAULTENCODING=1, which CI and ci-local.sh set.
+    # Later entries win: tests/ and scripts/ sites are the static ratchet's job (BACK-1358).
+    "ignore::EncodingWarning",
+    "error::EncodingWarning:reveal(\\.|$)",
 ]
 
 [tool.coverage.run]

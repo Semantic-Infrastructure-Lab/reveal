@@ -41,16 +41,9 @@ jobs:
       - name: Run tests
         env:
           PYTHONIOENCODING: utf-8
-        run: pytest tests/
-
-      - name: Run tests under an ASCII locale (Windows cp1252 stand-in)
-        # No PYTHONIOENCODING here on purpose: the step above sets it and hides stdout
-        # encoding bugs.  Bare text I/O and non-ASCII output that only fail on Windows fail here.
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        env:
-          PYTHONUTF8: '0'
-          PYTHONCOERCECLOCALE: '0'
-          LC_ALL: C
+          # Makes reveal/ text I/O without encoding= fail its test (pyproject filterwarnings).
+          # Console output under a non-UTF-8 stream: tests/test_console_encoding.py.
+          PYTHONWARNDEFAULTENCODING: '1'
         run: pytest tests/
 
       - name: Test Windows compatibility checks

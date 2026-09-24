@@ -270,7 +270,8 @@ def extract_element(self, element_type, name):
 **Text encoding (breaks on Windows only):** pass `encoding='utf-8'` to every text-mode
 `open()` / `read_text()` / `write_text()` (`errors='replace'` when reading user files). Windows
 defaults to cp1252, so a bare call passes on Linux/macOS and fails on Windows CI.
-`scripts/check_text_encoding.py` blocks new offenders; details in
+`scripts/check_text_encoding.py` blocks new offenders, and in `reveal/` a bare call fails the
+test that reaches it under `PYTHONWARNDEFAULTENCODING=1` (CI and `ci-local.sh` set it). Details in
 `internal-docs/design/ENCODING_ROBUSTNESS_2026-09-21.md`.
 
 ```python
@@ -339,7 +340,7 @@ pytest tests/
 
 ```bash
 scripts/ci-local.sh                # Python 3.12, latest deps: pytest + the CI-only steps
-scripts/ci-local.sh --matrix       # 3.10, 3.12 and 3.14 in turn, like CI (~25 min; use tmux)
+scripts/ci-local.sh --matrix       # 3.10, 3.12 and 3.14 in turn, like CI (~15 min; use tmux)
 scripts/ci-local.sh --matrix -- tests/test_foo.py   # quick: only the tests you touched, per Python
 scripts/ci-local.sh --lp 1.12.5    # force a tree-sitter-language-pack version (CI compat-matrix)
 ```

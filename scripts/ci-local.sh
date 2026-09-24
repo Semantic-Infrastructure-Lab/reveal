@@ -9,20 +9,23 @@
 #                             exactly as CI installs (optionally forcing a language-pack version)
 #   - Python version       -> --python picks one of CI's matrix (3.10 / 3.12 / 3.14);
 #                             --matrix runs all three
-#   - CI-only steps        -> the primary leg (3.12, no --lp) also runs the ASCII-locale pytest,
-#                             Windows-compat lint, V-series self-validation and B006 ratchet, which
-#                             CI runs only on ubuntu/3.12; other legs run pytest + CLI basics, as CI does
+#   - CI-only steps        -> the primary leg (3.12, no --lp) also runs the Windows-compat lint,
+#                             V-series self-validation and B006 ratchet, which CI runs only on
+#                             ubuntu/3.12; other legs run pytest + CLI basics, as CI does
 #   - local caches/env     -> REVEAL_DISK_CACHE=0 (stale ~/.reveal/cache, BACK-1294) and
 #                             PYTHONPYCACHEPREFIX unset (stale bytecode)
-#   - Windows text encoding -> re-runs pytest under an ASCII locale (PYTHONUTF8=0 LC_ALL=C, no
-#                             PYTHONIOENCODING) and runs scripts/check_text_encoding.py
+#   - Windows text encoding -> PYTHONWARNDEFAULTENCODING=1, so reveal/ text I/O without encoding=
+#                             fails its test (pyproject filterwarnings), and scripts/check_text_encoding.py.
+#                             Console output under a non-UTF-8 stream: tests/test_console_encoding.py.
+#                             This replaced a full second pytest run under LC_ALL=C (~5 min, never
+#                             caught anything the other checks missed)
 # What it cannot do: run Windows or macOS. scripts/check_windows_compat.py is the local guard
 # for the Windows path class; anything else Windows-specific still needs CI.
 #
 # Usage:
 #   scripts/ci-local.sh                     # Python 3.12, latest deps (CI's ubuntu/3.12 `test` leg)
 #   scripts/ci-local.sh --python 3.14
-#   scripts/ci-local.sh --matrix            # 3.10, 3.12, 3.14 in turn (~25 min; run it in tmux)
+#   scripts/ci-local.sh --matrix            # 3.10, 3.12, 3.14 in turn (~15 min; run it in tmux)
 #   scripts/ci-local.sh --matrix -- tests/test_foo.py   # fast: only these pytest targets per leg
 #   scripts/ci-local.sh --lp 1.12.5         # force tree-sitter-language-pack (CI's compat-matrix)
 #   scripts/ci-local.sh --no-tests          # only the non-pytest CI steps
@@ -131,6 +134,7 @@ echo "tree-sitter: $("$PY" -m pip list 2>/dev/null | grep -iE '^tree-sitter( |-l
 # Env hygiene: nothing from the developer's shell may leak into the run.
 export REVEAL_DISK_CACHE=0
 export PYTHONIOENCODING=utf-8
+export PYTHONWARNDEFAULTENCODING=1
 unset PYTHONPYCACHEPREFIX PYTHONPATH
 
 if [[ $RUN_TESTS -eq 1 ]]; then
@@ -138,14 +142,6 @@ if [[ $RUN_TESTS -eq 1 ]]; then
     "$PY" -m pytest "${PYTEST_TARGETS[@]}" -q -p no:cacheprovider -n auto >>"$LOG" 2>&1 \
         || { grep -E '^FAILED |^ERROR ' "$LOG" | head -30; fail "pytest"; }
     tail -1 "$LOG"
-
-    if [[ $PRIMARY -eq 1 ]]; then
-        step "Run tests under an ASCII locale (Windows cp1252 stand-in)"
-        env -u PYTHONIOENCODING PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 LC_ALL=C \
-            "$PY" -m pytest "${PYTEST_TARGETS[@]}" -q -p no:cacheprovider -n auto >>"$LOG" 2>&1 \
-            || { grep -E '^FAILED |^ERROR ' "$LOG" | tail -30; fail "pytest under ASCII locale"; }
-        tail -1 "$LOG"
-    fi
 fi
 
 step "CLI basics"
