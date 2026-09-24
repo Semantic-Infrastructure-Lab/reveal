@@ -62,6 +62,7 @@ class _TypeScriptBase(
         'interfaces': ('interface_declaration',),
         'types': ('type_alias_declaration',),
         'enums': ('enum_declaration',),
+        'namespaces': ('internal_module',),  # `namespace NS {}` (BACK-1410)
     }
 
 

@@ -289,7 +289,19 @@ def resolve_member(analyzer, parent_name: str, child_name: str) -> Optional[Reso
             break
     members += _out_of_line_definitions(analyzer, parent_name, child_name)
     members += _go_receiver_methods(analyzer, parent_name, child_name)
+    members += _function_value_members(analyzer, parent_name, child_name)
     return _resolution(analyzer, _in_tree_order(members))
+
+
+def _function_value_members(analyzer, parent_name: str, child_name: str) -> List[Any]:
+    """JS-family function values qualified as Parent.child: a class-field arrow
+    (`Svc.handler`), an object-literal method (`api.load`), a prototype or
+    exports assignment (`A.m`, `exports.x`) -- BACK-1410."""
+    find_all = getattr(analyzer, '_find_named_function_values', None)
+    if find_all is None:
+        return []
+    return [node for node in find_all(child_name)
+            if _qualifies(qualified_name(analyzer, node, child_name), f'{parent_name}.{child_name}')]
 
 
 def resolve_path(analyzer, dotted: str) -> Optional[Resolution]:
@@ -308,7 +320,7 @@ def resolve_path(analyzer, dotted: str) -> Optional[Resolution]:
         return resolution
     return _resolution(analyzer, [
         node for node in resolution.candidates
-        if _qualifies(qualified_name(analyzer, node), dotted)
+        if _qualifies(qualified_name(analyzer, node, parts[-1]), dotted)
     ])
 
 
@@ -322,10 +334,18 @@ def _qualifies(qualname: str, dotted: str) -> bool:
 # Describing candidates
 # ---------------------------------------------------------------------------
 
+# Function literals are named by where they are bound, not by a child: the
+# first identifier under an arrow is a parameter (`(x) => x` "named" x).
+_FUNCTION_LITERALS = frozenset({'arrow_function', 'function_expression', 'generator_function'})
+
+
 def qualified_name(analyzer, node, fallback: str = '?') -> str:
     """Human label for a definition: `A.pop`, `heapData.Pop`, `FileAccess::get`.
-    `fallback` names a node whose kind carries no name (a JS arrow value)."""
-    name = analyzer._get_node_name(node) or fallback
+    `fallback` names a node whose kind carries no name (a JS function value)."""
+    if _zero_arg(node, 'kind') in _FUNCTION_LITERALS:
+        name = fallback
+    else:
+        name = analyzer._get_node_name(node) or fallback
     if '::' in name:
         return name
     if _zero_arg(node, 'kind') == 'method_declaration' and getattr(analyzer, 'language', None) == 'go':
@@ -339,6 +359,11 @@ def qualified_name(analyzer, node, fallback: str = '?') -> str:
             if names:
                 parts.insert(0, names[0])
         parent = _zero_arg(parent, 'parent')
+    owner_of = getattr(analyzer, '_function_value_owner', None)
+    if len(parts) == 1 and owner_of is not None:
+        owner = owner_of(node)
+        if owner:
+            parts.insert(0, owner)
     return '.'.join(parts)
 
 

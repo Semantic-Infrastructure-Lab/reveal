@@ -386,7 +386,10 @@ def build_callers_index(functions: List[StructureItem]) -> Dict[str, List[str]]:
 # "add_report" — every call made from inside one had its caller
 # misattributed to the bare class name (real corpus example: Report.rb's
 # `add_report`/`remove_report`, both `def Report.xxx` singleton methods).
-_NAME_KINDS = ('identifier', 'name', 'constant', 'simple_identifier', 'property_identifier', 'field_identifier')
+# 'private_property_identifier': JS/TS `#name()` methods had no name and were
+# dropped from the outline (BACK-1410); the `#` is part of the real name.
+_NAME_KINDS = ('identifier', 'name', 'constant', 'simple_identifier', 'property_identifier',
+               'private_property_identifier', 'field_identifier')
 _PARAM_LIST_KINDS = ('parameters', 'parameter_list', 'formal_parameters', 'method_parameters')
 
 class TreeSitterAnalyzer(FileAnalyzer):
@@ -1613,7 +1616,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # PRIORITY 2b: no adjacent parameter list — first identifier/name child
         # (classes, fields, variables; excludes field_identifier, see PRIORITY 4)
         for child in kids:
-            if _zero_arg(child, 'kind') in ('identifier', 'name', 'constant', 'simple_identifier', 'property_identifier'):
+            if _zero_arg(child, 'kind') in ('identifier', 'name', 'constant', 'simple_identifier', 'property_identifier',
+                                            'private_property_identifier'):
                 return self._get_node_text(child)
         return None
 

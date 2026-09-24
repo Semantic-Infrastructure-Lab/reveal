@@ -1,4 +1,10 @@
-"""JS-family function-as-value extraction: `const f = () => {}` and class-field arrows.
+"""JS-family function-as-value extraction: functions whose name lives on a parent node.
+
+`const f = () => {}`, class-field arrows, object-literal methods of a named object
+(`const api = { load: () => {} }`), and CommonJS/prototype assignments
+(`module.exports = function main() {}`, `exports.x = ...`, `A.prototype.m = ...`).
+One enumerator (`_iter_function_values`) feeds both the outline and by-name lookup, so
+the two can't disagree about what exists (the BACK-530 bug class).
 
 Shared by JavaScript, TypeScript and TSX analyzers (BACK-1280: moved out of the
 `TreeSitterAnalyzer` base, which used to run this for every language). The grammar shapes
@@ -8,7 +14,7 @@ in never pays for the scan. Same mixin pattern as `JSClassBasesMixin` and
 `JSTestCallbackMixin` alongside.
 """
 
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Iterator, List, Optional, Tuple
 
 from ..core import node_children as _children
 from ..core.treesitter_compat import _zero_arg
@@ -18,6 +24,11 @@ if TYPE_CHECKING:
     from ..treesitter import TreeSitterAnalyzer as _Base
 else:
     _Base = object
+
+_FUNCTION_LITERALS = ('arrow_function', 'function_expression', 'generator_function')
+# What an object literal's parent must be for its methods to be named API:
+# `const api = {...}`, `x = {...}` (incl. module.exports), `export default {...}`.
+_NAMED_OBJECT_HOLDERS = ('variable_declarator', 'assignment_expression', 'export_statement')
 
 
 class JSFunctionValueMixin(_Base):
@@ -34,23 +45,6 @@ class JSFunctionValueMixin(_Base):
     # JS-family grammars, so this is a no-op for every other language.
 
     _CLASS_FIELD_NODE_TYPES = ('public_field_definition', 'field_definition')
-
-    def _extract_class_field_functions(self) -> List[StructureItem]:
-        """Extract class-field arrow/function-expression methods (`foo = () => {}`)."""
-        funcs = []
-        for field_type in self._CLASS_FIELD_NODE_TYPES:
-            for field_node in self._find_nodes_by_type(field_type):
-                name_node = value_node = None
-                for ch in _children(field_node):
-                    if _zero_arg(ch, 'kind') in ('property_identifier', 'private_property_identifier') and name_node is None:
-                        name_node = ch
-                    elif _zero_arg(ch, 'kind') in ('arrow_function', 'function_expression'):
-                        value_node = ch
-                if name_node and value_node:
-                    funcs.append(self._build_function_dict(
-                        value_node, self._get_node_text(name_node), []
-                    ))
-        return funcs
 
     # ── JS-family arrow-function-as-const (`const f = (...) => {}`) ─────────
     # BACK-431 Issue G tier B dogfood audit (mysterious-probe-0703, real
@@ -119,76 +113,29 @@ class JSFunctionValueMixin(_Base):
         return None
 
     def _extract_language_specific_functions(self) -> List[StructureItem]:
-        """Arrow-const and class-field function values, in that order."""
-        return [*self._extract_arrow_functions(), *self._extract_class_field_functions(),
+        """Every function value, then any subclass's own."""
+        return [*(self._build_function_dict(value, name, []) for name, value in self._iter_function_values()),
                 *super()._extract_language_specific_functions()]
 
-    def _extract_arrow_functions(self) -> List[StructureItem]:
-        """Extract named arrow/function-expression declarations (const X = () => {}),
-        at module scope or nested inside another function's body.
+    def _iter_function_values(self) -> Iterator[Tuple[str, Any]]:
+        """(name, function node) for every JS-family function value, in shape
+        order: declarations, class fields, object-literal methods, assignments.
 
-        BACK-643: this used to gate on `_is_module_scope_decl`, so a local
-        `const name = (...) => {}` declared inside another function's body
-        was invisible to both get_structure()/--outline and bare-name
-        lookup (`_find_named_function_value` below) — even though a plain
-        `function name() {}` in the exact same nested position was already
-        found at any depth via `_extract_undecorated_functions`'s unscoped
-        tree walk. `_arrow_or_fn_value` only matches a variable_declarator
-        whose value is an actual function literal, so dropping the scope
-        gate only brings named function-valued consts to parity with
-        function declarations — it does not start flagging arbitrary local
-        variables. As with declaration lookup, an ambiguous name reused at
-        multiple nesting depths resolves to the first tree-walk match; a
-        qualifier syntax to disambiguate is a separate, larger change.
+        BACK-643: a `const name = ...` counts at any depth, not only module
+        scope -- a nested `function name() {}` already did, and
+        `_arrow_or_fn_value` only matches a declarator whose value is a
+        function literal, so this brings function-valued consts to parity
+        without flagging arbitrary locals. BACK-1410 added the last two shapes.
         """
-        funcs = []
-        for decl_node in self._find_nodes_by_type('lexical_declaration'):
-            for child in _children(decl_node):
-                if _zero_arg(child, 'kind') != 'variable_declarator':
-                    continue
-                name_node, value_node = self._arrow_or_fn_value(child)
-                if name_node and value_node:
-                    funcs.append(self._build_function_dict(
-                        value_node, self._get_node_text(name_node), []
-                    ))
-        return funcs
-
-    def _find_named_function_value(self, name: str):
-        """Resolve a named arrow/function-expression value to its function
-        node, for bare-name lookup by both the plain element extractor
-        (display.element._try_treesitter_extraction) and nav-flag lookup
-        (file_handler._find_element_node).
-
-        Covers two JS-family shapes that carry their name on a parent node
-        rather than the (anonymous) arrow node itself:
-          1. `const name = (...) => {}` (lexical_declaration) at module
-             scope or nested inside another function's body — BACK-643:
-             previously module-scope-only, so a local named arrow-const was
-             listed nowhere and this lookup always missed it, and
-          2. class-field methods `name = (...) => {}` (public_field_definition
-             / field_definition) — BACK-527: previously only get_structure()
-             saw these (via _extract_class_field_functions), so they listed in
-             --outline but `reveal file.tsx name` returned "not found".
-        """
-        node = next(self._iter_named_function_values(name), None)
-        if node is not None:
-            return node
-        # 3. Language-specific fallback, no-op unless a subclass defines one.
-        return super()._find_named_function_value(name)
-
-    def _find_named_function_values(self, name: str) -> List[Any]:
-        """All matches of the two shapes above, in tree order (BACK-1400)."""
-        return list(self._iter_named_function_values(name)) or super()._find_named_function_values(name)
-
-    def _iter_named_function_values(self, name: str):
-        # 1. `const name = (...) => {}`, module scope or nested
-        for decl_node in self._find_nodes_by_type('lexical_declaration'):
-            for child in _children(decl_node):
-                if _zero_arg(child, 'kind') != 'variable_declarator':
-                    continue
-                name_node, value_node = self._arrow_or_fn_value(child)
-                if name_node and value_node and self._get_node_text(name_node) == name:
-                    yield value_node
+        # 1. `const name = (...) => {}` / `var name = function () {}`
+        for kind in ('lexical_declaration', 'variable_declaration'):
+            for decl_node in self._find_nodes_by_type(kind):
+                for child in _children(decl_node):
+                    if _zero_arg(child, 'kind') != 'variable_declarator':
+                        continue
+                    name_node, value_node = self._arrow_or_fn_value(child)
+                    if name_node and value_node:
+                        yield self._get_node_text(name_node), value_node
 
         # 2. class-field arrow method `name = (...) => {}`
         for field_type in self._CLASS_FIELD_NODE_TYPES:
@@ -197,7 +144,94 @@ class JSFunctionValueMixin(_Base):
                 for ch in _children(field_node):
                     if _zero_arg(ch, 'kind') in ('property_identifier', 'private_property_identifier') and name_node is None:
                         name_node = ch
-                    elif _zero_arg(ch, 'kind') in ('arrow_function', 'function_expression'):
+                    elif _zero_arg(ch, 'kind') in _FUNCTION_LITERALS:
                         value_node = ch
-                if name_node and value_node and self._get_node_text(name_node) == name:
-                    yield value_node
+                if name_node and value_node:
+                    yield self._get_node_text(name_node), value_node
+
+        # 3. `key: (...) => {}` in an object literal that has a name of its own:
+        # `const api = {...}`, `module.exports = {...}`, `export default {...}`.
+        # Only direct members -- arrows in an inline argument object
+        # (`fetch(url, { onDone: () => {} })`) are callbacks, not API.
+        for pair in self._find_nodes_by_type('pair'):
+            obj = _zero_arg(pair, 'parent')
+            holder = _zero_arg(obj, 'parent') if obj is not None else None
+            if holder is None or _zero_arg(holder, 'kind') not in _NAMED_OBJECT_HOLDERS:
+                continue
+            key = pair.child_by_field_name('key')
+            value = pair.child_by_field_name('value')
+            if (key is not None and value is not None and _zero_arg(key, 'kind') == 'property_identifier'
+                    and _zero_arg(value, 'kind') in _FUNCTION_LITERALS):
+                yield self._get_node_text(key), value
+
+        # 4. CommonJS and prototype assignments
+        for assignment in self._find_nodes_by_type('assignment_expression'):
+            name = self._assigned_function_name(assignment)
+            if name:
+                yield name, assignment.child_by_field_name('right')
+
+    def _assigned_function_name(self, assignment) -> Optional[str]:
+        """Name of a function assigned to an exported or prototype slot:
+        `module.exports = function main() {}` -> main (an anonymous one has no
+        name to list); `module.exports.x = ...`, `exports.x = ...` and
+        `A.prototype.x = ...` -> x. Any other assignment is not a definition."""
+        left = assignment.child_by_field_name('left')
+        right = assignment.child_by_field_name('right')
+        if left is None or right is None or _zero_arg(right, 'kind') not in _FUNCTION_LITERALS:
+            return None
+        if _zero_arg(left, 'kind') != 'member_expression':
+            return None
+        if self._get_node_text(left) == 'module.exports':
+            own_name = right.child_by_field_name('name')
+            return self._get_node_text(own_name) if own_name is not None else None
+        owner = left.child_by_field_name('object')
+        prop = left.child_by_field_name('property')
+        owner_text = self._get_node_text(owner) if owner is not None else ''
+        if prop is not None and (owner_text in ('module.exports', 'exports') or owner_text.endswith('.prototype')):
+            return self._get_node_text(prop)
+        return None
+
+    def _function_value_owner(self, value) -> Optional[str]:
+        """What a function value is a member of, when no class encloses it:
+        the named object of an object-literal method (`api` for
+        `const api = { load: ... }`, `module.exports`), or the target of an
+        assignment (`exports`, `A` for `A.prototype.m = ...`). Lets
+        element_resolve qualify it (`api.load`) and resolve `api.load`."""
+        parent = _zero_arg(value, 'parent')
+        kind = _zero_arg(parent, 'kind') if parent is not None else None
+        if kind == 'pair':
+            obj = _zero_arg(parent, 'parent')
+            holder = _zero_arg(obj, 'parent') if obj is not None else None
+            holder_kind = _zero_arg(holder, 'kind') if holder is not None else None
+            if holder_kind == 'variable_declarator':
+                name = holder.child_by_field_name('name')
+                return self._get_node_text(name) if name is not None else None
+            if holder_kind == 'assignment_expression':
+                left = holder.child_by_field_name('left')
+                return self._get_node_text(left) if left is not None else None
+            return 'default' if holder_kind == 'export_statement' else None
+        if kind == 'assignment_expression':
+            left = parent.child_by_field_name('left')
+            owner = left.child_by_field_name('object') if left is not None else None
+            if owner is None or _zero_arg(left, 'kind') != 'member_expression':
+                return None
+            text = self._get_node_text(owner)
+            return text[:-len('.prototype')] if text.endswith('.prototype') else text
+        return None
+
+    def _find_named_function_value(self, name: str):
+        """Resolve a function value by name to its function node (first in
+        shape order), for element and nav-flag lookup; see _iter_function_values
+        for the shapes (BACK-527/643/1410)."""
+        node = next(self._iter_named_function_values(name), None)
+        if node is not None:
+            return node
+        # Language-specific fallback, no-op unless a subclass defines one.
+        return super()._find_named_function_value(name)
+
+    def _find_named_function_values(self, name: str) -> List[Any]:
+        """Every function value named `name` (BACK-1400)."""
+        return list(self._iter_named_function_values(name)) or super()._find_named_function_values(name)
+
+    def _iter_named_function_values(self, name: str):
+        return (value for value_name, value in self._iter_function_values() if value_name == name)

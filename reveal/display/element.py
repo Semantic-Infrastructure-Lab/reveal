@@ -57,7 +57,7 @@ _TYPE_TO_CATEGORY = {
 
 _HIERARCHICAL_PATH = (
     r'^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*'
-    r'\.(?:[A-Za-z_]\w*|~[A-Za-z_]\w*|operator(?:\(\)|\[\]|[^\w\s.()\[\]]+))$'
+    r'\.(?:#?[A-Za-z_]\w*|~[A-Za-z_]\w*|operator(?:\(\)|\[\]|[^\w\s.()\[\]]+))$'
 )
 
 
@@ -115,7 +115,8 @@ def _parse_element_syntax(element: str):
     # Require identifier(.identifier)+: every part a bare identifier (no spaces),
     # not version strings like [0.50.0] or v1.2.3, and not headings like "rr.php sentinel locking".
     # The last part may also be a C++ destructor or operator (`Vec.~Vec`,
-    # `Vec.operator+`, `Vec.operator()`); no overloadable operator contains '.'.
+    # `Vec.operator+`, `Vec.operator()`; no overloadable operator contains '.')
+    # or a JS/TS private member (`Svc.#normalize`).
     if '.' in element and re.match(_HIERARCHICAL_PATH, element):
         return {'type': 'hierarchical'}
 
