@@ -1,5 +1,5 @@
 """`network` / `db` / `sdk` rule tables, import-shaped (BACK-1334 slices a-c: Go, Java, Kotlin, C#,
-Rust, Swift, Ruby, C++, Python).
+Rust, Swift, Ruby, C++, Python, PHP).
 
 Each row says "importing this module, or anything beneath it, is a network / database / vendor-SDK
 surface". They replace the per-language `_*_TAXONOMY` tuples that `categorize_by_prefix` walked;
@@ -19,12 +19,14 @@ generates a `gem` row and a `gem-*` row. C++ header roots are plain string prefi
 generated as the glob `<root>*`. Python classifies the full imported name: `from a import b` is
 `a.b` (the fact's `qualified`), and a relative import is a local module, never a row.
 
-Socket-client Call/New rows for `network` live in `surface_rules_sockets.py` (BACK-1334 slice e).
+Socket-client Call/New rows for `network` live in `surface_rules_sockets.py` (BACK-1334 slice e),
+PHP's I/O builtins (`curl_init`, `new PDO`, URL `fopen`) in `surface_rules_php_builtins.py`.
 
-Not yet rule-driven: PHP, TypeScript/JavaScript (BACK-1334 slices c-d).
+Not yet rule-driven: TypeScript/JavaScript (BACK-1334 slice d).
 """
 
 from .surface_rules_model import Import, Rule
+from .surface_rules_php_builtins import RULES as _PHP_BUILTIN_RULES
 from .surface_rules_sockets import RULES as _SOCKET_RULES
 
 # lang -> (example for module `{m}`, lookalike that must not match). The lookalike appends a
@@ -40,6 +42,7 @@ _SOURCES = {
     'ruby': ("require '{m}'\n", "require '{m}x'\n"),
     'cpp': ('#include <{m}>\nint main() {{}}\n', '#include <{m}>\nint main() {{}}\n'),
     'python': ('import {m}\n', 'import {m}x\n'),
+    'php': ('<?php\nuse {m};\n', '<?php\nuse {m}x;\n'),
 }
 
 # Modules beneath a row's module that do not count, per (lang, module). Each is also a
@@ -81,6 +84,9 @@ _MODULES = {
         'python': ('requests', 'httpx', 'httpcore', 'aiohttp', 'urllib', 'urllib3', 'socket',
                    'http', 'ftplib', 'smtplib', 'imaplib', 'poplib', 'xmlrpc', 'grpc', 'websocket',
                    'websockets'),
+        # The old list also had `GuzzleHttp\Client`, which `GuzzleHttp` already covers.
+        'php': ('GuzzleHttp', 'Symfony\\Component\\HttpClient', 'Symfony\\Contracts\\HttpClient',
+                'Http\\Client'),
     },
     'db': {
         'go': ('database/sql', 'gorm.io/gorm', 'github.com/jmoiron/sqlx',
@@ -107,6 +113,7 @@ _MODULES = {
                    'redis', 'aioredis', 'elasticsearch', 'sqlalchemy', 'databases', 'asyncpg',
                    'aiomysql', 'cx_Oracle', 'pyodbc', 'cassandra', 'pika', 'clickhouse_driver',
                    'confluent_kafka', 'supabase', 'minio'),
+        'php': ('Doctrine\\ORM', 'Doctrine\\DBAL', 'Illuminate\\Database', 'Predis'),
     },
     'sdk': {
         'go': ('github.com/stripe/stripe-go', 'github.com/aws/aws-sdk-go',
@@ -136,6 +143,7 @@ _MODULES = {
                    'botocore', 'litellm', 'anthropic_bedrock', 'google.genai',
                    'google.generativeai', 'google.ai', 'vertexai', 'mistralai', 'groq', 'together',
                    'replicate', 'huggingface_hub'),
+        'php': ('Stripe', 'Twilio', 'Aws', 'Google\\Cloud', 'SendGrid', 'Mailgun'),
     },
 }
 
@@ -170,7 +178,11 @@ def _rows(category: str) -> tuple:
     return tuple(rows)
 
 
-# A category has one table: `network` also carries the socket-client Call/New rows.
-_EXTRA = {'network': _SOCKET_RULES}
+# A category has one table: `network` also carries the socket-client Call/New rows, and
+# `network` / `db` carry PHP's I/O builtins.
+_EXTRA = {
+    'network': _SOCKET_RULES + tuple(r for r in _PHP_BUILTIN_RULES if r.category == 'network'),
+    'db': tuple(r for r in _PHP_BUILTIN_RULES if r.category == 'db'),
+}
 
 TABLES = {category: _rows(category) + _EXTRA.get(category, ()) for category in _MODULES}

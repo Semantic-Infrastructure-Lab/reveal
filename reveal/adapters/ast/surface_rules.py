@@ -43,7 +43,7 @@ from .surface_rules_model import (  # noqa: F401  (re-exported: callers use `sur
 # at the top, cannot cycle. A new category module is added to _TABLE_MODULES, and only there.
 from . import surface_rules_env, surface_rules_fs, surface_rules_imports, surface_rules_subprocess
 
-_SEGMENT_SEPARATORS = ('::', '.', '/')
+_SEGMENT_SEPARATORS = ('::', '.', '/', '\\')      # `\`: PHP namespaces
 
 
 def _names(value: Names) -> Tuple[str, ...]:
@@ -115,6 +115,8 @@ def _call_fields(rule_match: Call, call: CallFact,
         return None
     key = next((a for a in call.args if a), None)     # first non-empty string literal
     if rule_match.string_arg and key is None:
+        return None
+    if rule_match.key_prefix and not key.startswith(rule_match.key_prefix):
         return None
     return {'path': path, 'receiver': receiver, 'name': name, 'key': key or ''}
 

@@ -15,10 +15,11 @@ env access: ``getenv('KEY')`` and the ``$_ENV['KEY']`` superglobal (``$_SERVER``
 is deliberately excluded — it is a request superglobal, not env config, and
 folding it in floods the read with request-header noise).
 
-network/db/sdk egress: ``use`` import-root taxonomy (PHP namespaces use ``\\``
-separators). PHP builtins (PDO/mysqli/curl/exec/file_put_contents) are global
-functions and constructors, not ``use`` imports, so they are matched by exact name
-against curated tables (BACK-1090) rather than by import prefix.
+network/db/sdk egress is rule-driven (BACK-1334 c) through this walk's
+``RuleScan``: ``use`` import roots (``surface_rules_imports.py``) and the I/O
+builtins (curl/PDO/mysqli, URL ``fopen``; ``surface_rules_php_builtins.py``).
+The subprocess and file-write builtins (exec/file_put_contents) are still matched
+here by exact name against curated tables (BACK-1090).
 
 No CLI entrypoint category: PHP CLI scripts have no standard ``main`` node
 (execution starts at top-of-file), so surfacing one honestly is N/A.
@@ -27,28 +28,14 @@ No CLI entrypoint category: PHP CLI scripts have no standard ``main`` node
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line, _add_once, categorize_by_prefix
+from .nav_surface_common import _get_text, _get_line, _add_once
+from .surface_rules import RuleScan
 
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
 from reveal.core.treesitter_compat import _zero_arg
 
 logger = logging.getLogger(__name__)
-
-# PHP namespaces use '\' separators, so taxonomy prefixes are matched against
-# the raw dotted-with-backslash `use` target text.
-_NET_PACKAGES: frozenset = frozenset({
-    'GuzzleHttp', 'Symfony\\Component\\HttpClient', 'Symfony\\Contracts\\HttpClient',
-    'Http\\Client', 'GuzzleHttp\\Client',
-})
-
-_DB_PACKAGES: frozenset = frozenset({
-    'Doctrine\\ORM', 'Doctrine\\DBAL', 'Illuminate\\Database', 'Predis',
-})
-
-_SDK_PACKAGES: frozenset = frozenset({
-    'Stripe', 'Twilio', 'Aws', 'Google\\Cloud', 'SendGrid', 'Mailgun',
-})
 
 # Laravel Route facade verbs → HTTP method. 'match'/'resource' are excluded:
 # their path isn't the first string arg (match's first arg is a verb array),
@@ -63,23 +50,14 @@ _LARAVEL_ROUTE_VERBS: Dict[str, str] = {
     'any': 'ANY',
 }
 
-# PHP builtins (BACK-1090): PHP I/O is global functions, not imports, so the
-# import-prefix taxonomy above cannot see it. Curated, exact-name tables; a
-# call is recorded only for the names below.
-_NET_FUNCS: frozenset = frozenset({
-    'curl_init', 'curl_multi_init', 'fsockopen', 'pfsockopen',
-    'stream_socket_client', 'stream_socket_server', 'socket_create',
-})
-_DB_FUNCS: frozenset = frozenset({
-    'mysqli_connect', 'mysqli_real_connect', 'mysql_connect', 'mysql_pconnect',
-    'pg_connect', 'pg_pconnect', 'sqlsrv_connect', 'oci_connect', 'sqlite_open',
-})
-_DB_CONSTRUCTORS: frozenset = frozenset({'PDO', 'mysqli', 'SQLite3'})
+# PHP builtins (BACK-1090): PHP I/O is global functions, not imports. Curated,
+# exact-name tables; a call is recorded only for the names below. The network
+# and database builtins are rule rows (surface_rules_php_builtins.py).
 _SUBPROCESS_FUNCS: frozenset = frozenset({
     'exec', 'shell_exec', 'system', 'passthru', 'proc_open', 'popen', 'pcntl_exec',
 })
 _FS_WRITE_FUNCS: frozenset = frozenset({'file_put_contents', 'move_uploaded_file'})
-# fopen()/file_get_contents() take a URL or a mode: classify by literal args.
+# fopen() takes a URL or a path: a URL is network (a rule row), never a file write.
 _URL_SCHEMES: tuple = ('http://', 'https://', 'ftp://')
 
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
@@ -102,20 +80,20 @@ def scan_file_surface_php(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
 
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:
     surfaces: Dict[str, List[Dict[str, Any]]] = {k: [] for k in _EMPTY_KEYS}
+    rules = RuleScan('php', content_bytes)
+    rule_kinds, visit = rules.kinds, rules.visit
 
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
         kind = _zero_arg(node, 'kind')
+        if kind in rule_kinds:
+            visit(node, kind)
 
-        if kind == 'namespace_use_declaration':
-            _process_use(node, file_path, content_bytes, surfaces)
-        elif kind == 'scoped_call_expression':
+        if kind == 'scoped_call_expression':
             _process_scoped_call(node, file_path, content_bytes, surfaces)
         elif kind == 'function_call_expression':
             _process_function_call(node, file_path, content_bytes, surfaces)
-        elif kind == 'object_creation_expression':
-            _process_object_creation(node, file_path, content_bytes, surfaces)
         elif kind == 'shell_command_expression':
             _add_once(surfaces['subprocess'], {
                 'type': 'subprocess', 'name': '`...`',
@@ -129,25 +107,8 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
         for ch in reversed(_children(node)):
             stack.append(ch)
 
+    rules.apply(surfaces, file_path)
     return surfaces
-
-
-_PACKAGE_TAXONOMY: tuple = (
-    (_NET_PACKAGES, 'network'),
-    (_DB_PACKAGES, 'db'),
-    (_SDK_PACKAGES, 'sdk'),
-)
-
-
-def _process_use(node: Any, file_path: str, content_bytes: bytes,
-                 surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    for clause in _children(node):
-        if _zero_arg(clause, 'kind') != 'namespace_use_clause':
-            continue
-        for ch in _children(clause):
-            if _zero_arg(ch, 'kind') in ('qualified_name', 'name'):
-                module = _get_text(ch, content_bytes)
-                categorize_by_prefix(module, file_path, _get_line(node), surfaces, _PACKAGE_TAXONOMY, '\\')
 
 
 def _string_arg_texts(arguments_node: Any, content_bytes: bytes) -> List[str]:
@@ -204,44 +165,24 @@ def _process_scoped_call(node: Any, file_path: str, content_bytes: bytes,
 
 def _record_builtin_call(fname: str, strings: List[str], node: Any, file_path: str,
                          surfaces: Dict[str, List[Dict[str, Any]]]) -> bool:
-    """Classify a call to a PHP I/O builtin (BACK-1090). True when recorded."""
+    """Classify a call to a PHP subprocess / file-write builtin (BACK-1090). True when
+    recorded. Network and database builtins are rule rows."""
     line = _get_line(node)
-    if fname in _NET_FUNCS:
-        category, kind = 'network', 'call'
-    elif fname in _DB_FUNCS:
-        category, kind = 'db', 'call'
-    elif fname in _SUBPROCESS_FUNCS:
+    if fname in _SUBPROCESS_FUNCS:
         category, kind = 'subprocess', 'subprocess'
     elif fname in _FS_WRITE_FUNCS:
         category, kind = 'fs', 'fs_write'
     elif fname == 'fopen':
-        # Only write/append/create modes are a write; a URL is network egress.
-        if strings and strings[0].startswith(_URL_SCHEMES):
-            category, kind = 'network', 'call'
-        elif len(strings) >= 2 and any(m in strings[1] for m in 'wacx') \
-                and not strings[0].startswith('php://'):
+        # Only write/append/create modes are a write; a URL is network egress (a rule row).
+        if len(strings) >= 2 and any(m in strings[1] for m in 'wacx') \
+                and not strings[0].startswith(('php://', *_URL_SCHEMES)):
             category, kind = 'fs', 'fs_write'
         else:
             return False
-    elif fname in ('file_get_contents', 'file') and strings and strings[0].startswith(_URL_SCHEMES):
-        category, kind = 'network', 'call'
     else:
         return False
     _add_once(surfaces[category], {'type': kind, 'name': fname, 'file': file_path, 'line': line})
     return True
-
-
-def _process_object_creation(node: Any, file_path: str, content_bytes: bytes,
-                             surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    """`new PDO(...)` / `new mysqli(...)`: database connections."""
-    for ch in _children(node):
-        if _zero_arg(ch, 'kind') in ('name', 'qualified_name'):
-            cls = _get_text(ch, content_bytes).lstrip('\\')
-            if cls in _DB_CONSTRUCTORS:
-                _add_once(surfaces['db'], {
-                    'type': 'call', 'name': f'new {cls}', 'file': file_path, 'line': _get_line(node),
-                })
-            return
 
 
 def _process_function_call(node: Any, file_path: str, content_bytes: bytes,

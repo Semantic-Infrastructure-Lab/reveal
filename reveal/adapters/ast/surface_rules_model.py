@@ -38,6 +38,9 @@ class Call:
     # True = the call must pass a string-literal argument; the first one is offered as `{key}`.
     # A call with none (`System.getenv()`, a variable key, an interpolated string) is no match.
     string_arg: bool = False
+    # With `string_arg`: that first string literal must start with one of these (PHP
+    # `fopen('https://..')` is network, `fopen('/tmp/x')` is not).
+    key_prefix: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -117,8 +120,8 @@ class Rule:
             raise ValueError(f'entry_expr {self.entry_expr!r} uses {e} not offered by '
                              f'{type(self.match).__name__}') from None
         if isinstance(self.match, Call) and not self.match.string_arg and (
-                '{key}' in self.entry_name or '{key}' in self.entry_expr):
-            raise ValueError('{key} needs Call(string_arg=True)')
+                '{key}' in self.entry_name or '{key}' in self.entry_expr or self.match.key_prefix):
+            raise ValueError('{key} and key_prefix need Call(string_arg=True)')
 
 
 def check_table(category: str, rules: Tuple[Rule, ...]) -> None:

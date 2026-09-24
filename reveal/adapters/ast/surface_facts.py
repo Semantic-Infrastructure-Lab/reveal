@@ -352,6 +352,7 @@ def _call_fact(node: Any, get_text: Callable, call_kinds: frozenset,
     name = _callee_name(node, get_text, call_kinds, CHAIN_COLLAPSE)
     if not name:
         return None
+    name = name.lstrip('\\')            # PHP fully qualified global: `\curl_init()` is `curl_init()`
     receiver, short, sep = _split_path(name)
     if want is not None and not want(receiver, short):
         return None
@@ -368,7 +369,7 @@ def _new_fact(node: Any, get_text: Callable, call_kinds: frozenset,
                                     call_node_types=call_kinds, chain_receiver=CHAIN_COLLAPSE)
     if not (handled and name):
         return None
-    type_name = re.sub(r'<.*>$', '', re.sub(r'^new\s+', '', name))
+    type_name = re.sub(r'<.*>$', '', re.sub(r'^new\s+', '', name)).lstrip('\\')   # PHP `new \PDO`
     if want is not None and not want(type_name):
         return None
     return New(type_name, _args_of(node, get_text), _line(node))

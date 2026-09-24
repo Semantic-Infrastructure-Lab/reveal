@@ -115,10 +115,12 @@ its totals sum to the flat `total`.
   beneath it) is the surface. Python classifies the full imported name (`from google import
   genai` is `google.genai`) and never a relative import (`from .http import x` is the package's
   own module); C++ matches `#include` header roots as plain prefixes (`mysql` covers
-  `mysql_driver.h`). For Go, Java, Kotlin, C#, Rust, Swift, Ruby, C++ and Python the modules live
-  in one rule table (`reveal/adapters/ast/surface_rules_imports.py`), with stdlib socket clients
-  (`net.Dial`, `TcpStream::connect`, `TCPSocket`, `TcpClient`, `URLSession`) as call rows beside
-  them; TypeScript/JavaScript and PHP classify in their own scanners.
+  `mysql_driver.h`). PHP also counts its I/O builtins (`curl_init`, `fsockopen`, `mysqli_connect`,
+  `new PDO`, and `fopen`/`file_get_contents` on an `http(s)://` or `ftp://` URL). For Go, Java,
+  Kotlin, C#, Rust, Swift, Ruby, C++, Python and PHP the modules live in one rule table
+  (`reveal/adapters/ast/surface_rules_imports.py`), with stdlib socket clients (`net.Dial`,
+  `TcpStream::connect`, `TCPSocket`, `TcpClient`, `URLSession`) and the PHP builtins as call rows
+  beside them; TypeScript/JavaScript classifies in its own scanner.
 - `subprocess` is matched by call shape, not data flow: `subprocess.*`/`os.system`
   (Python, resolved through imports), `exec.Command` (Go), `ProcessBuilder` and
   `Runtime.getRuntime().exec` (Java/Kotlin), `Command::new` (Rust, only when

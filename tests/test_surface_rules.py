@@ -14,7 +14,9 @@ from reveal.adapters.ast.surface_facts import extract_facts
 from reveal.adapters.surface import _scan_surface
 
 EXT = {'python': 'py', 'go': 'go', 'java': 'java', 'kotlin': 'kt', 'ruby': 'rb',
-       'rust': 'rs', 'csharp': 'cs', 'swift': 'swift', 'cpp': 'cpp'}
+       'rust': 'rs', 'csharp': 'cs', 'swift': 'swift', 'cpp': 'cpp', 'php': 'php'}
+# PHP's subprocess detection is still its scanner's (binding hooks, BACK-1335).
+SUBPROCESS_LANGS = set(EXT) - {'php'}
 RULES = sr.all_rules()
 RULE_IDS = [f'{r.category}-{r.lang}-{i}' for i, r in enumerate(RULES)]
 
@@ -61,8 +63,8 @@ def test_every_site_the_scanner_reports_has_a_fact_on_its_line(rule, tmp_path):
 
 def test_subprocess_is_rule_driven_for_every_table_language():
     """A language silently dropping out of the table would read as `subprocess: 0`."""
-    assert {r.lang for r in RULES if r.category == 'subprocess'} == set(EXT)
-    for lang in EXT:
+    assert {r.lang for r in RULES if r.category == 'subprocess'} == SUBPROCESS_LANGS
+    for lang in SUBPROCESS_LANGS:
         assert 'subprocess' in sr.rule_categories(lang)
 
 
@@ -198,8 +200,10 @@ def test_new_subshell_and_import_match_kinds():
     (dict(example='   '), 'needs an example'),
     (dict(entry_name='{receiver}'), 'not offered by'),
     (dict(entry_expr='{type}'), 'not offered by'),
-    (dict(match=sr.Call(name='a'), entry_name='{key}'), r'needs Call\(string_arg=True\)'),
-], ids=['category', 'lang', 'example', 'placeholder', 'expr-placeholder', 'key-without-string-arg'])
+    (dict(match=sr.Call(name='a'), entry_name='{key}'), r'need Call\(string_arg=True\)'),
+    (dict(match=sr.Call(name='a', key_prefix=('http://',))), r'key_prefix need Call\(string_arg=True\)'),
+], ids=['category', 'lang', 'example', 'placeholder', 'expr-placeholder', 'key-without-string-arg',
+        'key-prefix-without-string-arg'])
 def test_rule_rejects_malformed_rows(kwargs, message):
     base = dict(category='subprocess', lang='go', match=sr.Subshell(), entry_name='x', example='x')
     with pytest.raises(ValueError, match=message):
@@ -312,7 +316,7 @@ def test_documented_env_parity_deltas(lang, code, expected, tmp_path):
 
 # ── import-shaped network/db/sdk tables (BACK-1334 slices a, b, c) ─────────
 
-IMPORT_LANGS = ('go', 'java', 'kotlin', 'csharp', 'rust', 'swift', 'ruby', 'cpp', 'python')
+IMPORT_LANGS = ('go', 'java', 'kotlin', 'csharp', 'rust', 'swift', 'ruby', 'cpp', 'python', 'php')
 IMPORT_CATEGORIES = ('network', 'db', 'sdk')
 
 
@@ -337,7 +341,8 @@ def test_import_modules_are_disjoint_across_categories(lang):
         if '*' in a + b:        # a glob covers everything with its literal prefix
             a, b = a.replace('*', ''), b.replace('*', '')
             return a.startswith(b) or b.startswith(a)
-        return any(a == b or a.startswith(b + s) or b.startswith(a + s) for s in ('.', '/', '::'))
+        return any(a == b or a.startswith(b + s) or b.startswith(a + s)
+                   for s in sr._SEGMENT_SEPARATORS)
     mods = [(c, m) for c in IMPORT_CATEGORIES for m in _import_modules(lang, c)]
     clashes = [(c1, m1, c2, m2) for i, (c1, m1) in enumerate(mods) for c2, m2 in mods[i + 1:]
                if c1 != c2 and overlaps(m1, m2)]
@@ -441,6 +446,42 @@ def test_python_imports_match_the_replaced_scanner(code, category, expected, tmp
     assert all(e['type'] == 'import' for e in entries)
 
 
+@pytest.mark.parametrize('code,category,expected', [
+    # `use` roots are `\`-segment prefixes; a function/const `use` is an import too; a group use
+    # (`use A\{B, C}`) is not seen, as before. A leading `\` is dropped (the replaced scanner
+    # missed `use \GuzzleHttp\X`).
+    ('<?php\nuse GuzzleHttp\\Client;\nuse GuzzleHttpX\\Y;\nuse Http\\Client\\HttpClient as H;\n'
+     'use Symfony\\Component\\HttpClient\\HttpClient, Foo\\Bar;\nuse GuzzleHttp\\{Psr7, Pool};\n'
+     'use \\GuzzleHttp\\Middleware;\n',
+     'network', ['GuzzleHttp\\Client', 'GuzzleHttp\\Middleware', 'Http\\Client\\HttpClient',
+                 'Symfony\\Component\\HttpClient\\HttpClient']),
+    # The alias is not the module: the replaced scanner read `as Stripe` as the `Stripe` SDK
+    # (one corpus site, `...\GuzzleHttp\Client as GuzzleHttp`, was a false network entry).
+    ('<?php\nuse function Aws\\S3\\putObject;\nuse Stripe\\StripeClient;\nuse StripeX\\A;\n'
+     'use Foo\\Bar as Stripe;\n', 'sdk', ['Aws\\S3\\putObject', 'Stripe\\StripeClient']),
+    # Builtins: bare or `\`-qualified calls and constructors, exact names; not a method, a static
+    # call or a namespaced function.
+    ('<?php\n$h = \\curl_init();\n$s = fsockopen("h", 80);\n$o = $c->curl_init();\n'
+     '$n = App\\curl_init();\n$x = CURL_INIT();\n', 'network', ['curl_init', 'fsockopen']),
+    ("<?php\nuse Doctrine\\ORM\\EntityManager;\n$a = new \\PDO('dsn');\n$b = new mysqli();\n"
+     "$c = pg_connect('x');\n$d = Db::mysqli_connect();\n$e = new PDOx();\n", 'db',
+     ['Doctrine\\ORM\\EntityManager', 'new PDO', 'new mysqli', 'pg_connect']),
+    # A URL is network whatever the quoting; the replaced scanner read only single-quoted
+    # strings, so `fopen("https://..")` was missed (BACK-1334 c recall fix).
+    ('<?php\n$a = fopen("https://x/a", "r");\n$b = fopen(\'ftp://x\', \'r\');\n'
+     '$c = file_get_contents("http://x");\n$d = file(\'https://x\');\n$e = fopen(\'/tmp/a\', \'w\');\n'
+     '$f = file_get_contents($u);\n', 'network', ['file', 'file_get_contents', 'fopen', 'fopen']),
+], ids=['php-use-network', 'php-use-sdk', 'php-builtin-network', 'php-builtin-db', 'php-url-args'])
+def test_php_network_db_sdk_match_the_replaced_scanner(code, category, expected, tmp_path):
+    assert sorted(e['name'] for e in _scan('php', code, tmp_path, category)) == expected
+
+
+def test_php_url_fopen_is_network_not_a_file_write(tmp_path):
+    code = "<?php\n$a = fopen('https://x', 'w');\n$b = fopen('/tmp/b', 'w');\n"
+    assert [e['line'] for e in _scan('php', code, tmp_path, 'network')] == [2]
+    assert [e['line'] for e in _scan('php', code, tmp_path, 'fs')] == [3]
+
+
 def test_python_imports_are_kept_when_no_call_rule_can_match(tmp_path):
     """The needle gate spares only call facts; a file with no subprocess literal still has
     its imports classified (before BACK-1334 c the gate dropped every fact)."""
@@ -451,12 +492,13 @@ def test_python_imports_are_kept_when_no_call_rule_can_match(tmp_path):
 
 @pytest.mark.parametrize('module', [
     'a', 'a.b', 'a/b.c', 'std::net::TcpStream', 'a:b', 'a:::b', 'aws-sdk-s3', '.rel.mod', '', 'a..b',
+    'Symfony\\Component\\HttpClient\\HttpClient',
 ])
 def test_segment_prefixes_are_exactly_the_segment_aligned_entries(module):
     """The prefix set replaced per-row `startswith(entry + sep)` checks (for speed); it must
     accept exactly the entries those checks accepted."""
     def old_rule(entry):
-        return module == entry or any(module.startswith(entry + s) for s in ('::', '.', '/'))
+        return module == entry or any(module.startswith(entry + s) for s in sr._SEGMENT_SEPARATORS)
     candidates = {module[:i] for i in range(len(module) + 1)} | {'x', module + 'x'}
     assert {e for e in candidates if old_rule(e)} == sr._segment_prefixes(module)
 

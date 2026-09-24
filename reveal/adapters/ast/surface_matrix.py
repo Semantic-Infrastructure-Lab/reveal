@@ -56,7 +56,7 @@ _HAND_CODED: Dict[str, frozenset] = {
     'typescript': frozenset({'cli', 'http', 'mcp', 'env', 'fs', 'subprocess', *_IMPORT_TAXONOMY}),
     'java': frozenset({'cli', 'http'}),
     'csharp': frozenset({'cli', 'http'}),
-    'php': frozenset({'http', 'env', 'fs', 'subprocess', *_IMPORT_TAXONOMY}),
+    'php': frozenset({'http', 'env', 'fs', 'subprocess'}),
     'swift': frozenset({'cli', 'http', 'env'}),
     'kotlin': frozenset({'cli', 'http'}),
     'ruby': frozenset({'http', 'env'}),
