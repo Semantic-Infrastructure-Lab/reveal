@@ -272,18 +272,22 @@ def _find_language_by_name(language: str) -> Tuple[Optional[str], Optional[Dict]
         Tuple of (ext, info, error_message)
     """
     all_analyzers = get_all_analyzers()
-    matches = []
-    for ext, info in all_analyzers.items():
-        if language.lower() in info['name'].lower():
-            matches.append((ext, info))
+    wanted = language.lower()
+    # The analyzer's language slug (`csharp`, `cpp`, `bash`) is the name reveal
+    # uses everywhere else; `--language-info csharp` found nothing (BACK-1421).
+    by_slug = [(ext, info) for ext, info in all_analyzers.items()
+               if getattr(info['class'], 'language', None) == wanted]
+    matches = by_slug or [(ext, info) for ext, info in all_analyzers.items()
+                          if wanted in info['name'].lower()]
 
     if not matches:
         return None, None, f"❌ Language not found: {language}\n\nTry: reveal --languages to see all supported languages"
 
     # When multiple extensions match, try to resolve to a single result.
     if len(matches) > 1:
-        # 1. Prefer exact name match (e.g. "javascript" → "JavaScript" not "JavaScript React")
-        exact = [(e, i) for e, i in matches if i['name'].lower() == language.lower()]
+        # 1. Prefer exact name match (e.g. "javascript" → "JavaScript" not "JavaScript React");
+        #    a slug match is exact by construction.
+        exact = by_slug or [(e, i) for e, i in matches if i['name'].lower() == wanted]
         if len(exact) == 1:
             return exact[0][0], exact[0][1], None
         # 2. If all exact-name matches share one analyzer class (e.g. .js/.jsx/.mjs/.cjs),
@@ -478,6 +482,16 @@ def _build_usage_examples(ext: str) -> List[str]:
     ]
 
 
+def resolve_language(language: str) -> Tuple[Optional[str], Optional[Dict], Optional[str]]:
+    """`(extension, info, error)` for a language name, slug or `.ext`; exactly
+    one of info/error is set."""
+    if not language.startswith('.'):
+        return _find_language_by_name(language)
+    ext = language.lower()
+    info, error = _validate_extension(ext)
+    return ext, info, error
+
+
 def get_language_info_detailed(language: str) -> str:
     """Get detailed information about a language's capabilities.
 
@@ -487,16 +501,9 @@ def get_language_info_detailed(language: str) -> str:
     Returns:
         Formatted language information
     """
-    # Normalize input and find extension
-    if not language.startswith('.'):
-        ext, info, error = _find_language_by_name(language)
-        if error or not info or not ext:
-            return error or "Language not found"
-    else:
-        ext = language.lower()
-        info, error = _validate_extension(ext)
-        if error or not info:
-            return error or "Extension not found"
+    ext, info, error = resolve_language(language)
+    if error or not info or not ext:
+        return error or "Language not found"
 
     # Build detailed information
     lines = _build_language_header(info, ext)

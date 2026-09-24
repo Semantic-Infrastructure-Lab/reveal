@@ -145,7 +145,12 @@ def handle_language_info(language: str):
 
     Shows detailed information about a language's capabilities.
     """
-    from ..introspection import get_language_info_detailed
+    from ..introspection import get_language_info_detailed, resolve_language
+    _, _, error = resolve_language(language)
+    if error:
+        # Unknown or ambiguous: exit 1 like a missing path, not 0 (BACK-1426)
+        print(error, file=sys.stderr)
+        sys.exit(1)
     print(get_language_info_detailed(language))
     sys.exit(0)
 

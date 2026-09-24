@@ -2,7 +2,9 @@
 
 import unittest
 import tempfile
+from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -298,6 +300,22 @@ class TestGetLanguageInfoDetailed(unittest.TestCase):
 
         self.assertIn("❌ Language not found:", result)
         self.assertIn("reveal --languages", result)
+
+    def test_language_slug_resolves(self):
+        """BACK-1421: `--language-info csharp` said 'Language not found'."""
+        self.assertIn("C#", get_language_info_detailed("csharp"))
+        self.assertIn("C++", get_language_info_detailed("cpp"))
+        self.assertIn("Shell Script", get_language_info_detailed("bash"))
+
+    def test_unknown_language_exits_1(self):
+        """BACK-1426: an unknown language printed 'not found' and exited 0."""
+        from reveal.cli.handlers.introspection import handle_language_info
+        with self.assertRaises(SystemExit) as cm:
+            with patch('sys.stderr', new_callable=StringIO) as err, \
+                    patch('sys.stdout', new_callable=StringIO):
+                handle_language_info("nonexistent_lang_12345")
+        self.assertEqual(cm.exception.code, 1)
+        self.assertIn("Language not found", err.getvalue())
 
     def test_get_info_unsupported_extension(self):
         """Test getting info for unsupported extension."""
