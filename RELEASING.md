@@ -132,6 +132,11 @@ Add a new version section:
 - Bug fix description
 ```
 
+Add it directly under `## [Unreleased]`, moving the unreleased entries beneath it. **Never
+rename the previous release's heading.** Three preps did that (0.94.0, 0.103.0, 0.124.0),
+and each time that release's entries silently became part of the next one.
+`tests/test_changelog_release_headings.py` fails if a release tag has no heading.
+
 ### Step 2: Run Release Script
 
 ```bash
