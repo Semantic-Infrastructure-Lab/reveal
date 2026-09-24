@@ -217,3 +217,39 @@ class TestStdinCheckExitCode:
         with patch("sys.stdin", StringIO(f"{f}\n")):
             result = _run_reveal_direct("--stdin")
         assert result.returncode == 0
+
+
+@pytest.fixture
+def unreadable_py(tmp_path):
+    """A .py file the current user cannot read (chmod 000)."""
+    import os
+    if os.name == "nt" or os.geteuid() == 0:
+        pytest.skip("chmod 000 does not deny reads on Windows or for root")
+    f = _write_py(tmp_path, "locked.py", "def f():\n    return 1\n")
+    f.chmod(0)
+    yield f
+    f.chmod(0o644)
+
+
+class TestUnreadableFile:
+    """BACK-1424: an unreadable file printed a PermissionError traceback."""
+
+    def test_file_view_is_a_clean_error(self, unreadable_py):
+        result = _run_reveal_direct(str(unreadable_py))
+        assert result.returncode == 1
+        assert "cannot read" in result.stderr and "Traceback" not in result.stderr
+
+    def test_single_file_check_exits_3(self, unreadable_py):
+        result = _run_reveal_direct("check", str(unreadable_py))
+        assert result.returncode == 3
+        assert "cannot read" in result.stderr
+
+    def test_single_file_check_exit_zero(self, unreadable_py):
+        assert _run_reveal_direct("check", str(unreadable_py), "--exit-zero").returncode == 0
+
+    def test_stdin_check_skips_it_and_exits_3(self, unreadable_py, tmp_path):
+        clean = _write_py(tmp_path, "clean.py", "def f():\n    return 1\n")
+        with patch("sys.stdin", StringIO(f"{clean}\n{unreadable_py}\n")):
+            result = _run_reveal_direct("--stdin", "--check", "--format", "json")
+        assert result.returncode == 3
+        assert "not readable, skipping" in result.stderr

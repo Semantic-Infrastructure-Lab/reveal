@@ -236,7 +236,12 @@ def run_check(args: Namespace) -> None:
         from reveal.checks import run_pattern_detection
         from reveal.config import RevealConfig
         allow_fallback = not getattr(args, 'no_fallback', False)
-        analyzer = _get_analyzer_or_exit(str(path), allow_fallback)
+        # An unreadable file could not be checked: exit 3 like a recursive check
+        # of the same file, or 0 under --exit-zero (BACK-1424).
+        analyzer = _get_analyzer_or_exit(
+            str(path), allow_fallback,
+            unreadable_exit_code=0 if getattr(args, 'exit_zero', False) else 3,
+        )
         cli_overrides = _build_file_cli_overrides(args)
         config = RevealConfig.get(start_path=path.parent, cli_overrides=cli_overrides or None)
         violations, degraded = run_pattern_detection(

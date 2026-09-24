@@ -4,6 +4,7 @@ Implements --stdin mode, --batch aggregation, SSL batch checks,
 and multi-URI result rendering.
 """
 
+import os
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Dict, List, Any, Tuple
@@ -89,6 +90,12 @@ def _process_stdin_file(
     # Process the file
     if not path.is_file():
         return 0, False
+
+    # An unreadable file is skipped like a missing one; in check mode it
+    # degrades the run (exit 3) rather than ending the whole batch (BACK-1424).
+    if not os.access(path, os.R_OK):
+        print(f"Warning: {target} is not readable, skipping", file=sys.stderr)
+        return 0, is_check_mode
 
     if is_check_mode:
         from reveal.file_handler import _get_analyzer_or_exit, _build_file_cli_overrides

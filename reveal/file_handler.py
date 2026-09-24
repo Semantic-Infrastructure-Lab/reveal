@@ -74,18 +74,20 @@ from .nav_handlers import (  # noqa: F401
 )
 
 
-def _get_analyzer_or_exit(path: str, allow_fallback: bool):
+def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code: int = 1):
     """Get analyzer for path or exit with error.
 
     Args:
         path: File path
         allow_fallback: Whether to allow fallback analyzers
+        unreadable_exit_code: Exit code when the file exists but cannot be read
+            (`check` passes 3, its "could not be checked" code)
 
     Returns:
         Analyzer instance
 
     Exits:
-        With error code 1 if no analyzer found
+        With error code 1 if no analyzer found, *unreadable_exit_code* if unreadable
     """
     from .registry import get_analyzer, get_all_analyzers  # noqa: I006 — circular avoidance
     from .errors import AnalyzerNotFoundError  # noqa: I006 — circular avoidance
@@ -110,7 +112,13 @@ def _get_analyzer_or_exit(path: str, allow_fallback: bool):
         print(str(error), file=sys.stderr)
         sys.exit(1)
 
-    return analyzer_class(path)
+    try:
+        return analyzer_class(path)  # reads the file
+    except OSError as e:
+        # An unreadable file (chmod 000, a FIFO, a vanished mount) printed a raw
+        # traceback, while a missing path got a clean error (BACK-1424).
+        print(f"Error: cannot read {path}: {e.strerror or e}", file=sys.stderr)
+        sys.exit(unreadable_exit_code)
 
 
 def _build_file_cli_overrides(args: Optional['Namespace']) -> dict:
