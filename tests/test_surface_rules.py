@@ -312,7 +312,7 @@ def test_documented_env_parity_deltas(lang, code, expected, tmp_path):
 
 # ── import-shaped network/db/sdk tables (BACK-1334 slices a, b, c) ─────────
 
-IMPORT_LANGS = ('go', 'java', 'kotlin', 'csharp', 'rust', 'swift', 'ruby', 'cpp')
+IMPORT_LANGS = ('go', 'java', 'kotlin', 'csharp', 'rust', 'swift', 'ruby', 'cpp', 'python')
 IMPORT_CATEGORIES = ('network', 'db', 'sdk')
 
 
@@ -415,6 +415,50 @@ def test_cpp_include_roots_match_the_replaced_scanner(code, category, expected, 
     entries = _scan('cpp', code + 'int main() { return 0; }\n', tmp_path, category)
     assert sorted(e['name'] for e in entries) == expected
     assert {e['type'] for e in entries} == {'include'}
+
+
+@pytest.mark.parametrize('code,category,expected', [
+    # The full imported name is classified and reported: `from a import b` is `a.b`, so a
+    # multi-segment row sees `from google import genai` (BACK-1260) and bare `google` is nothing.
+    ('from google import genai\nfrom google import protobuf\nimport google\n'
+     'from google.cloud import storage\nimport google.generativeai as g\n', 'sdk',
+     ['google.cloud.storage', 'google.genai', 'google.generativeai']),
+    # `urllib.parse` / `urllib.error` do no I/O however they are spelled (BACK-1338).
+    ('import urllib.parse\nfrom urllib import parse, request\nfrom urllib.error import URLError\n'
+     'from urllib.request import urlopen\nimport urllib\n', 'network',
+     ['urllib', 'urllib.request', 'urllib.request.urlopen']),
+    ('from requests import *\nimport requests, httpx\nimport httpxx\nimport socketserver\n', 'network',
+     ['httpx', 'requests', 'requests.*']),
+    ('import redis.asyncio as r\nfrom sqlalchemy.orm import Session\nimport mysqldb\n', 'db',
+     ['redis.asyncio', 'sqlalchemy.orm.Session']),
+    # A relative import is the package's own module, never a row (BACK-1334 c; the replaced
+    # scanner read `from .http import x` as network `http.x`: 28 corpus sites, all local).
+    ('from . import requests\nfrom .http import server\nfrom .. import redis\n', 'network', []),
+], ids=['python-full-name', 'python-urllib-no-io', 'python-network', 'python-db', 'python-relative'])
+def test_python_imports_match_the_replaced_scanner(code, category, expected, tmp_path):
+    entries = _scan('python', code, tmp_path, category)
+    assert sorted(e['name'] for e in entries) == expected
+    assert all(e['type'] == 'import' for e in entries)
+
+
+def test_python_imports_are_kept_when_no_call_rule_can_match(tmp_path):
+    """The needle gate spares only call facts; a file with no subprocess literal still has
+    its imports classified (before BACK-1334 c the gate dropped every fact)."""
+    code = 'import requests\nrequests.get("u")\n'
+    assert not any(n in code.encode() for n in sr._needles('python'))
+    assert [e['name'] for e in _scan('python', code, tmp_path, 'network')] == ['requests']
+
+
+@pytest.mark.parametrize('module', [
+    'a', 'a.b', 'a/b.c', 'std::net::TcpStream', 'a:b', 'a:::b', 'aws-sdk-s3', '.rel.mod', '', 'a..b',
+])
+def test_segment_prefixes_are_exactly_the_segment_aligned_entries(module):
+    """The prefix set replaced per-row `startswith(entry + sep)` checks (for speed); it must
+    accept exactly the entries those checks accepted."""
+    def old_rule(entry):
+        return module == entry or any(module.startswith(entry + s) for s in ('::', '.', '/'))
+    candidates = {module[:i] for i in range(len(module) + 1)} | {'x', module + 'x'}
+    assert {e for e in candidates if old_rule(e)} == sr._segment_prefixes(module)
 
 
 def test_import_glob_crosses_separators_and_needs_a_literal_prefix():

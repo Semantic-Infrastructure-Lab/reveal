@@ -67,6 +67,9 @@ class Import:
     names: Tuple[str, ...] = ()   # imported names (`b`, `c` in `use a::{b, c}`); () = whole module
     alias: str = ''
     line: int = 0
+    # What `Import` rules match and name, when not `module`: Python `from a import b` is `a.b`,
+    # so a row for `google.genai` sees `from google import genai`. Not part of equality.
+    qualified: str = field(default='', compare=False)
 
 
 @dataclass(frozen=True)
@@ -465,16 +468,41 @@ def _dotted(node: ast.AST) -> Optional[str]:
     return None
 
 
-def python_facts_from_ast(tree: ast.AST) -> List[Fact]:
-    """Facts from an already-parsed Python module (the scanner's own `ast` tree)."""
+_STATEMENT_HOLDERS = (ast.stmt, ast.excepthandler, ast.match_case)
+
+
+def _python_imports(tree: ast.AST) -> List[Fact]:
+    """Import facts. Imports are statements, so only statements (and the handlers and match
+    cases that hold them) are walked, not the expressions that make up most of a tree."""
     facts: List[Fact] = []
-    for node in ast.walk(tree):
+    stack = [tree]
+    while stack:
+        node = stack.pop()
         if isinstance(node, ast.Import):
             facts.extend(Import(a.name, alias=a.asname or '', line=node.lineno) for a in node.names)
         elif isinstance(node, ast.ImportFrom):
             module = '.' * node.level + (node.module or '')
-            facts.extend(Import(module, (a.name,), a.asname or '', node.lineno) for a in node.names)
-        elif isinstance(node, ast.Call):
+            # A relative import stays dotted (`.a.b`, `.b`): a local module, not a package.
+            join = '' if not module or module.endswith('.') else '.'
+            facts.extend(Import(module, (a.name,), a.asname or '', node.lineno,
+                                qualified=f'{module}{join}{a.name}')
+                         for a in node.names)
+        else:        # reversed, so statements pop in source order (`import a as x; import b as x`)
+            stack.extend(reversed([c for c in ast.iter_child_nodes(node)
+                                   if isinstance(c, _STATEMENT_HOLDERS)]))
+    return facts
+
+
+def python_facts_from_ast(tree: ast.AST, calls: bool = True) -> List[Fact]:
+    """Facts from an already-parsed Python module (the scanner's own `ast` tree).
+
+    `calls=False` keeps only the imports, for a file no call rule can match.
+    """
+    facts = _python_imports(tree)
+    if not calls:
+        return sorted(facts, key=lambda f: f.line)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
             path = _dotted(node.func)
             chained = path is None
             if path is None:

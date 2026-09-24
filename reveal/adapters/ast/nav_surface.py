@@ -6,41 +6,9 @@ from typing import Any, Dict, List, Optional
 
 from .surface_rules import apply_ast_rules
 from ...utils.pyparse import parse_python
-from .nav_surface_common import _add_once
 from .surface_matrix import UNPARSED_KEY
 
-_NET_PACKAGES: frozenset = frozenset({
-    'requests', 'httpx', 'httpcore', 'aiohttp', 'urllib', 'urllib3', 'socket',
-    'http', 'ftplib', 'smtplib', 'imaplib', 'poplib', 'xmlrpc',
-    'grpc', 'websocket', 'websockets',
-})
-
-# BACK-1338: urllib submodules that perform no I/O (URL parsing / exception
-# classes). `urllib` itself and urllib.request stay network.
-_NON_IO_NET_MODULES: frozenset = frozenset({'urllib.parse', 'urllib.error'})
-
-_DB_PACKAGES: frozenset = frozenset({
-    'psycopg2', 'psycopg', 'pymysql', 'MySQLdb', 'sqlite3',
-    'pymongo', 'motor', 'redis', 'aioredis', 'elasticsearch',
-    'sqlalchemy', 'databases', 'asyncpg',
-    'aiomysql', 'cx_Oracle', 'pyodbc', 'cassandra', 'pika',
-    'clickhouse_driver', 'confluent_kafka', 'supabase', 'minio',
-})
-
-_SDK_PACKAGES: frozenset = frozenset({
-    'anthropic', 'openai', 'cohere', 'google.cloud', 'azure',
-    'stripe', 'twilio', 'sendgrid', 'slack_sdk', 'github',
-    'atlassian', 'jira', 'pagerduty',
-    'boto3', 'botocore', 'litellm', 'anthropic_bedrock',
-    # BACK-1260: Google's AI SDKs. A module whose entire job is calling an AI
-    # vendor through its official SDK was absent from `sdk` and from `network`,
-    # visible only as three GOOGLE_* env vars with nothing marking them as a
-    # vendor integration -- exactly the question an AI-tooling / vendor-risk
-    # review exists to answer. Multi-segment on purpose: bare 'google' would
-    # claim every unrelated google-* package.
-    'google.genai', 'google.generativeai', 'google.ai', 'vertexai',
-    'mistralai', 'groq', 'together', 'replicate', 'huggingface_hub',
-})
+# network/db/sdk imports are rule-driven (surface_rules_imports.py, BACK-1334 c).
 
 _WRITE_MODES: frozenset = frozenset({'w', 'wb', 'a', 'ab', 'x', 'xb'})
 
@@ -94,9 +62,7 @@ def _scan_tree(
     delegating_writes = _collect_delegating_writes(tree)
 
     for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            _process_import(node, file_path, aliases, surfaces)
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             _process_function_def(node, file_path, surfaces, aliases, cli_groups, mcp_instances, http_apps,
                                   mcp_registrars)
         elif isinstance(node, ast.Call):
@@ -108,53 +74,6 @@ def _scan_tree(
 
     apply_ast_rules(surfaces, tree, file_path, source)
     return surfaces
-
-
-def _process_import(
-    node: ast.stmt,
-    file_path: str,
-    aliases: Dict[str, str],
-    surfaces: Dict[str, List[Dict[str, Any]]],
-) -> None:
-    if isinstance(node, ast.Import):
-        for alias in node.names:
-            name = alias.name
-            asname = alias.asname or name.split('.')[0]
-            aliases[asname] = name
-            _check_network_import(name, file_path, node.lineno, surfaces)
-    elif isinstance(node, ast.ImportFrom):
-        mod = node.module or ''
-        for alias in node.names:
-            full = f"{mod}.{alias.name}" if mod else alias.name
-            asname = alias.asname or alias.name
-            aliases[asname] = full
-            # BACK-1260: classify the full dotted name, not just the module it
-            # was imported from. `from google import genai` carries the vendor
-            # identity in the imported NAME -- checking 'google' alone can only
-            # either miss it or over-claim every google package.
-            _check_network_import(full, file_path, node.lineno, surfaces)
-
-
-def _check_network_import(
-    name: str,
-    file_path: str,
-    line: int,
-    surfaces: Dict[str, List[Dict[str, Any]]],
-) -> None:
-    # BACK-1260: match every dotted prefix, not just the root. Comparing only
-    # `name.split('.')[0]` meant a multi-segment catalog entry could never fire
-    # -- 'google.cloud' had been in _SDK_PACKAGES all along and was dead
-    # config, because the root of any google import is always 'google'.
-    parts = name.split('.')
-    prefixes = ['.'.join(parts[:i]) for i in range(1, len(parts) + 1)]
-    if any(p in _NON_IO_NET_MODULES for p in prefixes):
-        return
-    if any(p in _NET_PACKAGES for p in prefixes):
-        _add_once(surfaces['network'], {'type': 'import', 'name': name, 'file': file_path, 'line': line})
-    elif any(p in _DB_PACKAGES for p in prefixes):
-        _add_once(surfaces['db'], {'type': 'import', 'name': name, 'file': file_path, 'line': line})
-    elif any(p in _SDK_PACKAGES for p in prefixes):
-        _add_once(surfaces['sdk'], {'type': 'import', 'name': name, 'file': file_path, 'line': line})
 
 
 def _process_function_def(

@@ -111,14 +111,22 @@ its totals sum to the flat `total`.
   detected.
 - Dynamic surface registrations (plugin-loaded routes, runtime-constructed
   subprocess commands) are not tracked.
+- `network`/`db`/`sdk` are mostly import-based: importing a known client library (or anything
+  beneath it) is the surface. Python classifies the full imported name (`from google import
+  genai` is `google.genai`) and never a relative import (`from .http import x` is the package's
+  own module); C++ matches `#include` header roots as plain prefixes (`mysql` covers
+  `mysql_driver.h`). For Go, Java, Kotlin, C#, Rust, Swift, Ruby, C++ and Python the modules live
+  in one rule table (`reveal/adapters/ast/surface_rules_imports.py`), with stdlib socket clients
+  (`net.Dial`, `TcpStream::connect`, `TCPSocket`, `TcpClient`, `URLSession`) as call rows beside
+  them; TypeScript/JavaScript and PHP classify in their own scanners.
 - `subprocess` is matched by call shape, not data flow: `subprocess.*`/`os.system`
   (Python, resolved through imports), `exec.Command` (Go), `ProcessBuilder` and
   `Runtime.getRuntime().exec` (Java/Kotlin), `Command::new` (Rust, only when
   imported from a `process` module), `Process.Start`/`ProcessStartInfo` (C#),
-  `Process()` (Swift), `system`/backticks/`Open3` (Ruby). A launcher held in a
-  variable (`rt.exec(...)`) is not detected. For those eight languages the
+  `Process()` (Swift), `system`/backticks/`Open3` (Ruby), `system`/`popen`/`exec*` (C++). A
+  launcher held in a variable (`rt.exec(...)`) is not detected. For those nine languages the
   patterns live in one rule table (`reveal/adapters/ast/surface_rules_subprocess.py`);
-  TypeScript/JavaScript, PHP and C++ detect it in their own scanners.
+  TypeScript/JavaScript and PHP detect it in their own scanners.
 - `fs` covers writes only, matched by call shape: `os.WriteFile`/`os.Create` (Go),
   `Files.write`, `new FileWriter()` (Java/Kotlin), `File.WriteAllText`, `new StreamWriter()`
   (C#), `fs::write`/`File::create` (Rust), `File.write`/`FileUtils.mkdir_p` (Ruby),

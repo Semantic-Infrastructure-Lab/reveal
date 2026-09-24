@@ -1,5 +1,5 @@
 """`network` / `db` / `sdk` rule tables, import-shaped (BACK-1334 slices a-c: Go, Java, Kotlin, C#,
-Rust, Swift, Ruby, C++).
+Rust, Swift, Ruby, C++, Python).
 
 Each row says "importing this module, or anything beneath it, is a network / database / vendor-SDK
 surface". They replace the per-language `_*_TAXONOMY` tuples that `categorize_by_prefix` walked;
@@ -16,11 +16,12 @@ A module containing `*` is a glob for a name-prefix family with no shared segmen
 Ruby gems are matched as `gem`, `gem/...` and `gem-...` (the old scanner's rule), so each gem
 generates a `gem` row and a `gem-*` row. C++ header roots are plain string prefixes, not segments
 (`sqlite3` covers `sqlite3.h`, `mysql` covers `mysql.h` and `mysql/mysql.h`), so each C++ entry is
-generated as the glob `<root>*`.
+generated as the glob `<root>*`. Python classifies the full imported name: `from a import b` is
+`a.b` (the fact's `qualified`), and a relative import is a local module, never a row.
 
 Socket-client Call/New rows for `network` live in `surface_rules_sockets.py` (BACK-1334 slice e).
 
-Not yet rule-driven: PHP, Python, TypeScript/JavaScript (BACK-1334 slices c-d).
+Not yet rule-driven: PHP, TypeScript/JavaScript (BACK-1334 slices c-d).
 """
 
 from .surface_rules_model import Import, Rule
@@ -38,6 +39,14 @@ _SOURCES = {
     'swift': ('import {m}\n', 'import {m}x\n'),
     'ruby': ("require '{m}'\n", "require '{m}x'\n"),
     'cpp': ('#include <{m}>\nint main() {{}}\n', '#include <{m}>\nint main() {{}}\n'),
+    'python': ('import {m}\n', 'import {m}x\n'),
+}
+
+# Modules beneath a row's module that do not count, per (lang, module). Each is also a
+# counter-example of that row.
+_EXCLUDE = {
+    # BACK-1338: URL parsing and exception classes, no I/O; `urllib.request` stays network.
+    ('python', 'urllib'): ('urllib.parse', 'urllib.error'),
 }
 
 # Ruby gem names are also matched with a `-` suffix (`aws-sdk` covers `aws-sdk-s3`), which is not
@@ -69,6 +78,9 @@ _MODULES = {
         'cpp': ('curl/', 'cpr/', 'boost/asio', 'boost/beast', 'restclient', 'cpp-httplib',
                 'httplib.h', 'sys/socket.h', 'netinet/', 'arpa/inet.h', 'netdb.h', 'winsock2.h',
                 'ws2tcpip.h'),
+        'python': ('requests', 'httpx', 'httpcore', 'aiohttp', 'urllib', 'urllib3', 'socket',
+                   'http', 'ftplib', 'smtplib', 'imaplib', 'poplib', 'xmlrpc', 'grpc', 'websocket',
+                   'websockets'),
     },
     'db': {
         'go': ('database/sql', 'gorm.io/gorm', 'github.com/jmoiron/sqlx',
@@ -91,6 +103,10 @@ _MODULES = {
         # The old list also had `mysqlx`, which the `mysql` prefix already covers.
         'cpp': ('pqxx/', 'sqlite3', 'mysql', 'mongocxx/', 'bsoncxx/', 'hiredis', 'sw/redis++',
                 'soci/'),
+        'python': ('psycopg2', 'psycopg', 'pymysql', 'MySQLdb', 'sqlite3', 'pymongo', 'motor',
+                   'redis', 'aioredis', 'elasticsearch', 'sqlalchemy', 'databases', 'asyncpg',
+                   'aiomysql', 'cx_Oracle', 'pyodbc', 'cassandra', 'pika', 'clickhouse_driver',
+                   'confluent_kafka', 'supabase', 'minio'),
     },
     'sdk': {
         'go': ('github.com/stripe/stripe-go', 'github.com/aws/aws-sdk-go',
@@ -112,6 +128,14 @@ _MODULES = {
         'ruby': ('aws-sdk', 'stripe', 'twilio-ruby', 'google/cloud', 'sendgrid-ruby',
                  'mailgun-ruby'),
         'cpp': ('aws/', 'google/cloud', 'stripe/'),
+        # BACK-1260: Google's AI SDKs are multi-segment on purpose; bare `google` would claim
+        # every google-* package. `from google import genai` is `google.genai` (the fact's
+        # `qualified`), so it matches.
+        'python': ('anthropic', 'openai', 'cohere', 'google.cloud', 'azure', 'stripe', 'twilio',
+                   'sendgrid', 'slack_sdk', 'github', 'atlassian', 'jira', 'pagerduty', 'boto3',
+                   'botocore', 'litellm', 'anthropic_bedrock', 'google.genai',
+                   'google.generativeai', 'google.ai', 'vertexai', 'mistralai', 'groq', 'together',
+                   'replicate', 'huggingface_hub'),
     },
 }
 
@@ -135,11 +159,13 @@ def _rows(category: str) -> tuple:
     for lang, modules in _MODULES[category].items():
         example, lookalike = _SOURCES[lang]
         for m in modules:
+            exclude = _EXCLUDE.get((lang, m), ())
             for pattern in _patterns(lang, m):
                 pattern, hit, miss = _forms(lang, pattern)
-                rows.append(Rule(category, lang, Import(module=pattern), '{module}',
+                rows.append(Rule(category, lang, Import(module=pattern, exclude=exclude), '{module}',
                                  example=example.format(m=hit),
-                                 counter_examples=(lookalike.format(m=miss),),
+                                 counter_examples=(lookalike.format(m=miss),
+                                                   *(example.format(m=x) for x in exclude)),
                                  entry_type=_ENTRY_TYPES.get(lang, 'import')))
     return tuple(rows)
 

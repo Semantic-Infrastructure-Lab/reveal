@@ -52,7 +52,7 @@ SCANNER_MODULES: Dict[str, str] = {
 _IMPORT_TAXONOMY = ('network', 'db', 'sdk')
 
 _HAND_CODED: Dict[str, frozenset] = {
-    'python': frozenset({'cli', 'http', 'mcp', 'env', 'fs', *_IMPORT_TAXONOMY}),
+    'python': frozenset({'cli', 'http', 'mcp', 'env', 'fs'}),
     'typescript': frozenset({'cli', 'http', 'mcp', 'env', 'fs', 'subprocess', *_IMPORT_TAXONOMY}),
     'java': frozenset({'cli', 'http'}),
     'csharp': frozenset({'cli', 'http'}),

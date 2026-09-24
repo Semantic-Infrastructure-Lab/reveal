@@ -58,8 +58,12 @@ class Import:
     An entry containing `*` is a glob over the whole module text instead (`aws_sdk_*`,
     `aws-sdk-*`); `*` also crosses separators. Use it for families that share a name prefix
     but have no common segment: Rust crates (`aws_sdk_s3`), Ruby gems (`aws-sdk-s3`).
+
+    `exclude`: modules beneath `module` that do not count, matched the same way (Python
+    `urllib.parse` is URL parsing, not network I/O).
     """
     module: Names = ()
+    exclude: Names = ()
 
 
 Match = Union[Call, New, Subshell, Import]

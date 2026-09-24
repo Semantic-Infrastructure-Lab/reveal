@@ -27,7 +27,7 @@ import ast
 import re
 from functools import lru_cache
 from fnmatch import fnmatchcase
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from .surface_facts import CallFilter, FactCollector, NewFilter, python_facts_from_ast
 from .surface_facts import Call as CallFact
@@ -119,10 +119,26 @@ def _call_fields(rule_match: Call, call: CallFact,
     return {'path': path, 'receiver': receiver, 'name': name, 'key': key or ''}
 
 
-def _module_matches(wanted: str, module: str) -> bool:
-    if '*' in wanted:
-        return fnmatchcase(module, wanted)
-    return module == wanted or any(module.startswith(wanted + sep) for sep in _SEGMENT_SEPARATORS)
+@lru_cache(maxsize=4096)
+def _segment_prefixes(module: str) -> frozenset:
+    """The module and each prefix of it that ends at a separator: exactly the non-glob
+    entries that match it segment-aligned (`a.b/c` -> `a`, `a.b`, `a.b/c`)."""
+    return frozenset({module, *(module[:i] for i in range(len(module))
+                                if module.startswith(_SEGMENT_SEPARATORS, i))})
+
+
+@lru_cache(maxsize=None)
+def _import_patterns(m: Import) -> Tuple[frozenset, Tuple[str, ...], frozenset, Tuple[str, ...]]:
+    """(segment entries, globs) of `m.module`, then the same of `m.exclude`."""
+    def split(value: Names) -> Tuple[frozenset, Tuple[str, ...]]:
+        names = _names(value)
+        return frozenset(n for n in names if '*' not in n), tuple(n for n in names if '*' in n)
+    return (*split(m.module), *split(m.exclude))
+
+
+def _module_matches(segments: frozenset, globs: Tuple[str, ...], module: str) -> bool:
+    return (not segments.isdisjoint(_segment_prefixes(module))
+            or any(fnmatchcase(module, g) for g in globs))
 
 
 def _match_fields(m: Match, fact: Fact, aliases: Dict[str, str]) -> Optional[Dict[str, str]]:
@@ -133,9 +149,11 @@ def _match_fields(m: Match, fact: Fact, aliases: Dict[str, str]) -> Optional[Dic
     if isinstance(m, Subshell) and isinstance(fact, SubshellFact):
         return {}
     if isinstance(m, Import) and isinstance(fact, ImportFact):
-        wanted = _names(m.module)
-        if not wanted or any(_module_matches(w, fact.module) for w in wanted):
-            return {'module': fact.module}
+        module = fact.qualified or fact.module
+        segments, globs, skip_segments, skip_globs = _import_patterns(m)
+        if (not (segments or globs) or _module_matches(segments, globs, module)) \
+                and not _module_matches(skip_segments, skip_globs, module):
+            return {'module': module}
     return None
 
 
@@ -146,13 +164,44 @@ def _provenance_holds(rule: Rule, facts: List[Fact]) -> bool:
                for f in facts)
 
 
+# The fact type each match kind can match: a fact is only tried against rules of its own kind.
+_FACT_OF = {Call: CallFact, New: NewFact, Subshell: SubshellFact, Import: ImportFact}
+
+
+def _import_candidates(rules: List[Rule]) -> Callable[[ImportFact], List[Rule]]:
+    """The Import rules, in table order, that could match a fact: looked up by the fact's
+    segment prefixes instead of trying every row. A superset; `_match_fields` still decides.
+    Glob and module-less rules are always candidates."""
+    by_segment: Dict[str, List[int]] = {}
+    always: List[int] = []
+    for i, r in enumerate(rules):
+        segments, globs, _skip, _skip_globs = _import_patterns(r.match)
+        if globs or not segments:
+            always.append(i)
+        for s in segments:
+            by_segment.setdefault(s, []).append(i)
+
+    def candidates(fact: ImportFact) -> List[Rule]:
+        hits = set(always)
+        for prefix in _segment_prefixes(fact.qualified or fact.module):
+            hits.update(by_segment.get(prefix, ()))
+        return [rules[i] for i in sorted(hits)]
+    return candidates
+
+
 def _hits(rules: Iterable[Rule], facts: List[Fact]) -> List[Tuple[Rule, Fact, Dict[str, str]]]:
     """(rule, fact, match fields) per matching site; first rule in table order wins per fact."""
     aliases = _alias_map(facts)
-    usable = [r for r in rules if _provenance_holds(r, facts)]
+    usable: Dict[type, List[Rule]] = {}
+    for r in rules:
+        if _provenance_holds(r, facts):
+            usable.setdefault(_FACT_OF[type(r.match)], []).append(r)
+    import_candidates = _import_candidates(usable.get(ImportFact, []))
     out: List[Tuple[Rule, Fact, Dict[str, str]]] = []
     for fact in facts:
-        for rule in usable:
+        tried = (import_candidates(fact) if type(fact) is ImportFact
+                 else usable.get(type(fact), ()))
+        for rule in tried:
             fields = _match_fields(rule.match, fact, aliases)
             if fields is not None:
                 out.append((rule, fact, fields))
@@ -381,14 +430,11 @@ def apply_ast_rules(surfaces: Dict[str, List[Dict[str, Any]]], tree: ast.AST, fi
                     source: Optional[str] = None) -> None:
     """`apply_rules` for the Python scanner's `ast` tree.
 
-    A given `source` gates the walk (see `_needles`); without it every call is considered.
+    A given `source` gates the calls (see `_needles`); without it every call is considered.
+    Imports are always kept, as `FactCollector` keeps them.
     """
     if not rule_categories('python'):
         return
     needles = _needles('python')
-    if source is not None and needles is not None \
-            and not any(n.decode('utf-8') in source for n in needles):
-        facts: List[Fact] = []          # no rule's module is even mentioned: nothing can match
-    else:
-        facts = python_facts_from_ast(tree)
-    apply_rules(surfaces, 'python', facts, file_path)
+    calls = source is None or needles is None or any(n.decode('utf-8') in source for n in needles)
+    apply_rules(surfaces, 'python', python_facts_from_ast(tree, calls), file_path)
