@@ -162,7 +162,9 @@ reveal surface src/            # external boundary map: CLI args, routes, env va
 reveal dev new-adapter <name>  # scaffold new adapters/rules
 ```
 
-## Adapters (25 built-in)
+## Adapters
+
+The most-used adapters; `reveal --adapters` lists every one.
 
 | Adapter | What it queries |
 |---------|-----------------|

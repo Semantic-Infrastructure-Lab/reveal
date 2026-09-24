@@ -57,7 +57,7 @@ features:
   - 'DNS propagation validation across nameservers'
   - 'Cross-adapter integration (delegates to ssl:// for certificates)'
   - 'Health checks with actionable remediation steps'
-  - 'Zero external dependencies for basic functionality'
+  - 'Optional extras degrade gracefully: DNS needs reveal-cli[dns], WHOIS needs reveal-cli[whois]'
 
 workflows:
   - name: 'Domain Health Check'
@@ -109,11 +109,11 @@ anti_patterns:
 
   - bad: "whois example.com | grep -i expire"
     good: "reveal domain://example.com/whois"
-    why: "Structured WHOIS data with key fields extracted (when implemented)"
+    why: "Structured WHOIS data with key fields extracted"
 
 notes:
-  - 'Requires dnspython for DNS operations: pip install dnspython'
-  - 'WHOIS data not yet implemented (requires python-whois)'
+  - 'DNS operations (/dns, /mail, /ns-audit) need dnspython: pip install reveal-cli[dns]'
+  - 'WHOIS data (/whois, registrar info) needs python-whois: pip install reveal-cli[whois]'
   - 'DNS propagation checks require multiple nameserver queries (slower)'
   - 'For SSL-specific work, prefer ssl:// adapter directly'
   - 'domain:// focuses on DNS and registration; ssl:// focuses on certificates'

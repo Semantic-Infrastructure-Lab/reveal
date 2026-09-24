@@ -414,10 +414,13 @@ reveal surface [PATH] [--type TYPE] [--format FORMAT]
 | `http` | HTTP route handlers (Flask/FastAPI decorators) |
 | `mcp` | MCP tool registrations |
 | `env` | Environment variable reads (`os.getenv`, `os.environ.get`) |
-| `network` | Outbound network imports (`requests`, `httpx`, etc.) |
+| `network` | Outbound network imports (`requests`, `httpx`, etc.) and socket clients (Go `net.Dial`, Rust `TcpStream`, C# `TcpClient`, ...) |
 | `fs` | Filesystem writes (`open(…,'w')`, `Path.write_text`) |
 | `db` | Database/ORM imports |
 | `sdk` | Third-party SDK imports |
+| `subprocess` | Process spawns (`subprocess.run`, Go `exec.Command`, Java `ProcessBuilder`, C `system`/`popen`, ...) |
+
+A category a language does not implement yet is reported as "not implemented", not as 0; `--format json` carries the full language × category `matrix`.
 
 ### Examples
 

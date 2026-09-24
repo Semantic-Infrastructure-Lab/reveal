@@ -10,6 +10,7 @@ import sys
 from argparse import Namespace
 from pathlib import Path
 
+from reveal.adapters.ast.surface_matrix import CATEGORIES
 from reveal.adapters.surface import (  # noqa: F401 - re-exported for back-compat
     SurfaceAdapter,
     SurfaceRenderer,
@@ -57,7 +58,7 @@ def create_surface_parser() -> argparse.ArgumentParser:
         '--type',
         metavar='TYPE',
         default='',
-        help='Filter to one surface type: cli, http, mcp, env, network, fs, db, sdk'
+        help=f"Filter to one surface type: {', '.join(CATEGORIES)}"
     )
     parser.add_argument(
         '--top',
