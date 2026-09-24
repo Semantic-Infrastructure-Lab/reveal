@@ -1706,8 +1706,12 @@ they were published: Python 83.5% → 86.1% and TypeScript 76.8% → 90.9% (`env
 such as `os.environ["X"]` and `process.env.X`, the property-access channel above), C#
 98.3% → 100.0% and Dart 84.8% → 86.9% (calls now reached). The table keeps the figures
 as published. One category moved the other way: TypeScript `file` fell from 29/31 to
-24/31 because a later verb filter omits `fs.stat`/`realpath` and VS Code
-`workspace.fs.stat`/`readDirectory` (BACK-1468, open).
+24/31 because a later verb filter omitted `fs.stat`/`realpath` and VS Code
+`workspace.fs.stat`/`readDirectory`. Fixed the same day (BACK-1468): on the same sample
+`file` is 30/31 and TypeScript 94.5% overall, with the same 2 false positives on the 60
+negatives. The one remaining `file` miss is an oracle error (`formatLineAsMarkdown`
+only calls `text.replace`); two new unlisted `file` hits (`fs.accessSync`,
+`fs.createWriteStream`) are real I/O the oracle's pattern does not cover.
 
 Cross-language false-positive sweeps in the same program fixed bare-verb
 subsequence over-fire (`dict.update()` misread as a db write) and unscoped
