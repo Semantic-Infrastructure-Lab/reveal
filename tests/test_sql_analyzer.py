@@ -322,5 +322,27 @@ SELECT * FROM translations WHERE text_en LIKE '%Hello%';
             os.unlink(temp_path)
 
 
+    def test_schema_qualified_objects_are_named_by_object_not_schema(self):
+        """BACK-1413: every object in a pg_dump file was named 'public'."""
+        code = (
+            "CREATE TABLE public.users (id int);\n"
+            "CREATE TABLE plain (id int);\n"
+            "CREATE VIEW reporting.v AS SELECT 1;\n"
+            "CREATE FUNCTION public.f() RETURNS int AS $$ select 1 $$ LANGUAGE sql;\n"
+            "CREATE FUNCTION g() RETURNS int AS $$ select 1 $$ LANGUAGE sql;\n"
+        )
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.sql', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            temp_path = f.name
+        try:
+            structure = SQLAnalyzer(temp_path).get_structure()
+            self.assertEqual(sorted(c['name'] for c in structure['classes']),
+                             ['plain', 'public.users', 'reporting.v'])
+            self.assertEqual(sorted(fn['name'] for fn in structure['functions']),
+                             ['g', 'public.f'])
+        finally:
+            os.unlink(temp_path)
+
+
 if __name__ == '__main__':
     unittest.main()

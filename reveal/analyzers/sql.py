@@ -18,19 +18,22 @@ class SQLAnalyzer(TreeSitterAnalyzer):
     language = 'sql'
 
     def _find_identifier_child(self, node) -> Optional[str]:
-        """Find the first identifier child's text (searches recursively)."""
+        """The created object's name, schema-qualified as written.
+
+        The grammar nests it in an `object_reference` (`public` `.` `users`);
+        its FIRST identifier is the schema, which named every object in a
+        pg_dump file `public` (BACK-1413).
+        """
         direct = next((c for c in _children(node) if _zero_arg(c, 'kind') == 'identifier'), None)
         if direct:
             return self._get_node_text(direct)
-        # In new grammar, identifier is often nested in object_reference
         for child in _children(node):
             if _zero_arg(child, 'kind') != 'object_reference':
                 continue
-            nested = next(
-                (gc for gc in _children(child) if _zero_arg(gc, 'kind') == 'identifier'), None
-            )
-            if nested:
-                return self._get_node_text(nested)
+            parts = [self._get_node_text(gc) for gc in _children(child)
+                     if _zero_arg(gc, 'kind') == 'identifier']
+            if parts:
+                return '.'.join(parts)
         return None
 
     def _node_to_function_dict(self, node, name: str) -> StructureItem:
@@ -68,7 +71,7 @@ class SQLAnalyzer(TreeSitterAnalyzer):
 
         for func_type in func_types:
             for node in self._find_nodes_by_type(func_type):
-                name = self._get_node_name(node) or self._find_identifier_child(node)
+                name = self._find_identifier_child(node) or self._get_node_name(node)
                 if name:
                     functions.append(self._node_to_function_dict(node, name))
 
