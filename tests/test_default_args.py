@@ -42,6 +42,18 @@ def test_each_call_returns_an_independent_namespace():
     assert second.exclude is None and not hasattr(second, 'extra_state')
 
 
+def test_reveal_format_is_read_per_call_not_frozen_by_the_cache(monkeypatch):
+    """The parser defaults are cached per process; REVEAL_FORMAT must not be. A first
+    call made under REVEAL_FORMAT=json turned every later call's format to json, so
+    MCP tools and handle_uri emitted JSON -- 14 tests failed on one xdist worker."""
+    from reveal.cli.defaults import _parser_defaults as cached
+    cached.cache_clear()
+    monkeypatch.setenv('REVEAL_FORMAT', 'json')
+    assert _default_args().format == 'json'
+    monkeypatch.delenv('REVEAL_FORMAT')
+    assert _default_args().format == 'text'
+
+
 @pytest.mark.parametrize('scheme', ['ast', 'calls', 'git', 'markdown'])
 def test_default_args_do_not_trigger_the_structural_flag_warning(scheme):
     from reveal.cli.routing.uri import _warn_unsupported_structural_flags

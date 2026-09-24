@@ -27,6 +27,12 @@ def _parser_defaults() -> dict:
 
 def _default_args(**overrides) -> Namespace:
     """Return a Namespace with all reveal CLI defaults for internal routing functions."""
+    from .parser import _format_default
+
     defaults = copy.deepcopy(_parser_defaults())
+    # `format` defaults from REVEAL_FORMAT (BACK-1362), which the cache above would
+    # freeze at its first call: one caller that ran with REVEAL_FORMAT=json made every
+    # later call in the process emit JSON (MCP tools, handle_uri). Read it per call.
+    defaults['format'] = _format_default()
     defaults.update(overrides)
     return Namespace(**defaults)
