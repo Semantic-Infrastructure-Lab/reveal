@@ -177,6 +177,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`classify://` (and `overview://`'s provenance tag) had no in-tree-vendoring signal — vendored files inside the app tree (not under a `vendor/`-named directory) classified `first_party` (BACK-1238)** — new content-based signals: a minifier-preserved `/*!`/`//!` license-banner + version token, and locale-file fan-out (≥5 same-extension siblings named after language codes in one directory). Deliberately scoped to `classify://` only, not folded into the shared path-only `classify_path_provenance()` used by `overview://`/`hotspots://`/`pack://`.
 - **`WHY_REVEAL.md` claimed 85 quality rules; I007/I008 brought the real count to 87** — caught by CI's V029 self-validation check, fixed same-session.
 
+## [0.124.0] - 2026-08-29 (sessions oceanic-demon-0828, mitama-0828, xenon-wolf-0829)
+
 ### Added
 - **New `classify://` adapter (BACK-1233)** — one row of provenance (test/vendor/minified/first-party) per file across the full, unranked file population; `overview://`/`hotspots://`/`pack://` only ever tagged their own ranked/selected subsets, leaving "what fraction of this codebase is first-party" structurally uncomputable from any of them. Registered as adapter #35, with a due-diligence workflow recipe and `help://` reachability.
 - **`--also-json PATH` writes a second JSON artifact alongside `--format`'s primary output (BACK-1184)** — one reveal call now produces both a human-readable report and a machine-readable file without a second, re-parsing invocation; wired into all three URI-adapter render paths (structure/element/check).
