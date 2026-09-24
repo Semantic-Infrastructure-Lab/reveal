@@ -23,12 +23,19 @@ pytestmark = pytest.mark.component
 class TestDiscoverAdapterPlugins(unittest.TestCase):
 
     def setUp(self):
+        self._clear_test_plugins()
+        # Clean up after each test too: the registry is process-global, so a
+        # plugin left registered leaks into every later test on the same xdist
+        # worker (registry-wide contract/help tests then see an extra
+        # 'test_plugin_*' adapter with no renderer, guide or help relations).
+        self.addCleanup(self._clear_test_plugins)
+
+    @staticmethod
+    def _clear_test_plugins():
         _reset_adapter_plugin_discovery()
-        # Remove any test plugin schemes registered by previous tests
         for key in list(_ADAPTER_REGISTRY.keys()):
             if key.startswith('test_plugin_'):
                 del _ADAPTER_REGISTRY[key]
-        # Remove cached plugin modules
         for key in list(sys.modules.keys()):
             if key.startswith('reveal_plugin_adapter_'):
                 del sys.modules[key]
