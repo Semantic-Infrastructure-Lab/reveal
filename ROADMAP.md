@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-08-30 (pimubu-0830 — v0.126.0 release: external wishlist batch-6 fixes, multi-language test-detection gap)
+> **Last updated**: 2026-09-24 (void-nightmare-0924 — v0.128.0 release: language neutrality, one complexity score, surface:// rule tables, silent-failure sweep)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,15 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.128.0 — Language neutrality, one complexity score, surface:// rule tables, silent-failure sweep
+
+- ✅ Per-language conventions profile: `calls://?uncalled`, stdlib classification, test detection, `hotspots` test hints and `pack` entry points follow each language's rules instead of Python's; callee extraction has one shared implementation for `calls://` and `ast://` nav (BACK-1273–1310).
+- ✅ One complexity score across C901, `ast://`, `stats://` and `hotspots` for every language (the `mccabe` dependency is gone), with per-construct counting fixed language by language (BACK-1081, BACK-1284–1325).
+- ✅ `surface://` runs on one rule-table engine for 10 languages: subprocess detection in 8 more languages, socket clients, Ruby/Swift fs, a coverage matrix that says "not implemented" instead of 0, and `--by dir` (BACK-1319–1347).
+- ✅ Silent-failure sweep: about 20 CLI flags that were silently ignored now work (`--all`, `--verbose`, `--copy`, `--since`, `REVEAL_FORMAT`, `ignore:`), a typo'd path exits 1, `review` is a trustworthy CI gate, and Windows/non-UTF-8 crashes are fixed (BACK-1321–1401).
+- ✅ A file with a syntax error keeps its imports and symbols again — a regression present in 0.121.0–0.127.0 that cut import recall to 47% on curl, 56% on Godot and 79% on TigerBeetle (BACK-1460).
+- ⚠️ Complexity numbers change for most languages; `.reveal.yaml` thresholds tuned against the old scores may need a nudge.
 
 ### v0.127.0 — 2026-09-01 external handoff batch (12 items) + adversarial re-review follow-ups
 
