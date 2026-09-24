@@ -4,6 +4,7 @@ This module provides common fixtures for test isolation, temporary files,
 and adapter registry management to prevent test pollution and reduce duplication.
 """
 
+import os
 import pytest
 import sys
 import tempfile
@@ -214,3 +215,14 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "unit: fast unit tests (< 0.1s each)")
     config.addinivalue_line("markers", "integration: integration tests (subprocess-based, slower)")
     config.addinivalue_line("markers", "slow: tests taking > 1s each")
+    config.addinivalue_line("markers", "real_worker_pool: needs reveal's own ProcessPoolExecutor "
+                            "(clears the suite-wide REVEAL_MAX_WORKERS=1)")
+    # xdist already saturates the cores; reveal's internal pools on top only add contention
+    # (flag-matrix tests: 178s -> 103s). Explicit developer overrides win.
+    os.environ.setdefault("REVEAL_MAX_WORKERS", "1")
+
+
+@pytest.fixture(autouse=True)
+def _serial_workers_unless_pool_test(request, monkeypatch):
+    if request.node.get_closest_marker("real_worker_pool"):
+        monkeypatch.delenv("REVEAL_MAX_WORKERS", raising=False)

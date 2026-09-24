@@ -105,6 +105,7 @@ class TestI002GraphCachePreload:
             result = _i002_preload(tmp_path)
             assert result == {}
 
+    @pytest.mark.real_worker_pool
     def test_root_mis_detection_warning_logged_once_across_workers(self, tmp_path, monkeypatch, caplog):
         """End-to-end BACK-531 regression: a project with no I002 project markers
         and enough files to trigger the multi-worker path must log the BACK-338
