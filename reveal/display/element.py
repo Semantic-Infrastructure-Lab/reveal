@@ -815,6 +815,26 @@ def _read_lines(path, start_line, end_line):
         return None
 
 
+def _output_sections(analyzer, path, name: str, sections, output_format: str, config=None):
+    """Render several non-contiguous sections, each numbered from its own start line."""
+    for i, section in enumerate(sections):
+        start, end, source = section['line_start'], section['line_end'], section['source']
+        if output_format == 'grep':
+            for offset, line in enumerate(source.split('\n')):
+                print(f"{path}:{start + offset}:{line}")
+            continue
+        if i:
+            print()
+        print(f"{path}:{start}-{end} | {name}\n")
+        print(analyzer.format_with_lines(source, start))
+    if output_format != 'grep':
+        line_count = sum(s['line_end'] - s['line_start'] + 1 for s in sections)
+        file_type = get_file_type_from_analyzer(analyzer)
+        print_breadcrumbs('element', path, file_type=file_type, config=config,
+                          element_name=name, line_count=line_count,
+                          line_start=sections[0]['line_start'])
+
+
 def _output_result(analyzer, result, element: str, output_format: str, config=None):
     """Output extraction result in the requested format.
 
@@ -850,6 +870,11 @@ def _output_result(analyzer, result, element: str, output_format: str, config=No
     # Match count prefix for multi-section results
     if match_count and match_count > 1 and output_format not in ('json', 'grep'):
         print(f"# {match_count} sections matched \"{name}\" — showing all\n")
+
+    sections = result.get('sections')
+    if sections:
+        _output_sections(analyzer, path, name, sections, output_format, config)
+        return
 
     # Header
     print(f"{path}:{line_start}-{line_end} | {name}\n")

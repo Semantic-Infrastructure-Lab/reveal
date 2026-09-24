@@ -83,6 +83,16 @@ class TestSectionExtractionCLI:
         assert "alpha content" not in result.stdout
         assert "gamma content" not in result.stdout
 
+    def test_or_sections_numbered_from_their_own_lines(self, doc):
+        """'Alpha|Gamma' is non-contiguous: Gamma must print at file line 9,
+        not continue Alpha's numbering (6, 7, ...) under a 3-11 header."""
+        result = _run_reveal_direct(str(doc), "--section", "Alpha|Gamma")
+        assert result.returncode == 0, result.stderr
+        assert f"{doc}:3-5" in result.stdout
+        assert f"{doc}:9-10" in result.stdout
+        assert "     9  ## Gamma" in result.stdout
+        assert f"{doc}:3-10" not in result.stdout
+
     def test_nonexistent_section_errors_not_dumps(self, doc):
         """A missing section must fail, not silently dump the whole file."""
         result = _run_reveal_direct(str(doc), "--section", "Nonexistent")

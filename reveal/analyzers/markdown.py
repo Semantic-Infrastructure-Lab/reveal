@@ -1229,6 +1229,29 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         spans.sort(key=lambda t: t[0])
         return spans
 
+    def _sections_result(self, name: str, spans: List[tuple]) -> Dict[str, Any]:
+        """Result for one or more (start_line, end_line) section spans.
+
+        Several matched sections are rarely contiguous, so each keeps its own
+        span in ``sections``; ``source`` is their concatenation and
+        ``line_start``/``line_end`` bound the whole match.  A renderer that
+        numbered ``source`` from ``line_start`` would give every section after
+        the first the wrong line numbers."""
+        sections = [
+            {'line_start': sl, 'line_end': el, 'source': '\n'.join(self.lines[sl - 1:el])}
+            for sl, el in spans
+        ]
+        result: Dict[str, Any] = {
+            'name': name,
+            'line_start': spans[0][0],
+            'line_end': spans[-1][1],
+            'source': '\n\n'.join(s['source'] for s in sections),
+        }
+        if len(sections) > 1:
+            result['match_count'] = len(sections)
+            result['sections'] = sections
+        return result
+
     def _find_heading_match(self, pattern: str):
         """Search headings for an exact or substring match of *pattern*.
 
@@ -1311,16 +1334,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             spans = self._collect_section_spans(patterns)
             if not spans:
                 return None
-            sources = ['\n'.join(self.lines[sl - 1:el]) for sl, el, _ in spans]
-            result: Dict[str, Any] = {
-                'name': name,
-                'line_start': spans[0][0],
-                'line_end': spans[-1][1],
-                'source': '\n\n'.join(sources),
-            }
-            if len(spans) > 1:
-                result['match_count'] = len(spans)
-            return result
+            return self._sections_result(name, [(sl, el) for sl, el, _ in spans])
 
         # Single-pattern path (original behaviour preserved)
         pattern = patterns[0]
@@ -1332,14 +1346,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             elif len(substring_matches) > 1:
                 # Multiple partial matches — extract and concatenate all of them
                 spans = [(sl, self._section_end(self.lines, sl, hl)) for sl, hl, _ in substring_matches]
-                sources = ['\n'.join(self.lines[sl - 1:el]) for sl, el in spans]
-                return {
-                    'name': name,
-                    'line_start': spans[0][0],
-                    'line_end': spans[-1][1],
-                    'source': '\n\n'.join(sources),
-                    'match_count': len(spans),
-                }
+                return self._sections_result(name, spans)
             else:
                 return super().extract_element(element_type, name)
 

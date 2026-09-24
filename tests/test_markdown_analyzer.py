@@ -1747,6 +1747,19 @@ class TestMarkdownSectionOrPattern(unittest.TestCase):
         result = self.analyzer.extract_element('section', 'Open Issues|Notes')
         self.assertEqual(result['line_start'], 1)  # Open Issues is on line 1
 
+    def test_each_section_keeps_its_own_span(self):
+        """Non-contiguous matches carry per-section spans, so a renderer can
+        number each from its real start line (not from line_start onward)."""
+        result = self.analyzer.extract_element('section', 'Open Issues|Notes')
+        spans = [(s['line_start'], s['line_end']) for s in result['sections']]
+        self.assertEqual(spans, [(1, 3), (10, 12)])
+        self.assertTrue(result['sections'][1]['source'].startswith('# Notes'))
+
+    def test_single_substring_multi_match_keeps_spans(self):
+        """The single-term substring path (several headings contain 'Bug 11') too."""
+        result = self.analyzer.extract_element('section', 'Bug 11')
+        self.assertEqual([s['line_start'] for s in result['sections']], [13, 16])
+
     def test_line_end_is_last_match(self):
         """line_end reflects the end of the latest matched section."""
         result_single = self.analyzer.extract_element('section', 'Notes')
