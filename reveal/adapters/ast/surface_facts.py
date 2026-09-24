@@ -104,7 +104,8 @@ def _text(content: bytes) -> Callable[[Any], str]:
 
 
 def _line(node: Any) -> int:
-    return _zero_arg(node, 'start_position').row + 1
+    row: int = _zero_arg(node, 'start_position').row
+    return row + 1
 
 
 def _find(node: Any, *kinds: str) -> Optional[Any]:

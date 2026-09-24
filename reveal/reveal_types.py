@@ -26,6 +26,9 @@ CONTRACT_VERSION = '1.1'
 
 class WarningEntry(TypedDict, total=False):
     code: str
+    # ast://, hotspots, stats, and the Kotlin/OpenXML analyzers key the warning's
+    # kind as 'type' rather than 'code' (e.g. 'unknown_sort_field'); both occur.
+    type: str
     message: str
     file: str
     fallback: str
@@ -58,6 +61,9 @@ class RevealResult(_RevealResultRequired, total=False):
     """
     meta: RevealMeta
     error: str
+    # Set by an analyzer whose parser recovered from malformed input (BACK-1084/
+    # BACK-1404); `check` reads it as "results may be incomplete", not clean.
+    _has_errors: bool
 
 
 # ---------------------------------------------------------------------------

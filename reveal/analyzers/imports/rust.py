@@ -86,7 +86,8 @@ def _line_text(analyzer, line_number: int) -> str:
     """
     idx = line_number - 1
     if 0 <= idx < len(analyzer.lines):
-        return analyzer.lines[idx].rstrip()
+        line: str = analyzer.lines[idx]
+        return line.rstrip()
     return ""
 
 
@@ -456,7 +457,7 @@ class RustExtractor(LanguageExtractor):
             current = _zero_arg(current, 'parent')
 
         parent = _zero_arg(node, 'parent')
-        parent_type = _zero_arg(parent, 'kind')
+        parent_type: str = _zero_arg(parent, 'kind')
 
         # Decided by grammar field, not parent kind: `fn f(x: Duration)` and
         # `impl Display for D` put the *type* directly under parameter/impl_item,

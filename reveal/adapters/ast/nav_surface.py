@@ -24,8 +24,9 @@ _MOCK_PATCH_PREFIXES: tuple = ('mock.patch(', 'mocker.patch(', 'patch(')
 _MOCK_PATCH_SUBSTRINGS: tuple = ('unittest.mock.patch(',)
 
 
-def scan_file_surface(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
-    """Parse one Python file and return categorised surface entries."""
+def scan_file_surface(file_path: str) -> Dict[str, List[Any]]:
+    """Parse one Python file and return categorised surface entries (plus
+    UNPARSED_KEY: [file_path] when it cannot be parsed, BACK-1394)."""
     try:
         source = Path(file_path).read_text(errors='replace', encoding='utf-8')
         tree = parse_python(source, file_path)

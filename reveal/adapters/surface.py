@@ -103,7 +103,7 @@ _SURFACE_SCANNERS: tuple = (
 _CPP_SCANNER = next(s for s in _SURFACE_SCANNERS if '.cpp' in s.extensions)
 
 
-def _load_scanner(spec: '_SurfaceScanner') -> Callable[[str], Dict[str, List[Dict[str, Any]]]]:
+def _load_scanner(spec: '_SurfaceScanner') -> Callable[[str], Dict[str, List[Any]]]:
     return getattr(importlib.import_module(spec.module), spec.func)
 
 

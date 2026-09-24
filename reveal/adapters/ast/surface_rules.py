@@ -116,7 +116,7 @@ def _call_fields(rule_match: Call, call: CallFact,
     key = next((a for a in call.args if a), None)     # first non-empty string literal
     if rule_match.string_arg and key is None:
         return None
-    if rule_match.key_prefix and not key.startswith(rule_match.key_prefix):
+    if rule_match.key_prefix and (key is None or not key.startswith(rule_match.key_prefix)):
         return None
     return {'path': path, 'receiver': receiver, 'name': name, 'key': key or ''}
 
@@ -202,7 +202,7 @@ def _hits(rules: Iterable[Rule], facts: List[Fact]) -> List[Tuple[Rule, Fact, Di
     out: List[Tuple[Rule, Fact, Dict[str, str]]] = []
     for fact in facts:
         tried = (import_candidates(fact) if type(fact) is ImportFact
-                 else usable.get(type(fact), ()))
+                 else usable.get(type(fact), []))
         for rule in tried:
             fields = _match_fields(rule.match, fact, aliases)
             if fields is not None:
@@ -227,7 +227,7 @@ def scan_category(category: str, lang: str, facts: List[Fact],
         key = (name, fact.line)
         if key not in seen:
             seen.add(key)
-            entry = {'type': rule.entry_type or category, 'name': name}
+            entry: Dict[str, Any] = {'type': rule.entry_type or category, 'name': name}
             if rule.entry_expr:
                 entry['expr'] = rule.entry_expr.format(**fields)
             entry.update(file=file_path, line=fact.line)
@@ -263,8 +263,11 @@ _TABLES: Dict[str, Tuple[Rule, ...]] = dict(ALL_TABLES)   # live registry; tests
 
 
 def _reset_caches() -> None:
-    for cached in (_call_filter, _new_filter, _needles, rules_for, rule_categories):
-        cached.cache_clear()
+    _call_filter.cache_clear()
+    _new_filter.cache_clear()
+    _needles.cache_clear()
+    rules_for.cache_clear()
+    rule_categories.cache_clear()
 
 
 def register_table(category: str, rules: Tuple[Rule, ...]) -> None:
@@ -306,8 +309,10 @@ def _call_filter(lang: str) -> Optional[CallFilter]:
     exact: set = set()
     globs: List[str] = []
     receivers_any_name: set = set()
-    for r in (r for r in all_rules() if r.lang == lang and isinstance(r.match, Call)):
+    for r in all_rules():
         m = r.match
+        if r.lang != lang or not isinstance(m, Call):
+            continue
         if m.resolved:
             return None                    # the source name is an alias of the rule's name
         if m.qualified is not None:
@@ -335,8 +340,11 @@ def _call_filter(lang: str) -> Optional[CallFilter]:
 @lru_cache(maxsize=None)
 def _new_filter(lang: str) -> Optional[NewFilter]:
     exact: set = set()
-    for r in (r for r in all_rules() if r.lang == lang and isinstance(r.match, New)):
-        patterns = _names(r.match.type)
+    for r in all_rules():
+        m = r.match
+        if r.lang != lang or not isinstance(m, New):
+            continue
+        patterns = _names(m.type)
         if not patterns or any(c in p for p in patterns for c in '*?['):
             return None
         exact.update(patterns)
@@ -352,7 +360,7 @@ def _literal_prefix(pattern: str) -> str:
 
 
 def _longest_word(text: str) -> str:
-    words = re.findall(r'\w+', text)
+    words: List[str] = re.findall(r'\w+', text)
     return max(reversed(words), key=len) if words else ''      # ties: the later word
 
 
