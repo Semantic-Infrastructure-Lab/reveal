@@ -30,7 +30,7 @@ from ..conventions import family_for_path
 from ..analyzers.imports.base import build_project_namespaces
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
-from ..registry import get_code_extensions
+from ..registry import DECLARATION_ONLY_EXTENSIONS, get_code_extensions
 from ..utils.path_utils import is_skippable_dir, to_posix, to_relative_display
 from ..utils.results import ResultBuilder
 
@@ -1221,6 +1221,8 @@ class ImportsAdapter(ResourceAdapter):
                     if config.should_ignore(fp):
                         continue
                     file_index.setdefault(fname, []).append(fp)
+                    if fp.suffix.lower() in DECLARATION_ONLY_EXTENSIONS:
+                        continue  # a stub would duplicate its module's edges (BACK-1467)
                     if fp.suffix in supported_exts or fp.suffix.lower() in code_exts:
                         candidates.append(fp)
         return candidates, file_index

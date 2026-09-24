@@ -831,10 +831,11 @@ class TestStdinProcessing(unittest.TestCase):
         self.assertIn('somedir', error)
         handle_file_func.assert_not_called()
 
+    @patch('os.access', return_value=True)  # the faked file is readable (BACK-1424 skip)
     @patch('pathlib.Path.is_file', return_value=True)
     @patch('pathlib.Path.is_dir', return_value=False)
     @patch('pathlib.Path.exists', return_value=True)
-    def test_process_stdin_file_success(self, mock_exists, mock_is_dir, mock_is_file):
+    def test_process_stdin_file_success(self, mock_exists, mock_is_dir, mock_is_file, mock_access):
         """Test _process_stdin_file processes valid file."""
         args = MagicMock()
         args.meta = True

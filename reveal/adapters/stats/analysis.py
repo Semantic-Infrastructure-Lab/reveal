@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Iterator, cast
 
-from ...registry import get_analyzer
+from ...registry import DECLARATION_ONLY_EXTENSIONS, get_analyzer
 from ...utils.path_utils import is_skippable_dir
 
 
@@ -112,8 +112,10 @@ def find_analyzable_files(
                 except ValueError:
                     pass
 
-            # Check if reveal can analyze this file type
-            if not get_analyzer(str(file_path)):
+            # Check if reveal can analyze this file type (a .pyi stub can, but a
+            # scan skips declaration-only files -- DECLARATION_ONLY_EXTENSIONS)
+            if (file_path.suffix.lower() in DECLARATION_ONLY_EXTENSIONS
+                    or not get_analyzer(str(file_path))):
                 if excluded_by_extension is not None:
                     ext = file_path.suffix.lower() or '(no extension)'
                     excluded_by_extension[ext] = excluded_by_extension.get(ext, 0) + 1

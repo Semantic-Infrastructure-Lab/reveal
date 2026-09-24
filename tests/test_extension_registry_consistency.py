@@ -59,6 +59,14 @@ def test_python_stubs_use_the_python_analyzer(ext):
     assert language_for_extension(ext) == 'python'
 
 
+def test_declaration_only_stubs_are_not_scanned():
+    """A .pyi opens when targeted, but directory scans skip it: next to its module
+    it doubled functions, uncalled entries and surface imports (BACK-1467)."""
+    from reveal.registry import get_code_extensions
+    assert '.pyi' not in get_code_extensions()
+    assert extensions_for_languages('python') == {'.py'}
+
+
 def test_fallback_languages_route_to_a_fallback_analyzer():
     for ext in fallback_languages():
         cls = get_analyzer(f'x{ext}')
@@ -103,9 +111,7 @@ def test_rules_claim_whole_languages_never_part_of_one():
     .cjs, .bash, .markdown missing)."""
     from reveal.rules import RuleRegistry
     # I001/I002/I005 take the import extractors' extensions: .mm but not .m (BACK-664).
-    # .pyi stubs are declarations only: body rules have nothing to read, and M102
-    # would call every stub an orphan (nothing imports a .pyi by path; BACK-1467).
-    allowed_missing = {'.m', '.pyi'}
+    allowed_missing = {'.m'}
     for rule in RuleRegistry.get_rules():
         claimed = {p for p in rule.file_patterns if p.startswith('.') and '*' not in p}
         for lang in {language_for_extension(p) for p in claimed} - {None}:
@@ -147,6 +153,7 @@ def test_convention_test_file_patterns_accept_every_family_extension(languages, 
 
 # Extractor extensions deliberately outside their languages' registry family.
 _EXTRACTOR_EXTRAS = {
+    'PythonExtractor': {'.pyi'},     # stubs: declaration-only, read when targeted, never scanned
     'CppImportExtractor': {'.mm'},   # Obj-C++ includes (BACK-664); .m stays out
 }
 
@@ -186,3 +193,21 @@ def test_mts_and_hpp_plus_plus_files_are_scanned_end_to_end(tmp_path):
     assert 'cpp' in by_language  # the .h++ file activates the C++ scanner
     env = [e['name'] for e in _scan_surface(tmp_path)['surfaces']['env']]
     assert 'HOME' in env
+
+
+def test_a_stub_beside_its_module_is_not_double_counted(tmp_path):
+    """BACK-1467: once .pyi had an analyzer, every directory scan read the stub as
+    a second copy of its module."""
+    from reveal.adapters.imports import ImportsAdapter
+    from reveal.adapters.stats.analysis import find_analyzable_files
+    from reveal.adapters.surface import _scan_surface
+    (tmp_path / 'mod.py').write_text('import requests\n\ndef fetch(u):\n    return requests.get(u)\n',
+                                     encoding='utf-8')
+    (tmp_path / 'mod.pyi').write_text('import requests\n\ndef fetch(u: str) -> object: ...\n',
+                                      encoding='utf-8')
+    assert [p.name for p in find_analyzable_files(tmp_path)] == ['mod.py']
+    network = _scan_surface(tmp_path)['surfaces']['network']
+    assert [e['file'] for e in network] == ['mod.py']
+    scanned = ImportsAdapter(str(tmp_path)).get_structure()
+    assert '.pyi' not in str(scanned)
+    assert get_analyzer(str(tmp_path / 'mod.pyi')) is not None  # still opens when targeted

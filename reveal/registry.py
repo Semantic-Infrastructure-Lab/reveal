@@ -60,6 +60,12 @@ TREESITTER_EXTENSION_MAP: Dict[str, str] = {
 # Registry for file type analyzers
 _ANALYZER_REGISTRY: Dict[str, type] = {}
 
+# Declarations with no behavior (Python type stubs). They have an analyzer, so
+# `reveal x.pyi` works, but directory scans skip them: a stub next to its module
+# would count each function twice, list every stub function as uncalled, and
+# report the module's imports twice in surface:// (BACK-1467).
+DECLARATION_ONLY_EXTENSIONS: FrozenSet[str] = frozenset({'.pyi'})
+
 # BACK-583: extensions registered by more than one analyzer, where real
 # dispatch (get_analyzer()) resolves correctly via content/path sniffing
 # (e.g. _try_conf_detection for nginx-vs-ini '.conf' files) but the registry
@@ -565,9 +571,10 @@ def extensions_for_languages(*languages: str) -> FrozenSet[str]:
     registered (BACK-1403, BACK-1255). Reads the registry as it stands, which is
     complete whenever any reveal module runs, because reveal/__init__.py imports
     every analyzer first; extensions registered later by plugins are not included.
+    DECLARATION_ONLY_EXTENSIONS are left out: these consumers scan behavior.
     """
     wanted = set(languages)
-    known = set(_ANALYZER_REGISTRY) | set(TREESITTER_EXTENSION_MAP)
+    known = (set(_ANALYZER_REGISTRY) | set(TREESITTER_EXTENSION_MAP)) - DECLARATION_ONLY_EXTENSIONS
     return frozenset(ext for ext in known if language_for_extension(ext) in wanted)
 
 
@@ -677,7 +684,7 @@ def get_code_extensions() -> FrozenSet[str]:
         if getattr(cls, 'CATEGORY', 'code') == 'code'
     )
     treesitter = frozenset(TREESITTER_EXTENSION_MAP.keys())
-    return explicit | treesitter
+    return (explicit | treesitter) - DECLARATION_ONLY_EXTENSIONS
 
 
 @functools.lru_cache(maxsize=None)
