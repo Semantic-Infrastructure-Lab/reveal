@@ -89,6 +89,21 @@ logger = logging.getLogger(__name__)
 _NOT_CONCAT = object()
 
 
+def _include_ancestors(base_path: Path, search_paths: Optional[List[Path]]) -> List[Path]:
+    """Directories from the including file's directory up to the first search
+    root that contains it, nearest first (BACK-1469). Empty when the includer
+    sits under no search root — the walk never leaves the scanned project."""
+    base = base_path.resolve()
+    for root in search_paths or []:
+        root = root.resolve()
+        if base == root or root in base.parents:
+            chain = [base]
+            while chain[-1] != root:
+                chain.append(chain[-1].parent)
+            return chain
+    return []
+
+
 @dataclass(frozen=True)
 class _ImportSpec:
     """Per-language description of how imports appear in the tree-sitter grammar.
@@ -2083,7 +2098,8 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 
         System includes (``<stdio.h>``, ``is_relative=False``) return None —
         their file-level graph is not claimed. Quoted includes are looked up
-        next to the including file first, then under each project search path.
+        next to the including file first, then in its ancestor directories up
+        to the search root (nearest first), then under each project search path.
         """
         if not stmt.is_relative:
             return None
@@ -2094,7 +2110,17 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         if candidate.is_file():
             return candidate
 
-        # 2. Under each project search path (root, then full-suffix path match).
+        # 2. BACK-1469: the includer's ancestors, nearest first, up to the search
+        # root containing it — where a project's -Ilib/-Iinclude header lives
+        # (curl's lib/vtls/x.c "rand.h" -> lib/rand.h). Without this a bare
+        # basename went straight to step 3 and took whichever project's rand.h
+        # the root scan reached first (Redis src/rand.h, for 8 of curl's files).
+        for ancestor in _include_ancestors(base_path, search_paths):
+            for candidate in (ancestor / target, ancestor / 'include' / target):
+                if candidate.is_file():
+                    return candidate.resolve()
+
+        # 3. Under each project search path (root, then full-suffix path match).
         target_parts = Path(target).parts
         n = len(target_parts)
         for root in search_paths or []:
@@ -2105,9 +2131,10 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                 continue
             if n == 1:
                 # Bare basename target (no qualifying directory) — bounded
-                # one-level match, same as before (BACK-398).
+                # one-level match, same as before (BACK-398). Sorted so the pick
+                # doesn't depend on filesystem iteration order (BACK-1469).
                 basename = target_parts[0]
-                for child in root.iterdir():
+                for child in sorted(root.iterdir()):
                     if child.is_dir():
                         sub = (child / basename).resolve()
                         if sub.is_file():

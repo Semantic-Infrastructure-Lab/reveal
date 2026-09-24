@@ -619,6 +619,76 @@ class TestResolution:
         )
         assert resolved == (tmp_path / 'lib' / 'util.h').resolve()
 
+    @staticmethod
+    def _resolve_one(includer: Path, root: Path):
+        extractor = get_extractor(includer)
+        imports = extractor.extract_imports(includer)
+        assert len(imports) == 1
+        return extractor.resolve_import(
+            imports[0], base_path=includer.parent, search_paths=[root])
+
+    def test_c_bare_include_prefers_includer_ancestor_over_root_scan(self, tmp_path):
+        """BACK-1469: curl cloned inside the Redis tree. curl/lib/vtls/x.c's
+        "rand.h" is curl's lib/rand.h (curl builds with -Ilib), not the
+        one-level root-scan hit src/rand.h that belongs to Redis."""
+        (tmp_path / 'src').mkdir()
+        (tmp_path / 'src' / 'rand.h').write_text('void redis_rand(void);\n')
+        lib = tmp_path / 'curl' / 'lib'
+        (lib / 'vtls').mkdir(parents=True)
+        (lib / 'rand.h').write_text('void curl_rand(void);\n')
+        includer = lib / 'vtls' / 'openssl.c'
+        includer.write_text('#include "rand.h"\n')
+        assert self._resolve_one(includer, tmp_path) == (lib / 'rand.h').resolve()
+
+    def test_c_bare_include_found_in_ancestor_include_dir(self, tmp_path):
+        """BACK-1469: the -Iinclude convention — proj/src/a.c "foo.h" resolves to
+        proj/include/foo.h ahead of an unrelated one-level other/foo.h."""
+        (tmp_path / 'other').mkdir()
+        (tmp_path / 'other' / 'foo.h').write_text('int other;\n')
+        proj = tmp_path / 'proj'
+        (proj / 'src').mkdir(parents=True)
+        (proj / 'include').mkdir()
+        (proj / 'include' / 'foo.h').write_text('int proj;\n')
+        includer = proj / 'src' / 'a.c'
+        includer.write_text('#include "foo.h"\n')
+        assert self._resolve_one(includer, tmp_path) == (proj / 'include' / 'foo.h').resolve()
+
+    def test_c_include_ancestor_walk_stops_at_search_root(self, tmp_path):
+        """BACK-1469: a header above the search root is outside the scanned
+        project and must not be claimed as an edge."""
+        (tmp_path / 'x.h').write_text('int x;\n')
+        root = tmp_path / 'proj'
+        (root / 'src').mkdir(parents=True)
+        includer = root / 'src' / 'a.c'
+        includer.write_text('#include "x.h"\n')
+        assert self._resolve_one(includer, root) is None
+
+    def test_c_bare_include_root_scan_is_order_independent(self, tmp_path):
+        """BACK-1469: two one-level candidates — the pick is the sorted-first
+        child, not whatever the filesystem's iterdir() lists first."""
+        for name in ('zz', 'aa', 'mm'):
+            (tmp_path / name).mkdir()
+            (tmp_path / name / 'util.h').write_text('int u;\n')
+        includer = tmp_path / 'a.c'
+        includer.write_text('#include "util.h"\n')
+        assert self._resolve_one(includer, tmp_path) == (tmp_path / 'aa' / 'util.h').resolve()
+
+    def test_c_qualified_include_prefers_includer_ancestor(self, tmp_path):
+        """BACK-1469: "curl/curl.h" from proj/src/a.c resolves via the ancestor
+        walk to proj/include/curl/curl.h, not a vendored copy elsewhere that the
+        full-suffix walk might reach first."""
+        vendored = tmp_path / 'aaa' / 'vendor' / 'curl'
+        vendored.mkdir(parents=True)
+        (vendored / 'curl.h').write_text('int vendored;\n')
+        proj = tmp_path / 'proj'
+        (proj / 'src').mkdir(parents=True)
+        (proj / 'include' / 'curl').mkdir(parents=True)
+        (proj / 'include' / 'curl' / 'curl.h').write_text('int proj;\n')
+        includer = proj / 'src' / 'a.c'
+        includer.write_text('#include "curl/curl.h"\n')
+        assert self._resolve_one(includer, tmp_path) == (
+            proj / 'include' / 'curl' / 'curl.h').resolve()
+
 
 class TestModuleResolution:
     """BACK-487/488: file-level edge resolution for the non-#include languages.
