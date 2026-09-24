@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, List, Optional, Sequence, Tuple
 
 from .core import node_children as _children
+from .core.definition_names import name_matches
 from .core.node_taxonomy import (
     CLASS_NODES, MEMBER_CONTAINER_NODES, TYPE_DECL_NODES,
 )
@@ -76,15 +77,6 @@ def _in_tree_order(nodes: Iterable[Any]) -> List[Any]:
     for node in nodes:
         seen.setdefault(_span(node), node)
     return [seen[key] for key in sorted(seen)]
-
-
-def name_matches(node_name: Optional[str], wanted: str) -> bool:
-    """`wanted` names this definition: exactly, or as the trailing segments of
-    a C++ out-of-line qualified name (`get_file_as_bytes` and
-    `FileAccess::get_file_as_bytes` both name `FileAccess::get_file_as_bytes`)."""
-    if not node_name:
-        return False
-    return node_name == wanted or node_name.endswith('::' + wanted)
 
 
 def pick_best_candidate(candidates, analyzer=None):

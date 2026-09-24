@@ -203,6 +203,7 @@ def _definition_index(structures: List[Dict[str, Any]]) -> Dict[str, List[Dict[s
     (language builtins dropped, as in calls://)."""
     from reveal.adapters.ast.nav_effects import classify_call
     from reveal.adapters.calls.index import _lang_family
+    from reveal.core.definition_names import lookup_keys
     from reveal.conventions import conventions_for
     from reveal.registry import language_for_extension
 
@@ -219,13 +220,17 @@ def _definition_index(structures: List[Dict[str, Any]]) -> Dict[str, List[Dict[s
             if not name:
                 continue
             calls = elem.get('calls', [])
-            index.setdefault(name, []).append({
+            record = {
                 'file': file_path,
                 'line': elem.get('line', 0),
                 'params': _params_from_signature(elem.get('signature', ''), name),
                 'effects': _effects_from_calls(calls, classify_call, language),
                 'calls': [c for c in calls if c.split('.')[-1] not in builtins] if builtins else calls,
-            })
+            }
+            # A C++ out-of-line `Cls::poll` is keyed as `poll` too, so a bare
+            # `--from poll` and a bare `poll()` call site both reach it (BACK-1400).
+            for key in lookup_keys(name):
+                index.setdefault(key, []).append(record)
     # collect_structures' file order is not stable; frames and candidates must be.
     for defs in index.values():
         defs.sort(key=lambda d: (d['file'], d['line']))

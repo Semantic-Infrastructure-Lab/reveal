@@ -21,6 +21,7 @@ from ..ast.call_graph import build_alias_map, build_symbol_map, resolve_callees 
 from ...conventions import conventions_for, family_for_path, is_builtin_anywhere
 from ...defaults import TEST_FRAMEWORK_CALLEE_NAMES
 from ...utils.path_utils import is_unsafe_scan_root
+from ...core.definition_names import lookup_keys, name_matches
 
 # Module-level LRU cache: directory → (cache_key, index)
 # cache_key is a tuple of (abspath_str, mtime_ns) pairs so it's hashable.
@@ -467,7 +468,7 @@ def find_callees(
             # test call" should work the same way "what calls X" already does.
             if elem.get('category') not in ('functions', 'methods', 'tests'):
                 continue
-            if elem.get('name', '') != target:
+            if not name_matches(elem.get('name', ''), target):
                 continue
             calls = elem.get('calls', [])
             builtins = conventions_for(_lang_family(file_path)).builtins
@@ -477,7 +478,7 @@ def find_callees(
                 calls = filtered
             matches.append({
                 'file': file_path,
-                'function': target,
+                'function': elem.get('name', target),
                 'line': elem.get('line', 0),
                 'calls': calls,
             })
@@ -511,11 +512,9 @@ def _build_forward_index(
             builtins = conventions_for(_lang_family(file_path)).builtins
             if not include_builtins and builtins:
                 calls = [c for c in calls if c.split('.')[-1] not in builtins]
-            forward.setdefault(name, []).append({
-                'file': file_path,
-                'line': elem.get('line', 0),
-                'calls': calls,
-            })
+            record = {'file': file_path, 'line': elem.get('line', 0), 'calls': calls}
+            for key in lookup_keys(name):
+                forward.setdefault(key, []).append(record)
     return forward
 
 

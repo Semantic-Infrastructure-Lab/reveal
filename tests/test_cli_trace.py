@@ -331,6 +331,41 @@ class TestBuildTrace(unittest.TestCase):
         self.assertTrue(any('file' in e for e in callee_frame['effects']))
 
 
+class TestCppOutOfLineDefinitions(unittest.TestCase):
+    """BACK-1400 (CC6): a C++ out-of-line definition is stored as `Cls::poll`,
+    so `trace --from poll` answered "not found" and a bare `poll()` call site
+    never expanded into it, while calls://?target=poll found every caller."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        _write(self.tmpdir, 'client.cpp', """\
+            int Client::poll() {
+                return drain();
+            }
+
+            int Client::drain() {
+                return 0;
+            }
+
+            int run(Client &c) {
+                return c.poll();
+            }
+        """)
+
+    def test_bare_root_finds_the_out_of_line_definition(self):
+        frames = _build_trace(self.tmpdir, 'poll', 2)['frames']
+        self.assertEqual([(f['name'], f['line']) for f in frames], [('poll', 1), ('drain', 5)])
+
+    def test_qualified_root_still_works(self):
+        frames = _build_trace(self.tmpdir, 'Client::poll', 1)['frames']
+        self.assertEqual(frames[0]['line'], 1)
+
+    def test_call_site_expands_into_the_out_of_line_definition(self):
+        frames = _build_trace(self.tmpdir, 'run', 3)['frames']
+        self.assertEqual([f['name'] for f in frames], ['run', 'poll', 'drain'])
+        self.assertTrue(all(f.get('file') for f in frames), frames)
+
+
 class TestSameNameDefinitions(unittest.TestCase):
     """BACK-1399: frames are per definition. Keyed by bare name, two unrelated
     run()s rendered as one frame `run [b.py:1] calls: beta, alpha`."""

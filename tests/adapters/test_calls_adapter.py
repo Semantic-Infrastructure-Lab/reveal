@@ -944,6 +944,21 @@ def plain():
 # CallsAdapter: ?callees= query param (forward lookup)
 # ---------------------------------------------------------------------------
 
+class TestFindCalleesCppOutOfLine(unittest.TestCase):
+    """BACK-1400: ?callees= matched the stored name exactly, so a C++
+    out-of-line `FileAccess::get_bytes` had "no definition" for `get_bytes`."""
+
+    def test_bare_and_qualified_names_find_the_definition(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, 'f.cpp').write_text(
+                "int FileAccess::get_bytes(int p) {\n    return helper(p);\n}\n", encoding='utf-8')
+            for target in ('get_bytes', 'FileAccess::get_bytes'):
+                matches = find_callees(tmp, target)['matches']
+                self.assertEqual([(m['function'], m['calls']) for m in matches],
+                                 [('FileAccess::get_bytes', ['helper'])], target)
+            self.assertEqual(find_callees(tmp, 'Other::get_bytes')['matches'], [])
+
+
 class TestCallsAdapterCallees(unittest.TestCase):
 
     def setUp(self):
