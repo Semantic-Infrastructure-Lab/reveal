@@ -351,6 +351,37 @@ class TestHandleUriStructuralFlagsWarning:
         captured = capsys.readouterr()
         assert captured.err == ''
 
+    def _run_ast(self, uri, type_value):
+        with patch('reveal.adapters.base.get_adapter_class', return_value=_StubAdapterNoStructuralParams):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=MagicMock()):
+                with patch('reveal.cli.routing.uri.handle_adapter'):
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort=None, exclude=None, respect_gitignore=True,
+                                 depth=None, ext=None, type=type_value, fast=False, base_path=None)
+                    handle_uri(uri, None, args)
+
+    def test_no_warning_when_flag_value_already_in_uri_query(self, capsys):
+        """'reveal file.py --type function' routes as ast://file.py?type=function;
+        the flag is honored through the query, so the note must not fire."""
+        self._run_ast('ast://x.py?type=function', 'function')
+        assert 'has no effect' not in capsys.readouterr().err
+
+    def test_warns_when_uri_query_sets_a_different_value(self, capsys):
+        """The URI value wins over the flag, so a conflicting --type is still ignored."""
+        self._run_ast('ast://x.py?type=class', 'function')
+        assert '--type has no effect on ast://' in capsys.readouterr().err
+
+    def test_bare_file_type_flag_prints_no_false_note(self, tmp_path):
+        import subprocess
+        import sys as _sys
+        f = tmp_path / 'm.py'
+        f.write_text('def a():\n    pass\n\nclass B:\n    pass\n', encoding='utf-8')
+        proc = subprocess.run([_sys.executable, '-m', 'reveal', str(f), '--type', 'function'],
+                              capture_output=True, text=True, encoding='utf-8')
+        assert proc.returncode == 0, proc.stderr
+        assert 'has no effect' not in proc.stderr
+        assert 'a' in proc.stdout
+
     def test_multiple_ignored_flags_named_together(self, capsys):
         mock_renderer_cls = MagicMock()
         with patch('reveal.adapters.base.get_adapter_class', return_value=_StubAdapterNoStructuralParams):

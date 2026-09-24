@@ -9,6 +9,7 @@ import os
 import re
 import sys
 from typing import Any, List, Optional, TYPE_CHECKING
+from urllib.parse import parse_qs
 
 from ...errors import NotApplicableError
 from ...utils import print_json_result, write_also_json
@@ -287,12 +288,19 @@ _STRUCTURAL_FLAGS = ('depth', 'ext', 'type', 'fast')
 
 def _warn_unsupported_structural_flags(resource: str, scheme: str, args: 'Namespace') -> None:
     """Warn when --depth/--ext/--type/--fast were explicitly set but this
-    scheme's adapter has no way to honor them (BACK-1202)."""
+    scheme's adapter has no way to honor them (BACK-1202).
+
+    A flag whose value is already carried in the URI query is honored, not
+    ignored: 'reveal file.py --type function' is routed as
+    ast://file.py?type=function, and warning there told the user to run the
+    very command they ran."""
     from ..defaults import _parser_defaults
     defaults = _parser_defaults()
+    query = parse_qs(resource.partition('?')[2], keep_blank_values=True)
     ignored = [
         f'--{flag_name}' for flag_name in _STRUCTURAL_FLAGS
         if getattr(args, flag_name, defaults[flag_name]) != defaults[flag_name]
+        and str(getattr(args, flag_name)) not in query.get(flag_name, [])
     ]
     if not ignored:
         return
