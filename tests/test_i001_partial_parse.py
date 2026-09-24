@@ -8,6 +8,10 @@ Mirrors the mock pattern already used in test_go_imports_coverage.py /
 test_js_imports_coverage.py for the `analyzer.tree is None` case; this
 covers the newer `analyzer.has_parse_errors() is True` case those files
 predate.
+
+BACK-1460: a partial parse must still flag ``parse_failed`` but must NOT
+discard the imports tree-sitter did recover -- returning nothing dropped every
+edge from any file with an ERROR node out of depends:// / imports:// / I002.
 """
 
 from pathlib import Path
@@ -15,6 +19,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from reveal.analyzers.imports.generic import CImportExtractor
 from reveal.analyzers.imports.python import PythonExtractor
 from reveal.rules.imports.I001 import I001
 
@@ -40,10 +45,31 @@ class TestGetTreeAnalyzerErrorRecovery:
 
         e = PythonExtractor()
         with patch('reveal.analyzers.imports.base.get_analyzer', return_value=mock_cls):
-            result = e.extract_imports(f)
+            e.extract_imports(f)
 
-        assert result == []
         assert e.parse_failed is True
+
+    def test_partial_parse_keeps_imports_before_error_region(self, tmp_path):
+        """BACK-1460: imports outside the ERROR region survive, flagged parse_failed."""
+        f = _write_py(tmp_path, 'broken.py', 'import os\nimport sys\ndef f(\n')
+
+        e = PythonExtractor()
+        result = e.extract_imports(f)
+
+        assert e.parse_failed is True
+        assert [s.module_name for s in result] == ['os', 'sys']
+
+    def test_partial_parse_keeps_c_includes_before_error_region(self, tmp_path):
+        """BACK-1460: the macro-heavy C shape (Redis/curl) that lost every #include."""
+        f = tmp_path / 'broken.c'
+        f.write_text('#include "util.h"\n#include <stdio.h>\n'
+                     'int x = FOO(( ;\nstatic int LIST_HEAD(a) { }} }\n', encoding='utf-8')
+
+        e = CImportExtractor()
+        result = e.extract_imports(f)
+
+        assert e.parse_failed is True
+        assert [s.module_name for s in result] == ['util.h', 'stdio.h']
 
     def test_tree_without_error_nodes_parses_normally(self, tmp_path):
         """Sanity check the new branch doesn't fire on a clean tree."""
@@ -82,3 +108,23 @@ class TestI001SkipsPartialParse:
             "parse only partially recovered -- the usage scan behind the "
             "'unused' verdict is unreliable, not confirmed empty (BACK-1082)"
         )
+
+
+class TestDependsKeepsEdgesFromPartialParse:
+    """BACK-1460 end-to-end: depends:// must report an importer whose
+    #include sits before an ERROR region (Redis samples/c/src/util.h: 4 -> 11)."""
+
+    def test_include_before_error_region_yields_dependent(self, tmp_path):
+        from reveal.adapters.depends import DependsAdapter
+
+        (tmp_path / '.git').mkdir()
+        (tmp_path / 'util.h').write_text('int u(void);\n', encoding='utf-8')
+        (tmp_path / 'clean.c').write_text('#include "util.h"\nint ok(void) { return 1; }\n',
+                                          encoding='utf-8')
+        (tmp_path / 'broken.c').write_text(
+            '#include "util.h"\nint x = FOO(( ;\nstatic int LIST_HEAD(a) { }} }\n',
+            encoding='utf-8')
+
+        r = DependsAdapter(str(tmp_path / 'util.h')).get_structure()
+
+        assert {Path(d['file']).name for d in r['dependents']} == {'clean.c', 'broken.c'}

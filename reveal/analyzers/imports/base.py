@@ -301,9 +301,13 @@ class LanguageExtractor(ABC):
         Returns None in two distinct situations, only one of which is an
         error: no analyzer is registered for this file (not an error --
         extract_imports/extract_symbols degrade to empty as documented), or
-        an analyzer was found but the file failed to parse (sets
+        an analyzer was found but the file failed to parse TOTALLY (sets
         ``self.parse_failed`` and logs a warning, since a silent empty result
         here is indistinguishable from "genuinely no imports" to callers).
+
+        A PARTIAL parse (tree exists, has ERROR nodes) also sets
+        ``self.parse_failed`` and warns, but still returns the analyzer so the
+        imports/symbols outside the ERROR region are kept (BACK-1460).
         """
         path_str = str(file_path)
         try:
@@ -326,15 +330,23 @@ class LanguageExtractor(ABC):
             # would confidently suggest deleting an import that merely wasn't
             # seen because its usage sat inside the ERROR-recovered region --
             # worse than a silent miss, since acting on it deletes real code.
+            #
+            # BACK-1460: flag it, but KEEP the analyzer. Returning None here
+            # discarded every import and symbol in the file, not just the
+            # ones inside the ERROR region, so every import-graph consumer
+            # (depends://, imports://, I002, architecture) lost all edges
+            # from any partially-parsed file (macro-heavy C/C++, Zig, ...).
+            # Consumers that must not act on an incomplete parse (I001, I002,
+            # I008, ...) already skip on ``parse_failed``; the rest get the
+            # imports tree-sitter did recover.
             if hasattr(analyzer, 'has_parse_errors') and analyzer.has_parse_errors():
                 self.parse_failed = True
                 logger.warning(
                     "Partial parse for %s -- tree-sitter recovered with ERROR "
-                    "node(s); imports/symbols for this file are incomplete, "
-                    "not confirmed empty",
+                    "node(s); imports/symbols for this file may be incomplete, "
+                    "not confirmed complete",
                     path_str,
                 )
-                return None
             return analyzer
         except Exception as e:
             self.parse_failed = True
