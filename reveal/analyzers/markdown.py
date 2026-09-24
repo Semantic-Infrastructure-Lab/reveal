@@ -242,69 +242,69 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         )
 
     def _extract_headings(self) -> List[Dict[str, Any]]:
-        """Extract markdown headings using tree-sitter.
+        """Extract markdown headings (ATX and setext) with their section sizes."""
+        return [
+            {'line': line, 'level': level, 'name': title,
+             'size': self._section_end(line, level) - (line - 1)}
+            for line, level, title in self._heading_index()
+        ]
 
-        This correctly ignores # comments inside code fences by using the AST.
+    def _heading_index(self) -> List[Tuple[int, int, str]]:
+        """Every heading as ``(line, level, title)`` in document order.
+
+        The one place headings are found; the outline, section extraction and
+        section ends all read it. From the parse tree, so ``# comments`` in code
+        fences, YAML frontmatter and ``---`` thematic breaks never count, and
+        setext headings (``Title`` over ``====`` or ``----``, BACK-1412) do.
+        Without a tree it falls back to ATX-only regex matching.
         """
-        headings: List[Dict[str, Any]] = []
+        cached = getattr(self, '_headings_cache', None)
+        if cached is not None:
+            return cached
+        index = self._heading_index_from_tree() if self.tree else self._heading_index_regex()
+        self._headings_cache: List[Tuple[int, int, str]] = index
+        return index
 
-        if not self.tree:
-            # Fallback to regex if tree-sitter fails
-            return self._extract_headings_regex()
-
-        # Find all atx_heading nodes (# syntax headings)
-        heading_nodes = self._find_nodes_by_type('atx_heading')
-
-        for node in heading_nodes:
-            # Get the heading level (count # symbols)
-            level = None
-            title = None
-
-            # The first child is usually the marker (atx_h1_marker, atx_h2_marker, etc.)
-            # The second child is inline (heading content)
+    def _heading_index_from_tree(self) -> List[Tuple[int, int, str]]:
+        index = []
+        for node in self._find_nodes_by_type('atx_heading'):
+            level, title = None, None
             for child in _children(node):
-                if 'marker' in _zero_arg(child, 'kind'):
-                    # atx_h1_marker, atx_h2_marker, etc.
-                    level = int(_zero_arg(child, 'kind')[5])  # Extract number from 'atx_h1_marker'
-                elif _zero_arg(child, 'kind') == 'inline':
+                kind = _zero_arg(child, 'kind')
+                if kind.startswith('atx_h') and kind.endswith('_marker'):
+                    level = int(kind[5])  # atx_h2_marker -> 2
+                elif kind == 'inline':
                     title = self._get_node_text(child).strip()
-
             if level and title:
-                headings.append({
-                    'line': _zero_arg(node, 'start_position').row + 1,  # tree-sitter uses 0-indexed
-                    'level': level,
-                    'name': title,
-                })
+                index.append((_zero_arg(node, 'start_position').row + 1, level, title))
+        for node in self._find_nodes_by_type('setext_heading'):
+            level, title = None, None
+            for child in _children(node):
+                kind = _zero_arg(child, 'kind')
+                if kind == 'setext_h1_underline':
+                    level = 1
+                elif kind == 'setext_h2_underline':
+                    level = 2
+                elif kind == 'paragraph':
+                    title = ' '.join(self._get_node_text(child).split())
+            if level and title:
+                index.append((_zero_arg(node, 'start_position').row + 1, level, title))
+        index.sort()
+        return index
 
-        for h in headings:
-            h['size'] = self._section_end(self.lines, h['line'], h['level']) - (h['line'] - 1)
-
-        return headings
-
-    def _extract_headings_regex(self) -> List[Dict[str, Any]]:
-        """Fallback regex-based heading extraction.
-
-        Note: This has the code fence bug - only used if tree-sitter fails.
-        """
-        headings = []
-
+    def _heading_index_regex(self) -> List[Tuple[int, int, str]]:
+        """ATX headings outside ``` / ~~~ fences; used only if tree-sitter fails."""
+        index = []
+        in_fence = False
         for i, line in enumerate(self.lines, 1):
-            # Match heading syntax: # Heading, ## Heading, etc.
-            match = re.match(r'^(#{1,6})\s+(.+)$', line)
+            stripped = line.strip()
+            if stripped.startswith(('```', '~~~')):
+                in_fence = not in_fence
+                continue
+            match = None if in_fence else re.match(r'^(#{1,6})\s+(.+)$', line)
             if match:
-                level = len(match.group(1))
-                title = match.group(2).strip()
-
-                headings.append({
-                    'line': i,
-                    'level': level,
-                    'name': title,
-                })
-
-        for h in headings:
-            h['size'] = self._section_end(self.lines, h['line'], h['level']) - (h['line'] - 1)
-
-        return headings
+                index.append((i, len(match.group(1)), match.group(2).strip()))
+        return index
 
     def _extract_links(self, link_type: Optional[str] = None,
                       domain: Optional[str] = None,
@@ -1148,27 +1148,18 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         return results
 
-    @staticmethod
-    def _section_end(lines: List[str], start_line: int, heading_level: int) -> int:
-        """Return the line index (0-based) where this section ends.
+    def _next_heading(self, start_line: int, heading_level: int) -> Optional[Tuple[int, int, str]]:
+        """The first heading after *start_line* at *heading_level* or above
+        (a sibling or parent section), or None."""
+        for heading in self._heading_index():
+            if heading[0] > start_line and heading[1] <= heading_level:
+                return heading
+        return None
 
-        Scans forward from *start_line* (1-based) and stops at the first
-        heading whose level is <= *heading_level*, which signals the start of
-        a sibling or parent section.  Lines inside fenced code blocks are
-        skipped so that ``# comments`` in code don't truncate the section.
-        """
-        in_fence = False
-        for i in range(start_line, len(lines)):
-            stripped = lines[i].strip()
-            if stripped.startswith('```') or stripped.startswith('~~~'):
-                in_fence = not in_fence
-                continue
-            if in_fence:
-                continue
-            m = re.match(r'^(#{1,6})\s+', lines[i])
-            if m and len(m.group(1)) <= heading_level:
-                return i
-        return len(lines)
+    def _section_end(self, start_line: int, heading_level: int) -> int:
+        """Last line (1-based, inclusive) of the section headed at *start_line*."""
+        following = self._next_heading(start_line, heading_level)
+        return following[0] - 1 if following else len(self.lines)
 
     @staticmethod
     def _strip_inline_formatting(text: str) -> str:
@@ -1200,12 +1191,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             exact_level = None
             sub_matches = []
 
-            for i, line in enumerate(self.lines, 1):
-                m = re.match(r'^(#{1,6})\s+(.+)$', line)
-                if not m:
-                    continue
-                title = m.group(2).strip()
-                level = len(m.group(1))
+            for i, level, title in self._heading_index():
                 title_normalized = self._strip_inline_formatting(title.lower())
                 if title_normalized == pat_normalized:
                     exact_start = i
@@ -1222,7 +1208,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             for sl, hl in candidates:
                 if sl not in seen_starts:
                     seen_starts.add(sl)
-                    el = self._section_end(self.lines, sl, hl)
+                    el = self._section_end(sl, hl)
                     spans.append((sl, el, hl))
 
         # Sort by document order
@@ -1266,17 +1252,14 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         heading_level = None
         substring_matches = []
 
-        for i, line in enumerate(self.lines, 1):
-            m = re.match(r'^(#{1,6})\s+(.+)$', line)
-            if m:
-                title = m.group(2).strip()
-                title_normalized = self._strip_inline_formatting(title.lower())
-                if title_normalized == pat_normalized:
-                    start_line = i
-                    heading_level = len(m.group(1))
-                    break
-                if pat_normalized in title_normalized:
-                    substring_matches.append((i, len(m.group(1)), title))
+        for i, level, title in self._heading_index():
+            title_normalized = self._strip_inline_formatting(title.lower())
+            if title_normalized == pat_normalized:
+                start_line = i
+                heading_level = level
+                break
+            if pat_normalized in title_normalized:
+                substring_matches.append((i, level, title))
 
         return start_line, heading_level, substring_matches
 
@@ -1345,13 +1328,13 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 start_line, heading_level, _ = substring_matches[0]
             elif len(substring_matches) > 1:
                 # Multiple partial matches — extract and concatenate all of them
-                spans = [(sl, self._section_end(self.lines, sl, hl)) for sl, hl, _ in substring_matches]
+                spans = [(sl, self._section_end(sl, hl)) for sl, hl, _ in substring_matches]
                 return self._sections_result(name, spans)
             else:
                 return super().extract_element(element_type, name)
 
         # Find the end of this section (next heading of same or higher level)
-        end_line = self._section_end(self.lines, start_line, heading_level)
+        end_line = self._section_end(start_line, heading_level)
 
         # Extract the section
         source = '\n'.join(self.lines[start_line-1:end_line])
@@ -1364,10 +1347,10 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         }
 
         # Detect the next heading for short-result hints
-        if end_line < len(self.lines):
-            m = re.match(r'^(#{1,6})\s+(.+)$', self.lines[end_line])
-            if m:
-                next_name = self._strip_inline_formatting(m.group(2).strip())
-                result['next_section'] = {'name': next_name, 'line': end_line + 1}
+        following = self._next_heading(start_line, heading_level)
+        if following:
+            result['next_section'] = {
+                'name': self._strip_inline_formatting(following[2]), 'line': following[0],
+            }
 
         return result

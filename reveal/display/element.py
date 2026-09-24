@@ -567,18 +567,11 @@ def _extract_markdown_section_at_line(analyzer, target_line: int):
     Returns:
         Dict with name, line_start, line_end, source, or None
     """
-    import re
-
-    # Find all headings with their line numbers and levels
-    headings: list[dict[str, int | str]] = []
-    for i, line in enumerate(analyzer.lines, 1):
-        match = re.match(r'^(#{1,6})\s+(.+)$', line)
-        if match:
-            headings.append({
-                'line': i,
-                'level': len(match.group(1)),
-                'name': match.group(2).strip()
-            })
+    # The analyzer's heading index: ATX and setext, never a `# comment` in a code fence
+    headings: list[dict[str, int | str]] = [
+        {'line': line, 'level': level, 'name': title}
+        for line, level, title in analyzer._heading_index()
+    ]
 
     if not headings:
         return None

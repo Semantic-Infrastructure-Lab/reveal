@@ -768,12 +768,9 @@ class TestMarkdownRegexFallback(unittest.TestCase):
         try:
             analyzer = MarkdownAnalyzer(path)
             # Call regex method directly
-            headings = analyzer._extract_headings_regex()
+            headings = analyzer._heading_index_regex()
 
-            self.assertEqual(len(headings), 3)
-            self.assertEqual(headings[0]['level'], 1)
-            self.assertEqual(headings[1]['level'], 2)
-            self.assertEqual(headings[2]['level'], 3)
+            self.assertEqual([level for _, level, _ in headings], [1, 2, 3])
 
         finally:
             os.unlink(path)
@@ -2007,6 +2004,46 @@ class TestInlineFormattingNormalization(TestMarkdownAnalyzer):
         self.assertEqual(sif('`nginx` and `ssl`'), 'nginx and ssl')
         self.assertEqual(sif('No formatting here'), 'No formatting here')
         self.assertEqual(sif(''), '')
+
+
+class TestSetextHeadings(TestMarkdownAnalyzer):
+    """BACK-1412: `Title` over `====`/`----` is a heading; frontmatter, thematic
+    breaks and `---` in a code fence are not."""
+
+    CONTENT = (
+        "---\ntitle: x\n---\n\n"          # 1-3 frontmatter
+        "Title\n=====\n\nintro\n\n"        # 5 setext h1
+        "Sub\nline two\n---\n\ntext\n\n"   # 10 setext h2 (two-line title)
+        "---\n\n- item\n---\n\n"           # 16, 19 thematic breaks
+        "```\n# not a heading\n---\n```\n\n"
+        "## Real\n\nx\n"                   # 26 atx h2
+    )
+
+    def _analyzer(self):
+        path = self.create_temp_markdown(self.CONTENT)
+        self.addCleanup(self.teardown_file, path)
+        return MarkdownAnalyzer(path)
+
+    def test_outline_lists_setext_and_atx_headings_only(self):
+        headings = self._analyzer().get_structure()['headings']
+        self.assertEqual([(h['line'], h['level'], h['name']) for h in headings],
+                         [(5, 1, 'Title'), (10, 2, 'Sub line two'), (26, 2, 'Real')])
+
+    def test_setext_section_extracts_to_the_next_sibling(self):
+        result = self._analyzer().extract_element('section', 'Sub line two')
+        self.assertEqual((result['line_start'], result['line_end']), (10, 25))
+        self.assertEqual(result['next_section'], {'name': 'Real', 'line': 26})
+
+    def test_setext_h1_section_spans_its_h2_children(self):
+        result = self._analyzer().extract_element('section', 'Title')
+        self.assertEqual((result['line_start'], result['line_end']), (5, 28))
+        self.assertNotIn('next_section', result)
+
+    def test_atx_section_ends_at_a_setext_sibling(self):
+        path = self.create_temp_markdown("## A\n\nbody\n\nB\n---\n\nmore\n")
+        self.addCleanup(self.teardown_file, path)
+        result = MarkdownAnalyzer(path).extract_element('section', 'A')
+        self.assertEqual((result['line_start'], result['line_end']), (1, 4))
 
 
 class TestSectionEndCodeFence(TestMarkdownAnalyzer):
