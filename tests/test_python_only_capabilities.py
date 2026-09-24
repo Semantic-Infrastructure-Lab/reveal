@@ -85,7 +85,7 @@ def test_rule_disclosure_counts_non_python_files_only(mixed_tree):
 
 
 def test_check_discloses_t006_skip_on_mixed_tree_unless_deselected(mixed_tree):
-    from reveal.cli.file_checker import _python_only_rule_disclosures
+    from reveal.checks import _python_only_rule_disclosures
     files = sorted(mixed_tree.iterdir())
     assert len(_python_only_rule_disclosures(files, None, None)) == 1
     assert _python_only_rule_disclosures(files, ['C901'], None) == []

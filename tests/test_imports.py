@@ -2206,7 +2206,7 @@ class TestUnusedNotChecked:
         assert result['metadata']['unused_not_checked_extensions'] == {}
 
     def test_check_discloses_i001_gap_unless_deselected(self, tmp_path):
-        from reveal.cli.file_checker import _i001_not_checked_disclosures
+        from reveal.checks import _i001_not_checked_disclosures
         (tmp_path / "A.java").write_text(self.JAVA, encoding='utf-8')
         (tmp_path / "b.py").write_text("x = 1\n", encoding='utf-8')
         files = sorted(tmp_path.iterdir())

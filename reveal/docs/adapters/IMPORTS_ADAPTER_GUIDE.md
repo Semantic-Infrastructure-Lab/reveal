@@ -580,8 +580,8 @@ Swift/Kotlin in BACK-488; Scala/Dart/Lua/Zig/GDScript in BACK-514.)
 > other tree-sitter-parseable code files may not have an import extractor yet.
 > Rather than silently reporting zero imports for such a file, `imports://`
 > prints a "code file(s) skipped — no import support for: …" note so a low count
-> is never mistaken for a clean result. Likewise `?unused`, `deps`, and recursive
-> `check` (W-CAP-2) say "Unused imports not checked" for the 📦/📝 languages
+> is never mistaken for a clean result. Likewise `?unused`, `deps`, and `check`
+> (W-CAP-2, single-file and recursive) say "Unused imports not checked" for the 📦/📝 languages
 > instead of reporting ✅ (metadata field `unused_not_checked_extensions`).
 
 ### Language-Specific Examples

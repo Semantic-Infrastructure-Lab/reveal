@@ -7,6 +7,7 @@ import os
 import re
 import sys
 from collections import defaultdict
+from pathlib import Path
 from typing import Optional, Any, List
 
 from .base import FileAnalyzer
@@ -38,6 +39,58 @@ def _is_generated_file(content: str) -> bool:
     return any(p.search(head) for p in _GENERATED_PATTERNS)
 
 
+def _rule_will_run(code: str, select, ignore) -> bool:
+    """Return True if rule *code* is in the effective rule set for the filters.
+
+    Delegates to the same RuleRegistry resolution the per-file check uses, so
+    a preload decision can never drift from what actually runs. In particular
+    this honors --select: ``check <dir> --select C901`` must not trigger an
+    expensive project-wide index build (BACK-338).
+    """
+    from .rules import RuleRegistry
+    rules = RuleRegistry.get_rules(select=select, ignore=ignore)
+    return any(r.code == code for r in rules)
+
+
+def _python_only_rule_disclosures(files, select, ignore) -> List[str]:
+    """BACK-1283: a Python-only rule (T006) is skipped by file pattern on other
+    languages, which reads as "checked, clean". Say so when it was in the
+    effective rule set and the run held non-Python source."""
+    from .capabilities import python_only_rule_disclosure
+    if not _rule_will_run("T006", select, ignore):
+        return []
+    note = python_only_rule_disclosure(files, "T006")
+    return [note] if note else []
+
+
+def _i001_not_checked_disclosures(files, select, ignore) -> List[str]:
+    """BACK-1398: I001 runs on every language with an import extractor but only
+    judges the ones with unused-import detection; say so for the rest."""
+    if not _rule_will_run("I001", select, ignore):
+        return []
+    from .adapters.imports import _unused_not_checked
+    from .analyzers.imports.base import get_all_extensions
+    from .capabilities import W_CAP_UNUSED_NOT_CHECKED
+    extractable = get_all_extensions()
+    not_checked = _unused_not_checked(Path(f) for f in files if Path(f).suffix in extractable)
+    if not not_checked:
+        return []
+    listing = ", ".join(f"{ext} ({n})" for ext, n in not_checked.items())
+    return [
+        f"{W_CAP_UNUSED_NOT_CHECKED}: I001 has no unused-import detection for these languages; "
+        f"{sum(not_checked.values())} file(s) were not checked by it: {listing}."
+    ]
+
+
+def capability_disclosures(files, select, ignore) -> List[str]:
+    """Rules in the effective set that did not look at some of *files* because
+    of their language (W-CAP-1 T006, W-CAP-2 I001). Shared by single-file and
+    recursive ``check`` and by the MCP tool, so none of them can print a bare
+    "no issues" the others already know is unearned (BACK-1466)."""
+    return (_python_only_rule_disclosures(files, select, ignore)
+            + _i001_not_checked_disclosures(files, select, ignore))
+
+
 def _format_detections_json(
     path: str,
     detections: List[Any],
@@ -46,6 +99,7 @@ def _format_detections_json(
     no_snippets: bool = False,
     max_snippet_chars: Optional[int] = None,
     total_available: Optional[int] = None,
+    disclosures: Optional[List[str]] = None,
 ) -> None:
     """Format detections as JSON.
 
@@ -65,11 +119,14 @@ def _format_detections_json(
             instead of omitting it (BACK-1181). Ignored when no_snippets.
         total_available: True detection count before any --max-items
             truncation, if different from len(detections) (BACK-1181).
+        disclosures: Rules in the effective set that skipped this file's
+            language (capability_disclosures, BACK-1466); emitted as
+            ``scan_disclosures``, the key recursive check's summary uses.
     """
     print(safe_json_dumps(_build_detections_json(
         path, detections, parse_degraded=parse_degraded, rule_errors=rule_errors,
         no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
-        total_available=total_available,
+        total_available=total_available, disclosures=disclosures,
     )))
 
 
@@ -81,6 +138,7 @@ def _build_detections_json(
     no_snippets: bool = False,
     max_snippet_chars: Optional[int] = None,
     total_available: Optional[int] = None,
+    disclosures: Optional[List[str]] = None,
 ) -> dict:
     """Build the single-file check JSON document. Split out of
     _format_detections_json (BACK-1248) so --also-json can write the exact
@@ -94,7 +152,9 @@ def _build_detections_json(
             d.to_dict(no_snippets=no_snippets, max_snippet_chars=max_snippet_chars)
             for d in detections
         ],
-        'total': len(detections)
+        'total': len(detections),
+        # BACK-1466: [] means every rule in the set looked at this file.
+        'scan_disclosures': list(disclosures or []),
     }
     if total_available is not None and total_available != len(detections):
         result['meta'] = {
@@ -132,6 +192,7 @@ def _format_detections_text(
     no_snippets: bool = False,
     max_snippet_chars: Optional[int] = None,
     total_available: Optional[int] = None,
+    disclosures: Optional[List[str]] = None,
 ) -> None:
     """Format detections as human-readable text.
 
@@ -151,9 +212,13 @@ def _format_detections_text(
             omitting it (BACK-1181). Ignored when no_snippets.
         total_available: True detection count before any --max-items
             truncation, if different from len(detections) (BACK-1181).
+        disclosures: Rules that skipped this file's language (BACK-1466),
+            printed before the verdict so a ✅ can't read as a full check.
     """
     for err in rule_errors or []:
         print(f"{path}: ⚠️  rule {err['rule']} crashed and did not run — {err['error']}")
+    for note in disclosures or []:
+        print(f"{path}: ⚠️  {note}")
 
     if not detections:
         if parse_degraded:
@@ -263,6 +328,9 @@ def run_pattern_detection(
     # BACK-1084) means rules ran against fabricated/partial structure — surface
     # that instead of letting "0 detections" read as "clean file".
     parse_degraded = structure_parse_degraded(analyzer, structure)
+    # BACK-1466: the same rule/language gaps recursive check discloses (W-CAP-1
+    # T006, W-CAP-2 I001) -- without them a single-file ✅ claims more than ran.
+    disclosures = capability_disclosures([path], select, ignore)
 
     # Apply severity filter if requested
     if severity_arg:
@@ -292,13 +360,13 @@ def run_pattern_detection(
         'json': lambda: _format_detections_json(
             path, rendered_detections, parse_degraded=parse_degraded, rule_errors=rule_errors,
             no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
-            total_available=total_available,
+            total_available=total_available, disclosures=disclosures,
         ),
         'grep': lambda: _format_detections_grep(detections),
         'text': lambda: _format_detections_text(
             path, rendered_detections, no_group=no_group, parse_degraded=parse_degraded, rule_errors=rule_errors,
             no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
-            total_available=total_available,
+            total_available=total_available, disclosures=disclosures,
         ),
     }
 
@@ -319,7 +387,7 @@ def run_pattern_detection(
                     path, rendered_detections, parse_degraded=parse_degraded,
                     rule_errors=rule_errors, no_snippets=no_snippets,
                     max_snippet_chars=max_snippet_chars,
-                    total_available=total_available,
+                    total_available=total_available, disclosures=disclosures,
                 )))
         except OSError as e:
             print(f"Warning: --also-json could not write {also_json}: {e}", file=sys.stderr)

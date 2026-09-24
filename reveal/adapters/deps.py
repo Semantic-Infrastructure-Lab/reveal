@@ -184,8 +184,10 @@ def _analyse_imports(files: Dict[str, List[Dict[str, Any]]], base_path: Path) ->
 # ── Renderers ──────────────────────────────────────────────────────────────────
 
 def _render_summary(analysis: Dict[str, Any], cycle_count: int, unused_count: int,
-                    meta: Optional[Dict[str, Any]] = None) -> None:
+                    meta: Optional[Dict[str, Any]] = None,
+                    skipped: Optional[List[str]] = None) -> None:
     meta = meta or {}
+    skipped = skipped or []
     total_files = analysis['total_files']
     total_imports = analysis['total_imports']
     ext_pkgs = len(analysis['external_packages'])
@@ -204,13 +206,17 @@ def _render_summary(analysis: Dict[str, Any], cycle_count: int, unused_count: in
     ]
 
     health_parts = []
-    if cycle_count:
+    if 'circular' in skipped:
+        health_parts.append("— circular deps not checked (--no-circular)")
+    elif cycle_count:
         health_parts.append(f"❌ {cycle_count} circular dep(s)")
     elif total_imports:
         health_parts.append("✅ no circular deps")
     else:
         health_parts.append("— no imports found, so nothing to check for cycles")
-    if unused_count:
+    if 'unused' in skipped:
+        health_parts.append("— unused imports not checked (--no-unused)")
+    elif unused_count:
         health_parts.append(f"⚠️  {unused_count} unused import(s)")
 
     print(f"\nSummary   {' · '.join(parts)}")
@@ -338,10 +344,13 @@ def _render_deps(report: Dict[str, Any], top: int) -> None:
     if warning:
         print(f"\n{warning}")
 
-    _render_summary(analysis, cycle_count, len(unused), base_meta)
-    not_checked_note = unused_not_checked_line(base_meta.get('unused_not_checked_extensions') or {})
-    if not_checked_note:
-        print(f"          {not_checked_note}")
+    skipped = report.get('skipped') or []
+    _render_summary(analysis, cycle_count, len(unused), base_meta, skipped=skipped)
+    # Per-language "not checked" is moot when --no-unused turned the check off.
+    if 'unused' not in skipped:
+        not_checked_note = unused_not_checked_line(base_meta.get('unused_not_checked_extensions') or {})
+        if not_checked_note:
+            print(f"          {not_checked_note}")
     _render_external_packages(analysis, top)
     _render_circular(cycles, cycle_count, Path(path_str), top)
     _render_unused(unused, Path(path_str), top)
@@ -442,6 +451,11 @@ class DepsAdapter(ResourceAdapter):
                             'base': {'type': 'object'},
                             'circular': {'type': 'object'},
                             'unused': {'type': 'array'},
+                            'skipped': {
+                                'type': 'array',
+                                'description': "Checks turned off by no_circular/no_unused ('circular', 'unused'); "
+                                               'their empty result means not checked, not clean',
+                            },
                         },
                     },
                 },
@@ -469,6 +483,9 @@ class DepsAdapter(ResourceAdapter):
             'base': base,
             'circular': circular,
             'unused': unused,
+            # BACK-1466: an empty circular/unused because the check was turned
+            # off must not read as a clean one ({} rendered "✅ no circular deps").
+            'skipped': [name for name, off in (('circular', no_circular), ('unused', no_unused)) if off],
         }
 
         meta = self.composed_meta()

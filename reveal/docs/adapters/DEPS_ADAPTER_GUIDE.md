@@ -44,7 +44,10 @@ reveal deps . --format json
 `module`, `names`). An empty `unused` covers only languages with unused-import
 detection (Python, JS/TS, Go, Rust); the rest are listed in
 `base.metadata.unused_not_checked_extensions` and the text Health line says
-"Unused imports not checked" for them. Text rendering additionally derives
+"Unused imports not checked" for them. `skipped` lists the checks turned off
+with `no_circular`/`no_unused` (`["circular"]`, `["unused"]`), so an empty
+`circular`/`unused` there means "not checked", not "clean"; the text Health line
+says "not checked" for them instead of ✅. Text rendering additionally derives
 third-party/stdlib package usage counts and a "top importers" ranking from `base`.
 
 ## Good Review Questions

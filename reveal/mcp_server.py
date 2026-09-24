@@ -560,6 +560,7 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
         ignore: Comma-separated rule codes/series to exclude, e.g. 'N'
     """
     from pathlib import Path
+    from .checks import capability_disclosures
     from .cli.file_checker import collect_files_to_check, load_gitignore_patterns, _check_files_json
 
     p = Path(path)
@@ -583,13 +584,28 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
     total_issues, _, file_results, _, _ = _check_files_json(
         files, directory, select_list, ignore_list, severity=severity_filter
     )
+    # BACK-1466: what the CLI prints beside its verdict -- rules skipped for a
+    # language, and files that errored or parsed degraded -- so a clean result
+    # here can't claim more than actually ran. Scan-cap disclosures (I002/D005/
+    # T006) are not included: they read process-global caches that outlive one
+    # call in this long-lived server and would report an earlier target's cap.
+    notes = [f"⚠️  {n}" for n in capability_disclosures(files, select_list, ignore_list)]
+    for fr in file_results:
+        if fr.get('status') == 'error':
+            notes.append(f"⚠️  {fr['file']}: could not be checked -- {fr.get('detail', 'analyzer error')}")
+        elif fr.get('status') == 'warning':
+            notes.append(f"⚠️  {fr['file']}: did not parse cleanly; results may be incomplete or incorrect")
+        for err in fr.get('rule_errors', []):
+            notes.append(f"⚠️  {fr['file']}: rule {err['rule']} crashed and did not run -- {err['error']}")
 
     if total_issues == 0:
-        return "No issues found."
+        return "\n".join(notes + ["No issues found."])
 
-    lines = []
+    lines = list(notes)
     for fr in file_results:
         n = fr['issues']
+        if not n:
+            continue
         lines.append(f"\n{fr['file']}: Found {n} issue{'s' if n != 1 else ''}\n")
         for d in fr['detections']:
             loc = f"L{d['line']}"

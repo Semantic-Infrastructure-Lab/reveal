@@ -601,8 +601,8 @@ reveal deps [PATH] [--top N] [--no-unused] [--no-circular]
 | Flag | Description |
 |------|-------------|
 | `--top N` | Top packages/importers to show (default: 10) |
-| `--no-unused` | Skip unused imports section |
-| `--no-circular` | Skip circular dependency section |
+| `--no-unused` | Skip unused imports section (Health says "not checked"; JSON `skipped`) |
+| `--no-circular` | Skip circular dependency section (Health says "not checked", not ✅; JSON `skipped`) |
 | `--format json` | Machine-readable output |
 
 ### Exit Codes
