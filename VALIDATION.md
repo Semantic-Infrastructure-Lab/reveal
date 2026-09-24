@@ -51,6 +51,14 @@ is a claim we have not yet checked, **not** a claim it is broken.
 | Zig | ✅ 100%⁶ (ghostty, TigerBeetle²⁰) | ✅ 98.4%²⁹ (TigerBeetle) | ✅ 92.28%→99.98% (ghostty, BACK-753/754/755 fixed) | **Measured** |
 | TSX, plain JS | ✅ 100%⁷ (Excalidraw, three.js), 100%²⁵ (react-router) | ✅ 98.4%³³ (Excalidraw) | ✅ 100% (three.js + Excalidraw, BACK-751/752 fixed) | **Measured** |
 
+**Import-recall column, re-measured 2026-09-23 (BACK-1458):** these are the figures as
+published. At the current tree, C, C++, Zig, Python, Go, Kotlin and TSX measure below
+them because of an open regression, BACK-1460: a file with any tree-sitter parse error
+loses all its imports (e.g. C/curl 47.04%, C++/Godot `core/` 55.79%). The other
+re-runnable rows reproduce. Sixteen corpus/oracle pairs can no longer be re-run
+(BACK-1461). Details are under
+[Import/Dependency Recall → Results](#importdependency-recall).
+
 **How to read this table — three caveats that the ✅ marks do not carry:**
 
 1. **Evidence breadth varies by more than an order of magnitude.** A ✅ 100%
@@ -1426,6 +1434,34 @@ actually closes the gap without introducing false positives.
 | C (overfit guard, BACK-710) | curl (client-side networking library, 468 files — flatter `lib/`+`src/` layout with `lib/vauth`/`lib/vquic`/`lib/vtls` subdirs and heavy cross-directory and parent-relative includes, vs. Redis's mostly-flat `src/`) | Same per-directive isolated `gcc -H` oracle, unmodified | Full population, 232 targets, 2,330 edges | **100.0000%** (no fix needed) | 173 (documented, oracle-scope) | None — all 173 apparent FPs confirmed by direct grep to be genuine `#include` lines in `tests/unit/`, `tests/libtest/`, `tests/server/` and `projects/OS400/` files, outside the oracle's deliberately production-only importer scope but correctly found by `depends://` |
 | C++ | Godot (`samples/cpp`, `core/`+`scene/`+`servers/`+`drivers/`+`platform/`, 2,830 files) | Same method as C, per-directive `g++ -H -fsyntax-only -std=c++17` isolation | 30-target stratified sample (fan-in buckets high/mid/low), core/-rooted, 450 edges | 33.11% → 99.56% → **100.00%** | 3 (BACK-664, BACK-675, BACK-676) | `CppImportExtractor.extensions` omits `.h` (owned by `CImportExtractor` alone); `depends://`'s single-file scan-scoping (BACK-525 layer 4) narrowed a `.h` target's parse corpus to `{.c, .h}`, dropping every `.cpp` importer of its own header (BACK-675). Fixed by widening to the C/C++ family union when the target is either language. The first raw measurement (33.11%) was mostly a corpus-size confound, not this bug — `root=samples/cpp` (~14,000 files) tripped `depends://`'s BACK-524 5,000-file scan cap; re-measuring against a bounded, rsync'd sub-corpus (same precedent java/python-recall-oracle already set) isolated the real gap. Residual: 2/450 edges (`core/math/bvh_tree.h`'s own `.inc` fragment includes, sitting inside a template class body) traced to a separate bug — a `#include` inside a class body isn't valid top-level-context grammar, so tree-sitter degrades it to a generic `preproc_call` fallback node the extractor never scanned (BACK-676); fixed by scanning that node type too, filtered to the `#include` directive only. Same loop also found `CppImportExtractor.extensions` never claimed `.hh` (already C++ structurally) or `.mm` (Obj-C++, parses with the `objc` tree-sitter grammar but emits identical `preproc_include`/`preproc_call` nodes, verified empirically) — silently zero import resolution for either extension (BACK-664; Godot corpus: 258 `.hh` + 59 `.mm` files affected). Re-measured after both fixes: 100.00% recall, 0 missing edges on the same 450-edge sample; 24 new true-positive `.mm` importer edges surfaced (spot-checked genuine) register as this oracle's own false positives only because `build_oracle.py`'s ground-truth builder never scanned `.mm` as an importer candidate — a pre-existing oracle scope gap, not a defect. See [harness README](../internal-docs/planning/dogfood-findings/cpp-recall-oracle/README.md) |
 | C++ (overfit guard, BACK-709) | assimp (Open Asset Import Library — plugin/format-importer architecture, `code/AssetLib/<Format>/`, with relative parent-directory quoted includes, vs. Godot's flat engine-core monolith and root-relative `-iquote` convention) | Same per-directive isolated `g++ -H` oracle, unmodified | Full census, 250 targets, 707 edges | **100%** (no fix needed) | 50 (documented, oracle-scope) | None — still `.h`-dominant (728 `.h` vs 23 `.hpp`), re-exercising the BACK-675 extractor-family-scoping fix under a different directory shape. All 50 FPs spot-checked genuine: real `#include` edges from `test/`/`tools/`/`contrib/` files the oracle's importer scope deliberately excluded from ground truth |
+
+**Re-measured 2026-09-23 at `881ebd78` (BACK-1458): 11 rows reproduce, 10 have
+regressed, 16 cannot be re-run.** From 2026-08-28 (BACK-1214 made `depends://` report
+importer paths relative to its scan root) every import-recall harness silently measured
+0%, so these figures went unchecked for four weeks. The harnesses now map paths back and
+fail loudly when they measure nothing. Each loop was re-run at its published parameters;
+every sample matched the published target and edge counts.
+- **Reproduce as published:** TypeScript/nest 99.93%, PHP/WordPress 100.00%,
+  Rust/Meilisearch 100%, Lua/Kong 99.87%, Lua/AwesomeWM 99.33%, Dart/AppFlowy 99.76%,
+  Dart/drift 96.63%, GDScript (both) 100%, plain JS/three.js 100%, react-router 100%,
+  Scala/GitBucket 100%.
+- **Regressed, by BACK-1460:** since mid-August a file with any tree-sitter ERROR node
+  contributes no imports and no symbols. Python 92.28%, Go 98.42%, Kotlin 93.13%,
+  TSX/Excalidraw 99.60%, C/Redis 70.32%, C/curl 47.04%, C++/Godot `core/` 55.79%,
+  `editor/` 55.34%, `modules/` 83.75%, C++/assimp 58.70%, Zig/ghostty 83.57%,
+  Zig/TigerBeetle 78.59%. With only that early return removed, every regressed loop that
+  was re-run (all but Godot `editor/`/`modules/` and assimp) returns exactly to its
+  published figure. **Until BACK-1460 ships, read those rows' "after" figures as the
+  resolver's capability on files that parse cleanly, not as current end-to-end recall.**
+- **Cannot be re-run (BACK-1461):**
+  - Corpus clone not preserved: Java/guava, Go/client_golang, Python/celery,
+    Ruby/solidus, Kotlin/kotlinx.coroutines, Scala/cats-effect, Rust/ripgrep,
+    C#/Newtonsoft.Json, PHP/osCommerce, Swift/swift-collections.
+  - Oracle input not committed: TypeScript/VS Code (main + barrel), Java/Elasticsearch,
+    C#/Jellyfin.
+  - No diff harness: Ruby/Discourse, Swift/Kickstarter.
+
+  These figures stand as measured when published, but are not currently reproducible.
 
 **What this program found.** Each language got a baseline oracle loop, and
 every language has since had a second, deliberately differently-shaped corpus
