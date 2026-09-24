@@ -278,9 +278,23 @@ class TestClassifyCallBoundaryMatch(unittest.TestCase):
         self.assertIsNone(classify_call('mypdo'))
 
     def test_bare_header_classifies_as_http(self):
-        # Re-added in BACK-283 now that boundary matching is safe.
+        # PHP's header() builtin (BACK-283, scoped to PHP in BACK-1406).
         from reveal.adapters.ast.nav_effects import classify_call
         self.assertEqual(classify_call('header'), 'http')
+        self.assertEqual(classify_call('header', language='php'), 'http')
+
+    def test_header_receiver_is_not_http(self):
+        # BACK-1406: string ops on a variable named `header` were http in every language
+        from reveal.adapters.ast.nav_effects import classify_call
+        for callee, language in [('header.lower', 'python'), ('header.substr', 'cpp'),
+                                 ('header.to_lower', 'cpp'), ('$header->get', 'php'),
+                                 ('header.trim', 'javascript'), ('header.lower', None)]:
+            self.assertIsNone(classify_call(callee, language=language), (callee, language))
+
+    def test_bare_header_is_php_only(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        for language in ('python', 'go', 'cpp', 'javascript'):
+            self.assertIsNone(classify_call('header', language=language), language)
 
     def test_php_member_call_pdo_prepare_classifies_as_db(self):
         from reveal.adapters.ast.nav_effects import classify_call

@@ -571,31 +571,6 @@
     "source": "literal",
     "token": "halt"
   },
-  "literal:common:http:header": {
-    "hits": {
-      "c": 140,
-      "cpp": 441,
-      "csharp": 7,
-      "dart": 2,
-      "go": 1811,
-      "java": 650,
-      "javascript": 167,
-      "kotlin": 11,
-      "lua": 256,
-      "php": 612,
-      "ruby": 143,
-      "rust": 94,
-      "scala": 2,
-      "swift": 50,
-      "typescript": 380,
-      "zig": 2703
-    },
-    "home": "common",
-    "key": "literal:common:http:header",
-    "kind": "http",
-    "source": "literal",
-    "token": "header"
-  },
   "literal:common:http:http_get": {
     "hits": {
       "lua": 6,
@@ -2474,6 +2449,31 @@
     "kind": "http",
     "source": "literal",
     "token": "fsockopen"
+  },
+  "literal:php:http:header": {
+    "hits": {
+      "c": 140,
+      "cpp": 441,
+      "csharp": 7,
+      "dart": 2,
+      "go": 1811,
+      "java": 650,
+      "javascript": 167,
+      "kotlin": 11,
+      "lua": 256,
+      "php": 612,
+      "ruby": 143,
+      "rust": 94,
+      "scala": 2,
+      "swift": 50,
+      "typescript": 380,
+      "zig": 2703
+    },
+    "home": "php",
+    "key": "literal:php:http:header",
+    "kind": "http",
+    "source": "literal",
+    "token": "header"
   },
   "literal:php:http:mail": {
     "hits": {

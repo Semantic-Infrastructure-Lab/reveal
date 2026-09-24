@@ -75,10 +75,11 @@ _TAXONOMY_COMMON: List[Tuple[str, List[str]]] = [
     ]),
     ('http', [
         'http_get', 'http_post',
-        # Re-added 2026-05-05 (BACK-283): segment-boundary matching makes
-        # bare 'header' safe — it no longer matches user wrappers like
-        # 'printHeader' or 'request_headers'.
-        'header',
+        # BACK-1406: bare 'header' moved to PHP as an exact call ('^header').
+        # Segment matching still hit any receiver named `header`, in every
+        # language: `header.lower()` (Python), `header.substr(1)` (Godot C++,
+        # whose real network calls in HTTPClientTCP::poll were then the only
+        # thing NOT reported).
     ]),
     ('cache', [
         'redis->', 'redis::',
@@ -140,6 +141,9 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
             'file_get_contents',
             'wp_remote_get', 'wp_remote_post', 'wp_remote_request',
             'setcookie', 'setrawcookie', 'mail',
+            # The `header('Location: ...')` builtin, and only that exact call:
+            # `^` = the whole callee, so `$header->x()` and `header.lower()` miss.
+            '^header',
             # BACK-649 (sideeffects-recall-oracle/php, seventh language):
             # raw-socket HTTP idiom used by hand-rolled protocol clients
             # (POP3, FTP, WP_Http's streams transport) predating cURL/
@@ -1409,8 +1413,19 @@ def _tokenize(s: str) -> List[str]:
     return [p for p in parts if p]
 
 
+_EXACT = '^'
+
+
+def _compile_pattern(pattern: str) -> List[str]:
+    """Segments of *pattern*; a leading `^` (an exact, whole-callee match) is kept
+    as a first segment `_segments_contain` recognizes."""
+    if pattern.startswith(_EXACT):
+        return [_EXACT] + _tokenize(pattern[1:])
+    return _tokenize(pattern)
+
+
 def _compile(taxonomy: List[Tuple[str, List[str]]]) -> List[Tuple[str, List[List[str]]]]:
-    return [(kind, [_tokenize(p) for p in patterns]) for kind, patterns in taxonomy]
+    return [(kind, [_compile_pattern(p) for p in patterns]) for kind, patterns in taxonomy]
 
 
 # Pre-compiled once at module load: the "no language given" table (identical
@@ -1557,7 +1572,10 @@ _RECEIVER_VERB_FILTER: Dict[str, frozenset] = {
 
 
 def _segments_contain(callee_segs: List[str], pattern_segs: List[str]) -> bool:
-    """True if pattern_segs appears as a consecutive sub-sequence of callee_segs."""
+    """True if pattern_segs appears as a consecutive sub-sequence of callee_segs,
+    or, for an exact (`^`) pattern, is the whole callee."""
+    if pattern_segs and pattern_segs[0] == _EXACT:
+        return callee_segs == pattern_segs[1:]
     n = len(pattern_segs)
     if n == 0 or n > len(callee_segs):
         return False

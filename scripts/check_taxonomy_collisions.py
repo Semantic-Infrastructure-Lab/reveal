@@ -128,7 +128,7 @@ def bare_literal_patterns() -> List[BarePattern]:
     for lang, taxonomy in _TAXONOMY_BY_LANG.items():
         for kind, patterns in taxonomy:
             for p in patterns:
-                segs = _tokenize(p)
+                segs = _tokenize(p.lstrip('^'))  # `^x` = exact bare call x (BACK-1406)
                 if len(segs) == 1:
                     out.append(BarePattern(segs[0], kind, lang, "literal"))
     return out
