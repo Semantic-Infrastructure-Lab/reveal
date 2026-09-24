@@ -4,12 +4,12 @@ category: guide
 help_topic: agent
 help_description: Complete agent guide (task-based patterns, all adapters, troubleshooting)
 help_category: ai_guides
-help_token_estimate: "~45,000"
+help_token_estimate: "~48,000"
 ---
 # Reveal - AI Agent Reference (Complete)
 **Version:** 0.127.0
 **Purpose:** Comprehensive guide for AI code assistants
-**Token Cost:** ~45,000 tokens
+**Token Cost:** ~48,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
 
 ---
@@ -24,8 +24,8 @@ help_token_estimate: "~45,000"
 
 **For progressive, low-token discovery** (one topic at a time), use `reveal help://<topic>`:
 - `reveal help://` — index of all topics
-- `reveal help://ast` — ast:// quick start (first section only; ~400 tokens)
-- `reveal help://ast/full` — complete ast:// guide (~4,000 tokens)
+- `reveal help://ast` — ast:// quick start (first section only; ~600 tokens)
+- `reveal help://ast/full` — complete ast:// guide (~9,400 tokens)
 - `reveal help://tricks` — RECIPES guide first section
 - `reveal help://tricks/full` — complete RECIPES guide
 - `reveal help://schemas/<adapter>` — machine-readable adapter schema
@@ -40,9 +40,9 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 
 ## Before You Read This
 
-**This is a reference guide (~40,000 tokens). You do not need to read it upfront.**
+**This is a reference guide (~48,000 tokens). You do not need to read it upfront.**
 
-Start with `reveal help://quick` (~750 tokens) — it routes you to the right adapter for your task. Load sections of this guide only when you need deep reference on a specific adapter or pattern.
+Start with `reveal help://quick` (~1,800 tokens) — it routes you to the right adapter for your task. Load sections of this guide only when you need deep reference on a specific adapter or pattern.
 
 **Reveal covers more than source code.** Before broad discovery over any supported resource, check whether an adapter exists:
 
@@ -72,6 +72,7 @@ reveal --languages               # List every supported language
 reveal --discover                # Dump full adapter registry as JSON (schemas + params)
 reveal --capabilities <file>     # What can be extracted from this file (JSON)
 reveal --explain-file <file>     # Which analyzer + fallback status for this file
+reveal --language-info <lang>    # Per-language capabilities, known gaps, Python-only features it lacks
 
 # help:// adapter — read topic-by-topic (progressive disclosure)
 reveal help://                   # List all help topics
@@ -81,7 +82,7 @@ reveal help://schemas/<adapter>  # Machine-readable adapter schema (preferred fo
 reveal help://examples/<task>    # Canonical query recipes per task category
 
 # This guide — comprehensive reference
-reveal --agent-help              # First section of this file (~2,200 tokens); reveal help://agent/full for all
+reveal --agent-help              # First section of this file (~2,500 tokens); reveal help://agent/full for all
 
 # Raw flag/subcommand listing (different surface — argparse-generated)
 reveal --help                    # Global flags in full, specialized groups collapsed
@@ -229,7 +230,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal deps [path]` | Dependency health: external packages, circular deps, unused imports | `reveal deps --help` |
 | `reveal hotspots [path]` | High-complexity files and functions that need attention | `reveal hotspots --help` |
 | `reveal contracts [path]` | Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal contracts --help` |
-| `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal surface --help` |
+| `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal surface --help` |
 | `reveal testability [path]` | Test patch pressure joined with production boundary fan-out *(Python and TS/JS test suites)* | `reveal testability --help` |
 | `reveal trace --from FUNC` | Walk call graph from a named entry point; depth-indented narrative with side-effect classification | `reveal trace --help` |
 | `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
@@ -294,10 +295,10 @@ reveal src/main.py --outline
 reveal src/main.py process_request --outline
 
 # Just function names (fast scan)
-reveal src/main.py --format=json | jq '.structure.functions[].name'
+reveal src/main.py --format=json | jq '.structure.functions[]?.name'
 
 # Find complex functions first
-reveal src/main.py --format=json | jq '.structure.functions[] | select(.depth > 3)'
+reveal src/main.py --format=json | jq '.structure.functions[]? | select(.complexity > 10)'
 ```
 
 **Note:** `--outline` has two distinct modes that produce different output:
@@ -349,6 +350,8 @@ reveal 'ast://./src?complexity>10&lines>50'
 - `reveal_type=VAR` - Show type evidence for a variable without editing source
 - `show=dict-heatmap` - Rank untyped dicts (params, loop vars, locals) by keys read; suggests TypedDict names
 - `show=dict-schemas` - Cluster those into shapes shared across files; flags existing TypedDicts readers bypass or that have drifted
+
+`reveal_type=`, `show=dict-heatmap` and `show=dict-schemas` are **Python only**. On a mixed tree they analyze the `.py` files and add a `W-CAP-1` warning naming what was skipped (`analyzes Python only; 12 file(s) in other languages were not analyzed: …`, also in JSON `meta.warnings`). `reveal --language-info <lang>` lists the Python-only features a language lacks.
 
 **Filter combinations:**
 ```bash
@@ -510,18 +513,26 @@ reveal check Dockerfile                # Docker best practices (S701)
 - **D** (duplicates) - Duplicate code detection (D001 exact functions; D005 cross-file literal clusters; D002 similar functions exists but is disabled by default — enable with `--select D002`)
 - **E** (errors) - Line length and formatting (E501)
 - **F** (frontmatter) - Markdown front matter validation (F001-F005)
-- **I** (imports) - Import analysis and dependencies (I001-I006)
+- **I** (imports) - Import analysis and dependencies (I001-I008)
 - **L** (links) - Link validation and documentation (L001-L005)
-- **M** (maintainability) - Code maintainability checks (M101-M105)
+- **M** (maintainability) - Code maintainability checks (M101-M105, M501)
 - **N** (nginx) - Nginx configuration validation (N001-N012)
 - **R** (refactoring) - Refactoring opportunities (R913)
 - **S** (security) - Security vulnerabilities (S001 opt-in, S701)
 - **T** (types) - Type annotation issues (T004-T006)
 - **U** (urls) - URL consistency and security (U501, U502)
-- **V** (validation) - Internal validation rules (V001-V030)
+- **V** (validation) - Internal validation rules (V001-V032)
 
 **List all rules (including opt-in):** `reveal --rules`
 **Explain specific rule:** `reveal --explain B001`
+
+**Rules that can't run are disclosed, not silently passed (BACK-1466).** When a selected rule doesn't apply to a file's language, `check` (single-file and recursive) prints a disclosure before the verdict, and JSON carries it in `scan_disclosures` (`[]` when every selected rule applied):
+```
+sample.java: ⚠️  W-CAP-1: T006 analyzes Python only; 1 file(s) in other languages were not checked by it: java (1).
+sample.java: ⚠️  W-CAP-2: I001 has no unused-import detection for these languages; 1 file(s) were not checked by it: .java (1).
+sample.java: ✅ No issues found
+```
+A file that didn't parse cleanly reports `⚠️  file did not parse cleanly — results may be incomplete or incorrect` and `check` exits 3 (exit codes: 0 no issues, 1 issues, 2 usage error, 3 incomplete; `--exit-zero` for CI — see the per-command table under Troubleshooting).
 
 **Example output:**
 ```
@@ -662,7 +673,7 @@ reveal app.py --tail 5                 # Last 5 functions (where bugs cluster!)
 **Advanced extraction:**
 ```bash
 # Extract multiple functions (with --format=json)
-reveal app.py --format=json | jq '.structure.functions[] | select(.name | test("^handle_"))'
+reveal app.py --format=json | jq '.structure.functions[]? | select(.name | test("^handle_"))'
 
 # Extract function with its decorators
 reveal app.py decorated_function       # Automatically includes @decorators
@@ -859,7 +870,7 @@ reveal app.py myfunc --sideeffects
 # L12      file       file_put_contents("/tmp/...")
 # L14      env        process.env.API_KEY          <- property read, no ()
 ```
-Shows what external systems a range touches. Useful for assessing blast radius, spotting unexpected I/O, or understanding retry safety. Works on PHP and Python.
+Shows what external systems a range touches. Useful for assessing blast radius, spotting unexpected I/O, or understanding retry safety. Works on every language in reveal's conformance matrix: Python, PHP, JavaScript, TypeScript, Go, Rust, Java, Kotlin, C#, C, C++, Swift, Ruby.
 
 Two channels feed this. Most effects are **calls**, classified by callee name. But a language's env-read idiom is often a bare **property/subscript access** with no call node anywhere in it — `process.env.FOO` / `process.env['FOO']` (JS/TS), `ENV['FOO']` (Ruby), `os.environ['FOO']` (Python) — which no callee-name taxonomy can ever see. Those are detected by a separate property channel (BACK-644) and render without a `()` suffix, since they are not calls; `--format=json` tags each finding `"via": "call"` or `"via": "property"`.
 
@@ -935,7 +946,7 @@ reveal flat_file.php :120-340 --returns
 #
 # RETURN    L340:  return true  [unconditional]
 ```
-For each exit point (return/raise/throw/die), shows the full condition chain that must be true to reach it. `[unconditional]` means the exit is reachable without any guard. Complements `--exits` (which locates exits) with path analysis (which conditions gate each one). Works on PHP and Python.
+For each exit point (return/raise/throw/die), shows the full condition chain that must be true to reach it. `[unconditional]` means the exit is reachable without any guard. Complements `--exits` (which locates exits) with path analysis (which conditions gate each one). Works on the same languages as `--sideeffects` (Python, PHP, JS/TS, Go, Rust, Java, Kotlin, C#, C, C++, Swift, Ruby).
 
 **`--boundary` → boundary contract: INPUTS / ENVIRONMENT / EFFECTS (v0.81.0+)**
 ```bash
@@ -1025,8 +1036,8 @@ reveal python://packages
 # Get details on specific package
 reveal python://packages/requests
 
-# Check sys.path
-reveal python://sys/path
+# Check sys.path (conflict detection)
+reveal python://syspath
 
 # Check environment variables
 reveal python://env
@@ -1090,7 +1101,7 @@ reveal json://config.json?flatten
 reveal conversation.jsonl --head 10    # First 10 records
 reveal conversation.jsonl --tail 5     # Last 5 records
 reveal conversation.jsonl --range 48-52 # Records 48-52
-reveal conversation.jsonl 42           # Specific record
+reveal conversation.jsonl --range 42-42  # One specific record (a bare `42` prints a ±10-line raw window)
 ```
 
 **JSONL is different:** Each line is a separate JSON object (common for logs, LLM conversations, datasets). Use `--head`, `--tail`, `--range` to navigate records without loading entire file.
@@ -1141,6 +1152,17 @@ reveal src/changed_file.py changed_function
 
 **`reveal review` output:** structural diff + quality violations + top hotspots + complex functions, unified in one pass.
 
+**`reveal review` is a CI gate (BACK-1401).** Exit codes:
+- `0` pass — no findings
+- `1` warn — only `low`/`medium` findings
+- `2` fail — any `high`/`critical` finding, **or** an invalid target (unknown revision such as `main..nosuchbranch`, or not inside a git repository — `Error: cannot review …`)
+- `3` incomplete — a quality check crashed or couldn't analyze some files, so an empty result is not proof of a clean change
+
+JSON output carries the same verdict as `overall_status` (`pass` / `warn` / `fail` / `incomplete`, or `error` for an invalid target) and `exit_code`:
+```bash
+reveal review main..feature --format json | jq -e '.overall_status == "pass"'   # non-zero unless the review passed
+```
+
 **Advanced workflows:**
 ```bash
 # Compare with main branch
@@ -1149,8 +1171,9 @@ git diff main --name-only | reveal --stdin --outline
 # Check only modified (not new) files
 git diff --name-only --diff-filter=M | reveal --stdin --check
 
-# JSON output for CI/CD gating
+# JSON output for CI/CD gating (exit 0 pass / 1 warn / 2 fail or invalid range / 3 incomplete)
 reveal review main..feature --format json
+reveal review main..feature --format json | jq -e '.overall_status == "pass"'
 
 # Check security on new files only
 git diff --name-only --diff-filter=A | reveal --stdin --check --select S
@@ -1233,7 +1256,7 @@ reveal 'git://.?type=ownership&limit=500'                      # cap the history
 **Pattern:**
 ```bash
 # See imports
-reveal app.py --format=json | jq '.structure.imports[]'
+reveal app.py --format=json | jq '.structure.imports[]?'
 
 # See class hierarchy
 reveal app.py --outline
@@ -1243,7 +1266,7 @@ grep -r "import database" src/
 
 # See all functions in directory
 find src/ -name "*.py" | reveal --stdin --format=json | \
-  jq '.structure.functions[] | {file, name, lines: .line_count}'
+  jq '.structure.functions[]? | {file, name, lines: .line_count}'
 ```
 
 **--outline flag:** Shows hierarchical structure (classes with their methods, nested functions, decorators).
@@ -1255,11 +1278,11 @@ grep -r "class.*Base" src/ | reveal --stdin --outline
 
 # Find files with many imports (coupling indicator)
 find src/ -name "*.py" | reveal --stdin --format=json | \
-  jq 'select(.structure.imports | length > 20) | .file_path'
+  jq 'select(.structure.imports | length > 20) | .file'
 
-# Find circular import candidates
+# Find intra-project imports (each import is {line, content, file})
 find src/ -name "*.py" | reveal --stdin --format=json | \
-  jq '.structure.imports[] | select(. | contains("src/"))'
+  jq '.structure.imports[]? | select(.content | contains("src.")) | "\(.file):\(.line) \(.content)"'
 ```
 
 ---
@@ -1328,16 +1351,23 @@ Fields:
 reveal trace src/ --from main
 reveal trace src/ --from main --depth 3    # expand 3 levels (max 5)
 reveal trace src/ --from process_request --format json   # JSON output
+reveal trace src/ --from src/app.py:main   # FILE:NAME picks one of several same-named definitions
 ```
 
 Each frame shows:
 - Function name + file:line (relative path)
 - `params:` — function parameters
-- `effects:` — classified side-effects (hard_stop, db, http, cache, file, log, sleep)
+- `effects:` — classified side-effects (hard_stop, db, http, cache, file, env, log, sleep), e.g. `effects: env:get`
 - `calls:` — what it calls at the next level
 
 Output is depth-indented so the execution tree is scannable at a glance.  Unresolved
 (external/stdlib) callees appear with an `[external]` marker.
+
+**One frame per definition (BACK-1399).** Same-named functions in different files are never merged. A bare `--from NAME` with several definitions traces each one separately and warns:
+```
+⚠ 'check' has 8 definitions (I001.py:63, I002.py:268, I003.py:69, I004.py:75, I005.py:55 (+3 more)); each is traced separately -- pick one with --from <file>:check
+```
+A callee name with several definitions resolves to the one in the caller's file, then the one the caller imports; otherwise it is marked `[ambiguous: N definitions -- …]` (JSON `ambiguous`, `candidates`) and not expanded. Frames print in depth-first call order.
 
 
 ---
@@ -1374,7 +1404,25 @@ reveal 'calls://src/?uncalled&top=20'          # Top 20 most-recently-added unca
 
 **Suppression:** Add `# noqa: uncalled` to a function's definition line (or up to 3 lines after) to exclude it from results — useful for runtime-dispatched functions, plugin entry points, or framework hooks that are called dynamically.
 
-**Limitations:** Static analysis only — functions called via `getattr`, `importlib`, or string dispatch are not tracked and appear as uncalled. Private (`_prefix`) functions are flagged separately. `__dunder__` methods, `@property`, `@classmethod`, and `@staticmethod` are excluded automatically.
+**Limitations:** Static analysis only — functions called via `getattr`, `importlib`, reflection, or string dispatch are not tracked and appear as uncalled. Private (`_prefix`) functions are marked `(function, private)`. A function referenced without being called (a callback, `&Class::method`, `X::m`, `+= OnEvent`, a JSX component, a Ruby `before_action :x` symbol) counts as used.
+
+**Implicitly-invoked code is excluded per language.** The output footer (`⚠ Excludes …`) names the exact list for the scanned languages:
+
+| Language | Excluded automatically |
+|----------|------------------------|
+| Python | `__dunder__` methods, `@property`/`@classmethod`/`@staticmethod` |
+| JS/TS | constructors, `get`/`set` accessors; `describe`/`it`/`test` callbacks |
+| Go | `main`, `init`; `Test*`/`Benchmark*`/`Example*`/`Fuzz*` in `_test.go` |
+| Rust | `main`, `#[test]`/`#[bench]` functions, trait-impl methods |
+| Java | constructors, `@Override`, `main`, Spring/JAX-RS/Dagger methods (`@GetMapping`, `@Bean`, `@Provides`, …); JUnit3 `test*` in test files |
+| Kotlin | `override`, `main`, Spring/Dagger functions |
+| C# | constructors, `override`, `Main`, ASP.NET actions (`[HttpGet]`, `[Route]`, …), `Invoke`/`Configure`/… |
+| C/C++ | `main`, test-registration macros (`TEST`, `TEST_F`, `TEST_CASE`, …); C++ also constructors, destructors, operators, `override`/`final`, Godot `GDCLASS` hooks |
+| Swift | `init`/`deinit`, operator functions, `override` |
+| Ruby | `initialize`, `included`/`extended`/`inherited`/`method_missing`/`respond_to_missing?` |
+| PHP | none yet (the footer says so): constructors and framework-invoked methods may be listed |
+
+Test entry points (Go `Test*`, Rust `#[test]`, JS/TS test callbacks, JUnit3 `test*`) are counted in `test_entrypoints_excluded` (JSON) instead of being listed. Add `&test-framework=true` to list them as candidates too. `.reveal.yaml` `adapters.calls.entry_points.decorators` adds project-specific entry-point decorators.
 
 **Interpreting absence of evidence:** "No callers found" means no *static* callers were detected in the scanned path. It does not mean the function is dead — runtime dispatch (callbacks, plugin loaders, framework hooks, `getattr`-based dispatch) may call it without leaving a static trace. Treat `?uncalled` output as *candidates for review*, not confirmed dead code.
 
@@ -1462,7 +1510,7 @@ reveal hotspots . --format json    # JSON for CI/scripting
 reveal stats://. --hotspots
 ```
 
-**Output:** Files ranked by quality score (worst first) + complex functions with cyclomatic complexity scores. Each function shows a test-coverage indicator: ✅ (a `test_<func>` function exists in `tests/`/`test/`/`spec/`, or a `test_<module>.py` file covers the module) or ⚪ (no test match found). JSON output adds `has_test_hint: true/false/null` per function (`null` = no test convention known for that language).
+**Output:** Files ranked by quality score (worst first) + complex functions with cyclomatic complexity scores. Each function shows a test-coverage indicator: ✅ (a `test_<func>` function exists in `tests/`/`test/`/`spec/`, or a `test_<module>.py` file covers the module) or ⚪ (no test match found), or ❔ (no known test convention for the language — not a claim either way). Test matching follows each language's conventions (Go `_test.go` + `TestXxx`, Rust `#[test]`, JS/TS `*.test.*`/`*.spec.*`, JUnit `FooTest`/`testBar`). JSON output adds `has_test_hint: true/false/null` per function (`null` = no test convention known for that language).
 
 **Use case:** Identify the 10 worst files in a codebase — start technical debt work here. Output is the same data `reveal review` uses to surface hotspots in PR reviews.
 
@@ -1566,15 +1614,24 @@ reveal surface . --format json          # Machine-readable, for diffing across v
 reveal surface . --source-only          # Production surface only — excludes test files/dirs (v0.101.0+)
 reveal surface src/ --source-only --type sdk  # SDK egress, production code only (security review)
 reveal surface . --by dir --depth 2     # Which layers touch which boundary kinds (per-directory counts)
+reveal surface src/ --type subprocess   # Shell/process execution only (subprocess, exec, system, popen, ...)
 ```
 
-**What it finds:** CLI entry points, HTTP routes, environment variable reads, network egress, filesystem writes, subprocess calls — per language: Python (Click/argparse, Flask/FastAPI/Django, requests/urllib/sockets), TypeScript (Express/NestJS routes, fetch/axios), Java (Spring routes, `System.getenv`), C# (ASP.NET routes, `Environment.GetEnvironmentVariable`), PHP (Laravel/Symfony/WordPress routes, `getenv`/`$_ENV`), Swift (Vapor routes, `@main`/CLI entry), Kotlin (Ktor/Spring routes, `fun main`), Ruby (Sinatra/Rails routes, `ENV[...]`/`ENV.fetch`, gem-taxonomy requires), Go (Gin/Echo/Chi/net-http routes, `os.Getenv`/`os.LookupEnv`, `func main`, module-taxonomy imports), Rust (Actix/Rocket `#[get]` + Axum `.route` + Actix `web::resource`/`web::scope` routes, `env::var`, `fs::write`, `fn main`, use-crate taxonomy), C++ (cpp-httplib/Crow routes, `getenv`, `ofstream`/`fopen`, `int main`, `#include` taxonomy; `.h`-declared decls not reached — warns honestly). *(Supported: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++. On other languages it returns an explicit "not supported" note rather than a silent zero.)*
+**What it finds:** CLI entry points, HTTP routes, environment variable reads, network egress, filesystem writes, subprocess calls — per language: Python (Click/argparse, Flask/FastAPI/Django, requests/urllib/sockets), TypeScript (Express/NestJS routes, fetch/axios), Java (Spring routes, `System.getenv`), C# (ASP.NET routes, `Environment.GetEnvironmentVariable`), PHP (Laravel/Symfony/WordPress routes, `getenv`/`$_ENV`), Swift (Vapor routes, `@main`/CLI entry), Kotlin (Ktor/Spring routes, `fun main`), Ruby (Sinatra/Rails routes, `ENV[...]`/`ENV.fetch`, gem-taxonomy requires), Go (Gin/Echo/Chi/net-http routes, `os.Getenv`/`os.LookupEnv`, `func main`, module-taxonomy imports), Rust (Actix/Rocket `#[get]` + Axum `.route` + Actix `web::resource`/`web::scope` routes, `env::var`, `fs::write`, `fn main`, use-crate taxonomy), C++ (cpp-httplib/Crow routes, `getenv`, `ofstream`/`fopen`, `int main`, `#include` taxonomy; `.h`-declared decls not reached — warns honestly). *(Supported: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++. On other languages it returns an explicit "not supported" note rather than a silent zero.)* Stdlib socket clients count as `network` rows too (client side only: Go `net.Dial`, Rust `TcpStream::connect`, Ruby `TCPSocket`, C# `TcpClient`, Swift `URLSession`).
+
+**Per-category coverage.** Not every category is implemented for every supported language. When the scan includes a language/category pair with no detector, the report says so instead of showing a clean zero:
+```
+Not implemented for scanned languages (a 0 here is not a clean result):
+  cli: PHP, Ruby
+  mcp: C++, C#, Go, Java, Kotlin, PHP, Ruby, Rust, Swift
+```
+Files that could not be parsed are named, not counted as clean: `N file(s) could not be parsed and contribute no entries: …` (JSON `unparsed_files`, warning `W-SURFACE-2`).
 
 **`--source-only` (v0.101.0+):** Prunes test directories (`tests/`, `test/`, `spec/`, `__tests__/`, any dir starting with `test` or `spec`) and test files (`test_*.py`, `*_test.py`, `conftest.py`, `*.test.ts`, `*.spec.ts`, etc.) before scanning. Useful for security/architecture reviews where test scaffolding adds noise. `_meta.known_limits` in JSON output records the exclusion.
 
 **Use case:** Pre-deploy boundary audit, security review, or "what does this service expose / depend on?" When a config value, env var, or external endpoint changes, `reveal surface` tells you which code paths participate.
 
-**Interpreting absence of evidence:** Detection is taxonomy-based — only libraries in the built-in taxonomy (requests, boto3, flask, etc.) are recognised. Project-specific HTTP clients, custom I/O wrappers, or in-house SDK abstractions are not detected and will not appear. A zero count means "nothing in the known taxonomy found" — not "no external effects".
+**Interpreting absence of evidence:** Detection is taxonomy-based — only libraries in the built-in taxonomy (requests, boto3, flask, etc.) are recognised. Project-specific HTTP clients, custom I/O wrappers, or in-house SDK abstractions are not detected and will not appear. A zero count means "nothing in the known taxonomy found" — not "no external effects" — and a zero for a category listed under "Not implemented for scanned languages" means nothing was looked for at all.
 
 ---
 
@@ -1584,7 +1641,7 @@ reveal surface . --by dir --depth 2     # Which layers touch which boundary kind
 ```bash
 reveal health .                    # Code quality + SSL + DB + DNS in one report
 reveal health . --select B,S       # Just bugs and security
-reveal health . --all              # Include all categories (verbose)
+reveal health --all                # Check every resource detectable in context (current dir + configured targets)
 ```
 
 **Use case:** A single command that aggregates `reveal check` (code), `ssl://` (cert health), `mysql://`/`sqlite://` (DB health), and `domain://` (DNS) into one operator-friendly report. Use it for production readiness checks or scheduled monitoring jobs — not for routine code-quality runs (use `reveal check` for those).
@@ -1667,7 +1724,7 @@ reveal 'sqlite:///path/to/app.db?table=trades&limit=10'  # Sample rows
 **Pattern:**
 ```bash
 reveal 'diff://file_a.py:file_b.py'            # Structural diff: functions added/removed/modified
-reveal 'diff://before.py:after.py?context=3'   # With code context
+reveal 'diff://app.py:git://app.py@HEAD~1'     # Working copy vs. a git revision
 reveal 'diff://config.yaml:config_new.yaml'    # Works on any analyzer-supported type
 ```
 
@@ -2044,7 +2101,7 @@ reveal domain://api.example.com      # inspect the upstream domain
 
 # domain:// also supports WHOIS lookup
 reveal domain://example.com/whois    # registrar, creation/expiry dates, nameservers
-reveal domain://example.com/registrar  # registrar + WHOIS fields (requires: pip install reveal[whois])
+reveal domain://example.com/registrar  # registrar + WHOIS fields (requires: pip install reveal-cli[whois])
 
 # Validate nginx config + SSL in one workflow
 reveal nginx://example.com           # check vhost config
@@ -2069,14 +2126,18 @@ reveal domain://example.com --check
 reveal domain://example.com --check --only-failures
 
 # Specific sub-views
-reveal domain://example.com/dns          # All DNS records (A, AAAA, MX, TXT, NS, CNAME, SOA)
+reveal domain://example.com/dns          # All DNS records (A, AAAA, MX, TXT, NS, CNAME, SOA) (requires: pip install reveal-cli[dns])
 reveal domain://example.com/ssl          # SSL certificate status (delegates to ssl://)
 reveal domain://example.com/registrar    # Registrar name and key dates from WHOIS
-reveal domain://example.com/whois        # WHOIS data (requires: pip install reveal[whois])
+reveal domain://example.com/whois        # WHOIS data (requires: pip install reveal-cli[whois])
 
 # JSON for scripting
 reveal domain://example.com --check --format=json
 ```
+
+**Optional extras:** DNS views (`/dns`, `/mail`, `/ns-audit`) need `pip install reveal-cli[dns]` (dnspython); WHOIS views (`/whois`, `/registrar`) need `pip install reveal-cli[whois]`. Without them `domain://` degrades gracefully and prints the install hint.
+
+**Exit codes (`--check`):** `0` pass, `1` warning, `2` failure — computed from all checks, even when `--only-failures` trims the display.
 
 **When to use which view:**
 
@@ -2540,8 +2601,8 @@ reveal claude://hooks/PostToolUse
 | "Which files were changed?" | `.../files` |
 | "Why did a tool keep failing?" | `?errors` |
 | "How many tokens did thinking use?" | `.../thinking` |
-| "What was the original prompt?" | `.../user` |
-| "What did Claude output?" | `.../assistant` |
+| "What was the original prompt?" | `.../prompts` |
+| "What did Claude output?" | `.../messages` (or `.../exchanges` for prompt → answer pairs) |
 | "Where did the session stop?" | `?last` |
 | "Find sessions about X" | `claude://sessions/?search=X` |
 | "What MCP servers are configured?" | `claude://config` |
@@ -2772,13 +2833,21 @@ reveal file.py --format=grep
 # Typed JSON (with containment relationships)
 reveal file.py --format=typed
 
-# Copy to clipboard
+# Copy to clipboard (also prints normally) — works on subcommands too
 reveal file.py --copy
 reveal file.py process_request --copy
+reveal hotspots . --copy
 
 # Suppress breadcrumb hints (clean output for scripts / agents)
 reveal file.py -q                    # -q / --no-breadcrumbs
+
+# Default format for every call in this shell / agent session
+export REVEAL_FORMAT=json
+reveal file.py                       # JSON now
+reveal file.py --format text         # an explicit --format always wins
 ```
+
+`REVEAL_FORMAT` sets the default `--format` for every entry point — files, `uri://` adapters and subcommands (`reveal hotspots`, `reveal check`, …). An explicit `--format` on the command line overrides it.
 
 **Token budget flags (URI adapters — limits list fields like items/results/checks/commits):**
 ```bash
@@ -2786,10 +2855,10 @@ reveal file.py -q                    # -q / --no-breadcrumbs
 reveal 'ast://./src?complexity>5' --max-items 20
 
 # Truncate long string values to N chars (useful for calls:// call lists, git messages, etc.)
-reveal 'calls://./src' --max-snippet-chars 80
+reveal 'calls://./src?rank=callers' --max-snippet-chars 80
 
 # Combine: first 50 items, strings max 80 chars
-reveal 'calls://./src' --max-items 50 --max-snippet-chars 80
+reveal 'calls://./src?uncalled' --max-items 50 --max-snippet-chars 80
 ```
 When truncated, reveal adds a `meta.budget` field to the JSON output with cursor for pagination. Note: the header/count line in text output may show the pre-budget total; the actual listed results are limited.
 
@@ -2847,29 +2916,25 @@ reveal app.py --format=json | jq '.meta.extractable.elements.function'
 # Get example command
 reveal app.py --format=json | jq -r '.meta.extractable.examples[0]'
 ```
-```
 
-**Typed JSON output** (--format=typed):
+**Typed JSON output** (--format=typed) — a containment tree: classes carry their methods in `children`, and `stats` counts elements by category (element fields trimmed here):
 ```json
 {
-  "file_path": "src/models.py",
-  "typed_structure": {
-    "elements": [
-      {
-        "name": "User",
-        "type": "class",
-        "line_number": 10,
-        "children": [
-          {
-            "name": "__init__",
-            "type": "method",
-            "line_number": 11,
-            "parent": "User"
-          }
-        ]
-      }
-    ]
-  }
+  "type": "python",
+  "file": "src/models.py",
+  "stats": {"total": 10, "roots": 7, "max_depth": 1, "import": 2, "function": 6, "class": 2},
+  "tree": [
+    {
+      "name": "Batch",
+      "category": "class",
+      "line": 28,
+      "line_end": 40,
+      "children": [
+        {"name": "__init__", "category": "function", "line": 33, "line_end": 34},
+        {"name": "run", "category": "function", "line": 36, "line_end": 40}
+      ]
+    }
+  ]
 }
 ```
 
@@ -2877,17 +2942,17 @@ reveal app.py --format=json | jq -r '.meta.extractable.examples[0]'
 
 ```bash
 # Find complex functions
-reveal app.py --format=json | jq '.structure.functions[] | select(.depth > 3)'
+reveal app.py --format=json | jq '.structure.functions[]? | select(.complexity > 10)'
 
 # Find functions > 50 lines
-reveal app.py --format=json | jq '.structure.functions[] | select(.line_count > 50)'
+reveal app.py --format=json | jq '.structure.functions[]? | select(.line_count > 50)'
 
 # List all classes
-reveal app.py --format=json | jq '.structure.classes[].name'
+reveal app.py --format=json | jq '.structure.classes[]?.name'
 
 # Count functions per file
 find src/ -name "*.py" | reveal --stdin --format=json | \
-  jq '{file: .file_path, count: .structure.functions | length}'
+  jq '{file: .file, count: (.structure.functions | length)}'
 
 # Find files with no docstrings (empty imports)
 find src/ -name "*.py" | reveal --stdin --format=json | \
@@ -2909,7 +2974,7 @@ git diff --name-only | reveal --stdin --outline
 
 # Find complex functions across codebase
 find . -name "*.py" | reveal --stdin --format=json | \
-  jq '.structure.functions[] | select(.depth > 3)'
+  jq '.structure.functions[]? | select(.complexity > 10)'
 
 # Quality check on recent commits
 git diff HEAD~5 --name-only | reveal --stdin --check
@@ -2945,7 +3010,7 @@ reveal 'ast://./src?complexity>10'
 
 # Method 2: Pipeline with jq (more control)
 find src/ -name "*.py" | reveal --stdin --format=json | \
-  jq -r '.structure.functions[] |
+  jq -r '.structure.functions[]? |
          select(.complexity > 10) |
          "\(.file):\(.line) - \(.name) (complexity: \(.complexity))"' | \
   sort -t: -k3 -nr
@@ -2974,7 +3039,7 @@ done
 
 # JSON output for automation
 find . -name "*.py" | reveal --stdin --check --select S --format=json | \
-  jq 'select(.quality_issues | length > 0)'
+  jq 'select(.total > 0) | {file, total, detections}'
 ```
 
 ### Pattern 3: Tracking Code Quality Over Time
@@ -2993,7 +3058,7 @@ diff baseline.txt current.txt
 git log --oneline | head -10 | while read commit _; do
   git checkout $commit 2>/dev/null
   complexity=$(find src/ -name "*.py" | reveal --stdin --format=json | \
-    jq '[.structure.functions[].depth] | add / length')
+    jq -s '[.[].structure.functions[]?.complexity | numbers] | add / length')
   echo "$commit: avg complexity $complexity"
 done
 ```
@@ -3239,6 +3304,9 @@ reveal src/auth.py --check
 
 # 5. Extract problematic function
 reveal src/auth.py authenticate_user
+
+# 6. One-shot gate for CI: exit 0 pass, 1 warn, 2 fail (high/critical finding or bad range), 3 incomplete
+reveal review main..HEAD --format json | jq -e '.overall_status == "pass"'
 ```
 
 **Result:** Found security issue and complexity problem before merge.
@@ -3313,14 +3381,16 @@ The message now includes line count — use it to decide whether `Read` is worth
 
 **Causes & Solutions for genuine "no structure":**
 
-1. **Syntax errors in file**
+1. **Syntax errors or grammar gaps in the file** — reveal tells you; you don't need a separate check.
+   - The outline (bare and `--outline`) prints `⚠️  Parse recovered from syntax tree-sitter could not read: this outline may be incomplete or wrong (a grammar gap or a real syntax error).` and JSON carries `meta.parse_recovered: true`. Treat that outline as a lower bound.
+   - `reveal check` reports `⚠️  file did not parse cleanly — results may be incomplete or incorrect` and exits `3` (scan incomplete), including for malformed JSON/YAML/TOML/XML/notebooks/JSONL.
+   - A file whose substance is top-level code (no enclosing function) gets `⚠️  Partial outline: N of M code lines (P%) are top-level code outside any listed function/class (first at line X).` plus a ready `reveal "<file>" :X-<end>` command; JSON carries `meta.coverage`.
    ```bash
-   # Check for syntax errors
-   python -m py_compile script.py
-
-   # Reveal will show errors
-   reveal script.py --check --select E
+   reveal script.py --format json | jq '.meta.parse_recovered, .meta.coverage'
+   reveal check script.py            # exit 3 if it did not parse cleanly
+   python -m py_compile script.py    # the language's own parser, for the exact error
    ```
+   (`--check --select E` only runs E501 line length — it does not report syntax errors.)
 
 2. **Unsupported language/extension**
    ```bash
@@ -3393,7 +3463,7 @@ reveal app.py missing_function
    reveal app.py _private_function  # Works
 
    # Check if it exists
-   reveal app.py --format=json | jq '.structure.functions[].name'
+   reveal app.py --format=json | jq '.structure.functions[]?.name'
    ```
 
 ---
@@ -3432,13 +3502,13 @@ reveal huge_file.py
 3. **Use JSON + jq filtering**
    ```bash
    # Find what you need
-   reveal huge_file.py --format=json | jq '.structure.functions[] | select(.name | contains("target"))'
+   reveal huge_file.py --format=json | jq '.structure.functions[]? | select(.name | contains("target"))'
    ```
 
 4. **Limit output**
    ```bash
    # Show only complex functions
-   reveal huge_file.py --format=json | jq '.structure.functions[] | select(.depth > 5)'
+   reveal huge_file.py --format=json | jq '.structure.functions[]? | select(.complexity > 10)'
    ```
 
 ---
@@ -3498,14 +3568,22 @@ reveal deep_dir/
 
 ### Issue: "Exit code 2 is breaking my pipeline / parallel tool calls"
 
-**Exit code contract:**
-- `0` — pass (no findings, or informational output only)
-- `1` — warnings (expiring certs, non-critical issues)
-- `2` — failures found (expired certs, rule violations, ACL failures)
+**Exit codes are per command** — a non-zero exit is a machine-readable summary of the result, almost never a crash. The output (text or JSON) is still produced and valid.
 
-Exit code 2 means **reveal found something** — it is not a tool crash. The output is still valid and useful; the exit code is the machine-readable summary.
+| Command | `0` | `1` | `2` | `3` |
+|---------|-----|-----|-----|-----|
+| `reveal check` / `<path> --check` | no issues | issues found | usage error (bad arguments) | scan incomplete — a file could not be parsed or checked |
+| `reveal review` | pass | warn (`low`/`medium` findings only) | fail (any `high`/`critical` finding) **or** invalid target (unknown revision, not a git repo) | incomplete — a check crashed or skipped files |
+| `ssl://… --check`, `domain://… --check` | pass | warning (e.g. cert expiring <30 days) | critical/failure (expired, <7 days, DNS/HTTP failure) | — |
+| nginx `--validate-nginx-acme` / `--check-acl` / `--cpanel-certs`, `cpanel://USER/full-audit`, `nginx:// --audit` | pass | — | failure / gaps found | — |
+| `reveal deps`, `reveal hotspots` | clean | cycles/unused imports, or hotspots, found | — | — |
+| Any command given a path that doesn't exist | — | `Error: … not found` | — | — |
 
-**The right fix is `|| true` at the call site:**
+`reveal review --format json` also carries the verdict in the payload (`overall_status` + `exit_code`), so a gate can read either the exit code or the JSON.
+
+**`reveal check --exit-zero`** always exits 0 once the scan completed — findings and unparseable files move into the output only (a genuine usage error still exits 2). Use it to drop `check` into a `set -e` / CI pipeline.
+
+**For every other command, use `|| true` at the call site:**
 ```bash
 # In a shell pipeline — don't stop on findings
 reveal ssl://example.com --check || true
@@ -3518,16 +3596,14 @@ check-ssl:
     reveal ssl://example.com --check || true
 ```
 
-**Why there is no `--no-fail` / `--exit-zero` flag:**
-`|| true` is the idiomatic Unix pattern for "run this but don't stop on non-zero exit." Adding `--no-fail` would push caller concerns into the tool, conflate "checking" with "what to do about findings," and need to be added to every checking command. Most Unix tools (`grep`, `diff`, `test`) follow the same convention.
-
 **For AI agents running parallel tool calls:**
-If your agent framework treats any non-zero exit as a tool failure, use `|| true`. The output (text or JSON) is produced regardless of exit code — the exit code is purely a machine-readable summary of the result.
+If your agent framework treats any non-zero exit as a tool failure, use `reveal check --exit-zero` for `check` and `|| true` for everything else. The output (text or JSON) is produced regardless of exit code — the exit code is purely a machine-readable summary of the result.
 
 ```bash
-# These both produce output — exit code just summarizes the result
+# These all produce output — exit code just summarizes the result
 reveal ssl://example.com --check           # exits 2 if expired
 reveal ssl://example.com --check || true   # always exits 0; output identical
+reveal check src/ --exit-zero              # always exits 0 once the scan completed
 ```
 
 ---
@@ -3674,7 +3750,8 @@ CMD ["python", "app.py"]
 **C901: High cyclomatic complexity**
 - Complexity > 10 suggests function is too complex
 - Consider breaking into smaller functions
-- Use `reveal --explain C901` for thresholds
+- Default threshold 10 (override in `.reveal.yaml`: `rules: {C901: {threshold: 15}}`); `reveal --explain C901` describes the rule but does not print the threshold
+- One shared score: C901, `ast://?complexity`, `stats://` and `reveal hotspots` report the same number for every language — `if`/loops/`catch`, `&&`/`||`/`??`/`?:`, and match/switch arms count (a catch-all `default`/`else`/`_` arm does not); Rust `?` and Zig `try` count as early exits
 
 **C902: Function too long**
 - Function exceeds maximum line count
@@ -3707,9 +3784,9 @@ def process():
 ### Error Handling (E)
 
 **E501: Line too long**
-- Line exceeds maximum length (default: 88 characters, configurable via `.reveal.yaml`)
+- Line exceeds maximum length (default: 100 characters; URLs are ignored by default)
 - Applies to all file types (`*`)
-- Use `reveal --explain E501` for the threshold and configuration options
+- Configure in `.reveal.yaml`: `rules: {E501: {max_length: 120, ignore_urls: true}}` — `reveal --explain E501` describes the rule but does not print the threshold
 
 ---
 
@@ -3776,6 +3853,14 @@ def _lazy_import_heavy():
 - Suppressed by `# noqa: I006` or `# noqa` on the import line
 - Suppressed when function name contains `lazy` or `import`
 - Suppressed for `TYPE_CHECKING` guards
+
+**I007: Declared dependency never imported anywhere in the project** *(Python, Rust)*
+- A dependency listed in `pyproject.toml`, `requirements.txt` or `Cargo.toml` is never imported by any file in the project
+- Severity: LOW — candidate for removal from the manifest
+
+**I008: Import not declared in the project manifest** *(Python, Rust)*
+- An import that resolves as external (not stdlib, not project-local) is absent from the project's declared dependencies
+- Severity: LOW — works locally only because the package happens to be installed
 
 ---
 
@@ -4089,7 +4174,7 @@ server {
 
 ### Validation (V)
 
-**V001-V026 (mostly internal):** Validation rules for reveal's own codebase and plugin adapters
+**V001-V032 (mostly internal; there is no V010):** Validation rules for reveal's own codebase and plugin adapters
 - Most are internal self-checks used by `reveal reveal://` — ensure adapter completeness, doc/count accuracy, output-contract compliance. Hidden by default; pass `--all` to `reveal --rules`/`--explain` to see them.
 - Two are public and apply to your own plugin adapters: **V016** (adapter missing `get_help()` documentation) and **V023** (adapter output doesn't comply with the Output Contract).
 - [V026](rules/V026.md) (path-handling convention/portability) has a dedicated deep-dive doc.
@@ -4182,7 +4267,7 @@ rg -l "authenticate" src/ | reveal --stdin --outline
 
 # Extract matching functions
 rg -l "authenticate" src/ | while read f; do
-  reveal "$f" --format=json | jq '.structure.functions[] | select(.name | contains("authenticate"))'
+  reveal "$f" --format=json | jq '.structure.functions[]? | select(.name | contains("authenticate"))'
 done
 ```
 
@@ -4204,14 +4289,14 @@ done
 ### With jq (JSON processing)
 ```bash
 # Complex queries
-reveal app.py --format=json | jq '.structure.functions[] | select(.depth > 3 and .line_count > 50)'
+reveal app.py --format=json | jq '.structure.functions[]? | select(.depth > 3 and .line_count > 50)'
 
 # Aggregation
 find src/ -name "*.py" | reveal --stdin --format=json | \
   jq -s 'map(.structure.functions | length) | add'
 
 # Custom reports
-reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line_count) lines)"'
+reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.line_count) lines)"'
 ```
 
 ---
@@ -4334,8 +4419,8 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 ## Help System Overview
 
 **For AI agents (you):**
-- **Orientation** (`reveal --agent-help`) - First section of this file (~2,200 tokens)
-- **Complete guide** (`reveal help://agent/full`) - This file in full (~40,000 tokens)
+- **Orientation** (`reveal --agent-help`) - First section of this file (~2,500 tokens)
+- **Complete guide** (`reveal help://agent/full`) - This file in full (~48,000 tokens)
 - **Progressive help** (`reveal help://topic`) - Low-token per-topic exploration
 
 **For humans:**
@@ -4349,7 +4434,7 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 
 ---
 
-**Last updated:** 2026-03-15
+**Last updated:** 2026-09-24
 **Source:** https://github.com/Semantic-Infrastructure-Lab/reveal
 **PyPI:** https://pypi.org/project/reveal-cli/
 
@@ -4462,6 +4547,7 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Example-heavy** - Concrete commands that actually work
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
+- **2026-09-24 refresh (post-v0.127.0)** - Every example re-run against the live CLI. Exit codes are now a per-command table (`check` 0/1/2/3 + `--exit-zero`, `review` 0/1/2/3 + `overall_status`/`exit_code`, a missing path exits 1). New coverage: `?uncalled` per-language exclusions + `test_entrypoints_excluded`/`?test-framework=true`; `trace` one frame per definition + `--from FILE:NAME`; surface "Not implemented" block, unparsed-file warning, `--type subprocess`; Python-only `ast://` features (W-CAP-1) and `--language-info`; `check` disclosures (W-CAP-1/W-CAP-2, `scan_disclosures`); parse-recovery/partial-outline notices; `REVEAL_FORMAT`; `--copy` on subcommands; I007/I008. Fixed examples: `python://syspath`, calls:// budget flags need a query, `diff://` has no `?context=`, jq `.file`/`.content`/`.total`, typed JSON shape, JSONL `--range N-N`, claude `/prompts`/`/messages`, `reveal-cli[whois]`/`[dns]`, E501 default 100.
 - **v0.101.0** - `git://?type=ownership` — commit-share ownership for a file, directory, or whole repo (primary author, per-author %, contributor count, last-touch date; `?merges=1` includes merges, `?limit=N` caps history walk). `surface --source-only` — excludes test files/dirs from surface scans (production-only read for security review). Both carry the shallow-clone warning.
 - **v0.73.0** - `depends://` adapter (23rd adapter) — inverse module dependency graph; `depends://file.py` shows who imports it, `depends://dir/?top=N` ranks most-imported modules, `?format=dot` for GraphViz; scans from project root for full cross-directory visibility. `stats://` quality score now incorporates check rule detections by severity (CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts, cap -40); `quality.check_issues` count exposed in per-file output. PHP fixes: anonymous class detection (`anonymous_class` node type), function call tracking (`function_call_expression`), `stats://` complexity no longer stuck at 1.00
 - **v0.96.0** - `reveal check --profile NAME` (built-in presets: `maintenance`, `security`, `ci-strict`; project-defined via `.reveal.yaml`); S001 hardcoded secrets rule (opt-in — `sk-proj-`/`ghp_`/`AKIA*` + secret-named vars); PHP `calls://` OO support (`$obj->method()`, `new ClassName()` callers indexed cross-file); `reveal --rules` shows opt-in rules with `○` icon; I002 false positives 143→0 (TYPE_CHECKING + function-body imports excluded from cycle graph); I005 TYPE_CHECKING false positive fixed; `reveal hotspots`/`testability` perf: 74s→10.5s / 3min→9s via gitignore pruning + ProcessPoolExecutor + lru_cache; V025 relationship drift rule (`reveal:// --check`); L001 resolves directory links to index file, L003 ignores local citations.
@@ -4501,7 +4587,6 @@ The old version organized by "Use Cases" and "Workflows" - this version organize
 
 ## See Also
 
-- [RECIPES.md](guides/RECIPES.md) - Task-based workflows and patterns
+- [RECIPES.md](guides/RECIPES.md) - Task-based workflows, review workflows and patterns
 - [CONFIGURATION_GUIDE.md](guides/CONFIGURATION_GUIDE.md) - Configuration options
-- [RECIPES.md](guides/RECIPES.md) - Complete review workflows and patterns
 - [README.md](README.md) - Documentation hub
