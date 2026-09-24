@@ -15,6 +15,12 @@ class JavaAnalyzer(TreeSitterAnalyzer):
     Extracts classes, interfaces, methods, imports automatically using tree-sitter.
     """
     language = 'java'
+    # BACK-1409: enums were absent from the outline, and a nested enum's name
+    # extracted its constructor. An `@interface` is an annotation interface (JLS).
+    DECLARATION_CATEGORIES = {
+        'interfaces': ('interface_declaration', 'annotation_type_declaration'),
+        'enums': ('enum_declaration',),
+    }
 
     # ── Interfaces (BACK-403 pt 2) ──────────────────────────────────────────
     # Java's 'interface_declaration' was previously invisible to get_structure()

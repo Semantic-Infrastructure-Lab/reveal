@@ -1,6 +1,6 @@
 """TypeScript (.ts) and TypeScript React (.tsx) file analyzers."""
 
-from typing import Any, Dict, List, Optional
+from typing import List
 from ..reveal_types import StructureItem
 from ..core import node_children as _children
 from ..core import node_prev_sibling as _prev_sibling
@@ -56,45 +56,13 @@ class _TypeScriptBase(
         ]
 
     # ── TypeScript type declarations ──────────────────────────────────────────
-
-    def _extract_ts_types(self) -> Dict[str, List[StructureItem]]:
-        """Extract interface, type alias, and enum declarations."""
-        interfaces: List[StructureItem] = []
-        types: List[StructureItem] = []
-        enums: List[StructureItem] = []
-
-        for node_type, bucket in (
-            ('interface_declaration', interfaces),
-            ('type_alias_declaration', types),
-            ('enum_declaration', enums),
-        ):
-            for node in self._find_nodes_by_type(node_type):
-                name = self._get_node_name(node)
-                if not name:
-                    continue
-                line_start = _zero_arg(node, 'start_position').row + 1
-                line_end = _zero_arg(node, 'end_position').row + 1
-                entry: StructureItem = {
-                    'line': line_start,
-                    'line_end': line_end,
-                    'name': name,
-                    'line_count': line_end - line_start + 1,
-                    'decorators': [],
-                    'bases': self._extract_class_bases(node),
-                }
-                bucket.append(entry)
-
-        return {'interfaces': interfaces, 'types': types, 'enums': enums}
-
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
-        structure = super().get_structure(head=head, tail=tail, range=range, **kwargs)
-        for key, items in self._extract_ts_types().items():
-            if items:
-                if head or tail or range:
-                    items = self._apply_semantic_slice(items, head, tail, range)
-                structure[key] = items
-        return structure
+    # Built into the cached structure by the base (BACK-1409); this used to be
+    # an uncached get_structure override doing the same walk.
+    DECLARATION_CATEGORIES = {
+        'interfaces': ('interface_declaration',),
+        'types': ('type_alias_declaration',),
+        'enums': ('enum_declaration',),
+    }
 
 
 @register('.ts', name='TypeScript', icon='')

@@ -422,6 +422,15 @@ class TreeSitterAnalyzer(FileAnalyzer):
     # override; the base knows no language (BACK-1280).
     CALLEE_KIND_HOOKS: Dict[str, str] = {}
 
+    # BACK-1409: declaration kinds beyond functions/classes/structs, as outline
+    # category -> node kinds, built into the cached structure (BACK-1003). A
+    # language adds a kind as data here, not with a get_structure override:
+    # C# enums and properties, Dart mixins and Scala objects used to vanish
+    # from the outline with no sign they were skipped. Every kind needs a name
+    # _get_node_name can read; the BACK-530 invariant test then requires each
+    # listed entry to be extractable by that name.
+    DECLARATION_CATEGORIES: Dict[str, Tuple[str, ...]] = {'interfaces': ('interface_declaration',)}
+
     def __init__(self, path: str):
         super().__init__(path)
         self._tree: Optional[Any] = None
@@ -617,11 +626,13 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # (C#/Java/PHP each re-walked the tree for 'interface_declaration' on
         # every get_structure() call, uncached, even on a disk-cache hit for
         # everything else here). Folding it in means it's built once and
-        # cached like every other category — languages with no distinct
-        # interface node kind just cache an empty list from the cheap walk.
-        interfaces = self._extract_interface_declarations()
-        if interfaces:
-            structure['interfaces'] = interfaces
+        # cached like every other category. BACK-1409 generalized it to every
+        # DECLARATION_CATEGORIES entry.
+        for category, kinds in self.DECLARATION_CATEGORIES.items():
+            entries = sorted((entry for kind in kinds for entry in self._extract_declarations(kind)),
+                             key=lambda entry: entry['line'])
+            if entries:
+                structure[category] = entries
 
         if fingerprint is not None:
             disk_cache.put(_STRUCTURE_CACHE_NAMESPACE, fingerprint, structure,
@@ -1107,15 +1118,14 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 return self._get_node_text(gchild).strip() or None
         return None
 
-    def _extract_interface_declarations(self, node_kind: str = 'interface_declaration') -> List[Dict[str, Any]]:
-        """Extract interface declarations as a standalone list (name, line range, bases).
+    def _extract_declarations(self, node_kind: str) -> List[Dict[str, Any]]:
+        """Extract one DECLARATION_CATEGORIES node kind as a standalone list
+        (name, line range, bases).
 
-        Shared by any language whose grammar has a distinct interface node kind
-        (Java, C# both use 'interface_declaration', same node name as TS but with
-        different heritage-clause shapes — see each analyzer's own
-        `_extract_class_bases` override for the real per-language bases logic).
-        Mirrors `_TypeScriptBase._extract_ts_types`'s interfaces bucket, generalized
-        so BACK-403 pt 2 additions don't each reinvent this walk.
+        Bases come from each analyzer's own `_extract_class_bases` override
+        (Java and C# share 'interface_declaration' with TS but differ in
+        heritage-clause shape). Generalized from interfaces (BACK-403 pt 2) to
+        every declaration category (BACK-1409).
         """
         entries: List[Dict[str, Any]] = []
         for node in self._find_nodes_by_type(node_kind):

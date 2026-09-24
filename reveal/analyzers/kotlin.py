@@ -31,6 +31,9 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
     Supports both .kt (Kotlin) and .kts (Kotlin Script) files.
     """
     language = 'kotlin'
+    # BACK-1409: `typealias` was absent from the outline. (Kotlin interfaces
+    # parse as class_declaration; get_structure moves them to 'interfaces'.)
+    DECLARATION_CATEGORIES = {'types': ('type_alias',)}
 
     # ── Interfaces (BACK-403 pt 2) ──────────────────────────────────────────
     # Unlike Java/C#/TS, Kotlin has no distinct interface node kind: an

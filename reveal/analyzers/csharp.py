@@ -15,6 +15,14 @@ class CSharpAnalyzer(TreeSitterAnalyzer):
     Extracts classes, interfaces, methods automatically using tree-sitter.
     """
     language = 'csharp'
+    # BACK-1409: enums, delegates, properties and indexers were absent from the
+    # outline (Jellyfin: 136 enums), and not extractable by name.
+    DECLARATION_CATEGORIES = {
+        'interfaces': ('interface_declaration',),
+        'enums': ('enum_declaration',),
+        'delegates': ('delegate_declaration',),
+        'properties': ('property_declaration', 'indexer_declaration'),
+    }
 
     # ── Interfaces (BACK-403 pt 2) ──────────────────────────────────────────
     # C# shares tree-sitter's 'interface_declaration'/'class_declaration' node
@@ -27,6 +35,13 @@ class CSharpAnalyzer(TreeSitterAnalyzer):
     # 'class_heritage'/'extends_type_clause' — neither exists in C#'s grammar —
     # so bases always returned []. Interface extraction itself (BACK-1003) is
     # now handled generically and cached in TreeSitterAnalyzer._get_or_build_structure().
+
+    def _get_node_name(self, node) -> Optional[str]:
+        # An indexer (`public T this[int i] { ... }`) has no identifier child;
+        # C# itself names it `this`.
+        if _zero_arg(node, 'kind') == 'indexer_declaration':
+            return 'this'
+        return super()._get_node_name(node)
 
     def _extract_class_bases(self, node) -> List[str]:
         node_type = _zero_arg(node, 'kind')

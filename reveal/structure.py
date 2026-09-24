@@ -58,6 +58,7 @@ _CATEGORY_MAP = {
     "methods": "method",
     "code_blocks": "code_block",
     "links": "link",
+    "properties": "property",  # C# properties/indexers (BACK-1409); stripping the 's' gave 'propertie'
     # Add more as needed
 }
 

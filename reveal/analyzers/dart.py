@@ -106,6 +106,29 @@ class DartAnalyzer(TreeSitterAnalyzer):
     Supports Flutter and Dart-based applications.
     """
     language = 'dart'
+    # BACK-1409: mixins, extensions, enums and typedefs were absent from the
+    # outline (AppFlowy: 196 extensions, 166 enums).
+    DECLARATION_CATEGORIES = {
+        'mixins': ('mixin_declaration',),
+        'extensions': ('extension_declaration',),
+        'enums': ('enum_declaration',),
+        'types': ('type_alias',),
+    }
+
+    def _get_node_name(self, node) -> Optional[str]:
+        # A legacy function typedef (`typedef int Legacy(int x);`) puts its
+        # return type first, so the first type_identifier is `int`. The alias
+        # is the last type_identifier before `=` or the parameter list.
+        if _zero_arg(node, 'kind') == 'type_alias':
+            name = None
+            for child in _children(node):
+                kind = _zero_arg(child, 'kind')
+                if kind in ('=', 'formal_parameter_list'):
+                    break
+                if kind == 'type_identifier':
+                    name = self._get_node_text(child)
+            return name
+        return super()._get_node_name(node)
 
     # ── Class bases (BACK-645) ──────────────────────────────────────────────
     # `class Foo extends Bar implements Baz, Qux { ... }` previously fell

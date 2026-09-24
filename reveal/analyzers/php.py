@@ -15,6 +15,12 @@ class PhpAnalyzer(TreeSitterAnalyzer):
     Extracts classes, functions, namespaces automatically using tree-sitter.
     """
     language = 'php'
+    # BACK-1409: traits and enums (PHP 8.1) were absent from the outline.
+    DECLARATION_CATEGORIES = {
+        'interfaces': ('interface_declaration',),
+        'traits': ('trait_declaration',),
+        'enums': ('enum_declaration',),
+    }
     IMPORTS_VIA_EXTRACTOR = True  # BACK-1089
 
     # ── Interfaces (BACK-403 pt 2) ──────────────────────────────────────────

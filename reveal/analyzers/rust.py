@@ -16,18 +16,13 @@ class RustAnalyzer(TreeSitterAnalyzer):
     Full Rust support in 3 lines!
     """
     language = 'rust'
-
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
-        """BACK-1088: `trait` is Rust's interface declaration (`trait_item`) and was
-        absent from the structure; collect it into `structure['interfaces']`."""
-        structure = super().get_structure(head=head, tail=tail, range=range, **kwargs)
-        interfaces = self._extract_interface_declarations('trait_item')
-        if interfaces:
-            if head or tail or range:
-                interfaces = self._apply_semantic_slice(interfaces, head, tail, range)
-            structure['interfaces'] = interfaces
-        return structure
+    # BACK-1088: `trait` is Rust's interface declaration (`trait_item`).
+    # BACK-1409: enums and `type` aliases were absent from the outline.
+    DECLARATION_CATEGORIES = {
+        'interfaces': ('trait_item',),
+        'enums': ('enum_item',),
+        'types': ('type_item',),
+    }
 
     def _extract_class_bases(self, node) -> List[str]:
         """Supertraits of a trait (`trait A: B + Debug`, the `trait_bounds` child);

@@ -1,6 +1,6 @@
 """Go file analyzer - tree-sitter based."""
 
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from ..core import node_children as _children
 from ..core.treesitter_compat import _zero_arg
@@ -18,16 +18,7 @@ class GoAnalyzer(TreeSitterAnalyzer):
     """
     language = 'go'
     IMPORTS_VIA_EXTRACTOR = True  # BACK-1089
-
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
-        structure = super().get_structure(head=head, tail=tail, range=range, **kwargs)
-        interfaces = self._extract_interface_declarations('interface_type')
-        if interfaces:
-            if head or tail or range:
-                interfaces = self._apply_semantic_slice(interfaces, head, tail, range)
-            structure['interfaces'] = interfaces
-        return structure
+    DECLARATION_CATEGORIES = {'interfaces': ('interface_type',)}
 
     def _get_node_name(self, node) -> Optional[str]:
         # `type Foo interface {...}`: like struct_type, the name is a sibling

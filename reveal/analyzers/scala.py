@@ -15,6 +15,15 @@ class ScalaAnalyzer(TreeSitterAnalyzer):
     Extracts classes, objects, traits, and functions automatically using tree-sitter.
     """
     language = 'scala'
+    # BACK-1409: traits, objects, Scala 3 enums and type aliases were absent
+    # from the outline (gitbucket: 136 traits, 148 objects). A trait is listed
+    # as an interface, as Rust's is (BACK-1088).
+    DECLARATION_CATEGORIES = {
+        'interfaces': ('trait_definition',),
+        'objects': ('object_definition',),
+        'enums': ('enum_definition',),
+        'types': ('type_definition',),
+    }
 
     # ── Class bases (BACK-645) ──────────────────────────────────────────────
     # `class Foo[T] extends Bar[T] with Baz { ... }` previously fell through
