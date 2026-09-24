@@ -632,35 +632,35 @@ class TestResolution:
         "rand.h" is curl's lib/rand.h (curl builds with -Ilib), not the
         one-level root-scan hit src/rand.h that belongs to Redis."""
         (tmp_path / 'src').mkdir()
-        (tmp_path / 'src' / 'rand.h').write_text('void redis_rand(void);\n')
+        (tmp_path / 'src' / 'rand.h').write_text('void redis_rand(void);\n', encoding='utf-8')
         lib = tmp_path / 'curl' / 'lib'
         (lib / 'vtls').mkdir(parents=True)
-        (lib / 'rand.h').write_text('void curl_rand(void);\n')
+        (lib / 'rand.h').write_text('void curl_rand(void);\n', encoding='utf-8')
         includer = lib / 'vtls' / 'openssl.c'
-        includer.write_text('#include "rand.h"\n')
+        includer.write_text('#include "rand.h"\n', encoding='utf-8')
         assert self._resolve_one(includer, tmp_path) == (lib / 'rand.h').resolve()
 
     def test_c_bare_include_found_in_ancestor_include_dir(self, tmp_path):
         """BACK-1469: the -Iinclude convention — proj/src/a.c "foo.h" resolves to
         proj/include/foo.h ahead of an unrelated one-level other/foo.h."""
         (tmp_path / 'other').mkdir()
-        (tmp_path / 'other' / 'foo.h').write_text('int other;\n')
+        (tmp_path / 'other' / 'foo.h').write_text('int other;\n', encoding='utf-8')
         proj = tmp_path / 'proj'
         (proj / 'src').mkdir(parents=True)
         (proj / 'include').mkdir()
-        (proj / 'include' / 'foo.h').write_text('int proj;\n')
+        (proj / 'include' / 'foo.h').write_text('int proj;\n', encoding='utf-8')
         includer = proj / 'src' / 'a.c'
-        includer.write_text('#include "foo.h"\n')
+        includer.write_text('#include "foo.h"\n', encoding='utf-8')
         assert self._resolve_one(includer, tmp_path) == (proj / 'include' / 'foo.h').resolve()
 
     def test_c_include_ancestor_walk_stops_at_search_root(self, tmp_path):
         """BACK-1469: a header above the search root is outside the scanned
         project and must not be claimed as an edge."""
-        (tmp_path / 'x.h').write_text('int x;\n')
+        (tmp_path / 'x.h').write_text('int x;\n', encoding='utf-8')
         root = tmp_path / 'proj'
         (root / 'src').mkdir(parents=True)
         includer = root / 'src' / 'a.c'
-        includer.write_text('#include "x.h"\n')
+        includer.write_text('#include "x.h"\n', encoding='utf-8')
         assert self._resolve_one(includer, root) is None
 
     def test_c_bare_include_root_scan_is_order_independent(self, tmp_path):
@@ -668,9 +668,9 @@ class TestResolution:
         child, not whatever the filesystem's iterdir() lists first."""
         for name in ('zz', 'aa', 'mm'):
             (tmp_path / name).mkdir()
-            (tmp_path / name / 'util.h').write_text('int u;\n')
+            (tmp_path / name / 'util.h').write_text('int u;\n', encoding='utf-8')
         includer = tmp_path / 'a.c'
-        includer.write_text('#include "util.h"\n')
+        includer.write_text('#include "util.h"\n', encoding='utf-8')
         assert self._resolve_one(includer, tmp_path) == (tmp_path / 'aa' / 'util.h').resolve()
 
     def test_c_qualified_include_prefers_includer_ancestor(self, tmp_path):
@@ -679,13 +679,13 @@ class TestResolution:
         full-suffix walk might reach first."""
         vendored = tmp_path / 'aaa' / 'vendor' / 'curl'
         vendored.mkdir(parents=True)
-        (vendored / 'curl.h').write_text('int vendored;\n')
+        (vendored / 'curl.h').write_text('int vendored;\n', encoding='utf-8')
         proj = tmp_path / 'proj'
         (proj / 'src').mkdir(parents=True)
         (proj / 'include' / 'curl').mkdir(parents=True)
-        (proj / 'include' / 'curl' / 'curl.h').write_text('int proj;\n')
+        (proj / 'include' / 'curl' / 'curl.h').write_text('int proj;\n', encoding='utf-8')
         includer = proj / 'src' / 'a.c'
-        includer.write_text('#include "curl/curl.h"\n')
+        includer.write_text('#include "curl/curl.h"\n', encoding='utf-8')
         assert self._resolve_one(includer, tmp_path) == (
             proj / 'include' / 'curl' / 'curl.h').resolve()
 
