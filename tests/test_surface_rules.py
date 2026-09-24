@@ -310,9 +310,9 @@ def test_documented_env_parity_deltas(lang, code, expected, tmp_path):
     assert sorted(e['name'] for e in _scan(lang, code, tmp_path, 'env')) == expected
 
 
-# ── import-shaped network/db/sdk tables (BACK-1334 slices a, b) ────────────
+# ── import-shaped network/db/sdk tables (BACK-1334 slices a, b, c) ─────────
 
-IMPORT_LANGS = ('go', 'java', 'kotlin', 'csharp', 'rust', 'swift', 'ruby')
+IMPORT_LANGS = ('go', 'java', 'kotlin', 'csharp', 'rust', 'swift', 'ruby', 'cpp')
 IMPORT_CATEGORIES = ('network', 'db', 'sdk')
 
 
@@ -397,6 +397,24 @@ def test_import_modules_are_disjoint_across_categories(lang):
 def test_import_edge_forms_match_the_replaced_scanners(lang, code, category, expected, tmp_path):
     assert sorted(e['name'] for e in _scan(lang, code, tmp_path, category)) == expected
     assert all(e['type'] == 'import' for e in _scan(lang, code, tmp_path, category))
+
+
+@pytest.mark.parametrize('code,category,expected', [
+    # Header roots are plain string prefixes (the replaced `startswith`), not segments: `mysql`
+    # takes `mysql.h`, `mysql/mysql.h` and `mysql_driver.h`; a quoted include counts too.
+    ('#include <mysql.h>\n#include <mysql/mysql.h>\n#include "mysql_driver.h"\n'
+     '#include <sqlite3ext.h>\n#include <xmysql.h>\n#include MYSQL_HEADER\n', 'db',
+     ['mysql.h', 'mysql/mysql.h', 'mysql_driver.h', 'sqlite3ext.h']),
+    ('#include <curl/curl.h>\n#include <curl.h>\n#include <boost/asio/ip/tcp.hpp>\n'
+     '#include "httplib.h"\n#include <sys/socketx.h>\n', 'network',
+     ['boost/asio/ip/tcp.hpp', 'curl/curl.h', 'httplib.h']),
+    ('#include <aws/s3/S3Client.h>\n#include <awsx/a.h>\n#include <google/cloud/storage/client.h>\n'
+     '#include <google/protobuf/message.h>\n', 'sdk', ['aws/s3/S3Client.h', 'google/cloud/storage/client.h']),
+], ids=['cpp-db-plain-prefix', 'cpp-network', 'cpp-sdk'])
+def test_cpp_include_roots_match_the_replaced_scanner(code, category, expected, tmp_path):
+    entries = _scan('cpp', code + 'int main() { return 0; }\n', tmp_path, category)
+    assert sorted(e['name'] for e in entries) == expected
+    assert {e['type'] for e in entries} == {'include'}
 
 
 def test_import_glob_crosses_separators_and_needs_a_literal_prefix():

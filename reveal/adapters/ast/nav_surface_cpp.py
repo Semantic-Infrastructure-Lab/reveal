@@ -16,7 +16,8 @@ Other categories:
   `fopen`/`freopen`/`open` call.
 - **CLI entrypoint**: `int main(...)` — a top-level `function_definition` whose
   declarator name is `main`.
-- **network/db/sdk egress**: `#include <...>` header-path taxonomy.
+- **network/db/sdk egress**: `#include <...>` header roots, rule-driven
+  (`surface_rules_imports.py`, BACK-1334 c) through this walk's `RuleScan`.
 
 Route coverage is deliberately conservative (macro-heavy / template-heavy
 frameworks like Pistache and Drogon are not statically reachable without
@@ -27,7 +28,7 @@ guess.
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line, _add_once, normalize_cpp_macro_class_modifiers
+from .nav_surface_common import _get_text, _get_line, normalize_cpp_macro_class_modifiers
 from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
@@ -35,23 +36,6 @@ logger = logging.getLogger(__name__)
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
 from reveal.core.treesitter_compat import _zero_arg
-
-# #include header-path roots (matched as a prefix on the header path).
-_NET_HEADERS: tuple = ('curl/', 'cpr/', 'boost/asio', 'boost/beast', 'restclient',
-                       'cpp-httplib', 'httplib.h',
-                       # BSD/POSIX and Winsock sockets (BACK-1090): system headers
-                       # that the library-root list above never matched.
-                       'sys/socket.h', 'netinet/', 'arpa/inet.h', 'netdb.h',
-                       'winsock2.h', 'ws2tcpip.h')
-_DB_HEADERS: tuple = ('pqxx/', 'sqlite3', 'mysql', 'mysqlx', 'mongocxx/', 'bsoncxx/',
-                      'hiredis', 'sw/redis++', 'soci/')
-_SDK_HEADERS: tuple = ('aws/', 'google/cloud', 'stripe/')
-
-_HEADER_TAXONOMY: tuple = (
-    (_NET_HEADERS, 'network'),
-    (_DB_HEADERS, 'db'),
-    (_SDK_HEADERS, 'sdk'),
-)
 
 # cpp-httplib route verbs (title-case, as the library declares them).
 _HTTP_VERBS: Dict[str, str] = {
@@ -95,9 +79,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
         if kind in rule_kinds:
             visit(node, kind)
 
-        if kind == 'preproc_include':
-            _process_include(node, file_path, content_bytes, surfaces)
-        elif kind == 'call_expression':
+        if kind == 'call_expression':
             _process_call(node, file_path, content_bytes, surfaces)
         elif kind == 'function_definition':
             _process_function(node, file_path, content_bytes, surfaces)
@@ -127,25 +109,6 @@ def _first_string_arg(call_node: Any, content_bytes: bytes) -> Optional[str]:
         if _zero_arg(arg, 'kind') == 'string_literal':
             return _string_content(arg, content_bytes)
     return None
-
-
-def _process_include(node: Any, file_path: str, content_bytes: bytes,
-                     surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
-    header = None
-    for ch in _children(node):
-        if _zero_arg(ch, 'kind') == 'system_lib_string':
-            header = _get_text(ch, content_bytes).strip('<>')
-        elif _zero_arg(ch, 'kind') == 'string_literal':
-            header = _string_content(ch, content_bytes)
-    if not header:
-        return
-    line = _get_line(node)
-    for headers, category in _HEADER_TAXONOMY:
-        for prefix in headers:
-            if header == prefix or header.startswith(prefix):
-                _add_once(surfaces[category],
-                          {'type': 'include', 'name': header, 'file': file_path, 'line': line})
-                return
 
 
 def _process_function(node: Any, file_path: str, content_bytes: bytes,

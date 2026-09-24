@@ -62,7 +62,7 @@ _HAND_CODED: Dict[str, frozenset] = {
     'ruby': frozenset({'http', 'env'}),
     'go': frozenset({'cli', 'http'}),
     'rust': frozenset({'cli', 'http'}),
-    'cpp': frozenset({'cli', 'http', 'env', 'fs', *_IMPORT_TAXONOMY}),
+    'cpp': frozenset({'cli', 'http', 'env', 'fs'}),
 }
 
 # Nothing is declared impossible yet: every category has a plausible form in every
