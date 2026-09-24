@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
-from .core import node_children, tree_root
+from .core import tree_root
 from .core.treesitter_compat import _zero_arg
 
 if TYPE_CHECKING:
@@ -158,7 +158,14 @@ def _resolve_func_node(analyzer, element: str):
         (func_node, func_start, func_end) or exits with an error message.
     """
     from .display.element import _parse_element_syntax  # noqa: I006
-    func_node = _find_element_node(analyzer, element)
+    from .element_resolve import ambiguity_note, describe_candidates  # noqa: I006
+    resolution = _resolve_element(analyzer, element) if element else None
+    func_node = resolution.node if resolution is not None else None
+    # BACK-1400: say which definition the nav flag is analyzing when the name
+    # has several; stderr, so --format json stdout stays parseable.
+    if resolution is not None and resolution.ambiguous:
+        for line in ambiguity_note(analyzer.path, element, describe_candidates(analyzer, resolution, element)):
+            print(line, file=sys.stderr)
     if func_node is None:
         syntax = _parse_element_syntax(element) if element else None
         if syntax and syntax['type'] == 'line':
@@ -237,108 +244,32 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
             return
 
 
-def _find_hierarchical_element_node(analyzer, element: str):
-    """Resolve 'Parent.child' syntax to a tree-sitter node, or None.
+def _resolve_element(analyzer, element: str):
+    """Resolve a function/method name for nav flags to an element_resolve.Resolution.
 
-    Split out of _find_element_node to keep that dispatcher short; also the
-    natural home for language-specific fallbacks like Go's receiver methods.
+    Supports bare names ('my_func') and Class.method syntax ('MyClass.my_method').
+    Functions before types: a nav flag on `Foo` in Java means the method or
+    constructor, not the class body. JS-family `const f = (...) => {}` values
+    and test-callback labels come last (element_resolve._unnamed_kind_matches).
+    Returns None when nothing named matches.
     """
-    from .treesitter import PARENT_NODE_TYPES  # noqa: I006
-    from .display.element import _find_child_in_subtree, _go_receiver_method_node  # noqa: I006
+    from .element_resolve import TYPE_TIER, resolve_bare_name, resolve_path  # noqa: I006
+    from .treesitter import ELEMENT_TYPE_MAP  # noqa: I006
 
-    parent_name, child_name = element.split('.', 1)
-    for node_type in PARENT_NODE_TYPES:
-        for parent_node in analyzer._find_nodes_by_type(node_type):
-            if analyzer._get_node_name(parent_node) == parent_name:
-                child = _find_child_in_subtree(analyzer, parent_node, child_name)
-                if child:
-                    return child
-
-    # Go receiver methods (BACK-451): method_declaration is a top-level
-    # node, not an AST child of its receiver struct, so the containment
-    # walk above can never find it — matched by receiver-type text instead.
-    # Same resolver display/element.py uses for plain element extraction,
-    # shared here so the two by-name paths can't drift (BACK-530 precedent).
-    if getattr(analyzer, 'language', None) == 'go':
-        return _go_receiver_method_node(analyzer, parent_name, child_name)
-    return None
-
-
-def _pick_best_candidate(candidates, analyzer=None):
-    """Disambiguate multiple same-named nodes (overloads, abstract+override
-    pairs) by preferring one with a real 'block'-kind body over a bodyless
-    signature (abstract/interface) or an expression-bodied one (BACK-650).
-
-    Falls back to the first tree-order candidate when every candidate is
-    equally block-bodied (true overloads with no signal to disambiguate) or
-    equally bodyless — same shape as the pre-fix behavior for that case.
-
-    BACK-729: Dart's `function_signature`/`function_body` pair are disjoint
-    SIBLINGS, not parent/child (see treesitter.py:_function_end_node's
-    docstring) — the plain 'block'-child scan below can never see a Dart
-    method's real body, so an interface+impl same-name pair (e.g. an
-    abstract `int parse(String input);` and its concrete override) always
-    fell through to the first tree-order candidate, which is the bodyless
-    abstract signature (found live: `reveal file.dart parse` resolved to
-    the 1-line abstract declaration, never the implementation). When an
-    analyzer with `_function_end_node` is available, resolve each
-    candidate's paired body first — for Dart this walks to the sibling
-    `function_body`; for every other language `_function_end_node` is a
-    no-op (returns the same node), so this changes nothing for them.
-    """
-    if len(candidates) == 1:
-        return candidates[0]
-    end_node = getattr(analyzer, '_function_end_node', None)
-    for node in candidates:
-        if end_node is not None:
-            body = end_node(node)
-            if body is not node and _zero_arg(body, 'kind') == 'function_body':
-                return node
-        if any(_zero_arg(child, 'kind') == 'block' for child in node_children(node)):
-            return node
-    return candidates[0]
+    if '.' in element:
+        return resolve_path(analyzer, element)
+    return resolve_bare_name(analyzer, element, (ELEMENT_TYPE_MAP['function'], TYPE_TIER))
 
 
 def _find_element_node(analyzer, element: str):
     """Find and return the tree-sitter node for a named function/method.
 
     Supports bare names ('my_func') and Class.method syntax ('MyClass.my_method').
-    Returns the node or None if not found.
+    Returns the node or None if not found. An ambiguous name returns the same
+    pick element extraction shows; _resolve_func_node reports the others.
     """
-    from .treesitter import ELEMENT_TYPE_MAP  # noqa: I006
-
-    if '.' in element:
-        return _find_hierarchical_element_node(analyzer, element)
-
-    for category in ('function', 'class'):
-        for node_type in ELEMENT_TYPE_MAP.get(category, []):
-            candidates = [
-                node for node in analyzer._find_nodes_by_type(node_type)
-                if analyzer._get_node_name(node) == element
-            ]
-            if candidates:
-                return _pick_best_candidate(candidates, analyzer)
-
-    # JS-family `const f = (...) => {}` — not a FUNCTION_NODE_TYPES member at
-    # all (it's a filtered variable_declarator, not a flat kind match), so it
-    # needs its own resolver (BACK-431 Issue G tier B dogfood audit: found via
-    # real excalidraw/.tsx source, reproduces on plain .ts/.js too).
-    find_arrow_fn = getattr(analyzer, '_find_named_function_value', None)
-    if find_arrow_fn is not None:
-        node = find_arrow_fn(element)
-        if node is not None:
-            return node
-
-    # TS/TSX Jest/Vitest test-callback labels (`describe(foo)`, `test(...)`) —
-    # listed by get_structure()/--outline, so nav-flag lookup must resolve the
-    # same label too (BACK-530, same divergence class as the arrow case above).
-    find_test_cb = getattr(analyzer, '_find_named_test_callback', None)
-    if find_test_cb is not None:
-        node = find_test_cb(element)
-        if node is not None:
-            return node
-
-    return None
+    resolution = _resolve_element(analyzer, element)
+    return resolution.node if resolution is not None else None
 
 
 def _dispatch_special_flags(analyzer, path: str, output_format: str, args, config) -> bool:

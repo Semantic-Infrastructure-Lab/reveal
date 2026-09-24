@@ -5,10 +5,10 @@ import sys
 from typing import Optional, cast
 
 from reveal.base import FileAnalyzer
-from reveal.treesitter import (
-    ELEMENT_TYPE_MAP, PARENT_NODE_TYPES, CHILD_NODE_TYPES, ALL_ELEMENT_NODE_TYPES
+from reveal.element_resolve import (
+    TYPE_TIER, Resolution, ambiguity_note, describe_candidates, resolve_bare_name, resolve_path,
 )
-from reveal.core import node_children as _children
+from reveal.treesitter import ELEMENT_TYPE_MAP, ALL_ELEMENT_NODE_TYPES
 from reveal.core.treesitter_compat import _zero_arg
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
 
@@ -105,10 +105,10 @@ def _parse_element_syntax(element: str):
             'end_line': None
         }
 
-    # Check for hierarchical extraction (Class.method syntax)
-    # Require identifier.identifier: both parts must be bare identifiers (no spaces),
+    # Check for hierarchical extraction (Class.method, Outer.Inner.method)
+    # Require identifier(.identifier)+: every part a bare identifier (no spaces),
     # not version strings like [0.50.0] or v1.2.3, and not headings like "rr.php sentinel locking"
-    if '.' in element and re.match(r'^[A-Za-z_]\w*\.[A-Za-z_]\w*$', element):
+    if '.' in element and re.match(r'^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+$', element):
         return {'type': 'hierarchical'}
 
     # Default: name-based extraction
@@ -155,8 +155,12 @@ def _extract_by_syntax(analyzer, element: str, syntax: dict):
     elif syntax_type == 'hierarchical':
         from ..treesitter import TreeSitterAnalyzer
         if isinstance(analyzer, TreeSitterAnalyzer) and analyzer.tree:
-            return _extract_hierarchical_element(analyzer, element)
-        return None
+            result = _extract_hierarchical_element(analyzer, element)
+            if result:
+                return result
+        # Not a member path after all: a dotted name the analyzer knows as-is
+        # (a markdown heading `setup.py`, a JSON key `a.b`).
+        return _extract_by_name(analyzer, element)
 
     else:  # name-based extraction
         return _extract_by_name(analyzer, element)
@@ -175,13 +179,57 @@ def _extract_by_name(analyzer, element: str):
     from ..treesitter import TreeSitterAnalyzer
 
     # Try tree-sitter first if available
-    if isinstance(analyzer, TreeSitterAnalyzer) and analyzer.tree:
+    is_treesitter = isinstance(analyzer, TreeSitterAnalyzer) and analyzer.tree
+    if is_treesitter:
         result = _try_treesitter_extraction(analyzer, element)
         if result:
             return result
 
-    # Fallback to grep-based extraction
-    return _try_grep_extraction(analyzer, element)
+    # Fallback to the analyzer's own extract_element (markdown sections, ...)
+    result = _try_grep_extraction(analyzer, element)
+    if result or not is_treesitter:
+        return result
+    # Last: anything the outline lists by this name. After the analyzer's own
+    # extractor, never before it -- a markdown heading's outline item spans
+    # only the heading line, while its section extractor returns the section.
+    return _extract_listed_item(analyzer, element)
+
+
+# Bare-name tiers for display extraction, first tier with a match wins (see
+# element_resolve.resolve_bare_name). Types before functions, so `reveal
+# A.java Foo` is the class, not its constructor; structs after functions, so
+# C's `stat` is the function, not `struct stat`.
+_DISPLAY_NAME_TIERS = (
+    TYPE_TIER,
+    ELEMENT_TYPE_MAP['function'],
+    ELEMENT_TYPE_MAP['struct'],
+    ('section',), ('server',), ('location',), ('upstream',),
+)
+
+
+def _element_from_resolution(analyzer, resolution: Resolution, element: str):
+    """Element dict for a resolved node, carrying every candidate when the name
+    was ambiguous (BACK-1400) so each surface can say so."""
+    node = resolution.node
+    # Dart: node may be a function_signature whose body lives in a disjoint
+    # sibling (TreeSitterAnalyzer._function_end_node); every other language's
+    # node already spans its own body.
+    end_node = getattr(analyzer, '_function_end_node', lambda n: n)(node)
+    source = (
+        analyzer._get_node_text(node) if end_node is node
+        else analyzer._get_text_span(
+            _zero_arg(node, 'start_byte'), _zero_arg(end_node, 'end_byte')
+        )
+    )
+    result = {
+        'name': element,
+        'line_start': _zero_arg(node, 'start_position').row + 1,
+        'line_end': _zero_arg(end_node, 'end_position').row + 1,
+        'source': source,
+    }
+    if resolution.ambiguous:
+        result['candidates'] = describe_candidates(analyzer, resolution, element)
+    return result
 
 
 def _try_treesitter_extraction(analyzer, element: str):
@@ -194,71 +242,49 @@ def _try_treesitter_extraction(analyzer, element: str):
     Returns:
         Element dict or None if not found
     """
-    for element_type in ['class', 'function', 'struct', 'section', 'server', 'location', 'upstream']:
-        node_types = ELEMENT_TYPE_MAP.get(element_type, [element_type])
-        for node_type in node_types:
-            node = _find_named_node(analyzer, node_type, element)
-            if node:
-                # Dart: node may be a function_signature whose body lives in
-                # a disjoint sibling (TreeSitterAnalyzer._function_end_node);
-                # every other language's node already spans its own body.
-                end_node = getattr(analyzer, '_function_end_node', lambda n: n)(node)
-                source = (
-                    analyzer._get_node_text(node) if end_node is node
-                    else analyzer._get_text_span(
-                        _zero_arg(node, 'start_byte'), _zero_arg(end_node, 'end_byte')
-                    )
-                )
-                return {
-                    'name': element,
-                    'line_start': _zero_arg(node, 'start_position').row + 1,
-                    'line_end': _zero_arg(end_node, 'end_position').row + 1,
-                    'source': source,
-                }
-
-    # JS-family `const f = (...) => {}` — see TreeSitterAnalyzer
-    # ._find_named_function_value (BACK-431 Issue G tier B dogfood audit).
-    find_arrow_fn = getattr(analyzer, '_find_named_function_value', None)
-    if find_arrow_fn is not None:
-        node = find_arrow_fn(element)
-        if node is not None:
-            return {
-                'name': element,
-                'line_start': _zero_arg(node, 'start_position').row + 1,
-                'line_end': _zero_arg(node, 'end_position').row + 1,
-                'source': analyzer._get_node_text(node),
-            }
-
-    # TS/TSX Jest/Vitest test-callback labels (`describe(foo)`, `test(...)`) —
-    # get_structure()/--outline lists them (typescript._extract_test_callbacks),
-    # so by-name extraction must resolve the same label (BACK-530).
-    find_test_cb = getattr(analyzer, '_find_named_test_callback', None)
-    if find_test_cb is not None:
-        node = find_test_cb(element)
-        if node is not None:
-            return {
-                'name': element,
-                'line_start': _zero_arg(node, 'start_position').row + 1,
-                'line_end': _zero_arg(node, 'end_position').row + 1,
-                'source': analyzer._get_node_text(node),
-            }
-    return None
-
-
-def _find_named_node(analyzer, node_type: str, name: str):
-    """Find node of node_type whose name matches name, or None.
-
-    BACK-771: disambiguates same-named candidates (e.g. an abstract
-    interface method and its concrete override) the same way
-    file_handler._find_element_node does — first-tree-order-match alone
-    always picked the bodyless signature over the real implementation.
-    """
-    from ..file_handler import _pick_best_candidate  # noqa: I006 — deferred, avoids display/file_handler cycle
-
-    candidates = [n for n in analyzer._find_nodes_by_type(node_type) if analyzer._get_node_name(n) == name]
-    if not candidates:
+    # Named node kinds, then JS-family `const f = (...) => {}` values and
+    # test-callback labels (element_resolve._unnamed_kind_matches).
+    resolution = resolve_bare_name(analyzer, element, _DISPLAY_NAME_TIERS)
+    if resolution is None:
         return None
-    return _pick_best_candidate(candidates, analyzer)
+    return _element_from_resolution(analyzer, resolution, element)
+
+
+def _extract_listed_item(analyzer, element: str):
+    """Last resort: an item the outline lists under this exact name.
+
+    BACK-1400: the outline is the addressing contract -- if `reveal file`
+    lists it, `reveal file NAME` must return it. Analyzer-specific categories
+    have no node kind in the tiers above (Go `interfaces`, a `type_spec`'s
+    sibling-named `interface_type`), so `reveal fifo.go Queue` answered "not
+    found" for an interface printed one command earlier.
+    """
+    structure = _get_analyzer_structure(analyzer)
+    if not structure:
+        return None
+    matches = [
+        (category, item)
+        for category, items in structure.items()
+        if category != 'imports' and isinstance(items, list)
+        for item in items
+        if isinstance(item, dict) and item.get('name') == element
+    ]
+    if not matches:
+        return None
+    matches.sort(key=lambda m: m[1].get('line', m[1].get('line_start', 0)))
+    category, item = matches[0]
+    result = _build_element_from_item(analyzer, item, category, 1)
+    if len(matches) > 1:
+        candidates = []
+        for _, m_item in matches:
+            start = m_item.get('line', m_item.get('line_start', 1))
+            end = m_item.get('line_end', start)
+            candidates.append({
+                'name': m_item['name'], 'line_start': start, 'line_end': end,
+                'address': f':{start}-{end}', 'selected': m_item is item,
+            })
+        result['candidates'] = candidates
+    return result
 
 
 def _try_grep_extraction(analyzer, element: str):
@@ -392,117 +418,21 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
     _output_result(analyzer, result, element, output_format, config)
 
 
-def _find_child_in_subtree(analyzer, node, target_name: str):
-    """Recursively search for a named child node within a subtree."""
-    for child in _children(node):
-        if _zero_arg(child, 'kind') in CHILD_NODE_TYPES:
-            if analyzer._get_node_name(child) == target_name:
-                return child
-        result = _find_child_in_subtree(analyzer, child, target_name)
-        if result:
-            return result
-    return None
-
-
-def _go_receiver_method_node(analyzer, parent_name: str, child_name: str):
-    """Find a Go receiver method by receiver-type text match (BACK-451).
-
-    Go has no `Class.method` OOP shape: `func (b *Batch) Run(...)` is a
-    top-level `method_declaration`, not an AST child of the `Batch` struct's
-    node — the generic PARENT_NODE_TYPES/CHILD_NODE_TYPES containment walk
-    that works for every other class-shaped language can never find it.
-    Instead, scan `method_declaration` nodes directly and match the
-    receiver's type name (first `parameter_list`, unwrapping `pointer_type`
-    for `*Batch` receivers) against `parent_name`.
-    """
-    for node in analyzer._find_nodes_by_type('method_declaration'):
-        if analyzer._get_node_name(node) != child_name:
-            continue
-        receiver_type = _go_receiver_type_name(analyzer, node)
-        if receiver_type == parent_name:
-            return node
-    return None
-
-
-def _go_receiver_type_name(analyzer, method_node) -> Optional[str]:
-    """Extract the receiver's type identifier from a Go method_declaration."""
-    for child in _children(method_node):
-        if _zero_arg(child, 'kind') != 'parameter_list':
-            continue
-        for param in _children(child):
-            if _zero_arg(param, 'kind') != 'parameter_declaration':
-                continue
-            for part in _children(param):
-                kind = _zero_arg(part, 'kind')
-                if kind == 'type_identifier':
-                    return analyzer._get_node_text(part)
-                if kind == 'pointer_type':
-                    for inner in _children(part):
-                        if _zero_arg(inner, 'kind') == 'type_identifier':
-                            return analyzer._get_node_text(inner)
-        # Only the first parameter_list is the receiver.
-        break
-    return None
-
-
 def _extract_hierarchical_element(analyzer, element: str):
-    """Extract an element using hierarchical syntax (Class.method).
+    """Extract an element using hierarchical syntax (Class.method, Outer.Inner.method).
 
     Args:
         analyzer: TreeSitterAnalyzer instance
         element: Hierarchical element name like "MyClass.my_method"
 
     Returns:
-        Element dict with name, line_start, line_end, source
-        or None if not found
+        Element dict with name, line_start, line_end, source (and candidates
+        when several definitions match) or None if not found
     """
-    parts = element.split('.')
-    if len(parts) != 2:
+    resolution = resolve_path(analyzer, element)
+    if resolution is None:
         return None
-
-    parent_name, child_name = parts
-
-    parent_node = None
-    for node_type in PARENT_NODE_TYPES:
-        for node in analyzer._find_nodes_by_type(node_type):
-            if analyzer._get_node_name(node) == parent_name:
-                parent_node = node
-                break
-        if parent_node:
-            break
-
-    if not parent_node:
-        if getattr(analyzer, 'language', None) == 'go':
-            child_node = _go_receiver_method_node(analyzer, parent_name, child_name)
-            if child_node:
-                return {
-                    'name': element,
-                    'line_start': _zero_arg(child_node, 'start_position').row + 1,
-                    'line_end': _zero_arg(child_node, 'end_position').row + 1,
-                    'source': analyzer._get_node_text(child_node),
-                }
-        return None
-
-    child_node = _find_child_in_subtree(analyzer, parent_node, child_name)
-    if not child_node:
-        return None
-
-    # Dart methods: child_node is function_signature, whose body lives in a
-    # disjoint sibling (see TreeSitterAnalyzer._function_end_node) — every
-    # other language's child_node already spans its own body.
-    end_node = getattr(analyzer, '_function_end_node', lambda n: n)(child_node)
-    source = (
-        analyzer._get_node_text(child_node) if end_node is child_node
-        else analyzer._get_text_span(
-            _zero_arg(child_node, 'start_byte'), _zero_arg(end_node, 'end_byte')
-        )
-    )
-    return {
-        'name': element,
-        'line_start': _zero_arg(child_node, 'start_position').row + 1,
-        'line_end': _zero_arg(end_node, 'end_position').row + 1,
-        'source': source,
-    }
+    return _element_from_resolution(analyzer, resolution, element)
 
 
 def _extract_element_at_line(analyzer, target_line: int):
@@ -860,6 +790,12 @@ def _output_result(analyzer, result, element: str, output_format: str, config=No
     name = result.get('name', element)
     match_count = result.get('match_count')
 
+    # BACK-1400: an ambiguous name used to return the first definition
+    # silently. stderr keeps stdout the unchanged extracted source.
+    if result.get('candidates'):
+        for line in ambiguity_note(path, element, result['candidates']):
+            print(line, file=sys.stderr)
+
     # Match count prefix for multi-section results
     if match_count and match_count > 1 and output_format not in ('json', 'grep'):
         print(f"# {match_count} sections matched \"{name}\" — showing all\n")
@@ -885,7 +821,6 @@ def _output_result(analyzer, result, element: str, output_format: str, config=No
         line_count = line_end - line_start + 1
         next_section = result.get('next_section')
         if next_section and line_count <= 5 and output_format not in ('json', 'grep'):
-            import sys
             print(f"\n⚠ Short result ({line_count} lines) — this section may be a label only.",
                   file=sys.stderr)
             print(f"   Next section: {next_section['name']} (line {next_section['line']})",

@@ -278,15 +278,19 @@ class TestExtractionRouting:
         finally:
             os.unlink(temp_path)
 
-    def test_hierarchical_returns_none_without_treesitter(self):
-        """Test hierarchical extraction returns None without TreeSitter."""
-        analyzer = Mock()
+    def test_hierarchical_without_treesitter_asks_the_analyzer_by_name(self):
+        """A dotted element on a non-tree-sitter analyzer is not a member path
+        it can walk; the analyzer's own by-name extractor gets the literal name
+        (BACK-1400: a YAML/JSON key `db.url` used to be "not found")."""
+        analyzer = Mock(spec=['tree', 'extract_element'])
         analyzer.tree = None
+        analyzer.extract_element.side_effect = (
+            lambda kind, name: {'name': name} if kind == 'function' else None)
 
-        syntax = {'type': 'hierarchical'}
-        result = _extract_by_syntax(analyzer, 'Class.method', syntax)
+        result = _extract_by_syntax(analyzer, 'db.url', {'type': 'hierarchical'})
 
-        assert result is None
+        assert result == {'name': 'db.url'}
+        analyzer.extract_element.assert_any_call('function', 'db.url')
 
     def test_route_to_name_based_extraction(self):
         """Test routing to name-based extraction."""
@@ -459,10 +463,12 @@ class TestErrorHandling:
 class TestHierarchicalExtraction:
     """Test _extract_hierarchical_element (Class.method syntax)."""
 
-    def test_hierarchical_multi_level_returns_none(self):
-        """Test multi-level hierarchy (Class.Inner.method) returns None."""
+    def test_hierarchical_multi_level(self):
+        """Outer.Inner.method resolves (BACK-1400: AGENT_HELP documented it, the
+        code only took two levels); a wrong outer name does not."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-            f.write('class Outer:\n    class Inner:\n        def deep(): pass\n')
+            f.write('class Outer:\n    class Inner:\n        def deep(): pass\n'
+                    'class Other:\n    class Inner:\n        def deep(): pass\n')
             f.flush()
             temp_path = f.name
 
@@ -471,9 +477,9 @@ class TestHierarchicalExtraction:
             analyzer_class = get_analyzer(temp_path)
             analyzer = analyzer_class(temp_path)
 
-            # Only supports single-level hierarchy
-            result = _extract_hierarchical_element(analyzer, 'Outer.Inner.deep')
-            assert result is None
+            result = _extract_hierarchical_element(analyzer, 'Other.Inner.deep')
+            assert (result['line_start'], 'candidates' in result) == (6, False)
+            assert _extract_hierarchical_element(analyzer, 'Nope.Inner.deep') is None
         finally:
             os.unlink(temp_path)
 

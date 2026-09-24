@@ -640,6 +640,8 @@ reveal app.py DatabaseHandler          # Extract class by name
 # Hierarchical (nested elements)
 reveal app.py DatabaseHandler.connect  # Extract method within class
 reveal app.py Outer.Inner.method       # Multiple nesting levels
+reveal lib.rs Foo.bar                  # Rust: method in any `impl Foo` / `impl Trait for Foo`
+reveal io.cpp FileAccess.get_bytes     # C++: out-of-line `FileAccess::get_bytes` (bare name works too)
 
 # By line number (from grep, error messages, stack traces)
 reveal app.py 73                       # Element at line 73 (or ±10 context window)
@@ -653,6 +655,18 @@ reveal app.py @3                       # Third element
 # By type + position
 reveal app.py function:2               # Second function
 reveal app.py class:1                  # First class
+```
+
+**Ambiguous names:** a name defined more than once (same-named methods in two
+classes, Java overloads, one trait method per `impl`) returns the first
+definition, with a stderr note listing every definition and an address that
+picks it: the qualified name when that is unique, else its exact `:START-END`
+span, which works for nav flags as well. JSON output carries the same list as
+`candidates`, and MCP `reveal_element` appends the note.
+```
+Note: 'pop' matches 2 definitions; showing A.pop (line 2). To pick one:
+  reveal a.py A.pop   # line 2
+  reveal a.py B.pop   # line 4
 ```
 
 **When to use each:**
@@ -675,8 +689,9 @@ reveal app.py --tail 5                 # Last 5 functions (where bugs cluster!)
 # Extract multiple functions (with --format=json)
 reveal app.py --format=json | jq '.structure.functions[]? | select(.name | test("^handle_"))'
 
-# Extract function with its decorators
-reveal app.py decorated_function       # Automatically includes @decorators
+# Extract a decorated function: extraction starts at `def`, the outline's
+# line number starts at the decorator -- use that range to include it
+reveal app.py :47-50
 ```
 
 **Hierarchical view (--outline):**

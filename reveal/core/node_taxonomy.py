@@ -315,6 +315,35 @@ STRUCT_NODES: frozenset = frozenset({
 # block was silently dropped from --scope's ancestor chain).
 IMPL_NODES: frozenset = frozenset({'impl_item'})
 LAMBDA_NODES: frozenset = frozenset({'lambda'})
+# BACK-1400: type declarations that own members but are neither a class, a
+# struct nor an impl. Element extraction needs them twice: as the `Parent` in
+# `Parent.member` (`Metadata.isMetadata` on a Java nested enum was "not
+# found") and as a bare-name target (`Metadata` resolved to the enum's
+# constructor, a function, because no type tier knew the enum). Kinds and
+# names verified per grammar with tree-sitter-language-pack. Kotlin's `object`
+# is absent on purpose: a top-level `object Obj {}` parses as
+# infix_expression, not object_declaration. Not part of FUNCTION_TYPES, so
+# --scope's ancestor chain is unchanged.
+TYPE_DECL_NODES: frozenset = frozenset({
+    'interface_declaration',  # Java, C#, PHP, TypeScript
+    'enum_declaration',       # Java, C#, PHP, TypeScript, Dart
+    'enum_item',              # Rust
+    'trait_item',             # Rust (default method bodies)
+    'trait_declaration',      # PHP
+    'trait_definition',       # Scala
+    'object_definition',      # Scala
+    'enum_definition',        # Scala 3
+    'protocol_declaration',   # Swift
+    'mixin_declaration',      # Dart
+    'extension_declaration',  # Dart
+    'internal_module',        # TypeScript `namespace NS {}`
+})
+# Every node kind that can be the `Parent` of `Parent.member` extraction.
+# 'module' is Ruby's module (Python's root is also 'module', but it has no
+# name, so it never matches a parent name).
+MEMBER_CONTAINER_NODES: frozenset = (
+    CLASS_NODES | STRUCT_NODES | IMPL_NODES | TYPE_DECL_NODES | frozenset({'module'})
+)
 
 RETURN_NODES: frozenset = frozenset({'return_statement', 'return'})
 RAISE_NODES: frozenset = frozenset({'raise_statement', 'raise'})

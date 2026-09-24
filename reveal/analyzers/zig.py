@@ -321,8 +321,9 @@ class ZigAnalyzer(TreeSitterAnalyzer):
                             'source': self._get_node_text(decl_node),
                         }
         if element_type == 'test' and self.tree:
-            test_node = self._find_named_test_callback(name)
-            if test_node is not None:
+            test_nodes = self._find_named_test_callbacks(name)
+            if test_nodes:
+                test_node = test_nodes[0]
                 return {
                     'name': name,
                     'line_start': _zero_arg(test_node, 'start_position').row + 1,
@@ -357,20 +358,19 @@ class ZigAnalyzer(TreeSitterAnalyzer):
                 })
         return tests
 
-    def _find_named_test_callback(self, name: str):
-        """Resolve a Zig `test "name" {}` block back to its `TestDecl` node.
+    def _find_named_test_callbacks(self, name: str) -> List[Any]:
+        """Resolve a Zig `test "name" {}` block back to its `TestDecl` node(s),
+        every same-named one in tree order (BACK-1400).
 
-        Generic hook name shared with TypeScript's Jest/Vitest resolver
-        (`typescript.py:_find_named_test_callback`) — `display/element.py`'s
-        `_try_treesitter_extraction` already looks for this method on any
-        analyzer via `getattr`, so implementing it is enough to make
+        Generic hook name shared with the JS/TS Jest/Vitest resolver
+        (`_js_test_callbacks.py`) — `element_resolve._unnamed_kind_matches`
+        looks for this method on any analyzer via `getattr`, so implementing
+        it is enough to make
         `reveal file.zig "test name"` resolve exactly what `--outline`
         lists (BACK-661: previously the outline advertised all 62 test names
         as addressable handles that direct extraction then rejected, because
         'test'/'TestDecl' was never in `ELEMENT_TYPE_MAP`/`FUNCTION_NODE_TYPES`
         and this hook didn't exist for Zig).
         """
-        for test_node in self._find_nodes_by_type('TestDecl'):
-            if self._get_test_name(test_node) == name:
-                return test_node
-        return None
+        return [test_node for test_node in self._find_nodes_by_type('TestDecl')
+                if self._get_test_name(test_node) == name]

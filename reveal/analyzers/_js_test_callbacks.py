@@ -11,7 +11,7 @@ finds declarations) never sees them at all — not merely unaddressable, but
 invisible to `get_structure()`/`--outline` entirely.
 """
 
-from typing import Any, Dict, List
+from typing import Any, List
 from ..reveal_types import StructureItem
 from ..core import node_children as _children
 from ..core.treesitter_compat import _zero_arg
@@ -32,7 +32,7 @@ class JSTestCallbackMixin:
 
         The single source of truth for the synthetic label, shared by
         :meth:`_extract_test_callbacks` (structure/``--outline``) and
-        :meth:`_find_named_test_callback` (by-name ``reveal file <label>``
+        :meth:`_find_named_test_callbacks` (by-name ``reveal file <label>``
         resolution). BACK-530: these two paths previously synthesized — and
         would have had to keep re-synthesizing — the label independently; a
         lone enumerator makes the "outline lists it" and "by-name resolves
@@ -81,15 +81,12 @@ class JSTestCallbackMixin:
             callbacks.append(func)
         return callbacks
 
-    def _find_named_test_callback(self, name: str):
+    def _find_named_test_callbacks(self, name: str) -> List[Any]:
         """Resolve a synthetic test-callback label (``describe(foo)``,
         ``test(does a thing)``, or a bare ``beforeEach``) back to its callback
-        node, so ``reveal file '<label>'`` resolves exactly what ``--outline``
-        lists (BACK-530). Wired into both by-name resolvers
-        (``display.element._try_treesitter_extraction`` and
-        ``file_handler._find_element_node``), mirroring
-        ``_find_named_function_value``'s BACK-527 fix."""
-        for cb_name, node in self._iter_test_callbacks():
-            if cb_name == name:
-                return node
-        return None
+        node(s), so ``reveal file '<label>'`` resolves exactly what
+        ``--outline`` lists (BACK-530). Every same-labeled callback, in tree
+        order: a label repeated across ``describe`` blocks is disclosed as
+        ambiguous, not silently the first (BACK-1400). Read by
+        ``element_resolve.resolve_bare_name``."""
+        return [node for cb_name, node in self._iter_test_callbacks() if cb_name == name]

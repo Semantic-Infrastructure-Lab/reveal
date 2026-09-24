@@ -600,8 +600,8 @@ class TestBack650OverloadDisambiguation(unittest.TestCase):
             )  # first Write(string s), line 3
 
     def test_pick_best_candidate_single_candidate_returned_directly(self):
-        from reveal.file_handler import _pick_best_candidate
-        self.assertEqual(_pick_best_candidate(['only']), 'only')
+        from reveal.element_resolve import pick_best_candidate
+        self.assertEqual(pick_best_candidate(['only']), 'only')
 
     def test_dart_abstract_and_override_same_name_resolves_to_override(self):
         # BACK-729: the plain 'block'-child scan above can never see a Dart
@@ -638,15 +638,16 @@ class TestBack650OverloadDisambiguation(unittest.TestCase):
             self.assertEqual(_zero_arg(node, 'start_position').row, 6)  # 0-indexed: line 7
 
     def test_dart_abstract_and_override_same_name_bare_extraction_resolves_to_override(self):
-        # BACK-771: display.element._find_named_node (the bare `reveal
-        # file.dart name` extraction path, independent of file_handler's
-        # _find_element_node fixed by BACK-729) had zero disambiguation --
-        # plain next(...) over tree-order always returned the first match,
-        # the bodyless abstract signature, never the concrete override.
+        # BACK-771: the bare `reveal file.dart name` extraction path
+        # (independent of file_handler's _find_element_node fixed by BACK-729)
+        # had zero disambiguation -- plain next(...) over tree-order always
+        # returned the first match, the bodyless abstract signature, never
+        # the concrete override. Both paths share element_resolve since
+        # BACK-1400; the abstract signature is still disclosed as a candidate.
         import pathlib
         import tempfile
         from reveal.analyzers.dart import DartAnalyzer
-        from reveal.display.element import _find_named_node
+        from reveal.display.element import _try_treesitter_extraction
         with tempfile.TemporaryDirectory() as d:
             f = pathlib.Path(d) / 'parser.dart'
             f.write_text(
@@ -662,12 +663,16 @@ class TestBack650OverloadDisambiguation(unittest.TestCase):
                 "}\n"
             )
             analyzer = DartAnalyzer(str(f))
-            node = _find_named_node(analyzer, 'function_signature', 'parse')
-            self.assertIsNotNone(node)
+            result = _try_treesitter_extraction(analyzer, 'parse')
+            self.assertIsNotNone(result)
             # Regression: pre-fix, this returned the abstract signature at
             # line 2 (a 1-line node with no sibling body), not the real
             # implementation at line 7-9.
-            self.assertEqual(_zero_arg(node, 'start_position').row, 6)  # 0-indexed: line 7
+            self.assertEqual((result['line_start'], result['line_end']), (7, 9))
+            self.assertEqual(
+                [(c['name'], c['selected']) for c in result['candidates']],
+                [('Parser.parse', False), ('RealParser.parse', True)],
+            )
 
 
 # ─── BACK-547 ninth loop (Rust sideeffects-recall-oracle, real-corpus

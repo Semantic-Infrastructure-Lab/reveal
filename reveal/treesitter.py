@@ -318,22 +318,11 @@ CALLEE_ATTRIBUTE_TYPES = {
     'selector_expression',   # Go: pkg.Func
 }
 
-# Parent node types for hierarchical extraction (Class.method)
-PARENT_NODE_TYPES = (
-    'class_definition', 'class_declaration',
-    'class_specifier',        # C++ class (BACK-451)
-    'struct_item', 'struct_specifier', 'struct_declaration',
-    'impl_item',              # Rust impl blocks
-    'interface_declaration',
-    'module',                 # Ruby module
-    'class',                  # Ruby class (BACK-451/477: was missing entirely,
-                               # so Class.method always failed for Ruby classes
-                               # regardless of CHILD_NODE_TYPES — verified via
-                               # direct tree-sitter inspection, `class Batch`
-                               # parses to kind 'class', already used elsewhere
-                               # in CLASS_NODE_TYPES but never added here)
-    'anonymous_class',        # PHP anonymous class
-)
+# Parent node types for hierarchical extraction (Class.method) are
+# node_taxonomy.MEMBER_CONTAINER_NODES, resolved in reveal/element_resolve.py
+# (BACK-1400). The hand-kept PARENT_NODE_TYPES copy that used to live here had
+# already drifted: no enums/traits/protocols, and its first-parent-wins order
+# made Rust `Foo.bar` stop at the fieldless `struct Foo` before `impl Foo`.
 
 # Child node types for hierarchical extraction (methods within classes)
 CHILD_NODE_TYPES = (
@@ -750,6 +739,14 @@ class TreeSitterAnalyzer(FileAnalyzer):
         (display.element, file_handler). Defers to the language hook; JS-family
         analyzers try `const f = () => {}` and class fields first (BACK-1280)."""
         return self._find_named_language_specific_function(name)
+
+    def _find_named_function_values(self, name: str) -> List[Any]:
+        """Every function-as-value node named `name`, in tree order. Default:
+        the single match above. JS-family analyzers override it so a
+        same-named `const handle = ...` in several scopes is disclosed as
+        ambiguous instead of silently resolving to the first (BACK-1400)."""
+        node = self._find_named_function_value(name)
+        return [node] if node is not None else []
 
     def _find_named_language_specific_function(self, name: str):
         """Hook paired with `_extract_language_specific_functions` above:

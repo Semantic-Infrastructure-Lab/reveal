@@ -43,16 +43,30 @@ def _fixture_files():
     return files
 
 
-def _enumerated_names(analyzer):
-    """Every name get_structure() advertises as a nameable element."""
+def _enumerated_items(analyzer):
+    """Every (category, name, line) get_structure() advertises as a nameable
+    element -- every category, not just functions/classes/structs (BACK-1400:
+    Go `interfaces` were listed but not extractable)."""
     structure = analyzer.get_structure()
-    names = []
-    for category in ("functions", "classes", "structs"):
-        for element in structure.get(category, []):
-            name = element.get("name")
-            if name:
-                names.append((category, name))
-    return names
+    items = []
+    for category, elements in structure.items():
+        if category == "imports" or not isinstance(elements, list):
+            continue
+        for element in elements:
+            if isinstance(element, dict) and element.get("name"):
+                line = element.get("line")
+                items.append((category, element["name"], line, element.get("line_end", line)))
+    return items
+
+
+def _names(analyzer):
+    return [(category, name) for category, name, _, _ in _enumerated_items(analyzer)]
+
+
+def _overlaps(start, end, span):
+    """Same definition: the outline counts a decorated def from its decorator
+    line, extraction from the `def`, so compare spans, not start lines."""
+    return start <= span["line_end"] and span["line_start"] <= end
 
 
 def _build(path: Path):
@@ -67,20 +81,31 @@ def _build(path: Path):
 )
 def test_every_outlined_element_is_resolvable_by_name(fixture):
     """For each fixture, every name in get_structure() resolves via the same
-    by-name extractor the CLI uses — no --outline/extraction divergence."""
+    by-name extractor the CLI uses — no --outline/extraction divergence.
+
+    BACK-1400: resolving is not enough. The listed item must be the element
+    returned, or a disclosed candidate when the name is ambiguous. Before,
+    `pop` in `A.pop`/`B.pop` "resolved" (to A.pop) while B.pop was silently
+    unreachable.
+    """
     analyzer = _build(fixture)
     assert analyzer is not None, f"no analyzer for {fixture}"
 
     unresolved = []
-    for category, name in _enumerated_names(analyzer):
+    for category, name, line, line_end in _enumerated_items(analyzer):
         syntax = _parse_element_syntax(name)
         # A name whose text parses as line/ordinal/hierarchical syntax routes
         # through a different extraction strategy by design — the divergence
         # this test guards is the bare name-based path, so only assert there.
         if syntax["type"] != "name":
             continue
-        if _extract_by_syntax(analyzer, name, syntax) is None:
+        result = _extract_by_syntax(analyzer, name, syntax)
+        if result is None:
             unresolved.append(f"{category} '{name}'")
+            continue
+        spans = [result] + result.get("candidates", [])
+        if line is not None and not any(_overlaps(line, line_end, span) for span in spans):
+            unresolved.append(f"{category} '{name}' (line {line}: neither returned nor disclosed)")
 
     assert not unresolved, (
         f"{fixture.parent.name}/{fixture.name}: get_structure() enumerated "
@@ -113,7 +138,7 @@ def test_ts_test_callback_labels_resolve(tmp_path):
     f = _write(tmp_path, "sample.test.ts", src)
     analyzer = _build(f)
 
-    names = {name for _, name in _enumerated_names(analyzer)}
+    names = {name for _, name in _names(analyzer)}
     assert 'describe(outer group)' in names
     assert 'test(does a thing (with parens))' in names
     assert 'beforeEach' in names  # no string label → bare callee name
@@ -138,7 +163,7 @@ def test_js_class_field_arrow_method_resolves(tmp_path):
     f = _write(tmp_path, "widget.js", src)
     analyzer = _build(f)
 
-    names = {name for _, name in _enumerated_names(analyzer)}
+    names = {name for _, name in _names(analyzer)}
     assert 'handleClick' in names
 
     syntax = _parse_element_syntax('handleClick')

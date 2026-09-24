@@ -355,7 +355,13 @@ def reveal_element(path: str, element: str) -> str:
     name = result.get('name', element)
 
     header = f"{path}:{line_start}-{line_end} | {name}\n"
-    return f"{header}\n{analyzer.format_with_lines(source, line_start)}"
+    body = f"{header}\n{analyzer.format_with_lines(source, line_start)}"
+    # BACK-1400: an ambiguous name must not silently return the first match;
+    # the agent gets the same note (and :LINE addresses) the CLI prints.
+    if result.get('candidates'):
+        from .element_resolve import ambiguity_note
+        body += "\n\n" + "\n".join(ambiguity_note(path, element, result['candidates']))
+    return body
 
 
 # Nav flags that take no value (boolean), derived from nav_handlers._NAV_DISPATCH

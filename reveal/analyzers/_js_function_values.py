@@ -170,6 +170,17 @@ class JSFunctionValueMixin(_Base):
              saw these (via _extract_class_field_functions), so they listed in
              --outline but `reveal file.tsx name` returned "not found".
         """
+        node = next(self._iter_named_function_values(name), None)
+        if node is not None:
+            return node
+        # 3. Language-specific fallback, no-op unless a subclass defines one.
+        return super()._find_named_function_value(name)
+
+    def _find_named_function_values(self, name: str) -> List[Any]:
+        """All matches of the two shapes above, in tree order (BACK-1400)."""
+        return list(self._iter_named_function_values(name)) or super()._find_named_function_values(name)
+
+    def _iter_named_function_values(self, name: str):
         # 1. `const name = (...) => {}`, module scope or nested
         for decl_node in self._find_nodes_by_type('lexical_declaration'):
             for child in _children(decl_node):
@@ -177,7 +188,7 @@ class JSFunctionValueMixin(_Base):
                     continue
                 name_node, value_node = self._arrow_or_fn_value(child)
                 if name_node and value_node and self._get_node_text(name_node) == name:
-                    return value_node
+                    yield value_node
 
         # 2. class-field arrow method `name = (...) => {}`
         for field_type in self._CLASS_FIELD_NODE_TYPES:
@@ -189,7 +200,4 @@ class JSFunctionValueMixin(_Base):
                     elif _zero_arg(ch, 'kind') in ('arrow_function', 'function_expression'):
                         value_node = ch
                 if name_node and value_node and self._get_node_text(name_node) == name:
-                    return value_node
-
-        # 3. Language-specific fallback, no-op unless a subclass defines one.
-        return super()._find_named_function_value(name)
+                    yield value_node
