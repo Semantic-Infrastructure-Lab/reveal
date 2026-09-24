@@ -1,5 +1,6 @@
 """Tests for depends:// adapter — inverse module dependency graph."""
 
+import json
 import textwrap
 import unittest
 from pathlib import Path
@@ -2249,6 +2250,35 @@ class TestJsonOutputDoesNotLeakAbsolutePaths:
                 assert not dep.startswith(root), dep
         modules = {m['module'] for m in r['modules']}
         assert 'pkg/utils.py' in modules
+
+    def test_file_target_source_and_target_are_relative(self, simple_pkg):
+        """BACK-1462: BACK-1214 relativized dependents[].file but left the
+        envelope's 'source' and 'target' absolute."""
+        from reveal.adapters.depends import DependsAdapter
+        r = DependsAdapter(str(simple_pkg / 'pkg' / 'utils.py')).get_structure()
+        assert r['source'] == 'pkg/utils.py'
+        assert r['target'] == 'pkg/utils.py'
+
+    def test_directory_target_source_is_relative(self, simple_pkg):
+        """BACK-1462: the directory summary's 'source' leaked too."""
+        from reveal.adapters.depends import DependsAdapter
+        r = DependsAdapter(str(simple_pkg / 'pkg')).get_structure()
+        assert not r['source'].startswith(str(simple_pkg)), r['source']
+        assert r['source'] == 'pkg'
+
+    def test_php_include_module_is_relative(self, tmp_path):
+        """BACK-1462: a PHP require/include dependent's 'module' is the
+        resolved absolute include path; it must be relativized like 'file'."""
+        from reveal.adapters.depends import DependsAdapter
+        (tmp_path / '.git').mkdir()
+        _write(tmp_path / 'lib' / 'util.php', '<?php\nfunction u() { return 1; }\n')
+        _write(tmp_path / 'index.php', "<?php\nrequire_once __DIR__ . '/lib/util.php';\n")
+        r = DependsAdapter(str(tmp_path / 'lib' / 'util.php')).get_structure()
+        assert r['count'] == 1
+        dep = r['dependents'][0]
+        assert dep['file'] == 'index.php'
+        assert dep['module'] == 'lib/util.php'
+        assert str(tmp_path) not in json.dumps(r, default=str)
 
 
 if __name__ == '__main__':

@@ -307,7 +307,9 @@ class DependsRenderer:
 
         print()
         if not verbose:
-            print(f"  Tip: reveal depends://{target} --verbose  for full import detail")
+            # BACK-1462: 'target' is scan-root-relative now, so it is not a
+            # runnable path from an arbitrary cwd -- point at the flag instead.
+            print("  Tip: re-run with --verbose  for full import detail")
             print()
         print("ℹ Import-graph analysis — dynamic imports not followed.")
         print()
@@ -1581,17 +1583,21 @@ class DependsAdapter(ResourceAdapter):
         # BACK-1214: each dependent's 'file' came from _format_import_stmt's
         # str(stmt.file_path)/str(importer), always absolute -- never
         # relativized. Same confidentiality gap as BACK-1212/BACK-1213.
+        # BACK-1462: so is 'module' when the extractor resolved it to a path
+        # (PHP require/include carries the resolved absolute include path).
         for dep in dependents:
             if dep.get('file'):
                 dep['file'] = to_relative_display(dep['file'], self._scan_root)
+            if dep.get('module') and os.path.isabs(dep['module']):
+                dep['module'] = to_relative_display(dep['module'], self._scan_root)
 
         result = ResultBuilder.create(
             result_type='module_dependents',
-            source=str(self._target_path),
+            source=to_relative_display(str(self._target_path), self._scan_root),
             contract_version=CONTRACT_VERSION,
             source_type='file',
             data={
-                'target': str(target),
+                'target': to_relative_display(str(target), self._scan_root),
                 'dependents': dependents,
                 'count': len(dependents),
                 'metadata': self.get_metadata(),
@@ -1641,7 +1647,7 @@ class DependsAdapter(ResourceAdapter):
 
         result = ResultBuilder.create(
             result_type='dependency_summary',
-            source=str(self._target_path),
+            source=to_relative_display(str(self._target_path), self._scan_root),
             contract_version=CONTRACT_VERSION,
             source_type='directory',
             data={

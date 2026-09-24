@@ -172,12 +172,16 @@ Reverse Dependency Summary: src/models/
 reveal depends://src/utils.py --format=json
 ```
 
+Every path in the output is relative to the scan root (see `root` above), including
+`source`/`target` and a PHP include's resolved `module`.
+
 File target output schema:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "module_dependents",
-  "target": "/abs/path/src/utils.py",
+  "source": "src/utils.py",
+  "target": "src/utils.py",
   "count": 3,
   "dependents": [
     {
@@ -196,12 +200,12 @@ File target output schema:
 Directory target output schema:
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "type": "dependency_summary",
-  "source": "/abs/path/src/models/",
+  "source": "src/models",
   "modules": [
     {
-      "module": "/abs/path/src/models/user.py",
+      "module": "src/models/user.py",
       "dependent_count": 4,
       "dependents": ["src/api/views.py", "src/tasks/worker.py", ...]
     }
