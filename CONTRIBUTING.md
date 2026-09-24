@@ -271,8 +271,9 @@ def extract_element(self, element_type, name):
 `open()` / `read_text()` / `write_text()` (`errors='replace'` when reading user files). Windows
 defaults to cp1252, so a bare call passes on Linux/macOS and fails on Windows CI.
 `scripts/check_text_encoding.py` blocks new offenders, and in `reveal/` a bare call fails the
-test that reaches it under `PYTHONWARNDEFAULTENCODING=1` (CI and `ci-local.sh` set it). Details in
-`internal-docs/design/ENCODING_ROBUSTNESS_2026-09-21.md`.
+test that reaches it under `PYTHONWARNDEFAULTENCODING=1` (CI and `ci-local.sh` set it). To
+reproduce a Windows encoding bug on Linux, run under the cp1252 simulator:
+`PYTHONUTF8=0 PYTHONPATH=scripts/cp1252_sim reveal check some.conf`.
 
 ```python
 # ❌ Zero-indexed lines (editors use 1-indexed)
