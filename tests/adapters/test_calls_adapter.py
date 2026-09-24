@@ -2414,6 +2414,72 @@ class TestFindCalleesRecursive(unittest.TestCase):
         entries = {e['callee']: e for e in result['levels'][0]['callees']}
         self.assertTrue(entries['helper']['resolved'])
 
+    def _two_runs(self):
+        self._write('a.py', """\
+            def run():
+                alpha()
+
+            def alpha():
+                pass
+        """)
+        self._write('b.py', """\
+            def run():
+                beta()
+
+            def beta():
+                pass
+        """)
+
+    def test_same_named_functions_are_not_merged(self):
+        # BACK-1442: the name-keyed BFS expanded every `run` once `run` was
+        # reached, so main -> run listed alpha AND beta at level 2.
+        from reveal.adapters.calls.index import find_callees_recursive
+        self._two_runs()
+        self._write('main.py', """\
+            from b import run
+
+            def main():
+                run()
+        """)
+        result = find_callees_recursive(self.tmp, 'main', depth=2)
+        level2 = [(e['caller'], e['callee']) for e in result['levels'][1]['callees']]
+        self.assertEqual(level2, [('run', 'beta')])
+        run = result['levels'][0]['callees'][0]
+        self.assertEqual((os.path.basename(run['callee_file']), run['callee_line']), ('b.py', 1))
+
+    def test_unresolvable_same_named_callee_is_ambiguous_not_expanded(self):
+        from reveal.adapters.calls.index import find_callees_recursive
+        self._two_runs()
+        self._write('main.py', """\
+            def main():
+                run()
+        """)
+        result = find_callees_recursive(self.tmp, 'main', depth=3)
+        self.assertEqual(len(result['levels']), 1)
+        run = result['levels'][0]['callees'][0]
+        self.assertTrue(run['ambiguous'])
+        self.assertEqual(sorted(os.path.basename(c['file']) for c in run['candidates']), ['a.py', 'b.py'])
+
+    def test_each_root_definition_keeps_its_own_callees(self):
+        from reveal.adapters.calls.index import find_callees_recursive
+        self._two_runs()
+        result = find_callees_recursive(self.tmp, 'run', depth=1)
+        pairs = [(os.path.basename(e['caller_file']), e['callee']) for e in result['levels'][0]['callees']]
+        self.assertEqual(pairs, [('a.py', 'alpha'), ('b.py', 'beta')])
+
+    def test_ambiguous_entry_renders_its_candidates(self):
+        from reveal.adapters.calls.index import find_callees_recursive
+        from reveal.adapters.calls.renderer import _render_callees_recursive_text
+        self._two_runs()
+        self._write('main.py', """\
+            def main():
+                run()
+        """)
+        out = io.StringIO()
+        with redirect_stdout(out):
+            _render_callees_recursive_text(find_callees_recursive(self.tmp, 'main', depth=2))
+        self.assertIn('main → run  ? [ambiguous: 2 definitions -- a.py:1, b.py:1]', out.getvalue())
+
     def test_empty_project_returns_no_levels(self):
         from reveal.adapters.calls.index import find_callees_recursive
         self._write('app.py', 'def entry():\n    pass\n')

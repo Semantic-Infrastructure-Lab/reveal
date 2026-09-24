@@ -1,5 +1,6 @@
 """Renderer for calls:// adapter output."""
 
+import os
 from typing import Any, Dict
 
 from reveal.utils import print_json_result
@@ -227,6 +228,11 @@ def _render_callees_recursive_text(data: Dict[str, Any]) -> None:
             file_path = entry.get('caller_file', '')
             line = entry.get('caller_line', '')
             status = '✓' if resolved else '✗ [external]'
+            if entry.get('ambiguous'):
+                # BACK-1442: several definitions match and none is the
+                # caller's own or imported one -- listed, not expanded.
+                where = ', '.join(f"{os.path.basename(c['file'])}:{c['line']}" for c in entry['candidates'][:5])
+                status = f"? [ambiguous: {len(entry['candidates'])} definitions -- {where}]"
             loc = f"  {file_path}:{line}" if file_path else ''
             print(f"  {caller} → {callee}  {status}{loc}")
         print()

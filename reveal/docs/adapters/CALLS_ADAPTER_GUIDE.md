@@ -155,10 +155,10 @@ callee → [(file, caller_func, line), ...]
 | `rank` | string | — | Set to `callers` to rank all functions by in-degree |
 | `uncalled` | flag | — | List dead-code candidates — functions/methods with no static callers (see [Workflow 2](#workflow-2-find-unused-functions-dead-code)) |
 | `top` | integer | 10 | Max results for `?rank=callers` or `?uncalled` (capped at 100) |
-| `depth` | integer | 1 | Transitive levels for `?target` (1 = direct only, max 5) |
+| `depth` | integer | 1 (`?root`: 2) | Transitive levels for `?target` and `?root` (1 = direct only, max 5) |
 | `builtins` | boolean | `false` | Include Python builtins in output (applies to `?callees` and `?rank=callers`) |
 | `format` | string | `text` | Output format: `text`, `json`, or `dot` |
-| `root` | string | — | Root function name for a recursive callee-tree traversal |
+| `root` | string | — | Root function name for a recursive callee-tree traversal. Each definition is walked on its own; a callee name that several definitions share, with none in the caller's file or imports, is listed as `ambiguous` with its candidates and not expanded |
 | `modules` | boolean | `false` | Build a module-level dependency graph instead of function-level |
 | `external` | boolean | `false` | Include external (non-project) modules in the `?modules` graph |
 | `test-framework` | boolean | `false` | Include test-framework entrypoints as callers in `?rank=callers` |

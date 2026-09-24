@@ -42,7 +42,7 @@ _HELP: Dict[str, Any] = {
         'uncalled': 'List all functions/methods with no callers (dead code candidates)',
         'top':      'Max results for ?rank=callers or ?uncalled (default: 10/?rank, unlimited/?uncalled)',
         'type':     'For ?uncalled: filter to "function" (module-level only) or "method"',
-        'depth':    'Transitive caller depth (default 1, max 5) — applies to ?target only',
+        'depth':    'Transitive depth, max 5 — callers for ?target (default 1), the callee tree for ?root (default 2)',
         'format':   'Output format: text (default), dot (Graphviz), or json',
         'builtins': 'Include Python builtins in callees output (default: false). '
                     'Use ?builtins=true to see len, str, sorted, ValueError, etc.',
@@ -102,7 +102,7 @@ _SCHEMA: Dict[str, Any] = {
         'uncalled': {'type': 'boolean', 'description': 'List all functions/methods with no callers (dead code candidates)'},
         'top':      {'type': 'integer', 'description': 'Max results for ?rank=callers or ?uncalled (default 10/?rank, unlimited/?uncalled)'},
         'type':     {'type': 'string',  'description': 'For ?uncalled: "function" (module-level only) or "method"'},
-        'depth':    {'type': 'integer', 'description': 'Transitive depth 1-5 (default 1), applies to ?target'},
+        'depth':    {'type': 'integer', 'description': 'Transitive depth 1-5: ?target callers (default 1), ?root callee tree (default 2)'},
         'format':   {'type': 'string',  'description': 'Output format: text (default), dot (Graphviz), or json'},
         'builtins': {'type': 'boolean', 'description': 'Include Python builtins in callees output (default: false)'},
         'root':     {'type': 'string',  'description': 'Root function name for a recursive callee-tree traversal'},

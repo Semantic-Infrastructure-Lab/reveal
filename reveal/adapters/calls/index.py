@@ -519,61 +519,53 @@ def _build_forward_index(
 
 
 def _collect_level_entries(
-    current_names: Set[Tuple[str, str]],
-    forward: Dict[str, List[Dict[str, Any]]],
-    visited: Set[str],
-) -> Tuple[List[Dict[str, Any]], Set[Tuple[str, str]]]:
-    """Collect callee entries for one BFS level; return (entries, next_names).
+    frontier: List[Tuple[str, Dict[str, Any]]],
+    resolver: Any,
+    seen: Set[Any],
+) -> Tuple[List[Dict[str, Any]], List[Tuple[str, Dict[str, Any]]]]:
+    """Collect callee entries for one level; return (entries, next frontier).
 
-    *current_names*/*next_names* are (name, language_family) pairs — family is
-    '' for the root (unscoped) or an unrecognized-extension caller. BACK-405:
-    propagating the family across levels (not just the first hop) keeps a
-    resolved name's *own* forward-index lookup scoped too, so a same-named
-    definition in an unrelated language doesn't leak into what that node
-    "calls" once it becomes a source for the next level.
+    *frontier* holds (name, definition) pairs: each definition is expanded on
+    its own, so two same-named functions never contribute each other's
+    callees (BACK-1442, the bug trace:// had before BACK-1399). Each call
+    site resolves through calls.resolve.CallResolver -- language family
+    (BACK-405), then same file or imports; a name still matching several
+    definitions is an `ambiguous` entry with its candidates and is not
+    expanded.
 
-    *visited* stays name-only (not (name, family)) to preserve the original
-    cycle-prevention guarantee — a name, once visited via any language, is
-    never re-expanded, regardless of which family resolved it.
+    *seen* keeps each reachable thing listed once, as the name-keyed walk
+    did: a resolved callee by its definition (file, line), an external or
+    ambiguous one by its name.
     """
     level_entries: List[Dict[str, Any]] = []
-    next_names: Set[Tuple[str, str]] = set()
+    next_frontier: List[Tuple[str, Dict[str, Any]]] = []
 
-    for source_name, source_family in sorted(current_names):
-        seen_this_source: Set[str] = set()
-        defs = forward.get(source_name, [])
-        if source_family:
-            defs = [d for d in defs if _lang_family(d['file']) == source_family]
-        for defn in defs:
-            caller_family = source_family or _lang_family(defn['file'])
-            for callee in defn['calls']:
-                tail = _bare_callee_name(callee)
-                # BACK-405: scope resolution to the caller's language family
-                # before accepting a bare-name match — a flat, language-blind
-                # index lets a same-named definition in an unrelated language
-                # win over the correct "unresolved/external" fallback (e.g. a
-                # C write() syscall resolving to an unrelated Python def write).
-                candidates = forward.get(tail, [])
-                if caller_family:
-                    candidates = [c for c in candidates if _lang_family(c['file']) == caller_family]
-                resolved = bool(candidates)
-                resolved_name = tail if resolved else callee
-                resolved_family = caller_family if resolved else ''
-                if resolved_name in seen_this_source or resolved_name in visited:
-                    continue
-                seen_this_source.add(resolved_name)
-                visited.add(resolved_name)
-                level_entries.append({
-                    'caller': source_name,
-                    'callee': resolved_name,
-                    'resolved': resolved,
-                    'caller_file': defn['file'],
-                    'caller_line': defn['line'],
-                })
-                if resolved:
-                    next_names.add((resolved_name, resolved_family))
+    for source_name, defn in frontier:
+        for callee in defn['calls']:
+            tail, target = resolver.resolve(callee, defn['file'])
+            entry: Dict[str, Any] = {
+                'caller': source_name,
+                'callee': tail if target is not None else callee,
+                'resolved': target is not None,
+                'caller_file': defn['file'],
+                'caller_line': defn['line'],
+            }
+            if isinstance(target, dict):
+                key: Any = (target['file'], target['line'])
+                entry['callee_file'], entry['callee_line'] = key
+            else:
+                key = entry['callee']
+                if target:
+                    entry['ambiguous'] = True
+                    entry['candidates'] = [{'file': c['file'], 'line': c['line']} for c in target]
+            if key in seen:
+                continue
+            seen.add(key)
+            level_entries.append(entry)
+            if isinstance(target, dict):
+                next_frontier.append((tail, target))
 
-    return level_entries, next_names
+    return level_entries, next_frontier
 
 
 def find_callees_recursive(
@@ -596,23 +588,29 @@ def find_callees_recursive(
         ``total_resolved`` (callees found in the project),
         ``total_unresolved`` (external / not-found names).
     """
+    from .resolve import CallResolver  # noqa: I006 -- resolve imports this module
+
     path_obj = Path(path)
     directory = path_obj if path_obj.is_dir() else path_obj.parent
     structures = collect_structures(str(directory))
     forward = _build_forward_index(structures, include_builtins)
+    # collect_structures' file order is not stable; levels and candidates must be.
+    for defs in forward.values():
+        defs.sort(key=lambda d: (d['file'], d['line']))
 
-    # '' family = unscoped: root has no caller edge to inherit a language from.
-    visited: Set[str] = {root}
-    current_names: Set[Tuple[str, str]] = {(root, '')}
+    # Every definition of the root is a starting point (the root has no call
+    # site to disambiguate by); each is then walked on its own.
+    frontier = [(root, defn) for defn in forward.get(root, [])]
+    seen: Set[Any] = {(defn['file'], defn['line']) for _, defn in frontier}
+    resolver = CallResolver(forward)
     levels: List[Dict[str, Any]] = []
 
     for level_num in range(1, depth + 1):
-        level_entries, next_names = _collect_level_entries(current_names, forward, visited)
+        level_entries, frontier = _collect_level_entries(frontier, resolver, seen)
         if level_entries:
             levels.append({'level': level_num, 'callees': level_entries})
-        if not next_names:
+        if not frontier:
             break
-        current_names = next_names
 
     total_resolved = sum(sum(1 for e in lvl['callees'] if e['resolved']) for lvl in levels)
     total_unresolved = sum(sum(1 for e in lvl['callees'] if not e['resolved']) for lvl in levels)

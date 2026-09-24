@@ -113,7 +113,9 @@ class _TraceWalker:
     """Expands definitions depth-first; each definition gets one frame."""
 
     def __init__(self, index: Dict[str, List[Dict[str, Any]]], max_depth: int) -> None:
+        from reveal.adapters.calls.resolve import CallResolver
         self.index = index
+        self._resolver = CallResolver(index)
         self.max_depth = max_depth
         self.frames: List[Dict[str, Any]] = []
         self.resolved = 0
@@ -121,7 +123,6 @@ class _TraceWalker:
         self.ambiguous_names: Set[str] = set()
         self._expanded: Set[Tuple[str, int, str]] = set()
         self._leaf_names: Set[str] = set()
-        self._symbol_maps: Dict[str, Dict[str, Optional[str]]] = {}
 
     def expand(self, name: str, defn: Dict[str, Any], depth: int) -> None:
         self._expanded.add((defn['file'], defn['line'], name))
@@ -163,39 +164,10 @@ class _TraceWalker:
 
     def _resolve(self, call: str, caller_file: str) -> Tuple[str, Any]:
         """(label, target): target is one definition, a list of candidate
-        definitions when the name is ambiguous, or None when external."""
-        from reveal.adapters.calls.index import _bare_callee_name, _lang_family
-
-        tail = _bare_callee_name(call)
-        family = _lang_family(caller_file)
-        candidates = [d for d in self.index.get(tail, [])
-                      if not family or _lang_family(d['file']) == family]
-        if not candidates:
-            return _short_callee(call), None
-        if len(candidates) == 1:
-            return tail, candidates[0]
-        return tail, self._disambiguate(call, tail, caller_file, candidates) or candidates
-
-    def _disambiguate(self, call: str, tail: str, caller_file: str,
-                      candidates: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-        """The one candidate the caller's own file or its imports point at.
-        A bare call prefers a same-file definition (it shadows imports); a
-        qualified one (`strings.rtrim`, `h.run`) prefers the module it names."""
-        qualifier = call.split('.')[0] if '.' in call else ''
-        imported = self._symbol_map(caller_file).get(qualifier or tail)
-        imported_path = Path(imported).resolve() if imported else None
-        via_import = [c for c in candidates if imported_path and Path(c['file']).resolve() == imported_path]
-        same_file = [c for c in candidates if c['file'] == caller_file]
-        for group in ((via_import, same_file) if qualifier else (same_file, via_import)):
-            if len(group) == 1:
-                return group[0]
-        return None
-
-    def _symbol_map(self, file_path: str) -> Dict[str, Optional[str]]:
-        if file_path not in self._symbol_maps:
-            from reveal.adapters.ast.call_graph import build_symbol_map
-            self._symbol_maps[file_path] = build_symbol_map(file_path)
-        return self._symbol_maps[file_path]
+        definitions when the name is ambiguous, or None when external
+        (calls.resolve.CallResolver, shared with calls://?callees&depth)."""
+        tail, target = self._resolver.resolve(call, caller_file)
+        return (tail if target is not None else _short_callee(call)), target
 
 
 def _definition_index(structures: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
