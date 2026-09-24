@@ -189,6 +189,73 @@ def sample_json_data() -> dict:
     }
 
 
+_PROBE_COMPLEX = '''
+def complex_{i}(x, y=0):
+    total = 0
+    if x > 0:
+        if x > 10:
+            if x > 100:
+                return "huge"
+            return "big"
+        for k in range(x):
+            if k % 2 == 0:
+                total += k
+            elif k % 3 == 0:
+                total -= k
+            else:
+                while total > 50:
+                    total //= 2
+    elif x < 0:
+        while x < 0:
+            x += 1
+    try:
+        total += int(os.getenv("N{i}", "0"))
+    except ValueError:
+        pass
+    return total + y
+'''
+
+
+@pytest.fixture(scope="session")
+def flag_probe_corpus(tmp_path_factory) -> Path:
+    """A small Python project that overflows every default cap the flag-matrix probes lift.
+
+    Replaces probing reveal's own reveal/ and reveal/adapters trees (BACK-1451): those
+    cost 6-59s per probe and ran baseline + changed. Sized past each cap a probe relies
+    on: 30 complex modules (hotspot/overview/stats/ast top-N), 8 subpackages
+    (architecture's top=5 components), a pyproject.toml so depends:// resolves the
+    chained imports, and 3 patches per production function (testability's
+    min_patches=3, top=20 groups; patches:// cap). Layout: <root>/pkg, <root>/tests.
+    """
+    root = tmp_path_factory.mktemp("flag_probe_corpus")
+    pkg, tests, subpackages = root / "pkg", root / "tests", 8
+    tests.mkdir()
+    (root / "pyproject.toml").write_text('[project]\nname = "pkg"\nversion = "0"\n', encoding="utf-8")
+    for s in range(subpackages):
+        (pkg / f"sub{s}").mkdir(parents=True)
+        (pkg / f"sub{s}" / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    for i in range(30):
+        sub = f"sub{i % subpackages}"
+        src = "import os\nimport json\n"
+        if i:
+            src += f"from pkg.sub{(i - 1) % subpackages} import mod{i - 1}\n"
+        src += _PROBE_COMPLEX.format(i=i)
+        src += f"\n\ndef helper_{i}():\n"
+        src += (f"    return complex_{i}(1) + mod{i - 1}.helper_{i - 1}()\n" if i
+                else f"    return complex_{i}(1)\n")
+        src += (f"\n\nclass Thing{i}:\n    def run(self):\n        return helper_{i}()\n\n"
+                f"    def dump(self):\n        return json.dumps({{'i': {i}}})\n")
+        (pkg / sub / f"mod{i}.py").write_text(src, encoding="utf-8")
+        test = f"from unittest.mock import patch\nfrom pkg.{sub} import mod{i}\n"
+        for t in range(3):
+            test += (f"\n\n@patch('pkg.{sub}.mod{i}.complex_{i}', return_value={t})\n"
+                     f"def test_complex_{i}_{t}(complex_fn):\n"
+                     f"    assert mod{i}.complex_{i}({t}) == {t}\n")
+        (tests / f"test_mod{i}.py").write_text(test, encoding="utf-8")
+    return root
+
+
 # Registry isolation fixtures
 # These would require understanding reveal's adapter registry internals
 # Placeholder for future implementation:

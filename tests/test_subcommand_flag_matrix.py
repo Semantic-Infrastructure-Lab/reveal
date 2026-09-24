@@ -78,14 +78,15 @@ _CROSS_FILE_READERS = {
 
 # Cells provably honored by an observable output difference (mirrors PROBES in
 # test_flag_routing_matrix.py). (subcommand, flag) -> (extra argv, value for the flag).
+# `{pkg}`/`{tests}` are conftest's flag_probe_corpus (BACK-1451), `{tree}` probe_tree below.
 PROBES = {
-    ('architecture', 'verbose'): (['reveal/adapters'], True),
-    ('deps', 'verbose'): (['reveal/adapters'], True),
-    ('hotspots', 'verbose'): (['reveal/adapters'], True),
-    ('testability', 'verbose'): (['reveal', '--tests', 'tests'], True),
+    ('architecture', 'verbose'): (['{pkg}'], True),
+    ('deps', 'verbose'): (['{pkg}'], True),
+    ('hotspots', 'verbose'): (['{pkg}'], True),
+    ('testability', 'verbose'): (['{pkg}', '--tests', '{tests}'], True),
     ('check', 'respect_gitignore'): (['{tree}'], False),
     ('pack', 'since'): (['{tree}'], '2099-01-01'),
-    ('overview', 'all'): (['reveal/adapters'], True),
+    ('overview', 'all'): (['{pkg}'], True),
 }
 
 _FLAG_TO_CLI = {
@@ -259,9 +260,12 @@ def probe_tree(tmp_path_factory):
 
 
 @pytest.mark.parametrize('name,flag', sorted(PROBES))
-def test_honored_cell_changes_output(name, flag, probe_tree):
+def test_honored_cell_changes_output(name, flag, probe_tree, flag_probe_corpus, monkeypatch):
     argv, value = PROBES[name, flag]
-    argv = [a.replace('{tree}', str(probe_tree)) for a in argv]
+    # Relative {pkg}/{tests}, as the reveal/ probes were (see test_flag_routing_matrix.py).
+    monkeypatch.chdir(flag_probe_corpus)
+    argv = [a.replace('{tree}', str(probe_tree)).replace('{pkg}', 'pkg').replace('{tests}', 'tests')
+            for a in argv]
     baseline = _run_subcommand(name, argv)
     cli_flag = _FLAG_TO_CLI[flag]
     if flag == 'respect_gitignore':

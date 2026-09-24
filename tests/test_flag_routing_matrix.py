@@ -21,6 +21,7 @@ Scope: URI path only. Bare-path and subcommand invocation, env vars and .reveal.
 keys are the next dimensions of BACK-1362.
 """
 import ast
+import functools
 import io
 import sys
 from contextlib import redirect_stderr, redirect_stdout
@@ -46,29 +47,31 @@ _SEAM_FILES = {'cli/parser.py', 'cli/routing/uri.py', 'main.py'}
 # Honored cells that can be proven by output difference: scheme -> flag -> probe URI.
 # Probes must exceed the adapter's default cap or the flag has nothing to change.
 # scheme/flag -> (probe URI, value to give the flag). `{tree}` is a throwaway git repo with
-# one commit, a .gitignore and one ignored file, so these probes do not depend on what the
-# checkout under test happens to contain.
+# one commit, a .gitignore and one ignored file; `{pkg}`/`{tests}` are conftest's
+# flag_probe_corpus, sized past every cap below. Neither depends on what the checkout
+# under test happens to contain, and neither costs what probing reveal/ itself did
+# (6-59s per probe, BACK-1451).
 PROBES = {
-    ('hotspots', 'all'): ('hotspots://reveal/adapters', True),
-    ('overview', 'all'): ('overview://reveal/adapters', True),
-    ('overview', 'verbose'): ('overview://reveal/adapters', True),
+    ('hotspots', 'all'): ('hotspots://{pkg}', True),
+    ('overview', 'all'): ('overview://{pkg}', True),
+    ('overview', 'verbose'): ('overview://{pkg}', True),
     ('git', 'since'): ('git://{tree}', '2099-01-01'),
     ('git', 'until'): ('git://{tree}', '1970-01-02'),
     ('stats', 'respect_gitignore'): ('stats://{tree}', False),
     ('overview', 'respect_gitignore'): ('overview://{tree}', False),
     # BACK-1379: adapters whose --all now lifts a real default cap.
-    ('ast', 'all'): ('ast://reveal', True),
-    ('calls', 'all'): ('calls://reveal?rank=callers', True),
-    ('patches', 'all'): ('patches://tests', True),
-    ('testability', 'all'): ('testability://reveal', True),
-    ('stats', 'all'): ('stats://reveal?hotspots=true', True),
-    ('architecture', 'all'): ('architecture://reveal', True),
-    ('deps', 'all'): ('deps://reveal', True),
+    ('ast', 'all'): ('ast://{pkg}', True),
+    ('calls', 'all'): ('calls://{pkg}?rank=callers', True),
+    ('patches', 'all'): ('patches://{tests}', True),
+    ('testability', 'all'): ('testability://{pkg}', True),
+    ('stats', 'all'): ('stats://{pkg}?hotspots=true', True),
+    ('architecture', 'all'): ('architecture://{pkg}', True),
+    ('deps', 'all'): ('deps://{pkg}', True),
     ('git', 'all'): ('git://{tree}?type=log', True),
     # BACK-1379: --verbose slice.
     ('git', 'verbose'): ('git://{tree}/a.py?type=blame', True),
-    ('depends', 'verbose'): ('depends://reveal/adapters', True),
-    ('pack', 'verbose'): ('pack://reveal/adapters', True),
+    ('depends', 'verbose'): ('depends://{pkg}', True),
+    ('pack', 'verbose'): ('pack://{pkg}', True),
     # BACK-1379: respect_gitignore slice.
     ('classify', 'respect_gitignore'): ('classify://{tree}', False),
     # BACK-1379/BACK-1388: since/until slice. Originally pointed at a real repo file
@@ -90,23 +93,31 @@ PROBES = {
 
 def _flag_readers(flag):
     """Files under reveal/ (relative posix paths) that read args.<flag> directly."""
-    found = set()
+    return _readers_by_flag()[flag]
+
+
+@functools.cache
+def _readers_by_flag():
+    """flag -> files reading args.<flag>; one AST pass over reveal/ for all FLAGS.
+
+    Source files don't change within a run, so every derive_matrix() call shares it
+    (it was one full parse per flag per call, ~10s of each matrix test, BACK-1451).
+    """
+    found = {flag: set() for flag in FLAGS}
     for path in REVEAL_PKG.rglob('*.py'):
         rel = path.relative_to(REVEAL_PKG).as_posix()
         if rel in _SEAM_FILES or rel.startswith('cli/commands/'):
             continue
         for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
-            is_getattr = (
-                isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-                and node.func.id == 'getattr' and len(node.args) >= 2
-                and isinstance(node.args[0], ast.Name) and node.args[0].id == 'args'
-                and isinstance(node.args[1], ast.Constant) and node.args[1].value == flag)
-            is_attr = (
-                isinstance(node, ast.Attribute) and node.attr == flag
-                and isinstance(node.value, ast.Name) and node.value.id == 'args')
-            if is_getattr or is_attr:
-                found.add(rel)
-                break
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id == 'getattr' and len(node.args) >= 2
+                    and isinstance(node.args[0], ast.Name) and node.args[0].id == 'args'
+                    and isinstance(node.args[1], ast.Constant)
+                    and node.args[1].value in found):
+                found[node.args[1].value].add(rel)
+            elif (isinstance(node, ast.Attribute) and node.attr in found
+                    and isinstance(node.value, ast.Name) and node.value.id == 'args'):
+                found[node.attr].add(rel)
     return found
 
 
@@ -331,9 +342,13 @@ def churn_tree(tmp_path_factory):
 
 
 @pytest.mark.parametrize('scheme,flag', sorted(PROBES))
-def test_honored_cell_changes_output(scheme, flag, probe_tree, churn_tree):
+def test_honored_cell_changes_output(scheme, flag, probe_tree, churn_tree, flag_probe_corpus,
+                                     monkeypatch):
     uri, value = PROBES[scheme, flag]
-    uri = uri.replace('{tree}', str(probe_tree)).replace('{churn_tree}', str(churn_tree))
+    # Relative {pkg}/{tests}, as the reveal/ probes were: no drive-letter paths in URIs.
+    monkeypatch.chdir(flag_probe_corpus)
+    uri = (uri.replace('{tree}', str(probe_tree)).replace('{churn_tree}', str(churn_tree))
+           .replace('{pkg}', 'pkg').replace('{tests}', 'tests'))
     assert _render(uri) != _render(uri, **{flag: value}), (
         f'{scheme}:// claims a channel for --{flag} but the output is identical on {uri}')
 
