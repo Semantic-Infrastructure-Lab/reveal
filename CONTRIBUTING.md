@@ -341,13 +341,17 @@ pytest tests/
 
 ```bash
 scripts/ci-local.sh                # Python 3.12, latest deps: pytest + the CI-only steps
-scripts/ci-local.sh --matrix       # 3.10, 3.12 and 3.14 in turn, like CI (~15 min; use tmux)
-scripts/ci-local.sh --matrix -- tests/test_foo.py   # quick: only the tests you touched, per Python
+scripts/ci-local.sh --matrix       # 3.10, 3.12, 3.14, then 3.12 @ the language-pack 1.8.1 floor (~8 min; use tmux)
+scripts/ci-local.sh --matrix --changed              # per commit (~1 min): only the test files you added/edited
+scripts/ci-local.sh --matrix -- tests/test_foo.py   # quick: only these tests, per leg
 scripts/ci-local.sh --lp 1.12.5    # force a tree-sitter-language-pack version (CI compat-matrix)
 ```
 
 A 3.12-only run is not enough: 3.10 rejects PEP 701 f-strings (a nested same-type quote), and 3.14
-tokenizes t-strings natively, and both reached GitHub CI from a green local run. The script's
+tokenizes t-strings natively, and both reached GitHub CI from a green local run. Nor is a run on the
+latest language-pack: on the 1.8.1 floor `node.start_byte` is a bound method, not a value, so a bare
+read passes everywhere but CI's compat leg -- read Node accessors with `_zero_arg(node, 'start_byte')`
+(`scripts/check_treesitter_accessors.py` fails a bare read in seconds). The script's
 header also lists the Windows-only pitfalls worth checking by hand before you push.
 
 Your dev environment drifts from CI (dependency versions, Python version, stale `~/.reveal/cache`),

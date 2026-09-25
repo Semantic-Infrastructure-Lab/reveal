@@ -28,6 +28,8 @@
 #   scripts/ci-local.sh --matrix            # 3.10, 3.12, 3.14, then 3.12 @ language-pack 1.8.1 (~8 min: legs measured 92-113 s of pytest each; run it in tmux)
 #   scripts/ci-local.sh --matrix -- tests/test_foo.py   # fast: only these pytest targets per leg
 #   scripts/ci-local.sh --lp 1.12.5         # force tree-sitter-language-pack (CI's compat-matrix)
+#   scripts/ci-local.sh --matrix --changed  # per-commit check (~1 min): only the test files you added/edited
+#                                           # vs upstream, on every leg incl. the language-pack floor
 #   scripts/ci-local.sh --no-tests          # only the non-pytest CI steps
 #   scripts/ci-local.sh --fresh             # rebuild the venv from scratch
 #
@@ -46,6 +48,7 @@
 #   - shell=True / POSIX quoting in subprocess: pass an argument list
 #   - str(path) compared or split on '/': use Path parts or as_posix() (check_windows_compat.py)
 #   - open()/read_text() without encoding=: cp1252 default (check_text_encoding.py)
+# Bare node.start_byte etc. (floor leg above) is also linted in seconds: check_treesitter_accessors.py.
 set -euo pipefail
 
 MATRIX_VERSIONS=(3.10 3.12 3.14)  # keep in step with .github/workflows/test.yml
@@ -57,7 +60,9 @@ LP_VERSION=""
 RUN_TESTS=1
 FRESH=0
 MATRIX=0
+CHANGED=0
 PYTEST_TARGETS=(tests/)
+EXPLICIT_TARGETS=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --python) PY_VERSION="$2"; PY_EXPLICIT=1; shift 2 ;;
@@ -65,11 +70,33 @@ while [[ $# -gt 0 ]]; do
         --no-tests) RUN_TESTS=0; shift ;;
         --fresh) FRESH=1; shift ;;
         --matrix) MATRIX=1; shift ;;
-        --) shift; [[ $# -gt 0 ]] && PYTEST_TARGETS=("$@"); break ;;
+        --changed) CHANGED=1; shift ;;
+        --) shift; [[ $# -gt 0 ]] && { PYTEST_TARGETS=("$@"); EXPLICIT_TARGETS=1; }; break ;;
         -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
+
+# --changed: pytest targets = test files added/edited vs upstream (committed, staged, unstaged, new).
+# It catches what a NEW test does on an old dependency (BACK-1406's helper, red only on the language-pack
+# floor) in seconds; it cannot see a source change breaking an untouched test -- that is the full run's job.
+if [[ $CHANGED -eq 1 ]]; then
+    [[ $EXPLICIT_TARGETS -eq 1 ]] && { echo "--changed and explicit pytest targets are exclusive" >&2; exit 2; }
+    REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    BASE="$(git -C "$REPO_ROOT" merge-base HEAD '@{upstream}' 2>/dev/null || git -C "$REPO_ROOT" merge-base HEAD origin/master)"
+    PYTEST_TARGETS=()
+    while IFS= read -r f; do
+        [[ -f "$REPO_ROOT/$f" ]] && PYTEST_TARGETS+=("$f")
+    done < <({ git -C "$REPO_ROOT" diff --name-only "$BASE"; git -C "$REPO_ROOT" ls-files --others --exclude-standard; } \
+                 | grep -E '^tests/.*test_[^/]*\.py$' | sort -u)
+    if [[ ${#PYTEST_TARGETS[@]} -eq 0 ]]; then
+        echo "--changed: no test files changed vs ${BASE:0:8}; skipping pytest" >&2
+        RUN_TESTS=0
+        PYTEST_TARGETS=(tests/)
+    else
+        echo "--changed: ${#PYTEST_TARGETS[@]} test file(s) vs ${BASE:0:8}" >&2
+    fi
+fi
 
 if [[ $MATRIX -eq 1 ]]; then
     [[ $PY_EXPLICIT -eq 1 ]] && { echo "--matrix and --python are exclusive" >&2; exit 2; }
@@ -165,6 +192,7 @@ if [[ $PRIMARY -eq 1 ]]; then
     step "Windows compatibility checks"
     "$PY" scripts/check_windows_compat.py --warn >>"$LOG" 2>&1 || fail "windows compat"
     "$PY" scripts/check_text_encoding.py >>"$LOG" 2>&1 || { tail -8 "$LOG"; fail "text encoding (bare read_text/open breaks on Windows)"; }
+    "$PY" scripts/check_treesitter_accessors.py >>"$LOG" 2>&1 || { tail -8 "$LOG"; fail "bare tree-sitter accessor (a method on language-pack 1.8.1; use _zero_arg)"; }
 
     step "Reveal self-validation (V-series)"
     "$PY" - >>"$LOG" 2>&1 <<'EOF' || fail "V-series self-validation"
