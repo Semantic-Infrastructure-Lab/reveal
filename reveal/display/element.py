@@ -226,7 +226,7 @@ _DISPLAY_NAME_TIERS = (
 def _element_from_resolution(analyzer, resolution: Resolution, element: str):
     """Element dict for a resolved node, carrying every candidate when the name
     was ambiguous (BACK-1400) so each surface can say so."""
-    node = resolution.node
+    node = getattr(analyzer, '_extraction_node', lambda n: n)(resolution.node)
     # Dart: node may be a function_signature whose body lives in a disjoint
     # sibling (TreeSitterAnalyzer._function_end_node); every other language's
     # node already spans its own body.

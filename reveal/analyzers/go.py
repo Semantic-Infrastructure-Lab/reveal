@@ -27,6 +27,24 @@ class GoAnalyzer(TreeSitterAnalyzer):
             return self._struct_type_name(node)
         return super()._get_node_name(node)
 
+    def _extraction_node(self, node):
+        """`type Foo struct {...}` parses the body as a bare `struct_type` /
+        `interface_type` under `type_spec`; the `type` keyword and the name sit
+        outside it. Widen to the whole declaration (`type_declaration`) when it
+        declares just this type; in a grouped `type ( ... )` block, to the one
+        spec (`Foo struct {...}`)."""
+        if _zero_arg(node, 'kind') not in ('struct_type', 'interface_type'):
+            return node
+        spec = _zero_arg(node, 'parent')
+        if spec is None or _zero_arg(spec, 'kind') not in ('type_spec', 'type_alias'):
+            return node
+        decl = _zero_arg(spec, 'parent')
+        if decl is not None and _zero_arg(decl, 'kind') == 'type_declaration':
+            specs = [c for c in _children(decl) if _zero_arg(c, 'kind') in ('type_spec', 'type_alias')]
+            if len(specs) == 1:
+                return decl
+        return spec
+
     def _extract_class_bases(self, node) -> List[str]:
         """Embedded types: interface embedding (`type_elem` children of an
         interface_type) and struct embedding (a `field_declaration` carrying a

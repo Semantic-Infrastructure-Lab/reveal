@@ -364,3 +364,66 @@ func (s *Scheduler) DoThing(x int) (int, error) {
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# BACK-1415: `interface_type` / `struct_type` also appear as anonymous type
+# expressions; only a `type X ...` declaration is a named struct/interface.
+GO_ANON_TYPES = '''package q
+
+type Queue interface {
+	Add(obj interface{}) error
+}
+
+type FIFO struct {
+	items map[string]interface{}
+	queue []interface{}
+}
+
+type Set map[string]struct{}
+
+type Generic[T any] struct{ v T }
+
+var anon struct{ a int }
+
+type (
+	A struct{ x int }
+	B interface{ M() }
+)
+'''
+
+
+@pytest.fixture
+def go_anon(tmp_path):
+    path = tmp_path / 'q.go'
+    path.write_text(GO_ANON_TYPES, encoding='utf-8')
+    return GoAnalyzer(str(path))
+
+
+class TestGoAnonymousTypeExpressions:
+    def test_only_declared_types_are_listed(self, go_anon):
+        structure = go_anon.get_structure()
+        assert [s['name'] for s in structure['structs']] == ['FIFO', 'Generic', 'A']
+        assert [i['name'] for i in structure['interfaces']] == ['Queue', 'B']
+
+    def test_no_entry_is_named_after_a_map_key_type(self, go_anon):
+        structure = go_anon.get_structure()
+        names = [i['name'] for cat in ('structs', 'interfaces') for i in structure[cat]]
+        assert 'string' not in names
+
+    def test_extracting_a_struct_keeps_its_type_declaration(self, go_anon):
+        result = go_anon.extract_element('struct', 'FIFO')
+        assert result['source'].startswith('type FIFO struct {')
+        assert result['source'].rstrip().endswith('}')
+        assert result['line_start'] == 7
+
+    def test_extracting_a_generic_struct_keeps_its_type_declaration(self, go_anon):
+        assert go_anon.extract_element('struct', 'Generic')['source'] == 'type Generic[T any] struct{ v T }'
+
+    def test_grouped_declaration_extracts_just_its_own_spec(self, go_anon):
+        assert go_anon.extract_element('struct', 'A')['source'] == 'A struct{ x int }'
+
+    def test_by_name_display_path_matches(self, go_anon, capsys):
+        from reveal.display.element import extract_element
+        extract_element(go_anon, 'FIFO', 'text')
+        assert 'type FIFO struct {' in capsys.readouterr().out
+

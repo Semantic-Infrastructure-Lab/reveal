@@ -1239,6 +1239,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             for node in nodes:
                 node_name = self._get_node_name(node)
                 if node_name == name:
+                    node = self._extraction_node(node)
                     end_node = self._function_end_node(node)
                     source = (
                         self._get_node_text(node) if end_node is node
@@ -1372,6 +1373,15 @@ class TreeSitterAnalyzer(FileAnalyzer):
             self._content_bytes = content_bytes
         return content_bytes[start_byte:end_byte].decode('utf-8')
 
+    def _extraction_node(self, node):
+        """The node whose span is shown when `node` is extracted by name.
+
+        Normally the node itself. A grammar whose declared body is a bare child
+        of a wrapper that carries the keyword and name (Go's `type_spec`) widens
+        it, so `reveal f.go Foo` prints `type Foo struct {...}`, not `struct {...}`.
+        """
+        return node
+
     def _function_end_node(self, node):
         """Return the node whose end position bounds a function's body.
 
@@ -1503,7 +1513,11 @@ class TreeSitterAnalyzer(FileAnalyzer):
         and return None).
         """
         parent = _zero_arg(node, 'parent')
-        if parent is not None:
+        # Only a *declared* type has a name. The same node kind also appears as an
+        # anonymous type expression -- `map[string]interface{}`, `[]struct{...}`,
+        # a parameter, a `var x struct{...}` -- where the parent's
+        # type_identifier sibling is some other type (`string`), not a name.
+        if parent is not None and _zero_arg(parent, 'kind') in ('type_spec', 'type_alias'):
             for sibling in _children(parent):
                 if _zero_arg(sibling, 'kind') == 'type_identifier':
                     return self._get_node_text(sibling)
