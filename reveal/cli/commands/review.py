@@ -225,7 +225,7 @@ def _run_check(path: Optional[Path], select: str,
         errors = []
     try:
         from reveal.cli.file_checker import (
-            collect_files_to_check, load_gitignore_patterns, _check_files_json,
+            collect_files_to_check, _check_files_json,
         )
         if files is not None:
             check_files = [f.resolve() for f in files if f.is_file()]
@@ -234,8 +234,7 @@ def _run_check(path: Optional[Path], select: str,
             directory = Path(os.path.commonpath([str(f.parent) for f in check_files]))
         elif path is not None and path.is_dir():
             directory = path.resolve()
-            gitignore_patterns = load_gitignore_patterns(directory)
-            check_files = collect_files_to_check(directory, gitignore_patterns).files
+            check_files = collect_files_to_check(directory).files
         elif path is not None:
             directory = path.parent.resolve()
             check_files = [path.resolve()]

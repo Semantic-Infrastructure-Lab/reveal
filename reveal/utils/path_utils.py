@@ -572,7 +572,7 @@ def _display_name_for_language(lang: str) -> str:
 def _walk_code_files(
     path: Path,
     exclude_patterns: Optional[List[str]] = None,
-    respect_gitignore: bool = False,
+    respect_gitignore: Optional[bool] = None,
 ) -> Iterator[Path]:
     """Yield every file under *path*, skip-dir-correct (BACK-887's
     ``is_skippable_dir`` fix — shared so every census walk agrees).
@@ -585,10 +585,10 @@ def _walk_code_files(
     producing a language-census mismatch between ``check`` and
     ``overview``/``architecture`` on the same target (BACK-1038).
 
-    BACK-1042: *exclude_patterns*/*respect_gitignore* are opt-in (default:
-    no filtering beyond ``is_skippable_dir``, matching this function's
-    pre-existing behavior) — ``overview``'s ``--exclude``/``--respect-gitignore``
-    flags pass them through here; every other caller is unaffected.
+    BACK-1042: *exclude_patterns* are opt-in fnmatch patterns (``--exclude``).
+    BACK-1386: what git ignores is skipped by default (utils/gitignore.py);
+    *respect_gitignore* None follows the process switch (``--no-gitignore``),
+    so every census agrees with the file sets the analyses actually walk.
     """
     if path.is_file():
         yield path
@@ -603,11 +603,9 @@ def _walk_code_files(
     # correctly against the discovered project root.
     from ..config import RevealConfig  # deferred: cli/config cycle
     config = RevealConfig.get(start_path=path)
-    gitignore_patterns: List[str] = []
-    if respect_gitignore:
-        from ..cli.file_checker import load_gitignore_patterns  # deferred: cli cycle
-        gitignore_patterns = load_gitignore_patterns(path)
-    skip_patterns = list(gitignore_patterns) + list(exclude_patterns or [])
+    from .gitignore import gitignore_filter
+    gi = gitignore_filter(path, respect_gitignore)
+    skip_patterns = list(exclude_patterns or [])
     if skip_patterns:
         from ..cli.file_checker import should_skip_file  # deferred: cli cycle
     for root, dirs, filenames in os.walk(str(path)):
@@ -619,6 +617,8 @@ def _walk_code_files(
             dir_path = root_path / d
             if config.should_ignore(dir_path):
                 continue
+            if gi is not None and gi.ignored(dir_path, is_dir=True):
+                continue
             if skip_patterns:
                 rel_dir = dir_path.relative_to(path)
                 if should_skip_file(rel_dir / '_', skip_patterns):
@@ -628,6 +628,8 @@ def _walk_code_files(
         for fname in filenames:
             fp = root_path / fname
             if config.should_ignore(fp):
+                continue
+            if gi is not None and gi.ignored(fp):
                 continue
             if skip_patterns and should_skip_file(fp.relative_to(path), skip_patterns):
                 continue
@@ -757,7 +759,7 @@ class ScopeCensus:
 def census_for_path(
     path: Path,
     exclude_patterns: Optional[List[str]] = None,
-    respect_gitignore: bool = False,
+    respect_gitignore: Optional[bool] = None,
 ) -> ScopeCensus:
     """Build the unified BACK-884 scope census for *path* by walking it
     directly (skip-dir-correct per BACK-887) — the right choice for

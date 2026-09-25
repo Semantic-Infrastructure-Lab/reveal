@@ -749,7 +749,7 @@ class TestS001DotenvReachability(unittest.TestCase):
         for filename in ('.env', 'secrets.env', '.env.local'):
             self._write(d, filename, secret_line)
 
-        result = collect_files_to_check(Path(d), gitignore_patterns=[])
+        result = collect_files_to_check(Path(d), respect_gitignore=False)
         found_names = {p.name for p in result.files}
         self.assertEqual(
             found_names, {'.env', 'secrets.env', '.env.local'},

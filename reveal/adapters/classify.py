@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .stats.analysis import find_analyzable_files, get_file_display_path
 from ..utils import print_json_result
+from ..utils.gitignore import respect_gitignore_param
 from ..utils.path_utils import classify_path_provenance, looks_vendored_by_banner, is_vendor_dir
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
@@ -81,7 +82,7 @@ def _apply_locale_fanout(rows: List[Dict[str, Any]]) -> None:
                 row['provenance'] = 'vendor'
 
 
-def _classify_directory(directory: Path, respect_gitignore: bool = True) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+def _classify_directory(directory: Path, respect_gitignore: Optional[bool] = None) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
     """Returns (rows, excluded_by_extension).
 
     BACK-1241: the population here is gated on find_analyzable_files() ->
@@ -231,7 +232,7 @@ class ClassifyAdapter(ResourceAdapter):
         require_path_exists(path)
 
         directory = path if path.is_dir() else path.parent
-        respect_gitignore = str(self.query_params.get('respect_gitignore', True)).lower() != 'false'
+        respect_gitignore = respect_gitignore_param(self.query_params)
         rows, excluded_by_extension = _classify_directory(directory, respect_gitignore=respect_gitignore)
 
         by_provenance: Dict[str, int] = {}

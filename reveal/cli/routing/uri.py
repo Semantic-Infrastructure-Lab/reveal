@@ -200,10 +200,37 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
     # requests over different trees) a leaked scope would silently filter an
     # unrelated later query.
     from ...utils.exclusions import clear_active_exclusions
+    from ...utils.gitignore import gitignore_scope
+    resource, respect_gitignore = _pop_respect_gitignore(resource)
     try:
-        handle_adapter(adapter_class, scheme, resource, element, args)
+        with gitignore_scope(respect_gitignore):
+            handle_adapter(adapter_class, scheme, resource, element, args)
     finally:
         clear_active_exclusions()
+
+
+def _pop_respect_gitignore(resource: str):
+    """Split ``respect_gitignore=`` off the query: (resource, bool or None).
+
+    BACK-1386: the gitignore switch is applied to every walker for this
+    dispatch (utils/gitignore.gitignore_scope), so the key is consumed here
+    rather than left for the adapter -- filter-style adapters (ast://,
+    markdown://) would otherwise read it as a field filter and match nothing.
+    """
+    from ...utils.gitignore import parse_respect_gitignore
+    path_part, sep, query = resource.partition('?')
+    if not sep:
+        return resource, None
+    kept, value = [], None
+    for part in query.split('&'):
+        key, _, val = part.partition('=')
+        if key == 'respect_gitignore':
+            value = parse_respect_gitignore(val)
+        elif part:
+            kept.append(part)
+    if value is None:
+        return resource, None
+    return (f"{path_part}?{'&'.join(kept)}" if kept else path_part), value
 
 
 def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:

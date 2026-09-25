@@ -1,9 +1,11 @@
-"""Tests for display/filtering.py — GitignoreParser, PathFilter, should_filter_path."""
+"""Tests for display/filtering.py — PathFilter, should_filter_path.
+
+The gitignore matching itself is tests/test_gitignore_oracle.py (BACK-1485).
+"""
 
 import pytest
 from pathlib import Path
 from reveal.display.filtering import (
-    GitignoreParser,
     PathFilter,
     should_filter_path,
     DEFAULT_NOISE_PATTERNS,
@@ -11,92 +13,6 @@ from reveal.display.filtering import (
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
 pytestmark = pytest.mark.component
-
-
-# ============================================================================
-# GitignoreParser
-# ============================================================================
-
-class TestGitignoreParserParsing:
-    def test_skips_blank_lines(self, tmp_path):
-        (tmp_path / '.gitignore').write_text('\n\n*.pyc\n')
-        parser = GitignoreParser(tmp_path / '.gitignore')
-        assert len(parser.patterns) == 1
-
-    def test_skips_comment_lines(self, tmp_path):
-        (tmp_path / '.gitignore').write_text('# this is a comment\n*.pyc\n')
-        parser = GitignoreParser(tmp_path / '.gitignore')
-        assert len(parser.patterns) == 1
-        assert parser.patterns[0]['pattern'] == '*.pyc'
-
-    def test_negate_flag_set(self, tmp_path):
-        (tmp_path / '.gitignore').write_text('!important.py\n')
-        parser = GitignoreParser(tmp_path / '.gitignore')
-        assert parser.patterns[0]['negate'] is True
-        assert parser.patterns[0]['pattern'] == 'important.py'
-
-    def test_dir_only_flag_set(self, tmp_path):
-        (tmp_path / '.gitignore').write_text('build/\n')
-        parser = GitignoreParser(tmp_path / '.gitignore')
-        assert parser.patterns[0]['dir_only'] is True
-
-    def test_regular_pattern_not_dir_only(self, tmp_path):
-        (tmp_path / '.gitignore').write_text('*.log\n')
-        parser = GitignoreParser(tmp_path / '.gitignore')
-        assert parser.patterns[0]['dir_only'] is False
-
-    def test_nonexistent_gitignore_yields_empty_patterns(self, tmp_path):
-        parser = GitignoreParser(tmp_path / '.gitignore')
-        assert parser.patterns == []
-
-    def test_multiple_patterns_parsed(self, tmp_path):
-        (tmp_path / '.gitignore').write_text('*.pyc\ndist/\n.env\n')
-        parser = GitignoreParser(tmp_path / '.gitignore')
-        assert len(parser.patterns) == 3
-
-
-class TestGitignoreParserMatching:
-    def test_matches_file_by_glob(self, tmp_path):
-        (tmp_path / '.gitignore').write_text('*.pyc\n')
-        f = tmp_path / 'module.pyc'
-        f.write_text('')
-        parser = GitignoreParser(tmp_path / '.gitignore')
-        assert parser.matches(f) is True
-
-    def test_no_match_different_extension(self, tmp_path):
-        (tmp_path / '.gitignore').write_text('*.pyc\n')
-        f = tmp_path / 'module.py'
-        f.write_text('')
-        parser = GitignoreParser(tmp_path / '.gitignore')
-        assert parser.matches(f) is False
-
-    def test_matches_filename_only_pattern(self, tmp_path):
-        (tmp_path / '.gitignore').write_text('.DS_Store\n')
-        f = tmp_path / 'subdir' / '.DS_Store'
-        f.parent.mkdir()
-        f.write_text('')
-        parser = GitignoreParser(tmp_path / '.gitignore')
-        assert parser.matches(f) is True
-
-    def test_negation_overrides_earlier_match(self, tmp_path):
-        (tmp_path / '.gitignore').write_text('*.py\n!keep.py\n')
-        f = tmp_path / 'keep.py'
-        f.write_text('')
-        parser = GitignoreParser(tmp_path / '.gitignore')
-        assert parser.matches(f) is False
-
-    def test_path_outside_gitignore_dir_not_matched(self, tmp_path):
-        (tmp_path / '.gitignore').write_text('*.pyc\n')
-        parser = GitignoreParser(tmp_path / '.gitignore')
-        outside = Path('/tmp/unrelated_dir_xyz/module.pyc')
-        assert parser.matches(outside) is False
-
-    def test_matches_directory_pattern(self, tmp_path):
-        (tmp_path / '.gitignore').write_text('dist/\n')
-        d = tmp_path / 'dist'
-        d.mkdir()
-        parser = GitignoreParser(tmp_path / '.gitignore')
-        assert parser.matches(d) is True
 
 
 # ============================================================================
@@ -174,9 +90,11 @@ class TestPathFilterOptions:
         assert pf.should_filter(f) is False
 
     def test_no_gitignore_file_no_error(self, tmp_path):
-        # No .gitignore — should not crash
-        pf = PathFilter(tmp_path, respect_gitignore=True)
-        assert pf.gitignore_parser is None
+        # No .gitignore — should not crash, and nothing is hidden for it
+        f = tmp_path / 'app.py'
+        f.write_text('')
+        pf = PathFilter(tmp_path, respect_gitignore=True, include_defaults=False)
+        assert pf.should_filter(f) is False
 
     def test_multiple_custom_patterns(self, tmp_path):
         f = tmp_path / 'local.cfg'

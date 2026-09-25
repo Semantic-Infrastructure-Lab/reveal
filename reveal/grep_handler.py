@@ -264,8 +264,8 @@ def handle_grep_directory(path: str, pattern: str, args: Namespace) -> None:
     """Text search across all files in a directory, grouped by file then element."""
     output_format = getattr(args, 'format', 'text')
     ignore_case = getattr(args, 'ignore_case', False)
-    respect_gitignore = getattr(args, 'respect_gitignore', True)
-    exclude_patterns = getattr(args, 'exclude', [])
+    respect_gitignore = getattr(args, 'respect_gitignore', True) is not False
+    exclude_patterns = getattr(args, 'exclude', None) or []
 
     flags = re.IGNORECASE if ignore_case else 0
     try:
@@ -275,7 +275,8 @@ def handle_grep_directory(path: str, pattern: str, args: Namespace) -> None:
         sys.exit(1)
 
     dir_path = Path(path)
-    file_results, total_hits = _collect_dir_results(dir_path, compiled, respect_gitignore)
+    file_results, total_hits = _collect_dir_results(
+        dir_path, compiled, respect_gitignore, exclude_patterns)
 
     if output_format == 'json':
         _render_dir_json(file_results, path, pattern, total_hits)
@@ -286,31 +287,46 @@ def handle_grep_directory(path: str, pattern: str, args: Namespace) -> None:
 def _collect_dir_results(
     dir_path: Path,
     compiled: 're.Pattern[str]',
-    respect_gitignore: bool = True,
+    respect_gitignore: Optional[bool] = None,
+    exclude_patterns: Optional[List[str]] = None,
 ) -> 'tuple[List[Dict[str, Any]], int]':
-    """Walk dir_path and return (file_results, total_hits)."""
-    from .cli.file_checker import load_gitignore_patterns, should_skip_file  # noqa: I006  # deferred: cli cycle
-    gitignore_patterns = load_gitignore_patterns(dir_path) if respect_gitignore else []
+    """Walk dir_path and return (file_results, total_hits).
+
+    BACK-1485: gitignore via the shared git-backed oracle. --exclude patterns
+    were read by handle_grep_directory and then dropped; now fnmatch'd here
+    with the same should_skip_file semantics as ``check``.
+    """
+    from .cli.file_checker import should_skip_file  # noqa: I006  # deferred: cli cycle
+    from .utils.gitignore import gitignore_filter
+    gi = gitignore_filter(dir_path, respect_gitignore)
+    excludes = list(exclude_patterns or [])
+
+    def _excluded(p: Path) -> bool:
+        try:
+            return should_skip_file(p.relative_to(dir_path), excludes)
+        except ValueError:
+            return False
 
     file_results: List[Dict[str, Any]] = []
     total_hits = 0
     for root, dirs, files in os.walk(str(dir_path)):
+        root_path = Path(root)
         dirs[:] = sorted(
             d for d in dirs
-            if not is_skippable_dir(Path(root), d) and not d.startswith('.')
+            if not is_skippable_dir(root_path, d) and not d.startswith('.')
+            and not (gi is not None and gi.ignored(root_path / d, is_dir=True))
+            and not (excludes and _excluded(root_path / d / '_'))
         )
         for fname in sorted(files):
-            fpath = Path(root) / fname
+            fpath = root_path / fname
             if fpath.suffix in _BINARY_EXTENSIONS:
                 continue
             if fpath.suffix == '' and _looks_binary(fpath):
                 continue
-            if gitignore_patterns:
-                try:
-                    if should_skip_file(fpath.relative_to(dir_path), gitignore_patterns):
-                        continue
-                except ValueError:
-                    pass
+            if gi is not None and gi.ignored(fpath):
+                continue
+            if excludes and _excluded(fpath):
+                continue
             try:
                 content = fpath.read_text(encoding='utf-8', errors='replace')
             except (OSError, UnicodeDecodeError):

@@ -155,10 +155,8 @@ def _check_code(path: Path, args: Namespace):
     # tree (>5000 files) can exhaust memory because the subprocess buffers all JSON
     # output and the parent captures it all via capture_output=True.
     if path.is_dir():
-        from reveal.cli.file_checker import collect_files_to_check, load_gitignore_patterns
-        resolved = path.resolve()
-        gitignore_patterns = load_gitignore_patterns(resolved)
-        files = collect_files_to_check(resolved, gitignore_patterns).files
+        from reveal.cli.file_checker import collect_files_to_check
+        files = collect_files_to_check(path.resolve()).files
         if len(files) > _HEALTH_MAX_FILES:
             return 1, (
                 f"code: skipped — {len(files)} files exceeds health check limit "
@@ -166,6 +164,9 @@ def _check_code(path: Path, args: Namespace):
             )
     select = getattr(args, 'select', None) or 'B,S,I,C'
     cmd = ['reveal', 'check', str(path), f'--select={select}', '--only-failures', '--format=json']
+    from reveal.utils.gitignore import gitignore_enabled
+    if not gitignore_enabled():
+        cmd.append('--no-gitignore')  # the child counts the same file set as the guard above
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, encoding='utf-8', errors='replace')
     output = result.stdout.strip()
 

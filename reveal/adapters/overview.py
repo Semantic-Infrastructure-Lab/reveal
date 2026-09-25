@@ -23,6 +23,7 @@ from .git import GitAdapter
 from .imports import ImportsAdapter
 from .stats import StatsAdapter
 from ..utils import print_json_result
+from ..utils.gitignore import respect_gitignore_param
 from ..utils.path_utils import is_test_path
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
@@ -584,7 +585,7 @@ class OverviewAdapter(ResourceAdapter):
         self.exclude_patterns: List[str] = (
             [p for p in str(exclude_param).split(',') if p] if exclude_param else []
         )
-        self.respect_gitignore: bool = str(self.query_params.get('respect_gitignore', True)).lower() != 'false'
+        self.respect_gitignore: bool = respect_gitignore_param(self.query_params)
 
     @staticmethod
     def get_help() -> Dict[str, Any]:

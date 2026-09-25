@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Iterator, cast
 
 from ...registry import DECLARATION_ONLY_EXTENSIONS, get_analyzer
+from ...utils.gitignore import gitignore_filter
 from ...utils.path_utils import is_skippable_dir
 
 
@@ -29,7 +30,7 @@ def _is_large_json(file_path: Path) -> bool:
 def find_analyzable_files(
     directory: Path,
     code_only: bool = False,
-    respect_gitignore: bool = True,
+    respect_gitignore: Optional[bool] = None,
     exclude_patterns: Optional[List[str]] = None,
     excluded_by_extension: Optional[Dict[str, int]] = None,
 ) -> Iterator[Path]:
@@ -38,7 +39,8 @@ def find_analyzable_files(
     Args:
         directory: Directory to search
         code_only: If True, exclude data/config files
-        respect_gitignore: If True, skip gitignored directories and files
+        respect_gitignore: skip what git ignores (utils/gitignore.py);
+            None follows the process switch (--no-gitignore)
         exclude_patterns: BACK-1042 — additional user-supplied --exclude
             patterns, matched with the same semantics as gitignore_patterns
             (same directory-pruning behavior, so an excluded subtree is
@@ -56,17 +58,10 @@ def find_analyzable_files(
         Analyzable file paths one at a time (generator — avoids materializing
         the full list into memory before analysis begins).
     """
-    gitignore_patterns: List[str] = []
-    if respect_gitignore:
-        try:
-            from ...cli.file_checker import load_gitignore_patterns  # deferred: cli cycle
-            gitignore_patterns = load_gitignore_patterns(directory)
-        except Exception:
-            # Missing/unreadable .gitignore or import cycle glitch — scan
-            # unfiltered rather than fail the whole directory walk.
-            pass
-
-    skip_patterns = gitignore_patterns + list(exclude_patterns or [])
+    # BACK-1485: git's own verdict, not a root-.gitignore pattern matcher that
+    # dropped tracked files and ignored '!negation'.
+    gi = gitignore_filter(directory, respect_gitignore)
+    skip_patterns = list(exclude_patterns or [])
 
     # BACK-1221: honor REVEAL_IGNORE/config.yaml 'ignore:' here too — this is
     # one of several independent walkers that never routed through
@@ -85,6 +80,8 @@ def find_analyzable_files(
                 return False
             if config.should_ignore(root_path / d):
                 return False
+            if gi is not None and gi.ignored(root_path / d, is_dir=True):
+                return False
             if skip_patterns:
                 from ...cli.file_checker import should_skip_file  # deferred: cli cycle
                 try:
@@ -102,6 +99,9 @@ def find_analyzable_files(
             file_path = root_path / file
 
             if config.should_ignore(file_path):
+                continue
+
+            if gi is not None and gi.ignored(file_path):
                 continue
 
             if skip_patterns:

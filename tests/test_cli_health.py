@@ -111,15 +111,10 @@ class TestCheckCode(unittest.TestCase):
         self._collect_patcher = patch(
             'reveal.cli.file_checker.collect_files_to_check', return_value=FileCollectionResult(files=[])
         )
-        self._gitignore_patcher = patch(
-            'reveal.cli.file_checker.load_gitignore_patterns', return_value=[]
-        )
         self._collect_patcher.start()
-        self._gitignore_patcher.start()
 
     def tearDown(self):
         self._collect_patcher.stop()
-        self._gitignore_patcher.stop()
 
     @patch('subprocess.run')
     def test_healthy_returns_0(self, mock_run):
@@ -204,9 +199,6 @@ class TestCheckCode(unittest.TestCase):
             with patch(
                 'reveal.cli.file_checker.collect_files_to_check',
                 return_value=FileCollectionResult(files=fake_files),
-            ), patch(
-                'reveal.cli.file_checker.load_gitignore_patterns',
-                return_value=[],
             ), patch('subprocess.run') as mock_run:
                 code, summary = _check_code(Path(d), Namespace(select=None))
             # subprocess must NOT have been called
@@ -223,9 +215,6 @@ class TestCheckCode(unittest.TestCase):
             with patch(
                 'reveal.cli.file_checker.collect_files_to_check',
                 return_value=FileCollectionResult(files=fake_files),
-            ), patch(
-                'reveal.cli.file_checker.load_gitignore_patterns',
-                return_value=[],
             ), patch('subprocess.run') as mock_run:
                 mock_run.return_value = MagicMock(returncode=0, stdout='')
                 _check_code(Path(d), Namespace(select=None))

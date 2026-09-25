@@ -336,8 +336,7 @@ class TestRunCheck(unittest.TestCase):
 
     @patch('reveal.cli.file_checker._check_files_json')
     @patch('reveal.cli.file_checker.collect_files_to_check', return_value=FileCollectionResult(files=[Path('/tmp/f.py')]))
-    @patch('reveal.cli.file_checker.load_gitignore_patterns', return_value=[])
-    def test_returns_violations(self, _pats, _files, mock_check):
+    def test_returns_violations(self, _files, mock_check):
         mock_check.return_value = (1, 1, [{
             'file': 'f.py',
             'issues': 1,
@@ -349,16 +348,15 @@ class TestRunCheck(unittest.TestCase):
 
     @patch('reveal.cli.file_checker._check_files_json')
     @patch('reveal.cli.file_checker.collect_files_to_check', return_value=FileCollectionResult(files=[]))
-    @patch('reveal.cli.file_checker.load_gitignore_patterns', return_value=[])
-    def test_no_files_returns_empty_list(self, _pats, _files, mock_check):
+    def test_no_files_returns_empty_list(self, _files, mock_check):
         mock_check.return_value = (0, 0, [], 0, False)
         result = _run_check(Path('/tmp'), 'B,S')
         self.assertEqual(result, [])
 
-    @patch('reveal.cli.file_checker.load_gitignore_patterns', side_effect=Exception("fail"))
+    @patch('reveal.cli.file_checker.collect_files_to_check', side_effect=Exception("fail"))
     def test_exception_returns_empty_list(self, _mock):
         errors = []
-        # A directory that exists on every OS, so the patched gitignore loader
+        # A directory that exists on every OS, so the patched file collector
         # is what fails (on Windows '/tmp' is not a directory and a real check ran).
         result = _run_check(Path(tempfile.gettempdir()), 'B,S', errors=errors)
         self.assertEqual(result, [])

@@ -1196,7 +1196,7 @@ def capability_tiers_for(language_extensions: Dict[str, str]) -> Dict[str, str]:
 def scope_dict_for_path(
     path: Path,
     exclude_patterns: Optional[List[str]] = None,
-    respect_gitignore: bool = False,
+    respect_gitignore: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """The BACK-884 ``scope`` block for *path*: a fresh census
     (``path_utils.census_for_path``) with per-language capability tier

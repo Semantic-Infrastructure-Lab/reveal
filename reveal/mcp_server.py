@@ -577,7 +577,7 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
     """
     from pathlib import Path
     from .checks import capability_disclosures
-    from .cli.file_checker import collect_files_to_check, load_gitignore_patterns, _check_files_json
+    from .cli.file_checker import collect_files_to_check, _check_files_json
 
     p = Path(path)
     if not p.exists():
@@ -589,8 +589,7 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
 
     if p.is_dir():
         directory = p.resolve()
-        gitignore_patterns = load_gitignore_patterns(directory)
-        files = collect_files_to_check(directory, gitignore_patterns).files
+        files = collect_files_to_check(directory).files
         if not files:
             return f"No files found to check in {path}"
     else:

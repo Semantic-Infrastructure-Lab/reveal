@@ -2,12 +2,12 @@
 File and directory filtering for reveal.
 
 Provides smart filtering to hide build artifacts, test output, and other
-noise from directory listings. Supports .gitignore patterns and custom
-exclusion rules.
+noise from directory listings. Honors what git ignores (utils/gitignore.py,
+the same oracle every analysis walk uses) and custom exclusion rules.
 
 Features:
 ---------
-1. .gitignore parsing and pattern matching
+1. git's own ignore verdict (tracked files are never hidden)
 2. Smart defaults for common noise patterns
 3. Custom exclude patterns
 4. Per-project filtering rules
@@ -24,6 +24,8 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import fnmatch
+
+from ..utils.gitignore import gitignore_filter
 
 
 # Common noise patterns that should be filtered by default
@@ -80,108 +82,6 @@ DEFAULT_NOISE_PATTERNS = [
 ]
 
 
-class GitignoreParser:
-    """Parse and match .gitignore patterns.
-
-    Implements a simplified version of gitignore pattern matching:
-    - Supports glob patterns (*, ?, [...])
-    - Supports directory patterns (trailing /)
-    - Supports negation (leading !)
-    - Respects .gitignore location (patterns relative to that directory)
-    """
-
-    def __init__(self, gitignore_path: Path):
-        """Initialize parser with .gitignore file path.
-
-        Args:
-            gitignore_path: Path to .gitignore file
-        """
-        self.gitignore_dir = gitignore_path.parent
-        self.patterns: List[Dict[str, Any]] = []
-        self._parse(gitignore_path)
-
-    def _parse(self, gitignore_path: Path):
-        """Parse .gitignore file and extract patterns.
-
-        Args:
-            gitignore_path: Path to .gitignore file
-        """
-        try:
-            content = gitignore_path.read_text(encoding='utf-8', errors='ignore')
-        except (IOError, OSError):
-            return
-        for line in content.splitlines():
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-            negate = line.startswith('!')
-            if negate:
-                line = line[1:]
-            self.patterns.append({
-                'pattern': line,
-                'negate': negate,
-                'dir_only': line.endswith('/')
-            })
-
-    def matches(self, path: Path) -> bool:
-        """Check if path matches any gitignore pattern.
-
-        Args:
-            path: Path to check (can be file or directory)
-
-        Returns:
-            True if path should be ignored
-        """
-        # Make path relative to gitignore directory
-        try:
-            relative_path = path.relative_to(self.gitignore_dir)
-        except ValueError:
-            # Path is not under gitignore directory
-            return False
-
-        # Check against patterns
-        ignored = False
-        for pattern_info in self.patterns:
-            pattern = pattern_info['pattern'].rstrip('/')
-
-            # Check if pattern matches
-            if self._match_pattern(str(relative_path), pattern, path.is_dir()):
-                if pattern_info['negate']:
-                    ignored = False  # Negation patterns override
-                else:
-                    ignored = True
-
-        return ignored
-
-    def _match_pattern(self, path_str: str, pattern: str, is_dir: bool) -> bool:
-        """Check if path matches gitignore pattern.
-
-        Args:
-            path_str: String representation of path
-            pattern: Gitignore pattern
-            is_dir: Whether path is a directory
-
-        Returns:
-            True if pattern matches
-        """
-        # Match against full path
-        if fnmatch.fnmatch(path_str, pattern):
-            return True
-
-        # Match against filename only
-        if '/' not in pattern:
-            basename = os.path.basename(path_str)
-            if fnmatch.fnmatch(basename, pattern):
-                return True
-
-        # Match directory patterns
-        if is_dir:
-            if fnmatch.fnmatch(path_str + '/', pattern + '/'):
-                return True
-
-        return False
-
-
 class PathFilter:
     """Unified path filtering system.
 
@@ -209,12 +109,9 @@ class PathFilter:
         self.exclude_patterns = exclude_patterns or []
         self.include_defaults = include_defaults
 
-        # Load .gitignore if present
-        self.gitignore_parser = None
-        if respect_gitignore:
-            gitignore_path = self.root_path / '.gitignore'
-            if gitignore_path.exists():
-                self.gitignore_parser = GitignoreParser(gitignore_path)
+        # BACK-1485: git's verdict, shared with every analysis walk -- this
+        # used to be a second root-.gitignore parser that hid tracked files.
+        self.gitignore = gitignore_filter(self.root_path, respect_gitignore)
 
     def should_filter(self, path: Path) -> bool:
         """Check if path should be filtered out.
@@ -241,8 +138,8 @@ class PathFilter:
         Returns:
             'gitignore', 'noise', or 'exclude' if filtered; None if it survives.
         """
-        # Check .gitignore
-        if self.gitignore_parser and self.gitignore_parser.matches(path):
+        # Check what git ignores
+        if self.gitignore is not None and self.gitignore.ignored(path, is_dir=path.is_dir()):
             return 'gitignore'
 
         # Check default noise patterns

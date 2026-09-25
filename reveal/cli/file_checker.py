@@ -397,29 +397,6 @@ def _print_grouped_detections(
             print(f"  ↳ +{total - 1} more {d.rule_code} occurrences hidden — use --no-group to expand")
 
 
-def load_gitignore_patterns(directory: Path) -> List[str]:
-    """Load .gitignore patterns from directory.
-
-    Args:
-        directory: Directory containing .gitignore file
-
-    Returns:
-        List of gitignore patterns (empty if no .gitignore or on error)
-    """
-    gitignore_file = directory / '.gitignore'
-    if not gitignore_file.exists():
-        return []
-
-    try:
-        with open(gitignore_file, encoding='utf-8') as f:
-            return [
-                line.strip() for line in f
-                if line.strip() and not line.startswith('#')
-            ]
-    except Exception:
-        return []
-
-
 def should_skip_file(relative_path: Path, gitignore_patterns: List[str]) -> bool:
     """Check if file should be skipped based on gitignore patterns.
 
@@ -520,19 +497,19 @@ class FileCollectionResult:
 
 def collect_files_to_check(
     directory: Path,
-    gitignore_patterns: List[str],
+    respect_gitignore: Optional[bool] = None,
     exclude_patterns: Optional[List[str]] = None,
 ) -> FileCollectionResult:
     """Collect all supported files in directory tree.
 
     Args:
         directory: Root directory to scan
-        gitignore_patterns: Patterns to skip (from .gitignore, empty if
-            --no-gitignore)
+        respect_gitignore: skip what git ignores (BACK-1485, via
+            utils/gitignore.py: tracked files are never skipped); None
+            follows the process switch (--no-gitignore)
         exclude_patterns: Additional user-supplied --exclude patterns
-            (BACK-1042); matched with the same semantics as
-            gitignore_patterns so a directory pattern like
-            "wp-includes/js/dist/*" prunes the whole subtree instead of
+            (BACK-1042), fnmatch'd by should_skip_file; a directory pattern
+            like "wp-includes/js/dist/*" prunes the whole subtree instead of
             just filtering it out of the final report.
 
     Returns:
@@ -546,7 +523,9 @@ def collect_files_to_check(
     skipped_no_analyzer = 0
     skipped_dirs = 0
     no_analyzer_by_language: Dict[str, Dict[str, object]] = {}
-    skip_patterns = list(gitignore_patterns) + list(exclude_patterns or [])
+    from ..utils.gitignore import gitignore_filter
+    gi = gitignore_filter(directory, respect_gitignore)
+    skip_patterns = list(exclude_patterns or [])
 
     # BACK-1221: REVEAL_IGNORE / config.yaml 'ignore:' patterns were wired
     # into _walk_code_files's walk (BACK-1201) but this is `check`'s own,
@@ -568,6 +547,9 @@ def collect_files_to_check(
             if config.should_ignore(dir_path):
                 skipped_dirs += 1
                 continue
+            if gi is not None and gi.ignored(dir_path, is_dir=True):
+                skipped_dirs += 1
+                continue
             if skip_patterns:
                 rel_dir = dir_path.relative_to(directory)
                 # Append a dummy filename so should_skip_file sees parts correctly
@@ -587,7 +569,8 @@ def collect_files_to_check(
                 continue
 
             # Skip gitignored/excluded files
-            if should_skip_file(relative_path, skip_patterns):
+            if (gi is not None and gi.ignored(file_path)) or (
+                    skip_patterns and should_skip_file(relative_path, skip_patterns)):
                 skipped_gitignore += 1
                 continue
 
@@ -1348,10 +1331,9 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     config = RevealConfig.get(start_path=directory, cli_overrides=cli_overrides if cli_overrides else None)
 
     # Collect files to check
-    respect_gitignore = getattr(args, 'respect_gitignore', True)
-    gitignore_patterns = load_gitignore_patterns(directory) if respect_gitignore else []
+    respect_gitignore = getattr(args, 'respect_gitignore', True) is not False
     exclude_patterns = getattr(args, 'exclude', None) or []
-    collection = collect_files_to_check(directory, gitignore_patterns, exclude_patterns)
+    collection = collect_files_to_check(directory, respect_gitignore, exclude_patterns)
     files_to_check = collection.files
 
     # Handle no files found
@@ -1483,10 +1465,9 @@ def handle_profile_rules(directory: Path, args: 'Namespace') -> None:
     """
     directory = directory.resolve()
 
-    respect_gitignore = getattr(args, 'respect_gitignore', True)
-    gitignore_patterns = load_gitignore_patterns(directory) if respect_gitignore else []
+    respect_gitignore = getattr(args, 'respect_gitignore', True) is not False
     exclude_patterns = getattr(args, 'exclude', None) or []
-    files_to_check = collect_files_to_check(directory, gitignore_patterns, exclude_patterns).files
+    files_to_check = collect_files_to_check(directory, respect_gitignore, exclude_patterns).files
     if not files_to_check:
         _handle_no_files_found(directory, 'text')
         return
@@ -1518,7 +1499,6 @@ def handle_profile_rules(directory: Path, args: 'Namespace') -> None:
 
 
 # Legacy underscore-prefixed names for backwards compatibility
-_load_gitignore_patterns = load_gitignore_patterns
 _should_skip_file = should_skip_file
 _collect_files_to_check = collect_files_to_check
 _check_and_report_file = check_and_report_file

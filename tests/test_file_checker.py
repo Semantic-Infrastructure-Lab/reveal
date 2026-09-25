@@ -6,7 +6,6 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
 from reveal.cli.file_checker import (
-    load_gitignore_patterns,
     should_skip_file,
     collect_files_to_check,
     check_and_report_file,
@@ -22,68 +21,6 @@ from reveal.cli.file_checker import (
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
 pytestmark = pytest.mark.component
-
-
-class TestLoadGitignorePatterns:
-    """Tests for load_gitignore_patterns function."""
-
-    def test_no_gitignore(self, tmp_path):
-        """Test when .gitignore doesn't exist."""
-        patterns = load_gitignore_patterns(tmp_path)
-        assert patterns == []
-
-    def test_with_gitignore(self, tmp_path):
-        """Test loading patterns from .gitignore."""
-        gitignore = tmp_path / '.gitignore'
-        gitignore.write_text('*.pyc\n__pycache__/\n# comment\n\n.env\n')
-
-        patterns = load_gitignore_patterns(tmp_path)
-
-        assert '*.pyc' in patterns
-        assert '__pycache__/' in patterns
-        assert '.env' in patterns
-        assert '# comment' not in patterns  # Comments should be filtered
-        assert '' not in patterns  # Empty lines should be filtered
-
-    def test_empty_gitignore(self, tmp_path):
-        """Test with empty .gitignore file."""
-        gitignore = tmp_path / '.gitignore'
-        gitignore.write_text('\n\n')
-
-        patterns = load_gitignore_patterns(tmp_path)
-        assert patterns == []
-
-    def test_whitespace_only_gitignore(self, tmp_path):
-        """Test with whitespace-only lines."""
-        gitignore = tmp_path / '.gitignore'
-        gitignore.write_text('   \n\t\n  \t  \n')
-
-        patterns = load_gitignore_patterns(tmp_path)
-        assert patterns == []
-
-    def test_gitignore_with_inline_comments(self, tmp_path):
-        """Test gitignore with various comment styles."""
-        gitignore = tmp_path / '.gitignore'
-        gitignore.write_text('*.pyc\n# Full line comment\n.env  # Not a comment\n')
-
-        patterns = load_gitignore_patterns(tmp_path)
-        assert '*.pyc' in patterns
-        assert '.env  # Not a comment' in patterns  # Simple parser doesn't strip inline
-        assert '# Full line comment' not in patterns
-
-    @pytest.mark.skipif(sys.platform == 'win32', reason="chmod doesn't work the same on Windows")
-    @pytest.mark.skipif(sys.platform == 'win32', reason="chmod doesn't work the same way on Windows")
-    def test_gitignore_read_error(self, tmp_path):
-        """Test handling of read errors."""
-        gitignore = tmp_path / '.gitignore'
-        gitignore.write_text('*.pyc')
-        gitignore.chmod(0o000)  # Remove read permissions
-
-        try:
-            patterns = load_gitignore_patterns(tmp_path)
-            assert patterns == []  # Should return empty list on error
-        finally:
-            gitignore.chmod(0o644)  # Restore permissions
 
 
 class TestShouldSkipFile:
@@ -173,7 +110,7 @@ class TestCollectFilesToCheck:
 
     def test_empty_directory(self, tmp_path):
         """Test collecting files from empty directory."""
-        files = collect_files_to_check(tmp_path, []).files
+        files = collect_files_to_check(tmp_path).files
         assert files == []
 
     def test_python_files(self, tmp_path):
@@ -188,7 +125,7 @@ class TestCollectFilesToCheck:
                 return Mock() if path.endswith('.py') else None
             mock_get_analyzer.side_effect = analyzer_mock
 
-            files = collect_files_to_check(tmp_path, []).files
+            files = collect_files_to_check(tmp_path).files
 
         assert len(files) == 2
         assert all(f.suffix == '.py' for f in files)
@@ -207,7 +144,7 @@ class TestCollectFilesToCheck:
 
         with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             mock_get_analyzer.return_value = Mock()  # Return analyzer for all files
-            files = collect_files_to_check(tmp_path, []).files
+            files = collect_files_to_check(tmp_path).files
 
         # Should only find the file in the root directory
         assert len(files) == 1
@@ -225,7 +162,7 @@ class TestCollectFilesToCheck:
 
         with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             mock_get_analyzer.return_value = Mock()
-            files = collect_files_to_check(tmp_path, []).files
+            files = collect_files_to_check(tmp_path).files
 
         assert len(files) == 1
         assert files[0].name == 'included.py'
@@ -240,7 +177,7 @@ class TestCollectFilesToCheck:
 
         with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             mock_get_analyzer.return_value = Mock()
-            result = collect_files_to_check(tmp_path, [], exclude_patterns=['dist/*'])
+            result = collect_files_to_check(tmp_path, exclude_patterns=['dist/*'])
 
         assert [f.name for f in result.files] == ['included.py']
         assert result.skipped_dirs == 1
@@ -258,7 +195,7 @@ class TestCollectFilesToCheck:
 
         with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             mock_get_analyzer.return_value = Mock()
-            files = collect_files_to_check(tmp_path, [], exclude_patterns=['*.min.js']).files
+            files = collect_files_to_check(tmp_path, exclude_patterns=['*.min.js']).files
 
         assert [f.name for f in files] == ['app.py']
 
@@ -269,7 +206,7 @@ class TestCollectFilesToCheck:
 
         with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             mock_get_analyzer.return_value = Mock()
-            files = collect_files_to_check(tmp_path, []).files
+            files = collect_files_to_check(tmp_path).files
 
         assert len(files) == 1
 
@@ -286,7 +223,7 @@ class TestCollectFilesToCheck:
 
         with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             mock_get_analyzer.return_value = Mock()
-            files = collect_files_to_check(tmp_path, []).files
+            files = collect_files_to_check(tmp_path).files
 
         assert [f.name for f in files] == ['keep.py']
 
@@ -299,11 +236,14 @@ class TestFileCollectionResultCounts:
         (tmp_path / 'keep.py').write_text('# keep')
         (tmp_path / 'ignore.py').write_text('# ignore')
         with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
-            mock_get_analyzer.return_value = Mock()
-            result = collect_files_to_check(tmp_path, ['ignore.py'])
+            # the .gitignore file itself has no analyzer
+            mock_get_analyzer.side_effect = lambda p, allow_fallback=True: (
+                None if p.endswith('.gitignore') else Mock())
+            (tmp_path / '.gitignore').write_text('ignore.py\n')
+            result = collect_files_to_check(tmp_path)
         assert len(result.files) == 1
         assert result.skipped_gitignore == 1
-        assert result.skipped_no_analyzer == 0
+        assert result.skipped_no_analyzer == 1  # .gitignore
 
     def test_skipped_no_analyzer_counted(self, tmp_path):
         (tmp_path / 'a.py').write_text('# code')
@@ -312,7 +252,7 @@ class TestFileCollectionResultCounts:
             def analyzer_mock(path, allow_fallback=True):
                 return Mock() if path.endswith('.py') else None
             mock_get_analyzer.side_effect = analyzer_mock
-            result = collect_files_to_check(tmp_path, [])
+            result = collect_files_to_check(tmp_path)
         assert len(result.files) == 1
         assert result.skipped_no_analyzer == 1
         assert result.skipped_gitignore == 0
@@ -325,12 +265,12 @@ class TestFileCollectionResultCounts:
         (tmp_path / 'included.py').write_text('# included')
         with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             mock_get_analyzer.return_value = Mock()
-            result = collect_files_to_check(tmp_path, [])
+            result = collect_files_to_check(tmp_path)
         assert len(result.files) == 1
         assert result.skipped_dirs == 3
 
     def test_empty_directory_zero_counts(self, tmp_path):
-        result = collect_files_to_check(tmp_path, [])
+        result = collect_files_to_check(tmp_path)
         assert result.files == []
         assert result.skipped_gitignore == 0
         assert result.skipped_no_analyzer == 0
@@ -348,7 +288,7 @@ class TestFileCollectionResultToScopeCensus:
         (tmp_path / 'c.rs').write_text('// c')
         with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             mock_get_analyzer.return_value = Mock()
-            result = collect_files_to_check(tmp_path, [])
+            result = collect_files_to_check(tmp_path)
         census = result.to_scope_census()
         assert census.per_language == {'python': 2, 'rust': 1}
         assert census.total_code_files == 3
@@ -357,14 +297,17 @@ class TestFileCollectionResultToScopeCensus:
         (tmp_path / 'keep.py').write_text('# keep')
         (tmp_path / 'ignore.py').write_text('# ignore')
         with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
-            mock_get_analyzer.return_value = Mock()
-            result = collect_files_to_check(tmp_path, ['ignore.py'])
+            # the .gitignore file itself has no analyzer
+            mock_get_analyzer.side_effect = lambda p, allow_fallback=True: (
+                None if p.endswith('.gitignore') else Mock())
+            (tmp_path / '.gitignore').write_text('ignore.py\n')
+            result = collect_files_to_check(tmp_path)
         census = result.to_scope_census()
         assert census.skipped_gitignore == 1
-        assert census.skipped_no_analyzer == 0
+        assert census.skipped_no_analyzer == 1  # .gitignore
 
     def test_empty_collection_empty_census(self, tmp_path):
-        result = collect_files_to_check(tmp_path, [])
+        result = collect_files_to_check(tmp_path)
         census = result.to_scope_census()
         assert census.per_language == {}
         assert census.total_code_files == 0
@@ -383,7 +326,7 @@ class TestFileCollectionResultToScopeCensus:
             def analyzer_mock(path, allow_fallback=True):
                 return Mock() if path.endswith('.py') else None
             mock_get_analyzer.side_effect = analyzer_mock
-            result = collect_files_to_check(tmp_path, [])
+            result = collect_files_to_check(tmp_path)
         assert len(result.files) == 1  # only a.py — objc file never gets rule-checked
         census = result.to_scope_census()
         assert census.per_language == {'python': 1, 'objc': 1}
@@ -406,7 +349,7 @@ class TestAmbiguousSkipDirectories:
 
         with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             mock_get_analyzer.return_value = Mock()
-            files = collect_files_to_check(tmp_path, []).files
+            files = collect_files_to_check(tmp_path).files
 
         assert len(files) == 1
         assert files[0].name == 'included.py'
@@ -420,7 +363,7 @@ class TestAmbiguousSkipDirectories:
 
         with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             mock_get_analyzer.return_value = Mock()
-            files = collect_files_to_check(tmp_path, []).files
+            files = collect_files_to_check(tmp_path).files
 
         names = {f.name for f in files}
         assert names == {'included.py', 'Environment.py'}
@@ -434,7 +377,7 @@ class TestAmbiguousSkipDirectories:
 
         with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             mock_get_analyzer.return_value = Mock()
-            files = collect_files_to_check(tmp_path, []).files
+            files = collect_files_to_check(tmp_path).files
 
         assert len(files) == 1
         assert files[0].name == 'included.py'
@@ -448,7 +391,7 @@ class TestAmbiguousSkipDirectories:
 
         with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             mock_get_analyzer.return_value = Mock()
-            files = collect_files_to_check(tmp_path, []).files
+            files = collect_files_to_check(tmp_path).files
 
         assert len(files) == 1
         assert files[0].name == 'included.py'
@@ -459,11 +402,12 @@ class TestAmbiguousSkipDirectories:
         (tmp_path / 'ignore.pyc').write_text('# Ignore this')
         (tmp_path / 'also_ignore.py').write_text('# Also ignore')
 
-        patterns = ['*.pyc', 'also_ignore.py']
+        (tmp_path / '.gitignore').write_text('*.pyc\nalso_ignore.py\n')
 
         with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
-            mock_get_analyzer.return_value = Mock()
-            files = collect_files_to_check(tmp_path, patterns).files
+            mock_get_analyzer.side_effect = lambda p, allow_fallback=True: (
+                None if p.endswith('.gitignore') else Mock())
+            files = collect_files_to_check(tmp_path).files
 
         assert len(files) == 1
         assert files[0].name == 'keep.py'
@@ -478,7 +422,7 @@ class TestAmbiguousSkipDirectories:
 
         with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             mock_get_analyzer.return_value = Mock()
-            files = collect_files_to_check(tmp_path, []).files
+            files = collect_files_to_check(tmp_path).files
 
         assert len(files) == 2
         file_names = {f.name for f in files}
