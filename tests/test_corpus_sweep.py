@@ -55,14 +55,14 @@ def test_diff_raw_reports_changed_functions_and_ignores_one_sided_files():
 def test_absent_corpus_exits_zero(tmp_path):
     env = dict(os.environ, REVEAL_CORPUS_DIR=str(tmp_path / "missing"),
                REVEAL_ORACLE_CORPUS_DIR=str(tmp_path / "missing"))
-    r = subprocess.run([sys.executable, str(SCRIPT), "agree"], env=env, capture_output=True, text=True)
+    r = subprocess.run([sys.executable, str(SCRIPT), "agree"], env=env, capture_output=True, text=True, encoding='utf-8')
     assert r.returncode == 0 and "corpus not found" in r.stdout
 
 
 def test_complexity_requires_base_ref(tmp_path):
     env = dict(os.environ, REVEAL_CORPUS_DIR=str(tmp_path))
     (tmp_path / "go").mkdir()
-    r = subprocess.run([sys.executable, str(SCRIPT), "complexity"], env=env, capture_output=True, text=True)
+    r = subprocess.run([sys.executable, str(SCRIPT), "complexity"], env=env, capture_output=True, text=True, encoding='utf-8')
     assert r.returncode != 0 and "--base-ref" in r.stderr
 
 

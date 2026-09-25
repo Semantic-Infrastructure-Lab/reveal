@@ -69,7 +69,7 @@ def test_worker_warnings_are_prefixed_under_non_fork_start_methods(tmp_path, sta
 
     proc = subprocess.run(
         [sys.executable, str(driver), start_method, str(src)],
-        capture_output=True, text=True, timeout=600,
+        capture_output=True, text=True, encoding='utf-8', timeout=600,
     )
 
     warning_lines = [

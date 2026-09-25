@@ -25,7 +25,7 @@ pytestmark = pytest.mark.component
 def _run(cwd, *args):
     proc = subprocess.run(
         [sys.executable, '-m', 'reveal', *args],
-        capture_output=True, text=True, cwd=str(cwd), timeout=600,
+        capture_output=True, text=True, encoding='utf-8', cwd=str(cwd), timeout=600,
     )
     return proc
 

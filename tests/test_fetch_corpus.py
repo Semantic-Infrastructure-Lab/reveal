@@ -39,7 +39,7 @@ def _init_repo(path: Path, files: dict) -> str:
     subprocess.run(["git", "add", "."], cwd=path, check=True)
     subprocess.run(["git", "commit", "-q", "-m", "init"], cwd=path, check=True)
     out = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=path, capture_output=True, text=True, check=True
+        ["git", "rev-parse", "HEAD"], cwd=path, capture_output=True, text=True, encoding='utf-8', check=True
     )
     return out.stdout.strip()
 

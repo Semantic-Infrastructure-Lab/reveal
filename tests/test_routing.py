@@ -1272,7 +1272,7 @@ class TestHandleFile(unittest.TestCase):
                     return subprocess.run(
                         [_sys.executable, '-m', 'reveal', 'check', target,
                          '--exit-zero', *extra],
-                        capture_output=True, text=True,
+                        capture_output=True, text=True, encoding='utf-8',
                     )
 
                 text_run = run('--also-json', str(artifact))
@@ -1308,7 +1308,7 @@ class TestHandleFile(unittest.TestCase):
                 subprocess.run(
                     [_sys.executable, '-m', 'reveal', 'check', tmp, '--exit-zero',
                      '--also-json', str(out), *extra],
-                    capture_output=True, text=True,
+                    capture_output=True, text=True, encoding='utf-8',
                 )
                 return json.loads(out.read_text())['files']
 

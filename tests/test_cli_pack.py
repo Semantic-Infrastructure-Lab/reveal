@@ -970,7 +970,7 @@ class TestGetChangedFiles(unittest.TestCase):
         # Only run if the test directory is inside a git repo
         try:
             result = sp.run(['git', 'rev-parse', '--show-toplevel'],
-                            capture_output=True, text=True,
+                            capture_output=True, text=True, encoding='utf-8',
                             cwd=str(Path(__file__).parent))
             if result.returncode != 0:
                 self.skipTest("not in a git repo")
@@ -986,7 +986,7 @@ class TestGetChangedFiles(unittest.TestCase):
         import subprocess as sp
         try:
             result = sp.run(['git', 'rev-parse', 'HEAD~1'],
-                            capture_output=True, text=True,
+                            capture_output=True, text=True, encoding='utf-8',
                             cwd=str(Path(__file__).parent))
             if result.returncode != 0:
                 self.skipTest("not enough commits")

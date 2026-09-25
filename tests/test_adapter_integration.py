@@ -306,7 +306,7 @@ class TestGitAdapterIntegration(unittest.TestCase):
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             cwd=repo_dir,
             capture_output=True,
-            text=True
+            text=True, encoding='utf-8'
         )
         ref = branch_result.stdout.strip()
         if ref and ref != "HEAD":
@@ -316,7 +316,7 @@ class TestGitAdapterIntegration(unittest.TestCase):
             ["git", "rev-parse", "HEAD"],
             cwd=repo_dir,
             capture_output=True,
-            text=True
+            text=True, encoding='utf-8'
         )
         return sha_result.stdout.strip()
 

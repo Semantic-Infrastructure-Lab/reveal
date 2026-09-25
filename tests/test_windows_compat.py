@@ -156,7 +156,7 @@ class TestResourceModuleWindows(unittest.TestCase):
         env['PYTHONPATH'] = pkg_parent + os.pathsep + env.get('PYTHONPATH', '')
         result = subprocess.run(
             [sys.executable, '-c', code],
-            capture_output=True, text=True, env=env,
+            capture_output=True, text=True, encoding='utf-8', env=env,
         )
         self.assertEqual(
             result.returncode, 0,

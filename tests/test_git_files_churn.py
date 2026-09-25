@@ -99,7 +99,7 @@ class TestGetChurnCounts:
         for fname in ('a.py', 'b.py'):
             result = subprocess.run(
                 ['git', 'log', '--oneline', '--', fname],
-                cwd=str(repo_dir), capture_output=True, text=True,
+                cwd=str(repo_dir), capture_output=True, text=True, encoding='utf-8',
             )
             git_count = len([ln for ln in result.stdout.splitlines() if ln.strip()])
             assert counts[fname] == git_count, f"{fname}: reveal={counts[fname]} git={git_count}"

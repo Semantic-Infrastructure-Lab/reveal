@@ -645,7 +645,7 @@ class TestImportGraph:
             result = subprocess.run(
                 [sys.executable, '-c', script],
                 cwd=str(Path(__file__).resolve().parent.parent),
-                env=env, capture_output=True, text=True, timeout=30,
+                env=env, capture_output=True, text=True, encoding='utf-8', timeout=30,
             )
             assert result.returncode == 0, result.stderr
             outputs.add(result.stdout.strip())

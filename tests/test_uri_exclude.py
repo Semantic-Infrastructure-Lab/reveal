@@ -43,7 +43,7 @@ def tree(tmp_path):
 def _query(tree, uri, *flags, key):
     proc = subprocess.run(
         [sys.executable, '-m', 'reveal', uri, *flags, '--format', 'json'],
-        capture_output=True, text=True, cwd=str(tree), timeout=600,
+        capture_output=True, text=True, encoding='utf-8', cwd=str(tree), timeout=600,
     )
     assert proc.returncode == 0, proc.stderr
     return json.loads(proc.stdout)[key]
@@ -122,7 +122,7 @@ def test_hotspots_uri_honors_exclude(tree):
     out = subprocess.run(
         [sys.executable, '-m', 'reveal', 'hotspots://.?top=5',
          '--exclude', 'app/assets/*', '--format', 'json'],
-        capture_output=True, text=True, cwd=str(tree), timeout=600,
+        capture_output=True, text=True, encoding='utf-8', cwd=str(tree), timeout=600,
     )
     assert out.returncode == 0, out.stderr
     result = json.loads(out.stdout)
@@ -144,7 +144,7 @@ def test_hotspots_subcommand_accepts_exclude(tree):
     uri:// form accepted the same flag."""
     out = subprocess.run(
         [sys.executable, '-m', 'reveal', 'hotspots', '.', '--exclude', 'app/assets/*'],
-        capture_output=True, text=True, cwd=str(tree), timeout=600,
+        capture_output=True, text=True, encoding='utf-8', cwd=str(tree), timeout=600,
     )
     # Exit code is hotspots' own severity signal (1 == critical hotspots found),
     # so only the parser error and the filtering are asserted here.
@@ -163,7 +163,7 @@ def test_check_subcommand_still_honors_exclude(tree):
         out = subprocess.run(
             [sys.executable, '-m', 'reveal', 'check', '.', '--exit-zero',
              '--format', 'json', *flags],
-            capture_output=True, text=True, cwd=str(tree), timeout=600,
+            capture_output=True, text=True, encoding='utf-8', cwd=str(tree), timeout=600,
         )
         return json.loads(out.stdout)['summary']['files_checked']
 
@@ -182,7 +182,7 @@ def test_ast_honors_reveal_ignore_env_var(tree):
         env = {**os.environ, **env_extra}
         proc = subprocess.run(
             [sys.executable, '-m', 'reveal', 'ast://.?complexity>3', '--format', 'json'],
-            capture_output=True, text=True, cwd=str(tree), timeout=600, env=env,
+            capture_output=True, text=True, encoding='utf-8', cwd=str(tree), timeout=600, env=env,
         )
         assert proc.returncode == 0, proc.stderr
         return json.loads(proc.stdout)['total_results']
@@ -203,7 +203,7 @@ def test_reveal_ignore_and_cli_exclude_combine(tree):
         env = {**os.environ, **env_extra}
         proc = subprocess.run(
             [sys.executable, '-m', 'reveal', 'ast://.?complexity>3', *flags, '--format', 'json'],
-            capture_output=True, text=True, cwd=str(tree), timeout=600, env=env,
+            capture_output=True, text=True, encoding='utf-8', cwd=str(tree), timeout=600, env=env,
         )
         assert proc.returncode == 0, proc.stderr
         return json.loads(proc.stdout)['total_results']

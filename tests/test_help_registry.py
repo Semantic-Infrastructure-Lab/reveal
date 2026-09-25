@@ -694,7 +694,7 @@ class TestCliHelpOutput(unittest.TestCase):
         import subprocess, sys
         result = subprocess.run(
             [sys.executable, '-m', 'reveal.main', '--help'],
-            capture_output=True, text=True,
+            capture_output=True, text=True, encoding='utf-8',
             cwd=str(_DOCS_ROOT.parent.parent)
         )
         return result.stdout + result.stderr

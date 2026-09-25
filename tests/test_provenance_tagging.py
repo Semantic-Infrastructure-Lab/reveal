@@ -98,7 +98,7 @@ class TestRankingAdaptersCarryProvenance:
     def _run(self, tree, uri):
         proc = subprocess.run(
             [sys.executable, '-m', 'reveal', uri, '--format', 'json'],
-            capture_output=True, text=True, cwd=str(tree), timeout=600,
+            capture_output=True, text=True, encoding='utf-8', cwd=str(tree), timeout=600,
         )
         assert proc.returncode == 0, proc.stderr
         return json.loads(proc.stdout)

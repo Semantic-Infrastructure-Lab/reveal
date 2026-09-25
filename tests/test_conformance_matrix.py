@@ -712,7 +712,7 @@ def test_check_and_hotspots_complete_quickly(lang):
     for flag in ("--check", "--hotspots"):
         result = subprocess.run(
             [sys.executable, "-m", "reveal.main", str(_lang_dir(lang)), flag],
-            capture_output=True, text=True, timeout=30, env=env,
+            capture_output=True, text=True, encoding='utf-8', timeout=30, env=env,
         )
         assert result.returncode in (0, 1), (
             f"{lang} {flag}: unexpected crash (rc={result.returncode}): {result.stderr}"

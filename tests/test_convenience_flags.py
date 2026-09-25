@@ -350,7 +350,7 @@ class TestNameFlagAlias(unittest.TestCase):
         import sys
         return subprocess.run(
             [sys.executable, '-m', 'reveal.main'] + list(args),
-            capture_output=True, text=True,
+            capture_output=True, text=True, encoding='utf-8',
             cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         )
 
