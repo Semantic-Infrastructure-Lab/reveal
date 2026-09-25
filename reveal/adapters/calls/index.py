@@ -1155,7 +1155,7 @@ def rank_by_callers(
 
     Args:
         path: Root directory (or file) to analyse.
-        top: Maximum number of entries to return (default 10, capped at 100).
+        top: Maximum number of entries to return (default 10; 0 or less means all).
         include_builtins: If False (default), skip Python-file callers of
             Python builtins from the ranking; callers of same-named methods
             in other languages (e.g. Scala/Ruby ``.map``) are unaffected.
@@ -1180,7 +1180,6 @@ def rank_by_callers(
         }
     """
     index = build_callers_index(path)
-    top = max(1, min(top, 100))
 
     entries = []
     for callee_name, caller_records in index.items():
@@ -1213,12 +1212,15 @@ def rank_by_callers(
 
     entries.sort(key=lambda e: e['caller_count'], reverse=True)
 
+    # Honor an explicit top; the reported 'top' is the number actually shown.
+    shown = min(top, len(entries)) if top > 0 else len(entries)
+
     return {
         'query': 'rank_callers',
         'path': path,
-        'top': top,
+        'top': shown,
         'total_unique_callees': len(entries),
-        'entries': entries[:top],
+        'entries': entries[:shown],
     }
 
 

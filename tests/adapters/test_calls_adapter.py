@@ -1340,14 +1340,44 @@ class TestRankByCallers(unittest.TestCase):
         self.assertEqual(len(result['entries']), 1)
         self.assertEqual(result['top'], 1)
 
-    def test_top_capped_at_100(self):
-        result = rank_by_callers(self.tmpdir, top=999)
-        self.assertEqual(result['top'], 100)
-
     def test_sorted_descending(self):
         result = rank_by_callers(self.tmpdir)
         counts = [e['caller_count'] for e in result['entries']]
         self.assertEqual(counts, sorted(counts, reverse=True))
+
+
+class TestRankTopIsHonored(unittest.TestCase):
+    """BACK-1345: top= above 100 used to be clamped silently ('top 100 of 9186')."""
+
+    N = 130
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        defs = "\n".join(f"def fn_{i}():\n    return {i}\n" for i in range(self.N))
+        calls = "\n".join(f"    fn_{i}()" for i in range(self.N))
+        Path(self.tmp.name, "lib.py").write_text(
+            defs + "\n\ndef driver():\n" + calls + "\n", encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_top_above_100_is_honored(self):
+        result = rank_by_callers(self.tmp.name, top=120)
+        self.assertEqual(len(result['entries']), 120)
+        self.assertEqual(result['top'], 120)
+
+    def test_top_beyond_total_reports_what_is_shown(self):
+        result = rank_by_callers(self.tmp.name, top=1000000)
+        self.assertEqual(result['top'], result['total_unique_callees'])
+        self.assertEqual(len(result['entries']), result['total_unique_callees'])
+        self.assertGreater(result['total_unique_callees'], 100)
+
+    def test_top_zero_means_all(self):
+        result = rank_by_callers(self.tmp.name, top=0)
+        self.assertEqual(len(result['entries']), result['total_unique_callees'])
+
+    def test_default_is_still_ten(self):
+        self.assertEqual(len(rank_by_callers(self.tmp.name)['entries']), 10)
 
 
 class TestRankByCallersCrossLanguageBuiltins(unittest.TestCase):
