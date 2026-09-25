@@ -19,7 +19,7 @@ import tree_sitter_language_pack as ts
 
 from reveal.adapters.ast.nav_effects import classify_call, collect_effects, format_effect_target
 from reveal.adapters.ast.nav_exits import collect_exits, collect_gate_chains
-from reveal.core.treesitter_compat import tree_root, ts_parse
+from reveal.core.treesitter_compat import _zero_arg, tree_root, ts_parse
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -31,7 +31,7 @@ def _parse(language: str, code: str):
     root = tree_root(ts_parse(ts.get_parser(language), source))
 
     def get_text(node):
-        return data[node.start_byte:node.end_byte].decode('utf-8')
+        return data[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8')
 
     return root, get_text
 
