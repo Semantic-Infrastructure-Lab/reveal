@@ -1,7 +1,27 @@
 """URI parsing for diff adapter."""
 
 
-from typing import Tuple
+import os
+import re
+from typing import Optional, Tuple
+
+_ELEMENT_NAME = re.compile(r'^[A-Za-z_][\w.]*$')
+
+
+def split_trailing_element(right: str) -> Tuple[str, Optional[str]]:
+    """Split ``old.py/handle_request`` into (``old.py``, ``handle_request``).
+
+    The documented ``diff://a.py:b.py/element`` form glues the element onto the right
+    path, and a path can legitimately contain ``/``, so the suffix is an element only
+    when the whole string is not an existing path but its parent is an existing file.
+    Plain file paths only: a URI right side (``git://f@ref``) is never split.
+    """
+    if '://' in right or '/' not in right or os.path.exists(right):
+        return right, None
+    parent, _, element = right.rpartition('/')
+    if _ELEMENT_NAME.match(element) and os.path.isfile(parent):
+        return parent, element
+    return right, None
 
 
 def _find_separator_colon(resource: str) -> int:

@@ -3,7 +3,7 @@
 from typing import Dict, Any, Optional, Tuple, cast
 from reveal.reveal_types import CONTRACT_VERSION
 
-from .parsing import parse_diff_uris
+from .parsing import parse_diff_uris, split_trailing_element
 from .resolution import resolve_uri, extract_metadata, find_element
 from .help import get_schema as _get_schema, get_help as _get_help
 from ..base import ResourceAdapter, register_adapter, register_renderer
@@ -31,6 +31,7 @@ class DiffAdapter(ResourceAdapter):
     right_uri: str
     left_structure: Optional[Dict[str, Any]]
     right_structure: Optional[Dict[str, Any]]
+    embedded_element: Optional[str] = None  # from diff://a.py:b.py/element; read by the CLI router
 
     LEGACY_INIT = False
     CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # directory diffs walk (BACK-1386)
@@ -67,6 +68,7 @@ class DiffAdapter(ResourceAdapter):
             # parse_diff_uris handles Windows drive letters and all URI schemes
             try:
                 self.left_uri, self.right_uri = parse_diff_uris(resource)
+                self.right_uri, self.embedded_element = split_trailing_element(self.right_uri)
             except ValueError:
                 raise ValueError(
                     "DiffAdapter requires 'left:right' format. "

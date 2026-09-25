@@ -399,6 +399,9 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
         _handle_check_mode(adapter, renderer_class, args)
         return  # check mode exits directly
 
+    # An adapter may carry the element inside its resource (diff://a.py:b.py/func).
+    element = element or getattr(adapter, 'embedded_element', None)
+
     # Render element or structure based on adapter type
     _handle_rendering(adapter, renderer_class, scheme, resource, element, args)
 
