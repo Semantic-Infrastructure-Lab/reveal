@@ -29,6 +29,14 @@ class JsonlAnalyzer(FileAnalyzer):
     Extract by record number to view specific entries.
     """
 
+    @staticmethod
+    def _record_type(obj: Any, default: str = 'record') -> str:
+        """A record's `type` when it is a string label; anything else (an
+        object-valued `type`, a top-level array or scalar) crashed the
+        outline with 'unhashable type' / AttributeError."""
+        rec_type = obj.get('type') if isinstance(obj, dict) else None
+        return rec_type if isinstance(rec_type, str) else default
+
     def _build_preview(self, obj: Dict[str, Any]) -> str:
         """Build a preview string for a JSONL record.
 
@@ -38,6 +46,9 @@ class JsonlAnalyzer(FileAnalyzer):
         Returns:
             Preview string showing key content
         """
+        if not isinstance(obj, dict):
+            return f"{type(obj).__name__}: {json.dumps(obj)[:60]}"
+
         # For conversation logs, show role and snippet
         if 'message' in obj and isinstance(obj['message'], dict):
             preview = self._preview_conversation_message(obj['message'])
@@ -115,13 +126,14 @@ class JsonlAnalyzer(FileAnalyzer):
                 total_records += 1
 
                 # Track record type if present
-                rec_type = obj.get('type', 'record')
+                rec_type = self._record_type(obj)
                 record_types[rec_type] = record_types.get(rec_type, 0) + 1
 
                 # Store all records for slicing
                 preview = self._build_preview(obj)
                 all_records.append({
                     'line_start': i,
+                    'line_end': i,
                     'name': f"{rec_type} #{total_records}",
                     'preview': preview,
                 })
@@ -131,6 +143,7 @@ class JsonlAnalyzer(FileAnalyzer):
                 malformed += 1
                 all_records.append({
                     'line_start': i,
+                    'line_end': i,
                     'name': '⚠️ Invalid JSON',
                     'preview': f'Parse error: {str(e)[:50]}',
                 })
@@ -230,7 +243,7 @@ class JsonlAnalyzer(FileAnalyzer):
 
             try:
                 obj = json.loads(line)
-                rec_type = obj.get('type', '')
+                rec_type = self._record_type(obj, default='')
 
                 if rec_type == type_filter:
                     matches.append((i, obj))
@@ -243,22 +256,19 @@ class JsonlAnalyzer(FileAnalyzer):
         if not matches:
             return None
 
-        # Return first 10 matches
-        lines = []
-        start_line = matches[0][0]
-        end_line = matches[-1][0]
-
-        for line_num, obj in matches[:10]:
-            lines.append(f"# Line {line_num}")
-            lines.append(json.dumps(obj, indent=2))
-            lines.append("")
-
-        if len(matches) > 10:
-            lines.append(f"# ... and {len(matches) - 10} more records")
-
+        # Each record as its own raw line, numbered by where it sits: a
+        # pretty-printed dump numbered from the first match's line invented
+        # line numbers once the CLI could reach this (BACK-1411).
+        shown = matches[:10]
+        sections = [
+            {'line_start': line_num, 'line_end': line_num, 'source': self.lines[line_num - 1].rstrip('\n')}
+            for line_num, _ in shown
+        ]
+        more = f", first {len(shown)} shown" if len(matches) > len(shown) else ""
         return {
-            'name': f'{type_filter} records ({len(matches)} total)',
-            'line_start': start_line,
-            'line_end': end_line,
-            'source': '\n'.join(lines),
+            'name': f'{type_filter} records ({len(matches)} total{more})',
+            'line_start': shown[0][0],
+            'line_end': shown[-1][0],
+            'source': '\n'.join(section['source'] for section in sections),
+            'sections': sections,
         }

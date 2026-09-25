@@ -32,7 +32,10 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
 
         # Extract schema elements
         services_data = self._extract_services()
-        structure['services'] = [{'line_start': s['line_start'], 'name': s['name']} for s in services_data]
+        structure['services'] = [
+            {'line_start': s['line_start'], 'line_end': s['line_end'], 'name': s['name']}
+            for s in services_data
+        ]
 
         # Extract RPCs as separate category
         rpcs = []
@@ -73,6 +76,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
                     package_name = self._get_node_text(child)
                     return {
                         'line_start': _zero_arg(pkg_node, 'start_position').row + 1,
+                        'line_end': _zero_arg(pkg_node, 'end_position').row + 1,
                         'name': package_name,
                     }
 
@@ -91,6 +95,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
             rpcs = self._extract_service_rpcs(service_node)
             services.append({
                 'line_start': _zero_arg(service_node, 'start_position').row + 1,
+                'line_end': _zero_arg(service_node, 'end_position').row + 1,
                 'name': service_name,
                 'rpcs': rpcs,
             })
@@ -148,6 +153,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
             'name': rpc_name,
             'signature': signature,
             'line_start': _zero_arg(rpc_node, 'start_position').row + 1,
+            'line_end': _zero_arg(rpc_node, 'end_position').row + 1,
         }
 
     def _get_rpc_name(self, rpc_node: Any) -> Optional[str]:
@@ -214,6 +220,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
             ]
             messages.append({
                 'line_start': _zero_arg(msg_node, 'start_position').row + 1,
+                'line_end': _zero_arg(msg_node, 'end_position').row + 1,
                 'name': message_name,
                 'fields': fields,
             })
@@ -273,6 +280,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
                 continue
             enums.append({
                 'line_start': _zero_arg(enum_node, 'start_position').row + 1,
+                'line_end': _zero_arg(enum_node, 'end_position').row + 1,
                 'name': enum_name,
                 'values': self._get_enum_body_values(enum_node),
             })

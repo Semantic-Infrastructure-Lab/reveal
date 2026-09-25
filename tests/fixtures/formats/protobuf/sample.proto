@@ -1,0 +1,27 @@
+syntax = "proto3";
+package demo.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message Timestamp {
+  int64 seconds = 1;
+  int32 nanos = 2;
+}
+
+message User {
+  string id = 1;
+  message Address {
+    string city = 1;
+  }
+  Address addr = 2;
+}
+
+enum Color {
+  COLOR_UNSPECIFIED = 0;
+  RED = 1;
+}
+
+service UserService {
+  rpc GetUser(User) returns (User);
+  rpc ListUsers(User) returns (stream User);
+}

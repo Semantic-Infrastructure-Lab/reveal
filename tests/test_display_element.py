@@ -449,6 +449,7 @@ class TestErrorHandling:
         analyzer.tree = None
         analyzer.extract_by_selector = None  # code analyzer: no selector method
         analyzer.extract_element.return_value = None
+        analyzer.get_structure.return_value = {}  # outline fallback (BACK-1411) lists nothing
 
         with pytest.raises(SystemExit) as exc_info:
             extract_element(analyzer, 'nonexistent', 'human')

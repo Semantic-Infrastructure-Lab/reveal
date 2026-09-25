@@ -5,6 +5,7 @@ Common uses: Maven pom.xml, Spring configs, Android manifests, SOAP APIs.
 """
 
 import xml.etree.ElementTree as ET
+import xml.parsers.expat
 import logging
 from typing import Dict, Any, List, Optional, Tuple
 from ..base import FileAnalyzer
@@ -286,6 +287,59 @@ class XmlAnalyzer(FileAnalyzer):
                 contract_version=CONTRACT_VERSION,
                 message='Failed to analyze XML file',
             )
+
+    def _element_spans(self) -> List[Tuple[str, int, int]]:
+        """(tag, first line, last line) of every element, in document order.
+
+        ElementTree keeps no positions; expat reports the current line in
+        both the start and the end handler, which is exactly the span.
+        """
+        spans: List[List[Any]] = []
+        open_elements: List[int] = []
+        parser = xml.parsers.expat.ParserCreate()
+
+        def start(tag, _attrs):
+            open_elements.append(len(spans))
+            spans.append([tag, parser.CurrentLineNumber, parser.CurrentLineNumber])
+
+        def end(_tag):
+            spans[open_elements.pop()][2] = parser.CurrentLineNumber
+
+        parser.StartElementHandler = start
+        parser.EndElementHandler = end
+        try:
+            parser.Parse(self.content, True)
+        except xml.parsers.expat.ExpatError:
+            return []
+        return [(tag, first, last) for tag, first, last in spans]
+
+    def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
+        """Every element with this tag, as its source (BACK-1411).
+
+        `reveal pom.xml dependencies` used to be "not found": the tag lookup
+        in get_element() has no line numbers and the CLI only reaches it for
+        a bare integer. A prefixed tag answers to its local name too
+        (`element` finds `xs:element`), as the outline shows it.
+        """
+        matches = [(first, last) for tag, first, last in self._element_spans()
+                   if name in (tag, tag.rsplit(':', 1)[-1])]
+        if not matches:
+            return None
+        shown = matches[:10]
+        sections = [
+            {'line_start': first, 'line_end': last, 'source': '\n'.join(self.lines[first - 1:last])}
+            for first, last in shown
+        ]
+        if len(matches) == 1:
+            return {'name': name, **sections[0]}
+        more = f", first {len(shown)} shown" if len(matches) > len(shown) else ""
+        return {
+            'name': f'{name} ({len(matches)} elements{more})',
+            'line_start': shown[0][0],
+            'line_end': shown[-1][1],
+            'source': '\n\n'.join(section['source'] for section in sections),
+            'sections': sections,
+        }
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get specific element(s) by tag name.

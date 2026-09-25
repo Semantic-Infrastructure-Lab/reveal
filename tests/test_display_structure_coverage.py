@@ -283,12 +283,19 @@ class TestGetElementName:
 
 class TestExtractElementNames:
     def test_extracts_names(self):
-        items = [{'name': 'foo'}, {'name': 'bar'}]
+        items = [{'name': 'foo', 'line': 1}, {'name': 'bar', 'line_start': 5}]
         assert _extract_element_names(items) == ['foo', 'bar']
 
     def test_skips_items_without_name(self):
-        items = [{'name': 'foo'}, {}, {'name': 'bar'}]
+        items = [{'name': 'foo', 'line': 1}, {'line': 3}, {'name': 'bar', 'line': 5}]
         assert _extract_element_names(items) == ['foo', 'bar']
+
+    def test_skips_unlocated_items(self):
+        """BACK-1411: JSONL's line-0 record summary and a properties file's
+        line-less '(no section)' were advertised as extractable and aren't."""
+        items = [{'name': '📊 Summary: 2 records', 'line_start': 0},
+                 {'name': '(no section)'}, {'name': 'a #1', 'line_start': 1}]
+        assert _extract_element_names(items) == ['a #1']
 
     def test_empty_list(self):
         assert _extract_element_names([]) == []

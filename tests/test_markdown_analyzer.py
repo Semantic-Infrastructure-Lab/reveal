@@ -2107,14 +2107,13 @@ class TestFindHeadingMatch(TestMarkdownAnalyzer):
     """Direct unit tests for _find_heading_match helper."""
 
     def test_exact_match_returns_line_and_level(self):
-        """Exact match sets start_line and heading_level."""
+        """Exact match gives the heading's line and level."""
         content = "# Title\n\n## Target\n\nBody.\n"
         path = self.create_temp_markdown(content)
         try:
             analyzer = MarkdownAnalyzer(path)
-            start, level, subs = analyzer._find_heading_match('Target')
-            self.assertEqual(start, 3)
-            self.assertEqual(level, 2)
+            exact, subs = analyzer._find_heading_match('Target')
+            self.assertEqual(exact, [(3, 2)])
             self.assertEqual(subs, [])
         finally:
             self.teardown_file(path)
@@ -2125,21 +2124,19 @@ class TestFindHeadingMatch(TestMarkdownAnalyzer):
         path = self.create_temp_markdown(content)
         try:
             analyzer = MarkdownAnalyzer(path)
-            start, level, _ = analyzer._find_heading_match('my section')
-            self.assertEqual(start, 1)
-            self.assertEqual(level, 2)
+            exact, _ = analyzer._find_heading_match('my section')
+            self.assertEqual(exact, [(1, 2)])
         finally:
             self.teardown_file(path)
 
     def test_no_match_returns_none(self):
-        """No match returns None for start_line and heading_level."""
+        """No match returns no exact and no substring matches."""
         content = "## Something\n\nText.\n"
         path = self.create_temp_markdown(content)
         try:
             analyzer = MarkdownAnalyzer(path)
-            start, level, subs = analyzer._find_heading_match('Nonexistent')
-            self.assertIsNone(start)
-            self.assertIsNone(level)
+            exact, subs = analyzer._find_heading_match('Nonexistent')
+            self.assertEqual(exact, [])
             self.assertEqual(subs, [])
         finally:
             self.teardown_file(path)
@@ -2150,8 +2147,8 @@ class TestFindHeadingMatch(TestMarkdownAnalyzer):
         path = self.create_temp_markdown(content)
         try:
             analyzer = MarkdownAnalyzer(path)
-            start, level, subs = analyzer._find_heading_match('Install')
-            self.assertIsNone(start)
+            exact, subs = analyzer._find_heading_match('Install')
+            self.assertEqual(exact, [])
             self.assertEqual(len(subs), 2)
             self.assertEqual(subs[0][0], 1)  # line of first match
             self.assertEqual(subs[1][0], 5)  # line of second match
@@ -2164,9 +2161,21 @@ class TestFindHeadingMatch(TestMarkdownAnalyzer):
         path = self.create_temp_markdown(content)
         try:
             analyzer = MarkdownAnalyzer(path)
-            start, level, _ = analyzer._find_heading_match('The config file')
-            self.assertEqual(start, 1)
-            self.assertEqual(level, 2)
+            exact, _ = analyzer._find_heading_match('The config file')
+            self.assertEqual(exact, [(1, 2)])
+        finally:
+            self.teardown_file(path)
+
+    def test_every_exact_match_is_returned(self):
+        """BACK-1411: the scan stopped at the first exact match, so a repeated
+        heading's later sections were unreachable and undisclosed."""
+        content = "## Setup Guide\n\nA.\n\n## Setup\n\nB.\n\n## Setup\n\nC.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            exact, subs = analyzer._find_heading_match('Setup')
+            self.assertEqual(exact, [(5, 2), (9, 2)])
+            self.assertEqual(subs, [])
         finally:
             self.teardown_file(path)
 
@@ -2176,10 +2185,9 @@ class TestFindHeadingMatch(TestMarkdownAnalyzer):
         path = self.create_temp_markdown(content)
         try:
             analyzer = MarkdownAnalyzer(path)
-            start, level, subs = analyzer._find_heading_match('Setup')
-            self.assertEqual(start, 1)
-            self.assertEqual(level, 2)
-            self.assertEqual(subs, [])  # exact match found first, no substrings
+            exact, subs = analyzer._find_heading_match('Setup')
+            self.assertEqual(exact, [(1, 2)])
+            self.assertEqual(subs, [])  # an exact match wins over substrings
         finally:
             self.teardown_file(path)
 

@@ -1242,26 +1242,23 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         """Search headings for an exact or substring match of *pattern*.
 
         Returns:
-            ``(start_line, heading_level, substring_matches)`` where
-            *start_line* and *heading_level* are set on exact match (both
-            ``None`` otherwise) and *substring_matches* is a list of
-            ``(line, level, title)`` tuples for partial matches.
+            ``(exact_matches, substring_matches)``: ``(line, level)`` of every
+            heading equal to *pattern*, and ``(line, level, title)`` of every
+            heading containing it. Substring matches only count when there is
+            no exact one.
         """
         pat_normalized = self._strip_inline_formatting(pattern.lower())
-        start_line = None
-        heading_level = None
+        exact_matches = []
         substring_matches = []
 
         for i, level, title in self._heading_index():
             title_normalized = self._strip_inline_formatting(title.lower())
             if title_normalized == pat_normalized:
-                start_line = i
-                heading_level = level
-                break
-            if pat_normalized in title_normalized:
+                exact_matches.append((i, level))
+            elif pat_normalized in title_normalized:
                 substring_matches.append((i, level, title))
 
-        return start_line, heading_level, substring_matches
+        return exact_matches, [] if exact_matches else substring_matches
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract one or more markdown sections by heading name.
@@ -1321,7 +1318,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         # Single-pattern path (original behaviour preserved)
         pattern = patterns[0]
-        start_line, heading_level, substring_matches = self._find_heading_match(pattern)
+        exact_matches, substring_matches = self._find_heading_match(pattern)
+        start_line, heading_level = exact_matches[0] if exact_matches else (None, None)
 
         if not start_line or heading_level is None:
             if len(substring_matches) == 1:
@@ -1345,6 +1343,16 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             'line_end': end_line,
             'source': source,
         }
+
+        # Same heading more than once (every release's '### Fixed' in a
+        # changelog): keep the first, disclose the rest like any ambiguous
+        # name (BACK-1400) -- each later one was unreachable by name.
+        if len(exact_matches) > 1:
+            result['candidates'] = [
+                {'name': name, 'line_start': sl, 'line_end': (el := self._section_end(sl, hl)),
+                 'address': f':{sl}-{el}', 'selected': sl == start_line}
+                for sl, hl in exact_matches
+            ]
 
         # Detect the next heading for short-result hints
         following = self._next_heading(start_line, heading_level)

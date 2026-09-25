@@ -21,6 +21,7 @@ list travels with the result (`describe_candidates`) so each surface can say
 the name was ambiguous and how to address each definition.
 """
 
+import shlex
 from dataclasses import dataclass, field
 from typing import Any, Iterable, List, Optional, Sequence, Tuple
 
@@ -410,8 +411,16 @@ def ambiguity_note(path: str, element: str, candidates: Sequence[dict]) -> List[
         f"Note: '{element}' matches {len(candidates)} definitions; showing "
         f"{chosen['name']} (line {chosen['line_start']}). To pick one:"
     ]
-    for c in candidates:
+    for c in candidates[:_NOTE_MAX_ADDRESSES]:
         address = c.get('address') or f":{c['line_start']}-{c['line_end']}"
         label = f"line {c['line_start']}" if address == c['name'] else f"{c['name']}, line {c['line_start']}"
         lines.append(f"  reveal {path} {address}   # {label}")
+    # A changelog repeats '### Fixed' per release (124 in reveal's own); the
+    # note stays readable, JSON `candidates` keeps every one.
+    if len(candidates) > _NOTE_MAX_ADDRESSES:
+        lines.append(f"  ... and {len(candidates) - _NOTE_MAX_ADDRESSES} more "
+                     f"(all of them: reveal {path} {shlex.quote(element)} --format json)")
     return lines
+
+
+_NOTE_MAX_ADDRESSES = 10

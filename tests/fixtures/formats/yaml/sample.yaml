@@ -1,0 +1,7 @@
+db:
+  url: postgres://x
+  pool: 5
+server:
+  port: 8080
+jobs:
+  - name: a

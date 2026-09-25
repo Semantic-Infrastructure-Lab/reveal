@@ -83,9 +83,11 @@ class JupyterAnalyzer(FileAnalyzer):
         outputs_count = len(cell.get('outputs', []))
 
         name = self._get_cell_display_name(cell_type, first_line, execution_count, idx)
+        source_span = self._cell_source_span(idx, cell_line)
 
         return {
             'line': cell_line,
+            'line_end': source_span[1] if source_span else cell_line,
             'name': name,
             'type': cell_type,
             'execution_count': execution_count,
@@ -125,6 +127,68 @@ class JupyterAnalyzer(FileAnalyzer):
             contract_version=CONTRACT_VERSION,
             confidence=1.0,
         )
+
+    def _cell_source_span(self, cell_index: int, cell_line: int) -> Optional[Tuple[int, int]]:
+        """JSON lines holding a cell's source, one source string per line.
+
+        That is nbformat's own pretty-printed layout, where the decoded
+        strings are exactly those lines. None when the notebook is laid out
+        any other way (compact JSON, a source string with embedded newlines)
+        -- every candidate line must decode to the cell's own source.
+        """
+        source = self.cells[cell_index].get('source', [])
+        if not isinstance(source, list) or not source:
+            return None
+        if ''.join(source).rstrip('\n').count('\n') != len(source) - 1:
+            return None
+        bound = (self._find_cell_line(cell_index + 1)
+                 if cell_index + 1 < len(self.cells) else len(self.lines))
+        if bound <= cell_line:
+            bound = len(self.lines)
+        for key_line in range(cell_line, min(bound, len(self.lines)) + 1):
+            if self.lines[key_line - 1].strip() != '"source": [':
+                continue
+            first, last = key_line + 1, key_line + len(source)
+            if last > len(self.lines):
+                return None
+            try:
+                decoded = [json.loads(self.lines[i - 1].strip().rstrip(','))
+                           for i in range(first, last + 1)]
+            except json.JSONDecodeError:
+                return None
+            return (first, last) if decoded == source else None
+        return None
+
+    def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
+        """A cell by its outline name, as its decoded source (BACK-1411).
+
+        Numbered by the JSON lines the source strings sit on; a notebook not
+        laid out one string per line falls back to the outline item's raw
+        JSON span.
+        """
+        matches = [(idx, summary) for idx, cell in enumerate(self.cells)
+                   if (summary := self._create_cell_summary(cell, idx))['name'] == name]
+        if not matches:
+            return None
+        idx, summary = matches[0]
+        span = self._cell_source_span(idx, summary['line'])
+        if span is None:
+            return None
+        result: Dict[str, Any] = {
+            'name': name,
+            'line_start': span[0],
+            'line_end': span[1],
+            'source': ''.join(self.cells[idx]['source']).rstrip('\n'),
+        }
+        if len(matches) > 1:
+            # Same disclosure as any ambiguous name (BACK-1400): unexecuted
+            # cells that open with the same line share a display name.
+            result['candidates'] = [
+                {'name': name, 'line_start': s['line'], 'line_end': s['line_end'],
+                 'address': f":{s['line']}-{s['line_end']}", 'selected': i == idx}
+                for i, s in matches
+            ]
+        return result
 
     def _find_cell_line(self, cell_index: int) -> int:
         """Find approximate line number where a cell starts in the JSON."""

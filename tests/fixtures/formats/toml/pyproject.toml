@@ -1,0 +1,12 @@
+[project]
+name = "demo"
+version = "0.1"
+
+[tool.poetry]
+name = "demo"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+[[tool.mypy.overrides]]
+module = "x"

@@ -1,0 +1,35 @@
+type Query {
+  user(id: ID!): User
+  users: [User!]!
+}
+
+type User {
+  id: ID!
+  name: String
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+input UserInput {
+  name: String
+}
+
+interface Node {
+  id: ID!
+}
+
+query GetUser($id: ID!) {
+  user(id: $id) { id name }
+}
+
+mutation CreateUser($input: UserInput!) {
+  createUser(input: $input) { id }
+}
+
+fragment UserFields on User {
+  id
+  name
+}

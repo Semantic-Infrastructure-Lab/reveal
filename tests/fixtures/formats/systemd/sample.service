@@ -1,0 +1,10 @@
+[Unit]
+Description=Demo service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/demo
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

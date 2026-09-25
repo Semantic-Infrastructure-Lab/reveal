@@ -94,10 +94,12 @@ class IniAnalyzer(FileAnalyzer):
             # Pre-scan for section line numbers
             section_lines = {}
             import re
-            for i, line in enumerate(self.content.split('\n'), 1):
+            text_lines = self.content.split('\n')
+            for i, line in enumerate(text_lines, 1):
                 match = re.match(r'^\s*\[([^\]]+)\]\s*$', line)
                 if match:
                     section_lines[match.group(1)] = i
+            section_ends = self._section_ends(section_lines, text_lines)
 
             sections_data = []
             all_sections = list(config.sections())
@@ -126,6 +128,7 @@ class IniAnalyzer(FileAnalyzer):
                 sections_data.append({
                     'name': section,
                     'line_start': section_lines.get(section),
+                    'line_end': section_ends.get(section),
                     'key_count': len(items),
                     'keys': keys_data
                 })
@@ -159,6 +162,21 @@ class IniAnalyzer(FileAnalyzer):
             start, end = range_tuple
             return sections[start - 1:end]
         return sections
+
+    @staticmethod
+    def _section_ends(section_lines: Dict[str, int], text_lines: list) -> Dict[str, int]:
+        """Last line of each section: the line before the next header, with
+        trailing blank lines dropped (BACK-1411: without it `reveal f.ini
+        NAME` could only return the `[NAME]` header line)."""
+        starts = sorted(section_lines.values())
+        ends = {}
+        for name, start in section_lines.items():
+            following = [s for s in starts if s > start]
+            end = (following[0] - 1) if following else len(text_lines)
+            while end > start and not text_lines[end - 1].strip():
+                end -= 1
+            ends[name] = end
+        return ends
 
     def _parse_properties(self) -> Dict[str, Any]:
         """Parse as simple key=value properties file (no sections).

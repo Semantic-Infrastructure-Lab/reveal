@@ -8,6 +8,7 @@ from reveal.base import FileAnalyzer
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
 
 from .coverage import format_coverage_warning, outline_coverage
+from .element import listed_item_line
 from .metadata import _print_file_header
 from .outline import build_hierarchy, build_heading_hierarchy, render_outline
 from .formatting import (
@@ -327,11 +328,15 @@ def _get_element_name(item: Dict[str, Any]) -> Optional[str]:
 
 
 def _extract_element_names(items: List[Dict[str, Any]]) -> List[str]:
-    """Extract all element names from items list."""
+    """Extract all element names from items list.
+
+    Located items only (BACK-1411): a line-less summary item such as JSONL's
+    '📊 Summary: N records' was the advertised example, and it failed.
+    """
     names = []
     for item in items:
         name = _get_element_name(item)
-        if name:
+        if name and listed_item_line(item):
             names.append(name)
     return names
 

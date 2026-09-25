@@ -1,0 +1,11 @@
+{
+  "name": "demo",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "deps": [
+    1,
+    2
+  ]
+}

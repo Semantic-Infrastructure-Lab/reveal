@@ -12,6 +12,11 @@ a parametrised audit over the in-repo conformance + smoke fixtures asserts the
 two paths agree for EVERY enumerated name, closing the whole family instead of
 tripping over the next instance. The dedicated tests at the bottom pin the two
 known-hard shapes (arrow-const, TS/TSX test-callback labels) directly.
+
+BACK-1411 widened it to the format analyzers (fixtures/formats/: INI sections,
+notebook cells, JSONL records, proto/GraphQL/HCL blocks were listed but "not
+found", or found as their header line only), to dotted names, and to the
+whole listed span -- returning `message User {` alone is not returning User.
 """
 
 from pathlib import Path
@@ -19,7 +24,8 @@ from pathlib import Path
 import pytest
 
 from reveal.registry import get_analyzer
-from reveal.display.element import _parse_element_syntax, _extract_by_syntax
+from reveal.display.element import _parse_element_syntax, _extract_by_syntax, listed_item_line
+from reveal.display.structure import _build_extractable_meta
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -28,9 +34,9 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def _fixture_files():
-    """All single-file language fixtures under conformance/ and smoke/."""
+    """All single-file fixtures under conformance/, smoke/ and formats/."""
     files = []
-    for corpus in ("conformance", "smoke"):
+    for corpus in ("conformance", "smoke", "formats"):
         base = FIXTURES / corpus
         if not base.is_dir():
             continue
@@ -46,7 +52,8 @@ def _fixture_files():
 def _enumerated_items(analyzer):
     """Every (category, name, line) get_structure() advertises as a nameable
     element -- every category, not just functions/classes/structs (BACK-1400:
-    Go `interfaces` were listed but not extractable)."""
+    Go `interfaces` were listed but not extractable). Located items only: a
+    line-less summary (JSONL's record count) is metadata, not an element."""
     structure = analyzer.get_structure()
     items = []
     for category, elements in structure.items():
@@ -54,8 +61,10 @@ def _enumerated_items(analyzer):
             continue
         for element in elements:
             if isinstance(element, dict) and element.get("name"):
-                line = element.get("line")
-                items.append((category, element["name"], line, element.get("line_end", line)))
+                line = listed_item_line(element)
+                if line is None:
+                    continue
+                items.append((category, element["name"], line, element.get("line_end") or line))
     return items
 
 
@@ -94,18 +103,24 @@ def test_every_outlined_element_is_resolvable_by_name(fixture):
     unresolved = []
     for category, name, line, line_end in _enumerated_items(analyzer):
         syntax = _parse_element_syntax(name)
-        # A name whose text parses as line/ordinal/hierarchical syntax routes
-        # through a different extraction strategy by design — the divergence
-        # this test guards is the bare name-based path, so only assert there.
-        if syntax["type"] != "name":
+        # A name whose text parses as line/ordinal syntax is a position, not a
+        # name, by design. Dotted names (`tool.poetry`, `aws_instance.web`)
+        # are names the user types as listed, so they are asserted too.
+        if syntax["type"] not in ("name", "hierarchical"):
             continue
         result = _extract_by_syntax(analyzer, name, syntax)
         if result is None:
             unresolved.append(f"{category} '{name}'")
             continue
         spans = [result] + result.get("candidates", [])
-        if line is not None and not any(_overlaps(line, line_end, span) for span in spans):
+        hits = [span for span in spans if _overlaps(line, line_end, span)]
+        if not hits:
             unresolved.append(f"{category} '{name}' (line {line}: neither returned nor disclosed)")
+        elif not any(span["line_end"] >= line_end for span in hits):
+            unresolved.append(
+                f"{category} '{name}' (listed {line}-{line_end}, returned "
+                f"{result['line_start']}-{result['line_end']}: truncated)"
+            )
 
     assert not unresolved, (
         f"{fixture.parent.name}/{fixture.name}: get_structure() enumerated "
@@ -113,6 +128,23 @@ def test_every_outlined_element_is_resolvable_by_name(fixture):
         f"(--outline lists them, `reveal file <name>` returns not-found): "
         f"{unresolved}"
     )
+
+
+@pytest.mark.parametrize(
+    "fixture", _fixture_files(), ids=lambda p: f"{p.parent.name}/{p.name}"
+)
+def test_advertised_extraction_examples_extract(fixture):
+    """BACK-1411: `--format json` advertises meta.extractable.examples as
+    commands that work. Every one of them must -- JSONL advertised its
+    line-less '📊 Summary' item and INI/ipynb advertised unreachable names."""
+    analyzer = _build(fixture)
+    meta = _build_extractable_meta(analyzer.get_structure(), str(fixture))
+    failed = []
+    for elements in meta["elements"].values():
+        for name in elements:
+            if _extract_by_syntax(analyzer, name, _parse_element_syntax(name)) is None:
+                failed.append(name)
+    assert not failed, f"{fixture.parent.name}/{fixture.name}: advertised but not extractable: {failed}"
 
 
 # ─────────────────── directly pinned divergence shapes ────────────────────

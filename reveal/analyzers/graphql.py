@@ -185,6 +185,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
 
             type_info = {
                 'line': _zero_arg(type_def, 'start_position').row + 1,
+                'line_end': _zero_arg(type_def, 'end_position').row + 1,
                 'name': name,
                 'fields': fields,
             }
@@ -218,6 +219,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
                 if field_name:
                     operations.append({
                         'line': _zero_arg(field_child, 'start_position').row + 1,
+                        'line_end': _zero_arg(field_child, 'end_position').row + 1,
                         'name': field_name,
                         'signature': self._build_field_signature(field_name, args, return_type),
                     })
@@ -240,6 +242,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
 
             enums.append({
                 'line': _zero_arg(enum_def, 'start_position').row + 1,
+                'line_end': _zero_arg(enum_def, 'end_position').row + 1,
                 'name': name,
                 'values': values,
             })
@@ -271,6 +274,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
 
             interfaces.append({
                 'line': _zero_arg(iface_def, 'start_position').row + 1,
+                'line_end': _zero_arg(iface_def, 'end_position').row + 1,
                 'name': name,
                 'fields': fields,
             })
@@ -294,6 +298,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
 
             unions.append({
                 'line': _zero_arg(union_def, 'start_position').row + 1,
+                'line_end': _zero_arg(union_def, 'end_position').row + 1,
                 'name': name,
                 'members': members,
             })
@@ -327,6 +332,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
             if name:
                 scalars.append({
                     'line': _zero_arg(scalar_def, 'start_position').row + 1,
+                    'line_end': _zero_arg(scalar_def, 'end_position').row + 1,
                     'name': name,
                 })
 
@@ -349,6 +355,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
 
             inputs.append({
                 'line': _zero_arg(input_def, 'start_position').row + 1,
+                'line_end': _zero_arg(input_def, 'end_position').row + 1,
                 'name': name,
                 'fields': fields,
             })

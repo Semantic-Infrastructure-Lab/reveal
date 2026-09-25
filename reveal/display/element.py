@@ -196,11 +196,13 @@ def _extract_by_name(analyzer, element: str):
 
     # Fallback to the analyzer's own extract_element (markdown sections, ...)
     result = _try_grep_extraction(analyzer, element)
-    if result or not is_treesitter:
+    if result:
         return result
     # Last: anything the outline lists by this name. After the analyzer's own
     # extractor, never before it -- a markdown heading's outline item spans
     # only the heading line, while its section extractor returns the section.
+    # Every analyzer, not just tree-sitter ones (BACK-1411: INI sections,
+    # JSONL records and notebook cells were listed but "not found").
     return _extract_listed_item(analyzer, element)
 
 
@@ -259,6 +261,17 @@ def _try_treesitter_extraction(analyzer, element: str):
     return _element_from_resolution(analyzer, resolution, element)
 
 
+def listed_item_line(item) -> Optional[int]:
+    """The first line of an outline item, or None when it has no location.
+
+    An item without a positive line (JSONL's record-count summary at line 0,
+    a properties file's '(no section)') is outline metadata, not an
+    addressable span -- neither advertised as extractable nor extracted.
+    """
+    line = item.get('line', item.get('line_start'))
+    return line if isinstance(line, int) and line > 0 else None
+
+
 def _extract_listed_item(analyzer, element: str):
     """Last resort: an item the outline lists under this exact name.
 
@@ -276,11 +289,11 @@ def _extract_listed_item(analyzer, element: str):
         for category, items in structure.items()
         if category != 'imports' and isinstance(items, list)
         for item in items
-        if isinstance(item, dict) and item.get('name') == element
+        if isinstance(item, dict) and item.get('name') == element and listed_item_line(item)
     ]
     if not matches:
         return None
-    matches.sort(key=lambda m: m[1].get('line', m[1].get('line_start', 0)))
+    matches.sort(key=lambda m: listed_item_line(m[1]))
     category, item = matches[0]
     result = _build_element_from_item(analyzer, item, category, 1)
     if len(matches) > 1:
@@ -323,7 +336,7 @@ def _try_grep_extraction(analyzer, element: str):
         if result:
             return result
 
-    for element_type in ['function', 'class', 'struct', 'section', 'server', 'location', 'upstream']:
+    for element_type in ['function', 'class', 'struct', 'section', 'server', 'location', 'upstream', 'record']:
         result = analyzer.extract_element(element_type, element)
         if result:
             return result

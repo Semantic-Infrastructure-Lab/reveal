@@ -354,8 +354,18 @@ def reveal_element(path: str, element: str) -> str:
     source = result.get('source', '')
     name = result.get('name', element)
 
-    header = f"{path}:{line_start}-{line_end} | {name}\n"
-    body = f"{header}\n{analyzer.format_with_lines(source, line_start)}"
+    # Several non-contiguous spans (markdown `A|B` or substring matches, JSONL
+    # records of one type, XML elements of one tag): each numbered from its
+    # own start line, as the CLI renders them -- the joined `source` numbered
+    # from the first start would invent line numbers.
+    spans = result.get('sections') or [
+        {'line_start': line_start, 'line_end': line_end, 'source': source}
+    ]
+    body = "\n\n".join(
+        f"{path}:{s['line_start']}-{s['line_end']} | {name}\n\n"
+        f"{analyzer.format_with_lines(s['source'], s['line_start'])}"
+        for s in spans
+    )
     # BACK-1400: an ambiguous name must not silently return the first match;
     # the agent gets the same note (and :LINE addresses) the CLI prints.
     if result.get('candidates'):

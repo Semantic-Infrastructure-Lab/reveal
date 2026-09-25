@@ -69,6 +69,7 @@ class HCLAnalyzer(TreeSitterAnalyzer):
 
             block_info = {
                 'line': _zero_arg(block_node, 'start_position').row + 1,
+                'line_end': _zero_arg(block_node, 'end_position').row + 1,
                 'name': name,
             }
 

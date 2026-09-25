@@ -655,11 +655,22 @@ reveal app.py @3                       # Third element
 # By type + position
 reveal app.py function:2               # Second function
 reveal app.py class:1                  # First class
+
+# Config, data and docs: any name the outline lists
+reveal setup.cfg metadata              # INI/systemd section, header to last key
+reveal pyproject.toml tool.poetry      # TOML table (dotted names as listed)
+reveal main.tf aws_instance.web        # HCL block, through its closing brace
+reveal api.proto User                  # Protobuf message/service/enum
+reveal pom.xml dependencies            # XML: every element with that tag (first 10)
+reveal nb.ipynb "Code [3]: df = load()"  # Notebook cell as its code
+reveal log.jsonl user                  # JSONL records whose "type" is user
+reveal README.md "Install"             # Markdown section
 ```
 
 **Ambiguous names:** a name defined more than once (same-named methods in two
-classes, Java overloads, one trait method per `impl`) returns the first
-definition, with a stderr note listing every definition and an address that
+classes, Java overloads, one trait method per `impl`, a markdown heading that
+repeats) returns the first definition, with a stderr note listing every
+definition (the first 10 of them) and an address that
 picks it: the qualified name when that is unique, else its exact `:START-END`
 span, which works for nav flags as well. JSON output carries the same list as
 `candidates`, and MCP `reveal_element` appends the note.
