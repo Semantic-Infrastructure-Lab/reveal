@@ -185,6 +185,59 @@ function handleRequest($config) {
         self.assertIn('log', kinds)
 
 
+class TestCollectBoundaryCDeclarations(unittest.TestCase):
+    """BACK-1407: a valueless C/C++ declaration (`int rv;`, `char buf[6];`,
+    `struct x h, *p;`) binds a local — it is not a function INPUT."""
+
+    CODE = """\
+    #include <string>
+    static int N = 4;
+    int g(void);
+    int f(int a, int *out) {
+        int rv, (*fp)(int);
+        char buf[N];
+        struct addrinfo hints, *p;
+        int k = a + 1, z;
+        rv = g();
+        buf[0] = 0;
+        hints.x = 1;
+        p = 0;
+        z = k;
+        *out = rv + buf[0] + (p != 0) + z + fp(1);
+        return 0;
+    }
+    """
+
+    def _inputs(self, lang):
+        from reveal.adapters.ast.nav_boundary import collect_boundary
+        parser = ts.get_parser(lang)
+        src = textwrap.dedent(self.CODE)
+        data = src.encode('utf-8')
+        root = tree_root(ts_parse(parser, src))
+
+        def get_text(node):
+            return data[_zero_arg(node, 'start_byte') : _zero_arg(node, 'end_byte')].decode('utf-8')
+
+        result = collect_boundary(root, 1, 999, get_text)
+        return [d['var'] for d in result['inputs']]
+
+    def test_bare_declarations_are_not_inputs(self):
+        for lang in ('c', 'cpp'):
+            with self.subTest(lang=lang):
+                inputs = self._inputs(lang)
+                for local in ('rv', 'buf', 'hints', 'p', 'fp', 'k', 'z'):
+                    self.assertNotIn(local, inputs)
+
+    def test_real_inputs_still_reported(self):
+        # Parameters and called functions are genuinely undefined in the
+        # range — the fix must not hide them.
+        for lang in ('c', 'cpp'):
+            with self.subTest(lang=lang):
+                inputs = self._inputs(lang)
+                for real in ('a', 'out', 'g'):
+                    self.assertIn(real, inputs)
+
+
 class TestRenderBoundary(unittest.TestCase):
     """render_boundary produces three-section text output."""
 

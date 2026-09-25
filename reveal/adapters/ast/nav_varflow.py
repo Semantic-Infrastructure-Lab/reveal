@@ -13,6 +13,14 @@ from .node_taxonomy import (
 )
 
 
+# C/C++ declarator kinds that bind a name without an initializer (BACK-1407).
+# init_declarator and function_declarator (prototypes) are deliberately absent.
+_C_BARE_DECLARATORS = frozenset({
+    'identifier', 'pointer_declarator', 'array_declarator',
+    'reference_declarator', 'parenthesized_declarator',
+})
+
+
 @dataclass(frozen=True)
 class _DeclShape:
     """One grammar's declaration-with-initializer node shape (BACK-431 Issue C).
@@ -273,6 +281,8 @@ class VarFlowWalker:
             # grammars (BACK-431 Issue C) — see _DECL_SHAPES for per-language
             # field names and fallback strategies.
             self._walk_decl_shape(n, _DECL_SHAPES[ntype])
+        elif ntype == 'declaration' and n.child_by_field_name('declarator') is not None:
+            self._walk_c_declaration(n)
         elif ntype in FOR_NODES:
             # for_statement / C#/PHP foreach_statement / JS-TS for_in_statement —
             # all share the 'left'/'right' field shape (BACK-431).
@@ -421,6 +431,47 @@ class VarFlowWalker:
             self.walk(value, 'READ')
         for child in _children(n):
             if (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) not in processed:
+                self.walk(child, 'READ')
+
+    def _walk_c_declaration(self, n: Any) -> None:
+        """C/C++ `int rv; char buf[6]; struct x h, *p;` — a bare declarator binds its name.
+
+        Only `init_declarator` (`int x = f();`) was handled (_DECL_SHAPES), so a
+        valueless declaration walked its identifier as a READ and every such local
+        surfaced as a function INPUT / PARAM (BACK-1407). Like Java/C#'s valueless
+        `variable_declarator`, the declared name is a WRITE; array-size
+        expressions and the type stay READs. Function-pointer variables count;
+        prototypes (`int g(void);`) and initialised declarators keep their
+        existing handling.
+        """
+        for child in _children(n):
+            if _zero_arg(child, 'kind') in _C_BARE_DECLARATORS or self._is_fn_pointer_declarator(child):
+                self._walk_c_declarator(child)
+            else:
+                self.walk(child, 'READ')
+
+    @staticmethod
+    def _is_fn_pointer_declarator(d: Any) -> bool:
+        """`int (*fp)(int);` declares a pointer variable; `int g(void);` is a prototype."""
+        if _zero_arg(d, 'kind') != 'function_declarator':
+            return False
+        inner = d.child_by_field_name('declarator')
+        return inner is not None and _zero_arg(inner, 'kind') == 'parenthesized_declarator'
+
+    def _walk_c_declarator(self, d: Any) -> None:
+        """Walk one bare declarator: the declared identifier is a WRITE, the rest READ."""
+        kind = _zero_arg(d, 'kind')
+        if kind in ('identifier', 'field_identifier'):
+            self.walk(d, 'WRITE')
+            return
+        inner = d.child_by_field_name('declarator')
+        if inner is None and kind == 'parenthesized_declarator':
+            inner = next((c for c in _children(d) if _zero_arg(c, 'is_named')), None)
+        inner_span = (_zero_arg(inner, 'start_byte'), _zero_arg(inner, 'end_byte')) if inner is not None else None
+        for child in _children(d):
+            if inner_span is not None and (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) == inner_span:
+                self._walk_c_declarator(child)
+            else:
                 self.walk(child, 'READ')
 
     @staticmethod
