@@ -25,7 +25,7 @@
 # Usage:
 #   scripts/ci-local.sh                     # Python 3.12, latest deps (CI's ubuntu/3.12 `test` leg)
 #   scripts/ci-local.sh --python 3.14
-#   scripts/ci-local.sh --matrix            # 3.10, 3.12, 3.14, then 3.12 @ language-pack 1.8.1 (~20 min; run it in tmux)
+#   scripts/ci-local.sh --matrix            # 3.10, 3.12, 3.14, then 3.12 @ language-pack 1.8.1 (~8 min: legs measured 92-113 s of pytest each; run it in tmux)
 #   scripts/ci-local.sh --matrix -- tests/test_foo.py   # fast: only these pytest targets per leg
 #   scripts/ci-local.sh --lp 1.12.5         # force tree-sitter-language-pack (CI's compat-matrix)
 #   scripts/ci-local.sh --no-tests          # only the non-pytest CI steps
