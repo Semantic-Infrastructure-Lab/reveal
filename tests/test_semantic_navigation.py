@@ -361,6 +361,15 @@ class TestRangeWithNavFlags(unittest.TestCase):
         from pathlib import Path
         return str(Path(__file__).parent.parent / 'reveal' / 'adapters' / 'ast' / 'nav_exits.py')
 
+    @staticmethod
+    def _span(analyzer, name):
+        """(line, line_end) of a function in nav_exits.py, looked up by name --
+        hard-coded line numbers broke on every edit to that file."""
+        for fn in analyzer.get_structure()['functions']:
+            if fn['name'] == name:
+                return (fn['line'], fn['line_end'])
+        raise AssertionError(f'{name} not found in nav_exits.py')
+
     def test_deps_with_tuple_range(self):
         """--deps with a pre-parsed tuple range should not crash."""
         import io, sys
@@ -369,7 +378,7 @@ class TestRangeWithNavFlags(unittest.TestCase):
 
         analyzer = PythonAnalyzer(self._nav_file())
         analyzer.get_structure()
-        args = self._make_args(deps=True, range=(211, 239))
+        args = self._make_args(deps=True, range=self._span(analyzer, 'collect_deps'))
         captured = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = captured
@@ -391,7 +400,8 @@ class TestRangeWithNavFlags(unittest.TestCase):
         analyzer = PythonAnalyzer(self._nav_file())
         analyzer.get_structure()
         # Sub-range: covers writes to `mutations` but stops before the sort/return read
-        args = self._make_args(mutations=True, range=(241, 264))
+        start, end = self._span(analyzer, 'collect_mutations')
+        args = self._make_args(mutations=True, range=(start, end - 2))
         captured = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = captured
@@ -412,7 +422,7 @@ class TestRangeWithNavFlags(unittest.TestCase):
 
         analyzer = PythonAnalyzer(self._nav_file())
         analyzer.get_structure()
-        args = self._make_args(exits=True, range=(114, 180))
+        args = self._make_args(exits=True, range=self._span(analyzer, 'collect_exits'))
         captured = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = captured

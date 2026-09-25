@@ -33,10 +33,9 @@ from .node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_NODES
 # so (e.g.) a Go file can no longer be tagged 'session' by a PHP builtin named
 # `session_start`. When omitted, behavior is unchanged from before this split:
 # common + every language's patterns are checked (see _COMPILED_ALL).
+_HARD_STOP_NAMES: frozenset = frozenset({'die', 'exit', 'abort', 'halt'})
 _TAXONOMY_COMMON: List[Tuple[str, List[str]]] = [
-    ('hard_stop', [
-        'die', 'exit', 'abort', 'halt',
-    ]),
+    ('hard_stop', sorted(_HARD_STOP_NAMES)),
     ('db', [
         'pg_query', 'pg_fetch', 'sqlite_query',
         # BACK-635: `->update`/`->delete` were removed from the COMMON table and
@@ -1528,6 +1527,21 @@ _RECEIVER_TAXONOMY: List[Tuple[str, List[str]]] = [
 # Verbs also include the Node `fs.*`/`.NET Directory/Path` static-method
 # idioms already relied upon by other languages' 'file' receiver matches, so
 # this filter can't regress them.
+# BACK-1406: a verb allowlist for one receiver name, taking precedence over its
+# kind's. `cursor` is DB-API's cursor in Python, but across the pinned corpora
+# most `cursor.<verb>()` calls are not database I/O: tree-sitter cursors
+# (TS `cursor.gotoFirstChild()`), text/UI cursors (excalidraw
+# `this.cursor.reset()`), byte and search cursors (Java `cursor.remaining()`),
+# Rust iterators (`cursor.move_on_next()`). Only the DB-API verbs count.
+_RECEIVER_NAME_VERB_FILTER: Dict[str, frozenset] = {
+    'cursor': frozenset({
+        'execute', 'executemany', 'executescript', 'fetchone', 'fetchall',
+        'fetchmany', 'fetchval', 'callproc', 'nextset', 'mogrify', 'scroll',
+        'copy_from', 'copy_to', 'copy_expert',
+    }),
+}
+
+
 _RECEIVER_VERB_FILTER: Dict[str, frozenset] = {
     'file': frozenset({
         # JVM NIO `Files`/`Directory` static class (corpus histogram)
@@ -1600,7 +1614,7 @@ def _classify_by_receiver(callee_segs: List[str]) -> Optional[str]:
     for kind, receivers in _RECEIVER_TAXONOMY:
         for receiver in receivers:
             if receiver in non_final:
-                allowed_verbs = _RECEIVER_VERB_FILTER.get(kind)
+                allowed_verbs = _RECEIVER_NAME_VERB_FILTER.get(receiver, _RECEIVER_VERB_FILTER.get(kind))
                 if allowed_verbs is not None and verb not in allowed_verbs:
                     continue
                 return kind
@@ -1824,10 +1838,12 @@ def collect_effects(
 ) -> List[Dict[str, Any]]:
     """Return classified side-effect sites in a line range, in line order.
 
-    Two independent channels feed this (BACK-644):
-        call     -- range_calls() call sites, classified by classify_call()
-        property -- bare env property/subscript reads, which contain no call
-                    node and so can never be classified from callee text
+    Three independent channels feed this:
+        call      -- range_calls() call sites, classified by classify_call()
+        property  -- bare env property/subscript reads, which contain no call
+                     node and so can never be classified from callee text (BACK-644)
+        statement -- PHP process exits with no call node: `exit;` / `exit(1)`
+                     (an exit_statement) and a bare `die;` (BACK-1406)
 
     Each item is a dict:
         line      -- 1-indexed line of the site
@@ -1844,7 +1860,36 @@ def collect_effects(
     results.extend(
         _collect_property_effects(func_node, from_line, to_line, get_text, language)
     )
+    results.extend(_collect_statement_exits(func_node, from_line, to_line, get_text))
     results.sort(key=lambda r: r['line'])
+    return results
+
+
+def _collect_statement_exits(func_node: Any, from_line: int, to_line: int,
+                             get_text: Callable) -> List[Dict[str, Any]]:
+    """PHP hard_stop sites that are not calls (BACK-1406): `exit;` / `exit(1)`
+    parse to an exit_statement, and `die;` to a bare name."""
+    from .nav_exits import bare_exit_name  # noqa: PLC0415 -- nav_exits imports nav_calls
+    results = []
+    stack = list(_children(func_node))
+    while stack:
+        node = stack.pop()
+        line = _zero_arg(node, 'start_position').row + 1
+        if _zero_arg(node, 'end_position').row + 1 < from_line or line > to_line:
+            continue
+        kind = _zero_arg(node, 'kind')
+        # Ruby's bare `exit` is already a call site (range_calls); only PHP's
+        # statement forms have no call node.
+        if kind == 'exit_statement' or (
+                kind == 'name' and bare_exit_name(node, get_text) in _HARD_STOP_NAMES):
+            if from_line <= line <= to_line:
+                results.append({
+                    'line': line, 'callee': get_text(node).splitlines()[0].strip().rstrip(';'),
+                    'first_arg': None, 'has_more_args': False, 'kind': 'hard_stop',
+                    'via': 'statement',
+                })
+            continue
+        stack.extend(_children(node))
     return results
 
 
@@ -1856,7 +1901,7 @@ def format_effect_target(effect: Dict[str, Any]) -> str:
     one — it renders bare (`process.env.FOO`).
     """
     target = effect['callee'] or '(unknown)'
-    if effect.get('via') == 'property':
+    if effect.get('via') in ('property', 'statement'):  # as written: no call parens
         return target
     first_arg = effect.get('first_arg')
     if not first_arg:

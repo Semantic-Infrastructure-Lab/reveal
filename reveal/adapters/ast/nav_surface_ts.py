@@ -701,6 +701,18 @@ def _process_call(
         return
 
 
+def _is_callee(node: Any) -> bool:
+    """`process.env.hasOwnProperty` in `process.env.hasOwnProperty(k)`: a
+    method of the env object, not a variable -- env values are strings, never
+    called (BACK-1406)."""
+    parent = _zero_arg(node, 'parent')
+    if parent is None or _zero_arg(parent, 'kind') != 'call_expression':
+        return False
+    kids = _children(parent)
+    return bool(kids) and _zero_arg(kids[0], 'start_byte') == _zero_arg(node, 'start_byte') \
+        and _zero_arg(kids[0], 'end_byte') == _zero_arg(node, 'end_byte')
+
+
 def _process_member(
     node: Any,
     file_path: str,
@@ -718,7 +730,7 @@ def _process_member(
             prop_node = children[-1]
             if _zero_arg(obj_node, 'kind') == 'member_expression':
                 obj_text = _get_text(obj_node, content_bytes)
-                if obj_text == 'process.env':
+                if obj_text == 'process.env' and not _is_callee(node):
                     var_name = _get_text(prop_node, content_bytes)
                     _add_once(surfaces['env'], {
                         'type': 'env_var', 'name': var_name,

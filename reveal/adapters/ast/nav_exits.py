@@ -16,7 +16,36 @@ from ...core.treesitter_compat import _zero_arg
 # nodes (no raise_statement in tree-sitter-ruby), so they must be caught here the
 # way PHP/Perl `die`/`exit` are. Found via discourse deep-conformance dogfooding
 # (Ruby `raise ArgumentError` was invisible to --exits/--returns/--flowto).
-_EXIT_CALL_NAMES: frozenset = frozenset({'die', 'exit', 'raise', 'fail'})
+_EXIT_CALL_NAMES: frozenset = frozenset({'die', 'exit', 'raise', 'fail', 'abort'})
+
+# BACK-1406: an exit written as a bare name, with no call node. PHP's `die;`
+# is a `name` in an expression_statement (`exit;` is an exit_statement, in
+# EXIT_NODES); Ruby's bare `raise` / `exit` / `abort` is an `identifier`
+# directly in a body. Only in statement position: in Python or JS a bare
+# `exit` statement is a no-op expression, so the PHP form is keyed to PHP's
+# `name` kind and the Ruby form to Ruby's statement containers.
+_RUBY_STATEMENT_PARENTS: frozenset = frozenset({
+    'body_statement', 'then', 'else', 'if_modifier', 'unless_modifier',
+    'block_body', 'begin', 'ensure', 'program',
+})
+
+
+def bare_exit_name(node: Any, get_text: Callable) -> Optional[str]:
+    """`die` / `exit` / `raise` / ... when node is one written as a bare
+    statement (PHP `die;`, Ruby `raise`), else None."""
+    kind = _zero_arg(node, 'kind')
+    if kind not in ('name', 'identifier'):
+        return None
+    parent = _zero_arg(node, 'parent')
+    if parent is None:
+        return None
+    parent_kind = _zero_arg(parent, 'kind')
+    in_statement = (parent_kind == 'expression_statement' if kind == 'name'
+                    else parent_kind in _RUBY_STATEMENT_PARENTS)
+    if not in_statement:
+        return None
+    name = get_text(node)
+    return name if name in _EXIT_CALL_NAMES else None
 
 # BACK-421 part 3: C++ error-handling macros expand to an early return, but
 # tree-sitter parses the raw (pre-preprocessor) source, so they appear as a
@@ -111,6 +140,37 @@ _HARD_EXIT_KINDS: frozenset = frozenset({'RETURN', 'RAISE', 'THROW', 'EXIT'})
 _SOFT_EXIT_KINDS: frozenset = frozenset({'BREAK', 'CONTINUE', 'YIELD'})
 
 
+def _first_line(text: str) -> str:
+    text = text.splitlines()[0].strip() if text else ''
+    return text[:77] + '...' if len(text) > 80 else text
+
+
+def _exit_at(node: Any, get_text: Callable,
+             call_node_types: frozenset) -> Optional[tuple]:
+    """(kind, text, descend) when node is an exit, else None -- the one
+    definition of "exit" that --exits and --returns (collect_gate_chains) both
+    use: an exit node (return/raise/throw/PHP exit_statement...), Rust's `?`,
+    an exit call (`die(...)`, `raise X`, `ERR_FAIL_*`), or a bare exit name
+    (PHP `die;`, Ruby `raise`). descend: whether the walk continues into it
+    (a call's arguments can hold further calls)."""
+    ntype = _zero_arg(node, 'kind')
+    if ntype in _EXIT_KIND:
+        text_node = node
+        if ntype in _BARE_THROW_KEYWORD_KINDS:
+            parent = _zero_arg(node, 'parent')
+            if parent is not None:
+                text_node = parent
+        return _EXIT_KIND[ntype], _first_line(get_text(text_node)), False
+    if _is_rust_try_propagation(node):
+        return 'RETURN', _first_line(get_text(node)), False
+    if ntype in call_node_types:
+        if _is_exit_call(_extract_callee(node, get_text)):
+            return 'EXIT', _first_line(get_text(node)), True
+        return None
+    name = bare_exit_name(node, get_text)
+    return ('EXIT', name, False) if name else None
+
+
 def collect_exits(
     scope_node: Any,
     from_line: int,
@@ -138,31 +198,12 @@ def collect_exits(
             continue
 
         if from_line <= line <= to_line:
-            if _zero_arg(node, 'kind') in _EXIT_KIND:
-                kind = _EXIT_KIND[_zero_arg(node, 'kind')]
-                text_node = node
-                if _zero_arg(node, 'kind') in _BARE_THROW_KEYWORD_KINDS:
-                    parent = _zero_arg(node, 'parent')
-                    if parent is not None:
-                        text_node = parent
-                text = get_text(text_node).splitlines()[0].strip()
-                if len(text) > 80:
-                    text = text[:77] + '...'
+            found = _exit_at(node, get_text, call_node_types)
+            if found is not None:
+                kind, text, descend = found
                 results.append({'kind': kind, 'line': line, 'text': text})
-                continue
-            if _is_rust_try_propagation(node):
-                text = get_text(node).splitlines()[0].strip()
-                if len(text) > 80:
-                    text = text[:77] + '...'
-                results.append({'kind': 'RETURN', 'line': line, 'text': text})
-                continue
-            if _zero_arg(node, 'kind') in call_node_types:
-                callee = _extract_callee(node, get_text)
-                if _is_exit_call(callee):
-                    text = get_text(node).splitlines()[0].strip()
-                    if len(text) > 80:
-                        text = text[:77] + '...'
-                    results.append({'kind': 'EXIT', 'line': line, 'text': text})
+                if not descend:
+                    continue
 
         stack.extend(reversed(_children(node)))
 
@@ -369,30 +410,12 @@ def collect_gate_chains(
         ntype = _zero_arg(node, 'kind')
 
         if from_line <= line <= to_line:
-            if ntype in _EXIT_KIND:
-                text_node = node
-                if ntype in _BARE_THROW_KEYWORD_KINDS:
-                    parent = _zero_arg(node, 'parent')
-                    if parent is not None:
-                        text_node = parent
-                text = get_text(text_node).splitlines()[0].strip()
-                if len(text) > 80:
-                    text = text[:77] + '...'
-                results.append({'kind': _EXIT_KIND[ntype], 'line': line, 'text': text, 'gates': gates[:]})
-                return
-            if _is_rust_try_propagation(node):
-                text = get_text(node).splitlines()[0].strip()
-                if len(text) > 80:
-                    text = text[:77] + '...'
-                results.append({'kind': 'RETURN', 'line': line, 'text': text, 'gates': gates[:]})
-                return
-            if ntype in call_node_types:
-                callee = _extract_callee(node, get_text)
-                if _is_exit_call(callee):
-                    text = get_text(node).splitlines()[0].strip()
-                    if len(text) > 80:
-                        text = text[:77] + '...'
-                    results.append({'kind': 'EXIT', 'line': line, 'text': text, 'gates': gates[:]})
+            found = _exit_at(node, get_text, call_node_types)
+            if found is not None:
+                kind, text, descend = found
+                results.append({'kind': kind, 'line': line, 'text': text, 'gates': gates[:]})
+                if not descend:
+                    return
 
         if ntype in _GATE_NODE_TYPES:
             cond = _get_condition(node, get_text)

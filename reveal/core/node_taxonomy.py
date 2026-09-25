@@ -367,6 +367,11 @@ THROW_NODES: frozenset = frozenset(
     {'throw_statement', 'throw_expression', 'throw', 'throw_keyword'}
 )
 YIELD_NODES: frozenset = frozenset({'yield_statement', 'yield'})
+# BACK-1406: PHP parses `exit;` / `exit(1)` as a statement, not a call -- unlike
+# `die("x")`, which is a function_call_expression caught by nav_exits'
+# _EXIT_CALL_NAMES. Without this, --returns/--exits/--sideeffects missed every
+# `exit` in PHP.
+HARD_EXIT_NODES: frozenset = frozenset({'exit_statement'})
 # BACK-431: bare 'break'/'continue' were already recognized by nav_exits.py's
 # hand-written _EXIT_KIND but missing from nav_outline.py's EXIT_NODES — a
 # real drift instance found while consolidating (a grammar that emits bare
@@ -434,7 +439,7 @@ FUNCTION_TYPES: frozenset = DEF_NODES | CLASS_NODES | STRUCT_NODES | IMPL_NODES 
 
 EXIT_NODES: frozenset = (
     RETURN_NODES | RAISE_NODES | THROW_NODES | YIELD_NODES
-    | BREAK_NODES | CONTINUE_NODES
+    | BREAK_NODES | CONTINUE_NODES | HARD_EXIT_NODES
 )
 
 ALTERNATIVE_NODES: frozenset = (
@@ -526,6 +531,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'throw_statement': 'THROW', 'throw_expression': 'THROW', 'throw': 'THROW',
     'throw_keyword': 'THROW',
     'yield_statement': 'YIELD', 'yield': 'YIELD',
+    'exit_statement': 'EXIT',  # BACK-1406: PHP `exit;`
     'break_statement': 'BREAK', 'break': 'BREAK',
     'continue_statement': 'CONTINUE', 'continue': 'CONTINUE',
 }
