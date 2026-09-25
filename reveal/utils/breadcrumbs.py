@@ -496,9 +496,10 @@ def _handle_element(path, file_type, **kwargs):
         f"  → Back: reveal {path}          # See full structure",
     ])
 
-    # Suggest line-based extraction for navigating to nearby elements
-    if line_start and file_type in _CODE_TYPES:
-        print(f"  → Nearby: reveal {path} :{line_start + line_count + 5}  # Next element")
+    # Point at the outline's next element; the last element has no neighbour to suggest.
+    next_line = kwargs.get('next_line')
+    if line_start and file_type in _CODE_TYPES and next_line:
+        print(f"  → Nearby: reveal {path} :{next_line}  # Next element")
     else:
         _show_hint_once('element_check_fallback', [
             f"  → Check: reveal {path} --check # Quality analysis",

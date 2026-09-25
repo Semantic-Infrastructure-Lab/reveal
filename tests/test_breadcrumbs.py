@@ -1186,14 +1186,27 @@ class TestPrintBreadcrumbsElement:
 
         capture_breadcrumbs(
             'element', 'test.py', 'python', config=mock_config,
-            element_name='first_func', line_count=10, line_start=5,
+            element_name='first_func', line_count=10, line_start=5, next_line=20,
         )
         second = capture_breadcrumbs(
             'element', 'test.py', 'python', config=mock_config,
-            element_name='second_func', line_count=20, line_start=100,
+            element_name='second_func', line_count=20, line_start=100, next_line=131,
         )
 
-        assert 'Nearby: reveal test.py :125' in second
+        assert 'Nearby: reveal test.py :131' in second
+
+    def test_element_nearby_hint_omitted_without_a_next_element(self):
+        """BACK-1422: the last element has no neighbour; never guess a line."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        output = capture_breadcrumbs(
+            'element', 'test.py', 'python', config=mock_config,
+            element_name='last_func', line_count=4, line_start=1,
+        )
+
+        assert 'Nearby:' not in output
+        assert 'Extracted last_func' in output
 
 
 # ==============================================================================

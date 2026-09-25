@@ -1097,7 +1097,8 @@ class TestHandleExtractionErrorHints:
 
         captured = capsys.readouterr()
         assert 'Code extraction matches exact names' in captured.err
-        assert "--search 'staging'" in captured.err
+        assert "--grep 'staging'" in captured.err
+        assert '--search' not in captured.err  # --search is a name filter, not content search
         assert '/tmp/deploy.sh' in captured.err # noqa: win-path — analyzer.path is str, not Path; output is unchanged
 
     def test_ux12_hint_not_shown_when_pipe_in_element(self, capsys):
@@ -1113,7 +1114,7 @@ class TestHandleExtractionErrorHints:
         assert "'|' pattern matches headings only" in captured.err
 
     def test_pipe_hint_suggests_search_with_first_term(self, capsys):
-        """Pipe hint --search suggestion uses first term before |."""
+        """Pipe hint --grep suggestion uses first term before |."""
         analyzer = Mock()
         analyzer.path = '/tmp/doc.md'
         analyzer.get_structure.return_value = {}
@@ -1121,10 +1122,10 @@ class TestHandleExtractionErrorHints:
         _handle_extraction_error(analyzer, 'Open Issues|Closed', {'type': 'name'})
 
         captured = capsys.readouterr()
-        assert "--search 'Open Issues'" in captured.err
+        assert "--grep 'Open Issues'" in captured.err
 
     def test_ux12_hint_search_uses_full_element_name(self, capsys):
-        """--search suggestion uses the full element name, not a substring."""
+        """--grep suggestion uses the full element name, not a substring."""
         analyzer = Mock()
         analyzer.path = '/tmp/script.py'
         analyzer.get_structure.return_value = {}
@@ -1132,7 +1133,7 @@ class TestHandleExtractionErrorHints:
         _handle_extraction_error(analyzer, 'deploy_to_staging', {'type': 'name'})
 
         captured = capsys.readouterr()
-        assert "--search 'deploy_to_staging'" in captured.err
+        assert "--grep 'deploy_to_staging'" in captured.err
 
 
 class TestPrintAvailableNames:
@@ -1215,6 +1216,128 @@ class TestPrintAvailableNames:
         captured = capsys.readouterr()
         assert 'real_func' in captured.err
         assert 'not_a_dict' not in captured.err
+
+    def test_available_names_are_distinct(self, capsys):
+        """Same-named items (overloads, same-named methods) list once."""
+        analyzer = Mock()
+        analyzer.path = '/tmp/test.py'
+        analyzer.get_structure.return_value = {
+            'functions': [{'name': 'bar'}, {'name': 'bar'}, {'name': 'qux'}],
+            'methods': [{'name': 'bar'}],
+        }
+        _handle_extraction_error(analyzer, 'missing', {'type': 'name'})
+
+        available = [l for l in capsys.readouterr().err.splitlines() if l.startswith('Available:')]
+        assert available == ['Available: bar, qux']
+
+    def test_typo_gets_did_you_mean(self, capsys):
+        analyzer = Mock()
+        analyzer.path = '/tmp/test.py'
+        analyzer.get_structure.return_value = {'functions': [{'name': 'process_order'}, {'name': 'zzz'}]}
+
+        _handle_extraction_error(analyzer, 'proces_order', {'type': 'name'})
+
+        assert 'Did you mean: process_order?' in capsys.readouterr().err
+
+    def test_no_did_you_mean_for_unrelated_name(self, capsys):
+        analyzer = Mock()
+        analyzer.path = '/tmp/test.py'
+        analyzer.get_structure.return_value = {'functions': [{'name': 'process_order'}]}
+
+        _handle_extraction_error(analyzer, 'xyzzy', {'type': 'name'})
+
+        assert 'Did you mean' not in capsys.readouterr().err
+
+
+# ============================================================================
+# BACK-1422: `:N` past EOF is an error; the "Nearby" hint names a real element
+# ============================================================================
+
+FOUR_ELEMENTS = (
+    'def pop():\n    return 1\n'
+    '\n'
+    'def bar():\n    return 2\n'
+    '\n\n'
+    'class K:\n    def m(self):\n        return 3\n'
+)
+
+
+@pytest.fixture
+def py_file(tmp_path):
+    path = tmp_path / 'sample.py'
+    path.write_text(FOUR_ELEMENTS, encoding='utf-8')
+    return path
+
+
+def _run_extract(path, element, capsys):
+    from reveal.registry import get_analyzer
+    from reveal.display.element import extract_element
+    analyzer = get_analyzer(str(path))(str(path))
+    try:
+        extract_element(analyzer, element, 'text')
+        code = 0
+    except SystemExit as e:
+        code = e.code
+    captured = capsys.readouterr()
+    return code, captured.out, captured.err
+
+
+class TestLinePastEof:
+    def test_bare_line_past_eof_is_an_error(self, py_file, capsys):
+        code, out, err = _run_extract(py_file, ':50', capsys)
+        assert code == 1
+        assert out == ''
+        assert 'past the end' in err and '(10 lines)' in err
+
+    def test_bare_integer_past_eof_is_an_error(self, py_file, capsys):
+        code, out, err = _run_extract(py_file, '50', capsys)
+        assert code == 1 and 'past the end' in err
+
+    def test_range_entirely_past_eof_is_an_error(self, py_file, capsys):
+        code, _, err = _run_extract(py_file, ':50-60', capsys)
+        assert code == 1 and 'past the end' in err
+
+    def test_range_straddling_eof_still_clamps(self, py_file, capsys):
+        code, out, _ = _run_extract(py_file, ':9-60', capsys)
+        assert code == 0 and 'lines:9-10' in out
+
+    def test_last_line_still_resolves(self, py_file, capsys):
+        code, out, _ = _run_extract(py_file, ':10', capsys)
+        assert code == 0 and '| m' in out
+
+    def test_blank_line_between_elements_still_gives_context_window(self, py_file, capsys):
+        code, out, _ = _run_extract(py_file, ':3', capsys)
+        assert code == 0 and out.strip()
+
+
+class TestNextElementHint:
+    def _hint(self, out):
+        import re
+        m = re.search(r'Nearby: reveal \S+ :(\d+)  # Next element', out)
+        return int(m.group(1)) if m else None
+
+    def test_hint_is_the_next_outline_element_not_arithmetic(self, py_file, capsys):
+        _, out, _ = _run_extract(py_file, 'pop', capsys)
+        assert self._hint(out) == 4  # `def bar`, not pop's end + 5
+
+    def test_hint_round_trips_to_that_element(self, py_file, capsys):
+        _, out, _ = _run_extract(py_file, 'bar', capsys)
+        line = self._hint(out)
+        assert line == 8
+        _, out2, _ = _run_extract(py_file, f':{line}', capsys)
+        assert '| K' in out2
+
+    def test_last_element_has_no_hint(self, py_file, capsys):
+        _, out, _ = _run_extract(py_file, 'K', capsys)
+        assert 'Next element' not in out
+
+    def test_hint_never_points_past_eof(self, tmp_path, capsys):
+        path = tmp_path / 'tiny.py'
+        path.write_text('def pop():\n    return 1\n\ndef bar():\n    return 2\n', encoding='utf-8')
+        _, out, _ = _run_extract(path, 'pop', capsys)
+        assert self._hint(out) == 4
+        _, out, _ = _run_extract(path, 'bar', capsys)
+        assert 'Next element' not in out
 
 
 if __name__ == '__main__':

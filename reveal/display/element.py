@@ -1,6 +1,7 @@
 """Element extraction display."""
 
 from ..reveal_types import StructureItem
+import difflib
 import sys
 from typing import Optional, cast
 
@@ -159,7 +160,11 @@ def _extract_by_syntax(analyzer, element: str, syntax: dict):
             # Fall back to a context window so bare integers always show something useful.
             target = syntax['start_line']
             context = 10
-            return _extract_line_range(analyzer, max(1, target - context), target + context)
+            window = _extract_line_range(analyzer, max(1, target - context), target + context)
+            # A line past EOF is an error, not a window onto the file's start.
+            if window is not None and target > window['line_end']:
+                return None
+            return window
 
     elif syntax_type == 'hierarchical':
         from ..treesitter import TreeSitterAnalyzer
@@ -343,33 +348,56 @@ def _try_grep_extraction(analyzer, element: str):
     return None
 
 
+def _available_names(analyzer) -> list:
+    """Distinct element names from the analyzer's structure, in outline order."""
+    structure = analyzer.get_structure()
+    if not structure or not isinstance(structure, dict):
+        return []
+    names: list = []
+    for category in ('functions', 'classes', 'methods'):
+        items = structure.get(category, [])
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            name = item.get('name')
+            # An overload set or same-named methods list once: the name is the address.
+            if name and name not in names:
+                names.append(name)
+    return names
+
+
 def _print_available_names(analyzer):
     """Print available element names from the analyzer's structure to stderr."""
     try:
-        structure = analyzer.get_structure()
-        if not structure or not isinstance(structure, dict):
-            return
-
-        MAX_NAMES = 10
-        available = []
-        for category in ('functions', 'classes', 'methods'):
-            items = structure.get(category, [])
-            if not isinstance(items, list):
-                continue
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                name = item.get('name')
-                if name:
-                    available.append(name)
-
+        available = _available_names(analyzer)
         if available:
-            shown = available[:MAX_NAMES]
-            suffix = f" (and {len(available) - MAX_NAMES} more)" if len(available) > MAX_NAMES else ""
-            print(f"Available: {', '.join(shown)}{suffix}", file=sys.stderr)
+            max_names = 10
+            suffix = f" (and {len(available) - max_names} more)" if len(available) > max_names else ""
+            print(f"Available: {', '.join(available[:max_names])}{suffix}", file=sys.stderr)
     except Exception as e:
         print(f"Warning: could not list available names: {e}", file=sys.stderr)
+
+
+def _print_did_you_mean(analyzer, element: str):
+    """Suggest the closest element names for a mistyped one (stderr)."""
+    try:
+        close = difflib.get_close_matches(element, _available_names(analyzer), n=3, cutoff=0.6)
+    except Exception as e:
+        print(f"Warning: could not suggest similar names: {e}", file=sys.stderr)
         return
+    if close:
+        print(f"Did you mean: {', '.join(close)}?", file=sys.stderr)
+
+
+def _count_lines(path) -> Optional[int]:
+    """Number of lines in a file, or None when it cannot be read as text."""
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return sum(1 for _ in f)
+    except (OSError, UnicodeDecodeError, TypeError):
+        return None
 
 
 def _handle_extraction_error(analyzer, element: str, syntax: dict):
@@ -392,7 +420,15 @@ def _handle_extraction_error(analyzer, element: str, syntax: dict):
 
     elif syntax_type == 'line':
         target_line = syntax['start_line']
-        print(f"Error: No element found at line {target_line} in {analyzer.path}", file=sys.stderr)
+        end_line = syntax['end_line']
+        total = _count_lines(analyzer.path)
+        span = f"{target_line}-{end_line}" if end_line else str(target_line)
+        if total is not None and target_line > total:
+            print(f"Error: Line {span} is past the end of {analyzer.path} ({total} lines)", file=sys.stderr)
+        elif end_line:
+            print(f"Error: Invalid line range {span} in {analyzer.path}", file=sys.stderr)
+        else:
+            print(f"Error: No element found at line {target_line} in {analyzer.path}", file=sys.stderr)
 
     elif syntax_type == 'hierarchical':
         parent, child = element.rsplit('.', 1)
@@ -404,15 +440,16 @@ def _handle_extraction_error(analyzer, element: str, syntax: dict):
         if '|' in element:
             print(
                 "Hint: '|' pattern matches headings only. "
-                f"For table or body content, use: reveal {analyzer.path} --search '{element.split('|')[0].strip()}'",
+                f"For table or body content, use: reveal {analyzer.path} --grep '{element.split('|')[0].strip()}'",
                 file=sys.stderr
             )
         else:
             print(
                 f"Hint: Code extraction matches exact names. "
-                f"For content search, use: reveal {analyzer.path} --search '{element}'",
+                f"For content search, use: reveal {analyzer.path} --grep '{element}'",
                 file=sys.stderr
             )
+        _print_did_you_mean(analyzer, element)
         _print_available_names(analyzer)
 
 
@@ -760,6 +797,32 @@ def _read_lines(path, start_line, end_line):
         return None
 
 
+def _next_element_line(analyzer, after_line: int) -> Optional[int]:
+    """First line of the nearest outline item that starts after `after_line`.
+
+    The "Nearby" breadcrumb points here so the suggested `:N` lands on a real
+    element -- not on blank space between elements or past the end of the file.
+    None when nothing follows (the last element of the file).
+    """
+    try:
+        structure = _get_analyzer_structure(analyzer)
+        if not structure:
+            return None
+        starts = [
+            line
+            for category, items in structure.items()
+            if category != 'imports' and isinstance(items, list)
+            for item in items
+            if isinstance(item, dict)
+            for line in [listed_item_line(item)]
+            if line and line > after_line
+        ]
+    except Exception as e:
+        print(f"Warning: could not find the next element: {e}", file=sys.stderr)
+        return None
+    return min(starts) if starts else None
+
+
 def _output_sections(analyzer, path, name: str, sections, output_format: str, config=None):
     """Render several non-contiguous sections, each numbered from its own start line."""
     for i, section in enumerate(sections):
@@ -777,7 +840,8 @@ def _output_sections(analyzer, path, name: str, sections, output_format: str, co
         file_type = get_file_type_from_analyzer(analyzer)
         print_breadcrumbs('element', path, file_type=file_type, config=config,
                           element_name=name, line_count=line_count,
-                          line_start=sections[0]['line_start'])
+                          line_start=sections[0]['line_start'],
+                          next_line=_next_element_line(analyzer, sections[-1]['line_end']))
 
 
 def _output_result(analyzer, result, element: str, output_format: str, config=None):
@@ -851,4 +915,5 @@ def _output_result(analyzer, result, element: str, output_format: str, config=No
         # Navigation hints
         file_type = get_file_type_from_analyzer(analyzer)
         print_breadcrumbs('element', path, file_type=file_type, config=config,
-                         element_name=name, line_count=line_count, line_start=line_start)
+                         element_name=name, line_count=line_count, line_start=line_start,
+                         next_line=_next_element_line(analyzer, line_end))
