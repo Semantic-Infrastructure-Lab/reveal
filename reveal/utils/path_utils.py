@@ -1098,6 +1098,14 @@ def _python_package_top(target_path: Path) -> Optional[Path]:
     return current
 
 
+def _within_repo(candidate: Path, vcs_root: Optional[Path]) -> bool:
+    """True if *candidate* (an ancestor of the scan target) is at or below *vcs_root*.
+
+    Both come from climbing the same target, so "below" is "not shorter".
+    """
+    return vcs_root is None or len(candidate.parts) >= len(vcs_root.parts)
+
+
 def resolve_project_root(
     target_path: Path,
     *,
@@ -1115,7 +1123,10 @@ def resolve_project_root(
     * **1** nearest package/build marker (``use_package_markers``) — for a JS/TS
       match specifically, climbs further to an ancestor explicitly declaring
       lerna/pnpm/npm workspace membership if one exists (BACK-698), since that
-      ancestor is the true scan root for a monorepo package.
+      ancestor is the true scan root for a monorepo package. Either one counts
+      only inside the nearest VCS root (BACK-1434): a marker above it belongs to
+      another project, so a vendored checkout or submodule falls to tier 2
+      instead of scanning its parent project.
     * **2** nearest VCS root (``use_vcs``).
     * **3** contiguous ``__init__.py`` chain top (``python_init_chain``).
 
@@ -1130,20 +1141,19 @@ def resolve_project_root(
         reveal_root = search_parents_within_ceiling(target_path, _has_reveal_root_marker)
         if reveal_root is not None:
             return reveal_root
+    vcs_root = search_parents_within_ceiling(target_path, _has_vcs_marker)
     if use_package_markers:
         package_root = search_parents_within_ceiling(target_path, _has_package_marker)
-        if package_root is not None:
+        if package_root is not None and _within_repo(package_root, vcs_root):
             if (package_root / 'package.json').exists():
                 workspace_root = search_parents_within_ceiling(
                     package_root.parent, _has_js_workspace_marker
                 )
-                if workspace_root is not None:
+                if workspace_root is not None and _within_repo(workspace_root, vcs_root):
                     return workspace_root
             return package_root
-    if use_vcs:
-        vcs_root = search_parents_within_ceiling(target_path, _has_vcs_marker)
-        if vcs_root is not None:
-            return vcs_root
+    if use_vcs and vcs_root is not None:
+        return vcs_root
     if python_init_chain:
         return _python_package_top(target_path)
     return None

@@ -997,22 +997,47 @@ class TestDependsAdapterScanRootResolution:
     """BACK-525 layers 1-3: tiered nearest-marker climb, hard ceiling, and
     the inferred-project fallback that replaces the flat marker-climb."""
 
-    def test_package_marker_beats_nearer_vcs_root(self, tmp_path):
-        """A package/build marker several levels up must be preferred over a
-        *nearer* VCS root — package evidence is a project-unit signal, a bare
-        `.git` is only a climb ceiling, and being nearer doesn't promote it
-        (the core insight the flat nearest-match marker list couldn't
-        express: it always picked whichever marker was nearest, regardless
-        of kind)."""
+    def test_package_marker_beats_distant_vcs_root(self, tmp_path):
+        """BACK-525: a package inside a larger repo is scanned as the package --
+        the ancestor `.git` does not promote the whole repo to the scan root."""
         from reveal.adapters.depends import _resolve_project_root
 
-        (tmp_path / 'pyproject.toml').write_text('[project]\nname = "monorepo"\n')
-        nested = tmp_path / 'packages' / 'foo'
+        (tmp_path / '.git').mkdir()
+        pkg = tmp_path / 'packages' / 'foo'
+        (pkg / 'pyproject.toml').parent.mkdir(parents=True)
+        (pkg / 'pyproject.toml').write_text('[project]\nname = "foo"\n', encoding='utf-8')
+        target = pkg / 'src' / 'target.py'
+        _write(target, 'x = 1\n')
+
+        assert _resolve_project_root(target) == pkg
+
+    def test_nested_repo_is_not_scanned_as_its_parent_project(self, tmp_path):
+        """BACK-1434: a marker above the nearest `.git` belongs to another project.
+        A vendored checkout / scratch repo with no marker of its own used to resolve
+        to the enclosing project (`reveal review` in a repro repo under ~/src/tia ran
+        I002/T006 over 4,368 files of tia); it is its own root now."""
+        from reveal.adapters.depends import _resolve_project_root
+
+        (tmp_path / 'pyproject.toml').write_text('[project]\nname = "outer"\n', encoding='utf-8')
+        nested = tmp_path / 'vendor' / 'lib'
         (nested / '.git').mkdir(parents=True)
         target = nested / 'src' / 'target.py'
         _write(target, 'x = 1\n')
 
-        assert _resolve_project_root(target) == tmp_path
+        assert _resolve_project_root(target) == nested
+
+    def test_js_workspace_above_nested_repo_is_not_its_root(self, tmp_path):
+        """BACK-1434: the BACK-698 workspace climb is bounded by the repo too."""
+        from reveal.adapters.depends import _resolve_project_root
+
+        (tmp_path / 'package.json').write_text('{"workspaces": ["packages/*"]}', encoding='utf-8')
+        repo = tmp_path / 'packages' / 'app'
+        (repo / '.git').mkdir(parents=True)
+        (repo / 'package.json').write_text('{"name": "app"}', encoding='utf-8')
+        target = repo / 'index.js'
+        _write(target, 'export const x = 1\n')
+
+        assert _resolve_project_root(target) == repo
 
     def test_no_marker_before_ceiling_returns_none(self, tmp_path):
         """No package or VCS marker anywhere between the target and the hard
