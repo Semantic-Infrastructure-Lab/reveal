@@ -212,7 +212,10 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
             # pre-existing `list.insert()`/`iterable.select()`-shaped FPs that
             # existed before this move too — not a new regression, just now
             # contained to python+php instead of every language.
-            'query', 'execute', 'select', 'insert',
+            # BACK-1402: as the METHOD called (`session.query`, `cursor.execute`,
+            # bare `select(...)`), never as a receiver name -- `query.get("k")` on
+            # a dict named `query` and `select.split(",")` were db.
+            '.query', '.execute', '.select', '.insert',
         ]),
         ('http', [
             'requests.get', 'requests.post', 'requests.put', 'requests.delete',
@@ -1413,6 +1416,9 @@ def _tokenize(s: str) -> List[str]:
 
 
 _EXACT = '^'
+# A leading `.` (BACK-1402): the pattern must be the callee's final segments -- the
+# method actually called, never a receiver or intermediate name.
+_CALLED = '.'
 
 
 def _compile_pattern(pattern: str) -> List[str]:
@@ -1420,6 +1426,8 @@ def _compile_pattern(pattern: str) -> List[str]:
     as a first segment `_segments_contain` recognizes."""
     if pattern.startswith(_EXACT):
         return [_EXACT] + _tokenize(pattern[1:])
+    if pattern.startswith(_CALLED):
+        return [_CALLED] + _tokenize(pattern[1:])
     return _tokenize(pattern)
 
 
@@ -1587,9 +1595,13 @@ _RECEIVER_VERB_FILTER: Dict[str, frozenset] = {
 
 def _segments_contain(callee_segs: List[str], pattern_segs: List[str]) -> bool:
     """True if pattern_segs appears as a consecutive sub-sequence of callee_segs,
-    or, for an exact (`^`) pattern, is the whole callee."""
+    or, for an exact (`^`) pattern, is the whole callee, or, for a called (`.`)
+    pattern, ends it."""
     if pattern_segs and pattern_segs[0] == _EXACT:
         return callee_segs == pattern_segs[1:]
+    if pattern_segs and pattern_segs[0] == _CALLED:
+        tail = pattern_segs[1:]
+        return bool(tail) and callee_segs[-len(tail):] == tail
     n = len(pattern_segs)
     if n == 0 or n > len(callee_segs):
         return False

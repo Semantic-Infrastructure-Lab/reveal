@@ -615,7 +615,7 @@ reveal testability src --tests tests --top 20
 reveal testability src --tests tests --format json
 ```
 
-**Why this works:** Patch-heavy tests often point at production code that mixes runtime boundaries with decision logic. `patches://` shows what tests patch. `reveal testability` joins that pressure with production functions that touch network clients, persistence, filesystem state, notifications, clocks, environment/config, global state, or mutation. *(Supports Python (`unittest.mock`/`pytest`) and TypeScript/JavaScript (Jest/Vitest: `jest.mock`, `vi.mock`, `jest.spyOn`, `vi.spyOn`, `jest.fn`, `vi.fn`, `jest.replaceProperty`). Boundary fan-out half works for all languages.)*
+**Why this works:** Patch-heavy tests often point at production code that mixes runtime boundaries with decision logic. `patches://` shows what tests patch. `reveal testability` joins that pressure with production functions that touch network clients, persistence, filesystem state, logging, sleeps, environment/config, process exit, or mutation -- each function's own calls, classified exactly as `--sideeffects` classifies them, so the two never disagree. *(Supports Python (`unittest.mock`/`pytest`) and TypeScript/JavaScript (Jest/Vitest: `jest.mock`, `vi.mock`, `jest.spyOn`, `vi.spyOn`, `jest.fn`, `vi.fn`, `jest.replaceProperty`). Boundary fan-out half works for all languages.)*
 
 **How to interpret it:** This is advisory. Mocking an external API, clock, certificate probe, or filesystem boundary can be correct. High signal comes from repeated private/internal patches or patch pressure that overlaps with high boundary fan-out.
 

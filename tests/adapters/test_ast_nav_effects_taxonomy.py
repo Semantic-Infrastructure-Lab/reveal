@@ -2132,3 +2132,14 @@ class TestBack720ScalaTaxonomy(unittest.TestCase):
         self.assertIsNone(classify_call('session_start', language='scala'))
 
 
+
+
+@pytest.mark.parametrize('callee, expected', [
+    # BACK-1402: Python's bare db verbs match only as the method called.
+    ('session.query', 'db'), ('cursor.execute', 'db'), ('select', 'db'), ('insert', 'db'),
+    ('db.session.query', 'db'),
+    ('query.get', None), ('select.split', None), ("query.get('k', '').strip", None),
+])
+def test_python_db_verbs_match_the_called_method_not_a_receiver(callee, expected):
+    from reveal.adapters.ast.nav_effects import classify_call
+    assert classify_call(callee, 'python') == expected

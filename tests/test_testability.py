@@ -583,3 +583,69 @@ class TestNoTestsIsNotApplicable:
         adapter = TestabilityAdapter(str(tmp_path))
         with pytest.raises(NotApplicableError, match="no tests found"):
             adapter.get_structure()
+
+
+def test_boundary_categories_come_from_the_function_not_its_file(tmp_path):
+    """BACK-1402: whole-file imports gave every function in a file the same labels."""
+    src = _write(tmp_path / 'src' / 'service.py', '''
+import os.path
+import urllib.request
+import requests
+
+def pure(a, b):
+    return a + b
+
+def fetch(url):
+    return requests.get(url)
+''')
+    profiles = {p.function: p for p in collect_boundary_profiles(str(src.parent))}
+    assert profiles['pure'].categories == set()
+    assert profiles['fetch'].categories == {'network_client'}
+
+
+def test_java_string_builder_gets_no_python_vocabulary_labels(tmp_path):
+    """BACK-1402: Elasticsearch IngestService.getProcessorName (a string builder) was
+    'event_telemetry, filesystem, mutation, network_client, process_global' while
+    --sideeffects on it said 'No classified side effects'."""
+    src = _write(tmp_path / 'src' / 'Svc.java', '''
+import java.nio.file.Files;
+import org.apache.logging.log4j.Logger;
+import org.elasticsearch.cluster.ClusterState;
+
+class Svc {
+    String getProcessorName(String type, String tag) {
+        StringBuilder sb = new StringBuilder(5);
+        sb.append(type);
+        if (tag != null) { sb.append(":"); sb.append(tag); }
+        return sb.toString();
+    }
+    void load(java.nio.file.Path p) throws Exception {
+        Files.readAllBytes(p);
+    }
+}
+''')
+    profiles = {p.function: p for p in collect_boundary_profiles(str(src.parent))}
+    assert profiles['getProcessorName'].categories <= {'mutation'}
+    assert profiles['load'].categories == {'filesystem'}
+
+
+def test_go_boundary_uses_the_go_taxonomy(tmp_path):
+    src = _write(tmp_path / 'src' / 'client.go', '''
+package client
+
+import (
+    "net/http"
+    "os"
+)
+
+func Fetch(u string) (*http.Response, error) {
+    return http.Get(u)
+}
+
+func Token() string {
+    return os.Getenv("TOKEN")
+}
+''')
+    profiles = {p.function: p for p in collect_boundary_profiles(str(src.parent))}
+    assert profiles['Fetch'].categories == {'network_client'}
+    assert profiles['Token'].categories == {'env_config'}

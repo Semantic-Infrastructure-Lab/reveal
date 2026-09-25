@@ -1,11 +1,20 @@
-"""Conservative boundary fan-out profiling for Python code."""
+"""Conservative boundary fan-out profiling, per function, for every analyzed language.
+
+A function's boundary categories come from its OWN calls, classified by the same
+per-language taxonomy `--sideeffects` uses (`nav_effects.classify_call`), so the two
+cannot disagree. BACK-1402: the old classifier substring-matched a Python/reveal-internal
+vocabulary ('open', 'event', 'global', 'resolve', `RevealConfig.get`) against the calls
+plus the whole file's import list -- every function in a file got the same labels, and a
+pure Java string builder was "network_client, filesystem, process_global" while
+`--sideeffects` said it had none.
+"""
 
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 
 @dataclass(frozen=True)
@@ -29,35 +38,18 @@ class BoundaryProfile:
         return data
 
 
-_CATEGORY_PATTERNS = {
-    'network_client': (
-        'requests.', 'httpx.', 'aiohttp.', 'urllib.', 'socket.', 'dns.',
-        'check_ssl', 'probe_http', 'resolve',
-    ),
-    'persistence': (
-        'sqlite3', 'sqlalchemy', 'redis', 'cursor.', 'conn.execute',
-        'connection.execute', 'save_', 'load_', 'write_state', 'record_',
-    ),
-    'filesystem': (
-        'open', 'Path(', 'Path.', '.read_text', '.write_text', '.write_bytes',
-        'os.path', 'os.makedirs', 'shutil.',
-    ),
-    'notification': (
-        'discord', 'slack', 'email', 'webhook', 'notify', 'alert', 'send_',
-    ),
-    'event_telemetry': (
-        'logger.', 'logging.', 'metrics', 'emit', 'event', 'audit',
-    ),
-    'clock_sleep': (
-        'time.time', 'time.sleep', 'datetime.now', 'datetime.utcnow',
-        'asyncio.sleep', '.today',
-    ),
-    'env_config': (
-        'os.environ', 'os.getenv', 'getenv', 'RevealConfig.get', 'get_config',
-    ),
-    'process_global': (
-        'sys.exit', 'os._exit', 'global', 'singleton', 'registry',
-    ),
+# nav_effects kind -> testability category. `cache`/`session` are stateful stores, so
+# they count as persistence; kinds not listed here are not a test boundary.
+_EFFECT_CATEGORY = {
+    'http': 'network_client',
+    'db': 'persistence',
+    'cache': 'persistence',
+    'session': 'persistence',
+    'file': 'filesystem',
+    'log': 'event_telemetry',
+    'sleep': 'clock_sleep',
+    'env': 'env_config',
+    'hard_stop': 'process_global',
 }
 
 _MUTATION_TAILS = {'append', 'extend', 'update', 'setdefault', 'pop', 'remove', 'clear', 'add'}
@@ -67,6 +59,8 @@ def collect_boundary_profiles(path: str) -> List[BoundaryProfile]:
     """Collect conservative boundary profiles for functions under path."""
     from reveal.adapters.ast.analysis import collect_structures
 
+    from reveal.registry import language_for_extension
+
     structures = collect_structures(path)
     profiles: List[BoundaryProfile] = []
     imports_by_file = _imports_by_file(structures)
@@ -74,11 +68,12 @@ def collect_boundary_profiles(path: str) -> List[BoundaryProfile]:
     for file_struct in structures:
         file_path = file_struct.get('file', '')
         imports = imports_by_file.get(file_path, [])
+        language = language_for_extension(Path(file_path).suffix.lower())
         for elem in file_struct.get('elements', []):
             if elem.get('category') not in ('functions', 'methods'):
                 continue
             calls = [str(c) for c in elem.get('calls', [])]
-            categories = _classify_categories(calls, imports)
+            categories = _classify_categories(calls, language)
             mutation_sites = _mutation_sites(calls, elem.get('line', 0))
             if mutation_sites:
                 categories.add('mutation')
@@ -125,14 +120,15 @@ def _imports_by_file(structures: List[Dict[str, Any]]) -> Dict[str, List[str]]:
     return result
 
 
-def _classify_categories(calls: List[str], imports: List[str]) -> Set[str]:
-    text_items = [c.lower() for c in calls] + [i.lower() for i in imports]
+def _classify_categories(calls: List[str], language: Optional[str]) -> Set[str]:
+    """Boundary categories of one function's own calls (never its file's imports)."""
+    from reveal.adapters.ast.nav_effects import classify_call
+
     categories: Set[str] = set()
-    for category, patterns in _CATEGORY_PATTERNS.items():
-        for item in text_items:
-            if any(pattern.lower() in item for pattern in patterns):
-                categories.add(category)
-                break
+    for call in calls:
+        category = _EFFECT_CATEGORY.get(classify_call(call, language) or '')
+        if category:
+            categories.add(category)
     return categories
 
 

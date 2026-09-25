@@ -152,8 +152,10 @@ class TestabilityAdapter(ResourceAdapter):
             ],
             'features': [
                 'Production patch hotspots: functions/modules most mocked by tests',
-                'Boundary fan-out hotspots: high-complexity boundary code with no patch coverage',
-                'Python-only (patch-pressure pipeline); JS/TS test suites get a pointer to patches:// instead',
+                'Boundary fan-out hotspots: high-complexity boundary code with no patch coverage. '
+                'Categories come from each function\'s own calls, classified exactly as --sideeffects does, '
+                'in every language --sideeffects covers',
+                'Patch pressure is Python-only (mock.patch scan); JS/TS test suites get a pointer to patches:// instead',
             ],
             'notes': [
                 'Auto-detects tests/, test/, or spec/ under the source root (or its parent) when `tests` is omitted.',
@@ -238,7 +240,7 @@ class TestabilityAdapter(ResourceAdapter):
             if lang:
                 note = (
                     f'patch pressure not computed for {lang} test suites — '
-                    "`reveal testability`'s boundary-profile pipeline is Python-only."
+                    "`reveal testability`'s patch scan is Python-only (boundary hotspots below still apply)."
                 )
                 if lang in ('TypeScript', 'JavaScript'):
                     note += (
