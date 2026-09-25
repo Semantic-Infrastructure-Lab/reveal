@@ -9,8 +9,11 @@ entrypoint, and import-root taxonomy for network/db/sdk egress.
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line
+from typing import Any, Dict, List, Optional, Tuple
+from .nav_surface_common import (
+    INHERIT_KEY, ROUTE_CLASSES_KEY, SPRING_ROUTE_ANNOTATIONS, _get_text, _get_line, join_route_path,
+    merge_routes_by_path, type_simple_name,
+)
 from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
@@ -18,19 +21,6 @@ logger = logging.getLogger(__name__)
 from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
 from reveal.core.treesitter_compat import _zero_arg
-
-# Spring MVC route annotations → inferred HTTP method (RequestMapping needs
-# its own 'method' element to know the verb; left as ANY here — a precise
-# read would resolve RequestMethod.GET etc., not attempted this pass).
-_SPRING_ROUTE_ANNOTATIONS: Dict[str, str] = {
-    'GetMapping': 'GET',
-    'PostMapping': 'POST',
-    'PutMapping': 'PUT',
-    'DeleteMapping': 'DELETE',
-    'PatchMapping': 'PATCH',
-    'RequestMapping': 'ANY',
-}
-
 
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
@@ -55,21 +45,56 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
     rules = RuleScan('java', content_bytes)
     rule_kinds, visit = rules.kinds, rules.visit
 
-    stack = [tree_root(tree)]
+    # Each node travels with its class (name, own @RequestMapping paths or
+    # None, base type names).
+    classes: List[Dict[str, Any]] = []
+    stack: List[Tuple[Any, _Controller]] = [(tree_root(tree), (None, None, []))]
     while stack:
-        node = stack.pop()
+        node, controller = stack.pop()
         kind = _zero_arg(node, 'kind')
         if kind in rule_kinds:
             visit(node, kind)
 
-        if kind == 'method_declaration':
-            _process_method(node, file_path, content_bytes, surfaces)
+        if kind in ('class_declaration', 'interface_declaration'):
+            controller = (_class_name(node, content_bytes), _class_route_prefixes(node, content_bytes),
+                          _base_type_names(node, content_bytes))
+            if controller[0]:
+                classes.append({'name': controller[0], 'prefixes': controller[1], 'bases': controller[2]})
+        elif kind == 'method_declaration':
+            _process_method(node, file_path, content_bytes, surfaces, controller)
 
         for ch in reversed(_children(node)):
-            stack.append(ch)
+            stack.append((ch, controller))
 
     rules.apply(surfaces, file_path)
+    if classes:
+        surfaces[ROUTE_CLASSES_KEY] = classes
     return surfaces
+
+
+# (class name, the class's own @RequestMapping paths or None, base type names)
+_Controller = Tuple[Optional[str], Optional[List[str]], List[str]]
+
+
+def _class_name(class_node: Any, content_bytes: bytes) -> Optional[str]:
+    for ch in _children(class_node):
+        if _zero_arg(ch, 'kind') == 'identifier':
+            return _get_text(ch, content_bytes)
+    return None
+
+
+def _base_type_names(class_node: Any, content_bytes: bytes) -> List[str]:
+    """Superclass and interfaces -- Spring finds a class-level @RequestMapping
+    on either."""
+    names = []
+    for ch in _children(class_node):
+        if _zero_arg(ch, 'kind') not in ('superclass', 'super_interfaces', 'extends_interfaces'):
+            continue
+        for sub in _children(ch):
+            kinds = [sub] if _zero_arg(sub, 'kind') != 'type_list' else _children(sub)
+            names.extend(type_simple_name(_get_text(t, content_bytes)) for t in kinds
+                         if _zero_arg(t, 'kind') in ('type_identifier', 'generic_type', 'scoped_type_identifier'))
+    return names
 
 
 def _annotation_name(annotation_node: Any, content_bytes: bytes) -> Optional[str]:
@@ -79,22 +104,50 @@ def _annotation_name(annotation_node: Any, content_bytes: bytes) -> Optional[str
     return None
 
 
-def _annotation_path_arg(annotation_node: Any, content_bytes: bytes) -> Optional[str]:
-    """First bare string_literal arg, or the 'value'/'path' element_value_pair."""
+def _annotation_elements(annotation_node: Any, content_bytes: bytes) -> Dict[str, List[str]]:
+    """Each annotation element's values, an array flattened; the bare argument
+    of `@GetMapping("/x")` is the implicit `value`. A string is its text, an
+    enum constant its last segment (`RequestMethod.GET` -> GET), anything else
+    '?' -- a constant's value is not known statically."""
+    elements: Dict[str, List[str]] = {}
     for ch in _children(annotation_node):
         if _zero_arg(ch, 'kind') != 'annotation_argument_list':
             continue
         for arg in _children(ch):
-            if _zero_arg(arg, 'kind') == 'string_literal':
-                return _string_literal_text(arg, content_bytes)
-            if _zero_arg(arg, 'kind') == 'element_value_pair':
-                pair_children = _children(arg)
-                if len(pair_children) < 3:
-                    continue
-                key_name = _get_text(pair_children[0], content_bytes)
-                if key_name in ('value', 'path') and \
-                        _zero_arg(pair_children[2], 'kind') == 'string_literal':
-                    return _string_literal_text(pair_children[2], content_bytes)
+            kind = _zero_arg(arg, 'kind')
+            if kind in ('(', ')', ','):
+                continue
+            if kind == 'element_value_pair':
+                kids = _children(arg)
+                if len(kids) >= 3:
+                    elements[_get_text(kids[0], content_bytes)] = _element_values(kids[2], content_bytes)
+            else:
+                elements['value'] = _element_values(arg, content_bytes)
+    return elements
+
+
+def _element_values(node: Any, content_bytes: bytes) -> List[str]:
+    kind = _zero_arg(node, 'kind')
+    if kind == 'element_value_array_initializer':
+        return [value for ch in _children(node) if _zero_arg(ch, 'kind') not in ('{', '}', ',')
+                for value in _element_values(ch, content_bytes)]
+    if kind == 'string_literal':
+        return [_string_literal_text(node, content_bytes)]
+    if kind == 'field_access':
+        return [_get_text(node, content_bytes).rsplit('.', 1)[-1]]
+    return ['?']
+
+
+def _mapping_paths(elements: Dict[str, List[str]]) -> List[Optional[str]]:
+    return elements.get('value') or elements.get('path') or [None]
+
+
+def _class_route_prefixes(class_node: Any, content_bytes: bytes) -> Optional[List[str]]:
+    """A controller's class-level @RequestMapping paths, or None (BACK-1418:
+    they were never joined to the methods' paths)."""
+    for annotation in _find_method_annotations(class_node):
+        if _annotation_name(annotation, content_bytes) == 'RequestMapping':
+            return [p or '' for p in _mapping_paths(_annotation_elements(annotation, content_bytes))]
     return None
 
 
@@ -131,7 +184,8 @@ def _is_static_modifier_present(method_node: Any) -> bool:
 
 
 def _process_method(node: Any, file_path: str, content_bytes: bytes,
-                     surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
+                    surfaces: Dict[str, List[Dict[str, Any]]],
+                    controller: _Controller = (None, None, [])) -> None:
     line = _get_line(node)
     name = _method_name(node, content_bytes)
 
@@ -141,16 +195,30 @@ def _process_method(node: Any, file_path: str, content_bytes: bytes,
             'type': 'main', 'name': 'main', 'file': file_path, 'line': line,
         })
 
+    routes: List[Tuple[List[str], Optional[str]]] = []
+    decorators = []
     for annotation in _find_method_annotations(node):
         anno_name = _annotation_name(annotation, content_bytes)
-        if anno_name in _SPRING_ROUTE_ANNOTATIONS:
-            path_arg = _annotation_path_arg(annotation, content_bytes)
-            surfaces['http'].append({
+        if anno_name not in SPRING_ROUTE_ANNOTATIONS:
+            continue
+        decorators.append(f'@{anno_name}')
+        elements = _annotation_elements(annotation, content_bytes)
+        verbs = [SPRING_ROUTE_ANNOTATIONS[anno_name]]
+        if anno_name == 'RequestMapping':
+            verbs = [v.upper() for v in elements.get('method', []) if v != '?'] or ['ANY']
+        routes.extend((verbs, path) for path in _mapping_paths(elements))
+    class_name, prefixes, bases = controller
+    for methods, path in merge_routes_by_path(routes):
+        for prefix in (prefixes or [None]):
+            entry = {
                 'type': 'route',
                 'name': name or '?',
-                'path': path_arg or '?',
-                'methods': _SPRING_ROUTE_ANNOTATIONS[anno_name],
-                'decorator': f'@{anno_name}',
+                'path': join_route_path(prefix, path) or '?',
+                'methods': methods,
+                'decorator': ' '.join(decorators),
                 'file': file_path,
                 'line': line,
-            })
+            }
+            if prefixes is None and bases and class_name:
+                entry[INHERIT_KEY] = {'class': class_name, 'action': name, 'tokens': False, 'template': path}
+            surfaces['http'].append(entry)

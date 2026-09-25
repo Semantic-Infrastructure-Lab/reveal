@@ -31,6 +31,7 @@ from ..utils.path_utils import (
 )
 from ..utils.query import parse_query_params
 from .ast.surface_matrix import CATEGORIES, UNPARSED_KEY, coverage_matrix
+from .ast.nav_surface_common import ROUTE_CLASSES_KEY, resolve_inherited_route_prefixes
 from ..utils.results import ResultBuilder
 from ..defaults import TEST_DIR_PREFIX as _TEST_DIR_PREFIX
 
@@ -211,6 +212,7 @@ def _scan_surface(
 
     scanned_languages = set()
     unparsed: List[str] = []
+    route_classes: List[Dict[str, Any]] = []
     for spec, file_list in collected.items():
         if not file_list:
             continue
@@ -219,8 +221,12 @@ def _scan_surface(
         for file_path in file_list:
             result = scan_fn(str(file_path))
             unparsed.extend(result.pop(UNPARSED_KEY, []))
+            route_classes.extend(result.pop(ROUTE_CLASSES_KEY, []))
             for cat, entries in result.items():
                 surfaces[cat].extend(entries)
+    # BACK-1418: a controller's route prefix is often declared on a base class
+    # in another file; resolved here, where every scanned class is known.
+    resolve_inherited_route_prefixes(surfaces['http'], route_classes)
 
     if type_filter:
         surfaces = {k: v for k, v in surfaces.items() if k == type_filter}

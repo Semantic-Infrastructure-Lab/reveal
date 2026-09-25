@@ -20,8 +20,11 @@ shape but walks Kotlin's grammar for its two dominant web frameworks:
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line
+from typing import Any, Dict, List, Optional, Tuple
+from .nav_surface_common import (
+    INHERIT_KEY, ROUTE_CLASSES_KEY, SPRING_ROUTE_ANNOTATIONS, _get_text, _get_line, join_route_path,
+    merge_routes_by_path, type_simple_name,
+)
 from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
@@ -39,16 +42,6 @@ _KTOR_ROUTE_VERBS: Dict[str, str] = {
     'delete': 'DELETE',
     'head': 'HEAD',
     'options': 'OPTIONS',
-}
-
-# Spring MVC route annotations (shared with Java Spring) → inferred HTTP method.
-_SPRING_ROUTE_ANNOTATIONS: Dict[str, str] = {
-    'GetMapping': 'GET',
-    'PostMapping': 'POST',
-    'PutMapping': 'PUT',
-    'DeleteMapping': 'DELETE',
-    'PatchMapping': 'PATCH',
-    'RequestMapping': 'ANY',
 }
 
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
@@ -84,23 +77,56 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
                 'type': 'main', 'name': 'main', 'file': file_path, 'line': _get_line(child),
             })
 
-    stack = [root]
+    # Each node travels with its class (name, own Spring @RequestMapping paths
+    # or None, supertype names).
+    classes: List[Dict[str, Any]] = []
+    stack: List[Tuple[Any, _Controller]] = [(root, (None, None, []))]
     while stack:
-        node = stack.pop()
+        node, controller = stack.pop()
         kind = _zero_arg(node, 'kind')
         if kind in rule_kinds:
             visit(node, kind)
 
-        if kind == 'call_expression':
+        if kind in ('class_declaration', 'object_declaration'):
+            controller = (_class_name(node, content_bytes), _class_route_prefixes(node, content_bytes),
+                          _supertype_names(node, content_bytes))
+            if controller[0]:
+                classes.append({'name': controller[0], 'prefixes': controller[1], 'bases': controller[2]})
+        elif kind == 'call_expression':
             _process_call(node, file_path, content_bytes, surfaces)
         elif kind == 'function_declaration':
-            _process_annotations(node, file_path, content_bytes, surfaces)
+            _process_annotations(node, file_path, content_bytes, surfaces, controller)
 
         for ch in reversed(_children(node)):
-            stack.append(ch)
+            stack.append((ch, controller))
 
     rules.apply(surfaces, file_path)
+    if classes:
+        surfaces[ROUTE_CLASSES_KEY] = classes
     return surfaces
+
+
+# (class name, the class's own @RequestMapping paths or None, supertype names)
+_Controller = Tuple[Optional[str], Optional[List[str]], List[str]]
+
+
+def _class_name(class_node: Any, content_bytes: bytes) -> Optional[str]:
+    for ch in _children(class_node):
+        if _zero_arg(ch, 'kind') == 'type_identifier':
+            return _get_text(ch, content_bytes)
+    return None
+
+
+def _supertype_names(class_node: Any, content_bytes: bytes) -> List[str]:
+    names = []
+    for ch in _children(class_node):
+        if _zero_arg(ch, 'kind') == 'delegation_specifier':
+            for sub in _children(ch):
+                if _zero_arg(sub, 'kind') == 'constructor_invocation':
+                    sub = next((t for t in _children(sub) if _zero_arg(t, 'kind') == 'user_type'), sub)
+                if _zero_arg(sub, 'kind') == 'user_type':
+                    names.append(type_simple_name(_get_text(sub, content_bytes)))
+    return names
 
 
 def _function_name(func_node: Any, content_bytes: bytes) -> Optional[str]:
@@ -190,16 +216,46 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
 
 
 def _process_annotations(node: Any, file_path: str, content_bytes: bytes,
-                         surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
+                         surfaces: Dict[str, List[Dict[str, Any]]],
+                         controller: _Controller = (None, None, [])) -> None:
     name = _plain_function_name(node, content_bytes)
+    routes: List[Tuple[List[str], Optional[str]]] = []
+    decorators = []
     for annotation in _find_annotations(node):
-        anno_name, path = _annotation_name_and_path(annotation, content_bytes)
-        if anno_name in _SPRING_ROUTE_ANNOTATIONS:
-            surfaces['http'].append({
-                'type': 'route', 'name': name or '?', 'path': path or '?',
-                'methods': _SPRING_ROUTE_ANNOTATIONS[anno_name],
-                'decorator': f'@{anno_name}', 'file': file_path, 'line': _get_line(node),
-            })
+        anno_name, elements = _annotation_name_and_elements(annotation, content_bytes)
+        if anno_name not in SPRING_ROUTE_ANNOTATIONS:
+            continue
+        decorators.append(f'@{anno_name}')
+        verbs = [SPRING_ROUTE_ANNOTATIONS[anno_name]]
+        if anno_name == 'RequestMapping':
+            verbs = [v.upper() for v in elements.get('method', []) if v != '?'] or ['ANY']
+        routes.extend((verbs, path) for path in _mapping_paths(elements))
+    class_name, prefixes, bases = controller
+    for methods, path in merge_routes_by_path(routes):
+        for prefix in (prefixes or [None]):
+            entry = {
+                'type': 'route', 'name': name or '?',
+                'path': join_route_path(prefix, path) or '?',
+                'methods': methods, 'decorator': ' '.join(decorators),
+                'file': file_path, 'line': _get_line(node),
+            }
+            if prefixes is None and bases and class_name:
+                entry[INHERIT_KEY] = {'class': class_name, 'action': name, 'tokens': False, 'template': path}
+            surfaces['http'].append(entry)
+
+
+def _mapping_paths(elements: Dict[str, List[str]]) -> List[Optional[str]]:
+    return elements.get('value') or elements.get('path') or [None]
+
+
+def _class_route_prefixes(class_node: Any, content_bytes: bytes) -> Optional[List[str]]:
+    """A Spring controller's class-level @RequestMapping paths, or None
+    (BACK-1418: they were never joined to the functions' paths)."""
+    for annotation in _find_annotations(class_node):
+        anno_name, elements = _annotation_name_and_elements(annotation, content_bytes)
+        if anno_name == 'RequestMapping':
+            return [p or '' for p in _mapping_paths(elements)]
+    return None
 
 
 def _plain_function_name(func_node: Any, content_bytes: bytes) -> Optional[str]:
@@ -216,18 +272,44 @@ def _find_annotations(func_node: Any) -> List[Any]:
     return []
 
 
-def _annotation_name_and_path(annotation_node: Any, content_bytes: bytes) -> tuple:
-    """(annotation_name, first_string_arg) for @Name or @Name("/path")."""
+def _annotation_name_and_elements(annotation_node: Any,
+                                  content_bytes: bytes) -> Tuple[Optional[str], Dict[str, List[str]]]:
+    """(annotation name, element values) for @Name or @Name(...). A bare
+    argument is the implicit `value`; an array is flattened; a string is its
+    text, an enum constant its last segment (RequestMethod.GET -> GET),
+    anything else '?'."""
     for ch in _children(annotation_node):
-        if _zero_arg(ch, 'kind') == 'constructor_invocation':
-            name = None
-            path = None
-            for sub in _children(ch):
-                if _zero_arg(sub, 'kind') == 'user_type':
-                    name = _get_text(sub, content_bytes)
-                elif _zero_arg(sub, 'kind') == 'value_arguments':
-                    path = _first_string_arg(sub, content_bytes)
-            return name, path
-        if _zero_arg(ch, 'kind') == 'user_type':
-            return _get_text(ch, content_bytes), None
-    return None, None
+        kind = _zero_arg(ch, 'kind')
+        if kind == 'user_type':
+            return _get_text(ch, content_bytes), {}
+        if kind != 'constructor_invocation':
+            continue
+        name = None
+        elements: Dict[str, List[str]] = {}
+        for sub in _children(ch):
+            sub_kind = _zero_arg(sub, 'kind')
+            if sub_kind == 'user_type':
+                name = _get_text(sub, content_bytes)
+            elif sub_kind == 'value_arguments':
+                for arg in _children(sub):
+                    if _zero_arg(arg, 'kind') != 'value_argument':
+                        continue
+                    kids = _children(arg)
+                    key = 'value'
+                    if any(_zero_arg(k, 'kind') == '=' for k in kids):
+                        key = _get_text(kids[0], content_bytes)
+                    elements[key] = _element_values(kids[-1], content_bytes)
+        return name, elements
+    return None, {}
+
+
+def _element_values(node: Any, content_bytes: bytes) -> List[str]:
+    kind = _zero_arg(node, 'kind')
+    if kind == 'collection_literal':
+        return [value for ch in _children(node) if _zero_arg(ch, 'kind') not in ('[', ']', ',')
+                for value in _element_values(ch, content_bytes)]
+    if kind == 'string_literal':
+        return [_string_content(node, content_bytes)]
+    if kind == 'navigation_expression':
+        return [_get_text(node, content_bytes).rsplit('.', 1)[-1]]
+    return ['?']

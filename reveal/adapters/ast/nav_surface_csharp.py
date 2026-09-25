@@ -9,7 +9,10 @@ network/db/sdk egress.
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from .nav_surface_common import _get_text, _get_line
+from .nav_surface_common import (
+    INHERIT_KEY, ROUTE_CLASSES_KEY, _get_text, _get_line, join_route_path, merge_routes_by_path,
+    replace_route_tokens, type_simple_name,
+)
 from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
@@ -18,17 +21,24 @@ from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
 from reveal.core.treesitter_compat import _zero_arg
 
-# ASP.NET Core route attributes → inferred HTTP method. [Route] alone carries
-# no verb (it's often paired with an Http* attribute on the same method, or
-# used for controller-level prefixes) — recorded as ANY.
-_ASPNET_ROUTE_ATTRIBUTES: Dict[str, str] = {
+# ASP.NET Core verb attributes -> HTTP method. Each may carry its own route
+# template; several on one action are several routes (or one route answering
+# several verbs when their templates agree).
+_ASPNET_VERB_ATTRIBUTES: Dict[str, str] = {
     'HttpGet': 'GET',
     'HttpPost': 'POST',
     'HttpPut': 'PUT',
     'HttpDelete': 'DELETE',
     'HttpPatch': 'PATCH',
-    'Route': 'ANY',
+    'HttpHead': 'HEAD',
+    'HttpOptions': 'OPTIONS',
 }
+# [Route] carries a template and no verb (on a class it is the controller's
+# prefix); [AcceptVerbs("GET", "HEAD", Route = "...")] carries verbs.
+_ASPNET_ROUTE_ATTRIBUTES = frozenset(_ASPNET_VERB_ATTRIBUTES) | {'Route', 'AcceptVerbs'}
+
+# (class name, the class's own [Route] prefixes or None, base type names)
+_Controller = Tuple[Optional[str], Optional[List[str]], List[str]]
 
 
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
@@ -54,40 +64,97 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
     rules = RuleScan('csharp', content_bytes)
     rule_kinds, visit = rules.kinds, rules.visit
 
-    stack = [tree_root(tree)]
+    # Each node travels with its enclosing controller (_Controller: class
+    # name, the class's own [Route] prefixes or None, its base type names).
+    classes: List[Dict[str, Any]] = []
+    stack: List[Tuple[Any, _Controller]] = [(tree_root(tree), (None, None, []))]
     while stack:
-        node = stack.pop()
+        node, controller = stack.pop()
         kind = _zero_arg(node, 'kind')
         if kind in rule_kinds:
             visit(node, kind)
 
-        if kind == 'method_declaration':
-            _process_method(node, file_path, content_bytes, surfaces)
+        if kind == 'class_declaration':
+            controller = (_class_name(node, content_bytes), _class_route_prefixes(node, content_bytes),
+                          _base_type_names(node, content_bytes))
+            if controller[0]:
+                classes.append({'name': controller[0], 'prefixes': controller[1], 'bases': controller[2]})
+        elif kind == 'method_declaration':
+            _process_method(node, file_path, content_bytes, surfaces, controller)
 
         for ch in reversed(_children(node)):
-            stack.append(ch)
+            stack.append((ch, controller))
 
     rules.apply(surfaces, file_path)
+    if classes:
+        surfaces[ROUTE_CLASSES_KEY] = classes
     return surfaces
 
 
 def _attribute_name(attribute_node: Any, content_bytes: bytes) -> Optional[str]:
+    """`HttpGet` for [HttpGet], [HttpGetAttribute] and [Microsoft.AspNetCore.Mvc.HttpGet]."""
     for ch in _children(attribute_node):
+        if _zero_arg(ch, 'kind') in ('identifier', 'qualified_name'):
+            name = _get_text(ch, content_bytes).rsplit('.', 1)[-1]
+            return name[:-len('Attribute')] if name.endswith('Attribute') and name != 'Attribute' else name
+    return None
+
+
+def _attribute_args(attribute_node: Any, content_bytes: bytes) -> Tuple[List[str], Dict[str, str]]:
+    """(positional, named) arguments. A string is its text; anything else (a
+    constant, an expression) is '?' -- its value is not known statically."""
+    positional: List[str] = []
+    named: Dict[str, str] = {}
+    for ch in _children(attribute_node):
+        if _zero_arg(ch, 'kind') != 'attribute_argument_list':
+            continue
+        for arg in _children(ch):
+            if _zero_arg(arg, 'kind') != 'attribute_argument':
+                continue
+            kids = _children(arg)
+            is_named = any(_zero_arg(k, 'kind') == '=' for k in kids)
+            value = _argument_value(kids[-1], content_bytes) if kids else '?'
+            if is_named:
+                named[_get_text(kids[0], content_bytes)] = value
+            else:
+                positional.append(value)
+    return positional, named
+
+
+def _argument_value(node: Any, content_bytes: bytes) -> str:
+    kind = _zero_arg(node, 'kind')
+    if kind == 'string_literal':
+        return _string_literal_text(node, content_bytes)
+    if kind == 'verbatim_string_literal':
+        return _get_text(node, content_bytes)[2:-1]
+    return '?'
+
+
+def _class_name(class_node: Any, content_bytes: bytes) -> Optional[str]:
+    for ch in _children(class_node):
         if _zero_arg(ch, 'kind') == 'identifier':
             return _get_text(ch, content_bytes)
     return None
 
 
-def _attribute_path_arg(attribute_node: Any, content_bytes: bytes) -> Optional[str]:
-    for ch in _children(attribute_node):
-        if _zero_arg(ch, 'kind') != 'attribute_argument_list':
-            continue
-        for arg in _children(ch):
-            if _zero_arg(arg, 'kind') == 'attribute_argument':
-                for sub in _children(arg):
-                    if _zero_arg(sub, 'kind') == 'string_literal':
-                        return _string_literal_text(sub, content_bytes)
-    return None
+def _base_type_names(class_node: Any, content_bytes: bytes) -> List[str]:
+    for ch in _children(class_node):
+        if _zero_arg(ch, 'kind') == 'base_list':
+            return [type_simple_name(_get_text(b, content_bytes)) for b in _children(ch)
+                    if _zero_arg(b, 'kind') in ('identifier', 'generic_name', 'qualified_name')]
+    return []
+
+
+def _class_route_prefixes(class_node: Any, content_bytes: bytes) -> Optional[List[str]]:
+    """The templates of a controller's own [Route] attributes, or None."""
+    prefixes = []
+    for attribute in _find_method_attributes(class_node):
+        if _attribute_name(attribute, content_bytes) == 'Route':
+            positional, named = _attribute_args(attribute, content_bytes)
+            template = positional[0] if positional else named.get('Template')
+            if template is not None:
+                prefixes.append(template)
+    return prefixes or None
 
 
 def _string_literal_text(node: Any, content_bytes: bytes) -> str:
@@ -141,7 +208,8 @@ def _is_static_modifier_present(method_node: Any) -> bool:
 
 
 def _process_method(node: Any, file_path: str, content_bytes: bytes,
-                     surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
+                    surfaces: Dict[str, List[Dict[str, Any]]],
+                    controller: '_Controller' = (None, None, [])) -> None:
     line = _get_line(node)
     name = _method_name(node, content_bytes)
 
@@ -155,35 +223,71 @@ def _process_method(node: Any, file_path: str, content_bytes: bytes,
         (a, _attribute_name(a, content_bytes)) for a in _find_method_attributes(node)
     ]
     route_attrs = [(a, n) for a, n in route_attrs if n in _ASPNET_ROUTE_ATTRIBUTES]
-    if route_attrs:
-        verb, path_arg, decorator = _merge_route_attrs(route_attrs, content_bytes)
-        surfaces['http'].append({
-            'type': 'route',
-            'name': name or '?',
-            'path': path_arg or '?',
-            'methods': verb,
-            'decorator': decorator,
-            'file': file_path,
-            'line': line,
-        })
+    if not route_attrs:
+        return
+    decorator = ' '.join(f'[{attr_name}]' for _, attr_name in route_attrs)
+    class_name, prefixes, bases = controller
+    for methods, path in merge_routes_by_path(_action_routes(route_attrs, content_bytes)):
+        for prefix in (prefixes or [None]):
+            entry = {
+                'type': 'route',
+                'name': name or '?',
+                'path': replace_route_tokens(_under_prefix(prefix, path), class_name, name) or '?',
+                'methods': methods,
+                'decorator': decorator,
+                'file': file_path,
+                'line': line,
+            }
+            # No [Route] of its own: the prefix may come from a base class in
+            # another file, resolved once every file is scanned.
+            if prefixes is None and bases and class_name and not (path or '').startswith(('/', '~/')):
+                entry[INHERIT_KEY] = {
+                    'class': class_name, 'action': name, 'tokens': True,
+                    'template': replace_route_tokens(path, class_name, name),
+                }
+            surfaces['http'].append(entry)
 
 
-def _merge_route_attrs(
-    route_attrs: List[Any], content_bytes: bytes,
-) -> Tuple[str, Optional[str], str]:
-    # A method commonly carries an Http* verb attribute AND a separate [Route]
-    # attribute for its path (`[HttpPost] [Route("/users")]`) — merge those
-    # into one entry instead of reporting the same endpoint twice. Prefer the
-    # verb attribute's own path if it has one; otherwise fall back to any
-    # co-occurring [Route]'s path.
-    verb = 'ANY'
-    decorators = []
-    path_arg = None
+def _action_routes(route_attrs: List[Any], content_bytes: bytes) -> List[Tuple[List[str], Optional[str]]]:
+    """(verbs, template) for each route one action declares (BACK-1418).
+
+    A verb attribute with a template is a route of its own; a [Route] (or an
+    [AcceptVerbs] Route=) template answers the action's template-less verbs,
+    or ANY; template-less verbs with no [Route] answer the controller prefix
+    itself (template None). Before, the attributes were folded into one entry
+    with the last verb seen, so a stacked [HttpHead] vanished.
+    """
+    templated: List[Tuple[List[str], Optional[str]]] = []
+    bare_verbs: List[str] = []
+    route_templates: List[Optional[str]] = []
     for attribute, attr_name in route_attrs:
-        decorators.append(f'[{attr_name}]')
-        this_path = _attribute_path_arg(attribute, content_bytes)
-        if attr_name != 'Route':
-            verb = _ASPNET_ROUTE_ATTRIBUTES[attr_name]
-        if this_path and path_arg is None:
-            path_arg = this_path
-    return verb, path_arg, ' '.join(decorators)
+        positional, named = _attribute_args(attribute, content_bytes)
+        if attr_name == 'Route':
+            route_templates.append(positional[0] if positional else named.get('Template'))
+        elif attr_name == 'AcceptVerbs':
+            verbs = [v.upper() for v in positional if v != '?'] or ['ANY']
+            if 'Route' in named:
+                templated.append((verbs, named['Route']))
+            else:
+                bare_verbs.extend(verbs)
+        else:
+            verb = _ASPNET_VERB_ATTRIBUTES[attr_name]
+            template = positional[0] if positional else named.get('Template')
+            if template is None:
+                bare_verbs.append(verb)
+            else:
+                templated.append(([verb], template))
+    routes = list(templated)
+    for template in route_templates:
+        routes.append((bare_verbs or ['ANY'], template))
+    if not route_templates and bare_verbs:
+        routes.append((bare_verbs, None))
+    return routes
+
+
+def _under_prefix(prefix: Optional[str], template: Optional[str]) -> Optional[str]:
+    """ASP.NET: a template starting with '/' or '~/' ignores the controller's
+    prefix; anything else is appended to it."""
+    if template is not None and template.startswith(('/', '~/')):
+        return template.lstrip('~')
+    return join_route_path(prefix, template)
