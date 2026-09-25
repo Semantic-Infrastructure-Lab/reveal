@@ -12,7 +12,7 @@
 #   - CI-only steps        -> the primary leg (3.12, no --lp) also runs the Windows-compat lint,
 #                             V-series self-validation and B006 ratchet, which CI runs only on
 #                             ubuntu/3.12; other legs run pytest + CLI basics, as CI does
-#   - local caches/env     -> REVEAL_DISK_CACHE=0 (stale ~/.reveal/cache, BACK-1294) and
+#   - local caches/env     -> REVEAL_DISK_CACHE=0 (CI starts cold; keep ~/.reveal/cache out) and
 #                             PYTHONPYCACHEPREFIX unset (stale bytecode)
 #   - Windows text encoding -> PYTHONWARNDEFAULTENCODING=1, so reveal/ text I/O without encoding=
 #                             fails its test (pyproject filterwarnings), and scripts/check_text_encoding.py.

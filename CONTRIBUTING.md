@@ -354,7 +354,7 @@ read passes everywhere but CI's compat leg -- read Node accessors with `_zero_ar
 (`scripts/check_treesitter_accessors.py` fails a bare read in seconds). The script's
 header also lists the Windows-only pitfalls worth checking by hand before you push.
 
-Your dev environment drifts from CI (dependency versions, Python version, stale `~/.reveal/cache`),
+Your dev environment drifts from CI (dependency versions, Python version, stale bytecode),
 so a plain local `pytest` can pass while every CI job fails -- that is exactly how a
 `Node.to_sexp()` call, present only on the older vendored tree-sitter node, broke CI. `ci-local.sh`
 builds a dedicated venv under `~/.cache/reveal-ci/`, installs the way CI does, and also runs the
