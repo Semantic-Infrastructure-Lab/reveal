@@ -1748,6 +1748,102 @@ class TestNavSurfacePhp(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0]['path'], '/myplugin/v1/data')
 
+    # BACK-1417: WordPress builds routes from $this->namespace / $this->rest_base
+    # (84 of core's 86 calls) -- every one used to be dropped.
+    def _routes(self, content: str):
+        return [(e['methods'], e['path']) for e in self._scan_php('ctrl.php', content)['http']]
+
+    def test_wp_route_resolves_class_properties(self):
+        self.assertEqual(self._routes('''<?php
+            class Posts_Controller extends WP_REST_Controller {
+                public function __construct() {
+                    $this->namespace = 'wp/v2';
+                    $this->rest_base = 'posts';
+                }
+                public function register_routes() {
+                    register_rest_route($this->namespace, '/' . $this->rest_base . '/(?P<id>[\\d]+)', array(
+                        array('methods' => WP_REST_Server::READABLE, 'callback' => 'a'),
+                        array('methods' => WP_REST_Server::EDITABLE, 'callback' => 'b'),
+                        array('methods' => WP_REST_Server::DELETABLE, 'callback' => 'c'),
+                        'schema' => array($this, 'get_public_item_schema'),
+                    ));
+                }
+            }
+        '''), [('GET|POST|PUT|PATCH|DELETE', '/wp/v2/posts/(?P<id>[\\d]+)')])
+
+    def test_wp_route_property_default_and_class_constant(self):
+        self.assertEqual(self._routes('''<?php
+            class Themes {
+                const PATTERN = '[^/]+';
+                protected $namespace = 'wp/v2';
+                protected $rest_base = 'themes';
+                public function register_routes() {
+                    register_rest_route($this->namespace, sprintf('/%s/(?P<s>%s)', $this->rest_base, self::PATTERN),
+                                        array('methods' => 'GET, POST', 'callback' => 'x'));
+                }
+            }
+        '''), [('GET|POST', '/wp/v2/themes/(?P<s>[^/]+)')])
+
+    def test_wp_route_unresolvable_part_is_a_placeholder_not_a_drop(self):
+        """A ternary or conflicting values stay `{$expr}` -- never guessed, never dropped."""
+        self.assertEqual(self._routes('''<?php
+            class Terms {
+                public function __construct($tax) {
+                    $this->namespace = ! empty($tax->ns) ? $tax->ns : 'wp/v2';
+                    $this->rest_base = 'a';
+                    if ($tax) { $this->rest_base = 'b'; }
+                }
+                public function register_routes() {
+                    register_rest_route($this->namespace, '/' . $this->rest_base, array('callback' => 'x'));
+                    register_rest_route($ns, "/items/{$id}", array('callback' => 'x'));
+                }
+            }
+        '''), [('GET', '/{$this->namespace}/{$this->rest_base}'), ('GET', '/{$ns}/items/{$id}')])
+
+    def test_wp_route_methods(self):
+        """Endpoint without 'methods' answers GET (the WP default); an array of
+        verbs unions; an unknown expression is ANY."""
+        routes = self._routes('''<?php
+            register_rest_route('p/v1', '/a', array('callback' => 'x'));
+            register_rest_route('p/v1', '/b', array(array('methods' => array('POST', 'PUT'))));
+            register_rest_route('p/v1', '/c', array('methods' => $verbs, 'callback' => 'x'));
+            register_rest_route('p/v1', '/d', $args);
+        ''')
+        self.assertEqual(routes, [('GET', '/p/v1/a'), ('POST|PUT', '/p/v1/b'),
+                                  ('ANY', '/p/v1/c'), ('ANY', '/p/v1/d')])
+
+    def test_wp_route_nested_class_this_is_not_the_outer_class(self):
+        routes = self._routes('''<?php
+            class Outer {
+                protected $namespace = 'outer/v1';
+                public function f() {
+                    $x = new class { protected $namespace = 'inner/v1';
+                        public function r() { register_rest_route($this->namespace, '/i'); } };
+                    register_rest_route($this->namespace, '/o');
+                }
+            }
+        ''')
+        self.assertEqual(sorted(routes), [('ANY', '/inner/v1/i'), ('ANY', '/outer/v1/o')])
+
+    def test_laravel_route_double_quoted_and_concatenated_path(self):
+        routes = self._routes('<?php\nRoute::get("/users/{id}", "C@show");\n'
+                              "Route::post($prefix . '/items', 'C@store');\n")
+        self.assertEqual(routes, [('GET', '/users/{id}'), ('POST', '{$prefix}/items')])
+
+    def test_symfony_class_route_is_a_prefix_not_a_route(self):
+        routes = self._routes('''<?php
+            #[Route('/blog', name: 'blog_')]
+            class BlogController {
+                #[Route('/{slug}', name: 'show', methods: ['GET'])]
+                public function show() {}
+                #[Route(name: 'index')]
+                public function index() {}
+                #[Route(name: 'feed', path: '/feed.xml')]
+                public function feed() {}
+            }
+        ''')
+        self.assertEqual(routes, [('GET', '/blog/{slug}'), ('ANY', '/blog'), ('ANY', '/blog/feed.xml')])
+
     def test_php_plain_static_call_not_a_route(self):
         """A non-Route static call must not be misclassified as an HTTP route."""
         result = self._scan_php('x.php', "<?php\nLogger::get('channel');\n")
