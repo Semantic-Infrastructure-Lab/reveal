@@ -536,8 +536,11 @@ class TestScanSurface(unittest.TestCase):
         ''')
         report = _scan_surface(Path(self.tmp))
         entries = report['surfaces']['http']
-        self.assertEqual(len(entries), 1)
-        self.assertTrue(entries[0]['test_origin'])
+        # resources :admin_users is its 7 routes (BACK-1417), none test-sourced
+        by_origin = {e['path']: e['test_origin'] for e in entries}
+        self.assertEqual(len(entries), 8)
+        self.assertTrue(by_origin['/admin/users'])
+        self.assertFalse(by_origin['/admin_users/:id'])
         self.assertTrue(
             any('test files' in limit for limit in report['_meta']['known_limits'])
         )
@@ -2040,15 +2043,17 @@ class TestNavSurfaceRuby(unittest.TestCase):
         self.assertEqual(entries[0]['methods'], 'GET')
         self.assertEqual(entries[0]['target'], 'health#index')
 
-    def test_ruby_resources_not_a_route(self):
-        """`resources :posts` fans out into many routes with no single explicit
-        path, so it must not be surfaced as one (wrong-path) entry."""
+    def test_ruby_resources_expand_to_their_routes(self):
+        """`resources :posts` is its 7 routes (BACK-1417; more cases in
+        test_surface_rails_routes.py), not one wrong-path entry or none."""
         result = self._scan_rb('routes.rb', '''\
             Rails.application.routes.draw do
               resources :posts
             end
         ''')
-        self.assertEqual(len(result['http']), 0)
+        self.assertEqual(len(result['http']), 7)
+        self.assertIn(('PATCH|PUT', '/posts/:id'),
+                      [(e['methods'], e['path']) for e in result['http']])
 
     def test_ruby_member_get_not_a_route(self):
         """`http.get(url)` is a receiver call, not a bare DSL route invocation."""

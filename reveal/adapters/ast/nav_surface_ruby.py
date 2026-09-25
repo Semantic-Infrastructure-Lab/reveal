@@ -7,17 +7,13 @@ shape but walks Ruby's grammar for the two dominant web frameworks:
   receiver — implicit self) whose ``identifier`` is an HTTP verb, whose first
   ``argument_list`` entry is a string starting with ``/``, and which carries a
   ``do_block`` child.
-- **Rails** routes: ``get '/health', to: 'health#index'`` inside a
-  ``routes.draw do ... end`` block — same bare-``call``-with-HTTP-verb shape,
-  but without the ``do_block`` (the route line is itself one statement inside
-  the enclosing draw block). Because Ruby's bare method-call shape is
-  otherwise indistinguishable from any zero-receiver method named ``get``/
-  ``post``/etc., the leading-``/`` string-literal check is load-bearing here —
+- **Rails** routes: a ``routes.draw do ... end`` block is interpreted as the
+  routing DSL it is (``nav_surface_rails.py``, BACK-1417) -- ``resources``,
+  ``namespace``/``scope``, ``member``/``collection``, nesting, literal loops.
+  Outside a draw block, Ruby's bare method-call shape is otherwise
+  indistinguishable from any zero-receiver method named ``get``/``post``/etc.,
+  so the leading-``/`` string-literal check is load-bearing for Sinatra --
   it is what keeps this from firing on an arbitrary local ``get(key)`` helper.
-  ``resources :posts`` (which fans out into many CRUD routes with no explicit
-  path) is deliberately not tracked, matching how the PHP scanner declines
-  Laravel's ``Route::resource``/``match`` for the same "wrong path if
-  surfaced" reason.
 
 env access: ``ENV['KEY']`` (``element_reference`` on the ``ENV`` constant) and
 ``ENV.fetch('KEY')`` (a ``call`` on the ``ENV`` constant).
@@ -35,6 +31,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from .nav_surface_common import _get_text, _get_line
+from .nav_surface_rails import is_route_block, scan_route_block
 from .surface_rules import RuleScan
 
 logger = logging.getLogger(__name__)
@@ -43,10 +40,7 @@ from reveal.core import node_children as _children
 from reveal.core import tree_root, ts_parse
 from reveal.core.treesitter_compat import _zero_arg
 
-# Sinatra/Rails DSL verbs → HTTP method. 'resources'/'resource' are excluded:
-# they fan out into many routes with no single explicit path, so surfacing
-# them here would report a wrong (or nonexistent) path — same reasoning as
-# PHP's Route::resource/match exclusion.
+# Sinatra DSL verbs → HTTP method (Rails draw blocks: nav_surface_rails.py).
 _ROUTE_VERBS: Dict[str, str] = {
     'get': 'GET',
     'post': 'POST',
@@ -79,6 +73,10 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
     rules = RuleScan('ruby', content_bytes)
     rule_kinds, visit = rules.kinds, rules.visit
 
+    # Byte ranges of `routes.draw` blocks: the Rails interpreter reports their
+    # routes, so a verb call inside one is not read again as a Sinatra route.
+    route_blocks: List[tuple] = []
+
     stack = [tree_root(tree)]
     while stack:
         node = stack.pop()
@@ -87,7 +85,13 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
             visit(node, kind)
 
         if kind == 'call':
-            _process_call(node, file_path, content_bytes, surfaces)
+            start = _zero_arg(node, 'start_byte')
+            in_routes = any(lo <= start < hi for lo, hi in route_blocks)
+            if not in_routes and is_route_block(node, content_bytes):
+                surfaces['http'].extend(scan_route_block(node, content_bytes, file_path))
+                route_blocks.append((start, _zero_arg(node, 'end_byte')))
+                in_routes = True
+            _process_call(node, file_path, content_bytes, surfaces, in_routes)
         elif kind == 'element_reference':
             _process_element_reference(node, file_path, content_bytes, surfaces)
 
@@ -140,7 +144,7 @@ def _pair_string_value(arg_list: Any, key: str, content_bytes: bytes) -> Optiona
 
 
 def _process_call(node: Any, file_path: str, content_bytes: bytes,
-                   surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
+                  surfaces: Dict[str, List[Dict[str, Any]]], in_routes: bool = False) -> None:
     children = _children(node)
     ident = next((c for c in children if _zero_arg(c, 'kind') == 'identifier'), None)
     if ident is None:
@@ -165,7 +169,7 @@ def _process_call(node: Any, file_path: str, content_bytes: bytes,
             })
         return
 
-    if name in _ROUTE_VERBS and not has_receiver:
+    if name in _ROUTE_VERBS and not has_receiver and not in_routes:
         args = _arg_list_child(node)
         strings = _string_arg_texts(args, content_bytes) if args else []
         if not strings or not strings[0].startswith('/'):

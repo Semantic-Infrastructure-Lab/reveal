@@ -32,6 +32,7 @@ from ..utils.path_utils import (
 from ..utils.query import parse_query_params
 from .ast.surface_matrix import CATEGORIES, UNPARSED_KEY, coverage_matrix
 from .ast.nav_surface_common import ROUTE_CLASSES_KEY, resolve_inherited_route_prefixes
+from .ast.nav_surface_rails import resolve_engine_mounts
 from ..utils.results import ResultBuilder
 from ..defaults import TEST_DIR_PREFIX as _TEST_DIR_PREFIX
 
@@ -227,6 +228,9 @@ def _scan_surface(
     # BACK-1418: a controller's route prefix is often declared on a base class
     # in another file; resolved here, where every scanned class is known.
     resolve_inherited_route_prefixes(surfaces['http'], route_classes)
+    # BACK-1417: a Rails engine's routes are drawn relative to its mount point,
+    # which the app's routes (another file) declare.
+    resolve_engine_mounts(surfaces['http'])
 
     if type_filter:
         surfaces = {k: v for k, v in surfaces.items() if k == type_filter}
@@ -241,13 +245,11 @@ def _scan_surface(
     # BACK-1244: 'http' entries come from AST call-shape matching alone
     # (verb('/path', ...)) -- a real route declaration and an RSpec/pytest
     # request-spec call exercising that same route are indistinguishable at
-    # that level, so on a Rails app using `resources`/`resource` (excluded
-    # as too ambiguous to surface a path for) config/routes.rb can
-    # contribute ZERO entries while the entire reported "http surface" is
-    # actually test-spec calls -- inverted evidence for a DD review, where
-    # untested routes are exactly what's absent. Tag each entry and, when
-    # any are test-sourced, disclose it in known_limits rather than
-    # presenting the mix as an undifferentiated route table.
+    # that level, so test-spec calls can pad (or, before the BACK-1417 Rails
+    # interpreter, make up) the reported "http surface" -- inverted evidence
+    # for a DD review, where untested routes are exactly what's absent. Tag
+    # each entry and, when any are test-sourced, disclose it in known_limits
+    # rather than presenting the mix as an undifferentiated route table.
     http_entries = surfaces.get('http', [])
     test_origin_count = 0
     if http_entries and not source_only:
@@ -416,6 +418,9 @@ def _render_entry(surface_type: str, entry: Dict[str, Any]) -> None:
         # known_limits -- easy to miss a text summary note once a scan
         # scrolls past it.
         marker = '  [test]' if entry.get('test_origin') else ''
+        # BACK-1417: a Rails route declared under `if Rails.env.test?` etc.
+        if entry.get('condition'):
+            marker += f"  [{entry['condition']}]"
         print(f"  {method}  {path_}  → {name}{loc}{marker}")
 
     elif surface_type == 'mcp':
