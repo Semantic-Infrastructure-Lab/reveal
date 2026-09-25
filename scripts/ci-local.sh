@@ -12,8 +12,9 @@
 #   - CI-only steps        -> the primary leg (3.12, no --lp) also runs the Windows-compat lint,
 #                             V-series self-validation and B006 ratchet, which CI runs only on
 #                             ubuntu/3.12; other legs run pytest + CLI basics, as CI does
-#   - local caches/env     -> REVEAL_DISK_CACHE=0 (CI starts cold; keep ~/.reveal/cache out) and
-#                             PYTHONPYCACHEPREFIX unset (stale bytecode)
+#   - local caches/env     -> REVEAL_DISK_CACHE=0 (CI starts cold; keep ~/.reveal/cache out),
+#                             PYTHONPYCACHEPREFIX unset (stale bytecode), and XDG_CONFIG_HOME
+#                             pointed at an empty dir (no ~/.config/reveal user config)
 #   - Windows text encoding -> PYTHONWARNDEFAULTENCODING=1, so reveal/ text I/O without encoding=
 #                             fails its test (pyproject filterwarnings), and scripts/check_text_encoding.py.
 #                             Console output under a non-UTF-8 stream: tests/test_console_encoding.py.
@@ -177,6 +178,11 @@ export REVEAL_DISK_CACHE=0
 export PYTHONIOENCODING=utf-8
 export PYTHONWARNDEFAULTENCODING=1
 unset PYTHONPYCACHEPREFIX PYTHONPATH
+# CI has no ~/.config/reveal; a developer's (e.g. `display: breadcrumbs: true`)
+# overrides reveal's defaults, so tests that depended on it passed here and
+# failed on every CI job. Point user-config discovery at an empty dir.
+export XDG_CONFIG_HOME="${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/empty-xdg-config"
+rm -rf "$XDG_CONFIG_HOME" && mkdir -p "$XDG_CONFIG_HOME"
 
 if [[ $RUN_TESTS -eq 1 ]]; then
     step "Run tests (pytest ${PYTEST_TARGETS[*]})"

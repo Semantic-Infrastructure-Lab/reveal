@@ -1273,8 +1273,13 @@ def _run_extract(path, element, capsys):
     from reveal.registry import get_analyzer
     from reveal.display.element import extract_element
     analyzer = get_analyzer(str(path))(str(path))
+    # Breadcrumbs on explicitly: by default they are off when stdout is not a
+    # TTY (as under capsys), unless a user config turns them on -- so without
+    # this the hint tests passed only on a machine with such a config.
+    config = Mock()
+    config.is_breadcrumbs_enabled.return_value = True
     try:
-        extract_element(analyzer, element, 'text')
+        extract_element(analyzer, element, 'text', config=config)
         code = 0
     except SystemExit as e:
         code = e.code
