@@ -8,7 +8,7 @@
 #   - dependency versions  -> a dedicated venv, `pip install -e ".[dev]"` with eager upgrades,
 #                             exactly as CI installs (optionally forcing a language-pack version)
 #   - Python version       -> --python picks one of CI's matrix (3.10 / 3.12 / 3.14);
-#                             --matrix runs all three
+#                             --matrix runs all three, plus CI's language-pack floor leg (below)
 #   - CI-only steps        -> the primary leg (3.12, no --lp) also runs the Windows-compat lint,
 #                             V-series self-validation and B006 ratchet, which CI runs only on
 #                             ubuntu/3.12; other legs run pytest + CLI basics, as CI does
@@ -25,7 +25,7 @@
 # Usage:
 #   scripts/ci-local.sh                     # Python 3.12, latest deps (CI's ubuntu/3.12 `test` leg)
 #   scripts/ci-local.sh --python 3.14
-#   scripts/ci-local.sh --matrix            # 3.10, 3.12, 3.14 in turn (~15 min; run it in tmux)
+#   scripts/ci-local.sh --matrix            # 3.10, 3.12, 3.14, then 3.12 @ language-pack 1.8.1 (~20 min; run it in tmux)
 #   scripts/ci-local.sh --matrix -- tests/test_foo.py   # fast: only these pytest targets per leg
 #   scripts/ci-local.sh --lp 1.12.5         # force tree-sitter-language-pack (CI's compat-matrix)
 #   scripts/ci-local.sh --no-tests          # only the non-pytest CI steps
@@ -35,6 +35,11 @@
 #   - 3.10: PEP 701 f-strings (same quote nested inside, backslashes in {...}) are 3.12+ syntax
 #   - 3.14: tokenize/ast read PEP 750 t-strings and PEP 758 bare except natively, so code or
 #           test expectations written around their absence differ
+# What only the language-pack floor leg (3.12 @ 1.8.1, CI's compat-matrix `include`) catches:
+#   - 1.8.1 is the only leg on the vendored builtins.Node, where start_byte/end_byte/start_point are
+#     bound METHODS; 1.12.5+ make them properties. Bare `node.start_byte` in reveal/ or tests/ passes
+#     everywhere but here and raises "slice indices must be integers" -- go through _zero_arg
+#     (BACK-1406's test helper did, and reached CI red after a green 3-version --matrix).
 # What only GitHub's Windows legs catch -- check by hand before pushing tests that do this:
 #   - a Windows path as a re.sub replacement string (backslashes are escapes): pass a lambda
 #   - '/tmp' or other POSIX paths: not a directory on Windows; use tmp_path/tempfile.gettempdir()
@@ -44,6 +49,7 @@
 set -euo pipefail
 
 MATRIX_VERSIONS=(3.10 3.12 3.14)  # keep in step with .github/workflows/test.yml
+FLOOR_LP=1.8.1                    # the compat matrix's `include` leg (3.12 @ pyproject's floor); same file
 
 PY_VERSION="3.12"
 PY_EXPLICIT=0
@@ -70,16 +76,24 @@ if [[ $MATRIX -eq 1 ]]; then
     leg_args=()
     [[ $FRESH -eq 1 ]] && leg_args+=(--fresh)
     [[ $RUN_TESTS -eq 0 ]] && leg_args+=(--no-tests)
-    [[ -n "$LP_VERSION" ]] && leg_args+=(--lp "$LP_VERSION")
+    # Legs are "python:language-pack". An explicit --lp pins every leg; otherwise the Python legs use
+    # latest deps (as CI's `test` job does) and one extra leg pins the language-pack floor.
+    legs=()
+    for v in "${MATRIX_VERSIONS[@]}"; do legs+=("$v:$LP_VERSION"); done
+    [[ -z "$LP_VERSION" ]] && legs+=("3.12:$FLOOR_LP")
     # Every leg runs even after a failure (CI's fail-fast: false), so one run shows all breakage.
     results=()
     status=0
-    for v in "${MATRIX_VERSIONS[@]}"; do
-        printf '\n######## Python %s ########\n' "$v"
-        if "$0" --python "$v" ${leg_args[@]+"${leg_args[@]}"} -- "${PYTEST_TARGETS[@]}"; then
-            results+=("  python $v: pass")
+    for leg in "${legs[@]}"; do
+        v="${leg%%:*}"; lp="${leg#*:}"
+        label="python $v${lp:+ @ language-pack $lp}"
+        lp_args=()
+        [[ -n "$lp" ]] && lp_args=(--lp "$lp")
+        printf '\n######## %s ########\n' "$label"
+        if "$0" --python "$v" ${lp_args[@]+"${lp_args[@]}"} ${leg_args[@]+"${leg_args[@]}"} -- "${PYTEST_TARGETS[@]}"; then
+            results+=("  $label: pass")
         else
-            results+=("  python $v: FAIL (exit $?)")
+            results+=("  $label: FAIL (exit $?)")
             status=1
         fi
     done
