@@ -19,7 +19,7 @@ Limitations (static analysis):
 
 import os
 from typing import Any, Dict, Optional
-from reveal.reveal_types import CONTRACT_VERSION
+from reveal.reveal_types import CONTRACT_VERSION, RevealResult
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .confidence import build_meta as _call_graph_meta
@@ -304,13 +304,31 @@ class CallsAdapter(ResourceAdapter):
                 return
         self.path = expanded
 
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> RevealResult:
         target = self.query_params.get('target', '')
         callees_target = self.query_params.get('callees', '')
         root = self.query_params.get('root', '')
         rank = self.query_params.get('rank', '')
         uncalled = self.query_params.get('uncalled', False)
         modules = self.query_params.get('modules', False)
+
+        # A bare name-valued flag ('?callees', '?target&...') parses as True and
+        # used to crash deep in the index or search for a function named 'True'
+        # (BACK-1488) -- say what is missing instead.
+        bare = next((k for k in ('target', 'callees', 'root')
+                     if self.query_params.get(k) is True), None)
+        if bare:
+            return ResultBuilder.create(
+                result_type='calls_query',
+                source=self.path,
+                contract_version=CONTRACT_VERSION,
+                data={
+                    'path': self.path,
+                    'error': f"'{bare}' needs a function name: {bare}=<name>",
+                    'example': f"calls://{self.path}?{bare}=my_function",
+                },
+                **_call_graph_meta(self.path),
+            )
 
         if modules:
             include_external = bool(self.query_params.get('external', False))

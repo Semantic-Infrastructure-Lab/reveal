@@ -632,7 +632,9 @@ class ImportsRenderer:
         print(f"{'='*60}\n")
         print(f"  Total Files:   {total_files}")
         print(f"  Total Imports: {total_imports}")
-        if total_files <= 1:
+        if total_files <= 1 and Path(display_path).is_dir():
+            print("  Cycles Found:  N/A (only one file scanned — a cycle needs at least two)")
+        elif total_files <= 1:
             print("  Cycles Found:  N/A (single-file scan — use imports://dir/ to detect cycles)")
         elif not total_imports:
             print("  Cycles Found:  N/A (no imports found)")

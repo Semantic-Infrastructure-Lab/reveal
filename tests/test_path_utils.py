@@ -859,6 +859,13 @@ class TestToRelativeDisplay:
         outside = tmp_path.parent / "elsewhere.py"
         assert to_relative_display(str(outside), tmp_path) == to_posix(str(outside))
 
+    def test_single_file_base_names_the_file_not_dot(self, tmp_path):
+        # BACK-1488: a file target is its own base; "relative to itself" is '.',
+        # which surfaced as '.:42' in surface locations.
+        f = tmp_path / "mod.py"
+        f.write_text("x = 1\n", encoding="utf-8")
+        assert to_relative_display(str(f), f) == "mod.py"
+
     def test_no_base_path_returns_original(self):
         assert to_relative_display("/abs/file.py", None) == "/abs/file.py"
 
