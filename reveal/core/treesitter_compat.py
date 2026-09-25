@@ -105,9 +105,9 @@ def _zero_arg(obj, name):
         if name == 'kind':
             return obj.type
         if name == 'start_position':
-            return obj.start_point
+            return obj.start_point  # noqa: ts-accessor (the seam)
         if name == 'end_position':
-            return obj.end_point
+            return obj.end_point  # noqa: ts-accessor (the seam)
         raise
     return val() if callable(val) else val
 
