@@ -61,6 +61,10 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         run: python scripts/check_treesitter_accessors.py
 
+      - name: Doc hygiene ratchet (broken links, internal-docs refs)
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        run: python scripts/check_doc_hygiene.py --baseline .github/doc_hygiene_baseline.txt
+
       - name: Test CLI basics
         shell: bash
         run: |

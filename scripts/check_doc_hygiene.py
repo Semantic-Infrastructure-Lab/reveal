@@ -143,7 +143,7 @@ def check_leak_patterns(md_file):
 
 def _read_baseline(path: str) -> int:
     try:
-        return int(Path(path).read_text().strip())
+        return int(Path(path).read_text(encoding='utf-8').strip())
     except (OSError, ValueError) as e:
         print(f"Error: couldn't read baseline count from {path}: {e}", file=sys.stderr)
         sys.exit(1)

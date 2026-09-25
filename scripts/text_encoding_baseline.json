@@ -1,7 +1,6 @@
 {
  "scripts/analyze_duplicate_detection.py": 4,
- "scripts/check_doc_hygiene.py": 2,
- "scripts/check_mypy_baseline.py": 3,
+ "scripts/check_doc_hygiene.py": 1,
  "scripts/check_taxonomy_collisions.py": 3,
  "scripts/corpus_sweep.py": 3,
  "scripts/fetch_corpus.py": 3,

@@ -10,7 +10,7 @@
 #   - Python version       -> --python picks one of CI's matrix (3.10 / 3.12 / 3.14);
 #                             --matrix runs all three, plus CI's language-pack floor leg (below)
 #   - CI-only steps        -> the primary leg (3.12, no --lp) also runs the Windows-compat lint,
-#                             V-series self-validation and B006 ratchet, which CI runs only on
+#                             V-series self-validation, doc-hygiene ratchet and B006 ratchet, which CI runs only on
 #                             ubuntu/3.12, plus the mypy ratchet (system python3, as the release gate
 #                             runs it -- CI does not); other legs run pytest + CLI basics, as CI does
 #   - local caches/env     -> REVEAL_DISK_CACHE=0 (CI starts cold; keep ~/.reveal/cache out),
@@ -226,6 +226,12 @@ EOF
     else
         echo "system python3 has no mypy -- ratchet SKIPPED (release gate will still run it)" | tee -a "$LOG"
     fi
+
+    # Runs only in pre-release-check.sh otherwise, so internal-docs references and
+    # broken links slipped into shipped docs between releases (BACK-1474).
+    step "Doc hygiene ratchet"
+    "$PY" scripts/check_doc_hygiene.py --baseline .github/doc_hygiene_baseline.txt >>"$LOG" 2>&1 \
+        || { tail -12 "$LOG"; fail "doc hygiene regressed vs .github/doc_hygiene_baseline.txt"; }
 
     step "B006 ratchet"
     BASELINE=$(cat .github/b006_baseline.txt)
