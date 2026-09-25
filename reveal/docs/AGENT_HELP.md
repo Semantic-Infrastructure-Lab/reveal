@@ -1446,7 +1446,7 @@ reveal 'calls://src/?uncalled&top=20'          # Top 20 most-recently-added unca
 | C/C++ | `main`, test-registration macros (`TEST`, `TEST_F`, `TEST_CASE`, …); C++ also constructors, destructors, operators, `override`/`final`, Godot `GDCLASS` hooks |
 | Swift | `init`/`deinit`, operator functions, `override` |
 | Ruby | `initialize`, `included`/`extended`/`inherited`/`method_missing`/`respond_to_missing?` |
-| PHP | none yet (the footer says so): constructors and framework-invoked methods may be listed |
+| PHP | magic methods (`__construct`, `__destruct`, `__get`/`__set`, `__call`/`__callStatic`, `__toString`, `__invoke`, `__clone`, `__sleep`/`__wakeup`, …); functions named in hook strings (`add_action('init', 'fn')`) count as referenced |
 
 Test entry points (Go `Test*`, Rust `#[test]`, JS/TS test callbacks, JUnit3 `test*`) are counted in `test_entrypoints_excluded` (JSON) instead of being listed. Add `&test-framework=true` to list them as candidates too. `.reveal.yaml` `adapters.calls.entry_points.decorators` adds project-specific entry-point decorators.
 

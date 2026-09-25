@@ -303,6 +303,8 @@ CALL_GRAPH_IMPLICIT_EXCLUSION_VOCAB: Dict[str, str] = {
     'c': _CPP_IMPLICIT_EXCLUSIONS,
     'kotlin': 'override functions, main, and Spring/Dagger-registered functions (@Bean, @Provides, ...)',
     'swift': 'init/deinit, operator functions (==, <, ...) and override methods',
+    'php': 'magic methods (__construct, __destruct, __get/__set, __call/__callStatic, __toString, '
+           '__invoke, __clone, __sleep/__wakeup, __serialize/__unserialize, ...)',
     'dart': 'constructors (including named and factory constructors) and @override methods '
             '(Flutter build/createState/initState, ...)',
 }

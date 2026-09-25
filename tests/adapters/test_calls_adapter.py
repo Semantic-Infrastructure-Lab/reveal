@@ -1695,6 +1695,29 @@ class TestFindUncalled(unittest.TestCase):
         self.assertNotIn('initialize', names)
         self.assertIn('genuinely_dead', names)
 
+    def test_php_magic_methods_excluded_but_double_underscore_functions_kept(self):
+        """BACK-1443: PHP magic methods run on new/clone/serialize/property access,
+        never by name (64 of WordPress wp-includes' 2,722 uncalled entries). An exact
+        list, not a `__` pattern: WordPress's own `__return_null` is an ordinary function."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('c.php', '''\
+            <?php
+            class Foo {
+                public function __construct() {}
+                public function __wakeup() {}
+                public function __call($n, $a) {}
+                public function __toString() { return ''; }
+                public function genuinely_dead() {}
+            }
+            function __return_null() { return null; }
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = [e['name'] for e in result['entries']]
+        for magic in ('__construct', '__wakeup', '__call', '__toString'):
+            self.assertNotIn(magic, names)
+        self.assertIn('genuinely_dead', names)
+        self.assertIn('__return_null', names)
+
     def test_ruby_metaprogramming_hooks_excluded(self):
         """Ruby's module/metaprogramming callback hooks — invoked by the
         runtime (e.g. Module#included), never a source-level call."""
@@ -2855,6 +2878,19 @@ class TestCallGraphMeta(unittest.TestCase):
         vocab_warning = next(w['message'] for w in meta['warnings'] if w['code'] == 'W-CALLS-6')
         self.assertIn('initialize', vocab_warning)
         self.assertNotIn('__dunder__', vocab_warning)
+
+    def test_php_uncalled_exclusion_vocab_names_magic_methods(self):
+        """BACK-1443: PHP said 'no language-specific conventions' once it had some."""
+        from reveal.adapters.calls.confidence import build_meta
+
+        php_dir = os.path.join(self.tmpdir, 'php')
+        os.makedirs(php_dir)
+        _write(php_dir, 'index.php', '<?php\nfunction f() {}\n')
+
+        meta = build_meta(php_dir, uncalled=True)
+        vocab_warning = next(w['message'] for w in meta['warnings'] if w['code'] == 'W-CALLS-6')
+        self.assertIn('__construct', vocab_warning)
+        self.assertNotIn('no language-specific conventions', vocab_warning)
 
     def test_python_uncalled_exclusion_vocab_still_names_dunder(self):
         from reveal.adapters.calls.confidence import build_meta

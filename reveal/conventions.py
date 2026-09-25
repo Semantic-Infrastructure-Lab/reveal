@@ -375,7 +375,18 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
                 'SetUp', 'TearDown', 'SetUpTestSuite', 'TearDownTestSuite',
             }),
         ),
-        LanguageConventions(family='php', entry_point_files=frozenset({'index.php'})),
+        # BACK-1443: magic methods run on `new`/`clone`/serialize/property access/an
+        # undefined-method call, never by a call to their name. An exact list, not a
+        # `__` pattern: WordPress defines ordinary functions named `__return_null`,
+        # `__ngettext` (passed as hook-string callbacks) that must stay checkable.
+        LanguageConventions(
+            family='php', entry_point_files=frozenset({'index.php'}),
+            implicit_names=frozenset({
+                '__construct', '__destruct', '__call', '__callStatic', '__get', '__set',
+                '__isset', '__unset', '__sleep', '__wakeup', '__serialize', '__unserialize',
+                '__toString', '__invoke', '__set_state', '__clone', '__debugInfo',
+            }),
+        ),
         LanguageConventions(
             family='swift', entry_point_files=frozenset({'main.swift'}),
             # `P(x:)` indexes under the type name, never `init`; operators run on `a == b`.
