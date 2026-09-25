@@ -326,7 +326,7 @@ class XmlAnalyzer(FileAnalyzer):
         if not matches:
             return None
         shown = matches[:10]
-        sections = [
+        sections: List[Dict[str, Any]] = [
             {'line_start': first, 'line_end': last, 'source': '\n'.join(self.lines[first - 1:last])}
             for first, last in shown
         ]

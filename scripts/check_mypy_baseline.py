@@ -35,7 +35,7 @@ _ERROR = re.compile(r"^(?P<file>[^:\n]+):\d+(?::\d+)?: error: .*\[(?P<code>[a-z0
 def run_mypy() -> collections.Counter:
     proc = subprocess.run([sys.executable, "-m", "mypy", "reveal", "--no-error-summary",
                            "--no-pretty", "--show-error-codes"],
-                          cwd=REPO, capture_output=True, text=True)
+                          cwd=REPO, capture_output=True, text=True, encoding="utf-8")
     if proc.returncode not in (0, 1) or (proc.returncode == 1 and not proc.stdout.strip()):
         sys.exit(f"mypy failed to run:\n{proc.stderr or proc.stdout}")
     counts: collections.Counter = collections.Counter()
@@ -50,12 +50,12 @@ def main() -> int:
     current = run_mypy()
     total = sum(current.values())
     if "--update" in sys.argv:
-        BASELINE.write_text(json.dumps(dict(sorted(current.items())), indent=1) + "\n")
+        BASELINE.write_text(json.dumps(dict(sorted(current.items())), indent=1) + "\n", encoding="utf-8")
         print(f"baseline updated: {total} errors in {len(current)} (file, code) buckets")
         return 0
     if not BASELINE.exists():
         sys.exit(f"no baseline at {BASELINE}; run with --update to create it")
-    base = json.loads(BASELINE.read_text())
+    base = json.loads(BASELINE.read_text(encoding="utf-8"))
     worse = {k: (base.get(k, 0), v) for k, v in current.items() if v > base.get(k, 0)}
     better = sum(base[k] - current.get(k, 0) for k in base if current.get(k, 0) < base[k])
     print(f"mypy: {total} errors (baseline {sum(base.values())})")

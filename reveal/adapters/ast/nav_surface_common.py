@@ -25,7 +25,7 @@ def _get_text(node, content_bytes: bytes) -> str:
 
 
 def _get_line(node) -> int:
-    return _zero_arg(node, 'start_position').row + 1
+    return int(_zero_arg(node, 'start_position').row) + 1
 
 
 def disclose_parse_recovery(tree, file_path: str, surfaces: Dict[str, Any]) -> Dict[str, Any]:
@@ -166,10 +166,23 @@ def resolve_inherited_route_prefixes(http_entries: List[Dict[str, Any]],
             resolved.append(entry)
             continue
         for prefix in prefixes:
-            if info['tokens']:
-                prefix = replace_route_tokens(prefix, info['class'], info['action'])
-            resolved.append({**entry, 'path': join_route_path(prefix, info['template']) or '?'})
+            resolved_prefix = (replace_route_tokens(prefix, info['class'], info['action'])
+                               if info['tokens'] else prefix)
+            resolved.append({**entry, 'path': join_route_path(resolved_prefix, info['template']) or '?'})
     http_entries[:] = resolved
+
+
+def route_prefixes(prefixes: Optional[List[str]]) -> List[Optional[str]]:
+    """A controller's class-level route prefixes, or [None] -- one unprefixed
+    route -- when the class declares none."""
+    return list(prefixes) if prefixes else [None]
+
+
+def mapping_paths(elements: Dict[str, List[str]]) -> List[Optional[str]]:
+    """Paths of a Spring mapping annotation (`value`, else `path`); [None] for a
+    bare `@GetMapping`."""
+    paths: List[Optional[str]] = list(elements.get('value') or elements.get('path') or [])
+    return paths or [None]
 
 
 def merge_routes_by_path(routes: List[Tuple[List[str], Optional[str]]]) -> List[Tuple[str, Optional[str]]]:

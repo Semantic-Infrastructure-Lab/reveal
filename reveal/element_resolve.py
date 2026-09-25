@@ -23,7 +23,7 @@ the name was ambiguous and how to address each definition.
 
 import shlex
 from dataclasses import dataclass, field
-from typing import Any, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .core import node_children as _children
 from .core.definition_names import name_matches
@@ -58,7 +58,7 @@ class Resolution:
 
 
 def _start_line(node) -> int:
-    return _zero_arg(node, 'start_position').row + 1
+    return int(_zero_arg(node, 'start_position').row) + 1
 
 
 def _end_node(analyzer, node):
@@ -74,7 +74,7 @@ def _span(node) -> Tuple[int, int]:
 def _in_tree_order(nodes: Iterable[Any]) -> List[Any]:
     """Dedupe by span and sort by position -- deterministic regardless of the
     set-derived iteration order of the node-kind tuples that produced them."""
-    seen = {}
+    seen: Dict[Any, Any] = {}
     for node in nodes:
         seen.setdefault(_span(node), node)
     return [seen[key] for key in sorted(seen)]
@@ -182,7 +182,7 @@ def _base_type_name(analyzer, type_node) -> Optional[str]:
         inner = type_node.child_by_field_name('name')
         return analyzer._get_node_text(inner) if inner is not None else None
     if kind in ('type_identifier', 'identifier', 'primitive_type'):
-        return analyzer._get_node_text(type_node)
+        return str(analyzer._get_node_text(type_node))
     return None
 
 
@@ -240,11 +240,11 @@ def go_receiver_type_name(analyzer, method_node) -> Optional[str]:
             for part in _children(param):
                 kind = _zero_arg(part, 'kind')
                 if kind == 'type_identifier':
-                    return analyzer._get_node_text(part)
+                    return str(analyzer._get_node_text(part))
                 if kind == 'pointer_type':
                     for inner in _children(part):
                         if _zero_arg(inner, 'kind') == 'type_identifier':
-                            return analyzer._get_node_text(inner)
+                            return str(analyzer._get_node_text(inner))
         # Only the first parameter_list is the receiver.
         break
     return None

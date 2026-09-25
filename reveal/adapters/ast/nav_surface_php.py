@@ -104,7 +104,7 @@ def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, Lis
 
     # Pre-order walk: a class is seen before anything inside it, so the
     # innermost enclosing class of a call is the last one containing it.
-    classes: List[Any] = []
+    classes: List['_ClassScope'] = []
 
     def scope_of(node: Any) -> Optional['_ClassScope']:
         start = _zero_arg(node, 'start_byte')
@@ -466,7 +466,7 @@ def _eval_string(node: Any, content_bytes: bytes, scope: Optional[_ClassScope],
     and makes the whole unresolved."""
     handler = _EVALUATORS.get(_zero_arg(node, 'kind'))
     if handler is not None and depth <= _EVAL_MAX_DEPTH:
-        result = handler(node, content_bytes, scope, depth)
+        result: Optional[tuple] = handler(node, content_bytes, scope, depth)
         if result is not None:
             return result
     return _placeholder(node, content_bytes), False

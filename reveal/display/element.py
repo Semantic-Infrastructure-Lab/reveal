@@ -298,9 +298,9 @@ def _extract_listed_item(analyzer, element: str):
     ]
     if not matches:
         return None
-    matches.sort(key=lambda m: listed_item_line(m[1]))
+    matches.sort(key=lambda m: listed_item_line(m[1]) or 0)
     category, item = matches[0]
-    result = _build_element_from_item(analyzer, item, category, 1)
+    result = _build_element_from_item(analyzer, cast(StructureItem, item), category, 1)
     if len(matches) > 1:
         candidates = []
         for _, m_item in matches:

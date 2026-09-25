@@ -11,7 +11,8 @@
 #                             --matrix runs all three, plus CI's language-pack floor leg (below)
 #   - CI-only steps        -> the primary leg (3.12, no --lp) also runs the Windows-compat lint,
 #                             V-series self-validation and B006 ratchet, which CI runs only on
-#                             ubuntu/3.12; other legs run pytest + CLI basics, as CI does
+#                             ubuntu/3.12, plus the mypy ratchet (system python3, as the release gate
+#                             runs it -- CI does not); other legs run pytest + CLI basics, as CI does
 #   - local caches/env     -> REVEAL_DISK_CACHE=0 (CI starts cold; keep ~/.reveal/cache out),
 #                             PYTHONPYCACHEPREFIX unset (stale bytecode), and XDG_CONFIG_HOME
 #                             pointed at an empty dir (no ~/.config/reveal user config)
@@ -213,6 +214,18 @@ if detections:
     raise SystemExit(1)
 print('V-series self-validation passed')
 EOF
+
+    # The baseline is keyed to the maintainer mypy (system python3, as
+    # pre-release-check.sh runs it) -- not the venv's eagerly-upgraded one, whose
+    # counts drift. mypy is in neither test.yml nor the test run, so without this
+    # step the ratchet only turns red at release time (BACK-1486).
+    step "mypy ratchet (system python3)"
+    if python3 -c 'import mypy' 2>/dev/null; then
+        python3 scripts/check_mypy_baseline.py 2>&1 | tee -a "$LOG" | tail -20
+        [[ ${PIPESTATUS[0]} -eq 0 ]] || fail "mypy ratchet (fix the new errors, or --update after improvements)"
+    else
+        echo "system python3 has no mypy -- ratchet SKIPPED (release gate will still run it)" | tee -a "$LOG"
+    fi
 
     step "B006 ratchet"
     BASELINE=$(cat .github/b006_baseline.txt)

@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .nav_surface_common import (
     disclose_parse_recovery,
     INHERIT_KEY, ROUTE_CLASSES_KEY, _get_text, _get_line, join_route_path, merge_routes_by_path,
-    replace_route_tokens, type_simple_name,
+    replace_route_tokens, route_prefixes, type_simple_name,
 )
 from .surface_rules import RuleScan
 
@@ -166,7 +166,7 @@ def _string_literal_text(node: Any, content_bytes: bytes) -> str:
 
 
 def _find_method_attributes(method_node: Any) -> List[Any]:
-    attrs = []
+    attrs: List[Any] = []
     for ch in _children(method_node):
         if _zero_arg(ch, 'kind') == 'attribute_list':
             attrs.extend(a for a in _children(ch) if _zero_arg(a, 'kind') == 'attribute')
@@ -229,7 +229,7 @@ def _process_method(node: Any, file_path: str, content_bytes: bytes,
     decorator = ' '.join(f'[{attr_name}]' for _, attr_name in route_attrs)
     class_name, prefixes, bases = controller
     for methods, path in merge_routes_by_path(_action_routes(route_attrs, content_bytes)):
-        for prefix in (prefixes or [None]):
+        for prefix in route_prefixes(prefixes):
             entry = {
                 'type': 'route',
                 'name': name or '?',

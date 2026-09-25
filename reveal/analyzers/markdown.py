@@ -258,7 +258,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         setext headings (``Title`` over ``====`` or ``----``, BACK-1412) do.
         Without a tree it falls back to ATX-only regex matching.
         """
-        cached = getattr(self, '_headings_cache', None)
+        cached: Optional[List[Tuple[int, int, str]]] = getattr(self, '_headings_cache', None)
         if cached is not None:
             return cached
         index = self._heading_index_from_tree() if self.tree else self._heading_index_regex()

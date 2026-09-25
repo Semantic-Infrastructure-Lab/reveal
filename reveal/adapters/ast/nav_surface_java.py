@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .nav_surface_common import (
     disclose_parse_recovery,
     INHERIT_KEY, ROUTE_CLASSES_KEY, SPRING_ROUTE_ANNOTATIONS, _get_text, _get_line, join_route_path,
-    merge_routes_by_path, type_simple_name,
+    merge_routes_by_path, type_simple_name, mapping_paths, route_prefixes,
 )
 from .surface_rules import RuleScan
 
@@ -87,7 +87,7 @@ def _class_name(class_node: Any, content_bytes: bytes) -> Optional[str]:
 def _base_type_names(class_node: Any, content_bytes: bytes) -> List[str]:
     """Superclass and interfaces -- Spring finds a class-level @RequestMapping
     on either."""
-    names = []
+    names: List[str] = []
     for ch in _children(class_node):
         if _zero_arg(ch, 'kind') not in ('superclass', 'super_interfaces', 'extends_interfaces'):
             continue
@@ -139,16 +139,12 @@ def _element_values(node: Any, content_bytes: bytes) -> List[str]:
     return ['?']
 
 
-def _mapping_paths(elements: Dict[str, List[str]]) -> List[Optional[str]]:
-    return elements.get('value') or elements.get('path') or [None]
-
-
 def _class_route_prefixes(class_node: Any, content_bytes: bytes) -> Optional[List[str]]:
     """A controller's class-level @RequestMapping paths, or None (BACK-1418:
     they were never joined to the methods' paths)."""
     for annotation in _find_method_annotations(class_node):
         if _annotation_name(annotation, content_bytes) == 'RequestMapping':
-            return [p or '' for p in _mapping_paths(_annotation_elements(annotation, content_bytes))]
+            return [p or '' for p in mapping_paths(_annotation_elements(annotation, content_bytes))]
     return None
 
 
@@ -207,10 +203,10 @@ def _process_method(node: Any, file_path: str, content_bytes: bytes,
         verbs = [SPRING_ROUTE_ANNOTATIONS[anno_name]]
         if anno_name == 'RequestMapping':
             verbs = [v.upper() for v in elements.get('method', []) if v != '?'] or ['ANY']
-        routes.extend((verbs, path) for path in _mapping_paths(elements))
+        routes.extend((verbs, path) for path in mapping_paths(elements))
     class_name, prefixes, bases = controller
     for methods, path in merge_routes_by_path(routes):
-        for prefix in (prefixes or [None]):
+        for prefix in route_prefixes(prefixes):
             entry = {
                 'type': 'route',
                 'name': name or '?',

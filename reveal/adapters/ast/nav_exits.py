@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Collection, Dict, List, Optional
 
 from .nav_calls import _extract_callee
 from .nav_varflow import all_var_flow
@@ -146,7 +146,7 @@ def _first_line(text: str) -> str:
 
 
 def _exit_at(node: Any, get_text: Callable,
-             call_node_types: frozenset) -> Optional[tuple]:
+             call_node_types: Collection[str]) -> Optional[tuple]:
     """(kind, text, descend) when node is an exit, else None -- the one
     definition of "exit" that --exits and --returns (collect_gate_chains) both
     use: an exit node (return/raise/throw/PHP exit_statement...), Rust's `?`,
@@ -176,7 +176,7 @@ def collect_exits(
     from_line: int,
     to_line: int,
     get_text: Callable,
-    call_node_types: Optional[frozenset] = None,
+    call_node_types: Optional[Collection[str]] = None,
 ) -> List[Dict[str, Any]]:
     """Collect exit nodes within a line range.
 
@@ -386,7 +386,7 @@ def collect_gate_chains(
     from_line: int,
     to_line: int,
     get_text: Callable,
-    call_node_types: Optional[frozenset] = None,
+    call_node_types: Optional[Collection[str]] = None,
 ) -> List[Dict[str, Any]]:
     """Collect exit nodes in a line range, each annotated with their gate chain.
 

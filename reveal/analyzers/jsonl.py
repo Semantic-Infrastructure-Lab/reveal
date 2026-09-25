@@ -5,7 +5,7 @@ Handles conversation logs, streaming data, and other line-delimited JSON formats
 
 import json
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from ..base import FileAnalyzer
 from ..registry import register
 from ..utils.results import ResultBuilder
@@ -260,7 +260,7 @@ class JsonlAnalyzer(FileAnalyzer):
         # pretty-printed dump numbered from the first match's line invented
         # line numbers once the CLI could reach this (BACK-1411).
         shown = matches[:10]
-        sections = [
+        sections: List[Dict[str, Any]] = [
             {'line_start': line_num, 'line_end': line_num, 'source': self.lines[line_num - 1].rstrip('\n')}
             for line_num, _ in shown
         ]
