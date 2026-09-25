@@ -11,8 +11,10 @@ architecture-audit user cannot tolerate. A dependency-graph tool that
 occasionally reports "nothing imports this" about a load-bearing module is
 worse than no tool at all, because it looks like a confident, checked answer.
 This document is the audit trail proving how that failure mode was found,
-measured, and closed — and gives you what you need to re-run the check
-yourself against reveal's actual source, not take our word for it.
+measured, and closed — with the corpus, oracle method and figures for each
+loop, so a result can be challenged rather than taken on faith. The harness
+scripts themselves live in the maintainers' workspace and are not published
+(see [Re-running this yourself](#re-running-this-yourself)).
 
 Three signals have been through this treatment so far, each as its own
 independent-oracle program on real corpora: **import/dependency recall**
@@ -111,7 +113,7 @@ had pulled C, C++, Zig, Python, Go, Kotlin and TSX below them (C/curl 47.04%, C+
    categories with one oracle instance each, both at 0% recall — the figure
    is carried by env/file/log/sleep. Swift's own sparsest category (`env`)
    had exactly one function-reachable positive in the whole corpus (see
-   [SWIFT.md](internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/swift/SWIFT.md))
+   `internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/swift/SWIFT.md`)
    — a real recall number, but an n=1 one.
 4. **C's `http` category is a corpus-proven, deliberate decline, not a
    measurement gap.** C's 92.0% figure is carried entirely by `log`/`file`/
@@ -164,7 +166,7 @@ importer edges surfaced (spot-checked genuine, e.g.
 "core/debugger/engine_debugger.h"`) register as this oracle's own false
 positives only because `build_oracle.py`'s ground-truth builder never
 scanned `.mm` as an importer candidate — a pre-existing oracle scope gap,
-not a defect in the fix. Full story: [harness README](../internal-docs/planning/dogfood-findings/cpp-recall-oracle/README.md). ⁴ Sampled recall was 99.76% (823/825); the 2 residual misses were both
+not a defect in the fix. Full story: `internal-docs/planning/dogfood-findings/cpp-recall-oracle/README.md`. ⁴ Sampled recall was 99.76% (823/825); the 2 residual misses were both
 oracle false positives — a code-generation script's `writeln('''...''')`
 embeds literal `import '...'` *text* inside a Dart template string, which
 tree-sitter correctly never parses as a real import (the same class of
@@ -231,8 +233,7 @@ the 100% Meilisearch result generalized. It found one new real bug of the
 same shape as BACK-558's, one grouping level deeper — a `use_list` item
 that is itself a nested `scoped_use_list` (`use crate::{a::{x, y}, ...}`,
 ripgrep's dominant `lib.rs` re-export idiom) silently dropped the whole
-nested item, 56.0% → **100%** after the fix. See the [harness
-README](../internal-docs/planning/dogfood-findings/rust-recall-oracle/README.md#second-corpus-back-669-ripgrep--overfit-guard)
+nested item, 56.0% → **100%** after the fix. See the `internal-docs/planning/dogfood-findings/rust-recall-oracle/README.md`
 for the full write-up.
 
 ¹⁰ Overfit guard (BACK-669): re-ran the identical independent-oracle-diff
@@ -243,8 +244,7 @@ a pure `from . import a, b, c` statement where some names are sibling
 submodules and others are symbols living only in `__init__.py` silently
 dropped the `__init__.py` edge, because the single-value "primary" resolution
 stops at the first submodule match. 99.77% → **100%** after the fix. See the
-[harness
-README](../internal-docs/planning/dogfood-findings/python-recall-oracle/README.md#second-corpus-back-669-celery--overfit-guard)
+`internal-docs/planning/dogfood-findings/python-recall-oracle/README.md`
 for the full write-up.
 
 ¹¹ Overfit guard (BACK-669): re-ran the identical independent-oracle-diff
@@ -256,8 +256,7 @@ with no fix needed — including on the exact nested-type/static-member idiom
 `import static` statements) that BACK-551 previously found broken, confirming
 that fix generalizes past the corpus that found it. Guava's style guide
 forbids wildcard imports, so that resolution path is not exercised by this
-slice. See the [harness
-README](../internal-docs/planning/dogfood-findings/java-recall-oracle/README.md#second-corpus-back-669-guava--overfit-guard)
+slice. See the `internal-docs/planning/dogfood-findings/java-recall-oracle/README.md`
 for the full write-up.
 
 ¹² Overfit guard (BACK-669): re-ran the identical independent-oracle-diff
@@ -279,8 +278,7 @@ cause — explicit `chdir()`/CWD-dependent bare-literal resolution in 6 legacy
 extension scripts plus one nested bootstrap file, a shape this corpus
 actually relies on but a generic per-file resolver correctly does not chase
 (risking false-positive edges in other codebases) — filed as **BACK-681**,
-not fixed. See the [harness
-README](../internal-docs/planning/dogfood-findings/php-recall-oracle/README.md#second-corpus-back-669-oscommerce--overfit-guard)
+not fixed. See the `internal-docs/planning/dogfood-findings/php-recall-oracle/README.md`
 for the full write-up.
 
 ¹³ Overfit guard (BACK-669): re-ran the identical independent-oracle-diff
@@ -294,8 +292,7 @@ code-generation scripts that `go list` excludes but reveal's build-tag-blind
 parser doesn't (the same mechanism as the original loop's 8 Windows-build-tag
 FPs), plus external test-package files (`package foo_test`) whose own import
 of their parent package directory-fans-out to include themselves. See the
-[harness
-README](../internal-docs/planning/dogfood-findings/go-recall-oracle/README.md#second-corpus-back-669-client_golang--overfit-guard)
+`internal-docs/planning/dogfood-findings/go-recall-oracle/README.md`
 for the full write-up.
 
 ¹⁴ Overfit guard (BACK-669): re-ran the same content-scanned member-import
@@ -308,8 +305,7 @@ false positives, all root-caused to safe wildcard-import fan-out (`import
 kotlinx.coroutines.flow.internal.*` correctly resolving to every file
 declaring that package, per `depends://`'s directory-granularity semantics)
 — a broader import than the oracle's single-symbol targets, not a bug. See
-the [harness
-README](../internal-docs/planning/dogfood-findings/kotlin-member-import-oracle/README.md#second-corpus-back-669-kotlinxcoroutines--overfit-guard)
+the `internal-docs/planning/dogfood-findings/kotlin-member-import-oracle/README.md`
 for the full write-up.
 
 ¹⁵ Overfit guard (BACK-669): re-ran the same content-scanned container-member
@@ -324,8 +320,7 @@ bugs (not resolver bugs) were found and fixed in the measurement harness
 itself: a Scaladoc string literal containing example `import` text was
 initially miscounted as a real import, and Scala's legitimate local/
 method-scoped imports (indented, not column-0) were initially excluded,
-undercounting real edges as false positives. See the [harness
-README](../internal-docs/planning/dogfood-findings/scala-member-import-oracle/README.md#second-corpus-back-669-cats-effect--overfit-guard)
+undercounting real edges as false positives. See the `internal-docs/planning/dogfood-findings/scala-member-import-oracle/README.md`
 for the full write-up.
 
 ¹⁶ Overfit guard (BACK-669): re-ran the identical independent-oracle-diff
@@ -406,8 +401,7 @@ test package resolving `@nestjs/common` via implicit workspace/npm-link
 resolution with no tsconfig `paths`/`extends`/`references` at all) — too
 small (0.07% of edges) to justify further investigation as its own
 backlog item.
-See the [harness
-README](../internal-docs/planning/dogfood-findings/ts-recall-oracle/README.md#second-corpus-back-669-nest--overfit-guard)
+See the `internal-docs/planning/dogfood-findings/ts-recall-oracle/README.md`
 for the full write-up.
 
 ¹⁷ Overfit guard (BACK-669): re-ran the require + Zeitwerk path→constant
@@ -437,8 +431,7 @@ remaining 13 apparent misses traced to **oracle** noise (heredoc/regex-
 literal text — Rails generator templates and migration column-comment prose
 mentioning real class names without executing as code in that file) — fixed
 in the oracle, not the product, confirming a genuine **100.00%** (3,186/
-3,186) once measured honestly. See the [harness
-README](../internal-docs/planning/dogfood-findings/ruby-recall-oracle/README.md#second-corpus-solidus-solidusiosolidus)
+3,186) once measured honestly. See the `internal-docs/planning/dogfood-findings/ruby-recall-oracle/README.md`
 for the full write-up.
 
 ¹⁸ Overfit guard (BACK-669): re-ran the module-index oracle diff
@@ -482,8 +475,7 @@ corpus after both fixes: still 100% module-index coverage, `unresolved_
 intra` still 0, and total resolved import edges rose from 384,278 to
 660,716 — the attribute-prefix fix recovers real `@testable import`
 edges (1,477 real occurrences in that corpus alone) that were previously
-silently lost there too. See the [harness
-README](../internal-docs/planning/dogfood-findings/swift-recall-oracle/README.md#second-corpus-back-669-swift-collections-overfit-guard)
+silently lost there too. See the `internal-docs/planning/dogfood-findings/swift-recall-oracle/README.md`
 for the full write-up.
 
 ¹⁹ C#'s import-recall history (BACK-544 namespace index, BACK-554
@@ -539,8 +531,7 @@ branch of a legacy-condition-first `#if NET20 ... #else ... #endif` (the
 real, modern-default branch) — fixed by counting every branch's body
 unconditionally (matching reveal's own preprocessor-blind, safe-over-
 inclusion parse behavior, the same policy already established for Go's
-`//go:build` tags, BACK-685). See the [harness
-README](../internal-docs/planning/dogfood-findings/csharp-recall-oracle/README.md)
+`//go:build` tags, BACK-685). See the `internal-docs/planning/dogfood-findings/csharp-recall-oracle/README.md`
 for the full write-up.
 
 ²⁰ Overfit guard (BACK-714, child of BACK-708): re-ran the identical
@@ -552,8 +543,7 @@ terminal-emulator tree — full population diffed, not sampled, 215 targets,
 **100.0000%** recall, 0 missed, 0 false positives, no fix needed. 466 of the
 corpus's `@import(...)` calls are named-module aliases (`@import("vsr")`,
 `@import("stdx")`, ...), correctly out of scope per the same design as
-ghostty's excluded `std`/`builtin`/build-graph aliases. See the [harness
-README](../internal-docs/planning/dogfood-findings/zig-recall-oracle/README.md#second-corpus-back-714-overfit-guard-tigerbeetle)
+ghostty's excluded `std`/`builtin`/build-graph aliases. See the `internal-docs/planning/dogfood-findings/zig-recall-oracle/README.md`
 for the full write-up.
 
 ²¹ Overfit guard (BACK-710, child of BACK-708): re-ran the identical
@@ -571,8 +561,7 @@ by direct grep to be genuine `#include` lines in `tests/unit/`, `tests/tunit/`,
 benign scope difference already documented for the Redis oracle (importer
 scope deliberately limited to `lib/`+`src/` production code, while
 `depends://`'s search root legitimately covers the whole corpus). No fix
-needed. See the [harness
-README](../internal-docs/planning/dogfood-findings/c-recall-oracle/README.md#second-corpus-back-710-overfit-guard-curl)
+needed. See the `internal-docs/planning/dogfood-findings/c-recall-oracle/README.md`
 for the full write-up.
 
 ²² Overfit guard (BACK-711, child of BACK-708): re-ran the same
@@ -604,8 +593,7 @@ real git-repo-bounded project would hit). 2 new regression tests
 (`test_lua_bare_single_token_require_prefers_directory_module`,
 `test_lua_bare_single_token_require_prefers_true_sibling_flat_file`), full
 targeted suite (240 tests) green, Kong re-measured unchanged at 99.87%. See
-the [harness
-README](../internal-docs/planning/dogfood-findings/lua-recall-oracle/README.md#second-corpus-back-711-overfit-guard-awesomewm)
+the `internal-docs/planning/dogfood-findings/lua-recall-oracle/README.md`
 for the full write-up.
 
 ²³ Overfit guard (BACK-712, child of BACK-708): re-ran the same
@@ -639,8 +627,7 @@ does — **true recall on the sample is 100%** (real edges). 2 new regression
 tests (`test_dart_package_uri_with_show_combinator_resolves`,
 `test_dart_package_uri_with_deferred_as_combinator_resolves`), full targeted
 suite (242 tests) green, AppFlowy re-measured unchanged at 99.76%. See the
-[harness
-README](../internal-docs/planning/dogfood-findings/dart-recall-oracle/README.md#second-corpus-back-712-overfit-guard-drift)
+`internal-docs/planning/dogfood-findings/dart-recall-oracle/README.md`
 for the full write-up.
 
 ²⁴ Overfit guard (BACK-713, child of BACK-708): re-ran the same
@@ -653,8 +640,7 @@ the `class_name`-based `extends` convention — the dominant edge shape here,
 more so than in the v1 corpus. **100%** recall (63/63), no fix needed: the
 single-project shape confirms the `class_name_convention` resolution fix
 (from the v1 loop) generalizes correctly outside the many-independent-projects
-topology it was built against. See the [harness
-README](../internal-docs/planning/dogfood-findings/gdscript-recall-oracle/README.md#second-corpus-back-713-overfit-guard-pixelorama)
+topology it was built against. See the `internal-docs/planning/dogfood-findings/gdscript-recall-oracle/README.md`
 for the full write-up.
 
 ²⁵ Overfit guard (BACK-715, child of BACK-708): re-ran the same
@@ -671,8 +657,7 @@ targets, 222 edges. **100%** recall (222/222), 0 false positives, 0 misses
 — no fix needed. Confirms the shared resolver (already fixed twice: the
 TypeScript/VS Code loop, then this slice's own BACK-672 extension-omission
 fix) holds up on a monorepo topology and a pure-`.js`-JSX extension mix
-neither prior corpus exercised. See the [harness
-README](../internal-docs/planning/dogfood-findings/js-tsx-recall-oracle/README.md#second-corpus-back-715-overfit-guard-react-router)
+neither prior corpus exercised. See the `internal-docs/planning/dogfood-findings/js-tsx-recall-oracle/README.md`
 for the full write-up.
 
 ²⁶ Overfit guard (BACK-709, child of BACK-708, last of the seven BACK-708
@@ -689,8 +674,7 @@ targets, 707 edges. **100%** recall (707/707), 0 missing — no fix needed.
 from `test/`/`tools/`/`contrib/` files the oracle's importer scope
 deliberately excluded from ground truth, the same oracle-scope-gap shape as
 the v1 corpus's `.mm` false positives, not a resolver defect. See the
-[harness
-README](../internal-docs/planning/dogfood-findings/cpp-recall-oracle/README.md#second-corpus-back-709-overfit-guard-assimp)
+`internal-docs/planning/dogfood-findings/cpp-recall-oracle/README.md`
 for the full write-up.
 
 ²⁷ First side-effect/boundary measurement for C (BACK-718/BACK-721, twelfth
@@ -708,7 +692,7 @@ catastrophic cross-language collision in `classify_call`'s unscoped mode
 `anet*` compound wrapper names were kept. Plain C's lack of receiver/dot
 syntax means there is no way to scope a generic-English-verb pattern any
 narrower than "the whole call" — see
-[sideeffects-recall-oracle/c/C.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/c/C.md)
+`internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/c/C.md`
 for the full write-up.
 
 ²⁸ First side-effect/boundary measurement for Lua (BACK-718/BACK-722,
@@ -735,7 +719,7 @@ POSIX-file-truncation collision in Java/Go/C++); bare `connect`/`request`
 (the C loop's declined POSIX `connect` class, plus `request` would tag
 Kong's own `kong.request.*` incoming-request accessors as outbound HTTP) —
 see
-[sideeffects-recall-oracle/lua/LUA.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/lua/LUA.md)
+`internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/lua/LUA.md`
 for the full write-up.
 
 ²⁹ First side-effect/boundary measurement for Zig (BACK-718/BACK-725,
@@ -773,7 +757,7 @@ pre-existing `_TAXONOMY_COMMON` bare-verb collision (`'header'`→http,
 `'open'`→file) fires on TigerBeetle's own domain accessor/lifecycle
 methods — not fixed (common-scoped, cross-language blast radius, out of
 scope) — see
-[sideeffects-recall-oracle/zig/ZIG.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/zig/ZIG.md)
+`internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/zig/ZIG.md`
 for the full write-up.
 
 ³⁰ First side-effect/boundary measurement for Scala (BACK-718/BACK-720,
@@ -810,7 +794,7 @@ bogus record before being caught via the same outlier-length sanity sweep
 every loop since Zig has run. Closed: `external-git` commit `ea30d2f` landed
 by the orchestrating session after independent re-verification (630
 passed/2 xfailed re-confirmed, docs gate clean, diff reviewed) — see
-[sideeffects-recall-oracle/scala/SCALA.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/scala/SCALA.md)
+`internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/scala/SCALA.md`
 for the full write-up.
 
 ³¹ First side-effect/boundary measurement for Dart (BACK-718/BACK-723,
@@ -827,7 +811,7 @@ constructor calls declined after `check_taxonomy_collisions.py` found 311
 Dart-own-corpus hits (mostly local variables literally named `file`) plus
 11k+/4.9k+/2.9k+ unscoped TypeScript/Java/Go hits — residual `file`-bucket
 miss, not a fix. See
-[sideeffects-recall-oracle/dart/DART.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/dart/DART.md).
+`internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/dart/DART.md`.
 
 ³² First side-effect/boundary measurement for GDScript (BACK-718/BACK-724,
 seventeenth language in the program), Pixelorama's full corpus (3,131
@@ -848,7 +832,7 @@ this corpus, but collision-checking showed thousands of unrelated hits
 Lua for `request`) in every other measured language. `db` recall stays
 honestly 0/0: no SQL/NoSQL client exists in Godot core or GDScript stdlib.
 See
-[sideeffects-recall-oracle/gdscript/GDSCRIPT.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/gdscript/GDSCRIPT.md).
+`internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/gdscript/GDSCRIPT.md`.
 
 ³³ First side-effect/boundary measurement for TSX/plain-JS (BACK-718/BACK-726,
 eighteenth and final language in the breadth program), Excalidraw's
@@ -869,7 +853,7 @@ collision class as Zig/Go's declined bare verbs. `db`/`env`/`file` were an
 honest corpus-*scope* absence for `.tsx`/`.jsx` specifically (this same
 app's `.ts` files already have `process.env`/`fs`/IndexedDB coverage from
 the prior TypeScript loop). See
-[sideeffects-recall-oracle/tsx/TSX.md](../internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/tsx/TSX.md).
+`internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/tsx/TSX.md`.
 
 ³⁴ Python `calls://` pilot (BACK-730), Home Assistant core (213 files), three
 independent query directions on the same corpus: reverse-lookup (`?target=`)
@@ -883,7 +867,7 @@ immediately-invoked calls produce un-normalized raw text); transitive lookup
 (`?target=&depth=2`) 99.98% (9,967/9,969 edges, 20-per-bucket sample),
 ground truth derived by BFS over the depth-1 oracle rather than a fresh AST
 walk — the only miss is BACK-731 cascading one level deeper, not a new root
-cause. See [calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
+cause. See `internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md`.
 ³⁵ TypeScript `calls://` pilot (BACK-730), VS Code's `src/vs/base` (307
 files, reused corpus from the import-recall loop), reverse-lookup only:
 100.00% recall, 0 false positives at both an 8-per-bucket (926 edges) and a
@@ -909,7 +893,7 @@ split (`size_of::<u32>()` misparsed as callee `<u32>`), plus a minor
 parenthesized-callee gap (`(f)(args)` captures `"(f)"` literally) — filed
 and fixed as **BACK-733** the same session; re-measured at **100.00%**
 recall, 0 false positives, matching Go/TS. See
-[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+`internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md`
 ("Fourth language: Rust" section) for the full write-up.
 ³⁸ Java `calls://` pilot (BACK-730), Elasticsearch's `server/src/main/java`
 (4,837 files), reverse-lookup only: first measurement **9.99%** recall
@@ -929,7 +913,7 @@ initially-planned independent-oracle parser) silently fails to parse
 `javalang`'s last update) — escalated to JavaParser (a modern,
 actively-maintained parser) plus a locally-installed JDK 17 rather than
 accept a biased sample. See
-[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+`internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md`
 ("Fifth language: Java" section) for the full write-up.
 ³⁹ Ruby `calls://` pilot (BACK-730), Discourse's `app/`+`lib/` (1,899 files),
 reverse-lookup only: a pre-flight tree-sitter grammar dump (done before
@@ -955,7 +939,7 @@ from source via `rbenv`/`ruby-build` (Discourse's `Gemfile` requires `~>
 3.4`; Ubuntu jammy's only `apt` Ruby package, 3.0.2, failed to parse 9.4%
 of the corpus — modern hash-literal shorthand syntax) rather than accept a
 biased sample, same precedent as Java's JDK/JavaParser escalation. See
-[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+`internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md`
 ("Sixth language: Ruby" section) for the full write-up.
 ⁴⁰ PHP `calls://` pilot (BACK-730), WordPress core's `wp-admin/`+
 `wp-includes/` (1,328 files), reverse-lookup only: a pre-flight tree-sitter
@@ -980,7 +964,7 @@ stripped down to a bare name, so neither ever matched a `?target=` lookup.
 Both fixed same session; re-measured at **100.00%** recall, 0 false
 positives, at both an 8-per-bucket (2,488 edges) and 20-per-bucket (5,585
 edges) sample. See
-[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+`internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md`
 ("Seventh language: PHP" section) for the full write-up.
 ⁴¹ C# `calls://` pilot (BACK-730), Jellyfin (2,098 files), reverse-lookup
 only: unlike Java/Ruby/PHP, a pre-flight tree-sitter grammar dump found no
@@ -1013,7 +997,7 @@ corpus's size, confirmed by testing the same target scoped to a single
 file). Final measurement after all three fixes: **100.00%** recall, 0
 false positives, at both an 8-per-bucket (1,012 edges) and 20-per-bucket
 (2,828 edges) sample. See
-[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+`internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md`
 ("Eighth language: C#" section) for the full write-up.
 ⁴² Kotlin `calls://` pilot (BACK-730), Tivi (629 `.kt` files), reverse-lookup
 only: a pre-flight grammar dump found no missing node kind. First
@@ -1040,7 +1024,7 @@ later fixed via ERROR-node recovery in `kotlin.py` and shipped in
 0.123.0, without waiting on the grammar-pack migration; a second,
 lower-value shape (SAM labeled-return spillage) remains an accepted
 residual. See
-[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+`internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md`
 ("Ninth language: Kotlin" section) for the full write-up.
 ⁴³ Swift `calls://` pilot (BACK-730), Signal-iOS's `SignalServiceKit`
 module (1,190 files), reverse-lookup only: a pre-flight grammar dump
@@ -1072,7 +1056,7 @@ call suffix onto the whole binary expression instead of just the call,
 corrupting the extracted callee text (comparison operators like `==` do
 not exhibit this). Both blocked on the same BACK-573/BACK-620
 grammar-pack ceiling as BACK-738. Filed **BACK-742**, open. See
-[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+`internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md`
 ("Tenth language: Swift" section) for the full write-up.
 
 ⁴⁴ C++ `calls://` pilot (BACK-730), assimp's `code/` subdir (218 `.cpp`/
@@ -1097,7 +1081,7 @@ oracle-incompleteness (the ~40 skipped files), not `calls://` bugs. Two
 narrow residual misses left undiagnosed (~1% of sampled edges, a further
 partial-macro-collapse variant and one unexplained case) — not filed, no
 evidence either is a real `calls://` gap. See
-[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+`internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md`
 ("Eleventh language: C++" section) for the full write-up.
 
 ⁴⁵ Scala `calls://` measurement (BACK-730, twelfth language), GitBucket's
@@ -1127,7 +1111,7 @@ broader bug filed not fixed: `calls://` forward-lookup (`?callees=`) and
 `--rank` apply the Python-builtins filter to *all* languages, silently dropping
 `.map`/`.filter`/`.zip`/`.min`/`.sum` etc. in Scala/Java/Ruby/…; the
 reverse-lookup path this measurement uses is unaffected. See
-[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+`internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md`
 ("Twelfth language: Scala" section) for the full write-up.
 
 ⁴⁶ C `calls://` measurement (BACK-730, fifteenth language), Redis's `src/`
@@ -1162,7 +1146,7 @@ false positives trace to documented, accepted residual classes (2
 unparseable Solaris/BSD-only files, several headers-unavailable feature
 flags, two permanently-`#if 0`-disabled dead-code blocks), none `calls://`
 defects. See
-[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+`internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md`
 ("Fifteenth language: C" section) for the full write-up.
 
 ⁴⁷ Lua `calls://` measurement (BACK-730, sixteenth language), Kong API
@@ -1198,27 +1182,7 @@ expression (`{ [CONTENT_TYPE_POST] = function(...) end }`, a real
 dynamic-dispatch idiom in `pdk/service/request.lua`) — misattributing the
 value function's calls to the key expression's name, not a real function
 name at all; fixed by requiring the identifier be the field's structural
-FIRST child (a literal string key), never one preceded by `[`.
-**100.00%** recall, 0 misses at both 8/bucket (1,422 edges, 11 false
-positives) and 20/bucket (3,549 edges, 23 false positives) — every
-remaining false positive traces to the one excluded unparseable file
-(`router/transform.lua`) or one inherent bare-name-matching limitation (a
-function *parameter* named `fmt` shadowing the corpus-wide `fmt` module
-in `dns/stats.lua` — `calls://` does no scope/binding resolution, so a
-local name shadowing a global is indistinguishable from the real thing;
-not a Lua-specific bug, the same class of limitation as every other
-language's bare-name matching). No cascading attribution (confirmed
-empirically before writing the oracle, unlike Zig/JS-TS): Lua's
-`function_declaration`/`function_definition` are both ordinary
-`FUNCTION_NODE_TYPES` members, so the shared complexity/calls walk stops
-at every nested function boundary the same as Go/Rust. Also confirmed via
-a real-CLI dogfood detour: the installed `reveal_cli` site-packages
-copy (0.107.1) is stale relative to `external-git` and gets silently
-picked up instead of it whenever the CLI runs from a directory outside
-`external-git` with no `PYTHONPATH` set — cost real debugging time before
-being traced to `sys.path` ordering, not a new Lua-specific bug, but
-worth flagging again for the next language's session. See
-[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+FIRST child (a literal string key), never one preceded by ``internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md`
 ("Sixteenth language: Lua" section) for the full write-up.
 
 ⁴⁸ GDScript `calls://` measurement (BACK-730, seventeenth language),
@@ -1284,7 +1248,7 @@ straight through to the nearest enclosing named function, the identical
 anonymous-function-value precedent, not a bug (a pre-flight corpus grep
 found 0 named-lambda-variable occurrences in this exact corpus, so
 low-stakes here regardless). See
-[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+`internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md`
 ("Seventeenth language: GDScript" section) for the full write-up.
 
 ⁴⁹ Dart `calls://` measurement (BACK-730, eighteenth and FINAL language),
@@ -1350,7 +1314,7 @@ library-prefixed plain type without semantic info) — the oracle's first
 draft used the unstripped dotted type text as ground truth, manufacturing
 191 false positives against `calls://`'s own (correct) bare-last-segment
 name; fixed oracle-side by taking the final dotted segment. See
-[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md)
+`internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md`
 ("Eighteenth language: Dart" section) for the full write-up. This was the
 LAST of the 18 `VALIDATION.md`-tracked languages — the full calls://
 recall sweep BACK-730 opened is now complete.
@@ -1416,11 +1380,11 @@ actually closes the gap without introducing false positives.
 | C# | Jellyfin, Godot C# glue | Real-corpus grep (idiom itself was fixture-only — absent from both corpora) | Fixture + incidental real-corpus hit | N/A for the target idiom | — | Investigating the (absent) target idiom surfaced that namespace fan-out was never wired into the dependency graph at all for zero-import files |
 | C# (BACK-669, missing baseline) | Jellyfin (`samples/csharp`, 2,098 files, large multi-project ASP.NET media-server monorepo) | Independent namespace/type oracle (`build_oracle.py`) — C# `using`/`using static`/alias resolved via a from-scratch regex namespace-declaration index and (namespace, type) index, never calling `depends://`'s own resolver | Full population, 1,754 targets, 99,654 edges | 99.9970% → **100.00%** (BACK-702 fixed) | 0 | `using Alias = Foo.Bar.Type;` (87/96 real alias statements) and `using static Foo.Bar.Type;` name a specific TYPE one dotted component past any namespace the tree declares — the namespace fan-out index never matches, and the directory-suffix match only succeeds when the physical layout mirrors the namespace and the type's basename is tree-wide unique; Jellyfin's per-project top-level dirs (`MediaBrowser.Controller`, a literal `.` in one path component) and a same-named `LinkedChildType` type in two different namespaces broke both. Fixed via a new `namespaced_type_fallback` spec flag reusing the existing Kotlin/Scala `member_index`/`resolve_member_targets` machinery, keyed `(namespace, type_name)` |
 | C# (overfit guard, BACK-669) | Newtonsoft.Json (single-project library, 945 files, heavy `#if`/`#else` multi-target-framework conditional compilation — 528/945 files, vs. 0/2,098 in Jellyfin) | Same oracle mechanism, unmodified resolution logic | Full population, 793 targets, 48,400 edges | **99.3636%** (0 new resolver bugs — same BACK-702 fix from the baseline slice, re-confirmed) | 0 | The one residual (308/308 misses, all on one target) is a genuine tree-sitter-c-sharp grammar limitation, not a resolver gap — `TestFixtureBase.cs` shares one method BODY between a `#if DNXCORE50` constructor header and an `#else` regular-method header, which the preprocessor-blind grammar can't parse into any declaration node, producing an `ERROR` node that swallows the file's whole namespace body; correctly honest-decline caveated (`confidence: reduced`), not a silent wrong zero. Filed **BACK-703**, not fixed (4/945 files affected, narrow and documented, same class as Go's build-tag blindness, BACK-685). Also found and fixed an oracle-only bug (not `depends://`): the oracle's original #if-branch-selection heuristic (keep only the `#if` branch) silently dropped 37 real edges sitting in a legacy-condition-first `#if NET20 ... #else ...` block's `#else` (the real modern-default branch) — fixed by counting every branch unconditionally, matching reveal's own preprocessor-blind parse behavior |
-| PHP | WordPress core (`samples/php`, 1,927 files) | Buildless `require`/`require_once`/`include`/`include_once` string-expression resolver (not `use`/namespace — see [harness README](../internal-docs/planning/dogfood-findings/php-recall-oracle/README.md) for why) | 80-target stratified sample, 442 edges | 0.00% → 33.85% (BACK-564) → **100.00%** (BACK-565) | 0 | `depends://`'s PHP resolver only recognized a bare string-literal require/include target; every real WordPress require/include uses string concatenation (`__DIR__ . 'x.php'`, `ABSPATH . WPINC . 'x.php'`, etc. — confirmed 0 bare-literal requires exist anywhere in the corpus). BACK-564 resolved the universal `__DIR__`/`dirname(__FILE__)` directory-relative idiom via a structural AST-walk extractor. BACK-565 (same session) closed the remaining majority: WordPress-specific framework-bootstrap constants (`ABSPATH`/`WPINC`/`WP_CONTENT_DIR`/`WP_PLUGIN_DIR`) are genuinely derivable — WordPress defines them in-tree via `define('ABSPATH', __DIR__ . '/')` and similar — so a project-wide constant index (built to a fixed point, since real constants chain through each other) now substitutes them into the same concatenation resolver. Constants with genuinely ambiguous `define()` values (measured: 3/50) are excluded from the index, never guessed |
+| PHP | WordPress core (`samples/php`, 1,927 files) | Buildless `require`/`require_once`/`include`/`include_once` string-expression resolver (not `use`/namespace — see `internal-docs/planning/dogfood-findings/php-recall-oracle/README.md` for why) | 80-target stratified sample, 442 edges | 0.00% → 33.85% (BACK-564) → **100.00%** (BACK-565) | 0 | `depends://`'s PHP resolver only recognized a bare string-literal require/include target; every real WordPress require/include uses string concatenation (`__DIR__ . 'x.php'`, `ABSPATH . WPINC . 'x.php'`, etc. — confirmed 0 bare-literal requires exist anywhere in the corpus). BACK-564 resolved the universal `__DIR__`/`dirname(__FILE__)` directory-relative idiom via a structural AST-walk extractor. BACK-565 (same session) closed the remaining majority: WordPress-specific framework-bootstrap constants (`ABSPATH`/`WPINC`/`WP_CONTENT_DIR`/`WP_PLUGIN_DIR`) are genuinely derivable — WordPress defines them in-tree via `define('ABSPATH', __DIR__ . '/')` and similar — so a project-wide constant index (built to a fixed point, since real constants chain through each other) now substitutes them into the same concatenation resolver. Constants with genuinely ambiguous `define()` values (measured: 3/50) are excluded from the index, never guessed |
 | PHP (overfit guard, BACK-669) | osCommerce (`catalog/`, 436 files) | Same require/include oracle mechanism, adapted for one corpus-specific bootstrap constant (`OSCOM_BASE_DIR`) | Full population (small corpus), 74 targets, 288 edges | 0.00% → **74.65%** (BACK-680 fixed; BACK-681 residual filed, not fixed) | 0 | The dominant real-world statement shape here — parenthesized call-style (`require('includes/foo.php');`, 534/544 statements, vs. only 10/1,521 on WordPress) — broke both the concatenation AST-walk (only checked direct children, missing a target nested inside `parenthesized_expression`) and the bare-literal `_build()` fallback (space-splitting tokenizer never matches the fused `require('...')` token). Fixed by handling the parenthesized wrapper and bare string-literal targets structurally. Residual 73/288 edges trace to explicit `chdir()`/CWD-dependent bare-literal resolution in 6 legacy extension scripts — real PHP runtime behavior a generic per-file resolver correctly declines to chase (would need actual chdir-call symbolic tracking, and a naive ancestor-directory-walk risks false positives in other codebases) — filed as BACK-681 |
 | Swift | Kickstarter iOS (`samples/swift`, 1,961 files, 8 SwiftPM packages) | `swift package dump-package` (real toolchain, target list) + independent per-file import parse | Full-tree; 21 declared targets, 164-edge precision sample | ~0% effective (123 edges / 7 dependent files) → **100% of declared targets resolved** (384,278 edges / 1,511 dependent files) | 0 (164-edge sample, none unbacked) | Swift's import granularity is the *module (SwiftPM target)*, not the file, but the resolver only matched `import Foo` → a unique `Foo.swift` — resolving ~0% of real multi-file targets, AND (worse) leaving `unresolved_intra` at 0 so no honest-decline `⚠` fired: a silent wrong "no dependents". Fixed in two buildless parts: (1) `Sources/<Target>/` directory-convention fan-out (`import Foo` → every file in target Foo, C#-namespace-style); (2) a structural `Package.swift` parse for targets that relocate sources via an explicit `path:` (real GraphAPI `path: "./Sources"`, 326 importers). The independent `dump-package` oracle caught the custom-`path:` case the directory convention alone would have silently mis-mapped |
 | Swift (overfit guard, BACK-669) | swift-collections (pure SwiftPM library, 696 files, 25 targets) | `swift package dump-package` (target→path ground truth) + independent regex import scan (`build_oracle.py`), from scratch | Full population, not sampled — 14,824 edges | 88.57% → **98.42%** (BACK-704 fixed; residual 234/234 = one target, honestly declined) | 0 | Two real gaps this pure-library, no-app corpus exercised that Kickstarter's app never did: (1) `_RopeModule`'s target is declared through a *programmatically built* `targets:` array (`.map { $0.toTarget() }`), whose custom `directory:` relocation argument names a dir that doesn't match the target's own sanitized identifier — unresolvable without evaluating arbitrary manifest code, but pre-fix also *silent* (no honest-decline warning); fixed the silence, not the resolution, via a new `extract_manifest_target_names` broader name-only scan feeding `is_intra_project_import`'s inventory; (2, the bigger effect) `@testable import Foo` / stacked `@_spi(Testing) @testable import Foo` — a common test-file idiom — wasn't recognized at all: the keyword-stripping tokenizer only pops a fixed keyword set, and an attribute's argument varies so it can't be one; the un-stripped attribute text became the whole garbage `module_name`. Fixed via a new `strip_attribute_prefix` spec flag. Re-run against Kickstarter: still 100%/0 unresolved, and total resolved edges rose 384,278 → 660,716 (recovers real `@testable import` edges silently lost there too) |
-| Lua | Kong (`samples/lua`, 1,309 `.lua` files) | Project's own `kong-latest.rockspec` `build.modules` table (authoritative dotted-module → file map) + independent regex `require(...)` scan | 30-target stratified sample (fan-in buckets 1 / 2-5 / 6-20 / 21-50 / 50+), 782 edges | 85.4% → 99.5% → **99.87%** | 0 | `require("a.b.c")` may name a *directory* module (`a/b/c/init.lua`, Lua's `package.path` `?/init.lua` convention) with no flat `a/b/c.lua` file at all — `_match_dotted` only ever tried appending an extension to the last dotted component, so every directory-module require silently resolved to `None`. Hit 5 real Kong targets (`kong.conf_loader`, `kong.db.declarative`, `kong.vaults.env`, `kong.dynamic_hook`, `kong.plugins.rate-limiting.policies`), each returning a confident "no dependents" despite 2-35 real importers. Fixed via a new opt-in `directory_index_filenames` spec field. Two residuals found on the same sample, both fixed in a same-program follow-up (BACK-670, which incidentally also closed BACK-671): `_longest_unique_suffix`'s bare-basename (`k=1`) fallback — shared by every `module_separator` language (Java/Kotlin/Scala/C#/PHP/Swift/Lua) — wrongly matched multi-part imports whose real qualifying prefix had already failed to match (29 false positives, e.g. external `resty.*` modules landing on same-basename in-tree `kong.tools.*` files); gated to true single-token imports only, re-measured at 99.87% with 0 new false positives, and Java/PHP/Scala re-confirmed at 100%/Kotlin at its unaffected 99.14% baseline — see [harness README](../internal-docs/planning/dogfood-findings/lua-recall-oracle/README.md) |
+| Lua | Kong (`samples/lua`, 1,309 `.lua` files) | Project's own `kong-latest.rockspec` `build.modules` table (authoritative dotted-module → file map) + independent regex `require(...)` scan | 30-target stratified sample (fan-in buckets 1 / 2-5 / 6-20 / 21-50 / 50+), 782 edges | 85.4% → 99.5% → **99.87%** | 0 | `require("a.b.c")` may name a *directory* module (`a/b/c/init.lua`, Lua's `package.path` `?/init.lua` convention) with no flat `a/b/c.lua` file at all — `_match_dotted` only ever tried appending an extension to the last dotted component, so every directory-module require silently resolved to `None`. Hit 5 real Kong targets (`kong.conf_loader`, `kong.db.declarative`, `kong.vaults.env`, `kong.dynamic_hook`, `kong.plugins.rate-limiting.policies`), each returning a confident "no dependents" despite 2-35 real importers. Fixed via a new opt-in `directory_index_filenames` spec field. Two residuals found on the same sample, both fixed in a same-program follow-up (BACK-670, which incidentally also closed BACK-671): `_longest_unique_suffix`'s bare-basename (`k=1`) fallback — shared by every `module_separator` language (Java/Kotlin/Scala/C#/PHP/Swift/Lua) — wrongly matched multi-part imports whose real qualifying prefix had already failed to match (29 false positives, e.g. external `resty.*` modules landing on same-basename in-tree `kong.tools.*` files); gated to true single-token imports only, re-measured at 99.87% with 0 new false positives, and Java/PHP/Scala re-confirmed at 100%/Kotlin at its unaffected 99.14% baseline — see `internal-docs/planning/dogfood-findings/lua-recall-oracle/README.md` |
 | Lua (overfit guard, BACK-711) | AwesomeWM (window manager, 882 files, no rockspec/build manifest at all — forces pure directory-convention resolution vs. Kong's rockspec-backed lookup) | Same independent-regex oracle mechanism, re-run on a second corpus | Full population, 170 targets, 2,552 edges | 0% → **99.33%** | 2 (documented, out-of-scope test shims) | A bare single-token `require("wibox")` (393 call sites) silently resolved onto an unrelated same-basename flat file (`lib/awful/wibox.lua`) instead of the real directory module (`lib/wibox/init.lua`, which showed 0 dependents) — the k=1 global-basename-uniqueness fallback had no structural relationship to the import site. Fixed by trying the directory-index candidate first for single-token imports, falling back to a flat file only when it is a *true sibling* of that directory. Residual 17 misses are genuine structural ambiguity (AwesomeWM's `tests/examples/{text,shims}/` trees literally mirror `lib/`'s module paths) that a suffix-based resolver correctly declines rather than guesses on |
 | Dart | AppFlowy (`samples/dart/frontend/appflowy_flutter`, 1,974 `.dart` files, 14 in-tree packages) | Every in-tree `pubspec.yaml`'s declared `name:` → its own `lib/` (authoritative name→dir map) + independent regex `import '...'` scan | 30-target stratified sample (fan-in buckets 1 / 2-5 / 6-20 / 21-50 / 50+), 825 edges | 19.3% → **99.76%** (100% real — see below) | 0 | `package:<name>/x.dart` — the dominant real-world Dart import shape (5,989 of 6,290 in-tree imports in the sample corpus, vs. 301 relative imports) — had no resolution branch at all: it contains `/` and matched `_looks_like_path` before any separator logic ran, so it was always tried (and failed) as a literal file-relative path. Every `package:` self- and cross-package import in the corpus silently resolved to `None`. Fixed with a new opt-in `package_uri_scheme`/`package_manifest_filename`/`package_manifest_lib_dirname` spec triple: builds a project-wide package-name→`lib/` index from every in-tree `pubspec.yaml` (cached per scan on the shared `file_index`), the same authoritative-manifest role Lua's rockspec and Swift's `Package.swift` played. The 2 residual sampled misses were both oracle false positives — a code-generation script's `writeln('''...''')` embeds literal `import '...'` text inside a Dart template string, which tree-sitter correctly never parses as a real import (same class as Lua's `nginx_kong.lua` false positive) — so true recall on the sample is 100% (823/823 real edges) |
 | Dart (overfit guard, BACK-712) | drift (SQL code-generation package, 1,171 files, 32 in-tree pubspec packages under one melos workspace, vs. AppFlowy's 14 under a single Flutter app) | Same pubspec-manifest oracle mechanism, re-run on a second corpus | 30-target stratified sample, 1,039 edges | 91.24% → **96.63%** (100% of real edges) | 0 | A `show`/`hide`/`deferred as` combinator clause trailing the quoted URI (`import 'package:drift/drift.dart' show OpeningDetails;`) was never stripped before quote extraction, so `module_name` became literal garbage that still dispatched into `_resolve_package_uri` and silently returned `None` — 88 of 91 misses landed on drift's own barrel file. Fixed with a new opt-in `combinator_clause` spec flag truncating the remainder at its closing quote. The residual 35 misses are all oracle false positives (`TestBackend.inTest({...})` fixtures embedding literal `import` text inside Dart string literals), so true recall on the sample is 100% |
@@ -1430,9 +1394,9 @@ actually closes the gap without introducing false positives.
 | Zig (overfit guard, BACK-714) | TigerBeetle (distributed database, mostly-flat `src/`, 245 files) | Same oracle, unmodified, re-run on a second corpus | Full population (small corpus), 215 targets, 836 edges | **100.0000%** (no fix needed) | 0 | None — full-population diff confirmed 100% recall immediately, same clean outcome as the ghostty baseline. 466 named-module aliases (`@import("vsr")`, `@import("stdx")`, ...) correctly excluded, same scope decision as ghostty's |
 | TSX, plain JS | three.js (`samples/javascript`, 1,622 `.js` files) + Excalidraw (`samples/tsx/excalidraw`, 635 `.ts`/`.tsx` files) | Independent regex scan for static/dynamic `import`, `export ... from`, and `require(...)` (comment-stripped, string-aware), true filesystem-based extension/index resolution (not a port of `resolve_import`'s own heuristic — see Finding) | 2 stratified samples, one per corpus (fan-in buckets 1 / 2-5 / 6-20 / 21-50 / 50+): `.js` 30 targets/777 edges, `.tsx` 29 targets/745 edges | `.js` 100% (no gap); `.tsx` 98.79% → **100%** | 0 | `.js`/`.jsx`/`.ts`/`.tsx`/`.mjs` share one resolver function (`_resolve_relative_js`) — a dotted basename with the extension omitted (`./charts.constants` → `charts.constants.ts`, `./WelcomeScreen.Center` → `.tsx`, `./subset-shared.chunk` → `.ts`) was misjudged by the `has_extension` gate (only checks whether the last path segment contains *any* dot) as already having a real extension, so it tried only the literal path plus the narrow `.js/.jsx/.mjs` TS-ESM fallback map, then returned `None` instead of falling through to the plain extension-append/directory-index resolution used for genuinely extensionless specifiers (BACK-672) |
 | TSX, plain JS (overfit guard, BACK-715) | react-router v5.3.4 (5-package lerna-style monorepo, 180 `.js` files, pure JSX-in-`.js` with no `.jsx` extension at all, vs. three.js's single-package plain `.js` and Excalidraw's `.ts`/`.tsx`) | Same relative-import oracle mechanism, re-run on a third corpus | Full census (small population), 112 targets, 222 edges | **100%** (no fix needed) | 0 | None — confirms the shared `_resolve_relative_js` resolver (already fixed twice: the VS Code loop, then this slice's own BACK-672) holds on a monorepo topology and a pure-`.js`-JSX extension mix neither prior corpus exercised. Cross-package bare specifiers (`react-router-dom` importing `"react-router"`) are correctly out of scope for a relative-import oracle |
-| C | Redis (`samples/c`, `src/`+`modules/`+`tests/modules/`+`utils/`, 275 files) | Real preprocessor, per-directive: `gcc -H -fsyntax-only -iquote <including-file's-dir>` resolves each quoted `#include "..."` in isolation (real header search, not a re-derivation of reveal's own) | 30-target stratified sample (fan-in buckets high/mid/low), 310 edges | **100%** (no baseline gap) | 0 real (2 apparent — see below) | No bug found — `_resolve_include`'s sibling-then-search-path resolution was already correct across every fan-in bucket sampled. Graduated from BACK-611's earlier grep spot-check to this full oracle loop; the loop's *own* first draft (whole-file `gcc -H`, reading the transitive tree) had a self-inflicted undercount bug from gcc's include-guard optimization skipping already-satisfied headers — caught before it could report a false gap, see [harness README](../internal-docs/planning/dogfood-findings/c-recall-oracle/README.md). The 2 apparent false positives are `deps/`-tree (vendored third-party) files `depends://` correctly resolves but this oracle deliberately doesn't scan as importers |
+| C | Redis (`samples/c`, `src/`+`modules/`+`tests/modules/`+`utils/`, 275 files) | Real preprocessor, per-directive: `gcc -H -fsyntax-only -iquote <including-file's-dir>` resolves each quoted `#include "..."` in isolation (real header search, not a re-derivation of reveal's own) | 30-target stratified sample (fan-in buckets high/mid/low), 310 edges | **100%** (no baseline gap) | 0 real (2 apparent — see below) | No bug found — `_resolve_include`'s sibling-then-search-path resolution was already correct across every fan-in bucket sampled. Graduated from BACK-611's earlier grep spot-check to this full oracle loop; the loop's *own* first draft (whole-file `gcc -H`, reading the transitive tree) had a self-inflicted undercount bug from gcc's include-guard optimization skipping already-satisfied headers — caught before it could report a false gap, see `internal-docs/planning/dogfood-findings/c-recall-oracle/README.md`. The 2 apparent false positives are `deps/`-tree (vendored third-party) files `depends://` correctly resolves but this oracle deliberately doesn't scan as importers |
 | C (overfit guard, BACK-710) | curl (client-side networking library, 468 files — flatter `lib/`+`src/` layout with `lib/vauth`/`lib/vquic`/`lib/vtls` subdirs and heavy cross-directory and parent-relative includes, vs. Redis's mostly-flat `src/`) | Same per-directive isolated `gcc -H` oracle, unmodified | Full population, 232 targets, 2,330 edges | **100.0000%** (no fix needed) | 173 (documented, oracle-scope) | None — all 173 apparent FPs confirmed by direct grep to be genuine `#include` lines in `tests/unit/`, `tests/libtest/`, `tests/server/` and `projects/OS400/` files, outside the oracle's deliberately production-only importer scope but correctly found by `depends://` |
-| C++ | Godot (`samples/cpp`, `core/`+`scene/`+`servers/`+`drivers/`+`platform/`, 2,830 files) | Same method as C, per-directive `g++ -H -fsyntax-only -std=c++17` isolation | 30-target stratified sample (fan-in buckets high/mid/low), core/-rooted, 450 edges | 33.11% → 99.56% → **100.00%** | 3 (BACK-664, BACK-675, BACK-676) | `CppImportExtractor.extensions` omits `.h` (owned by `CImportExtractor` alone); `depends://`'s single-file scan-scoping (BACK-525 layer 4) narrowed a `.h` target's parse corpus to `{.c, .h}`, dropping every `.cpp` importer of its own header (BACK-675). Fixed by widening to the C/C++ family union when the target is either language. The first raw measurement (33.11%) was mostly a corpus-size confound, not this bug — `root=samples/cpp` (~14,000 files) tripped `depends://`'s BACK-524 5,000-file scan cap; re-measuring against a bounded, rsync'd sub-corpus (same precedent java/python-recall-oracle already set) isolated the real gap. Residual: 2/450 edges (`core/math/bvh_tree.h`'s own `.inc` fragment includes, sitting inside a template class body) traced to a separate bug — a `#include` inside a class body isn't valid top-level-context grammar, so tree-sitter degrades it to a generic `preproc_call` fallback node the extractor never scanned (BACK-676); fixed by scanning that node type too, filtered to the `#include` directive only. Same loop also found `CppImportExtractor.extensions` never claimed `.hh` (already C++ structurally) or `.mm` (Obj-C++, parses with the `objc` tree-sitter grammar but emits identical `preproc_include`/`preproc_call` nodes, verified empirically) — silently zero import resolution for either extension (BACK-664; Godot corpus: 258 `.hh` + 59 `.mm` files affected). Re-measured after both fixes: 100.00% recall, 0 missing edges on the same 450-edge sample; 24 new true-positive `.mm` importer edges surfaced (spot-checked genuine) register as this oracle's own false positives only because `build_oracle.py`'s ground-truth builder never scanned `.mm` as an importer candidate — a pre-existing oracle scope gap, not a defect. See [harness README](../internal-docs/planning/dogfood-findings/cpp-recall-oracle/README.md) |
+| C++ | Godot (`samples/cpp`, `core/`+`scene/`+`servers/`+`drivers/`+`platform/`, 2,830 files) | Same method as C, per-directive `g++ -H -fsyntax-only -std=c++17` isolation | 30-target stratified sample (fan-in buckets high/mid/low), core/-rooted, 450 edges | 33.11% → 99.56% → **100.00%** | 3 (BACK-664, BACK-675, BACK-676) | `CppImportExtractor.extensions` omits `.h` (owned by `CImportExtractor` alone); `depends://`'s single-file scan-scoping (BACK-525 layer 4) narrowed a `.h` target's parse corpus to `{.c, .h}`, dropping every `.cpp` importer of its own header (BACK-675). Fixed by widening to the C/C++ family union when the target is either language. The first raw measurement (33.11%) was mostly a corpus-size confound, not this bug — `root=samples/cpp` (~14,000 files) tripped `depends://`'s BACK-524 5,000-file scan cap; re-measuring against a bounded, rsync'd sub-corpus (same precedent java/python-recall-oracle already set) isolated the real gap. Residual: 2/450 edges (`core/math/bvh_tree.h`'s own `.inc` fragment includes, sitting inside a template class body) traced to a separate bug — a `#include` inside a class body isn't valid top-level-context grammar, so tree-sitter degrades it to a generic `preproc_call` fallback node the extractor never scanned (BACK-676); fixed by scanning that node type too, filtered to the `#include` directive only. Same loop also found `CppImportExtractor.extensions` never claimed `.hh` (already C++ structurally) or `.mm` (Obj-C++, parses with the `objc` tree-sitter grammar but emits identical `preproc_include`/`preproc_call` nodes, verified empirically) — silently zero import resolution for either extension (BACK-664; Godot corpus: 258 `.hh` + 59 `.mm` files affected). Re-measured after both fixes: 100.00% recall, 0 missing edges on the same 450-edge sample; 24 new true-positive `.mm` importer edges surfaced (spot-checked genuine) register as this oracle's own false positives only because `build_oracle.py`'s ground-truth builder never scanned `.mm` as an importer candidate — a pre-existing oracle scope gap, not a defect. See `internal-docs/planning/dogfood-findings/cpp-recall-oracle/README.md` |
 | C++ (overfit guard, BACK-709) | assimp (Open Asset Import Library — plugin/format-importer architecture, `code/AssetLib/<Format>/`, with relative parent-directory quoted includes, vs. Godot's flat engine-core monolith and root-relative `-iquote` convention) | Same per-directive isolated `g++ -H` oracle, unmodified | Full census, 250 targets, 707 edges | **100%** (no fix needed) | 50 (documented, oracle-scope) | None — still `.h`-dominant (728 `.h` vs 23 `.hpp`), re-exercising the BACK-675 extractor-family-scoping fix under a different directory shape. All 50 FPs spot-checked genuine: real `#include` edges from `test/`/`tools/`/`contrib/` files the oracle's importer scope deliberately excluded from ground truth |
 
 **Re-measured 2026-09-23 at `881ebd78` (BACK-1458) and 2026-09-24 at `8200a93b`
@@ -1698,7 +1662,7 @@ re-measured.
 | C++ | Godot | 24.4% → **83.3%** | Macro-hidden effects and per-category taxonomy gaps |
 | TypeScript | VS Code (65,008 functions) | 75.6% → **76.8%** (91.3% ex-`env`) | `process.env.X` env reads are a property access, not a call — invisible to the call-only classifier; closed by a dedicated property-access channel (BACK-644) |
 | Kotlin | tivi (full tree, six-category sweep, BACK-727) | 82.5% → **92.9%** | http-client-construction (`HttpClientFactory.create`/`OkHttpClient.Builder`), `BuildConfig.X` env property reads (BACK-644-shaped), coroutine `delay()` sleep idiom, and two oracle-side bugs (unmasked `//` comments, excluded expression bodies); remaining misses are declined bare `File(`/`client.get` (catastrophic cross-language collision) |
-| Swift | Kickstarter iOS (full tree, six-category sweep, BACK-728) | 43.3% → **100.0%** | Security-framework Keychain wrapper + `UserDefaults` local storage (db), `FileManager.default.moveItem` (file), `Bundle.main.infoDictionary` env read, Firebase Crashlytics factory call (log, avoiding a collision-prone bare `record` verb), GCD `DispatchQueue.asyncAfter` (sleep), `URLSession.downloadTask` (http) — see [SWIFT.md](internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/swift/SWIFT.md) |
+| Swift | Kickstarter iOS (full tree, six-category sweep, BACK-728) | 43.3% → **100.0%** | Security-framework Keychain wrapper + `UserDefaults` local storage (db), `FileManager.default.moveItem` (file), `Bundle.main.infoDictionary` env read, Firebase Crashlytics factory call (log, avoiding a collision-prone bare `record` verb), GCD `DispatchQueue.asyncAfter` (sleep), `URLSession.downloadTask` (http) — see `internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/swift/SWIFT.md` |
 
 **Re-measured 2026-09-24 (BACK-1463), each loop at its published sample:** 14 of 18
 reproduce exactly. Four measure higher on the identical sample, from fixes made after
@@ -1763,44 +1727,7 @@ reverse-lookup (`?target=`, "who calls this"), forward-lookup (`?callees=`,
 
 | C | Redis `src/` (125 `.c` + 83 `.h`, `deps/`/`curl/`/`modules/`/`src/modules/`/`tests/` excluded) | reverse | 89.52% → **100.00%** (both 8/bucket 1,196 edges and 20/bucket 2,826 edges) | 433 (pre-fix, 8/bucket) → 17/33 (post-fix) | No new `calls://` extraction bugs found — every real fix landed in the libclang oracle, adapted from the C++ oracle. Two general oracle-side bugs new to this program: byte-offset-vs-char-offset slicing of `cursor.extent` (silently wrong on any file with a non-ASCII byte, e.g. one curly-apostrophe comment corrupted ~6 targets' extraction), and a macro-vararg-nested call (`serverLog(level, fmt, ..., strerror(errno))`) losing ALL position info under macro re-expansion (`cursor.extent` collapses to zero-width) — a `cursor.spelling` fallback was added, guarded to require ≥1 real argument so it doesn't also fabricate calls from object-like macro constants like `HUGE_VAL`. The dominant false-positive source (433 at first run) was Redis's extensive `#ifdef`-gated optional-feature/self-test code — `calls://` (never preprocessing) sees every branch unconditionally where libclang can only compile one; fixed by building the oracle with a maximal "every optional feature on" flag set. One real, narrow tree-sitter-c grammar bug found and filed as **BACK-756** (open, not fixed, same class as Kotlin's BACK-738/Swift's BACK-742/C++'s BACK-745): a multi-line macro definition in `ziplist.c` desyncs the parser into ERROR-recovery, dropping the following function from `get_structure()` entirely. Remaining false positives all trace to documented, accepted residual classes (2 unparseable Solaris/BSD-only files, several headers-unavailable feature flags, two permanently-`#if 0`-disabled dead-code blocks), none `calls://` defects |
 
-| Lua | Kong API gateway's `kong/` package dir (605 `.lua` files, 604 parsed clean — 1 excluded, a LuaJIT-only `0x01ULL` 64-bit-integer literal no standard-Lua parser recognizes) | reverse | **100.00%** (both 8/bucket 1,422 edges and 20/bucket 3,549 edges) | 11 (8/bucket) / 23 (20/bucket), all traced to documented residuals, none `calls://` defects. At HEAD (rebuilt oracle, BACK-1314): recall 100.00% (3,507/3,507), 32 false positives | Two real, distinct `calls://` bugs found via pre-flight AND fixed: **BACK-757** — `_bare_callee_name` split only on `->`/`.`/`::`, never a lone Lua `:` (`db:init_connector()`, Lua's DOMINANT OOP method-call idiom), so every colon-method call's bare callee stayed the full `"receiver:method"` string and never matched a bare `?target=method` lookup — the single highest real-world-impact gap this session, same bug class as Rust's turbofish/PHP's namespace-prefix/C#'s generic-suffix normalization misses. **BACK-758** — `name = function(...) end` / `tbl.k = function(...) end` (module-table method idiom) / `{ key = function(...) end }` (table-constructor field, Lua's metatable-dispatch/event-handler-table idiom) were ALL entirely invisible to `get_structure()`/`--outline` — not just their calls, the whole scope — found via a real Kong corpus grep (643 occurrences of `= function(` across 176 files); fixed by adding Lua-specific scope extraction (mirroring JS/TS's `_arrow_or_fn_value` precedent for a value that carries no name of its own). Fixing BACK-758 surfaced its own false-positive bug in the same session (not filed separately, fixed pre-measurement): the table-constructor-field extraction naively took "the first identifier child" of a `field` node, which also matches a COMPUTED key's bracketed expression (`{ [CONTENT_TYPE_POST] = function(...) end }`, a dynamic-dispatch idiom) — misattributing the value function's calls to the key expression's name; fixed by requiring the identifier be the field's structural first child (a literal string key), not preceded by `[`. All remaining false positives trace to the one excluded unparseable file (`router/transform.lua`) plus one inherent bare-name-matching limitation (a function parameter named `fmt` shadowing the corpus-wide `fmt` module in `dns/stats.lua`, not a Lua-specific bug). No cascading attribution (confirmed empirically, unlike Zig/JS-TS): Lua's `function_declaration`/`function_definition` are ordinary `FUNCTION_NODE_TYPES` members, so the shared complexity/calls walk stops at every nested function boundary |
-
-| GDScript | Pixelorama (pixel-art editor), `samples/gdscript_pixelorama/` (247 `.gd` files, one coherent Godot project — 246 parsed clean; 1 excluded, see below) | reverse | **100.00%** (both 8/bucket 1,099 edges and 20/bucket 2,678 edges) | 6 (8/bucket) / 18 (20/bucket), all traced to the one excluded file, none `calls://` defects | One real, dominant `calls://` bug found via pre-flight AND fixed: **BACK-759** — `self.foo()`/`obj.method()`/`Class.static()`/`ClassName.new()` (GDScript has no `new` keyword; `.new()` IS the constructor-call idiom) and every segment of a chained call (`a.b().c()`) parse to `attribute_call`, a node kind entirely absent from `CALL_NODE_TYPES` — the single most common GDScript call idiom (any `self.`-qualified call, and every object instantiation) was silently invisible to `calls://`. Unlike Java/Ruby/PHP's dotted-call node kinds, the receiver here is not a field/child of the call node at all — it's a preceding SIBLING inside the enclosing `attribute` node's flat `(receiver, '.', segment, '.', segment, ...)` child list — so the fix reconstructs the qualified name from a raw source-text span rather than a field lookup. Fixing this also required guarding `nav_calls.py`'s `range_calls` (the `ast://`/`--calls`/`--sideeffects`/`--boundary` path) against double-counting: it already special-cased this exact flat chain (`_extract_gdscript_attribute_calls`, added earlier under BACK-431) to reconstruct the FULL qualified callee, so once `attribute_call` became a `CALL_NODE_TYPES` member the generic per-node walk started ALSO matching it directly and emitting a second, wrongly-bare duplicate entry — caught by an existing regression test, fixed by excluding `attribute_call` from that generic check. One file, `ExportDialog.gd`, is excluded from the oracle: it contains a bare call to a function literally named `export` (`func export() -> void: ...` / `export()`), which this oracle's npm `tree-sitter-gdscript` (6.1.0) build parses as a grammar `ERROR` — `export` is treated as reserved even in plain call position — while reveal's own bundled `tree_sitter_language_pack` (1.8.1) build of the SAME upstream grammar parses the identical file with zero errors and correctly extracts the call (confirmed directly against `GDScriptAnalyzer`). A genuine grammar-BUILD skew between two independently vendored copies of the same grammar, running in the OPPOSITE direction of every prior residual in this program (the tool under test is fine; the oracle's tool is not) — excluding the file (rather than fabricating a false miss) is the correct call, and every sampled false positive traces to exactly this one file. No cascading attribution for named functions (ordinary `FUNCTION_NODE_TYPES` boundary-stop, same as Go/Rust/Lua); GDScript's anonymous/named `lambda` function-VALUE syntax is confirmed (empirically, not assumed) to have NO scope of its own at all — calls inside any lambda, named or not, bleed straight through to the nearest enclosing named function, the same "transparent boundary" shape as Lua's BACK-758 precedent, not a bug (0 named-lambda-variable occurrences in this exact corpus, so low-stakes here) |
-
-| Dart | AppFlowy's `frontend/appflowy_flutter/lib` (1,526 `.dart` files, one coherent Flutter app package, 100% parsed clean) | reverse | 86.58% → **100.00%** (8/bucket, 2,337 edges); → **97.55%** (20/bucket, 4,785 edges) | 0 at both sample sizes, post-fix | Six distinct, real `calls://` bugs found, all but one fixed. `calls://` had effectively NO Dart call-graph support before this session (Dart's grammar has no dedicated call-expression node kind at all): (1) **BACK-760** — every plain/dotted/cascaded/null-safe call (`foo()`, `obj.method()`, `this.foo()`, `Class.static()`, `obj?.method()`, `obj!.method()`, `..method()`) parses to a flat `(primary, selector*)` sibling run with no wrapping call node, and `List<int>.from(...)`-style generic-typed constructor calls parse to a separate `constructor_invocation` node — both entirely absent from `CALL_NODE_TYPES`, the single largest total blind spot in this whole program. (2) **BACK-761** — `constructor_signature`/`factory_constructor_signature` absent from `FUNCTION_NODE_TYPES`: every constructor had no caller scope at all. (3) **BACK-763** — the explicit pre-Dart-2 `new Foo(...)` form parses to `new_expression` (shared with C++/JS/TS), but the existing field-based extractors return `None` for Dart's flat, field-less shape. (4) **BACK-764** — a constructor WITH an initializer list (`Foo(...) : super(...) { ... }`, Flutter/BLoC's dominant constructor idiom) wedges an `initializers` sibling between the signature and the real body, defeating `_function_end_node`'s pairing lookup and truncating the WHOLE body's calls to empty; initializer-list calls themselves also live outside `body_node`. (5) **BACK-765** — `const Duration(...)`-style explicitly-const-evaluated constructor calls (ubiquitous in Flutter — the recommended default whenever every argument is constant) parse to a third distinct flat-constructor node, `const_object_expression`, also absent from `CALL_NODE_TYPES`. (6) **BACK-766/BACK-767** — getters/setters (`getter_signature`/`setter_signature`) and `const`-marked constructors (`constant_constructor_signature`) were BOTH entirely absent from `FUNCTION_NODE_TYPES` (no caller scope at all), and parameter DEFAULT VALUES for any signature kind (`{int x = compute()}`) live outside `body_node` the same way initializer lists do. (7) **BACK-769** — `super.method()`/`await super.method()` (override-delegation, a common Dart idiom) has its qualifier as a BARE sibling with no wrapping `selector` node (or nested one level inside `await_expression`'s own children), a shape the initial flat-sibling extractor didn't handle. A structural cascading bug was also found and fixed pre-oracle: Dart's disjoint `function_signature`/`function_body` sibling pairing (needed for `_function_end_node`'s outline-range fix) meant the shared complexity/calls walk's `FUNCTION_NODE_TYPES`-boundary stop condition didn't actually stop at a NESTED named local function — its body, a separate sibling, kept getting walked by every enclosing scope, double-counting its calls; fixed by having the walk detect and skip a nested signature's paired body sibling. The ONE residual, left open and documented rather than worked around — **BACK-768** — is an upstream `tree-sitter-dart` grammar ambiguity, not a reveal bug: a single-argument generic call (`getIt<Foo>(x)`, `getIt<Foo>(name: x)`, `BlocBuilder<A,B>(builder: ...)`) is misparsed as a `relational_expression`/record-literal chain instead of a generic function call whenever the argument list has exactly one element (0 or 2+ arguments parse correctly) — genuinely ambiguous to a context-free grammar without semantic/import resolution, and not fixable in reveal's Python extraction layer. All 20/bucket residual misses traced to exactly this one class. A second, distinct upstream-grammar-adjacent finding was traced to the ORACLE, not `calls://`: `analyzer`'s `InstanceCreationExpression` for an un-namespaced dotted `const`/`new` NAMED constructor call (`const EdgeInsetsDirectional.only(...)`) leaves `constructorName.name` null and puts the WHOLE dotted path in `constructorName.type` (can't distinguish "Class.namedCtor" from a library-prefixed plain type without semantic info) — the oracle's first draft used the unstripped dotted type text as ground truth, manufacturing 191 false positives against `calls://`'s (correct) bare-last-segment name; fixed oracle-side by taking the final dotted segment, same bare-name convention the rest of the oracle already follows. Dart was the EIGHTEENTH and FINAL language in this program — no unmeasured languages remain. |
-
-**Re-run at HEAD (BACK-1310, 2026-09-19, `--sample 20`).** After the callee-extraction
-and language-neutrality work, every stored oracle was re-run against the current tree:
-Go, C#, PHP, C, Python (2,633 edges) and JS all 100.00% (Go 1 FP, C 29 FP); Lua
-100.00% with FP 130 → 32 once the oracle stopped encoding the old
-anonymous-callback blind spot (BACK-1313/1314); Ruby 99.80% against an oracle now
-stricter (it counts paren-less calls), which also exposed and fixed a real analyzer
-bug where a paren-less call used as a receiver was mis-resolved (~3.5% of edges);
-C++ unchanged at 95.73% (same 146 misses, FP 632 → 683, uninvestigated); re-run after BACK-1390/1432 (2026-09-22): C++ 96.26% (reference-returning and nested out-of-line definitions were misnamed or dropped), C re-confirmed at 100.00% (2,826/2,826, 33 FP). Java, Swift,
-Zig, GDScript, Dart, Kotlin, Scala, TS and Rust were re-run earlier in the program
-and match their stored figures (Rust's stored 95.27% predates BACK-733).
-
-**Every oracle re-run at `f94c9c66`+ (BACK-1433, 2026-09-22, `--sample 20`).** The oracles
-had stored absolute paths under the `/tmp` roots they were built in, so after the corpus
-moved to `~/.cache/reveal-corpus-calls-oracle/` 14 of 16 harnesses silently measured 0%;
-they now store corpus-relative paths. All 21 harness/oracle pairs reproduce: 100.00% for
-Python (2,633/2,633, 0 FP; forward `?callees=` 467/467; depth=2 9,969/9,969, 1 FP), C
-(33 FP), C# (2,828), Go (4,418, 1 FP), Java (4,009), PHP (5,585), TypeScript (2,557),
-three.js (2,752), Excalidraw (2,484), Lua (3,507, 32 FP), GDScript (2,678, 18 FP), Scala
-(1,651) and Dart (4,785 -- up from the stored 97.55%); Rust 100.00% (3,259) with FP up to
-92, as expected once BACK-1393 extracts calls inside macros the `syn` oracle cannot see;
-Kotlin 99.79%, Swift 99.79%, Ruby 99.80% and Zig 99.98%, as stored; C++ 96.26% (715 FP),
-as re-measured after BACK-1432.
-
-Full methodology, per-corpus commit/snapshot, and the harness scripts
-(`build_oracle*.py`/`.rb`/`.go`/`.js`/`.php`/C# `Program.cs`, `main.rs`, Kotlin
-`KotlinOracle.kt`, Swift `swift-oracle/main.swift`, C++/C via libclang, Scala
-`build_oracle_scala.scala` via scalameta, `build_oracle_js.js` for JS/TSX,
-`zig-oracle/build_oracle_zig.zig` for Zig via `std.zig.Ast`, `build_oracle_lua.js`
-for Lua via `luaparse`, `build_oracle_gdscript.js` for GDScript via the npm
-`tree-sitter-gdscript` grammar, `dart-oracle/build_oracle_dart.dart` for Dart
-via `package:analyzer`, `diff_*.py`) for all eighteen languages:
-[calls-recall-oracle/README.md](../internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md).
+| Lua | Kong API gateway's `kong/` package dir (605 `.lua` files, 604 parsed clean — 1 excluded, a LuaJIT-only `0x01ULL` 64-bit-integer literal no standard-Lua parser recognizes) | reverse | **100.00%** (both 8/bucket 1,422 edges and 20/bucket 3,549 edges) | 11 (8/bucket) / 23 (20/bucket), all traced to documented residuals, none `calls://` defects. At HEAD (rebuilt oracle, BACK-1314): recall 100.00% (3,507/3,507), 32 false positives | Two real, distinct `calls://` bugs found via pre-flight AND fixed: **BACK-757** — `_bare_callee_name` split only on `->`/`.`/`::`, never a lone Lua `:` (`db:init_connector()`, Lua's DOMINANT OOP method-call idiom), so every colon-method call's bare callee stayed the full `"receiver:method"` string and never matched a bare `?target=method` lookup — the single highest real-world-impact gap this session, same bug class as Rust's turbofish/PHP's namespace-prefix/C#'s generic-suffix normalization misses. **BACK-758** — `name = function(...) end` / `tbl.k = function(...) end` (module-table method idiom) / `{ key = function(...) end }` (table-constructor field, Lua's metatable-dispatch/event-handler-table idiom) were ALL entirely invisible to `get_structure()`/`--outline` — not just their calls, the whole scope — found via a real Kong corpus grep (643 occurrences of `= function(` across 176 files); fixed by adding Lua-specific scope extraction (mirroring JS/TS's `_arrow_or_fn_value` precedent for a value that carries no name of its own). Fixing BACK-758 surfaced its own false-positive bug in the same session (not filed separately, fixed pre-measurement): the table-constructor-field extraction naively took "the first identifier child" of a `field` node, which also matches a COMPUTED key's bracketed expression (`{ [CONTENT_TYPE_POST] = function(...) end }`, a dynamic-dispatch idiom) — misattributing the value function's calls to the key expression's name; fixed by requiring the identifier be the field's structural first child (a literal string key), not preceded by ``internal-docs/planning/dogfood-findings/calls-recall-oracle/README.md`.
 
 All eighteen `VALIDATION.md`-tracked languages are now measured for
 cross-file call-graph recall. Import/dependency and side-effect recall
@@ -1815,16 +1742,25 @@ can hide a systemic callee-, caller-, or grammar-level bug.
 
 ## Re-running this yourself
 
-Every loop's harness is a plain script pair — `build_oracle.*` (produces the
-independent ground truth) and a diff script that compares it against a live reveal
-run — checked in alongside its findings, not hidden in this repo's history. The
-import-recall diff scripts are per-loop (`diff_recall*.py`, `diff_oracle*.py`); the
-call-graph and side-effect loops each share one table-driven `recall_harness.py`. All of
-them exit non-zero, with the reason, when a run measured nothing (a missing corpus,
-errored queries, or 0 hits), instead of printing a recall figure. Each run also records
-the Python, tree-sitter and tree-sitter-language-pack versions and the reveal commit it
-measured, because the grammar version decides which files parse with errors, so the
-same command can give a different figure under a different grammar:
+The per-loop harnesses are **not part of this repository**. Each loop's harness is a
+plain script pair — `build_oracle.*` (produces the independent ground truth) and a diff
+script that compares it against a live reveal run — kept, with its findings, in the
+maintainers' workspace (`internal-docs/`), which is not published. Pointing you at those
+paths would send you to files you cannot open, so this section says what *is* public.
+
+What you can reproduce today:
+
+- **The corpora.** Every real-world repo measured above is pinned to an exact commit in
+  `tests/corpus/manifest.yaml`; `python scripts/fetch_corpus.py` materializes them
+  (`--list` shows the manifest and cache state).
+- **The method.** Each row of the tables above names the oracle mechanism (a from-scratch
+  regex/AST scan, a build-system manifest, a real preprocessor or toolchain) and the sample
+  design, so a result can be re-derived and challenged line by line.
+- **The reveal side.** The measured commands (`depends://`, `imports://`, `--sideeffects`,
+  `--boundary`, `calls://`) are ordinary reveal invocations; run them on the pinned corpus
+  and compare against your own oracle.
+
+For provenance, the harness directories (maintainer-internal, unpublished) are:
 
 ```
 # Import/dependency recall — one directory per language, both corpora each
@@ -1855,9 +1791,11 @@ internal-docs/planning/dogfood-findings/ruby-autoload-oracle/
 internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/
 ```
 
-Each harness's own README documents the exact corpus commit/snapshot used,
-the oracle's assumptions, and the stratified-sampling method, so a result can
-be reproduced or challenged line by line rather than taken on faith.
+Inside the maintainer workspace every harness exits non-zero, with the reason, when a run
+measured nothing (a missing corpus, errored queries, or 0 hits) instead of printing a
+recall figure, and records the Python, tree-sitter and tree-sitter-language-pack versions
+and the reveal commit it measured — the grammar version decides which files parse with
+errors, so the same command can give a different figure under a different grammar.
 
 ## Scope
 
