@@ -390,6 +390,13 @@ def build_callers_index(functions: List[StructureItem]) -> Dict[str, List[str]]:
 _NAME_KINDS = ('identifier', 'name', 'constant', 'simple_identifier', 'property_identifier',
                'private_property_identifier', 'field_identifier')
 _PARAM_LIST_KINDS = ('parameters', 'parameter_list', 'formal_parameters', 'method_parameters')
+# Nodes that end a signature's text, for grammars that name no `body` field:
+# a body (Kotlin's `function_body` holds `= expr` as well as a block) or a C++
+# constructor's `: member(x), ...` initializer list.
+_SIGNATURE_END_KINDS = (
+    'function_body', 'block', 'compound_statement', 'statement_block', 'code_block',
+    'field_initializer_list',
+)
 
 class TreeSitterAnalyzer(FileAnalyzer):
     """Base class for tree-sitter based analyzers.
@@ -1817,6 +1824,17 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         return None
 
+    def _signature_head(self, node) -> str:
+        """The node's text up to the start of its body or initializer list (all of it if it has neither)."""
+        ends = [c for c in _children(node) if _zero_arg(c, 'kind') in _SIGNATURE_END_KINDS]
+        body = node.child_by_field_name('body') if hasattr(node, 'child_by_field_name') else None
+        if body is not None:
+            ends.append(body)
+        if not ends:
+            return self._get_node_text(node)
+        end = min(_zero_arg(c, 'start_byte') for c in ends)
+        return self._get_text_span(_zero_arg(node, 'start_byte'), end)
+
     def _get_signature(self, node) -> str:
         """Get function signature (parameters and return type only).
 
@@ -1853,9 +1871,11 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if params_text:
             return params_text + return_type
 
-        # Fallback: try to extract from first line
-        text = self._get_node_text(node)
-        first_line = text.split('\n')[0].strip()
+        # Fallback: the declaration text up to its body, whitespace-collapsed --
+        # not the node's first line, which leaks a same-line body (`) {`,
+        # `= x + 1`, `{ a * 2 }`) and cuts a multi-line parameter list short.
+        text = self._signature_head(node)
+        first_line = ' '.join(text.split())
 
         # Remove common prefixes (def, func, fn, function, etc.)
         for prefix in ['def ', 'func ', 'fn ', 'function ', 'async def ', 'pub fn ', 'fn ', 'async fn ']:
@@ -1867,7 +1887,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # Remove the name to leave just params + return type
         if '(' in first_line:
             name_end = first_line.index('(')
-            signature = first_line[name_end:].rstrip(':').strip()
+            signature = first_line[name_end:].rstrip(':{').strip()
             return signature
 
         # No parens at all — e.g. Ruby's paren-less method defs (`def human?`
