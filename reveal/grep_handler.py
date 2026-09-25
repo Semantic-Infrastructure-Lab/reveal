@@ -37,6 +37,15 @@ def _looks_like_bre_alternation_mistake(pattern: str) -> bool:
     return bool(_BRE_ALTERNATION_RE.search(pattern))
 
 
+def _bre_alternation_hint(pattern: str) -> Optional[str]:
+    """Tip text for a '\\|' pattern that found nothing, else None."""
+    if not _looks_like_bre_alternation_mistake(pattern):
+        return None
+    fixed = pattern.replace('\\|', '|')
+    return (f"--grep uses Python regex, where '\\|' is a literal pipe, not "
+            f"alternation. Did you mean: '{fixed}' (no backslash)?")
+
+
 def _looks_binary(fpath: Path) -> bool:
     """Heuristic binary detection: a NUL byte in the leading chunk (the same
     signal git/grep use). Catches compiled binaries with no distinguishing
@@ -201,10 +210,9 @@ def _render_text(
 
     if not hit_lines:
         print("No matches found.")
-        if _looks_like_bre_alternation_mistake(pattern):
-            print(f"  Tip: --grep uses Python regex, where '\\|' is a literal "
-                  f"pipe, not alternation. Did you mean: "
-                  f"'{pattern.replace(chr(92) + '|', '|')}' (no backslash)?")
+        bre_hint = _bre_alternation_hint(pattern)
+        if bre_hint:
+            print(f"  Tip: {bre_hint}")
         elif not re.search(r'[|+*?\\[\]{}()]', pattern):
             print(f"  Tip: --grep searches literal/regex text. "
                   f"For named elements use: reveal {path} --name '{pattern}'")
@@ -248,7 +256,7 @@ def _render_json(
     hit_lines: List[int],
     groups: List[Dict[str, Any]],
 ) -> None:
-    print(safe_json_dumps({
+    result: Dict[str, Any] = {
         'type': 'grep_results',
         'path': path,
         'pattern': pattern,
@@ -257,7 +265,10 @@ def _render_json(
             {'name': g['name'], 'kind': g['kind'], 'lines': g['lines']}
             for g in groups
         ],
-    }))
+    }
+    if not hit_lines and (hint := _bre_alternation_hint(pattern)):
+        result['hint'] = hint
+    print(safe_json_dumps(result))
 
 
 def handle_grep_directory(path: str, pattern: str, args: Namespace) -> None:
@@ -354,10 +365,9 @@ def _render_dir_text(
     print(f"Text search: {path}  —  pattern: {pattern}")
     if not file_results:
         print("No matches found.")
-        if _looks_like_bre_alternation_mistake(pattern):
-            print(f"  Tip: --grep uses Python regex, where '\\|' is a literal "
-                  f"pipe, not alternation. Did you mean: "
-                  f"'{pattern.replace(chr(92) + '|', '|')}' (no backslash)?")
+        bre_hint = _bre_alternation_hint(pattern)
+        if bre_hint:
+            print(f"  Tip: {bre_hint}")
         return
     print(f"{total_hits} {hit_word} across {len(file_results)} {file_word}")
     print()
@@ -388,7 +398,7 @@ def _render_dir_json(
     pattern: str,
     total_hits: int,
 ) -> None:
-    print(safe_json_dumps({
+    result: Dict[str, Any] = {
         'type': 'grep_results',
         'path': path,
         'pattern': pattern,
@@ -404,7 +414,10 @@ def _render_dir_json(
             }
             for r in file_results
         ],
-    }))
+    }
+    if not file_results and (hint := _bre_alternation_hint(pattern)):
+        result['hint'] = hint
+    print(safe_json_dumps(result))
 
 
 def _format_lines(lines: List[int]) -> str:

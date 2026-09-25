@@ -260,3 +260,15 @@ class TestGrepBreAlternationMistake(unittest.TestCase):
         self.assertIn('No matches found', r.stdout)
         self.assertIn("uses Python regex", r.stdout)
         self.assertIn("SOC-SEC-33|SOC-101", r.stdout)
+
+    def test_escaped_pipe_json_carries_hint(self):
+        for target in (self.f.name, self.d):
+            r = run_reveal(target, '--grep', r'SOC-SEC-33\|SOC-101', '--format', 'json')
+            self.assertEqual(r.returncode, 0, r.stderr)
+            data = json.loads(r.stdout)
+            self.assertEqual(data['total_hits'], 0)
+            self.assertIn("SOC-SEC-33|SOC-101", data['hint'])
+
+    def test_json_without_mistake_has_no_hint(self):
+        r = run_reveal(self.f.name, '--grep', r'zzz-nope', '--format', 'json')
+        self.assertNotIn('hint', json.loads(r.stdout))
