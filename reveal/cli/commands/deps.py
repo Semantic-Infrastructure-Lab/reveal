@@ -26,6 +26,7 @@ from reveal.adapters.deps import (  # noqa: F401 - re-exported for back-compat
     _run_circular,
     _run_unused,
 )
+from ..global_flags import add_gitignore_arguments
 
 
 def create_deps_parser() -> argparse.ArgumentParser:
@@ -80,6 +81,7 @@ def create_deps_parser() -> argparse.ArgumentParser:
             "(circular/unused) actually needs."
         )
     )
+    add_gitignore_arguments(parser)
     return parser
 
 

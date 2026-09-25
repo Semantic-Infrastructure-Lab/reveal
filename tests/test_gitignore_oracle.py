@@ -18,20 +18,12 @@ from reveal.utils import gitignore
 from reveal.utils.gitignore import (
     GitIgnoreFilter,
     _PatternMatcher,
-    clear_cache,
     compile_gitignore_line,
     gitignore_filter,
     is_gitignored,
 )
 
 pytestmark = pytest.mark.skipif(shutil.which('git') is None, reason='git not installed')
-
-
-@pytest.fixture(autouse=True)
-def _fresh_cache():
-    clear_cache()
-    yield
-    clear_cache()
 
 
 def _git(root: Path, *args: str) -> str:
@@ -217,8 +209,8 @@ def test_tree_view_filter_shows_tracked_file(repo):
 def test_uri_query_key_is_consumed(resource, expected):
     """handle_uri takes ?respect_gitignore= off the query: ast:// and
     markdown:// would otherwise read it as a field filter and match nothing."""
-    from reveal.cli.routing.uri import _pop_respect_gitignore
-    assert _pop_respect_gitignore(resource) == expected
+    from reveal.utils.gitignore import split_respect_gitignore
+    assert split_respect_gitignore(resource) == expected
 
 
 def test_no_gitignore_flag_sets_process_switch():

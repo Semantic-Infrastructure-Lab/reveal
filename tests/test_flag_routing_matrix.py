@@ -30,6 +30,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from conftest import write_gitignore_probe_files
+
 MATRIX_PATH = Path(__file__).parent / 'flag_routing_matrix.yaml'
 REVEAL_PKG = Path(__file__).resolve().parent.parent / 'reveal'
 
@@ -74,6 +76,22 @@ PROBES = {
     ('pack', 'verbose'): ('pack://{pkg}', True),
     # BACK-1379: respect_gitignore slice.
     ('classify', 'respect_gitignore'): ('classify://{tree}', False),
+    # BACK-1386: every walker honors it (probe_tree's *ignored* files).
+    ('architecture', 'respect_gitignore'): ('architecture://{tree}', False),
+    ('ast', 'respect_gitignore'): ('ast://{tree}', False),
+    ('calls', 'respect_gitignore'): ('calls://{tree}?uncalled', False),
+    ('contracts', 'respect_gitignore'): ('contracts://{tree}', False),
+    ('depends', 'respect_gitignore'): ('depends://{tree}/a.py', False),
+    ('deps', 'respect_gitignore'): ('deps://{tree}', False),
+    ('hotspots', 'respect_gitignore'): ('hotspots://{tree}', False),
+    ('imports', 'respect_gitignore'): ('imports://{tree}', False),
+    ('markdown', 'respect_gitignore'): ('markdown://{tree}', False),
+    ('pack', 'respect_gitignore'): ('pack://{tree}', False),
+    ('patches', 'respect_gitignore'): ('patches://{tree}', False),
+    ('surface', 'respect_gitignore'): ('surface://{tree}', False),
+    ('testability', 'respect_gitignore'): ('testability://{tree}', False),
+    ('trace', 'respect_gitignore'): ('trace://{tree}?from=a', False),
+    ('diff', 'respect_gitignore'): ('diff://{tree}:{churn_tree}', False),
     # BACK-1379/BACK-1388: since/until slice. Originally pointed at a real repo file
     # (reveal/adapters/stats) on the theory that a future since= excludes every real
     # commit "regardless of clone depth" -- wrong: that file's churn score is only
@@ -278,12 +296,10 @@ def probe_tree(tmp_path_factory):
     import subprocess
 
     root = tmp_path_factory.mktemp('probe_tree')
-    (root / 'a.py').write_text('def a():\n    return 1\n', encoding='utf-8')
-    (root / 'ignored.py').write_text('def b():\n    return 2\n', encoding='utf-8')
-    (root / '.gitignore').write_text('ignored.py\n', encoding='utf-8')
+    tracked = write_gitignore_probe_files(root)
     git = ['git', '-C', str(root), '-c', 'user.name=t', '-c', 'user.email=t@t']
     subprocess.run([*git, 'init', '-q'], check=True)
-    subprocess.run([*git, 'add', 'a.py', '.gitignore'], check=True)
+    subprocess.run([*git, 'add', *tracked], check=True)
     subprocess.run([*git, 'commit', '-q', '-m', 'init', '--date', '2020-01-01T00:00:00'],
                    check=True, env={**__import__('os').environ, 'GIT_COMMITTER_DATE': '2020-01-01T00:00:00'})
     # git://{tree}?type=log's default cap is 20 commits (refs.get_ref_structure); add

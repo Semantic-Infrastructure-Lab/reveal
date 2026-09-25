@@ -14,6 +14,7 @@ import sys
 import argparse
 from pathlib import Path
 from argparse import Namespace
+from ..global_flags import add_gitignore_arguments
 
 
 def create_check_parser() -> argparse.ArgumentParser:
@@ -93,14 +94,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
              '(e.g., --exclude "*.min.js" --exclude "wp-includes/js/dist/*"). '
              'Repeatable. Excluded files are never parsed or checked (BACK-1042).',
     )
-    parser.add_argument(
-        '--respect-gitignore', action='store_true', default=True,
-        help='Respect .gitignore rules when collecting files to check (default: enabled)',
-    )
-    parser.add_argument(
-        '--no-gitignore', action='store_false', dest='respect_gitignore',
-        help='Ignore .gitignore rules and check all files',
-    )
+    add_gitignore_arguments(parser)
     parser.add_argument(
         '--no-group', action='store_true', dest='no_group',
         help='Show every check result individually (disables collapsing repeated rules)',

@@ -40,7 +40,7 @@ reveal overview . --format json
 | `no_git` | `true`, `false` (default) | Skip the recent-git-activity section. |
 | `no_imports` | `true`, `false` (default) | Skip import graph analysis (architecture section). |
 | `exclude` | comma-separated glob patterns | Exclude matching files/directories from the `stats`/hotspots and `scope` sections (BACK-1042). Does not yet affect `architecture` or `complex_functions`. |
-| `respect_gitignore` | `true` (default), `false` | Respect `.gitignore` for the `stats`/hotspots and `scope` sections. |
+| `respect_gitignore` | `true` (default), `false` | Skip what git ignores, in every section (tracked files are never skipped; `false` or `--no-gitignore` includes ignored files). |
 
 ## Reading The Output
 
@@ -64,9 +64,10 @@ actually came from.
   adapter's own coverage for a given language.
 - Static imports only for the architecture section — dynamically loaded
   files (plugins, registries) may appear as spurious entry points.
-- `exclude`/`respect_gitignore` (BACK-1042) only reach the `stats`/hotspots
-  and `scope` sections — `architecture` (`imports://`) and
-  `complex_functions` (`ast://`) still scan the whole tree.
+- `?exclude=` (BACK-1042) only reaches the `stats`/hotspots and `scope`
+  sections — `architecture` (`imports://`) and `complex_functions`
+  (`ast://`) still scan the whole tree. `respect_gitignore` applies to
+  every section (BACK-1386).
 - A directory without its own `.git` inherits the enclosing repo's history
   (disclosed via `git_foreign_root`, not silently hidden).
 

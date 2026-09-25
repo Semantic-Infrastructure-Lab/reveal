@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, cast
 
 from ...registry import get_markdown_extensions
+from ...utils.gitignore import gitignore_filter
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +33,19 @@ def find_markdown_files(base_path: Path) -> List[Path]:
             return [base_path]
         return []
 
-    for root, _, filenames in os.walk(base_path):
+    # BACK-1386: skip what git ignores (--no-gitignore turns it off). Only
+    # .git itself is pruned beyond that -- the code walkers' skip list
+    # (build/, dist/, vendor/...) is not applied to docs.
+    gi = gitignore_filter(base_path)
+    for root, dirs, filenames in os.walk(base_path):
+        dirs[:] = [d for d in dirs if d != '.git']
+        if gi is not None:
+            gi.prune(root, dirs)
         for filename in filenames:
             if filename.lower().endswith(md_exts):
-                files.append(Path(root) / filename)
+                fp = Path(root) / filename
+                if gi is None or not gi.ignored(fp):
+                    files.append(fp)
 
     return sorted(files)
 

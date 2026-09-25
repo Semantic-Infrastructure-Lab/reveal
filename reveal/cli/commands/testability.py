@@ -24,6 +24,7 @@ from reveal.adapters.testability import (  # noqa: F401 - re-exported for back-c
     _resolve_test_paths,
 )
 from reveal.errors import NotApplicableError
+from ..global_flags import add_gitignore_arguments
 
 
 def create_testability_parser() -> argparse.ArgumentParser:
@@ -76,6 +77,7 @@ def create_testability_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='Include low-count unresolved patch targets in text/JSON results',
     )
+    add_gitignore_arguments(parser)
     return parser
 
 

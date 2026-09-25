@@ -33,6 +33,7 @@ class DiffAdapter(ResourceAdapter):
     right_structure: Optional[Dict[str, Any]]
 
     LEGACY_INIT = False
+    CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # directory diffs walk (BACK-1386)
     CANONICAL_EMPTY_RESOURCE = ''
 
     def __init__(self, resource: Optional[str] = None, right_uri: Optional[str] = None):

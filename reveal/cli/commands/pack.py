@@ -42,6 +42,7 @@ from reveal.adapters.pack import (  # noqa: F401 - re-exported for back-compat
     _render_pack,
     _walk_files,
 )
+from ..global_flags import add_gitignore_arguments
 
 
 def create_pack_parser() -> argparse.ArgumentParser:
@@ -106,6 +107,7 @@ def create_pack_parser() -> argparse.ArgumentParser:
         default=False,
         help='Boost high fan-in (core abstraction) files; prepend architecture brief before content.'
     )
+    add_gitignore_arguments(parser)
     return parser
 
 

@@ -609,8 +609,10 @@ class OverviewAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Static imports only for the architecture section — dynamically loaded files may appear as entry points.',
-                'exclude/respect_gitignore (BACK-1042) apply to the stats/hotspots and scope sections only — '
-                'the architecture (imports://) and complex_functions (ast://) sections do not yet honor them.',
+                '?exclude= (BACK-1042) applies to the stats/hotspots and scope sections only — '
+                'the architecture (imports://) and complex_functions (ast://) sections do not yet honor it.',
+                'Every section skips what git ignores (tracked files are never skipped); '
+                'respect_gitignore=false / --no-gitignore includes it everywhere (BACK-1386).',
                 'BACK-1178: the CLI subcommand form (`reveal overview <path> --format '
                 'json`) and this URI form intentionally carry different '
                 'contract_version/meta envelopes — subcommand-form is frozen at '

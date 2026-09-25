@@ -27,6 +27,7 @@ from reveal.adapters.surface import (  # noqa: F401 - re-exported for back-compa
     _scan_surface,
     _supported_coverage_languages,
 )
+from ..global_flags import add_gitignore_arguments
 
 
 def create_surface_parser() -> argparse.ArgumentParser:
@@ -86,6 +87,7 @@ def create_surface_parser() -> argparse.ArgumentParser:
         default=0,
         help='With --by dir: roll directories up to their first N path segments (default 0: full directory)'
     )
+    add_gitignore_arguments(parser)
     return parser
 
 

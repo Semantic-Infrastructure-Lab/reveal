@@ -41,6 +41,7 @@ from reveal.adapters.overview import (  # noqa: F401 - re-exported for back-comp
     _run_stats,
 )
 from reveal.cli.routing.flag_specs import exclude_fragment, inject_query_flags
+from ..global_flags import add_gitignore_arguments
 
 
 def create_overview_parser() -> argparse.ArgumentParser:
@@ -97,14 +98,7 @@ def create_overview_parser() -> argparse.ArgumentParser:
              '(BACK-1042); the architecture and complex-functions sections '
              'do not yet honor it.',
     )
-    parser.add_argument(
-        '--respect-gitignore', action='store_true', default=True,
-        help='Respect .gitignore rules when scanning (default: enabled)',
-    )
-    parser.add_argument(
-        '--no-gitignore', action='store_false', dest='respect_gitignore',
-        help='Ignore .gitignore rules and scan all files',
-    )
+    add_gitignore_arguments(parser)
     return parser
 
 

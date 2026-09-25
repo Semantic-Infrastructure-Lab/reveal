@@ -190,7 +190,11 @@ def query(
             "Expected format: scheme://resource  (e.g. ast://mydir/)"
         )
 
+    from .utils.gitignore import gitignore_scope, split_respect_gitignore
+
     scheme, resource = uri.split("://", 1)
+    # BACK-1386: same ?respect_gitignore= handling as the CLI's handle_uri.
+    resource, respect_gitignore = split_respect_gitignore(resource)
     adapter_class = get_adapter_class(scheme)
     if adapter_class is None:
         supported = ", ".join(f"{s}://" for s in list_supported_schemes())
@@ -199,18 +203,19 @@ def query(
             f"Supported schemes: {supported}"
         )
 
-    if isinstance(adapter_class, type) and hasattr(adapter_class, "from_uri"):
-        adapter = adapter_class.from_uri(scheme, resource, element_name)
-    else:
-        adapter = _default_from_uri(adapter_class, scheme, resource, element_name)
+    with gitignore_scope(respect_gitignore):
+        if isinstance(adapter_class, type) and hasattr(adapter_class, "from_uri"):
+            adapter = adapter_class.from_uri(scheme, resource, element_name)
+        else:
+            adapter = _default_from_uri(adapter_class, scheme, resource, element_name)
 
-    if element_name:
-        result = adapter.get_element(element_name, **kwargs)
-        if result is None:
-            raise ValueError(f"Element {element_name!r} not found in {uri}")
-        return result
+        if element_name:
+            result = adapter.get_element(element_name, **kwargs)
+            if result is None:
+                raise ValueError(f"Element {element_name!r} not found in {uri}")
+            return result
 
-    return adapter.get_structure(**kwargs)
+        return adapter.get_structure(**kwargs)
 
 
 def check(

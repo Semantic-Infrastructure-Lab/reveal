@@ -274,7 +274,7 @@ class CallsAdapter(ResourceAdapter):
     BUDGET_LIST_FIELD = 'levels'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
-    CLI_QUERY_FLAGS = {'all': 'top=1000000'}  # lifts the ?rank=callers/?uncalled top=10 default (BACK-1379)
+    CLI_QUERY_FLAGS = {'all': 'top=1000000', 'respect_gitignore': 'respect_gitignore=false'}  # lifts the ?rank=callers/?uncalled top=10 default (BACK-1379)
 
     @staticmethod
     def get_help() -> Dict[str, Any]:

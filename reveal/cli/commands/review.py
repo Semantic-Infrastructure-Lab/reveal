@@ -8,6 +8,7 @@ import sys
 from argparse import Namespace
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from ..global_flags import add_gitignore_arguments
 
 
 def create_review_parser() -> argparse.ArgumentParser:
@@ -41,6 +42,7 @@ def create_review_parser() -> argparse.ArgumentParser:
         default='B,S,I,C,M',
         help='Rule categories (default: B,S,I,C,M)'
     )
+    add_gitignore_arguments(parser)
     return parser
 
 

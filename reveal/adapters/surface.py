@@ -21,6 +21,7 @@ from ..registry import (
     JS_TS_LANGUAGES, _is_cpp_header_content, extensions_for_languages, language_for_extension,
 )
 from ..utils import print_json_result
+from ..utils.gitignore import gitignore_filter
 from ..utils.path_utils import (
     census_and_coverage_for_path,
     detect_non_python_language,
@@ -143,15 +144,20 @@ def _collect_source_files(path: Path, source_only: bool = False) -> Dict['_Surfa
             buckets[spec].append(path)
         return buckets
 
+    gi = gitignore_filter(path)  # BACK-1386
     for root, dirs, filenames in os.walk(str(path)):
         dirs[:] = [
             d for d in dirs
             if not is_skippable_dir(Path(root), d) and not d.startswith('.')
             and not (source_only and _is_test_dir(d))
         ]
+        if gi is not None:
+            gi.prune(root, dirs)
         for fname in filenames:
             fpath = Path(os.path.join(root, fname))
             if source_only and _is_test_file(fpath):
+                continue
+            if gi is not None and gi.ignored(fpath):
                 continue
             spec = _scanner_for(fpath)
             if spec is not None:
@@ -495,6 +501,7 @@ class SurfaceAdapter(ResourceAdapter):
     HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # --no-gitignore (BACK-1386)
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
 
     def __init__(self, resource: str, query: Optional[str] = None):

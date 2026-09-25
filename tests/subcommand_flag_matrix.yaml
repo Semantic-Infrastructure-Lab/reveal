@@ -17,10 +17,11 @@ subcommands:
       review: not-applicable
       via: []
     respect_gitignore:
-      reason: --respect_gitignore is not declared on `reveal architecture`'s own parser
-        -- argparse rejects it loudly (unrecognized arguments), not a silent gap
-      review: not-applicable
-      via: []
+      reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
+        proves an output diff'
+      review: honored
+      via:
+      - declared-global
     since:
       reason: --since is not declared on `reveal architecture`'s own parser -- argparse
         rejects it loudly (unrecognized arguments), not a silent gap
@@ -72,10 +73,11 @@ subcommands:
       review: not-applicable
       via: []
     respect_gitignore:
-      reason: --respect_gitignore is not declared on `reveal contracts`'s own parser
-        -- argparse rejects it loudly (unrecognized arguments), not a silent gap
-      review: not-applicable
-      via: []
+      reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
+        proves an output diff'
+      review: honored
+      via:
+      - declared-global
     since:
       reason: --since is not declared on `reveal contracts`'s own parser -- argparse
         rejects it loudly (unrecognized arguments), not a silent gap
@@ -99,10 +101,11 @@ subcommands:
       review: not-applicable
       via: []
     respect_gitignore:
-      reason: --respect_gitignore is not declared on `reveal deps`'s own parser --
-        argparse rejects it loudly (unrecognized arguments), not a silent gap
-      review: not-applicable
-      via: []
+      reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
+        proves an output diff'
+      review: honored
+      via:
+      - declared-global
     since:
       reason: --since is not declared on `reveal deps`'s own parser -- argparse rejects
         it loudly (unrecognized arguments), not a silent gap
@@ -152,10 +155,12 @@ subcommands:
       review: not-applicable
       via: []
     respect_gitignore:
-      reason: --respect_gitignore is not declared on `reveal health`'s own parser
-        -- argparse rejects it loudly (unrecognized arguments), not a silent gap
-      review: not-applicable
-      via: []
+      reason: 'BACK-1386: applied by apply_global_flags; health collects its files
+        with collect_files_to_check, which follows the switch (test_gitignore_oracle.py,
+        test_cli_health.py)'
+      review: honored
+      via:
+      - declared-global
     since:
       reason: --since is not declared on `reveal health`'s own parser -- argparse
         rejects it loudly (unrecognized arguments), not a silent gap
@@ -180,10 +185,11 @@ subcommands:
       review: not-applicable
       via: []
     respect_gitignore:
-      reason: --respect_gitignore is not declared on `reveal hotspots`'s own parser
-        -- argparse rejects it loudly (unrecognized arguments), not a silent gap
-      review: not-applicable
-      via: []
+      reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
+        proves an output diff'
+      review: honored
+      via:
+      - declared-global
     since:
       reason: --since is not declared on `reveal hotspots`'s own parser -- argparse
         rejects it loudly (unrecognized arguments), not a silent gap
@@ -263,10 +269,11 @@ subcommands:
       review: not-applicable
       via: []
     respect_gitignore:
-      reason: --respect_gitignore is not declared on `reveal pack`'s own parser --
-        argparse rejects it loudly (unrecognized arguments), not a silent gap
-      review: not-applicable
-      via: []
+      reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
+        proves an output diff'
+      review: honored
+      via:
+      - declared-global
     since:
       reason: 'pre-existing: threaded into the PackAdapter query string and read by
         the adapter'
@@ -290,10 +297,12 @@ subcommands:
       review: not-applicable
       via: []
     respect_gitignore:
-      reason: --respect_gitignore is not declared on `reveal review`'s own parser
-        -- argparse rejects it loudly (unrecognized arguments), not a silent gap
-      review: not-applicable
-      via: []
+      reason: 'BACK-1386: applied by apply_global_flags; review collects its files
+        with collect_files_to_check, which follows the switch (test_gitignore_oracle.py,
+        test_cli_health.py)'
+      review: honored
+      via:
+      - declared-global
     since:
       reason: --since is not declared on `reveal review`'s own parser -- argparse
         rejects it loudly (unrecognized arguments), not a silent gap
@@ -342,10 +351,11 @@ subcommands:
       review: not-applicable
       via: []
     respect_gitignore:
-      reason: --respect_gitignore is not declared on `reveal surface`'s own parser
-        -- argparse rejects it loudly (unrecognized arguments), not a silent gap
-      review: not-applicable
-      via: []
+      reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
+        proves an output diff'
+      review: honored
+      via:
+      - declared-global
     since:
       reason: --since is not declared on `reveal surface`'s own parser -- argparse
         rejects it loudly (unrecognized arguments), not a silent gap
@@ -369,10 +379,11 @@ subcommands:
       review: not-applicable
       via: []
     respect_gitignore:
-      reason: --respect_gitignore is not declared on `reveal testability`'s own parser
-        -- argparse rejects it loudly (unrecognized arguments), not a silent gap
-      review: not-applicable
-      via: []
+      reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
+        proves an output diff'
+      review: honored
+      via:
+      - declared-global
     since:
       reason: --since is not declared on `reveal testability`'s own parser -- argparse
         rejects it loudly (unrecognized arguments), not a silent gap
@@ -396,10 +407,11 @@ subcommands:
       review: not-applicable
       via: []
     respect_gitignore:
-      reason: --respect_gitignore is not declared on `reveal trace`'s own parser --
-        argparse rejects it loudly (unrecognized arguments), not a silent gap
-      review: not-applicable
-      via: []
+      reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
+        proves an output diff'
+      review: honored
+      via:
+      - declared-global
     since:
       reason: --since is not declared on `reveal trace`'s own parser -- argparse rejects
         it loudly (unrecognized arguments), not a silent gap

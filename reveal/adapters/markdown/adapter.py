@@ -175,6 +175,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
 
     BUDGET_LIST_FIELD = 'results'
     LEGACY_INIT = False
+    CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # --no-gitignore (BACK-1386)
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:

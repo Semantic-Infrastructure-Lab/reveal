@@ -23,7 +23,7 @@ class PatchesAdapter(ResourceAdapter):
 
     BUDGET_LIST_FIELD = 'groups'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
-    CLI_QUERY_FLAGS = {'all': 'limit=1000000'}  # lifts the limit=20 group default (BACK-1379)
+    CLI_QUERY_FLAGS = {'all': 'limit=1000000', 'respect_gitignore': 'respect_gitignore=false'}  # lifts the limit=20 group default (BACK-1379)
 
     def __init__(self, resource: str, query: Optional[str] = None):
         path, query_string = resource, query

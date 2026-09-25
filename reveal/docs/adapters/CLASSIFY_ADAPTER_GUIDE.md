@@ -23,7 +23,9 @@ reveal 'classify://src' --format json
 
 `classify://` walks the full target directory (respecting `REVEAL_IGNORE`/
 `config.yaml`'s `ignore:` and the same well-known skip directories as
-`stats://`), skipping gitignored files by default.
+`stats://`), skipping what git ignores by default. That is git's own answer
+(`git ls-files --ignored`), so a tracked file is never skipped even when a
+`.gitignore` pattern matches it.
 
 - `respect_gitignore` (boolean, default `true`) — set to `false` (or pass
   `--no-gitignore` on the CLI) to include gitignored files:

@@ -44,6 +44,7 @@ from reveal.adapters.contracts import (  # noqa: F401 - re-exported for back-com
     _scan_contracts_rust,
     _scan_contracts_ts,
 )
+from ..global_flags import add_gitignore_arguments
 
 
 def create_contracts_parser() -> argparse.ArgumentParser:
@@ -77,6 +78,7 @@ def create_contracts_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='Skip showing which classes implement each contract'
     )
+    add_gitignore_arguments(parser)
     return parser
 
 

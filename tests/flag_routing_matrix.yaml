@@ -8,8 +8,8 @@ adapters:
       via:
       - routing-special
     respect_gitignore:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     since:
       reason: module/package dependency graph, no per-item timestamp anywhere in the
         file (architecture.py:530); existing warn_unsupported note is correct
@@ -28,8 +28,8 @@ adapters:
       via:
       - declared
     respect_gitignore:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     since:
       reason: returns AST nodes (functions/classes); no per-node date field exists
         anywhere in ast/*.py; confirmed live -- output unchanged with --since
@@ -71,8 +71,8 @@ adapters:
       via:
       - declared
     respect_gitignore:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     since:
       reason: caller/callee graph and confidence scores; mtime_ns is used only as
         a cache key (invalidation), never exposed as a per-result field or filterable
@@ -158,8 +158,8 @@ adapters:
       review: unreviewed
       via: []
     respect_gitignore:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     since:
       reason: interface/type-alias/abstract-class extraction, no timestamp field anywhere;
         only 'since' hits are unrelated English prose
@@ -210,8 +210,8 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     since:
       reason: static import/dependency graph; no per-file change-date is read anywhere
         in the file
@@ -230,8 +230,8 @@ adapters:
       via:
       - routing-special
     respect_gitignore:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     since:
       reason: dependency listing (deps.py:432), no date/timestamp anywhere in the
         file
@@ -252,10 +252,8 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      reason: diffs two already-resolved git resources via parse_diff_uris (adapter.py:118)
-        -- git-history comparison, not a working-tree walk
-      review: not-applicable
-      via: []
+      via:
+      - declared
     since:
       reason: diffs two explicitly-given refs/files (diff/adapter.py:118); not a filterable
         list of dated items -- 'modified' elsewhere in the file is an unrelated diff-summary
@@ -379,8 +377,8 @@ adapters:
       via:
       - declared
     respect_gitignore:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     since:
       reason: function-level complexity/length hotspots; no git-churn integration
         in this adapter (unlike stats://, which does have one) -- no per-item date
@@ -406,8 +404,8 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     since:
       reason: import-graph/cycle/violation detection; mtime_ns is used only as a cache-fingerprint
         component, never surfaced as a queryable per-result field
@@ -483,8 +481,8 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     since:
       review: unreviewed
       via: []
@@ -570,8 +568,8 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     since:
       reason: candidate file scoring/budget selection has no per-item date field;
         the module's 'since_ref' concept is the MCP pack tool's own git-ref diff parameter,
@@ -592,8 +590,8 @@ adapters:
       via:
       - declared
     respect_gitignore:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     since:
       reason: static scan of test files for mock.patch() call sites, grouped by target/test/file;
         no date field, no git integration
@@ -750,8 +748,8 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     since:
       reason: attack-surface/taxonomy rule matching against source; no date field
         anywhere in the file
@@ -772,8 +770,8 @@ adapters:
       via:
       - declared
     respect_gitignore:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     since:
       reason: testability scoring (mock pressure, coupling); no date field in the
         file
@@ -801,8 +799,8 @@ adapters:
       review: not-applicable
       via: []
     respect_gitignore:
-      review: unreviewed
-      via: []
+      via:
+      - declared
     since:
       reason: call-graph trace from an entry point; no date field anywhere in the
         file

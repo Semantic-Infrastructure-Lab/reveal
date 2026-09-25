@@ -31,6 +31,7 @@ from ..analyzers.imports.base import build_project_namespaces
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 from ..registry import DECLARATION_ONLY_EXTENSIONS, get_code_extensions
+from ..utils.gitignore import gitignore_filter
 from ..utils.path_utils import is_skippable_dir, to_posix, to_relative_display
 from ..utils.results import ResultBuilder
 
@@ -970,7 +971,7 @@ class ImportsAdapter(ResourceAdapter):
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
-    CLI_QUERY_FLAGS = {'verbose': 'verbose'}  # `--verbose` == `&verbose` (BACK-1361)
+    CLI_QUERY_FLAGS = {'verbose': 'verbose', 'respect_gitignore': 'respect_gitignore=false'}  # `--verbose` == `&verbose` (BACK-1361)
 
     def __init__(self, resource: str = '.', query: Optional[str] = None):
         """Initialize imports adapter.
@@ -1209,6 +1210,11 @@ class ImportsAdapter(ResourceAdapter):
             # effect here while check/stats:///census reporting all honored it.
             from ..config import RevealConfig  # deferred: cli/config cycle
             config = RevealConfig.get(start_path=target_path)
+            # BACK-1386: what git ignores is not parsed as a graph node, but it
+            # stays in file_index -- a gitignored generated header or module is
+            # still a real #include/import target, so ignored dirs are walked,
+            # not pruned.
+            gi = gitignore_filter(target_path)
             for root, dirs, filenames in os.walk(str(target_path)):
                 root_path = Path(root)
                 dirs[:] = [
@@ -1224,6 +1230,8 @@ class ImportsAdapter(ResourceAdapter):
                     if fp.suffix.lower() in DECLARATION_ONLY_EXTENSIONS:
                         continue  # a stub would duplicate its module's edges (BACK-1467)
                     if fp.suffix in supported_exts or fp.suffix.lower() in code_exts:
+                        if gi is not None and gi.ignored(fp):
+                            continue
                         candidates.append(fp)
         return candidates, file_index
 

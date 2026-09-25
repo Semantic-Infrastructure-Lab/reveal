@@ -32,6 +32,7 @@ from reveal.adapters.architecture import (  # noqa: F401 - re-exported for back-
     _run_imports_analysis,
     _run_scope,
 )
+from ..global_flags import add_gitignore_arguments
 
 
 def create_architecture_parser() -> argparse.ArgumentParser:
@@ -81,6 +82,7 @@ def create_architecture_parser() -> argparse.ArgumentParser:
             'languages (Python/JS/TS/Go/Rust/C/C++ today) — see BACK-487/488.'
         ),
     )
+    add_gitignore_arguments(parser)
     return parser
 
 

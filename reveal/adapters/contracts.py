@@ -17,6 +17,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from .surface import _supported_coverage_languages
 from ..registry import JS_TS_LANGUAGES, _is_cpp_header_content, extensions_for_languages
 from ..utils import print_json_result
+from ..utils.gitignore import gitignore_filter
 from ..utils.exclusions import path_is_excluded
 from ..utils.path_utils import (
     assess_language_coverage,
@@ -79,16 +80,19 @@ def _is_cpp_file(fpath: Path) -> bool:
 
 def _walk_matching(path: Path, matches: Callable[[Path], bool]) -> Iterator[Path]:
     """Files under *path* (or *path* itself) that *matches* accepts, skipping
-    vendored/build and dot directories."""
+    vendored/build and dot directories and what git ignores."""
     if path.is_file():
         if matches(path):
             yield path
         return
+    gi = gitignore_filter(path)  # BACK-1386
     for root, dirs, filenames in os.walk(str(path)):
         dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
+        if gi is not None:
+            gi.prune(root, dirs)
         for fname in filenames:
             fpath = Path(os.path.join(root, fname))
-            if matches(fpath):
+            if matches(fpath) and not (gi is not None and gi.ignored(fpath)):
                 yield fpath
 
 
@@ -933,6 +937,7 @@ class ContractsAdapter(ResourceAdapter):
     HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # --no-gitignore (BACK-1386)
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
 
     def __init__(self, resource: str, query: Optional[str] = None):

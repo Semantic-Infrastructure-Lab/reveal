@@ -88,7 +88,10 @@ class MyAdapter(ResourceAdapter):
     # of the flag being accepted and silently ignored (BACK-1229, BACK-1361, BACK-1379).
     # Flags that need a per-adapter declaration here: --all, --verbose, --since,
     # --until, --no-gitignore (spelled `respect_gitignore`); `{value}` in a fragment
-    # is the flag's value. --sort/--limit reach every adapter automatically (universal
+    # is the flag's value. If your adapter walks a directory, filter the walk with
+    # reveal.utils.gitignore.gitignore_filter(root) (git's own verdict; the router
+    # applies --no-gitignore / ?respect_gitignore= to it for you) and declare
+    # 'respect_gitignore': 'respect_gitignore=false' here. --sort/--limit reach every adapter automatically (universal
     # specs, no declaration needed) via reveal/utils/query_control.py's ResultControl.
     # CLI_QUERY_FLAGS = {'all': 'top=1000000', 'since': 'since={value}'}
     #

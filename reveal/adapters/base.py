@@ -613,6 +613,9 @@ class ResourceAdapter(ABC):
         known = set(declared.keys())
         if extra_known_keys:
             known |= set(extra_known_keys)
+        # A key this adapter's own CLI_QUERY_FLAGS injects is accepted by
+        # definition (BACK-1361 was a declared fragment the validator flagged).
+        known |= {frag.partition('=')[0] for frag in type(self).CLI_QUERY_FLAGS.values()}
         from ..utils.query import warn_unknown_query_params
         warn_unknown_query_params(
             query_params,

@@ -13,13 +13,14 @@ import os
 import re
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple
+from typing import Any, Dict, FrozenSet, Iterator, List, Optional, Set, Tuple
 
 from ..ast.analysis import collect_structures, is_code_file
 from ...utils.pyparse import parse_python
 from ..ast.call_graph import build_alias_map, build_symbol_map, resolve_callees as _resolve_callees
 from ...conventions import conventions_for, family_for_path, is_builtin_anywhere
 from ...defaults import TEST_FRAMEWORK_CALLEE_NAMES
+from ...utils.gitignore import gitignore_enabled, gitignore_filter
 from ...utils.path_utils import is_unsafe_scan_root
 from ...core.definition_names import lookup_keys, name_matches
 
@@ -278,7 +279,8 @@ def _python_referenced_names(directory: Path) -> Set[str]:
     """
     import ast as _ast
 
-    cache_key = _dir_cache_key(directory)
+    from ...utils.exclusions import active_exclusions
+    cache_key = (_dir_cache_key(directory), active_exclusions(), gitignore_enabled())
     dir_str = str(directory)
     cached = _REFERENCE_CACHE.get(dir_str)
     if cached and cached[0] == cache_key:
@@ -286,7 +288,7 @@ def _python_referenced_names(directory: Path) -> Set[str]:
         return cached[1]
 
     referenced: Set[str] = set()
-    for py_file in directory.rglob('*.py'):
+    for py_file in _iter_python_files(directory):
         try:
             if is_unsafe_scan_root(py_file.parent):
                 continue
@@ -322,6 +324,31 @@ def _python_referenced_names(directory: Path) -> Set[str]:
     if len(_REFERENCE_CACHE) > _REFERENCE_CACHE_MAX:
         _REFERENCE_CACHE.popitem(last=False)
     return referenced
+
+
+def _iter_python_files(directory: Path) -> Iterator[Path]:
+    """The .py files the callers index sees: the same pruning as
+    collect_structures (skip dirs, --exclude, what git ignores).
+
+    BACK-1386: this was a bare rglob('*.py') that walked .venv/,
+    node_modules/ and every git-ignored tree, so a name referenced only in a
+    vendored or generated file hid a genuinely uncalled function.
+    """
+    from ...utils.path_utils import is_skippable_dir
+    gi = gitignore_filter(directory)
+    for root, dirs, files in os.walk(directory):
+        dirs[:] = [
+            d for d in dirs
+            if not is_skippable_dir(Path(root), d) and not d.endswith('.egg-info')
+        ]
+        if gi is not None:
+            gi.prune(root, dirs)
+        for name in files:
+            if not name.endswith('.py'):
+                continue
+            fp = Path(root) / name
+            if is_code_file(fp) and not (gi is not None and gi.ignored(fp)):
+                yield fp
 
 
 def _dir_cache_key(directory: Path) -> Any:
@@ -384,9 +411,10 @@ def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
     # Check cache. BACK-1257: the key must include the active --exclude scope,
     # or a long-lived host (the MCP server) would serve an unfiltered index to a
     # later filtered request over the same tree — _dir_cache_key fingerprints
-    # directory mtimes only, which exclusion does not change.
+    # directory mtimes only, which exclusion does not change. BACK-1386: same
+    # for the gitignore switch (--no-gitignore changes the file set).
     from ...utils.exclusions import active_exclusions
-    cache_key = (_dir_cache_key(directory), active_exclusions())
+    cache_key = (_dir_cache_key(directory), active_exclusions(), gitignore_enabled())
     if dir_str in _INDEX_CACHE and _INDEX_CACHE[dir_str][0] == cache_key:
         _INDEX_CACHE.move_to_end(dir_str)
         return _INDEX_CACHE[dir_str][1]
@@ -700,11 +728,14 @@ def _parent_hint_scan_is_cheap(parent: str) -> bool:
     if is_unsafe_scan_root(parent):
         return False
     count = 0
+    gi = gitignore_filter(parent)  # count what the scan itself would see
     for root, dirs, files in os.walk(parent):
         dirs[:] = [
             d for d in dirs
             if not is_skippable_dir(Path(root), d) and not d.endswith('.egg-info')
         ]
+        if gi is not None:
+            gi.prune(root, dirs)
         for name in files:
             if is_code_file(Path(name)):
                 count += 1

@@ -254,45 +254,56 @@ class TestHandleUriSinceUntil:
 # ─── handle_uri — BACK-1202: --no-gitignore on URI-scheme targets ────────────
 
 class TestHandleUriRespectGitignore:
-    """overview:// and stats:// already read ?respect_gitignore=false
-    (BACK-1042) but nothing forwarded --no-gitignore into the query string
-    for the URI-scheme form -- same silent-drop shape as --exclude."""
+    """--no-gitignore / ?respect_gitignore= on the URI form. Originally (BACK-1042)
+    only overview:// and stats:// read the query key, and nothing forwarded the flag.
+    BACK-1386: handle_uri consumes the key and runs the dispatch under the process
+    gitignore switch, so every walker sees it and filter-style adapters (ast://) never
+    get it as a field filter."""
 
-    def test_no_gitignore_injected_for_overview_scheme(self):
-        with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+    @staticmethod
+    def _dispatch(uri, respect_gitignore):
+        from reveal.utils.gitignore import gitignore_enabled
+        seen = {}
+
+        def fake_handler(adapter_class, scheme, resource, element, args):
+            seen['resource'] = resource
+            seen['enabled'] = gitignore_enabled()
+
+        with patch('reveal.cli.routing.uri.handle_adapter', side_effect=fake_handler):
             from reveal.cli.routing import handle_uri
-            args = _args(sort=None, exclude=None, respect_gitignore=False, base_path=None)
-            handle_uri('overview://src', None, args)
-        resource_arg = mock_handler.call_args[0][2]
-        assert 'respect_gitignore=false' in resource_arg
+            args = _args(sort=None, exclude=None, respect_gitignore=respect_gitignore, base_path=None)
+            handle_uri(uri, None, args)
+        return seen
+
+    def test_no_gitignore_reaches_the_dispatch(self):
+        seen = self._dispatch('overview://src', False)
+        assert seen['enabled'] is False
+        assert 'respect_gitignore=' not in seen['resource']
 
     def test_default_respect_gitignore_true_is_not_injected(self):
         """Default True is indistinguishable from 'not typed' -- must not inject."""
-        with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
-            from reveal.cli.routing import handle_uri
-            args = _args(sort=None, exclude=None, respect_gitignore=True, base_path=None)
-            handle_uri('overview://src', None, args)
-        resource_arg = mock_handler.call_args[0][2]
-        assert 'respect_gitignore=' not in resource_arg
+        seen = self._dispatch('overview://src', True)
+        assert seen['enabled'] is True
+        assert 'respect_gitignore=' not in seen['resource']
 
     def test_uri_respect_gitignore_takes_precedence_over_flag(self):
-        with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
-            from reveal.cli.routing import handle_uri
-            args = _args(sort=None, exclude=None, respect_gitignore=False, base_path=None)
-            handle_uri('overview://src?respect_gitignore=true', None, args)
-        resource_arg = mock_handler.call_args[0][2]
-        assert resource_arg.count('respect_gitignore=') == 1
-        assert 'respect_gitignore=true' in resource_arg
+        seen = self._dispatch('overview://src?respect_gitignore=true', False)
+        assert seen['enabled'] is True
+        assert 'respect_gitignore=' not in seen['resource']
 
-    def test_no_gitignore_warns_on_non_supporting_scheme(self, capsys):
-        with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
-            from reveal.cli.routing import handle_uri
-            args = _args(sort=None, exclude=None, respect_gitignore=False, base_path=None)
-            handle_uri('ast://.', None, args)
-        resource_arg = mock_handler.call_args[0][2]
-        assert 'respect_gitignore=' not in resource_arg
-        captured = capsys.readouterr()
-        assert '--no-gitignore has no effect on ast://' in captured.err
+    def test_filter_adapter_never_sees_the_key(self):
+        seen = self._dispatch('ast://.?type=function&respect_gitignore=false', True)
+        assert seen['enabled'] is False
+        assert seen['resource'] == '.?type=function'
+
+    def test_switch_restored_after_dispatch(self):
+        from reveal.utils.gitignore import gitignore_enabled
+        self._dispatch('ast://.?respect_gitignore=false', True)
+        assert gitignore_enabled() is True
+
+    def test_no_gitignore_warns_on_non_walking_scheme(self, capsys):
+        self._dispatch('env://', False)
+        assert '--no-gitignore has no effect on env://' in capsys.readouterr().err
 
 
 # ─── handle_uri — BACK-1202: --depth/--ext/--type/--fast are honest no-ops ───

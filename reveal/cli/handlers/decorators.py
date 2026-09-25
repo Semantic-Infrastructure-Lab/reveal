@@ -144,8 +144,12 @@ def _scan_python_files(target_path):
             total_files = 1
             total_decorated = 1 if has_decorators else 0
     elif target_path.is_dir():
-        for file_path in target_path.rglob('*.py'):
-            if '.venv' in str(file_path) or 'node_modules' in str(file_path):
+        # The shared walker (skip dirs, REVEAL_IGNORE, what git ignores). This
+        # was rglob('*.py') with a substring test on the whole path, which
+        # skipped every file when the target itself sat under a '.venv'.
+        from ...utils.path_utils import _walk_code_files
+        for file_path in _walk_code_files(target_path):
+            if file_path.suffix != '.py':
                 continue
             processed, has_decorators = _collect_file_decorators(
                 file_path, decorator_counts, decorator_files

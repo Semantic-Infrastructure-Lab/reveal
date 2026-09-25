@@ -23,6 +23,7 @@ from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supp
 from ..analyzers.imports.generic import CImportExtractor, CppImportExtractor
 from ..defaults import SKIP_DIRECTORIES
 from ..utils.query import parse_query_params
+from ..utils.gitignore import gitignore_filter
 from ..utils.results import ResultBuilder
 from ..utils.path_utils import (
     is_skippable_dir,
@@ -419,7 +420,7 @@ class DependsAdapter(ResourceAdapter):
     # --verbose was a silent no-op on depends://. Same fix as imports:// (BACK-1361):
     # declare the flag, read it back out of the query in get_structure(), and have
     # render_structure prefer result['verbose'] over its own kwarg default.
-    CLI_QUERY_FLAGS = {'verbose': 'verbose'}
+    CLI_QUERY_FLAGS = {'verbose': 'verbose', 'respect_gitignore': 'respect_gitignore=false'}
 
     def __init__(self, resource: str = '', query: Optional[str] = None):
         """Initialize depends adapter.
@@ -692,6 +693,9 @@ class DependsAdapter(ResourceAdapter):
             if scan_root.suffix in supported_exts:
                 files.append(scan_root)
         else:
+            # BACK-1386: gitignored files are not parsed (not dependents), but
+            # stay in file_index as resolution targets, as in imports://.
+            gi = gitignore_filter(scan_root)
             for root, dirs, filenames in os.walk(str(scan_root)):
                 dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
                 capped = False
@@ -704,6 +708,8 @@ class DependsAdapter(ResourceAdapter):
                     # is the expensive part language-scoping needs to cut.
                     file_index.setdefault(fname, []).append(fp)
                     if fp.suffix not in supported_exts:
+                        continue
+                    if gi is not None and gi.ignored(fp):
                         continue
                     if len(files) >= self._SCAN_FILE_CAP:
                         capped = True

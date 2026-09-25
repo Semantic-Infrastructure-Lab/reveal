@@ -367,6 +367,7 @@ class TraceAdapter(ResourceAdapter):
     HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # --no-gitignore (BACK-1386)
 
     def __init__(self, resource: str, query: Optional[str] = None):
         self.path = str(Path(resource).expanduser())

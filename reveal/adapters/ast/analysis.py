@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, cast
 
 from ...reveal_types import StructureItem
+from ...utils.gitignore import gitignore_filter
 from ...utils.path_utils import is_skippable_dir
 from .call_graph import build_symbol_map, resolve_callees
 
@@ -39,15 +40,19 @@ def collect_structures(path: str) -> List[Dict[str, Any]]:
     if path_obj.is_file():
         try_add_file_structure(str(path_obj), structures)
     elif path_obj.is_dir():
-        # Recursively find all code files, pruning well-known non-project dirs.
+        # Recursively find all code files, pruning well-known non-project dirs
+        # and what git ignores (BACK-1386; --no-gitignore turns that off).
+        gi = gitignore_filter(path_obj)
         for root, dirs, files in os.walk(str(path_obj)):
             dirs[:] = [
                 d for d in dirs
                 if not is_skippable_dir(Path(root), d) and not d.endswith('.egg-info')
             ]
+            if gi is not None:
+                gi.prune(root, dirs)
             for name in files:
                 fp = Path(root) / name
-                if is_code_file(fp):
+                if is_code_file(fp) and not (gi is not None and gi.ignored(fp)):
                     try_add_file_structure(str(fp), structures)
 
     return structures

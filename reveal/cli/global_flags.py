@@ -12,9 +12,22 @@ main._dispatch_and_run applies it around both entry paths.
 from __future__ import annotations
 
 from argparse import Namespace
+from typing import Any
 
 from ..utils.gitignore import set_gitignore_enabled
 from ..utils.json_utils import set_provenance_enabled
+
+
+def add_gitignore_arguments(parser: Any) -> None:
+    """--respect-gitignore / --no-gitignore, for every parser whose command walks a tree.
+
+    One declaration so the spelling, default and help cannot drift between the
+    main parser and the subcommands; apply_global_flags() is what honors it.
+    """
+    parser.add_argument('--respect-gitignore', action='store_true', default=True,
+                        help='Skip files git ignores (default: enabled; tracked files are never skipped)')
+    parser.add_argument('--no-gitignore', action='store_false', dest='respect_gitignore',
+                        help='Include files git ignores')
 
 
 def apply_global_flags(args: Namespace) -> None:

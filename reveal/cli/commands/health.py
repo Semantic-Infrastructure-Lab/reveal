@@ -5,6 +5,7 @@ import sys
 from argparse import Namespace
 from pathlib import Path
 from typing import List
+from ..global_flags import add_gitignore_arguments
 
 
 def create_health_parser() -> argparse.ArgumentParser:
@@ -47,6 +48,7 @@ def create_health_parser() -> argparse.ArgumentParser:
         dest='health_all',
         help='Check all resources detectable in context (current dir + configured targets)'
     )
+    add_gitignore_arguments(parser)
     return parser
 
 

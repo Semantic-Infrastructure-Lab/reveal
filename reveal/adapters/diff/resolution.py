@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, Iterator, cast
 from .git import resolve_git_ref, resolve_git_adapter
 from ..base import get_adapter_class
 from ...registry import get_analyzer
+from ...utils.gitignore import gitignore_filter
 from ...utils.path_utils import is_skippable_dir
 
 
@@ -195,15 +196,20 @@ def find_analyzable_files(directory: Path) -> Iterator[Path]:
         File paths that have analyzers (generator — avoids materializing
         the full list into memory before processing begins).
     """
+    gi = gitignore_filter(directory)  # BACK-1386
     for root, dirs, files in os.walk(directory):
         # Skip common ignore directories (BACK-552: 'venv'/'dist'/'build' etc.
         # are ambiguous — only skipped when they hold no source at their own
         # top level, since a real package can legitimately use those names)
         root_path = Path(root)
         dirs[:] = [d for d in dirs if not is_skippable_dir(root_path, d)]
+        if gi is not None:
+            gi.prune(root, dirs)
 
         for file in files:
             file_path = Path(root) / file
+            if gi is not None and gi.ignored(file_path):
+                continue
             # Check if reveal can analyze this file
             if get_analyzer(str(file_path), allow_fallback=False):
                 yield file_path

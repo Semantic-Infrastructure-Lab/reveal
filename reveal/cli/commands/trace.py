@@ -24,6 +24,7 @@ from reveal.adapters.trace import (  # noqa: F401 - re-exported for back-compat
     _relpath,
     _render_trace,
 )
+from ..global_flags import add_gitignore_arguments
 
 
 def create_trace_parser() -> argparse.ArgumentParser:
@@ -52,6 +53,7 @@ def create_trace_parser() -> argparse.ArgumentParser:
         '--format', choices=['text', 'json'], default='text',
         help='Output format: text (default) or json',
     )
+    add_gitignore_arguments(parser)
     return parser
 
 

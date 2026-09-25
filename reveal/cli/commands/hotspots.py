@@ -23,6 +23,7 @@ from reveal.adapters.hotspots import (  # noqa: F401 - re-exported for back-comp
     _run_file_hotspots,
     _run_function_hotspots,
 )
+from ..global_flags import add_gitignore_arguments
 
 
 def create_hotspots_parser() -> argparse.ArgumentParser:
@@ -82,6 +83,7 @@ def create_hotspots_parser() -> argparse.ArgumentParser:
              '(e.g., --exclude "*.min.js" --exclude "vendor/*"). Repeatable. '
              'Patterns are relative to the analysed path.',
     )
+    add_gitignore_arguments(parser)
     return parser
 
 

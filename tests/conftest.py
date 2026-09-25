@@ -10,7 +10,7 @@ import sys
 import tempfile
 import shutil
 from pathlib import Path
-from typing import Generator
+from typing import Generator, List
 from io import StringIO
 from contextlib import redirect_stdout, redirect_stderr
 
@@ -216,6 +216,38 @@ def complex_{i}(x, y=0):
 '''
 
 
+def write_gitignore_probe_files(root: Path) -> List[str]:
+    """Populate *root* for --no-gitignore probes (BACK-1386); returns the paths to commit.
+
+    Everything named *ignored* is git-ignored, and each file gives a different walker
+    something to see: a Protocol (contracts), env/subprocess (surface, testability),
+    imports (imports/deps/depends/architecture), a complex function (hotspots), the
+    callee of a.a (trace), a patched test (patches/testability) and a doc (markdown).
+    The caller runs `git init` and commits the returned paths.
+    """
+    (root / 'a.py').write_text('from ignored import helper\n\n\ndef a():\n    return helper()\n',
+                               encoding='utf-8')
+    (root / 'a.md').write_text('# Title\n\nTracked doc.\n', encoding='utf-8')
+    (root / 'tests').mkdir(exist_ok=True)
+    (root / 'tests' / 'test_a.py').write_text(
+        'from a import a\n\n\ndef test_a():\n    assert a() is not None\n', encoding='utf-8')
+    tangled = '\n'.join(
+        f'    if x == {i}:\n        x += {i}\n    elif x > {i} and x < {i * 3 + 1}:\n        x -= 1'
+        for i in range(12))
+    (root / 'ignored.py').write_text(
+        'import os\nimport subprocess\nfrom typing import Protocol\n\nimport a\n\n\n'
+        'class Probe(Protocol):\n    def run(self) -> int: ...\n\n\n'
+        "def helper():\n    subprocess.run(['true'])\n    return os.environ['PROBE_ENV']\n\n\n"
+        'def b():\n    return a.a()\n\n\n'
+        f'def tangled(x):\n{tangled}\n    return x\n', encoding='utf-8')
+    (root / 'tests' / 'test_ignored.py').write_text(
+        "from unittest import mock\n\n\n@mock.patch('a.helper')\ndef test_b(m):\n    assert m\n",
+        encoding='utf-8')
+    (root / 'ignored.md').write_text('# Ignored\n\nIgnored doc.\n', encoding='utf-8')
+    (root / '.gitignore').write_text('*ignored*\n', encoding='utf-8')
+    return ['a.py', 'a.md', 'tests/test_a.py', '.gitignore']
+
+
 @pytest.fixture(scope="session")
 def flag_probe_corpus(tmp_path_factory) -> Path:
     """A small Python project that overflows every default cap the flag-matrix probes lift.
@@ -293,3 +325,16 @@ def pytest_configure(config):
 def _serial_workers_unless_pool_test(request, monkeypatch):
     if request.node.get_closest_marker("real_worker_pool"):
         monkeypatch.delenv("REVEAL_MAX_WORKERS", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _reset_gitignore_state():
+    """--no-gitignore is process state (BACK-1386): a test that runs apply_global_flags
+    with it, or a cached `git ls-files` answer for a reused tmp repo, must not leak into
+    the next test in the same worker."""
+    from reveal.utils.gitignore import clear_cache, set_gitignore_enabled
+    set_gitignore_enabled(True)
+    clear_cache()
+    yield
+    set_gitignore_enabled(True)
+    clear_cache()

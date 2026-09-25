@@ -14,6 +14,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 from ..utils.path_utils import is_test_basename_for_language
 from ..utils.pyparse import parse_python
 from ..core.treesitter_compat import _zero_arg, suppress_treesitter_warnings, tree_root, ts_parse
+from ..utils.gitignore import gitignore_filter
 from ..utils.path_utils import is_skippable_dir
 from ..registry import JS_TS_LANGUAGES, extensions_for_languages, js_ts_grammar
 
@@ -104,11 +105,14 @@ def iter_test_files(
             if _file_matches(path, extensions):
                 files.append(path)
         elif path.is_dir():
+            gi = gitignore_filter(path)  # BACK-1386
             for root, dirs, names in os.walk(path):
                 dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
+                if gi is not None:
+                    gi.prune(root, dirs)
                 for name in names:
                     fp = Path(root) / name
-                    if _file_matches(fp, extensions):
+                    if _file_matches(fp, extensions) and not (gi is not None and gi.ignored(fp)):
                         files.append(fp)
     return sorted(set(files))
 

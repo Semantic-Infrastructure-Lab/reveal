@@ -114,9 +114,10 @@ def test_unsupported_flag_gets_a_note_naming_the_supporting_schemes():
 
 
 def test_note_lists_every_declaring_scheme():
-    _, err = _inject('.', 'ast', respect_gitignore=False)
-    assert '--no-gitignore has no effect on ast://' in err
-    assert 'overview://' in err and 'stats://' in err
+    # BACK-1386: every walking adapter declares --no-gitignore; env:// walks nothing.
+    _, err = _inject('.', 'env', respect_gitignore=False)
+    assert '--no-gitignore has no effect on env://' in err
+    assert 'overview://' in err and 'stats://' in err and 'ast://' in err
 
 
 def test_all_and_verbose_stay_silent_on_adapters_without_a_declaration():

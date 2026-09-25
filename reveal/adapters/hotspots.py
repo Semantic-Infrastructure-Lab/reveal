@@ -18,6 +18,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from ..conventions import LanguageConventions, conventions_for, family_for_path
 from ..defaults import TEST_DIR_NAMES, VENDOR_DIR_NAMES
 from ..utils import print_json_result
+from ..utils.gitignore import gitignore_filter
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
 
@@ -128,8 +129,11 @@ def _build_test_name_index(path: Path, families: Optional[Iterable[str]] = None)
     names: Set[str] = set()
     if not convs:
         return names
+    gi = gitignore_filter(path)  # BACK-1386
     for root, dirs, files in os.walk(str(path)):
         dirs[:] = [d for d in dirs if not d.startswith('.') and d not in _SKIP_WALK_DIRS]
+        if gi is not None:
+            gi.prune(root, dirs)
         in_test_dir = any(part in TEST_DIR_NAMES for part in Path(root).relative_to(path).parts)
         for fname in files:
             conv = convs.get(family_for_path(fname))
@@ -293,7 +297,7 @@ class HotspotsAdapter(ResourceAdapter):
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
     # default top=10 per ranking; --all lifts it (BACK-1229)
-    CLI_QUERY_FLAGS = {'all': 'top=1000000'}
+    CLI_QUERY_FLAGS = {'all': 'top=1000000', 'respect_gitignore': 'respect_gitignore=false'}
 
     def __init__(self, resource: str, query: Optional[str] = None):
         self.path = str(Path(resource).expanduser())

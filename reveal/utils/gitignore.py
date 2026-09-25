@@ -409,6 +409,30 @@ def parse_respect_gitignore(value: object) -> Optional[bool]:
     return str(value).strip().lower() not in ('false', '0', 'no', 'off')
 
 
+def split_respect_gitignore(resource: str) -> Tuple[str, Optional[bool]]:
+    """Split ``respect_gitignore=`` off a URI resource's query.
+
+    Returns (resource without the key, its bool value or None). Every URI
+    entry point (cli/routing/uri.handle_uri, api.query) consumes the key and
+    applies it with gitignore_scope() for the whole dispatch, so every walker
+    sees it -- and filter-style adapters (ast://, markdown://) never read it
+    as a field filter that matches nothing.
+    """
+    path_part, sep, query = resource.partition('?')
+    if not sep:
+        return resource, None
+    kept, value = [], None
+    for part in query.split('&'):
+        key, _, val = part.partition('=')
+        if key == 'respect_gitignore':
+            value = parse_respect_gitignore(val)
+        elif part:
+            kept.append(part)
+    if value is None:
+        return resource, None
+    return (f"{path_part}?{'&'.join(kept)}" if kept else path_part), value
+
+
 def respect_gitignore_param(query_params) -> bool:
     """An adapter's ?respect_gitignore= if given, else the process switch."""
     explicit = parse_respect_gitignore(query_params.get('respect_gitignore'))

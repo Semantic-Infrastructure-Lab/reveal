@@ -21,6 +21,10 @@ Cell classification, per (subcommand, flag):
                     cross-file forward -- see _CROSS_FILE_READERS) somewhere in scope.
                     Still needs a hand `review: honored` plus, ideally, a PROBES entry
                     proving an output difference -- "read" doesn't guarantee "used".
+  declared-global   the flag is declared and applied process-wide by
+                    cli/global_flags.apply_global_flags, which every entry path calls after
+                    parsing (BACK-1386: --no-gitignore switches every walker at once). Still
+                    needs a hand `review: honored` plus a PROBES entry.
   declared-unused   the flag is declared but no read was found anywhere in scope -- the
                     silent-no-op shape. Must carry `review: not-applicable` with a reason
                     (nothing in this subcommand's output changes based on the flag) or
@@ -40,6 +44,8 @@ from pathlib import Path
 
 import pytest
 import yaml
+
+from conftest import write_gitignore_probe_files
 
 MATRIX_PATH = Path(__file__).parent / 'subcommand_flag_matrix.yaml'
 REVEAL_PKG = Path(__file__).resolve().parent.parent / 'reveal'
@@ -85,6 +91,16 @@ PROBES = {
     ('hotspots', 'verbose'): (['{pkg}'], True),
     ('testability', 'verbose'): (['{pkg}', '--tests', '{tests}'], True),
     ('check', 'respect_gitignore'): (['{tree}'], False),
+    # BACK-1386: every walking subcommand, via apply_global_flags (probe_tree's *ignored*).
+    ('architecture', 'respect_gitignore'): (['{tree}'], False),
+    ('contracts', 'respect_gitignore'): (['{tree}'], False),
+    ('deps', 'respect_gitignore'): (['{tree}'], False),
+    ('hotspots', 'respect_gitignore'): (['{tree}'], False),
+    ('pack', 'respect_gitignore'): (['{tree}'], False),
+    ('surface', 'respect_gitignore'): (['{tree}'], False),
+    ('testability', 'respect_gitignore'): (['{tree}'], False),
+    ('trace', 'respect_gitignore'): (['{tree}', '--from', 'a'], False),
+    ('overview', 'respect_gitignore'): (['{tree}'], False),
     ('pack', 'since'): (['{tree}'], '2099-01-01'),
     ('overview', 'all'): (['{pkg}'], True),
 }
@@ -150,7 +166,12 @@ def derive_matrix():
             read = (_module_reads_flag(own_rel, flag)
                     or any(_module_reads_flag(f, flag) for f in cross_files)
                     or _reads_via_shared_seam(name, flag))
-            cells[flag] = ['declared-read'] if read else ['declared-unused']
+            if read:
+                cells[flag] = ['declared-read']
+            elif _module_reads_flag('reveal/cli/global_flags.py', flag):
+                cells[flag] = ['declared-global']
+            else:
+                cells[flag] = ['declared-unused']
         matrix[name] = cells
     return matrix
 
@@ -248,12 +269,10 @@ def probe_tree(tmp_path_factory):
     import subprocess
 
     root = tmp_path_factory.mktemp('subcommand_probe_tree')
-    (root / 'a.py').write_text('def a():\n    return 1\n', encoding='utf-8')
-    (root / 'ignored.py').write_text('def b():\n    return 2\n', encoding='utf-8')
-    (root / '.gitignore').write_text('ignored.py\n', encoding='utf-8')
+    tracked = write_gitignore_probe_files(root)
     git = ['git', '-C', str(root), '-c', 'user.name=t', '-c', 'user.email=t@t']
     subprocess.run([*git, 'init', '-q'], check=True)
-    subprocess.run([*git, 'add', 'a.py', '.gitignore'], check=True)
+    subprocess.run([*git, 'add', *tracked], check=True)
     subprocess.run([*git, 'commit', '-q', '-m', 'init', '--date', '2020-01-01T00:00:00'],
                    check=True, env={**__import__('os').environ, 'GIT_COMMITTER_DATE': '2020-01-01T00:00:00'})
     return root
