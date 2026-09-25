@@ -136,7 +136,6 @@ notes:
 output_formats:
   - text
   - json
-  - grep
 
 see_also:
   - 'reveal help://env - Environment variables'

@@ -199,8 +199,16 @@ def test_selected_files_carry_reusable_drill_back_anchors():
 # Output formats
 # --------------------------------------------------------------------------- #
 
-@pytest.mark.parametrize("fmt", ["json", "typed", "grep", "text"])
+@pytest.mark.parametrize("fmt", ["json", "text"])
 def test_all_output_formats_run_without_crashing(fmt):
     result = _run("pack", str(REPO), "--format", fmt, "--budget", "4000")
     _assert_sane(result, f"pack --format {fmt}")
     assert result.stdout.strip(), f"pack --format {fmt} produced no output"
+
+
+@pytest.mark.parametrize("fmt", ["typed", "grep"])
+def test_unrendered_formats_are_rejected(fmt):
+    """BACK-1425: pack printed its text rendering for these (byte-identical)."""
+    result = _run("pack", str(REPO), "--format", fmt, "--budget", "4000")
+    assert result.returncode == 2
+    assert "not supported by reveal pack" in result.stderr

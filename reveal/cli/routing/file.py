@@ -17,6 +17,9 @@ if TYPE_CHECKING:
 # Module-level imports so callers can mock reveal.cli.routing.file.handle_uri
 # and reveal.cli.routing.file.handle_file in tests.
 from .uri import handle_uri  # noqa: E402
+from .formats import (  # noqa: E402
+    DEFAULT_OUTPUT_FORMATS, reject_unhonored_also_json, require_supported_format,
+)
 from ...file_handler import handle_file  # noqa: E402
 from ...grep_handler import handle_grep  # noqa: E402
 from ...registry import get_markdown_extensions  # noqa: E402
@@ -294,6 +297,7 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
     if getattr(args, 'grep', None):
         if getattr(args, 'name', None):
             print("Note: --name ignored when --grep is used (--grep searches all text, --name filters structural output)", file=sys.stderr)
+        reject_unhonored_also_json(args, '--grep')
         from ...grep_handler import handle_grep_directory
         handle_grep_directory(str(path), args.grep, args)
         return
@@ -330,6 +334,8 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
     elif getattr(args, 'name', None):
         handle_uri(_build_ast_query_from_flags(path, args), args.element, args)
         return
+    require_supported_format(args, DEFAULT_OUTPUT_FORMATS, 'a directory listing')
+    reject_unhonored_also_json(args, 'a directory listing')
     sort_by = getattr(args, 'sort', None)
     include_extensions = _parse_ext_arg(ext_from_args)
     output_format = getattr(args, 'format', 'text')
@@ -378,6 +384,7 @@ def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Names
     if getattr(args, 'grep', None):
         if getattr(args, 'name', None):
             print(f"Note: --name '{args.name}' ignored when --grep is used (--grep searches all text, --name filters structural output)", file=sys.stderr)
+        reject_unhonored_also_json(args, '--grep')
         handle_grep(str(path), args.grep, args)
         return
     if getattr(args, 'name', None) or getattr(args, 'sort', None) or getattr(args, 'type', None):
@@ -397,6 +404,7 @@ def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Names
             print(file=sys.stderr)
             print("Learn more: reveal help://ux", file=sys.stderr)
             sys.exit(1)
+    reject_unhonored_also_json(args, 'the file view')
     handle_file(str(path), element, args.meta, args.format, args)
 
 

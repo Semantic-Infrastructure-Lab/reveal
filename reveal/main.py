@@ -189,8 +189,34 @@ def _dispatch_subcommand() -> bool:
     # positional/subparser conflicts), so it must apply the global flags itself
     # (BACK-1034: --provenance was silently dropped here).
     apply_global_flags(args)
+    _require_subcommand_format(name, args)
     getattr(mod, runner_fn)(args)
     return True
+
+
+# Subcommands with no same-named adapter whose runners render only these
+# (measured: grep/typed output was byte-identical to text). `check` renders
+# every format and is not listed.
+_SUBCOMMAND_FORMATS = {
+    'health': ('text', 'json'),
+    'review': ('text', 'json'),
+}
+
+
+def _require_subcommand_format(name: str, args: Any) -> None:
+    """A subcommand renders what its adapter (or _SUBCOMMAND_FORMATS)
+    declares; any other --format is rejected, not printed as text (BACK-1425)."""
+    from . import adapters as _adapters  # noqa: F401 -- registers every adapter
+    from .adapters.base import get_adapter_class
+    from .cli.routing.formats import (
+        declared_output_formats, reject_unhonored_also_json, require_supported_format,
+    )
+    adapter_class = get_adapter_class(name)
+    supported = (declared_output_formats(adapter_class) if adapter_class is not None
+                 else _SUBCOMMAND_FORMATS.get(name))
+    require_supported_format(args, supported, f"reveal {name}")
+    if name != 'check':
+        reject_unhonored_also_json(args, f"reveal {name}")
 
 
 def _setup_console() -> None:

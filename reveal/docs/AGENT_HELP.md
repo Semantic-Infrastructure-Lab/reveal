@@ -2875,6 +2875,8 @@ reveal file.py --format text         # an explicit --format always wins
 
 `REVEAL_FORMAT` sets the default `--format` for every entry point — files, `uri://` adapters and subcommands (`reveal hotspots`, `reveal check`, …). An explicit `--format` on the command line overrides it.
 
+**Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `ast://`, `env://`, `markdown://` and `reveal check`; `typed` for a single file and `reveal check`. Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note). `--also-json PATH` works with `scheme://` URIs and `reveal check`, and exits 2 elsewhere; use `--format json` there.
+
 **Token budget flags (URI adapters — limits list fields like items/results/checks/commits):**
 ```bash
 # Stop after N results (text and JSON both respect this)

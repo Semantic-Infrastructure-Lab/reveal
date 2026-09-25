@@ -1008,7 +1008,7 @@ class ClaudeAdapter(ResourceAdapter):
                 'On Windows, UUID session names are shown in the listing (reveal claude://)',
                 'SSH / multi-user: --base-path /path/to/.claude/projects points all resources at that install',
             ],
-            'output_formats': ['text', 'json', 'grep'],
+            'output_formats': ['text', 'json'],
             'see_also': [
                 'reveal json:// - Navigate JSONL structure directly',
                 'reveal help://adapters - All available adapters',

@@ -14,6 +14,7 @@ from urllib.parse import parse_qs
 from ...errors import NotApplicableError
 from ...utils import print_json_result, write_also_json
 from .flag_specs import exclude_fragment, inject_query_flags
+from .formats import declared_output_formats, require_supported_format
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -520,6 +521,8 @@ def _handle_rendering(adapter, renderer_class: type[Any], scheme: str,
         element: Optional element to extract
         args: CLI arguments
     """
+    require_supported_format(args, declared_output_formats(type(adapter)), f"{scheme}://")
+
     # Get element or structure based on adapter capabilities
     # Adapters with render_element (env, python, help) support element-based access
     # Others (ast, json, stats) always use get_structure() unless element explicitly provided

@@ -123,7 +123,6 @@ notes:
 output_formats:
   - text
   - json
-  - grep
 
 see_also:
   - 'reveal help://ast - Query code structure'

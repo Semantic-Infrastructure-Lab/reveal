@@ -323,6 +323,7 @@ For adapters without a custom renderer, the base renderer handles JSON, grep, an
 - `--format grep` → grep-compatible `file:line:match` lines
 - `--format dot` → Graphviz DOT (calls://)
 - (default) → text renderer for the adapter's type
+- An adapter's `get_help()['output_formats']` is enforced (`cli/routing/formats.py`, BACK-1425): an explicit `--format` it does not declare exits 2 rather than falling back to text. Declare a format only once its renderer actually produces it.
 
 ### Field Selection
 
