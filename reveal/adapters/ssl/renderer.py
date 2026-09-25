@@ -376,6 +376,10 @@ class SSLRenderer(TypeDispatchRenderer):
 
         # Group and render checks
         checks = result.get('checks', [])
+        if only_failures:
+            checks = [c for c in checks if c['status'] in ('failure', 'warning')]
+            if not checks:
+                print("No failures or warnings.\n")
         failures, warnings, passes, infos = cls._group_checks_by_status(checks)
 
         cls._render_check_failures(failures)
@@ -408,6 +412,11 @@ class SSLRenderer(TypeDispatchRenderer):
             Filtered result dict (copy)
         """
         if result.get('type') != 'ssl_batch_check':
+            if only_failures and 'checks' in result:
+                single = result.copy()
+                single['checks'] = [c for c in result['checks']
+                                    if c['status'] in ('failure', 'warning')]
+                return single
             return result
 
         filtered = result.copy()

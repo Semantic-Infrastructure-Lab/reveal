@@ -1941,6 +1941,74 @@ server {
         self.assertIn('SSL Certificate File Validation', output)
 
 
+class TestSingleHostOnlyFailures(unittest.TestCase):
+    """BACK-1220: ssl://host --check --only-failures ignored the flag for one host."""
+
+    def _result(self, checks):
+        failures = sum(1 for c in checks if c['status'] == 'failure')
+        return {
+            'type': 'ssl_check_advanced',
+            'host': 'example.com',
+            'port': 443,
+            'status': 'failure' if failures else 'pass',
+            'certificate': {'common_name': 'example.com', 'days_until_expiry': 60,
+                            'not_after': '2024-12-31'},
+            'checks': checks,
+            'summary': {'total': len(checks), 'passed': 0, 'warnings': 0, 'failures': failures},
+            'exit_code': 1 if failures else 0,
+        }
+
+    def _text(self, result, **kwargs):
+        import io
+        from contextlib import redirect_stdout
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer.render_check(result, format='text', **kwargs)
+        return f.getvalue()
+
+    MIXED = [
+        {'name': 'certificate_expiry', 'status': 'pass', 'message': 'Valid for 60 days'},
+        {'name': 'tls_version', 'status': 'failure', 'message': 'Using TLSv1.0'},
+        {'name': 'hsts', 'status': 'warning', 'message': 'HSTS missing'},
+        {'name': 'issuer_type', 'status': 'info', 'message': 'Issued by Test CA'},
+    ]
+
+    def test_text_only_failures_hides_passes_and_infos(self):
+        out = self._text(self._result(self.MIXED), only_failures=True)
+        self.assertIn('tls_version', out)
+        self.assertIn('hsts', out)
+        self.assertNotIn('certificate_expiry', out)
+        self.assertNotIn('issuer_type', out)
+
+    def test_text_all_passing_says_so_instead_of_listing_passes(self):
+        checks = [
+            {'name': 'certificate_expiry', 'status': 'pass', 'message': 'Valid for 60 days'},
+            {'name': 'issuer_type', 'status': 'info', 'message': 'Issued by Test CA'},
+        ]
+        out = self._text(self._result(checks), only_failures=True)
+        self.assertIn('No failures or warnings', out)
+        self.assertNotIn('certificate_expiry', out)
+        self.assertNotIn('issuer_type', out)
+
+    def test_text_without_flag_still_shows_everything(self):
+        checks = [
+            {'name': 'certificate_expiry', 'status': 'pass', 'message': 'Valid for 60 days'},
+            {'name': 'issuer_type', 'status': 'info', 'message': 'Issued by Test CA'},
+        ]
+        out = self._text(self._result(checks))
+        self.assertIn('certificate_expiry', out)
+        self.assertIn('issuer_type', out)
+
+    def test_json_only_failures_filters_single_host_checks(self):
+        filtered = SSLRenderer._filter_results(self._result(self.MIXED), only_failures=True)
+        self.assertEqual([c['name'] for c in filtered['checks']], ['tls_version', 'hsts'])
+
+    def test_json_filter_does_not_mutate_the_input(self):
+        result = self._result(self.MIXED)
+        SSLRenderer._filter_results(result, only_failures=True)
+        self.assertEqual(len(result['checks']), 4)
+
+
 class TestValidateNginxRendering(unittest.TestCase):
     """Tests for BACK-077: render_check routes ssl_nginx_validation without crashing."""
 
