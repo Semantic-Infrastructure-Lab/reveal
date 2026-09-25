@@ -5,7 +5,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, cast
 
 from reveal.base import FileAnalyzer
+from reveal.defaults import DisplayDefaults
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
+from reveal.utils.path_utils import is_minified_content, is_minified_filename
 
 from .coverage import format_coverage_warning, outline_coverage
 from .element import listed_item_line
@@ -522,7 +524,8 @@ _CATEGORY_FORMATTERS = {
 
 
 def _render_single_category(category: str, items: Any, path: Path, output_format: str,
-                             heading_depth: Optional[int] = None) -> None:
+                             heading_depth: Optional[int] = None,
+                             budget: Optional[Dict[str, Any]] = None) -> None:
     """Render a single category."""
     # Handle dict-type metadata specially (HTML metadata as dict, not list)
     if category == 'metadata' and isinstance(items, dict):
@@ -551,7 +554,10 @@ def _render_single_category(category: str, items: Any, path: Path, output_format
 
     count = len(items)
 
-    print(f"{category.capitalize()} ({count}):")
+    if budget:
+        print(f"{category.capitalize()} ({count} of {budget['total_available']} shown):")
+    else:
+        print(f"{category.capitalize()} ({count}):")
 
     if category == 'headings':
         _format_markdown_headings(items, path, output_format, depth_override=heading_depth)
@@ -565,10 +571,12 @@ def _render_single_category(category: str, items: Any, path: Path, output_format
 def _render_text_categories(structure: Dict[str, List[Dict[str, Any]]],
                             path: Path, output_format: str, heading_depth: Optional[int] = None) -> None:
     """Render each category in text format."""
+    budgets: Dict[str, Any] = cast(Dict[str, Any], structure.get('_budget') or {})
     for category, items in structure.items():
-        if _should_skip_category(category, items):
+        if category in ('_budget', '_looks_minified') or _should_skip_category(category, items):
             continue
-        _render_single_category(category, items, path, output_format, heading_depth=heading_depth)
+        _render_single_category(category, items, path, output_format, heading_depth=heading_depth,
+                                budget=budgets.get(category))
 
 
 def _build_outline_hierarchy(structure: Dict[str, List[Dict[str, Any]]]):
@@ -604,6 +612,19 @@ PARSE_RECOVERY_NOTICE = ("⚠️  Parse recovered from syntax tree-sitter could 
                          "incomplete or wrong (a grammar gap or a real syntax error).")
 
 
+def _print_truncation_notice(structure: Dict[str, Any]) -> None:
+    """Say so when a category list was cut short (default cap, --max-items)."""
+    budgets = structure.get('_budget') if isinstance(structure, dict) else None
+    if not budgets:
+        return
+    parts = ", ".join(f"{cat} {b['returned']} of {b['total_available']}" for cat, b in budgets.items())
+    print(f"Truncated: {parts}.")
+    if structure.get('_looks_minified'):
+        print("  This file looks minified/bundled; its listing is capped low.")
+    print("  Use --all for everything, or --max-items N to set the cap.")
+    print()
+
+
 def _print_coverage_warning(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]]) -> None:
     """Say so when the outline is not the whole story: the parse recovered around
     errors (BACK-1084's `_has_errors`, already disclosed by `check`), or it covers
@@ -611,7 +632,9 @@ def _print_coverage_warning(analyzer: FileAnalyzer, structure: Dict[str, List[Di
     if isinstance(structure, dict) and structure.get('_has_errors'):
         print()
         print(PARSE_RECOVERY_NOTICE)
-    coverage = outline_coverage(structure, analyzer.lines)
+    # A budget-truncated listing covers little of the file by construction; the
+    # truncation notice already says so, and a coverage claim would mislead.
+    coverage = None if structure.get('_budget') else outline_coverage(structure, analyzer.lines)
     if coverage:
         print()
         for line in format_coverage_warning(coverage, analyzer.path):
@@ -650,6 +673,7 @@ def _handle_outline_mode(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[
 
     hierarchy = _build_outline_hierarchy(structure)
     render_outline(hierarchy, path)
+    _print_truncation_notice(structure)
     _print_coverage_warning(analyzer, structure)
 
     # Navigation hints
@@ -714,6 +738,7 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
     # Text output: show header, categories, and navigation hints
     _print_file_header(path, is_fallback, fallback_lang)
     _render_text_categories(structure, path, output_format, heading_depth=heading_depth)
+    _print_truncation_notice(structure)
     _print_coverage_warning(analyzer, structure)
 
     # Navigation hints
@@ -723,7 +748,22 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
                          structure=structure)
 
 
-def _apply_file_budget_constraints(structure: Dict[str, Any], args=None) -> Dict[str, Any]:
+def _default_file_item_cap(analyzer: FileAnalyzer, args, output_format: str) -> Optional[int]:
+    """Per-category cap for a bare-file text view when neither --all nor --max-items
+    is given (BACK-1424); None means no default cap. JSON/typed output is a data
+    contract and is never capped implicitly."""
+    if args is None or output_format != 'text' or getattr(args, 'all', False):
+        return None
+    if getattr(args, 'typed', False):
+        return None
+    if is_minified_filename(analyzer.path.name) or is_minified_content(analyzer.content):
+        return DisplayDefaults.MINIFIED_FILE_MAX_ITEMS
+    return DisplayDefaults.FILE_MAX_ITEMS
+
+
+def _apply_file_budget_constraints(structure: Dict[str, Any], args=None,
+                                   default_cap: Optional[int] = None,
+                                   looks_minified: bool = False) -> Dict[str, Any]:
     """Apply --max-items/--max-snippet-chars to a bare-file structure dict.
 
     Mirrors cli/routing/uri.py::_apply_budget_constraints, but a file's
@@ -740,6 +780,8 @@ def _apply_file_budget_constraints(structure: Dict[str, Any], args=None) -> Dict
 
     max_items = getattr(args, 'max_items', None)
     max_snippet_chars = getattr(args, 'max_snippet_chars', None)
+    if max_items is None:
+        max_items = default_cap
     if max_items is None and max_snippet_chars is None:
         return structure
 
@@ -758,6 +800,8 @@ def _apply_file_budget_constraints(structure: Dict[str, Any], args=None) -> Dict
 
     if budget_meta:
         structure['_budget'] = budget_meta
+        if looks_minified:
+            structure['_looks_minified'] = True
 
     return structure
 
@@ -781,7 +825,10 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
         kwargs['outline'] = args.outline
 
     structure = analyzer.get_structure(**kwargs)
-    structure = _apply_file_budget_constraints(structure, args)
+    default_cap = _default_file_item_cap(analyzer, args, output_format)
+    structure = _apply_file_budget_constraints(
+        structure, args, default_cap=default_cap,
+        looks_minified=default_cap == DisplayDefaults.MINIFIED_FILE_MAX_ITEMS)
     path = analyzer.path
 
     # --frontmatter is a silent no-op in text mode (data is extracted but not

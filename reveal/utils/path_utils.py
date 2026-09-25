@@ -19,6 +19,7 @@ from ..defaults import (
     TEST_DIR_NAMES,
     VENDOR_DIR_NAMES,
     MINIFIED_FILENAME_RE,
+    DisplayDefaults,
 )
 from ..registry import _is_cpp_header_content, language_for_extension, LANGUAGE_DISPLAY_NAMES
 
@@ -226,6 +227,15 @@ def is_minified_filename(filename: str) -> bool:
     ``classify://`` called the same file ``first_party``.
     """
     return bool(MINIFIED_FILENAME_RE.search(filename))
+
+
+def is_minified_content(content: str) -> bool:
+    """True if *content* looks minified/bundled whatever the file is called: big, with
+    very long lines on average (BACK-1424; the filename test misses ``bundle.js``)."""
+    size = len(content)
+    if size < DisplayDefaults.MINIFIED_MIN_BYTES:
+        return False
+    return size / (content.count('\n') + 1) > DisplayDefaults.MINIFIED_AVG_LINE_CHARS
 
 
 # BACK-1264: 'spec'/'specs' names two different things -- an RSpec test tree,

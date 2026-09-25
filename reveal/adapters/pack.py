@@ -258,7 +258,8 @@ def _get_file_structure(file_path: str) -> str:
         # helpful default for interactive `reveal file.py`) would otherwise
         # leak a small file's full content into a confidentiality-sensitive
         # DD pack.
-        show_structure(analyzer, 'text', args=SimpleNamespace(no_raw_fallback=True))
+        # all=True: pack budgets its own output; the interactive per-file item cap must not apply.
+        show_structure(analyzer, 'text', args=SimpleNamespace(no_raw_fallback=True, all=True))
     except Exception:
         # The text-mode caller renders '' as '[no structure analysis available]'.
         return ''

@@ -195,6 +195,14 @@ class DisplayDefaults:
     TREE_DIR_LIMIT = 50                  # --dir-limit default
     TREE_MAX_ENTRIES = 200               # --max-entries default
     SNIPPET_CONTEXT_LINES = 3            # Lines of context around matches
+    # Per-category cap on a single file's text structure view (BACK-1424); --all or
+    # --max-items lifts/overrides it. A minified/bundled file gets the small one.
+    FILE_MAX_ITEMS = 500
+    MINIFIED_FILE_MAX_ITEMS = 50
+    # Content-based minified test: a file this large whose lines average this long is
+    # a build artifact whatever its name (a 5 MB one-line `bundle.js`).
+    MINIFIED_MIN_BYTES = 10_000
+    MINIFIED_AVG_LINE_CHARS = 200
 
 
 # Cross-file call-graph EXTRACTION confidence, per language (BACK-1198).
