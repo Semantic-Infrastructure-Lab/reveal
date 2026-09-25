@@ -1652,6 +1652,7 @@ Not implemented for scanned languages (a 0 here is not a clean result):
   mcp: C++, C#, Go, Java, Kotlin, PHP, Ruby, Rust, Swift
 ```
 Files that could not be parsed are named, not counted as clean: `N file(s) could not be parsed and contribute no entries: …` (JSON `unparsed_files`, warning `W-SURFACE-2`).
+Files tree-sitter parsed only by guessing across an ERROR region are named too (`recovered_files`, warning `W-SURFACE-3`); each entry inside such a region carries `in_error_region` (text: `[parse-recovered]`) -- treat it as possibly fabricated.
 
 **`--source-only` (v0.101.0+):** Prunes test directories (`tests/`, `test/`, `spec/`, `__tests__/`, any dir starting with `test` or `spec`) and test files (`test_*.py`, `*_test.py`, `conftest.py`, `*.test.ts`, `*.spec.ts`, etc.) before scanning. Useful for security/architecture reviews where test scaffolding adds noise. `_meta.known_limits` in JSON output records the exclusion.
 

@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line, _add_once
+from .nav_surface_common import disclose_parse_recovery, _get_text, _get_line, _add_once
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ def scan_file_surface_ts(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
         return {k: [] for k in _EMPTY_KEYS}
 
     content_bytes = source.encode('utf-8')
-    return _scan_tree(tree, file_path, content_bytes)
+    return disclose_parse_recovery(tree, file_path, _scan_tree(tree, file_path, content_bytes))
 
 
 def _scan_tree(

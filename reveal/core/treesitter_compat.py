@@ -34,7 +34,9 @@ Related Issues:
 - Mobile platform test fixes (session: interstellar-blackhole-0113)
 """
 
+import re
 import warnings
+from typing import List, Tuple
 
 
 def suppress_treesitter_warnings():
@@ -233,3 +235,47 @@ def node_sexp(node) -> str:
         if callable(fn):
             return str(fn())
     return str(node)
+
+
+def error_node_spans(root) -> List[Tuple[int, int]]:
+    """1-based (first_line, last_line) of every outermost ERROR node under `root`.
+
+    Only subtrees whose `has_error` flag is set are entered, so a clean tree costs
+    one flag read. A nested ERROR is covered by its outermost one. BACK-1480: a
+    scanner that walks the whole tree needs to know which lines lie in a region
+    where tree-sitter lost its place and recovered with a guess.
+    """
+    spans: List[Tuple[int, int]] = []
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        if not _zero_arg(node, 'has_error'):
+            continue
+        if _zero_arg(node, 'kind') == 'ERROR':
+            spans.append((_zero_arg(node, 'start_position').row + 1,
+                          _zero_arg(node, 'end_position').row + 1))
+            continue
+        stack.extend(node_children(node))
+    return spans
+
+
+def tree_has_recovery_artifacts(tree) -> bool:
+    """True if the parse was not fully clean: an ERROR node OR a MISSING token
+    inserted during error recovery (BACK-1084; see
+    `TreeSitterAnalyzer._has_recovery_artifacts` for why this is wider than an
+    ERROR-node check). A lone trailing end-of-file MISSING quirk is not flagged.
+    """
+    root = tree_root(tree)
+    if not _zero_arg(root, 'has_error'):
+        return False
+    if error_node_spans(root):
+        return True
+    # No ERROR node: only MISSING tokens remain. A lone MISSING at the very end
+    # of the tree, named like an anonymous `<rule>_token<N>` (Go: a file ending
+    # in an interface type; C: an #include-only unit), is the same benign
+    # end-of-file grammar quirk -- the structure is complete, so don't alarm.
+    # Zero-width MISSING nodes are not reachable through child(), so read the
+    # s-expression (only ever built for an already-flagged tree).
+    sexp = node_sexp(root).strip()
+    missing = re.findall(r'\(MISSING\b', sexp)
+    return not (len(missing) == 1 and re.search(r'\(MISSING "?\w*_token\d+"?\)\)$', sexp))

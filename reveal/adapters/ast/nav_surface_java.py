@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from .nav_surface_common import (
+    disclose_parse_recovery,
     INHERIT_KEY, ROUTE_CLASSES_KEY, SPRING_ROUTE_ANNOTATIONS, _get_text, _get_line, join_route_path,
     merge_routes_by_path, type_simple_name,
 )
@@ -37,7 +38,7 @@ def scan_file_surface_java(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
         return {k: [] for k in _EMPTY_KEYS}
 
     content_bytes = source.encode('utf-8')
-    return _scan_tree(tree, file_path, content_bytes)
+    return disclose_parse_recovery(tree, file_path, _scan_tree(tree, file_path, content_bytes))
 
 
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:

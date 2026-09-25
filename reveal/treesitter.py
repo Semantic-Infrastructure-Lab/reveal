@@ -3,7 +3,6 @@
 import hashlib
 import logging
 import os
-import re
 import threading
 from collections import OrderedDict
 from typing import Dict, List, Any, Optional, Set, Tuple
@@ -20,7 +19,7 @@ from .core import suppress_treesitter_warnings
 from .core import node_children as _children
 from .core import node_next_sibling as _next_sibling
 from .core import iter_tree as _iter_tree
-from .core.treesitter_compat import _zero_arg, node_sexp
+from .core.treesitter_compat import _zero_arg, tree_has_recovery_artifacts
 from .core import tree_root
 from .core import ts_parse
 from .core.node_taxonomy import (
@@ -1340,20 +1339,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """
         if not self.tree:
             return False
-        root = tree_root(self.tree)
-        if not _zero_arg(root, 'has_error'):
-            return False
-        if self.has_parse_errors():
-            return True
-        # No ERROR node: only MISSING tokens remain. A lone MISSING at the very end
-        # of the tree, named like an anonymous `<rule>_token<N>` (Go: a file ending
-        # in an interface type; C: an #include-only unit), is the same benign
-        # end-of-file grammar quirk -- the structure is complete, so don't alarm.
-        # Zero-width MISSING nodes are not reachable through child(), so read the
-        # s-expression (only ever built for an already-flagged tree).
-        sexp = node_sexp(root).strip()
-        missing = re.findall(r'\(MISSING\b', sexp)
-        return not (len(missing) == 1 and re.search(r'\(MISSING "?\w*_token\d+"?\)\)$', sexp))
+        return tree_has_recovery_artifacts(self.tree)
 
     def _get_node_text(self, node) -> str:
         """Get the source text for a node.

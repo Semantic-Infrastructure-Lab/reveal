@@ -30,7 +30,7 @@ from ..utils.path_utils import (
     is_test_basename_for_language,
 )
 from ..utils.query import parse_query_params
-from .ast.surface_matrix import CATEGORIES, UNPARSED_KEY, coverage_matrix
+from .ast.surface_matrix import CATEGORIES, RECOVERED_KEY, UNPARSED_KEY, coverage_matrix
 from .ast.nav_surface_common import ROUTE_CLASSES_KEY, resolve_inherited_route_prefixes
 from .ast.nav_surface_rails import resolve_engine_mounts
 from ..utils.results import ResultBuilder
@@ -213,6 +213,7 @@ def _scan_surface(
 
     scanned_languages = set()
     unparsed: List[str] = []
+    recovered: List[str] = []
     route_classes: List[Dict[str, Any]] = []
     for spec, file_list in collected.items():
         if not file_list:
@@ -222,6 +223,7 @@ def _scan_surface(
         for file_path in file_list:
             result = scan_fn(str(file_path))
             unparsed.extend(result.pop(UNPARSED_KEY, []))
+            recovered.extend(result.pop(RECOVERED_KEY, []))
             route_classes.extend(result.pop(ROUTE_CLASSES_KEY, []))
             for cat, entries in result.items():
                 surfaces[cat].extend(entries)
@@ -241,6 +243,8 @@ def _scan_surface(
     _relativize_surface_paths(surfaces, path)
     from ..utils.path_utils import to_relative_display
     unparsed_files = sorted(to_relative_display(f, path) for f in unparsed)
+    recovered_files = sorted(to_relative_display(f, path) for f in recovered)
+    error_region_entries = _count_error_region(surfaces)
 
     # BACK-1244: 'http' entries come from AST call-shape matching alone
     # (verb('/path', ...)) -- a real route declaration and an RSpec/pytest
@@ -271,6 +275,7 @@ def _scan_surface(
         **by_dir,
         'unsupported_language': unsupported_language,
         'unparsed_files': unparsed_files,
+        'recovered_files': recovered_files,
         'coverage': coverage.to_scope_dict('surface'),
         'scope': scope,
         '_meta': {
@@ -287,9 +292,19 @@ def _scan_surface(
                     "exclude them"
                 ] if test_origin_count else []),
                 *([_unparsed_note(unparsed_files)] if unparsed_files else []),
+                *([_recovered_note(recovered_files, error_region_entries)] if recovered_files else []),
             ],
         },
     }
+
+
+def _recovered_note(recovered_files: List[str], error_region_entries: int) -> str:
+    """BACK-1480: files tree-sitter parsed only by guessing across an ERROR/MISSING region."""
+    shown = ', '.join(recovered_files[:5])
+    more = f" (+{len(recovered_files) - 5} more)" if len(recovered_files) > 5 else ''
+    return (f"{len(recovered_files)} file(s) parsed with error recovery; "
+            f"{error_region_entries} entries lie in a recovered region (tagged 'in_error_region', "
+            f"may be fabricated): {shown}{more}")
 
 
 def _unparsed_note(unparsed_files: List[str]) -> str:
@@ -337,6 +352,9 @@ def _render_report(report: Dict[str, Any], top: int = None) -> None:
         print()
     if report.get('unparsed_files'):
         print(f"⚠ {_unparsed_note(report['unparsed_files'])}")
+        print()
+    if report.get('recovered_files'):
+        print(f"⚠ {_recovered_note(report['recovered_files'], _count_error_region(report['surfaces']))}")
         print()
     print(f"Total surface entries: {total}")
     if top is not None:
@@ -393,10 +411,16 @@ def _render_by_dir(rows: List[Dict[str, Any]], top: Optional[int]) -> None:
     print()
 
 
+def _count_error_region(surfaces: Dict[str, List[Dict[str, Any]]]) -> int:
+    return sum(1 for entries in surfaces.values() for e in entries if e.get('in_error_region'))
+
+
 def _render_entry(surface_type: str, entry: Dict[str, Any]) -> None:
     file_path = entry.get('file', '')
     line = entry.get('line', '')
     loc = f"  {file_path}:{line}" if file_path else ''
+    if entry.get('in_error_region'):
+        loc += '  [parse-recovered]'
 
     if surface_type == 'cli':
         kind = entry.get('type', '')
@@ -575,6 +599,9 @@ class SurfaceAdapter(ResourceAdapter):
             warnings.append({'code': 'W-SURFACE-1', 'message': coverage_warning})
         if report['unparsed_files']:
             warnings.append({'code': 'W-SURFACE-2', 'message': _unparsed_note(report['unparsed_files'])})
+        if report['recovered_files']:
+            warnings.append({'code': 'W-SURFACE-3', 'message': _recovered_note(
+                report['recovered_files'], _count_error_region(report['surfaces']))})
 
         return ResultBuilder.create(
             result_type='surface_scan',

@@ -28,6 +28,11 @@ CATEGORIES: Tuple[str, ...] = ('cli', 'http', 'mcp', 'env', 'network', 'db', 'sd
 # the report can say they contributed nothing instead of counting them as clean.
 UNPARSED_KEY = '_unparsed'
 
+# Not a category either (BACK-1480): a tree-sitter scanner lists a file here when the
+# parser recovered from an ERROR/MISSING region. The file still contributes entries,
+# but any entry inside the region is tagged `in_error_region` -- it may be a guess.
+RECOVERED_KEY = '_recovered'
+
 RULES = 'rules'
 SCANNER = 'scanner'
 NOT_APPLICABLE = 'not_applicable'

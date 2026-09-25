@@ -33,7 +33,7 @@ import logging
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line, _add_once, join_route_path
+from .nav_surface_common import disclose_parse_recovery, _get_text, _get_line, _add_once, join_route_path
 from .surface_rules import RuleScan
 
 from reveal.core import node_children as _children
@@ -94,7 +94,7 @@ def scan_file_surface_php(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
         return {k: [] for k in _EMPTY_KEYS}
 
     content_bytes = source.encode('utf-8')
-    return _scan_tree(tree, file_path, content_bytes)
+    return disclose_parse_recovery(tree, file_path, _scan_tree(tree, file_path, content_bytes))
 
 
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:

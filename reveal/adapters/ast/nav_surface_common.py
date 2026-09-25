@@ -15,7 +15,9 @@ which keeps its own ``_categorize_module``.
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from reveal.core.treesitter_compat import _zero_arg
+from reveal.core.treesitter_compat import _zero_arg, error_node_spans, tree_has_recovery_artifacts, tree_root
+
+from .surface_matrix import RECOVERED_KEY
 
 
 def _get_text(node, content_bytes: bytes) -> str:
@@ -24,6 +26,32 @@ def _get_text(node, content_bytes: bytes) -> str:
 
 def _get_line(node) -> int:
     return _zero_arg(node, 'start_position').row + 1
+
+
+def disclose_parse_recovery(tree, file_path: str, surfaces: Dict[str, Any]) -> Dict[str, Any]:
+    """BACK-1480: say so when a tree-sitter scan walked a partly-recovered parse.
+
+    tree-sitter never fails, it guesses: after it loses sync (a PHP docblock, a
+    macro-heavy C++ file) it emits ERROR nodes whose contents still look like code,
+    and a scanner walking the tree reports them as real surface (WordPress
+    formatting.php: 10 fabricated `subprocess` hits from backticks in a docblock).
+    Entries are kept -- most in-region C++ hits are real (`getenv("LC_ALL")`) -- but
+    each one whose line lies in an ERROR region is tagged `in_error_region`, and the
+    file is listed under RECOVERED_KEY so the report can name it. Line granularity:
+    entries carry a line, not a node.
+    """
+    if not tree_has_recovery_artifacts(tree):
+        return surfaces
+    spans = error_node_spans(tree_root(tree))
+    for key, entries in surfaces.items():
+        if key.startswith('_'):
+            continue
+        for entry in entries:
+            line = entry.get('line', 0)
+            if any(first <= line <= last for first, last in spans):
+                entry['in_error_region'] = True
+    surfaces[RECOVERED_KEY] = [file_path]
+    return surfaces
 
 
 def _add_once(lst: List[Dict[str, Any]], entry: Dict[str, Any]) -> None:
