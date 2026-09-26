@@ -222,12 +222,19 @@ def grammar_kinds(language: str) -> Tuple[FrozenSet[str], FrozenSet[str]]:
     return frozenset(named), frozenset(every)
 
 
+# A table is a module constant (``CALL_NODE_TYPES``, ``_DECISION_TYPES``). Lowercase names are
+# runtime state: treesitter's ``_warned_uncached_languages`` fills with language names while
+# tests run, and read as a dead node kind 'python' depending on test order.
+_CONSTANT = re.compile(r'_?[A-Z][A-Z0-9_]*')
+
+
 def central_tables() -> Dict[str, FrozenSet[str]]:
-    """``module.NAME -> kinds`` for every set of strings in CENTRAL_MODULES (dict values too)."""
+    """``module.NAME -> kinds`` for every set-of-strings constant in CENTRAL_MODULES
+    (dict values too)."""
     tables: Dict[str, FrozenSet[str]] = {}
     for modname in CENTRAL_MODULES:
         for name, value in vars(importlib.import_module(modname)).items():
-            if (modname, name) in NOT_KIND_TABLES:
+            if (modname, name) in NOT_KIND_TABLES or not _CONSTANT.fullmatch(name):
                 continue
             candidates = value.items() if isinstance(value, dict) else [(None, value)]
             for key, table in candidates:
@@ -327,6 +334,12 @@ def test_known_gaps_name_a_task():
 # ---------------------------------------------------------------------------
 # Negative controls: each check fails on the defect it exists for
 # ---------------------------------------------------------------------------
+
+def test_runtime_state_is_not_a_table(monkeypatch):
+    import reveal.treesitter
+    monkeypatch.setattr(reveal.treesitter, '_warned_uncached_languages', {'python'})
+    assert not any('_warned_' in name for name in central_tables())
+
 
 def test_a_typo_in_a_table_is_caught():
     kinds_of = {'python': grammar_kinds('python')[1]}
