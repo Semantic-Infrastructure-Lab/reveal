@@ -19,7 +19,9 @@ automatically because they're built by union, not re-declared.
 
 from __future__ import annotations
 
-from typing import Dict
+from typing import Any, Dict
+
+from .treesitter_compat import _zero_arg, node_children
 
 
 # ---------------------------------------------------------------------------
@@ -44,8 +46,10 @@ MODIFIER_NODES: frozenset = IF_MODIFIER_NODES | LOOP_MODIFIER_NODES
 IF_NODES: frozenset = frozenset({
     'if_statement', 'if_expression', 'if', 'IfStatement', 'unless',
 }) | IF_MODIFIER_NODES
-ELIF_NODES: frozenset = frozenset({'elif_clause', 'elseif_clause'})
-ELSE_NODES: frozenset = frozenset({'else_clause', 'else'})
+# Lua's `elseif`/`else` arms are elseif_statement/else_statement: in no
+# family, so --outline put their bodies under the IF (BACK-1530).
+ELIF_NODES: frozenset = frozenset({'elif_clause', 'elseif_clause', 'elseif_statement'})
+ELSE_NODES: frozenset = frozenset({'else_clause', 'else', 'else_statement'})
 # Zig's IfStatement (BACK-431 Issue G smoke-tier audit) has no AST fields at
 # all — unlike every other IF_NODES member, `_walk_if_while`'s
 # 'condition'/'body' field lookup silently no-ops for it, so it's kept out
@@ -123,23 +127,28 @@ RUBY_ITERATOR_METHODS: frozenset = frozenset({
 RUBY_LOOP_METHODS: frozenset = frozenset({'loop'})
 
 # BACK-477: Ruby's 'begin' is the literal tree-sitter kind of its
-# begin/rescue/ensure/end block. Kotlin's try/catch/finally block is a
-# `try_expression` node — deliberately NOT added here: Rust's `?` operator
-# (BACK-428's territory, not this one) parses to the exact same kind string
-# for an unrelated construct (verified via direct tree-sitter inspection —
-# `validate(order)?` produces a `try_expression` wrapping the call), so
-# adding it would break Rust's documented no-try/catch `--catchmap` contract.
-# Kotlin's try-block itself stays unlabeled for now; its catch_block/
-# finally_block (below) are unambiguous and still make `--catchmap`
-# non-empty for Kotlin.
-TRY_NODES: frozenset = frozenset({'try_statement', 'try', 'begin'})
+# begin/rescue/ensure/end block. Java's `try (var r = ...) { }` is its own
+# kind, try_with_resources_statement (BACK-1530).
+# Kotlin's and Scala's try/catch/finally block is a `try_expression`, and so
+# are Swift's `try f()` and Rust's `?` operator (`validate(order)?` wraps the
+# call). A scope test must use opens_scope() below, not this family alone, or
+# every Swift `try` and Rust `?` would read as a TRY and break Rust's
+# documented no-try/catch `--catchmap` contract.
+# Before BACK-1530 the kind was left out altogether, so a Kotlin catch_block
+# printed with no TRY above it.
+TRY_NODES: frozenset = frozenset({
+    'try_statement', 'try', 'begin', 'try_with_resources_statement', 'try_expression',
+})
 EXCEPT_NODES: frozenset = frozenset({'except_clause'})
 # BACK-477: Kotlin's finally_block; Ruby's 'ensure' block (literal kind name).
 FINALLY_NODES: frozenset = frozenset({'finally_clause', 'finally', 'finally_block', 'ensure'})
 # BACK-477: catch_block is Kotlin AND Swift's shared kind name for the catch
 # arm (verified via direct tree-sitter inspection, no collision found with
-# any other supported grammar). Ruby's 'rescue' clause.
-CATCH_NODES: frozenset = frozenset({'catch_clause', 'catch', 'catch_block', 'rescue'})
+# any other supported grammar). Ruby's 'rescue' clause, and its statement
+# modifier `x rescue y` (rescue_modifier, BACK-1530).
+CATCH_NODES: frozenset = frozenset({
+    'catch_clause', 'catch', 'catch_block', 'rescue', 'rescue_modifier',
+})
 WITH_NODES: frozenset = frozenset({'with_statement', 'with'})
 # Rust `match x { }` — 'value'/'body' fields. Python's `match_statement` uses
 # a *different* field name ('subject', not 'value') for its scrutinee, so it
@@ -512,8 +521,8 @@ IF_WHILE_NODES: frozenset = IF_NODES | ELIF_NODES | WHILE_NODES
 KEYWORD_LABEL: Dict[str, str] = {
     'if_statement': 'IF', 'if': 'IF', 'if_expression': 'IF', 'IfStatement': 'IF',
     'if_modifier': 'IF', 'unless': 'UNLESS', 'unless_modifier': 'UNLESS',
-    'elif_clause': 'ELIF', 'elseif_clause': 'ELIF',
-    'else_clause': 'ELSE', 'else': 'ELSE',
+    'elif_clause': 'ELIF', 'elseif_clause': 'ELIF', 'elseif_statement': 'ELIF',
+    'else_clause': 'ELSE', 'else': 'ELSE', 'else_statement': 'ELSE',
     'for_statement': 'FOR', 'for': 'FOR', 'for_expression': 'FOR',
     'foreach_statement': 'FOR', 'for_in_statement': 'FOR',
     'enhanced_for_statement': 'FOR', 'for_range_loop': 'FOR',
@@ -522,7 +531,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'until': 'WHILE', 'while_modifier': 'WHILE', 'until_modifier': 'WHILE',
     'loop_expression': 'LOOP',
     'try_statement': 'TRY', 'try': 'TRY',
-    'begin': 'TRY',
+    'begin': 'TRY', 'try_with_resources_statement': 'TRY', 'try_expression': 'TRY',
     'except_clause': 'EXCEPT',
     'finally_clause': 'FINALLY', 'finally': 'FINALLY',
     'finally_block': 'FINALLY', 'ensure': 'FINALLY',
@@ -538,7 +547,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'select_statement': 'SWITCH',  # Go `select` (its arms are communication_case)
     'switch_expression': 'SWITCH', 'case_match': 'SWITCH',
     'catch_clause': 'CATCH', 'catch': 'CATCH',
-    'catch_block': 'CATCH', 'rescue': 'CATCH',
+    'catch_block': 'CATCH', 'rescue': 'CATCH', 'rescue_modifier': 'CATCH',
     'switch_case': 'CASE', 'switch_entry': 'CASE', 'case_statement': 'CASE',
     'expression_case': 'CASE', 'type_case': 'CASE', 'communication_case': 'CASE',  # Go
     'case': 'SWITCH', 'when': 'CASE',  # Ruby case/when (bare kinds; named nodes)
@@ -579,6 +588,32 @@ KEYWORD_LABEL: Dict[str, str] = {
     'break_statement': 'BREAK', 'break': 'BREAK',
     'continue_statement': 'CONTINUE', 'continue': 'CONTINUE',
 }
+
+
+def is_rust_try_operator(node: Any) -> bool:
+    """True for Rust's `x?` -- the one `try_expression` that is not a try block.
+
+    Kotlin's try block and Rust's `?` share the kind string; only the shape
+    tells them apart: Rust's always holds a literal `?` token, Kotlin's opens
+    with `try` (BACK-428, BACK-1530). --exits reads it as an early RETURN; a
+    scope test must skip it."""
+    return (_zero_arg(node, 'kind') == 'try_expression'
+            and any(_zero_arg(c, 'kind') == '?' for c in node_children(node)))
+
+
+def opens_scope(node: Any, kind: str) -> bool:
+    """Whether a node of ``kind`` opens an --outline/--scope scope.
+
+    SCOPE_NODES, except a `try_expression` that is not a try block. Four
+    grammars use that kind: Kotlin and Scala for a try block, which opens with
+    the bare `try` token, and Swift (`try f()`) and Rust (`f()?`) for an
+    operator on a throwing call (BACK-1530)."""
+    if kind not in SCOPE_NODES:
+        return False
+    if kind != 'try_expression':
+        return True
+    first = node_children(node)[:1]
+    return bool(first) and _zero_arg(first[0], 'kind') == 'try'
 
 
 # ---------------------------------------------------------------------------

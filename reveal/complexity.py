@@ -58,6 +58,7 @@ _DECISION_TYPES = frozenset({
     # Exception handling
     'except_clause', 'catch_clause', 'catch_block',  # kotlin
     'rescue',
+    'rescue_modifier',  # ruby `x rescue y` (BACK-1530); does not nest
     # Pattern matching — Python match_statement/case_clause and Rust
     # match_expression/match_arm (BACK-431).
     # Match arms are the decisions, not the container (see _NOT_DECISION_CONTAINERS).
@@ -178,6 +179,9 @@ _NESTING_TYPES = frozenset({
     'while_statement', 'while_expression', 'while', 'until',
     'loop_expression',
     'try_statement', 'try', 'with_statement', 'with',
+    'try_with_resources_statement',  # java (BACK-1530)
+    # Not Kotlin's try_expression: Rust's `x?` shares the kind, and nesting it
+    # would deepen every function that uses `?`.
     'match_statement', 'match_expression', 'case_statement',
     'do_statement', 'switch_statement',
     # Go's switch statements nest like every other switch_statement (BACK-1529).
@@ -218,6 +222,7 @@ _KEYWORD_PAIRS = frozenset({
     ('for', 'for'),
     ('when', 'when'),
     ('rescue', 'rescue'),
+    ('rescue_modifier', 'rescue'),
     ('boolean_operator', 'or'),
     ('boolean_operator', 'and'),
     # Kotlin: `when_expression` wraps a bare `when` keyword token (BACK-1301).

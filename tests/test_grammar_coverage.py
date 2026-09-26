@@ -31,8 +31,9 @@ supported language pack.
 
 Limits:
 - The families are cross-language, so a name classified for one grammar counts for every
-  grammar. For example, Kotlin's ``try_expression`` passes because complexity names Rust's
-  (BACK-1530).
+  grammar, and a kind that only ``complexity`` names passes although no nav family holds it.
+  Ruby's ``until`` block, Lua's ``elseif_statement`` and Kotlin's ``try_expression`` all
+  passed this way while --outline dropped them (BACK-1528, BACK-1530).
 - Wrapper kinds without a control-flow word, such as Kotlin ``jump_expression`` and Swift
   ``control_transfer_statement``, are out of reach of the name check (BACK-1527).
 - Declaration and call kinds get the existence check only.
@@ -161,23 +162,13 @@ KNOWN_GAPS: Dict[str, Dict[str, str]] = {
         'throw_expression_without_cascade': 'BACK-1531',
     },
     'elixir': {'else_block': 'BACK-1531', 'rescue_block': 'BACK-1531'},
-    'go': {
-        'defer_statement': 'BACK-1531', 'goto_statement': 'BACK-1531',
-    },
-    'java': {
-        'try_with_resources_statement': 'BACK-1530',
-        'switch_rule': 'BACK-1531',
-    },
+    'go': {'defer_statement': 'BACK-1531', 'goto_statement': 'BACK-1531'},
+    'java': {'switch_rule': 'BACK-1531'},
     'javascript': {'yield_expression': 'BACK-1527'},
-    'lua': {'else_statement': 'BACK-1530', 'goto_statement': 'BACK-1531'},
-    'php': {
-        'yield_expression': 'BACK-1527', 'goto_statement': 'BACK-1531',
-    },
+    'lua': {'goto_statement': 'BACK-1531'},
+    'php': {'yield_expression': 'BACK-1527', 'goto_statement': 'BACK-1531'},
     'powershell': {'invokation_foreach_expression': 'BACK-1531', 'switch_clause': 'BACK-1531'},
     'python': {'for_in_clause': 'BACK-1531', 'if_clause': 'BACK-1531'},
-    'ruby': {
-        'rescue_modifier': 'BACK-1530',
-    },
     'rust': {
         'break_expression': 'BACK-1527', 'continue_expression': 'BACK-1527',
         'return_expression': 'BACK-1527', 'yield_expression': 'BACK-1527',

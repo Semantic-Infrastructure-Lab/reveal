@@ -156,6 +156,9 @@ CASES = [
     ('go', 'select 1+default', 'package p\nfunc f(c chan int) {\n\tselect {\n\tcase <-c:\n\tdefault:\n\t}\n}\n', 2, None),
     ('java', 'switch expression 2+default', 'class A { int f(int a){ return switch (a) { case 1 -> 1; case 2 -> 2; default -> 3; }; } }\n', 3, None),
     ('cs', 'switch expression 2+discard', 'class A { int F(int a){ return a switch { 1 => 1, 2 => 2, _ => 3 }; } }\n', 3, None),
+    # The rescue modifier counts once, like the rescue clause (BACK-1530).
+    ('rb', 'rescue modifier', 'def f(a)\n  a.call rescue nil\nend\n', 2, None),
+    ('java', 'try-with-resources/catch', 'class A { void f(){ try (var r = g()) { } catch(Exception e) {} } java.io.Closeable g(){ return null; } }\n', 2, None),
 ]
 
 def _param(row):

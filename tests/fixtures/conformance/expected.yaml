@@ -436,6 +436,7 @@ kotlin:
   ifmap:
     not_supported: true  # entry_function uses try/catch, no bare if
   catchmap:
+  - {keyword: TRY, line_start: 14}  # try_expression, a TRY since BACK-1530
   - {keyword: CATCH, line_start: 20}
   mutations_probe: {range: "12-12", var: result, next_read_line: 15}
   returns:

@@ -6,7 +6,7 @@ from typing import Any, Callable, Collection, Dict, List, Optional
 
 from .nav_calls import _extract_callee
 from .nav_varflow import all_var_flow
-from .node_taxonomy import EXIT_NODES, GATE_NODES, KEYWORD_LABEL
+from .node_taxonomy import EXIT_NODES, GATE_NODES, KEYWORD_LABEL, is_rust_try_operator
 from ...core import node_children as _children
 from ...core.treesitter_compat import _zero_arg
 
@@ -65,22 +65,6 @@ def _is_exit_call(callee: Optional[str]) -> bool:
     if callee in _EXIT_CALL_NAMES or callee in _CPP_MACRO_EXIT_NAMES:
         return True
     return callee.startswith(_CPP_MACRO_EXIT_PREFIXES)
-
-
-# BACK-428: Rust's `?` postfix operator (`validate(order)?`) conditionally
-# propagates an early `Err` return. It parses to a `try_expression` node --
-# but that exact kind string is ALSO Kotlin's try/catch/finally block
-# (node_taxonomy.py's TRY_NODES comment documents this collision and
-# deliberately keeps `try_expression` out of the shared taxonomy for this
-# reason). Adding it to EXIT_NODES/KEYWORD_LABEL globally would misclassify
-# every Kotlin try-block as a RETURN exit. Disambiguated structurally
-# instead: Rust's try_expression always has a literal '?' child (confirmed
-# via direct tree-sitter inspection: children are `[<expr>, '?']`); Kotlin's
-# always opens with a literal 'try' keyword child. Checked per-callsite here
-# rather than folded into the taxonomy, since the taxonomy has no concept of
-# "same kind string, different language, disambiguate by shape."
-def _is_rust_try_propagation(node: Any) -> bool:
-    return _zero_arg(node, 'kind') == 'try_expression' and any(_zero_arg(c, 'kind') == '?' for c in _children(node))
 
 
 # Statement-shaped kinds that can appear as a direct child of a Rust `block`.
@@ -161,7 +145,7 @@ def _exit_at(node: Any, get_text: Callable,
             if parent is not None:
                 text_node = parent
         return _EXIT_KIND[ntype], _first_line(get_text(text_node)), False
-    if _is_rust_try_propagation(node):
+    if is_rust_try_operator(node):  # Rust `x?`: an early Err return (BACK-428)
         return 'RETURN', _first_line(get_text(node)), False
     if ntype in call_node_types:
         if _is_exit_call(_extract_callee(node, get_text)):

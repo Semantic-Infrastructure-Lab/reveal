@@ -380,6 +380,30 @@ OUTLINE_CASES = [
     ('php', 'match',
      '<?php\nfunction f($x) { $y = match($x) { 1 => 10, 2 => 20, default => 0 }; return $y; }\n',
      [('MATCH', 1), ('CASE', 2), ('CASE', 2), ('DEFAULT', 2), ('RETURN', 1)]),
+    # BACK-1530: try / else / rescue
+    ('java', 'try-with-resources',
+     'class A { void f(String p) { try (var r = open(p)) { if (r == null) { g(); } } '
+     'catch (Exception e) { g(); } finally { g(); } } }',
+     [('TRY', 1), ('IF', 2), ('CATCH', 1), ('FINALLY', 1)]),
+    ('kotlin', 'try block',
+     'fun f(x: Int) { try { if (x > 1) { g() } } catch (e: Exception) { g() } finally { g() } }',
+     [('TRY', 1), ('IF', 2), ('CATCH', 1), ('FINALLY', 1)]),
+    ('scala', 'try block',
+     'object A { def f(): Unit = { try { g() } catch { case e: Exception => h() } } }',
+     [('TRY', 1), ('CATCH', 1), ('CASE', 2)]),
+    # The same kind string, try_expression, on an operator: not a scope.
+    ('rust', '? operator is not a try block',
+     'fn f(x: i32) -> Result<i32, E> { let v = g(x)?; if v > 1 { h(); } Ok(v) }',
+     [('IF', 1)]),
+    ('swift', 'try / try? are not try blocks',
+     'func f() { let x = try? g(); let y = try g(); if x == nil { h() } }',
+     [('IF', 1)]),
+    ('lua', 'elseif / else',
+     'function f(x)\n  if x > 1 then\n    g()\n  elseif x > 0 then\n    h()\n  else\n    k()\n  end\nend\n',
+     [('IF', 1), ('ELIF', 1), ('ELSE', 1)]),
+    ('ruby', 'rescue modifier',
+     'def f(x)\n  y = risky(x) rescue nil\n  y\nend\n',
+     [('CATCH', 1)]),
 ]
 
 

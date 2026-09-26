@@ -16,6 +16,7 @@ from .node_taxonomy import (  # noqa: F401 — re-exported for nav.py/back-compa
     RUBY_BLOCK_NODES,
     RUBY_ITERATOR_METHODS,
     RUBY_LOOP_METHODS,
+    opens_scope,
 )
 
 
@@ -134,7 +135,7 @@ def _collect_outline(
             items.append(_make_item(child, depth, get_text))
             if depth < max_depth:
                 _collect_outline(child, depth + 1, items, get_text, max_depth)
-        elif ctype in SCOPE_NODES:
+        elif opens_scope(child, ctype):
             items.append(_make_item(child, depth, get_text))
             if depth < max_depth:
                 _collect_scope_interior(child, depth, items, get_text, max_depth)
@@ -170,7 +171,7 @@ def _collect_scope_interior(
             items.append(_make_item(child, scope_depth, get_text))
             if scope_depth < max_depth:
                 _collect_outline(child, scope_depth + 1, items, get_text, max_depth)
-        elif ctype in SCOPE_NODES:
+        elif opens_scope(child, ctype):
             items.append(_make_item(child, scope_depth + 1, get_text))
             if scope_depth + 1 < max_depth:
                 _collect_scope_interior(child, scope_depth + 1, items, get_text, max_depth)
@@ -268,7 +269,7 @@ def _find_ancestors(
             depth += 1
 
     node_kind = _zero_arg(node, 'kind')
-    if _zero_arg(node, 'is_named') and (node_kind in SCOPE_NODES or node_kind in FUNCTION_TYPES):
+    if _zero_arg(node, 'is_named') and (opens_scope(node, node_kind) or node_kind in FUNCTION_TYPES):
         condition = None
         if _zero_arg(node, 'kind') in GATE_NODES:
             from .nav_exits import _get_condition  # noqa: PLC0415 — avoid import-time cost for non-JSON callers
