@@ -139,18 +139,21 @@ class MySchemeAdapter(ResourceAdapter):
             'contract_version': '1.0',
             'type': 'myscheme_overview',
             'source': f'myscheme://{self.resource}',
-            'source_type': 'service',
+            'source_type': 'network',  # file | directory | database | runtime | network
             'items': [...],
         }
 
     @classmethod
     def get_schema(cls) -> dict:
         return {
-            'output_types': ['myscheme_overview'],
-            'query_params': [],
-            'cli_flags': [],
-            'example_queries': ['myscheme://hostname'],
-            'notes': 'Explores myscheme resources.',
+            'adapter': 'myscheme',
+            'description': 'Explores myscheme resources.',
+            'uri_syntax': 'myscheme://<host>',
+            'output_types': [{'type': 'myscheme_overview', 'description': 'Host overview'}],
+            'query_params': {},
+            'example_queries': [{'uri': 'myscheme://hostname', 'description': 'Overview',
+                                 'output_type': 'myscheme_overview'}],
+            'notes': ['Explores myscheme resources.'],
         }
 ```
 
@@ -171,7 +174,11 @@ see BACK-590).
 2. Implement `get_structure()` with all four Output Contract fields
 3. Implement `get_schema()` — required for `--discover` and contract compliance tests
 4. Add `get_help()` or `reveal/adapters/help_data/<scheme>.yaml`
-5. Add tests — `pytest tests/test_output_contract_compliance.py` auto-tests all adapters
+5. Add tests, and a row in `FIXTURE_URIS` in `tests/test_output_contract_compliance.py`
+   (it fails until every registered adapter has one, or a `NOT_RUNNABLE` reason). That
+   harness runs each adapter on a fixture and checks the Output Contract, that a missing
+   resource is an error, that an `error` result exits nonzero, and that no absolute path
+   leaks
 6. Add `reveal/docs/<SCHEME>_ADAPTER_GUIDE.md` and link from `reveal/docs/INDEX.md`
 
 **Simplest examples to study**: `adapters/git/adapter.py` (resource-arg init, package layout), `adapters/nginx/adapter.py` (domain-centric, package layout with a `handlers.py` split)

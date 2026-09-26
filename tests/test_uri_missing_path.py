@@ -19,14 +19,6 @@ from reveal.cli.routing.uri import handle_uri
 
 pytestmark = pytest.mark.component
 
-# Every adapter whose resource is a filesystem path and that had no check of
-# its own. Pinned so dropping the flag from one is a deliberate act.
-PATH_ADAPTERS = sorted([
-    'architecture', 'ast', 'calls', 'contracts', 'deps', 'depends', 'hotspots',
-    'imports', 'overview', 'pack', 'surface', 'testability',
-])
-
-
 def _run(uri, **overrides):
     out, err = StringIO(), StringIO()
     code = 0
@@ -46,8 +38,11 @@ def _flagged_schemes():
     )
 
 
-def test_flagged_adapters_are_the_expected_set():
-    assert _flagged_schemes() == PATH_ADAPTERS
+# Every adapter that opts into the shared check, derived from the registry (BACK-1363).
+# An adapter that should opt in but doesn't is caught by the contract harness, which
+# probes every registered adapter with a missing resource
+# (tests/test_output_contract_compliance.py::test_missing_resource_is_an_error).
+PATH_ADAPTERS = _flagged_schemes()
 
 
 def test_default_is_not_a_path_adapter():

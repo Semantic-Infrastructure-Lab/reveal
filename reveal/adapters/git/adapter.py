@@ -61,7 +61,12 @@ _SCHEMA_OUTPUT_TYPES = [
     _git_output_type('git_ref', 'Branch/tag/commit history', {
         'ref': {'type': 'string'}, 'commit': {'type': 'object'}, 'history': {'type': 'array'}
     }),
-    _git_output_type('git_file', 'File contents at specific ref', {
+    _git_output_type('git_file_structure', 'File structure (functions, classes, imports) at specific ref', {
+        'source_type': {'type': 'string', 'const': 'file'},
+        'path': {'type': 'string'}, 'ref': {'type': 'string'}, 'commit': {'type': 'string'},
+        'size': {'type': 'integer'}, 'lines': {'type': 'integer'}, 'structure': {'type': 'object'}
+    }),
+    _git_output_type('git_file', 'File contents at specific ref (?raw=1)', {
         'source_type': {'type': 'string', 'const': 'file'},
         'path': {'type': 'string'}, 'ref': {'type': 'string'}, 'commit': {'type': 'string'},
         'size': {'type': 'integer'}, 'lines': {'type': 'integer'}, 'content': {'type': 'string'}
@@ -95,7 +100,8 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'git://.', 'description': 'Repository overview (branches, tags, commits)', 'output_type': 'git_repository'},
     {'uri': 'git://.@main', 'description': 'Branch/commit history', 'ref': 'main', 'output_type': 'git_ref'},
     {'uri': 'git://.@abc1234', 'description': 'Specific commit details', 'ref': 'abc1234', 'output_type': 'git_ref'},
-    {'uri': 'git://src/app.py@v1.0', 'description': 'File contents at tag', 'ref': 'v1.0', 'output_type': 'git_file'},
+    {'uri': 'git://src/app.py@v1.0', 'description': 'File structure at tag', 'ref': 'v1.0', 'output_type': 'git_file_structure'},
+    {'uri': 'git://src/app.py@v1.0?raw=1', 'description': 'File contents at tag', 'ref': 'v1.0', 'query_param': '?raw=1', 'output_type': 'git_file'},
     {'uri': 'git://src/app.py?type=history', 'description': 'File commit history (50 commits)', 'query_param': '?type=history', 'output_type': 'git_file_history'},
     {'uri': 'git://src/app.py?type=blame', 'description': 'File blame summary (contributors + key hunks)', 'query_param': '?type=blame', 'output_type': 'git_file_blame'},
     {'uri': 'git://src/app.py?type=blame&detail=full', 'description': 'File blame detailed (line-by-line)', 'query_param': '?type=blame&detail=full', 'output_type': 'git_file_blame'},

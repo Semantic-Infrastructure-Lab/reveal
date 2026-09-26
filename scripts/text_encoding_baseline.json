@@ -127,7 +127,6 @@
  "tests/test_office_analyzers.py": 1,
  "tests/test_ordinal_extraction.py": 4,
  "tests/test_outline_coverage.py": 7,
- "tests/test_output_contract_compliance.py": 6,
  "tests/test_path_utils.py": 99,
  "tests/test_php_analyzer.py": 3,
  "tests/test_plugin_discovery.py": 3,
