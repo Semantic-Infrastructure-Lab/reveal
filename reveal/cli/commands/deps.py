@@ -35,7 +35,8 @@ def create_deps_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='reveal deps',
         parents=[_build_global_options_parser()],
-        description='Dependency health dashboard: external packages, circular deps, unused imports.',
+        description='Dependency health dashboard: external packages, circular deps, unused imports. '
+                    'Exit code 0 = clean, 1 = circular dependencies or unused imports found (or a missing path).',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"

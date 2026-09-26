@@ -32,7 +32,9 @@ def create_hotspots_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='reveal hotspots',
         parents=[_build_global_options_parser()],
-        description='Identify high-complexity files and functions that need attention.',
+        description='Identify high-complexity files and functions that need attention. '
+                    'Exit code 0 = nothing serious, 1 = a file below quality 70 or a function above '
+                    'complexity 20 (or a missing path).',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"

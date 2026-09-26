@@ -330,9 +330,12 @@ def _dispatch_and_run() -> None:
         sys.stdout = tee_writer
 
     try:
-        if _dispatch_subcommand():
-            return
-        _main_impl()
+        if not _dispatch_subcommand():
+            _main_impl()
+        # Flush here so a reader that closed early (`| head`) raises inside this
+        # try: output smaller than the buffer otherwise failed at interpreter exit
+        # with "Exception ignored ... BrokenPipeError" and exit 120 (BACK-1510).
+        sys.stdout.flush()
     except BrokenPipeError:
         devnull = os.open(os.devnull, os.O_WRONLY)
         os.dup2(devnull, sys.stdout.fileno())

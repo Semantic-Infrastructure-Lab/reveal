@@ -180,6 +180,10 @@ def format_query(query: Dict[str, Any]) -> str:
         if op == 'in':
             # Format OR logic nicely: type=class|function
             parts.append(f"{key}=={'|'.join(val)}")
+        elif op.isalpha():
+            # A word operator (glob) glued on printed 'nameglob*x*', which the
+            # hint code then read as an unknown key 'nameglob' (BACK-1510).
+            parts.append(f"{key}={val} ({op})")
         else:
             parts.append(f"{key}{op}{val}")
     return " AND ".join(parts)

@@ -105,6 +105,10 @@ def load_json(file_path: Path) -> Any:
     """
     if not file_path.exists():
         raise FileNotFoundError(f"JSON file not found: {file_path}")
+    if file_path.is_dir():
+        # A bare `json://` resolved to '.' and failed with "[Errno 21] Is a directory".
+        raise ValueError(f"json:// needs a JSON file, not a directory ({file_path}): "
+                         f"e.g. reveal json://package.json")
 
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -119,6 +123,8 @@ def load_json(file_path: Path) -> Any:
             '.xml': ('XML', 'an XML file'),
             '.ini': ('INI', 'an INI configuration file'),
             '.cfg': ('Config', 'a configuration file'),
+            '.jsonl': ('JSONL', 'a JSON Lines file (one record per line)'),
+            '.ndjson': ('JSONL', 'a JSON Lines file (one record per line)'),
         }
 
         if file_ext in file_type_hints:

@@ -66,7 +66,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 
 - **Limit results:** `--limit N` becomes `?limit=N` on ast/markdown/json/git/stats and `?top=N` on hotspots/calls/depends/testability; elsewhere a note says it has no effect. `--head N` slices any list result.
 - **Scripting:** `--format json` puts JSON on stdout (warnings go to stderr); `--no-breadcrumbs` drops the next-step hints. A target that cannot render a `--format` value exits 2.
-- **Exit codes (`check`):** 0 clean, 1 issues found, 2 usage error, 3 scan incomplete. `review` uses 0 clean, 1 warnings, 2 critical.
+- **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete; `review` 0 pass, 1 warnings, 2 blocking issue or bad target, 3 incomplete; `deps`/`hotspots` exit 1 when they find something.
 
 ---
 

@@ -17,7 +17,10 @@ def create_review_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='reveal review',
         parents=[_build_global_options_parser()],
-        description='Assess code quality and structural changes before a PR merge.',
+        description='Assess code quality and structural changes before a PR merge. '
+                    'Exit code 0 = pass, 1 = warnings, 2 = a blocking (high/critical) issue or an '
+                    'invalid target, 3 = incomplete (some files could not be checked). '
+                    'A large range can take minutes.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
