@@ -4460,7 +4460,7 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
 
 **For AI agents (you):**
 - **Orientation** (`reveal --agent-help`) - First sections of this file (~1,000 tokens)
-- **Complete guide** (`reveal help://agent/full`) - This file in full (~48,000 tokens)
+- **Complete guide** (`reveal help://agent/full`) - This file in full (~49,000 tokens)
 - **Progressive help** (`reveal 'help://<topic>'`) - Low-token per-topic exploration
 
 **For humans:**

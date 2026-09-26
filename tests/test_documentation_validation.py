@@ -387,3 +387,49 @@ class TestExampleShellSafety:
         assert shell_command("ast://./src") == "reveal ast://./src"
         assert shell_command("reveal src/ --grep 'x'") == "reveal src/ --grep 'x'"
         assert shell_command("calls://src?uncalled --format json") == "reveal 'calls://src?uncalled' --format json"
+
+
+class TestHelpSizeClaims:
+    """BACK-1509: the "~N tokens" cost of each help tier is hand-copied into a
+    dozen docs and help strings. It drifted to four different figures for
+    --agent-help (2,200 / 2,250 / 2,276 / 2,500) and 300-1,800 for help://quick.
+    Every stated figure must stay within 30% of the live size (bytes / 4)."""
+
+    TIERS = {
+        '--agent-help': ['--agent-help'],
+        'help://quick': ['help://quick'],
+        'help://agent/full': ['help://agent/full'],
+    }
+    _KEY = re.compile(r'(--agent-help|help://quick|help://agent/full)')
+    _CLAIM = re.compile(r'~([\d,]+) ?tok')
+
+    @staticmethod
+    def _measure(args):
+        import subprocess
+        import sys
+        out = subprocess.run([sys.executable, '-m', 'reveal', *args], capture_output=True,
+                             encoding='utf-8', check=True).stdout
+        return len(out.encode('utf-8')) / 4
+
+    def test_stated_help_sizes_match_live_output(self):
+        repo_root = Path(__file__).parent.parent
+        sources = sorted((repo_root / 'reveal').rglob('*.md')) + sorted((repo_root / 'reveal').rglob('*.py'))
+        sources.append(repo_root / 'README.md')
+        measured = {tier: self._measure(args) for tier, args in self.TIERS.items()}
+        wrong = []
+        for src in sources:
+            for lineno, line in enumerate(src.read_text(encoding='utf-8').splitlines(), 1):
+                keys = [(m.start(), m.group(1)) for m in self._KEY.finditer(line)]
+                if not keys:
+                    continue
+                for claim in self._CLAIM.finditer(line):
+                    # attribute each figure to the nearest tier named before it
+                    before = [k for pos, k in keys if pos < claim.start()]
+                    if not before or claim.start() - line.rfind(before[-1], 0, claim.start()) > 110:
+                        continue
+                    stated = int(claim.group(1).replace(',', ''))
+                    actual = measured[before[-1]]
+                    if not 0.7 * actual <= stated <= 1.3 * actual:
+                        wrong.append(f"{src.relative_to(repo_root)}:{lineno}: {before[-1]} says ~{stated:,}, "
+                                     f"measured ~{int(actual):,}")
+        assert not wrong, "Stale help size claims:\n  " + "\n  ".join(wrong)

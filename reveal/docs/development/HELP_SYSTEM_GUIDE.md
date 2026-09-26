@@ -296,14 +296,14 @@ Start broad, drill down as needed. Don't force users to load everything.
 **Good:**
 ```bash
 reveal help://examples/quality  # A task recipe (~160 tokens)
-reveal help://quick             # Intent router (~1,000 tokens) — cheapest orientation
+reveal help://quick             # Intent router (~1,600 tokens) — cheapest orientation
 reveal --agent-help             # Agent orientation (~1,000 tokens)
 reveal help://schemas/ast       # One adapter's query syntax (~2,400 tokens)
 ```
 
 **Bad:**
 ```bash
-reveal help://agent/full    # Everything at once (~44,000 tokens)
+reveal help://agent/full    # Everything at once (~49,000 tokens)
 ```
 
 Every expensive tier has a cheaper default with a drill-down beneath it:

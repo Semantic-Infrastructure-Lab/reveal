@@ -126,7 +126,7 @@ code, but for sessions, git history, documents, data stores, and runtime state.
 | Project-specific tools | live plugins | `reveal help://adapters` |
 
 When adapter syntax is uncertain:
-1. `reveal help://quick` — compact intent router (~300 tokens)
+1. `reveal help://quick` — compact intent router (~1,600 tokens)
 2. `reveal 'help://schemas/<adapter>' --format=json` — exact query params
 3. Prefer scoped, bounded queries first; drill down as needed.
 4. Confirm consequential findings by reading source or running targeted checks.
