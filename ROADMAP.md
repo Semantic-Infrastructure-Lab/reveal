@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-09-25 (v0.129.0 release: --limit/--head/--format honored or rejected, .gitignore correctness, C++/Rails/WordPress resolution, cache keyed on code)
+> **Last updated**: 2026-09-26 (Reliability program set as the priority track, BACK-1512)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -251,8 +251,75 @@ Earlier releases (v0.33–v0.91) and full per-item notes: [CHANGELOG.md](CHANGEL
 
 ## Current Focus: Path to v1.0
 
+### Reliability program — the priority track (BACK-1512)
+
+This is the first priority until its step 1 lands. It ranks above new adapters and new
+language breadth.
+
+Recent releases have been mostly fixes: 0.122.0–0.129.0 shipped 155 "Fixed" entries and 31
+"Added". Those fixes fall into about 15 recurring bug classes, which come from five
+structural causes:
+
+1. **Flags reach adapters through 7 separate mechanisms.** A flag can work on one
+   invocation form and be silently dropped on another. This is the largest class, with
+   45+ fixes.
+2. **Results can't express "failed", "not applicable" or "truncated".** A failure then
+   renders as a clean zero or ✅. This is the most harmful class, with 35+ fixes.
+3. **Shared infrastructure is copied instead of called.** There are 24 directory walkers,
+   25 parser-setup sites and about 70 path-rendering sites.
+4. **Per-language node-kind tables are typed by hand** and never checked against the
+   grammar.
+5. **Help and docs are never run against actual behavior.**
+
+Each cause had been diagnosed several times, but only guarded against, never removed. This
+repo already shows what works:
+- Removing a second implementation retired its bug class: single callee extraction, the
+  encoding ratchet, and one complexity score.
+- Adding a check around a cause did not. The routing matrix covered 5 flags, and 9
+  silent-flag bugs were filed after it.
+
+So this track works in two steps per cause. First a ratchet stops the class from growing:
+a check that counts violations and lets the count only fall. Then the cause is removed.
+
+**Next, in priority order**
+
+1. **Ratchets that stop each class from growing.** These are small and can run in parallel:
+   - BACK-1513, the adapter contract harness. It absorbs BACK-1363 and the test half of
+     BACK-1366.
+   - BACK-1515, the walker ratchet.
+   - BACK-1364, the grammar-coverage test.
+   - BACK-1046, the parser-import ratchet. It can freeze today's count before BACK-1045
+     lands.
+   - BACK-1368, the print/exit ratchet.
+2. **The largest class:** BACK-1514, the flag ledger, then BACK-1058, one Invocation path
+   shared by the URI and subcommand forms.
+3. **The result contract:** BACK-1059 (typed outcomes), BACK-1491 (cache whole results),
+   BACK-916 (one rendering layer) and BACK-1052 (a shared scan budget).
+4. **One seam per concern:** BACK-1223 (one walker), BACK-1045 (parser seam), BACK-1366
+   (one path pass), BACK-1372 (root finders) and BACK-1054 (import resolution).
+
+These gates run continuously alongside the steps above:
+- BACK-1365: executable docs.
+- BACK-1518: a recall-regression gate that turns the Validation & Trust oracles below into
+  scheduled checks.
+- BACK-1096: cross-subsystem invariants.
+- BACK-1055: one source of truth for help.
+
+**Working rules while the track runs:**
+- A fix in one of these classes goes through the shared seam. It must not add another
+  walker, forwarding path or hand-typed table.
+- New adapters and flags must pass the contract harness.
+- The success measure is Fixed entries per class trending to zero across releases, with
+  each ratchet's count only falling. The raw number of fixes is not the measure, and it
+  is expected to rise while step 1 surfaces existing violations.
+- Full evidence and past decisions to respect: the maintainer design note
+  RELIABILITY_PROGRAM_2026-09-26 (not shipped). The task list is `tt list --tag
+  reliability`.
+
+---
+
 ### Test Coverage & Quality
-- Test count: **11,681 passing** (v0.114.0) — 28 skipped, 2 xfailed (intentional: PowerPivot fixtures, network adapters)
+- Test count: see the CI run for the current release. It isn't hand-maintained here (BACK-388).
 - Coverage: **~68%** — target 90%+
 - UX query/navigation surface: complete (query operators, field selection, element discovery, `--outline`/`--scope`/`--varflow`/`--calls` range)
 
