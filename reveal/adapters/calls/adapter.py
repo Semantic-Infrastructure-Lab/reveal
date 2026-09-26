@@ -326,6 +326,16 @@ class CallsAdapter(ResourceAdapter):
         print("⚠ Query param 'top' (--limit) for calls:// only caps ?rank=callers and "
               "?uncalled — ignored; every result is shown.", file=sys.stderr)
 
+    def _warn_depth_ignored(self, mode: str) -> None:
+        """depth= walks ?target (callers) and ?root (callee tree) only; in any other
+        mode it was dropped in silence, so `?callees=X&depth=3` read as a transitive
+        answer (BACK-1504)."""
+        if self.query_params.get('depth') is None:
+            return
+        hint = " -- use ?root=<name>&depth=N for callees level by level" if mode == 'callees' else ''
+        print(f"⚠ Query param 'depth' for calls:// applies to ?target and ?root only, "
+              f"not ?{mode} — ignored{hint}.", file=sys.stderr)
+
     def get_structure(self, **kwargs) -> RevealResult:
         target = self.query_params.get('target', '')
         callees_target = self.query_params.get('callees', '')
@@ -354,6 +364,7 @@ class CallsAdapter(ResourceAdapter):
 
         if modules:
             self._warn_top_ignored()
+            self._warn_depth_ignored('modules')
             include_external = bool(self.query_params.get('external', False))
             result_data = build_module_dependency_graph(self.path, include_external=include_external)
             query_format = self.query_params.get('format', '')
@@ -368,6 +379,7 @@ class CallsAdapter(ResourceAdapter):
             )
 
         if rank == 'callers':
+            self._warn_depth_ignored('rank')
             top = int(self.query_params.get('top', 10))
             include_builtins = bool(self.query_params.get('builtins', False))
             include_test_framework = bool(self.query_params.get('test-framework', False))
@@ -385,6 +397,7 @@ class CallsAdapter(ResourceAdapter):
             )
 
         if uncalled:
+            self._warn_depth_ignored('uncalled')
             top = int(self.query_params.get('top', 0))
             type_filter = self.query_params.get('type', '')
             only_functions = type_filter == 'function'
@@ -439,6 +452,7 @@ class CallsAdapter(ResourceAdapter):
         self._warn_top_ignored()
 
         if callees_target:
+            self._warn_depth_ignored('callees')
             include_builtins = bool(self.query_params.get('builtins', False))
             result_data = find_callees(self.path, callees_target, include_builtins=include_builtins)
             result_data['path'] = self.path

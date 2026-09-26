@@ -59,6 +59,7 @@ def create_surface_parser() -> argparse.ArgumentParser:
         '--type',
         metavar='TYPE',
         default='',
+        choices=CATEGORIES,  # BACK-1504: a typo must not read as "0 entries"
         help=f"Filter to one surface type: {', '.join(CATEGORIES)}"
     )
     parser.add_argument(

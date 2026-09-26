@@ -585,6 +585,10 @@ class SurfaceAdapter(ResourceAdapter):
         _source_only_raw = self.query_params.get('source_only')
         source_only = str(_source_only_raw).lower() == 'true' if _source_only_raw is not None else False
 
+        # BACK-1504: an unknown type used to filter everything out and report
+        # "Total surface entries: 0" -- a typo read as "touches no env vars".
+        if type_filter and type_filter not in CATEGORIES:
+            raise ValueError(f"surface: unknown type={type_filter!r} (supported: {', '.join(CATEGORIES)})")
         by = str(self.query_params.get('by') or '')
         if by not in ('', 'dir'):
             raise ValueError(f"surface: unknown by={by!r} (supported: dir)")

@@ -374,6 +374,19 @@ class GitAdapter(ResourceAdapter):
         query_type = self.query.get('type')
         resolved = query_type or 'default (log)'
 
+        # BACK-1504: on a file or directory, commit filters are applied only by
+        # ?type=history; the default view shows the file at the ref and never
+        # reads them, so `git://f.py?message~=fix` answered with no filter at all.
+        if self.subpath and query_type not in ('history', 'log', 'ownership') and self.query_filters:
+            fields = ', '.join(sorted({f.field for f in self.query_filters}))
+            view = f"type={query_type}" if query_type else 'file content'
+            print(
+                f"⚠ Filter param(s) [{fields}] have no effect on git:// view '{view}' -- "
+                f"add ?type=history to filter this path's commits. "
+                f"Result does not reflect them.",
+                file=sys.stderr,
+            )
+
         for key, valid_type in self._VIEW_SCOPED_PARAMS.items():
             if key in self.query and query_type != valid_type:
                 print(
