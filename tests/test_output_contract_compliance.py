@@ -192,6 +192,11 @@ class _Harness:
 
     @contextmanager
     def _hermetic(self):
+        # The language pack fixes its grammar cache directory at first use, under HOME. Use it
+        # once before HOME moves, or each xdist worker downloads grammars into the empty home
+        # (8s+ per worker, and a network dependency).
+        from tree_sitter_language_pack import get_parser
+        get_parser('python')
         cwd = os.getcwd()
         saved_env = {k: os.environ.get(k) for k in ('HOME', 'USERPROFILE')}
         redirected = [(cls, name, cls.__dict__.get(name, _UNSET), fake)
