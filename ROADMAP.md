@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-09-24 (void-nightmare-0924 — v0.128.0 release: language neutrality, one complexity score, surface:// rule tables, silent-failure sweep)
+> **Last updated**: 2026-09-25 (v0.129.0 release: --limit/--head/--format honored or rejected, .gitignore correctness, C++/Rails/WordPress resolution, cache keyed on code)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,14 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.129.0 — Result-control flags honored or rejected, .gitignore correctness, member/route resolution, cache keyed on code
+
+- ✅ `--limit`, `--head/--tail/--range`, `--format` and `--also-json` are applied or rejected with a note, never silently dropped: `--limit` maps to the native `top=` on hotspots/calls/depends/testability, and unsupported `sort=`/`limit=`/`offset=` warn and run (BACK-1385, 1425, 1496, 1497).
+- ✅ Every walker skips what git ignores and no longer drops tracked files; `--no-gitignore` works everywhere (BACK-1386, 1485). A package marker above the nearest `.git` belongs to another project (BACK-1434).
+- ✅ Element/member resolution: C++ out-of-line methods and operators, ambiguous names disclose every definition, and enums/traits/type aliases/`#private` JS methods/config elements are listed and extractable (BACK-1400, 1409–1412).
+- ✅ `surface://` reads Rails `routes.draw`, WordPress REST routes and Spring/C# controller prefixes, and discloses error-recovered regions (BACK-1417, 1418, 1480).
+- ✅ The disk cache is keyed on the code that built it, not just the version, so an edit cannot serve stale results (BACK-1294, BACK-1328); a huge file's outline is capped and says so (BACK-1424).
 
 ### v0.128.0 — Language neutrality, one complexity score, surface:// rule tables, silent-failure sweep
 

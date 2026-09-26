@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.129.0] - 2026-09-25 (sessions wuluzowo-0925, calm-sirocco-0925, pearl-watercolor-0925, reborn-river-0925)
+
 ### Fixed
 - **`reveal FILE` printed every function of a huge file, and `--max-items` truncated without saying so (BACK-1424, output-cap part)** — a 5 MB one-line bundle listed 81,362 functions (3.3 MB, 11 s) and a 150,000-function file 6 MB. The text view now lists at most 500 items per category and ends with `Truncated: functions 500 of 150000.` plus how to lift it (`--all`, or `--max-items N`); the header reads `Functions (500 of 150000 shown):`. A file that looks minified or bundled gets a cap of 50, judged by its name (`lib.min.js`) or by its content (10 KB or more with lines averaging over 200 characters, so a `bundle.js` is caught too). Those two files now print 2 KB and 20 KB. `--format json`, `--typed` and `pack` are never capped implicitly. `--max-items N` on a bare file used to print `Functions (3):` for a 150,000-function file with nothing to say the rest was cut, and then claimed a "Partial outline" from the truncated list; it now reports the cut and makes no coverage claim.
 - **The documented `diff://a.py:b.py/element` form failed (BACK-1473)** — `help://schemas/diff` shows `diff://app.py:old.py/handle_request`, but the suffix was read as part of the right-hand path (`No analyzer found for file: b.py/foo`). For plain file paths it is now the element when the whole string is not a path but its parent is a file. The positional form (`diff://a.py:b.py foo`) is unchanged, and a URI right side (`git://f@ref`) is never split.
