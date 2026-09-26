@@ -6,7 +6,6 @@ from dataclasses import dataclass, asdict, replace
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer, _ADAPTER_REGISTRY
-from ..rendering import render_help
 from ..utils.formatting import shell_command
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
@@ -260,6 +259,10 @@ class HelpRenderer:
             result: Structure dict from HelpAdapter.get_structure()
             format: Output format ('text', 'json', 'grep')
         """
+        # Imported here: reveal.rendering imports reveal.adapters (through its
+        # help renderer), so a module-level import made `import reveal.rendering`
+        # fail with a circular ImportError when it ran first.
+        from ..rendering import render_help
         render_help(result, format, list_mode=True)
 
     @staticmethod
@@ -270,6 +273,7 @@ class HelpRenderer:
             result: Element dict from HelpAdapter.get_element()
             format: Output format ('text', 'json', 'grep')
         """
+        from ..rendering import render_help
         render_help(result, format)
 
     @staticmethod

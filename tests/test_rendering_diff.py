@@ -232,10 +232,12 @@ class TestRenderDiffBreadcrumbs(unittest.TestCase):
 
         output = capture_stdout(_render_diff_breadcrumbs, left, right, details)
 
-        self.assertIn("1. reveal 'diff://git://HEAD/app.py:git://.//app.py/handle_request'", output)
+        # A git:// right side does not split a /element suffix (BACK-1494), so the
+        # deep dive passes the element positionally (BACK-1503).
+        self.assertIn("1. reveal 'diff://git://HEAD/app.py:git://.//app.py' handle_request", output)
         self.assertIn("2. reveal stats://app.py", output)
-        self.assertIn("3. reveal imports://. --circular", output)
-        self.assertIn("4. reveal app.py --check", output)
+        self.assertIn("3. reveal 'imports://.?circular'", output)
+        self.assertIn("4. reveal check app.py", output)
 
     def test_code_review_without_modified_function_renumbers_from_one(self):
         """With no modified function, the workflow list must start at 1, not 2."""
@@ -249,8 +251,26 @@ class TestRenderDiffBreadcrumbs(unittest.TestCase):
 
         self.assertNotIn('deep dive', output.lower())
         self.assertIn("1. reveal stats://app.py", output)
-        self.assertIn("2. reveal imports://. --circular", output)
-        self.assertIn("3. reveal app.py --check", output)
+        self.assertIn("2. reveal 'imports://.?circular'", output)
+        self.assertIn("3. reveal check app.py", output)
+
+    def test_git_ref_sides_suggest_the_working_tree_path(self):
+        """BACK-1503: with no 'file' key, the git:// URI itself was printed where a
+        path belongs (`reveal stats://git://HEAD/.`, `reveal git://HEAD/. --check`)."""
+        left = {'uri': 'git://HEAD~1/src/app.py'}
+        right = {'uri': 'git://src/app.py@HEAD'}
+        output = capture_stdout(_render_diff_breadcrumbs, left, right, {'functions': []})
+        self.assertIn("reveal stats://src/app.py", output)
+        self.assertIn("reveal check src/app.py", output)
+        self.assertNotIn("stats://git://", output)
+
+    def test_directory_diff_has_no_element_deep_dive(self):
+        left = {'uri': 'git://HEAD~1/.', 'type': 'git_directory'}
+        right = {'uri': 'git://HEAD/.', 'type': 'git_directory'}
+        details = {'functions': [{'type': 'modified', 'name': 'f'}]}
+        output = capture_stdout(_render_diff_breadcrumbs, left, right, details)
+        self.assertNotIn('Deep dive', output)
+        self.assertIn("1. reveal stats://.", output)
 
     def test_render_category_summary_with_changes(self):
         """Test _render_category_summary when there are changes."""
@@ -303,3 +323,13 @@ class TestRenderDiffBreadcrumbs(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_rendering_imports_on_its_own():
+    """`import reveal.rendering` in a fresh interpreter failed with a circular
+    ImportError (rendering -> adapters -> adapters/help -> rendering), so this
+    test module errored whenever it ran first or alone."""
+    import subprocess
+    proc = subprocess.run([sys.executable, '-c', 'import reveal.rendering'],
+                          capture_output=True, text=True, encoding='utf-8')
+    assert proc.returncode == 0, proc.stderr

@@ -353,9 +353,32 @@ def _render_element_details(element: Dict[str, Any]) -> None:
     print()
 
 
+def _local_path(uri: str) -> str:
+    """The working-tree path a diff side names: `git://path@REF` and the legacy
+    `git://REF/path` give `path` (the forms diff/git.py accepts), `file://x`
+    gives `x`, a plain path is itself. A bare ref or overview gives '.'."""
+    if uri.startswith('git://'):
+        rest = uri[len('git://'):]
+        if '@' in rest:
+            path = rest.rsplit('@', 1)[0]
+        elif '/' in rest:
+            path = rest.split('/', 1)[1]
+        else:
+            path = ''
+        return path.rstrip('/') or '.'
+    if uri.startswith('file://'):
+        return uri[len('file://'):] or '.'
+    return uri or '.'
+
+
 def _render_diff_breadcrumbs(left: Dict[str, Any], right: Dict[str, Any],
                              details: Dict[str, Any]) -> None:
     """Render breadcrumbs after diff output.
+
+    Every suggested command must run as printed (BACK-1503: after a git-ref
+    diff all four failed -- a git:// URI used as a filesystem path, an
+    `--circular` flag that does not exist, a `/element` suffix on a git://
+    right side, which is not split, BACK-1494).
 
     Args:
         left: Left side metadata
@@ -366,10 +389,10 @@ def _render_diff_breadcrumbs(left: Dict[str, Any], right: Dict[str, Any],
     print("---")
     print()
 
-    # Extract URIs and path
     left_uri = left.get('uri', '')
     right_uri = right.get('uri', '')
-    path = right.get('file', right_uri)
+    path = right.get('file') or _local_path(right_uri)
+    is_dir = 'directory' in str(right.get('type', '')) or 'directory' in str(left.get('type', ''))
 
     # Detect code review workflow (using git refs)
     is_code_review = 'git://' in left_uri or 'git://' in right_uri
@@ -383,11 +406,14 @@ def _render_diff_breadcrumbs(left: Dict[str, Any], right: Dict[str, Any],
     modified_funcs = [f for f in functions if f.get('type') == 'modified']
 
     step = 1
-    if modified_funcs:
-        # Suggest viewing a modified function
+    if modified_funcs and not is_dir:
         func_name = modified_funcs[0].get('name', '')
         if func_name:
-            print(f"  {step}. reveal 'diff://{left_uri}:{right_uri}/{func_name}'")
+            if right_uri.startswith('git://'):
+                cmd = f"reveal 'diff://{left_uri}:{right_uri}' {func_name}"
+            else:
+                cmd = f"reveal 'diff://{left_uri}:{right_uri}/{func_name}'"
+            print(f"  {step}. {cmd}")
             print(f"     └─ Deep dive into {func_name} changes")
             print()
             step += 1
@@ -395,12 +421,12 @@ def _render_diff_breadcrumbs(left: Dict[str, Any], right: Dict[str, Any],
     if is_code_review:
         print(f"  {step}. reveal stats://{path}            # Check complexity trends")
         step += 1
-        print(f"  {step}. reveal imports://. --circular    # Check for new cycles")
+        print(f"  {step}. reveal 'imports://.?circular'    # Check for new cycles")
         step += 1
-        print(f"  {step}. reveal {path} --check            # Quality check")
+        print(f"  {step}. reveal check {path}            # Quality check")
     else:
         print(f"Next: reveal stats://{path}      # Analyze complexity trends")
-        print(f"      reveal {path} --check      # Check quality after changes")
+        print(f"      reveal check {path}      # Check quality after changes")
         print("      reveal help://diff         # Learn more about diff adapter")
 
 
