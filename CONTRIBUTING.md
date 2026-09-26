@@ -111,8 +111,13 @@ class IniAnalyzer(FileAnalyzer):
 
 **Check tree-sitter support:**
 ```bash
-python -c "from tree_sitter_languages import get_language; get_language('lua')"
+python -c "from tree_sitter_language_pack import get_language; get_language('lua')"
 ```
+
+A new tree-sitter language must pass `tests/test_grammar_coverage.py`. It fails on every
+control-flow node kind in the grammar (`if`/`for`/`switch`/`return`/... in the name) that
+`reveal/core/node_taxonomy.py` does not classify. Add each such kind to its family there. If a
+kind is not runtime control flow, list it in the test's `IGNORED` with the reason.
 
 ### 2. Add URI Adapters
 

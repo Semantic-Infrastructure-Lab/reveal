@@ -160,8 +160,7 @@ CALL_NODE_TYPES = {
     # static binding in any PHP OOP codebase (WordPress, Laravel, etc).
     # See core/callees/php.py:scoped_call (shared with nav).
     'scoped_call_expression',  # PHP self::/parent::/static::/Class::method()
-    'method_call',             # Ruby, Rust (method syntax)
-    'method_call_expression',  # Rust
+    'method_call',             # Verilog (fallback grammar); Ruby and Rust calls are 'call' / 'call_expression'
     'invocation_expression',   # C#
     'function_call',           # Lua, Bash
     'method_invocation',       # Java

@@ -46,7 +46,6 @@ _DECISION_TYPES = frozenset({
     # Boolean operators
     'boolean_operator',
     'and', 'or',
-    'logical_and', 'logical_or',
     # Ternary
     'conditional_expression', 'ternary_expression',
     'conditional',  # ruby `a ? b : c`
