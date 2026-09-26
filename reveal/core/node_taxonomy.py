@@ -19,7 +19,7 @@ automatically because they're built by union, not re-declared.
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from .treesitter_compat import _zero_arg, node_children
 
@@ -385,28 +385,36 @@ MEMBER_CONTAINER_NODES: frozenset = (
     CLASS_NODES | STRUCT_NODES | IMPL_NODES | TYPE_DECL_NODES | frozenset({'module'})
 )
 
-RETURN_NODES: frozenset = frozenset({'return_statement', 'return'})
+# BACK-1527: expression-oriented grammars wrap each exit in an *_expression
+# (Rust return/break/continue/yield, Scala return; JS/TS/PHP yield), C++20
+# coroutines have co_return/co_yield statements, Dart `yield*` is
+# yield_each_statement. Without the wrapper, --exits matched only the bare
+# keyword token inside it and printed `return` without its value, and
+# --outline (which skips anonymous tokens) dropped every Rust return.
+RETURN_NODES: frozenset = frozenset({
+    'return_statement', 'return', 'return_expression', 'co_return_statement',
+})
 RAISE_NODES: frozenset = frozenset({'raise_statement', 'raise'})
 # Scala's grammar is expression-oriented like Rust's — 'throw_expression',
 # not 'throw_statement' (BACK-431 Issue G smoke-tier audit: Scala's `throw`
 # was invisible to --exits/--returns without this, the same failure shape
 # BACK-430 found for Rust).
-# Kotlin and Swift both wrap throw in a control-transfer wrapper whose only
-# distinguishing child is a keyword node — Kotlin's `jump_expression` carries a
-# bare `throw` kind, Swift's `control_transfer_statement` carries `throw_keyword`
-# (its return sibling is the bare `return` kind, already in RETURN_NODES, which
-# is why returns worked but throws didn't). Both keyword kinds must be recognized
-# here, exactly as RETURN_NODES already carries bare 'return'. Safe against
-# double-counting: collect_exits `continue`s when a wrapper (throw_statement/
-# throw_expression) matches, so its throw-keyword child is never walked; the bare
-# kinds only fire under jump_expression/control_transfer_statement, which are not
-# themselves exit nodes. NB: Swift's `throws` (function effect specifier on the
-# signature) is deliberately NOT included — only `throw_keyword` (the statement).
-# Found via tivi (Kotlin) + ios-oss (Swift) deep-conformance dogfooding.
+# Kotlin and Swift wrap return/throw/break/continue in one control-transfer
+# wrapper (JUMP_WRAPPER_NODES, below) whose exit kind is its keyword child:
+# Kotlin's `jump_expression` holds a bare `throw`/`return`/..., Swift's
+# `control_transfer_statement` holds `throw_keyword` or a bare `return`/....
+# Those keyword kinds are here, as RETURN_NODES carries bare 'return', so
+# exit_label() can name the wrapper by its first child. NB: Swift's `throws`
+# (function effect specifier on the signature) is deliberately NOT included —
+# only `throw_keyword` (the statement). Found via tivi (Kotlin) + ios-oss
+# (Swift) deep-conformance dogfooding.
 THROW_NODES: frozenset = frozenset(
     {'throw_statement', 'throw_expression', 'throw', 'throw_keyword'}
 )
-YIELD_NODES: frozenset = frozenset({'yield_statement', 'yield'})
+YIELD_NODES: frozenset = frozenset({
+    'yield_statement', 'yield', 'yield_expression', 'co_yield_statement',
+    'yield_each_statement',  # Dart `yield*`
+})
 # BACK-1406: PHP parses `exit;` / `exit(1)` as a statement, not a call -- unlike
 # `die("x")`, which is a function_call_expression caught by nav_exits'
 # _EXIT_CALL_NAMES. Without this, --returns/--exits/--sideeffects missed every
@@ -417,8 +425,15 @@ HARD_EXIT_NODES: frozenset = frozenset({'exit_statement'})
 # real drift instance found while consolidating (a grammar that emits bare
 # `break`/`continue` keyword nodes was invisible to --outline while already
 # working in --exits/--returns).
-BREAK_NODES: frozenset = frozenset({'break_statement', 'break'})
-CONTINUE_NODES: frozenset = frozenset({'continue_statement', 'continue'})
+BREAK_NODES: frozenset = frozenset({'break_statement', 'break', 'break_expression'})
+CONTINUE_NODES: frozenset = frozenset({'continue_statement', 'continue', 'continue_expression'})
+# BACK-1527: wrappers whose exit kind is their first child, a keyword in one of
+# the families above (Kotlin `return x`, `throw e`, `break`, `continue`; Swift
+# the same with `throw_keyword`). The kind carries no control-flow word, so the
+# grammar-coverage test cannot see it. Kotlin's labeled `return@forEach` has
+# its own `return@` token: it leaves the lambda, not the function, and is not
+# an exit. Not part of EXIT_NODES (no fixed label); use exit_label().
+JUMP_WRAPPER_NODES: frozenset = frozenset({'jump_expression', 'control_transfer_statement'})
 
 
 # ---------------------------------------------------------------------------
@@ -580,13 +595,17 @@ KEYWORD_LABEL: Dict[str, str] = {
     'struct_type': 'STRUCT',
     'impl_item': 'IMPL',
     'return_statement': 'RETURN', 'return': 'RETURN',
+    'return_expression': 'RETURN', 'co_return_statement': 'RETURN',  # BACK-1527
     'raise_statement': 'RAISE', 'raise': 'RAISE',
     'throw_statement': 'THROW', 'throw_expression': 'THROW', 'throw': 'THROW',
     'throw_keyword': 'THROW',
     'yield_statement': 'YIELD', 'yield': 'YIELD',
+    'yield_expression': 'YIELD', 'co_yield_statement': 'YIELD',  # BACK-1527
+    'yield_each_statement': 'YIELD',
     'exit_statement': 'EXIT',  # BACK-1406: PHP `exit;`
-    'break_statement': 'BREAK', 'break': 'BREAK',
+    'break_statement': 'BREAK', 'break': 'BREAK', 'break_expression': 'BREAK',
     'continue_statement': 'CONTINUE', 'continue': 'CONTINUE',
+    'continue_expression': 'CONTINUE',
 }
 
 
@@ -599,6 +618,18 @@ def is_rust_try_operator(node: Any) -> bool:
     scope test must skip it."""
     return (_zero_arg(node, 'kind') == 'try_expression'
             and any(_zero_arg(c, 'kind') == '?' for c in node_children(node)))
+
+
+def exit_label(node: Any, kind: str) -> Optional[str]:
+    """RETURN / THROW / BREAK / ... when a node of ``kind`` is an exit, else None.
+
+    The one definition --outline and --exits/--returns share. EXIT_NODES name
+    themselves; a JUMP_WRAPPER_NODES wrapper is named by its keyword child, so
+    the exit is reported at the whole statement (`return x`, not `return`)."""
+    if kind in JUMP_WRAPPER_NODES:
+        first = node_children(node)[:1]
+        kind = _zero_arg(first[0], 'kind') if first else ''
+    return KEYWORD_LABEL[kind] if kind in EXIT_NODES else None
 
 
 def opens_scope(node: Any, kind: str) -> bool:

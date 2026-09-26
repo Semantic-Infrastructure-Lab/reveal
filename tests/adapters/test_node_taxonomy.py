@@ -1,8 +1,8 @@
 """Guard-rail tests for reveal.adapters.ast.node_taxonomy (BACK-431 Issue A).
 
 These pin the property the consolidation exists to guarantee: nav_outline.py
-(SCOPE_NODES/EXIT_NODES/KEYWORD_LABEL), nav_exits.py (_GATE_NODE_TYPES/
-_EXIT_KIND), and nav_varflow.py's if/while/for dispatch all read from the
+(SCOPE_NODES/EXIT_NODES/KEYWORD_LABEL), nav_exits.py (_GATE_NODE_TYPES, and
+exit_label for exits), and nav_varflow.py's if/while/for dispatch all read from the
 *same* frozensets in node_taxonomy.py, not independent hand-copies — the
 exact drift that caused BACK-427 (if_expression added to two of three
 modules) and BACK-430 (while/for/loop/match_expression added to one of
@@ -51,16 +51,45 @@ class TestSharedIdentity(unittest.TestCase):
     def test_nav_exits_gate_node_types_is_taxonomy_gate_nodes(self):
         self.assertIs(nav_exits._GATE_NODE_TYPES, tax.GATE_NODES)
 
-    def test_nav_exits_exit_kind_values_match_taxonomy_keyword_label(self):
-        for kind, label in nav_exits._EXIT_KIND.items():
-            self.assertEqual(
-                label, tax.KEYWORD_LABEL[kind],
-                f'_EXIT_KIND[{kind!r}] = {label!r} disagrees with '
-                f'KEYWORD_LABEL[{kind!r}] = {tax.KEYWORD_LABEL[kind]!r}',
-            )
+    def test_outline_and_exits_share_exit_label(self):
+        # BACK-1527 replaced nav_exits' own _EXIT_KIND map: both views name an
+        # exit through the one taxonomy function.
+        self.assertIs(nav_outline.exit_label, tax.exit_label)
+        self.assertIs(nav_exits.exit_label, tax.exit_label)
 
-    def test_nav_exits_exit_kind_keys_equal_exit_nodes(self):
-        self.assertEqual(frozenset(nav_exits._EXIT_KIND), tax.EXIT_NODES)
+
+class TestExitLabel(unittest.TestCase):
+    """exit_label names EXIT_NODES by KEYWORD_LABEL and a jump wrapper by its keyword child."""
+
+    def _labels(self, lang, code, kinds):
+        root = tree_root(ts_parse(ts.get_parser(lang), code))
+        found, stack = [], [root]
+        while stack:
+            n = stack.pop()
+            if _zero_arg(n, 'kind') in kinds:
+                found.append(tax.exit_label(n, _zero_arg(n, 'kind')))
+            stack.extend(reversed([n.child(i) for i in range(_zero_arg(n, 'child_count'))]))
+        return found
+
+    def test_every_exit_kind_is_labeled(self):
+        for kind in tax.EXIT_NODES:
+            self.assertEqual(tax.exit_label(None, kind), tax.KEYWORD_LABEL[kind])
+
+    def test_kotlin_jump_expression_by_keyword(self):
+        code = ('fun f(xs: List<Int>): Int { for (x in xs) { if (x == 1) break; '
+                'if (x == 2) continue; if (x == 3) throw E(); '
+                'xs.forEach { return@forEach } }; return 0 }')
+        self.assertEqual(self._labels('kotlin', code, {'jump_expression'}),
+                         ['BREAK', 'CONTINUE', 'THROW', None, 'RETURN'])
+
+    def test_swift_control_transfer_statement_by_keyword(self):
+        code = ('func f(xs: [Int]) throws -> Int { for x in xs { if x == 1 { break }; '
+                'if x == 2 { continue }; if x == 3 { throw E.bad } }; return 0 }')
+        self.assertEqual(self._labels('swift', code, {'control_transfer_statement'}),
+                         ['BREAK', 'CONTINUE', 'THROW', 'RETURN'])
+
+    def test_non_exit_is_none(self):
+        self.assertIsNone(tax.exit_label(None, 'if_statement'))
 
 
 class TestFamilyConsistency(unittest.TestCase):
@@ -342,10 +371,10 @@ OUTLINE_CASES = [
     # BACK-1528: loops
     ('kotlin', 'do-while',
      'fun f(x: Int): Int { var i = 0; do { if (i > x) { i = 0 }; i++ } while (i < 10); return 0 }',
-     [('DO', 1), ('IF', 2)]),
+     [('DO', 1), ('IF', 2), ('RETURN', 1)]),
     ('swift', 'repeat-while',
      'func f(x: Int) -> Int { var i = 0; repeat { if i > x { i = 0 }; i += 1 } while i < 10; return 0 }',
-     [('DO', 1), ('IF', 2)]),
+     [('DO', 1), ('IF', 2), ('RETURN', 1)]),
     ('scala', 'do-while',
      'object A { def f(x: Int): Int = { var i = 0; do { if (i > x) { i = 0 }; i += 1 } while (i < 10); 0 } }',
      [('DO', 1), ('IF', 2)]),
@@ -404,6 +433,26 @@ OUTLINE_CASES = [
     ('ruby', 'rescue modifier',
      'def f(x)\n  y = risky(x) rescue nil\n  y\nend\n',
      [('CATCH', 1)]),
+    # BACK-1527: exit wrappers
+    ('rust', 'return / break / continue expressions',
+     'fn f(xs: Vec<i32>) -> i32 { for x in xs { if x == 1 { break; } '
+     'if x == 2 { continue; } if x == 4 { return x; } } return 0; }',
+     [('FOR', 1), ('IF', 2), ('BREAK', 3), ('IF', 2), ('CONTINUE', 3), ('IF', 2), ('RETURN', 3),
+      ('RETURN', 1)]),
+    ('kotlin', 'jump_expression',
+     'fun f(xs: List<Int>): Int { for (x in xs) { if (x == 1) { break }; '
+     'if (x == 3) { throw E() } }; return 0 }',
+     [('FOR', 1), ('IF', 2), ('BREAK', 3), ('IF', 2), ('THROW', 3), ('RETURN', 1)]),
+    ('swift', 'control_transfer_statement',
+     'func f(xs: [Int]) throws -> Int { for x in xs { if x == 1 { continue }; '
+     'if x == 3 { throw E.bad } }; return 0 }',
+     [('FOR', 1), ('IF', 2), ('CONTINUE', 3), ('IF', 2), ('THROW', 3), ('RETURN', 1)]),
+    ('javascript', 'yield expression',
+     'function* f(a) { if (a) { yield 1; } const x = yield a; return x; }',
+     [('IF', 1), ('YIELD', 2), ('YIELD', 1), ('RETURN', 1)]),
+    ('cpp', 'co_yield / co_return',
+     'task<int> f(int a) { if (a) { co_yield a; } co_return 1; }',
+     [('IF', 1), ('YIELD', 2), ('RETURN', 1)]),
 ]
 
 
@@ -418,6 +467,20 @@ def test_grammar_gap_construct_appears_in_outline(lang, code, expected):
     node, get_text = _first_function(lang, code, _OUTLINE_ROOT_KINDS.get(lang, tax.DEF_NODES))
     got = [(i['keyword'], i['depth']) for i in element_outline(node, get_text)]
     assert got == expected
+
+
+@pytest.mark.parametrize('lang,code', [
+    ('rust', 'fn f(x: i32) -> i32 { if x > 1 { return x + 1; } return 0; }'),
+    ('kotlin', 'fun f(x: Int): Int { if (x > 1) { return x + 1 }; return 0 }'),
+    ('swift', 'func f(x: Int) -> Int { if x > 1 { return x + 1 }; return 0 }'),
+])
+def test_exits_report_the_whole_return_statement(lang, code):
+    # BACK-1527: --exits matched the bare `return` token inside the wrapper and
+    # printed `return` without its value.
+    node, get_text = _first_function(lang, code, tax.DEF_NODES)
+    exits = nav_exits.collect_exits(node, 1, 1, get_text)
+    assert [(e['kind'], e['text'].rstrip(';')) for e in exits] == [
+        ('RETURN', 'return x + 1'), ('RETURN', 'return 0')]
 
 
 if __name__ == '__main__':

@@ -35,7 +35,8 @@ Limits:
   Ruby's ``until`` block, Lua's ``elseif_statement`` and Kotlin's ``try_expression`` all
   passed this way while --outline dropped them (BACK-1528, BACK-1530).
 - Wrapper kinds without a control-flow word, such as Kotlin ``jump_expression`` and Swift
-  ``control_transfer_statement``, are out of reach of the name check (BACK-1527).
+  ``control_transfer_statement``, are out of reach of the name check. Those two are
+  ``node_taxonomy.JUMP_WRAPPER_NODES`` (BACK-1527).
 - Declaration and call kinds get the existence check only.
 
 When ``test_control_flow_kinds_are_classified`` fails after a grammar bump or a new
@@ -150,13 +151,11 @@ KNOWN_GAPS: Dict[str, Dict[str, str]] = {
         'seh_finally_clause': 'BACK-1531', 'seh_try_statement': 'BACK-1531',
     },
     'cpp': {
-        'co_return_statement': 'BACK-1527', 'co_yield_statement': 'BACK-1527',
         'goto_statement': 'BACK-1531', 'seh_except_clause': 'BACK-1531',
         'seh_finally_clause': 'BACK-1531', 'seh_try_statement': 'BACK-1531',
     },
     'csharp': {'goto_statement': 'BACK-1531'},
     'dart': {
-        'yield_each_statement': 'BACK-1527',
         'for_element': 'BACK-1531', 'if_element': 'BACK-1531',
         'switch_statement_case': 'BACK-1531', 'switch_statement_default': 'BACK-1531',
         'throw_expression_without_cascade': 'BACK-1531',
@@ -164,19 +163,11 @@ KNOWN_GAPS: Dict[str, Dict[str, str]] = {
     'elixir': {'else_block': 'BACK-1531', 'rescue_block': 'BACK-1531'},
     'go': {'defer_statement': 'BACK-1531', 'goto_statement': 'BACK-1531'},
     'java': {'switch_rule': 'BACK-1531'},
-    'javascript': {'yield_expression': 'BACK-1527'},
     'lua': {'goto_statement': 'BACK-1531'},
-    'php': {'yield_expression': 'BACK-1527', 'goto_statement': 'BACK-1531'},
+    'php': {'goto_statement': 'BACK-1531'},
     'powershell': {'invokation_foreach_expression': 'BACK-1531', 'switch_clause': 'BACK-1531'},
     'python': {'for_in_clause': 'BACK-1531', 'if_clause': 'BACK-1531'},
-    'rust': {
-        'break_expression': 'BACK-1527', 'continue_expression': 'BACK-1527',
-        'return_expression': 'BACK-1527', 'yield_expression': 'BACK-1527',
-        'try_block': 'BACK-1531',
-    },
-    'scala': {'return_expression': 'BACK-1527'},
-    'tsx': {'yield_expression': 'BACK-1527'},
-    'typescript': {'yield_expression': 'BACK-1527'},
+    'rust': {'try_block': 'BACK-1531'},
 }
 
 

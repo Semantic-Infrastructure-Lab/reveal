@@ -16,6 +16,7 @@ from .node_taxonomy import (  # noqa: F401 — re-exported for nav.py/back-compa
     RUBY_BLOCK_NODES,
     RUBY_ITERATOR_METHODS,
     RUBY_LOOP_METHODS,
+    exit_label,
     opens_scope,
 )
 
@@ -53,9 +54,9 @@ def _make_item(
     is_exit: bool = False,
     keyword: Optional[str] = None,
 ) -> Dict[str, Any]:
-    # keyword override: for Ruby block-iterator `call` nodes, the kind is
-    # 'call' (which KEYWORD_LABEL would surface as 'CALL'); the caller passes
-    # the semantic loop keyword (FOR/LOOP) it derived from the method name.
+    # keyword override: for nodes whose kind alone does not name their role --
+    # a Ruby block-iterator `call` (the caller derives FOR/LOOP from the method
+    # name) or a Kotlin/Swift jump wrapper (exit_label names it by its keyword).
     node_kind = _zero_arg(node, 'kind')
     resolved = keyword or KEYWORD_LABEL.get(node_kind, node_kind.upper())
     return {
@@ -143,8 +144,8 @@ def _collect_outline(
             items.append(_make_item(child, depth, get_text, keyword=block_kw))
             if depth < max_depth:
                 _collect_scope_interior(child, depth, items, get_text, max_depth)
-        elif ctype in EXIT_NODES:
-            items.append(_make_item(child, depth, get_text, is_exit=True))
+        elif (exit_kw := exit_label(child, ctype)) is not None:
+            items.append(_make_item(child, depth, get_text, is_exit=True, keyword=exit_kw))
         else:
             if depth <= max_depth:
                 _collect_outline(child, depth, items, get_text, max_depth)
@@ -179,8 +180,8 @@ def _collect_scope_interior(
             items.append(_make_item(child, scope_depth + 1, get_text, keyword=block_kw))
             if scope_depth + 1 < max_depth:
                 _collect_scope_interior(child, scope_depth + 1, items, get_text, max_depth)
-        elif ctype in EXIT_NODES:
-            items.append(_make_item(child, scope_depth + 1, get_text, is_exit=True))
+        elif (exit_kw := exit_label(child, ctype)) is not None:
+            items.append(_make_item(child, scope_depth + 1, get_text, is_exit=True, keyword=exit_kw))
         else:
             if scope_depth < max_depth:
                 _collect_outline(child, scope_depth + 1, items, get_text, max_depth)

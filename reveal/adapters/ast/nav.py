@@ -43,7 +43,6 @@ from .nav_calls import (  # noqa: F401
 )
 from .nav_exits import (  # noqa: F401
     _EXIT_CALL_NAMES,
-    _EXIT_KIND,
     _HARD_EXIT_KINDS,
     _SOFT_EXIT_KINDS,
     collect_exits,

@@ -6,7 +6,7 @@ from typing import Any, Callable, Collection, Dict, List, Optional
 
 from .nav_calls import _extract_callee
 from .nav_varflow import all_var_flow
-from .node_taxonomy import EXIT_NODES, GATE_NODES, KEYWORD_LABEL, is_rust_try_operator
+from .node_taxonomy import GATE_NODES, exit_label, is_rust_try_operator
 from ...core import node_children as _children
 from ...core.treesitter_compat import _zero_arg
 
@@ -103,21 +103,6 @@ def _find_rust_tail_expression(scope_node: Any) -> Optional[Any]:
         return last
     return None
 
-# Mapping from exit node type to kind label — derived from the shared
-# taxonomy (node_taxonomy.py) so it can't drift from EXIT_NODES/KEYWORD_LABEL
-# the way BACK-431 found it had (bare 'break'/'continue' were hand-added
-# here but missing from nav_outline.py's EXIT_NODES).
-_EXIT_KIND: Dict[str, str] = {k: KEYWORD_LABEL[k] for k in EXIT_NODES}
-
-# BACK-497 cosmetic follow-on: Kotlin's bare 'throw' and Swift's bare
-# 'throw_keyword' are the keyword *token* node, not the full throw expression
-# (that lives one level up, in the enclosing jump_expression/
-# control_transfer_statement) — so get_text() on the matched node itself
-# renders only the word "throw". Render the parent's text instead for these
-# two bare kinds; every other THROW_NODES entry (throw_statement,
-# throw_expression) already *is* the full expression.
-_BARE_THROW_KEYWORD_KINDS: frozenset = frozenset({'throw', 'throw_keyword'})
-
 _HARD_EXIT_KINDS: frozenset = frozenset({'RETURN', 'RAISE', 'THROW', 'EXIT'})
 
 # YIELD suspends a generator — not a hard exit but transfers control.
@@ -138,13 +123,9 @@ def _exit_at(node: Any, get_text: Callable,
     (PHP `die;`, Ruby `raise`). descend: whether the walk continues into it
     (a call's arguments can hold further calls)."""
     ntype = _zero_arg(node, 'kind')
-    if ntype in _EXIT_KIND:
-        text_node = node
-        if ntype in _BARE_THROW_KEYWORD_KINDS:
-            parent = _zero_arg(node, 'parent')
-            if parent is not None:
-                text_node = parent
-        return _EXIT_KIND[ntype], _first_line(get_text(text_node)), False
+    label = exit_label(node, ntype)
+    if label is not None:
+        return label, _first_line(get_text(node)), False
     if is_rust_try_operator(node):  # Rust `x?`: an early Err return (BACK-428)
         return 'RETURN', _first_line(get_text(node)), False
     if ntype in call_node_types:
