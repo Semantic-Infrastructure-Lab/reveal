@@ -283,16 +283,20 @@ a check that counts violations and lets the count only fall. Then the cause is r
 
 **Next, in priority order**
 
-1. **Ratchets that stop each class from growing.** These are small and can run in parallel:
-   - BACK-1513, the adapter contract harness. It absorbs BACK-1363 and the test half of
-     BACK-1366.
-   - BACK-1515, the walker ratchet.
-   - BACK-1364, the grammar-coverage test.
-   - BACK-1046, the parser-import ratchet. It can freeze today's count before BACK-1045
-     lands.
-   - BACK-1368, the print/exit ratchet.
-2. **The largest class:** BACK-1514, the flag ledger, then BACK-1058, one Invocation path
-   shared by the URI and subcommand forms.
+1. **Finish the ratchets.** Most landed on 2026-09-26:
+   - the walker, parser-import, print/exit and complexity ratchets
+     (`scripts/check_boundaries.py`, `scripts/check_complexity.py`);
+   - the grammar-coverage test (`tests/test_grammar_coverage.py`);
+   - the registry-driven contract harness (`tests/test_output_contract_compliance.py`).
+
+   Still open: BACK-1513's remaining invariants (truncation disclosure, the subcommand
+   forms, POSIX separators on Windows).
+2. **The largest class:** BACK-1514, the flag ledger. The URI path landed on 2026-09-26: a
+   flag or query key the user sets is used, or a note names it
+   (`reveal/cli/routing/ledger.py`, ratchet `tests/test_flag_ledger.py`). Next:
+   - BACK-1539 routes the subcommands through the ledger;
+   - BACK-1537 catches keys an adapter parses and then ignores;
+   - BACK-1058 gives the URI and subcommand forms one Invocation path.
 3. **The result contract:** BACK-1059 (typed outcomes), BACK-1491 (cache whole results),
    BACK-916 (one rendering layer) and BACK-1052 (a shared scan budget).
 4. **One seam per concern:** BACK-1223 (one walker), BACK-1045 (parser seam), BACK-1366
