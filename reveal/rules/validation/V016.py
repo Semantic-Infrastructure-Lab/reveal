@@ -192,6 +192,7 @@ class V016(BaseRule):
 
         detections: List[Detection] = []
 
+        # boundary-ok: walker -- V-series: reveal's own source
         for py_file in sorted(adapters_dir.rglob('*.py')):
             # Skip __init__.py and base.py (same logic as check())
             if py_file.name in ('__init__.py', 'base.py'):

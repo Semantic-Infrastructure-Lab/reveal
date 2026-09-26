@@ -544,6 +544,7 @@ class HelpAdapter(ResourceAdapter):
         # Aliases will look up metadata by relative file path.
         metadata_by_file: Dict[str, Dict[str, str]] = {}
         if docs_dir.exists():
+            # boundary-ok: walker -- reveal's bundled docs
             for md in docs_dir.rglob('*.md'):
                 rel = md.relative_to(docs_dir).as_posix()
                 metadata_by_file[rel] = _read_help_frontmatter(md)
@@ -569,6 +570,7 @@ class HelpAdapter(ResourceAdapter):
         discovered: Dict[str, GuideEntry] = {}
         if docs_dir.exists():
             # AST_ADAPTER_GUIDE.md -> 'ast-adapter'; QUERY_SYNTAX_GUIDE.md -> 'query-syntax'
+            # boundary-ok: walker -- reveal's bundled docs
             for guide in docs_dir.rglob('*_GUIDE.md'):
                 topic = guide.stem.lower().replace('_guide', '').replace('_', '-')
                 rel = guide.relative_to(docs_dir).as_posix()
@@ -576,6 +578,7 @@ class HelpAdapter(ResourceAdapter):
 
             # Catch any *GUIDE.md without the underscore separator (e.g. HTMLGUIDE.md).
             seen_files = {e.file for e in discovered.values()}
+            # boundary-ok: walker -- reveal's bundled docs
             for guide in docs_dir.rglob('*GUIDE.md'):
                 rel = guide.relative_to(docs_dir).as_posix()
                 if rel in seen_files:

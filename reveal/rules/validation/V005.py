@@ -150,6 +150,7 @@ class V005(BaseRule):
         registered_files = set(static_help.values())
 
         for pattern in auto_discovered_patterns:
+            # boundary-ok: walker -- V-series: reveal's own source
             for guide_file in docs_dir.rglob(pattern):
                 relative_path = to_posix(guide_file.relative_to(docs_dir))
 

@@ -86,6 +86,7 @@ class V026(BaseRule):
             return []
 
         detections: List[Detection] = []
+        # boundary-ok: walker -- V-series: reveal's own source
         for py_file in sorted(reveal_root.rglob('*.py')):
             if py_file.name in _EXEMPT_FILENAMES:
                 continue

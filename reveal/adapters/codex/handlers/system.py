@@ -178,6 +178,7 @@ def get_memories(codex_home: Path) -> Dict[str, Any]:
         return {**base, 'memories': [], 'total': 0}
 
     memories: List[Dict[str, Any]] = []
+    # boundary-ok: walker -- the Codex home, not a code tree
     for path in sorted(memories_dir.rglob('*')):
         if not path.is_file():
             continue

@@ -131,6 +131,7 @@ class V021(BaseRule):
             return []
 
         detections = []
+        # boundary-ok: walker -- V-series: reveal's own source
         for analyzer_file in analyzers_dir.rglob('*.py'):
             if analyzer_file.name == '__init__.py':
                 continue

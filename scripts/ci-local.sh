@@ -201,6 +201,11 @@ if [[ $PRIMARY -eq 1 ]]; then
     "$PY" scripts/check_text_encoding.py >>"$LOG" 2>&1 || { tail -8 "$LOG"; fail "text encoding (bare read_text/open breaks on Windows)"; }
     "$PY" scripts/check_treesitter_accessors.py >>"$LOG" 2>&1 || { tail -8 "$LOG"; fail "bare tree-sitter accessor (a method on language-pack 1.8.1; use _zero_arg)"; }
 
+    # Counts of re-implemented shared infrastructure; each may only fall (BACK-1512).
+    step "Shared-seam ratchet"
+    "$PY" scripts/check_boundaries.py 2>&1 | tee -a "$LOG" | tail -20
+    [[ ${PIPESTATUS[0]} -eq 0 ]] || fail "shared-seam ratchet (see scripts/check_boundaries.py)"
+
     step "Reveal self-validation (V-series)"
     "$PY" - >>"$LOG" 2>&1 <<'EOF' || fail "V-series self-validation"
 from reveal.adapters.reveal import RevealAdapter

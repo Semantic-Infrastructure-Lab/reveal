@@ -44,6 +44,7 @@ def get_skills(codex_home: Path, resource: str) -> Dict[str, Any]:
                 'error': f'Skills directory not found: {skills_dir}'}
 
     entries = []
+    # boundary-ok: walker -- the Codex home, not a code tree
     for skill_md in sorted(skills_dir.glob('**/SKILL.md')):
         try:
             content = skill_md.read_text(encoding='utf-8', errors='replace')
@@ -100,6 +101,7 @@ def get_plugins(codex_home: Path, resource: str) -> Dict[str, Any]:
                 'error': f'Plugins directory not found: {plugins_dir}'}
 
     entries = []
+    # boundary-ok: walker -- the Codex home, not a code tree
     for manifest_path in sorted(plugins_dir.glob('**/.codex-plugin/plugin.json')):
         try:
             manifest = json.loads(manifest_path.read_text(encoding='utf-8', errors='replace'))

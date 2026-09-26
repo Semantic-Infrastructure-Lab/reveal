@@ -100,6 +100,7 @@ def _package_files(package: str, recursive: bool):
         return []
     root = os.path.dirname(spec.origin)
     found = []
+    # boundary-ok: walker -- reveal's own package files (cache key)
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = sorted(d for d in dirnames if d != "__pycache__") if recursive else []
         for name in filenames:

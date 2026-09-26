@@ -90,6 +90,7 @@ class V022(BaseRule):
         if not cli_dir.exists():
             return detections
 
+        # boundary-ok: walker -- V-series: reveal's own source
         for handlers_file in sorted(cli_dir.rglob('*.py')):
             try:
                 handler_content = handlers_file.read_text(encoding='utf-8')
