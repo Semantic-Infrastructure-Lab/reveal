@@ -43,6 +43,7 @@ Examples:
   # Element extraction
   reveal app.py load_config      # Extract specific function
   reveal app.py Database         # Extract class definition
+  reveal conversation.jsonl 42   # Record #42
   reveal conversation.jsonl user # Every record of type 'user'
 
   # Output formats

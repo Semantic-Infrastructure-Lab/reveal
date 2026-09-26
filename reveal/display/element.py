@@ -731,6 +731,9 @@ def _get_category_items(structure, category: str):
     # Skip non-dict entries (e.g. CSV's 'columns' is a bare list of strings) —
     # they have no 'line'/'line_start' to sort by and no ordinal-extractable shape.
     items = [item for item in items if isinstance(item, dict)]
+    # A line-0 entry is a synthetic summary (JSONL's "📊 Summary: N records"),
+    # not an element: counting it made @4 return record #3 (BACK-1511).
+    items = [item for item in items if item.get('line', item.get('line_start', 1)) != 0]
     if not items:
         return None
 

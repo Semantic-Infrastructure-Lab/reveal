@@ -200,6 +200,17 @@ class JsonlAnalyzer(FileAnalyzer):
 
         return super().extract_element(element_type, name)
 
+    def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
+        """`reveal log.jsonl 42` is record 42, not a line window around it.
+
+        A bare integer reaches the analyzer's own get_element() before the
+        line-reference fallback (as CSV rows do); without this hook record
+        extraction by number was unreachable from the CLI (BACK-1511).
+        """
+        if not str(element_name).isdigit():
+            return None
+        return self._extract_by_number(int(element_name))
+
     def _extract_by_number(self, record_num: int) -> Optional[Dict[str, Any]]:
         """Extract record by number (1-based)."""
         current = 0
@@ -212,15 +223,14 @@ class JsonlAnalyzer(FileAnalyzer):
             current += 1
             if current == record_num:
                 try:
-                    obj = json.loads(line)
-                    # Pretty print the JSON
-                    pretty = json.dumps(obj, indent=2)
-
+                    json.loads(line)
+                    # The record as it is on its line: a pretty-printed dump was
+                    # numbered as if it spanned lines i..i+N (BACK-1411, BACK-1511).
                     return {
                         'name': f'Record {record_num}',
                         'line_start': i,
                         'line_end': i,
-                        'source': pretty,
+                        'source': line,
                     }
                 except json.JSONDecodeError:
                     return {

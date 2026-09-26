@@ -317,3 +317,29 @@ class TestJsonlAnalyzer(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestRecordByNumberFromCli:
+    """BACK-1511: `reveal log.jsonl 42` returned a line window, and @N counted
+    the line-0 Summary item, so @4 was record #3."""
+
+    @staticmethod
+    def _file(tmp_path):
+        import json as _json
+        f = tmp_path / 'r.jsonl'
+        f.write_text(''.join(_json.dumps({'type': 'user' if i % 2 else 'assistant', 'n': i}) + '\n'
+                             for i in range(1, 11)), encoding='utf-8')
+        return f
+
+    def test_bare_number_is_that_record(self, tmp_path):
+        from reveal.display.element import _extract_by_syntax, _parse_element_syntax
+        analyzer = JsonlAnalyzer(str(self._file(tmp_path)))
+        result = _extract_by_syntax(analyzer, '4', _parse_element_syntax('4'))
+        assert result['line_start'] == result['line_end'] == 4
+        assert result['source'] == '{"type": "assistant", "n": 4}'
+
+    def test_ordinal_skips_the_summary_item(self, tmp_path):
+        from reveal.display.element import _extract_by_syntax, _parse_element_syntax
+        analyzer = JsonlAnalyzer(str(self._file(tmp_path)))
+        result = _extract_by_syntax(analyzer, '@4', _parse_element_syntax('@4'))
+        assert result['line_start'] == 4
