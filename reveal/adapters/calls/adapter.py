@@ -393,9 +393,8 @@ class CallsAdapter(ResourceAdapter):
                 **_call_graph_meta(self.path, uncalled=True),
             )
 
-        self._warn_top_ignored()
-
         if root:
+            self._warn_top_ignored()
             depth = int(self.query_params.get('depth', '2'))
             depth = max(1, min(depth, 5))
             include_builtins = bool(self.query_params.get('builtins', False))
@@ -426,6 +425,7 @@ class CallsAdapter(ResourceAdapter):
             )
 
         query_format = self.query_params.get('format', '')
+        self._warn_top_ignored()
 
         if callees_target:
             include_builtins = bool(self.query_params.get('builtins', False))
