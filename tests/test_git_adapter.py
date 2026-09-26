@@ -3108,3 +3108,31 @@ class TestTimeline:
         r = adapter.get_structure()
         assert r['type'] == 'git_file_history'
         assert len(r['commits']) == 4
+
+
+class TestHistoryShapesRenderAsText:
+    """BACK-1502: directory history and bucketed timelines fell through to the
+    raw JSON envelope in text mode."""
+
+    def _render(self, result, capsys):
+        from reveal.adapters.git.renderer import GitRenderer
+        GitRenderer.render_structure(result, format='text')
+        return capsys.readouterr().out
+
+    def test_directory_history(self, capsys):
+        out = self._render({
+            'type': 'git_directory_history', 'path': 'src', 'ref': 'HEAD', 'count': 1,
+            'commits': [{'hash': 'abc1234', 'date': '2026-09-01 10:00:00', 'author': 'A', 'message': 'fix: x'}],
+        }, capsys)
+        assert out.startswith('Directory History: src @ HEAD')
+        assert 'abc1234' in out and '"type"' not in out
+
+    def test_timeline(self, capsys):
+        out = self._render({
+            'type': 'git_timeline', 'path': 'src', 'ref': 'HEAD', 'bucket': 'month',
+            'buckets': [{'period': '2026-08', 'commit_count': 4, 'author_count': 2},
+                        {'period': '2026-09', 'commit_count': 2, 'author_count': 1}],
+            'commit_count': 6, 'distinct_author_count': 2,
+        }, capsys)
+        assert out.startswith('Timeline: src @ HEAD (per month)')
+        assert '2026-08' in out and '4 commit(s)' in out and '"buckets"' not in out

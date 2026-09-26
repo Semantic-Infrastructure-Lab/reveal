@@ -33,8 +33,10 @@ class GitRenderer:
             GitRenderer._render_file_structure(result)
         elif result_type == 'git_file_diff':
             GitRenderer._render_file_diff(result)
-        elif result_type in ('file_history', 'git_file_history'):
+        elif result_type in ('file_history', 'git_file_history', 'git_directory_history'):
             GitRenderer._render_file_history(result)
+        elif result_type == 'git_timeline':
+            GitRenderer._render_timeline(result)
         elif result_type in ('file_blame', 'git_file_blame'):
             GitRenderer._render_file_blame(result)
         elif result_type == 'git_ownership':
@@ -120,13 +122,32 @@ class GitRenderer:
         if element:
             print(f"Element History: {result['path']} → {element} @ {result['ref']}")
         else:
-            print(f"File History: {result['path']} @ {result['ref']}")
+            kind = 'Directory' if result.get('type') == 'git_directory_history' else 'File'
+            print(f"{kind} History: {result['path']} @ {result['ref']}")
         print(f"Commits: {result['count']}")
         print()
 
         for commit in result['commits']:
             print(f"  {commit['hash']} {commit['date']} {commit['author']}")
             print(f"    {commit['message']}")
+
+    @staticmethod
+    def _render_timeline(result: dict) -> None:
+        """Render ?type=history&bucket=... -- commit and author counts per period.
+        It fell through to raw JSON in text mode (BACK-1502)."""
+        buckets = result.get('buckets') or []
+        print(f"Timeline: {result['path']} @ {result['ref']} (per {result.get('bucket', 'period')})")
+        print(f"Commits: {result.get('commit_count', 0)}  Authors: {result.get('distinct_author_count', 0)}")
+        print()
+        if not buckets:
+            print("  (no commits matched)")
+            return
+        peak = max(b.get('commit_count', 0) for b in buckets) or 1
+        for b in buckets:
+            count = b.get('commit_count', 0)
+            bar = '█' * max(1, round(20 * count / peak)) if count else ''
+            authors = b.get('author_count', 0)
+            print(f"  {b.get('period', '?'):<10} {count:>5} commit(s)  {authors:>3} author(s)  {bar}")
 
     @staticmethod
     def _render_file_blame(result: dict) -> None:
