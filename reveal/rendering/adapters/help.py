@@ -164,7 +164,7 @@ def _render_special_topics_section() -> None:
     print()
     print("  quick            - Compact intent router: decision tree + key commands")
     print("                     Type: Generated")
-    print("                     Token cost: ~750 tokens (start here for AI agents)")
+    print("                     Token cost: ~1,600 tokens (start here for AI agents)")
     print()
     print("  adapters         - Summary of all URI adapters")
     print("                     Type: Generated")
@@ -189,8 +189,8 @@ def _render_navigation_section() -> None:
     print("  reveal help://intro         # 5-minute introduction")
     print()
     print("**Bootstrap (AI agents):**")
-    print("  reveal help://quick        # Compact intent router (~750 tokens, start here)")
-    print("  reveal --agent-help        # Agent orientation (~2,200 tokens)")
+    print("  reveal help://quick        # Compact intent router (~1,600 tokens, start here)")
+    print("  reveal --agent-help        # Agent orientation (~1,000 tokens)")
     print("  reveal help://agent/full   # Complete reference guide (~40,000 tokens)")
     print()
     print("**Discover adapters:**")
@@ -985,7 +985,9 @@ def _render_help_quick(data: Dict[str, Any]) -> None:
     if decision_tree:
         print()
         print("What do you want to do?")
-        col_want = max(len(e['want']) for e in decision_tree)
+        # Cap the column: one long cluster-coverage line would otherwise pad
+        # every row (it was ~40% of the page's bytes).
+        col_want = min(64, max(len(e['want']) for e in decision_tree))
         for e in decision_tree:
             print(f"  {e['want']:<{col_want}}  →  {e['use']}")
             print(f"    {e['example']}")

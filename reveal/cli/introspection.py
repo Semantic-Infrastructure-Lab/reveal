@@ -431,7 +431,8 @@ def _build_full_support_info(info: Dict[str, Any]) -> List[str]:
         lines.append(f"🎯 Conformance level: {profile.conformance_level}")
         lines.append(f"   --varflow trust: {profile.varflow}")
         imports_unused_display = {
-            True: "yes (name-based; see known limitations)",
+            True: ("yes (name-based; see known limitations)" if profile.known_limitations
+                   else "yes (name-based)"),
             False: "not checked (imports listed, usage not analyzed)",
             None: "not supported (no import extractor)",
         }[profile.imports_unused]

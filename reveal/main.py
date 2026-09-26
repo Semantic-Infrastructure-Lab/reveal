@@ -16,7 +16,7 @@ from collections.abc import Callable
 
 
 from .logging_setup import configure_stderr_logging
-from .registry import display_name_for_extension, fallback_languages, get_all_analyzers
+from .registry import FALLBACK_SUPPORT_NOTE, display_name_for_extension, fallback_languages, get_all_analyzers
 from . import __version__
 from .utils import copy_to_clipboard, check_for_updates
 from .cli.global_flags import apply_global_flags
@@ -542,12 +542,15 @@ def _print_fallback_languages(fallbacks: List[Tuple[str, str]]) -> None:
     if not fallbacks:
         return
 
-    print("\nTree-Sitter Auto-Supported (basic):")
+    print("\nTree-sitter fallback:")
     for name, ext in sorted(fallbacks):
         print(f"  {name:20s} {ext}")
-    languages = len({name for name, _ in fallbacks})
-    print(f"\nTotal: {languages} additional languages ({len(fallbacks)} extensions) via fallback")
-    print("Note: These work automatically but may have basic support.")
+    # Count grammars, not labels: .mm and .sv/.svh carry finer labels above but
+    # route to the objc/verilog grammars, as `reveal --languages` counts them.
+    grammars = fallback_languages()
+    languages = len({grammars[ext] for _, ext in fallbacks})
+    print(f"\nTotal: {languages} fallback languages ({len(fallbacks)} extensions)")
+    print(f"Note: {FALLBACK_SUPPORT_NOTE}.")
     print("Note: Contributions for full analyzers welcome!")
 
 
@@ -567,7 +570,9 @@ def list_supported_types() -> None:
     for ext, info in sorted_analyzers:
         marker = " *" if info.get('content_ambiguous') else ""
         print(f"  {info['name']:20s} {ext}{marker}")
-    print(f"\nTotal: {len(analyzers)} file types with full support")
+    languages = len({info['name'] for info in analyzers.values()})
+    print(f"\nTotal: {len(analyzers)} extensions across {languages} explicit analyzers "
+          f"(support tiers per language: reveal --languages)")
 
     # BACK-583: flag extensions whose actual analyzer is content-dependent —
     # the line above only shows the registry's last-registered winner.

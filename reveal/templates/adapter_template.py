@@ -122,7 +122,9 @@ class {class_name}Adapter(ResourceAdapter):
                     ],
                 }},
             ],
-            'output_formats': ['text', 'json', 'grep'],
+            # List only formats the renderer implements: the CLI enforces this list
+            # and rejects any other --format (BACK-1425).
+            'output_formats': ['text', 'json'],
             'see_also': [
                 # TODO: Add related adapters/help topics
             ]
@@ -207,7 +209,7 @@ class {class_name}Renderer:
 
         Args:
             result: Structure dict from {class_name}Adapter.get_structure()
-            format: Output format ('text', 'json', 'grep')
+            format: Output format ('text', 'json')
         """
         # TODO: Implement custom rendering or use generic renderer
         from ...utils import safe_json_dumps
@@ -226,7 +228,7 @@ class {class_name}Renderer:
 
         Args:
             result: Element dict from {class_name}Adapter.get_element()
-            format: Output format ('text', 'json', 'grep')
+            format: Output format ('text', 'json')
         """
         from ...utils import safe_json_dumps
 

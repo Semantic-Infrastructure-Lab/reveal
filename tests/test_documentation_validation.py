@@ -243,7 +243,7 @@ class TestDocumentationConsistency:
         universal_adapter_title = "Universal adapter options  [work with any URI adapter]"
         quality_checks_title = "Quality checks  [--check universal; rules/config are file-specific]"
         global_titles = {
-            "Output  [global — work with every target]",
+            "Output  [global — formats vary by target]",
             "Discovery  [global — introspection, agent helpers]",
             "Navigation  [global — browse, filter, sort]",
             "Display  [global — tree depth, filtering, layout]",

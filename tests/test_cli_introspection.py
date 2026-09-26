@@ -114,16 +114,16 @@ class TestExplainFile(unittest.TestCase):
 
     def test_explain_tier1_language_with_known_limitations_shows_them(self):
         """A tier1-verified language can still have documented known
-        limitations (e.g. Go) -- those must not be hidden just because the
+        limitations (e.g. Rust) -- those must not be hidden just because the
         conformance tier itself is the best one."""
         import tree_sitter_language_pack as tslp
         from unittest.mock import patch
 
-        go_file = Path(self.temp_dir) / "test.go"
-        go_file.write_text("package main\nfunc main() {}\n")
+        rs_file = Path(self.temp_dir) / "test.rs"
+        rs_file.write_text("fn main() {}\n")
 
-        with patch.object(tslp, "downloaded_languages", return_value=["go"]):
-            result = explain_file(str(go_file))
+        with patch.object(tslp, "downloaded_languages", return_value=["rust"]):
+            result = explain_file(str(rs_file))
 
         self.assertIn("✅ Full language-specific analysis", result)
         self.assertIn("Known limitations:", result)

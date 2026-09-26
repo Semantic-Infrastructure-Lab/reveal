@@ -372,12 +372,7 @@ _TIER1: Dict[str, LanguageCapability] = {
             "from the segment before a semantic-import-versioning /vN "
             "suffix (e.g. k8s.io/klog/v2 -> klog, not v2)."
         ),
-        known_limitations=[
-            "BACK-451 (open): named `Class.method` extraction syntax fails "
-            "for Go — methods are free functions with a receiver parameter, "
-            "not nested under a type body, so literal Class.method syntax "
-            "may never apply; `:LINE-RANGE` is the working workaround.",
-        ],
+        known_limitations=[],
         validation=[
             MeasuredRecall(RECALL_SIGNAL_IMPORT, 100.0, "Kubernetes, client_golang"),
             MeasuredRecall(RECALL_SIGNAL_SIDE_EFFECT, 96.3, "client-go"),

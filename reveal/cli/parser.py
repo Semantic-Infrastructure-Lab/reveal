@@ -43,7 +43,7 @@ Examples:
   # Element extraction
   reveal app.py load_config      # Extract specific function
   reveal app.py Database         # Extract class definition
-  reveal conversation.jsonl 42   # Extract record #42
+  reveal conversation.jsonl user # Every record of type 'user'
 
   # Output formats
   reveal app.py --format=json    # JSON for scripting
@@ -164,7 +164,7 @@ Discovery (find what reveal can do):
   reveal --discover           Dump full adapter registry as JSON (schemas, params)
   reveal help://              List help topics
   reveal help://<topic>       Read a topic (e.g. help://ast, help://schemas/ast)
-  reveal --agent-help         Agent orientation (~2,200 tokens; reveal help://agent/full for all)
+  reveal --agent-help         Agent orientation (~1,000 tokens; reveal help://agent/full for all)
 
 Agents: reveal --agent-help  ·  Task routing: reveal help://quick
 '''
@@ -231,9 +231,10 @@ def _add_global_options(target) -> None:
     """
     target.add_argument('--format', choices=['text', 'json', 'typed', 'grep'], default=_format_default(),
                         help='Output format (text, json, typed [typed JSON with types/relationships], grep). '
-                             'Defaults to $REVEAL_FORMAT if set.')
+                             'Each target accepts only the formats it renders (help://schemas/<adapter>); '
+                             'another value exits 2 with the supported list. Defaults to $REVEAL_FORMAT if set.')
     target.add_argument('--also-json', metavar='PATH', default=None,
-                        help='BACK-1184: also write the result as JSON to PATH, in addition to '
+                        help='Also write the result as JSON to PATH, in addition to '
                              '--format\'s primary output -- one invocation, one parse, both a '
                              'human-readable report and a machine-readable artifact. '
                              'scheme://resource URIs and `reveal check` only (an error elsewhere); '
@@ -354,7 +355,7 @@ def _add_discovery_options(group) -> None:
     group.add_argument('--language-info', type=str, metavar='LANG',
                        help='Show detailed information about a language (e.g., --language-info python or --language-info .py)')
     group.add_argument('--agent-help', action='store_true',
-                       help='Agent orientation (~2,200 tokens; reveal help://agent/full for the complete task-pattern reference). Complements --help (raw flag listing).')
+                       help='Agent orientation (~1,000 tokens; reveal help://agent/full for the complete task-pattern reference). Complements --help (raw flag listing).')
     group.add_argument('--discover', action='store_true',
                        help='Dump full adapter registry as JSON (schemas, output types, query params — for programmatic discovery)')
 
@@ -434,8 +435,9 @@ def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
                         help='Cap text output to the first N files with issues, then print a "+N more files" '
                              'summary footer instead of continuing (BACK-539; a large monorepo can otherwise '
                              'print 100K+ lines). Default 50 for check; set to 0 to disable the cap. '
-                             'Ignored for --format json. On URI targets it becomes ?limit=N, or the adapter\'s own '
-                             'cap where it has one (hotspots/calls/depends/testability: ?top=N).')
+                             'For check, ignored with --format json. On URI targets it becomes ?limit=N on '
+                             'ast/markdown/json/git/stats, ?top=N on hotspots/calls/depends/testability; '
+                             'elsewhere a note says it has no effect.')
 
 
 def _strip_path_quotes(value: str) -> str:
@@ -452,7 +454,8 @@ def _strip_path_quotes(value: str) -> str:
 def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     """Add general navigation options (browsing, filtering, sorting)."""
     parser.add_argument('--head', type=int, metavar='N',
-                        help='Show first N semantic units (records, functions, sections)')
+                        help='Show first N semantic units (records, functions, sections); on a URI result, '
+                             'every list it returns is sliced (a note says so when there is none)')
     parser.add_argument('--tail', type=int, metavar='N',
                         help='Show last N semantic units (records, functions, sections)')
     parser.add_argument('--range', type=str, metavar='START-END',
@@ -465,7 +468,8 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
                         help='Case-insensitive match for --grep')
     parser.add_argument('--sort', type=str, metavar='FIELD',
                         help='Sort results by field (e.g., modified, size, name, complexity). '
-                             'Use --desc for descending order, or prefix with - in URI queries.')
+                             'Use --desc for descending order, or prefix with - in URI queries. Applied by --files and '
+                             'ast/markdown/json/git/stats; elsewhere a note says it has no effect.')
     parser.add_argument('--desc', action='store_true',
                         help='Sort descending (use with --sort, e.g., --sort modified --desc)')
     parser.add_argument('--asc', action='store_true',
@@ -473,7 +477,8 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--type', type=str, metavar='TYPE',
                         help='Filter by element type (function, class, method, etc.)')
     parser.add_argument('--all', action='store_true',
-                        help='Show all results (no limit, e.g., reveal claude:// --all); '
+                        help='Show all results (no limit, e.g., reveal claude:// --all; on a file, lifts the '
+                             '500-per-category outline cap); '
                              'with --rules/--adapters/--discover, also include reveal-internal '
                              'self-check entries hidden by default')
     parser.add_argument('--since', type=str, metavar='DATE',
@@ -649,7 +654,7 @@ def _add_universal_filter_flags(parser: argparse.ArgumentParser) -> None:
 
     # Budget constraints
     parser.add_argument('--max-items', type=int, metavar='N',
-                        help='Stop after N results (budget mode)')
+                        help='Stop after N results (budget mode); on a file, caps each outline category and says so')
     parser.add_argument('--max-snippet-chars', type=int, metavar='N',
                         help='Truncate long string values to N characters')
 
@@ -778,8 +783,9 @@ def create_argument_parser(
     _add_positional_arguments(parser, version)
 
     # ── Global ────────────────────────────────────────────────────────────────
-    # These flags work with every target and every subcommand.
-    g_output = parser.add_argument_group('Output  [global — work with every target]')
+    # Every target and subcommand takes these flags; --format/--also-json values
+    # are then honored or rejected per target (BACK-1425).
+    g_output = parser.add_argument_group('Output  [global — formats vary by target]')
     _add_global_options(g_output)
     _add_input_output_options(g_output)
 
