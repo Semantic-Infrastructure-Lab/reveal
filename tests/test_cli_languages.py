@@ -101,7 +101,8 @@ class TestListSupportedLanguages(unittest.TestCase):
         # Should have fallback header
         self.assertIn("Tree-sitter Fallback", result)
         # Should describe what fallback means
-        self.assertIn("Basic analysis", result)
+        self.assertIn("best-effort outline", result)
+        self.assertNotIn("Basic analysis", result)
 
     def test_separator_lines(self):
         """Test that separator lines are present."""
@@ -256,3 +257,35 @@ class TestGetAnalyzerFeatures(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestFallbackClaimIsHonest(unittest.TestCase):
+    """BACK-1447: every place that describes the fallback uses one non-overclaiming wording."""
+
+    def test_explain_file_uses_shared_note(self):
+        import tempfile, os
+        from reveal.cli.introspection import explain_file
+        from reveal.registry import FALLBACK_SUPPORT_NOTE
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "m.hs")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("main = 1\n")
+            text = explain_file(path)
+        self.assertIn(FALLBACK_SUPPORT_NOTE, text)
+        self.assertNotIn("Basic structural analysis", text)
+
+    def test_note_does_not_promise_extraction(self):
+        from reveal.registry import FALLBACK_SUPPORT_NOTE
+        self.assertIn("best-effort", FALLBACK_SUPPORT_NOTE)
+        self.assertNotIn("functions, classes, imports", FALLBACK_SUPPORT_NOTE)
+
+    def test_help_languages_uses_shared_note(self):
+        import io
+        from contextlib import redirect_stdout
+        from reveal.registry import FALLBACK_SUPPORT_NOTE
+        from reveal.rendering.adapters.help import _render_help_languages
+        from reveal.cli.languages import build_languages_payload
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _render_help_languages(build_languages_payload())
+        self.assertIn(FALLBACK_SUPPORT_NOTE, buf.getvalue())

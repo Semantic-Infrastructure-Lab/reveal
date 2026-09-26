@@ -3,10 +3,12 @@ Language support listing for reveal.
 
 Provides introspection into which languages reveal can analyze and how.
 Distinguishes between explicit analyzers (full featured) and tree-sitter
-fallback analyzers (basic structure extraction).
+fallback analyzers (raw view plus a best-effort outline).
 """
 
 from typing import Dict, List, Tuple
+
+from ..registry import FALLBACK_SUPPORT_NOTE
 
 
 def _collect_language_support():
@@ -139,7 +141,7 @@ def list_supported_languages() -> str:
     # Fallback section
     lines.append(f"\n🔄 Tree-sitter Fallback ({len(fallback_languages)})")
     lines.append("-" * 70)
-    lines.append("Basic analysis (functions, classes, imports)\n")
+    lines.append(f"{FALLBACK_SUPPORT_NOTE}\n")
 
     fallback_sorted = sorted(fallback_languages)
     for lang_info in fallback_sorted:

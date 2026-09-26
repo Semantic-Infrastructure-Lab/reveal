@@ -3,6 +3,7 @@
 import sys
 from typing import Any, Dict
 
+from reveal.registry import FALLBACK_SUPPORT_NOTE
 from reveal.utils import print_json_result
 from reveal.adapters.base import Stability, _ADAPTER_REGISTRY
 
@@ -862,7 +863,7 @@ def _render_help_languages(data: Dict[str, Any]) -> None:
         print(f"  {entry.get('name', ''):20} ({entry.get('extension', '')}){tag}{marker}")
     print()
     print(f"## Tree-sitter Fallback ({len(fallback)})")
-    print("Basic analysis (functions, classes, imports)")
+    print(FALLBACK_SUPPORT_NOTE)
     print()
     for entry in fallback:
         print(f"  {entry.get('name', ''):20} ({', '.join(entry.get('extensions', []))})")

@@ -20,6 +20,12 @@ from typing import FrozenSet, Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
+# What the generic tree-sitter fallback honestly delivers (BACK-1447): the raw file view
+# always works, but the outline comes from generic node kinds -- on a 2-function sample
+# elm/erlang/ocaml/r/verilog extracted nothing, haskell named both functions "Int".
+# One wording, shared by `--languages`, `help://languages` and `--explain-file`.
+FALLBACK_SUPPORT_NOTE = "Raw file view plus a best-effort outline (may be empty or misnamed)"
+
 # Extension → tree-sitter language name for dynamic fallback analyzer creation.
 # Also imported by main.py to build the --help fallback language list.
 # When adding a new language: add it here once; main.py picks it up automatically.
@@ -472,7 +478,7 @@ def _try_treesitter_fallback(ext: str) -> Optional[type]:
                 'type_name': language.replace('_', ' ').title(),
                 'is_fallback': True,
                 'fallback_language': language,
-                'fallback_quality': 'basic',  # Tree-sitter basic analysis (functions, classes, imports)
+                'fallback_quality': 'basic',  # generic tree-sitter outline; see FALLBACK_SUPPORT_NOTE
                 'CATEGORY': 'code',
             }
         )

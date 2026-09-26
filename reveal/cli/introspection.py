@@ -9,7 +9,10 @@ This module provides commands for understanding how reveal analyzes files:
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
-from ..registry import get_analyzer, get_all_analyzers, get_markdown_extensions, language_for_extension
+from ..registry import (
+    FALLBACK_SUPPORT_NOTE, get_analyzer, get_all_analyzers, get_markdown_extensions,
+    language_for_extension,
+)
 from ..core import node_children as _children
 from ..core import tree_root
 from ..core.treesitter_compat import _zero_arg
@@ -124,7 +127,7 @@ def explain_file(path: str, verbose: bool = False) -> str:
         lines.append(f"   Quality: {fallback_quality}")
         lines.append("")
         lines.append("   What this means:")
-        lines.append("   • Basic structural analysis (functions, classes, imports)")
+        lines.append(f"   • {FALLBACK_SUPPORT_NOTE}")
         lines.append("   • No language-specific features")
         lines.append("   • Generic tree-sitter parsing")
     else:
