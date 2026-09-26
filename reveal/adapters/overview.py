@@ -23,6 +23,7 @@ from .git import GitAdapter
 from .imports import ImportsAdapter
 from .stats import StatsAdapter
 from ..utils import print_json_result
+from ..utils.exclusions import exclusion_scope
 from ..utils.gitignore import respect_gitignore_param
 from ..utils.path_utils import is_test_path
 from ..utils.query import parse_query_params
@@ -164,7 +165,9 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path) -> Dict[str, A
     """
     try:
         importer = ImportsAdapter(str(path))
-        importer._build_graph(path)
+        # BACK-1495: this call bypasses compose(), so --exclude has to be scoped here.
+        with exclusion_scope(path if path.is_dir() else path.parent, adapter.exclude_patterns):
+            importer._build_graph(path)
         fan_in = importer._format_fan_in()
         entrypoints = importer._format_entrypoints()
         components = importer._format_components()

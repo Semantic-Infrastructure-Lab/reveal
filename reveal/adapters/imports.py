@@ -31,6 +31,7 @@ from ..analyzers.imports.base import build_project_namespaces
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 from ..registry import DECLARATION_ONLY_EXTENSIONS, get_code_extensions
+from ..utils.exclusions import path_is_excluded
 from ..utils.gitignore import gitignore_filter
 from ..utils.path_utils import is_skippable_dir, to_posix, to_relative_display
 from ..utils.results import ResultBuilder
@@ -1233,6 +1234,10 @@ class ImportsAdapter(ResourceAdapter):
                         continue  # a stub would duplicate its module's edges (BACK-1467)
                     if fp.suffix in supported_exts or fp.suffix.lower() in code_exts:
                         if gi is not None and gi.ignored(fp):
+                            continue
+                        # BACK-1495: --exclude file patterns (c.py, *.min.js) drop the file
+                        # as a graph node, but like gitignored files it stays in file_index.
+                        if path_is_excluded(fp):
                             continue
                         candidates.append(fp)
         return candidates, file_index
