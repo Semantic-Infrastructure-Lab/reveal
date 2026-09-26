@@ -55,7 +55,7 @@ and the usage block, not disabled. `--help-all` renders everything.
 
 **Usage:**
 ```bash
-reveal --agent-help           # Orientation section (~1,000 tokens); reveal help://agent/full for the complete guide (~49,000 tokens)
+reveal --agent-help           # Orientation section (~1,200 tokens); reveal help://agent/full for the complete guide (~49,000 tokens)
 ```
 
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -137,7 +137,7 @@ reveal help://anti-patterns      # Common mistakes
 ### For AI Agents:
 ```bash
 # Bootstrap understanding
-reveal --agent-help              # Get agent orientation (~1,000 tokens; help://agent/full for the complete guide)
+reveal --agent-help              # Get agent orientation (~1,200 tokens; help://agent/full for the complete guide)
 
 # Discover adapter capabilities programmatically
 reveal help://schemas            # List all adapters with schemas
@@ -297,7 +297,7 @@ Start broad, drill down as needed. Don't force users to load everything.
 ```bash
 reveal help://examples/quality  # A task recipe (~160 tokens)
 reveal help://quick             # Intent router (~1,600 tokens) — cheapest orientation
-reveal --agent-help             # Agent orientation (~1,000 tokens)
+reveal --agent-help             # Agent orientation (~1,200 tokens)
 reveal help://schemas/ast       # One adapter's query syntax (~2,400 tokens)
 ```
 

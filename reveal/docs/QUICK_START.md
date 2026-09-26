@@ -358,7 +358,7 @@ reveal help://ssl        # Learn about ssl:// adapter
 ```bash
 reveal --help                    # CLI help
 reveal help://quick              # AI agent compact intent router (~1,600 tokens)
-reveal --agent-help              # AI agent orientation (~1,000 tokens; help://agent/full for the rest)
+reveal --agent-help              # AI agent orientation (~1,200 tokens; help://agent/full for the rest)
 reveal help://                   # List all help topics
 reveal help://markdown           # Markdown analysis guide
 reveal help://tricks             # Power user workflows
