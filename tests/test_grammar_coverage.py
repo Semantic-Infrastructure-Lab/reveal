@@ -153,33 +153,30 @@ KNOWN_GAPS: Dict[str, Dict[str, str]] = {
         'goto_statement': 'BACK-1531', 'seh_except_clause': 'BACK-1531',
         'seh_finally_clause': 'BACK-1531', 'seh_try_statement': 'BACK-1531',
     },
-    'csharp': {'goto_statement': 'BACK-1531', 'switch_expression': 'BACK-1529'},
+    'csharp': {'goto_statement': 'BACK-1531'},
     'dart': {
-        'switch_expression': 'BACK-1529', 'yield_each_statement': 'BACK-1527',
+        'yield_each_statement': 'BACK-1527',
         'for_element': 'BACK-1531', 'if_element': 'BACK-1531',
         'switch_statement_case': 'BACK-1531', 'switch_statement_default': 'BACK-1531',
         'throw_expression_without_cascade': 'BACK-1531',
     },
     'elixir': {'else_block': 'BACK-1531', 'rescue_block': 'BACK-1531'},
     'go': {
-        'default_case': 'BACK-1529', 'expression_switch_statement': 'BACK-1529',
-        'type_switch_statement': 'BACK-1529',
         'defer_statement': 'BACK-1531', 'goto_statement': 'BACK-1531',
     },
     'java': {
-        'switch_expression': 'BACK-1529', 'try_with_resources_statement': 'BACK-1530',
+        'try_with_resources_statement': 'BACK-1530',
         'switch_rule': 'BACK-1531',
     },
     'javascript': {'yield_expression': 'BACK-1527'},
     'lua': {'else_statement': 'BACK-1530', 'goto_statement': 'BACK-1531'},
     'php': {
-        'match_conditional_expression': 'BACK-1529', 'match_default_expression': 'BACK-1529',
         'yield_expression': 'BACK-1527', 'goto_statement': 'BACK-1531',
     },
     'powershell': {'invokation_foreach_expression': 'BACK-1531', 'switch_clause': 'BACK-1531'},
     'python': {'for_in_clause': 'BACK-1531', 'if_clause': 'BACK-1531'},
     'ruby': {
-        'case_match': 'BACK-1529', 'rescue_modifier': 'BACK-1530',
+        'rescue_modifier': 'BACK-1530',
     },
     'rust': {
         'break_expression': 'BACK-1527', 'continue_expression': 'BACK-1527',

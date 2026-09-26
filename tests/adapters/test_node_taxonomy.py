@@ -358,14 +358,40 @@ OUTLINE_CASES = [
     ('ruby', 'while/until modifiers and until block',
      'def f(x)\n  x += 1 while x < 10\n  x -= 1 until x < 5\n  until x > 20\n    x += 2 if x\n  end\nend\n',
      [('WHILE', 1), ('WHILE', 1), ('WHILE', 1), ('IF', 2)]),
+    # BACK-1529: switch / match
+    ('go', 'switch, type switch and select with default arms',
+     'package p\nfunc f(x int, v interface{}, c chan int) {\n\tswitch x {\n\tcase 1:\n\t\tx = 2\n'
+     '\tdefault:\n\t\tx = 3\n\t}\n\tswitch v.(type) {\n\tcase int:\n\t\tx = 4\n\t}\n'
+     '\tselect {\n\tcase y := <-c:\n\t\tx = y\n\tdefault:\n\t}\n}\n',
+     [('SWITCH', 1), ('CASE', 2), ('DEFAULT', 2), ('SWITCH', 1), ('CASE', 2),
+      ('SWITCH', 1), ('CASE', 2), ('DEFAULT', 2)]),
+    ('java', 'switch expression',
+     'class A { int f(String p) { int y = switch (p) { case "a" -> 1; default -> 0; }; return y; } }',
+     [('SWITCH', 1), ('RETURN', 1)]),
+    ('csharp', 'switch expression',
+     'class A { int F(int x) { var y = x switch { 1 => 10, _ => 0 }; return y; } }',
+     [('SWITCH', 1), ('CASE', 2), ('CASE', 2), ('RETURN', 1)]),
+    ('dart', 'switch expression',
+     'int f(int x) { var y = switch (x) { 1 => 10, _ => 0 }; return y; }',
+     [('SWITCH', 1), ('CASE', 2), ('CASE', 2), ('RETURN', 1)]),
+    ('ruby', 'case/in',
+     'def f(x)\n  case x\n  in Integer then 1\n  in String then 2\n  end\nend\n',
+     [('SWITCH', 1), ('CASE', 2), ('CASE', 2)]),
+    ('php', 'match',
+     '<?php\nfunction f($x) { $y = match($x) { 1 => 10, 2 => 20, default => 0 }; return $y; }\n',
+     [('MATCH', 1), ('CASE', 2), ('CASE', 2), ('DEFAULT', 2), ('RETURN', 1)]),
 ]
+
+
+# Dart's body is a sibling of its signature, so the outline root is function_body.
+_OUTLINE_ROOT_KINDS = {'dart': frozenset({'function_body'})}
 
 
 @pytest.mark.parametrize('lang,code,expected', [
     pytest.param(lang, code, expected, id=f'{lang}-{name}')
     for lang, name, code, expected in OUTLINE_CASES])
 def test_grammar_gap_construct_appears_in_outline(lang, code, expected):
-    node, get_text = _first_function(lang, code, tax.FUNCTION_TYPES)
+    node, get_text = _first_function(lang, code, _OUTLINE_ROOT_KINDS.get(lang, tax.DEF_NODES))
     got = [(i['keyword'], i['depth']) for i in element_outline(node, get_text)]
     assert got == expected
 

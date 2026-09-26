@@ -75,6 +75,11 @@ _DECISION_TYPES = frozenset({
     'switch_expression_arm', 'switch_expression_case',
     # Go switch / type-switch / select arms (BACK-1298); `default_case` excluded.
     'expression_case', 'type_case', 'communication_case',
+    # Ruby 3 `case/in` arms and PHP `match` arms (BACK-1529). PHP's default arm
+    # is its own kind (match_default_expression), uncounted. A Ruby `in _` arm
+    # is a lone identifier, indistinguishable from a binding `in x` without
+    # source text, so it counts (+1); Ruby's usual catch-all is `else`.
+    'in_clause', 'match_conditional_expression',
 })
 
 # Match containers are nesting (see _NESTING_TYPES) but NOT decisions: their arms
@@ -175,6 +180,8 @@ _NESTING_TYPES = frozenset({
     'try_statement', 'try', 'with_statement', 'with',
     'match_statement', 'match_expression', 'case_statement',
     'do_statement', 'switch_statement',
+    # Go's switch statements nest like every other switch_statement (BACK-1529).
+    'expression_switch_statement', 'type_switch_statement', 'select_statement',
     'do_while_statement', 'repeat_while_statement', 'do_while_expression',
     'repeat_statement',
 })

@@ -181,12 +181,24 @@ CASE_NODES: frozenset = frozenset({
     # Go: each `case` arm of expression/type switches and select (`default`
     # arms are `default_case` -- deliberately not a branch) (BACK-1298).
     'expression_case', 'type_case', 'communication_case',
+    # BACK-1529: C# / Dart switch-expression arms, Ruby 3 `case/in` arms, PHP
+    # `match` arms (the default arm is match_default_expression, below).
+    'switch_expression_arm', 'switch_expression_case', 'in_clause',
+    'match_conditional_expression',
 })
+# BACK-1529: Go's switch/type-switch/select, the Java/C#/Dart switch
+# expression and Ruby 3's `case/in` (`case_match`) were in no family, so
+# --outline showed their arms flat under the function with no SWITCH scope
+# (and nothing at all for the switch expressions and case_match).
 SWITCH_NODES: frozenset = frozenset({
     'switch_statement', 'switch', 'SwitchExpr', 'when_expression', 'case',
+    'expression_switch_statement', 'type_switch_statement', 'select_statement',
+    'switch_expression', 'case_match',
 })
 SWITCH_DEFAULT_NODES: frozenset = frozenset({
     'switch_default', 'default', 'default_statement',
+    'default_case',               # Go (BACK-1529)
+    'match_default_expression',   # PHP `default => ...` (BACK-1529)
 })
 
 DEF_NODES: frozenset = frozenset({
@@ -461,9 +473,13 @@ EXIT_NODES: frozenset = (
     | BREAK_NODES | CONTINUE_NODES | HARD_EXIT_NODES
 )
 
+# nav_outline.py: clauses printed at their construct's own depth (an else is a
+# sibling of its if). A default arm is not one: it is an arm like CASE, so it
+# is a scope below. Where it sits under a body node (JS switch_body, PHP
+# match_block) the depth came out the same either way; Go's default_case is a
+# direct child of the switch and printed beside it (BACK-1529).
 ALTERNATIVE_NODES: frozenset = (
     ELIF_NODES | ELSE_NODES | EXCEPT_NODES | FINALLY_NODES | CATCH_NODES
-    | SWITCH_DEFAULT_NODES
 )
 
 # nav_outline.py: every construct that opens a nested scope worth descending into.
@@ -472,7 +488,7 @@ SCOPE_NODES: frozenset = (
     | FOR_EXPRESSION_NODES | FOR_EACH_NAME_VALUE_NODES | FOR_RANGE_LOOP_NODES
     | LOOP_NODES | DO_NODES
     | TRY_NODES | EXCEPT_NODES | FINALLY_NODES | CATCH_NODES | WITH_NODES
-    | MATCH_NODES | CASE_NODES | SWITCH_NODES
+    | MATCH_NODES | CASE_NODES | SWITCH_NODES | SWITCH_DEFAULT_NODES
 )
 
 # nav_exits.py: constructs whose body is entered conditionally — used to
@@ -518,12 +534,18 @@ KEYWORD_LABEL: Dict[str, str] = {
     'do_while_expression': 'DO', 'repeat_statement': 'DO',
     'switch_statement': 'SWITCH', 'switch': 'SWITCH', 'SwitchExpr': 'SWITCH',
     'when_expression': 'SWITCH',
+    'expression_switch_statement': 'SWITCH', 'type_switch_statement': 'SWITCH',  # Go
+    'select_statement': 'SWITCH',  # Go `select` (its arms are communication_case)
+    'switch_expression': 'SWITCH', 'case_match': 'SWITCH',
     'catch_clause': 'CATCH', 'catch': 'CATCH',
     'catch_block': 'CATCH', 'rescue': 'CATCH',
     'switch_case': 'CASE', 'switch_entry': 'CASE', 'case_statement': 'CASE',
     'expression_case': 'CASE', 'type_case': 'CASE', 'communication_case': 'CASE',  # Go
     'case': 'SWITCH', 'when': 'CASE',  # Ruby case/when (bare kinds; named nodes)
+    'switch_expression_arm': 'CASE', 'switch_expression_case': 'CASE',  # C#, Dart
+    'in_clause': 'CASE', 'match_conditional_expression': 'CASE',  # Ruby case/in, PHP match
     'switch_default': 'DEFAULT', 'default': 'DEFAULT', 'default_statement': 'DEFAULT',
+    'default_case': 'DEFAULT', 'match_default_expression': 'DEFAULT',  # Go, PHP match
     'function_definition': 'DEF', 'function_declaration': 'DEF',
     'function_item': 'DEF', 'function': 'DEF',
     'method_definition': 'DEF', 'method_declaration': 'DEF',

@@ -150,6 +150,12 @@ CASES = [
     ('sh', 'c-style for', 'f() {\n  for ((i=0;i<3;i++)); do\n    echo $i\n  done\n}\n', 2, None),
     ('rb', 'modifier while/until', 'def f(a)\n  a += 1 while a < 10\n  a -= 1 until a < 5\n  a\nend\n', 3, None),
     ('rb', 'until', 'def f(a)\n  until a > 3\n    a += 1\n  end\nend\n', 2, None),
+    # Pattern-match arms count, the default arm does not (BACK-1529).
+    ('rb', 'case/in x2 else', 'def f(a)\n  case a\n  in Integer then 1\n  in String then 2\n  else 3\n  end\nend\n', 3, None),
+    ('php', 'match 2+default', '<?php\nfunction f($a){ return match($a) { 1 => 10, 2 => 20, default => 0 }; }\n', 3, None),
+    ('go', 'select 1+default', 'package p\nfunc f(c chan int) {\n\tselect {\n\tcase <-c:\n\tdefault:\n\t}\n}\n', 2, None),
+    ('java', 'switch expression 2+default', 'class A { int f(int a){ return switch (a) { case 1 -> 1; case 2 -> 2; default -> 3; }; } }\n', 3, None),
+    ('cs', 'switch expression 2+discard', 'class A { int F(int a){ return a switch { 1 => 1, 2 => 2, _ => 3 }; } }\n', 3, None),
 ]
 
 def _param(row):
