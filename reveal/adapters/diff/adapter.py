@@ -34,6 +34,7 @@ class DiffAdapter(ResourceAdapter):
     embedded_element: Optional[str] = None  # from diff://a.py:b.py/element; read by the CLI router
 
     LEGACY_INIT = False
+    HONORS_RESULT_CONTROL = False  # no sort=/limit=/offset= handling (BACK-1385)
     CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # directory diffs walk (BACK-1386)
     CANONICAL_EMPTY_RESOURCE = ''
 

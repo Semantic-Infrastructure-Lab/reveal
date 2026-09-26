@@ -137,8 +137,15 @@ def test_namespace_missing_the_flags_is_tolerated():
 
 # --- universal specs: --sort / --limit (BACK-1376) ---------------------------------
 
-def test_sort_and_desc_inject_on_any_scheme():
-    assert _inject('env://', 'env', sort='name', desc=True)[0] == 'env://?sort=-name'
+def test_sort_and_desc_inject_on_schemes_that_honor_result_control():
+    assert _inject('ast://.', 'ast', sort='name', desc=True)[0] == 'ast://.?sort=-name'
+
+
+def test_sort_is_not_injected_where_the_adapter_ignores_it():
+    # BACK-1385: env:// reads no sort=; gluing `?sort=name` onto it made it "Element not found".
+    resource, err = _inject('env://', 'env', sort='name', desc=True)
+    assert resource == 'env://'
+    assert 'has no effect on env://' in err
 
 
 def test_sort_already_negated_is_not_double_negated():

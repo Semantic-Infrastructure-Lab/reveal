@@ -148,6 +148,14 @@ class ResourceAdapter(ABC):
     # ssl, help, ...) and for those that already validate it themselves.
     RESOURCE_IS_PATH: bool = False
 
+    # True = a `sort=` / `limit=` / `offset=` in this adapter's query is applied to its
+    # results (ast, stats, git, ...). False for adapters that return one fixed thing (env,
+    # python, help, domain, diff) or read only their own query keys (cpanel): the router
+    # then says `--sort`/`--limit` have no effect instead of gluing `?limit=N` onto the
+    # resource, and rejects a typed `?sort=`/`?limit=`/`?offset=` with a clear error
+    # rather than a confusing "Element not found" or a silently ignored key (BACK-1385).
+    HONORS_RESULT_CONTROL: bool = True
+
     # Global CLI flags this adapter honors through a query param: {flag dest: fragment}.
     # The router appends the fragment when the flag is in effect, unless the URI already
     # sets that key (BACK-1376), so `--flag` and the `?param` spelling mean the same.

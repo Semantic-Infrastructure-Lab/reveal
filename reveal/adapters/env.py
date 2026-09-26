@@ -148,6 +148,7 @@ class EnvAdapter(ResourceAdapter):
     STABILITY = Stability.STABLE
     ELEMENT_NAMESPACE_ADAPTER = True
     LEGACY_INIT = False
+    HONORS_RESULT_CONTROL = False  # no sort=/limit=/offset= handling (BACK-1385)
     CANONICAL_EMPTY_RESOURCE = ''
 
     @staticmethod

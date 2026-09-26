@@ -33,8 +33,8 @@ class FlagSpec:
     value: Callable[[Any], Any | None]    # args -> value to inject; None = flag not set
     warn_unsupported: bool = False        # note when the adapter declares no support
     already_scoped: tuple[str, ...] = ()  # raw URI substrings meaning "caller scoped it"
-    universal: str | None = None          # fragment for EVERY adapter (query-control keys the
-                                          # generic result pipeline reads, e.g. sort=, limit=)
+    universal: str | None = None          # fragment for every adapter that HONORS_RESULT_CONTROL
+                                          # (the sort=/limit= keys of the generic result pipeline)
 
 
 def _typed(dest: str) -> Callable[[Any], Any | None]:
@@ -72,7 +72,8 @@ FLAG_SPECS: tuple[FlagSpec, ...] = (
     # nginx, overview), so a missing declaration is not evidence of a dropped flag.
     FlagSpec('all', '--all', _switch('all')),
     FlagSpec('verbose', '--verbose', _switch('verbose')),
-    # Result-control keys every adapter's query pipeline understands, so no declaration.
+    # Result-control keys most adapters' query pipeline understands, so no per-adapter declaration;
+    # the few that do not set HONORS_RESULT_CONTROL = False and get the "no effect" note (BACK-1385).
     # --limit's argparse default is None ('typed or not'); `check` applies its own cap of 50.
     FlagSpec('sort', '--sort', _sort, universal='sort={value}'),
     FlagSpec('limit', '--limit', _set('limit'), universal='limit={value}'),
@@ -102,14 +103,31 @@ def _supporting_schemes(dest: str) -> list:
     return sorted(s for s in list_supported_schemes() if dest in _declared(get_adapter_class(s)))
 
 
+RESULT_CONTROL_KEYS = frozenset({'sort', 'limit', 'offset'})
+
+
+def unsupported_result_control_keys(resource: str, adapter_class: Any) -> list:
+    """Typed `?sort=`/`?limit=`/`?offset=` keys on an adapter that does not apply them (BACK-1385)."""
+    if getattr(adapter_class, 'HONORS_RESULT_CONTROL', True):
+        return []
+    pairs = resource.partition('?')[2].split('&')
+    return [k for k in (pair.partition('=')[0] for pair in pairs) if k in RESULT_CONTROL_KEYS]
+
+
 def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
     """Append the query fragment for every CLI flag in effect that this scheme's adapter
     declares; print a note for the flags it does not support (where the spec says to)."""
     from ...adapters.base import get_adapter_class
-    declared = _declared(get_adapter_class(scheme))
+    adapter_class = get_adapter_class(scheme)
+    declared = _declared(adapter_class)
+    honors_result_control = getattr(adapter_class, 'HONORS_RESULT_CONTROL', True)
     for spec in FLAG_SPECS:
         value = spec.value(args)
         if value is None:
+            continue
+        if spec.universal and not honors_result_control:
+            print(f"Note: {spec.option} has no effect on {scheme}:// -- it does not take "
+                  f"sort=/limit=/offset=.", file=sys.stderr)
             continue
         fragment = spec.universal or declared.get(spec.dest)
         if fragment:

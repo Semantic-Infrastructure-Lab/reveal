@@ -515,6 +515,7 @@ class DomainAdapter(ResourceAdapter):
     BUDGET_LIST_FIELD = 'checks'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    HONORS_RESULT_CONTROL = False  # no sort=/limit=/offset= handling (BACK-1385)
     CANONICAL_EMPTY_RESOURCE = ''  # bare domain:// must raise TypeError, not silently become "."
 
     @staticmethod

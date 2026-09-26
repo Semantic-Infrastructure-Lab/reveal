@@ -527,6 +527,7 @@ class CpanelAdapter(ResourceAdapter):
     QUICK_RANK = 9
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    HONORS_RESULT_CONTROL = False  # no sort=/limit=/offset= handling (BACK-1385)
     CANONICAL_EMPTY_RESOURCE = ''  # bare cpanel:// must raise TypeError, not silently become "."
 
     # cpanel:// has no plain-file form, so these flags are never valid on a
