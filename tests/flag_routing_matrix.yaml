@@ -48,8 +48,8 @@ adapters:
       via: []
   autossl:
     all:
-      review: unreviewed
-      via: []
+      via:
+      - structure-param
     respect_gitignore:
       reason: resource is a fixed AutoSSL log directory (adapter.py:25 AUTOSSL_LOG_DIR),
         not a git-tracked project checkout; no .gitignore concept applies
