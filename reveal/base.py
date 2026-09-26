@@ -54,9 +54,10 @@ class FileAnalyzer(ABC):
         for encoding in encodings:
             try:
                 with open(self.path, 'r', encoding=encoding) as f:
-                    lines = f.read().splitlines()
+                    text = f.read()
                     self._detected_encoding = encoding
-                    return lines
+                    self._ends_with_newline = text.endswith(('\n', '\r'))
+                    return text.splitlines()
             except (UnicodeDecodeError, LookupError):
                 # Try next encoding
                 logger.debug(f"Failed to read {self.path} with {encoding}, trying next")
@@ -67,6 +68,7 @@ class FileAnalyzer(ABC):
         self._detected_encoding = 'utf-8'
         with open(self.path, 'rb') as f:
             content = f.read().decode('utf-8', errors='replace')
+            self._ends_with_newline = content.endswith(('\n', '\r'))
             return content.splitlines()
 
     def get_metadata(self) -> Dict[str, Any]:

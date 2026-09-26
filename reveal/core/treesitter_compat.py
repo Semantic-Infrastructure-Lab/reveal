@@ -272,10 +272,12 @@ def tree_has_recovery_artifacts(tree) -> bool:
         return True
     # No ERROR node: only MISSING tokens remain. A lone MISSING at the very end
     # of the tree, named like an anonymous `<rule>_token<N>` (Go: a file ending
-    # in an interface type; C: an #include-only unit), is the same benign
+    # in an interface type; C: an #include-only unit) or a bare newline
+    # (Dockerfile: last instruction with no final newline), is the same benign
     # end-of-file grammar quirk -- the structure is complete, so don't alarm.
+    # (A file that does end in a newline is parsed with it since BACK-1500.)
     # Zero-width MISSING nodes are not reachable through child(), so read the
     # s-expression (only ever built for an already-flagged tree).
     sexp = node_sexp(root).strip()
     missing = re.findall(r'\(MISSING\b', sexp)
-    return not (len(missing) == 1 and re.search(r'\(MISSING "?\w*_token\d+"?\)\)$', sexp))
+    return not (len(missing) == 1 and re.search(r'\(MISSING (?:"?\w*_token\d+"?|"\n")\)\)$', sexp))

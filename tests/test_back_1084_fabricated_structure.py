@@ -111,7 +111,37 @@ class TestHasParseErrorsUnaffectedByWiderCheck:
         f.write_text('#include <stdio.h>\n#include "local.h"\n', encoding="utf-8")
         analyzer = CAnalyzer(str(f))
 
-        # The wider check DOES flag this (a real, if benign, MISSING token)
-        assert analyzer._has_recovery_artifacts() is True
+        # The wider check used to flag this (a MISSING token at EOF). It came
+        # from parsing without the file's final newline; since BACK-1500 the
+        # newline is parsed and the file is clean.
+        assert analyzer._has_recovery_artifacts() is False
         # But the narrow check imports/base.py relies on must stay clean.
         assert analyzer.has_parse_errors() is False
+
+
+class TestFinalNewlineIsParsed:
+    """BACK-1500: FileAnalyzer.content drops the file's final newline, and
+    grammars that end a statement at a newline then reported a MISSING token
+    on a clean file -- every Dockerfile made `reveal check` exit 3."""
+
+    @staticmethod
+    def _analyzer(tmp_path: Path, name: str, text: str):
+        from reveal.registry import get_analyzer
+        f = tmp_path / name
+        f.write_text(text, encoding="utf-8")
+        return get_analyzer(str(f))(str(f))
+
+    @pytest.mark.parametrize("name,text", [
+        ("Dockerfile", "FROM python:3.12\nRUN pip install x\n"),
+        ("Dockerfile", "FROM python:3.12\nRUN pip install x"),  # no final newline: benign EOF quirk
+        ("main.c", "#include <stdio.h>\n"),
+        ("iface.go", "package p\n\ntype I interface{}\n"),
+    ])
+    def test_clean_file_is_not_flagged(self, tmp_path, name, text):
+        analyzer = self._analyzer(tmp_path, name, text)
+        assert not analyzer._has_recovery_artifacts()
+        assert "_has_errors" not in analyzer.get_structure()
+
+    def test_broken_dockerfile_still_flagged(self, tmp_path):
+        analyzer = self._analyzer(tmp_path, "Dockerfile", "FROM python:3.12\nRUN [\"a\",\n")
+        assert analyzer._has_recovery_artifacts()

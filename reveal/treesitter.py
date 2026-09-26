@@ -516,7 +516,13 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         try:
             parser = get_parser(self.language)  # type: ignore[arg-type]  # language is validated at runtime
-            self.tree = ts_parse(parser, self.content)
+            # self.content is '\n'.join(lines), which drops the file's final
+            # newline. Grammars that end a statement at a newline (Dockerfile,
+            # C preprocessor lines, Go) then report a MISSING token at EOF on a
+            # perfectly clean file (BACK-1500). Parse what is on disk; appending
+            # at the end moves no byte offset of the content before it.
+            source = self.content + '\n' if getattr(self, '_ends_with_newline', False) else self.content
+            self.tree = ts_parse(parser, source)
         except Exception as e:
             self.parse_error = str(e)
             if self.language not in _warned_failed_languages:
