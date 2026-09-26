@@ -295,6 +295,20 @@ reproduce a Windows encoding bug on Linux, run under the cp1252 simulator:
 something that is not the user's target (reveal's own docs, a cache) takes
 `# boundary-ok: walker -- <why>`.
 
+**Flags and query keys (use them, or let the ledger say so):** a URI adapter is told about
+every flag and query key the user sets that its run never used
+(`reveal/cli/routing/ledger.py`). An adapter needs no declaration for this. Two rules keep
+it honest:
+- Parse your query with `parse_query_params`, `parse_query_filters` or
+  `parse_result_control`. A hand-written parser must call `note_query_parsed(query)`, or
+  every key gets a "has no effect" note.
+- In routing code, read a flag you might not apply with `peek(args, dest)`, and call
+  `mark(args, dest)` once you have applied it or printed a note. A plain `args.x` read
+  counts as used.
+
+`tests/test_flag_ledger.py` runs every adapter with each probe flag, and fails when a flag
+is neither honored nor named.
+
 ```python
 # ❌ Zero-indexed lines (editors use 1-indexed)
 {'line': 0, 'name': 'main'}
