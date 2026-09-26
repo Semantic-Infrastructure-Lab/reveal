@@ -267,31 +267,9 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:
     # utils/exclusions.py), rather than 13+ per-adapter query params. Schemes
     # whose resource is not a filesystem path (env://, help://, git://,
     # sqlite://, ssl://, ...) never walk, so they keep the advisory.
-    from pathlib import Path as _Path
-    from ...utils.exclusions import set_active_exclusions
-    # An empty resource (env://, help://) is not "the current directory" for
-    # this purpose -- it means the scheme takes no path at all, so it must fall
-    # through to the advisory rather than silently accepting a scope it will
-    # never consult.
-    target_str = resource.partition('?')[0]
-    target = _Path(target_str) if target_str else None
-    walk_root = None
-    if target is not None and target.exists():
-        walk_root = target if target.is_dir() else target.parent
-
-    # BACK-1266: REVEAL_IGNORE / config.yaml 'ignore:' patterns were parsed
-    # into RevealConfig and wired into _walk_code_files (the subcommand-form
-    # walker `check` uses) under BACK-1201, but every URI-form adapter routes
-    # directory pruning through is_skippable_dir instead -- which BACK-1257
-    # taught to consult --exclude but not REVEAL_IGNORE, so the env var
-    # stayed silently unhonored on ast:///calls:///hotspots:// etc. exactly
-    # the way --exclude was before that fix. Merged in here, once at
-    # dispatch, onto the same active-scope plumbing rather than a second
-    # matcher. Discovered relative to the walk root (matching
-    # _walk_code_files' own RevealConfig.get(start_path=...)), not cwd.
-    from ...config import RevealConfig
-    ignore_values = RevealConfig.get(start_path=walk_root).ignore_patterns()
-    combined_values = exclude_values + [p for p in ignore_values if p not in exclude_values]
+    # BACK-1266: the scope also carries REVEAL_IGNORE / config 'ignore:'.
+    from ...utils.exclusions import dispatch_scope, set_active_exclusions
+    walk_root, combined_values = dispatch_scope(resource.partition('?')[0], exclude_values)
 
     if not combined_values:
         return resource

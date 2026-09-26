@@ -26,7 +26,8 @@ from reveal.adapters.deps import (  # noqa: F401 - re-exported for back-compat
     _run_circular,
     _run_unused,
 )
-from ..global_flags import add_gitignore_arguments
+from ..global_flags import add_exclude_argument, add_gitignore_arguments
+from ..routing.ledger import complete
 
 
 def create_deps_parser() -> argparse.ArgumentParser:
@@ -82,6 +83,7 @@ def create_deps_parser() -> argparse.ArgumentParser:
             "(circular/unused) actually needs."
         )
     )
+    add_exclude_argument(parser)
     add_gitignore_arguments(parser)
     return parser
 
@@ -145,4 +147,5 @@ def run_deps(args: Namespace) -> None:
     cycles = circular.get('count', 0)
     unused_count = len(unused)
     if cycles or unused_count:
+        complete(args)  # a findings exit, not an error: the flag ledger still reports
         sys.exit(1)

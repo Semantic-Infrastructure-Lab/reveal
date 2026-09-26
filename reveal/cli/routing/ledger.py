@@ -6,7 +6,9 @@ get_structure parameter names, check() keyword arguments, the --exclude walk sco
 post_process(result, args), and the renderer. Each mechanism used to decide on its own
 whether to mention a flag it could not apply, and most did not. So a flag argparse accepted
 could vanish on one adapter and work on the next (45+ fixes in 0.122-0.129). The ledger makes
-that decision once per dispatch, in handle_uri.
+that decision once per dispatch: in handle_uri for URI, bare-path and MCP invocations, and in
+``subcommand.dispatch_subcommand`` for the ``reveal <name>`` subcommands (BACK-1539), whose
+defaults come from their own parser.
 
 A flag the user set (its value differs from the parser default) counts as used when:
 
@@ -22,14 +24,14 @@ A flag the user set (its value differs from the parser default) counts as used w
 A query key counts as used when an adapter's query parser saw it
 (``utils.query_parser.note_query_parsed``). Whatever is left when the dispatch finishes gets
 one note. Process-global flags (``cli.global_flags.PROCESS_GLOBAL_FLAGS``) are never reported.
-
-Not covered yet: the ``cli/commands/*`` subcommands, which build adapters directly.
+A dispatch that ends in ``sys.exit`` after producing its result (check mode, a subcommand's
+findings exit) calls ``complete`` first; an error exit reports nothing.
 """
 
 from __future__ import annotations
 
 import sys
-from argparse import Namespace
+from argparse import ArgumentParser, Namespace
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Optional, Set, TextIO
 from urllib.parse import parse_qs
@@ -57,13 +59,21 @@ class TrackedArgs(Namespace):
 class FlagLedger:
     """Flags and query keys the user set for one dispatch, and which of them were used."""
 
-    def __init__(self, args: Namespace):
-        from ..defaults import _parser_defaults
+    def __init__(self, args: Namespace, parser: Optional[ArgumentParser] = None,
+                 subcommand: Optional[str] = None):
+        """``parser`` and ``subcommand`` for a ``reveal <subcommand>`` dispatch: flags are
+        judged against that parser's defaults, and the note names the subcommand."""
+        from ..defaults import _parser_defaults, option_defaults_of
         from ..global_flags import PROCESS_GLOBAL_FLAGS
         from ..parser import _format_default
 
-        # format's default comes from REVEAL_FORMAT per call; _parser_defaults is cached.
-        defaults = {**_parser_defaults(), 'format': _format_default()}
+        if parser is None:
+            # format's default comes from REVEAL_FORMAT per call; _parser_defaults is cached.
+            defaults = {**_parser_defaults(), 'format': _format_default()}
+        else:  # built for this call, so its format default is already current
+            defaults = option_defaults_of(parser)
+        self.parser = parser
+        self.subcommand = subcommand
         self.set_flags: Dict[str, Any] = {
             dest: getattr(args, dest) for dest, default in defaults.items()
             if dest not in _NOT_FLAGS and dest not in PROCESS_GLOBAL_FLAGS
@@ -113,14 +123,17 @@ class FlagLedger:
                 seen.append(key)
         return seen
 
-    def report(self, scheme: str, stream: Optional[TextIO] = None) -> None:
-        from ..defaults import _option_names
+    def report(self, scheme: str = '', stream: Optional[TextIO] = None) -> None:
+        from ..defaults import _option_names, option_names_of
 
         out = stream if stream is not None else sys.stderr
-        names = _option_names()
+        names = _option_names() if self.parser is None else option_names_of(self.parser)
         flags = self.unused_flags()
-        if flags:
-            spelled = ', '.join(names.get(dest, f'--{dest}') for dest in flags)
+        spelled = ', '.join(names.get(dest, f'--{dest}') for dest in flags)
+        if flags and self.subcommand:
+            print(f"Note: {spelled} has no effect on 'reveal {self.subcommand}' -- this "
+                  f"subcommand does not use it.", file=out)
+        elif flags:
             bare = [names.get(d, f'--{d}') for d in flags if d in _BARE_PATH_FLAGS]
             hint = (f" Use a bare path scan (reveal <path> {' '.join(bare)}) instead."
                     if bare else '')

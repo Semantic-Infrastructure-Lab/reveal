@@ -14,7 +14,8 @@ import sys
 import argparse
 from pathlib import Path
 from argparse import Namespace
-from ..global_flags import add_gitignore_arguments
+from ..global_flags import add_exclude_argument, add_gitignore_arguments
+from ..routing.ledger import complete
 
 
 def create_check_parser() -> argparse.ArgumentParser:
@@ -88,8 +89,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         '--config', type=str, metavar='FILE',
         help='Config file (.reveal.yaml or pyproject.toml)',
     )
-    parser.add_argument(
-        '--exclude', action='append', metavar='PATTERN',
+    add_exclude_argument(
+        parser,
         help='Exclude files/directories matching pattern from analysis entirely '
              '(e.g., --exclude "*.min.js" --exclude "wp-includes/js/dist/*"). '
              'Repeatable. Excluded files are never parsed or checked (BACK-1042).',
@@ -247,6 +248,7 @@ def run_check(args: Namespace) -> None:
         # that distinguishable from clean (0) and from real issues (1) at
         # the shell level; see internal-docs/design/EXIT_CODE_CONTRACT.md.
         from reveal.cli.file_checker import check_exit_code
+        complete(args)  # the exit code is the result: the flag ledger still reports
         sys.exit(check_exit_code(
             violations,
             files_degraded=1 if degraded else 0,

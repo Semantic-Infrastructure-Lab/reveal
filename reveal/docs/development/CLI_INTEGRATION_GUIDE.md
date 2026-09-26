@@ -268,7 +268,10 @@ functions as shown above. `reveal/main.py`'s `_dispatch_subcommand()` looks up
 `(module_path, parser_factory_name, runner_name)`, then lazily imports the module
 and calls the factory/runner. Adding a subcommand today means adding one entry to
 that dict plus a `create_<name>_parser()` / `run_<name>()` pair in
-`reveal/cli/commands/<name>.py` — see `reveal/cli/commands/scaffold.py` for a
+`reveal/cli/commands/<name>.py`. The runner is called through
+`reveal/cli/routing/subcommand.py`'s `dispatch_subcommand`, which applies the flag ledger
+and the `--exclude`/REVEAL_IGNORE walk scope to every subcommand (BACK-1539) — a new
+subcommand gets both without wiring. See `reveal/cli/commands/scaffold.py` for a
 complete, production example of:
 - Subcommand architecture
 - Multiple subparsers (adapter, analyzer, rule)

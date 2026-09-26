@@ -6,6 +6,7 @@ from argparse import Namespace
 from pathlib import Path
 from typing import List
 from ..global_flags import add_gitignore_arguments
+from ..routing.ledger import complete
 
 
 def create_health_parser() -> argparse.ArgumentParser:
@@ -123,6 +124,7 @@ def run_health(args: Namespace) -> None:
     else:
         _render_results(results)
 
+    complete(args)  # the exit code is the result: the flag ledger still reports
     sys.exit(overall_exit)
 
 

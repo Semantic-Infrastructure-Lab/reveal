@@ -9,6 +9,7 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from ..global_flags import add_gitignore_arguments
+from ..routing.ledger import complete
 
 
 def create_review_parser() -> argparse.ArgumentParser:
@@ -140,6 +141,7 @@ def run_review(args: Namespace) -> None:
     else:
         _render_report(report, args.verbose)
 
+    complete(args)  # the exit code is the result: the flag ledger still reports
     sys.exit(report['exit_code'])
 
 

@@ -30,7 +30,9 @@ Cell classification, per (subcommand, flag):
                     (nothing in this subcommand's output changes based on the flag) or
                     `review: honored` if the automated scan simply missed the wiring
                     (extend _CROSS_FILE_READERS instead of guessing). An unreviewed cell
-                    here fails CI.
+                    here fails CI. At runtime a not-applicable flag is no longer silent:
+                    the flag ledger names it (BACK-1539, tests/test_flag_ledger.py
+                    section 4).
 
 Regenerate with `python tests/test_subcommand_flag_matrix.py --write` (keeps hand-written
 `review`/`reason` fields, exactly like the URI matrix's `--write`).

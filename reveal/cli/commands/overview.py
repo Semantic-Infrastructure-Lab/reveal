@@ -41,7 +41,7 @@ from reveal.adapters.overview import (  # noqa: F401 - re-exported for back-comp
     _run_stats,
 )
 from reveal.cli.routing.flag_specs import exclude_fragment, inject_query_flags
-from ..global_flags import add_gitignore_arguments
+from ..global_flags import add_exclude_argument, add_gitignore_arguments
 
 
 def create_overview_parser() -> argparse.ArgumentParser:
@@ -90,13 +90,12 @@ def create_overview_parser() -> argparse.ArgumentParser:
              'points, Components) instead of --top N (BACK-1226). Same effect as '
              '--verbose here.'
     )
-    parser.add_argument(
-        '--exclude', action='append', metavar='PATTERN',
+    add_exclude_argument(
+        parser,
         help='Exclude files/directories matching pattern from analysis entirely '
              '(e.g., --exclude "*.min.js" --exclude "wp-includes/js/dist/*"). '
-             'Repeatable. Applies to the stats/hotspots and scope sections '
-             '(BACK-1042); the architecture and complex-functions sections '
-             'do not yet honor it.',
+             'Repeatable. Applies to every section that walks files, as on overview:// '
+             '(BACK-1042, BACK-1495, BACK-1539); REVEAL_IGNORE patterns are added to it.',
     )
     add_gitignore_arguments(parser)
     return parser

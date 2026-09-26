@@ -12,7 +12,7 @@ from typing import Optional
 # shadowing the editable dev checkout (BACK-1014) shows up immediately as
 # an unexpected site-packages path instead of silently resolving.
 _PACKAGE_DIR = Path(__file__).resolve().parent.parent
-from .global_flags import add_gitignore_arguments
+from .global_flags import add_exclude_argument, add_gitignore_arguments
 
 
 def _build_core_examples() -> str:
@@ -394,8 +394,7 @@ def _add_display_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--fast', action='store_true',
                         help='Fast mode: skip line counting for better performance')
     add_gitignore_arguments(parser)
-    parser.add_argument('--exclude', action='append', metavar='PATTERN',
-                        help='Exclude files/directories matching pattern (e.g., --exclude "*.log" --exclude "tmp/")')
+    add_exclude_argument(parser, help='Exclude files/directories matching pattern (e.g., --exclude "*.log" --exclude "tmp/")')
     parser.add_argument('--ext', type=str, metavar='EXTS',
                         help='Filter to files with these extensions, comma-separated (e.g., --ext md or --ext py,md). '
                              'Works on directory trees and --stdin pipelines.')

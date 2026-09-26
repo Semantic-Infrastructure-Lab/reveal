@@ -1436,6 +1436,8 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     # previously fed only the disclosure text/JSON summary, never the
     # actual process exit code, so a directory containing an unparseable
     # file exited 0 identically to an all-clean directory).
+    from .routing.ledger import complete
+    complete(args)  # the exit code is the result: the flag ledger still reports
     sys.exit(check_exit_code(
         total_issues, files_errored, files_degraded,
         exit_zero=getattr(args, 'exit_zero', False),

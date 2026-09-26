@@ -1,4 +1,4 @@
-"""Process-wide active --exclude scope for URI-form adapter walks (BACK-1257).
+"""Process-wide active --exclude scope for adapter walks, URI and subcommand forms (BACK-1257).
 
 URI adapters each own a private ``os.walk`` -- 13+ of them across 19 files
 (BACK-1223 tracks the consolidation). Only ``overview://`` and ``stats://`` ever
@@ -7,7 +7,8 @@ scheme was accepted by argparse, warned about on stderr, and otherwise
 discarded. Threading an ``exclude_patterns`` kwarg through every walker is the
 consolidation project, not a fix.
 
-Instead the CLI publishes the active scope here once at dispatch time, and the
+Instead the CLI publishes the active scope here once at dispatch time (``dispatch_scope``,
+from handle_uri and from the subcommand seam, BACK-1539), and the
 one directory-pruning predicate every walker already routes through
 (``utils.path_utils.is_skippable_dir``, 30 call sites) consults it. Semantics
 are delegated to ``cli.file_checker.should_skip_file`` so URI-form ``--exclude``
@@ -55,6 +56,27 @@ def exclusions_consulted() -> bool:
 def active_exclusions() -> Tuple[Optional[Path], Tuple[str, ...]]:
     """Current (root, patterns). Patterns is empty when no scope is active."""
     return _ACTIVE_ROOT, _ACTIVE_PATTERNS
+
+
+def dispatch_scope(target: str, exclude: Optional[List[str]]) -> Tuple[Optional[Path], List[str]]:
+    """The walk scope one dispatch publishes for ``target``: (walk root, patterns).
+
+    Patterns are ``--exclude`` plus the REVEAL_IGNORE / config ``ignore:`` patterns
+    (BACK-1266), discovered relative to the walk root the way ``check``'s walker does. The
+    root is None when ``target`` is not an existing path: an empty target (env://, help://)
+    means the command takes no path at all, not "the current directory". Every CLI entry
+    point computes its scope here -- URI dispatch and the subcommands (BACK-1539) -- so
+    REVEAL_IGNORE cannot again reach one form and not the other.
+    """
+    from ..config import RevealConfig
+
+    exclude_values = list(exclude or [])
+    path = Path(target) if target else None
+    walk_root = None
+    if path is not None and path.exists():
+        walk_root = path if path.is_dir() else path.parent
+    ignore_values = RevealConfig.get(start_path=walk_root).ignore_patterns()
+    return walk_root, exclude_values + [p for p in ignore_values if p not in exclude_values]
 
 
 @contextmanager

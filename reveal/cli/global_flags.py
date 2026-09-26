@@ -35,6 +35,22 @@ def add_gitignore_arguments(parser: Any) -> None:
                         help='Include files git ignores')
 
 
+_EXCLUDE_HELP = ('Exclude files/directories matching pattern from analysis entirely '
+                 '(e.g., --exclude "*.min.js" --exclude "vendor/"). Repeatable. Patterns are '
+                 'relative to the analysed path; REVEAL_IGNORE patterns are added to them.')
+
+
+def add_exclude_argument(parser: Any, help: str = _EXCLUDE_HELP) -> None:
+    """--exclude, for every parser whose command walks a tree (BACK-1517).
+
+    One declaration so the spelling and action cannot drift. What honors it is the walk
+    scope each dispatch publishes (``utils.exclusions.dispatch_scope``): handle_uri for
+    URIs, ``cli/routing/subcommand.py`` for subcommands. A command that accepts it and
+    never walks gets a flag-ledger note, not silence.
+    """
+    parser.add_argument('--exclude', action='append', metavar='PATTERN', help=help)
+
+
 def apply_global_flags(args: Namespace) -> None:
     """Apply flags whose effect is process-global state, from a parsed ``args``."""
     set_provenance_enabled(bool(getattr(args, 'provenance', False)))

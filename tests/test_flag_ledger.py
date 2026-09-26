@@ -1,6 +1,6 @@
 """Flag ledger (BACK-1514): a flag or query key the user sets is used, or a note names it.
 
-Three layers:
+Four layers:
 
 1. Unit tests of ``reveal/cli/routing/ledger.py``: what counts as set, used, carried into the
    query, and what the note says.
@@ -18,6 +18,12 @@ item and the git file has two commits. "Output changed" still cannot see a flag 
 without visible effect: ``--all`` under a default cap the fixture never reaches, or
 ``--head 1`` on a one-item list. Those pairs are listed too, against BACK-1538 (grow the
 fixture until they show, or confirm the flag is dropped).
+
+4. Subcommands (BACK-1539): ``reveal <name>`` runs through ``cli/routing/subcommand.py``,
+   which gives it the same ledger (judged against the subcommand's own parser) and the same
+   ``--exclude``/REVEAL_IGNORE walk scope handle_uri publishes. Every subcommand that walks a
+   tree must declare ``--exclude`` and honor both it and REVEAL_IGNORE, or name the flag; every
+   subcommand's ``--verbose`` is honored or named.
 """
 
 import os
@@ -336,3 +342,199 @@ def test_tracked_args_behave_like_the_namespace_they_copy():
     assert args.limit == 3 and getattr(args, 'no_such_flag', 'd') == 'd'
     args.limit = 4
     assert args.limit == 4
+
+
+# ---------------------------------------------------------------------------
+# 4. Subcommands (BACK-1539): the same ledger and walk scope through one seam
+# ---------------------------------------------------------------------------
+
+from reveal.cli.commands.surface import create_surface_parser  # noqa: E402
+from reveal.cli.routing.ledger import complete  # noqa: E402
+from reveal.cli.routing.subcommand import dispatch_subcommand  # noqa: E402
+
+
+def test_a_subcommand_ledger_judges_flags_against_its_own_parser():
+    """--top is surface's own flag and --verbose comes from the shared parent; neither is on
+    the main parser's defaults, which is what the URI ledger compares against."""
+    parser = create_surface_parser()
+    ledger = FlagLedger(parser.parse_args(['.', '--top', '3', '--verbose']), parser=parser,
+                        subcommand='surface')
+    assert set(ledger.set_flags) == {'top', 'verbose'}
+    err = StringIO()
+    ledger.report(stream=err)
+    note = err.getvalue()
+    assert "has no effect on 'reveal surface' -- this subcommand does not use it" in note
+    assert '--top' in note and '--verbose' in note
+
+
+def _dispatch(runner, *argv):
+    parser = create_surface_parser()
+    err = StringIO()
+    with redirect_stderr(err):
+        try:
+            dispatch_subcommand('surface', parser, runner, parser.parse_args(list(argv)))
+        except SystemExit:
+            pass
+    return err.getvalue()
+
+
+def test_a_findings_exit_still_reports_and_an_error_exit_does_not():
+    """deps/hotspots/check/health/review exit nonzero after printing their result: the flags
+    were applied (or not), so the note belongs. An early error exit applied nothing."""
+    def findings(args):
+        complete(args)
+        sys.exit(1)
+
+    def error(args):
+        sys.exit(1)
+
+    assert '--verbose' in _dispatch(findings, '.', '--verbose')
+    assert _dispatch(error, '.', '--verbose') == ''
+    assert _dispatch(lambda args: args.verbose, '.', '--verbose') == ''  # read = used
+
+
+def _walk_tree(root):
+    """A project whose skipme/ shows up in every walking subcommand's output.
+
+    The config root sits above the walked path, as in a real repo (``reveal surface src``):
+    that is where REVEAL_IGNORE went unhonored, since a walker matching patterns against the
+    config root sees ``proj/skipme/...``, not ``skipme/...``."""
+    (root / '.reveal.yaml').write_text('root: true\n', encoding='utf-8')
+    proj = root / 'proj'
+    (proj / 'skipme').mkdir(parents=True)
+    (proj / 'tests').mkdir()
+    (proj / 'app.py').write_text(
+        'from abc import ABC, abstractmethod\n\nfrom skipme.extra import extra_fn\n\n\n'
+        'class Base(ABC):\n    @abstractmethod\n    def run(self):\n        ...\n\n\n'
+        'def main(x):\n    if x:\n        return extra_fn(x)\n    return 0\n', encoding='utf-8')
+    (proj / 'skipme' / '__init__.py').write_text('', encoding='utf-8')
+    (proj / 'skipme' / 'extra.py').write_text(
+        'import os\nimport sys\n\nfrom app import Base\n\n\nclass Impl(Base):\n'
+        '    def run(self):\n        return 1\n\n\ndef extra_fn(x):\n'
+        + ''.join(f'    if x == {i}:\n        return {i}\n' for i in range(25))
+        + '    return os.sep\n', encoding='utf-8')
+    (proj / 'tests' / 'test_app.py').write_text(
+        'from unittest.mock import patch\n\n\n@patch("skipme.extra.extra_fn")\n'
+        '@patch("skipme.extra.os")\ndef test_main(a, b):\n    pass\n', encoding='utf-8')
+    (proj / 'README.md').write_text('# Proj\n\nSee [app](app.py).\n', encoding='utf-8')
+    # More of everything than any default --top shows, so --verbose (lift the cap) is visible.
+    (proj / 'many').mkdir()
+    for i in range(30):
+        (proj / 'many' / f'mod{i}.py').write_text(
+            f'import json\n\nfrom app import main\n\n\ndef work{i}(x):\n'
+            + ''.join(f'    if x == {j}:\n        return main({j})\n' for j in range(12 + i % 5))
+            + '    return 0\n', encoding='utf-8')
+    # 30 targets patched 3 times each: past testability's --min-patches 3 and its --top 20.
+    (proj / 'tests' / 'test_many.py').write_text('from unittest.mock import patch\n\n\n' + ''.join(
+        f'@patch("many.mod{i}.work{i}")\ndef test_{i}_{k}(m):\n    pass\n\n\n'
+        for i in range(30) for k in range(3)), encoding='utf-8')
+    return proj
+
+
+# name -> argv after the subcommand, for every subcommand that walks a tree.
+WALKERS = {
+    'architecture': ['proj'],
+    'check': ['proj'],
+    'contracts': ['proj'],
+    'deps': ['proj'],
+    'hotspots': ['proj'],
+    'overview': ['proj'],
+    'pack': ['proj'],
+    'surface': ['proj'],
+    'testability': ['proj', '--tests', 'proj/tests'],
+    'trace': ['proj', '--from', 'main'],
+}
+# Subcommands that take --verbose, and what else each needs to run on the tree.
+VERBOSE_TAKERS = {**{n: a for n, a in WALKERS.items() if n != 'trace'},
+                  'health': ['proj'], 'review': ['proj']}
+
+# (subcommand, probe): the walk consulted the scope, but the fixture cannot show an effect.
+# The URI ratchet lists the same testability pair (BACK-1538).
+KNOWN_NOT_VISIBLE = {
+    ('testability', 'exclude'): 'BACK-1538',
+    ('testability', 'reveal_ignore'): 'BACK-1538',
+}
+
+
+class _SubcommandHarness:
+    def __init__(self, root):
+        self.root = root
+        self._cache = {}
+
+    def run(self, name, *extra, reveal_ignore=None, fmt='json'):
+        key = (name, extra, reveal_ignore, fmt)
+        if key not in self._cache:
+            from conftest import _run_reveal_direct
+            from reveal.config import RevealConfig
+            argv = [name, *WALKERS.get(name, VERBOSE_TAKERS.get(name, [])), *extra,
+                    '--format', fmt]
+            saved_cwd, saved_env = os.getcwd(), os.environ.get('REVEAL_IGNORE')
+            os.chdir(self.root)
+            if reveal_ignore:
+                os.environ['REVEAL_IGNORE'] = reveal_ignore
+            RevealConfig._cache.clear()
+            try:
+                proc = _run_reveal_direct(*argv)
+            finally:
+                os.chdir(saved_cwd)
+                if saved_env is None:
+                    os.environ.pop('REVEAL_IGNORE', None)
+                else:
+                    os.environ['REVEAL_IGNORE'] = saved_env
+                RevealConfig._cache.clear()
+            self._cache[key] = (proc.returncode, proc.stdout, proc.stderr)
+        return self._cache[key]
+
+
+@pytest.fixture(scope='module')
+def subcommand_harness(tmp_path_factory):
+    root = tmp_path_factory.mktemp('subcommand_ledger')
+    _walk_tree(root)
+    return _SubcommandHarness(root)
+
+
+def _walk_cases():
+    for name in sorted(WALKERS):
+        for probe in ('exclude', 'reveal_ignore'):
+            task = KNOWN_NOT_VISIBLE.get((name, probe))
+            marks = [pytest.mark.xfail(strict=True, reason=f'{task}: not visible')] if task else []
+            yield pytest.param(name, probe, marks=marks, id=f'{name}-{probe}')
+
+
+def test_walkers_match_the_subcommand_table():
+    from reveal.main import _SUBCOMMANDS
+    assert set(VERBOSE_TAKERS) <= set(_SUBCOMMANDS)
+    for name, (module_path, parser_fn, _) in _SUBCOMMANDS.items():
+        import importlib
+        parser = getattr(importlib.import_module(module_path), parser_fn)()
+        declares = any('--exclude' in a.option_strings for a in parser._actions)
+        assert declares == (name in WALKERS), (
+            f"reveal {name}: --exclude is declared exactly by the subcommands that walk a tree "
+            f"(add_exclude_argument), and each of those is probed in WALKERS")
+
+
+@pytest.mark.parametrize('name, probe', _walk_cases())
+def test_walk_scope_reaches_every_walking_subcommand(subcommand_harness, name, probe):
+    """BACK-1517: REVEAL_IGNORE pruned surface:// but not `reveal surface`, and `reveal pack`
+    rejected the --exclude pack:// accepted. Both now come from one seam."""
+    base = subcommand_harness.run(name)
+    if probe == 'exclude':
+        code, out, err = subcommand_harness.run(name, '--exclude', 'skipme/')
+    else:
+        code, out, err = subcommand_harness.run(name, reveal_ignore='skipme/**')
+    assert 'unrecognized arguments' not in err, err
+    honored = (code, out) != base[:2]
+    assert honored or 'Note: --exclude' in err, (
+        f'{probe} on reveal {name} changed nothing and no note named it. The walk scope is '
+        f'published by reveal/cli/routing/subcommand.py; a walker that bypasses '
+        f'utils.path_utils.is_skippable_dir does not see it.')
+
+
+@pytest.mark.parametrize('name', sorted(VERBOSE_TAKERS))
+def test_verbose_is_honored_or_named_on_every_subcommand(subcommand_harness, name):
+    """--verbose comes from the shared parent parser, so every subcommand accepts it. Where it
+    has nothing to expand (surface, contracts, health, ...) it used to vanish in silence.
+    Text output: where --verbose lifts --top, the cap is a display cap (JSON is uncapped)."""
+    base = subcommand_harness.run(name, fmt='text')
+    code, out, err = subcommand_harness.run(name, '--verbose', fmt='text')
+    assert (code, out) != base[:2] or f"--verbose has no effect on 'reveal {name}'" in err, err

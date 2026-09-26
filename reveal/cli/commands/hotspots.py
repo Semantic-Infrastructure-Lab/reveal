@@ -23,7 +23,8 @@ from reveal.adapters.hotspots import (  # noqa: F401 - re-exported for back-comp
     _run_file_hotspots,
     _run_function_hotspots,
 )
-from ..global_flags import add_gitignore_arguments
+from ..global_flags import add_exclude_argument, add_gitignore_arguments
+from ..routing.ledger import complete
 
 
 def create_hotspots_parser() -> argparse.ArgumentParser:
@@ -75,16 +76,7 @@ def create_hotspots_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='Show only file-level hotspots, skip function analysis'
     )
-    parser.add_argument(
-        # BACK-1257: the uri:// form accepts --exclude via the global parser, so
-        # `reveal hotspots://. --exclude X` worked while `reveal hotspots .
-        # --exclude X` died with "unrecognized arguments" -- the same request,
-        # two syntaxes, one of them a hard parser error.
-        '--exclude', action='append', metavar='PATTERN',
-        help='Exclude files/directories matching pattern from analysis entirely '
-             '(e.g., --exclude "*.min.js" --exclude "vendor/*"). Repeatable. '
-             'Patterns are relative to the analysed path.',
-    )
+    add_exclude_argument(parser)
     add_gitignore_arguments(parser)
     return parser
 
@@ -111,12 +103,10 @@ def run_hotspots(args: Namespace) -> None:
         f'&functions_only={"true" if functions_only else "false"}'
         f'&files_only={"true" if files_only else "false"}'
     )
-    # BACK-1257: publish the same walk-scope the uri:// form publishes, so both
-    # syntaxes filter identically. Scoped to this call rather than set globally.
-    from reveal.utils.exclusions import exclusion_scope
-    with exclusion_scope(path, getattr(args, 'exclude', None)):
-        adapter = HotspotsAdapter(str(path), query)
-        result = adapter.get_structure()
+    # The --exclude/REVEAL_IGNORE walk scope is published by the subcommand seam
+    # (cli/routing/subcommand.py), as handle_uri publishes it for hotspots://.
+    adapter = HotspotsAdapter(str(path), query)
+    result = adapter.get_structure()
 
     file_hotspots = result['file_hotspots']
     fn_hotspots = result['function_hotspots']
@@ -147,4 +137,5 @@ def run_hotspots(args: Namespace) -> None:
     serious_files = [h for h in file_hotspots if h.get('quality_score', 100) < 70]
     serious_fns = [f for f in fn_hotspots if f.get('complexity', 0) > 20]
     if serious_files or serious_fns:
+        complete(args)  # a findings exit, not an error: the flag ledger still reports
         sys.exit(1)

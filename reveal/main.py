@@ -184,13 +184,16 @@ def _dispatch_subcommand() -> bool:
     module_path, parser_fn, runner_fn = _SUBCOMMANDS[name]
     import importlib
     mod = importlib.import_module(module_path)
-    args = getattr(mod, parser_fn)().parse_args(sys.argv[2:])
+    parser = getattr(mod, parser_fn)()
+    args = parser.parse_args(sys.argv[2:])
     # This path bypasses _main_impl() (table-driven dispatch before argparse's
     # positional/subparser conflicts), so it must apply the global flags itself
     # (BACK-1034: --provenance was silently dropped here).
     apply_global_flags(args)
     _require_subcommand_format(name, args)
-    getattr(mod, runner_fn)(args)
+    # BACK-1539: the flag ledger and the REVEAL_IGNORE/--exclude walk scope, once for all.
+    from .cli.routing.subcommand import dispatch_subcommand
+    dispatch_subcommand(name, parser, getattr(mod, runner_fn), args)
     return True
 
 
