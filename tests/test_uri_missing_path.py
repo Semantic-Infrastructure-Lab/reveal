@@ -105,7 +105,7 @@ def test_calls_name_shorthand_is_not_a_missing_path(tmp_path):
     # BACK-1499: `calls://path:name` was rejected as "Path not found: path:name"
     # because the check ran before the adapter split off `:name`.
     src = tmp_path / 'mod.py'
-    src.write_text('def helper():\n    pass\n\n\ndef main():\n    helper()\n')
+    src.write_text('def helper():\n    pass\n\n\ndef main():\n    helper()\n', encoding='utf-8')
     code, out, err = _run(f'calls://{src}:helper')
     assert code == 0, err
     assert 'Callers of: helper' in out

@@ -60,7 +60,7 @@ def test_workers_exit_when_parent_is_killed(tmp_path, method):
     child = tmp_path / 'child.py'
     child.write_text(CHILD, encoding='utf-8')
     proc = subprocess.Popen([sys.executable, str(child), method], stdout=subprocess.PIPE,
-                            text=True, cwd=str(tmp_path))
+                            text=True, encoding='utf-8', cwd=str(tmp_path))
     pids = [int(p) for p in proc.stdout.readline().split()]
     assert pids, 'child printed no worker pids'
     os.kill(proc.pid, signal.SIGKILL)

@@ -353,7 +353,10 @@ def _reject_missing_path(adapter_class: type, scheme: str, resource: str, args: 
     a typo'd path can no longer read as a clean empty result with exit 0."""
     if getattr(adapter_class, 'RESOURCE_IS_PATH', False) is not True:
         return
-    path = adapter_class.resource_path(resource.partition('?')[0])
+    path = resource.partition('?')[0]
+    resolve = getattr(adapter_class, 'resource_path', None)  # BACK-1499: calls:// path:name
+    if resolve is not None:
+        path = resolve(path)
     if not path or os.path.exists(path):
         return
     msg = f"Path not found: {path}"
