@@ -1308,3 +1308,31 @@ class TestFormatHistoryRow:
         from reveal.adapters.autossl.renderer import _format_history_row
         row = _format_history_row(self._row(tls_status=None, impediments=[{'code': 'X'}]), 25, 10)
         assert 'dcv_failed' in row
+
+
+class TestDomainHistoryAllFlag:
+    """BACK-1381: --all reached autossl's **kwargs catch-all, which the CLI never fills."""
+
+    RUNS = [f"2026-01-{d:02d}T00:00:00Z" for d in range(30, 0, -1)]  # 30 runs
+
+    def _parsed(self, timestamp):
+        return {'run_start': timestamp, 'users': [{'username': 'u', 'domains': [
+            {'domain': 'a.example.com', 'tls_status': 'ok'}]}]}
+
+    def _rows(self, **kwargs):
+        with patch('reveal.adapters.autossl.adapter.list_runs', return_value=self.RUNS), \
+             patch('reveal.adapters.autossl.adapter.parse_run', side_effect=self._parsed):
+            result = AutosslAdapter('autossl://a.example.com').get_structure(**kwargs)
+        return result
+
+    def test_default_is_capped(self):
+        assert len(self._rows()['history']) == 20
+
+    def test_all_named_param_lifts_the_cap(self):
+        assert len(self._rows(all=True)['history']) == 30
+
+    def test_cli_arg_builder_forwards_all(self):
+        from argparse import Namespace
+        from reveal.cli.routing.uri import _build_adapter_kwargs
+        adapter = AutosslAdapter('autossl://a.example.com')
+        assert _build_adapter_kwargs(adapter, Namespace(all=True)).get('all') is True

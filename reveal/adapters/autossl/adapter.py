@@ -415,7 +415,8 @@ class AutosslAdapter(ResourceAdapter):
             self.timestamp = rest
 
     def get_structure(self, only_failures: bool = False, summary: bool = False,
-                      user: Optional[str] = None, **kwargs: Any) -> Dict[str, Any]:
+                      user: Optional[str] = None, all: bool = False,
+                      **kwargs: Any) -> Dict[str, Any]:
         """Return run list or parsed run data.
 
         Args:
@@ -424,12 +425,13 @@ class AutosslAdapter(ResourceAdapter):
             summary: When True, strip per-user/domain detail — return only the
                 top-level run header and summary counts.
             user: When set, filter to only the named user (case-sensitive).
+            all: For a domain history (autossl://domain/example.com), lift the row cap.
         """
         only_failures = only_failures or bool(self.query_params.get('only-failures'))
         summary = summary or bool(self.query_params.get('summary'))
         user = user or self.query_params.get('user') or None
         if self.domain is not None:
-            show_all = kwargs.get('all', False)
+            show_all = all
             return self._domain_history_structure(self.domain, show_all=show_all)
         if self.timestamp is None:
             return self._list_runs_structure()
