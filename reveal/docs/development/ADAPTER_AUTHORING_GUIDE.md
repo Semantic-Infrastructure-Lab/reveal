@@ -91,8 +91,12 @@ class MyAdapter(ResourceAdapter):
     # is the flag's value. If your adapter walks a directory, filter the walk with
     # reveal.utils.gitignore.gitignore_filter(root) (git's own verdict; the router
     # applies --no-gitignore / ?respect_gitignore= to it for you) and declare
-    # 'respect_gitignore': 'respect_gitignore=false' here. --sort/--limit reach every adapter automatically (universal
-    # specs, no declaration needed) via reveal/utils/query_control.py's ResultControl.
+    # 'respect_gitignore': 'respect_gitignore=false' here. --sort/--limit are injected as
+    # sort=/limit= with no declaration, but only take effect if your adapter applies them
+    # (reveal/utils/query_control.py's ResultControl, as ast/stats/git do); otherwise list them
+    # out of your schema so _warn_unknown_query_params reports them. If your resource cannot
+    # carry a query key at all (it would swallow `?limit=2`), set
+    # HONORS_RESULT_CONTROL = False on the adapter and the router strips them (BACK-1385).
     # CLI_QUERY_FLAGS = {'all': 'top=1000000', 'since': 'since={value}'}
     #
     # If your cap lives in the RENDERER (a `top:` kwarg on render_structure(), not a

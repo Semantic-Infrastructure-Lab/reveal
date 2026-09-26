@@ -269,8 +269,9 @@ def test_every_silent_cell_is_classified():
 def test_flags_match_the_flag_spec_table():
     from reveal.cli.routing.flag_specs import FLAG_SPECS
 
-    # Universal specs (sort=, limit=) reach every adapter's query pipeline alike, so there is
-    # no per-adapter routing for the matrix to record; declaration-based ones must be columns.
+    # Universal specs (sort=, limit=) are injected without a declaration (and skipped where
+    # HONORS_RESULT_CONTROL = False, BACK-1385), so there is no per-adapter routing for the
+    # matrix to record; declaration-based ones must be columns.
     assert set(FLAGS) >= {spec.dest for spec in FLAG_SPECS if spec.universal is None}, (
         'a FlagSpec exists for a flag this matrix does not cover')
 
