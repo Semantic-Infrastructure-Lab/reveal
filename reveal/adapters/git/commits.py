@@ -11,6 +11,17 @@ if TYPE_CHECKING:
     import pygit2
 
 
+def history_sort() -> int:
+    """pygit2 walk order for every user-visible history listing (BACK-1426).
+
+    GIT_SORT_TIME alone leaves commits with the same timestamp in arbitrary order
+    (three commits made in one second listed c3, c1, c2); adding TOPOLOGICAL keeps a
+    child before its parent, so ties come out the way `git log` prints them.
+    """
+    import pygit2
+    return pygit2.GIT_SORT_TOPOLOGICAL | pygit2.GIT_SORT_TIME
+
+
 def get_repository_overview(
     repo: 'pygit2.Repository',
     get_head_info_func,
@@ -83,7 +94,7 @@ def get_recent_commits(
         if repo.is_empty:
             return commits
 
-        walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
+        walker = repo.walk(repo.head.target, history_sort())  # type: ignore[arg-type]
 
         for commit in walker:
             if no_merges and len(commit.parents) > 1:
@@ -127,7 +138,7 @@ def get_commit_history(
     commits = []
 
     try:
-        walker = repo.walk(start_commit.id, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
+        walker = repo.walk(start_commit.id, history_sort())  # type: ignore[arg-type]
 
         for commit in walker:
             if no_merges and len(commit.parents) > 1:
@@ -204,7 +215,7 @@ def get_commit_timeline(
     matched: List[Dict[str, Any]] = []
 
     try:
-        walker = repo.walk(start_commit.id, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
+        walker = repo.walk(start_commit.id, history_sort())  # type: ignore[arg-type]
 
         for commit in walker:
             if no_merges and len(commit.parents) > 1:

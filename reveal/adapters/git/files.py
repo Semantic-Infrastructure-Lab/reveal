@@ -11,6 +11,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ...core import disk_cache
 from ...utils.results import ResultBuilder
+from .commits import history_sort
 
 logger = logging.getLogger(__name__)
 
@@ -274,7 +275,7 @@ def get_file_history(
             _reset_content_search_error()
 
         # Walk commit history
-        walker = repo.walk(commit.id, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
+        walker = repo.walk(commit.id, history_sort())  # type: ignore[arg-type]
 
         for commit in walker:
             if no_merges and len(commit.parents) > 1:
@@ -356,7 +357,7 @@ def get_file_timeline(
             obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
 
         commit = cast('pygit2.Commit', obj)
-        walker = repo.walk(commit.id, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
+        walker = repo.walk(commit.id, history_sort())  # type: ignore[arg-type]
 
         for commit in walker:
             if no_merges and len(commit.parents) > 1:
