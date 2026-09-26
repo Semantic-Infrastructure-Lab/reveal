@@ -213,7 +213,7 @@ Output:
 ```
 Most-called functions: src/
 Ranking by:            caller count (in-degree)
-Showing:               top 10 of 87 unique callees
+Showing:               10 of 87 unique callees
 
   validate_item  (5 callers)
     utils/auth.py:42  check_token

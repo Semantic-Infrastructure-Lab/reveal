@@ -138,6 +138,7 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
     adapter_class = get_adapter_class(scheme)
     declared = _declared(adapter_class)
     honors_result_control = getattr(adapter_class, 'HONORS_RESULT_CONTROL', True)
+    injected: dict[str, str] = {}  # query key -> the flag that set it
     for spec in FLAG_SPECS:
         value = spec.value(args)
         if value is None:
@@ -152,9 +153,15 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
         fragment = fragment or spec.universal
         if fragment:
             fragment = fragment.replace('{value}', str(value))
-            if not _has_key(resource, fragment.partition('=')[0]) and not any(
+            key = fragment.partition('=')[0]
+            if key in injected:
+                # --all and --limit both map to top= on hotspots/calls/testability.
+                print(f"Note: {spec.option} ignored on {scheme}:// -- {injected[key]} already "
+                      f"sets {key}=.", file=sys.stderr)
+            elif not _has_key(resource, key) and not any(
                     token in resource for token in spec.already_scoped):
                 resource = f"{resource}{'&' if '?' in resource else '?'}{fragment}"
+                injected[key] = spec.option
         elif spec.warn_unsupported:
             aware = ', '.join(f'{s}://' for s in _supporting_schemes(spec.dest))
             print(f"Note: {spec.option} has no effect on {scheme}:// -- only {aware} support it.",

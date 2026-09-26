@@ -434,7 +434,8 @@ def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
                         help='Cap text output to the first N files with issues, then print a "+N more files" '
                              'summary footer instead of continuing (BACK-539; a large monorepo can otherwise '
                              'print 100K+ lines). Default 50 for check; set to 0 to disable the cap. '
-                             'Ignored for --format json. On URI targets it becomes ?limit=N.')
+                             'Ignored for --format json. On URI targets it becomes ?limit=N, or the adapter\'s own '
+                             'cap where it has one (hotspots/calls/depends/testability: ?top=N).')
 
 
 def _strip_path_quotes(value: str) -> str:
@@ -858,6 +859,14 @@ def validate_navigation_args(args):
     if nav_count > 1:
         print("Error: --head, --tail, and --range are mutually exclusive", file=sys.stderr)
         sys.exit(1)
+
+    # A negative count slices from the wrong end (--head -1 = all but the last,
+    # --limit -1 on hotspots:// = top=-1 = drops each list's last item).
+    for option, value in (('--head', args.head), ('--tail', args.tail),
+                          ('--limit', getattr(args, 'limit', None))):
+        if value is not None and value < 0:
+            print(f"Error: {option} must be 0 or more, got {value}", file=sys.stderr)
+            sys.exit(1)
 
     # Parse and validate range if provided
     if args.range:

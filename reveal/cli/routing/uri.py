@@ -791,19 +791,30 @@ def _apply_field_selection(result: dict, args: 'Namespace') -> dict:
     return result
 
 
-def _find_budget_list_field(result: dict, adapter=None) -> Optional[str]:
-    """Find the budget/slicing-limitable list field on a structure result.
+def _budget_list_fields(result: dict, adapter=None) -> list[str]:
+    """The sliceable list fields present on a structure result.
 
-    Adapter declares which field via BUDGET_LIST_FIELD; falls back to probing
-    for adapters that predate it (transition period only).
+    Adapter declares them via BUDGET_LIST_FIELD (one name, or a tuple for a result
+    with several lists, e.g. hotspots://); falls back to probing for adapters that
+    predate it (transition period only). A declared field missing from this result
+    (another mode's shape) yields nothing -- never a guess at other lists (BACK-1497).
     """
     declared = getattr(adapter, 'BUDGET_LIST_FIELD', None) if adapter is not None else None
     if declared:
-        return declared if (declared in result and isinstance(result[declared], list)) else None
+        names = ((declared,) if isinstance(declared, str)
+                 else tuple(declared) if isinstance(declared, (tuple, list)) else ())
+        return [name for name in names if isinstance(result.get(name), list)]
     for field_name in ['items', 'results', 'checks', 'commits', 'files']:
-        if field_name in result and isinstance(result[field_name], list):
-            return field_name
-    return None
+        if isinstance(result.get(field_name), list):
+            return [field_name]
+    return []
+
+
+def _find_budget_list_field(result: dict, adapter=None) -> Optional[str]:
+    """The one list --max-items/--max-snippet-chars apply to; None when a result has
+    several (BACK-1498 tracks budgeting those)."""
+    fields = _budget_list_fields(result, adapter)
+    return fields[0] if len(fields) == 1 else None
 
 
 def _apply_budget_constraints(result: dict, args: 'Namespace', adapter=None) -> dict:
@@ -858,10 +869,12 @@ def _apply_head_tail_range(result: dict, args: 'Namespace', adapter=None,
     field-discovery (BUDGET_LIST_FIELD / probe fallback) since it's the same
     "which field is the sliceable list" question.
 
-    BACK-1497: a result with several lists (hotspots:// file + function hotspots,
-    reveal:// analyzers/adapters/rules) has no single sliceable field, so the flag
-    slices every top-level non-empty list of dicts; a result with no list at all says
-    the flag had no effect instead of returning unchanged in silence.
+    BACK-1497: an adapter whose result holds several lists (hotspots:// file +
+    function hotspots, reveal:// analyzers/adapters/rules) declares them all in
+    BUDGET_LIST_FIELD and each is sliced. An adapter that declares nothing and has no
+    probe-able list says the flag had no effect instead of returning unchanged in
+    silence; one that declares a field this result lacks stays silent, since it may
+    apply the flag itself (claude:// does, in post_process).
     """
     if not isinstance(result, dict):
         return result
@@ -872,17 +885,12 @@ def _apply_head_tail_range(result: dict, args: 'Namespace', adapter=None,
     if not (head or tail or range_):
         return result
 
-    list_field = _find_budget_list_field(result, adapter)
-    if list_field:
-        result[list_field] = _slice_items(result[list_field], head, tail, range_)
-        return result
-
-    fields = [k for k, v in result.items()
-              if isinstance(v, list) and v and all(isinstance(i, dict) for i in v)]
+    fields = _budget_list_fields(result, adapter)
     flag = '--head' if head else '--tail' if tail else '--range'
     if not fields:
-        print(f"Note: {flag} has no effect on {scheme or 'this'}:// -- its result has no list "
-              f"to slice.", file=sys.stderr)
+        if getattr(adapter, 'BUDGET_LIST_FIELD', None) is None:
+            print(f"Note: {flag} has no effect on {scheme or 'this'}:// -- its result has no "
+                  f"list to slice.", file=sys.stderr)
         return result
     for field in fields:
         result[field] = _slice_items(result[field], head, tail, range_)

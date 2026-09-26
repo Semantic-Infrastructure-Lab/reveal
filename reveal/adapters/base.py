@@ -83,9 +83,11 @@ class ResourceAdapter(ABC):
     """Base class for all resource adapters."""
 
     # Override in subclasses to name the top-level list field that budget
-    # constraints (--max-items, --max-snippet-chars) should apply to.
-    # None = this adapter has no budget-limitable list field.
-    BUDGET_LIST_FIELD: Optional[str] = None
+    # constraints (--max-items, --max-snippet-chars) and --head/--tail/--range apply to.
+    # A tuple names several lists (a result with more than one, e.g. hotspots://); each
+    # present one is sliced by --head/--tail/--range (BACK-1497). None = not declared:
+    # the router probes a few common names, and says the flag had no effect otherwise.
+    BUDGET_LIST_FIELD: Optional['str | Tuple[str, ...]'] = None
 
     # Set True in subclasses where scheme://RESOURCE means "get element RESOURCE"
     # rather than "analyze path RESOURCE" (e.g. env, python, help).

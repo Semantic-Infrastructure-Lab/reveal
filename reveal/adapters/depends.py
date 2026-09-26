@@ -286,7 +286,8 @@ class DependsRenderer:
             print("ℹ Import-graph analysis — dynamic imports not followed.")
             return
 
-        print(f"  {count} file(s) import this module:\n")
+        shown = f" (showing {len(dependents)})" if len(dependents) < count else ''
+        print(f"  {count} file(s) import this module{shown}:\n")
         for dep in dependents:
             file_path = dep.get('file', '')
             line = dep.get('line', 0)
@@ -338,7 +339,12 @@ class DependsRenderer:
             return
 
         total = sum(m['dependent_count'] for m in modules)
-        print(f"  {len(modules)} module(s) imported internally ({total} total import edges)\n")
+        total_modules = result.get('total_modules', len(modules))
+        if len(modules) < total_modules:
+            print(f"  Top {len(modules)} of {total_modules} module(s) imported internally "
+                  f"({total} import edges shown)\n")
+        else:
+            print(f"  {len(modules)} module(s) imported internally ({total} total import edges)\n")
 
         for m in modules:
             count = m['dependent_count']
@@ -420,7 +426,8 @@ class DependsAdapter(ResourceAdapter):
     # --verbose was a silent no-op on depends://. Same fix as imports:// (BACK-1361):
     # declare the flag, read it back out of the query in get_structure(), and have
     # render_structure prefer result['verbose'] over its own kwarg default.
-    CLI_QUERY_FLAGS = {'verbose': 'verbose', 'limit': 'top={value}', 'respect_gitignore': 'respect_gitignore=false'}  # top= caps the module list (BACK-1496)
+    CLI_QUERY_FLAGS = {'verbose': 'verbose', 'limit': 'top={value}', 'respect_gitignore': 'respect_gitignore=false'}  # top= caps the module / dependents list (BACK-1496)
+    BUDGET_LIST_FIELD = ('modules', 'dependents')  # directory summary / single-file mode (BACK-1497)
 
     def __init__(self, resource: str = '', query: Optional[str] = None):
         """Initialize depends adapter.
@@ -540,9 +547,11 @@ class DependsAdapter(ResourceAdapter):
             fmt = 'text'
         top_n_raw = self._query_params.get('top')
         top_n = int(top_n_raw) if top_n_raw else None
+        if top_n is not None and top_n < 1:
+            top_n = None  # 0 / negative = no cap (a negative slice would drop the tail)
 
         if target_path.is_file():
-            result = self._format_file_dependents(target_path)
+            result = self._format_file_dependents(target_path, top_n=top_n)
         else:
             result = self._format_directory_summary(target_path, top_n=top_n, fmt=fmt)
         # BACK-1379: carry ?verbose through the result dict since handle_uri
@@ -1535,7 +1544,7 @@ class DependsAdapter(ResourceAdapter):
 
     # ── Formatters ─────────────────────────────────────────────────────────
 
-    def _format_file_dependents(self, target: Path) -> Dict[str, Any]:
+    def _format_file_dependents(self, target: Path, top_n: Optional[int] = None) -> Dict[str, Any]:
         """Format all files that import `target`."""
         if not self._graph:
             return {'error': 'Graph not built'}
@@ -1604,8 +1613,8 @@ class DependsAdapter(ResourceAdapter):
             source_type='file',
             data={
                 'target': to_relative_display(str(target), self._scan_root),
-                'dependents': dependents,
-                'count': len(dependents),
+                'dependents': dependents[:top_n] if top_n else dependents,
+                'count': len(dependents),  # the total, also when top= shows fewer (BACK-1496)
                 'metadata': self.get_metadata(),
                 '_meta': self._build_meta(),
             },
@@ -1647,6 +1656,7 @@ class DependsAdapter(ResourceAdapter):
             })
 
         modules.sort(key=lambda m: m['dependent_count'], reverse=True)
+        total_modules = len(modules)
 
         if top_n:
             modules = modules[:top_n]
@@ -1659,6 +1669,7 @@ class DependsAdapter(ResourceAdapter):
             data={
                 '_format': fmt,
                 'modules': modules,
+                'total_modules': total_modules,
                 'metadata': self.get_metadata(),
                 '_meta': self._build_meta(),
             },

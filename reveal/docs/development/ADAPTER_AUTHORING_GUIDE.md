@@ -99,7 +99,8 @@ class MyAdapter(ResourceAdapter):
     # HONORS_RESULT_CONTROL = False on the adapter and the router strips them (BACK-1385).
     # An adapter with its own result cap declares 'limit': 'top={value}' and --limit becomes
     # that instead of limit= (--limit 0 is sent as top=1000000: your own top=0 may mean
-    # "nothing"); declare it only if top= caps the default view, not just some modes (BACK-1496).
+    # "nothing"); declare it only if top= caps the default view, and warn in a mode that
+    # ignores top= (calls:// ?target=) rather than dropping --limit in silence (BACK-1496).
     # CLI_QUERY_FLAGS = {'all': 'top=1000000', 'since': 'since={value}'}
     #
     # If your cap lives in the RENDERER (a `top:` kwarg on render_structure(), not a

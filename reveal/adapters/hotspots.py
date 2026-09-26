@@ -296,6 +296,7 @@ class HotspotsAdapter(ResourceAdapter):
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
+    BUDGET_LIST_FIELD = ('file_hotspots', 'function_hotspots')  # --head/--tail slice both (BACK-1497)
     # default top=10 per ranking; --all lifts it (BACK-1229)
     CLI_QUERY_FLAGS = {'all': 'top=1000000', 'limit': 'top={value}', 'respect_gitignore': 'respect_gitignore=false'}  # top= caps each list (BACK-1496)
 

@@ -18,6 +18,7 @@ Limitations (static analysis):
 """
 
 import os
+import sys
 from typing import Any, Dict, Optional
 from reveal.reveal_types import CONTRACT_VERSION, RevealResult
 
@@ -271,7 +272,7 @@ class CallsAdapter(ResourceAdapter):
     HELP_CLUSTER = 'Code Analysis'
     QUICK_RANK = 1
 
-    BUDGET_LIST_FIELD = 'levels'
+    BUDGET_LIST_FIELD = ('levels', 'entries')  # ?target= depth levels; ?rank=callers / ?uncalled entries (BACK-1497)
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
     CLI_QUERY_FLAGS = {'all': 'top=1000000', 'limit': 'top={value}', 'respect_gitignore': 'respect_gitignore=false'}  # top= caps ?rank=callers/?uncalled (default 10; BACK-1379, BACK-1496)
@@ -304,6 +305,16 @@ class CallsAdapter(ResourceAdapter):
                 return
         self.path = expanded
 
+    def _warn_top_ignored(self) -> None:
+        """top= caps only ?rank=callers and ?uncalled; say so instead of ignoring it in
+        silence -- `--limit N` arrives as top=N in every mode (BACK-1496). --all's own
+        top= is exempt: lifting a cap the mode does not have is not worth a warning."""
+        top = self.query_params.get('top')
+        if top is None or str(top) == type(self).CLI_QUERY_FLAGS['all'].partition('=')[2]:
+            return
+        print("⚠ Query param 'top' (--limit) for calls:// only caps ?rank=callers and "
+              "?uncalled — ignored; every result is shown.", file=sys.stderr)
+
     def get_structure(self, **kwargs) -> RevealResult:
         target = self.query_params.get('target', '')
         callees_target = self.query_params.get('callees', '')
@@ -331,6 +342,7 @@ class CallsAdapter(ResourceAdapter):
             )
 
         if modules:
+            self._warn_top_ignored()
             include_external = bool(self.query_params.get('external', False))
             result_data = build_module_dependency_graph(self.path, include_external=include_external)
             query_format = self.query_params.get('format', '')
@@ -380,6 +392,8 @@ class CallsAdapter(ResourceAdapter):
                 data=result_data,
                 **_call_graph_meta(self.path, uncalled=True),
             )
+
+        self._warn_top_ignored()
 
         if root:
             depth = int(self.query_params.get('depth', '2'))

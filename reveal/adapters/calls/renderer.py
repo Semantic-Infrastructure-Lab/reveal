@@ -130,13 +130,14 @@ def _render_callees_text(data: Dict[str, Any]) -> None:
 def _render_ranking_text(data: Dict[str, Any]) -> None:
     """Render rank=callers output — most-called functions sorted by in-degree."""
     path = data.get('path', '.')
-    top = data.get('top', 10)
     total = data.get('total_unique_callees', 0)
     entries = data.get('entries', [])
 
     print(f"Most-called functions: {path}")
     print(f"Ranking by:            caller count (in-degree)")
-    print(f"Showing:               top {top} of {total} unique callees")
+    # Counted, not the requested top=: --head/--tail/--range may slice entries after
+    # ranking (--tail is not a "top"), and top=10 of 3 callees shows 3 (BACK-1497).
+    print(f"Showing:               {len(entries)} of {total} unique callees")
     print()
 
     if not entries:
