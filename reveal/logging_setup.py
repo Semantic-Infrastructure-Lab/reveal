@@ -47,5 +47,32 @@ def worker_bootstrap(inner=None, inner_args=()) -> None:
     inherited anyway.
     """
     configure_stderr_logging()
+    _exit_with_parent()
     if inner is not None:
         inner(*inner_args)
+
+
+def _exit_with_parent() -> None:
+    """End this pool worker when the process that owns the pool dies.
+
+    BACK-1501: SIGTERM/SIGKILL to a reveal parent (a CI timeout, an MCP
+    cancel, Popen.kill) left its workers running, reparented to init --
+    one test harness piled up 272 of them. parent_process().sentinel becomes
+    ready when the parent exits, under fork, spawn and forkserver alike, so a
+    daemon thread waiting on it ends the worker without polling.
+    """
+    import multiprocessing
+    import os
+    import threading
+
+    parent = multiprocessing.parent_process()
+    sentinel = getattr(parent, 'sentinel', None)
+    if sentinel is None:
+        return
+
+    def _watch() -> None:
+        from multiprocessing.connection import wait
+        wait([sentinel])
+        os._exit(1)
+
+    threading.Thread(target=_watch, name='reveal-parent-watch', daemon=True).start()
