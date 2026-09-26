@@ -291,10 +291,11 @@ a check that counts violations and lets the count only fall. Then the cause is r
 
    Still open: BACK-1513's remaining invariants (truncation disclosure, the subcommand
    forms, POSIX separators on Windows).
-2. **The largest class:** BACK-1514, the flag ledger. The URI path landed on 2026-09-26: a
-   flag or query key the user sets is used, or a note names it
-   (`reveal/cli/routing/ledger.py`, ratchet `tests/test_flag_ledger.py`). Next:
-   - BACK-1539 routes the subcommands through the ledger;
+2. **The largest class:** BACK-1514, the flag ledger. It landed on 2026-09-26 for the URI
+   path and then the subcommands: a flag or query key the user sets is used, or a note names
+   it (`reveal/cli/routing/ledger.py`, ratchet `tests/test_flag_ledger.py`). Subcommands also
+   get the URI form's `--exclude`/REVEAL_IGNORE walk scope from one seam
+   (`reveal/cli/routing/subcommand.py`). Next:
    - BACK-1537 catches keys an adapter parses and then ignores;
    - BACK-1058 gives the URI and subcommand forms one Invocation path.
 3. **The result contract:** BACK-1059 (typed outcomes), BACK-1491 (cache whole results),

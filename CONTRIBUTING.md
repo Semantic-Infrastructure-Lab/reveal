@@ -309,6 +309,13 @@ it honest:
 `tests/test_flag_ledger.py` runs every adapter with each probe flag, and fails when a flag
 is neither honored nor named.
 
+Subcommands (`reveal <name>`) get the same ledger and walk scope from
+`reveal/cli/routing/subcommand.py`. A runner reads its flags from `args` as usual; a runner
+that exits nonzero *after* printing its result (a findings exit code) calls
+`complete(args)` first so the ledger still reports. A subcommand that walks a tree declares
+`--exclude` with `add_exclude_argument(parser)` and never applies it itself: the seam
+publishes it, with REVEAL_IGNORE, for every walker.
+
 ```python
 # ❌ Zero-indexed lines (editors use 1-indexed)
 {'line': 0, 'name': 'main'}
