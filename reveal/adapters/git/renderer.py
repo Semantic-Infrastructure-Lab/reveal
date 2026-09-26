@@ -230,7 +230,7 @@ class GitRenderer:
             GitRenderer._render_ignored_commits(ignored)
 
         GitRenderer._render_key_hunks(result['hunks'])
-        print(f"Use: reveal git://{result['path']}?type=blame&detail=full for line-by-line view")
+        print(f"Use: reveal 'git://{result['path']}?type=blame&detail=full' for line-by-line view")
 
     @staticmethod
     def _render_ownership(result: dict) -> None:

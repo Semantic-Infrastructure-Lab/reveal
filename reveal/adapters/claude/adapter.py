@@ -1010,7 +1010,7 @@ class ClaudeAdapter(ResourceAdapter):
             ],
             'output_formats': ['text', 'json'],
             'see_also': [
-                'reveal json:// - Navigate JSONL structure directly',
+                'reveal <session>.jsonl --head 10 - Read the raw JSONL records',
                 'reveal help://adapters - All available adapters',
             ]
         }

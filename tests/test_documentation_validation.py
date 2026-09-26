@@ -6,6 +6,8 @@ These tests ensure Reveal's documentation maintains high quality by:
 3. Ensuring cross-reference density
 """
 
+import re
+
 import pytest
 from pathlib import Path
 from reveal.rules.links.L001 import L001
@@ -346,3 +348,42 @@ class TestDocumentationCompleteness:
                 f"Missing documentation for major adapters:\n" +
                 "\n".join(f"  - {mg}" for mg in missing_guides)
             )
+
+
+class TestExampleShellSafety:
+    """Help examples must survive being pasted into a shell.
+
+    An unquoted `reveal ast://src?complexity>10` redirects output into a file
+    named `10` and drops the filter; `reveal git://f?type=blame&element=x`
+    backgrounds the command at `&` and runs `element=x` separately. A 0.129.0
+    help audit found ~600 such lines across the guides, including the
+    help://quick router's own example.
+    """
+
+    _TOKEN = re.compile(r"(?<![\w'\"])reveal\s+([a-z][a-z0-9+]*://[^\s`'\"]*)")
+    _UNSAFE = re.compile(r"[?&<>|*\[]")
+
+    def test_markdown_examples_quote_uris_with_shell_metacharacters(self):
+        repo_root = Path(__file__).parent.parent
+        docs = sorted((repo_root / "reveal" / "docs").rglob("*.md")) + [repo_root / "README.md"]
+        offenders = []
+        for doc in docs:
+            for lineno, line in enumerate(doc.read_text(encoding="utf-8").splitlines(), 1):
+                if "❌" in line:  # deliberate "this breaks in a shell" counter-examples
+                    continue
+                for m in self._TOKEN.finditer(line):
+                    uri = m.group(1).rstrip(").,;:")
+                    if self._UNSAFE.search(uri):
+                        offenders.append(f"{doc.relative_to(repo_root)}:{lineno}: reveal {uri}")
+        assert not offenders, (
+            "Quote URIs containing ? & < > | * [ in help examples "
+            "(reveal 'scheme://...'; use double quotes if it holds a $VAR):\n  "
+            + "\n  ".join(offenders[:40])
+        )
+
+    def test_shell_command_quotes_bare_uris(self):
+        from reveal.utils.formatting import shell_command
+        assert shell_command("ast://src?complexity>10") == "reveal 'ast://src?complexity>10'"
+        assert shell_command("ast://./src") == "reveal ast://./src"
+        assert shell_command("reveal src/ --grep 'x'") == "reveal src/ --grep 'x'"
+        assert shell_command("calls://src?uncalled --format json") == "reveal 'calls://src?uncalled' --format json"

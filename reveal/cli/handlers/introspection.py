@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Dict, List, Any
 
+from ...utils.formatting import shell_command
+
 if TYPE_CHECKING:
     from argparse import Namespace
 
@@ -85,7 +87,7 @@ def handle_adapters(show_all: bool = False):
         lines.append(f"  {scheme}://")
         lines.append(f"    {description}")
         if example:
-            lines.append(f"    Example: reveal {example}")
+            lines.append(f"    Example: {shell_command(example)}")
         lines.append("")
 
     lines.append("=" * 70)

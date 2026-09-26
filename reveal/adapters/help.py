@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer, _ADAPTER_REGISTRY
 from ..rendering import render_help
+from ..utils.formatting import shell_command
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -134,7 +135,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': "6. What's dead or duplicated", 'query': "reveal 'calls://<repo>?uncalled=true&type=function'", 'description': 'Statically-uncalled functions (test-runner entry points excluded by default; add &test-framework=true to include). Also: reveal check <repo> --select B,C,D,I,U for duplicates (note: "uncalled" is a derived heuristic, not a separately measured signal — it inherits extraction confidence plus every convention-invoked call static analysis cannot see (runtime constructors, framework lifecycle hooks, dynamic dispatch); zero callers found is not proof of dead code)', 'output_type': 'calls_uncalled'},
             {'goal': '7. Is the test suite honest', 'query': "reveal 'patches://<repo>/tests?group=target&limit=15'", 'description': 'Mock/patch-pressure grouped by target (Python/TS-JS) — which boundaries are over-mocked, a test-trust smell', 'output_type': 'patches_scan'},
             {'goal': '8. Did recent changes hold up', 'query': 'reveal review <old-tag>..<new-tag>', 'description': 'Quality + structural assessment over a git range (or main..feature for an open PR) — CLI subcommand, no URI adapter form'},
-            {'goal': '9. Diff structure across two revisions', 'query': "reveal 'diff://<repo>/<file>@<refA>::<repo>/<file>@<refB>'", 'description': 'Structural diff between two revisions of a file. For a whole-repo architecture delta, use reveal architecture <repo> --against <ref> instead', 'output_type': 'diff_comparison'},
+            {'goal': '9. Diff structure across two revisions', 'query': "reveal 'diff://git://<file>@<refA>:git://<file>@<refB>'", 'description': 'Structural diff between two revisions of a file. For a whole-repo architecture delta, use reveal architecture <repo> --against <ref> instead', 'output_type': 'diff_comparison'},
             {'goal': 'Bonus: curate an LLM-ready context snapshot', 'query': 'reveal pack <repo> --architecture', 'description': 'Token-budgeted export of the whole tree, boosted toward the same core abstractions step 4 identifies — for handing the codebase to another agent, not for the DD memo itself', 'output_type': 'pack'},
         ]
     },
@@ -204,7 +205,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Search across all sessions', 'query': "reveal 'claude://sessions/?search=validate_token'", 'description': 'Cross-session content search', 'output_type': 'claude_cross_session_search'},
             {'goal': 'Session tool usage', 'query': 'reveal claude://session/my-session/tools', 'description': 'Tool call counts and success rates', 'output_type': 'claude_tools'},
             {'goal': 'Files touched in a session', 'query': 'reveal claude://session/my-session/files', 'description': 'All Read/Write/Edit operations', 'output_type': 'claude_files'},
-            {'goal': 'Session errors', 'query': 'reveal claude://session/my-session?errors', 'description': 'All errors with context', 'output_type': 'claude_errors'},
+            {'goal': 'Session errors', 'query': "reveal 'claude://session/my-session?errors'", 'description': 'All errors with context', 'output_type': 'claude_errors'},
             {'goal': 'Prompt/answer pairs for a session', 'query': 'reveal claude://session/my-session/exchanges', 'description': 'Each human prompt paired with the assistant\'s final answer, skipping thinking-only and tool-only turns in between', 'output_type': 'claude_exchanges'},
             {'goal': 'Codex session overview', 'query': 'reveal codex://SESSION-ID', 'description': 'Turns, tools, tokens, duration for a Codex CLI session', 'output_type': 'codex_session_overview'},
             {'goal': 'Filter Codex sessions by title', 'query': "reveal 'codex://sessions/?filter=validate_token'", 'description': 'Metadata filter by title or first message (SQLite index, no JSONL scan)', 'output_type': 'codex_session_list'},
@@ -240,8 +241,8 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'description': 'Runtime environment — env vars, Python packages, reveal install state',
         'recipes': [
             {'goal': 'All environment variables', 'query': 'reveal env://', 'description': 'Full env dump grouped by prefix', 'output_type': 'environment'},
-            {'goal': 'Filter env by prefix', 'query': "reveal 'env://?prefix=DB'", 'description': 'Show only DB_* variables', 'output_type': 'environment'},
-            {'goal': 'Python package versions', 'query': 'reveal python://', 'description': 'Installed packages with versions', 'output_type': 'python_runtime'},
+            {'goal': 'Filter env by prefix', 'query': "reveal env:// | grep '^DB'", 'description': 'Show only DB_* variables (env:// takes no query params)', 'output_type': 'environment'},
+            {'goal': 'Python package versions', 'query': 'reveal python://packages', 'description': 'Installed packages with versions', 'output_type': 'python_runtime'},
             {'goal': 'Reveal install info', 'query': 'reveal reveal://', 'description': 'Registered analyzers, adapters, rules', 'output_type': 'reveal_structure'},
         ]
     },
@@ -1293,7 +1294,7 @@ class HelpAdapter(ResourceAdapter):
 
         candidates.sort(key=lambda c: (c[0], c[1]))
         for _rank, _scheme, uri, description in candidates:
-            commands.append({'cmd': f'reveal {uri}', 'description': description})
+            commands.append({'cmd': shell_command(uri), 'description': description})
 
         commands.append({
             'cmd': 'reveal help://adapters',
@@ -1519,7 +1520,7 @@ class HelpAdapter(ResourceAdapter):
                 {
                     'adapters': ['claude', 'git'],
                     'description': 'Session archaeology: history + code changes',
-                    'example': "reveal 'claude://sessions/?search=auth'  &&  reveal 'git://src/?message~=auth'",
+                    'example': "reveal 'claude://sessions/?search=auth'  &&  reveal 'git://.?type=history&message~=auth'",
                 },
             ],
         }

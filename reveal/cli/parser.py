@@ -67,13 +67,13 @@ def _build_jq_examples() -> str:
   reveal log.jsonl --range 100-150 --format=json | jq '.structure.records[] | select(.name | contains("error"))'
 
   # Advanced filtering with jq (powerful!)
-  reveal app.py --format=json | jq '.structure.functions[] | select(.line_count > 100)'
-  reveal app.py --format=json | jq '.structure.functions[] | select(.depth > 3)'
-  reveal app.py --format=json | jq '.structure.functions[] | select(.line_count > 50 and .depth > 2)'
-  reveal src/**/*.py --format=json | jq -r '.structure.functions[] | "\\(.file):\\(.line) \\(.name) [\\(.line_count) lines]"'
+  reveal app.py --format=json | jq '.structure.functions[]? | select(.line_count > 100)'
+  reveal app.py --format=json | jq '.structure.functions[]? | select(.depth > 3)'
+  reveal app.py --format=json | jq '.structure.functions[]? | select(.line_count > 50 and .depth > 2)'
+  find src -name '*.py' | reveal --stdin --format=json | jq -r '.structure.functions[]? | "\\(.file):\\(.line) \\(.name) [\\(.line_count) lines]"'
 
   # Pipeline + jq (combine the power!)
-  find . -name "*.py" | reveal --stdin --format=json | jq '.structure.functions[] | select(.line_count > 100)'
+  find . -name "*.py" | reveal --stdin --format=json | jq '.structure.functions[]? | select(.line_count > 100)'
   git diff --name-only | grep "\\.py$" | reveal --stdin --check --format=grep
 '''
 
@@ -86,7 +86,7 @@ def _build_adapter_examples() -> str:
   reveal doc.md --links --link-type external  # Only external links
   reveal doc.md --code                        # Extract all code blocks
   reveal doc.md --code --language python      # Only Python code blocks
-  reveal doc.md --frontmatter                 # Extract YAML front matter
+  reveal doc.md --frontmatter --format json   # Extract YAML front matter
 
   # HTML-specific features
   reveal page.html --metadata                 # Extract SEO/social metadata

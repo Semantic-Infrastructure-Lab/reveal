@@ -40,7 +40,7 @@ def create_testability_parser() -> argparse.ArgumentParser:
             "  reveal testability src --tests tests\n"
             "  reveal testability . --tests tests integration_tests --top 20\n"
             "  reveal testability src --tests tests --format json\n"
-            "  reveal patches://tests?group=target  # raw patch scan\n"
+            "  reveal 'patches://tests?group=target'  # raw patch scan\n"
         ),
     )
     parser.add_argument(

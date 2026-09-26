@@ -5,6 +5,7 @@ from typing import Any, Dict
 
 from reveal.registry import FALLBACK_SUPPORT_NOTE
 from reveal.utils import print_json_result
+from reveal.utils.formatting import shell_command
 from reveal.adapters.base import Stability, _ADAPTER_REGISTRY
 
 
@@ -448,7 +449,7 @@ def _render_help_examples(data: Dict[str, Any]) -> None:
         print("## Examples")
         for ex in data['examples']:
             if isinstance(ex, dict):
-                print(f"  {ex['uri']}")
+                print(f"  {shell_command(ex['uri'])}")
                 print(f"    -> {ex['description']}")
             else:
                 print(f"  {ex}")
@@ -608,7 +609,7 @@ def _render_query_recipes(data: Dict[str, Any]) -> None:
             desc = recipe.get('description', '')
             output_type = recipe.get('output_type', '')
             print(f"**{goal}**")
-            print(f"  {query}")
+            print(f"  {shell_command(query)}")
             if desc:
                 print(f"  -> {desc}")
             if output_type:
@@ -726,7 +727,7 @@ def _render_schema_example_queries(example_queries: list) -> None:
         return
     print("## Example Queries")
     for ex in example_queries:
-        print(f"  {ex.get('uri', '')}")
+        print(f"  {shell_command(ex.get('uri', ''))}")
         if ex.get('description'):
             print(f"    -> {ex['description']}")
         if ex.get('output_type'):

@@ -79,7 +79,7 @@ workflows:
       - 'reveal imports://src?unused'
       - 'Review unused imports list'
       - 'Remove unused imports from files'
-      - 'Verify with reveal imports://src?unused again'
+      - "Verify with reveal 'imports://src?unused' again"
 
   - name: 'Detect Circular Dependencies'
     scenario: 'Find and break circular import cycles'
@@ -95,7 +95,7 @@ workflows:
       - 'Create .reveal.yaml with layer rules'
       - "reveal 'imports://src?violations'"
       - 'Fix violations (move files or refactor dependencies)'
-      - 'Add to CI/CD: reveal imports://src?violations --format json'
+      - "Add to CI/CD: reveal 'imports://src?violations' --format json"
 
   - name: 'Codebase Health Check'
     scenario: 'Comprehensive import analysis'

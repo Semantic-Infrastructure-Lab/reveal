@@ -843,7 +843,7 @@ class NginxUriAdapter(ResourceAdapter):
             flag=flag,
             examples=(
                 f"  reveal nginx.conf {flag}                    # with a .conf file\n"
-                f"  reveal nginx://nginx.conf?{attr.replace('_', '-')}=true  # URI param"
+                f"  reveal 'nginx://nginx.conf?{attr.replace('_', '-')}=true'  # URI param"
             ),
         )
         for attr, flag in (
