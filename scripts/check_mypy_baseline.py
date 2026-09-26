@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import collections
 import json
+import os
 import re
 import subprocess
 import sys
@@ -33,9 +34,12 @@ _ERROR = re.compile(r"^(?P<file>[^:\n]+):\d+(?::\d+)?: error: .*\[(?P<code>[a-z0
 
 
 def run_mypy() -> collections.Counter:
+    # FORCE_COLOR/MYPY_FORCE_COLOR make mypy colour even captured output, which no line
+    # matches: the count read 0 and the ratchet passed ("616 fewer errors"). Plain output only.
+    env = {k: v for k, v in os.environ.items() if k not in ("FORCE_COLOR", "MYPY_FORCE_COLOR")}
     proc = subprocess.run([sys.executable, "-m", "mypy", "reveal", "--no-error-summary",
-                           "--no-pretty", "--show-error-codes"],
-                          cwd=REPO, capture_output=True, text=True, encoding="utf-8")
+                           "--no-pretty", "--show-error-codes", "--no-color-output"],
+                          cwd=REPO, capture_output=True, text=True, encoding="utf-8", env=env)
     if proc.returncode not in (0, 1) or (proc.returncode == 1 and not proc.stdout.strip()):
         sys.exit(f"mypy failed to run:\n{proc.stderr or proc.stdout}")
     counts: collections.Counter = collections.Counter()
@@ -43,6 +47,10 @@ def run_mypy() -> collections.Counter:
         m = _ERROR.match(line)
         if m:
             counts[f"{m['file']}::{m['code']}"] += 1
+    if proc.returncode == 1 and not counts:
+        sys.exit("mypy reported errors but none matched the error pattern -- the output format "
+                 f"changed; fix _ERROR before trusting this ratchet. First lines:\n"
+                 f"{proc.stdout[:500]}")
     return counts
 
 
