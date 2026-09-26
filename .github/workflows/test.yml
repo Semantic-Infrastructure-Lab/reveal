@@ -65,6 +65,10 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         run: python scripts/check_boundaries.py
 
+      - name: Complexity ratchet (a function over the C901 threshold may only get simpler)
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        run: python scripts/check_complexity.py
+
       - name: Doc hygiene ratchet (broken links, internal-docs refs)
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         run: python scripts/check_doc_hygiene.py --baseline .github/doc_hygiene_baseline.txt

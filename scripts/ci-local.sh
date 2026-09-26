@@ -10,7 +10,7 @@
 #   - Python version       -> --python picks one of CI's matrix (3.10 / 3.12 / 3.14);
 #                             --matrix runs all three, plus CI's language-pack floor leg (below)
 #   - CI-only steps        -> the primary leg (3.12, no --lp) also runs the Windows-compat lint,
-#                             V-series self-validation, doc-hygiene ratchet and B006 ratchet, which CI runs only on
+#                             V-series self-validation, shared-seam, complexity, doc-hygiene and B006 ratchets, which CI runs only on
 #                             ubuntu/3.12, plus the mypy ratchet (system python3, as the release gate
 #                             runs it -- CI does not); other legs run pytest + CLI basics, as CI does
 #   - local caches/env     -> REVEAL_DISK_CACHE=0 (CI starts cold; keep ~/.reveal/cache out),
@@ -205,6 +205,11 @@ if [[ $PRIMARY -eq 1 ]]; then
     step "Shared-seam ratchet"
     "$PY" scripts/check_boundaries.py 2>&1 | tee -a "$LOG" | tail -20
     [[ ${PIPESTATUS[0]} -eq 0 ]] || fail "shared-seam ratchet (see scripts/check_boundaries.py)"
+
+    # Each function over the C901 threshold is frozen at its score; scores may only fall.
+    step "Complexity ratchet"
+    "$PY" scripts/check_complexity.py 2>&1 | tee -a "$LOG" | tail -20
+    [[ ${PIPESTATUS[0]} -eq 0 ]] || fail "complexity ratchet (see scripts/check_complexity.py)"
 
     step "Reveal self-validation (V-series)"
     "$PY" - >>"$LOG" 2>&1 <<'EOF' || fail "V-series self-validation"
