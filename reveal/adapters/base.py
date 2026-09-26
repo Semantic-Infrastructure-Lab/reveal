@@ -150,6 +150,13 @@ class ResourceAdapter(ABC):
     # ssl, help, ...) and for those that already validate it themselves.
     RESOURCE_IS_PATH: bool = False
 
+    @classmethod
+    def resource_path(cls, resource: str) -> str:
+        """The filesystem path inside a RESOURCE_IS_PATH resource, for the router's
+        missing-path check. Override when the resource carries more than a path
+        (calls:// takes a `path:name` shorthand, BACK-1499)."""
+        return resource
+
     # Whether the router may hand this adapter the cross-cutting `sort=` / `limit=` /
     # `offset=` keys (BACK-1385). True = they are passed through: only a few adapters
     # apply them (ast, markdown, json, git, stats); most others reject them through

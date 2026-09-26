@@ -19,7 +19,7 @@ Limitations (static analysis):
 
 import os
 import sys
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from reveal.reveal_types import CONTRACT_VERSION, RevealResult
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
@@ -293,17 +293,28 @@ class CallsAdapter(ResourceAdapter):
         qs = query_string if isinstance(query_string, str) else ''
         self.query_params = parse_query_params(qs, coerce=True)
         self._warn_unknown_query_params(self.query_params)  # BACK-507
-        # Support 'path:target' colon shorthand (e.g. calls://src/file.py:my_fn).
-        # Only apply when the portion before ':' is an existing path and the portion
-        # after ':' looks like a bare name (no slashes → not a file path).
-        if ':' in expanded and '?' not in expanded:
-            before, _, after = expanded.rpartition(':')
+        path, name = self._split_name_shorthand(expanded)
+        if name and not self.query_params.get('target') and not self.query_params.get('callees'):
+            self.query_params['target'] = name
+        self.path = path
+
+    @staticmethod
+    def _split_name_shorthand(resource: str) -> Tuple[str, Optional[str]]:
+        """Split the 'path:target' colon shorthand (calls://src/file.py:my_fn).
+
+        Only when the part before ':' is an existing path and the part after it
+        looks like a bare name (no slashes, so not a file path)."""
+        if ':' in resource and '?' not in resource:
+            before, _, after = resource.rpartition(':')
             if after and '/' not in after and os.path.exists(before):
-                if not self.query_params.get('target') and not self.query_params.get('callees'):
-                    self.query_params['target'] = after
-                self.path = before
-                return
-        self.path = expanded
+                return before, after
+        return resource, None
+
+    @classmethod
+    def resource_path(cls, resource: str) -> str:
+        """The path part of `path:name`, so the router's missing-path check does
+        not reject the shorthand (BACK-1499)."""
+        return cls._split_name_shorthand(os.path.expanduser(resource))[0]
 
     def _warn_top_ignored(self) -> None:
         """top= caps only ?rank=callers and ?uncalled; say so instead of ignoring it in
