@@ -15,6 +15,7 @@ import re
 from pathlib import Path
 from typing import Set, Dict
 
+from conftest import production_schemes
 from reveal.adapters.base import list_supported_schemes, get_adapter_class
 from reveal.registry import get_all_analyzers
 
@@ -34,10 +35,7 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
         The 'test' adapter is registered during test runs but is not a production
         adapter (not imported in adapters/__init__.py, not documented).
         """
-        adapters = set(list_supported_schemes())
-        adapters.discard('test')
-        adapters.discard('demo')
-        return adapters
+        return set(production_schemes())
 
     def test_all_adapter_files_are_registered(self):
         """All files with @register_adapter should appear in list_supported_schemes().

@@ -66,6 +66,19 @@ def native(posix_path: str) -> str:
     return str(Path(posix_path))
 
 
+# Adapters that only tests register, never `import reveal.adapters`: a mock 'test'
+# adapter, and the scaffold 'demo' adapter that tests/test_demo_adapter.py imports.
+# Whether they are in the registry depends on which tests ran first in the process.
+TEST_ONLY_SCHEMES = frozenset({'test', 'demo'})
+
+
+def production_schemes() -> List[str]:
+    """Registered adapter schemes, minus the ones only tests register."""
+    from reveal import adapters  # noqa: F401  (registers every production adapter)
+    from reveal.adapters.base import list_supported_schemes
+    return sorted(s for s in list_supported_schemes() if s not in TEST_ONLY_SCHEMES)
+
+
 @pytest.fixture
 def temp_dir() -> Generator[Path, None, None]:
     """Create a temporary directory for test files.

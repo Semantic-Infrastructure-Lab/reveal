@@ -22,6 +22,7 @@ pytestmark = pytest.mark.contract
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+from conftest import production_schemes
 from reveal.adapters.base import get_adapter_class, get_renderer_class, list_supported_schemes, list_renderer_schemes
 from reveal.adapters import (
     env, ast, help, python, json, git, mysql, sqlite,
@@ -296,11 +297,8 @@ class TestAdapterContracts(unittest.TestCase):
 
     @staticmethod
     def _production_schemes():
-        """Registered schemes minus meta/scaffold adapters (help/test/demo)."""
-        return sorted(
-            s for s in list_supported_schemes()
-            if s not in ('help', 'test', 'demo')
-        )
+        """Production schemes minus help (a meta adapter)."""
+        return [s for s in production_schemes() if s != 'help']
 
     @staticmethod
     def _canonical_uri(example_uri):

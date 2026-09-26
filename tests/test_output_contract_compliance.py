@@ -42,6 +42,7 @@ from pathlib import Path
 import pytest
 
 from reveal import adapters  # noqa: F401  (registers every adapter)
+from conftest import production_schemes
 from reveal.adapters import base as adapters_base
 from reveal.cli.defaults import _default_args
 from reveal.cli.routing.uri import handle_uri
@@ -124,7 +125,7 @@ _VALID_SOURCE_TYPES = {'file', 'directory', 'database', 'runtime', 'network'}
 
 
 def _registered():
-    return sorted(adapters_base.list_supported_schemes())
+    return production_schemes()
 
 
 def _cases(invariant, schemes):
