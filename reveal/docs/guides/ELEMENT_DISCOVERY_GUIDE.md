@@ -190,11 +190,11 @@ reveal python://doctor      # Environment diagnostics
 Combine elements with query operators:
 
 ```bash
-# Get DNS records, filter by type
-reveal domain://google.com/dns?type=A
+# Get DNS records, then filter by type (domain:// takes no query params)
+reveal domain://google.com/dns --format json | jq '.records.a'
 
-# Get slow queries, limit to top 10
-reveal mysql://localhost/slow-queries?limit=10
+# Complex functions, first 10 (ast:// applies filters, sort and limit)
+reveal 'ast://src?type=function&complexity>10&sort=-complexity&limit=10'
 
 # Get packages starting with 'django'
 reveal python://packages | grep django

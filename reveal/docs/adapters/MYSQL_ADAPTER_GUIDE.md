@@ -7,7 +7,7 @@ category: guide
 **Adapter**: `mysql://`
 **Purpose**: MySQL database inspection with health monitoring, performance analysis, and replication status
 **Type**: Database adapter
-**Output Formats**: text, json, grep
+**Output Formats**: text, json
 
 ## Table of Contents
 
@@ -985,7 +985,7 @@ The mysql:// adapter does not use query parameters. All configuration is done vi
 
 | Flag | Description | Example |
 |------|-------------|---------|
-| `--format=<type>` | Output format (text, json, grep) | `reveal mysql://localhost --format=json` |
+| `--format=<type>` | Output format (text, json) | `reveal mysql://localhost --format=json` |
 | `--check` | Run health checks with thresholds | `reveal mysql://localhost --check` |
 | `--only-failures` | Show only warnings/failures | `reveal mysql://localhost --check --only-failures` |
 | `--advanced` | Reserved for future enhanced checks | `reveal mysql://localhost --check --advanced` |
@@ -1002,8 +1002,8 @@ reveal mysql://localhost --check
 # Health checks (JSON) with only failures
 reveal mysql://localhost --check --only-failures --format=json
 
-# Grep-friendly output
-reveal mysql://localhost --format=grep | grep -i "buffer"
+# Search the report
+reveal mysql://localhost | grep -i "buffer"
 ```
 
 ---

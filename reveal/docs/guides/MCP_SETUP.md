@@ -115,8 +115,10 @@ reveal_query("ast://src/?name=validate_token", provenance=True)
 
 CLI-only global flags (`--severity`, `--select`, `--format`) don't pass
 through here — write `?limit=N`, `?sort=field`/`?sort=-field`, and
-`?offset=M` directly in the URI instead (every adapter reads these off the
-query string the same way regardless of CLI vs. MCP). Everything else is each
+`?offset=M` directly in the URI instead. Only `ast://`, `markdown://`,
+`json://`, `git://` and `stats://` apply these; `hotspots://`, `calls://`,
+`depends://` and `testability://` cap with `?top=N`, and other adapters
+answer `Unknown query param ... ignored`. Everything else is each
 adapter's own `?key=value` vocabulary — check `reveal_query('help://schemas/
 <adapter>')` for what a given scheme accepts, or use a dedicated typed tool
 (`reveal_check` has `severity`/`select`/`ignore`).
@@ -294,7 +296,7 @@ reveal_query("help://schemas/git")
 
 When you're uncertain what adapter to use, start with:
 ```
-reveal_query("help://quick")   # compact intent router, ~750 tokens
+reveal_query("help://quick")   # compact intent router, ~1,600 tokens
 ```
 
 ## Token Efficiency

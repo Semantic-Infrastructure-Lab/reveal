@@ -11,8 +11,7 @@ help_token_estimate: "~2,000"
 
 Use this workflow when tests need many patches or when a production function
 mixes business decisions with runtime boundaries such as network clients,
-persistence, notifications, clocks, environment, filesystem state, or global
-state.
+persistence, sleeps, environment, filesystem state, or global state.
 
 The goal is not to say "mocking is bad." Mocking external boundaries is often
 correct. The goal is to find review targets where repeated patching and
@@ -69,17 +68,17 @@ All of the above are measured against an independent ground-truth oracle
 [VALIDATION.md](../../../VALIDATION.md).
 
 `reveal testability` joins those patch groups to production function profiles.
-The production side uses a conservative boundary taxonomy:
+Each production function's categories come from its own calls, classified by the
+same per-language taxonomy as `--sideeffects`:
 
-- network clients and probes
-- persistence and state save/load calls
-- filesystem writes and runtime paths
-- notification and alert calls
-- event/telemetry emission
-- clocks and sleeps
-- environment/config reads
-- process/global state
-- mutation of objects or collections
+- `network_client` -- HTTP calls
+- `persistence` -- database, cache and session calls
+- `filesystem` -- file I/O
+- `event_telemetry` -- logging calls
+- `clock_sleep` -- sleeps (not clock reads)
+- `env_config` -- environment reads
+- `process_global` -- process exits (`sys.exit`, PHP `exit`/`die`)
+- `mutation` -- in-place collection writes (`append`, `update`, `pop`, ...)
 
 ## Good Interpretations
 
@@ -94,7 +93,7 @@ Good:
 
 ```text
 This private helper is patched repeatedly and the related function touches
-persistence, notification, clock, and mutation boundaries. Extracting the pure
+persistence, clock_sleep, and mutation boundaries. Extracting the pure
 decision step may make tests simpler.
 ```
 

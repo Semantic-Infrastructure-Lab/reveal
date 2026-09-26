@@ -152,7 +152,7 @@ function: foo
   complexity: 3 → 1 ✓ (simplified)
   lines: 4 → 1 ✓ (reduced)
   signature: unchanged
-  body: modified (refactored)
+  body: unified diff of the source
 ```
 
 **Why semantic matters**:
@@ -770,26 +770,47 @@ reveal diff://git://abc123/app.py:app.py
 # Compare function across files
 reveal diff://app.py:old.py/handle_request
 
-# Compare function across git versions
-reveal diff://git://main/app.py:git://feature/app.py/handle_request
+# Compare function across git versions (with a git:// right side,
+# pass the element as a separate argument -- BACK-1494)
+reveal diff://git://main/app.py:git://feature/app.py handle_request
 
 # Compare function in working tree vs HEAD
 reveal diff://git://HEAD/app.py:app.py/process_data
 ```
 
-**Example output**:
+**Example output** (`reveal diff://old.py:app.py/handle_request`):
 ```
-function: handle_request
+~ Element 'handle_request' was MODIFIED
 
-  complexity: 8 → 4 ✓ (improved)
-  lines: 45 → 32 ✓ (reduced)
-  parameters: (request) → (request, options) (added parameter)
+  depth:
+    - 3
+    + 2
 
-  Body changes:
-    - Removed nested if statements
-    - Added early returns
-    - Simplified error handling
+  signature:
+    - (request)
+    + (request, options=None)
+
+  line_count:
+    - 5
+    + 4
+
+  body:
+    --- old
+    +++ new
+    @@ -1,5 +1,4 @@
+    -def handle_request(request):
+    -    if request:
+    -        if request.ok:
+    -            return 1
+    -    return 0
+    +def handle_request(request, options=None):
+    +    if not request or not request.ok:
+    +        return 0
+    +    return 1
 ```
+
+The body is compared as source text. When a side has no readable source (a directory, another adapter),
+an unchanged verdict says `body not compared` instead of claiming the elements are identical.
 
 ---
 
@@ -825,7 +846,7 @@ class: UserModel
 reveal diff://api.py:old_api.py/APIHandler.process_request
 
 # Compare method across branches
-reveal diff://git://main/api.py:git://refactor/api.py/API.handle
+reveal diff://git://main/api.py:git://refactor/api.py API.handle
 ```
 
 **Example output**:
@@ -1106,7 +1127,7 @@ reveal diff://git://main/.:git://feature/.
 reveal diff://git://main/src/core/:git://feature/src/core/
 
 # Step 3: Review specific function changes
-reveal diff://git://main/app.py:git://feature/app.py/process_data
+reveal diff://git://main/app.py:git://feature/app.py process_data
 
 # Step 4: Verify complexity improvements
 reveal diff://git://main/.:git://feature/. --format json | \
@@ -1488,7 +1509,7 @@ reveal diff://old_system/:new_system/ --format json | \
 
 ```bash
 # ✅ Focus on specific function
-reveal diff://git://main/app.py:git://feature/app.py/critical_handler
+reveal diff://git://main/app.py:git://feature/app.py critical_handler
 
 # Review only changed logic
 ```

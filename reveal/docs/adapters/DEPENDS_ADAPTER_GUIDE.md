@@ -68,7 +68,7 @@ depends://<directory/>[?top=N][?format=dot]
 | Component | Description |
 |-----------|-------------|
 | `path` | File (returns importers of that file) or directory (returns summary) |
-| `top` | Limit directory summary to N most-imported modules |
+| `top` | Cap the list: a directory's N most-imported modules, or a file's first N importers |
 | `format` | Output format: `text` (default), `json`, or `dot` (Graphviz) |
 | `root` | Pin the scan root to `DIR` for this invocation (see below) |
 
@@ -99,7 +99,7 @@ The full project scan makes the results comprehensive — callers outside the ta
 
 ### `top`
 
-Limit directory summary to the N most-imported modules. Useful for finding high-coupling candidates.
+On a directory, limit the summary to the N most-imported modules (`Top N of M module(s)`) -- useful for finding high-coupling candidates. On a file, show the first N importers (`... (showing N)`). `--limit N` becomes `top=N`; `--limit 0` means no cap.
 
 ```bash
 reveal 'depends://src?top=5'

@@ -327,7 +327,8 @@ Each frame is labelled with detected side-effects:
 | `file` | Filesystem I/O |
 | `log` | Logging call |
 | `sleep` | Blocking sleep |
-| `hard_stop` | `sys.exit` / raise without catch |
+| `env` | Environment/config read |
+| `hard_stop` | Process exit: `sys.exit`/`os._exit`, PHP `exit`/`die` (a `raise` is not a side effect) |
 
 Unresolved (external/stdlib) callees appear with an `[external]` marker.
 
@@ -367,7 +368,7 @@ reveal contracts [PATH] [--abstract-only] [--no-implementations] [--format FORMA
 |------|-------------|
 | `--abstract-only` | Show only ABCs and Protocols; skip TypedDicts, dataclasses, path-heuristic |
 | `--no-implementations` | Skip showing which classes implement each contract |
-| `--format` | `text` (default), `json`, `typed`, `grep` |
+| `--format` | `text` (default), `json` |
 
 ### Examples
 
@@ -404,7 +405,7 @@ reveal surface [PATH] [--type TYPE] [--format FORMAT]
 | `--source-only` | Exclude test files/dirs (`test_*.py`, `tests/`, `*.spec.ts`, etc.) |
 | `--by dir` | Per-directory counts by category (which layer owns which boundary); `--top N` then caps directories |
 | `--depth N` | With `--by dir`: roll directories up to their first N path segments (default 0: full directory) |
-| `--format` | `text` (default), `json`, `typed`, `grep` |
+| `--format` | `text` (default), `json` |
 
 ### Surface Types
 

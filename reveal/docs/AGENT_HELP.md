@@ -1,15 +1,15 @@
 ---
-title: Reveal - AI Agent Reference (Complete)
+title: Reveal - AI Agent Reference
 category: guide
 help_topic: agent
 help_description: Complete agent guide (task-based patterns, all adapters, troubleshooting)
 help_category: ai_guides
-help_token_estimate: "~48,000"
+help_token_estimate: "~49,000"
 ---
-# Reveal - AI Agent Reference (Complete)
+# Reveal - AI Agent Reference
 **Version:** 0.129.0
 **Purpose:** Comprehensive guide for AI code assistants
-**Token Cost:** ~48,000 tokens
+**Token Cost:** ~49,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
 
 ---
@@ -34,30 +34,39 @@ help_token_estimate: "~48,000"
 
 Guides >200 lines show the first section by default (progressive disclosure). Append `/full` to get the complete guide.
 
-`--help`, `--agent-help`, and `help://` complement each other — they don't overlap.
+`--help` lists flags, `--agent-help` gives task recipes, and `help://` goes one topic at a time.
 
 ---
 
 ## Before You Read This
 
-**This is a reference guide (~48,000 tokens). You do not need to read it upfront.**
+**This is the start of a long reference (`reveal help://agent/full`, ~49,000 tokens). You do not need the rest upfront:** the table below covers the common tasks, and `reveal help://quick` routes everything else.
 
-Start with `reveal help://quick` (~1,800 tokens) — it routes you to the right adapter for your task. Load sections of this guide only when you need deep reference on a specific adapter or pattern.
+**Quote every URI** (`reveal 'ast://src/?complexity>10'`): `>`, `<`, `&` and `|` are shell operators.
 
-**Reveal covers more than source code.** Before broad discovery over any supported resource, check whether an adapter exists:
+| Task | Command |
+|------|---------|
+| Orient in an unfamiliar repo | `reveal overview://src/` |
+| Outline a file | `reveal src/app.py` |
+| Read one function or class | `reveal src/app.py load_config` (also `Class.method`, `:120-160`) |
+| Riskiest code | `reveal 'hotspots://src/?functions_only=true&top=10'` |
+| Query functions by complexity/size/type | `reveal 'ast://src/?type=function&complexity>10&sort=-complexity&limit=10'` |
+| Who calls a function | `reveal 'calls://src/?target=my_fn'` |
+| What a function calls, level by level | `reveal 'trace://src/?from=my_fn&depth=2'` |
+| Dead code | `reveal 'calls://src/?uncalled'` |
+| A function's inputs, side effects, exits | `reveal src/app.py my_fn --boundary` (or `--sideeffects`, `--exits`) |
+| Unused or circular imports | `reveal 'imports://src/?unused'` / `?circular` |
+| HTTP routes, env vars, network/db/fs access | `reveal 'surface://src/?type=http'` |
+| Text search, grouped by enclosing function | `reveal src/ --grep 'pattern'` (Python regex syntax) |
+| File history / commit search | `reveal 'git://src/app.py?type=history'`, `reveal 'git://.?type=history&message~=fix'` |
+| One section of a markdown doc | `reveal doc.md "Heading"` |
+| Review a commit range | `reveal review main..HEAD` (can take minutes on a large range) |
+| Prior Claude sessions | `reveal 'claude://sessions/?search=auth-refactor'` |
+| Databases, env, SSL, nginx, other resources | `reveal help://adapters` |
 
-| Need | Adapter | Example |
-|------|---------|---------|
-| Code structure / functions | `ast://` | `reveal ast://src/?type=function` |
-| Call relationships | `calls://` | `reveal 'calls://src/?target=my_fn'` |
-| Git history / diffs | `git://` `diff://` | `reveal 'git://.?message~=fix'` |
-| Claude sessions / prompts | `claude://` | `reveal 'claude://sessions/?search=auth-refactor'` |
-| Codex CLI sessions | `codex://` | `reveal 'codex://sessions/?filter=auth-refactor'` |
-| Markdown / docs | `markdown://` | `reveal docs/ --grep 'decision'` |
-| Databases / workbooks | `sqlite://` `mysql://` `xlsx://` | `reveal sqlite:///app.db` |
-| Environment / runtime | `env://` `python://` | `reveal env://` |
-| Project-specific tools | live plugins | `reveal help://adapters` |
-| Output format / `--provenance` / `--perf` — which one do I need? | `help://output-diagnostics` | `reveal help://output-diagnostics` |
+- **Limit results:** `--limit N` becomes `?limit=N` on ast/markdown/json/git/stats and `?top=N` on hotspots/calls/depends/testability; elsewhere a note says it has no effect. `--head N` slices any list result.
+- **Scripting:** `--format json` puts JSON on stdout (warnings go to stderr); `--no-breadcrumbs` drops the next-step hints. A target that cannot render a `--format` value exits 2.
+- **Exit codes (`check`):** 0 clean, 1 issues found, 2 usage error, 3 scan incomplete. `review` uses 0 clean, 1 warnings, 2 critical.
 
 ---
 
@@ -82,7 +91,7 @@ reveal help://schemas/<adapter>  # Machine-readable adapter schema (preferred fo
 reveal help://examples/<task>    # Canonical query recipes per task category
 
 # This guide — comprehensive reference
-reveal --agent-help              # First section of this file (~2,500 tokens); reveal help://agent/full for all
+reveal --agent-help              # First sections of this file (~1,000 tokens); reveal help://agent/full for all
 
 # Raw flag/subcommand listing (different surface — argparse-generated)
 reveal --help                    # Global flags in full, specialized groups collapsed
@@ -3150,10 +3159,10 @@ exit 0
 
 **reveal auto-detects and provides structure for:**
 
-### Programming Languages (51 total — run `reveal --languages` for the live explicit-vs-fallback breakdown)
-Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Scala, Swift, Kotlin, Dart, Elixir, Zig, GDScript, Bash, PowerShell, SQL, PHP, Ruby, Lua, and more — plus a tree-sitter fallback (basic structure only) for any other supported grammar
+### Programming Languages (51 languages and file formats in total — run `reveal --languages` for the live breakdown)
+Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Scala, Swift, Kotlin, Dart, Elixir, Zig, GDScript, Bash, PowerShell, SQL, PHP, Ruby, Lua, and more — plus 7 tree-sitter fallback languages (elm, erlang, haskell, objc, ocaml, r, verilog) that get a raw file view and a best-effort outline (may be empty or misnamed)
 
-**Structure provided:** Functions, classes, methods, imports, decorators, complexity
+**Structure provided (explicit analyzers):** Functions, classes, methods, imports, decorators, complexity
 
 **Bash/Shell scripts (`.sh`, `.bash`):** Also extracts top-level variable assignments (config vars, paths, defaults). Only top-level vars — assignments inside functions, loops, and `if` blocks are excluded. Example:
 ```
@@ -4450,9 +4459,9 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
 ## Help System Overview
 
 **For AI agents (you):**
-- **Orientation** (`reveal --agent-help`) - First section of this file (~2,500 tokens)
+- **Orientation** (`reveal --agent-help`) - First sections of this file (~1,000 tokens)
 - **Complete guide** (`reveal help://agent/full`) - This file in full (~48,000 tokens)
-- **Progressive help** (`reveal help://topic`) - Low-token per-topic exploration
+- **Progressive help** (`reveal help://<topic>`) - Low-token per-topic exploration
 
 **For humans:**
 - **CLI reference** (`reveal --help`) - All flags and options

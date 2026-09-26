@@ -1281,7 +1281,7 @@ sqlite3 code.db "SELECT file, symbol, complexity
 - ✅ Wildcard and regex pattern matching
 - ✅ Result control (sort, limit, offset)
 - ✅ Multiple output formats (text, JSON, grep)
-- ✅ 85 language support via tree-sitter
+- ✅ Multi-language support via tree-sitter
 - ✅ Combined filters with AND logic
 - ✅ OR logic for type parameter
 - ✅ Tree-sitter-based McCabe complexity for supported languages

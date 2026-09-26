@@ -1477,7 +1477,8 @@ reveal lib.rs            # Rust
 ### Tree-sitter support (see `reveal --languages`)
 
 ```bash
-# C, C++, Java, Ruby, PHP, Scala, Haskell, OCaml, Lua...
+# C, C++, Java, Ruby, PHP, Scala, Lua... (Haskell, OCaml and the other
+# fallback languages get a best-effort outline only)
 reveal Main.java         # Works!
 reveal app.rb            # Works!
 reveal script.lua        # Works!

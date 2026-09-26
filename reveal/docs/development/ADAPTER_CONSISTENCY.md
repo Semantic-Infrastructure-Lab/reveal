@@ -72,12 +72,12 @@ Not all flags in `reveal --help` are universal. **Ground truth for scope is the
 argument-group titles `reveal --help`/`--help-all` already print** — they come
 straight from `cli/parser.py::create_argument_parser()`'s `add_argument_group()`
 calls, so they can't drift from the CLI the way a hand-copied list can. This
-table mirrors those groups; verified live against reveal-cli 0.122.0.
+table mirrors those groups; verified live against reveal-cli 0.129.0.
 
-**Global — work with every target** (`Output`, `Discovery`, `Navigation`,
-`Display` groups):
+**Global — accepted by every target** (`Output`, `Discovery`, `Navigation`,
+`Display` groups; values and result-control flags then apply per target, see the note below):
 ```bash
---format {text,json,typed,grep}   # Output format
+--format {text,json,typed,grep}   # Output format (each target accepts its declared subset)
 --copy                             # Copy to clipboard
 --verbose                          # Detailed output
 --no-breadcrumbs                   # Scripting mode
@@ -90,10 +90,11 @@ table mirrors those groups; verified live against reveal-cli 0.122.0.
                       # including URI-adapter targets (confirmed live)
 --ext EXTS / --files / --hotspots / --code-only
 ```
-> `--format typed` is *accepted* on every target, but its `typed` value is not
-> yet fully implemented for every result shape — confirmed byte-identical to
-> `--format text` on several adapters (BACK-1037). Accepted everywhere ≠
-> functional everywhere; don't cite this flag as proof a value fully renders.
+> `--format` and `--also-json` are honored or rejected per target (BACK-1425):
+> each adapter's declared `output_formats` (`help://schemas/<adapter>`) is
+> enforced, and any other value exits 2 with the supported list. `--sort`,
+> `--limit` and `--head`/`--tail`/`--range` print a `Note: ... has no effect`
+> on a target that cannot apply them (BACK-1385, BACK-1497).
 
 **`--check` is universal; its own options are file-target-scoped** (`Quality
 checks` group):
@@ -142,7 +143,8 @@ cPanel`, `Markdown`, `HTML`, `Schema validation`):
 > (`cli/parser.py:805`) — this is the same anti-pattern BACK-1035 already
 > fixed for `--format grep`/`check` (stderr error + exit 2 instead of silent
 > wrong output) and BACK-1202 is fixing for `--depth`/`--ext`/`--type`/
-> `--fast`/`--respect-gitignore` on URI adapters. **It is not a design goal.**
+> `--fast` on URI adapters (`--respect-gitignore`/`--no-gitignore` apply on
+> every walker since BACK-1386). **It is not a design goal.**
 > A documented flag that doesn't apply to a target should error or warn, never
 > silently succeed — treat any remaining silent-ignore as a bug to file, not
 > expected behavior to route around. See

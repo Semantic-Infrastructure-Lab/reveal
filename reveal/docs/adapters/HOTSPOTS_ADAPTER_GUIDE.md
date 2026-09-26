@@ -35,7 +35,7 @@ reveal 'hotspots://.?top=20' --format json
 
 | Parameter | Values | Purpose |
 |-----------|--------|---------|
-| `top` | integer (default `10`) | Number of hotspots to show. |
+| `top` | integer (default `10`) | Number of hotspots to show. `top=0` shows none; use `--limit 0` or `--all` for every hotspot. |
 | `min_complexity` | integer (default `10`) | Minimum cyclomatic complexity for a function to be reported. |
 | `functions_only` | `true`, `false` (default) | Skip file-level hotspots. |
 | `files_only` | `true`, `false` (default) | Skip function-level hotspots (and the test-index scan below). |

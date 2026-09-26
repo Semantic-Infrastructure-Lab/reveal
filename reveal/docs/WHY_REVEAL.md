@@ -74,7 +74,7 @@ reveal 'calls://src/?uncalled&type=function&top=20'  # verify results: entry poi
 
 ### 2. Deep-Dive Code Navigation (Nav Flags)
 
-A family of flags for inspecting one function or line range without reading the whole file. Works on Python, PHP, and 80+ other tree-sitter languages — including flat procedural files.
+A family of flags for inspecting one function or line range without reading the whole file. Works on Python, PHP, and the other tree-sitter languages (`reveal --languages`) — including flat procedural files.
 
 ```bash
 # Boundary contract for an unfamiliar code range — single highest-value flag

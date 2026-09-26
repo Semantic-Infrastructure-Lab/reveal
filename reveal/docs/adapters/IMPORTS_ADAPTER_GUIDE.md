@@ -7,7 +7,7 @@ category: guide
 **Adapter**: `imports://`
 **Purpose**: Import graph analysis for detecting unused imports, circular dependencies, and layer violations
 **Type**: Analysis adapter
-**Output Formats**: text, json, grep
+**Output Formats**: text, json
 
 ## Table of Contents
 
@@ -56,8 +56,6 @@ reveal imports://src --verbose
 # 7. JSON output for CI/CD
 reveal 'imports://src?unused' --format=json
 
-# 8. Grep-friendly output
-reveal 'imports://src?circular' --format=grep
 ```
 
 **Why use imports://?**
@@ -668,7 +666,7 @@ reveal 'imports://src?unused=true'
 
 | Flag | Description | Example |
 |------|-------------|---------|
-| `--format=<type>` | Output format (text, json, grep) | `reveal imports://src --format=json` |
+| `--format=<type>` | Output format (text, json) | `reveal imports://src --format=json` |
 | `--verbose` | Show detailed results | `reveal imports://src --verbose` |
 
 ### Examples
@@ -680,8 +678,8 @@ reveal 'imports://src?unused' --verbose
 # JSON output for CI/CD
 reveal 'imports://src?circular' --format=json
 
-# Grep-friendly output
-reveal 'imports://src?unused' --format=grep | grep "api/"
+# Filter unused imports to one package
+reveal 'imports://src?unused' | grep "api/"
 ```
 
 ---

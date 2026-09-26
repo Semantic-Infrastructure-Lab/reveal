@@ -1719,7 +1719,7 @@ A file with quality 65 but 5 long functions may rank higher as a hotspot than a 
 
 ### Q4: Can I exclude specific files or directories?
 
-**A**: Not directly via query params. Options:
+**A**: Yes: `--exclude PATTERN` (repeatable) or `?exclude=a,b` (comma-separated globs; the CLI percent-escapes a literal `,`, `&`, `=` or `%` inside a pattern). Other options:
 1. **Target specific paths**: `reveal stats://./src/core` (skip other dirs)
 2. **Use code_only**: `reveal stats://./src?code_only=true` (skip data/config)
 3. **Filter in post-processing**: `jq '.files[] | select(.file | contains("test") | not)'`

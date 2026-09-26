@@ -103,7 +103,7 @@ reveal testability src --tests tests --format json
 
 That command points at production functions where repeated patching overlaps
 with multiple runtime boundaries such as network calls, persistence, filesystem
-state, notifications, clocks, environment reads, process globals, or mutation.
+state, sleeps, environment reads, process exits, or mutation.
 
 ## Limits
 

@@ -17,12 +17,12 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | Adapter | Query Params | Example |
 |---------|--------------|---------|
 | **imports://** | `unused`, `circular`, `circular&verbose`, `violations` | `imports://.?unused` |
-| **git://** | `type`, `detail`, `element`, `author`, `email`, `message`, `hash`, `ref` | `git://file.py?type=history` |
+| **git://** | `type`, `detail`, `element`, `author`, `email`, `message`, `hash`, `ref`, `sort`, `limit`, `offset` | `git://file.py?type=history` |
 | **json://** | `schema`, `flatten`, `gron`, `type`, `keys`, `length`, field filters, `sort`, `limit`, `offset` | `json://data.json?type=object` |
 | **markdown://** | field filters (frontmatter), `aggregate`, `body-contains`, `sort`, `limit`, `offset` | `markdown://docs/?status=draft` |
-| **stats://** | `hotspots`, `code_only`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions` | `stats://.?hotspots` |
-| **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `has_decorator`, `calls`, `callee_of`, `show`, `sort`, `param_type`, `return_type`, `has_annotations`, `callers`, `reveal_type` | `ast://src?complexity>10` |
-| **calls://** | `target`, `callees`, `rank`, `top`, `depth`, `format`, `builtins`, `root`, `modules`, `external` | `calls://src?target=fn` |
+| **stats://** | `hotspots`, `code_only`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions`, `exclude`, `sort`, `limit`, `offset` | `stats://.?hotspots` |
+| **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `has_decorator`, `calls`, `callee_of`, `show`, `sort`, `limit`, `offset`, `param_type`, `return_type`, `has_annotations`, `callers`, `reveal_type` | `ast://src?complexity>10` |
+| **calls://** | `target`, `callees`, `uncalled`, `rank`, `top`, `depth`, `format`, `builtins`, `root`, `modules`, `external` | `calls://src?target=fn` |
 | **claude://** | `summary`, `errors`, `tools`, `contains`, `role`, `search`, `tail`, `last`, `tokens` | `claude://session?summary` |
 | **codex://** | `search`, `filter`, `since`, `until` | `codex://sessions/?search=auth-refactor` |
 | **depends://** | `top`, `format` | `depends://src?top=10` |
@@ -40,6 +40,11 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **python://** | none | N/A |
 | **domain://** | none | N/A |
 | **reveal://** | none | N/A |
+
+`sort`, `limit` and `offset` are applied by `ast://`, `markdown://`, `json://`, `git://` and
+`stats://` only. `hotspots://`, `calls://`, `depends://` and `testability://` cap with `top=N`
+(the `--limit N` flag maps to it), and other adapters answer `Unknown query param ... ignored`.
+Every adapter that walks a directory also takes `respect_gitignore=false` (the same as `--no-gitignore`).
 
 ## Detailed Documentation
 
@@ -483,7 +488,7 @@ reveal 'stats://.?hotspots&code_only'
 
 **Query Parameters**:
 
-- **`top=N`** (integer) - Limit to the N most-imported files (directory mode)
+- **`top=N`** (integer) - Limit to the N most-imported modules (directory) or the first N importers (file); `--limit N` maps here
   ```bash
   reveal 'depends://src?top=10'
   ```

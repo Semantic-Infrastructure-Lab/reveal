@@ -84,7 +84,7 @@ calls://<path>?rank=callers[&top=N]
 | `target` | Function name to find **callers of** (reverse lookup) |
 | `callees` | Function name to find **callees of** (forward lookup) |
 | `rank` | Set to `callers` to rank all functions by in-degree (coupling metrics) |
-| `top` | Max results for `?rank=callers` (default: 10, max: 100) |
+| `top` | Max results for `?rank=callers` (default: 10; `0` = all) |
 | `depth` | Transitive levels for `?target` (default: 1, max: 5) |
 | `format` | Output format: `text` (default), `json`, or `dot` (Graphviz) |
 
@@ -154,7 +154,7 @@ callee → [(file, caller_func, line), ...]
 | `callees` | string | — | Function name to find **callees of** (forward lookup) |
 | `rank` | string | — | Set to `callers` to rank all functions by in-degree |
 | `uncalled` | flag | — | List dead-code candidates — functions/methods with no static callers (see [Workflow 2](#workflow-2-find-unused-functions-dead-code)) |
-| `top` | integer | 10 | Max results for `?rank=callers` or `?uncalled` (capped at 100) |
+| `top` | integer | 10 for `?rank`, all for `?uncalled` | Max results for `?rank=callers` or `?uncalled`; `0` = all. `--limit N` becomes `top=N` |
 | `depth` | integer | 1 (`?root`: 2) | Transitive levels for `?target` and `?root` (1 = direct only, max 5) |
 | `builtins` | boolean | `false` | Include Python builtins in output (applies to `?callees` and `?rank=callers`) |
 | `format` | string | `text` | Output format: `text`, `json`, or `dot` |

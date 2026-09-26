@@ -43,7 +43,7 @@ workflows:
     scenario: 'Review what changed in a feature branch'
     steps:
       - "reveal diff://git://main/.:git://feature/.  # Full branch comparison"
-      - "reveal diff://git://main/app.py:git://feature/app.py/process_data  # Specific function"
+      - "reveal diff://git://main/app.py:git://feature/app.py process_data  # Specific function"
   - name: 'Refactoring Validation'
     scenario: 'Verify refactoring improved complexity'
     steps:

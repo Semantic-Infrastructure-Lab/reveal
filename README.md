@@ -42,7 +42,7 @@ reveal 'calls://src/?rank=callers&top=20'  # most architecturally coupled functi
 reveal 'calls://src/?uncalled'             # functions with no callers — rough check, verify results
 ```
 
-**Deep-dive code navigation (works on Python, PHP, and 80+ other tree-sitter languages):**
+**Deep-dive code navigation (works on Python, PHP, and the other tree-sitter languages; see `reveal --languages`):**
 ```bash
 reveal app.py process_batch --boundary       # inputs read, outputs/effects produced
 reveal app.py process_batch --sideeffects    # DB / HTTP / FS / logging calls, classified

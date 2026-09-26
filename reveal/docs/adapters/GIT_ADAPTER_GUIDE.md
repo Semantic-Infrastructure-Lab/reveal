@@ -7,7 +7,7 @@ category: guide
 **Adapter**: `git://`
 **Purpose**: Git repository inspection with history, blame, and file tracking
 **Type**: Repository adapter
-**Output Formats**: text, json, grep
+**Output Formats**: text, json
 
 ## Table of Contents
 
@@ -75,8 +75,8 @@ reveal git://src/app.py?type=blame&element=load_config
 # 10. Filter commits by author
 reveal git://.@main?author=John
 
-# 11. Search commit messages (requires a ref — see Query Syntax note)
-reveal git://.@main?message~=bug
+# 11. Search commit messages (type=history lists only the matching commits)
+reveal 'git://.?type=history&message~=bug'
 ```
 
 **Why use git://?**
@@ -126,14 +126,14 @@ git://src/app.py?type=history
 # Multiple parameters (& separator)
 git://src/app.py?type=blame&detail=full
 
-# Filter with operators (requires an explicit ref — see note below)
-git://.@main?author=John&message~=bug
+# Filter commits (see note below)
+git://.?type=history&author~=John&message~=bug
 
 # Result control
 git://.@main?limit=100&sort=date
 ```
 
-**Important**: Commit filters (`author`, `email`, `message`, `hash`) only take effect against an explicit ref (`git://.@main?...`, `git://.@HEAD?...`). A bare `git://.?...` with no `@ref` returns the repository overview and silently ignores filter params — always pin a ref when filtering commits.
+**Important**: Commit filters (`author`, `email`, `message`, `hash`) filter a commit list. With `?type=history` (`git://.?type=history&message~=bug`, `git://src/auth?type=history&...`) you get only the matching commits. On the repository overview (`git://.?...` or `git://.@main?...`) they filter the "Recent Commits" block, which is printed below the unfiltered branch and tag lists. On a single file, add `type=history`: without it the file's content at the ref is shown and the filter is not applied.
 
 ---
 
