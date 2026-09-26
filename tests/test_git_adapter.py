@@ -3136,3 +3136,39 @@ class TestHistoryShapesRenderAsText:
         }, capsys)
         assert out.startswith('Timeline: src @ HEAD (per month)')
         assert '2026-08' in out and '4 commit(s)' in out and '"buckets"' not in out
+
+
+class TestLimitAfterOffset:
+    """BACK-1506: the commit walk stopped after `limit` commits and result
+    control then skipped `offset` of them, so limit=3&offset=1 gave 2."""
+
+    @pytest.fixture
+    def repo(self, tmp_path, monkeypatch):
+        import pygit2
+        repo = pygit2.init_repository(str(tmp_path))
+        sig = pygit2.Signature('T', 't@example.com')
+        parents = []
+        for i in range(5):
+            (tmp_path / 'f.txt').write_text(f'{i}\n', encoding='utf-8')
+            repo.index.add('f.txt')
+            repo.index.write()
+            oid = repo.create_commit('HEAD', sig, sig, f'c{i}', repo.index.write_tree(), parents)
+            parents = [oid]
+        monkeypatch.chdir(tmp_path)
+        return tmp_path
+
+    @staticmethod
+    def _messages(commits):
+        return [c['message'].strip() for c in commits]
+
+    def test_file_history(self, repo):
+        result = GitAdapter('f.txt', query={'type': 'history', 'limit': '3', 'offset': '1'}).get_structure()
+        assert self._messages(result['commits']) == ['c3', 'c2', 'c1']
+
+    def test_ref_history(self, repo):
+        result = GitAdapter('.', query={'type': 'history', 'limit': '3', 'offset': '1'}).get_structure()
+        assert self._messages(result['history']) == ['c3', 'c2', 'c1']
+
+    def test_overview_recent_commits(self, repo):
+        result = GitAdapter('.', query={'limit': '3', 'offset': '1'}).get_structure()
+        assert self._messages(result['commits']['recent']) == ['c3', 'c2', 'c1']

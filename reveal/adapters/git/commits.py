@@ -105,7 +105,8 @@ def get_recent_commits(
             if content_pattern and not _commit_diff_contains(repo, commit, '', content_pattern):
                 continue
             commits.append(commit_dict)
-            if len(commits) >= limit:
+            # offset + limit: apply_result_control skips `offset` first (BACK-1506)
+            if len(commits) >= limit + (result_control.offset or 0):
                 break
     except Exception:
         pass  # return whatever commits were collected before the error
@@ -149,7 +150,8 @@ def get_commit_history(
             if content_pattern and not _commit_diff_contains(repo, commit, '', content_pattern):
                 continue
             commits.append(commit_dict)
-            if len(commits) >= limit:
+            # offset + limit: apply_result_control skips `offset` first (BACK-1506)
+            if len(commits) >= limit + (result_control.offset or 0):
                 break
     except Exception:
         pass  # return whatever commits were collected before the error

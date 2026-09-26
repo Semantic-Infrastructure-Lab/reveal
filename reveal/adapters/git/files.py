@@ -288,7 +288,9 @@ def get_file_history(
             if content_pattern and not _commit_diff_contains(repo, commit, subpath, content_pattern):
                 continue
             commits.append(commit_dict)
-            if len(commits) >= limit:
+            # Collect offset + limit: result control below skips `offset` of them
+            # first, so stopping at `limit` returned limit - offset (BACK-1506).
+            if len(commits) >= limit + (getattr(result_control, 'offset', 0) or 0):
                 break
 
         # Apply result control (sort, limit, offset) from query params
