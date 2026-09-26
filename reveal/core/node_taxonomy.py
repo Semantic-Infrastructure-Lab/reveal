@@ -33,14 +33,17 @@ from typing import Dict
 # from IF_NODES below), so _get_condition's `condition` field lookup captures the
 # gate. `unless`/`unless_modifier` carry an inverted sense conveyed by the UNLESS
 # label. Found via discourse deep-conformance dogfooding.
-# Statement modifiers (`x if cond` / `x unless cond`) are conditional decisions
-# and gates, but — unlike block conditionals — they wrap a single statement and
-# do NOT introduce a nesting level. Kept as their own set so complexity's nesting
-# metric can exclude them while still counting them as decisions.
-MODIFIER_NODES: frozenset = frozenset({'if_modifier', 'unless_modifier'})
+# Statement modifiers (`x if cond` / `x unless cond`, and the loop forms
+# `x += 1 while cond` / `x -= 1 until cond`) are decisions and gates, but —
+# unlike block conditionals and loops — they wrap a single statement and do NOT
+# introduce a nesting level. Kept as their own set so complexity's nesting metric
+# can exclude them while still counting them as decisions.
+IF_MODIFIER_NODES: frozenset = frozenset({'if_modifier', 'unless_modifier'})
+LOOP_MODIFIER_NODES: frozenset = frozenset({'while_modifier', 'until_modifier'})  # BACK-1528
+MODIFIER_NODES: frozenset = IF_MODIFIER_NODES | LOOP_MODIFIER_NODES
 IF_NODES: frozenset = frozenset({
     'if_statement', 'if_expression', 'if', 'IfStatement', 'unless',
-}) | MODIFIER_NODES
+}) | IF_MODIFIER_NODES
 ELIF_NODES: frozenset = frozenset({'elif_clause', 'elseif_clause'})
 ELSE_NODES: frozenset = frozenset({'else_clause', 'else'})
 # Zig's IfStatement (BACK-431 Issue G smoke-tier audit) has no AST fields at
@@ -48,14 +51,23 @@ ELSE_NODES: frozenset = frozenset({'else_clause', 'else'})
 # 'condition'/'body' field lookup silently no-ops for it, so it's kept out
 # of nav_varflow's IF_WHILE_NODES; it still counts for --outline/--ifmap
 # (SCOPE_NODES/KEYWORD_LABEL), which only match on node kind.
-WHILE_NODES: frozenset = frozenset({'while_statement', 'while_expression', 'while'})
+# Ruby block `until cond ... end` is a named `until` (its keyword token is an
+# anonymous `until`, skipped by the outline walkers); labeled WHILE so --loopmap
+# keeps it, and the label text still reads "until ..." (BACK-1528).
+WHILE_NODES: frozenset = frozenset({
+    'while_statement', 'while_expression', 'while', 'until',
+}) | LOOP_MODIFIER_NODES
 # Loop constructs that share the C-style 'left'/'right' field shape in
 # nav_varflow (loop var = 'left', iterable = 'right'): plain for, C#/PHP
 # `foreach`, and JS/TS `for…of` / `for…in` (`for_in_statement`). BACK-431:
 # `for_in_statement` was absent from the family entirely, making JS/TS
 # for-each loops invisible to --outline/--ifmap/--varflow (confirmed live).
+# Bash `for ((i=0; i<n; i++))` (`c_style_for_statement`) has C's
+# initializer/condition/update/body fields, like C's for_statement here: neither
+# has 'left'/'right', so _walk_for walks it as plain children (BACK-1528).
 FOR_NODES: frozenset = frozenset({
     'for_statement', 'foreach_statement', 'for_in_statement', 'for',
+    'c_style_for_statement',
 })
 # Rust `for x in y { }` — 'pattern'/'value' fields, not 'left'/'right' (BACK-430).
 FOR_EXPRESSION_NODES: frozenset = frozenset({'for_expression'})
@@ -73,7 +85,14 @@ FOR_EACH_NAME_VALUE_NODES: frozenset = frozenset({'enhanced_for_statement'})
 FOR_RANGE_LOOP_NODES: frozenset = frozenset({'for_range_loop'})
 # Rust `loop { }` — no condition field at all.
 LOOP_NODES: frozenset = frozenset({'loop_expression'})
-DO_NODES: frozenset = frozenset({'do_statement'})
+# Body-first loops. C/Java/JS/C#/PHP/Dart/Go `do_statement`; Kotlin
+# `do_while_statement`, Swift `repeat_while_statement`, Scala `do_while_expression`
+# and Lua `repeat ... until` (`repeat_statement`) were in no family, so the loop
+# was missing from --outline/--loopmap and its body read as unnested (BACK-1528).
+DO_NODES: frozenset = frozenset({
+    'do_statement', 'do_while_statement', 'repeat_while_statement',
+    'do_while_expression', 'repeat_statement',
+})
 
 # BACK-477: Ruby's per-element iteration idiom (`items.each do |x| ... end`,
 # `list.map { |x| ... }`, `3.times do ... end`) has NO dedicated loop AST
@@ -482,7 +501,9 @@ KEYWORD_LABEL: Dict[str, str] = {
     'for_statement': 'FOR', 'for': 'FOR', 'for_expression': 'FOR',
     'foreach_statement': 'FOR', 'for_in_statement': 'FOR',
     'enhanced_for_statement': 'FOR', 'for_range_loop': 'FOR',
+    'c_style_for_statement': 'FOR',
     'while_statement': 'WHILE', 'while': 'WHILE', 'while_expression': 'WHILE',
+    'until': 'WHILE', 'while_modifier': 'WHILE', 'until_modifier': 'WHILE',
     'loop_expression': 'LOOP',
     'try_statement': 'TRY', 'try': 'TRY',
     'begin': 'TRY',
@@ -493,7 +514,8 @@ KEYWORD_LABEL: Dict[str, str] = {
     'match_statement': 'MATCH', 'match_expression': 'MATCH',
     'case_clause': 'CASE', 'match_arm': 'CASE', 'SwitchProng': 'CASE',
     'when_entry': 'CASE',
-    'do_statement': 'DO',
+    'do_statement': 'DO', 'do_while_statement': 'DO', 'repeat_while_statement': 'DO',
+    'do_while_expression': 'DO', 'repeat_statement': 'DO',
     'switch_statement': 'SWITCH', 'switch': 'SWITCH', 'SwitchExpr': 'SWITCH',
     'when_expression': 'SWITCH',
     'catch_clause': 'CATCH', 'catch': 'CATCH',

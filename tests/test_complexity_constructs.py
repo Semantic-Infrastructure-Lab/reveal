@@ -142,6 +142,14 @@ CASES = [
     ('swift', 'try? / try! do not branch', 'func f(_ a: () throws -> Int) -> Int { return (try? a()) ?? 0 }\n', 2, None),
     ('ts', 'ternary ? counted once', 'function f(a: boolean) { return a ? 1 : 2 }\n', 2, None),
     ('kt', 'nullable type ? not counted', 'fun f(a: Int?): Int? { return a }\n', 1, None),
+    # Body-first loops, loop modifiers and C-style for count once: the construct, not also
+    # its bare keyword token (BACK-1528).
+    ('kt', 'do-while', 'fun f(a: Int) { var i = a; do { i-- } while (i > 0) }\n', 2, None),
+    ('swift', 'repeat-while', 'func f(_ a: Int) { var i = a; repeat { i -= 1 } while i > 0 }\n', 2, None),
+    ('scala', 'do-while', 'object O { def f(a: Int): Unit = { var i = a; do { i -= 1 } while (i > 0) } }\n', 2, None),
+    ('sh', 'c-style for', 'f() {\n  for ((i=0;i<3;i++)); do\n    echo $i\n  done\n}\n', 2, None),
+    ('rb', 'modifier while/until', 'def f(a)\n  a += 1 while a < 10\n  a -= 1 until a < 5\n  a\nend\n', 3, None),
+    ('rb', 'until', 'def f(a)\n  until a > 3\n    a += 1\n  end\nend\n', 2, None),
 ]
 
 def _param(row):

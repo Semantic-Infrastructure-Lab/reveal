@@ -143,7 +143,7 @@ IGNORED: Dict[str, Dict[str, str]] = {
 # Control flow that no family holds yet. Each row names its task and is deleted by the
 # fix; test_no_stale_entries enforces that.
 KNOWN_GAPS: Dict[str, Dict[str, str]] = {
-    'bash': {'c_style_for_statement': 'BACK-1528', 'case_item': 'BACK-1531'},
+    'bash': {'case_item': 'BACK-1531'},
     'c': {
         'goto_statement': 'BACK-1531', 'seh_except_clause': 'BACK-1531',
         'seh_finally_clause': 'BACK-1531', 'seh_try_statement': 'BACK-1531',
@@ -171,7 +171,6 @@ KNOWN_GAPS: Dict[str, Dict[str, str]] = {
         'switch_rule': 'BACK-1531',
     },
     'javascript': {'yield_expression': 'BACK-1527'},
-    'kotlin': {'do_while_statement': 'BACK-1528'},
     'lua': {'else_statement': 'BACK-1530', 'goto_statement': 'BACK-1531'},
     'php': {
         'match_conditional_expression': 'BACK-1529', 'match_default_expression': 'BACK-1529',
@@ -180,7 +179,6 @@ KNOWN_GAPS: Dict[str, Dict[str, str]] = {
     'powershell': {'invokation_foreach_expression': 'BACK-1531', 'switch_clause': 'BACK-1531'},
     'python': {'for_in_clause': 'BACK-1531', 'if_clause': 'BACK-1531'},
     'ruby': {
-        'until_modifier': 'BACK-1528', 'while_modifier': 'BACK-1528',
         'case_match': 'BACK-1529', 'rescue_modifier': 'BACK-1530',
     },
     'rust': {
@@ -188,8 +186,7 @@ KNOWN_GAPS: Dict[str, Dict[str, str]] = {
         'return_expression': 'BACK-1527', 'yield_expression': 'BACK-1527',
         'try_block': 'BACK-1531',
     },
-    'scala': {'do_while_expression': 'BACK-1528', 'return_expression': 'BACK-1527'},
-    'swift': {'repeat_while_statement': 'BACK-1528'},
+    'scala': {'return_expression': 'BACK-1527'},
     'tsx': {'yield_expression': 'BACK-1527'},
     'typescript': {'yield_expression': 'BACK-1527'},
 }

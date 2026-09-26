@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Body-first loops, Ruby loop modifiers and Bash `for ((...))` were missing from `--outline` and `--loopmap` (BACK-1528)** — Kotlin `do { } while`, Swift `repeat { } while`, Scala `do { } while`, Lua `repeat ... until`, Bash `for ((i=0;i<n;i++))`, Ruby `x += 1 while c` / `x -= 1 until c` and Ruby's block `until ... end` were in no control-flow family. The loop did not show, and an `if` inside it printed as if it were not nested (Ruby printed nothing at all). They now show as DO, FOR or WHILE, with their contents nested under them. Ruby `until` gates read `until <cond>`, like `unless`. Complexity scores are unchanged, because the loop's keyword token already counted. Nesting depth now counts these loops, so a Ruby `until` block nests like `while`.
+
 ## [0.129.0] - 2026-09-25 (sessions wuluzowo-0925, calm-sirocco-0925, pearl-watercolor-0925, reborn-river-0925)
 
 ### Fixed

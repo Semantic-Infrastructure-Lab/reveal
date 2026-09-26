@@ -42,7 +42,12 @@ _DECISION_TYPES = frozenset({
     'foreach_statement', 'for_in_statement', 'enhanced_for_statement',
     'while_statement', 'while_expression', 'while',
     'until',
+    'c_style_for_statement',  # bash `for ((...))`
+    'while_modifier', 'until_modifier',  # ruby `x += 1 while c` (do not nest)
     'do_statement',
+    # Body-first loops (BACK-1528): kotlin, swift, scala, lua `repeat ... until`
+    'do_while_statement', 'repeat_while_statement', 'do_while_expression',
+    'repeat_statement',
     # Boolean operators
     'boolean_operator',
     'and', 'or',
@@ -164,11 +169,14 @@ _NESTING_TYPES = frozenset({
     'unless',  # Ruby block `unless … end` nests; the modifiers (MODIFIER_NODES) do not
     'for_statement', 'for_expression', 'for',
     'foreach_statement', 'for_in_statement', 'enhanced_for_statement',
-    'while_statement', 'while_expression', 'while',
+    'c_style_for_statement',
+    'while_statement', 'while_expression', 'while', 'until',
     'loop_expression',
     'try_statement', 'try', 'with_statement', 'with',
     'match_statement', 'match_expression', 'case_statement',
     'do_statement', 'switch_statement',
+    'do_while_statement', 'repeat_while_statement', 'do_while_expression',
+    'repeat_statement',
 })
 
 # Keyword-container pairs not to double-count (a construct node plus the bare
@@ -209,6 +217,16 @@ _KEYWORD_PAIRS = frozenset({
     ('when_expression', 'when'),
     # C `do { } while (c)`: the statement wraps a bare `while` keyword token.
     ('do_statement', 'while'),
+    # BACK-1528: the same shape in the other body-first loops, the ruby loop
+    # modifiers and bash's C-style for. Before these kinds were decisions, the
+    # bare token alone carried the count; now the construct does.
+    ('do_while_statement', 'while'),
+    ('repeat_while_statement', 'while'),
+    ('do_while_expression', 'while'),
+    ('repeat_statement', 'until'),
+    ('while_modifier', 'while'),
+    ('until_modifier', 'until'),
+    ('c_style_for_statement', 'for'),
     # Zig: `IfStatement`/`IfExpr` wrap an `IfPrefix` that holds the bare `if` token.
     ('IfPrefix', 'if'),
 })

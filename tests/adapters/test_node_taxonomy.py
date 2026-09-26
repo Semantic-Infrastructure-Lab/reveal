@@ -133,10 +133,10 @@ class TestComplexityCoversFamilies(unittest.TestCase):
         # (a guard clause shouldn't inflate a flat function's depth), so they are
         # excluded here while still being required as decisions above.
         families = (
-            (tax.IF_NODES - tax.MODIFIER_NODES) | tax.WHILE_NODES | tax.FOR_NODES
+            tax.IF_NODES | tax.WHILE_NODES | tax.FOR_NODES
             | tax.FOR_EXPRESSION_NODES | tax.FOR_EACH_NAME_VALUE_NODES
             | tax.LOOP_NODES | tax.DO_NODES | tax.MATCH_NODES
-        )
+        ) - tax.MODIFIER_NODES
         missing = families - complexity._NESTING_TYPES
         self.assertEqual(
             missing, frozenset(),
@@ -333,6 +333,41 @@ class TestRustStructNotDoubleCounted(unittest.TestCase):
         structure = _get_structure(RustAnalyzer, '.rs', self.RUST_STRUCT)
         classes = structure.get('classes') or []
         self.assertEqual(classes, [], f'Rust struct double-counted as class: {classes}')
+
+
+# Kinds the grammar-coverage test (tests/test_grammar_coverage.py) found in no family,
+# pinned end to end: each construct shows in --outline at the right depth.
+# (language, construct, source, expected [(keyword, depth), ...])
+OUTLINE_CASES = [
+    # BACK-1528: loops
+    ('kotlin', 'do-while',
+     'fun f(x: Int): Int { var i = 0; do { if (i > x) { i = 0 }; i++ } while (i < 10); return 0 }',
+     [('DO', 1), ('IF', 2)]),
+    ('swift', 'repeat-while',
+     'func f(x: Int) -> Int { var i = 0; repeat { if i > x { i = 0 }; i += 1 } while i < 10; return 0 }',
+     [('DO', 1), ('IF', 2)]),
+    ('scala', 'do-while',
+     'object A { def f(x: Int): Int = { var i = 0; do { if (i > x) { i = 0 }; i += 1 } while (i < 10); 0 } }',
+     [('DO', 1), ('IF', 2)]),
+    ('lua', 'repeat-until',
+     'function f(x)\n  repeat\n    if x > 5 then x = 0 end\n    x = x + 1\n  until x > 10\nend\n',
+     [('DO', 1), ('IF', 2)]),
+    ('bash', 'c-style for',
+     'f() {\n  for ((i=0;i<3;i++)); do\n    if [ "$i" -gt 1 ]; then echo x; fi\n  done\n}\n',
+     [('FOR', 1), ('IF', 2)]),
+    ('ruby', 'while/until modifiers and until block',
+     'def f(x)\n  x += 1 while x < 10\n  x -= 1 until x < 5\n  until x > 20\n    x += 2 if x\n  end\nend\n',
+     [('WHILE', 1), ('WHILE', 1), ('WHILE', 1), ('IF', 2)]),
+]
+
+
+@pytest.mark.parametrize('lang,code,expected', [
+    pytest.param(lang, code, expected, id=f'{lang}-{name}')
+    for lang, name, code, expected in OUTLINE_CASES])
+def test_grammar_gap_construct_appears_in_outline(lang, code, expected):
+    node, get_text = _first_function(lang, code, tax.FUNCTION_TYPES)
+    got = [(i['keyword'], i['depth']) for i in element_outline(node, get_text)]
+    assert got == expected
 
 
 if __name__ == '__main__':
