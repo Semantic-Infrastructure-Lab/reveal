@@ -286,7 +286,10 @@ class RuleRegistry:
             external: True when rules_dir is outside the reveal package, so
                 modules must be loaded by file path rather than imported
         """
-        for subdir in rules_dir.iterdir():
+        # Sorted: registration order is check's detection order, and raw
+        # iterdir()/glob() order is the filesystem's, which differs between
+        # checkouts and machines (BACK-1540).
+        for subdir in sorted(rules_dir.iterdir()):
             # Skip non-directories and private directories
             if not subdir.is_dir() or subdir.name.startswith('_'):
                 continue
@@ -308,7 +311,7 @@ class RuleRegistry:
             module_prefix: Module prefix for imports (e.g., "reveal.rules")
             external: True when the directory is outside the reveal package
         """
-        for module_file in category_dir.glob('*.py'):
+        for module_file in sorted(category_dir.glob('*.py')):
             # Skip if not a rule module file (filters out utils.py, etc.)
             if not cls._is_rule_module_file(module_file):
                 continue

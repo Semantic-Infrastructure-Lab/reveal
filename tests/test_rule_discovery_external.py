@@ -211,3 +211,28 @@ def test_project_config_dir_is_anchored_to_project_root(tmp_path, monkeypatch):
     subdir.mkdir(parents=True)
     monkeypatch.chdir(subdir)
     assert config.project_config_dir == from_root
+
+
+def test_discovery_order_does_not_follow_filesystem_order(clean_registry, tmp_path, monkeypatch):
+    """BACK-1540: rules register in path order, not in the order the filesystem
+    lists them. Registration order is the order check reports detections in, and
+    iterdir()/glob() order differs between checkouts (ext4 hash order), so two
+    copies of one tree gave differently ordered `reveal check` output."""
+    from pathlib import Path
+
+    project_config_dir = tmp_path / ".reveal"
+    rules_dir = project_config_dir / "rules"
+    for code in ("Q003", "Q001", "Q002"):
+        _write_rule(rules_dir, code)
+    alpha = rules_dir / "alpha"
+    alpha.mkdir()
+    (alpha / "Q009.py").write_text((rules_dir / "custom" / "Q001.py").read_text().replace("Q001", "Q009"))
+
+    # List every directory backwards, as a filesystem may.
+    iterdir, glob = Path.iterdir, Path.glob
+    monkeypatch.setattr(Path, "iterdir", lambda self: iter(sorted(iterdir(self), reverse=True)))
+    monkeypatch.setattr(Path, "glob", lambda self, *a, **k: iter(sorted(glob(self, *a, **k), reverse=True)))
+
+    clean_registry._discover_project_rules(_FakeConfig(tmp_path / "unused", project_config_dir))
+
+    assert [r.code for r in clean_registry._rules] == ["Q009", "Q001", "Q002", "Q003"]
