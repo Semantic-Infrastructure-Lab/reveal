@@ -649,6 +649,15 @@ def _print_help_not_found_hints(adapter, element_name: str, section: Optional[st
     )
 
 
+def _adapter_error_text(e: Exception, scheme: Optional[str]) -> str:
+    """One-line ``Error (scheme://): msg`` text; multi-line messages print bare."""
+    error_msg = str(e)
+    if '\n' in error_msg:
+        return f"Error: {error_msg}"
+    scheme_hint = f" ({scheme}://)" if scheme else ""
+    return f"Error{scheme_hint}: {error_msg}"
+
+
 def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
                     resource: str, args: 'Namespace', scheme: Optional[str] = None) -> None:
     """Render a specific element from adapter.
@@ -666,7 +675,15 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
     section = getattr(args, 'section', None)
     if section:
         element_kwargs['section'] = section
-    result = adapter.get_element(element_name, **element_kwargs)
+    try:
+        result = adapter.get_element(element_name, **element_kwargs)
+    except NotApplicableError as e:
+        _emit_not_applicable_envelope(scheme or 'unknown', resource, e.reason, args)
+        return
+    except Exception as e:
+        print(_adapter_error_text(e, scheme), file=sys.stderr)
+        _emit_adapter_error_envelope(scheme or 'unknown', resource or '', str(e), args)
+        sys.exit(1)
 
     if result is None:
         print(f"Error: Element '{element_name}' not found", file=sys.stderr)
@@ -865,13 +882,8 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
         _emit_not_applicable_envelope(scheme or 'unknown', resource or '', e.reason, args)
         return
     except Exception as e:
-        error_msg = str(e)
-        if '\n' in error_msg:
-            print(f"Error: {error_msg}", file=sys.stderr)
-        else:
-            scheme_hint = f" ({scheme}://)" if scheme else ""
-            print(f"Error{scheme_hint}: {error_msg}", file=sys.stderr)
-        _emit_adapter_error_envelope(scheme or 'unknown', resource or '', error_msg, args)
+        print(_adapter_error_text(e, scheme), file=sys.stderr)
+        _emit_adapter_error_envelope(scheme or 'unknown', resource or '', str(e), args)
         sys.exit(1)
 
     # Apply post-processing
@@ -886,13 +898,8 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
             _emit_not_applicable_envelope(scheme or 'unknown', resource or '', e.reason, args)
             return
         except Exception as e:
-            error_msg = str(e)
-            if '\n' in error_msg:
-                print(f"Error: {error_msg}", file=sys.stderr)
-            else:
-                scheme_hint = f" ({scheme}://)" if scheme else ""
-                print(f"Error{scheme_hint}: {error_msg}", file=sys.stderr)
-            _emit_adapter_error_envelope(scheme or 'unknown', resource or '', error_msg, args)
+            print(_adapter_error_text(e, scheme), file=sys.stderr)
+            _emit_adapter_error_envelope(scheme or 'unknown', resource or '', str(e), args)
             sys.exit(1)
 
     # Add available elements if adapter supports discovery

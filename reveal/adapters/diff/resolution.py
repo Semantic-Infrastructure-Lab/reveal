@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional, Iterator, cast
 
-from .git import resolve_git_ref, resolve_git_adapter
+from .git import resolve_git_ref, resolve_git_adapter, read_git_text
 from ..base import get_adapter_class
 from ...registry import get_analyzer
 from ...utils.gitignore import gitignore_filter
@@ -260,3 +260,27 @@ def find_element(structure: Dict[str, Any], element_name: str) -> Optional[Dict[
                 return cast(Dict[str, Any], method)
 
     return None
+
+
+def read_element_source(uri: str, element: Dict[str, Any]) -> Optional[str]:
+    """Return the source text of ``element`` in the resource ``uri`` names.
+
+    Only single-file resources (plain path, ``file://``, ``git://``) carry
+    source; directories and other adapters return None, meaning "not comparable".
+    """
+    start, end = element.get('line'), element.get('line_end')
+    if not isinstance(start, int) or not isinstance(end, int):
+        return None
+    scheme, _, resource = uri.partition('://') if '://' in uri else ('file', '', uri)
+    if scheme == 'git':
+        text = read_git_text(resource)
+    elif scheme == 'file':
+        try:
+            text = Path(resource).read_text(encoding='utf-8', errors='replace')
+        except OSError:
+            return None
+    else:
+        return None
+    if text is None:
+        return None
+    return '\n'.join(text.splitlines()[start - 1:end])

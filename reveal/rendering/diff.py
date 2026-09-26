@@ -1,5 +1,6 @@
 """Rendering functions for diff:// adapter output."""
 
+import difflib
 import json
 from typing import Dict, Any
 
@@ -271,6 +272,14 @@ def _render_imports_section(imports: list) -> None:
     print()
 
 
+def _print_body_diff(old: str, new: str) -> None:
+    """Print a unified diff of two element bodies."""
+    for line in difflib.unified_diff(str(old).splitlines(), str(new).splitlines(),
+                                     'old', 'new', lineterm='', n=2):
+        print(f"    {line}")
+    print()
+
+
 def render_element_diff_text(diff_result: Dict[str, Any]) -> None:
     """Render element-specific diff in text format.
 
@@ -323,6 +332,9 @@ def render_element_diff_text(diff_result: Dict[str, Any]) -> None:
                 old = change.get('old')
                 new = change.get('new')
                 print(f"  {key}:")
+                if key == 'body':
+                    _print_body_diff(old, new)
+                    continue
                 print(f"    - {old}")
                 print(f"    + {new}")
                 print()

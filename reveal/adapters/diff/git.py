@@ -4,7 +4,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Dict, Any, cast
+from typing import Dict, Any, Optional, cast
 
 from ...registry import get_analyzer
 
@@ -69,6 +69,25 @@ def _read_blob_text(repo, commit, path: str) -> str:
         raise ValueError(f"Path is not a file: {path}")
     blob = repo[entry.id]
     return blob.data.decode('utf-8', errors='replace')
+
+
+def read_git_text(resource: str) -> Optional[str]:
+    """Return the file text a ``git://`` diff URI points at, or None.
+
+    Accepts ``path@REF`` and the legacy ``REF/path`` form. Directories,
+    repository overviews and unresolvable refs return None.
+    """
+    if '@' in resource:
+        path, git_ref = resource.rsplit('@', 1)
+    elif '/' in resource:
+        git_ref, path = resource.split('/', 1)
+    else:
+        return None
+    try:
+        repo = _open_repo()
+        return _read_blob_text(repo, _resolve_commit(repo, git_ref), path)
+    except (ValueError, ImportError, KeyError):
+        return None
 
 
 def resolve_git_ref(git_ref: str, path: str) -> Dict[str, Any]:

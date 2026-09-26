@@ -4,7 +4,7 @@ from typing import Dict, Any, Optional, Tuple, cast
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .parsing import parse_diff_uris, split_trailing_element
-from .resolution import resolve_uri, extract_metadata, find_element
+from .resolution import resolve_uri, extract_metadata, find_element, read_element_source
 from .help import get_schema as _get_schema, get_help as _get_help
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import DiffRenderer
@@ -177,7 +177,34 @@ class DiffAdapter(ResourceAdapter):
         left_elem = find_element(left_struct, element_name)
         right_elem = find_element(right_struct, element_name)
 
-        return compute_element_diff(left_elem, right_elem, element_name)
+        result = compute_element_diff(left_elem, right_elem, element_name)
+        if left_elem is not None and right_elem is not None:
+            self._compare_bodies(result, left_elem, right_elem)
+        return result
+
+    def _compare_bodies(self, result: Dict[str, Any], left_elem: Dict[str, Any],
+                        right_elem: Dict[str, Any]) -> None:
+        """Fold a source-text comparison into a both-sides-present element diff.
+
+        Structural fields (signature, line count, complexity) miss body-only
+        edits such as ``return 1`` -> ``return 10``. When both sources are
+        readable and differ, the element is MODIFIED with a ``body`` change;
+        when either is unreadable an "unchanged" verdict says so instead of
+        claiming the elements are identical.
+        """
+        old = read_element_source(self.left_uri, left_elem)
+        new = read_element_source(self.right_uri, right_elem)
+        if old is None or new is None:
+            if result['type'] == 'unchanged':
+                result['message'] = (f"Element '{result['name']}': signature and shape "
+                                     "unchanged; body not compared (source unavailable)")
+            return
+        if old == new:
+            return
+        if result['type'] == 'unchanged':
+            result.update(type='modified', changes={}, left=left_elem, right=right_elem)
+            result.pop('message', None)
+        result['changes']['body'] = {'old': old, 'new': new}
 
     def get_metadata(self) -> Dict[str, Any]:
         """Get metadata about the diff operation.
