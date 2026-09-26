@@ -48,24 +48,24 @@ reveal json://config.json/database/host
 
 # 3. Array access
 reveal json://data.json/users/0          # First user
-reveal json://data.json/users[0:3]       # First 3 users (slice)
-reveal json://data.json/users[-1]        # Last user
+reveal 'json://data.json/users[0:3]'       # First 3 users (slice)
+reveal 'json://data.json/users[-1]'        # Last user
 
 # 4. Understand structure (schema inference)
-reveal json://config.json?schema
+reveal 'json://config.json?schema'
 
 # 5. Flatten for grep workflow
-reveal json://config.json?flatten
+reveal 'json://config.json?flatten'
 
 # 6. List keys
-reveal json://package.json/dependencies?keys
+reveal 'json://package.json/dependencies?keys'
 
 # 7. Filter arrays
-reveal json://data.json/users?age>25
-reveal json://data.json/products?price=10..50
+reveal 'json://data.json/users?age>25'
+reveal 'json://data.json/products?price=10..50'
 
 # 8. Sort and limit
-reveal json://data.json/users?sort=-age&limit=10
+reveal 'json://data.json/users?sort=-age&limit=10'
 ```
 
 ---
@@ -132,14 +132,14 @@ reveal json://data.json/users/0          # First element
 reveal json://data.json/users/1          # Second element
 
 # Negative indices (from end)
-reveal json://data.json/users[-1]        # Last element
-reveal json://data.json/users[-2]        # Second to last
+reveal 'json://data.json/users[-1]'        # Last element
+reveal 'json://data.json/users[-2]'        # Second to last
 
 # Slicing [start:end] (end exclusive)
-reveal json://data.json/users[0:3]       # First 3 elements (indices 0,1,2)
-reveal json://data.json/users[5:10]      # Elements 5-9
-reveal json://data.json/users[10:]       # From index 10 to end
-reveal json://data.json/users[:5]        # First 5 elements
+reveal 'json://data.json/users[0:3]'       # First 3 elements (indices 0,1,2)
+reveal 'json://data.json/users[5:10]'      # Elements 5-9
+reveal 'json://data.json/users[10:]'       # From index 10 to end
+reveal 'json://data.json/users[:5]'        # First 5 elements
 ```
 
 **Slice behavior**: Same as Python - `[start:end]` where `end` is exclusive.
@@ -150,10 +150,10 @@ Understand JSON structure without reading entire file:
 
 ```bash
 # Schema of entire file
-reveal json://config.json?schema
+reveal 'json://config.json?schema'
 
 # Schema of nested path
-reveal json://data.json/users?schema
+reveal 'json://data.json/users?schema'
 ```
 
 **Example output:**
@@ -187,10 +187,10 @@ Convert JSON to grep-able lines:
 
 ```bash
 # Flatten entire file
-reveal json://config.json?flatten
+reveal 'json://config.json?flatten'
 
 # Also accepts ?gron (named after github.com/tomnomnom/gron)
-reveal json://config.json?gron
+reveal 'json://config.json?gron'
 ```
 
 **Example output:**
@@ -208,13 +208,13 @@ config.api.timeout = 30
 **Workflow with grep:**
 ```bash
 # Find all database-related config
-reveal json://config.json?flatten | grep -i database
+reveal 'json://config.json?flatten' | grep -i database
 
 # Find all URLs
-reveal json://config.json?flatten | grep url
+reveal 'json://config.json?flatten' | grep url
 
 # Find specific value
-reveal json://config.json?flatten | grep "5432"
+reveal 'json://config.json?flatten' | grep "5432"
 ```
 
 ### 5. **Type Introspection**
@@ -223,15 +223,15 @@ Get type information at any path:
 
 ```bash
 # Type of entire file
-reveal json://data.json?type
+reveal 'json://data.json?type'
 # Output: Object
 
 # Type of nested path
-reveal json://data.json/users?type
+reveal 'json://data.json/users?type'
 # Output: Array[Object] (150 items)
 
 # Type of value
-reveal json://config.json/database/port?type
+reveal 'json://config.json/database/port?type'
 # Output: Integer
 ```
 
@@ -241,15 +241,15 @@ List object keys or array indices:
 
 ```bash
 # List object keys
-reveal json://package.json?keys
+reveal 'json://package.json?keys'
 # Output: name, version, description, dependencies, devDependencies, scripts
 
 # List nested keys
-reveal json://package.json/dependencies?keys
+reveal 'json://package.json/dependencies?keys'
 # Output: express, lodash, axios, ...
 
 # For arrays, shows length
-reveal json://data.json/users?keys
+reveal 'json://data.json/users?keys'
 # Output: 150 items
 ```
 
@@ -259,15 +259,15 @@ Get counts and lengths:
 
 ```bash
 # Array length
-reveal json://data.json/users?length
+reveal 'json://data.json/users?length'
 # Output: 150
 
 # Object key count
-reveal json://package.json/dependencies?length
+reveal 'json://package.json/dependencies?length'
 # Output: 45
 
 # String length
-reveal json://data.json/users/0/name?length
+reveal 'json://data.json/users/0/name?length'
 # Output: 12
 ```
 
@@ -277,28 +277,28 @@ Filter arrays of objects using query parameters:
 
 ```bash
 # Exact match
-reveal json://data.json/users?status=active
+reveal 'json://data.json/users?status=active'
 
 # Numeric comparisons
-reveal json://data.json/users?age>25
-reveal json://data.json/users?age>=18
-reveal json://data.json/users?score<50
+reveal 'json://data.json/users?age>25'
+reveal 'json://data.json/users?age>=18'
+reveal 'json://data.json/users?score<50'
 
 # Range queries
-reveal json://data.json/products?price=10..50
-reveal json://data.json/users?age=18..65
+reveal 'json://data.json/products?price=10..50'
+reveal 'json://data.json/users?age=18..65'
 
 # Regex matching
-reveal json://data.json/users?name~=^John
-reveal json://data.json/products?category~=electronics
+reveal 'json://data.json/users?name~=^John'
+reveal 'json://data.json/products?category~=electronics'
 
 # Negation
-reveal json://data.json/users?status!=inactive
-reveal json://data.json/products?stock!=0
+reveal 'json://data.json/users?status!=inactive'
+reveal 'json://data.json/products?stock!=0'
 
 # Combined filters (AND logic)
-reveal json://data.json/users?age>25&status=active
-reveal json://data.json/products?price<100&stock>0
+reveal 'json://data.json/users?age>25&status=active'
+reveal 'json://data.json/products?price<100&stock>0'
 ```
 
 ---
@@ -340,10 +340,10 @@ reveal json://data.json/users/-1        # Last
 reveal json://data.json/users/-2        # Second to last
 
 # Slice
-reveal json://data.json/users[0:10]     # First 10
-reveal json://data.json/users[10:20]    # Next 10
-reveal json://data.json/users[100:]     # From 100 to end
-reveal json://data.json/users[:5]       # First 5
+reveal 'json://data.json/users[0:10]'     # First 10
+reveal 'json://data.json/users[10:20]'    # Next 10
+reveal 'json://data.json/users[100:]'     # From 100 to end
+reveal 'json://data.json/users[:5]'       # First 5
 ```
 
 **Mixed navigation:**
@@ -353,9 +353,9 @@ reveal json://data.json/users/0/name
 reveal json://data.json/teams/3/members/0/email
 
 # Array slice → Object key
-reveal json://data.json/users[0:10]/name  # NOT SUPPORTED
+reveal 'json://data.json/users[0:10]/name'  # NOT SUPPORTED
 # Instead: filter and extract
-reveal json://data.json/users[0:10] --format=json | jq '.[].name'
+reveal 'json://data.json/users[0:10]' --format=json | jq '.[].name'
 ```
 
 ### Dot Notation in Field Names
@@ -364,8 +364,8 @@ For filtering, field names support dot notation:
 
 ```bash
 # Filter by nested field
-reveal json://data.json/users?metadata.verified=true
-reveal json://data.json/orders?customer.tier=premium
+reveal 'json://data.json/users?metadata.verified=true'
+reveal 'json://data.json/orders?customer.tier=premium'
 ```
 
 ---
@@ -423,48 +423,48 @@ Used with arrays of objects:
 
 ```bash
 # Greater than
-reveal json://data.json/users?age>25
+reveal 'json://data.json/users?age>25'
 
 # Less than
-reveal json://data.json/products?price<100
+reveal 'json://data.json/products?price<100'
 
 # Greater than or equal
-reveal json://data.json/scores?value>=80
+reveal 'json://data.json/scores?value>=80'
 
 # Less than or equal
-reveal json://data.json/users?age<=65
+reveal 'json://data.json/users?age<=65'
 ```
 
 **Equality operators** (any value type):
 
 ```bash
 # Exact match (case-insensitive for strings)
-reveal json://data.json/users?status=active
-reveal json://data.json/products?category=electronics
+reveal 'json://data.json/users?status=active'
+reveal 'json://data.json/products?category=electronics'
 
 # Not equal
-reveal json://data.json/users?status!=inactive
-reveal json://data.json/products?stock!=0
+reveal 'json://data.json/users?status!=inactive'
+reveal 'json://data.json/products?stock!=0'
 ```
 
 **Pattern operators** (string values):
 
 ```bash
 # Regex match
-reveal json://data.json/users?name~=^John       # Starts with "John"
-reveal json://data.json/users?email~=@gmail     # Contains "@gmail"
-reveal json://data.json/products?sku~=^ABC      # SKU starts with "ABC"
+reveal 'json://data.json/users?name~=^John'       # Starts with "John"
+reveal 'json://data.json/users?email~=@gmail'     # Contains "@gmail"
+reveal 'json://data.json/products?sku~=^ABC'      # SKU starts with "ABC"
 ```
 
 **Range operator** (numeric or string):
 
 ```bash
 # Numeric range
-reveal json://data.json/products?price=10..50
-reveal json://data.json/users?age=18..65
+reveal 'json://data.json/products?price=10..50'
+reveal 'json://data.json/users?age=18..65'
 
 # String range (alphabetical)
-reveal json://data.json/users?name=A..M        # Names starting A-M
+reveal 'json://data.json/users?name=A..M'        # Names starting A-M
 ```
 
 ### Combined Filters
@@ -473,13 +473,13 @@ Multiple filters use AND logic:
 
 ```bash
 # Age AND status
-reveal json://data.json/users?age>25&status=active
+reveal 'json://data.json/users?age>25&status=active'
 
 # Price AND stock
-reveal json://data.json/products?price<100&stock>0
+reveal 'json://data.json/products?price<100&stock>0'
 
 # Three filters
-reveal json://data.json/users?age>18&age<65&status=active
+reveal 'json://data.json/users?age>18&age<65&status=active'
 ```
 
 ### Nested Field Filtering
@@ -488,9 +488,9 @@ Use dot notation for nested fields:
 
 ```bash
 # Filter by nested field
-reveal json://data.json/users?metadata.verified=true
-reveal json://data.json/orders?customer.tier=premium
-reveal json://data.json/products?details.weight>10
+reveal 'json://data.json/users?metadata.verified=true'
+reveal 'json://data.json/orders?customer.tier=premium'
+reveal 'json://data.json/products?details.weight>10'
 ```
 
 ---
@@ -599,19 +599,19 @@ reveal json://config.json/database --format=json
 
 ```bash
 # Step 1: Get high-level schema
-reveal json://data.json?schema
+reveal 'json://data.json?schema'
 
 # Step 2: List top-level keys
-reveal json://data.json?keys
+reveal 'json://data.json?keys'
 
 # Step 3: Drill into nested structure
-reveal json://data.json/users?schema
+reveal 'json://data.json/users?schema'
 
 # Step 4: Sample first element
 reveal json://data.json/users/0
 
 # Step 5: Get type of specific field
-reveal json://data.json/users/0/metadata?type
+reveal 'json://data.json/users/0/metadata?type'
 ```
 
 **Expected outcome**: Complete understanding of JSON structure without reading entire file.
@@ -622,16 +622,16 @@ reveal json://data.json/users/0/metadata?type
 
 ```bash
 # Step 1: Flatten entire file
-reveal json://config.json?flatten > flat_config.txt
+reveal 'json://config.json?flatten' > flat_config.txt
 
 # Step 2: Search for database config
-reveal json://config.json?flatten | grep -i database
+reveal 'json://config.json?flatten' | grep -i database
 
 # Step 3: Find all URLs
-reveal json://config.json?flatten | grep url
+reveal 'json://config.json?flatten' | grep url
 
 # Step 4: Find specific port number
-reveal json://config.json?flatten | grep "5432"
+reveal 'json://config.json?flatten' | grep "5432"
 
 # Step 5: Navigate directly to found path
 reveal json://config.json/database/host
@@ -648,19 +648,19 @@ reveal json://config.json/database/host
 curl https://api.example.com/users > users.json
 
 # Step 2: Understand structure
-reveal json://users.json?schema
+reveal 'json://users.json?schema'
 
 # Step 3: Filter active users
-reveal json://users.json/data/users?status=active
+reveal 'json://users.json/data/users?status=active'
 
 # Step 4: Sort by age descending
-reveal json://users.json/data/users?status=active&sort=-age
+reveal 'json://users.json/data/users?status=active&sort=-age'
 
 # Step 5: Get top 10
-reveal json://users.json/data/users?status=active&sort=-age&limit=10
+reveal 'json://users.json/data/users?status=active&sort=-age&limit=10'
 
 # Step 6: Export to CSV with jq
-reveal json://users.json/data/users?status=active --format=json | \
+reveal 'json://users.json/data/users?status=active' --format=json | \
   jq -r '.value[] | [.id, .name, .email, .age] | @csv'
 ```
 
@@ -672,15 +672,15 @@ reveal json://users.json/data/users?status=active --format=json | \
 
 ```bash
 # Step 1: Flatten both files
-reveal json://config.prod.json?flatten > prod_flat.txt
-reveal json://config.dev.json?flatten > dev_flat.txt
+reveal 'json://config.prod.json?flatten' > prod_flat.txt
+reveal 'json://config.dev.json?flatten' > dev_flat.txt
 
 # Step 2: Diff flattened output
 diff prod_flat.txt dev_flat.txt
 
 # Or use reveal directly
-diff <(reveal json://config.prod.json?flatten) \
-     <(reveal json://config.dev.json?flatten)
+diff <(reveal 'json://config.prod.json?flatten') \
+     <(reveal 'json://config.dev.json?flatten')
 
 # Step 3: Navigate to specific difference
 reveal json://config.prod.json/database/host
@@ -695,20 +695,20 @@ reveal json://config.dev.json/database/host
 
 ```bash
 # Step 1: Get response schema
-reveal json://response.json?schema > actual_schema.txt
+reveal 'json://response.json?schema' > actual_schema.txt
 
 # Step 2: Compare with expected schema
 # (Manual inspection or diff against documented schema)
 
 # Step 3: Check required fields exist
-reveal json://response.json/data/users/0?keys
+reveal 'json://response.json/data/users/0?keys'
 
 # Step 4: Validate field types
-reveal json://response.json/data/users/0/id?type      # Should be Integer
-reveal json://response.json/data/users/0/email?type   # Should be String
+reveal 'json://response.json/data/users/0/id?type'      # Should be Integer
+reveal 'json://response.json/data/users/0/email?type'   # Should be String
 
 # Step 5: Check array lengths
-reveal json://response.json/data/users?length
+reveal 'json://response.json/data/users?length'
 ```
 
 **Expected outcome**: Verified API contract compliance.
@@ -719,15 +719,15 @@ reveal json://response.json/data/users?length
 
 ```bash
 # Step 1: Generate schema
-reveal json://api_response.json?schema > API_SCHEMA.md
+reveal 'json://api_response.json?schema' > API_SCHEMA.md
 
 # Step 2: List all endpoints
-reveal json://swagger.json/paths?keys
+reveal 'json://swagger.json/paths?keys'
 
 # Step 3: Document each endpoint
-for endpoint in $(reveal json://swagger.json/paths?keys); do
+for endpoint in $(reveal 'json://swagger.json/paths?keys'); do
   echo "## $endpoint"
-  reveal json://swagger.json/paths/$endpoint?schema
+  reveal "json://swagger.json/paths/$endpoint?schema"
   echo ""
 done > API_DOCS.md
 ```
@@ -746,16 +746,16 @@ Sort arrays by any field:
 
 ```bash
 # Sort by age (ascending)
-reveal json://data.json/users?sort=age
+reveal 'json://data.json/users?sort=age'
 
 # Sort by age (descending - oldest first)
-reveal json://data.json/users?sort=-age
+reveal 'json://data.json/users?sort=-age'
 
 # Sort by name (alphabetical)
-reveal json://data.json/users?sort=name
+reveal 'json://data.json/users?sort=name'
 
 # Sort by nested field
-reveal json://data.json/orders?sort=customer.name
+reveal 'json://data.json/orders?sort=customer.name'
 ```
 
 **Note**: Sorting works on arrays of objects. The field must exist in all objects.
@@ -766,13 +766,13 @@ Restrict output to first N items:
 
 ```bash
 # Top 10 results
-reveal json://data.json/users?limit=10
+reveal 'json://data.json/users?limit=10'
 
 # Top 5 oldest users
-reveal json://data.json/users?sort=-age&limit=5
+reveal 'json://data.json/users?sort=-age&limit=5'
 
 # Top 20 cheapest products
-reveal json://data.json/products?sort=price&limit=20
+reveal 'json://data.json/products?sort=price&limit=20'
 ```
 
 ### Offset Results
@@ -781,13 +781,13 @@ Skip first N items (pagination):
 
 ```bash
 # Skip first 10 items
-reveal json://data.json/users?offset=10
+reveal 'json://data.json/users?offset=10'
 
 # Pagination: items 11-20
-reveal json://data.json/users?offset=10&limit=10
+reveal 'json://data.json/users?offset=10&limit=10'
 
 # Next page: items 21-30
-reveal json://data.json/users?offset=20&limit=10
+reveal 'json://data.json/users?offset=20&limit=10'
 ```
 
 ### Combined Result Control
@@ -796,13 +796,13 @@ All three can be combined:
 
 ```bash
 # Top 10 oldest active users
-reveal json://data.json/users?status=active&sort=-age&limit=10
+reveal 'json://data.json/users?status=active&sort=-age&limit=10'
 
 # Products paginated, cheapest first
-reveal json://data.json/products?sort=price&limit=20&offset=40
+reveal 'json://data.json/products?sort=price&limit=20&offset=40'
 
 # Complex query: active users over 25, sorted by name, page 2
-reveal json://data.json/users?status=active&age>25&sort=name&offset=10&limit=10
+reveal 'json://data.json/users?status=active&age>25&sort=name&offset=10&limit=10'
 ```
 
 ---
@@ -840,13 +840,13 @@ reveal json://large_data.json/users/0
 reveal json://large_data.json/users
 
 # ✅ Fast: just first 10 items
-reveal json://large_data.json/users[0:10]
+reveal 'json://large_data.json/users[0:10]'
 ```
 
 **Strategy 3: Filter at query time**
 ```bash
 # ✅ Fast: filter during load
-reveal json://large_data.json/users?status=active&limit=100
+reveal 'json://large_data.json/users?status=active&limit=100'
 
 # ❌ Slower: load all then filter with jq
 reveal json://large_data.json/users --format=json | jq '.value[] | select(.status == "active") | .[0:100]'
@@ -855,10 +855,10 @@ reveal json://large_data.json/users --format=json | jq '.value[] | select(.statu
 **Strategy 4: Use schema first**
 ```bash
 # Understand structure before deep dive
-reveal json://large_data.json?schema
-reveal json://large_data.json/users?schema
+reveal 'json://large_data.json?schema'
+reveal 'json://large_data.json/users?schema'
 # Then: targeted queries
-reveal json://large_data.json/users[0:100]
+reveal 'json://large_data.json/users[0:100]'
 ```
 
 ### Memory Considerations
@@ -1009,19 +1009,19 @@ Start broad, then narrow:
 
 ```bash
 # 1. Understand structure
-reveal json://data.json?schema
+reveal 'json://data.json?schema'
 
 # 2. List top-level keys
-reveal json://data.json?keys
+reveal 'json://data.json?keys'
 
 # 3. Explore specific section
-reveal json://data.json/users?schema
+reveal 'json://data.json/users?schema'
 
 # 4. Sample first element
 reveal json://data.json/users/0
 
 # 5. Filter and extract
-reveal json://data.json/users?status=active&sort=-age&limit=10
+reveal 'json://data.json/users?status=active&sort=-age&limit=10'
 ```
 
 ### When to Use Schema
@@ -1043,7 +1043,7 @@ reveal json://data.json/users?status=active&sort=-age&limit=10
 
 ```bash
 # 1. Flatten entire file
-reveal json://config.json?flatten > flat.txt
+reveal 'json://config.json?flatten' > flat.txt
 
 # 2. Search with grep
 grep -i "database" flat.txt
@@ -1070,13 +1070,13 @@ reveal json://config.json/database/host
 reveal 'json://data.json/users?age>25'
 
 # ❌ BAD: Unquoted (shell redirects > to file)
-reveal json://data.json/users?age>25
+reveal 'json://data.json/users?age>25'
 
 # ✅ GOOD: Quoted with regex
 reveal 'json://data.json/users?name~=^John'
 
 # ❌ BAD: Unquoted (shell interprets ~)
-reveal json://data.json/users?name~=^John
+reveal 'json://data.json/users?name~=^John'
 ```
 
 ### Prefer Direct Paths Over Filtering
@@ -1085,7 +1085,7 @@ reveal json://data.json/users?name~=^John
 
 ```bash
 # ❌ Slow: filter then extract
-reveal json://data.json/users?id=42 --format=json | jq '.value[0]'
+reveal 'json://data.json/users?id=42' --format=json | jq '.value[0]'
 
 # ✅ Fast: direct array index (if you know it)
 reveal json://data.json/users/5
@@ -1095,7 +1095,7 @@ reveal json://data.json/users/5
 
 ```bash
 # ✅ Filter to find it
-reveal json://data.json/users?id=42
+reveal 'json://data.json/users?id=42'
 ```
 
 ### Use Result Control for Large Arrays
@@ -1107,10 +1107,10 @@ reveal json://data.json/users?id=42
 reveal json://data.json/users
 
 # ✅ Good: limit to 100
-reveal json://data.json/users?limit=100
+reveal 'json://data.json/users?limit=100'
 
 # ✅ Good: slice syntax
-reveal json://data.json/users[0:100]
+reveal 'json://data.json/users[0:100]'
 ```
 
 ### Combine with jq for Advanced Queries
@@ -1145,7 +1145,7 @@ reveal json://data.json/orders --format=json | \
       .items[] | select(.quantity > 5)'
 
 # Generate CSV with jq
-reveal json://data.json/users?status=active --format=json | \
+reveal 'json://data.json/users?status=active' --format=json | \
   jq -r '.value[] | [.id, .name, .email, .age] | @csv'
 ```
 
@@ -1153,33 +1153,33 @@ reveal json://data.json/users?status=active --format=json | \
 
 ```bash
 # Find all database config
-reveal json://config.json?flatten | grep -i database
+reveal 'json://config.json?flatten' | grep -i database
 
 # Find specific values
-reveal json://config.json?flatten | grep "localhost"
+reveal 'json://config.json?flatten' | grep "localhost"
 
 # Case-insensitive search
-reveal json://config.json?flatten | grep -i "api"
+reveal 'json://config.json?flatten' | grep -i "api"
 
 # Count occurrences
-reveal json://config.json?flatten | grep -c "endpoint"
+reveal 'json://config.json?flatten' | grep -c "endpoint"
 ```
 
 ### With diff (Configuration Comparison)
 
 ```bash
 # Compare two JSON configs
-diff <(reveal json://prod.json?flatten) \
-     <(reveal json://dev.json?flatten)
+diff <(reveal 'json://prod.json?flatten') \
+     <(reveal 'json://dev.json?flatten')
 
 # Colorized diff
-diff -u <(reveal json://prod.json?flatten) \
-        <(reveal json://dev.json?flatten) | colordiff
+diff -u <(reveal 'json://prod.json?flatten') \
+        <(reveal 'json://dev.json?flatten') | colordiff
 
 # Just show differences
 diff --suppress-common-lines \
-     <(reveal json://prod.json?flatten) \
-     <(reveal json://dev.json?flatten)
+     <(reveal 'json://prod.json?flatten') \
+     <(reveal 'json://dev.json?flatten')
 ```
 
 ### With curl (API Workflow)
@@ -1191,11 +1191,11 @@ curl -s https://api.example.com/users | \
 
 # For now: save then explore
 curl -s https://api.example.com/users > response.json
-reveal json://response.json?schema
+reveal 'json://response.json?schema'
 
 # Filter API response
 curl -s https://api.example.com/users > users.json
-reveal json://users.json/data/users?status=active
+reveal 'json://users.json/data/users?status=active'
 ```
 
 ### With Python (Scripting)
@@ -1225,7 +1225,7 @@ for user in users:
 # Process multiple JSON files
 for file in *.json; do
   echo "=== $file ==="
-  reveal json://$file?schema
+  reveal "json://$file?schema"
 done
 
 # Extract specific value from multiple files

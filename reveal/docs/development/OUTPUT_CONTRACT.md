@@ -299,7 +299,7 @@ Adapters MAY include confidence/warning fields on individual result items:
 
 Adapters MAY include additional fields beyond the contract. These fields:
 - MUST NOT conflict with reserved field names
-- SHOULD be documented in adapter help (`reveal help://<adapter>`)
+- SHOULD be documented in adapter help (`reveal 'help://<adapter>'`)
 - SHOULD follow naming conventions (snake_case for dicts, lowercase for simple types)
 
 **Example**: MySQL adapter with custom fields

@@ -218,7 +218,7 @@ reveal --stdin --check < domains.txt
 Audit all SSL certificates from nginx config:
 
 ```bash
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --summary
+reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --summary
 ```
 
 **Output**:
@@ -234,7 +234,7 @@ Summary:
   ❌ Failures: 0
 
 Next steps:
-  reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --only-failures
+  reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --only-failures
 ```
 
 ---
@@ -595,22 +595,22 @@ reveal ssl://example.com/full --format=json
 
 **Basic batch check**:
 ```bash
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check
+reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check
 ```
 
 **Summary only** (counts, no details):
 ```bash
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --summary
+reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --summary
 ```
 
 **Show only failures**:
 ```bash
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --only-failures
+reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --only-failures
 ```
 
 **Validate nginx config against actual certificates**:
 ```bash
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --validate-nginx
+reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --validate-nginx
 ```
 
 ### Method 2: Stdin Mode
@@ -691,17 +691,17 @@ reveal nginx.conf --extract domains | sort | uniq | reveal --stdin --check --onl
 
 1. **Check all certificates**:
    ```bash
-   reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check
+   reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check
    ```
 
 2. **Filter to expiring certificates**:
    ```bash
-   reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --expiring-within=30
+   reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --expiring-within=30
    ```
 
 3. **Show only problems**:
    ```bash
-   reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --only-failures
+   reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --only-failures
    ```
 
 4. **Inspect specific certificate**:
@@ -716,7 +716,7 @@ reveal nginx.conf --extract domains | sort | uniq | reveal --stdin --check --onl
 
 REPORT="/var/log/ssl-check-$(date +%Y-%m-%d).txt"
 
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --only-failures > "$REPORT"
+reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --only-failures > "$REPORT"
 
 if [ -s "$REPORT" ]; then
   mail -s "SSL Certificate Warnings" admin@example.com < "$REPORT"
@@ -802,7 +802,7 @@ fi
 
 1. **Generate inventory**:
    ```bash
-   reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --format=json > ssl-audit.json
+   reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --format=json > ssl-audit.json
    ```
 
 2. **Extract statistics**:
@@ -812,7 +812,7 @@ fi
 
 3. **List expiring certificates** (<60 days):
    ```bash
-   reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --expiring-within=60 --format=json | \
+   reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --expiring-within=60 --format=json | \
      jq '.results[] | select(.days_until_expiry < 60) | {domain: .host, days: .days_until_expiry}'
    ```
 
@@ -823,7 +823,7 @@ fi
 
 5. **Identify weak certificates** (non-2048+ keys, old TLS):
    ```bash
-   reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --advanced --only-failures
+   reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --advanced --only-failures
    ```
 
 ### Workflow 5: CI/CD SSL Validation
@@ -874,7 +874,7 @@ jobs:
 
 1. **Get all certificates with expiry dates**:
    ```bash
-   reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --format=json > certs.json
+   reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --format=json > certs.json
    ```
 
 2. **Group by expiry window**:
@@ -910,15 +910,15 @@ jobs:
 **Extract specific fields**:
 ```bash
 # Get all domains and expiry dates
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --format=json | \
+reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --format=json | \
   jq -r '.results[] | "\(.host): \(.days_until_expiry) days"'
 
 # Count by status
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --format=json | \
+reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --format=json | \
   jq '.summary'
 
 # List only critical certificates
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --format=json | \
+reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --format=json | \
   jq '.results[] | select(.status == "failure")'
 ```
 
@@ -994,7 +994,7 @@ print("Report generated: ssl-report.html")
 # /usr/local/bin/ssl_exporter.sh
 
 # Get SSL check results
-RESULTS=$(reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --format=json)
+RESULTS=$(reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --format=json)
 
 # Extract metrics
 TOTAL=$(echo $RESULTS | jq '.summary.total')
@@ -1028,7 +1028,7 @@ EOF
 WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
 
 # Check certificates
-RESULTS=$(reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --only-failures --format=json)
+RESULTS=$(reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --only-failures --format=json)
 
 FAILURES=$(echo $RESULTS | jq '.summary.failures')
 WARNINGS=$(echo $RESULTS | jq '.summary.warnings')
@@ -1058,7 +1058,7 @@ fi
 # /etc/cron.hourly/ssl-metrics
 
 # Get SSL check results
-RESULTS=$(reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --format=json)
+RESULTS=$(reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --format=json)
 
 TIMESTAMP=$(date +%s)
 TOTAL=$(echo $RESULTS | jq '.summary.total')
@@ -1124,19 +1124,19 @@ cat domains.txt | reveal --stdin --check
 **2. Use --summary for large batches**:
 ```bash
 # ❌ Verbose output (100+ domains)
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check
+reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check
 
 # ✅ Concise summary
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --summary
+reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --summary
 ```
 
 **3. Filter early with --only-failures**:
 ```bash
 # ❌ Shows all results (noisy)
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check
+reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check
 
 # ✅ Shows only problems
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --only-failures
+reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --only-failures
 ```
 
 ### Best Practices
@@ -1283,7 +1283,7 @@ reveal ssl://subdomain.example.com/san
 
 **Symptom**:
 ```bash
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check
+reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check
 # No domains found
 ```
 
@@ -1301,7 +1301,7 @@ ls /etc/nginx/conf.d/*.conf
 reveal /etc/nginx/conf.d/site.conf
 
 # Use absolute path
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check
+reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check
 ```
 
 ---
@@ -1320,7 +1320,7 @@ echo -e "ssl://example.com\nssl://google.com\nssl://github.com" | \
 
 ```bash
 # Find certificates expiring within 30 days
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --format=json | \
+reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --format=json | \
   jq '.results[] | select(.days_until_expiry < 30)'
 ```
 
@@ -1343,7 +1343,7 @@ jq -s '.[0].common_name as $prod | .[1].common_name as $staging |
 
 ```bash
 # Generate certificate renewal calendar
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --format=json | \
+reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --format=json | \
   jq -r '.results[] | "\(.valid_until)\t\(.host)\t\(.days_until_expiry) days"' | \
   sort > renewal-calendar.txt
 ```

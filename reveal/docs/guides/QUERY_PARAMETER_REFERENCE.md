@@ -616,7 +616,7 @@ The following adapters still have adapter-specific options expressed as CLI flag
 | Adapter | CLI flag | URI query param |
 |---------|---------|-----------------|
 | `ssl://` | `reveal ssl://host --expiring-within 30` | `reveal 'ssl://host?expiring-within=30'` ✅ |
-| `ssl://` | `reveal ssl://nginx:///etc/nginx/*.conf --summary` | `reveal 'ssl://nginx:///etc/nginx/*.conf?summary'` ✅ |
+| `ssl://` | `reveal 'ssl://nginx:///etc/nginx/*.conf' --summary` | `reveal 'ssl://nginx:///etc/nginx/*.conf?summary'` ✅ |
 | `cpanel://` | `reveal cpanel://USER/ssl --dns-verified` | `reveal 'cpanel://USER/ssl?dns-verified'` ✅ |
 | `cpanel://` | `reveal cpanel://USER/ssl --check-live` | `reveal 'cpanel://USER/ssl?check-live'` ✅ |
 | `letsencrypt://` | `reveal letsencrypt:// --check-orphans` | `reveal 'letsencrypt://?check-orphans'` ✅ |
@@ -672,7 +672,7 @@ family above, despite the name similarity — it combines with frontmatter
 filters and ranks results, which `?search=` adapters don't do).
 
 **If you're unsure which an adapter uses:** `?search=` never combines with
-other params; `~=`/`body-contains=` always can. `reveal help://<scheme>` documents
+other params; `~=`/`body-contains=` always can. `reveal 'help://<scheme>'` documents
 which one a given adapter supports.
 
 ---

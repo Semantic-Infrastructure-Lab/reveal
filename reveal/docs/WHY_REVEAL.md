@@ -28,11 +28,11 @@ It's a **semantic query layer** — a unified interface for asking questions abo
 Most tools expose features as subcommands (`git log`, `git blame`). Reveal exposes *resources* as URIs with query parameters:
 
 ```bash
-reveal ast://src/?complexity>10&sort=-complexity
-reveal calls://src/?target=validate_token&depth=3
+reveal 'ast://src/?complexity>10&sort=-complexity'
+reveal 'calls://src/?target=validate_token&depth=3'
 reveal ssl://api.example.com
-reveal mysql://prod/?type=replication
-reveal markdown://docs/?aggregate=type
+reveal 'mysql://prod/?type=replication'
+reveal 'markdown://docs/?aggregate=type'
 ```
 
 Same syntax. Same operators. Same output format. Whether you're querying code, certificates, databases, or docs — the mental model doesn't change. New capabilities don't require new syntax; they drop in as new adapters.

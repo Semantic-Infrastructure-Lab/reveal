@@ -1045,13 +1045,13 @@ reveal 'ast://.?decorator!=property'
 reveal 'ast://./src?complexity>10'
 
 # ❌ BAD: Unquoted (shell redirects > to file)
-reveal ast://./src?complexity>10
+reveal 'ast://./src?complexity>10'
 
 # ✅ GOOD: Quoted with wildcards
 reveal 'ast://./src?name=test_*'
 
 # ❌ BAD: Unquoted (shell expands * to files)
-reveal ast://./src?name=test_*
+reveal 'ast://./src?name=test_*'
 ```
 
 ### Use JSON for Scripting

@@ -114,7 +114,7 @@ code, but for sessions, git history, documents, data stores, and runtime state.
 
 | Need | Adapter | Example |
 |------|---------|---------|
-| Code structure / functions | `ast://` | `reveal ast://src/?type=function` |
+| Code structure / functions | `ast://` | `reveal 'ast://src/?type=function'` |
 | Call relationships | `calls://` | `reveal 'calls://src/?target=my_fn'` |
 | Imports / change impact | `imports://` `depends://` | `reveal imports://src/` |
 | Git history / diffs | `git://` `diff://` | `reveal 'git://.?message~=fix'` |
@@ -127,7 +127,7 @@ code, but for sessions, git history, documents, data stores, and runtime state.
 
 When adapter syntax is uncertain:
 1. `reveal help://quick` — compact intent router (~300 tokens)
-2. `reveal help://schemas/<adapter> --format=json` — exact query params
+2. `reveal 'help://schemas/<adapter>' --format=json` — exact query params
 3. Prefer scoped, bounded queries first; drill down as needed.
 4. Confirm consequential findings by reading source or running targeted checks.
 ```

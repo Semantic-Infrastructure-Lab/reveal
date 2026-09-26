@@ -116,9 +116,9 @@ state as queryable data.
 ### BI workbook reverse engineering
 
 ```bash
-reveal xlsx:///data/report.xlsx?powerpivot=relationships
-reveal xlsx:///data/report.xlsx?powerquery=list
-reveal xlsx:///data/report.xlsx?connections=show
+reveal 'xlsx:///data/report.xlsx?powerpivot=relationships'
+reveal 'xlsx:///data/report.xlsx?powerquery=list'
+reveal 'xlsx:///data/report.xlsx?connections=show'
 ```
 
 **Why this matters:** Reveal can inspect Power Pivot models, Power Query M code,
@@ -829,7 +829,7 @@ reveal README.md --links --link-type=external
 reveal README.md --links --link-type=internal
 
 # Find broken links
-reveal docs/*.md --links 2>/dev/null | grep BROKEN
+ls docs/*.md | reveal --stdin --links 2>/dev/null | grep BROKEN
 ```
 
 ### Extract content
@@ -858,7 +858,7 @@ The `json://` adapter turns reveal into a JSON explorer - no jq required for bas
 
 ```bash
 # What's in this JSON file?
-reveal json://config.json?schema
+reveal 'json://config.json?schema'
 
 # Output:
 # Schema:
@@ -886,14 +886,14 @@ reveal json://config.json/database/host
 
 # Array access
 reveal json://data.json/users/0           # First user
-reveal json://data.json/users[0:3]        # First 3 users (slice)
+reveal 'json://data.json/users[0:3]'        # First 3 users (slice)
 ```
 
 ### Search inside JSON (gron-style)
 
 ```bash
 # Flatten to grep-able format
-reveal json://config.json?flatten
+reveal 'json://config.json?flatten'
 
 # Output:
 # json = {}
@@ -904,24 +904,24 @@ reveal json://config.json?flatten
 # json.database.credentials.username = "admin"
 
 # Now search!
-reveal json://config.json?flatten | grep -i password
-reveal json://large-config.json?flatten | grep 'api.*key'
+reveal 'json://config.json?flatten' | grep -i password
+reveal 'json://large-config.json?flatten' | grep 'api.*key'
 ```
 
 ### Real-world patterns
 
 ```bash
 # Explore package.json
-reveal json://package.json?schema           # See structure
+reveal 'json://package.json?schema'           # See structure
 reveal json://package.json/dependencies     # List deps
 reveal json://package.json/scripts          # See npm scripts
 
 # Explore tsconfig.json
 reveal json://tsconfig.json/compilerOptions
-reveal json://tsconfig.json?flatten | grep strict
+reveal 'json://tsconfig.json?flatten' | grep strict
 
 # Debug API response (saved to file)
-reveal json://api-response.json?schema      # Understand structure
+reveal 'json://api-response.json?schema'      # Understand structure
 reveal json://api-response.json/data/0      # First result
 ```
 
@@ -984,29 +984,29 @@ reveal diff://sqlite://./dev.db:sqlite://./prod.db
 reveal xlsx:///data/report.xlsx
 
 # Inspect a sheet or range
-reveal xlsx:///data/report.xlsx?sheet=Summary
-reveal xlsx:///data/report.xlsx?sheet=Sales&range=A1:C10
+reveal 'xlsx:///data/report.xlsx?sheet=Summary'
+reveal 'xlsx:///data/report.xlsx?sheet=Sales&range=A1:C10'
 
 # Search across all sheets
-reveal xlsx:///data/report.xlsx?search=revenue
+reveal 'xlsx:///data/report.xlsx?search=revenue'
 ```
 
 ### Reverse-engineer a Power BI / Power Pivot export
 
 ```bash
 # Tables, columns, measures, DAX, and relationships
-reveal xlsx:///data/report.xlsx?powerpivot=tables
-reveal xlsx:///data/report.xlsx?powerpivot=schema
-reveal xlsx:///data/report.xlsx?powerpivot=dax
-reveal xlsx:///data/report.xlsx?powerpivot=relationships
+reveal 'xlsx:///data/report.xlsx?powerpivot=tables'
+reveal 'xlsx:///data/report.xlsx?powerpivot=schema'
+reveal 'xlsx:///data/report.xlsx?powerpivot=dax'
+reveal 'xlsx:///data/report.xlsx?powerpivot=relationships'
 
 # Power Query M code
-reveal xlsx:///data/report.xlsx?powerquery=list
-reveal xlsx:///data/report.xlsx?powerquery=show
+reveal 'xlsx:///data/report.xlsx?powerquery=list'
+reveal 'xlsx:///data/report.xlsx?powerquery=show'
 
 # Named ranges and external connections
-reveal xlsx:///data/report.xlsx?names=list
-reveal xlsx:///data/report.xlsx?connections=show
+reveal 'xlsx:///data/report.xlsx?names=list'
+reveal 'xlsx:///data/report.xlsx?connections=show'
 ```
 
 **Why this matters:** this turns opaque finance and BI workbooks into something
@@ -1563,7 +1563,7 @@ reveal 'ast://src/hotspot.py?complexity>10'
 reveal diff://git://HEAD~10/src/hotspot.py:src/hotspot.py
 
 # 4. Who wrote the complex function?
-reveal git://src/hotspot.py?type=blame&element=complex_function
+reveal 'git://src/hotspot.py?type=blame&element=complex_function'
 ```
 
 ### Pattern 2: The Import Archaeology
@@ -1578,8 +1578,8 @@ reveal 'ast://src/module_a.py?type=function'
 reveal 'ast://src/module_b.py?type=function'
 
 # 3. When was the cycle introduced?
-reveal git://src/module_a.py?type=history
-reveal git://src/module_b.py?type=history
+reveal 'git://src/module_a.py?type=history'
+reveal 'git://src/module_b.py?type=history'
 ```
 
 ### Pattern 3: The Config Drift Detector
@@ -1587,7 +1587,7 @@ reveal git://src/module_b.py?type=history
 
 ```bash
 # 1. Understand config structure
-reveal json://config.json?schema
+reveal 'json://config.json?schema'
 
 # 2. Compare environments
 reveal diff://json://config.dev.json:json://config.prod.json
@@ -1604,7 +1604,7 @@ reveal env://
 reveal check src/ --select B,S
 
 # 2. Who wrote insecure code?
-reveal git://src/insecure.py?type=blame&element=bad_function
+reveal 'git://src/insecure.py?type=blame&element=bad_function'
 
 # 3. Check for secrets in env
 reveal env:// --format=json | jq '[.categories[] | .[] | select(.sensitive==true)]'
@@ -1659,7 +1659,7 @@ reveal 'ast://./src?complexity>15' --format=json
 reveal 'imports://src?circular'
 
 # "Who wrote this function?"
-reveal git://src/app.py?type=blame&element=process
+reveal 'git://src/app.py?type=blame&element=process'
 
 # "What changed between these versions?"
 reveal diff://v1.py:v2.py

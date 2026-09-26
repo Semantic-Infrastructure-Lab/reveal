@@ -74,7 +74,7 @@ grep -r "https://" docs/  # Misses [text](url) format
 
 **With Reveal**:
 ```bash
-reveal docs/*.md --links --link-type external
+ls docs/*.md | reveal --stdin --links --link-type external
 ```
 
 Output shows:

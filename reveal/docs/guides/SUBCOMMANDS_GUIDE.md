@@ -771,5 +771,5 @@ reveal testability src --tests tests --format json
 
 ### See Also
 
-- `reveal patches://tests?group=target` — Raw patch-pressure scan (what this command joins against production boundaries)
+- `reveal 'patches://tests?group=target'` — Raw patch-pressure scan (what this command joins against production boundaries)
 - `reveal help://testability` — Full testability workflow guide (interpretation, boundary taxonomy, false-positive notes)

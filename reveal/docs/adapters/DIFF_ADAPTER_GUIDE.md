@@ -557,7 +557,7 @@ reveal diff://git://HEAD/.:./
 
 **Syntax**:
 ```bash
-reveal diff://env://[name]:env://[name]
+reveal 'diff://env://[name]:env://[name]'
 ```
 
 **Use cases**:

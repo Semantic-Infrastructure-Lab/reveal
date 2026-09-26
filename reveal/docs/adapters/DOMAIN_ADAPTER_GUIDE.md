@@ -309,7 +309,7 @@ The domain:// adapter supports four elements for progressive disclosure:
 
 **Syntax**:
 ```bash
-reveal domain://<domain>/dns
+reveal 'domain://<domain>/dns'
 ```
 
 **Example**:
@@ -348,7 +348,7 @@ reveal domain://google.com/dns
 
 **Syntax**:
 ```bash
-reveal domain://<domain>/whois
+reveal 'domain://<domain>/whois'
 ```
 
 **Example**:
@@ -385,7 +385,7 @@ reveal domain://example.com/whois
 
 **Syntax**:
 ```bash
-reveal domain://<domain>/ssl
+reveal 'domain://<domain>/ssl'
 ```
 
 **Example**:
@@ -429,7 +429,7 @@ reveal domain://example.com/ssl
 
 **Syntax**:
 ```bash
-reveal domain://<domain>/registrar
+reveal 'domain://<domain>/registrar'
 ```
 
 **Example**:
@@ -466,7 +466,7 @@ reveal domain://example.com/registrar
 
 **Syntax**:
 ```bash
-reveal domain://<domain> --check
+reveal 'domain://<domain>' --check
 ```
 
 **Example**:
@@ -504,7 +504,7 @@ fi
 
 **Syntax**:
 ```bash
-reveal domain://<domain> --check --advanced
+reveal 'domain://<domain>' --check --advanced
 ```
 
 **Example**:
@@ -527,7 +527,7 @@ reveal domain://example.com --check --advanced
 
 **Syntax**:
 ```bash
-reveal domain://<domain> --check --only-failures
+reveal 'domain://<domain>' --check --only-failures
 ```
 
 **Example**:
@@ -725,7 +725,7 @@ reveal domain://example.com --check
 
 ### Check Types
 
-**Note**: `--check` now runs 9 checks total, including the four documented below plus HTTP redirect (port 80 → HTTPS), mail deliverability (SPF/DMARC), and NS authority checks. See the `/mail`, `/http`, and `/ns-audit` elements listed in `reveal domain://<domain>` output for details on those additional checks.
+**Note**: `--check` now runs 9 checks total, including the four documented below plus HTTP redirect (port 80 → HTTPS), mail deliverability (SPF/DMARC), and NS authority checks. See the `/mail`, `/http`, and `/ns-audit` elements listed in `reveal 'domain://<domain>'` output for details on those additional checks.
 
 #### 1. DNS Resolution Check
 

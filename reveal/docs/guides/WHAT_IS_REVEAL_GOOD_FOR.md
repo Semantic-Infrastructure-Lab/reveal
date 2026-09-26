@@ -365,7 +365,7 @@ The infrastructure guides make that positioning unusually concrete:
 Reveal is a good fit when you need lightweight inspection across structured resources without switching mental models.
 
 ```bash
-reveal mysql://prod/?type=replication
+reveal 'mysql://prod/?type=replication'
 reveal sqlite:///tmp/app.db
 reveal 'json://config.json?path=services.api'
 reveal env://.env

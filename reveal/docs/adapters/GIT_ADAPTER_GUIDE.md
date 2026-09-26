@@ -52,9 +52,8 @@ reveal git://.
 reveal git://.@main
 reveal git://.@develop
 
-# 4. Tag history
+# 4. Tag history (any tag name after @)
 reveal git://.@v1.0.0
-reveal git://.@latest
 
 # 5. Specific commit
 reveal git://.@abc1234
@@ -64,16 +63,16 @@ reveal git://README.md@main
 reveal git://src/app.py@v1.0
 
 # 7. File history (50 most recent commits)
-reveal git://src/app.py?type=history
+reveal 'git://src/app.py?type=history'
 
 # 8. File blame (who wrote what)
-reveal git://src/app.py?type=blame
+reveal 'git://src/app.py?type=blame'
 
 # 9. Semantic blame (who wrote this function)
-reveal git://src/app.py?type=blame&element=load_config
+reveal 'git://src/app.py?type=blame&element=load_config'
 
 # 10. Filter commits by author
-reveal git://.@main?author=John
+reveal 'git://.@main?author=John'
 
 # 11. Search commit messages (type=history lists only the matching commits)
 reveal 'git://.?type=history&message~=bug'
@@ -173,11 +172,11 @@ reveal git://src/app.py@abc1234
 # Shows: file contents at that point in time
 
 # 5. Trace file history
-reveal git://src/app.py?type=history
+reveal 'git://src/app.py?type=history'
 # Shows: 50 commits that touched this file
 
 # 6. Attribution analysis
-reveal git://src/app.py?type=blame
+reveal 'git://src/app.py?type=blame'
 # Shows: who wrote what (contributors + key hunks)
 ```
 
@@ -224,8 +223,8 @@ Recent Commits (10):
 Next Steps:
   reveal git://.@main              # Main branch history
   reveal git://.@v1.2.0            # Tag history
-  reveal git://src/app.py?type=history  # File history
-  reveal git://src/app.py?type=blame    # File attribution
+  reveal 'git://src/app.py?type=history'  # File history
+  reveal 'git://src/app.py?type=blame'    # File attribution
 ```
 
 **What you get**:
@@ -281,8 +280,8 @@ History (20 commits, showing 20):
 
 Next Steps:
   reveal git://.@abc1234            # Specific commit details
-  reveal git://.@main?limit=100     # More commits
-  reveal git://.@main?author=John   # Filter by author
+  reveal 'git://.@main?limit=100'     # More commits
+  reveal 'git://.@main?author=John'   # Filter by author
 ```
 
 **Query parameters**:
@@ -293,8 +292,7 @@ Next Steps:
 ### Tag History
 
 ```bash
-reveal git://.@v1.0.0
-reveal git://.@latest
+reveal git://.@v1.0.0    # any tag name
 ```
 
 **Returns**: Same as branch history, but for commits reachable from tag.
@@ -337,7 +335,7 @@ Stats:
 
 Next Steps:
   reveal git://src/auth.py@abc1234      # View file at this commit
-  reveal git://src/auth.py?type=history # File history
+  reveal 'git://src/auth.py?type=history' # File history
   reveal git://.@def5678                # Parent commit
 ```
 
@@ -392,8 +390,8 @@ Content:
 ────────────────────────────────────────
 
 Next Steps:
-  reveal git://src/app.py?type=history  # File history
-  reveal git://src/app.py?type=blame    # Who wrote what
+  reveal 'git://src/app.py?type=history'  # File history
+  reveal 'git://src/app.py?type=blame'    # Who wrote what
 ```
 
 **Use cases**:
@@ -410,9 +408,9 @@ Works on a **file, a directory (subtree), or the whole repo** — the target
 resolves to a tree/blob oid either way (directory scoping detailed below).
 
 ```bash
-reveal git://src/app.py?type=history
-reveal git://README.md?type=history&limit=100
-reveal git://src/auth?type=history              # a directory — every commit touching src/auth/**
+reveal 'git://src/app.py?type=history'
+reveal 'git://README.md?type=history&limit=100'
+reveal 'git://src/auth?type=history'              # a directory — every commit touching src/auth/**
 ```
 
 **Returns** (~800 tokens for 50 commits):
@@ -451,7 +449,7 @@ Summary:
   Last commit: 13 hours ago
 
 Next Steps:
-  reveal git://src/app.py?type=blame    # Who wrote what
+  reveal 'git://src/app.py?type=blame'    # Who wrote what
   reveal git://src/app.py@abc1234       # View at specific commit
   reveal git://.@abc1234                # Full commit details
 ```
@@ -472,9 +470,9 @@ files. A directory path resolves to a subtree oid (the same mechanism
 `?type=ownership` uses), so history aggregates every file beneath it:
 
 ```bash
-reveal git://src/auth?type=history              # every commit touching src/auth/**
-reveal git://src/auth?type=history&message~=fix # bugfix commits scoped to a subsystem
-reveal git://.?type=history&message~=fix        # bugfix commits repo-wide
+reveal 'git://src/auth?type=history'              # every commit touching src/auth/**
+reveal 'git://src/auth?type=history&message~=fix' # bugfix commits scoped to a subsystem
+reveal 'git://.?type=history&message~=fix'        # bugfix commits repo-wide
 ```
 
 Combining `message~=` with a directory target is how to answer "what fixes
@@ -490,10 +488,10 @@ repo. This is the primitive behind "is activity on this file/subsystem
 trending up or down": rendering (bars, charts) is left to the consumer.
 
 ```bash
-reveal git://src/app.py?type=history&bucket=month     # monthly commit/author counts for a file
-reveal git://src/auth?type=history&bucket=week         # weekly counts for a directory
-reveal git://.?type=history&bucket=month               # monthly counts repo-wide
-reveal git://.?type=history&bucket=month&author=Alice  # scoped to one author's activity
+reveal 'git://src/app.py?type=history&bucket=month'     # monthly commit/author counts for a file
+reveal 'git://src/auth?type=history&bucket=week'         # weekly counts for a directory
+reveal 'git://.?type=history&bucket=month'               # monthly counts repo-wide
+reveal 'git://.?type=history&bucket=month&author=Alice'  # scoped to one author's activity
 ```
 
 **Returns**:
@@ -542,7 +540,7 @@ all buckets.
 ### Summary Blame (Default)
 
 ```bash
-reveal git://src/app.py?type=blame
+reveal 'git://src/app.py?type=blame'
 ```
 
 **Returns** (~500 tokens):
@@ -587,15 +585,15 @@ Key Hunks (significant changes):
     "Comprehensive error handling for all endpoints"
 
 Next Steps:
-  reveal git://src/app.py?type=blame&detail=full     # Line-by-line
-  reveal git://src/app.py?type=blame&element=create_app  # Semantic blame
-  reveal git://src/app.py?type=history                # File history
+  reveal 'git://src/app.py?type=blame&detail=full'     # Line-by-line
+  reveal 'git://src/app.py?type=blame&element=create_app'  # Semantic blame
+  reveal 'git://src/app.py?type=history'                # File history
 ```
 
 ### Detailed Blame (Line-by-Line)
 
 ```bash
-reveal git://src/app.py?type=blame&detail=full
+reveal 'git://src/app.py?type=blame&detail=full'
 ```
 
 **Returns** (~1500 tokens for 89-line file):
@@ -632,7 +630,7 @@ ghi9012 | John Doe | 13 hours ago
 ────────────────────────────────────────
 
 Next Steps:
-  reveal git://src/app.py?type=history  # File history
+  reveal 'git://src/app.py?type=history'  # File history
   reveal git://.@abc1234                # Commit details
 ```
 
@@ -649,9 +647,9 @@ Next Steps:
 **Answer**: "Who wrote this function?" (not just "who wrote line 42?")
 
 ```bash
-reveal git://src/app.py?type=blame&element=create_app
-reveal git://src/auth.py?type=blame&element=AuthHandler
-reveal git://models.py?type=blame&element=User.save
+reveal 'git://src/app.py?type=blame&element=create_app'
+reveal 'git://src/auth.py?type=blame&element=AuthHandler'
+reveal 'git://models.py?type=blame&element=User.save'
 ```
 
 **Returns** (~300 tokens):
@@ -689,7 +687,7 @@ abc1234 | John Doe | 6 months ago
 ────────────────────────────────────────
 
 Next Steps:
-  reveal git://src/app.py?type=blame&detail=full  # Full file blame
+  reveal 'git://src/app.py?type=blame&detail=full'  # Full file blame
   reveal git://.@def5678                          # Jane's commit
   reveal git://.@abc1234                          # John's commit
 ```
@@ -719,10 +717,10 @@ Next Steps:
 `?type=diff` shows what a specific commit changed in a file (or directory subtree), relative to its parent — narrower than the full commit diff in `git://.@<ref>`.
 
 ```bash
-reveal git://src/app.py@abc1234?type=diff                        # full file diff for that commit
-reveal git://src/app.py@abc1234?type=diff&element=load_config    # diff scoped to a function's hunks
-reveal git://src/app.py@abc1234?type=diff&context=10              # more context lines
-reveal git://src/auth@abc1234?type=diff                          # a directory — what the commit changed beneath src/auth/
+reveal 'git://src/app.py@abc1234?type=diff'                        # full file diff for that commit
+reveal 'git://src/app.py@abc1234?type=diff&element=load_config'    # diff scoped to a function's hunks
+reveal 'git://src/app.py@abc1234?type=diff&context=10'              # more context lines
+reveal 'git://src/auth@abc1234?type=diff'                          # a directory — what the commit changed beneath src/auth/
 ```
 
 **Modifiers**: `element=<name>` scopes to hunks touching that function/class; `context=N` sets context lines around each hunk (default varies).
@@ -843,34 +841,34 @@ that shares are limited to the fetched history. Run `git fetch --unshallow` firs
 
 ```bash
 # File history (default: 50 commits)
-reveal git://src/app.py?type=history
+reveal 'git://src/app.py?type=history'
 
 # File history (last 100 commits)
-reveal git://src/app.py?type=history&limit=100
+reveal 'git://src/app.py?type=history&limit=100'
 
 # Blame summary (default)
-reveal git://src/app.py?type=blame
+reveal 'git://src/app.py?type=blame'
 
 # Blame detailed (line-by-line)
-reveal git://src/app.py?type=blame&detail=full
+reveal 'git://src/app.py?type=blame&detail=full'
 
 # Semantic blame (specific function)
-reveal git://src/app.py?type=blame&element=create_app
+reveal 'git://src/app.py?type=blame&element=create_app'
 
 # Filter by author
-reveal git://.@main?author=John
+reveal 'git://.@main?author=John'
 
 # Filter by message (regex)
-reveal git://.?message~=bug
+reveal 'git://.?message~=bug'
 
 # Multiple filters (AND logic)
-reveal git://.?author=John&message~=fix
+reveal 'git://.?author=John&message~=fix'
 
 # Pagination
-reveal git://.@main?limit=50&offset=100
+reveal 'git://.@main?limit=50&offset=100'
 
 # Timeline: monthly commit/author counts for a file
-reveal git://src/app.py?type=history&bucket=month
+reveal 'git://src/app.py?type=history&bucket=month'
 ```
 
 ---
@@ -883,68 +881,68 @@ Filter commits by author, email, message, or hash. **All examples below need an 
 
 ```bash
 # Exact match (case-insensitive)
-reveal git://.?author=John
+reveal 'git://.?author=John'
 
 # Regex match (case-insensitive)
-reveal git://.?author~=john
+reveal 'git://.?author~=john'
 
 # Multiple authors (OR logic with regex)
-reveal git://.?author~=John|Jane
+reveal 'git://.?author~=John|Jane'
 
 # Branch + author filter
-reveal git://.@main?author=John
+reveal 'git://.@main?author=John'
 ```
 
 ### Email Filtering
 
 ```bash
 # Exact match
-reveal git://.?email=john@example.com
+reveal 'git://.?email=john@example.com'
 
 # Domain match (regex)
-reveal git://.?email~=@example.com
+reveal 'git://.?email~=@example.com'
 
 # Multiple domains
-reveal git://.?email~=@(example|test).com
+reveal 'git://.?email~=@(example|test).com'
 ```
 
 ### Message Filtering
 
 ```bash
 # Exact match (case-sensitive)
-reveal git://.?message=Initial commit
+reveal 'git://.?message=Initial' commit
 
 # Contains (case-insensitive regex)
-reveal git://.?message~=bug
+reveal 'git://.?message~=bug'
 
 # Multiple keywords (OR logic)
-reveal git://.?message~=bug|fix|patch
+reveal 'git://.?message~=bug|fix|patch'
 
 # Complex pattern
-reveal git://.?message~=feat.*auth
+reveal 'git://.?message~=feat.*auth'
 ```
 
 ### Hash Filtering
 
 ```bash
 # Prefix match
-reveal git://.?hash=abc123
+reveal 'git://.?hash=abc123'
 
 # Range match (Git's hash range operator)
-reveal git://.?hash=abc123..def456
+reveal 'git://.?hash=abc123..def456'
 ```
 
 ### Combining Filters
 
 ```bash
 # Author AND message (AND logic)
-reveal git://.?author=John&message~=bug
+reveal 'git://.?author=John&message~=bug'
 
 # Author AND email domain
-reveal git://.?author=John&email~=@example.com
+reveal 'git://.?author=John&email~=@example.com'
 
 # Complex: author + message + branch
-reveal git://.@main?author=John&message~=fix.*auth
+reveal 'git://.@main?author=John&message~=fix.*auth'
 ```
 
 ### Operators
@@ -971,47 +969,47 @@ Control result pagination and sorting:
 # Default limits
 reveal git://.               # 10 items per category
 reveal git://.@main          # 20 commits
-reveal git://file?type=history  # 50 commits
+reveal 'git://file?type=history'  # 50 commits
 
 # Custom limits
-reveal git://.@main?limit=100
-reveal git://file?type=history&limit=200
+reveal 'git://.@main?limit=100'
+reveal 'git://file?type=history&limit=200'
 ```
 
 ### Offset (Pagination)
 
 ```bash
 # Skip first 50 commits
-reveal git://.@main?offset=50
+reveal 'git://.@main?offset=50'
 
 # Page 2 (50 commits per page)
-reveal git://.@main?limit=50&offset=50
+reveal 'git://.@main?limit=50&offset=50'
 
 # Page 3
-reveal git://.@main?limit=50&offset=100
+reveal 'git://.@main?limit=50&offset=100'
 ```
 
 ### Sort
 
 ```bash
 # Sort by date (default)
-reveal git://.@main?sort=date
+reveal 'git://.@main?sort=date'
 
 # Sort by author
-reveal git://.@main?sort=author
+reveal 'git://.@main?sort=author'
 
 # Sort by message
-reveal git://.@main?sort=message
+reveal 'git://.@main?sort=message'
 ```
 
 ### Combining Result Control
 
 ```bash
 # Page 2 of John's commits, sorted by date
-reveal git://.@main?author=John&limit=50&offset=50&sort=date
+reveal 'git://.@main?author=John&limit=50&offset=50&sort=date'
 
 # Last 100 bug fixes
-reveal git://.?message~=bug&limit=100&sort=date
+reveal 'git://.?message~=bug&limit=100&sort=date'
 ```
 
 ---
@@ -1241,10 +1239,10 @@ reveal git://config/ @main
 reveal git://src/main.py@main
 
 # 6. Understand authentication module
-reveal git://src/auth.py?type=history
+reveal 'git://src/auth.py?type=history'
 
 # 7. Find who wrote auth logic
-reveal git://src/auth.py?type=blame
+reveal 'git://src/auth.py?type=blame'
 ```
 
 **Output**: Complete understanding of repository structure, activity, and ownership
@@ -1257,10 +1255,10 @@ reveal git://src/auth.py?type=blame
 
 ```bash
 # 1. Compare feature branch to main
-reveal git://.@feature/login?limit=50
+reveal 'git://.@feature/login?limit=50'
 
 # 2. Filter commits by feature author
-reveal git://.@feature/login?author=Jane
+reveal 'git://.@feature/login?author=Jane'
 
 # 3. Review specific file changes
 reveal git://src/auth.py@feature/login
@@ -1269,10 +1267,10 @@ reveal git://src/auth.py@feature/login
 reveal git://src/auth.py@main
 
 # 5. Check file history for context
-reveal git://src/auth.py?type=history&limit=20
+reveal 'git://src/auth.py?type=history&limit=20'
 
 # 6. See who else worked on this file
-reveal git://src/auth.py?type=blame
+reveal 'git://src/auth.py?type=blame'
 ```
 
 **Output**: Full context for code review with history and attribution
@@ -1285,10 +1283,10 @@ reveal git://src/auth.py?type=blame
 
 ```bash
 # 1. Search commits mentioning "bug" or "fix"
-reveal git://.?message~=bug|fix&limit=100
+reveal 'git://.?message~=bug|fix&limit=100'
 
 # 2. Filter by affected file
-reveal git://src/payment.py?type=history
+reveal 'git://src/payment.py?type=history'
 
 # 3. Find suspicious commit
 reveal git://.@abc1234
@@ -1300,7 +1298,7 @@ reveal git://src/payment.py@abc1234~1
 reveal git://src/payment.py@abc1234
 
 # 6. Check who made the change
-reveal git://src/payment.py?type=blame&element=process_payment
+reveal 'git://src/payment.py?type=blame&element=process_payment'
 ```
 
 **Output**: Identify bug introduction commit and responsible code
@@ -1316,18 +1314,18 @@ reveal git://src/payment.py?type=blame&element=process_payment
 reveal git://.
 
 # 2. Find main contributors to core module
-reveal git://src/core/?type=blame
+reveal 'git://src/core/?type=blame'
 
 # 3. Identify API expert (most commits in api/)
-reveal git://.?author=*&message~=api&limit=100
+reveal 'git://.?author=*&message~=api&limit=100'
 
 # 4. Check database expert
-reveal git://db/migrations/?type=history
+reveal 'git://db/migrations/?type=history'
 
 # 5. Create ownership map
-reveal git://src/auth.py?type=blame  # Auth expert
-reveal git://src/api.py?type=blame   # API expert
-reveal git://src/db.py?type=blame    # DB expert
+reveal 'git://src/auth.py?type=blame'  # Auth expert
+reveal 'git://src/api.py?type=blame'   # API expert
+reveal 'git://src/db.py?type=blame'    # DB expert
 ```
 
 **Output**: Map of code ownership and expertise
@@ -1340,18 +1338,18 @@ reveal git://src/db.py?type=blame    # DB expert
 
 ```bash
 # 1. Get all commits since last release
-reveal git://.?message~=feat|fix|breaking&limit=200
+reveal 'git://.?message~=feat|fix|breaking&limit=200'
 
 # 2. Group by type (features, fixes, breaking)
-reveal git://.?message~=^feat&limit=100 > features.txt
-reveal git://.?message~=^fix&limit=100 > fixes.txt
-reveal git://.?message~=^breaking&limit=100 > breaking.txt
+reveal 'git://.?message~=^feat&limit=100' > features.txt
+reveal 'git://.?message~=^fix&limit=100' > fixes.txt
+reveal 'git://.?message~=^breaking&limit=100' > breaking.txt
 
 # 3. Get commit details
 reveal git://.@abc1234
 
 # 4. Extract files changed
-reveal git://.@main?limit=100 --format=json | \
+reveal 'git://.@main?limit=100' --format=json | \
   jq '.history[] | {hash, message, files: .stats.files}'
 ```
 
@@ -1365,17 +1363,17 @@ reveal git://.@main?limit=100 --format=json | \
 
 ```bash
 # 1. Find all commits touching requirements.txt
-reveal git://requirements.txt?type=history
+reveal 'git://requirements.txt?type=history'
 
 # 2. Identify dependency updaters
-reveal git://requirements.txt?type=blame
+reveal 'git://requirements.txt?type=blame'
 
 # 3. Check for security-related changes
-reveal git://requirements.txt?type=history --format=json | \
+reveal 'git://requirements.txt?type=history' --format=json | \
   jq '.commits[] | select(.message | test("security|cve|vuln"; "i"))'
 
 # 4. Find who last updated specific dependency
-reveal git://requirements.txt?type=blame&detail=full | grep "flask=="
+reveal 'git://requirements.txt?type=blame&detail=full' | grep "flask=="
 ```
 
 **Output**: Dependency maintenance history and ownership
@@ -1396,7 +1394,7 @@ reveal git://.@main --format=json | \
   jq '.history | sort_by(.stats.files) | reverse | .[0:10] | .[] | {hash, files: .stats.files, message}'
 
 # Get contributor statistics
-reveal git://.@main?limit=1000 --format=json | \
+reveal 'git://.@main?limit=1000' --format=json | \
   jq '[.history[] | .author] | group_by(.) | map({author: .[0], commits: length}) | sort_by(.commits) | reverse'
 
 # Find commits with most changes
@@ -1416,7 +1414,7 @@ LIMIT=${2:-1000}
 echo "Analyzing $BRANCH (last $LIMIT commits)..."
 
 # Get commit data
-DATA=$(reveal git://.@$BRANCH?limit=$LIMIT --format=json)
+DATA=$(reveal "git://.@$BRANCH?limit=$LIMIT" --format=json)
 
 # Top contributors
 echo "Top Contributors:"
@@ -1464,7 +1462,7 @@ LIMIT=${2:-500}
 echo "Finding code hotspots on $BRANCH..."
 
 # Get all commits with file changes
-reveal git://.@$BRANCH?limit=$LIMIT --format=json | \
+reveal "git://.@$BRANCH?limit=$LIMIT" --format=json | \
   jq -r '
     [.history[] | .changed_files[]? | .path] |
     group_by(.) |
@@ -1488,22 +1486,22 @@ echo "Generating release notes since $LAST_TAG..."
 
 # Features
 echo "## Features"
-reveal git://.?message~=^feat:&limit=100 --format=json | \
+reveal 'git://.?message~=^feat:&limit=100' --format=json | \
   jq -r '.history[] | "- \(.message | split("\n")[0] | sub("^feat: "; ""))"'
 
 # Fixes
 echo -e "\n## Bug Fixes"
-reveal git://.?message~=^fix:&limit=100 --format=json | \
+reveal 'git://.?message~=^fix:&limit=100' --format=json | \
   jq -r '.history[] | "- \(.message | split("\n")[0] | sub("^fix: "; ""))"'
 
 # Breaking Changes
 echo -e "\n## Breaking Changes"
-reveal git://.?message~=BREAKING&limit=100 --format=json | \
+reveal 'git://.?message~=BREAKING&limit=100' --format=json | \
   jq -r '.history[] | "- \(.message | split("\n")[0])"'
 
 # Contributors
 echo -e "\n## Contributors"
-reveal git://.?limit=100 --format=json | \
+reveal 'git://.?limit=100' --format=json | \
   jq -r '[.history[] | .author] | unique | .[] | "- \(.)"'
 ```
 
@@ -1582,7 +1580,7 @@ set -e
 echo "Checking commits since main..."
 
 # Get commits in this PR/branch
-COMMITS=$(reveal git://.?limit=50 --format=json)
+COMMITS=$(reveal 'git://.?limit=50' --format=json)
 
 # Check for conventional commit format
 INVALID=$(echo "$COMMITS" | jq -r '
@@ -1642,25 +1640,25 @@ git:// is optimized for AI agent consumption:
    reveal git://.@main
 
    # Then detailed
-   reveal git://src/app.py?type=history
+   reveal 'git://src/app.py?type=history'
    ```
 
 3. **Use summary blame (default)**
    ```bash
    # Summary: ~500 tokens
-   reveal git://src/app.py?type=blame
+   reveal 'git://src/app.py?type=blame'
 
    # Full: ~1500 tokens (only when needed)
-   reveal git://src/app.py?type=blame&detail=full
+   reveal 'git://src/app.py?type=blame&detail=full'
    ```
 
 4. **Filter early**
    ```bash
    # Without filter: 1000 commits scanned
-   reveal git://.@main?limit=1000
+   reveal 'git://.@main?limit=1000'
 
    # With filter: Only matching commits scanned
-   reveal git://.@main?author=John&limit=100
+   reveal 'git://.@main?author=John&limit=100'
    ```
 
 5. **Cache repository overview**
@@ -1681,18 +1679,18 @@ git:// is optimized for AI agent consumption:
 2. **Use semantic blame for functions**
    ```bash
    # Instead of grepping line numbers
-   reveal git://src/app.py?type=blame&element=create_app
+   reveal 'git://src/app.py?type=blame&element=create_app'
 
-   # Not: grep -n "def create_app" && reveal git://src/app.py?type=blame&detail=full
+   # Not: grep -n "def create_app" && reveal 'git://src/app.py?type=blame&detail=full'
    ```
 
 3. **Combine filters for precision**
    ```bash
    # Good: Specific query
-   reveal git://.@main?author=John&message~=auth&limit=50
+   reveal 'git://.@main?author=John&message~=auth&limit=50'
 
    # Bad: Overly broad
-   reveal git://.@main?limit=1000 | grep -i john | grep -i auth
+   reveal 'git://.@main?limit=1000' | grep -i john | grep -i auth
    ```
 
 4. **Use JSON output for parsing**
@@ -1707,10 +1705,10 @@ git:// is optimized for AI agent consumption:
 5. **Leverage progressive disclosure**
    ```bash
    # Don't: Read entire file history for quick check
-   reveal git://src/app.py?type=history&limit=1000
+   reveal 'git://src/app.py?type=history&limit=1000'
 
    # Do: Start small, expand if needed
-   reveal git://src/app.py?type=history  # Default 50
+   reveal 'git://src/app.py?type=history'  # Default 50
    ```
 
 ---
@@ -1798,13 +1796,13 @@ reveal git://.@main  # Not master if renamed
 grep "def function_name" src/app.py
 
 # Use exact name (case-sensitive)
-reveal git://src/app.py?type=blame&element=function_name
+reveal 'git://src/app.py?type=blame&element=function_name'
 
 # For classes, use ClassName not classname
-reveal git://src/models.py?type=blame&element=User
+reveal 'git://src/models.py?type=blame&element=User'
 
 # For methods, use ClassName.method_name
-reveal git://src/models.py?type=blame&element=User.save
+reveal 'git://src/models.py?type=blame&element=User.save'
 ```
 
 ---
@@ -1859,27 +1857,27 @@ reveal git://.
 
 # Then drill into specifics
 reveal git://.@main
-reveal git://src/app.py?type=history
+reveal 'git://src/app.py?type=history'
 ```
 
 ### 2. Use Semantic Blame for Code Review
 
 ```bash
 # Answer "who owns this function?"
-reveal git://src/api.py?type=blame&element=handle_request
+reveal 'git://src/api.py?type=blame&element=handle_request'
 
 # Not: "who wrote line 42?"
-reveal git://src/api.py?type=blame&detail=full | grep "42:"
+reveal 'git://src/api.py?type=blame&detail=full' | grep "42:"
 ```
 
 ### 3. Filter for Precision
 
 ```bash
 # Good: Specific query
-reveal git://.?author=John&message~=auth
+reveal 'git://.?author=John&message~=auth'
 
 # Bad: Scan everything, filter later
-reveal git://.?limit=10000 | grep john
+reveal 'git://.?limit=10000' | grep john
 ```
 
 ### 4. Use JSON for Scripting
@@ -1894,23 +1892,23 @@ reveal git://.@main --format=json | \
 
 ```bash
 # Start with summary
-reveal git://src/app.py?type=blame
+reveal 'git://src/app.py?type=blame'
 
 # Drill into specific function if needed
-reveal git://src/app.py?type=blame&element=create_app
+reveal 'git://src/app.py?type=blame&element=create_app'
 
 # Full detail only when necessary
-reveal git://src/app.py?type=blame&detail=full
+reveal 'git://src/app.py?type=blame&detail=full'
 ```
 
 ### 6. Combine with Other Adapters
 
 ```bash
 # Find complex functions, then blame them
-reveal ast://src/**/*.py?complexity>10 --format=json | \
+reveal 'ast://src/**/*.py?complexity>10' --format=json | \
   jq -r '.matches[].path' | while read file; do
     echo "=== $file ==="
-    reveal git://$file?type=blame
+    reveal "git://$file?type=blame"
   done
 ```
 
@@ -1968,13 +1966,13 @@ reveal git://.
 
 ```bash
 # 1. Find commits mentioning "bug" or "fix"
-reveal git://.?message~=bug|fix&limit=100
+reveal 'git://.?message~=bug|fix&limit=100'
 
 # 2. Check file history
-reveal git://src/buggy.py?type=history
+reveal 'git://src/buggy.py?type=history'
 
 # 3. Blame specific function
-reveal git://src/buggy.py?type=blame&element=buggy_function
+reveal 'git://src/buggy.py?type=blame&element=buggy_function'
 
 # 4. View commit that changed it
 reveal git://.@suspicious_hash
@@ -1989,7 +1987,7 @@ reveal git://.@suspicious_hash
 reveal git://. --format=json | jq -r '.branches.items[].name' | \
   while read branch; do
     echo "=== $branch ==="
-    reveal git://.@$branch?message~=search_term
+    reveal "git://.@$branch?message~=search_term"
   done
 ```
 
@@ -2040,7 +2038,7 @@ reveal git://.
 
 ```bash
 # Export commit data
-reveal git://.@main?limit=1000 --format=json > commits.json
+reveal 'git://.@main?limit=1000' --format=json > commits.json
 
 # Analyze with jq, Python, R, etc.
 cat commits.json | jq '.history[] | {date, author, message}'
@@ -2099,7 +2097,7 @@ For detailed merge analysis, use `git show <merge_commit>`.
 
 ```bash
 # Get commits with file changes
-reveal git://.@main?limit=1000 --format=json | \
+reveal 'git://.@main?limit=1000' --format=json | \
   jq -r '[.history[].changed_files[]?.path] | group_by(.) | map({file: .[0], changes: length}) | sort_by(.changes) | reverse | .[]'
 ```
 

@@ -418,7 +418,7 @@ The examples above demonstrate the **multi-shot prompting pattern** - by showing
 
 ```
 Problem: [Specific issue]
-Command: reveal python://[endpoint]
+Command: reveal 'python://[endpoint]'
 Output: [Actual JSON/text output]
 Interpretation: [What this means]
 Action: [What to do next]

@@ -17,16 +17,16 @@ category: guide
 reveal file.xlsx
 
 # Extract specific sheet (by name)
-reveal xlsx://file.xlsx?sheet=Sales
+reveal 'xlsx://file.xlsx?sheet=Sales'
 
 # Extract cell range (A1 notation)
-reveal xlsx://file.xlsx?sheet=Sales&range=A1:C10
+reveal 'xlsx://file.xlsx?sheet=Sales&range=A1:C10'
 
 # Export sheet as CSV
-reveal xlsx://file.xlsx?sheet=Sales&format=csv
+reveal 'xlsx://file.xlsx?sheet=Sales&format=csv'
 
 # Search across all sheets
-reveal xlsx://file.xlsx?search=revenue
+reveal 'xlsx://file.xlsx?search=revenue'
 ```
 
 ---
@@ -58,14 +58,14 @@ Author: Finance Team
 
 **By name (case-insensitive):**
 ```bash
-reveal xlsx://file.xlsx?sheet=Sales
-reveal xlsx://file.xlsx?sheet=sales     # Case-insensitive
+reveal 'xlsx://file.xlsx?sheet=Sales'
+reveal 'xlsx://file.xlsx?sheet=sales'     # Case-insensitive
 ```
 
 **By index (0-based):**
 ```bash
-reveal xlsx://file.xlsx?sheet=0         # First sheet
-reveal xlsx://file.xlsx?sheet=1         # Second sheet
+reveal 'xlsx://file.xlsx?sheet=0'         # First sheet
+reveal 'xlsx://file.xlsx?sheet=1'         # Second sheet
 ```
 
 **Output shows:**
@@ -79,16 +79,16 @@ reveal xlsx://file.xlsx?sheet=1         # Second sheet
 **A1 notation support:**
 ```bash
 # Simple range
-reveal xlsx://file.xlsx?sheet=Sales&range=A1:C10
+reveal 'xlsx://file.xlsx?sheet=Sales&range=A1:C10'
 
 # Single column
-reveal xlsx://file.xlsx?sheet=Sales&range=B:B
+reveal 'xlsx://file.xlsx?sheet=Sales&range=B:B'
 
 # Single row
-reveal xlsx://file.xlsx?sheet=Sales&range=5:5
+reveal 'xlsx://file.xlsx?sheet=Sales&range=5:5'
 
 # Large ranges (AA-ZZ columns supported)
-reveal xlsx://file.xlsx?sheet=Data&range=A1:ZZ1000
+reveal 'xlsx://file.xlsx?sheet=Data&range=A1:ZZ1000'
 ```
 
 **What you get:**
@@ -101,13 +101,13 @@ reveal xlsx://file.xlsx?sheet=Data&range=A1:ZZ1000
 **Export any sheet to CSV format:**
 ```bash
 # Full sheet
-reveal xlsx://file.xlsx?sheet=Sales&format=csv
+reveal 'xlsx://file.xlsx?sheet=Sales&format=csv'
 
 # Specific range
-reveal xlsx://file.xlsx?sheet=Sales&range=A1:E100&format=csv
+reveal 'xlsx://file.xlsx?sheet=Sales&range=A1:E100&format=csv'
 
 # Pipe to file
-reveal xlsx://file.xlsx?sheet=Sales&format=csv > sales.csv
+reveal 'xlsx://file.xlsx?sheet=Sales&format=csv' > sales.csv
 ```
 
 **CSV output characteristics:**
@@ -121,7 +121,7 @@ reveal xlsx://file.xlsx?sheet=Sales&format=csv > sales.csv
 **Find data across entire workbook:**
 ```bash
 # Simple search (case-insensitive)
-reveal xlsx://file.xlsx?search=revenue
+reveal 'xlsx://file.xlsx?search=revenue'
 
 # Multiple matches show sheet + cell location
 ```
@@ -183,7 +183,7 @@ xlsx://file.xlsx?search=revenue
 
 **Human-readable table output:**
 ```bash
-reveal xlsx://file.xlsx?sheet=Sales
+reveal 'xlsx://file.xlsx?sheet=Sales'
 ```
 
 Output includes:
@@ -197,7 +197,7 @@ Output includes:
 
 **Machine-readable structured output:**
 ```bash
-reveal xlsx://file.xlsx?sheet=Sales --format json
+reveal 'xlsx://file.xlsx?sheet=Sales' --format json
 ```
 
 **JSON structure:**
@@ -231,7 +231,7 @@ reveal xlsx://file.xlsx?sheet=Sales --format json
 
 **Excel-compatible CSV:**
 ```bash
-reveal xlsx://file.xlsx?sheet=Sales&format=csv
+reveal 'xlsx://file.xlsx?sheet=Sales&format=csv'
 ```
 
 Output characteristics:
@@ -309,16 +309,16 @@ to extract M code (see Power Query section below).
 
 ```bash
 # List all tables in the model
-reveal xlsx://model.xlsx?powerpivot=tables
+reveal 'xlsx://model.xlsx?powerpivot=tables'
 
 # Full schema: tables, columns, measures
-reveal xlsx://model.xlsx?powerpivot=schema
+reveal 'xlsx://model.xlsx?powerpivot=schema'
 
 # DAX expressions for all measures
-reveal xlsx://model.xlsx?powerpivot=dax
+reveal 'xlsx://model.xlsx?powerpivot=dax'
 
 # Relationship graph
-reveal xlsx://model.xlsx?powerpivot=relationships
+reveal 'xlsx://model.xlsx?powerpivot=relationships'
 ```
 
 **`?powerpivot=schema` output (XMLA tier — full detail):**
@@ -408,16 +408,16 @@ Power Query M code is stored in a `customXml/itemN.xml` file that contains a bas
 
 ```bash
 # List all Power Query queries in the workbook
-reveal xlsx://file.xlsx?powerquery=list
+reveal 'xlsx://file.xlsx?powerquery=list'
 
 # Show full M code for all queries
-reveal xlsx://file.xlsx?powerquery=show
+reveal 'xlsx://file.xlsx?powerquery=show'
 
 # Show M code for a specific query
-reveal xlsx://file.xlsx?powerquery=SalesData
+reveal 'xlsx://file.xlsx?powerquery=SalesData'
 
 # Quoted names with spaces still work (case-insensitive match)
-reveal xlsx://file.xlsx?powerquery=Sales Data
+reveal 'xlsx://file.xlsx?powerquery=Sales' Data
 ```
 
 ### Sample Output
@@ -448,7 +448,7 @@ Extracted from `xl/workbook.xml` `<definedNames>` using stdlib XML parsing (no o
 
 ```bash
 # List all named ranges
-reveal xlsx://file.xlsx?names=list
+reveal 'xlsx://file.xlsx?names=list'
 ```
 
 ### Sample Output
@@ -483,10 +483,10 @@ Connections reveal where the workbook pulls data from: ODBC databases, OLE DB, w
 
 ```bash
 # List all connections
-reveal xlsx://file.xlsx?connections=list
+reveal 'xlsx://file.xlsx?connections=list'
 
 # Full connection details (connection strings and SQL)
-reveal xlsx://file.xlsx?connections=show
+reveal 'xlsx://file.xlsx?connections=show'
 ```
 
 ### Sample Output — list
@@ -529,7 +529,7 @@ reveal file.xlsx sales
 
 **Equivalent to:**
 ```bash
-reveal xlsx://file.xlsx?sheet=Sheet1
+reveal 'xlsx://file.xlsx?sheet=Sheet1'
 ```
 
 ---
@@ -553,7 +553,7 @@ reveal report.xlsx
 reveal report.xlsx Sales
 
 # Step 3: Look at specific range
-reveal xlsx://report.xlsx?sheet=Sales&range=A1:E25
+reveal 'xlsx://report.xlsx?sheet=Sales&range=A1:E25'
 ```
 
 ### Workflow 2: CSV Export for Analysis
@@ -562,10 +562,10 @@ reveal xlsx://report.xlsx?sheet=Sales&range=A1:E25
 
 ```bash
 # Export full sheet
-reveal xlsx://data.xlsx?sheet=Transactions&format=csv > transactions.csv
+reveal 'xlsx://data.xlsx?sheet=Transactions&format=csv' > transactions.csv
 
 # Export specific range only
-reveal xlsx://data.xlsx?sheet=Summary&range=A1:D100&format=csv > summary.csv
+reveal 'xlsx://data.xlsx?sheet=Summary&range=A1:D100&format=csv' > summary.csv
 
 # Verify export
 wc -l transactions.csv
@@ -594,7 +594,7 @@ find reports/ -name "*.xlsx" | reveal --stdin xlsx://?search=Q4%20Revenue
 ```bash
 # Extract Sales sheet from all monthly reports
 for month in jan feb mar apr; do
-  reveal xlsx://reports/${month}_report.xlsx?sheet=Sales&format=csv > ${month}_sales.csv
+  reveal "xlsx://reports/${month}_report.xlsx?sheet=Sales&format=csv" > ${month}_sales.csv
 done
 
 # Combine into single file
@@ -642,7 +642,7 @@ rather than silently showing `0 rows, 0 cols`. Other sheets in the same workbook
 parse normally. To access a large sheet's data, extract a specific range:
 
 ```bash
-reveal xlsx://huge_file.xlsx?sheet=FactSales&range=A1:Z1000
+reveal 'xlsx://huge_file.xlsx?sheet=FactSales&range=A1:Z1000'
 ```
 
 ### Large File Strategies
@@ -744,7 +744,7 @@ reveal report.xlsx
 reveal report.xlsx Sales
 
 # 3. Extract specific data
-reveal xlsx://report.xlsx?sheet=Sales&range=A1:E100&format=csv
+reveal 'xlsx://report.xlsx?sheet=Sales&range=A1:E100&format=csv'
 ```
 
 ### Case-Insensitive Sheet Names
@@ -803,11 +803,11 @@ df = pd.read_csv(io.StringIO(csv_data))
 
 ```bash
 # Extract specific columns
-reveal xlsx://file.xlsx?sheet=Sales --format json | \
+reveal 'xlsx://file.xlsx?sheet=Sales' --format json | \
   jq '.rows[] | [.[0], .[2], .[4]]'
 
 # Filter rows
-reveal xlsx://file.xlsx?sheet=Sales --format json | \
+reveal 'xlsx://file.xlsx?sheet=Sales' --format json | \
   jq '.rows[] | select(.[3] > 100)'
 ```
 
@@ -815,7 +815,7 @@ reveal xlsx://file.xlsx?sheet=Sales --format json | \
 
 ```bash
 # Export to CSV, import to SQLite
-reveal xlsx://data.xlsx?sheet=Transactions&format=csv > transactions.csv
+reveal 'xlsx://data.xlsx?sheet=Transactions&format=csv' > transactions.csv
 sqlite3 data.db ".import --csv transactions.csv transactions"
 ```
 

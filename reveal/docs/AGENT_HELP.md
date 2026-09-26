@@ -22,14 +22,14 @@ help_token_estimate: "~49,000"
 
 **For raw flag and subcommand listing** (the "what flags exist?" question), use `reveal --help` instead — it's argparse-generated and always reflects the live CLI.
 
-**For progressive, low-token discovery** (one topic at a time), use `reveal help://<topic>`:
+**For progressive, low-token discovery** (one topic at a time), use `reveal 'help://<topic>'`:
 - `reveal help://` — index of all topics
 - `reveal help://ast` — ast:// quick start (first section only; ~600 tokens)
 - `reveal help://ast/full` — complete ast:// guide (~9,400 tokens)
 - `reveal help://tricks` — RECIPES guide first section
 - `reveal help://tricks/full` — complete RECIPES guide
-- `reveal help://schemas/<adapter>` — machine-readable adapter schema
-- `reveal help://examples/<task>` — query recipes per task
+- `reveal 'help://schemas/<adapter>'` — machine-readable adapter schema
+- `reveal 'help://examples/<task>'` — query recipes per task
 - `reveal 'help://search?search=<term>'` — full-text search this help corpus by your own phrasing, when nothing above matches it
 
 Guides >200 lines show the first section by default (progressive disclosure). Append `/full` to get the complete guide.
@@ -85,10 +85,10 @@ reveal --language-info <lang>    # Per-language capabilities, known gaps, Python
 
 # help:// adapter — read topic-by-topic (progressive disclosure)
 reveal help://                   # List all help topics
-reveal help://<topic>            # First section of a topic (e.g. help://ast, help://tricks)
-reveal help://<topic>/full       # Complete guide (e.g. help://ast/full)
-reveal help://schemas/<adapter>  # Machine-readable adapter schema (preferred for agents)
-reveal help://examples/<task>    # Canonical query recipes per task category
+reveal 'help://<topic>'            # First section of a topic (e.g. help://ast, help://tricks)
+reveal 'help://<topic>/full'       # Complete guide (e.g. help://ast/full)
+reveal 'help://schemas/<adapter>'  # Machine-readable adapter schema (preferred for agents)
+reveal 'help://examples/<task>'    # Canonical query recipes per task category
 
 # This guide — comprehensive reference
 reveal --agent-help              # First sections of this file (~1,000 tokens); reveal help://agent/full for all
@@ -98,7 +98,7 @@ reveal --help                    # Global flags in full, specialized groups coll
 reveal --help-all                # Every flag, every subcommand, with one-liners
 ```
 
-**For agents: the canonical discovery recipe** is `reveal --discover` (full registry as JSON in one call) or, for a single adapter, `reveal help://schemas/<adapter> --format=json`. Both return query params, operators, output type names, and example queries — generate valid queries from the schema rather than hardcoding URI syntax.
+**For agents: the canonical discovery recipe** is `reveal --discover` (full registry as JSON in one call) or, for a single adapter, `reveal 'help://schemas/<adapter>' --format=json`. Both return query params, operators, output type names, and example queries — generate valid queries from the schema rather than hardcoding URI syntax.
 
 `help://schemas/<adapter>` returns the discovery tier: every query param and
 operator, plus each output type's **name and description**. The full JSON-Schema
@@ -119,7 +119,7 @@ reveal help://schemas                               # listing: ast, ssl, git, ..
 reveal help://examples                             # listing: quality, security, ...
 
 # Discover adapter schemas (supported by most adapters; meta-adapters like help:// return none)
-reveal help://schemas/<adapter> --format=json
+reveal 'help://schemas/<adapter>' --format=json
 
 # File & Analysis Adapters
 reveal help://schemas/ast --format=json        # Code structure analysis
@@ -1120,17 +1120,17 @@ reveal json://config.json/database/host
 
 # Array access
 reveal json://data.json/users/0
-reveal json://data.json/users[-1]      # Last item
+reveal 'json://data.json/users[-1]'      # Last item
 
 # Array slicing
-reveal json://data.json/users[0:5]     # First 5 items
-reveal json://data.json/users[-3:]     # Last 3 items
+reveal 'json://data.json/users[0:5]'     # First 5 items
+reveal 'json://data.json/users[-3:]'     # Last 3 items
 
 # Get structure overview
-reveal json://config.json?schema
+reveal 'json://config.json?schema'
 
 # Make grep-able (gron-style)
-reveal json://config.json?flatten
+reveal 'json://config.json?flatten'
 
 # JSONL: Get specific records
 reveal conversation.jsonl --head 10    # First 10 records
@@ -1160,7 +1160,7 @@ reveal conversation.jsonl --range 42-42  # One specific record (a bare `42` prin
   }
 }
 
-# reveal json://config.json?flatten
+# reveal 'json://config.json?flatten'
 json.database.host = "localhost"
 json.database.port = 5432
 json.database.name = "mydb"
@@ -2230,7 +2230,7 @@ reveal cpanel://USERNAME/ssl
 reveal cpanel://USERNAME/ssl --only-failures
 
 # Filter to main domain only (URI query param)
-reveal cpanel://USERNAME/ssl?domain_type=main_domain
+reveal 'cpanel://USERNAME/ssl?domain_type=main_domain'
 # domain_type values: main_domain, addon, subdomain, parked
 
 # DNS-verified: exclude NXDOMAIN and elsewhere-pointing domains from counts
@@ -2294,7 +2294,7 @@ reveal /etc/nginx/conf.d/users/USERNAME.conf --diagnose
 | Show only cert problems | `reveal cpanel://USERNAME/ssl --only-failures` |
 | "Former-customer domains inflating critical count" | `reveal cpanel://USERNAME/ssl --dns-verified` |
 | "Which domains point to a different server?" | `reveal cpanel://USERNAME/ssl --dns-verified --format=json \| jq '.certs[] \| select(.dns_points_here == false)'` |
-| Scope to main domain only | `reveal cpanel://USERNAME/ssl?domain_type=main_domain` |
+| Scope to main domain only | `reveal 'cpanel://USERNAME/ssl?domain_type=main_domain'` |
 
 **DNS verification details (--dns-verified):**
 - `dns_resolves: false` → domain is NXDOMAIN (DNS gone); shown with `[nxdomain]` tag, excluded from summary
@@ -2430,7 +2430,7 @@ reveal doc.md --code --language python
 reveal doc.md --code --inline
 
 # Get YAML frontmatter
-reveal doc.md --frontmatter
+reveal doc.md --frontmatter --format json
 
 # Text search in a single file — hits grouped by heading (finds table cells, body text, anywhere)
 reveal doc.md --grep 'search-term'
@@ -2534,7 +2534,7 @@ reveal claude://session/my-session-0302/files
 reveal claude://session/my-session-0302/tools
 
 # Errors with full context
-reveal claude://session/my-session-0302?errors
+reveal 'claude://session/my-session-0302?errors'
 
 # Thinking blocks with token estimates
 reveal claude://session/my-session-0302/thinking
@@ -2632,7 +2632,7 @@ reveal claude://hooks/PostToolUse
 
 | Scenario | Command |
 |----------|---------|
-| "What did this session do?" | `reveal claude://session/<name>` |
+| "What did this session do?" | `reveal 'claude://session/<name>'` |
 | "What order did things happen?" | `.../workflow` |
 | "Which files were changed?" | `.../files` |
 | "Why did a tool keep failing?" | `?errors` |
@@ -3387,7 +3387,7 @@ reveal docs/setup.md --links --link-type internal
 **Old (still works, but deprecated):**
 ```bash
 reveal stats://. --hotspots
-reveal stats://.?hotspots=true
+reveal 'stats://.?hotspots=true'
 ```
 
 **Correct — use the subcommand:**
@@ -4461,7 +4461,7 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
 **For AI agents (you):**
 - **Orientation** (`reveal --agent-help`) - First sections of this file (~1,000 tokens)
 - **Complete guide** (`reveal help://agent/full`) - This file in full (~48,000 tokens)
-- **Progressive help** (`reveal help://<topic>`) - Low-token per-topic exploration
+- **Progressive help** (`reveal 'help://<topic>'`) - Low-token per-topic exploration
 
 **For humans:**
 - **CLI reference** (`reveal --help`) - All flags and options

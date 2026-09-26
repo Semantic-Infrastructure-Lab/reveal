@@ -102,7 +102,7 @@ reveal hotspots ./src
 Or via the stats adapter directly (equivalent, lower-level):
 
 ```bash
-reveal stats://./src?hotspots=true
+reveal 'stats://./src?hotspots=true'
 ```
 
 **Output**:
@@ -144,7 +144,7 @@ File Statistics: src/app.py
 Find files with high complexity:
 
 ```bash
-reveal stats://./src?complexity>10
+reveal 'stats://./src?complexity>10'
 ```
 
 ### Example 5: Filter with Range
@@ -152,7 +152,7 @@ reveal stats://./src?complexity>10
 Find medium-sized files (50-200 lines):
 
 ```bash
-reveal stats://./src?lines=50..200
+reveal 'stats://./src?lines=50..200'
 ```
 
 ### Example 6: Sort by Complexity
@@ -160,7 +160,7 @@ reveal stats://./src?lines=50..200
 Get top 10 most complex files:
 
 ```bash
-reveal stats://./src?sort=-complexity&limit=10
+reveal 'stats://./src?sort=-complexity&limit=10'
 ```
 
 ### Example 7: Combine Filters
@@ -168,7 +168,7 @@ reveal stats://./src?sort=-complexity&limit=10
 Find large, complex files:
 
 ```bash
-reveal stats://./src?lines>100&complexity>10&sort=-complexity&limit=5
+reveal 'stats://./src?lines>100&complexity>10&sort=-complexity&limit=5'
 ```
 
 ### Example 8: CI/CD Integration
@@ -320,38 +320,38 @@ Use `&` to combine multiple filters:
 
 ```bash
 # Large files with high complexity
-reveal stats://./src?lines>100&complexity>10
+reveal 'stats://./src?lines>100&complexity>10'
 
 # Medium-sized files with good quality
-reveal stats://./src?lines=50..200&quality>=80
+reveal 'stats://./src?lines=50..200&quality>=80'
 
 # Files with functions but no classes
-reveal stats://./src?functions!=0&classes==0
+reveal 'stats://./src?functions!=0&classes==0'
 
 # Complex files, sorted by complexity
-reveal stats://./src?complexity>10&sort=-complexity&limit=10
+reveal 'stats://./src?complexity>10&sort=-complexity&limit=10'
 ```
 
 ### Examples
 
 **Find refactoring targets**:
 ```bash
-reveal stats://./src?complexity>15&quality<60
+reveal 'stats://./src?complexity>15&quality<60'
 ```
 
 **Exclude small files**:
 ```bash
-reveal stats://./src?lines>50
+reveal 'stats://./src?lines>50'
 ```
 
 **Find test files with complexity**:
 ```bash
-reveal stats://./src?file~=test&complexity>5
+reveal 'stats://./src?file~=test&complexity>5'
 ```
 
 **Files in specific range**:
 ```bash
-reveal stats://./src?lines=100..500&complexity=5..15
+reveal 'stats://./src?lines=100..500&complexity=5..15'
 ```
 
 ---
@@ -381,31 +381,31 @@ Same as filterable fields:
 
 **Top 10 largest files**:
 ```bash
-reveal stats://./src?sort=-lines&limit=10
+reveal 'stats://./src?sort=-lines&limit=10'
 ```
 
 **Top 10 most complex files**:
 ```bash
-reveal stats://./src?sort=-complexity&limit=10
+reveal 'stats://./src?sort=-complexity&limit=10'
 ```
 
 **Pagination (results 11-20)**:
 ```bash
-reveal stats://./src?sort=-lines&offset=10&limit=10
+reveal 'stats://./src?sort=-lines&offset=10&limit=10'
 ```
 
 **Lowest quality files**:
 ```bash
-reveal stats://./src?sort=quality&limit=10
+reveal 'stats://./src?sort=quality&limit=10'
 ```
 
 **Complex files, paginated**:
 ```bash
 # Page 1 (results 1-10)
-reveal stats://./src?complexity>10&sort=-complexity&limit=10
+reveal 'stats://./src?complexity>10&sort=-complexity&limit=10'
 
 # Page 2 (results 11-20)
-reveal stats://./src?complexity>10&sort=-complexity&offset=10&limit=10
+reveal 'stats://./src?complexity>10&sort=-complexity&offset=10&limit=10'
 ```
 
 ### Truncation Metadata
@@ -618,7 +618,7 @@ Hotspots are sorted by **hotspot score** (descending) and limited to **top 10**.
 
 **Request**:
 ```bash
-reveal stats://./src?hotspots=true
+reveal 'stats://./src?hotspots=true'
 ```
 
 **Result**:
@@ -646,7 +646,7 @@ Quality Hotspots (Top 10 worst files):
 **Workflow**:
 1. **Identify** hotspots: `reveal hotspots ./src`
 2. **Inspect** top file: `reveal stats://./src/core.py` (detailed stats)
-3. **Analyze** structure: `reveal ast://./src/core.py?functions` (see functions)
+3. **Analyze** structure: `reveal 'ast://./src/core.py?functions'` (see functions)
 4. **Review** code: `reveal ./src/core.py` (read implementation)
 5. **Refactor** prioritizing highest hotspot scores
 
@@ -662,12 +662,12 @@ Quality Hotspots (Top 10 worst files):
 
 1. **Get hotspot overview**:
    ```bash
-   reveal stats://./src?hotspots=true
+   reveal 'stats://./src?hotspots=true'
    ```
 
 2. **Filter high complexity files**:
    ```bash
-   reveal stats://./src?complexity>15&sort=-complexity&limit=10
+   reveal 'stats://./src?complexity>15&sort=-complexity&limit=10'
    ```
 
 3. **Analyze specific hotspot**:
@@ -677,7 +677,7 @@ Quality Hotspots (Top 10 worst files):
 
 4. **Inspect code structure**:
    ```bash
-   reveal ast://./src/core.py?functions
+   reveal 'ast://./src/core.py?functions'
    ```
 
 5. **Review implementation**:
@@ -860,7 +860,7 @@ Quality Hotspots (Top 10 worst files):
 
 1. **Get baseline hotspots**:
    ```bash
-   reveal stats://./src?hotspots=true --format=json > hotspots-baseline.json
+   reveal 'stats://./src?hotspots=true' --format=json > hotspots-baseline.json
    ```
 
 2. **Target top 5 files**:
@@ -895,7 +895,7 @@ Quality Hotspots (Top 10 worst files):
 5. **Repeat for remaining hotspots**:
    ```bash
    # Track progress
-   reveal stats://./src?hotspots=true
+   reveal 'stats://./src?hotspots=true'
    ```
 
 **Result**: Systematic codebase quality improvement campaign.
@@ -919,11 +919,11 @@ reveal stats://./src --format=json | \
   jq -r '.files[] | select(.quality.score < 60) | .file'
 
 # Count hotspots
-reveal stats://./src?hotspots=true --format=json | \
+reveal 'stats://./src?hotspots=true' --format=json | \
   jq '.hotspots | length'
 
 # Get worst file
-reveal stats://./src?hotspots=true --format=json | \
+reveal 'stats://./src?hotspots=true' --format=json | \
   jq -r '.hotspots[0].file'
 ```
 
@@ -1170,7 +1170,7 @@ echo "Report generated: stats-report.csv"
 reveal stats://./src --format=json | jq '.files[] | select(.lines.total > 100)'
 
 # ✅ Good: Filter at adapter level
-reveal stats://./src?lines>100 --format=json
+reveal 'stats://./src?lines>100' --format=json
 ```
 
 **2. Use result control**:
@@ -1179,7 +1179,7 @@ reveal stats://./src?lines>100 --format=json
 reveal stats://./src --format=json | jq '.files[0:10]'
 
 # ✅ Good: Limit at adapter level
-reveal stats://./src?limit=10 --format=json
+reveal 'stats://./src?limit=10' --format=json
 ```
 
 **3. Exclude irrelevant files**:
@@ -1188,7 +1188,7 @@ reveal stats://./src?limit=10 --format=json
 reveal stats://./src
 
 # ✅ Good: Code files only
-reveal stats://./src?code_only=true
+reveal 'stats://./src?code_only=true'
 ```
 
 **4. Use specific paths**:
@@ -1419,7 +1419,7 @@ reveal stats://./src/file.py
 reveal stats://./src/file.py --format=json | jq '.issues'
 
 # Review specific functions
-reveal ast://./src/file.py?functions
+reveal 'ast://./src/file.py?functions'
 ```
 
 ### Issue 3: Analysis too slow
@@ -1437,17 +1437,17 @@ reveal stats://./
 reveal stats://./src/core
 
 # ✅ Exclude non-code files
-reveal stats://./src?code_only=true
+reveal 'stats://./src?code_only=true'
 
 # ✅ Use filters to reduce results
-reveal stats://./src?lines>100&limit=20
+reveal 'stats://./src?lines>100&limit=20'
 ```
 
 ### Issue 4: Filter not working
 
 **Symptom**:
 ```bash
-reveal stats://./src?lines>100
+reveal 'stats://./src?lines>100'
 # Still shows files with <100 lines
 ```
 
@@ -1456,20 +1456,20 @@ reveal stats://./src?lines>100
 **Solution**:
 ```bash
 # ❌ Bad: Shell interprets >
-reveal stats://./src?lines>100
+reveal 'stats://./src?lines>100'
 
 # ✅ Good: Quote the URI
 reveal "stats://./src?lines>100"
 
 # ✅ Alternative: Escape >
-reveal stats://./src?lines\>100
+reveal 'stats://./src?lines\>100'
 ```
 
 ### Issue 5: Hotspots missing
 
 **Symptom**:
 ```bash
-reveal stats://./src?hotspots=true
+reveal 'stats://./src?hotspots=true'
 # No hotspots section in output
 ```
 
@@ -1574,7 +1574,7 @@ reveal stats://./src/plugins
 reveal stats://./src/api
 
 # 3. Get hotspots in worst subsystem
-reveal stats://./src/core?hotspots=true
+reveal 'stats://./src/core?hotspots=true'
 
 # 4. Analyze specific hotspot
 reveal stats://./src/core/worst-file.py
@@ -1590,7 +1590,7 @@ reveal ./src/core/worst-file.py
 #!/bin/bash
 # generate-report.sh
 
-STATS=$(reveal stats://./src?hotspots=true --format=json)
+STATS=$(reveal 'stats://./src?hotspots=true' --format=json)
 
 cat > report.html <<EOF
 <!DOCTYPE html>
@@ -1721,7 +1721,7 @@ A file with quality 65 but 5 long functions may rank higher as a hotspot than a 
 
 **A**: Yes: `--exclude PATTERN` (repeatable) or `?exclude=a,b` (comma-separated globs; the CLI percent-escapes a literal `,`, `&`, `=` or `%` inside a pattern). Other options:
 1. **Target specific paths**: `reveal stats://./src/core` (skip other dirs)
-2. **Use code_only**: `reveal stats://./src?code_only=true` (skip data/config)
+2. **Use code_only**: `reveal 'stats://./src?code_only=true'` (skip data/config)
 3. **Filter in post-processing**: `jq '.files[] | select(.file | contains("test") | not)'`
 
 For permanent exclusions, consider using reveal's config system (check reveal docs).
@@ -1825,7 +1825,7 @@ For **duplication detection**, use specialized tools like:
 **A**: Stats adapter shows **aggregate metrics** (file-level, directory-level). For **function-level details**, use:
 ```bash
 # Function-level structure
-reveal ast://./src/file.py?functions
+reveal 'ast://./src/file.py?functions'
 
 # Then manually inspect specific functions
 reveal ./src/file.py

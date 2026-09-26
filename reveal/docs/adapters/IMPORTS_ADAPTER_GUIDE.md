@@ -1680,7 +1680,7 @@ reveal 'imports://src?unused' --verbose | \
 
 ```bash
 # Find complex files with circular dependencies
-reveal ast://src/**/*.py?complexity>10 --format=json | \
+reveal 'ast://src/**/*.py?complexity>10' --format=json | \
   jq -r '.matches[].path' | while read file; do
     reveal imports://$file
   done

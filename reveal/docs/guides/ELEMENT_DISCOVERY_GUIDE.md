@@ -564,7 +564,7 @@ reveal python://packages | grep django
 **✅ Do** (filter at adapter level when possible):
 ```bash
 # Use query operators for efficiency
-reveal python://packages?filter=django
+reveal 'python://packages?filter=django'
 ```
 
 ### 5. Document Expected Elements
@@ -623,7 +623,7 @@ reveal help://git      # See git:// element syntax
 reveal ssl://google.com/san
 
 # Query filter (parameter)
-reveal stats://src?min_complexity=10
+reveal 'stats://src?min_complexity=10'
 ```
 
 ### No Element Hints in Output
