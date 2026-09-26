@@ -54,7 +54,7 @@ def create_hotspots_parser() -> argparse.ArgumentParser:
         metavar='N',
         type=int,
         default=10,
-        help='Number of hotspot files to show (default: 10)'
+        help='Number of hotspots to show per list (default: 10; 0 = all)'
     )
     parser.add_argument(
         '--min-complexity',
@@ -99,7 +99,7 @@ def run_hotspots(args: Namespace) -> None:
     # same "lift the cap" meaning hotspots://...?all=true already has (the
     # subcommand has no --all of its own).
     from reveal.adapters.overview import UNLIMITED_TOP
-    top = UNLIMITED_TOP if getattr(args, 'verbose', False) else args.top
+    top = UNLIMITED_TOP if getattr(args, 'verbose', False) or args.top <= 0 else args.top  # 0 = no cap (BACK-1505)
     min_cx = args.min_complexity
     functions_only = getattr(args, 'functions_only', False)
     files_only = getattr(args, 'files_only', False)

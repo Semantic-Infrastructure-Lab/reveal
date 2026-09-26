@@ -155,13 +155,15 @@ class TestGetStructureFalsyDefaults(unittest.TestCase):
 
     @patch('reveal.adapters.ast.AstAdapter.get_structure')
     @patch('reveal.adapters.stats.StatsAdapter.get_structure')
-    def test_top_zero_returns_zero_hotspots(self, mock_stats, mock_ast):
+    def test_top_zero_means_no_cap(self, mock_stats, mock_ast):
+        # top=0 is still honoured rather than replaced by the default 10 -- it
+        # means "no cap" (BACK-1505; it used to mean "none", then print a clean verdict).
         mock_stats.return_value = {'hotspots': [_file_hotspot('a.py', 60)]}
         mock_ast.return_value = {'results': [_fn_hotspot('foo', 15)]}
         adapter = HotspotsAdapter('.', 'top=0')
         result = adapter.get_structure()
-        self.assertEqual(result['file_hotspots'], [])
-        self.assertEqual(result['function_hotspots'], [])
+        self.assertEqual(len(result['file_hotspots']), 1)
+        self.assertEqual(len(result['function_hotspots']), 1)
 
     @patch('reveal.adapters.stats.StatsAdapter.get_structure', return_value={'hotspots': []})
     @patch('reveal.adapters.ast.AstAdapter.__init__', return_value=None)
@@ -792,3 +794,27 @@ class TestMultiLanguageTestIndex(unittest.TestCase):
         with redirect_stdout(buf):
             _render_function_hotspots([fn], test_index=set())
         self.assertIn('❔', buf.getvalue())
+
+
+class TestTopZeroMeansAll:
+    """BACK-1505: top=0 showed no hotspots and then printed the ✅ clean
+    verdict -- a false all-clear. 0 means no cap, as for calls://."""
+
+    @staticmethod
+    def _tree(tmp_path):
+        body = "\n".join(f"    if x == {i}:\n        return {i}" for i in range(12))
+        for n in range(3):
+            (tmp_path / f"m{n}.py").write_text(f"def f{n}(x):\n{body}\n    return -1\n", encoding="utf-8")
+        return tmp_path
+
+    def test_uri_top_zero_lists_every_function(self, tmp_path):
+        from reveal.adapters.hotspots import HotspotsAdapter
+        path = self._tree(tmp_path)
+        data = HotspotsAdapter(str(path), 'top=0&functions_only=true').get_structure()
+        assert len(data['function_hotspots']) == 3
+
+    def test_uri_top_caps_as_before(self, tmp_path):
+        from reveal.adapters.hotspots import HotspotsAdapter
+        path = self._tree(tmp_path)
+        data = HotspotsAdapter(str(path), 'top=1&functions_only=true').get_structure()
+        assert len(data['function_hotspots']) == 1

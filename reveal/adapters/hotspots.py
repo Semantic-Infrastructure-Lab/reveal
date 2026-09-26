@@ -345,7 +345,7 @@ class HotspotsAdapter(ResourceAdapter):
             'description': 'High-complexity, low-quality file and function scanner',
             'uri_syntax': 'hotspots://<path>?top=10&min_complexity=10',
             'query_params': {
-                'top': {'type': 'integer', 'description': 'Number of hotspots to show', 'examples': ['top=20']},
+                'top': {'type': 'integer', 'description': 'Number of hotspots to show per list (0 = all)', 'examples': ['top=20']},
                 'min_complexity': {'type': 'integer', 'description': 'Minimum cyclomatic complexity to report', 'examples': ['min_complexity=15']},
                 'functions_only': {'type': 'boolean', 'description': 'Skip file-level hotspots', 'examples': ['functions_only=true']},
                 'files_only': {'type': 'boolean', 'description': 'Skip function-level hotspots (and the test-index scan)', 'examples': ['files_only=true']},
@@ -377,6 +377,11 @@ class HotspotsAdapter(ResourceAdapter):
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
         path = Path(self.path)
         top = self.int_param('top', 10)
+        if top <= 0:
+            # BACK-1505: top=0 meant "show none" and then printed the ✅ clean
+            # verdict -- a false all-clear. 0 means no cap, as it does for calls://.
+            from reveal.adapters.overview import UNLIMITED_TOP
+            top = UNLIMITED_TOP
         min_cx = self.int_param('min_complexity', 10)
         functions_only = str(self.query_params.get('functions_only', False)).lower() == 'true'
         files_only = str(self.query_params.get('files_only', False)).lower() == 'true'
