@@ -17,6 +17,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..conventions import LanguageConventions, conventions_for, family_for_path
 from ..defaults import TEST_DIR_NAMES, VENDOR_DIR_NAMES
+from ..utils.formatting import cwd_path
 from ..utils import print_json_result
 from ..utils.gitignore import gitignore_filter
 from ..utils.query import parse_query_params
@@ -163,7 +164,7 @@ def _is_covered(name: str, loc: str, test_index: Set[str]) -> bool:
     )
 
 
-def _render_file_hotspots(hotspots: List[Dict[str, Any]], top: int) -> None:
+def _render_file_hotspots(hotspots: List[Dict[str, Any]], top: int, root: str = '') -> None:
     if not hotspots:
         return
     print(f"\nFile hotspots (top {min(len(hotspots), top)} by severity):")
@@ -193,7 +194,7 @@ def _render_file_hotspots(hotspots: List[Dict[str, Any]], top: int) -> None:
             print(f"      issues: {', '.join(issues)}")
 
         # Suggest next command
-        print(f"      → reveal {name}")
+        print(f"      → reveal {cwd_path(root, name)}")
 
 
 def _render_function_hotspots(fns: List[Dict[str, Any]], test_index: Optional[Set[str]] = None) -> None:
@@ -267,7 +268,7 @@ def _render_report(report: Dict[str, Any], top: int, test_index: Optional[Set[st
         print()
         return
 
-    _render_file_hotspots(file_hotspots, top)
+    _render_file_hotspots(file_hotspots, top, root=path)
     _render_function_hotspots(fn_hotspots, test_index=test_index)
     _render_summary(file_hotspots, fn_hotspots)
 

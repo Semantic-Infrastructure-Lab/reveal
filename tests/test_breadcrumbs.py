@@ -746,10 +746,13 @@ class TestPrintBreadcrumbsLargeFile:
         mock_config.is_breadcrumbs_enabled.return_value = True
         structure = {'functions': [{'name': f'func_{i}'} for i in range(25)]}
 
-        capture_breadcrumbs('structure', 'first.py', 'python', config=mock_config, structure=structure)
+        first = capture_breadcrumbs('structure', 'first.py', 'python', config=mock_config, structure=structure)
         second = capture_breadcrumbs('structure', 'second.py', 'python', config=mock_config, structure=structure)
 
-        assert second.strip() == ''
+        assert 'ast://' in first
+        # The per-file extraction hint (`reveal second.py func_0`) is specific to
+        # each file and still shows; the generic AST-query block does not repeat.
+        assert 'ast://' not in second
 
 
 # ==============================================================================

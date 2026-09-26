@@ -409,7 +409,15 @@ def _suggest_line_extraction(path, file_type, structure, hints_shown):
         return 0
 
     first_func = functions[0]
-    line = first_func.get('line', 0) if isinstance(first_func, dict) else 0
+    if not isinstance(first_func, dict):
+        return 0
+    # By name is the primary extraction form; the hint used to show only `:LINE`
+    # (BACK-1508), so an agent reading outlines never learned it.
+    name = first_func.get('name')
+    if name and name.isidentifier():
+        print(f"      reveal {path} {name}       # Extract this function by name")
+        return 1
+    line = first_func.get('line', 0)
     if line:
         print(f"      reveal {path} :{line}       # Extract at line number")
         return 1

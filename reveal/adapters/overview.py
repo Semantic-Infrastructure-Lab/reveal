@@ -22,6 +22,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from .git import GitAdapter
 from .imports import ImportsAdapter
 from .stats import StatsAdapter
+from ..utils.formatting import cwd_path
 from ..utils import print_json_result
 from ..utils.exclusions import exclusion_scope
 from ..utils.gitignore import respect_gitignore_param
@@ -291,7 +292,7 @@ def _render_quality_pulse(summary: Dict[str, Any], hotspots: List[Dict[str, Any]
     print(f"\nQuality   {icon} {' · '.join(parts)}")
 
 
-def _render_hotspots(hotspots: List[Dict[str, Any]], top: int) -> None:
+def _render_hotspots(hotspots: List[Dict[str, Any]], top: int, root: str = '') -> None:
     if not hotspots:
         return
     print(f"\nHotspots  (top {min(len(hotspots), top)} files needing attention)")
@@ -307,7 +308,7 @@ def _render_hotspots(hotspots: List[Dict[str, Any]], top: int) -> None:
 
         issue_str = f"  — {', '.join(issues)}" if issues else ''
         print(f"  {icon} {name}  {q}/100{issue_str}")
-        print(f"       → reveal {name}")
+        print(f"       → reveal {cwd_path(root, name)}")
     remaining = len(hotspots) - min(len(hotspots), top)
     if remaining > 0:
         print(f"  ... and {remaining} more (use --all)")
@@ -527,7 +528,7 @@ def _render_overview(report: Dict[str, Any], top: int) -> None:
     _render_codebase_stats(summary)
     _render_language_breakdown(files_list, top)
     _render_quality_pulse(summary, hotspots)
-    _render_hotspots(hotspots, top)
+    _render_hotspots(hotspots, top, root=path_str)
     _render_complex_functions(complex_fns, base_path=path)
     _render_architecture(architecture, complex_fns, top, base_path=path)
     _render_git_log(git_log, report.get('git_foreign_root'))

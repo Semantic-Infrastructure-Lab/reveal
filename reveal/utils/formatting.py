@@ -1,5 +1,6 @@
 """Formatting utilities for reveal."""
 
+import os
 import re
 import shlex
 
@@ -38,3 +39,17 @@ def shell_command(example: str) -> str:
         return example
     uri, rest = example[:m.end()], example[m.end():]
     return f'reveal {shlex.quote(uri)}{rest}'
+
+
+def cwd_path(root: str, name: str) -> str:
+    """A path a next-step hint can print: `name` is relative to the scanned
+    `root`, the hint runs from the cwd. `reveal overview://reveal` printed
+    `→ reveal treesitter.py`, which fails outside reveal/ (BACK-1508).
+    Relative to the cwd when the file is under it, else absolute."""
+    path = name if os.path.isabs(name) or not root else os.path.join(root, name)
+    path = os.path.normpath(path)
+    try:
+        rel = os.path.relpath(path)
+    except ValueError:  # another drive on Windows
+        return path
+    return path if rel.startswith('..') else rel

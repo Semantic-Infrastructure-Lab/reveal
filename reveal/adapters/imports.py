@@ -23,6 +23,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
 from ..core import disk_cache
+from ..utils.formatting import cwd_path
 from ..utils import print_json_result
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.classify import classify_import, local_package_names
@@ -667,11 +668,14 @@ class ImportsRenderer:
             if files_failed_count > 10:
                 print(f"      ... and {files_failed_count - 10} more")
             print()
+        # The scanned path, not the renderer's `resource` argument, which reaches
+        # here as '.' and widened a copy-pasted query to the whole cwd (BACK-1508).
+        scope = cwd_path('', str(display_path))
         print("Query options:")
-        print(f"  reveal 'imports://{resource}?unused'       - Find unused imports")
-        print(f"  reveal 'imports://{resource}?circular'     - Detect circular deps")
-        print(f"  reveal 'imports://{resource}?violations'   - Check layer violations")
-        print(f"  reveal 'imports://{resource}?rank=fan-in'  - Rank files by fan-in (core abstractions)")
+        print(f"  reveal 'imports://{scope}?unused'       - Find unused imports")
+        print(f"  reveal 'imports://{scope}?circular'     - Detect circular deps")
+        print(f"  reveal 'imports://{scope}?violations'   - Check layer violations")
+        print(f"  reveal 'imports://{scope}?rank=fan-in'  - Rank files by fan-in (core abstractions)")
         print()
 
     @staticmethod
