@@ -16,6 +16,7 @@ Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
 - ✅ Element/member resolution: C++ out-of-line methods and operators, ambiguous names disclose every definition, and enums/traits/type aliases/`#private` JS methods/config elements are listed and extractable (BACK-1400, 1409–1412).
 - ✅ `surface://` reads Rails `routes.draw`, WordPress REST routes and Spring/C# controller prefixes, and discloses error-recovered regions (BACK-1417, 1418, 1480).
 - ✅ The disk cache is keyed on the code that built it, not just the version, so an edit cannot serve stale results (BACK-1294, BACK-1328); a huge file's outline is capped and says so (BACK-1424).
+- ⚠️ Changes a script may notice: an unsupported `--format` or `--also-json` exits 2 instead of printing text (BACK-1425); git-ignored files drop out of every walker, so counts fall (BACK-1386); the text outline stops at 500 items per category (`--format json` is uncapped, BACK-1424); `help://languages` JSON lists one entry per language (51, not 81) with an `extensions` list (BACK-1441).
 
 ### v0.128.0 — Language neutrality, one complexity score, surface:// rule tables, silent-failure sweep
 
