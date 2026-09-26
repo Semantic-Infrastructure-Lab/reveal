@@ -226,7 +226,8 @@ def test_discovery_order_does_not_follow_filesystem_order(clean_registry, tmp_pa
         _write_rule(rules_dir, code)
     alpha = rules_dir / "alpha"
     alpha.mkdir()
-    (alpha / "Q009.py").write_text((rules_dir / "custom" / "Q001.py").read_text().replace("Q001", "Q009"))
+    q001 = (rules_dir / "custom" / "Q001.py").read_text(encoding="utf-8")
+    (alpha / "Q009.py").write_text(q001.replace("Q001", "Q009"), encoding="utf-8")
 
     # List every directory backwards, as a filesystem may.
     iterdir, glob = Path.iterdir, Path.glob
