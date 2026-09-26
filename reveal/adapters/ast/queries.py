@@ -2,6 +2,7 @@
 
 from typing import Dict, Any
 from ...utils.query import parse_query_filters
+from ...utils.query_parser import note_query_parsed
 
 
 def parse_equality_value(key: str, value: str) -> Dict[str, Any]:
@@ -100,6 +101,7 @@ def extract_builtins_param(query_string: str):
     """
     if not query_string or 'builtins' not in query_string:
         return query_string, False
+    note_query_parsed('builtins')
 
     parts = query_string.split('&')
     include_builtins = False
@@ -126,6 +128,7 @@ def extract_reveal_type_param(query_string: str):
     """
     if not query_string or 'reveal_type=' not in query_string:
         return query_string, None
+    note_query_parsed('reveal_type')
 
     parts = query_string.split('&')
     var_name = None
@@ -149,6 +152,7 @@ def extract_show_param(query_string: str):
     """
     if not query_string or 'show=' not in query_string:
         return query_string, None
+    note_query_parsed('show')
 
     parts = query_string.split('&')
     show_value = None

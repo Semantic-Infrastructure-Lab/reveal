@@ -18,6 +18,11 @@ from ..utils.gitignore import set_gitignore_enabled
 from ..utils.json_utils import set_provenance_enabled
 
 
+# Flags in effect for every command once parsed: applied by apply_global_flags below, or, for
+# --copy, around the whole run. The flag ledger (BACK-1514) never reports them as unused.
+PROCESS_GLOBAL_FLAGS = frozenset({'provenance', 'respect_gitignore', 'copy'})
+
+
 def add_gitignore_arguments(parser: Any) -> None:
     """--respect-gitignore / --no-gitignore, for every parser whose command walks a tree.
 

@@ -2,13 +2,45 @@
 
 import re as _re  # noqa: F401 — imported for use by query_eval, kept here for consumers
 import sys
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, TextIO, Union
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, TextIO, Union
 
 # Characters that only appear in a *filter* key (e.g. `complexity>10`, `msg~=x`),
 # never in a fixed param key. Used to distinguish the two in adapters that parse
 # the same query string as both params and filters (stats://, git://).
 _FILTER_OP_CHARS = frozenset('<>~!')
+
+# BACK-1514 flag ledger: while a dispatch collects, every query parser below records the keys
+# it was handed. A key no parser saw was never read by the adapter (sqlite:// parses no query
+# at all), which is what the ledger reports.
+_PARSED_KEYS: ContextVar[Optional[Set[str]]] = ContextVar('reveal_parsed_query_keys', default=None)
+_KEY_END = _re.compile(r'[=<>!~.?]')
+
+
+def query_key(part: str) -> str:
+    """The key of one ``&``-separated query part: ``limit=2`` -> ``limit``,
+    ``complexity>10`` -> ``complexity``, ``!draft`` -> ``draft``."""
+    return _KEY_END.split(part.strip().lstrip('!'), 1)[0].strip()
+
+
+@contextmanager
+def collect_parsed_query_keys() -> Iterator[Set[str]]:
+    """Collect the keys every query parser sees until the block exits."""
+    keys: Set[str] = set()
+    token = _PARSED_KEYS.set(keys)
+    try:
+        yield keys
+    finally:
+        _PARSED_KEYS.reset(token)
+
+
+def note_query_parsed(query: str) -> None:
+    """Record that an adapter parsed ``query``. Call from any parser that reads a query."""
+    keys = _PARSED_KEYS.get()
+    if keys is not None and query:
+        keys.update(query_key(part) for part in query.split('&') if part.strip())
 
 
 def coerce_value(value: str) -> Union[bool, int, float, str]:
@@ -76,6 +108,7 @@ def parse_query_params(query: str, coerce: bool = False) -> Dict[str, Any]:
     """Parse URL query string into parameter dictionary."""
     if not query:
         return {}
+    note_query_parsed(query)
 
     params = {}
     for part in query.split('&'):
@@ -253,6 +286,7 @@ def parse_query_filters(
     """
     if not query:
         return []
+    note_query_parsed(query)
 
     filters = []
     parts = query.split('&')

@@ -4,10 +4,7 @@ The hand-written dict had drifted: 36 parser dests missing, and `depth` defaulti
 where the parser says None -- which made every internal caller (MCP reveal_query, tests)
 print a false "--depth has no effect on <scheme>://" note. BACK-1362.
 """
-import io
-from contextlib import redirect_stderr
 
-import pytest
 
 from reveal.cli.defaults import _default_args
 from reveal.cli.parser import create_argument_parser
@@ -54,11 +51,10 @@ def test_reveal_format_is_read_per_call_not_frozen_by_the_cache(monkeypatch):
     assert _default_args().format == 'text'
 
 
-@pytest.mark.parametrize('scheme', ['ast', 'calls', 'git', 'markdown'])
-def test_default_args_do_not_trigger_the_structural_flag_warning(scheme):
-    from reveal.cli.routing.uri import _warn_unsupported_structural_flags
+def test_default_args_set_no_flag():
+    """The flag ledger (BACK-1514) reports every flag whose value differs from the parser
+    default. _default_args is what MCP and internal routing pass, so it must set none, or
+    every such call would print a note."""
+    from reveal.cli.routing.ledger import FlagLedger
 
-    err = io.StringIO()
-    with redirect_stderr(err):
-        _warn_unsupported_structural_flags('x', scheme, _default_args())
-    assert err.getvalue() == ''
+    assert FlagLedger(_default_args()).set_flags == {}

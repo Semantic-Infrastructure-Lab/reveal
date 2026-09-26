@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ...utils.query_parser import join_exclude_patterns
+from .ledger import delegate, mark, peek
 
 
 @dataclass(frozen=True)
@@ -39,30 +40,32 @@ class FlagSpec:
                                           # adapter's own `top=0` may mean "nothing" (hotspots)
 
 
+# The value functions `peek`: reading a flag here is not using it. inject_query_flags marks a
+# flag once it is injected or noted, and the flag ledger (BACK-1514) reports the rest.
 def _typed(dest: str) -> Callable[[Any], Any | None]:
-    return lambda args: getattr(args, dest, None) or None
+    return lambda args: peek(args, dest) or None
 
 
 def _switch(dest: str) -> Callable[[Any], bool | None]:
-    return lambda args: True if getattr(args, dest, False) else None
+    return lambda args: True if peek(args, dest, False) else None
 
 
 def _set(dest: str) -> Callable[[Any], Any | None]:
     # Unlike _typed, a falsy value counts: --limit 0 is a real request (no cap).
-    return lambda args: getattr(args, dest, None)
+    return lambda args: peek(args, dest)
 
 
 def _sort(args: Any) -> str | None:
-    field = getattr(args, 'sort', None)
+    field = peek(args, 'sort')
     if not field:
         return None
-    return f'-{field}' if getattr(args, 'desc', False) and not field.startswith('-') else field
+    return f'-{field}' if peek(args, 'desc', False) and not field.startswith('-') else field
 
 
 def _no_gitignore(args: Any) -> bool | None:
     # --respect-gitignore's argparse default is True, indistinguishable from typing it,
     # so only the True -> False transition (--no-gitignore) is a real signal.
-    return False if getattr(args, 'respect_gitignore', True) is False else None
+    return False if peek(args, 'respect_gitignore', True) is False else None
 
 
 # Order is the order fragments are appended to the query string.
@@ -144,6 +147,7 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
         if value is None:
             continue
         if spec.universal and not honors_result_control:
+            mark(args, spec.dest)
             print(f"Note: {spec.option} has no effect on {scheme}:// -- it does not take "
                   f"sort=/limit=/offset=.", file=sys.stderr)
             continue
@@ -156,13 +160,19 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
             key = fragment.partition('=')[0]
             if key in injected:
                 # --all and --limit both map to top= on hotspots/calls/testability.
+                mark(args, spec.dest)
                 print(f"Note: {spec.option} ignored on {scheme}:// -- {injected[key]} already "
                       f"sets {key}=.", file=sys.stderr)
-            elif not _has_key(resource, key) and not any(
-                    token in resource for token in spec.already_scoped):
+            elif any(token in resource for token in spec.already_scoped):
+                mark(args, spec.dest)  # the caller scoped it in the URI (date>...)
+            elif not _has_key(resource, key):
                 resource = f"{resource}{'&' if '?' in resource else '?'}{fragment}"
                 injected[key] = spec.option
+                delegate(args, spec.dest, key)
+            # A key already in the URI wins; the ledger counts the flag as carried only
+            # when the URI value is the flag's own.
         elif spec.warn_unsupported:
+            mark(args, spec.dest)
             aware = ', '.join(f'{s}://' for s in _supporting_schemes(spec.dest))
             print(f"Note: {spec.option} has no effect on {scheme}:// -- only {aware} support it.",
                   file=sys.stderr)

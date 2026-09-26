@@ -251,67 +251,11 @@ class TestHandleUriSinceUntil:
         assert '--since has no effect on ast://' in captured.err
 
 
-# ─── handle_uri — BACK-1202: --no-gitignore on URI-scheme targets ────────────
-
-class TestHandleUriRespectGitignore:
-    """--no-gitignore / ?respect_gitignore= on the URI form. Originally (BACK-1042)
-    only overview:// and stats:// read the query key, and nothing forwarded the flag.
-    BACK-1386: handle_uri consumes the key and runs the dispatch under the process
-    gitignore switch, so every walker sees it and filter-style adapters (ast://) never
-    get it as a field filter."""
-
-    @staticmethod
-    def _dispatch(uri, respect_gitignore):
-        from reveal.utils.gitignore import gitignore_enabled
-        seen = {}
-
-        def fake_handler(adapter_class, scheme, resource, element, args):
-            seen['resource'] = resource
-            seen['enabled'] = gitignore_enabled()
-
-        with patch('reveal.cli.routing.uri.handle_adapter', side_effect=fake_handler):
-            from reveal.cli.routing import handle_uri
-            args = _args(sort=None, exclude=None, respect_gitignore=respect_gitignore, base_path=None)
-            handle_uri(uri, None, args)
-        return seen
-
-    def test_no_gitignore_reaches_the_dispatch(self):
-        seen = self._dispatch('overview://src', False)
-        assert seen['enabled'] is False
-        assert 'respect_gitignore=' not in seen['resource']
-
-    def test_default_respect_gitignore_true_is_not_injected(self):
-        """Default True is indistinguishable from 'not typed' -- must not inject."""
-        seen = self._dispatch('overview://src', True)
-        assert seen['enabled'] is True
-        assert 'respect_gitignore=' not in seen['resource']
-
-    def test_uri_respect_gitignore_takes_precedence_over_flag(self):
-        seen = self._dispatch('overview://src?respect_gitignore=true', False)
-        assert seen['enabled'] is True
-        assert 'respect_gitignore=' not in seen['resource']
-
-    def test_filter_adapter_never_sees_the_key(self):
-        seen = self._dispatch('ast://.?type=function&respect_gitignore=false', True)
-        assert seen['enabled'] is False
-        assert seen['resource'] == '.?type=function'
-
-    def test_switch_restored_after_dispatch(self):
-        from reveal.utils.gitignore import gitignore_enabled
-        self._dispatch('ast://.?respect_gitignore=false', True)
-        assert gitignore_enabled() is True
-
-    def test_no_gitignore_warns_on_non_walking_scheme(self, capsys):
-        self._dispatch('env://', False)
-        assert '--no-gitignore has no effect on env://' in capsys.readouterr().err
-
-
-# ─── handle_uri — BACK-1202: --depth/--ext/--type/--fast are honest no-ops ───
+# ─── handle_uri — BACK-1202 / BACK-1514: an unused flag gets one note ────────
 
 class _StubAdapterNoStructuralParams:
     """Real callable get_structure() with a bare **kwargs signature, like
-    OverviewAdapter/StatsAdapter/AstAdapter -- lets inspect.signature() run
-    for real instead of on a MagicMock."""
+    OverviewAdapter/StatsAdapter/AstAdapter: the flags are never read."""
     def get_structure(self, **kwargs):
         return {}
 
@@ -321,51 +265,41 @@ class _StubAdapterWithDepthParam:
         return {}
 
 
+def _parses_its_query(adapter_class, scheme, resource, element, args):
+    """handle_adapter stand-in for an adapter that reads its query (ast:// does)."""
+    from reveal.utils.query_parser import parse_query_params
+    parse_query_params(resource.partition('?')[2])
+
+
 class TestHandleUriStructuralFlagsWarning:
-    """--depth/--ext/--type/--fast are accepted by argparse and silently
-    dropped for adapters whose get_structure() has no matching parameter and
-    no query_params handling either -- there's nothing to inject into, so the
-    honest fix is a warning (BACK-1202)."""
+    """--depth/--ext/--type/--fast are accepted by argparse; an adapter that never reads
+    them gets the flag ledger's note (BACK-1202, generalized by BACK-1514). The ledger
+    judges by what the dispatch actually read, so these run the real generic handler."""
+
+    def _dispatch(self, adapter_cls, **flags):
+        args = _args(**{'sort': None, 'exclude': None, 'respect_gitignore': True, 'ext': None,
+                        'type': None, 'fast': False, 'base_path': None, **flags})
+        with patch('reveal.adapters.base.get_adapter_class', return_value=adapter_cls):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=MagicMock()):
+                from reveal.cli.routing import handle_uri
+                handle_uri('overview://.', None, args)
 
     def test_depth_warns_when_adapter_has_no_matching_param(self, capsys):
-        mock_renderer_cls = MagicMock()
-        with patch('reveal.adapters.base.get_adapter_class', return_value=_StubAdapterNoStructuralParams):
-            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-                with patch('reveal.cli.routing.uri.handle_adapter'):
-                    from reveal.cli.routing import handle_uri
-                    args = _args(sort=None, exclude=None, respect_gitignore=True,
-                                 depth=1, ext=None, type=None, fast=False, base_path=None)
-                    handle_uri('overview://.', None, args)
-        captured = capsys.readouterr()
-        assert '--depth has no effect on overview://' in captured.err
+        self._dispatch(_StubAdapterNoStructuralParams, depth=1)
+        assert '--depth has no effect on overview://' in capsys.readouterr().err
 
     def test_no_warning_when_adapter_declares_matching_param(self, capsys):
-        mock_renderer_cls = MagicMock()
-        with patch('reveal.adapters.base.get_adapter_class', return_value=_StubAdapterWithDepthParam):
-            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-                with patch('reveal.cli.routing.uri.handle_adapter'):
-                    from reveal.cli.routing import handle_uri
-                    args = _args(sort=None, exclude=None, respect_gitignore=True,
-                                 depth=1, ext=None, type=None, fast=False, base_path=None)
-                    handle_uri('overview://.', None, args)
-        captured = capsys.readouterr()
-        assert '--depth' not in captured.err
+        self._dispatch(_StubAdapterWithDepthParam, depth=1)
+        assert '--depth' not in capsys.readouterr().err
 
     def test_no_warning_when_flags_left_at_default(self, capsys):
-        mock_renderer_cls = MagicMock()
-        with patch('reveal.adapters.base.get_adapter_class', return_value=_StubAdapterNoStructuralParams):
-            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-                with patch('reveal.cli.routing.uri.handle_adapter'):
-                    from reveal.cli.routing import handle_uri
-                    args = _args(sort=None, exclude=None, respect_gitignore=True, base_path=None)
-                    handle_uri('overview://.', None, args)
-        captured = capsys.readouterr()
-        assert captured.err == ''
+        self._dispatch(_StubAdapterNoStructuralParams)
+        assert 'has no effect' not in capsys.readouterr().err
 
     def _run_ast(self, uri, type_value):
         with patch('reveal.adapters.base.get_adapter_class', return_value=_StubAdapterNoStructuralParams):
             with patch('reveal.adapters.base.get_renderer_class', return_value=MagicMock()):
-                with patch('reveal.cli.routing.uri.handle_adapter'):
+                with patch('reveal.cli.routing.uri.handle_adapter', side_effect=_parses_its_query):
                     from reveal.cli.routing import handle_uri
                     args = _args(sort=None, exclude=None, respect_gitignore=True,
                                  depth=None, ext=None, type=type_value, fast=False, base_path=None)
@@ -394,17 +328,10 @@ class TestHandleUriStructuralFlagsWarning:
         assert 'a' in proc.stdout
 
     def test_multiple_ignored_flags_named_together(self, capsys):
-        mock_renderer_cls = MagicMock()
-        with patch('reveal.adapters.base.get_adapter_class', return_value=_StubAdapterNoStructuralParams):
-            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-                with patch('reveal.cli.routing.uri.handle_adapter'):
-                    from reveal.cli.routing import handle_uri
-                    args = _args(sort=None, exclude=None, respect_gitignore=True,
-                                 depth=1, ext='py', type=None, fast=False, base_path=None)
-                    handle_uri('overview://.', None, args)
-        captured = capsys.readouterr()
-        assert '--depth' in captured.err
-        assert '--ext' in captured.err
+        self._dispatch(_StubAdapterNoStructuralParams, depth=1, ext='py')
+        err = capsys.readouterr().err
+        assert '--depth' in err
+        assert '--ext' in err
 
     def test_no_since_until_flags_no_injection_no_warning(self, capsys):
         mock_adapter_cls = MagicMock()
@@ -420,8 +347,6 @@ class TestHandleUriStructuralFlagsWarning:
         captured = capsys.readouterr()
         assert captured.err == ''
 
-
-# ─── generic_adapter_handler — base_path override ────────────────────────────
 
 class TestGenericAdapterHandlerBasePath:
     def test_base_path_calls_reconfigure_base_path(self):

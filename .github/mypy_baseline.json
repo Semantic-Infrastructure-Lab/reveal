@@ -244,7 +244,6 @@
  "reveal/cli/parser.py::unused-ignore": 1,
  "reveal/cli/routing/file.py::attr-defined": 1,
  "reveal/cli/routing/file.py::operator": 1,
- "reveal/cli/routing/uri.py::operator": 1,
  "reveal/config.py::import-not-found": 1,
  "reveal/config.py::import-untyped": 1,
  "reveal/config.py::no-any-return": 1,

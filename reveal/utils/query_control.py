@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
+from .query_parser import note_query_parsed
+
 
 @dataclass
 class ResultControl:
@@ -65,7 +67,11 @@ def parse_result_control(query: str) -> Tuple[str, ResultControl]:
 
     for part in query.split('&'):
         part = part.strip()
-        if part and not _apply_control_param(control, part):
+        if not part:
+            continue
+        if _apply_control_param(control, part):
+            note_query_parsed(part)
+        else:
             remaining_parts.append(part)
 
     return '&'.join(remaining_parts), control

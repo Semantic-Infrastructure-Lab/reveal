@@ -15,6 +15,7 @@ from . import query as query_module
 from . import operations
 from . import files
 from . import filtering
+from ...utils.query_parser import note_query_parsed
 
 
 def _extract_backlinks(filter_query: str) -> tuple:
@@ -28,6 +29,7 @@ def _extract_backlinks(filter_query: str) -> tuple:
     for part in filter_query.split('&'):
         stripped = part.strip()
         if stripped.startswith('backlinks='):
+            note_query_parsed(stripped)
             value = stripped[len('backlinks='):]
             if value:
                 target = value
@@ -47,6 +49,7 @@ def _extract_aggregate(filter_query: str) -> tuple:
     for part in filter_query.split('&'):
         stripped = part.strip()
         if stripped.startswith('aggregate='):
+            note_query_parsed(stripped)
             field = stripped[len('aggregate='):]
             if field:
                 aggregate_field = field
@@ -66,6 +69,7 @@ def _extract_explain(filter_query: str) -> tuple:
     for part in filter_query.split('&'):
         stripped = part.strip()
         if stripped == 'explain':
+            note_query_parsed(stripped)
             explain = True
         else:
             remaining_parts.append(part)
@@ -83,6 +87,7 @@ def _extract_link_graph(filter_query: str) -> tuple:
     for part in filter_query.split('&'):
         stripped = part.strip()
         if stripped in ('link-graph', 'link_graph'):
+            note_query_parsed(stripped)
             link_graph = True
         else:
             remaining_parts.append(part)
@@ -100,6 +105,7 @@ def _extract_lint(filter_query: str) -> tuple:
     for part in filter_query.split('&'):
         stripped = part.strip()
         if stripped == 'lint':
+            note_query_parsed(stripped)
             lint = True
         else:
             remaining_parts.append(part)
@@ -117,6 +123,7 @@ def _extract_lint_fields(filter_query: str) -> tuple:
     for part in filter_query.split('&'):
         stripped = part.strip()
         if stripped.startswith('lint-fields='):
+            note_query_parsed(stripped)
             value = stripped[len('lint-fields='):]
             if value:
                 lint_fields = [f.strip() for f in value.split(',') if f.strip()]
@@ -136,6 +143,7 @@ def _extract_fields(filter_query: str) -> tuple:
     for part in filter_query.split('&'):
         stripped = part.strip()
         if stripped.startswith('fields='):
+            note_query_parsed(stripped)
             value = stripped[len('fields='):]
             if value:
                 fields = [f.strip() for f in value.split(',') if f.strip()]
@@ -155,6 +163,7 @@ def _extract_body_contains(filter_query: str) -> tuple:
     for part in filter_query.split('&'):
         stripped = part.strip()
         if stripped.startswith('body-contains='):
+            note_query_parsed(stripped)
             term = stripped[len('body-contains='):]
             if term:
                 body_contains.append(term)

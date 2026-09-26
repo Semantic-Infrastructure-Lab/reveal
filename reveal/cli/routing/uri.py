@@ -8,16 +8,14 @@ import logging
 import os
 import re
 import sys
-from typing import Any, List, Optional, TYPE_CHECKING
-from urllib.parse import parse_qs
+from argparse import Namespace
+from typing import Any, List, Optional
 
 from ...errors import NotApplicableError
 from ...utils import print_json_result, write_also_json
 from .flag_specs import exclude_fragment, inject_query_flags, strip_result_control_keys
+from .ledger import FlagLedger, complete, ledger_of, mark, peek
 from .formats import declared_output_formats, require_supported_format
-
-if TYPE_CHECKING:
-    from argparse import Namespace
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +136,13 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
 
     scheme, resource = uri.split('://', 1)
 
+    # BACK-1514: every flag and query key the user set is used by this dispatch or named in
+    # one note at the end (see ledger.py). A nested call shares the outer call's ledger.
+    ledger = None
+    if ledger_of(args) is None and isinstance(args, Namespace):
+        ledger = FlagLedger(args)
+        args = ledger.track(args)
+
     # Expand a leading ~/... in the resource path before dispatch. A single-quoted
     # 'scheme://~/dir?query' never reaches shell tilde expansion (the ? forces
     # quoting), and only some adapters called expanduser() themselves — centralize
@@ -180,7 +185,6 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
     # a value already in the URI wins over the flag.
     resource = _inject_exclude_flag(resource, scheme, args)
     resource = inject_query_flags(resource, scheme, args)
-    _warn_unsupported_structural_flags(resource, scheme, args)
 
     # Look up adapter from registry
     from ...adapters.base import get_adapter_class, list_supported_schemes
@@ -220,9 +224,16 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
     resource, respect_gitignore = split_respect_gitignore(resource)
     try:
         with gitignore_scope(respect_gitignore):
-            handle_adapter(adapter_class, scheme, resource, element, args)
+            if ledger is None:
+                handle_adapter(adapter_class, scheme, resource, element, args)
+            else:
+                with ledger.dispatching(resource):
+                    handle_adapter(adapter_class, scheme, resource, element, args)
+                ledger.complete = True
     finally:
         clear_active_exclusions()
+        if ledger is not None and ledger.complete:
+            ledger.report(scheme)
 
 
 def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:
@@ -294,59 +305,6 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:
     return resource
 
 
-# BACK-1202: --depth/--ext/--type/--fast have real, documented semantics for
-# bare path scans (routing/file.py) but no URI adapter's get_structure()
-# declares a matching parameter and none reads the matching query_params key
-# either -- unlike --exclude/--since/--until/--respect-gitignore above, there
-# is no adapter-side support to inject into, so the honest fix is a warning
-# (same convention as the --grep/BACK-351 and markdown --links/BACK-357 notes
-# in handle_uri()) rather than a silent drop or a guessed semantic.
-# Compared against the parser's own default, so "was this actually typed" can be told
-# apart from "left at default" (--depth 0 must count as set, not falsy).
-_STRUCTURAL_FLAGS = ('depth', 'ext', 'type', 'fast')
-
-
-def _warn_unsupported_structural_flags(resource: str, scheme: str, args: 'Namespace') -> None:
-    """Warn when --depth/--ext/--type/--fast were explicitly set but this
-    scheme's adapter has no way to honor them (BACK-1202).
-
-    A flag whose value is already carried in the URI query is honored, not
-    ignored: 'reveal file.py --type function' is routed as
-    ast://file.py?type=function, and warning there told the user to run the
-    very command they ran."""
-    from ..defaults import _parser_defaults
-    defaults = _parser_defaults()
-    query = parse_qs(resource.partition('?')[2], keep_blank_values=True)
-    ignored = [
-        f'--{flag_name}' for flag_name in _STRUCTURAL_FLAGS
-        if getattr(args, flag_name, defaults[flag_name]) != defaults[flag_name]
-        and str(getattr(args, flag_name)) not in query.get(flag_name, [])
-    ]
-    if not ignored:
-        return
-    from ...adapters.base import get_adapter_class
-    adapter_class = get_adapter_class(scheme)
-    get_structure = getattr(adapter_class, 'get_structure', None) if adapter_class else None
-    if get_structure is None:
-        return
-    import inspect
-    try:
-        params = inspect.signature(get_structure).parameters
-    except (TypeError, ValueError):
-        return
-    still_ignored = [
-        flag for flag in ignored
-        if flag.lstrip('-') not in params
-    ]
-    if still_ignored:
-        print(
-            f"Note: {', '.join(still_ignored)} has no effect on {scheme}:// "
-            f"queries -- not supported by this adapter. Use a bare path scan "
-            f"(reveal <path> {' '.join(still_ignored)}) instead.",
-            file=sys.stderr,
-        )
-
-
 def _reject_missing_path(adapter_class: type, scheme: str, resource: str, args: 'Namespace') -> None:
     """Exit 1 when a path-taking adapter (RESOURCE_IS_PATH) is given a path that
     does not exist (BACK-1321). One shared check instead of per-adapter ones, so
@@ -402,8 +360,9 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
 
     # Apply --base-path override for adapters that support it (e.g., claude://)
     # REVEAL_CLAUDE_BASE_PATH env var acts as a persistent default for --base-path.
-    path_override = getattr(args, 'base_path', None) or os.environ.get('REVEAL_CLAUDE_BASE_PATH')
+    path_override = peek(args, 'base_path') or os.environ.get('REVEAL_CLAUDE_BASE_PATH')
     if path_override and hasattr(adapter, 'reconfigure_base_path'):
+        mark(args, 'base_path')
         from pathlib import Path as _Path
         try:
             adapter.reconfigure_base_path(_Path(path_override))
@@ -412,7 +371,8 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
             sys.exit(1)
 
     # Handle --check mode if requested
-    if getattr(args, 'check', False) and hasattr(adapter, 'check'):
+    if peek(args, 'check', False) and hasattr(adapter, 'check'):
+        mark(args, 'check')
         _handle_check_mode(adapter, renderer_class, args)
         return  # check mode exits directly
 
@@ -533,6 +493,7 @@ def _handle_check_mode(adapter, renderer_class: type[Any], args: 'Namespace') ->
     else:
         logger.warning("check() returned non-dict result; treating as pass (exit 0)")
         exit_code = 0
+    complete(args)
     sys.exit(exit_code)
 
 
@@ -714,11 +675,12 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
 
     # Apply --head/--tail to text-body content (BACK-355).
     # Probe canonical field names; first match wins.
-    head = getattr(args, 'head', None)
-    tail = getattr(args, 'tail', None)
+    head = peek(args, 'head')
+    tail = peek(args, 'tail')
     if (head or tail) and isinstance(result, dict):
         for field in ('content', 'body'):
             if field in result and isinstance(result[field], str):
+                mark(args, 'head', 'tail')
                 lines = result[field].splitlines()
                 if head:
                     lines = lines[:head]
@@ -831,10 +793,11 @@ def _apply_budget_constraints(result: dict, args: 'Namespace', adapter=None) -> 
 
     from reveal.utils.query import apply_budget_limits
 
+    mark(args, 'max_items', 'max_snippet_chars')
     budget_result = apply_budget_limits(
         result[list_field],
-        max_items=getattr(args, 'max_items', None),
-        truncate_strings=getattr(args, 'max_snippet_chars', None)
+        max_items=peek(args, 'max_items'),
+        truncate_strings=peek(args, 'max_snippet_chars')
     )
 
     # Update result with budget-limited items
@@ -882,19 +845,23 @@ def _apply_head_tail_range(result: dict, args: 'Namespace', adapter=None,
     if not isinstance(result, dict):
         return result
 
-    head = getattr(args, 'head', None)
-    tail = getattr(args, 'tail', None)
-    range_ = getattr(args, 'range', None)
+    head = peek(args, 'head')
+    tail = peek(args, 'tail')
+    range_ = peek(args, 'range')
     if not (head or tail or range_):
         return result
 
     fields = _budget_list_fields(result, adapter)
     flag = '--head' if head else '--tail' if tail else '--range'
     if not fields:
+        # A declared field this result lacks: the adapter may apply the flag itself (claude://
+        # reads args.head in post_process); if nothing does, the ledger's note says so.
         if getattr(adapter, 'BUDGET_LIST_FIELD', None) is None:
+            mark(args, 'head', 'tail', 'range')
             print(f"Note: {flag} has no effect on {scheme or 'this'}:// -- its result has no "
                   f"list to slice.", file=sys.stderr)
         return result
+    mark(args, 'head', 'tail', 'range')
     for field in fields:
         result[field] = _slice_items(result[field], head, tail, range_)
     if len(fields) > 1:
@@ -973,7 +940,8 @@ def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace') -> dic
     """
     if getattr(renderer_class, 'ACCEPTS_TOP', False) is not True:
         return {}
-    if getattr(args, 'all', False) or getattr(args, 'verbose', False):
+    if peek(args, 'all', False) or peek(args, 'verbose', False):
+        mark(args, 'all', 'verbose')
         from ...adapters.overview import UNLIMITED_TOP
         return {'top': UNLIMITED_TOP}
     return {}

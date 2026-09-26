@@ -25,6 +25,20 @@ def _parser_defaults() -> dict:
     return {**_PACK_EXTRAS, **vars(parser.parse_args([]))}
 
 
+@lru_cache(maxsize=1)
+def _option_names() -> dict:
+    """dest -> the flag's spelling (``max_items`` -> ``--max-items``), for messages."""
+    from .parser import create_argument_parser
+
+    parser = create_argument_parser('0', full_help=False)
+    names: dict = {}
+    for action in parser._actions:
+        long_options = [o for o in action.option_strings if o.startswith('--')]
+        if long_options and action.dest not in names:
+            names[action.dest] = long_options[0]
+    return names
+
+
 def _default_args(**overrides) -> Namespace:
     """Return a Namespace with all reveal CLI defaults for internal routing functions."""
     from .parser import _format_default

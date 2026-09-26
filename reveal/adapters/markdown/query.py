@@ -3,6 +3,7 @@
 from typing import Any, List, Tuple
 
 from ...utils.query import compare_values
+from ...utils.query_parser import note_query_parsed
 
 
 def parse_query(query: str) -> List[Tuple[str, str, str]]:
@@ -18,6 +19,7 @@ def parse_query(query: str) -> List[Tuple[str, str, str]]:
     filters: List[tuple] = []
     if not query:
         return filters
+    note_query_parsed(query)
 
     # Split on & for multiple filters
     parts = query.split('&')
