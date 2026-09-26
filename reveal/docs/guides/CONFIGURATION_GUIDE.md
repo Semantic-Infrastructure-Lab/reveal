@@ -283,6 +283,11 @@ export REVEAL_IGNORE="*.min.js,vendor/**,node_modules/**"
 reveal --check file.py
 ```
 
+Every command that walks a directory honors it -- `scheme://` URIs and the subcommands
+(`reveal surface`, `reveal pack`, `reveal check`, ...) alike. Patterns are added to any
+`--exclude` and match relative to the analysed path, so `vendor/**` prunes `src/vendor/`
+when you run `reveal surface src`.
+
 ### Rule-Specific Thresholds
 
 #### `REVEAL_C901_THRESHOLD`
