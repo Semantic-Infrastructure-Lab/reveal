@@ -896,9 +896,11 @@ class TestHelpAdapterSectionFilter:
         full_result = adapter.get_element('agent/full')
         if not full_result or 'content' not in full_result:
             return
-        # Pick the first heading in the content
+        # Pick the first level-2 heading: the H1 title's section is the whole
+        # guide (it only used to look shorter because a `# comment` inside a
+        # code fence was mistaken for a heading, BACK-1507).
         for line in full_result['content'].splitlines():
-            if line.startswith('#'):
+            if line.startswith('## '):
                 heading_text = line.lstrip('#').strip()
                 break
         else:

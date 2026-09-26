@@ -282,6 +282,29 @@ class HelpRenderer:
         print(f"Error accessing help: {error}", file=sys.stderr)
 
 
+_FENCE_RE = re.compile(r'^\s*(```|~~~)')
+_HEADING_RE = re.compile(r'^(#{1,6})\s+(.*)')
+
+
+def _markdown_headings(lines: List[str]) -> List[tuple]:
+    """(index, level, text) for every ATX heading outside fenced code blocks."""
+    headings = []
+    fence = None
+    for i, line in enumerate(lines):
+        m = _FENCE_RE.match(line)
+        if m:
+            if fence is None:
+                fence = m.group(1)
+            elif m.group(1) == fence:
+                fence = None
+            continue
+        if fence is None:
+            h = _HEADING_RE.match(line)
+            if h:
+                headings.append((i, len(h.group(1)), h.group(2).strip()))
+    return headings
+
+
 @register_adapter('help')
 @register_renderer(HelpRenderer)
 class HelpAdapter(ResourceAdapter):
@@ -754,6 +777,18 @@ class HelpAdapter(ResourceAdapter):
             # Only route to adapter section handler when the adapter actually exists;
             # returning None here gives a clean "not found" rather than a misleading
             # "Unknown section" error when the base topic doesn't exist at all.
+            if adapter_name in _ADAPTER_REGISTRY and uri_section in self.VALID_SECTIONS:
+                result = self._get_adapter_section(adapter_name, uri_section)
+                if result and 'error' not in result:
+                    return result
+            # help://git/file-history -> the guide's "File History" section: the
+            # footer lists guide sections, and nothing opened one (BACK-1507).
+            if adapter_name in self.help_topics:
+                guide = self._load_static_help(adapter_name, full=True,
+                                               section=uri_section.replace('-', ' '))
+                if guide and 'error' not in guide:
+                    guide['topic'] = f'{adapter_name}/{uri_section}'
+                    return guide
             if adapter_name in _ADAPTER_REGISTRY:
                 return self._get_adapter_section(adapter_name, uri_section)
             return None
@@ -799,16 +834,23 @@ class HelpAdapter(ResourceAdapter):
             Error dict if invalid, None if valid
         """
         if section not in self.VALID_SECTIONS:
-            valid_sections = ', '.join(sorted(self.VALID_SECTIONS))
+            # List only what this adapter has: the fixed list sent every adapter
+            # but ast to sections that then failed as missing (BACK-1507).
+            help_data = self._get_adapter_help(adapter_name) or {}
+            keys = {'workflows': 'workflows', 'try-now': 'try_now', 'anti-patterns': 'anti_patterns'}
+            present = sorted(s for s, k in keys.items() if help_data.get(k))
+            valid = ', '.join(present) if present else 'none'
+            message = f"Unknown section '{section}'. Sections of {adapter_name}: {valid}."
+            if adapter_name in self.help_topics:
+                message += (f" Guide sections open by heading: reveal help://{adapter_name}/<heading-words>"
+                            f" (e.g. help://{adapter_name}/quick-start) or --section '<Heading>';"
+                            f" they are listed at the end of reveal help://{adapter_name}.")
             return {
                 'type': 'help_section',
                 'adapter': adapter_name,
                 'section': section,
                 'error': 'Invalid section',
-                'message': (
-                    f"Unknown section '{section}'. "
-                    f"Valid sections: {valid_sections}"
-                ),
+                'message': message,
                 'next': [f'reveal help://{adapter_name}'],
             }
         return None
@@ -1729,34 +1771,22 @@ class HelpAdapter(ResourceAdapter):
     def _extract_markdown_section(self, lines: list[str], section: str, topic: str) -> Optional[str]:
         """Extract a heading and its body from markdown lines.
 
-        Case-insensitive substring match on heading text. Returns the matched heading
-        line through the line before the next heading of equal or lesser depth, or EOF.
-        Returns None if no matching heading is found.
+        Case-insensitive: an exact heading match wins, else the first heading
+        containing the text. Returns the matched heading line through the line
+        before the next heading of equal or lesser depth, or EOF. Returns None
+        if no heading matches. Headings inside fenced code are not headings: a
+        `# 7. File history` comment in a bash example used to be returned in
+        place of the guide's `## File History` section (BACK-1507).
         """
-        import re as _re
-        heading_re = _re.compile(r'^(#{1,6})\s+(.*)')
-        needle = section.lower()
-
-        match_start: Optional[int] = None
-        match_level: int = 0
-
-        for i, line in enumerate(lines):
-            m = heading_re.match(line)
-            if m:
-                level = len(m.group(1))
-                text = m.group(2).strip()
-                if match_start is None:
-                    if needle in text.lower():
-                        match_start = i
-                        match_level = level
-                else:
-                    # End of section: same or higher level heading
-                    if level <= match_level:
-                        return '\n'.join(lines[match_start:i])
-
-        if match_start is not None:
-            return '\n'.join(lines[match_start:])
-        return None
+        needle = section.lower().strip()
+        headings = _markdown_headings(lines)
+        match = (next((h for h in headings if h[2].lower() == needle), None)
+                 or next((h for h in headings if needle in h[2].lower()), None))
+        if match is None:
+            return None
+        start, level, _ = match
+        end = next((i for i, lvl, _ in headings if i > start and lvl <= level), len(lines))
+        return '\n'.join(lines[start:end])
 
     def _truncate_to_first_section(self, topic: str, lines: list[str]) -> str:
         """Return header + first meaningful content + section breadcrumb for large guides.
@@ -1765,8 +1795,11 @@ class HelpAdapter(ResourceAdapter):
         whichever cuts later — avoids the case where the first section is a skimpy
         1-paragraph intro (e.g. quick-start's "Installation" section).
         """
-        section_indices = [i for i, line in enumerate(lines) if line.startswith('## ')]
-        section_names = [lines[i][3:].strip() for i in section_indices]
+        # Level-2 headings outside fenced code (a sample doc's `## Section One`
+        # inside a fence was listed as a section of the guide, BACK-1507).
+        level2 = [(i, text) for i, level, text in _markdown_headings(lines) if level == 2]
+        section_indices = [i for i, _ in level2]
+        section_names = [text for _, text in level2]
 
         if section_indices:
             # Walk sections until we have at least 60 lines of body content
