@@ -43,6 +43,35 @@ def coerce_value(value: str) -> Union[bool, int, float, str]:
     return value
 
 
+# `?exclude=` carries a list of glob patterns inside one query value: ',' separates
+# patterns and '&'/'=' delimit query params, so a pattern containing any of them (or a
+# literal '%') is percent-escaped on the way in and decoded on the way out (BACK-1380).
+_EXCLUDE_ESCAPES = (('%', '%25'), (',', '%2C'), ('&', '%26'), ('=', '%3D'))
+
+
+def join_exclude_patterns(patterns: Iterable[str]) -> str:
+    """Encode exclude patterns as one ``?exclude=`` value; inverse of split_exclude_param."""
+    encoded = []
+    for pattern in patterns:
+        for char, escape in _EXCLUDE_ESCAPES:
+            pattern = pattern.replace(char, escape)
+        encoded.append(pattern)
+    return ','.join(encoded)
+
+
+def split_exclude_param(value: Any) -> List[str]:
+    """Decode an ``?exclude=`` value into its patterns (empty entries dropped)."""
+    if not value or value is True:
+        return []
+    patterns = []
+    for part in str(value).split(','):
+        for char, escape in reversed(_EXCLUDE_ESCAPES):
+            part = part.replace(escape, char).replace(escape.lower(), char)
+        if part:
+            patterns.append(part)
+    return patterns
+
+
 def parse_query_params(query: str, coerce: bool = False) -> Dict[str, Any]:
     """Parse URL query string into parameter dictionary."""
     if not query:

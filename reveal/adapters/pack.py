@@ -24,6 +24,7 @@ from ..utils import print_json_result
 from ..utils.gitignore import gitignore_filter
 from ..utils.path_utils import classify_path_provenance, is_skippable_dir, to_posix
 from ..utils.query import parse_query_params
+from ..utils.query_parser import split_exclude_param
 from ..utils.results import ResultBuilder
 
 # Entry point filename patterns (highest priority) live per language in
@@ -1034,7 +1035,7 @@ class PackAdapter(ResourceAdapter):
         # entirely, comma-separated, same format as overview://'s ?exclude=.
         exclude_param = self.query_params.get('exclude')
         exclude_patterns = (
-            [p for p in str(exclude_param).split(',') if p] if exclude_param else None
+            split_exclude_param(exclude_param) or None
         )
 
         budget_tokens, budget_lines = _parse_budget(budget_str)

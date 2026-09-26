@@ -26,6 +26,7 @@ from ..utils import print_json_result
 from ..utils.gitignore import respect_gitignore_param
 from ..utils.path_utils import is_test_path
 from ..utils.query import parse_query_params
+from ..utils.query_parser import join_exclude_patterns, split_exclude_param
 from ..utils.results import ResultBuilder
 
 logger = logging.getLogger(__name__)
@@ -62,13 +63,14 @@ def _run_stats(adapter: 'OverviewAdapter', path: Path) -> Dict[str, Any]:
 
     BACK-1042: forwards --exclude/--respect-gitignore as a raw query string
     (not compose()'s **params/urlencode path — nothing downstream in
-    parse_query_params URL-decodes, so an urlencoded '*'/',' would reach
-    find_analyzable_files still percent-escaped and never match).
+    parse_query_params URL-decodes, so an urlencoded '*' would reach
+    find_analyzable_files still percent-escaped and never match). ',', '&', '='
+    and '%' inside a pattern are escaped by join_exclude_patterns (BACK-1380).
     """
     query = 'hotspots=true'
     exclude_patterns = adapter.exclude_patterns
     if exclude_patterns:
-        query += f'&exclude={",".join(exclude_patterns)}'
+        query += f'&exclude={join_exclude_patterns(exclude_patterns)}'
     query += f'&respect_gitignore={"true" if adapter.respect_gitignore else "false"}'
     return adapter.compose(StatsAdapter, str(path), default={}, query=query)
 
@@ -583,7 +585,7 @@ class OverviewAdapter(ResourceAdapter):
         # BACK-1042
         exclude_param = self.query_params.get('exclude')
         self.exclude_patterns: List[str] = (
-            [p for p in str(exclude_param).split(',') if p] if exclude_param else []
+            split_exclude_param(exclude_param)
         )
         self.respect_gitignore: bool = respect_gitignore_param(self.query_params)
 

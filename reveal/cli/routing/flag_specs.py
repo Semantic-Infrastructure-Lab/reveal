@@ -23,6 +23,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from ...utils.query_parser import join_exclude_patterns
+
 
 @dataclass(frozen=True)
 class FlagSpec:
@@ -80,10 +82,10 @@ FLAG_SPECS: tuple[FlagSpec, ...] = (
 def exclude_fragment(patterns: Any) -> str:
     """The `exclude=` query fragment for overview://, stats:// and pack:// ('' if none).
 
-    Patterns are comma-joined and the adapters split on ',' with no decoding, so a pattern
-    that itself contains ',' (or '&'/'=') is not representable and is silently split.
+    Patterns are comma-joined; ',', '&', '=' and '%' inside a pattern are percent-escaped
+    (BACK-1380) and the adapters decode with `split_exclude_param`.
     """
-    return f"exclude={','.join(patterns)}" if patterns else ''
+    return f"exclude={join_exclude_patterns(patterns)}" if patterns else ''
 
 
 def _has_key(resource: str, key: str) -> bool:

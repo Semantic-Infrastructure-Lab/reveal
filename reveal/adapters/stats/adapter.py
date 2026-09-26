@@ -12,6 +12,7 @@ from ...utils.query import (
     parse_query_filters,
     parse_result_control,
 )
+from ...utils.query_parser import split_exclude_param
 from ...utils.gitignore import respect_gitignore_param
 from ...utils.validation import require_path_exists
 
@@ -286,7 +287,7 @@ class StatsAdapter(ResourceAdapter):
         # in by overview's --exclude/--no-gitignore flags (also usable
         # directly on stats:// itself).
         exclude_param = self.query_params.get('exclude')
-        exclude_patterns = [p for p in str(exclude_param).split(',') if p] if exclude_param else None
+        exclude_patterns = split_exclude_param(exclude_param) or None
         respect_gitignore = respect_gitignore_param(self.query_params)
 
         files = list(find_analyzable_files(
