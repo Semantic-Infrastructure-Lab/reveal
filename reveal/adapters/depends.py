@@ -420,7 +420,7 @@ class DependsAdapter(ResourceAdapter):
     # --verbose was a silent no-op on depends://. Same fix as imports:// (BACK-1361):
     # declare the flag, read it back out of the query in get_structure(), and have
     # render_structure prefer result['verbose'] over its own kwarg default.
-    CLI_QUERY_FLAGS = {'verbose': 'verbose', 'respect_gitignore': 'respect_gitignore=false'}
+    CLI_QUERY_FLAGS = {'verbose': 'verbose', 'limit': 'top={value}', 'respect_gitignore': 'respect_gitignore=false'}  # top= caps the module list (BACK-1496)
 
     def __init__(self, resource: str = '', query: Optional[str] = None):
         """Initialize depends adapter.

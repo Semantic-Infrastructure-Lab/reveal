@@ -35,6 +35,8 @@ class FlagSpec:
     already_scoped: tuple[str, ...] = ()  # raw URI substrings meaning "caller scoped it"
     universal: str | None = None          # fragment for every adapter with HONORS_RESULT_CONTROL
                                           # (sort=/limit=; applied by a few, warned about by the rest)
+    unbounded: int | None = None          # value a declared fragment gets for a 0 ("no cap"): an
+                                          # adapter's own `top=0` may mean "nothing" (hotspots)
 
 
 def _typed(dest: str) -> Callable[[Any], Any | None]:
@@ -77,8 +79,10 @@ FLAG_SPECS: tuple[FlagSpec, ...] = (
     # those that cannot receive a query key at all set HONORS_RESULT_CONTROL = False and get the
     # "no effect" note instead (BACK-1385).
     # --limit's argparse default is None ('typed or not'); `check` applies its own cap of 50.
+    # An adapter that declares its own native cap in CLI_QUERY_FLAGS (hotspots/calls/depends/
+    # testability `top={value}`) gets that instead of the universal key (BACK-1496).
     FlagSpec('sort', '--sort', _sort, universal='sort={value}'),
-    FlagSpec('limit', '--limit', _set('limit'), universal='limit={value}'),
+    FlagSpec('limit', '--limit', _set('limit'), universal='limit={value}', unbounded=1_000_000),
 )
 
 
@@ -142,7 +146,10 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
             print(f"Note: {spec.option} has no effect on {scheme}:// -- it does not take "
                   f"sort=/limit=/offset=.", file=sys.stderr)
             continue
-        fragment = spec.universal or declared.get(spec.dest)
+        fragment = declared.get(spec.dest)
+        if fragment and spec.unbounded is not None and value == 0:
+            value = spec.unbounded
+        fragment = fragment or spec.universal
         if fragment:
             fragment = fragment.replace('{value}', str(value))
             if not _has_key(resource, fragment.partition('=')[0]) and not any(

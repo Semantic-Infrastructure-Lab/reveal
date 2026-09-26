@@ -835,7 +835,17 @@ def _apply_budget_constraints(result: dict, args: 'Namespace', adapter=None) -> 
     return result
 
 
-def _apply_head_tail_range(result: dict, args: 'Namespace', adapter=None) -> dict:
+def _slice_items(items: list, head, tail, range_) -> list:
+    if head:
+        return items[:head]
+    if tail:
+        return items[-tail:]
+    start, end = range_
+    return items[max(start - 1, 0):end]
+
+
+def _apply_head_tail_range(result: dict, args: 'Namespace', adapter=None,
+                           scheme: Optional[str] = None) -> dict:
     """Apply --head/--tail/--range to a directory-shaped URI structure result.
 
     BACK-1204: these flags already worked on bare-file structural listings
@@ -847,6 +857,11 @@ def _apply_head_tail_range(result: dict, args: 'Namespace', adapter=None) -> dic
     unchanged with or without --head 1. Mirrors _apply_budget_constraints's
     field-discovery (BUDGET_LIST_FIELD / probe fallback) since it's the same
     "which field is the sliceable list" question.
+
+    BACK-1497: a result with several lists (hotspots:// file + function hotspots,
+    reveal:// analyzers/adapters/rules) has no single sliceable field, so the flag
+    slices every top-level non-empty list of dicts; a result with no list at all says
+    the flag had no effect instead of returning unchanged in silence.
     """
     if not isinstance(result, dict):
         return result
@@ -858,18 +873,22 @@ def _apply_head_tail_range(result: dict, args: 'Namespace', adapter=None) -> dic
         return result
 
     list_field = _find_budget_list_field(result, adapter)
-    if not list_field:
+    if list_field:
+        result[list_field] = _slice_items(result[list_field], head, tail, range_)
         return result
 
-    items = result[list_field]
-    if head:
-        result[list_field] = items[:head]
-    elif tail:
-        result[list_field] = items[-tail:]
-    elif range_:
-        start, end = range_
-        result[list_field] = items[max(start - 1, 0):end]
-
+    fields = [k for k, v in result.items()
+              if isinstance(v, list) and v and all(isinstance(i, dict) for i in v)]
+    flag = '--head' if head else '--tail' if tail else '--range'
+    if not fields:
+        print(f"Note: {flag} has no effect on {scheme or 'this'}:// -- its result has no list "
+              f"to slice.", file=sys.stderr)
+        return result
+    for field in fields:
+        result[field] = _slice_items(result[field], head, tail, range_)
+    if len(fields) > 1:
+        print(f"Note: {flag} applied to each of {', '.join(fields)} -- {scheme or 'this'}:// "
+              f"returns several lists.", file=sys.stderr)
     return result
 
 
@@ -902,7 +921,7 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
 
     # Apply post-processing
     result = _apply_field_selection(result, args)
-    result = _apply_head_tail_range(result, args, adapter)
+    result = _apply_head_tail_range(result, args, adapter, scheme)
     result = _apply_budget_constraints(result, args, adapter)
     post_process = getattr(type(adapter), 'post_process', None)
     if post_process is not None:

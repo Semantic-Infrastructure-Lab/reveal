@@ -297,7 +297,7 @@ class HotspotsAdapter(ResourceAdapter):
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
     # default top=10 per ranking; --all lifts it (BACK-1229)
-    CLI_QUERY_FLAGS = {'all': 'top=1000000', 'respect_gitignore': 'respect_gitignore=false'}
+    CLI_QUERY_FLAGS = {'all': 'top=1000000', 'limit': 'top={value}', 'respect_gitignore': 'respect_gitignore=false'}  # top= caps each list (BACK-1496)
 
     def __init__(self, resource: str, query: Optional[str] = None):
         self.path = str(Path(resource).expanduser())

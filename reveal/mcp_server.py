@@ -455,7 +455,7 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
     '?limit=N', '?sort=field' (or '?sort=-field' for desc) and '?offset=M'
     are applied by ast://, markdown://, json://, git:// and stats:// only;
     other adapters answer "Unknown query param ... ignored" -- use their own
-    key instead (e.g. hotspots:// and calls:// take '?top=N').
+    key instead (hotspots://, calls://, depends:// and testability:// take '?top=N').
     Every other per-adapter option is that adapter's own '?key=value'
     vocabulary, not a generic CLI-flag passthrough — check
     reveal_query('help://schemas/<adapter>') for what a given scheme accepts.

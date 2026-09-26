@@ -129,7 +129,7 @@ class TestabilityAdapter(ResourceAdapter):
     boundary fan-out — where tests over-mock vs. where risky boundary code
     has no patch coverage at all."""
     HELP_CLUSTER = 'Code Analysis'
-    CLI_QUERY_FLAGS = {'all': 'top=1000000', 'respect_gitignore': 'respect_gitignore=false'}  # lifts the top=20 group default (BACK-1379)
+    CLI_QUERY_FLAGS = {'all': 'top=1000000', 'limit': 'top={value}', 'respect_gitignore': 'respect_gitignore=false'}  # top= caps each hotspot group (default 20; BACK-1379, BACK-1496)
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
