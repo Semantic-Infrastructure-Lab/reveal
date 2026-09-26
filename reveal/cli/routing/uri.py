@@ -14,7 +14,7 @@ from typing import Any, List, Optional
 from ...errors import NotApplicableError
 from ...utils import print_json_result, write_also_json
 from .flag_specs import exclude_fragment, inject_query_flags, strip_result_control_keys
-from .ledger import FlagLedger, complete, ledger_of, mark, peek
+from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
 from .formats import declared_output_formats, require_supported_format
 
 logger = logging.getLogger(__name__)
@@ -255,11 +255,12 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:
     # CLI --exclude flag because this set predates BACK-1196 having its own
     # query param wired up.
     _EXCLUDE_AWARE_SCHEMES = {'overview', 'stats', 'pack'}
-    exclude_values = list(getattr(args, 'exclude', None) or [])
+    exclude_values = list(peek(args, 'exclude') or [])
 
     if exclude_values and scheme in _EXCLUDE_AWARE_SCHEMES and 'exclude=' not in resource:
         sep = '&' if '?' in resource else '?'
         resource = f"{resource}{sep}{exclude_fragment(exclude_values)}"
+        delegate(args, 'exclude', 'exclude')
 
     # BACK-1257: every other path-walking scheme gets exclusion by publishing
     # the scope for the shared directory-pruning predicate (see
@@ -295,8 +296,10 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:
     if not combined_values:
         return resource
     if walk_root is not None:
+        # Used only if a walk consults the scope (the ledger checks exclusions_consulted).
         set_active_exclusions(walk_root, combined_values)
     elif exclude_values and scheme not in _EXCLUDE_AWARE_SCHEMES:
+        mark(args, 'exclude')
         print(
             f"Note: --exclude has no effect on {scheme}:// -- it does not walk a "
             f"filesystem tree. Pre-filter the target or scope to a narrower path.",

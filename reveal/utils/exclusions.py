@@ -26,19 +26,30 @@ from typing import List, Optional, Tuple
 
 _ACTIVE_ROOT: Optional[Path] = None
 _ACTIVE_PATTERNS: Tuple[str, ...] = ()
+# Set when a walk actually checks a path against the active scope. The flag ledger
+# (BACK-1514) counts --exclude as used only then: publishing a scope for an adapter that
+# never walks (sqlite://, json://) applied nothing.
+_CONSULTED = False
 
 
 def set_active_exclusions(root: Path, patterns: List[str]) -> None:
     """Publish the --exclude scope for subsequent walks in this process."""
-    global _ACTIVE_ROOT, _ACTIVE_PATTERNS
+    global _ACTIVE_ROOT, _ACTIVE_PATTERNS, _CONSULTED
     _ACTIVE_ROOT = Path(root)
     _ACTIVE_PATTERNS = tuple(patterns or ())
+    _CONSULTED = False
 
 
 def clear_active_exclusions() -> None:
     """Drop the active scope. Long-lived hosts must call this between requests."""
-    global _ACTIVE_ROOT, _ACTIVE_PATTERNS
+    global _ACTIVE_ROOT, _ACTIVE_PATTERNS, _CONSULTED
     _ACTIVE_ROOT, _ACTIVE_PATTERNS = None, ()
+    _CONSULTED = False
+
+
+def exclusions_consulted() -> bool:
+    """True once a walk has checked a path against the active scope since it was set."""
+    return _CONSULTED
 
 
 def active_exclusions() -> Tuple[Optional[Path], Tuple[str, ...]]:
@@ -78,8 +89,10 @@ def path_is_excluded(path: Path) -> bool:
     subcommand uses, so ``--exclude 'app/*'`` means the same thing in both
     forms and means nothing when the target is already ``app/models``.
     """
+    global _CONSULTED
     if not _ACTIVE_PATTERNS or _ACTIVE_ROOT is None:
         return False
+    _CONSULTED = True
     from ..cli.file_checker import should_skip_file  # deferred: cli imports utils
     rel = _relative_to_scope(path)
     if rel is None:
@@ -98,8 +111,10 @@ def dir_is_excluded(path: Path) -> bool:
     'app/assets/*.js' does not match the probe, so that directory is correctly
     still walked and filtered file by file.
     """
+    global _CONSULTED
     if not _ACTIVE_PATTERNS or _ACTIVE_ROOT is None:
         return False
+    _CONSULTED = True
     from ..cli.file_checker import should_skip_file
     rel = _relative_to_scope(path)
     if rel is None:

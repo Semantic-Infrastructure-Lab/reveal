@@ -15,7 +15,9 @@ A flag the user set (its value differs from the parser default) counts as used w
 - routing code that only *inspects* a flag, and may then not apply it, reads it with ``peek``
   and calls ``mark`` once it has applied the flag or printed a note about it; or
 - its value was carried into the URI query (``reveal f.py --type function`` routes as
-  ``ast://f.py?type=function``). The query key is then judged instead.
+  ``ast://f.py?type=function``). The query key is then judged instead; or
+- for ``--exclude`` published as the walk scope, a walk actually checked a path against it
+  (``utils.exclusions.exclusions_consulted``). An adapter that never walks applied nothing.
 
 A query key counts as used when an adapter's query parser saw it
 (``utils.query_parser.note_query_parsed``). Whatever is left when the dispatch finishes gets
@@ -32,6 +34,7 @@ from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Optional, Set, TextIO
 from urllib.parse import parse_qs
 
+from ...utils.exclusions import exclusions_consulted
 from ...utils.query_parser import collect_parsed_query_keys, query_key
 
 _LEDGER_ATTR = '_reveal_flag_ledger'
@@ -94,6 +97,8 @@ class FlagLedger:
                 yield
             finally:
                 self.parsed_keys = set(parsed)
+                if exclusions_consulted():  # a walk applied the --exclude scope
+                    self.used.add('exclude')
 
     def unused_flags(self) -> List[str]:
         return [dest for dest in self.set_flags
