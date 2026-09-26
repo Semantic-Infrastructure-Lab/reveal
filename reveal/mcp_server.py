@@ -452,11 +452,11 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
 
     CLI-only global flags (--severity, --select, --format) do NOT pass
     through to this tool — there's no argv for them to come from here.
-    Exceptions: '?limit=N', '?sort=field' (or '?sort=-field' for desc),
-    and '?offset=M' work when written directly into the URI (every adapter
-    reads them straight off the query string via a shared result-control
-    parser, independent of any CLI flag);
-    every other per-adapter option is that adapter's own '?key=value'
+    '?limit=N', '?sort=field' (or '?sort=-field' for desc) and '?offset=M'
+    are applied by ast://, markdown://, json://, git:// and stats:// only;
+    other adapters answer "Unknown query param ... ignored" -- use their own
+    key instead (e.g. hotspots:// and calls:// take '?top=N').
+    Every other per-adapter option is that adapter's own '?key=value'
     vocabulary, not a generic CLI-flag passthrough — check
     reveal_query('help://schemas/<adapter>') for what a given scheme accepts.
     For severity/select filtering, use a dedicated typed tool instead

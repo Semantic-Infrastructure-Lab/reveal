@@ -33,8 +33,8 @@ class FlagSpec:
     value: Callable[[Any], Any | None]    # args -> value to inject; None = flag not set
     warn_unsupported: bool = False        # note when the adapter declares no support
     already_scoped: tuple[str, ...] = ()  # raw URI substrings meaning "caller scoped it"
-    universal: str | None = None          # fragment for every adapter that HONORS_RESULT_CONTROL
-                                          # (the sort=/limit= keys of the generic result pipeline)
+    universal: str | None = None          # fragment for every adapter with HONORS_RESULT_CONTROL
+                                          # (sort=/limit=; applied by a few, warned about by the rest)
 
 
 def _typed(dest: str) -> Callable[[Any], Any | None]:
@@ -72,8 +72,10 @@ FLAG_SPECS: tuple[FlagSpec, ...] = (
     # nginx, overview), so a missing declaration is not evidence of a dropped flag.
     FlagSpec('all', '--all', _switch('all')),
     FlagSpec('verbose', '--verbose', _switch('verbose')),
-    # Result-control keys most adapters' query pipeline understands, so no per-adapter declaration;
-    # the few that do not set HONORS_RESULT_CONTROL = False and get the "no effect" note (BACK-1385).
+    # Result-control keys, injected without a per-adapter declaration. Only ast/markdown/json/
+    # git/stats apply them; most other adapters warn "Unknown query param" and ignore them, and
+    # those that cannot receive a query key at all set HONORS_RESULT_CONTROL = False and get the
+    # "no effect" note instead (BACK-1385).
     # --limit's argparse default is None ('typed or not'); `check` applies its own cap of 50.
     FlagSpec('sort', '--sort', _sort, universal='sort={value}'),
     FlagSpec('limit', '--limit', _set('limit'), universal='limit={value}'),
@@ -106,12 +108,23 @@ def _supporting_schemes(dest: str) -> list:
 RESULT_CONTROL_KEYS = frozenset({'sort', 'limit', 'offset'})
 
 
-def unsupported_result_control_keys(resource: str, adapter_class: Any) -> list:
-    """Typed `?sort=`/`?limit=`/`?offset=` keys on an adapter that does not apply them (BACK-1385)."""
-    if getattr(adapter_class, 'HONORS_RESULT_CONTROL', True):
-        return []
-    pairs = resource.partition('?')[2].split('&')
-    return [k for k in (pair.partition('=')[0] for pair in pairs) if k in RESULT_CONTROL_KEYS]
+def strip_result_control_keys(resource: str, adapter_class: Any) -> tuple[str, list]:
+    """Remove typed `sort=`/`limit=`/`offset=` from the query of an adapter that cannot receive
+    them (HONORS_RESULT_CONTROL = False); return the new resource and the removed keys (BACK-1385)."""
+    if getattr(adapter_class, 'HONORS_RESULT_CONTROL', True) or '?' not in resource:
+        return resource, []
+    base, _, query = resource.partition('?')
+    kept: list[str] = []
+    removed: list[str] = []
+    for pair in query.split('&'):
+        key = pair.partition('=')[0]
+        if key in RESULT_CONTROL_KEYS:
+            removed.append(key)
+        else:
+            kept.append(pair)
+    if not removed:
+        return resource, []
+    return (f"{base}?{'&'.join(kept)}" if kept else base), removed
 
 
 def inject_query_flags(resource: str, scheme: str, args: Any) -> str:

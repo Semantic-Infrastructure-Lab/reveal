@@ -31,6 +31,7 @@ class RevealAdapter(ResourceAdapter):
     internal = True
     STABILITY = Stability.STABLE
     LEGACY_INIT = False
+    HONORS_RESULT_CONTROL = False  # ignores its query entirely (BACK-1385)
     CANONICAL_EMPTY_RESOURCE = ''
 
     @staticmethod

@@ -13,7 +13,7 @@ from urllib.parse import parse_qs
 
 from ...errors import NotApplicableError
 from ...utils import print_json_result, write_also_json
-from .flag_specs import exclude_fragment, inject_query_flags, unsupported_result_control_keys
+from .flag_specs import exclude_fragment, inject_query_flags, strip_result_control_keys
 from .formats import declared_output_formats, require_supported_format
 
 if TYPE_CHECKING:
@@ -194,15 +194,19 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
         print(f"Supported schemes: {schemes}", file=sys.stderr)
         sys.exit(1)
 
-    # BACK-1385: sort=/limit=/offset= typed on an adapter that does not apply them would be glued
-    # onto its resource ("Element '?limit=2' not found") or dropped with a warning; say so instead.
-    ignored_keys = unsupported_result_control_keys(resource, adapter_class)
-    if ignored_keys:
-        message = (f"{scheme}:// does not support {'/'.join(k + '=' for k in ignored_keys)} "
-                   f"-- remove it from the URI.")
-        print(f"Error: {message}", file=sys.stderr)
-        _emit_adapter_error_envelope(scheme, resource, message, args)
-        sys.exit(1)
+    # BACK-1385: sort=/limit=/offset= typed on an adapter that cannot receive them would be glued
+    # onto its resource ("Element '?limit=2' not found"). Strip them with the same warning every
+    # other adapter gives an unsupported param, and run the query.
+    resource, stripped_keys = strip_result_control_keys(resource, adapter_class)
+    if stripped_keys:
+        from ...utils.query_parser import warn_unknown_query_params
+        schema = adapter_class.get_schema() if hasattr(adapter_class, 'get_schema') else None
+        if isinstance(schema, dict):
+            known = schema.get('query_params') or {}
+            warn_unknown_query_params(dict.fromkeys(stripped_keys, True), known, adapter=scheme)
+        else:  # no schema: do not claim "Valid params: (none)" (help://search takes search=)
+            for key in stripped_keys:
+                print(f"⚠ Unknown query param '{key}' for {scheme}:// — ignored.", file=sys.stderr)
 
     # Dispatch to scheme-specific handler. BACK-1257: the --exclude walk scope
     # _inject_exclude_flag published is process-global, so it must not outlive
