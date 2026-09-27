@@ -41,7 +41,10 @@ from conftest import production_schemes
 from reveal.cli.defaults import _default_args
 from reveal.cli.routing.ledger import FlagLedger, TrackedArgs, delegate, mark, peek
 from reveal.cli.routing.uri import handle_uri
-from reveal.utils.query_parser import collect_parsed_query_keys, parse_query_params, query_key
+from reveal.utils.query_control import parse_result_control
+from reveal.utils.query_parser import (
+    collect_query_keys, parse_query_filters, parse_query_params, query_key,
+    warn_unknown_query_params)
 import test_output_contract_compliance as harness_module
 
 # ---------------------------------------------------------------------------
@@ -83,6 +86,9 @@ def test_a_flag_carried_into_the_query_is_judged_by_its_key():
     assert ledger.unused_flags() == ['limit']  # nobody parsed top=
     with ledger.dispatching('x?top=2'):
         parse_query_params('top=2')
+    assert ledger.unused_flags() == ['limit']  # parsed, never read (BACK-1537)
+    with ledger.dispatching('x?top=2'):
+        parse_query_params('top=2').get('top')
     assert ledger.unused_flags() == []
 
 
@@ -90,14 +96,14 @@ def test_a_flag_whose_value_is_already_in_the_query_is_carried():
     """reveal f.py --type function routes as ast://f.py?type=function."""
     ledger = _ledger(type='function')
     with ledger.dispatching('f.py?type=function'):
-        parse_query_params('type=function')
+        assert parse_query_params('type=function')['type'] == 'function'
     assert ledger.unused_flags() == []
 
 
 def test_a_query_key_no_parser_saw_is_reported_once():
     ledger = _ledger()
     with ledger.dispatching('t.db?bogus=1&name>2&bogus=3'):
-        parse_query_params('name>2')
+        parse_query_filters('name>2')  # a filter parser uses every key it parses
     assert ledger.unused_query_keys() == ['bogus']
 
 
@@ -106,11 +112,72 @@ def test_query_key_normalizes_filters_and_negation():
         ['limit', 'lines', 'draft', 'name', 'show']
 
 
-def test_parsed_keys_are_collected_only_inside_a_dispatch():
-    parse_query_params('outside=1')
-    with collect_parsed_query_keys() as keys:
-        parse_query_params('a=1&b')
-    assert keys == {'a', 'b'}
+def test_query_keys_are_collected_only_inside_a_dispatch():
+    parse_query_params('outside=1').get('outside')
+    with collect_query_keys() as log:
+        parse_query_filters('x>1')
+        params = parse_query_params('a=1&b')
+    assert log.seen == {'x', 'a', 'b'} and log.used == {'x'}
+    params.get('a')  # bound at parse time: a read after the block still lands in its log
+    assert log.used == {'x', 'a'}
+
+
+# BACK-1537: a dict parser's key is used when the adapter reads it, not when it is parsed.
+
+def test_query_params_record_reads_and_peeks_do_not():
+    with collect_query_keys() as log:
+        params = parse_query_params('limit=2&content~=x&sort=name&flag')
+        assert list(params.peek_items()) == [('limit', '2'), ('content~', 'x'), ('sort', 'name'),
+                                             ('flag', True)]
+        assert log.used == set()
+        params.get('content~')
+        assert 'sort' in params
+        params['flag']
+        params.get('absent')
+    assert log.used == {'content', 'sort', 'flag', 'absent'}  # normalized like the ledger's keys
+
+
+@pytest.mark.parametrize('walk', [list, lambda p: p.items(), lambda p: dict(p), lambda p: {**p},
+                                  lambda p: p.copy(), lambda p: (lambda **kw: kw)(**p)])
+def test_walking_a_whole_query_counts_every_key(walk):
+    """A consumer this class cannot see into (a helper handed the dict) never gets a false note."""
+    with collect_query_keys() as log:
+        walk(parse_query_params('a=1&b=2'))
+    assert log.used == {'a', 'b'}
+
+
+def test_result_control_counts_a_key_when_a_field_is_read():
+    with collect_query_keys() as log:
+        rest, control = parse_result_control('limit=2&sort=-name&type=x')
+    assert rest == 'type=x' and log.seen == {'limit', 'sort'} and log.used == set()
+    assert control.limit == 2
+    assert log.used == {'limit'}
+    assert control.sort_descending
+    assert log.used == {'limit', 'sort'}
+
+
+def test_an_unknown_key_warning_counts_as_the_note():
+    """The adapter's own 'Unknown query param' warning named it; the ledger must not repeat it."""
+    with collect_query_keys() as log:
+        params = parse_query_params('bogus=1&limit=2')
+        warn_unknown_query_params(params, {'limit'}, stream=StringIO())
+    assert log.used == {'bogus'}
+
+
+def test_a_parsed_but_unread_key_gets_the_not_for_this_view_note():
+    ledger = _ledger(limit=2)
+    args = ledger.track(_default_args(limit=2))
+    delegate(args, 'limit', 'limit')
+    with ledger.dispatching('f.py?limit=2&raw=1&bogus=1'):
+        parse_query_params('limit=2&raw=1')
+    err = StringIO()
+    ledger.report('git', stream=err)
+    assert err.getvalue() == (
+        "Note: --limit has no effect on this git:// query -- the adapter accepts it, but not "
+        "for this view.\n"
+        "Note: query param 'bogus' has no effect on git:// -- this adapter does not read it.\n"
+        "Note: query param 'raw' has no effect on this git:// query -- the adapter accepts it, "
+        "but not for this view.\n")
 
 
 def test_note_names_every_unused_flag_and_the_bare_path_hint():
@@ -204,17 +271,10 @@ PROBES = {
     'depth': ('--depth', 1),
 }
 
-_PARSED_BUT_IGNORED = 'BACK-1537'  # the adapter parses the key, then this view ignores it
 _NOT_VISIBLE = 'BACK-1538'  # read, but the fixture cannot show an effect
 
 KNOWN_SILENT = {
-    ('git', 'limit'): _PARSED_BUT_IGNORED,
-    ('git', 'sort'): _PARSED_BUT_IGNORED,
-    ('git', 'since'): _PARSED_BUT_IGNORED,
-    ('git', 'all'): _PARSED_BUT_IGNORED,
-    ('xlsx', 'limit'): _PARSED_BUT_IGNORED,
     ('codex', 'since'): _NOT_VISIBLE,
-    ('stats', 'since'): _NOT_VISIBLE,
     ('stats', 'sort'): _NOT_VISIBLE,
     ('depends', 'limit'): _NOT_VISIBLE,
     ('hotspots', 'limit'): _NOT_VISIBLE,
@@ -236,7 +296,6 @@ KNOWN_SILENT = {
     ('deps', 'all'): _NOT_VISIBLE,
     ('hotspots', 'all'): _NOT_VISIBLE,
     ('overview', 'all'): _NOT_VISIBLE,
-    ('stats', 'all'): _NOT_VISIBLE,
     ('testability', 'all'): _NOT_VISIBLE,
 }
 

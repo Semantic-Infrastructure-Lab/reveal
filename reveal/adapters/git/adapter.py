@@ -16,6 +16,7 @@ from ...utils.query import (
     parse_result_control,
     ResultControl
 )
+from ...utils.query_parser import QueryParams, mark_query_keys, peek_query_items, query_key
 
 # Import modular components
 from .renderer import GitRenderer
@@ -231,11 +232,11 @@ class GitAdapter(ResourceAdapter):
             else:
                 self.ref = ref
             self.subpath = parsed['subpath']
-            # Merge parsed query with explicitly provided query
-            if query:
-                self.query = {**parsed['query'], **query}
-            else:
-                self.query = parsed['query']
+            # Merge parsed query with explicitly provided query; merging is not reading
+            # (BACK-1537), so the merged dict keeps recording which keys a view reads.
+            self.query: Dict[str, Any] = parsed['query']
+            for key, value in peek_query_items(query or {}):
+                self.query[key] = value
         else:
             # Old style: explicit arguments (all provided)
             self.path = resource
@@ -251,8 +252,12 @@ class GitAdapter(ResourceAdapter):
         """
         result_control_parts = []
         filter_parts = []
+        self._filter_keys = []  # the user's keys behind filter_parts, for warnings
 
-        for k, v in self.query.items():
+        # Routing a key is not reading it (BACK-1537): each key counts as used where it is
+        # applied -- result control when a view reads the ResultControl, operational keys
+        # when a view reads them, filters when parsed.
+        for k, v in peek_query_items(self.query):
             # Result control parameters
             if k in ['sort', 'limit', 'offset']:
                 result_control_parts.append(f"{k}={v}")
@@ -263,23 +268,19 @@ class GitAdapter(ResourceAdapter):
             # ?ref= overrides the starting ref (alias for @ref in the URI)
             elif k == 'ref':
                 self.ref = v
+                mark_query_keys(self.query, k)
             # ?since=YYYY-MM-DD — ergonomic alias for date>=YYYY-MM-DD
-            elif k == 'since':
-                filter_parts.append(f"date>={v}")
             # ?until=YYYY-MM-DD — ergonomic alias for date<=YYYY-MM-DD (BACK-1192,
             # symmetric with ?since= above — the CLI --until flag needs a target
             # to alias into; only date>= existed before this)
-            elif k == 'until':
-                filter_parts.append(f"date<={v}")
-            # Filter parameters
+            elif k in ('since', 'until'):
+                filter_parts.append(f"date{'>' if k == 'since' else '<'}={v}")
+                self._filter_keys.append(k)
+                mark_query_keys(self.query, k)  # the filter parser records 'date'
+            # Filter parameters (a key may already end with its operator: author~, date>)
             else:
-                # Check if key already ends with an operator character (~, !, >, <, .)
-                if k and k[-1] in ['~', '!', '>', '<', '.']:
-                    # Key has operator, just add = between key and value
-                    filter_parts.append(f"{k}={v}")
-                else:
-                    # Regular key, use = operator
-                    filter_parts.append(f"{k}={v}")
+                filter_parts.append(f"{k}={v}")
+                self._filter_keys.append(query_key(k))
 
         return result_control_parts, filter_parts
 
@@ -384,10 +385,10 @@ class GitAdapter(ResourceAdapter):
         # ?type=history; the default view shows the file at the ref and never
         # reads them, so `git://f.py?message~=fix` answered with no filter at all.
         if self.subpath and query_type not in ('history', 'log', 'ownership') and self.query_filters:
-            fields = ', '.join(sorted({f.field for f in self.query_filters}))
+            fields = ', '.join(f"'{key}'" for key in sorted(set(self._filter_keys)))
             view = f"type={query_type}" if query_type else 'file content'
             print(
-                f"⚠ Filter param(s) [{fields}] have no effect on git:// view '{view}' -- "
+                f"⚠ Filter param(s) {fields} have no effect on git:// view '{view}' -- "
                 f"add ?type=history to filter this path's commits. "
                 f"Result does not reflect them.",
                 file=sys.stderr,
@@ -416,11 +417,11 @@ class GitAdapter(ResourceAdapter):
             # *also* routes it into query_filters (it isn't in that
             # method's operational-key exclusion list) — exclude it here
             # so a real ownership param doesn't get flagged as inert.
-            inert_fields = {f.field for f in self.query_filters} - {'merges'}
-            if inert_fields:
-                fields = ', '.join(sorted(inert_fields))
+            inert_keys = set(self._filter_keys) - {'merges'}
+            if inert_keys:
+                fields = ', '.join(f"'{key}'" for key in sorted(inert_keys))
                 print(
-                    f"⚠ Filter param(s) [{fields}] have no effect on git:// "
+                    f"⚠ Filter param(s) {fields} have no effect on git:// "
                     f"view 'ownership' — ownership aggregates commit-share "
                     f"unfiltered. Result does not reflect them.",
                     file=sys.stderr,
@@ -446,7 +447,7 @@ class GitAdapter(ResourceAdapter):
         path = '.'
         ref = 'HEAD'
         subpath = None
-        query: Dict[str, Any] = {}
+        query: Dict[str, Any] = QueryParams()
 
         # Handle empty resource
         if not resource or resource == '':

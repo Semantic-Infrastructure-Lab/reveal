@@ -3,7 +3,10 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
-from .query_parser import note_query_parsed
+from .query_parser import query_key_recorder
+
+# The query key behind each field, for the flag ledger (BACK-1537).
+_FIELD_KEYS = {'sort_field': 'sort', 'sort_descending': 'sort', 'limit': 'limit', 'offset': 'offset'}
 
 
 @dataclass
@@ -15,11 +18,22 @@ class ResultControl:
         sort_descending: Sort in descending order
         limit: Maximum number of results (None = no limit)
         offset: Number of results to skip (default: 0)
+
+    One from ``parse_result_control`` counts its query key as used when a field is read, not
+    when it is parsed: git:// parses ?limit= for every view and the file view never reads it.
     """
     sort_field: Optional[str] = None
     sort_descending: bool = False
     limit: Optional[int] = None
     offset: int = 0
+
+    def __getattribute__(self, name: str) -> Any:
+        key = _FIELD_KEYS.get(name)
+        if key is not None:
+            reads = object.__getattribute__(self, '__dict__').get('_reads')
+            if reads is not None:
+                reads.add(key)
+        return object.__getattribute__(self, name)
 
 
 def _apply_sort_param(control: ResultControl, sort_field: str) -> None:
@@ -65,15 +79,17 @@ def parse_result_control(query: str) -> Tuple[str, ResultControl]:
     control = ResultControl()
     remaining_parts = []
 
+    applied = []
     for part in query.split('&'):
         part = part.strip()
         if not part:
             continue
         if _apply_control_param(control, part):
-            note_query_parsed(part)
+            applied.append(part)
         else:
             remaining_parts.append(part)
 
+    vars(control)['_reads'] = query_key_recorder(*applied)  # set last: parsing is not reading
     return '&'.join(remaining_parts), control
 
 

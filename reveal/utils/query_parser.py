@@ -5,18 +5,29 @@ import sys
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, TextIO, Union
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, TextIO, Tuple, Union
 
 # Characters that only appear in a *filter* key (e.g. `complexity>10`, `msg~=x`),
 # never in a fixed param key. Used to distinguish the two in adapters that parse
 # the same query string as both params and filters (stats://, git://).
 _FILTER_OP_CHARS = frozenset('<>~!')
 
-# BACK-1514 flag ledger: while a dispatch collects, every query parser below records the keys
-# it was handed. A key no parser saw was never read by the adapter (sqlite:// parses no query
-# at all), which is what the ledger reports.
-_PARSED_KEYS: ContextVar[Optional[Set[str]]] = ContextVar('reveal_parsed_query_keys', default=None)
+# BACK-1514 flag ledger: while a dispatch collects, a QueryKeyLog records which query keys an
+# adapter's parsers were handed (seen) and which it used. A filter parser (parse_query_filters)
+# uses every key it parses. parse_query_params and parse_result_control see their keys when
+# they parse them and use one only when the adapter reads it (BACK-1537): git://FILE parses
+# ?limit= for the views that honor it, and the file view never reads it. A key never used is
+# what the ledger reports -- sqlite:// parses no query at all, so its keys are not even seen.
 _KEY_END = _re.compile(r'[=<>!~.?]')
+
+
+@dataclass
+class QueryKeyLog:
+    seen: Set[str]  # handed to some parser
+    used: Set[str]  # read by the adapter (for a filter parser: parsed)
+
+
+_KEY_LOG: ContextVar[Optional[QueryKeyLog]] = ContextVar('reveal_query_key_log', default=None)
 
 
 def query_key(part: str) -> str:
@@ -26,21 +37,114 @@ def query_key(part: str) -> str:
 
 
 @contextmanager
-def collect_parsed_query_keys() -> Iterator[Set[str]]:
-    """Collect the keys every query parser sees until the block exits."""
-    keys: Set[str] = set()
-    token = _PARSED_KEYS.set(keys)
+def collect_query_keys() -> Iterator[QueryKeyLog]:
+    """Log the keys query parsers see and the adapter uses until the block exits."""
+    log = QueryKeyLog(seen=set(), used=set())
+    token = _KEY_LOG.set(log)
     try:
-        yield keys
+        yield log
     finally:
-        _PARSED_KEYS.reset(token)
+        _KEY_LOG.reset(token)
 
 
 def note_query_parsed(query: str) -> None:
-    """Record that an adapter parsed ``query``. Call from any parser that reads a query."""
-    keys = _PARSED_KEYS.get()
-    if keys is not None and query:
-        keys.update(query_key(part) for part in query.split('&') if part.strip())
+    """Record every key of ``query`` as seen and used. Call from a filter parser: its filters
+    are the adapter's reads, so parsing a key is using it."""
+    log = _KEY_LOG.get()
+    if log is not None and query:
+        keys = {query_key(part) for part in query.split('&') if part.strip()}
+        log.seen.update(keys)
+        log.used.update(keys)
+
+
+def query_key_recorder(*seen: str) -> Optional[Set[str]]:
+    """Record ``seen`` keys as parsed and return the used-keys set of the dispatch in progress
+    (None outside one). A parser whose result is read later binds that set at parse time and
+    adds each key the adapter reads."""
+    log = _KEY_LOG.get()
+    if log is None:
+        return None
+    log.seen.update(query_key(key) for key in seen)
+    return log.used
+
+
+class QueryParams(Dict[str, Any]):
+    """``parse_query_params``' result: a dict that records the keys the adapter reads (BACK-1537).
+
+    ``[]``, ``get``, ``in``, ``pop`` and ``setdefault`` record their key. Anything that walks the
+    whole dict (iteration, ``keys``/``items``/``values``, ``**params``, JSON) records every key,
+    so a consumer this class cannot see into never produces a false note. Code that only routes
+    or validates keys walks them with ``peek_items`` and records what it applied with ``mark``.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._reads = query_key_recorder()
+
+    def mark(self, *keys: str) -> None:
+        """Count ``keys`` as used: applied, or already named in a warning."""
+        if self._reads is not None:
+            self._reads.update(query_key(key) for key in keys)
+
+    def _mark_all(self) -> None:
+        if self._reads is not None:
+            self.mark(*dict.keys(self))
+
+    def peek_items(self) -> Iterator[Tuple[str, Any]]:
+        """Walk the items without counting them as used."""
+        return iter(list(dict.items(self)))
+
+    def __getitem__(self, key: str) -> Any:
+        self.mark(key)
+        return super().__getitem__(key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        self.mark(key)
+        return super().get(key, default)
+
+    def __contains__(self, key: object) -> bool:
+        if isinstance(key, str):
+            self.mark(key)
+        return super().__contains__(key)
+
+    def pop(self, key: str, *default: Any) -> Any:
+        self.mark(key)
+        return super().pop(key, *default)
+
+    def setdefault(self, key: str, default: Any = None) -> Any:
+        self.mark(key)
+        return super().setdefault(key, default)
+
+    def __iter__(self) -> Iterator[str]:
+        self._mark_all()
+        return super().__iter__()
+
+    def keys(self):
+        self._mark_all()
+        return super().keys()
+
+    def items(self):
+        self._mark_all()
+        return super().items()
+
+    def values(self):
+        self._mark_all()
+        return super().values()
+
+    def copy(self) -> Dict[str, Any]:
+        self._mark_all()
+        return dict(dict.items(self))
+
+
+def peek_query_items(params: Dict[str, Any]) -> Iterator[Tuple[str, Any]]:
+    """Walk a parsed query without counting its keys as used (a plain dict works too)."""
+    return params.peek_items() if isinstance(params, QueryParams) else iter(list(params.items()))
+
+
+def mark_query_keys(params: Dict[str, Any], *keys: str) -> None:
+    """Count ``keys`` of a parsed query as used (a no-op for a plain dict)."""
+    if isinstance(params, QueryParams):
+        params.mark(*keys)
 
 
 def coerce_value(value: str) -> Union[bool, int, float, str]:
@@ -104,13 +208,13 @@ def split_exclude_param(value: Any) -> List[str]:
     return patterns
 
 
-def parse_query_params(query: str, coerce: bool = False) -> Dict[str, Any]:
-    """Parse URL query string into parameter dictionary."""
+def parse_query_params(query: str, coerce: bool = False) -> QueryParams:
+    """Parse URL query string into parameter dictionary. A key counts as used by the flag
+    ledger once the adapter reads it (``QueryParams``), not when it is parsed."""
+    params = QueryParams()
     if not query:
-        return {}
-    note_query_parsed(query)
+        return params
 
-    params = {}
     for part in query.split('&'):
         part = part.strip()
         if not part:
@@ -125,6 +229,7 @@ def parse_query_params(query: str, coerce: bool = False) -> Dict[str, Any]:
         else:
             params[part] = True
 
+    query_key_recorder(*dict.keys(params))
     return params
 
 
@@ -163,7 +268,7 @@ def warn_unknown_query_params(
     out = stream if stream is not None else sys.stderr
     known = set(known_keys)
     unknown = []
-    for key in query_params:
+    for key, _ in peek_query_items(query_params):  # validating is not reading
         if key in known:
             continue
         if skip_filter_keys and any(c in _FILTER_OP_CHARS for c in key):
@@ -171,6 +276,7 @@ def warn_unknown_query_params(
         unknown.append(key)
 
     if unknown:
+        mark_query_keys(query_params, *unknown)  # named here, so the ledger need not repeat it
         prefix = f"{adapter}://" if adapter else "this resource"
         valid = ', '.join(sorted(known)) if known else '(none)'
         for key in unknown:

@@ -295,9 +295,9 @@ a check that counts violations and lets the count only fall. Then the cause is r
    path and then the subcommands: a flag or query key the user sets is used, or a note names
    it (`reveal/cli/routing/ledger.py`, ratchet `tests/test_flag_ledger.py`). Subcommands also
    get the URI form's `--exclude`/REVEAL_IGNORE walk scope from one seam
-   (`reveal/cli/routing/subcommand.py`). Next:
-   - BACK-1537 catches keys an adapter parses and then ignores;
-   - BACK-1058 gives the URI and subcommand forms one Invocation path.
+   (`reveal/cli/routing/subcommand.py`). BACK-1537 then made a parsed key count only once a
+   view reads it, so a key an adapter parses and then ignores is named too. Next: BACK-1058
+   gives the URI and subcommand forms one Invocation path.
 3. **The result contract:** BACK-1059 (typed outcomes), BACK-1491 (cache whole results),
    BACK-916 (one rendering layer) and BACK-1052 (a shared scan budget).
 4. **One seam per concern:** BACK-1223 (one walker), BACK-1045 (parser seam), BACK-1366

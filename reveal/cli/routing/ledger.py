@@ -21,9 +21,12 @@ A flag the user set (its value differs from the parser default) counts as used w
 - for ``--exclude`` published as the walk scope, a walk actually checked a path against it
   (``utils.exclusions.exclusions_consulted``). An adapter that never walks applied nothing.
 
-A query key counts as used when an adapter's query parser saw it
-(``utils.query_parser.note_query_parsed``). Whatever is left when the dispatch finishes gets
-one note. Process-global flags (``cli.global_flags.PROCESS_GLOBAL_FLAGS``) are never reported.
+A query key counts as used when the adapter read it (``utils.query_parser``): a filter parser
+uses every key it parses, while ``parse_query_params`` and ``parse_result_control`` return
+objects that record a key only when a view reads it (BACK-1537 -- git://FILE parses ?limit=
+for its history view and the file view never reads it). Whatever is left when the dispatch
+finishes gets one note, which says whether the adapter parsed the key and then left it unused
+here, or never parsed it at all. Process-global flags (``cli.global_flags.PROCESS_GLOBAL_FLAGS``) are never reported.
 A dispatch that ends in ``sys.exit`` after producing its result (check mode, a subcommand's
 findings exit) calls ``complete`` first; an error exit reports nothing.
 """
@@ -37,12 +40,15 @@ from typing import Any, Dict, Iterator, List, Optional, Set, TextIO
 from urllib.parse import parse_qs
 
 from ...utils.exclusions import exclusions_consulted
-from ...utils.query_parser import collect_parsed_query_keys, query_key
+from ...utils.query_parser import collect_query_keys, query_key
 
 _LEDGER_ATTR = '_reveal_flag_ledger'
 _NOT_FLAGS = frozenset({'path', 'element'})
 # Flags that work on a bare path scan but have no URI meaning: the note says where they work.
 _BARE_PATH_FLAGS = ('depth', 'ext', 'type', 'fast')
+# The adapter parsed the key and no code on this query's path read it (git://FILE --limit).
+_NOT_HERE = 'the adapter accepts it, but not for this view.'
+
 
 
 class TrackedArgs(Namespace):
@@ -81,7 +87,8 @@ class FlagLedger:
         self.used: Set[str] = set()
         self.delegated: Dict[str, str] = {}  # dest -> the query key that carries its value
         self.query_keys: List[str] = []
-        self.parsed_keys: Set[str] = set()
+        self.seen_keys: Set[str] = set()  # handed to a query parser
+        self.used_keys: Set[str] = set()  # read by the adapter
         self.complete = False
 
     def track(self, args: Namespace) -> TrackedArgs:
@@ -102,24 +109,24 @@ class FlagLedger:
         for dest, value in self.set_flags.items():
             if dest not in self.delegated and str(value) in typed.get(dest, []):
                 self.delegated[dest] = dest
-        with collect_parsed_query_keys() as parsed:
+        with collect_query_keys() as log:
             try:
                 yield
             finally:
-                self.parsed_keys = set(parsed)
+                self.seen_keys, self.used_keys = set(log.seen), set(log.used)
                 if exclusions_consulted():  # a walk applied the --exclude scope
                     self.used.add('exclude')
 
     def unused_flags(self) -> List[str]:
         return [dest for dest in self.set_flags
                 if dest not in self.used
-                and (dest not in self.delegated or self.delegated[dest] not in self.parsed_keys)]
+                and (dest not in self.delegated or self.delegated[dest] not in self.used_keys)]
 
     def unused_query_keys(self) -> List[str]:
         carried = set(self.delegated.values())
         seen: List[str] = []
         for key in self.query_keys:
-            if key not in self.parsed_keys and key not in carried and key not in seen:
+            if key not in self.used_keys and key not in carried and key not in seen:
                 seen.append(key)
         return seen
 
@@ -134,16 +141,35 @@ class FlagLedger:
             print(f"Note: {spelled} has no effect on 'reveal {self.subcommand}' -- this "
                   f"subcommand does not use it.", file=out)
         elif flags:
-            bare = [names.get(d, f'--{d}') for d in flags if d in _BARE_PATH_FLAGS]
-            hint = (f" Use a bare path scan (reveal <path> {' '.join(bare)}) instead."
-                    if bare else '')
-            print(f"Note: {spelled} has no effect on {scheme}:// queries -- not supported "
-                  f"by this adapter.{hint}", file=out)
+            parsed = [d for d in flags if self.delegated.get(d) in self.seen_keys]
+            self._report_flags([d for d in flags if d not in parsed], names, scheme, out)
+            if parsed:
+                spelled = ', '.join(names.get(dest, f'--{dest}') for dest in parsed)
+                print(f"Note: {spelled} has no effect on this {scheme}:// query -- {_NOT_HERE}",
+                      file=out)
+        self._report_keys(scheme, out)
+
+    @staticmethod
+    def _report_flags(flags: List[str], names: Dict[str, str], scheme: str, out: TextIO) -> None:
+        """Flags no parser saw: the adapter does not support them at all."""
+        if not flags:
+            return
+        spelled = ', '.join(names.get(dest, f'--{dest}') for dest in flags)
+        bare = [names.get(d, f'--{d}') for d in flags if d in _BARE_PATH_FLAGS]
+        hint = f" Use a bare path scan (reveal <path> {' '.join(bare)}) instead." if bare else ''
+        print(f"Note: {spelled} has no effect on {scheme}:// queries -- not supported "
+              f"by this adapter.{hint}", file=out)
+
+    def _report_keys(self, scheme: str, out: TextIO) -> None:
         keys = self.unused_query_keys()
-        if keys:
-            quoted = ', '.join(f"'{key}'" for key in keys)
-            print(f"Note: query param {quoted} has no effect on {scheme}:// -- this adapter "
+        unparsed = ', '.join(f"'{key}'" for key in keys if key not in self.seen_keys)
+        unread = ', '.join(f"'{key}'" for key in keys if key in self.seen_keys)
+        if unparsed:
+            print(f"Note: query param {unparsed} has no effect on {scheme}:// -- this adapter "
                   f"does not read it.", file=out)
+        if unread:
+            print(f"Note: query param {unread} has no effect on this {scheme}:// query -- "
+                  f"{_NOT_HERE}", file=out)
 
 
 def ledger_of(args: Any) -> Optional[FlagLedger]:

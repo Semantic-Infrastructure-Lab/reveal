@@ -268,7 +268,7 @@ class _StubAdapterWithDepthParam:
 def _parses_its_query(adapter_class, scheme, resource, element, args):
     """handle_adapter stand-in for an adapter that reads its query (ast:// does)."""
     from reveal.utils.query_parser import parse_query_params
-    parse_query_params(resource.partition('?')[2])
+    dict(parse_query_params(resource.partition('?')[2]))  # a read of every key (BACK-1537)
 
 
 class TestHandleUriStructuralFlagsWarning:

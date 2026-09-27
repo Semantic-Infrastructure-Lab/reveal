@@ -65,7 +65,7 @@ def test_git_file_filter_without_history_warns(repo, capsys, monkeypatch):
     monkeypatch.chdir(repo)
     GitAdapter('a.py', query={'message~': 'fix'})
     err = capsys.readouterr().err
-    assert '[message]' in err and 'add ?type=history' in err
+    assert "'message'" in err and 'add ?type=history' in err
 
 
 def test_git_file_filter_with_history_is_silent(repo, capsys, monkeypatch):

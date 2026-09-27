@@ -2878,7 +2878,7 @@ class TestViewScopedParamWarnings:
         GitAdapter(path=str(git_repo_ownership), query={'type': 'ownership', 'since': '2020-01-01'})
         err = capsys.readouterr().err
         assert 'ownership' in err
-        assert 'date' in err  # 'since' is rewritten to a 'date' filter
+        assert "'since'" in err  # named as typed, not as the 'date' filter it becomes
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_since_on_default_view_silent(self, git_repo_ownership, capsys):
