@@ -2,7 +2,7 @@
 
 `tests/test_flag_routing_matrix.py` covers the URI (`scheme://...`) path. Subcommands
 (`reveal overview`, `reveal check`, ...) are a separate invocation path: each builds its
-own `argparse.ArgumentParser` in `reveal/cli/commands/<name>.py` (see `main._SUBCOMMANDS`),
+own `argparse.ArgumentParser` in `reveal/cli/commands/<name>.py` (see `reveal.cli.invocation.COMMANDS`),
 so declaring one of the five global flags there is a per-subcommand choice, not something
 inherited automatically the way `--format`/`--copy` are via `_build_global_options_parser()`.
 
@@ -56,26 +56,8 @@ REVEAL_PKG = Path(__file__).resolve().parent.parent / 'reveal'
 # invocation path.
 FLAGS = ('verbose', 'all', 'since', 'until', 'respect_gitignore')
 
-# name -> (module_path, parser_fn, runner_fn); mirrors reveal/main.py's _SUBCOMMANDS table.
-# Not imported directly from main.py to avoid pulling in main's sys.argv-inspection side
-# effects at collection time; a test below keeps this list honest against main.py's own copy.
-SUBCOMMANDS = {
-    'architecture': ('reveal.cli.commands.architecture', 'create_architecture_parser', 'run_architecture'),
-    'check':        ('reveal.cli.commands.check',        'create_check_parser',        'run_check'),
-    'contracts':    ('reveal.cli.commands.contracts',    'create_contracts_parser',    'run_contracts'),
-    'deps':         ('reveal.cli.commands.deps',         'create_deps_parser',         'run_deps'),
-    'dev':          ('reveal.cli.commands.dev',          'create_dev_parser',          'run_dev'),
-    'health':       ('reveal.cli.commands.health',       'create_health_parser',       'run_health'),
-    'hotspots':     ('reveal.cli.commands.hotspots',     'create_hotspots_parser',     'run_hotspots'),
-    'offline':      ('reveal.cli.commands.offline',      'create_offline_parser',      'run_offline'),
-    'overview':     ('reveal.cli.commands.overview',     'create_overview_parser',     'run_overview'),
-    'pack':         ('reveal.cli.commands.pack',         'create_pack_parser',         'run_pack'),
-    'review':       ('reveal.cli.commands.review',       'create_review_parser',       'run_review'),
-    'scaffold':     ('reveal.cli.commands.scaffold',     'create_scaffold_parser',     'run_scaffold'),
-    'surface':      ('reveal.cli.commands.surface',      'create_surface_parser',      'run_surface'),
-    'testability':  ('reveal.cli.commands.testability',  'create_testability_parser',  'run_testability'),
-    'trace':        ('reveal.cli.commands.trace',        'create_trace_parser',        'run_trace'),
-}
+# The live subcommand table (reveal/cli/invocation.py), read without importing main.py.
+from reveal.cli.invocation import COMMANDS as SUBCOMMANDS  # noqa: E402
 
 # A flag genuinely read by a different module than the subcommand's own, because the
 # subcommand forwards `args` wholesale into a shared helper (e.g. check -> file_checker).
@@ -154,7 +136,7 @@ def _reads_via_shared_seam(name, flag):
 
 def derive_matrix():
     matrix = {}
-    for name, (modpath, parser_fn, _runner_fn) in SUBCOMMANDS.items():
+    for name, (modpath, parser_fn, _runner_fn, _formats) in SUBCOMMANDS.items():
         mod = importlib.import_module(modpath)
         parser = getattr(mod, parser_fn)()
         dests = {a.dest for a in parser._actions}
@@ -214,14 +196,6 @@ def write_matrix():
 
 # --------------------------------------------------------------------------- tests
 
-def test_subcommand_table_matches_main():
-    from reveal.main import _SUBCOMMANDS as live
-    assert set(SUBCOMMANDS) == set(live), (
-        f'subcommand set drifted from main.py: {sorted(set(SUBCOMMANDS) ^ set(live))} -- '
-        'update SUBCOMMANDS above to match main._SUBCOMMANDS')
-    assert SUBCOMMANDS == dict(live), 'module/parser/runner names drifted from main._SUBCOMMANDS'
-
-
 def test_recorded_matrix_matches_derived_channels():
     derived, recorded = derive_matrix(), load_recorded()
     assert set(recorded) == set(derived), (
@@ -252,7 +226,7 @@ def test_probes_only_target_honored_cells():
 
 
 def _run_subcommand(name, argv):
-    modpath, parser_fn, runner_fn = SUBCOMMANDS[name]
+    modpath, parser_fn, runner_fn, _formats = SUBCOMMANDS[name]
     mod = importlib.import_module(modpath)
     args = getattr(mod, parser_fn)().parse_args(argv)
     from reveal.cli.global_flags import apply_global_flags

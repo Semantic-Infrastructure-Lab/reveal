@@ -93,6 +93,23 @@ def test_print_flagged(src):
     assert set(_hits(src)) == {'print'}
 
 
+@pytest.mark.parametrize('src', [
+    "import sys\nname = sys.argv[1]",
+    "import sys\nif '--copy' in sys.argv:\n    pass",
+    "import sys\nsys.argv.remove('--perf')",
+    "from sys import argv",
+])
+def test_argv_flagged(src):
+    assert set(_hits(src)) == {'argv'}
+
+
+def test_argv_home_is_main_only():
+    # main() reads it once into an Invocation; the rest of main.py and the CLI may not.
+    src = "import sys\ndef main():\n    run(sys.argv)\ndef other():\n    return sys.argv[1]"
+    assert _hits(src, 'reveal/main.py') == {'argv': [5]}
+    assert _hits("import sys\nsys.argv[1:]", 'reveal/cli/parser.py') == {'argv': [2]}
+
+
 @pytest.mark.parametrize('src, rel', [
     ("print('x')\nsys.exit(1)", 'reveal/cli/commands/foo.py'),
     ("print('x')\nsys.exit(1)", 'reveal/main.py'),

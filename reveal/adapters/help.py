@@ -2062,8 +2062,8 @@ class HelpAdapter(ResourceAdapter):
             # below is actively wrong for it — redirect to --help instead,
             # mirroring main.py's _check_ghost_flags() redirect at the CLI
             # flag-typo layer, one layer up at the help:// query layer.
-            from ..main import _SUBCOMMANDS
-            if adapter_name in _SUBCOMMANDS:
+            from ..cli.invocation import COMMANDS
+            if adapter_name in COMMANDS:
                 return {
                     'type': 'adapter_schema',
                     'adapter': adapter_name,

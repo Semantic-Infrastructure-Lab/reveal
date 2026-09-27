@@ -772,7 +772,9 @@ def create_argument_parser(
         Configured ArgumentParser instance
     """
     if full_help is None:
-        full_help = '--help-all' in sys.argv
+        from .invocation import current_invocation
+        invocation = current_invocation()
+        full_help = invocation is not None and invocation.typed('--help-all')
     parser = _ScopedErrorArgumentParser(
         description='Reveal: Explore code semantically - The simplest way to understand code',
         formatter_class=argparse.RawDescriptionHelpFormatter,

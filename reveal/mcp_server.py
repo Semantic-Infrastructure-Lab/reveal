@@ -471,17 +471,21 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
             so the response shape differs from a plain-text query — only set
             this when the caller actually needs the manifest.
     """
+    from .cli.invocation import Invocation, invocation_scope
     from .cli.routing import handle_uri
     from .utils.json_utils import set_provenance_enabled
 
     args = _default_args(path=uri, provenance=provenance, format='json' if provenance else 'text')
+    # The CLI command equivalent to this call: what a provenance manifest records as the
+    # command, instead of the server's own argv (BACK-1058).
+    invocation = Invocation.parse(['reveal', uri] + (['--format', 'json', '--provenance'] if provenance else []))
     # Holds _capture_lock across the whole provenance-flag lifecycle (not just
     # inside _run_and_capture) because set_provenance_enabled is a second
     # process-global, independent of the stdout/stderr one _run_and_capture
     # already serializes -- a concurrent call with provenance=False must not
     # observe this call's flag mid-flight. _capture_lock is an RLock so
     # _run_and_capture's own internal acquisition below doesn't deadlock.
-    with _capture_lock:
+    with _capture_lock, invocation_scope(invocation):
         apply_global_flags(args)
         try:
             return _run_and_capture(handle_uri, uri, None, args)

@@ -34,6 +34,11 @@ Rules (home = where the concern is allowed to live):
     rendering homes and retires the print-based contract; this rule only keeps print out
     of analysis code meanwhile.) ``mcp_server.py`` is NOT a home: stdout is its JSON-RPC
     stream.
+``argv`` (BACK-1058)
+    ``sys.argv`` (and ``from sys import argv``). Home: ``reveal/main.py::main``, which parses
+    it once into a ``reveal.cli.invocation.Invocation``; everything else asks
+    ``current_invocation()``. A raw re-read is how ``reveal --format json overview`` missed
+    the subcommand, ``-qc`` copied nothing, and MCP provenance named the server as the command.
 
 Code under ``if __name__ == '__main__':`` is exempt from ``exit`` and ``print``.
 Suppress one deliberate site with ``# boundary-ok: <rule> -- <why>`` on any line of the
@@ -78,6 +83,11 @@ RULES: Dict[str, Dict[str, Any]] = {
         'task': 'BACK-1368 (removal: BACK-916)',
         'fix': 'raise an exception or return an error result; let the CLI choose the exit code',
         'home': (('prefix', 'reveal/cli/'), ('prefix', 'reveal/mcp_server.py')) + _ENTRY_POINTS,
+    },
+    'argv': {
+        'task': 'BACK-1058',
+        'fix': 'ask reveal.cli.invocation.current_invocation() (the command line, parsed once)',
+        'home': (('func', 'reveal/main.py', 'main'),),
     },
     'print': {
         'task': 'BACK-1368 (removal: BACK-916)',
@@ -220,6 +230,13 @@ class _Scanner(ast.NodeVisitor):
             for a in node.names:
                 if a.name == 'exit':
                     self.from_sys[a.asname or a.name] = 'sys.exit'
+                elif a.name == 'argv':
+                    self._add('argv', node)
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        if _dotted(node) == 'sys.argv':
+            self._add('argv', node)
+        self.generic_visit(node)
 
     def visit_Raise(self, node: ast.Raise) -> None:
         exc = node.exc.func if isinstance(node.exc, ast.Call) else node.exc

@@ -16,6 +16,7 @@ import pytest
 
 from conftest import _run_reveal_direct
 from reveal.adapters.base import get_adapter_class, list_supported_schemes
+from reveal.cli.invocation import Invocation, invocation_scope
 from reveal.cli.routing.formats import (
     DEFAULT_OUTPUT_FORMATS, declared_output_formats, reject_unhonored_also_json, require_supported_format,
 )
@@ -50,8 +51,9 @@ def test_declared_output_formats():
 
 
 def test_explicit_unsupported_format_exits_2(capsys, monkeypatch):
-    monkeypatch.setattr('sys.argv', ['reveal', 'x', '--format', 'grep'])
-    with pytest.raises(SystemExit) as exc:
+    monkeypatch.setenv('REVEAL_FORMAT', 'grep')  # typed wins over the env default
+    with invocation_scope(Invocation.parse(['reveal', 'x', '--format', 'grep'])), \
+            pytest.raises(SystemExit) as exc:
         require_supported_format(SimpleNamespace(format='grep'), ('text', 'json'), 'surface://')
     assert exc.value.code == 2
     assert 'not supported by surface:// (supported: text, json)' in capsys.readouterr().err
@@ -59,9 +61,9 @@ def test_explicit_unsupported_format_exits_2(capsys, monkeypatch):
 
 def test_reveal_format_env_default_falls_back_with_a_note(capsys, monkeypatch):
     monkeypatch.setenv('REVEAL_FORMAT', 'grep')
-    monkeypatch.setattr('sys.argv', ['reveal', 'surface://x'])
     args = SimpleNamespace(format='grep')
-    require_supported_format(args, ('text', 'json'), 'surface://')
+    with invocation_scope(Invocation.parse(['reveal', 'surface://x'])):
+        require_supported_format(args, ('text', 'json'), 'surface://')
     assert args.format == 'text'
     assert 'REVEAL_FORMAT=grep is not supported by surface://' in capsys.readouterr().err
 

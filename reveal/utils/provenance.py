@@ -53,6 +53,17 @@ def _config_digest(cwd: Path) -> Optional[str]:
         return None
 
 
+def _command_line() -> str:
+    """The reveal command that produced the result: the CLI's own invocation, or the CLI
+    equivalent the MCP server published for its call (BACK-1058)."""
+    from ..cli.invocation import current_invocation
+    invocation = current_invocation()
+    if invocation is not None:
+        return invocation.display
+    # boundary-ok: argv -- no reveal invocation (reveal used as a library): the host's command line
+    return ' '.join(sys.argv)
+
+
 def build_execution_provenance(cwd: Optional[Path] = None) -> Dict[str, Any]:
     """Build the 'execution' provenance block.
 
@@ -67,7 +78,7 @@ def build_execution_provenance(cwd: Optional[Path] = None) -> Dict[str, Any]:
     cwd = cwd or Path.cwd()
     return {
         'reveal_version': __version__,
-        'command': ' '.join(sys.argv),
+        'command': _command_line(),
         'platform': platform.platform(),
         'python_version': platform.python_version(),
         'repo': _git_state(cwd),

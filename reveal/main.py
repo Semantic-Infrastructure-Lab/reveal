@@ -11,8 +11,10 @@ try:
 except ImportError:  # Windows CPython has no `resource` module
     resource = None  # type: ignore[assignment]
 from pathlib import Path
-from typing import Optional, Tuple, Any, List
-from collections.abc import Callable
+from argparse import Namespace
+from contextlib import contextmanager
+from typing import Optional, Tuple, Any, List, TextIO, cast
+from collections.abc import Callable, Iterator, Sequence
 
 
 from .logging_setup import configure_stderr_logging
@@ -20,6 +22,7 @@ from .registry import FALLBACK_SUPPORT_NOTE, display_name_for_extension, fallbac
 from . import __version__
 from .utils import copy_to_clipboard, check_for_updates
 from .cli.global_flags import apply_global_flags
+from .cli.invocation import COMMANDS, Invocation, invocation_scope
 from .config import disable_breadcrumbs_permanently
 
 
@@ -29,17 +32,6 @@ PERF_LOG_PATH = Path(os.environ.get('REVEAL_PERF_LOG_PATH', str(Path.home() / '.
 # BACK-1231: moved to reveal/logging_setup.py so pool workers can call it
 # without importing the CLI. Re-exported here for any caller using the old name.
 _configure_stderr_logging = configure_stderr_logging
-
-
-def _perf_flag_present() -> bool:
-    """Check for --perf without going through argparse (must work before
-    subcommand dispatch, which uses its own per-command parsers)."""
-    return '--perf' in sys.argv or os.environ.get('REVEAL_PERF_LOG') == '1'
-
-
-def _strip_perf_flag() -> None:
-    if '--perf' in sys.argv:
-        sys.argv.remove('--perf')
 
 
 def _log_perf(start: float, argv_snapshot: List[str], exit_code: int) -> None:
@@ -122,29 +114,6 @@ from .cli import (
 )
 
 
-# Module-level (not just local to _dispatch_subcommand) so other layers —
-# e.g. help.py's help://schemas/<name> lookup, BACK-1028 — can tell a
-# CLI-only subcommand apart from an unknown name without re-deriving this
-# table. Each entry: subcommand name -> (module_path, parser_factory, runner).
-_SUBCOMMANDS = {
-    'architecture': ('reveal.cli.commands.architecture', 'create_architecture_parser', 'run_architecture'),
-    'check':        ('reveal.cli.commands.check',        'create_check_parser',        'run_check'),
-    'contracts':    ('reveal.cli.commands.contracts',    'create_contracts_parser',    'run_contracts'),
-    'deps':         ('reveal.cli.commands.deps',         'create_deps_parser',         'run_deps'),
-    'dev':          ('reveal.cli.commands.dev',          'create_dev_parser',          'run_dev'),
-    'health':       ('reveal.cli.commands.health',       'create_health_parser',       'run_health'),
-    'hotspots':     ('reveal.cli.commands.hotspots',     'create_hotspots_parser',     'run_hotspots'),
-    'offline':      ('reveal.cli.commands.offline',      'create_offline_parser',      'run_offline'),
-    'overview':     ('reveal.cli.commands.overview',     'create_overview_parser',     'run_overview'),
-    'pack':         ('reveal.cli.commands.pack',         'create_pack_parser',         'run_pack'),
-    'review':       ('reveal.cli.commands.review',       'create_review_parser',       'run_review'),
-    'scaffold':     ('reveal.cli.commands.scaffold',     'create_scaffold_parser',     'run_scaffold'),
-    'surface':      ('reveal.cli.commands.surface',      'create_surface_parser',      'run_surface'),
-    'testability':  ('reveal.cli.commands.testability',  'create_testability_parser',  'run_testability'),
-    'trace':        ('reveal.cli.commands.trace',         'create_trace_parser',         'run_trace'),
-}
-
-
 def _warn_if_subcommand_shadows_path(name: str) -> None:
     """Hint on stderr when a bare verb (e.g. `reveal overview`) silently
     shadows a same-named file/dir in cwd (BACK-1112).
@@ -162,53 +131,9 @@ def _warn_if_subcommand_shadows_path(name: str) -> None:
     )
 
 
-def _dispatch_subcommand() -> bool:
-    """Dispatch to a named subcommand using a table-driven lookup.
-
-    Uses sys.argv inspection before argparse runs to avoid conflicts between
-    optional positional args and subparsers.
-
-    Returns:
-        True if a subcommand was matched and executed.
-    """
-    if len(sys.argv) < 2:
-        return False
-
-    name = sys.argv[1]
-
-    if name not in _SUBCOMMANDS:
-        return False
-
-    _warn_if_subcommand_shadows_path(name)
-
-    module_path, parser_fn, runner_fn = _SUBCOMMANDS[name]
-    import importlib
-    mod = importlib.import_module(module_path)
-    parser = getattr(mod, parser_fn)()
-    args = parser.parse_args(sys.argv[2:])
-    # This path bypasses _main_impl() (table-driven dispatch before argparse's
-    # positional/subparser conflicts), so it must apply the global flags itself
-    # (BACK-1034: --provenance was silently dropped here).
-    apply_global_flags(args)
-    _require_subcommand_format(name, args)
-    # BACK-1539: the flag ledger and the REVEAL_IGNORE/--exclude walk scope, once for all.
-    from .cli.routing.subcommand import dispatch_subcommand
-    dispatch_subcommand(name, parser, getattr(mod, runner_fn), args)
-    return True
-
-
-# Subcommands with no same-named adapter whose runners render only these
-# (measured: grep/typed output was byte-identical to text). `check` renders
-# every format and is not listed.
-_SUBCOMMAND_FORMATS = {
-    'health': ('text', 'json'),
-    'review': ('text', 'json'),
-}
-
-
 def _require_subcommand_format(name: str, args: Any) -> None:
-    """A subcommand renders what its adapter (or _SUBCOMMAND_FORMATS)
-    declares; any other --format is rejected, not printed as text (BACK-1425)."""
+    """A subcommand renders what its adapter (or its COMMANDS entry) declares;
+    any other --format is rejected, not printed as text (BACK-1425)."""
     from . import adapters as _adapters  # noqa: F401 -- registers every adapter
     from .adapters.base import get_adapter_class
     from .cli.routing.formats import (
@@ -216,7 +141,7 @@ def _require_subcommand_format(name: str, args: Any) -> None:
     )
     adapter_class = get_adapter_class(name)
     supported = (declared_output_formats(adapter_class) if adapter_class is not None
-                 else _SUBCOMMAND_FORMATS.get(name))
+                 else COMMANDS[name].formats)
     require_supported_format(args, supported, f"reveal {name}")
     if name != 'check':
         reject_unhonored_also_json(args, f"reveal {name}")
@@ -242,22 +167,6 @@ def _setup_console() -> None:
             stream.reconfigure(errors='replace')
 
 
-def _setup_copy_mode() -> Optional[Tuple[Any, io.StringIO, Any]]:
-    """Setup output capture for copy mode.
-
-    Returns:
-        Optional[Tuple[Any, io.StringIO, Any]]: (tee_writer, captured_output, original_stdout)
-            or None if not copy mode
-    """
-    copy_mode = '--copy' in sys.argv or '-c' in sys.argv
-    if not copy_mode:
-        return None
-
-    captured_output = io.StringIO()
-    original_stdout = sys.stdout
-    return TeeWriter(original_stdout, captured_output), captured_output, original_stdout
-
-
 def _handle_clipboard_copy(captured_output: io.StringIO, original_stdout: Any) -> None:
     """Handle clipboard copy after command execution.
 
@@ -278,40 +187,33 @@ def _handle_clipboard_copy(captured_output: io.StringIO, original_stdout: Any) -
         print("   Install xclip, xsel (Linux), or use pbcopy (macOS)", file=sys.stderr)
 
 
-def _preprocess_sort_arg() -> None:
-    """Allow --sort -field syntax (descending) by converting to --sort=-field.
-
-    Argparse treats '--sort -modified' as a missing argument error because
-    '-modified' looks like a flag. The '=' form '--sort=-modified' is accepted.
-    This converts the space form to the = form before argparse runs.
-    """
-    i = 0
-    while i < len(sys.argv) - 1:
-        if sys.argv[i] == '--sort':
-            next_arg = sys.argv[i + 1]
-            # Single-dash prefix that looks like a field name (not a -- flag)
-            if re.match(r'^-[a-zA-Z_][a-zA-Z0-9_]*$', next_arg):
-                sys.argv[i] = f'--sort={next_arg}'
-                del sys.argv[i + 1]
-                break
-        i += 1
+@contextmanager
+def _copy_scope(enabled: bool) -> Iterator[None]:
+    """--copy: tee stdout while the command runs, then copy what it printed."""
+    if not enabled:
+        yield
+        return
+    captured_output = io.StringIO()
+    original_stdout = sys.stdout
+    sys.stdout = cast(TextIO, TeeWriter(original_stdout, captured_output))  # duck-typed stream
+    try:
+        yield
+    finally:
+        _handle_clipboard_copy(captured_output, original_stdout)
 
 
-def main() -> None:
-    """Main CLI entry point."""
+def main(argv: Optional[Sequence[str]] = None) -> None:
+    """Main CLI entry point. ``argv`` defaults to the process's own (``argv[0]`` is the program)."""
     _configure_stderr_logging()
     _setup_console()
-    _preprocess_sort_arg()
+    invocation = Invocation.parse(sys.argv if argv is None else argv)
 
-    perf_enabled = _perf_flag_present()
-    if perf_enabled:
-        _strip_perf_flag()
-        argv_snapshot = list(sys.argv[1:])
-        start = time.perf_counter()
-
+    perf_enabled = invocation.perf or os.environ.get('REVEAL_PERF_LOG') == '1'
+    start = time.perf_counter()
     exit_code = 0
     try:
-        _dispatch_and_run()
+        with invocation_scope(invocation):
+            _dispatch_and_run(invocation)
     except SystemExit as e:
         exit_code = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
         raise
@@ -320,33 +222,49 @@ def main() -> None:
         raise
     finally:
         if perf_enabled:
-            _log_perf(start, argv_snapshot, exit_code)
+            _log_perf(start, list(invocation.argv), exit_code)
 
 
-def _dispatch_and_run() -> None:
-    """Route to a subcommand, or fall through to the main path (URI/file/dir)."""
-    # Copy mode wraps BOTH paths: it was set up after subcommand dispatch, so
-    # `reveal overview . --copy` parsed the flag and copied nothing (BACK-1375).
-    copy_setup = _setup_copy_mode()
-    if copy_setup:
-        tee_writer, captured_output, original_stdout = copy_setup
-        sys.stdout = tee_writer
+def _dispatch_and_run(invocation: Invocation) -> None:
+    """Parse the invocation once, apply its global flags, and run it (BACK-1058).
 
-    try:
-        if not _dispatch_subcommand():
-            _main_impl()
-        # Flush here so a reader that closed early (`| head`) raises inside this
-        # try: output smaller than the buffer otherwise failed at interpreter exit
-        # with "Exception ignored ... BrokenPipeError" and exit 120 (BACK-1510).
-        sys.stdout.flush()
-    except BrokenPipeError:
-        devnull = os.open(os.devnull, os.O_WRONLY)
-        os.dup2(devnull, sys.stdout.fileno())
-        sys.exit(0)
-    finally:
-        if copy_setup:
-            _, captured_output, original_stdout = copy_setup
-            _handle_clipboard_copy(captured_output, original_stdout)
+    The subcommand and path/URI forms differ only in which parser reads the command line
+    and what runs the result. Everything else is applied here, once, for both.
+    """
+    args, run = _prepare(invocation)
+    apply_global_flags(args)
+    # --copy comes from the parsed args, so every spelling argparse accepts (-c, -qc,
+    # --copy) is honored. A raw scan of argv missed the combined short form.
+    with _copy_scope(bool(getattr(args, 'copy', False))):
+        try:
+            run()
+            # Flush here so a reader that closed early (`| head`) raises inside this
+            # try: output smaller than the buffer otherwise failed at interpreter exit
+            # with "Exception ignored ... BrokenPipeError" and exit 120 (BACK-1510).
+            sys.stdout.flush()
+        except BrokenPipeError:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, sys.stdout.fileno())
+            sys.exit(0)
+
+
+def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None]]:
+    """Parse ``invocation`` with its command's parser; return the args and what runs them."""
+    name = invocation.command
+    if name is None:
+        _check_ghost_flags(invocation)
+        parser = create_argument_parser(__version__, full_help=invocation.typed('--help-all'))
+        args = parser.parse_args(invocation.argv)
+        validate_navigation_args(args)
+        return args, lambda: _main_impl(invocation, parser, args)
+
+    _warn_if_subcommand_shadows_path(name)
+    sub_parser, runner = COMMANDS[name].load()
+    sub_args = sub_parser.parse_args(invocation.command_argv)
+    _require_subcommand_format(name, sub_args)
+    # BACK-1539: the flag ledger and the REVEAL_IGNORE/--exclude walk scope, once for all.
+    from .cli.routing.subcommand import dispatch_subcommand
+    return sub_args, lambda: dispatch_subcommand(name, sub_parser, runner, sub_args)
 
 
 def _handle_special_modes(args: Any) -> bool:
@@ -454,20 +372,20 @@ def _handle_at_file(file_path: str, args):
     sys.exit(0)
 
 
-def _check_ghost_flags() -> None:
+def _check_ghost_flags(invocation: Invocation) -> None:
     """Intercept unsupported flags before argparse to emit targeted suggestions."""
-    import re as _re
-    lines_pattern = _re.compile(r'^--lines(?:=\S+)?$')
-    for i, arg in enumerate(sys.argv[1:], 1):
+    argv = invocation.argv
+    lines_pattern = re.compile(r'^--lines(?:=\S+)?$')
+    for i, arg in enumerate(argv):
         if lines_pattern.match(arg):
             # Extract the range value if present (--lines=N-M or --lines N-M)
             range_val = None
             if '=' in arg:
                 range_val = arg.split('=', 1)[1]
-            elif i < len(sys.argv) - 1 and not sys.argv[i + 1].startswith('-'):
-                range_val = sys.argv[i + 1]
+            elif i < len(argv) - 1 and not argv[i + 1].startswith('-'):
+                range_val = argv[i + 1]
             hint = f" {range_val}" if range_val else " N-M"
-            path_hint = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith('-') else "file.py"
+            path_hint = argv[0] if argv and not argv[0].startswith('-') else "file.py"
             print(
                 f"reveal: unknown flag --lines. Did you mean:\n"
                 f"  reveal {path_hint}:{hint.strip()}    (line range extraction)\n"
@@ -477,17 +395,8 @@ def _check_ghost_flags() -> None:
             sys.exit(2)
 
 
-def _main_impl() -> None:
-    """Main CLI implementation."""
-    # Intercept ghost flags before argparse to emit targeted suggestions
-    _check_ghost_flags()
-
-    # Parse and validate arguments
-    parser = create_argument_parser(__version__)
-    args = parser.parse_args()
-    validate_navigation_args(args)
-    apply_global_flags(args)
-
+def _main_impl(invocation: Invocation, parser: Any, args: Namespace) -> None:
+    """Run the path/URI form with its parsed ``args``."""
     # Check for updates (once per day, non-blocking, opt-out available)
     check_for_updates()
 
@@ -502,7 +411,7 @@ def _main_impl() -> None:
     # other no-path case (a flag combo with nothing to act on) keeps the
     # original argparse-usage fallback.
     if not args.path:
-        if len(sys.argv) == 1:
+        if invocation.bare:
             handle_discover(False)
         parser.print_help()
         sys.exit(1)

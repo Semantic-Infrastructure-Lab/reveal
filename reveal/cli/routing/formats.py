@@ -58,7 +58,9 @@ def require_supported_format(args: Any, supported: Optional[Sequence[str]], labe
 
 
 def _format_flag_given() -> bool:
-    return any(arg == '--format' or arg.startswith('--format=') for arg in sys.argv[1:])
+    from ..invocation import current_invocation
+    invocation = current_invocation()
+    return invocation is not None and invocation.typed('--format')
 
 
 def reject_unhonored_also_json(args: Any, label: str) -> None:

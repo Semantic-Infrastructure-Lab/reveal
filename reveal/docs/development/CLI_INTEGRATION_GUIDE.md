@@ -42,237 +42,122 @@ class C999(BaseRule):
 
 **No CLI wiring needed!** Just create the file and it works.
 
-### 2. Manual Wiring Pattern (Top-Level Commands)
+### 2. One Registry Entry (Top-Level Commands)
 
-Top-level commands (like `reveal scaffold`, `reveal help`, etc.) must be manually wired:
+Top-level commands (`reveal overview`, `reveal check`, `reveal dev`, ...) are listed in one
+table, `COMMANDS` in `reveal/cli/invocation.py`:
 
 ```bash
-reveal scaffold adapter myname myscheme://  # New command type
-reveal --languages                           # Flag-based command
+reveal overview .                  # a subcommand: COMMANDS['overview']
+reveal --format json overview .    # the same; global options may precede the name
+reveal --languages                 # a flag-based mode of the path form, not a command
 ```
 
-These require explicit integration in `main.py`.
+`main.py` never inspects the command line itself. `main()` parses `sys.argv` once into an
+`Invocation`, which finds the subcommand name. `main._dispatch_and_run` then runs the
+same steps for a subcommand and for the path/URI form:
+- parse with the command's own parser;
+- apply the global flags;
+- honor `--copy`;
+- run through `reveal/cli/routing/subcommand.py`'s `dispatch_subcommand`, which applies the flag ledger and
+the `--exclude`/REVEAL_IGNORE walk scope (BACK-1539).
+
+A new command gets all of these without wiring. Code
+that needs to know what was typed asks `reveal.cli.invocation.current_invocation()`.
+`scripts/check_boundaries.py` rejects a `sys.argv` read anywhere else (BACK-1058).
 
 ## Adding a New Top-Level Command
 
-**Example**: Adding `reveal stats` command
+**Example**: adding `reveal stats`.
 
-### Step 1: Create Handler Functions
+### Step 1: Create the Command Module
 
-Create `reveal/cli/handlers_stats.py`:
-
-```python
-"""CLI handlers for stats commands."""
-
-def handle_stats_overview() -> None:
-    """Show statistics overview."""
-    print("Statistics Overview")
-    # Implementation...
-
-def handle_stats_by_language(language: str) -> None:
-    """Show statistics for specific language."""
-    print(f"Statistics for {language}")
-    # Implementation...
-```
-
-### Step 2: Import Handlers in main.py
-
-Add to imports at top of `reveal/main.py`:
+Create `reveal/cli/commands/stats.py` with a parser factory and a runner:
 
 ```python
-from .cli import (
-    # ... existing imports ...
-    handle_stats_overview,
-    handle_stats_by_language,
-)
-```
+"""reveal stats — statistics overview."""
 
-### Step 3: Create Command Handler Function
+import argparse
+from argparse import Namespace
 
-Add function in `reveal/main.py`:
+from ..parser import _build_global_options_parser
 
-```python
-def _handle_stats_command() -> bool:
-    """Handle 'reveal stats' subcommands.
 
-    Returns:
-        bool: True if stats command was handled, False otherwise
-    """
-    import argparse
-
-    if len(sys.argv) < 2 or sys.argv[1] != 'stats':
-        return False
-
-    # Create stats subcommand parser
+def create_stats_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='reveal stats',
         description='Show reveal statistics and metrics',
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        parents=[_build_global_options_parser()],  # --format, --copy, --provenance, ...
     )
+    parser.add_argument('path', nargs='?', default='.', help='Directory to measure')
+    return parser
 
-    subparsers = parser.add_subparsers(dest='stats_type', help='Type of statistics')
-    subparsers.required = True
 
-    # Overview subcommand
-    overview_parser = subparsers.add_parser('overview', help='Statistics overview')
-
-    # By-language subcommand
-    lang_parser = subparsers.add_parser('by-language', help='Statistics by language')
-    lang_parser.add_argument('language', help='Language name')
-
-    # Parse args (skip 'reveal stats' from argv)
-    args = parser.parse_args(sys.argv[2:])
-
-    # Route to handlers
-    if args.stats_type == 'overview':
-        handle_stats_overview()
-    elif args.stats_type == 'by-language':
-        handle_stats_by_language(args.language)
-
-    return True
+def run_stats(args: Namespace) -> None:
+    ...  # render the result for args.format
 ```
 
-### Step 4: Wire into main()
+Take `--format`, `--copy`, `--provenance` and the other global options from
+`_build_global_options_parser()`; never re-declare them. If the command walks a tree, also
+call `add_exclude_argument(parser)` and `add_gitignore_arguments(parser)` from
+`reveal/cli/global_flags.py`.
 
-Add call in `reveal/main.py` `main()` function, **early** (before argument parsing):
+### Step 2: Register It
+
+Add one line to `COMMANDS` in `reveal/cli/invocation.py`:
 
 ```python
-def main():
-    """Main entry point for reveal CLI."""
-
-    # Handle stats subcommands early (before copy mode setup)
-    if _handle_stats_command():
-        return
-
-    # Handle scaffold subcommands early (before copy mode setup)
-    if _handle_scaffold_command():
-        return
-
-    # ... rest of main() ...
+    'stats':        _spec('stats'),
 ```
 
-### Step 5: Add Documentation
+`_spec(name)` means module `reveal.cli.commands.<name>`, `create_<name>_parser` and
+`run_<name>`. If there is no same-named URI adapter to declare the output formats, pass the
+formats the runner renders, for example `_spec('stats', ('text', 'json'))`. Any other `--format` is
+then rejected instead of printed as text (BACK-1425).
 
-Update `reveal/docs/SCAFFOLDING_GUIDE.md` or create new guide documenting the command.
+### Step 3: List It in `--help`
 
-### Step 6: Add Tests
+Add a line to `_build_subcommands_section()` in `reveal/cli/parser.py`.
 
-Create `tests/test_cli_stats.py`:
+### Step 4: Add Tests
+
+Drive the real entry point in-process with `main(argv)`:
 
 ```python
-"""Tests for stats CLI commands."""
+from reveal.main import main
 
-import subprocess
 
-def test_stats_overview():
-    """Test stats overview command."""
-    result = subprocess.run(
-        ['reveal', 'stats', 'overview'],
-        capture_output=True,
-        text=True
-    )
-    assert result.returncode == 0
-    assert 'Statistics Overview' in result.stdout
-
-def test_stats_by_language():
-    """Test stats by-language command."""
-    result = subprocess.run(
-        ['reveal', 'stats', 'by-language', 'python'],
-        capture_output=True,
-        text=True
-    )
-    assert result.returncode == 0
-    assert 'python' in result.stdout.lower()
+def test_stats_json(capsys, tmp_path):
+    main(['reveal', 'stats', str(tmp_path), '--format', 'json'])
+    assert capsys.readouterr().out.lstrip().startswith('{')
 ```
+
+`tests/test_subcommand_flag_matrix.py` and `tests/test_flag_ledger.py` read `COMMANDS`,
+so they cover the new command automatically. Every flag its parser accepts must be honored
+or reported in a note.
 
 ## Checklist for New Commands
 
-- [ ] Create handler functions in `reveal/cli/handlers_*.py`
-- [ ] Import handlers in `reveal/main.py`
-- [ ] Create `_handle_*_command()` function in `reveal/main.py`
-- [ ] Wire into `main()` function (call early, before arg parsing)
-- [ ] Add to `--help` output or document in guide
-- [ ] Create integration tests
+- [ ] `reveal/cli/commands/<name>.py` with `create_<name>_parser()` and `run_<name>(args)`
+- [ ] Global options come from `_build_global_options_parser()`, and walkers call `add_exclude_argument`
+- [ ] One `COMMANDS` entry in `reveal/cli/invocation.py`
+- [ ] A line in `--help` (`_build_subcommands_section`)
+- [ ] Tests via `main(['reveal', '<name>', ...])`; the flag matrices pick it up
 - [ ] Update CHANGELOG.md
-- [ ] Consider adding to `help://` system
+- [ ] Consider adding it to the `help://` system
 
-## Common Patterns
-
-### Pattern 1: Simple Command (No Subcommands)
-
-```python
-def _handle_simple_command() -> bool:
-    """Handle 'reveal simple' command."""
-    if len(sys.argv) < 2 or sys.argv[1] != 'simple':
-        return False
-
-    handle_simple()
-    return True
-```
-
-### Pattern 2: Command with Subcommands
-
-See Step 3 example above for full subcommand pattern.
-
-### Pattern 3: Command with Flags
-
-```python
-def _handle_flagged_command() -> bool:
-    """Handle 'reveal command --flag' pattern."""
-    if len(sys.argv) < 2 or sys.argv[1] != 'command':
-        return False
-
-    import argparse
-    parser = argparse.ArgumentParser(prog='reveal command')
-    parser.add_argument('--flag', action='store_true')
-    args = parser.parse_args(sys.argv[2:])
-
-    handle_command(flag=args.flag)
-    return True
-```
-
-## Why Manual Wiring?
+## Why a Registry, Not Auto-Discovery?
 
 **Question**: Why not auto-discover commands like we do for adapters/analyzers/rules?
 
-**Answer**: Top-level commands are fewer, more varied, and need explicit control:
-- Explicit ordering (which commands run first)
-- Namespace control (avoid command conflicts)
-- Argument parsing complexity (subcommands, flags, etc.)
-- Clear visibility of all entry points in one place
-
-Auto-discovery works great for homogeneous components (adapters, analyzers, rules) that follow a strict pattern. Commands are heterogeneous and benefit from explicit wiring.
-
-## Pit of Success: Catching Missing Wiring
-
-### Rule: Orphaned Handler Detection
-
-Create rule `C998` (Custom/CLI orphaned handler) to detect handlers not wired to CLI.
-
-### Test Pattern: CLI Integration Tests
-
-Always create integration tests that actually invoke `reveal <command>` via subprocess to verify wiring works.
-
-### Documentation Pattern: This Guide
-
-Reference this guide in:
-- CONTRIBUTING.md (How to add new commands)
-- SCAFFOLDING_GUIDE.md (Note: scaffolding is for adapters/analyzers/rules, not commands)
-- Internal architecture docs
+**Answer**: A command name takes a word away from the path namespace: `reveal overview`
+means the command, not a `./overview` directory (BACK-1112). One explicit table keeps the
+reserved words visible in one place, and `help://schemas/<name>` reads the same table to
+tell a CLI-only command from an unknown name (BACK-1028).
 
 ## Real Example: The Scaffold Command
 
-**Note:** Current wiring uses a table-driven dispatcher, not per-command `_handle_*_command()`
-functions as shown above. `reveal/main.py`'s `_dispatch_subcommand()` looks up
-`sys.argv[1]` in a `_SUBCOMMANDS` dict mapping the command name to
-`(module_path, parser_factory_name, runner_name)`, then lazily imports the module
-and calls the factory/runner. Adding a subcommand today means adding one entry to
-that dict plus a `create_<name>_parser()` / `run_<name>()` pair in
-`reveal/cli/commands/<name>.py`. The runner is called through
-`reveal/cli/routing/subcommand.py`'s `dispatch_subcommand`, which applies the flag ledger
-and the `--exclude`/REVEAL_IGNORE walk scope to every subcommand (BACK-1539) — a new
-subcommand gets both without wiring. See `reveal/cli/commands/scaffold.py` for a
-complete, production example of:
+See `reveal/cli/commands/scaffold.py` for a complete example of:
 - Subcommand architecture
 - Multiple subparsers (adapter, analyzer, rule)
 - Handler routing
@@ -283,12 +168,12 @@ complete, production example of:
 - "Do I need to wire my adapter?" → **NO** - adapters use `@register_adapter` decorator
 - "Do I need to wire my analyzer?" → **NO** - analyzers use `@register` decorator
 - "Do I need to wire my rule?" → **NO** - rules use file system convention
-- "Do I need to wire my new command?" → **YES** - follow this guide
+- "Do I need to wire my new command?" → **YES** - one `COMMANDS` entry; follow this guide
 
 ## See Also
 
-- `reveal/cli/handlers_scaffold.py` - Example handlers
-- `reveal/main.py` - Main entry point and wiring examples
+- `reveal/cli/invocation.py` - `COMMANDS` and the `Invocation`
+- `reveal/main.py` - the entry point: parse once, then `_dispatch_and_run`
 - `SCAFFOLDING_GUIDE.md` - For creating adapters/analyzers/rules
 - `CONTRIBUTING.md` - General contribution guide
 - [SCAFFOLDING_GUIDE.md](SCAFFOLDING_GUIDE.md) - Creating adapters, analyzers, and rules

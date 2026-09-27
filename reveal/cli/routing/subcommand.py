@@ -4,12 +4,14 @@ The ``cli/commands/*`` runners build their adapters directly, so the URI plumbin
 reached them: ``REVEAL_IGNORE`` pruned ``surface://`` but not ``reveal surface``, and a flag a
 subcommand's parser accepted but its runner never read (``reveal surface --verbose``) was
 dropped without a word, while the same flag on the URI form got a ledger note. Every
-subcommand already enters through one call site (``main._dispatch_subcommand``); this is the
-seam behind it, so a cross-cutting concern lands here once instead of in 15 runners.
+subcommand already enters through one call site (``main._prepare``, from the one Invocation,
+BACK-1058); this is the seam behind it, so a cross-cutting concern lands here once instead of
+in 15 runners.
 
 What it does not unify, deliberately: the runners keep their own output contracts (a JSON
 ``type`` named for the subcommand, ``deps``/``hotspots`` exiting 1 on findings as a CI gate --
-EXIT_CODE_CONTRACT). One Invocation path for both forms is BACK-1058.
+EXIT_CODE_CONTRACT). Both forms share one parse-and-dispatch path (``main._dispatch_and_run``),
+not one handler.
 """
 
 from __future__ import annotations

@@ -561,11 +561,10 @@ def _walk_cases():
 
 
 def test_walkers_match_the_subcommand_table():
-    from reveal.main import _SUBCOMMANDS
-    assert set(VERBOSE_TAKERS) <= set(_SUBCOMMANDS)
-    for name, (module_path, parser_fn, _) in _SUBCOMMANDS.items():
-        import importlib
-        parser = getattr(importlib.import_module(module_path), parser_fn)()
+    from reveal.cli.invocation import COMMANDS
+    assert set(VERBOSE_TAKERS) <= set(COMMANDS)
+    for name, spec in COMMANDS.items():
+        parser, _runner = spec.load()
         declares = any('--exclude' in a.option_strings for a in parser._actions)
         assert declares == (name in WALKERS), (
             f"reveal {name}: --exclude is declared exactly by the subcommands that walk a tree "

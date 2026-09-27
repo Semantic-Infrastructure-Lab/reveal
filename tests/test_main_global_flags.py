@@ -1,7 +1,7 @@
 """Global flags must behave the same on every path (BACK-1378, BACK-1375).
 
-main.py has two entry paths (subcommand dispatch and _main_impl) and the MCP server has a
-third. A global flag handled on one and not the others is the silently-dropped-flag bug
+The CLI has two forms (subcommands and the path/URI form), parsed and dispatched by one
+path (main._dispatch_and_run, BACK-1058), and the MCP server is a third. A global flag handled on one and not the others is the silently-dropped-flag bug
 class. These tests pin the shared hook and the --copy behavior on each path.
 """
 import sys
@@ -36,8 +36,7 @@ def _provenance_on():
 
 
 def _run(monkeypatch, *argv):
-    monkeypatch.setattr(sys, 'argv', ['reveal', *argv])
-    reveal_main._dispatch_and_run()
+    reveal_main.main(['reveal', *argv])
 
 
 # ------------------------------------------------------------------ apply_global_flags
@@ -114,6 +113,35 @@ def test_copy_restores_stdout_after_a_subcommand(monkeypatch, tree, clipboard):
 def test_no_copy_flag_means_no_clipboard_write(monkeypatch, tree, clipboard):
     _run(monkeypatch, 'overview', str(tree))
     assert clipboard == []
+
+
+@pytest.mark.parametrize('flags', [('-c',), ('-qc',), ('-q', '-c')])
+def test_copy_honors_every_spelling_argparse_accepts(monkeypatch, tree, clipboard, flags):
+    # BACK-1058: a raw `'-c' in argv` scan missed -qc, which argparse accepts: no copy, no note.
+    _run(monkeypatch, str(tree / 'a.py'), *flags)
+    assert clipboard and clipboard[0].strip()
+
+
+# ------------------------------------------------ one Invocation for both forms (BACK-1058)
+
+@pytest.mark.parametrize('before', [
+    ('--format', 'json'), ('--format=json',), ('--provenance', '--format', 'json'), ('-q', '--format', 'json'),
+])
+def test_global_options_may_precede_the_subcommand(capsys, tree, before):
+    # `reveal --format json overview DIR` used to be the path form: "Error: overview not found".
+    reveal_main.main(['reveal', *before, 'overview', str(tree)])
+    out = capsys.readouterr().out
+    assert '"type": "overview"' in out
+
+
+def test_a_non_global_option_before_the_name_keeps_the_path_form(monkeypatch, tmp_path, capsys):
+    # Only options every subcommand accepts may precede its name; after any other the word
+    # is a path, as before (a directory named `overview` here).
+    (tmp_path / 'overview').mkdir()
+    (tmp_path / 'overview' / 'x.py').write_text('def g():\n    pass\n', encoding='utf-8')
+    monkeypatch.chdir(tmp_path)
+    reveal_main.main(['reveal', '--depth', '1', 'overview'])
+    assert 'x.py' in capsys.readouterr().out
 
 
 # ------------------------------------------------------------- REVEAL_FORMAT (BACK-1362)
