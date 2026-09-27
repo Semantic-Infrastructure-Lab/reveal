@@ -277,7 +277,7 @@ Adapters serve help via two patterns:
 
 ## Subcommand Orchestration
 
-Six subcommands compose adapters into higher-level workflows:
+Several subcommands compose adapters into higher-level workflows. The full list is `COMMANDS` in `reveal/cli/invocation.py`:
 
 | Subcommand | File | What it composes |
 |------------|------|-----------------|
@@ -288,7 +288,7 @@ Six subcommands compose adapters into higher-level workflows:
 | `reveal hotspots <dir>` | `cli/commands/hotspots.py` | Complexity + coupling ranking |
 | `reveal dev <cmd>` | `cli/commands/dev.py` | Developer tooling (new-adapter scaffold, etc.) |
 
-Subcommands are dispatched from `main.py` → `_dispatch_subcommand()` before the normal routing path. They call adapters programmatically (not via URI routing) and compose their outputs.
+`main()` parses the command line once, into an `Invocation`, which names the subcommand. `main._dispatch_and_run` runs a subcommand and the path/URI form the same way: parse with the command's own parser, apply the global flags and `--copy`, and run. A subcommand runs through `cli/routing/subcommand.py`, which applies the flag ledger and the `--exclude`/REVEAL_IGNORE walk scope (BACK-1058, BACK-1539). Subcommands call adapters programmatically (not via URI routing) and compose their outputs.
 
 ### Example: `reveal review`
 
