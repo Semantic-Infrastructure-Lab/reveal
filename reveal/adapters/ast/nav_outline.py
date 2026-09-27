@@ -18,6 +18,7 @@ from .node_taxonomy import (  # noqa: F401 — re-exported for nav.py/back-compa
     RUBY_LOOP_METHODS,
     exit_label,
     opens_scope,
+    scope_label,
 )
 
 
@@ -32,7 +33,7 @@ def _node_label(node: Any, get_text: Callable, keyword: Optional[str] = None) ->
     doesn't name their role (Ruby block-iterator calls — see _make_item).
     """
     if keyword is None:
-        keyword = KEYWORD_LABEL.get(_zero_arg(node, 'kind'), _zero_arg(node, 'kind').upper())
+        keyword = scope_label(node, _zero_arg(node, 'kind'))
     first_line = get_text(node).splitlines()[0].strip().rstrip(':').rstrip('{').strip()
     lower = first_line.lower()
     kw_lower = keyword.lower()
@@ -58,7 +59,7 @@ def _make_item(
     # a Ruby block-iterator `call` (the caller derives FOR/LOOP from the method
     # name) or a Kotlin/Swift jump wrapper (exit_label names it by its keyword).
     node_kind = _zero_arg(node, 'kind')
-    resolved = keyword or KEYWORD_LABEL.get(node_kind, node_kind.upper())
+    resolved = keyword or scope_label(node, node_kind)
     return {
         'type': _zero_arg(node, 'kind'),
         'keyword': resolved,
@@ -278,7 +279,7 @@ def _find_ancestors(
             condition = cond['text'] if cond else None
         chain.append({
             'type': _zero_arg(node, 'kind'),
-            'keyword': KEYWORD_LABEL.get(_zero_arg(node, 'kind'), _zero_arg(node, 'kind').upper()),
+            'keyword': scope_label(node, node_kind),
             'label': _node_label(node, get_text),
             'line_start': start,
             'line_end': end,

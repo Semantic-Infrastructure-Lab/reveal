@@ -5,6 +5,7 @@ flow can import this without pulling the full analyzer base class into scope.
 """
 
 from .core import node_children as _children
+from .core.node_taxonomy import is_do_block
 from .core.treesitter_compat import _zero_arg
 
 
@@ -268,6 +269,8 @@ def is_decision(kind: str, parent_kind, node=None, node_text=None) -> bool:
                 and node_text(node) in _SCALA_LOGICAL_OPERATORS)
     if kind == 'catch_clause' and node is not None and _has_child_kind(node, 'case_block'):
         return False  # Scala: `catch { case ... }` -- the case arms carry the count
+    if kind == 'do_statement' and node is not None and is_do_block(node):
+        return False  # Swift `do { } catch` -- a block, not a loop; its catch_blocks count (BACK-1541)
     if kind in _DECISION_TYPES:
         if parent_kind is not None and (parent_kind, kind) in _KEYWORD_PAIRS:
             return False

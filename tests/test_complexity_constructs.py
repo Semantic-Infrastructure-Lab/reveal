@@ -159,6 +159,10 @@ CASES = [
     # The rescue modifier counts once, like the rescue clause (BACK-1530).
     ('rb', 'rescue modifier', 'def f(a)\n  a.call rescue nil\nend\n', 2, None),
     ('java', 'try-with-resources/catch', 'class A { void f(){ try (var r = g()) { } catch(Exception e) {} } java.io.Closeable g(){ return null; } }\n', 2, None),
+    # Swift's do block is not C's do-while: only its catch arms count (BACK-1541).
+    ('swift', 'do/catch', 'func f() { do { try g() } catch { h() } }\n', 2, None),
+    ('swift', 'do block, no catch', 'func f() { do { let y = 1 } }\n', 1, None),
+    ('java', 'do-while', 'class A { void f(int a){ do { a--; } while (a > 0); } }\n', 2, None),
 ]
 
 def _param(row):

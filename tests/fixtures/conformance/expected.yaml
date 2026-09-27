@@ -473,7 +473,8 @@ swift:
   - {kind: RETURN, line: 22}
   ifmap:
     not_supported: true  # entry_function uses do/catch, no bare if
-  catchmap:
+  catchmap:  # do/catch: the do block is the TRY (BACK-1541; was a lone CATCH)
+  - {keyword: TRY, line_start: 12}
   - {keyword: CATCH, line_start: 21}
   mutations_probe: {range: "13-13", var: result, next_read_line: 14}
   returns:
