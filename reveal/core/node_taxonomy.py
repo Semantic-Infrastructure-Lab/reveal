@@ -90,7 +90,8 @@ FOR_RANGE_LOOP_NODES: frozenset = frozenset({'for_range_loop'})
 # Rust `loop { }` — no condition field at all.
 LOOP_NODES: frozenset = frozenset({'loop_expression'})
 # Body-first loops. C/Java/JS/C#/PHP/Dart `do_statement` (Swift's
-# `do { } catch { }` block shares that kind: test is_do_block(), BACK-1541); Kotlin
+# `do { } catch { }` and Lua's `do ... end` blocks share that kind: test
+# is_do_block(), BACK-1541); Kotlin
 # `do_while_statement`, Swift `repeat_while_statement`, Scala `do_while_expression`
 # and Lua `repeat ... until` (`repeat_statement`) were in no family, so the loop
 # was missing from --outline/--loopmap and its body read as unnested (BACK-1528).
@@ -633,22 +634,29 @@ def exit_label(node: Any, kind: str) -> Optional[str]:
     return KEYWORD_LABEL[kind] if kind in EXIT_NODES else None
 
 
-def is_do_block(node: Any) -> bool:
-    """True for Swift's `do { } catch { }` -- the one `do_statement` that is not a loop.
+_DO_LOOP_CONDITION_TOKENS: frozenset = frozenset({'while', 'until'})
 
-    C/C++/Java/JS/TS/C#/PHP/Dart/ObjC use the kind for `do { } while (c);`,
-    which always holds a `while` token; Swift's `do` block never does (its
-    do-while is `repeat_while_statement`). DO_NODES alone made --loopmap list
-    the block as a loop and complexity count it as a decision (BACK-1541)."""
+
+def is_do_block(node: Any) -> bool:
+    """True for a `do_statement` that is a block, not a body-first loop.
+
+    C/C++/CUDA/GLSL/Java/JS/TS/C#/PHP/Dart/ObjC/PowerShell use the kind for
+    `do { } while (c)` (PowerShell also `do { } until (c)`): the loop always
+    holds its `while`/`until` token. Swift's `do { } catch { }` (its do-while
+    is `repeat_while_statement`) and Lua's `do ... end` never do. DO_NODES
+    alone made --loopmap list those blocks as loops and complexity count them
+    as decisions (BACK-1541)."""
     return (_zero_arg(node, 'kind') == 'do_statement'
-            and not any(_zero_arg(c, 'kind') == 'while' for c in node_children(node)))
+            and not any(_zero_arg(c, 'kind') in _DO_LOOP_CONDITION_TOKENS
+                        for c in node_children(node)))
 
 
 def scope_label(node: Any, kind: str) -> str:
     """The keyword --outline/--scope/--loopmap/--catchmap print for a scope node.
 
-    KEYWORD_LABEL, except where one kind names two constructs: Swift's `do`
-    block is a TRY (its catch_block children are the CATCHes), not a DO loop."""
+    KEYWORD_LABEL, except where one kind names two constructs: a `do` block
+    that opens a scope is Swift's do/catch, a TRY (its catch_block children
+    are the CATCHes), not a DO loop."""
     if kind == 'do_statement' and is_do_block(node):
         return 'TRY'
     return KEYWORD_LABEL.get(kind, kind.upper())
@@ -662,7 +670,8 @@ def opens_scope(node: Any, kind: str) -> bool:
       Kotlin and Scala for a try block, which opens with the bare `try` token,
       and Swift (`try f()`) and Rust (`f()?`) for an operator on a throwing
       call (BACK-1530);
-    - a Swift `do { }` with no catch, which is a plain block (BACK-1541)."""
+    - a `do` block with no catch (Swift `do { }`, Lua `do ... end`), which is a
+      plain block like a bare `{ }` (BACK-1541)."""
     if kind not in SCOPE_NODES:
         return False
     if kind == 'do_statement' and is_do_block(node):

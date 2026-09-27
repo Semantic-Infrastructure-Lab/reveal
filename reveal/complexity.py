@@ -230,6 +230,8 @@ _KEYWORD_PAIRS = frozenset({
     ('when_expression', 'when'),
     # C `do { } while (c)`: the statement wraps a bare `while` keyword token.
     ('do_statement', 'while'),
+    # PowerShell `do { } until (c)` (BACK-1541: counted twice without it).
+    ('do_statement', 'until'),
     # BACK-1528: the same shape in the other body-first loops, the ruby loop
     # modifiers and bash's C-style for. Before these kinds were decisions, the
     # bare token alone carried the count; now the construct does.
@@ -270,7 +272,7 @@ def is_decision(kind: str, parent_kind, node=None, node_text=None) -> bool:
     if kind == 'catch_clause' and node is not None and _has_child_kind(node, 'case_block'):
         return False  # Scala: `catch { case ... }` -- the case arms carry the count
     if kind == 'do_statement' and node is not None and is_do_block(node):
-        return False  # Swift `do { } catch` -- a block, not a loop; its catch_blocks count (BACK-1541)
+        return False  # Swift `do { } catch`, Lua `do ... end`: a block, not a loop (BACK-1541)
     if kind in _DECISION_TYPES:
         if parent_kind is not None and (parent_kind, kind) in _KEYWORD_PAIRS:
             return False

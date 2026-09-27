@@ -163,6 +163,9 @@ CASES = [
     ('swift', 'do/catch', 'func f() { do { try g() } catch { h() } }\n', 2, None),
     ('swift', 'do block, no catch', 'func f() { do { let y = 1 } }\n', 1, None),
     ('java', 'do-while', 'class A { void f(int a){ do { a--; } while (a > 0); } }\n', 2, None),
+    ('lua', 'do ... end block', 'function f(x)\n  do\n    if x then g() end\n  end\nend\n', 2, None),
+    ('ps1', 'do-while', 'function f {\n  do { $x++ } while ($x -lt 3)\n}\n', 2, None),
+    ('ps1', 'do-until', 'function f {\n  do { $x-- } until ($x -lt 0)\n}\n', 2, None),
 ]
 
 def _param(row):
