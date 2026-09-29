@@ -37,7 +37,8 @@ Usage:
     )
 
 An error result is a failure wherever it is rendered: ``outcome_of`` reads it, and the URI
-router exits nonzero for it. An adapter returns the error; it does not exit.
+router exits nonzero for it. An adapter returns the error; it does not exit. A cut list is
+recorded with ``note_truncation``, and the router prints it; a renderer does not.
 """
 
 from pathlib import Path
@@ -50,7 +51,15 @@ _CONTRACT_FIELDS: frozenset = frozenset(
     {'contract_version', 'type', 'source', 'source_type', 'meta', 'scope'}
 )
 
-Outcome = Literal['ok', 'not_applicable', 'failed']
+Outcome = Literal['ok', 'truncated', 'not_applicable', 'failed']
+
+# How to see what a cut left out, by what cut it. An adapter names the cause; the
+# URI router prints the message once (cli/routing/uri._emit_result).
+_TRUNCATION_HINTS = {
+    'limit': 'raise ?limit=N or page with ?offset=N',
+    'auto_cap': 'add filters, or set ?limit=N',
+    'max_items': 'raise --max-items',
+}
 
 
 def outcome_of(result: Any) -> Outcome:
@@ -60,6 +69,8 @@ def outcome_of(result: Any) -> Outcome:
       hand-built ``{'error': ...}`` dicts alike). The query did not produce its answer.
     - ``not_applicable``: ``applicable`` is False (BACK-1210). The query ran and does not
       apply to this target; that is a recorded answer, not a failure.
+    - ``truncated``: a list in the answer was cut (``note_truncation``). The answer is
+      correct but incomplete. It exits 0, and the router prints what was left out.
     - ``ok``: anything else, including an empty answer.
 
     Only the top-level key counts. ``meta.errors`` holds per-file problems inside an
@@ -72,7 +83,68 @@ def outcome_of(result: Any) -> Outcome:
         return 'failed'
     if result.get('applicable') is False:
         return 'not_applicable'
+    if truncations_of(result):
+        return 'truncated'
     return 'ok'
+
+
+def note_truncation(result: Any, field: str, shown: int, total: int,
+                    cause: str, hint: Optional[str] = None) -> None:
+    """Record that ``result[field]`` holds ``shown`` of ``total`` items (BACK-1059).
+
+    This is the one way to say a list was cut. It writes one ``meta.warnings`` entry per
+    field: ``{'type': 'truncated', 'field', 'shown', 'total', 'cause', 'message'}``. Before
+    it, truncation was spelled six ways (a ``truncated`` or ``auto_capped`` meta warning,
+    a top-level ``warnings`` list, ``meta.budget``, ``pagination``, a ``warning``
+    string), and text renderers that didn't know a given spelling showed a cut list as
+    complete.
+
+    A second cut of the same field updates its entry: the adapter's own ``?limit``, then
+    the router's ``--max-items``, is one disclosure of the smaller ``shown`` against the
+    larger ``total``. Nothing is recorded when nothing was cut.
+    """
+    if shown >= total:
+        return
+    meta = result.get('meta')
+    if not isinstance(meta, dict):
+        meta = result['meta'] = {}
+    if not isinstance(meta.get('warnings'), list):
+        meta['warnings'] = []
+    entry = next((w for w in meta['warnings']
+                  if w.get('type') == 'truncated' and w.get('field') == field), None)
+    if entry is None:
+        entry = {'type': 'truncated', 'field': field}
+        meta['warnings'].append(entry)
+    else:
+        shown, total = min(shown, entry['shown']), max(total, entry['total'])
+    if hint is None:
+        hint = _TRUNCATION_HINTS.get(cause, '')
+    entry.update(shown=shown, total=total, cause=cause,
+                 message=_truncation_message(field, shown, total, hint))
+
+
+def relabel_truncations(result: Any, field: str, hint: str) -> None:
+    """Restate a composed child's cuts as the parent's (``ResourceAdapter.compose``).
+
+    overview:// shows ast://'s ``results`` as its ``complex_functions``, cut by its own
+    ``?top=N``; the child's "results ... raise ?limit=N" names a list and a knob the
+    parent's reader doesn't have.
+    """
+    for entry in truncations_of(result):
+        entry['field'] = field
+        entry['message'] = _truncation_message(field, entry['shown'], entry['total'], hint)
+
+
+def _truncation_message(field: str, shown: int, total: int, hint: str) -> str:
+    return f'{field}: showing {shown} of {total}' + (f' — {hint}' if hint else '')
+
+
+def truncations_of(result: Any) -> List[Dict[str, Any]]:
+    """The lists a result says were cut: its ``truncated`` meta warnings (``note_truncation``)."""
+    meta = result.get('meta') if isinstance(result, dict) else None
+    warnings = meta.get('warnings') if isinstance(meta, dict) else None
+    return [w for w in warnings or []
+            if isinstance(w, dict) and w.get('type') == 'truncated']
 
 
 class ResultBuilder:
@@ -273,81 +345,6 @@ class ResultBuilder:
     # BACK-447: back-compat alias — `create_meta` is the public name now;
     # older internal call sites and tests may still reference `_create_meta`.
     _create_meta = create_meta
-
-    @staticmethod
-    def add_pagination_meta(
-        result: Dict[str, Any],
-        total: int,
-        displayed: int,
-        offset: Optional[int] = None,
-        limit: Optional[int] = None
-    ) -> Dict[str, Any]:
-        """Add pagination metadata to result.
-
-        Args:
-            result: Result dict to modify
-            total: Total number of items available
-            displayed: Number of items actually displayed
-            offset: Starting offset (if applicable)
-            limit: Limit applied (if applicable)
-
-        Returns:
-            Modified result dict
-
-        Example:
-            >>> result = {'type': 'query', 'results': [...]}
-            >>> ResultBuilder.add_pagination_meta(result, total=100, displayed=25, limit=25)
-            >>> result['pagination']
-            {'total': 100, 'displayed': 25, 'offset': 0, 'limit': 25, 'truncated': True}
-        """
-        pagination: Dict[str, Any] = {
-            'total': total,
-            'displayed': displayed,
-        }
-
-        if offset is not None:
-            pagination['offset'] = offset
-        else:
-            pagination['offset'] = 0
-
-        if limit is not None:
-            pagination['limit'] = limit
-
-        pagination['truncated'] = displayed < total
-
-        result['pagination'] = pagination
-        return result
-
-    @staticmethod
-    def add_truncation_warning(
-        result: Dict[str, Any],
-        displayed: int,
-        total: int,
-        limit: Optional[int] = None
-    ) -> Dict[str, Any]:
-        """Add truncation warning if results were limited.
-
-        Args:
-            result: Result dict to modify
-            displayed: Number of items displayed
-            total: Total number of items available
-            limit: Limit that was applied (if known)
-
-        Returns:
-            Modified result dict
-
-        Example:
-            >>> result = {'results': [...]}
-            >>> ResultBuilder.add_truncation_warning(result, displayed=25, total=100)
-            >>> result['warning']
-            'Results truncated: showing 25 of 100 matches'
-        """
-        if displayed < total:
-            result['warning'] = f'Results truncated: showing {displayed} of {total} matches'
-            if limit:
-                result['warning'] += f' (limit={limit})'
-
-        return result
 
 
 # Convenience functions for backward compatibility

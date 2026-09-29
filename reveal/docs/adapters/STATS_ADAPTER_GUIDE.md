@@ -410,17 +410,26 @@ reveal 'stats://./src?complexity>10&sort=-complexity&offset=10&limit=10'
 
 ### Truncation Metadata
 
-When results are limited, output includes:
+When results are limited, output includes (text output ends with the same message,
+`⚠ Truncated files: showing 10 of 42 — ...`):
 ```json
 {
-  "warnings": [{
-    "type": "truncated",
-    "message": "Results truncated: showing 10 of 42 total matches"
-  }],
+  "meta": {
+    "warnings": [{
+      "type": "truncated",
+      "field": "files",
+      "shown": 10,
+      "total": 42,
+      "cause": "limit",
+      "message": "files: showing 10 of 42 — raise ?limit=N or page with ?offset=N"
+    }]
+  },
   "displayed_results": 10,
   "total_matches": 42
 }
 ```
+
+The summary aggregates only the files shown.
 
 ---
 

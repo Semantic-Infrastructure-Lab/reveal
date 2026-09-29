@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from reveal.reveal_types import CONTRACT_VERSION
 
-from ...utils.results import ResultBuilder
+from ...utils.results import ResultBuilder, note_truncation
 from ...utils.path_utils import to_posix
 
 
@@ -172,10 +172,7 @@ def add_truncation_warning(
     Modifies response in place.
     """
     if displayed < total_matches:
-        response['warnings'] = [{
-            'type': 'truncated',
-            'message': f'Results truncated: showing {displayed} of {total_matches} total matches'
-        }]
+        note_truncation(response, 'results', displayed, total_matches, 'limit')
         response['displayed_results'] = displayed
         response['total_matches'] = total_matches
 

@@ -383,7 +383,10 @@ reveal 'ast://./src?complexity>10' --format=json
 - `total_results`: Number of matches before limit/offset
 - `displayed_results`: Number of results in output
 - `results`: Array of matched code elements — each has `name` (not `symbol`), `category` (not `type`; values `functions`/`classes`/`methods`), and `line_count` (not `lines`)
-- `meta`: Trust metadata (parse mode, confidence)
+- `meta`: Trust metadata (parse mode, confidence) and `warnings`. When `results` holds fewer
+  than `total_results` (`?limit=`, `?offset=`, the 200-result cap on an unfiltered query,
+  `--max-items`, `--head`), one warning says so: `{"type": "truncated", "field": "results",
+  "shown", "total", "cause", "message"}`. Text output prints the same message last.
 
 ### 3. Grep Format
 

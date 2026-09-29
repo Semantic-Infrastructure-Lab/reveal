@@ -2,10 +2,10 @@
 
 import os
 from dataclasses import replace
-from reveal.reveal_types import CONTRACT_VERSION
+from reveal.reveal_types import CONTRACT_VERSION, WarningEntry
 
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, cast
 
 from .queries import (
     parse_query, format_query,
@@ -26,10 +26,12 @@ from ...utils.query import (
     apply_result_control,
     ResultControl
 )
-from ...utils.results import ResultBuilder
+from ...utils.results import ResultBuilder, note_truncation
 
 # Filter aliases that name a differently-named element field (see filtering.py).
 _SORT_FIELD_ALIASES = {'lines': 'line_count'}
+# An unfiltered query returns at most this many results unless ?limit= is set.
+DEFAULT_RESULT_CAP = 200
 
 # Suppress tree-sitter warnings (centralized in core module)
 suppress_treesitter_warnings()
@@ -74,6 +76,94 @@ def _degraded_conformance_warning(elements: List[Dict[str, Any]]) -> Optional[Di
             f"files — see reveal --language-info <ext> for details."
         ),
     }
+
+
+def _unknown_sort_field_warning(control: ResultControl,
+                                filtered: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """A sort field no result carries leaves the results unsorted (BACK-1423)."""
+    if not control.sort_field or not filtered or any(control.sort_field in e for e in filtered):
+        return None
+    sortable = sorted({k for e in filtered[:200] for k, v in e.items()
+                       if isinstance(v, (int, float, str)) and not k.startswith('_')})
+    return {
+        'type': 'unknown_sort_field',
+        'message': (
+            f"sort field '{control.sort_field}' is not a field of any result, so "
+            f"results are unsorted. Sortable: {', '.join(sortable)}"
+        ),
+    }
+
+
+def _unknown_filter_key_warning(structures: List[Dict[str, Any]], filtered: List[Dict[str, Any]],
+                                query: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """A zero-result query whose filter key never appeared on any scanned element:
+    a typo, not a genuine zero (BACK-1111)."""
+    if filtered or not query:
+        return None
+    unknown_keys = find_unknown_filter_keys(structures, query)
+    if not unknown_keys:
+        return None
+    keys_str = ', '.join(f"'{k}'" for k in unknown_keys)
+    return {
+        'type': 'unknown_filter_key',
+        'message': (
+            f"Filter key(s) {keys_str} never appear on any scanned element — "
+            f"this may be a typo rather than a genuine zero-match. "
+            f"See: reveal help://ast"
+        )
+    }
+
+
+def _unfiltered_ranking_warning(controlled: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """BACK-1258: ast://?complexity>N is a ranking a reader treats as "what to look at
+    first", and on a repo that commits vendored JS it can be dominated by files nobody
+    will ever edit (8 of 19 on camaleon-cms) with nothing in the output saying so.
+    Advisory -- ranking and result count are unchanged. Reads each result's
+    ``provenance`` (_annotate_results)."""
+    noise = sum(1 for e in controlled if e.get('provenance') in ('vendor', 'minified'))
+    if not noise:
+        return None
+    return {
+        'type': 'unfiltered_ranking',
+        'message': (
+            f'{noise} of {len(controlled)} results are vendored or minified '
+            f'files. Results are not filtered by provenance -- read the '
+            f'per-result "provenance" field, or exclude them with '
+            f'--exclude, before treating this as a ranking of your own code.'
+        ),
+    }
+
+
+# Cheap half of a known limitation (found 2026-09-01, disclosed rather than silently
+# fixed -- the accurate fix needs re-weighting every downstream complexity threshold,
+# which needs its own re-baselined change): complexity is pure McCabe cyclomatic
+# complexity, a decision-point count with no nesting-depth weighting. Only surfaced when
+# a query actually filters on it -- unfiltered browsing doesn't need the caveat repeated.
+_COMPLEXITY_IS_UNWEIGHTED = {
+    'type': 'complexity_is_unweighted',
+    'message': (
+        'complexity is McCabe cyclomatic complexity (a count of '
+        'decision points), not weighted by nesting depth -- ~40 flat, '
+        'sequential branches at the same level score identically to '
+        'one branch nested 40 levels deep. Two functions with the '
+        'same score can have very different actual structure.'
+    ),
+}
+
+
+def _query_warnings(structures: List[Dict[str, Any]], filtered: List[Dict[str, Any]],
+                    controlled: List[Dict[str, Any]], control: ResultControl,
+                    query: Any) -> List[WarningEntry]:
+    """The caveats on an ast:// query's answer. Truncation is not one of them: the
+    result records it with note_truncation, and the router prints it (BACK-1059)."""
+    warnings = [
+        _degraded_conformance_warning(controlled),
+        _unknown_sort_field_warning(control, filtered),
+        _unknown_filter_key_warning(structures, filtered, query),
+        _unfiltered_ranking_warning(controlled),
+        dict(_COMPLEXITY_IS_UNWEIGHTED) if 'complexity' in query else None,
+    ]
+    return cast(List[WarningEntry], [w for w in warnings if w])
 
 
 @register_adapter('ast')
@@ -192,64 +282,17 @@ class AstAdapter(ResourceAdapter):
         # show=dict-heatmap: per-function untyped-dict ranking
         # show=dict-schemas: the same items clustered into shared shapes
         if self.show_mode in ('dict-heatmap', 'dict-schemas'):
-            from ...analyzers._python_dict_usage import (
-                collect_dict_analysis, collect_dict_schemas, has_python_files,
-            )
-            items, typeddicts = collect_dict_analysis(self.path)
-            if self.show_mode == 'dict-heatmap':
-                results = items
-            else:
-                results = collect_dict_schemas(items, typeddicts)
-            unsupported_language = ''
-            if not items and not has_python_files(self.path):
-                from ...utils.path_utils import detect_non_python_language
-                unsupported_language = detect_non_python_language(Path(self.path))
-            from ...capabilities import python_only_warning
-            warning = python_only_warning(self.show_mode, Path(self.path))
-            meta = self.create_meta(parse_mode='python_ast',
-                                    confidence=1.0, warnings=[warning] if warning else [], errors=[])
-            result = ResultBuilder.create(
-                result_type='ast_' + self.show_mode.replace('-', '_'),
-                source=self.path,
-                contract_version=CONTRACT_VERSION,
-                data={
-                    'path': self.path,
-                    'total_results': len(results),
-                    'results': results,
-                    'unsupported_language': unsupported_language,
-                },
-            )
-            result['meta'] = meta
-            return result
+            return self._dict_analysis_result()
 
         # reveal_type=<var>: type-evidence mode — entirely different result shape
         if self.reveal_type_var:
-            from .nav_reveal_type import collect_type_evidence
-            evidence = collect_type_evidence(self.path, self.reveal_type_var)
-            from ...capabilities import python_only_warning
-            warning = python_only_warning('reveal-type', Path(self.path))
-            meta = self.create_meta(parse_mode='tree_sitter_full',
-                                    confidence=1.0, warnings=[warning] if warning else [], errors=[])
-            result = ResultBuilder.create(
-                result_type='ast_reveal_type',
-                source=self.path,
-                contract_version=CONTRACT_VERSION,
-                data={
-                    'path': self.path,
-                    'var_name': self.reveal_type_var,
-                    'total_results': len(evidence),
-                    'results': evidence,
-                },
-            )
-            result['meta'] = meta
-            return result
+            return self._reveal_type_result()
 
         # Collect all structures from path (file or directory), unless the
         # caller already collected them (see `structures` param docstring above)
         if structures is None:
             structures = collect_structures(self.path)
 
-        # Apply filters
         filtered = apply_filters(structures, self.query)
 
         # Apply result control (sort, limit, offset). `lines` is the filter
@@ -262,129 +305,12 @@ class AstAdapter(ResourceAdapter):
 
         # Auto-cap large unfiltered result sets to prevent accidental token floods.
         # Applies only when no explicit limit was set by the user.
-        DEFAULT_RESULT_CAP = 200
-        auto_capped = False
-        if not self.result_control.limit and len(controlled) > DEFAULT_RESULT_CAP:
-            auto_capped = True
-            auto_capped_total = len(controlled)
+        auto_capped = not self.result_control.limit and len(controlled) > DEFAULT_RESULT_CAP
+        if auto_capped:
             controlled = controlled[:DEFAULT_RESULT_CAP]
 
-        # Create trust metadata (v1.1)
-        # AST adapter uses tree-sitter for parsing
-        meta = self.create_meta(
-            parse_mode='tree_sitter_full',
-            confidence=1.0 if structures else 0.0,
-            warnings=[],
-            errors=[]
-        )
+        self._annotate_results(controlled)
 
-        if not meta.get('warnings'):
-            meta['warnings'] = []
-
-        degraded_warning = _degraded_conformance_warning(controlled)
-        if degraded_warning:
-            meta['warnings'].append(degraded_warning)
-
-        if control.sort_field and filtered and not any(control.sort_field in e for e in filtered):
-            sortable = sorted({k for e in filtered[:200] for k, v in e.items()
-                               if isinstance(v, (int, float, str)) and not k.startswith('_')})
-            meta['warnings'].append({
-                'type': 'unknown_sort_field',
-                'message': (
-                    f"sort field '{control.sort_field}' is not a field of any result, so "
-                    f"results are unsorted. Sortable: {', '.join(sortable)}"
-                ),
-            })
-
-        # Disclose when a zero-result query traces to a filter key that never
-        # appeared on any scanned element — typo vs. genuine zero (BACK-1111)
-        if not filtered and self.query:
-            unknown_keys = find_unknown_filter_keys(structures, self.query)
-            if unknown_keys:
-                keys_str = ', '.join(f"'{k}'" for k in unknown_keys)
-                meta['warnings'].append({
-                    'type': 'unknown_filter_key',
-                    'message': (
-                        f"Filter key(s) {keys_str} never appear on any scanned element — "
-                        f"this may be a typo rather than a genuine zero-match. "
-                        f"See: reveal help://ast"
-                    )
-                })
-
-        # Add truncation metadata if results were limited
-        if self.result_control.limit or self.result_control.offset:
-            if len(filtered) > len(controlled):
-                meta['warnings'].append({
-                    'type': 'truncated',
-                    'message': f'Results truncated: showing {len(controlled)} of {len(filtered)} total matches'
-                })
-
-        # Warn when auto-cap kicked in
-        if auto_capped:
-            meta['warnings'].append({
-                'type': 'auto_capped',
-                'message': (
-                    f'Large result set capped at {DEFAULT_RESULT_CAP} of {auto_capped_total} matches. '
-                    f'Add filters to narrow results, or use ?limit=N to set an explicit cap.'
-                )
-            })
-
-        # Filter builtins from calls lists unless ?builtins=true. Python-file
-        # elements only -- PYTHON_BUILTINS names (map/filter/sorted/...) can
-        # collide with real methods in other languages (Scala/Ruby `.map`,
-        # `.filter`), same cross-language bug class as BACK-748's calls://
-        # adapter fix; this ast:// copy of the filter was missed there.
-        if not self.include_builtins:
-            for elem in controlled:
-                builtins = conventions_for(family_for_path(elem.get('file', ''))).builtins
-                if elem.get('calls') and builtins:
-                    elem['calls'] = [c for c in elem['calls'] if c.split('.')[-1] not in builtins]
-
-        # BACK-1258: tag each result test/vendor/minified, the same field
-        # hotspots:// and overview:// already carry. ast://?complexity>N is a
-        # ranking a reader treats as "what to look at first", and on a repo that
-        # commits vendored JS it can be dominated by files nobody will ever edit
-        # (8 of 19 on camaleon-cms) with nothing in the output saying so.
-        # Additive and advisory -- ranking and result count are unchanged.
-        from ...utils.path_utils import provenance_for_display_path
-        _base = Path(self.path)
-        for elem in controlled:
-            elem['provenance'] = provenance_for_display_path(elem.get('file'), _base)
-        _noise = sum(
-            1 for e in controlled
-            if e.get('provenance') in ('vendor', 'minified')
-        )
-        if _noise:
-            meta['warnings'].append({
-                'type': 'unfiltered_ranking',
-                'message': (
-                    f'{_noise} of {len(controlled)} results are vendored or minified '
-                    f'files. Results are not filtered by provenance -- read the '
-                    f'per-result "provenance" field, or exclude them with '
-                    f'--exclude, before treating this as a ranking of your own code.'
-                ),
-            })
-
-        # Cheap half of a known limitation (found 2026-09-01, disclosed rather
-        # than silently fixed -- the accurate fix needs re-weighting every
-        # downstream complexity threshold, which needs its own re-baselined
-        # change): complexity is pure McCabe cyclomatic complexity, a
-        # decision-point count with no nesting-depth weighting, only surfaced
-        # when a query actually filters on it -- unfiltered browsing doesn't
-        # need the caveat repeated on every result.
-        if 'complexity' in self.query:
-            meta['warnings'].append({
-                'type': 'complexity_is_unweighted',
-                'message': (
-                    'complexity is McCabe cyclomatic complexity (a count of '
-                    'decision points), not weighted by nesting depth -- ~40 flat, '
-                    'sequential branches at the same level score identically to '
-                    'one branch nested 40 levels deep. Two functions with the '
-                    'same score can have very different actual structure.'
-                ),
-            })
-
-        # Build result using ResultBuilder (automatically handles contract_version, source, source_type)
         result = ResultBuilder.create(
             result_type='ast_query',
             source=self.path,
@@ -398,6 +324,87 @@ class AstAdapter(ResourceAdapter):
                 'displayed_results': len(controlled),
                 'results': controlled
             }
+        )
+        result['meta'] = self.create_meta(
+            parse_mode='tree_sitter_full',
+            confidence=1.0 if structures else 0.0,
+            warnings=_query_warnings(structures, filtered, controlled, control, self.query),
+            errors=[]
+        )
+        note_truncation(result, 'results', len(controlled), len(filtered),
+                        'auto_cap' if auto_capped else 'limit')
+        return result
+
+    def _annotate_results(self, controlled: List[Dict[str, Any]]) -> None:
+        """Per-result fields added after the query ran."""
+        # Filter builtins from calls lists unless ?builtins=true. Python-file
+        # elements only -- PYTHON_BUILTINS names (map/filter/sorted/...) can
+        # collide with real methods in other languages (Scala/Ruby `.map`,
+        # `.filter`), same cross-language bug class as BACK-748's calls://
+        # adapter fix; this ast:// copy of the filter was missed there.
+        if not self.include_builtins:
+            for elem in controlled:
+                builtins = conventions_for(family_for_path(elem.get('file', ''))).builtins
+                if elem.get('calls') and builtins:
+                    elem['calls'] = [c for c in elem['calls'] if c.split('.')[-1] not in builtins]
+
+        # BACK-1258: tag each result test/vendor/minified, the same field
+        # hotspots:// and overview:// already carry (read by _unfiltered_ranking_warning).
+        from ...utils.path_utils import provenance_for_display_path
+        base = Path(self.path)
+        for elem in controlled:
+            elem['provenance'] = provenance_for_display_path(elem.get('file'), base)
+
+    def _dict_analysis_result(self) -> Dict[str, Any]:
+        """show=dict-heatmap / show=dict-schemas: Python untyped-dict analysis."""
+        from ...analyzers._python_dict_usage import (
+            collect_dict_analysis, collect_dict_schemas, has_python_files,
+        )
+        items, typeddicts = collect_dict_analysis(self.path)
+        if self.show_mode == 'dict-heatmap':
+            results = items
+        else:
+            results = collect_dict_schemas(items, typeddicts)
+        unsupported_language = ''
+        if not items and not has_python_files(self.path):
+            from ...utils.path_utils import detect_non_python_language
+            unsupported_language = detect_non_python_language(Path(self.path))
+        from ...capabilities import python_only_warning
+        warning = python_only_warning(self.show_mode, Path(self.path))
+        meta = self.create_meta(parse_mode='python_ast',
+                                confidence=1.0, warnings=[warning] if warning else [], errors=[])
+        result = ResultBuilder.create(
+            result_type='ast_' + self.show_mode.replace('-', '_'),
+            source=self.path,
+            contract_version=CONTRACT_VERSION,
+            data={
+                'path': self.path,
+                'total_results': len(results),
+                'results': results,
+                'unsupported_language': unsupported_language,
+            },
+        )
+        result['meta'] = meta
+        return result
+
+    def _reveal_type_result(self) -> Dict[str, Any]:
+        """reveal_type=<var>: type evidence for one variable."""
+        from .nav_reveal_type import collect_type_evidence
+        evidence = collect_type_evidence(self.path, self.reveal_type_var)
+        from ...capabilities import python_only_warning
+        warning = python_only_warning('reveal-type', Path(self.path))
+        meta = self.create_meta(parse_mode='tree_sitter_full',
+                                confidence=1.0, warnings=[warning] if warning else [], errors=[])
+        result = ResultBuilder.create(
+            result_type='ast_reveal_type',
+            source=self.path,
+            contract_version=CONTRACT_VERSION,
+            data={
+                'path': self.path,
+                'var_name': self.reveal_type_var,
+                'total_results': len(evidence),
+                'results': evidence,
+            },
         )
         result['meta'] = meta
         return result

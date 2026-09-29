@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from reveal.adapters.json import JsonAdapter
+from reveal.utils.results import truncations_of
 
 # BACK-1149: component-layer test -- single adapter in isolation (network/db calls mocked), no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -446,8 +447,8 @@ class TestJsonAdapterFiltering(unittest.TestCase):
 
         users = result['value']
         self.assertEqual(len(users), 2)
-        # Should have truncation warning
-        self.assertIn('warnings', result)
+        [cut] = truncations_of(result)
+        self.assertEqual((cut['field'], cut['shown'], cut['total']), ('value', 2, 5))
         self.assertEqual(result['total_matches'], 5)
         self.assertEqual(result['displayed_results'], 2)
 

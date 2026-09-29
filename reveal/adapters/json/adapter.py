@@ -4,7 +4,7 @@ from typing import Dict, Any, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
-from ...utils.results import ResultBuilder
+from ...utils.results import ResultBuilder, note_truncation
 from ...utils.query import (
     parse_query_filters,
     parse_result_control,
@@ -197,6 +197,9 @@ class JsonAdapter(ResourceAdapter):
         # Add metadata if present
         if metadata:
             result.update(metadata)
+        if 'displayed_results' in metadata:
+            note_truncation(result, 'value', metadata['displayed_results'],
+                            metadata['total_matches'], 'limit')
 
         return result
 
@@ -321,8 +324,6 @@ class JsonAdapter(ResourceAdapter):
         # Apply result control (sort, limit, offset)
         if has_result_control:
             value, rc_metadata = apply_result_control(value, self.result_control, get_field_value)
-            if 'warnings' in rc_metadata and 'warnings' in metadata:
-                metadata['warnings'].extend(rc_metadata.pop('warnings'))
             metadata.update(rc_metadata)
 
         return value, metadata

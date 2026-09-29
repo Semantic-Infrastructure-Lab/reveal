@@ -46,7 +46,8 @@ _CIRCULAR_TOLERANT_LANGUAGES = frozenset({'csharp', 'java', 'kotlin', 'swift'})
 def _run_complex_functions(adapter: 'ArchitectureAdapter', path: Path, limit: int) -> List[Dict[str, Any]]:
     from reveal.adapters.ast import AstAdapter
     data = adapter.compose(AstAdapter, str(path), default={},
-                            query=f'complexity>9&sort=-complexity&limit={limit}')
+                            query=f'complexity>9&sort=-complexity&limit={limit}',
+                            cut_as=('complex_functions', 'raise ?top=N'))
     return data.get('results', data.get('elements', []))
 
 

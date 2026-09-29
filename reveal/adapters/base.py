@@ -312,6 +312,7 @@ class ResourceAdapter(ABC):
 
     def compose(self, adapter_cls: type, resource: Any, *,
                 query: Optional[str] = None, default: Any = None,
+                cut_as: Optional[Tuple[str, str]] = None,
                 **params: Any) -> Any:
         """Run a sibling adapter in-process as part of this adapter's own scan.
 
@@ -338,6 +339,10 @@ class ResourceAdapter(ABC):
 
         Call ``self.composed_meta()`` once, when building the final result,
         and pass its warnings/errors/confidence into ``ResultBuilder.create()``.
+
+        ``cut_as=(field, hint)``: this adapter shows the child's list as its own
+        ``field``, cut by its own knob (``hint``), so the child's truncation is restated
+        that way before it is folded (BACK-1059). Without it the child's wording is kept.
         """
         if query is None and params:
             from urllib.parse import urlencode
@@ -352,6 +357,9 @@ class ResourceAdapter(ABC):
             return default
 
         if isinstance(result, dict):
+            if cut_as:
+                from reveal.utils.results import relabel_truncations
+                relabel_truncations(result, *cut_as)
             self.fold_meta(result.get('meta'))
 
         return result

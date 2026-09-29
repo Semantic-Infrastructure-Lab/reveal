@@ -3,6 +3,7 @@
 import pytest
 from pathlib import Path
 from reveal.adapters.stats import StatsAdapter
+from reveal.utils.results import truncations_of
 
 # BACK-1149: component-layer test -- single adapter in isolation (network/db calls mocked), no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -1039,9 +1040,8 @@ class TestUnifiedQuerySyntax:
         adapter = StatsAdapter(str(tmp_path), query="limit=2")
         result = adapter.get_structure()
 
-        # Should have warning about truncation
-        assert 'warnings' in result
-        assert any(w['type'] == 'truncated' for w in result['warnings'])
+        [cut] = truncations_of(result)
+        assert (cut['field'], cut['shown'], cut['total']) == ('files', 2, 5)
         assert result['displayed_results'] == 2
         assert result['total_matches'] == 5
 

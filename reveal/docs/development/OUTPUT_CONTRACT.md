@@ -324,27 +324,35 @@ Adapters MAY include additional fields beyond the contract. These fields:
 
 ---
 
-## Outcomes: failed, not applicable, ok
+## Outcomes: failed, not applicable, truncated, ok
 
-A result says what happened through two top-level fields. `reveal.utils.results.outcome_of`
-is the one definition, and the URI router turns it into the exit code for every adapter,
-in text and JSON alike (BACK-1059):
+A result says what happened through two top-level fields and one kind of `meta.warnings`
+entry. `reveal.utils.results.outcome_of` is the one definition, and the URI router turns it
+into the exit code for every adapter, in text and JSON alike (BACK-1059):
 
 | Outcome | How the result says it | Exit | Build it with |
 |---|---|---|---|
 | `failed` | a non-empty top-level `error` string | 1 | `ResultBuilder.create_error(...)` |
 | `not_applicable` | `applicable: false` plus a `reason` | 0 | `raise NotApplicableError(reason)` |
-| `ok` | neither; an empty answer is still `ok` | 0 | `ResultBuilder.create(...)` |
+| `truncated` | a `meta.warnings` entry `{"type": "truncated", "field", "shown", "total", "cause", "message"}` per cut list | 0 | `note_truncation(result, field, shown, total, cause)` |
+| `ok` | none of these; an empty answer is still `ok` | 0 | `ResultBuilder.create(...)` |
 
 - **Return the error; don't exit or print it.** The router prints `Error (<scheme>://): <error>`
   on stderr before rendering and exits 1 after, so `--format json` still gets the whole
   envelope. A renderer adds only detail for an error result (an example, the valid names)
   and must not print the error again.
+- **Record a cut list; don't print it.** `note_truncation` is the only spelling of a cut
+  (`cause`: `limit`, `auto_cap`, `max_items`, `head`, `tail`, `range`). The router records
+  its own `--max-items`/`--head` cuts the same way and prints every cut once, after the
+  render: `⚠ Truncated <field>: showing N of M — <how to see more>` on stdout for text, on
+  stderr for grep. Renderers leave `truncated` warnings alone. An adapter that shows a
+  composed child's list as its own passes `compose(..., cut_as=(field, hint))`.
 - **Problems inside an answer are not a failure.** Per-file parse failures in a result that
   was still produced go in `meta.errors` (v1.1). An error on one item of a list stays on that
   item. Neither changes the outcome.
-- `tests/test_result_outcome.py` pins the definition and the exit path;
-  `tests/test_output_contract_compliance.py` runs every registered adapter against it.
+- `tests/test_result_outcome.py` and `tests/test_result_truncation.py` pin the definition,
+  the exit path and the truncation line; `tests/test_output_contract_compliance.py` runs
+  every registered adapter against them.
 
 ---
 
@@ -362,7 +370,7 @@ The following field names are reserved and MUST NOT be used for adapter-specific
 - `next_steps`
 - `status`
 - `issues`
-- `error`: only for a failed result (see [Outcomes](#outcomes-failed-not-applicable-ok))
+- `error`: only for a failed result (see [Outcomes](#outcomes-failed-not-applicable-truncated-ok))
 - `version` (use `contract_version` instead)
 
 ---

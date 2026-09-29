@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from reveal.adapters.ast.adapter import AstAdapter
+from reveal.utils.results import truncations_of
 
 # BACK-1149: component-layer test -- single adapter/module in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -267,15 +268,20 @@ class TestAstAdapterAutoCap(unittest.TestCase):
     def test_auto_cap_warning_in_meta(self):
         adapter = AstAdapter(self.tmpdir)
         result = adapter.get_structure()
-        warning_types = [w['type'] for w in result['meta']['warnings']]
-        self.assertIn('auto_capped', warning_types)
+        [cut] = truncations_of(result)
+        self.assertEqual((cut['field'], cut['shown'], cut['total'], cut['cause']),
+                         ('results', 200, 210, 'auto_cap'))
 
     def test_explicit_limit_overrides_auto_cap(self):
         adapter = AstAdapter(self.tmpdir, 'limit=210')
         result = adapter.get_structure()
-        # With explicit limit=210 covering all 210 functions, no auto_cap warning
-        warning_types = [w['type'] for w in result['meta']['warnings']]
-        self.assertNotIn('auto_capped', warning_types)
+        # With explicit limit=210 covering all 210 functions, nothing was cut
+        self.assertEqual(truncations_of(result), [])
+
+    def test_explicit_limit_is_a_limit_cut(self):
+        result = AstAdapter(self.tmpdir, 'limit=5').get_structure()
+        [cut] = truncations_of(result)
+        self.assertEqual((cut['shown'], cut['total'], cut['cause']), (5, 210, 'limit'))
 
 
 # ---------------------------------------------------------------------------

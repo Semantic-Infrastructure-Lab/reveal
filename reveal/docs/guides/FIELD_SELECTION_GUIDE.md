@@ -89,7 +89,28 @@ Budget-aware flags enable explicit token budget control for AI agent loops. When
 
 ### Truncation Metadata
 
-When budget is exceeded, output includes metadata:
+A cut list is disclosed the same way for every adapter and every cause (`--max-items`,
+`--head`/`--tail`/`--range`, `?limit=`/`?offset=`, an adapter's default cap): one
+`meta.warnings` entry per cut list. Text output prints the same message after the results,
+as `⚠ Truncated results: showing 50 of 150 — raise --max-items`.
+
+```json
+{
+  "meta": {
+    "warnings": [{
+      "type": "truncated",
+      "field": "results",
+      "shown": 50,
+      "total": 150,
+      "cause": "max_items",
+      "message": "results: showing 50 of 150 — raise --max-items"
+    }]
+  }
+}
+```
+
+`cause` is `limit`, `auto_cap`, `max_items`, `head`, `tail` or `range`. When
+`--max-items` cut the list, the output also includes its budget block:
 
 ```json
 {
@@ -627,9 +648,11 @@ reveal <uri> --fields=<existing-field> --format=json
 
 **Problem**: Expected `meta.budget.truncated` but not present
 
-**Cause**: Results fit within budget (no truncation occurred)
+**Cause**: Results fit within budget (no truncation occurred), or something other than
+`--max-items` cut the list (`?limit=`, `--head`, an adapter's default cap).
 
-**Solution**: This is expected. Only truncated results include budget metadata.
+**Solution**: Check `meta.warnings` for an entry with `"type": "truncated"`. It is present
+for every cut, whatever caused it; `meta.budget` is present only for `--max-items`.
 
 ---
 

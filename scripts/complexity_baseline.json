@@ -1,6 +1,5 @@
 {
  "functions": {
-  "reveal/adapters/ast/adapter.py::AstAdapter.get_structure": 42,
   "reveal/adapters/ast/nav_keys.py::_KeysWalker.walk": 25,
   "reveal/adapters/ast/nav_surface_ts.py::_collect_node_builtin_bindings": 27,
   "reveal/adapters/ast/nav_surface_ts.py::_destructured_express_names": 23,

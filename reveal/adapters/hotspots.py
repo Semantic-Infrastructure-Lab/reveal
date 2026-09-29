@@ -65,7 +65,7 @@ def _run_file_hotspots(adapter: 'HotspotsAdapter', path: Path, top: int) -> List
     # _run_stats already does this. Without it hotspots:// would honor --exclude
     # for its function list (via ast://) but not its file list.
     _root, _patterns = active_exclusions()
-    extra = {'exclude': list(_patterns)} if _patterns else {}
+    extra: Dict[str, Any] = {'exclude': list(_patterns)} if _patterns else {}
     data = adapter.compose(StatsAdapter, str(path), default={}, hotspots=True, top=top, **extra)
     hotspots = data.get('hotspots', [])
     return cast(List[Dict[str, Any]], hotspots[:top])
@@ -77,7 +77,8 @@ def _run_function_hotspots(adapter: 'HotspotsAdapter', path: Path, min_complexit
     # BACK-984: '>=' directly, not the old '>{min_complexity - 1}' hack —
     # the filter parser supports it natively.
     query = f'complexity>={min_complexity}&sort=-complexity&limit={top}'
-    data = adapter.compose(AstAdapter, str(path), default={}, query=query)
+    data = adapter.compose(AstAdapter, str(path), default={}, query=query,
+                           cut_as=('function_hotspots', 'raise ?top=N'))
     results = data.get('results', data.get('elements', []))
     return cast(List[Dict[str, Any]], results[:top])
 

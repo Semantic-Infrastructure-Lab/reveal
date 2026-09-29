@@ -153,7 +153,8 @@ def _run_git_log(adapter: 'OverviewAdapter', path: Path, limit: int) -> List[Dic
 def _run_complex_functions(adapter: 'OverviewAdapter', path: Path, limit: int) -> List[Dict[str, Any]]:
     """Fetch top complex functions via AstAdapter."""
     data = adapter.compose(AstAdapter, str(path), default={},
-                            query=f'complexity>9&sort=-complexity&limit={limit}')
+                            query=f'complexity>9&sort=-complexity&limit={limit}',
+                            cut_as=('complex_functions', 'raise ?top=N'))
     return data.get('results', data.get('elements', []))
 
 

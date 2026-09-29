@@ -24,13 +24,12 @@ _KNOWN_FILTER_KEYS = {'type', 'name', 'complexity', 'size', 'lines', 'depth', 'd
 
 
 def _render_meta_warnings(data: Dict[str, Any]) -> None:
-    """Print data's meta.warnings other than 'auto_capped' (already surfaced
-    inline via the 'Results: N of M' line above). BACK-1266: ast:// gained an
+    """Print data's meta.warnings. BACK-1266: ast:// gained an
     'unfiltered_ranking' warning (BACK-1258) that only ever reached JSON —
     the text renderer never called this, the exact 'JSON honest, text drops
     caveats' defect BACK-1261/1262 fixed everywhere else that same session."""
     from reveal.utils.warning_render import render_meta_warnings
-    render_meta_warnings(data, skip_types=frozenset({'auto_capped'}))
+    render_meta_warnings(data)
 
 
 def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
@@ -73,17 +72,16 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
         return
 
     # Text format
-    displayed_results = data.get('displayed_results', len(results))
-    meta_warnings = data.get('meta', {}).get('warnings', [])
-    auto_cap_warning = next((w for w in meta_warnings if w.get('type') == 'auto_capped'), None)
+    # len(results), not displayed_results: the router's --max-items/--head cut the
+    # list after the adapter counted it. How to see the rest is the router's
+    # truncation line (BACK-1059).
+    displayed_results = len(results)
 
     print(f"AST Query: {data.get('path', '.')}")
     if query != 'none':
         print(f"Filter: {query}")
     print(f"Files scanned: {total_files}")
-    if auto_cap_warning:
-        print(f"Results: {displayed_results} of {total_results} — add filters or use ?limit=N to see more")
-    elif displayed_results < total_results:
+    if displayed_results < total_results:
         print(f"Results: {displayed_results} of {total_results}")
     else:
         print(f"Results: {total_results}")

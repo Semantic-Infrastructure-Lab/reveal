@@ -14,6 +14,7 @@ from ...utils.query import (
 )
 from ...utils.query_parser import split_exclude_param
 from ...utils.gitignore import respect_gitignore_param
+from ...utils.results import note_truncation
 from ...utils.validation import require_path_exists
 
 # Import modular functions
@@ -363,14 +364,9 @@ class StatsAdapter(ResourceAdapter):
         return result
 
     def _add_truncation_metadata(self, result: dict, displayed: int, total: int) -> None:
-        """Add truncation metadata to result if results were limited."""
+        """Record a ?limit/?offset cut of the files list (note_truncation, BACK-1059)."""
         if displayed < total:
-            if 'warnings' not in result:
-                result['warnings'] = []
-            result['warnings'].append({
-                'type': 'truncated',
-                'message': f'Results truncated: showing {displayed} of {total} total matches'
-            })
+            note_truncation(result, 'files', displayed, total, 'limit')
             result['displayed_results'] = displayed
             result['total_matches'] = total
 

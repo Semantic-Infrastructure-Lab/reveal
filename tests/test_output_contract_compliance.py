@@ -25,14 +25,17 @@ proves nothing about the adapter's normal output. Invariants:
    the error paths themselves are pinned in ``tests/test_result_outcome.py``.
 4. ``abs_path``: no string in the result contains the fixture root's absolute path. The
    input was relative, so an absolute path is a leak (BACK-1366).
+5. ``truncation``: every list that ``--head 1`` makes shorter is disclosed as a
+   ``truncated`` meta warning naming it (``note_truncation``), and the text render prints
+   it (BACK-1059). A cut list must not read as the whole answer.
 
 Violations that exist today are listed in ``KNOWN_VIOLATIONS`` as strict xfails, each
 naming its task. A fix makes its case XPASS, which fails the run until the entry is
 deleted. The list can only shrink.
 
-Not covered yet (BACK-1513 follow-ups): truncation disclosure on capped lists, consumed
-flags (BACK-1514), the ``cli/commands/*`` subcommand forms, and POSIX separators on
-Windows.
+Not covered yet (BACK-1513 follow-ups): an adapter's own undisclosed caps (a ``[:N]`` the
+router never sees, so ``--head`` can't expose it), consumed flags (BACK-1514), the
+``cli/commands/*`` subcommand forms, and POSIX separators on Windows.
 """
 
 import json
@@ -51,6 +54,7 @@ from conftest import production_schemes
 from reveal.adapters import base as adapters_base
 from reveal.cli.defaults import _default_args
 from reveal.cli.routing.uri import handle_uri
+from reveal.utils.results import truncations_of
 
 pytestmark = pytest.mark.contract
 
@@ -231,29 +235,37 @@ class _Harness:
                 else:
                     os.environ[k] = v
 
-    def run(self, uri):
-        """(exit code, parsed JSON or None, stderr) for `uri`, run once and cached."""
-        if uri not in self._cache:
+    def run_raw(self, uri, **flags):
+        """(exit code, stdout, stderr) for `uri` with CLI `flags`, run once and cached."""
+        key = (uri, tuple(sorted(flags.items())))
+        if key not in self._cache:
             out, err, code = StringIO(), StringIO(), 0
             with self._hermetic(), redirect_stdout(out), redirect_stderr(err):
                 try:
-                    handle_uri(uri, None, _default_args(format='json'))
+                    handle_uri(uri, None, _default_args(**flags))
                 except SystemExit as exc:
                     code = exc.code if isinstance(exc.code, int) else 1
-            try:
-                payload = json.loads(out.getvalue())
-            except ValueError:
-                payload = None
-            self._cache[uri] = (code, payload, err.getvalue())
-        return self._cache[uri]
+            self._cache[key] = (code, out.getvalue(), err.getvalue())
+        return self._cache[key]
 
-    def run_fixture(self, scheme):
-        uri = FIXTURE_URIS[scheme]
+    def run(self, uri, **flags):
+        """(exit code, parsed JSON or None, stderr) for `uri` with --format json."""
+        code, out, err = self.run_raw(uri, format='json', **flags)
+        try:
+            payload = json.loads(out)
+        except ValueError:
+            payload = None
+        return code, payload, err
+
+    def fixture_uri(self, scheme):
         if scheme == 'xlsx' and not (self.root / 'proj' / 'data.xlsx').exists():
             pytest.skip('openpyxl not installed')
         if scheme == 'git' and not shutil.which('git'):
             pytest.skip('git not installed')
-        return self.run(uri)
+        return FIXTURE_URIS[scheme]
+
+    def run_fixture(self, scheme, **flags):
+        return self.run(self.fixture_uri(scheme), **flags)
 
 
 @pytest.fixture(scope='module')
@@ -290,7 +302,7 @@ def test_every_registered_adapter_is_covered():
 
 def test_known_violations_name_real_cases():
     for invariant, scheme in KNOWN_VIOLATIONS:
-        assert invariant in ('contract', 'missing', 'error_exit', 'abs_path')
+        assert invariant in ('contract', 'missing', 'error_exit', 'abs_path', 'truncation')
         assert scheme in FIXTURE_URIS
 
 
@@ -331,3 +343,36 @@ def test_no_absolute_fixture_path_in_result(harness, scheme):
     leaks = [(where, value) for where, value in _strings(payload)
              if any(needle in value for needle in harness.needles)]
     assert not leaks, f'{scheme}: absolute path in a result for a relative input: {leaks[:3]}'
+
+
+def _cut_lists(full, cut):
+    """Top-level lists that are shorter in `cut` than in `full`."""
+    if not (isinstance(full, dict) and isinstance(cut, dict)):
+        return []
+    return sorted(key for key, value in full.items()
+                  if isinstance(value, list) and isinstance(cut.get(key), list)
+                  and len(cut[key]) < len(value))
+
+
+@pytest.mark.parametrize('scheme', _cases('truncation', sorted(FIXTURE_URIS)))
+def test_a_cut_list_is_disclosed(harness, scheme):
+    _, full, _ = harness.run_fixture(scheme)
+    _, cut, _ = harness.run_fixture(scheme, head=1)
+    shortened = _cut_lists(full, cut)
+    if not shortened:
+        return
+    disclosed = {entry.get('field') for entry in truncations_of(cut)}
+    assert set(shortened) <= disclosed, (
+        f'{scheme}: --head 1 cut {shortened} but the result discloses only {sorted(disclosed)}')
+    _, text, _ = harness.run_raw(harness.fixture_uri(scheme), format='text', head=1)
+    for field in shortened:
+        assert f'⚠ Truncated {field}: ' in text, f'{scheme}: text render hides the cut of {field}'
+
+
+def test_the_truncation_invariant_bites(harness):
+    """Positive control: on this fixture --head 1 really cuts some adapters' lists, so
+    test_a_cut_list_is_disclosed is not vacuously green."""
+    expected = ['ast', 'classify', 'pack', 'reveal', 'stats']
+    bitten = [scheme for scheme in expected
+              if _cut_lists(harness.run_fixture(scheme)[1], harness.run_fixture(scheme, head=1)[1])]
+    assert bitten == expected

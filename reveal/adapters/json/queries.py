@@ -183,13 +183,9 @@ def apply_result_control(
     if result_control.limit is not None:
         controlled = controlled[:result_control.limit]
 
-    # Add truncation warning if results were limited
+    # The counts of a cut; the adapter records the cut itself (note_truncation, BACK-1059)
     displayed = len(controlled)
     if displayed < total_matches:
-        metadata['warnings'] = [{
-            'type': 'truncated',
-            'message': f'Results truncated: showing {displayed} of {total_matches} total matches'
-        }]
         metadata['displayed_results'] = displayed
         metadata['total_matches'] = total_matches
 

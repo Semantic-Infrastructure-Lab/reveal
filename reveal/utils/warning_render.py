@@ -53,9 +53,10 @@ def render_meta_warnings(
             own output — passing them here keeps the disclosure from appearing
             twice rather than silently dropping the whole block.
     """
-    warnings = collect_meta_warnings(result)
-    if skip_types:
-        warnings = [w for w in warnings if w.get('type') not in skip_types]
+    # 'truncated' is printed once, for every URI result, by the router
+    # (cli/routing/uri._print_truncations, BACK-1059).
+    skip = {'truncated'} | set(skip_types or ())
+    warnings = [w for w in collect_meta_warnings(result) if w.get('type') not in skip]
     if not warnings:
         return
     if heading:

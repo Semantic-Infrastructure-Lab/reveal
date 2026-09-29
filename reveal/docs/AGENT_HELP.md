@@ -2899,7 +2899,7 @@ reveal 'calls://./src?rank=callers' --max-snippet-chars 80
 # Combine: first 50 items, strings max 80 chars
 reveal 'calls://./src?uncalled' --max-items 50 --max-snippet-chars 80
 ```
-When truncated, reveal adds a `meta.budget` field to the JSON output with cursor for pagination. Note: the header/count line in text output may show the pre-budget total; the actual listed results are limited.
+Any cut list is disclosed the same way, whatever cut it (`--max-items`, `--head`, `?limit=`, an adapter's default cap): text output ends with `⚠ Truncated <field>: showing N of M — <how to see more>`, and JSON carries it as a `meta.warnings` entry `{"type": "truncated", "field", "shown", "total", "cause", "message"}`. `--max-items` also adds `meta.budget` with a cursor for pagination. A truncated result exits 0.
 
 ### JSON Format Details
 

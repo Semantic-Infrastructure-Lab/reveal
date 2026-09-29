@@ -289,8 +289,9 @@ a check that counts violations and lets the count only fall. Then the cause is r
    - the grammar-coverage test (`tests/test_grammar_coverage.py`);
    - the registry-driven contract harness (`tests/test_output_contract_compliance.py`).
 
-   Still open: BACK-1513's remaining invariants (truncation disclosure, the subcommand
-   forms, POSIX separators on Windows).
+   Still open: BACK-1513's remaining invariants (an adapter's own undisclosed caps, the
+   subcommand forms, POSIX separators on Windows). The harness checks that a list the
+   router cuts is disclosed since 2026-09-28.
 2. **The largest class** (flags dropped between invocation forms) is retired at its cause.
    Landed 2026-09-26: the flag ledger, where a flag or query key the user sets is used, or a
    note names it (`reveal/cli/routing/ledger.py`, ratchet `tests/test_flag_ledger.py`). The
@@ -302,9 +303,10 @@ a check that counts violations and lets the count only fall. Then the cause is r
    BACK-916 (one rendering layer) and BACK-1052 (a shared scan budget). BACK-1059's first
    slice landed on 2026-09-28: one definition of a failed result (`outcome_of`, a top-level
    `error`), which the URI router reports and turns into exit 1 for every adapter
-   (`cli/routing/uri._emit_result`); renderers no longer print or exit on it. Still open:
-   `partial` and truncated as outcomes (truncation is spelled 3 ways), the subcommand forms,
-   and file-path results.
+   (`cli/routing/uri._emit_result`); renderers no longer print or exit on it. Its second
+   slice, the same day, made a cut list an outcome: one marker (`note_truncation`, a
+   `truncated` meta warning, replacing six spellings), which the router prints once after
+   the render. Still open: the subcommand forms, file-path results, and the broad `except`s.
 4. **One seam per concern:** BACK-1223 (one walker), BACK-1045 (parser seam), BACK-1366
    (one path pass), BACK-1372 (root finders) and BACK-1054 (import resolution).
 

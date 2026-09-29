@@ -13,7 +13,7 @@ from typing import Any, List, Optional
 
 from ...errors import NotApplicableError
 from ...utils import print_json_result, write_also_json
-from ...utils.results import outcome_of
+from ...utils.results import note_truncation, outcome_of, truncations_of
 from .flag_specs import exclude_fragment, inject_query_flags, strip_result_control_keys
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
 from .formats import declared_output_formats, require_supported_format
@@ -781,16 +781,27 @@ def _apply_budget_constraints(result: dict, args: 'Namespace', adapter=None) -> 
         truncate_strings=peek(args, 'max_snippet_chars')
     )
 
-    # Update result with budget-limited items
+    total = len(result[list_field])
     result[list_field] = budget_result['items']
     if budget_result['meta']['truncated']:
-        # Merge budget metadata
-        if 'meta' in result and isinstance(result['meta'], dict):
-            result['meta']['budget'] = budget_result['meta']
-        else:
-            result['meta'] = budget_result['meta']
+        _record_cut(result, list_field, total, 'max_items', sole=True)
+        result['meta']['budget'] = budget_result['meta']
 
     return result
+
+
+def _record_cut(result: dict, field: str, total: int, cause: str, sole: bool) -> None:
+    """Disclose a cut the router made to ``result[field]`` (BACK-1059).
+
+    ``--max-items`` and ``--head/--tail/--range`` slice a list after the adapter built its
+    counts, so the result said "45 results" while holding 3, and text renderers showed
+    the 3 as complete. The cut becomes a ``note_truncation`` entry, which the router
+    prints; a sole list's ``displayed_results`` is corrected to what is left.
+    """
+    shown = len(result[field])
+    note_truncation(result, field, shown, total, cause)
+    if sole and shown < total and isinstance(result.get('displayed_results'), int):
+        result['displayed_results'] = shown
 
 
 def _slice_items(items: list, head, tail, range_) -> list:
@@ -843,8 +854,11 @@ def _apply_head_tail_range(result: dict, args: 'Namespace', adapter=None,
                   f"list to slice.", file=sys.stderr)
         return result
     mark(args, 'head', 'tail', 'range')
+    cause = flag.lstrip('-')
     for field in fields:
+        total = len(result[field])
         result[field] = _slice_items(result[field], head, tail, range_)
+        _record_cut(result, field, total, cause, sole=len(fields) == 1)
     if len(fields) > 1:
         print(f"Note: {flag} applied to each of {', '.join(fields)} -- {scheme or 'this'}:// "
               f"returns several lists.", file=sys.stderr)
@@ -916,15 +930,35 @@ def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render, 
 
     The error line comes before the render, so renderers add only detail (an example, the
     valid names) and never print the error themselves. The exit comes after it, so
-    --format json still prints the whole error envelope.
+    --format json still prints the whole error envelope. A truncated result exits 0; what
+    it left out is printed after the render (_print_truncations).
     """
-    failed = outcome_of(result) == 'failed'
-    if failed:
+    outcome = outcome_of(result)
+    if outcome == 'failed':
         print(f"Error ({scheme or 'unknown'}://): {result['error']}", file=sys.stderr)
     write_also_json(result, args)
     render(result, args.format, **render_kwargs)
-    if failed:
+    if outcome == 'truncated':
+        _print_truncations(result, args.format)
+    if outcome == 'failed':
         sys.exit(1)
+
+
+def _print_truncations(result: dict, output_format: str) -> None:
+    """Say, once, which lists the rendered answer shows only part of (BACK-1059).
+
+    Truncation was disclosed by whichever renderer knew the adapter's spelling of it, so
+    ``stats://?limit=2`` and ``markdown://?limit=2`` printed a cut list as the whole
+    answer. Renderers leave ``truncated`` warnings to this. JSON already carries them in
+    ``meta.warnings``; text gets them after the body, on stdout with it; any other format
+    (grep) gets them on stderr, so its lines stay parseable.
+    """
+    if output_format == 'json':
+        return
+    stream = sys.stdout if output_format == 'text' else sys.stderr
+    print(file=stream)
+    for entry in truncations_of(result):
+        print(f"⚠ Truncated {entry['message']}", file=stream)
 
 
 def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace') -> dict:
