@@ -16,8 +16,8 @@ import json
 import pytest
 
 from conftest import _run_reveal_direct
-from reveal.adapters.claude.adapter import ClaudeAdapter
-from reveal.adapters.codex.adapter import CodexAdapter
+from reveal import adapters  # noqa: F401  (registers every adapter)
+from reveal.adapters.base import get_adapter_class
 from reveal.utils.results import outcome_of
 
 FORMATS = ['text', 'json']
@@ -86,7 +86,10 @@ def test_codex_unknown_resource_exits_nonzero(proj, fmt):
 def test_claude_without_a_projects_dir_exits_nonzero(proj, fmt, monkeypatch):
     """BACK-1525: on a machine with no Claude install the listing is an error, not an
     empty success."""
-    monkeypatch.setattr(ClaudeAdapter, 'CONVERSATION_BASE', proj / 'no-claude' / 'projects')
+    # Patch the class the registry serves: a test that reloads the adapter module
+    # replaces it, and a class imported at the top of this file would then be stale.
+    monkeypatch.setattr(get_adapter_class('claude'), 'CONVERSATION_BASE',
+                        proj / 'no-claude' / 'projects')
     r = _run_reveal_direct('claude://sessions', '--format', fmt)
     assert r.returncode == 1
 
@@ -94,7 +97,8 @@ def test_claude_without_a_projects_dir_exits_nonzero(proj, fmt, monkeypatch):
 @pytest.mark.parametrize('fmt', FORMATS)
 def test_codex_without_a_db_exits_nonzero(proj, fmt, monkeypatch):
     """BACK-1525: the same for codex:// with no state DB."""
-    monkeypatch.setattr(CodexAdapter, 'CODEX_DB', proj / 'no-codex' / 'state_5.sqlite')
+    monkeypatch.setattr(get_adapter_class('codex'), 'CODEX_DB',
+                        proj / 'no-codex' / 'state_5.sqlite')
     r = _run_reveal_direct('codex://', '--format', fmt)
     assert r.returncode == 1
     assert 'Codex DB not found' in r.stdout + r.stderr

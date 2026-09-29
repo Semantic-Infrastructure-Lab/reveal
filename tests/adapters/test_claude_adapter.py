@@ -694,22 +694,33 @@ class TestFindConversationAgentFilter:
         assert result is None
 
 
+@pytest.fixture
+def reload_claude_adapter(monkeypatch):
+    """Reload the claude adapter module under the test's env vars; reload it again under
+    the real env afterwards, even if the test fails.
+
+    CONVERSATION_BASE is resolved at import, so these tests reload the module. They used
+    to 'restore' with a second reload at the end of the test body, while monkeypatch still
+    had the env vars set, so the registry kept a ClaudeAdapter pointing at a deleted temp
+    dir. Any later claude:// run in the same xdist worker read from it (the contract
+    harness failed on py3.10 only, by test distribution).
+    """
+    import importlib
+    import reveal.adapters.claude.adapter as mod
+    yield lambda: importlib.reload(mod)
+    monkeypatch.undo()
+    importlib.reload(mod)
+
+
 class TestConversationBaseEnvVar:
     """Tests for REVEAL_CLAUDE_DIR environment variable support."""
 
-    def test_env_var_overrides_default_path(self, tmp_path, monkeypatch):
+    def test_env_var_overrides_default_path(self, tmp_path, monkeypatch, reload_claude_adapter):
         """Test that REVEAL_CLAUDE_DIR env var overrides ~/.claude/projects."""
         monkeypatch.setenv('REVEAL_CLAUDE_DIR', str(tmp_path))
-
-        # Re-evaluate the class attribute by importing fresh
-        import importlib
-        import reveal.adapters.claude.adapter as mod
-        importlib.reload(mod)
+        mod = reload_claude_adapter()
 
         assert mod.ClaudeAdapter.CONVERSATION_BASE == tmp_path
-
-        # Restore after test
-        importlib.reload(mod)
 
     def test_listing_respects_env_var_path(self, tmp_path, monkeypatch):
         """Test that session listing scans the env-var directory."""
@@ -726,40 +737,30 @@ class TestConversationBaseEnvVar:
         names = [s['session'] for s in result['recent_sessions']]
         assert 'env-test' in names
 
-    def test_reveal_claude_home_derives_conversation_base(self, tmp_path, monkeypatch):
+    def test_reveal_claude_home_derives_conversation_base(self, tmp_path, monkeypatch,
+                                                          reload_claude_adapter):
         """BACK-121: When REVEAL_CLAUDE_HOME is set, CONVERSATION_BASE derives from it.
 
         Setting only REVEAL_CLAUDE_HOME should point CONVERSATION_BASE at
         <REVEAL_CLAUDE_HOME>/projects/ — same derivation pattern as BACK-119 for CLAUDE_JSON.
         """
-        import importlib
-        import reveal.adapters.claude.adapter as mod
-
         fake_home = tmp_path / 'some_user' / '.claude'
         monkeypatch.setenv('REVEAL_CLAUDE_HOME', str(fake_home))
         monkeypatch.delenv('REVEAL_CLAUDE_DIR', raising=False)
-        importlib.reload(mod)
+        mod = reload_claude_adapter()
 
         assert mod.ClaudeAdapter.CONVERSATION_BASE == fake_home / 'projects'
 
-        # Restore
-        importlib.reload(mod)
-
-    def test_reveal_claude_dir_takes_precedence_over_claude_home(self, tmp_path, monkeypatch):
+    def test_reveal_claude_dir_takes_precedence_over_claude_home(self, tmp_path, monkeypatch,
+                                                                 reload_claude_adapter):
         """BACK-121: REVEAL_CLAUDE_DIR explicit override wins over REVEAL_CLAUDE_HOME derivation."""
-        import importlib
-        import reveal.adapters.claude.adapter as mod
-
         fake_home = tmp_path / 'some_user' / '.claude'
         explicit_dir = tmp_path / 'custom' / 'sessions'
         monkeypatch.setenv('REVEAL_CLAUDE_HOME', str(fake_home))
         monkeypatch.setenv('REVEAL_CLAUDE_DIR', str(explicit_dir))
-        importlib.reload(mod)
+        mod = reload_claude_adapter()
 
         assert mod.ClaudeAdapter.CONVERSATION_BASE == explicit_dir
-
-        # Restore
-        importlib.reload(mod)
 
 
 class TestReconfigureBasePath:
