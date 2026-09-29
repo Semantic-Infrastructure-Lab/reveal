@@ -8,6 +8,7 @@ re-exported here for backward compatibility with existing callers/tests.
 import argparse
 import sys
 from argparse import Namespace
+from functools import partial
 from pathlib import Path
 
 from reveal.adapters.hotspots import (  # noqa: F401 - re-exported for back-compat
@@ -25,6 +26,7 @@ from reveal.adapters.hotspots import (  # noqa: F401 - re-exported for back-comp
 )
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
 from ..routing.ledger import complete
+from ..routing.subcommand import emit_subcommand_result
 
 
 def create_hotspots_parser() -> argparse.ArgumentParser:
@@ -111,27 +113,10 @@ def run_hotspots(args: Namespace) -> None:
     file_hotspots = result['file_hotspots']
     fn_hotspots = result['function_hotspots']
 
+    emit_subcommand_result(result, args, name='hotspots', source=path, render=partial(
+        HotspotsRenderer.render_structure, format=args.format, top=top, test_index=adapter.test_index))
     if args.format == 'json':
-        from reveal.utils.results import add_cli_contract_fields
-        from reveal.utils.json_utils import attach_provenance
-        import json
-        # BACK-1178: keep the adapter's own 'contract_version' and 'meta'.
-        # Stripping them made this subcommand emit a 1.0 envelope for the
-        # same payload its uri:// form emits as 1.1 -- self-consistent (1.0
-        # is the no-meta baseline) but a needless split for a consumer that
-        # reaches the same data two ways. type/source/source_type are still
-        # rebuilt below with the CLI-appropriate values.
-        report = {
-            k: v for k, v in result.items()
-            if k not in ('type', 'source', 'source_type')
-        }
-        print(json.dumps(
-            attach_provenance(add_cli_contract_fields(report, result_type='hotspots', source=path)),
-            indent=2, default=str,
-        ))
-        return
-
-    HotspotsRenderer.render_structure(result, format=args.format, top=top, test_index=adapter.test_index)
+        return  # the findings exit below applies to text/grep only, as it always has
 
     # Exit with non-zero if there are serious hotspots (quality < 70 or complexity > 20)
     serious_files = [h for h in file_hotspots if h.get('quality_score', 100) < 70]

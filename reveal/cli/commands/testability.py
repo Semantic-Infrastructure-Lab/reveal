@@ -9,7 +9,6 @@ backward compatibility with existing callers/tests.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from argparse import Namespace
 from pathlib import Path
@@ -25,6 +24,7 @@ from reveal.adapters.testability import (  # noqa: F401 - re-exported for back-c
 )
 from reveal.errors import NotApplicableError
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
+from ..routing.subcommand import emit_subcommand_result
 
 
 def create_testability_parser() -> argparse.ArgumentParser:
@@ -114,13 +114,4 @@ def run_testability(args: Namespace) -> None:
         )
         sys.exit(1)
 
-    if args.format == 'json':
-        from reveal.utils.results import add_cli_contract_fields
-        from reveal.utils.json_utils import attach_provenance
-        print(json.dumps(
-            attach_provenance(add_cli_contract_fields(result, result_type='testability', source=path)),
-            indent=2, default=str,
-        ))
-        return
-
-    _render_report(result)
+    emit_subcommand_result(result, args, name='testability', source=path, render=_render_report)

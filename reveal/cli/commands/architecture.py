@@ -8,9 +8,9 @@ independent of the main brief. Internal names are re-exported here for
 backward compatibility with existing callers/tests.
 """
 import argparse
-import json
 import sys
 from argparse import Namespace
+from functools import partial
 from pathlib import Path
 
 from reveal.adapters.architecture import (  # noqa: F401 - re-exported for back-compat
@@ -33,6 +33,7 @@ from reveal.adapters.architecture import (  # noqa: F401 - re-exported for back-
     _run_scope,
 )
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
+from ..routing.subcommand import emit_subcommand_result
 
 
 def create_architecture_parser() -> argparse.ArgumentParser:
@@ -108,27 +109,8 @@ def run_architecture(args: Namespace) -> None:
 
     query = f'top={top}&no_imports={"true" if no_imports else "false"}'
     result = ArchitectureAdapter(str(path), query).get_structure()
-
-    if args.format == 'json':
-        from reveal.utils.results import add_cli_contract_fields
-        from reveal.utils.json_utils import attach_provenance
-        # BACK-1178: keep the adapter's own 'contract_version' and 'meta'.
-        # Stripping them made this subcommand emit a 1.0 envelope for the
-        # same payload its uri:// form emits as 1.1 -- self-consistent (1.0
-        # is the no-meta baseline) but a needless split for a consumer that
-        # reaches the same data two ways. type/source/source_type are still
-        # rebuilt below with the CLI-appropriate values.
-        report = {
-            k: v for k, v in result.items()
-            if k not in ('type', 'source', 'source_type')
-        }
-        print(json.dumps(
-            attach_provenance(add_cli_contract_fields(report, result_type='architecture', source=path)),
-            indent=2, default=str,
-        ))
-        return
-
-    ArchitectureRenderer.render_structure(result, format=args.format, top=top, no_imports=no_imports)
+    emit_subcommand_result(result, args, name='architecture', source=path, render=partial(
+        ArchitectureRenderer.render_structure, format=args.format, top=top, no_imports=no_imports))
 
 
 def _run_architecture_diff(path: Path, against: str, args: Namespace) -> None:
@@ -145,13 +127,5 @@ def _run_architecture_diff(path: Path, against: str, args: Namespace) -> None:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    if args.format == 'json':
-        from reveal.utils.results import add_cli_contract_fields
-        from reveal.utils.json_utils import attach_provenance
-        print(json.dumps(
-            attach_provenance(add_cli_contract_fields(report, result_type='architecture_diff', source=path)),
-            indent=2, default=str,
-        ))
-        return
-
-    render_diff_brief(report)
+    emit_subcommand_result(report, args, name='architecture_diff', source=path,
+                           render=render_diff_brief)

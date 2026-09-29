@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from ..global_flags import add_gitignore_arguments
 from ..routing.ledger import complete
+from ..routing.subcommand import emit_subcommand_result
 
 
 def create_review_parser() -> argparse.ArgumentParser:
@@ -124,22 +125,13 @@ def run_review(args: Namespace) -> None:
     report['overall_status'], report['exit_code'] = _review_outcome(violations, errors)
 
     # Render
-    if args.format == 'json':
-        from reveal.utils.results import add_cli_contract_fields
-        from reveal.utils.json_utils import attach_provenance
-        if is_git_range:
-            review_source_type = 'git_range'
-        else:
-            review_source_type = 'file' if path is not None and path.is_file() else 'directory'
-        print(json.dumps(
-            attach_provenance(add_cli_contract_fields(
-                report, result_type='review', source=target,
-                source_type=review_source_type,
-            )),
-            indent=2, default=str,
-        ))
+    if is_git_range:
+        review_source_type = 'git_range'
     else:
-        _render_report(report, args.verbose)
+        review_source_type = 'file' if path is not None and path.is_file() else 'directory'
+    emit_subcommand_result(report, args, name='review', source=target,
+                           source_type=review_source_type,
+                           render=lambda r: _render_report(r, args.verbose))
 
     complete(args)  # the exit code is the result: the flag ledger still reports
     sys.exit(report['exit_code'])

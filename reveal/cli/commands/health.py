@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import List
 from ..global_flags import add_gitignore_arguments
 from ..routing.ledger import complete
+from ..routing.subcommand import emit_subcommand_result
 
 
 def create_health_parser() -> argparse.ArgumentParser:
@@ -110,19 +111,9 @@ def run_health(args: Namespace) -> None:
         if exit_code > overall_exit:
             overall_exit = exit_code
 
-    if args.format == 'json':
-        import json
-        from reveal.utils.results import add_cli_contract_fields
-        from reveal.utils.json_utils import attach_provenance
-        print(json.dumps(
-            attach_provenance(add_cli_contract_fields(
-                {'results': results, 'overall_exit': overall_exit},
-                result_type='health', source=','.join(targets), source_type='multi',
-            )),
-            indent=2,
-        ))
-    else:
-        _render_results(results)
+    emit_subcommand_result({'results': results, 'overall_exit': overall_exit}, args,
+                           name='health', source=','.join(targets), source_type='multi',
+                           render=lambda report: _render_results(report['results']))
 
     complete(args)  # the exit code is the result: the flag ledger still reports
     sys.exit(overall_exit)

@@ -103,6 +103,22 @@ def test_argv_flagged(src):
     assert set(_hits(src)) == {'argv'}
 
 
+@pytest.mark.parametrize('src', [
+    "print(add_cli_contract_fields(report, result_type='x', source=p))",
+    "from reveal.utils import results\nresults.add_cli_contract_fields(r, result_type='x', source=p)",
+])
+def test_subcommand_output_flagged(src):
+    # BACK-1544: a runner that builds its own JSON envelope skips the outcome seam.
+    hits = _hits(src, 'reveal/cli/commands/foo.py')
+    assert set(hits) == {'subcommand-output'}
+
+
+def test_subcommand_output_home_is_the_emitter_only():
+    src = ("def emit_subcommand_result(result):\n    return add_cli_contract_fields(result)\n"
+           "def other(result):\n    return add_cli_contract_fields(result)\n")
+    assert _hits(src, 'reveal/cli/routing/subcommand.py') == {'subcommand-output': [4]}
+
+
 def test_argv_home_is_main_only():
     # main() reads it once into an Invocation; the rest of main.py and the CLI may not.
     src = "import sys\ndef main():\n    run(sys.argv)\ndef other():\n    return sys.argv[1]"

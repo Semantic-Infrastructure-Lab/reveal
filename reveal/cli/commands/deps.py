@@ -8,6 +8,7 @@ for backward compatibility with existing callers/tests.
 import argparse
 import sys
 from argparse import Namespace
+from functools import partial
 from pathlib import Path
 
 from reveal.adapters.deps import (  # noqa: F401 - re-exported for back-compat
@@ -28,6 +29,7 @@ from reveal.adapters.deps import (  # noqa: F401 - re-exported for back-compat
 )
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
 from ..routing.ledger import complete
+from ..routing.subcommand import emit_subcommand_result
 
 
 def create_deps_parser() -> argparse.ArgumentParser:
@@ -88,6 +90,19 @@ def create_deps_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _summarize_base_files(result: dict) -> dict:
+    """--summary-only (BACK-1040): replace base.files, the bulk of deps JSON on a real
+    repo, with its file and import counts. circular/unused are left as they are."""
+    base = result.get('base')
+    if not isinstance(base, dict) or not isinstance(base.get('files'), dict):
+        return result
+    files = base['files']
+    summary = {k: v for k, v in base.items() if k != 'files'}
+    summary['total_files'] = len(files)
+    summary['total_imports'] = sum(len(v) for v in files.values())
+    return {**result, 'base': summary}
+
+
 def run_deps(args: Namespace) -> None:
     """Run the dependency dashboard."""
     path = Path(args.path).resolve()
@@ -113,35 +128,12 @@ def run_deps(args: Namespace) -> None:
     circular = result['circular']
     unused = result['unused']
 
+    if args.format == 'json' and getattr(args, 'summary_only', False):
+        result = _summarize_base_files(result)
+    emit_subcommand_result(result, args, name='deps', source=path, render=partial(
+        DepsRenderer.render_structure, format=args.format, top=top))
     if args.format == 'json':
-        from reveal.utils.results import add_cli_contract_fields
-        from reveal.utils.json_utils import attach_provenance
-        import json
-        # BACK-1178: keep the adapter's own 'contract_version' and 'meta'.
-        # Stripping them made this subcommand emit a 1.0 envelope for the
-        # same payload its uri:// form emits as 1.1 -- self-consistent (1.0
-        # is the no-meta baseline) but a needless split for a consumer that
-        # reaches the same data two ways. type/source/source_type are still
-        # rebuilt below with the CLI-appropriate values.
-        report = {
-            k: v for k, v in result.items()
-            if k not in ('type', 'source', 'source_type')
-        }
-        if getattr(args, 'summary_only', False) and isinstance(report.get('base'), dict):
-            files = report['base'].get('files')
-            if isinstance(files, dict):
-                report['base'] = {
-                    k: v for k, v in report['base'].items() if k != 'files'
-                }
-                report['base']['total_files'] = len(files)
-                report['base']['total_imports'] = sum(len(v) for v in files.values())
-        print(json.dumps(
-            attach_provenance(add_cli_contract_fields(report, result_type='deps', source=path)),
-            indent=2, default=str,
-        ))
-        return
-
-    DepsRenderer.render_structure(result, format=args.format, top=top)
+        return  # the findings exit below applies to text/grep only, as it always has
 
     # Exit 1 if there are circular deps or unused imports
     cycles = circular.get('count', 0)

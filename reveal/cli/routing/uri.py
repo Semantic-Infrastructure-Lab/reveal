@@ -931,7 +931,7 @@ def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render, 
     The error line comes before the render, so renderers add only detail (an example, the
     valid names) and never print the error themselves. The exit comes after it, so
     --format json still prints the whole error envelope. A truncated result exits 0; what
-    it left out is printed after the render (_print_truncations).
+    it left out is printed after the render (print_truncations).
     """
     outcome = outcome_of(result)
     if outcome == 'failed':
@@ -939,13 +939,16 @@ def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render, 
     write_also_json(result, args)
     render(result, args.format, **render_kwargs)
     if outcome == 'truncated':
-        _print_truncations(result, args.format)
+        print_truncations(result, args.format)
     if outcome == 'failed':
         sys.exit(1)
 
 
-def _print_truncations(result: dict, output_format: str) -> None:
+def print_truncations(result: dict, output_format: str) -> None:
     """Say, once, which lists the rendered answer shows only part of (BACK-1059).
+
+    Shared with the subcommand seam (subcommand.emit_subcommand_result), so ``reveal
+    overview`` and ``overview://`` disclose a cut the same way (BACK-1544).
 
     Truncation was disclosed by whichever renderer knew the adapter's spelling of it, so
     ``stats://?limit=2`` and ``markdown://?limit=2`` printed a cut list as the whole

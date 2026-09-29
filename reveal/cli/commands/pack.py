@@ -8,9 +8,9 @@ directly (_parse_budget, _get_changed_files, _collect_candidates,
 _apply_budget, _format_pack_result) and is untouched by this refactor.
 """
 
-import json
 import sys
 from argparse import Namespace
+from functools import partial
 from pathlib import Path
 import argparse
 
@@ -43,6 +43,7 @@ from reveal.adapters.pack import (  # noqa: F401 - re-exported for back-compat
     _walk_files,
 )
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
+from ..routing.subcommand import emit_subcommand_result
 
 
 def create_pack_parser() -> argparse.ArgumentParser:
@@ -141,26 +142,7 @@ def run_pack(args: Namespace) -> None:
     if adapter.relevance_warning:
         print(f"Warning: {adapter.relevance_warning}", file=sys.stderr)
 
-    if args.format == 'json':
-        from reveal.utils.results import add_cli_contract_fields
-        from reveal.utils.json_utils import attach_provenance
-        # Note: unlike other migrated commands, 'meta' is NOT stripped here —
-        # PackAdapter.get_structure() never passes parse_mode/confidence/
-        # warnings/errors to ResultBuilder.create(), so ResultBuilder never
-        # injects its own envelope 'meta' key. The 'meta' key present in
-        # `result` is always pack's own selection-metadata dict (real data),
-        # not a contract artifact — stripping it would silently drop it.
-        report = {
-            k: v for k, v in result.items()
-            if k not in ('contract_version', 'type', 'source', 'source_type')
-        }
-        print(json.dumps(
-            attach_provenance(add_cli_contract_fields(report, result_type='pack', source=path)),
-            indent=2, default=str,
-        ))
-        return
-
-    PackRenderer.render_structure(
-        result, format=args.format, verbose=args.verbose,
+    emit_subcommand_result(result, args, name='pack', source=path, render=partial(
+        PackRenderer.render_structure, format=args.format, verbose=args.verbose,
         architecture=architecture, content=emit_content,
-    )
+    ))

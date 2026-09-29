@@ -9,9 +9,9 @@ the reveal_trace MCP tool imports run_trace from this module directly.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from argparse import Namespace
+from functools import partial
 from pathlib import Path
 
 from reveal.adapters.trace import (  # noqa: F401 - re-exported for back-compat
@@ -25,6 +25,7 @@ from reveal.adapters.trace import (  # noqa: F401 - re-exported for back-compat
     _render_trace,
 )
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
+from ..routing.subcommand import emit_subcommand_result
 
 
 def create_trace_parser() -> argparse.ArgumentParser:
@@ -76,22 +77,5 @@ def run_trace(args: Namespace) -> None:
         )
         sys.exit(1)
 
-    if args.format == 'json':
-        from reveal.utils.results import add_cli_contract_fields
-        from reveal.utils.json_utils import attach_provenance
-        # BACK-1178: keep the adapter's own 'contract_version' and 'meta'.
-        # Stripping them made this subcommand emit a 1.0 envelope for the
-        # same payload its uri:// form emits as 1.1 -- self-consistent (1.0
-        # is the no-meta baseline) but a needless split for a consumer that
-        # reaches the same data two ways. type/source/source_type are still
-        # rebuilt below with the CLI-appropriate values.
-        report = {
-            k: v for k, v in result.items()
-            if k not in ('type', 'source', 'source_type')
-        }
-        print(json.dumps(
-            attach_provenance(add_cli_contract_fields(report, result_type='trace', source=path)),
-            indent=2,
-        ))
-    else:
-        TraceRenderer.render_structure(result, format=args.format)
+    emit_subcommand_result(result, args, name='trace', source=path, render=partial(
+        TraceRenderer.render_structure, format=args.format))

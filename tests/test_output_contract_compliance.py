@@ -28,14 +28,21 @@ proves nothing about the adapter's normal output. Invariants:
 5. ``truncation``: every list that ``--head 1`` makes shorter is disclosed as a
    ``truncated`` meta warning naming it (``note_truncation``), and the text render prints
    it (BACK-1059). A cut list must not read as the whole answer.
+6. ``subcommand``: every ``reveal <name>`` that answers a query (the ``COMMANDS``
+   registry, run through ``main``) prints its result through
+   ``cli/routing/subcommand.emit_subcommand_result``, and every cut that result records is
+   printed in its text output. Runners that built their own output never checked the
+   outcome, so slice 2 of BACK-1059 silently dropped ``reveal overview``'s cut line
+   (BACK-1544). ``SUBCOMMAND_CUT_ARGV`` makes the fixture cut real lists, and
+   ``test_the_subcommand_cut_invariant_bites`` checks that it does.
 
 Violations that exist today are listed in ``KNOWN_VIOLATIONS`` as strict xfails, each
 naming its task. A fix makes its case XPASS, which fails the run until the entry is
 deleted. The list can only shrink.
 
 Not covered yet (BACK-1513 follow-ups): an adapter's own undisclosed caps (a ``[:N]`` the
-router never sees, so ``--head`` can't expose it), consumed flags (BACK-1514), the
-``cli/commands/*`` subcommand forms, and POSIX separators on Windows.
+router never sees, so ``--head`` can't expose it), consumed flags (BACK-1514), and POSIX
+separators on Windows.
 """
 
 import json
@@ -53,7 +60,10 @@ from reveal import adapters  # noqa: F401  (registers every adapter)
 from conftest import production_schemes
 from reveal.adapters import base as adapters_base
 from reveal.cli.defaults import _default_args
+from reveal.cli.invocation import COMMANDS
+from reveal.cli.routing import subcommand as subcommand_seam
 from reveal.cli.routing.uri import handle_uri
+from reveal.main import main
 from reveal.utils.results import truncations_of
 
 pytestmark = pytest.mark.contract
@@ -122,6 +132,36 @@ KNOWN_VIOLATIONS = {
     ('abs_path', 'stats'): 'BACK-1366',
     ('abs_path', 'testability'): 'BACK-1366',
     ('abs_path', 'xlsx'): 'BACK-1366',
+    ('subcommand', 'check'): 'BACK-1545',
+}
+
+# How to run each `reveal <name>` against the fixture (invariant 6). Every COMMANDS entry
+# needs a row here or a NOT_A_QUERY reason.
+SUBCOMMAND_ARGV = {
+    'architecture': ['proj'],
+    'check': ['proj'],
+    'contracts': ['proj'],
+    'deps': ['proj'],
+    'health': ['proj'],
+    'hotspots': ['proj'],
+    'overview': ['proj'],
+    'pack': ['proj'],
+    'review': ['proj'],
+    'surface': ['proj'],
+    'testability': ['proj'],
+    'trace': ['proj', '--from', 'main'],
+}
+
+NOT_A_QUERY = {
+    'dev': 'developer tooling (scaffold, config inspection), not an answer about a target',
+    'offline': 'prepares grammars for offline use, not an answer about a target',
+    'scaffold': 'writes template files, not an answer about a target',
+}
+
+# Flags that make the small fixture cut a list, so the text-disclosure half of invariant 6
+# is not vacuously green.
+SUBCOMMAND_CUT_ARGV = {
+    'hotspots': ['--top', '1', '--min-complexity', '1'],
 }
 
 _REQUIRED_FIELDS = ['contract_version', 'type', 'source', 'source_type']
@@ -257,6 +297,30 @@ class _Harness:
             payload = None
         return code, payload, err
 
+    def run_subcommand(self, name, *argv):
+        """(exit code, stdout, stderr, results) for `reveal <name> <argv>` through ``main``.
+
+        ``results`` are the result dicts that reached ``emit_subcommand_result``, seen at
+        its ``outcome_of`` call; empty when the runner printed its output some other way.
+        """
+        key = (name, argv)
+        if key not in self._cache:
+            out, err, code, results = StringIO(), StringIO(), 0, []
+
+            def recording_outcome_of(result, _real=subcommand_seam.outcome_of):
+                results.append(result)
+                return _real(result)
+
+            with self._hermetic(), redirect_stdout(out), redirect_stderr(err), \
+                    pytest.MonkeyPatch.context() as mp:
+                mp.setattr(subcommand_seam, 'outcome_of', recording_outcome_of)
+                try:
+                    main(['reveal', name, *argv])
+                except SystemExit as exc:
+                    code = exc.code if isinstance(exc.code, int) else 1
+            self._cache[key] = (code, out.getvalue(), err.getvalue(), results)
+        return self._cache[key]
+
     def fixture_uri(self, scheme):
         if scheme == 'xlsx' and not (self.root / 'proj' / 'data.xlsx').exists():
             pytest.skip('openpyxl not installed')
@@ -302,8 +366,9 @@ def test_every_registered_adapter_is_covered():
 
 def test_known_violations_name_real_cases():
     for invariant, scheme in KNOWN_VIOLATIONS:
-        assert invariant in ('contract', 'missing', 'error_exit', 'abs_path', 'truncation')
-        assert scheme in FIXTURE_URIS
+        assert invariant in ('contract', 'missing', 'error_exit', 'abs_path', 'truncation',
+                             'subcommand')
+        assert scheme in (SUBCOMMAND_ARGV if invariant == 'subcommand' else FIXTURE_URIS)
 
 
 # -- invariants ------------------------------------------------------------------------
@@ -376,3 +441,49 @@ def test_the_truncation_invariant_bites(harness):
     bitten = [scheme for scheme in expected
               if _cut_lists(harness.run_fixture(scheme)[1], harness.run_fixture(scheme, head=1)[1])]
     assert bitten == expected
+
+
+# --- Invariant 6: subcommand forms (BACK-1544) ---------------------------------------------
+
+def test_every_subcommand_is_covered():
+    covered = set(SUBCOMMAND_ARGV) | set(NOT_A_QUERY)
+    assert not set(SUBCOMMAND_ARGV) & set(NOT_A_QUERY)
+    assert set(COMMANDS) - covered == set(), (
+        'New subcommand(s) with no contract-harness entry: add a SUBCOMMAND_ARGV row '
+        '(or a NOT_A_QUERY reason) in tests/test_output_contract_compliance.py')
+    assert covered - set(COMMANDS) == set(), 'Harness lists subcommands that no longer exist'
+
+
+@pytest.mark.parametrize('name', _cases('subcommand', sorted(SUBCOMMAND_ARGV)))
+def test_subcommand_result_leaves_through_the_seam(harness, name):
+    argv = SUBCOMMAND_ARGV[name] + SUBCOMMAND_CUT_ARGV.get(name, [])
+    for fmt in ('json', 'text'):
+        _, _, err, results = harness.run_subcommand(name, *argv, '--format', fmt)
+        assert results, (
+            f'reveal {name} --format {fmt} printed its result without emit_subcommand_result '
+            f'(cli/routing/subcommand.py), so a failed or cut answer goes unreported. '
+            f'stderr: {err[-300:]}')
+    # The envelope (BACK-906) under the subcommand's own name, conforming to the same
+    # contract version as its URI twin (BACK-1178: pack's said 1.0 to pack://'s 1.1).
+    _, out, _, _ = harness.run_subcommand(name, *argv, '--format', 'json')
+    payload = json.loads(out)
+    assert [f for f in _REQUIRED_FIELDS if f not in payload] == []
+    assert payload['type'] == name
+    if name in FIXTURE_URIS:
+        _, twin, _ = harness.run_fixture(name)
+        assert payload['contract_version'] == twin['contract_version'], (
+            f'reveal {name} and {name}:// disagree about the contract their payload conforms to')
+    _, text, _, results = harness.run_subcommand(name, *argv, '--format', 'text')
+    for entry in truncations_of(results[-1]):
+        assert f"⚠ Truncated {entry['message']}" in text, (
+            f"reveal {name}: the result records a cut of {entry['field']} that the text hides")
+
+
+def test_the_subcommand_cut_invariant_bites(harness):
+    """Positive control: with SUBCOMMAND_CUT_ARGV the fixture really cuts these
+    subcommands' lists, so the text-disclosure check above is not vacuously green."""
+    for name, extra in SUBCOMMAND_CUT_ARGV.items():
+        _, text, _, results = harness.run_subcommand(
+            name, *SUBCOMMAND_ARGV[name], *extra, '--format', 'text')
+        assert results and truncations_of(results[-1]), f'reveal {name} {extra}: nothing was cut'
+        assert '⚠ Truncated ' in text

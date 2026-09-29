@@ -200,3 +200,93 @@ def test_a_composite_names_its_own_list(proj):
     assert r.returncode == 0, r.stderr
     assert '⚠ Truncated complex_functions: showing 1 of 2 — raise ?top=N' in r.stdout
     assert 'Truncated results' not in r.stdout
+
+
+# -- the subcommand forms (BACK-1544) -----------------------------------------------------
+
+def _two_complex_functions(proj, branches=12):
+    branches = ''.join(f'    if x == {i}:\n        return {i}\n' for i in range(branches))
+    for name in ('a', 'b'):
+        (proj / f'cx_{name}.py').write_text(f'def {name}(x):\n{branches}    return -1\n',
+                                            encoding='utf-8')
+
+
+def test_the_subcommand_says_what_its_uri_form_says(proj):
+    """``reveal overview`` printed its cut line until slice 2 left cut lists to the URI
+    router, which subcommands never reach; it then printed nothing (BACK-1544)."""
+    _two_complex_functions(proj)
+    r = _run_reveal_direct('overview', '.', '--top', '1', '--no-git')
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.count('⚠ Truncated complex_functions: showing 1 of 2 — raise ?top=N') == 1
+    uri = _run_reveal_direct('overview://.?top=1&no_git=true')
+    assert uri.stdout.splitlines()[-1] == r.stdout.splitlines()[-1]
+
+
+def test_a_subcommand_cut_is_printed_before_its_findings_exit(proj):
+    """hotspots exits 1 on findings (EXIT_CODE_CONTRACT); the cut line still prints first."""
+    _two_complex_functions(proj, branches=24)  # complexity > 20 is a hotspots finding
+    r = _run_reveal_direct('hotspots', '.', '--top', '1', '--min-complexity', '1')
+    assert r.returncode == 1
+    assert '⚠ Truncated function_hotspots: showing 1 of ' in r.stdout
+    payload = json.loads(_run_reveal_direct(
+        'hotspots', '.', '--top', '1', '--min-complexity', '1', '--format', 'json').stdout)
+    assert [c['field'] for c in truncations_of(payload)] == ['function_hotspots']
+
+
+def test_an_uncut_subcommand_says_nothing(proj):
+    """Negative control for the two tests above."""
+    _two_complex_functions(proj)
+    r = _run_reveal_direct('overview', '.', '--no-git')
+    assert r.returncode == 0, r.stderr
+    assert 'Truncated' not in r.stdout + r.stderr
+
+
+class _Args:
+    def __init__(self, fmt):
+        self.format = fmt
+
+
+def _emit(result, fmt, capsys):
+    from reveal.cli.routing.subcommand import emit_subcommand_result
+    rendered = []
+    code = 0
+    try:
+        emit_subcommand_result(result, _Args(fmt), name='demo', source='/src',
+                               render=rendered.append)
+    except SystemExit as exc:
+        code = exc.code
+    out, err = capsys.readouterr()
+    return code, out, err, rendered
+
+
+def test_emit_subcommand_result_prints_a_cut_after_the_render(capsys):
+    result = {'items': [1]}
+    note_truncation(result, 'items', 1, 5, 'limit')
+    code, out, err, rendered = _emit(result, 'text', capsys)
+    assert (code, rendered) == (0, [result])
+    assert out.strip().startswith('⚠ Truncated items: showing 1 of 5 — raise ?limit=N')
+    code, out, err, rendered = _emit(result, 'grep', capsys)
+    assert (code, out.strip()) == (0, '')
+    assert '⚠ Truncated items: showing 1 of 5' in err
+
+
+def test_emit_subcommand_result_json_is_the_subcommands_envelope(capsys):
+    result = {'contract_version': '1.1', 'type': 'demo_scan', 'source': 'rel', 'items': [1]}
+    note_truncation(result, 'items', 1, 5, 'limit')
+    code, out, err, rendered = _emit(result, 'json', capsys)
+    payload = json.loads(out)
+    assert (code, rendered, err) == (0, [], '')
+    assert (payload['contract_version'], payload['type'], payload['source']) == ('1.1', 'demo', '/src')
+    assert truncations_of(payload)[0]['field'] == 'items'
+
+
+@pytest.mark.parametrize('fmt', ['text', 'json'])
+def test_emit_subcommand_result_fails_a_failed_result(fmt, capsys):
+    """A top-level error exits 1 after the output, as the URI form does (BACK-1059)."""
+    code, out, err, rendered = _emit({'error': 'boom'}, fmt, capsys)
+    assert code == 1
+    assert 'Error (reveal demo): boom' in err
+    if fmt == 'json':
+        assert json.loads(out)['error'] == 'boom'
+    else:
+        assert rendered == [{'error': 'boom'}]

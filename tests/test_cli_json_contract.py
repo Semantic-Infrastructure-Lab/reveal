@@ -19,53 +19,19 @@ pytestmark = pytest.mark.component
 
 _COMMANDS_DIR = Path(__file__).parent.parent / 'reveal' / 'cli' / 'commands'
 
-# file -> number of --format json print sites that must be enveloped.
-_EXPECTED_JSON_SITES = {
-    'architecture.py': 2,
-    'overview.py': 1,
-    'pack.py': 1,
-    'surface.py': 1,
-    'review.py': 2,
-    'contracts.py': 1,
-    'health.py': 1,
-    'testability.py': 1,
-    'hotspots.py': 1,
-    'deps.py': 1,
-    'trace.py': 1,
-}
-
-
 class TestCliJsonContract(unittest.TestCase):
-    """Every raw json.dumps() call in cli/commands/ must be wrapped by
-    add_cli_contract_fields() so --format json output always carries the
-    Output Contract envelope."""
+    """No cli/commands/*.py prints a JSON payload without the envelope.
 
-    def test_every_known_json_dumps_site_is_enveloped(self):
-        for filename, expected_sites in _EXPECTED_JSON_SITES.items():
-            with self.subTest(file=filename):
-                content = (_COMMANDS_DIR / filename).read_text(encoding='utf-8')
-                dumps_calls = re.findall(r'json\.dumps\(', content)
-                self.assertEqual(
-                    len(dumps_calls), expected_sites,
-                    f"{filename}: expected {expected_sites} json.dumps() call(s), "
-                    f"found {len(dumps_calls)} — update _EXPECTED_JSON_SITES if this "
-                    f"is an intentional new/removed JSON output site."
-                )
-                envelope_calls = len(re.findall(r'add_cli_contract_fields\(', content))
-                self.assertGreaterEqual(
-                    envelope_calls, expected_sites,
-                    f"{filename} has a json.dumps() call not wrapped by "
-                    f"add_cli_contract_fields() — every --format json payload must "
-                    f"carry contract_version/type/source/source_type (BACK-906)."
-                )
+    The adapter-backed runners, health and review print theirs through
+    cli/routing/subcommand.emit_subcommand_result, which adds the envelope once
+    (BACK-1544). Running each subcommand and checking its envelope, and that its
+    contract_version matches its URI twin (BACK-1178), is invariant 6 of
+    tests/test_output_contract_compliance.py. This static check keeps any other
+    json.dumps() site in the package (review's usage-error exit, a new command)
+    from shipping an un-enveloped payload."""
 
-    def test_no_other_cli_command_has_unenveloped_json_dumps(self):
-        """Any *other* file in cli/commands/ that starts using json.dumps() for
-        its --format json output must also envelope it — this catches new
-        commands added after BACK-906, not just the 11 known at fix time."""
+    def test_no_cli_command_has_unenveloped_json_dumps(self):
         for path in sorted(_COMMANDS_DIR.glob('*.py')):
-            if path.name in _EXPECTED_JSON_SITES or path.name == '__init__.py':
-                continue
             with self.subTest(file=path.name):
                 content = path.read_text(encoding='utf-8')
                 dumps_calls = len(re.findall(r'json\.dumps\(', content))
@@ -73,51 +39,9 @@ class TestCliJsonContract(unittest.TestCase):
                 self.assertGreaterEqual(
                     envelope_calls, dumps_calls,
                     f"{path.name} has {dumps_calls} json.dumps() call(s) but only "
-                    f"{envelope_calls} add_cli_contract_fields() call(s) — new "
-                    f"--format json output must carry the Output Contract envelope."
+                    f"{envelope_calls} add_cli_contract_fields() call(s) -- print a "
+                    f"result through emit_subcommand_result (cli/routing/subcommand.py).",
                 )
-
-
-class TestBack1178MetaContractVersionParity(unittest.TestCase):
-    """BACK-1178: cli/commands/*.py's --format json envelope must keep the
-    adapter's own 'contract_version'/'meta' rather than stripping them and
-    re-deriving a 1.0/no-meta envelope from add_cli_contract_fields() -- that
-    split made the subcommand form disagree with its uri:// twin over the
-    same payload. Round 1 fixed 6 files (overview/hotspots/deps/surface/
-    contracts/architecture) but missed trace.py, which had the byte-identical
-    strip pattern and went undetected because TestCliJsonContract above only
-    checks envelope *presence*, not which keys survive it. Static, so it
-    catches a reintroduced 'contract_version'/'meta' entry in the strip
-    tuple without needing to execute each command."""
-
-    _FILES = (
-        'overview.py', 'hotspots.py', 'deps.py', 'surface.py',
-        'contracts.py', 'architecture.py', 'trace.py',
-    )
-
-    def test_strip_tuple_keeps_contract_version_and_meta(self):
-        for filename in self._FILES:
-            with self.subTest(file=filename):
-                content = (_COMMANDS_DIR / filename).read_text(encoding='utf-8')
-                strip_tuples = re.findall(r"if k not in \(([^)]*)\)", content)
-                self.assertTrue(
-                    strip_tuples,
-                    f"{filename}: expected a 'if k not in (...)' report-rebuild "
-                    f"strip tuple; update this test if the pattern changed.",
-                )
-                for tup in strip_tuples:
-                    self.assertNotIn(
-                        "'contract_version'", tup,
-                        f"{filename} strips 'contract_version' from its own "
-                        f"report before enveloping -- reintroduces BACK-1178's "
-                        f"1.0-vs-1.1 split against the uri:// form.",
-                    )
-                    self.assertNotIn(
-                        "'meta'", tup,
-                        f"{filename} strips 'meta' from its own report before "
-                        f"enveloping -- reintroduces BACK-1178's split against "
-                        f"the uri:// form.",
-                    )
 
 
 class TestCheckJsonContract(unittest.TestCase):

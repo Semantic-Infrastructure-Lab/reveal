@@ -44,6 +44,11 @@
   "reveal/utils/updates.py": 2,
   "reveal/utils/warning_render.py": 2
  },
+ "subcommand-output": {
+  "reveal/checks.py": 1,
+  "reveal/cli/commands/review.py": 1,
+  "reveal/cli/file_checker.py": 2
+ },
  "tree-sitter-import": {
   "reveal/adapters/ast/nav_contracts_cpp.py": 1,
   "reveal/adapters/ast/nav_contracts_go.py": 1,

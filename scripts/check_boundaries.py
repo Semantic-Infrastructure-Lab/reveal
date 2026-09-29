@@ -39,6 +39,11 @@ Rules (home = where the concern is allowed to live):
     it once into a ``reveal.cli.invocation.Invocation``; everything else asks
     ``current_invocation()``. A raw re-read is how ``reveal --format json overview`` missed
     the subcommand, ``-qc`` copied nothing, and MCP provenance named the server as the command.
+``subcommand-output`` (BACK-1544 -> BACK-1059)
+    ``add_cli_contract_fields()``: a ``reveal <name>`` result's JSON envelope. Home:
+    ``reveal/cli/routing/subcommand.py::emit_subcommand_result``, which also acts on the
+    result's outcome (a failed result exits 1, a cut list is printed). A runner that built
+    its own envelope never did, which is how ``reveal overview`` lost its cut line.
 
 Code under ``if __name__ == '__main__':`` is exempt from ``exit`` and ``print``.
 Suppress one deliberate site with ``# boundary-ok: <rule> -- <why>`` on any line of the
@@ -88,6 +93,11 @@ RULES: Dict[str, Dict[str, Any]] = {
         'task': 'BACK-1058',
         'fix': 'ask reveal.cli.invocation.current_invocation() (the command line, parsed once)',
         'home': (('func', 'reveal/main.py', 'main'),),
+    },
+    'subcommand-output': {
+        'task': 'BACK-1544 (removal: BACK-1545 for check)',
+        'fix': 'print the result through reveal.cli.routing.subcommand.emit_subcommand_result',
+        'home': (('func', 'reveal/cli/routing/subcommand.py', 'emit_subcommand_result'),),
     },
     'print': {
         'task': 'BACK-1368 (removal: BACK-916)',
@@ -261,6 +271,8 @@ class _Scanner(ast.NodeVisitor):
             self._add('exit', node)
         if name in ('print', 'sys.stdout.write', 'sys.stderr.write'):
             self._add('print', node)
+        if name.rsplit('.', 1)[-1] == 'add_cli_contract_fields':
+            self._add('subcommand-output', node)
         self.generic_visit(node)
 
 

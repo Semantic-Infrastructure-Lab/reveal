@@ -8,6 +8,7 @@ backward compatibility with existing callers/tests.
 import argparse
 import sys
 from argparse import Namespace
+from functools import partial
 from pathlib import Path
 
 from reveal.adapters.ast.surface_matrix import CATEGORIES
@@ -28,6 +29,7 @@ from reveal.adapters.surface import (  # noqa: F401 - re-exported for back-compa
     _supported_coverage_languages,
 )
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
+from ..routing.subcommand import emit_subcommand_result
 
 
 def create_surface_parser() -> argparse.ArgumentParser:
@@ -108,25 +110,5 @@ def run_surface(args: Namespace) -> None:
 
     query = f'type={type_filter}&source_only={"true" if source_only else "false"}&by={by}&depth={depth}'
     result = SurfaceAdapter(str(path), query).get_structure()
-
-    if args.format == 'json':
-        from reveal.utils.results import add_cli_contract_fields
-        from reveal.utils.json_utils import attach_provenance
-        import json
-        # BACK-1178: keep the adapter's own 'contract_version' and 'meta'.
-        # Stripping them made this subcommand emit a 1.0 envelope for the
-        # same payload its uri:// form emits as 1.1 -- self-consistent (1.0
-        # is the no-meta baseline) but a needless split for a consumer that
-        # reaches the same data two ways. type/source/source_type are still
-        # rebuilt below with the CLI-appropriate values.
-        report = {
-            k: v for k, v in result.items()
-            if k not in ('type', 'source', 'source_type')
-        }
-        print(json.dumps(
-            attach_provenance(add_cli_contract_fields(report, result_type='surface', source=path)),
-            indent=2, default=str,
-        ))
-        return
-
-    SurfaceRenderer.render_structure(result, format=args.format, top=top)
+    emit_subcommand_result(result, args, name='surface', source=path, render=partial(
+        SurfaceRenderer.render_structure, format=args.format, top=top))

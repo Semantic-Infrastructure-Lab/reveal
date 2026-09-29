@@ -328,7 +328,11 @@ Adapters MAY include additional fields beyond the contract. These fields:
 
 A result says what happened through two top-level fields and one kind of `meta.warnings`
 entry. `reveal.utils.results.outcome_of` is the one definition, and the URI router turns it
-into the exit code for every adapter, in text and JSON alike (BACK-1059):
+into the exit code for every adapter, in text and JSON alike (BACK-1059). The subcommands
+(`reveal overview`, `reveal hotspots`, ...) print their results through the same handling,
+`cli/routing/subcommand.emit_subcommand_result`, so a failed or cut answer reads the same in
+both forms (BACK-1544). A subcommand's findings exit (`hotspots`/`deps` exit 1 on findings,
+`check`'s 0/1/2/3) is its own and applies after:
 
 | Outcome | How the result says it | Exit | Build it with |
 |---|---|---|---|
@@ -350,9 +354,14 @@ into the exit code for every adapter, in text and JSON alike (BACK-1059):
 - **Problems inside an answer are not a failure.** Per-file parse failures in a result that
   was still produced go in `meta.errors` (v1.1). An error on one item of a list stays on that
   item. Neither changes the outcome.
+- **A subcommand passes its result to `emit_subcommand_result`; it doesn't print its own
+  JSON.** That function adds the envelope (the subcommand's name as `type`, the adapter's
+  `contract_version` and `meta` kept) and acts on the outcome. `scripts/check_boundaries.py`
+  counts `add_cli_contract_fields()` calls outside it (rule `subcommand-output`), and the count
+  may only fall.
 - `tests/test_result_outcome.py` and `tests/test_result_truncation.py` pin the definition,
   the exit path and the truncation line; `tests/test_output_contract_compliance.py` runs
-  every registered adapter against them.
+  every registered adapter and subcommand against them.
 
 ---
 
