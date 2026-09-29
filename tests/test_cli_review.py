@@ -391,11 +391,14 @@ class TestRunCheck(unittest.TestCase):
 class TestRunHotspots(unittest.TestCase):
 
     @patch('reveal.adapters.stats.adapter.StatsAdapter')
-    def test_returns_top_10(self, MockAdapter):
+    def test_returns_the_whole_ranking(self, MockAdapter):
+        """run_review cuts it to 10 and records the cut (BACK-1543), so the runner asks
+        stats for every hotspot."""
         hotspots = [{'file': f'f{i}.py'} for i in range(15)]
         MockAdapter.return_value.get_structure.return_value = {'hotspots': hotspots}
         result = _run_hotspots(Path('/tmp'))
-        self.assertEqual(len(result), 10)
+        self.assertEqual(len(result), 15)
+        self.assertIn('top=0', MockAdapter.call_args.args[1])
 
     @patch('reveal.adapters.stats.adapter.StatsAdapter', side_effect=Exception("fail"))
     def test_exception_returns_empty(self, _mock):

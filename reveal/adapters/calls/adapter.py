@@ -27,7 +27,7 @@ from .confidence import build_meta as _call_graph_meta
 from .index import find_callers, find_callees, find_callees_recursive, find_uncalled, rank_by_callers, build_module_dependency_graph
 from .renderer import render_calls_structure
 from ...utils.query import parse_query_params
-from ...utils.results import ResultBuilder
+from ...utils.results import ResultBuilder, note_truncation
 
 
 _HELP: Dict[str, Any] = {
@@ -388,13 +388,17 @@ class CallsAdapter(ResourceAdapter):
                 include_test_framework=include_test_framework,
             )
             result_data['path'] = self.path
-            return ResultBuilder.create(
+            result = ResultBuilder.create(
                 result_type='calls_ranking',
                 source=self.path,
                 contract_version=CONTRACT_VERSION,
                 data=result_data,
                 **_call_graph_meta(self.path),
             )
+            # BACK-1543: 'top'/'total_unique_callees' said it; the marker is what gets printed.
+            note_truncation(result, 'entries', len(result_data['entries']),
+                            result_data['total_unique_callees'], 'limit', hint='raise ?top=N')
+            return result
 
         if uncalled:
             self._warn_depth_ignored('uncalled')
@@ -409,13 +413,16 @@ class CallsAdapter(ResourceAdapter):
             query_format = self.query_params.get('format', '')
             if query_format:
                 result_data['_query_format'] = query_format
-            return ResultBuilder.create(
+            result = ResultBuilder.create(
                 result_type='calls_uncalled',
                 source=self.path,
                 contract_version=CONTRACT_VERSION,
                 data=result_data,
                 **_call_graph_meta(self.path, uncalled=True),
             )
+            note_truncation(result, 'entries', len(result_data['entries']),
+                            result_data['total_uncalled'], 'limit', hint='raise ?top=N')
+            return result
 
         if root:
             self._warn_top_ignored()

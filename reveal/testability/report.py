@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Sequence
 
 from .boundaries import BoundaryProfile, collect_boundary_profiles, module_name_from_file, profile_score
 from ..reveal_types import CONTRACT_VERSION
+from ..utils.results import note_truncation
 from .patches import PatchGroup, group_patches, scan_patches
 
 
@@ -21,16 +22,17 @@ def build_testability_report(
 ) -> Dict[str, Any]:
     """Build the composed testability pressure report."""
     patches = scan_patches(test_paths)
-    patch_groups = group_patches(patches, group_by='target', limit=0, min_count=min_patches)
+    patch_groups = group_patches(patches, group_by='target', min_count=min_patches)
     profiles = collect_boundary_profiles(src_path)
 
     profile_rows = _rank_profiles(src_path, profiles, patch_groups, min_categories)
     target_rows = _rank_targets(src_path, patch_groups, profiles, include_unresolved)
 
+    all_targets, all_profiles = target_rows, profile_rows
     target_rows = target_rows[:top] if top > 0 else target_rows
     profile_rows = profile_rows[:top] if top > 0 else profile_rows
 
-    return {
+    report = {
         'contract_version': CONTRACT_VERSION,
         'type': 'testability_report',
         'source': str(Path(src_path)),
@@ -54,6 +56,12 @@ def build_testability_report(
             'errors': [],
         },
     }
+    # BACK-1543: 'testability://src?top=3' showed 3 of 75 patch hotspots as all of them.
+    note_truncation(report, 'patch_hotspots', len(target_rows), len(all_targets), 'limit',
+                    hint='raise ?top=N')
+    note_truncation(report, 'boundary_hotspots', len(profile_rows), len(all_profiles), 'limit',
+                    hint='raise ?top=N')
+    return report
 
 
 def _rank_targets(

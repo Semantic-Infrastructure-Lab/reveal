@@ -368,13 +368,16 @@ def _ts_build_patch_use(
 def group_patches(
     patches: Iterable[PatchUse],
     group_by: str = 'target',
-    limit: int = 20,
     min_count: int = 1,
     target_filter: str = '',
     private_only: bool = False,
     suppress: bool = True,
 ) -> List[PatchGroup]:
-    """Group patch uses by target, test, or file."""
+    """Group patch uses by target, test, or file, every group, highest pressure first.
+
+    The caller cuts the list and records the cut (BACK-1543): a ``limit`` here dropped the
+    total, so ``patches://tests?limit=3&group=file`` showed 3 of 124 groups as all of them.
+    """
     patch_list = list(patches)
     if suppress:
         patch_list = [p for p in patch_list if not _is_suppressed(p)]
@@ -424,7 +427,7 @@ def group_patches(
         ))
 
     groups.sort(key=lambda g: (g.score, g.patch_count, g.key), reverse=True)
-    return groups[:limit] if limit > 0 else groups
+    return groups
 
 
 def _scan_file(file_path: Path) -> List[PatchUse]:

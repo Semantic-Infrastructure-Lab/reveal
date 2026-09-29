@@ -35,7 +35,7 @@ from ..registry import DECLARATION_ONLY_EXTENSIONS, get_code_extensions
 from ..utils.exclusions import path_is_excluded
 from ..utils.gitignore import gitignore_filter
 from ..utils.path_utils import is_skippable_dir, to_posix, to_relative_display
-from ..utils.results import ResultBuilder
+from ..utils.results import ResultBuilder, note_truncation
 
 # Disk-cache namespace for this adapter's resolved import graph (BACK-834).
 # Mirrors rules/imports/I002.py's own import-graph disk cache (_tree_fingerprint
@@ -1537,10 +1537,13 @@ class ImportsAdapter(ResourceAdapter):
         )
 
         total = len(entries)
-        if top:
+        if top and top > 0:  # a negative slice would drop the tail, not cap
             entries = entries[:top]
 
-        return self._build_response('fan_in_ranking', entries=entries, total=total)
+        response = self._build_response('fan_in_ranking', entries=entries, total=total)
+        # BACK-1543: 'total' said it; the marker is what gets printed.
+        note_truncation(response, 'entries', len(entries), total, 'limit', hint='raise ?top=N')
+        return response
 
     def _format_entrypoints(self) -> Dict[str, Any]:
         """Return files with fan-in=0 — nothing imports them.

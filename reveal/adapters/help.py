@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer, _ADAPTER_REGISTRY
 from ..utils.formatting import shell_command
-from ..utils.results import ResultBuilder
+from ..utils.results import ResultBuilder, note_truncation
 from reveal.reveal_types import CONTRACT_VERSION
 
 # Valid help_category values for the help:// index listing.
@@ -282,6 +282,8 @@ class HelpRenderer:
         print(f"Error accessing help: {error}", file=sys.stderr)
 
 
+# help://search lists at most this many hits and records the rest as a cut (BACK-1543).
+_SEARCH_HIT_CAP = 20
 _FENCE_RE = re.compile(r'^\s*(```|~~~)')
 _HEADING_RE = re.compile(r'^(#{1,6})\s+(.*)')
 
@@ -1099,9 +1101,10 @@ class HelpAdapter(ResourceAdapter):
             })
 
         hits.sort(key=lambda h: (-h.pop('_strength'), _TYPE_PRIORITY.get(h['type'], 9)))
-        hits = hits[:20]
+        found = len(hits)
+        hits = hits[:_SEARCH_HIT_CAP]
 
-        return {
+        result = {
             'type': 'help_search',
             'query': term,
             'count': len(hits),
@@ -1111,6 +1114,10 @@ class HelpAdapter(ResourceAdapter):
                 else ['reveal help://quick', 'reveal help://adapters']
             ),
         }
+        # BACK-1543: 'help://search/file' listed 20 of 47 hits as all of them.
+        note_truncation(result, 'hits', len(hits), found, 'limit',
+                        hint='add a search word to narrow it')
+        return result
 
     def _get_adapter_description(self, adapter_class: type[Any]) -> str:
         """Get description from adapter's help method.

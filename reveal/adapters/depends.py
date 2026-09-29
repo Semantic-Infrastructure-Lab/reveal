@@ -24,7 +24,7 @@ from ..analyzers.imports.generic import CImportExtractor, CppImportExtractor
 from ..defaults import SKIP_DIRECTORIES
 from ..utils.query import parse_query_params
 from ..utils.gitignore import gitignore_filter
-from ..utils.results import ResultBuilder
+from ..utils.results import ResultBuilder, note_truncation
 from ..utils.path_utils import (
     is_skippable_dir,
     is_unsafe_scan_root,
@@ -1606,6 +1606,7 @@ class DependsAdapter(ResourceAdapter):
             if dep.get('module') and os.path.isabs(dep['module']):
                 dep['module'] = to_relative_display(dep['module'], self._scan_root)
 
+        shown = dependents[:top_n] if top_n else dependents
         result = ResultBuilder.create(
             result_type='module_dependents',
             source=to_relative_display(str(self._target_path), self._scan_root),
@@ -1613,12 +1614,13 @@ class DependsAdapter(ResourceAdapter):
             source_type='file',
             data={
                 'target': to_relative_display(str(target), self._scan_root),
-                'dependents': dependents[:top_n] if top_n else dependents,
+                'dependents': shown,
                 'count': len(dependents),  # the total, also when top= shows fewer (BACK-1496)
                 'metadata': self.get_metadata(),
                 '_meta': self._build_meta(),
             },
         )
+        note_truncation(result, 'dependents', len(shown), len(dependents), 'limit', hint='raise ?top=N')
         # BACK-547: undercount_possible flags that an empty result may be a lower
         # bound (intra-project imports that didn't resolve), so the renderer
         # softens the confident "nothing imports this" assertion and the ⚠ shows.
@@ -1674,6 +1676,9 @@ class DependsAdapter(ResourceAdapter):
                 '_meta': self._build_meta(),
             },
         )
+        # total_modules stays for JSON readers; the marker is what every renderer and the
+        # router read as a cut (BACK-1543).
+        note_truncation(result, 'modules', len(modules), total_modules, 'limit', hint='raise ?top=N')
         empty = not modules
         result['undercount_possible'] = empty and self._unresolved_intra > 0
         warnings = self._warnings(include_honest_decline=empty)

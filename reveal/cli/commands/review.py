@@ -11,6 +11,10 @@ from typing import Any, Dict, List, Optional
 from ..global_flags import add_gitignore_arguments
 from ..routing.ledger import complete
 from ..routing.subcommand import emit_subcommand_result
+from ...utils.results import note_truncation
+
+# Hotspots and complex functions each list their top this-many (BACK-1543 records the rest).
+_SECTION_TOP = 10
 
 
 def create_review_parser() -> argparse.ArgumentParser:
@@ -112,13 +116,13 @@ def run_review(args: Namespace) -> None:
 
     # Step 4: Hotspots
     print("  Analyzing hotspots…", file=sys.stderr)
-    hotspots = _run_hotspots(path, files=changed_files)
-    report['sections']['hotspots'] = hotspots
+    _add_top_section(report, 'hotspots', _run_hotspots(path, files=changed_files),
+                     'see all: reveal hotspots <path> --all')
 
     # Step 5: Complexity
     print("  Scanning complexity…", file=sys.stderr)
-    complexity = _run_complexity(path, files=changed_files)
-    report['sections']['complexity'] = complexity
+    _add_top_section(report, 'complexity', _run_complexity(path, files=changed_files),
+                     "see all: reveal 'ast://<path>?complexity>10&sort=-complexity'")
 
     if errors:
         report['errors'] = errors
@@ -135,6 +139,17 @@ def run_review(args: Namespace) -> None:
 
     complete(args)  # the exit code is the result: the flag ledger still reports
     sys.exit(report['exit_code'])
+
+
+def _add_top_section(report: Dict[str, Any], name: str, ranked: List[Dict[str, Any]],
+                     hint: str) -> None:
+    """Keep the top ``_SECTION_TOP`` of a ranked section and record the cut (BACK-1543).
+
+    ``reveal review --format json`` listed 10 hotspots and 10 complex functions with no
+    total, so a reader took them for all there were.
+    """
+    report['sections'][name] = ranked[:_SECTION_TOP]
+    note_truncation(report, name, min(len(ranked), _SECTION_TOP), len(ranked), 'limit', hint=hint)
 
 
 def _review_outcome(violations: List[Dict[str, Any]], errors: List[str]) -> tuple:
@@ -274,7 +289,7 @@ def _run_hotspots(path: Optional[Path],
         hotspots: List[Dict[str, Any]] = []
         for target in targets:
             try:
-                adapter = StatsAdapter(str(target), 'hotspots=true')
+                adapter = StatsAdapter(str(target), 'hotspots=true&top=0')  # all: cut once, above
                 data = adapter.get_structure(hotspots=True)
                 found = data.get('hotspots', data.get('files', [])) or []
                 hotspots.extend(_as_hotspot(h) for h in found)
@@ -283,7 +298,7 @@ def _run_hotspots(path: Optional[Path],
                 continue
         hotspots = [h for h in hotspots if not _is_perfect_quality(h)]
         hotspots.sort(key=_hotspot_score, reverse=True)
-        return hotspots[:10]
+        return hotspots
     except Exception as e:
         print(f"Warning: hotspot analysis failed, skipping: {e}", file=sys.stderr)
         return []
@@ -334,7 +349,8 @@ def _run_complexity(path: Optional[Path],
         results: List[Dict[str, Any]] = []
         for target in targets:
             try:
-                adapter = AstAdapter(str(target), 'complexity>10&sort=-complexity&limit=10')
+                # limit=1000000 as ast's --all: no auto-cap, so the section's total is real.
+                adapter = AstAdapter(str(target), 'complexity>10&sort=-complexity&limit=1000000')
                 data = adapter.get_structure()
                 found = data.get('results', data.get('elements', [])) or []
                 results.extend(found)
@@ -342,7 +358,7 @@ def _run_complexity(path: Optional[Path],
                 print(f"Warning: complexity analysis failed for {target}, skipping: {e}", file=sys.stderr)
                 continue
         results.sort(key=lambda r: r.get('complexity', 0) or 0, reverse=True)
-        return results[:10]
+        return results
     except Exception as e:
         print(f"Warning: complexity analysis failed, skipping: {e}", file=sys.stderr)
         return []

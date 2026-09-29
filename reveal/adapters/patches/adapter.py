@@ -9,7 +9,7 @@ from reveal.adapters.base import ResourceAdapter, register_adapter, register_ren
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.testability.patches import group_patches, scan_patches
 from reveal.utils.query import parse_query_params
-from reveal.utils.results import ResultBuilder
+from reveal.utils.results import ResultBuilder, note_truncation
 from reveal.utils.validation import require_path_exists
 
 from .renderer import PatchesRenderer
@@ -132,15 +132,15 @@ class PatchesAdapter(ResourceAdapter):
         _suppress_raw = self.query_params.get('suppress')
         suppress = str(_suppress_raw).lower() != 'false' if _suppress_raw is not None else True
 
-        groups = group_patches(
+        ranked = group_patches(
             patches,
             group_by=group_by,
-            limit=limit,
             min_count=min_count,
             target_filter=target_filter,
             private_only=private_only,
             suppress=suppress,
         )
+        groups = ranked[:limit] if limit > 0 else ranked
         targets = {p.target_qualname or p.target_raw for p in patches}
 
         warnings = [{
@@ -148,7 +148,7 @@ class PatchesAdapter(ResourceAdapter):
             'message': 'Patch pressure is advisory; mocking external boundaries can be correct.',
         }]
 
-        return ResultBuilder.create(
+        result = ResultBuilder.create(
             result_type='patches_scan',
             source=self.path,
             contract_version=CONTRACT_VERSION,
@@ -172,3 +172,6 @@ class PatchesAdapter(ResourceAdapter):
                 'uses': [p.to_dict() for p in patches],
             },
         )
+        # BACK-1543: '?limit=3&group=file' showed 3 of 124 groups as all of them.
+        note_truncation(result, 'groups', len(groups), len(ranked), 'limit', hint='raise ?limit=N')
+        return result

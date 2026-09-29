@@ -586,11 +586,16 @@ class TestXlsxAdapterCrossSheetSearch:
         assert any('Alice' in str(c) for c in match['cells'])
 
     def test_search_limit_respected(self, multi_sheet_xlsx):
-        """?limit=N caps total search results."""
-        uri = f"xlsx://{multi_sheet_xlsx}?search=Widget&limit=1"
-        adapter = XlsxAdapter(uri)
-        result = adapter.get_structure()
-        assert result['total_matches'] == 1
+        """?limit=N caps the listed matches; total_matches still counts them all, and the
+        cut is recorded (BACK-1543: total_matches was counted after the cut)."""
+        from reveal.utils.results import truncations_of
+        full = XlsxAdapter(f"xlsx://{multi_sheet_xlsx}?search=Widget").get_structure()
+        assert full['total_matches'] > 1
+        result = XlsxAdapter(f"xlsx://{multi_sheet_xlsx}?search=Widget&limit=1").get_structure()
+        assert sum(len(sr['matches']) for sr in result['sheet_results']) == 1
+        assert result['total_matches'] == full['total_matches']
+        [cut] = truncations_of(result)
+        assert (cut['field'], cut['shown'], cut['total']) == ('matches', 1, full['total_matches'])
 
     def test_search_includes_pattern_in_result(self, multi_sheet_xlsx):
         """Result always echoes the search pattern."""

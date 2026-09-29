@@ -72,8 +72,8 @@ def test_two():
 ''')
 
     uses = scan_patches([test_file])
-    by_target = group_patches(uses, group_by='target', min_count=1, limit=10)
-    by_test = group_patches(uses, group_by='test', min_count=2, limit=10)
+    by_target = group_patches(uses, group_by='target', min_count=1)
+    by_test = group_patches(uses, group_by='test', min_count=2)
 
     assert by_target[0].key == 'app.service.fetch_price'
     assert by_target[0].patch_count == 2

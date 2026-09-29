@@ -35,14 +35,19 @@ proves nothing about the adapter's normal output. Invariants:
    outcome, so slice 2 of BACK-1059 silently dropped ``reveal overview``'s cut line
    (BACK-1544). ``SUBCOMMAND_CUT_ARGV`` makes the fixture cut real lists, and
    ``test_the_subcommand_cut_invariant_bites`` checks that it does.
+7. ``own_cap``: every list an adapter's own cap knob makes shorter is disclosed. The knob is
+   the key its ``CLI_QUERY_FLAGS['all']`` lifts, or a ``top``/``limit`` its schema declares;
+   the adapter runs on the wider ``wide/`` tree with the knob at 1 and uncapped. A cap the
+   adapter applies itself is a ``[:N]`` the router never sees, so ``--head`` (invariant 5)
+   can't expose it: ``stats://?hotspots=true&top=2`` showed 2 of 43 hotspot files as the
+   whole list (BACK-1543). ``test_the_own_cap_invariant_bites`` checks that it cuts.
 
 Violations that exist today are listed in ``KNOWN_VIOLATIONS`` as strict xfails, each
 naming its task. A fix makes its case XPASS, which fails the run until the entry is
 deleted. The list can only shrink.
 
-Not covered yet (BACK-1513 follow-ups): an adapter's own undisclosed caps (a ``[:N]`` the
-router never sees, so ``--head`` can't expose it), consumed flags (BACK-1514), and POSIX
-separators on Windows.
+Not covered yet (BACK-1513 follow-ups): caps with no knob (a hard-coded ``[:20]``, which
+invariant 7 can't vary), consumed flags (BACK-1514), and POSIX separators on Windows.
 """
 
 import json
@@ -133,6 +138,8 @@ KNOWN_VIOLATIONS = {
     ('abs_path', 'testability'): 'BACK-1366',
     ('abs_path', 'xlsx'): 'BACK-1366',
     ('subcommand', 'check'): 'BACK-1545',
+    ('own_cap', 'git'): 'BACK-1547',
+    ('own_cap', 'overview'): 'BACK-1547',
 }
 
 # How to run each `reveal <name>` against the fixture (invariant 6). Every COMMANDS entry
@@ -162,6 +169,18 @@ NOT_A_QUERY = {
 # is not vacuously green.
 SUBCOMMAND_CUT_ARGV = {
     'hotspots': ['--top', '1', '--min-complexity', '1'],
+}
+
+# Invariant 7 runs each adapter that has a cap knob on the wider tree: its FIXTURE_URIS row
+# with 'proj' read as 'wide', plus any other views listed here (a view is where a list, and
+# the knob that caps it, lives: calls:// ranks only under ?uncalled or ?rank=).
+OWN_CAP_URIS = {
+    'calls': ['calls://wide?uncalled', 'calls://wide?rank=callers'],
+    'depends': ['depends://wide/pkg/y.py'],
+    'git': ['git://wide/app.py?type=history'],
+    'imports': ['imports://wide?rank=fan-in'],
+    'stats': ['stats://wide?hotspots=true'],
+    'xlsx': ['xlsx://wide/data.xlsx?sheet=Sheet', 'xlsx://wide/data.xlsx?search=n'],
 }
 
 _REQUIRED_FIELDS = ['contract_version', 'type', 'source', 'source_type']
@@ -217,12 +236,60 @@ def _build_tree(root: Path) -> None:
         wb.save(str(proj / 'data.xlsx'))
     except ImportError:
         pass
+    _build_wide_tree(root / 'wide')
     if shutil.which('git'):  # the root is the repo: git:// resolves it from the cwd
         env = dict(os.environ, GIT_AUTHOR_NAME='t', GIT_AUTHOR_EMAIL='t@example.com',
                    GIT_COMMITTER_NAME='t', GIT_COMMITTER_EMAIL='t@example.com')
-        for cmd in (['init', '-q'], ['add', 'proj'], ['commit', '-q', '-m', 'init']):
+        for cmd in (['init', '-q'], ['add', 'proj', 'wide'], ['commit', '-q', '-m', 'init']):
             subprocess.run(['git', '-C', str(root)] + cmd, check=True, env=env,
                            capture_output=True)
+        with open(root / 'wide' / 'app.py', 'a', encoding='utf-8') as f:
+            f.write('\n\ndef later():\n    pass\n')
+        subprocess.run(['git', '-C', str(root), 'commit', '-q', '-am', 'second'], check=True,
+                       env=env, capture_output=True)
+
+
+def _build_wide_tree(wide: Path) -> None:
+    """Two or more of everything a cap knob cuts (invariant 7): hotspot files, complex
+    functions, callers, imports, modules, patches, JSON items, sheet rows, commits. Kept
+    apart from proj/ so the other invariants' fixture answers don't move."""
+    (wide / 'pkg').mkdir(parents=True)
+    (wide / 'tests').mkdir()
+    nested = ''.join('    ' * (i + 1) + f'if x > {i}:\n' for i in range(6)) + '    ' * 7 + 'return x\n'
+    branches = ''.join(f'    if x == {i}:\n        return {i}\n' for i in range(12))
+    for n in ('a', 'b', 'c'):
+        (wide / f'deep_{n}.py').write_text(
+            f'def deep_{n}(x):\n{nested}    return 0\n\n\n'
+            f'def cx_{n}(x):\n{branches}    return -1\n', encoding='utf-8')
+    (wide / 'app.py').write_text(
+        'import os\nimport json\nimport sys\nfrom pkg import x, y\n\n\n'
+        'def main():\n    return helper() + a() + b()\n\n\n'
+        'def a():\n    return helper()\n\n\ndef b():\n    return helper()\n\n\n'
+        'def helper():\n    return os.getcwd()\n\n\n'
+        'def unused_one():\n    pass\n\n\ndef unused_two():\n    pass\n', encoding='utf-8')
+    (wide / 'pkg' / '__init__.py').write_text('', encoding='utf-8')
+    (wide / 'pkg' / 'x.py').write_text(
+        'import requests\nimport yaml\nfrom pkg import y\n\n\ndef fx():\n    return y.fy()\n',
+        encoding='utf-8')
+    (wide / 'pkg' / 'y.py').write_text(
+        'import numpy\nfrom pkg import x\n\n\ndef fy():\n    return 1\n', encoding='utf-8')
+    (wide / 'tests' / 'test_app.py').write_text(
+        'from unittest import mock\n\n\ndef test_main():\n'
+        '    with mock.patch("app.helper"):\n        pass\n'
+        '    with mock.patch("app.a"):\n        pass\n\n\n'
+        'def test_b():\n    with mock.patch("app.b"):\n        pass\n', encoding='utf-8')
+    (wide / 'data.json').write_text(json.dumps([{'n': i} for i in range(4)]), encoding='utf-8')
+    for i in range(3):
+        (wide / f'doc{i}.md').write_text(f'# Doc {i}\n\n## One\n\n## Two\n', encoding='utf-8')
+    try:
+        import openpyxl
+        wb = openpyxl.Workbook()
+        for i in range(4):
+            wb.active.append([f'n{i}', i])
+        wb.create_sheet('second').append(['k'])
+        wb.save(str(wide / 'data.xlsx'))
+    except ImportError:
+        pass
 
 
 class _Harness:
@@ -367,7 +434,7 @@ def test_every_registered_adapter_is_covered():
 def test_known_violations_name_real_cases():
     for invariant, scheme in KNOWN_VIOLATIONS:
         assert invariant in ('contract', 'missing', 'error_exit', 'abs_path', 'truncation',
-                             'subcommand')
+                             'subcommand', 'own_cap')
         assert scheme in (SUBCOMMAND_ARGV if invariant == 'subcommand' else FIXTURE_URIS)
 
 
@@ -487,3 +554,73 @@ def test_the_subcommand_cut_invariant_bites(harness):
             name, *SUBCOMMAND_ARGV[name], *extra, '--format', 'text')
         assert results and truncations_of(results[-1]), f'reveal {name} {extra}: nothing was cut'
         assert '⚠ Truncated ' in text
+
+
+# --- Invariant 7: an adapter's own cap (BACK-1543) ----------------------------------------
+
+def _cap_knobs(scheme):
+    """The query keys that cap this adapter's lists: the one --all lifts, plus a declared
+    top/limit. Derived from the adapter's own declarations, never a hand-written table."""
+    cls = adapters_base.get_adapter_class(scheme)
+    knobs = set()
+    lifted = (getattr(cls, 'CLI_QUERY_FLAGS', None) or {}).get('all')
+    if lifted:
+        knobs.add(lifted.partition('=')[0])
+    params = (cls.get_schema() or {}).get('query_params') or {}
+    return sorted(knobs | {key for key in params if key in ('top', 'limit')})
+
+
+def _own_cap_uris(scheme):
+    return [FIXTURE_URIS[scheme].replace('://proj', '://wide')] + OWN_CAP_URIS.get(scheme, [])
+
+
+def _lists(obj, path=()):
+    """(path, list) for every list in a result, two dict levels deep, meta excluded."""
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            if key == 'meta':
+                continue
+            if isinstance(value, list):
+                yield path + (key,), value
+            elif isinstance(value, dict) and len(path) < 2:
+                yield from _lists(value, path + (key,))
+
+
+def _knob_cuts(harness, scheme):
+    """{'<view>?<knob>=1': ([shortened list paths], cut result)}, each view with each knob
+    at 1 vs uncapped."""
+    harness.fixture_uri(scheme)  # the same skips as the proj/ runs
+    cuts = {}
+    for uri in _own_cap_uris(scheme):
+        sep = '&' if '?' in uri else '?'
+        for knob in _cap_knobs(scheme):
+            _, full, _ = harness.run(f'{uri}{sep}{knob}=1000000')
+            _, cut, _ = harness.run(f'{uri}{sep}{knob}=1')
+            whole, part = dict(_lists(full)), dict(_lists(cut))
+            cuts[f'{uri}{sep}{knob}=1'] = (
+                sorted(p for p, v in whole.items() if p in part and len(part[p]) < len(v)), cut)
+    return cuts
+
+
+@pytest.mark.parametrize('scheme', _cases('own_cap', sorted(
+    s for s in FIXTURE_URIS if _cap_knobs(s))))
+def test_an_adapters_own_cap_is_disclosed(harness, scheme):
+    hidden = {}
+    for run, (shortened, cut) in _knob_cuts(harness, scheme).items():
+        disclosed = {entry.get('field') for entry in truncations_of(cut)}
+        missed = ['.'.join(path) for path in shortened if path[-1] not in disclosed]
+        if missed:
+            hidden[run] = missed
+    assert not hidden, (
+        f'cut without saying so: {hidden}. Record it with note_truncation '
+        f'(reveal/utils/results.py), or compose(..., cut_as=...)')
+
+
+def test_the_own_cap_invariant_bites(harness):
+    """Positive control: on wide/ a knob at 1 really cuts these adapters' lists, so
+    test_an_adapters_own_cap_is_disclosed is not vacuously green."""
+    expected = ['ast', 'calls', 'depends', 'git', 'hotspots', 'imports', 'json', 'overview',
+                'patches', 'stats', 'xlsx']
+    bitten = [scheme for scheme in sorted(s for s in FIXTURE_URIS if _cap_knobs(s))
+              if any(shortened for shortened, _ in _knob_cuts(harness, scheme).values())]
+    assert bitten == expected

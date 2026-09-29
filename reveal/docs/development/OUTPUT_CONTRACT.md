@@ -351,6 +351,13 @@ both forms (BACK-1544). A subcommand's findings exit (`hotspots`/`deps` exit 1 o
   render: `⚠ Truncated <field>: showing N of M — <how to see more>` on stdout for text, on
   stderr for grep. Renderers leave `truncated` warnings alone. An adapter that shows a
   composed child's list as its own passes `compose(..., cut_as=(field, hint))`.
+- **A cap the adapter applies itself is a cut too.** Count the whole list, then keep the top
+  N and record it with the adapter's own knob as the hint (`hint='raise ?top=N'`). Cut where
+  the knob is read, not inside a shared helper: a helper that returns only the top N has lost
+  the total (`identify_hotspots`, `group_patches` did, BACK-1543). A total field (`total`,
+  `total_modules`, `count`) may stay for JSON readers, but it doesn't replace the marker. A
+  cap with no knob still records the cut and says how to narrow the question
+  (`help://search`: `add a search word to narrow it`).
 - **Problems inside an answer are not a failure.** Per-file parse failures in a result that
   was still produced go in `meta.errors` (v1.1). An error on one item of a list stays on that
   item. Neither changes the outcome.
@@ -361,7 +368,9 @@ both forms (BACK-1544). A subcommand's findings exit (`hotspots`/`deps` exit 1 o
   may only fall.
 - `tests/test_result_outcome.py` and `tests/test_result_truncation.py` pin the definition,
   the exit path and the truncation line; `tests/test_output_contract_compliance.py` runs
-  every registered adapter and subcommand against them.
+  every registered adapter and subcommand against them. Its invariant 7 (`own_cap`) runs each
+  adapter with its cap knob at 1 and uncapped, and fails on any list that got shorter without
+  a `truncated` entry.
 
 ---
 

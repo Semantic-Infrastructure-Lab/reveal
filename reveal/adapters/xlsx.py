@@ -17,7 +17,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from ..analyzers.office.openxml import XlsxAnalyzer
 from ..utils import print_json_result
 from ..utils.query import parse_query_params
-from ..utils.results import ResultBuilder
+from ..utils.results import ResultBuilder, note_truncation
 from reveal.reveal_types import CONTRACT_VERSION
 
 logger = logging.getLogger(__name__)
@@ -858,14 +858,10 @@ class XlsxAdapter(ResourceAdapter):
         if range_param:
             rows_data = self._apply_cell_range(rows_data, range_param)
 
-        # Apply row limit if specified
-        limit_param = self.query_params.get('limit')
-        if limit_param:
-            try:
-                limit = int(limit_param)
-                rows_data = rows_data[:limit]
-            except ValueError:
-                pass  # Ignore invalid limit
+        all_rows = rows_data
+        limit = self._limit_param()
+        if limit > 0:
+            rows_data = rows_data[:limit]
 
         # Get sheet metadata
         sheet_info = self._get_sheet_info(sheet_name)
@@ -884,12 +880,22 @@ class XlsxAdapter(ResourceAdapter):
         if format_param:
             result_data['preferred_format'] = format_param
 
-        return ResultBuilder.create(
+        result = ResultBuilder.create(
             contract_version=CONTRACT_VERSION,
             result_type='xlsx_sheet',
             source=self.file_path or Path('unknown'),
             data=result_data
         )
+        # BACK-1543: '?sheet=S&limit=3' listed 3 of 701 rows; rows_count said 701 in JSON only.
+        note_truncation(result, 'rows', len(rows_data), len(all_rows), 'limit', hint='raise ?limit=N')
+        return result
+
+    def _limit_param(self) -> int:
+        """``?limit=N`` as a positive cap, else 0 (none). A negative slice dropped the tail."""
+        try:
+            return max(int(self.query_params.get('limit') or 0), 0)
+        except (TypeError, ValueError):
+            return 0
 
     def _resolve_sheet_name(self, identifier: str) -> Optional[str]:
         """Resolve sheet identifier to sheet name.
@@ -1040,15 +1046,12 @@ class XlsxAdapter(ResourceAdapter):
         if self.analyzer is None:
             raise ValueError("Analyzer not initialized")
 
-        matches = self.analyzer.search_all_sheets(pattern)
+        found = self.analyzer.search_all_sheets(pattern)
 
-        # Apply limit if specified
-        limit_param = self.query_params.get('limit')
-        if limit_param:
-            try:
-                matches = matches[:int(limit_param)]
-            except ValueError:
-                pass
+        # BACK-1543: total_matches was counted after this cut, so ?limit=3 reported 3 of
+        # 684 as the total. A negative limit dropped the tail instead of capping.
+        limit = self._limit_param()
+        matches = found[:limit] if limit > 0 else found
 
         # Group by sheet
         sheets_seen: Dict[str, List[Dict[str, Any]]] = {}
@@ -1063,17 +1066,19 @@ class XlsxAdapter(ResourceAdapter):
 
         result_data = {
             'pattern': pattern,
-            'total_matches': len(matches),
+            'total_matches': len(found),
             'sheets_with_matches': len(sheet_results),
             'sheet_results': sheet_results,
         }
 
-        return ResultBuilder.create(
+        result = ResultBuilder.create(
             contract_version=CONTRACT_VERSION,
             result_type='xlsx_search',
             source=self.file_path or Path('unknown'),
             data=result_data
         )
+        note_truncation(result, 'matches', len(matches), len(found), 'limit', hint='raise ?limit=N')
+        return result
 
     # -------------------------------------------------------------------------
     # Power Pivot helpers
