@@ -90,9 +90,11 @@ Budget-aware flags enable explicit token budget control for AI agent loops. When
 ### Truncation Metadata
 
 A cut list is disclosed the same way for every adapter and every cause (`--max-items`,
-`--head`/`--tail`/`--range`, `?limit=`/`?offset=`, an adapter's default cap): one
-`meta.warnings` entry per cut list. Text output prints the same message after the results,
-as `⚠ Truncated results: showing 50 of 150 — raise --max-items`.
+`--head`/`--tail`/`--range`, `?limit=`/`?offset=`, an adapter's own `?top=`, an adapter's
+default cap): one `meta.warnings` entry per cut list. Text output prints the same message
+after the results, as `⚠ Truncated results: showing 50 of 150 — raise --max-items`. Two
+cuts don't record it yet: `--head`/`--tail` on a file path (`reveal f.py --head 2`), and
+git history's `?limit=`, whose walk stops at the limit and so never counts the total.
 
 ```json
 {
