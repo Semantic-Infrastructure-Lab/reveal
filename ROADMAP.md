@@ -289,10 +289,11 @@ a check that counts violations and lets the count only fall. Then the cause is r
    - the grammar-coverage test (`tests/test_grammar_coverage.py`);
    - the registry-driven contract harness (`tests/test_output_contract_compliance.py`).
 
-   Still open: BACK-1513's remaining invariants (an adapter's own undisclosed caps, BACK-1543;
-   POSIX separators on Windows). Since 2026-09-28 the harness checks that a list the router
-   cuts is disclosed, and runs every subcommand through the same result handling (all but
-   `check`, BACK-1545).
+   Still open: BACK-1513's remaining invariants (caps with no knob, BACK-1551; POSIX
+   separators on Windows). Since 2026-09-28 the harness checks that a list the router cuts is
+   disclosed, and runs every subcommand through the same result handling (all but `check`,
+   BACK-1545). Since 2026-09-29 it also runs each adapter's own cap knob (`?top`, `?limit`) at
+   1 and uncapped, and a list that got shorter must be disclosed (BACK-1543).
 2. **The largest class** (flags dropped between invocation forms) is retired at its cause.
    Landed 2026-09-26: the flag ledger, where a flag or query key the user sets is used, or a
    note names it (`reveal/cli/routing/ledger.py`, ratchet `tests/test_flag_ledger.py`). The
@@ -308,8 +309,10 @@ a check that counts violations and lets the count only fall. Then the cause is r
    slice, the same day, made a cut list an outcome: one marker (`note_truncation`, a
    `truncated` meta warning, replacing six spellings), which the router prints once after
    the render. The subcommands print through the same handling since BACK-1544
-   (`cli/routing/subcommand.emit_subcommand_result`), except `check` (BACK-1545). Still open:
-   file-path results, adapters' own undisclosed caps (BACK-1543), and the broad `except`s.
+   (`cli/routing/subcommand.emit_subcommand_result`), except `check` (BACK-1545), and an
+   adapter's own `?top`/`?limit` cut is recorded the same way (BACK-1543). Still open:
+   file-path results (BACK-1548), walks that stop at their limit and so have no total
+   (BACK-1547), and the broad `except`s.
 4. **One seam per concern:** BACK-1223 (one walker), BACK-1045 (parser seam), BACK-1366
    (one path pass), BACK-1372 (root finders) and BACK-1054 (import resolution).
 
