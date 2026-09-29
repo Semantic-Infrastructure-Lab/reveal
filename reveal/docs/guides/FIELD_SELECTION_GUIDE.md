@@ -92,9 +92,8 @@ Budget-aware flags enable explicit token budget control for AI agent loops. When
 A cut list is disclosed the same way for every adapter and every cause (`--max-items`,
 `--head`/`--tail`/`--range`, `?limit=`/`?offset=`, an adapter's own `?top=`, an adapter's
 default cap): one `meta.warnings` entry per cut list. Text output prints the same message
-after the results, as `⚠ Truncated results: showing 50 of 150 — raise --max-items`. Two
-cuts don't record it yet: `--head`/`--tail` on a file path (`reveal f.py --head 2`), and
-git history's `?limit=`, whose walk stops at the limit and so never counts the total.
+after the results, as `⚠ Truncated results: showing 50 of 150 — raise --max-items`. One
+cut doesn't record it yet: `--head`/`--tail` on a file path (`reveal f.py --head 2`).
 
 ```json
 {
@@ -104,6 +103,7 @@ git history's `?limit=`, whose walk stops at the limit and so never counts the t
       "field": "results",
       "shown": 50,
       "total": 150,
+      "exact": true,
       "cause": "max_items",
       "message": "results: showing 50 of 150 — raise --max-items"
     }]
@@ -111,7 +111,10 @@ git history's `?limit=`, whose walk stops at the limit and so never counts the t
 }
 ```
 
-`cause` is `limit`, `auto_cap`, `max_items`, `head`, `tail` or `range`. When
+`cause` is `limit`, `auto_cap`, `max_items`, `head`, `tail` or `range`. `exact` is false
+when the total is only a lower bound: git history is walked newest first and stops one
+commit past the page, so it knows more exist but not how many (`total` is then the page plus
+one, and the message says `showing 50 of 51+`). When
 `--max-items` cut the list, the output also includes its budget block:
 
 ```json

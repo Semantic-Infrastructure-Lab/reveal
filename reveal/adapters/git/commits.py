@@ -1,11 +1,12 @@
 """Git commit operations and formatting."""
 
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Any, List, Optional, TYPE_CHECKING
+from typing import Callable, Dict, Any, List, Optional, TYPE_CHECKING
 from reveal.reveal_types import CONTRACT_VERSION
 
-from ...utils.query import apply_result_control
-from ...utils.results import ResultBuilder
+from ...utils.query import ResultControl, apply_result_control
+from ...utils.results import ResultBuilder, note_truncation
 
 if TYPE_CHECKING:
     import pygit2
@@ -21,19 +22,121 @@ def history_sort() -> int:
     import pygit2
     return pygit2.GIT_SORT_TOPOLOGICAL | pygit2.GIT_SORT_TIME
 
+@dataclass
+class HistoryWalk:
+    """One page of a history walk, and what the walk knows about the rest (BACK-1547).
+
+    ``total`` counts the matching commits the walk saw. It is exact when the walk ran to
+    the end of history, and a lower bound (``exact=False``) when it stopped one commit
+    past the page: more exist, but not how many.
+    """
+    commits: List[Dict[str, Any]]
+    total: int
+    exact: bool
+
+    def disclose(self, result: Any, field: str, hint: Optional[str] = None) -> None:
+        """Record the page as a cut of ``result[field]`` if it is one."""
+        note_truncation(result, field, len(self.commits), self.total, 'limit',
+                        hint=hint, exact=self.exact)
+
+
+def walk_history(
+    repo: 'pygit2.Repository',
+    start_id,
+    keep: Callable[['pygit2.Commit'], Optional[Dict[str, Any]]],
+    limit: Optional[int],
+    result_control: Optional[ResultControl] = None,
+) -> HistoryWalk:
+    """Walk history from ``start_id`` newest first, and page the commits ``keep`` accepts.
+
+    The one commit walk behind every git:// view (BACK-1547). There were five copies, and
+    each stopped at ``offset + limit``, so none could say whether more commits existed,
+    ``?sort=`` ordered only the commits already walked (``?sort=date&limit=3`` listed the
+    3 newest, re-sorted, not the 3 oldest), and two returned whatever they held when the
+    walk raised.
+
+    - ``keep(commit)`` returns the commit's dict, or None to skip it.
+    - A limit cuts the answer; it doesn't bound what is read. With ``?sort=`` the walk
+      reads all of history, since the sort must see every match, and the total is exact.
+      Without it, history order is the answer's order, so the walk stops one commit past
+      ``offset + limit``: that commit proves more exist.
+    - A walk that fails partway fails the query, rather than passing off what it had
+      collected as the whole answer.
+    """
+    import pygit2
+
+    control = result_control or ResultControl()
+    offset = control.offset or 0
+    stop_at = None if limit is None or control.sort_field else offset + limit + 1
+    matched: List[Dict[str, Any]] = []
+    try:
+        for commit in repo.walk(start_id, history_sort()):  # type: ignore[arg-type]
+            commit_dict = keep(commit)
+            if commit_dict is None:
+                continue
+            matched.append(commit_dict)
+            if stop_at is not None and len(matched) >= stop_at:
+                break
+    except pygit2.GitError as exc:
+        raise ValueError(
+            f"git history walk failed after {len(matched)} commits: {exc}") from exc
+    page = apply_result_control(matched, control)
+    if limit is not None:
+        page = page[:limit]
+    return HistoryWalk(page, len(matched), stop_at is None or len(matched) < stop_at)
+
+
+def commit_filter(
+    repo: 'pygit2.Repository',
+    format_commit_func,
+    matches_all_filters_func,
+    *,
+    no_merges: bool = False,
+    touches: Optional[Callable[..., bool]] = None,
+    subpath: str = '',
+    content_pattern: Optional[str] = None,
+) -> Callable[['pygit2.Commit'], Optional[Dict[str, Any]]]:
+    """The ``keep`` for ``walk_history``: which commits a git:// view lists.
+
+    Cheapest test first: merges, then the path touch check, then the formatted commit's
+    filters, then the diff search (``?content~=``), which reads blobs.
+    """
+    if content_pattern:
+        from .files import _commit_diff_contains, _reset_content_search_error
+        _reset_content_search_error()
+
+    def keep(commit: 'pygit2.Commit') -> Optional[Dict[str, Any]]:
+        if no_merges and len(commit.parents) > 1:
+            return None
+        if touches is not None and not touches(repo, commit, subpath):
+            return None
+        commit_dict: Dict[str, Any] = format_commit_func(commit)
+        if not matches_all_filters_func(commit_dict):
+            return None
+        if content_pattern and not _commit_diff_contains(repo, commit, subpath, content_pattern):
+            return None
+        return commit_dict
+
+    return keep
+
 
 def get_repository_overview(
     repo: 'pygit2.Repository',
     get_head_info_func,
     list_branches_func,
     list_tags_func,
-    get_recent_commits_func
+    get_recent_commits_func,
+    recent_limit: int = 10,
 ) -> Dict[str, Any]:
-    """Generate repository overview structure."""
+    """Generate repository overview structure.
+
+    ``recent_limit`` is ``?limit`` (default 10), so ``--all`` reaches the recent-commit list
+    too; it was a fixed 10 that neither lifted (BACK-1547).
+    """
     head_info = get_head_info_func(repo)
     branches = list_branches_func(repo)
     tags = list_tags_func(repo)
-    recent_commits = get_recent_commits_func(repo, limit=10)
+    recent = get_recent_commits_func(repo, limit=recent_limit)
 
     result = ResultBuilder.create(
         result_type='git_repository',
@@ -51,7 +154,7 @@ def get_repository_overview(
             'recent': tags[:10],
         },
         commits={
-            'recent': recent_commits,
+            'recent': recent.commits,
         },
         stats={
             'is_bare': repo.is_bare,
@@ -59,6 +162,7 @@ def get_repository_overview(
             'head_detached': repo.head_is_detached if not repo.is_empty else False,
         }
     )
+    recent.disclose(result, 'commits.recent')
     # BACK-1166: surface a content-pattern search degradation, if the caller
     # requested one (get_recent_commits_func resets this before running).
     from .files import get_content_search_disclosure
@@ -80,42 +184,13 @@ def get_recent_commits(
     query_filters: list,
     no_merges: bool = False,
     content_pattern: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+) -> HistoryWalk:
     """Get recent commits from HEAD."""
-    import pygit2
-
-    if content_pattern:
-        from .files import _commit_diff_contains, _reset_content_search_error
-        _reset_content_search_error()
-
-    commits: List[Dict[str, Any]] = []
-
-    try:
-        if repo.is_empty:
-            return commits
-
-        walker = repo.walk(repo.head.target, history_sort())  # type: ignore[arg-type]
-
-        for commit in walker:
-            if no_merges and len(commit.parents) > 1:
-                continue
-            commit_dict = format_commit_func(commit)
-            if not matches_all_filters_func(commit_dict):
-                continue
-            if content_pattern and not _commit_diff_contains(repo, commit, '', content_pattern):
-                continue
-            commits.append(commit_dict)
-            # offset + limit: apply_result_control skips `offset` first (BACK-1506)
-            if len(commits) >= limit + (result_control.offset or 0):
-                break
-    except Exception:
-        pass  # return whatever commits were collected before the error
-
-    # Apply result control if specified in query
-    if result_control.limit or result_control.sort_field or result_control.offset:
-        commits = apply_result_control(commits, result_control)
-
-    return commits
+    if repo.is_empty:
+        return HistoryWalk([], 0, True)
+    keep = commit_filter(repo, format_commit_func, matches_all_filters_func,
+                         no_merges=no_merges, content_pattern=content_pattern)
+    return walk_history(repo, repo.head.target, keep, limit, result_control)
 
 
 def get_commit_history(
@@ -128,39 +203,11 @@ def get_commit_history(
     query_filters: list,
     no_merges: bool = False,
     content_pattern: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+) -> HistoryWalk:
     """Get commit history from a starting commit."""
-    import pygit2
-
-    if content_pattern:
-        from .files import _commit_diff_contains, _reset_content_search_error
-        _reset_content_search_error()
-
-    commits = []
-
-    try:
-        walker = repo.walk(start_commit.id, history_sort())  # type: ignore[arg-type]
-
-        for commit in walker:
-            if no_merges and len(commit.parents) > 1:
-                continue
-            commit_dict = format_commit_func(commit)
-            if not matches_all_filters_func(commit_dict):
-                continue
-            if content_pattern and not _commit_diff_contains(repo, commit, '', content_pattern):
-                continue
-            commits.append(commit_dict)
-            # offset + limit: apply_result_control skips `offset` first (BACK-1506)
-            if len(commits) >= limit + (result_control.offset or 0):
-                break
-    except Exception:
-        pass  # return whatever commits were collected before the error
-
-    # Apply result control if specified in query
-    if result_control.limit or result_control.sort_field or result_control.offset:
-        commits = apply_result_control(commits, result_control)
-
-    return commits
+    keep = commit_filter(repo, format_commit_func, matches_all_filters_func,
+                         no_merges=no_merges, content_pattern=content_pattern)
+    return walk_history(repo, start_commit.id, keep, limit, result_control)
 
 
 def bucket_commits(commit_dicts: List[Dict[str, Any]], bucket: str) -> List[Dict[str, Any]]:
@@ -199,46 +246,38 @@ def bucket_commits(commit_dicts: List[Dict[str, Any]], bucket: str) -> List[Dict
 def get_commit_timeline(
     repo: 'pygit2.Repository',
     start_commit: 'pygit2.Commit',
-    bucket: str,
     limit: int,
     format_commit_func,
     matches_all_filters_func,
     no_merges: bool = False,
-) -> Dict[str, Any]:
-    """Walk history from start_commit and bucket it by week/month.
+) -> HistoryWalk:
+    """Walk history from start_commit for a week/month timeline (``timeline_fields``).
 
     Unlike get_commit_history, this collects up to `limit` matching commits
     (a much higher default than the flat-list view, since a meaningful
-    timeline needs the full range) and returns aggregated period counts
-    rather than a commit list.
+    timeline needs the full range); the caller aggregates them into period
+    counts rather than listing them.
     """
-    import pygit2
+    keep = commit_filter(repo, format_commit_func, matches_all_filters_func,
+                         no_merges=no_merges)
+    return walk_history(repo, start_commit.id, keep, limit)
 
-    matched: List[Dict[str, Any]] = []
 
-    try:
-        walker = repo.walk(start_commit.id, history_sort())  # type: ignore[arg-type]
-
-        for commit in walker:
-            if no_merges and len(commit.parents) > 1:
-                continue
-            commit_dict = format_commit_func(commit)
-            if not matches_all_filters_func(commit_dict):
-                continue
-            matched.append(commit_dict)
-            if len(matched) >= limit:
-                break
-    except Exception:
-        pass  # return whatever commits were collected before the error
-
-    buckets = bucket_commits(matched, bucket)
-
+def timeline_fields(matched: List[Dict[str, Any]], bucket: str) -> Dict[str, Any]:
+    """The bucketed counts a git_timeline result reports for ``matched``."""
     return {
         'bucket': bucket,
-        'buckets': buckets,
+        'buckets': bucket_commits(matched, bucket),
         'commit_count': len(matched),
         'distinct_author_count': len({c.get('email') or c.get('author') for c in matched}),
     }
+
+
+def disclose_timeline_cut(result: Any, walk: HistoryWalk) -> None:
+    """A timeline counts only the commits its walk reached. When ``?limit`` stopped the
+    walk, older history is missing from every count, so the result says so (BACK-1547)."""
+    walk.disclose(result, 'commits',
+                  hint='raise ?limit=N; the timeline counts only the newest N commits')
 
 
 def format_commit(commit: 'pygit2.Commit', detailed: bool = False) -> Dict[str, Any]:

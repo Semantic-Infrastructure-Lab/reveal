@@ -594,7 +594,6 @@ class GitAdapter(ResourceAdapter):
                         commits.format_commit,
                         lambda cd: queries.matches_all_filters(cd, self.query_filters),
                         touch_func,
-                        commits.bucket_commits,
                     )
 
                 result = files.get_file_history(
@@ -624,10 +623,10 @@ class GitAdapter(ResourceAdapter):
                 raise ValueError(f"Invalid bucket: {bucket!r} (expected 'week' or 'month')")
             limit = int(self.query.get('limit', 20000))
             return refs.get_ref_timeline(
-                repo, self.ref,
-                lambda repo, start_commit, _b=bucket, _lim=limit, _nm=no_merges: \
+                repo, self.ref, bucket,
+                lambda repo, start_commit, _lim=limit, _nm=no_merges: \
                     commits.get_commit_timeline(
-                        repo, start_commit, _b, _lim,
+                        repo, start_commit, _lim,
                         commits.format_commit,
                         lambda cd: queries.matches_all_filters(cd, self.query_filters),
                         no_merges=_nm,
@@ -665,7 +664,8 @@ class GitAdapter(ResourceAdapter):
                         self.query_filters,
                         no_merges=_nm,
                         content_pattern=_cp,
-                    )
+                    ),
+                recent_limit=int(self.query.get('limit', 10)),
             )
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
@@ -770,7 +770,8 @@ class GitAdapter(ResourceAdapter):
                 'element': 'For blame/diff/history: function/class name to scope output to that element. For ?type=history, runs the analyzer at each commit — use ?limit=N on files with deep history.',
                 'ignore': 'For blame: comma-separated commit hash prefixes to suppress (e.g. ignore=69b0093,f5fcac0). Any prefix length works — 4–7 chars is typical.',
                 'context': 'For diff: number of context lines (default 3)',
-                'limit': 'Limit number of results (default: 50 for history, 20 for refs, 20000 for bucket= timelines — timelines need the full matching range, not a short page)',
+                'limit': 'Limit number of results (default: 10 recent commits for the repository view, 50 for history, 20 for refs, 20000 for bucket= timelines — timelines need the full matching range, not a short page). A cut history says so: "showing 50 of 51+" (at least 51).',
+                'sort': 'Order commits by a field: date, author, message (-field for descending). History is newest first without it; a sort reads all matching history before ?limit cuts it.',
                 'author': 'Filter commits by author name (case-insensitive, use ~= for regex)',
                 'email': 'Filter commits by author email (case-insensitive, use ~= for regex)',
                 'message': 'Filter commits by message (use ~= for regex matching)',

@@ -338,7 +338,7 @@ both forms (BACK-1544). A subcommand's findings exit (`hotspots`/`deps` exit 1 o
 |---|---|---|---|
 | `failed` | a non-empty top-level `error` string | 1 | `ResultBuilder.create_error(...)` |
 | `not_applicable` | `applicable: false` plus a `reason` | 0 | `raise NotApplicableError(reason)` |
-| `truncated` | a `meta.warnings` entry `{"type": "truncated", "field", "shown", "total", "cause", "message"}` per cut list | 0 | `note_truncation(result, field, shown, total, cause)` |
+| `truncated` | a `meta.warnings` entry `{"type": "truncated", "field", "shown", "total", "exact", "cause", "message"}` per cut list | 0 | `note_truncation(result, field, shown, total, cause)` |
 | `ok` | none of these; an empty answer is still `ok` | 0 | `ResultBuilder.create(...)` |
 
 - **Return the error; don't exit or print it.** The router prints `Error (<scheme>://): <error>`
@@ -358,6 +358,14 @@ both forms (BACK-1544). A subcommand's findings exit (`hotspots`/`deps` exit 1 o
   `total_modules`, `count`) may stay for JSON readers, but it doesn't replace the marker. A
   cap with no knob still records the cut and says how to narrow the question
   (`help://search`: `add a search word to narrow it`).
+- **A cap cuts the answer; it doesn't bound what is read.** Build the whole answer, order it,
+  then keep the first N. Stop reading early only when the reading order is the answer's order,
+  and then read one past the page: that item proves more exist, so record a lower bound,
+  `note_truncation(..., total=shown + 1, exact=False)`, printed `showing 50 of 51+`. git://
+  walks history this way, one walk for every view (`git/commits.walk_history`), and reads all of
+  it when `?sort=` asks for another order. Before, `?sort=date&limit=3` sorted the 3 commits it
+  had walked and listed the 3 newest (BACK-1547). A read that fails partway fails the query; it
+  doesn't return what it had as the whole answer.
 - **Problems inside an answer are not a failure.** Per-file parse failures in a result that
   was still produced go in `meta.errors` (v1.1). An error on one item of a list stays on that
   item. Neither changes the outcome.
@@ -370,7 +378,8 @@ both forms (BACK-1544). A subcommand's findings exit (`hotspots`/`deps` exit 1 o
   the exit path and the truncation line; `tests/test_output_contract_compliance.py` runs
   every registered adapter and subcommand against them. Its invariant 7 (`own_cap`) runs each
   adapter with its cap knob at 1 and uncapped, and fails on any list that got shorter without
-  a `truncated` entry.
+  a `truncated` entry, on a capped list that isn't the uncapped list's first N, and on a
+  disclosed `total` that isn't the uncapped length (or, when `exact` is false, is above it).
 
 ---
 

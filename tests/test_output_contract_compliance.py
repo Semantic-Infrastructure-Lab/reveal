@@ -41,6 +41,10 @@ proves nothing about the adapter's normal output. Invariants:
    adapter applies itself is a ``[:N]`` the router never sees, so ``--head`` (invariant 5)
    can't expose it: ``stats://?hotspots=true&top=2`` showed 2 of 43 hotspot files as the
    whole list (BACK-1543). ``test_the_own_cap_invariant_bites`` checks that it cuts.
+   The cut must also be honest: the capped list is the first N of the uncapped one (git's
+   ``?sort=date&limit=1`` listed the newest commit, sorted after the walk stopped), and a
+   disclosed ``total`` is the uncapped length, or at most it when ``exact`` is false
+   (xlsx said ``total_matches: 3`` where 684 matched) (BACK-1547).
 
 Violations that exist today are listed in ``KNOWN_VIOLATIONS`` as strict xfails, each
 naming its task. A fix makes its case XPASS, which fails the run until the entry is
@@ -138,8 +142,6 @@ KNOWN_VIOLATIONS = {
     ('abs_path', 'testability'): 'BACK-1366',
     ('abs_path', 'xlsx'): 'BACK-1366',
     ('subcommand', 'check'): 'BACK-1545',
-    ('own_cap', 'git'): 'BACK-1547',
-    ('own_cap', 'overview'): 'BACK-1547',
 }
 
 # How to run each `reveal <name>` against the fixture (invariant 6). Every COMMANDS entry
@@ -177,7 +179,10 @@ SUBCOMMAND_CUT_ARGV = {
 OWN_CAP_URIS = {
     'calls': ['calls://wide?uncalled', 'calls://wide?rank=callers'],
     'depends': ['depends://wide/pkg/y.py'],
-    'git': ['git://wide/app.py?type=history'],
+    # history newest-first, the same file oldest-first (a sort must see every commit, not
+    # the ones walked before the limit), and the repository view's recent commits
+    'git': ['git://wide/app.py?type=history', 'git://wide/app.py?type=history&sort=date',
+            'git://.'],
     'imports': ['imports://wide?rank=fan-in'],
     'stats': ['stats://wide?hotspots=true'],
     'xlsx': ['xlsx://wide/data.xlsx?sheet=Sheet', 'xlsx://wide/data.xlsx?search=n'],
@@ -240,13 +245,20 @@ def _build_tree(root: Path) -> None:
     if shutil.which('git'):  # the root is the repo: git:// resolves it from the cwd
         env = dict(os.environ, GIT_AUTHOR_NAME='t', GIT_AUTHOR_EMAIL='t@example.com',
                    GIT_COMMITTER_NAME='t', GIT_COMMITTER_EMAIL='t@example.com')
-        for cmd in (['init', '-q'], ['add', 'proj', 'wide'], ['commit', '-q', '-m', 'init']):
-            subprocess.run(['git', '-C', str(root)] + cmd, check=True, env=env,
-                           capture_output=True)
-        with open(root / 'wide' / 'app.py', 'a', encoding='utf-8') as f:
-            f.write('\n\ndef later():\n    pass\n')
-        subprocess.run(['git', '-C', str(root), 'commit', '-q', '-am', 'second'], check=True,
-                       env=env, capture_output=True)
+
+        def git(*cmd, day=1):
+            # A day apart, so a date sort has one right answer (invariant 7's prefix rule).
+            date = f'2026-01-{day:02d}T12:00:00'
+            subprocess.run(['git', '-C', str(root), *cmd], check=True, capture_output=True,
+                           env=dict(env, GIT_AUTHOR_DATE=date, GIT_COMMITTER_DATE=date))
+
+        git('init', '-q')
+        git('add', 'proj', 'wide')
+        git('commit', '-q', '-m', 'init')
+        for day, name in ((2, 'later'), (3, 'latest')):
+            with open(root / 'wide' / 'app.py', 'a', encoding='utf-8') as f:
+                f.write(f'\n\ndef {name}():\n    pass\n')
+            git('commit', '-q', '-am', name, day=day)
 
 
 def _build_wide_tree(wide: Path) -> None:
@@ -587,8 +599,8 @@ def _lists(obj, path=()):
 
 
 def _knob_cuts(harness, scheme):
-    """{'<view>?<knob>=1': ([shortened list paths], cut result)}, each view with each knob
-    at 1 vs uncapped."""
+    """{'<view>?<knob>=1': ([shortened list paths], cut result, uncapped result)}, each view
+    with each knob at 1 vs uncapped."""
     harness.fixture_uri(scheme)  # the same skips as the proj/ runs
     cuts = {}
     for uri in _own_cap_uris(scheme):
@@ -598,22 +610,65 @@ def _knob_cuts(harness, scheme):
             _, cut, _ = harness.run(f'{uri}{sep}{knob}=1')
             whole, part = dict(_lists(full)), dict(_lists(cut))
             cuts[f'{uri}{sep}{knob}=1'] = (
-                sorted(p for p, v in whole.items() if p in part and len(part[p]) < len(v)), cut)
+                sorted(p for p, v in whole.items() if p in part and len(part[p]) < len(v)),
+                cut, full)
     return cuts
+
+
+def _names(path):
+    """The field names a cut of the list at ``path`` may be recorded under: its key, or
+    its dotted path when it is nested (git:// root's ``commits.recent``)."""
+    return {path[-1], '.'.join(path)}
 
 
 @pytest.mark.parametrize('scheme', _cases('own_cap', sorted(
     s for s in FIXTURE_URIS if _cap_knobs(s))))
 def test_an_adapters_own_cap_is_disclosed(harness, scheme):
     hidden = {}
-    for run, (shortened, cut) in _knob_cuts(harness, scheme).items():
+    for run, (shortened, cut, _) in _knob_cuts(harness, scheme).items():
         disclosed = {entry.get('field') for entry in truncations_of(cut)}
-        missed = ['.'.join(path) for path in shortened if path[-1] not in disclosed]
+        missed = ['.'.join(path) for path in shortened if not _names(path) & disclosed]
         if missed:
             hidden[run] = missed
     assert not hidden, (
         f'cut without saying so: {hidden}. Record it with note_truncation '
         f'(reveal/utils/results.py), or compose(..., cut_as=...)')
+
+
+@pytest.mark.parametrize('scheme', _cases('own_cap_prefix', sorted(
+    s for s in FIXTURE_URIS if _cap_knobs(s))))
+def test_an_adapters_own_cap_keeps_the_first_n(harness, scheme):
+    """A cap cuts the answer: the capped list is the uncapped list's first N. A cap that
+    bounds what is read instead (git walked 1 commit, then sorted it) answers a different
+    question."""
+    wrong = {}
+    for run, (shortened, cut, full) in _knob_cuts(harness, scheme).items():
+        whole, part = dict(_lists(full)), dict(_lists(cut))
+        for path in shortened:
+            if part[path] != whole[path][:len(part[path])]:
+                wrong[f"{run} {'.'.join(path)}"] = (part[path], whole[path][:len(part[path])])
+    assert not wrong, f'capped list is not the first N of the uncapped one: {wrong}'
+
+
+@pytest.mark.parametrize('scheme', _cases('own_cap_total', sorted(
+    s for s in FIXTURE_URIS if _cap_knobs(s))))
+def test_a_disclosed_total_is_the_real_total(harness, scheme):
+    """A cut says how many there are: the uncapped length, or at most it for a lower bound
+    (``exact: false``, a walk that stopped one past the page)."""
+    wrong = {}
+    for run, (shortened, cut, full) in _knob_cuts(harness, scheme).items():
+        whole = dict(_lists(full))
+        for path in shortened:
+            for entry in truncations_of(cut):
+                if entry.get('field') not in _names(path):
+                    continue
+                real = len(whole[path])
+                honest = (entry['total'] == real if entry.get('exact', True)
+                          else entry['shown'] < entry['total'] <= real)
+                if not honest:
+                    wrong[f"{run} {'.'.join(path)}"] = (
+                        entry['total'], entry.get('exact', True), real)
+    assert not wrong, f'disclosed (total, exact) vs the real length: {wrong}'
 
 
 def test_the_own_cap_invariant_bites(harness):
@@ -622,5 +677,5 @@ def test_the_own_cap_invariant_bites(harness):
     expected = ['ast', 'calls', 'depends', 'git', 'hotspots', 'imports', 'json', 'overview',
                 'patches', 'stats', 'xlsx']
     bitten = [scheme for scheme in sorted(s for s in FIXTURE_URIS if _cap_knobs(s))
-              if any(shortened for shortened, _ in _knob_cuts(harness, scheme).values())]
+              if any(shortened for shortened, _, _ in _knob_cuts(harness, scheme).values())]
     assert bitten == expected

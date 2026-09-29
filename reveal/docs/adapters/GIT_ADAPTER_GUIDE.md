@@ -967,14 +967,26 @@ Control result pagination and sorting:
 
 ```bash
 # Default limits
-reveal git://.               # 10 items per category
+reveal git://.               # 10 recent commits (?limit=N), 10 branches, 10 tags
 reveal git://.@main          # 20 commits
 reveal 'git://file?type=history'  # 50 commits
 
 # Custom limits
 reveal 'git://.@main?limit=100'
 reveal 'git://file?type=history&limit=200'
+reveal 'git://file?type=history' --all   # every commit (limit=1000000)
 ```
+
+A history cut by its limit says so, after the listing (text) or in `meta.warnings` (JSON):
+
+```
+⚠ Truncated commits: showing 50 of 51+ — raise ?limit=N or page with ?offset=N
+```
+
+`51+` means at least 51. History is walked newest first and the walk stops one commit past
+the page, so it knows more exist but not how many. With `?sort=` the count is exact (see
+Sort). A timeline (`?bucket=`) stopped by its limit (default 20000) says the same, since its
+counts then cover only the newest N commits.
 
 ### Offset (Pagination)
 
@@ -991,9 +1003,16 @@ reveal 'git://.@main?limit=50&offset=100'
 
 ### Sort
 
+History is newest first without `?sort=`. A sort orders every matching commit, not just the
+first page, so it reads all of history before it cuts to `?limit` (about 8 µs per commit, a
+second or so per 100k commits). Leave it off when newest first is what you want.
+
 ```bash
-# Sort by date (default)
+# Oldest first
 reveal 'git://.@main?sort=date'
+
+# Newest first (the default order; no sort needed)
+reveal 'git://.@main?sort=-date'
 
 # Sort by author
 reveal 'git://.@main?sort=author'
@@ -1008,8 +1027,8 @@ reveal 'git://.@main?sort=message'
 # Page 2 of John's commits, sorted by date
 reveal 'git://.@main?author=John&limit=50&offset=50&sort=date'
 
-# Last 100 bug fixes
-reveal 'git://.?message~=bug&limit=100&sort=date'
+# Last 100 bug fixes (newest first is the default order)
+reveal 'git://.?message~=bug&limit=100'
 ```
 
 ---

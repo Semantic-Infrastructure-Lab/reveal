@@ -360,9 +360,26 @@ class TestRunGitLog(unittest.TestCase):
 
     @patch('reveal.adapters.overview.GitAdapter')
     def test_limit_passed_as_query_param(self, MockAdapter):
+        """BACK-1547: through compose's (resource, query-string) call; GitAdapter moves a
+        query string passed as its ref into its query."""
         MockAdapter.return_value.get_structure.return_value = {}
         _run_git_log(self.adapter, Path('/project'), 7)
-        MockAdapter.assert_called_once_with(path=str(Path('/project')), query={'type': 'history', 'limit': '7'})
+        MockAdapter.assert_called_once_with(str(Path('/project')), 'type=history&limit=7')
+
+    @patch('reveal.adapters.overview.GitAdapter')
+    def test_gits_cut_is_restated_as_git_log(self, MockAdapter):
+        """BACK-1547: overview's ?top=1 showed one commit as the whole log."""
+        from reveal.utils.results import truncations_of
+        MockAdapter.return_value.get_structure.return_value = {
+            'commits': [{'hash': 'abc1234'}],
+            'meta': {'warnings': [{'type': 'truncated', 'field': 'commits', 'shown': 1,
+                                   'total': 2, 'exact': False, 'cause': 'limit',
+                                   'message': 'commits: showing 1 of 2+'}]},
+        }
+        _run_git_log(self.adapter, Path('/project'), 1)
+        [cut] = truncations_of({'meta': self.adapter.composed_meta()})
+        self.assertEqual(cut['field'], 'git_log')
+        self.assertEqual(cut['message'], 'git_log: showing 1 of 2+ — raise ?top=N')
 
     @patch('reveal.adapters.overview.GitAdapter')
     def test_reads_commits_key_for_directory_targets(self, MockAdapter):

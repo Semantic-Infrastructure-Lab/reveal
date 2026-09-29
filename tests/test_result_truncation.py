@@ -30,9 +30,46 @@ def test_note_truncation_records_one_entry():
     note_truncation(result, 'results', 2, 9, 'limit')
     [cut] = truncations_of(result)
     assert cut == {
-        'type': 'truncated', 'field': 'results', 'shown': 2, 'total': 9, 'cause': 'limit',
+        'type': 'truncated', 'field': 'results', 'shown': 2, 'total': 9, 'exact': True,
+        'cause': 'limit',
         'message': 'results: showing 2 of 9 — raise ?limit=N or page with ?offset=N',
     }
+
+
+def test_a_walk_that_stopped_early_records_a_lower_bound():
+    """BACK-1547: git:// stops one commit past ?limit, so it knows more exist, not how
+    many. total stays an int for JSON readers; exact says it is a floor."""
+    result = {'type': 't'}
+    note_truncation(result, 'commits', 50, 51, 'limit', exact=False)
+    [cut] = truncations_of(result)
+    assert (cut['shown'], cut['total'], cut['exact']) == (50, 51, False)
+    assert cut['message'] == 'commits: showing 50 of 51+ — raise ?limit=N or page with ?offset=N'
+    assert outcome_of(result) == 'truncated'
+
+
+@pytest.mark.parametrize('first, second, expected', [
+    # the router's --max-items 3 after a walk's lower bound: still a floor
+    ((50, 51, False), (3, 50, True), (3, 51, False)),
+    # a larger exact total beats a smaller floor
+    ((50, 51, False), (3, 90, True), (3, 90, True)),
+    # a tie: the exact one says more
+    ((50, 51, False), (3, 51, True), (3, 51, True)),
+])
+def test_merging_a_lower_bound_keeps_the_larger_total(first, second, expected):
+    result = {'type': 't'}
+    for shown, total, exact in (first, second):
+        note_truncation(result, 'commits', shown, total, 'limit', exact=exact)
+    [cut] = truncations_of(result)
+    assert (cut['shown'], cut['total'], cut['exact']) == expected
+    assert cut['message'].startswith(f"commits: showing {expected[0]} of {expected[1]}"
+                                     f"{'' if expected[2] else '+'} ")
+
+
+def test_relabel_keeps_a_lower_bound():
+    child = {'type': 'git_file_history'}
+    note_truncation(child, 'commits', 5, 6, 'limit', exact=False)
+    relabel_truncations(child, 'git_log', 'raise ?top=N')
+    assert truncations_of(child)[0]['message'] == 'git_log: showing 5 of 6+ — raise ?top=N'
 
 
 @pytest.mark.parametrize('shown, total', [(9, 9), (10, 9), (0, 0)])

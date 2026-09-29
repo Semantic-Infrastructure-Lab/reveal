@@ -127,32 +127,23 @@ def _resolve_git_root(path: Path) -> Optional[Path]:
 
 
 def _run_git_log(adapter: 'OverviewAdapter', path: Path, limit: int) -> List[Dict[str, Any]]:
-    """Fetch recent commits via GitAdapter.
+    """Fetch the newest ``limit`` commits via GitAdapter, and restate its cut as ``git_log``.
 
-    BACK-1016: a 13th sibling-adapter-construction site the BACK-984 sweep
-    missed — it constructs GitAdapter directly (query is a dict, not the
-    canonical query string compose() expects, so it can't route through
-    compose() as-is) and previously swallowed a crashed git log into `[]`
-    with only a logger.warning, no envelope error. record_composed_error()
-    closes that the same way BACK-984 did for every compose()-based site.
+    BACK-1547: through ``compose`` like the other sections. It had constructed GitAdapter
+    directly with a dict query (BACK-1016), so git's cut never reached this report and
+    ``?top=1`` showed one commit as the whole log. GitAdapter takes ``compose``'s
+    ``(resource, query-string)`` call, since it moves a query string passed as its ``ref``
+    into its query. A crashed git log is still an attributed composed error, not ``[]``.
 
-    BACK-1225: query type must be 'history', not 'log' -- GitAdapter's
-    subpath-scoped dispatch only recognizes the exact string 'history' (see
-    adapter.py get_structure()); 'log' fell through to its file-content
-    branch and failed with a misdirected error on every subdirectory target
-    (i.e. every overview:// call below repo root). At repo root (no subpath)
-    this changes nothing: GitAdapter's ref-based branch only ever checked
-    query_type for truthiness, never its exact value. The two GitAdapter
-    result shapes differ by key -- repo-root's refs.get_ref_structure()
-    returns 'history'; a subpath's files.get_file_history() returns
-    'commits' -- so both are checked here."""
-    try:
-        data = GitAdapter(path=str(path), query={'type': 'history', 'limit': str(limit)}).get_structure()
-        return data.get('history', data.get('commits', []))
-    except Exception as exc:
-        logger.warning("git log collection failed for %s: %s", path, exc)
-        adapter.record_composed_error('GitAdapter', path, exc)
-        return []
+    BACK-1225: the query type is 'history', which GitAdapter's subpath dispatch recognizes
+    ('log' fell through to its file-content branch on every subdirectory target). The two
+    result shapes differ by key: repo-root's ``refs.get_ref_structure()`` returns
+    'history', a subpath's ``files.get_file_history()`` returns 'commits', so both are read.
+    """
+    data = adapter.compose(GitAdapter, str(path), default={},
+                           query=f'type=history&limit={limit}',
+                           cut_as=('git_log', 'raise ?top=N'))
+    return data.get('history', data.get('commits', []))
 
 
 def _run_complex_functions(adapter: 'OverviewAdapter', path: Path, limit: int) -> List[Dict[str, Any]]:

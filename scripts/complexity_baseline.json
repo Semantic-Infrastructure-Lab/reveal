@@ -11,7 +11,6 @@
   "reveal/adapters/codex/handlers/sessions.py::search_sessions": 23,
   "reveal/adapters/depends.py::DependsAdapter._format_file_dependents": 22,
   "reveal/adapters/depends.py::DependsAdapter._index_one_file": 25,
-  "reveal/adapters/git/files.py::get_file_history": 23,
   "reveal/adapters/help.py::HelpAdapter._get_element_impl": 37,
   "reveal/adapters/help.py::HelpAdapter._search_help": 26,
   "reveal/adapters/overview.py::_render_architecture": 27,

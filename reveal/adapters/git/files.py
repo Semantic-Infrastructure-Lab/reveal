@@ -11,7 +11,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ...core import disk_cache
 from ...utils.results import ResultBuilder
-from .commits import history_sort
+from .commits import commit_filter, disclose_timeline_cut, timeline_fields, walk_history
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +260,6 @@ def get_file_history(
 
     try:
         limit = int(query.get('limit', 50))
-        commits = []
 
         # Start from HEAD or specified ref
         obj = repo.revparse_single(ref)
@@ -269,34 +268,12 @@ def get_file_history(
 
         commit = cast('pygit2.Commit', obj)
 
-        no_merges = query.get('no_merges') in ('1', 'true', 'yes')
         content_pattern: Optional[str] = query.get('content~') or query.get('content') or None
-        if content_pattern:
-            _reset_content_search_error()
-
-        # Walk commit history
-        walker = repo.walk(commit.id, history_sort())  # type: ignore[arg-type]
-
-        for commit in walker:
-            if no_merges and len(commit.parents) > 1:
-                continue
-            if not commit_touches_file_func(repo, commit, subpath):
-                continue
-            commit_dict = format_commit_func(commit)
-            if not matches_all_filters_func(commit_dict):
-                continue
-            if content_pattern and not _commit_diff_contains(repo, commit, subpath, content_pattern):
-                continue
-            commits.append(commit_dict)
-            # Collect offset + limit: result control below skips `offset` of them
-            # first, so stopping at `limit` returned limit - offset (BACK-1506).
-            if len(commits) >= limit + (getattr(result_control, 'offset', 0) or 0):
-                break
-
-        # Apply result control (sort, limit, offset) from query params
-        from ...utils.query import apply_result_control
-        total_matches = len(commits)
-        controlled_commits = apply_result_control(commits, result_control)
+        keep = commit_filter(repo, format_commit_func, matches_all_filters_func,
+                             no_merges=query.get('no_merges') in ('1', 'true', 'yes'),
+                             touches=commit_touches_file_func, subpath=subpath,
+                             content_pattern=content_pattern)
+        walk = walk_history(repo, commit.id, keep, limit, result_control)
 
         result = ResultBuilder.create(
             result_type='git_directory_history' if is_dir else 'git_file_history',
@@ -305,10 +282,13 @@ def get_file_history(
             contract_version=CONTRACT_VERSION,
             path=subpath,
             ref=ref,
-            commits=controlled_commits,
-            count=len(controlled_commits),
-            total_matches=total_matches if total_matches != len(controlled_commits) else None,
+            commits=walk.commits,
+            count=len(walk.commits),
+            # The whole count when the walk knows it; a walk that stopped at the page only
+            # knows a lower bound, which its truncated entry carries (BACK-1547).
+            total_matches=walk.total if walk.exact and walk.total != len(walk.commits) else None,
         )
+        walk.disclose(result, 'commits')
         if content_pattern:
             disclosure = get_content_search_disclosure()
             if disclosure:
@@ -333,7 +313,6 @@ def get_file_timeline(
     format_commit_func,
     matches_all_filters_func,
     commit_touches_file_func,
-    bucket_commits_func,
 ) -> Dict[str, Any]:
     """Bucket commit history for a file or directory by week/month.
 
@@ -351,29 +330,16 @@ def get_file_timeline(
 
     try:
         limit = int(query.get('limit', 20000))
-        no_merges = query.get('no_merges') in ('1', 'true', 'yes')
-        matched: List[Dict[str, Any]] = []
 
         obj = repo.revparse_single(ref)
         while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
             obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
 
         commit = cast('pygit2.Commit', obj)
-        walker = repo.walk(commit.id, history_sort())  # type: ignore[arg-type]
-
-        for commit in walker:
-            if no_merges and len(commit.parents) > 1:
-                continue
-            if not commit_touches_file_func(repo, commit, subpath):
-                continue
-            commit_dict = format_commit_func(commit)
-            if not matches_all_filters_func(commit_dict):
-                continue
-            matched.append(commit_dict)
-            if len(matched) >= limit:
-                break
-
-        buckets = bucket_commits_func(matched, bucket)
+        keep = commit_filter(repo, format_commit_func, matches_all_filters_func,
+                             no_merges=query.get('no_merges') in ('1', 'true', 'yes'),
+                             touches=commit_touches_file_func, subpath=subpath)
+        walk = walk_history(repo, commit.id, keep, limit)
 
         result = ResultBuilder.create(
             result_type='git_timeline',
@@ -382,11 +348,9 @@ def get_file_timeline(
             contract_version=CONTRACT_VERSION,
             path=subpath,
             ref=ref,
-            bucket=bucket,
-            buckets=buckets,
-            commit_count=len(matched),
-            distinct_author_count=len({c.get('email') or c.get('author') for c in matched}),
+            **timeline_fields(walk.commits, bucket),
         )
+        disclose_timeline_cut(result, walk)
         if getattr(repo, 'is_shallow', False):
             result['shallow_clone'] = True
         return result

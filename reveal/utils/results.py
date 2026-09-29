@@ -89,11 +89,12 @@ def outcome_of(result: Any) -> Outcome:
 
 
 def note_truncation(result: Any, field: str, shown: int, total: int,
-                    cause: str, hint: Optional[str] = None) -> None:
+                    cause: str, hint: Optional[str] = None, exact: bool = True) -> None:
     """Record that ``result[field]`` holds ``shown`` of ``total`` items (BACK-1059).
 
     This is the one way to say a list was cut. It writes one ``meta.warnings`` entry per
-    field: ``{'type': 'truncated', 'field', 'shown', 'total', 'cause', 'message'}``. Before
+    field: ``{'type': 'truncated', 'field', 'shown', 'total', 'exact', 'cause', 'message'}``.
+    Before
     it, truncation was spelled six ways (a ``truncated`` or ``auto_capped`` meta warning,
     a top-level ``warnings`` list, ``meta.budget``, ``pagination``, a ``warning``
     string), and text renderers that didn't know a given spelling showed a cut list as
@@ -102,6 +103,11 @@ def note_truncation(result: Any, field: str, shown: int, total: int,
     A second cut of the same field updates its entry: the adapter's own ``?limit``, then
     the router's ``--max-items``, is one disclosure of the smaller ``shown`` against the
     larger ``total``. Nothing is recorded when nothing was cut.
+
+    ``exact=False``: the reader stopped once it had enough, so ``total`` is a lower bound
+    (BACK-1547). git:// walks history until it holds one commit past ``?limit``; it knows
+    more exist, not how many, and says "showing 50 of 51+". When two cuts of one field
+    merge, the larger total wins, and on a tie the exact one does.
     """
     if shown >= total:
         return
@@ -116,11 +122,12 @@ def note_truncation(result: Any, field: str, shown: int, total: int,
         entry = {'type': 'truncated', 'field': field}
         meta['warnings'].append(entry)
     else:
-        shown, total = min(shown, entry['shown']), max(total, entry['total'])
+        shown = min(shown, entry['shown'])
+        total, exact = max((total, exact), (entry['total'], entry.get('exact', True)))
     if hint is None:
         hint = _TRUNCATION_HINTS.get(cause, '')
-    entry.update(shown=shown, total=total, cause=cause,
-                 message=_truncation_message(field, shown, total, hint))
+    entry.update(shown=shown, total=total, exact=exact, cause=cause,
+                 message=_truncation_message(field, shown, total, hint, exact))
 
 
 def relabel_truncations(result: Any, field: str, hint: str) -> None:
@@ -132,11 +139,14 @@ def relabel_truncations(result: Any, field: str, hint: str) -> None:
     """
     for entry in truncations_of(result):
         entry['field'] = field
-        entry['message'] = _truncation_message(field, entry['shown'], entry['total'], hint)
+        entry['message'] = _truncation_message(field, entry['shown'], entry['total'], hint,
+                                               entry.get('exact', True))
 
 
-def _truncation_message(field: str, shown: int, total: int, hint: str) -> str:
-    return f'{field}: showing {shown} of {total}' + (f' — {hint}' if hint else '')
+def _truncation_message(field: str, shown: int, total: int, hint: str,
+                        exact: bool = True) -> str:
+    of = f'{total}' if exact else f'{total}+'
+    return f'{field}: showing {shown} of {of}' + (f' — {hint}' if hint else '')
 
 
 def truncations_of(result: Any) -> List[Dict[str, Any]]:

@@ -6,6 +6,7 @@ from typing import Dict, Any, List, cast, TYPE_CHECKING
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ...utils.results import ResultBuilder
+from .commits import disclose_timeline_cut, timeline_fields
 
 if TYPE_CHECKING:
     import pygit2
@@ -37,7 +38,7 @@ def get_ref_structure(
             commit_obj = cast('pygit2.Commit', obj)
             # Get commit history from this point
             limit = int(query.get('limit', 20))
-            commits = get_commit_history_func(repo, commit_obj, limit=limit)
+            walk = get_commit_history_func(repo, commit_obj, limit=limit)
 
             result = ResultBuilder.create(
                 result_type='git_ref',
@@ -46,9 +47,10 @@ def get_ref_structure(
                 contract_version=CONTRACT_VERSION,
                 ref=ref,
                 commit=format_commit_func(commit_obj, detailed=True),
-                history=commits,
+                history=walk.commits,
                 filter_applied=bool(query_filters),
             )
+            walk.disclose(result, 'history')
             # BACK-1166: surface a content-pattern search degradation, if the
             # caller requested one (get_commit_history_func resets this
             # before running).
@@ -72,6 +74,7 @@ def get_ref_structure(
 def get_ref_timeline(
     repo: 'pygit2.Repository',
     ref: str,
+    bucket: str,
     get_commit_timeline_func,
 ) -> Dict[str, Any]:
     """Bucket repo-wide commit history (no subpath) by week/month."""
@@ -86,7 +89,7 @@ def get_ref_timeline(
             raise ValueError(f"Cannot resolve ref to commit: {ref}")
 
         commit_obj = cast('pygit2.Commit', obj)
-        timeline = get_commit_timeline_func(repo, commit_obj)
+        walk = get_commit_timeline_func(repo, commit_obj)
 
         result = ResultBuilder.create(
             result_type='git_timeline',
@@ -95,8 +98,9 @@ def get_ref_timeline(
             contract_version=CONTRACT_VERSION,
             path=None,
             ref=ref,
-            **timeline,
+            **timeline_fields(walk.commits, bucket),
         )
+        disclose_timeline_cut(result, walk)
         if getattr(repo, 'is_shallow', False):
             result['shallow_clone'] = True
         return result
