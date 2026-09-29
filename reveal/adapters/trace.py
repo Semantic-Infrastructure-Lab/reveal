@@ -367,6 +367,7 @@ class TraceAdapter(ResourceAdapter):
     HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    RESOURCE_IS_PATH = True  # a typo'd path exits 1, not 'entry point has no calls' (BACK-1524)
     CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # --no-gitignore (BACK-1386)
 
     def __init__(self, resource: str, query: Optional[str] = None):
