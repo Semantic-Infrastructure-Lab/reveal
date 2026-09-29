@@ -1,4 +1,5 @@
 {
+ "argv": {},
  "exit": {
   "reveal/adapters/cpanel/renderer.py": 1,
   "reveal/adapters/nginx/handlers.py": 18,
@@ -10,8 +11,6 @@
   "reveal/grep_handler.py": 3,
   "reveal/logging_setup.py": 1,
   "reveal/nav_handlers.py": 2,
-  "reveal/rendering/adapters/help.py": 7,
-  "reveal/rendering/adapters/json_adapter.py": 1,
   "reveal/rendering/adapters/python.py": 1
  },
  "print": {

@@ -52,8 +52,6 @@ def _render_codex_config(result: dict) -> None:
         else:
             print(json.dumps(val, indent=2, ensure_ascii=False, default=str) if isinstance(val, (dict, list)) else str(val))
         print()
-        if 'error' in result:
-            print(f"Error: {result['error']}")
         return
     config = result.get('config', {})
     if config:
@@ -61,8 +59,6 @@ def _render_codex_config(result: dict) -> None:
     else:
         print("  (empty or not found)")
     print()
-    if 'error' in result:
-        print(f"Error: {result['error']}")
 
 
 def _render_codex_memories(result: dict) -> None:
@@ -95,7 +91,6 @@ def _render_codex_rules(result: dict) -> None:
 
 def _render_codex_skills(result: dict) -> None:
     if 'error' in result:
-        print(f"Error: {result['error']}")
         return
     skills = result.get('skills', [])
     total = result.get('total', len(skills))
@@ -111,7 +106,6 @@ def _render_codex_skills(result: dict) -> None:
 
 def _render_codex_skill(result: dict) -> None:
     if 'error' in result:
-        print(f"Error: {result['error']}")
         return
     print(f"Codex Skill: {result.get('name', '?')}")
     desc = result.get('description')
@@ -123,7 +117,6 @@ def _render_codex_skill(result: dict) -> None:
 
 def _render_codex_plugins(result: dict) -> None:
     if 'error' in result:
-        print(f"Error: {result['error']}")
         return
     plugins = result.get('plugins', [])
     total = result.get('total', len(plugins))
@@ -140,7 +133,6 @@ def _render_codex_plugins(result: dict) -> None:
 
 def _render_codex_plugin(result: dict) -> None:
     if 'error' in result:
-        print(f"Error: {result['error']}")
         return
     print(f"Codex Plugin: {result.get('name', '?')}")
     print()

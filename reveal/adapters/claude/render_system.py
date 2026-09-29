@@ -58,7 +58,6 @@ def _render_claude_settings(result: dict) -> None:
     if 'key' in result:
         val = result.get('value')
         if error:
-            print(f'Error: {error}')
             return
         formatted = _json.dumps(val, indent=2) if isinstance(val, (dict, list)) else str(val)
         print(f'{result["key"]}:')
@@ -66,7 +65,6 @@ def _render_claude_settings(result: dict) -> None:
         return
 
     if error:
-        print(f'Error: {error}')
         return
 
     settings = result.get('settings', {})
@@ -83,8 +81,6 @@ def _render_claude_plans(result: dict) -> None:
         for name in result.get('matches', []):
             print(f'  {name}')
         return
-    if error:
-        print(f'Error: {error}')
 
     plans = result.get('plans', [])
     total = result.get('total', 0)
@@ -124,7 +120,6 @@ def _render_claude_plan(result: dict) -> None:
     """Render a single plan's content."""
     error = result.get('error')
     if error:
-        print(f'Error: {error}')
         return
     name = result.get('name', '')
     source = result.get('source', '')
@@ -160,8 +155,6 @@ def _render_claude_config(result: dict) -> None:
     projects = result.get('projects', [])
     flags = result.get('flags', {})
 
-    if error:
-        print(f'Error: {error}')
 
     print(f'Claude Code Config: {source}')
     print()
@@ -193,8 +186,6 @@ def _render_claude_config(result: dict) -> None:
 def _render_claude_memory(result: dict) -> None:
     """Render memory files listing."""
     error = result.get('error')
-    if error:
-        print(f'Error: {error}')
     memories = result.get('memories', [])
     total = result.get('total', 0)
     search = result.get('search')
@@ -243,8 +234,6 @@ def _render_claude_agents(result: dict) -> None:
         return
 
     error = result.get('error')
-    if error:
-        print(f'Error: {error}')
 
     agents = result.get('agents', [])
     total = result.get('total', 0)
@@ -282,7 +271,6 @@ def _render_claude_agent(result: dict) -> None:
     """Render a single agent definition."""
     error = result.get('error')
     if error:
-        print(f'Error: {error}')
         return
     name = result.get('name', '')
     modified = result.get('modified', '')
@@ -335,8 +323,6 @@ def _hook_detail(h: dict) -> str:
 def _render_claude_hooks(result: dict) -> None:
     """Render hook event types and scripts."""
     error = result.get('error')
-    if error:
-        print(f'Error: {error}')
 
     if 'event' in result and result.get('kind') == 'file':
         _render_hook_file(result)

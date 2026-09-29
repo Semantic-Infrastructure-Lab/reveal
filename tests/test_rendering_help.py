@@ -4,7 +4,7 @@ import unittest
 import sys
 import io
 from pathlib import Path
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 
 # Add parent directory to path to import reveal
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -18,7 +18,6 @@ from reveal.rendering.adapters.help import (
     _render_adapter_schema,
     _select_index_entries,
     render_help,
-    help_error_exit_code,
 )
 
 import pytest
@@ -219,13 +218,17 @@ class TestRenderHelpStaticGuide(unittest.TestCase):
         self.assertIn('Some content here.', output)
 
     def test_error_handling(self):
-        """Should handle error data and exit."""
+        """An error result gets its detail on stderr and nothing else; the router prints
+        the error line and exits 1 (BACK-1059)."""
         data = {
-            'error': True,
+            'error': 'Not found',
             'message': 'File not found'
         }
-        with self.assertRaises(SystemExit):
-            _render_help_static_guide(data)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            output = capture_stdout(_render_help_static_guide, data)
+        self.assertIn('File not found', stderr.getvalue())
+        self.assertEqual(output, '')
 
     def test_renders_note_cross_signpost(self):
         """BACK-847: help://schema (singular) must cross-signpost help://schemas
@@ -365,13 +368,17 @@ class TestRenderHelpSection(unittest.TestCase):
         self.assertIn('reveal help://ast', output)
 
     def test_error_handling(self):
-        """Should handle error data and exit."""
+        """An error result gets its detail on stderr and nothing else; the router prints
+        the error line and exits 1 (BACK-1059)."""
         data = {
-            'error': True,
+            'error': 'Not found',
             'message': 'Section not found'
         }
-        with self.assertRaises(SystemExit):
-            _render_help_section(data)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            output = capture_stdout(_render_help_section, data)
+        self.assertIn('Section not found', stderr.getvalue())
+        self.assertEqual(output, '')
 
 
 class TestRenderHelpAdapterSpecific(unittest.TestCase):
@@ -593,13 +600,17 @@ class TestRenderHelpAdapterSpecific(unittest.TestCase):
         self.assertNotIn('## Next', output)
 
     def test_error_handling(self):
-        """Should handle error data and exit."""
+        """An error result gets its detail on stderr and nothing else; the router prints
+        the error line and exits 1 (BACK-1059)."""
         data = {
-            'error': True,
+            'error': 'Not found',
             'message': 'Adapter not found'
         }
-        with self.assertRaises(SystemExit):
-            _render_help_adapter_specific(data)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            output = capture_stdout(_render_help_adapter_specific, data)
+        self.assertIn('Adapter not found', stderr.getvalue())
+        self.assertEqual(output, '')
 
 
 class TestRenderHelp(unittest.TestCase):
@@ -677,8 +688,10 @@ class TestRenderHelp(unittest.TestCase):
         output = capture_stdout(render_help, data, 'text', False)
         self.assertIn('# test:// - Test adapter', output)
 
-    def test_json_real_error_exits_nonzero(self):
-        """BACK-697: a genuine error dict must exit 1 in JSON, matching text mode."""
+    def test_json_error_renders_without_exiting(self):
+        """BACK-1059: the renderer prints an error result; the router's outcome check
+        (cli/routing/uri._emit_result) exits 1 for it, in JSON and text alike.
+        End-to-end exit codes: tests/test_result_outcome.py."""
         data = {
             'type': 'adapter_schema',
             'adapter': 'nonexistent',
@@ -686,9 +699,8 @@ class TestRenderHelp(unittest.TestCase):
             'message': "No adapter named 'nonexistent'",
             'available_adapters': ['ast', 'git'],
         }
-        with self.assertRaises(SystemExit) as ctx:
-            capture_stdout(render_help, data, 'json', False)
-        self.assertEqual(ctx.exception.code, 1)
+        output = capture_stdout(render_help, data, 'json', False)
+        self.assertIn('"Unknown adapter"', output)
 
     def test_json_catalog_listing_exits_zero(self):
         """Bare help://examples is a navigational listing, not an error — exit 0."""
@@ -705,25 +717,21 @@ class TestRenderHelp(unittest.TestCase):
     def test_json_schema_catalog_listing_exits_zero(self):
         """Bare help://schemas listing (no 'error' key at all) must still exit 0."""
         data = {
-            'type': 'adapter_schema',
-            'adapter': '',
+            'type': 'adapter_schema_index',
             'available_adapters': ['ast', 'git'],
         }
         output = capture_stdout(render_help, data, 'json', False)
         self.assertIn('"available_adapters"', output)
 
-    def test_text_schema_catalog_listing_does_not_crash(self):
-        """Bare help://schemas listing must render as a catalog, not raise KeyError.
+    def test_text_schema_catalog_listing_renders_catalog(self):
+        """Bare help://schemas is its own success type (BACK-1059), rendered as a catalog.
 
-        Regression: the adapter-side dict for a bare `help://schemas` lookup
-        omitted the `error` key, so `_is_catalog_listing()` (which requires
-        `'error' in data` before checking `type`/`adapter`/`available_adapters`)
-        returned False and `_render_schema_error` crashed on `data['message']`.
+        It used to be an error-shaped dict ('error': 'No adapter specified') that the
+        renderer had to recognise as a listing, and one variant without the 'error' key
+        crashed on data['message'].
         """
         data = {
-            'type': 'adapter_schema',
-            'adapter': '',
-            'error': 'No adapter specified',
+            'type': 'adapter_schema_index',
             'available_adapters': ['ast', 'git'],
             'usage': 'reveal help://schemas/<adapter>',
             'examples': ['reveal help://schemas/ast'],
@@ -736,9 +744,7 @@ class TestRenderHelp(unittest.TestCase):
         (singular, the unrelated front-matter guide) rather than leaving the
         namespace collision to silently misinform."""
         data = {
-            'type': 'adapter_schema',
-            'adapter': '',
-            'error': 'No adapter specified',
+            'type': 'adapter_schema_index',
             'available_adapters': ['ast', 'git'],
             'usage': 'reveal help://schemas/<adapter>',
             'examples': ['reveal help://schemas/ast'],
@@ -875,22 +881,6 @@ class TestRenderHelp(unittest.TestCase):
         self.assertIn('Tree-sitter Fallback (1)', output)
         self.assertIn('Zig', output)
 
-    def test_help_error_exit_code_real_error(self):
-        data = {'type': 'help_section', 'error': 'Unknown adapter', 'message': 'x'}
-        self.assertEqual(help_error_exit_code(data), 1)
-
-    def test_help_error_exit_code_catalog_listing(self):
-        data = {
-            'type': 'query_recipes',
-            'task': '',
-            'error': 'No task specified',
-            'available_tasks': ['security'],
-        }
-        self.assertEqual(help_error_exit_code(data), 0)
-
-    def test_help_error_exit_code_no_error_key(self):
-        self.assertEqual(help_error_exit_code({'type': 'help_quick'}), 0)
-
 
 class TestRenderAdapterSchemaOutputTypeDrilldown(unittest.TestCase):
     """help://schemas/<adapter>/<output_type> drill-down (BACK-838 schemas tiering)."""
@@ -937,8 +927,11 @@ class TestRenderAdapterSchemaOutputTypeDrilldown(unittest.TestCase):
             'available_output_types': ['ssl_certificate'],
             'next': ['reveal help://schemas/ssl'],
         }
-        with self.assertRaises(SystemExit):
-            capture_stdout(_render_adapter_schema, data)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            output = capture_stdout(_render_adapter_schema, data)
+        self.assertIn("No output type 'bogus'", stderr.getvalue())
+        self.assertEqual(output, '')
 
 
 class TestHelpQuick(unittest.TestCase):

@@ -9,34 +9,6 @@ from reveal.utils.formatting import shell_command
 from reveal.adapters.base import Stability, _ADAPTER_REGISTRY
 
 
-def _is_catalog_listing(data: Dict[str, Any]) -> bool:
-    """True if an 'error' dict is actually a bare-topic catalog listing.
-
-    `help://examples` and `help://schemas` route through the same error-shaped
-    dict as a real lookup failure (BACK-697) — task/adapter is empty and an
-    `available_*` list is present instead. Those are navigational, not errors,
-    and must not trigger a non-zero exit.
-    """
-    if 'error' not in data:
-        return False
-    if data.get('type') == 'query_recipes':
-        return not data.get('task') and bool(data.get('available_tasks'))
-    if data.get('type') == 'adapter_schema':
-        return not data.get('adapter') and bool(data.get('available_adapters'))
-    return False
-
-
-def help_error_exit_code(data: Dict[str, Any]) -> int:
-    """Exit code `help://` output should produce for a given result dict.
-
-    Kept in sync with the per-type text renderers below so JSON and text
-    output agree on what counts as a real error (BACK-697).
-    """
-    if 'error' in data and not _is_catalog_listing(data):
-        return 1
-    return 0
-
-
 # Stability badge/label are derived from each adapter's own STABILITY class
 # attribute (reveal/adapters/base.py) — never a hand-maintained set here, so a
 # new adapter can't silently render with the wrong badge (BACK-688).
@@ -268,8 +240,8 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
 def _render_help_static_guide(data: Dict[str, Any]) -> None:
     """Render static guide from markdown file."""
     if 'error' in data:
-        print(f"Error: {data['message']}", file=sys.stderr)
-        sys.exit(1)
+        _render_error_detail(data)
+        return
 
     # Add source attribution header
     topic = data.get('topic', 'unknown')
@@ -350,8 +322,8 @@ _SECTION_RENDERERS = {
 def _render_help_section(data: Dict[str, Any]) -> None:
     """Render specific help section (help://ast/workflows)."""
     if 'error' in data:
-        print(f"Error: {data['message']}", file=sys.stderr)
-        sys.exit(1)
+        _render_error_detail(data)
+        return
 
     adapter = data.get('adapter', '')
     section = data.get('section', '')
@@ -536,10 +508,8 @@ def _render_help_see_also(data: Dict[str, Any]) -> None:
 def _render_help_search(data: Dict[str, Any]) -> None:
     """Render help://search?search=<term> — full-text hits across the help corpus."""
     if 'error' in data:
-        print(f"Error: {data['message']}", file=sys.stderr)
-        for example in data.get('examples', []):
-            print(f"  {example}", file=sys.stderr)
-        sys.exit(1)
+        _render_error_detail(data)
+        return
 
     query = data.get('query', '')
     hits = data.get('hits', [])
@@ -588,8 +558,8 @@ def _render_query_recipes_index(data: Dict[str, Any]) -> None:
 def _render_query_recipes(data: Dict[str, Any]) -> None:
     """Render help://examples/<task> — canonical query recipes for a task."""
     if 'error' in data:
-        print(f"Error: {data['message']}", file=sys.stderr)
-        sys.exit(1)
+        _render_error_detail(data)
+        return
 
     task = data.get('task', '')
     description = data.get('description', '')
@@ -624,30 +594,37 @@ def _render_query_recipes(data: Dict[str, Any]) -> None:
     print()
 
 
-def _render_schema_error(data: Dict[str, Any]) -> None:
-    available = data.get('available_adapters', [])
-    adapter = data.get('adapter', '')
-    if _is_catalog_listing(data):
-        print("# Adapter Schemas")
+def _render_adapter_schema_index(data: Dict[str, Any]) -> None:
+    """Render bare help://schemas — the adapters that publish a schema."""
+    print("# Adapter Schemas")
+    print()
+    print("**Usage:** `reveal help://schemas/<adapter>`")
+    print()
+    print("## Available Adapters")
+    for name in data.get('available_adapters', []):
+        print(f"  {name}")
+    print()
+    print("## Examples")
+    print("  reveal help://schemas/ast")
+    print("  reveal help://schemas/ssl")
+    print("  reveal help://schemas/git")
+    print()
+    if data.get('note'):
+        print(f"Note: {data['note']}")
         print()
-        print("**Usage:** `reveal help://schemas/<adapter>`")
-        print()
-        print("## Available Adapters")
-        for name in available:
-            print(f"  {name}")
-        print()
-        print("## Examples")
-        print("  reveal help://schemas/ast")
-        print("  reveal help://schemas/ssl")
-        print("  reveal help://schemas/git")
-        print()
-        if data.get('note'):
-            print(f"Note: {data['note']}")
-            print()
-        _render_schema_next(data)
-    else:
-        print(f"Error: {data['message']}", file=sys.stderr)
-        sys.exit(1)
+    _render_schema_next(data)
+
+
+def _render_error_detail(data: Dict[str, Any]) -> None:
+    """The detail under a help:// error: its message and any example commands.
+
+    The router has already printed the error line and exits 1 after this returns
+    (cli/routing/uri._emit_result, BACK-1059).
+    """
+    if data.get('message'):
+        print(data['message'], file=sys.stderr)
+    for example in data.get('examples', []):
+        print(f"  {example}", file=sys.stderr)
 
 
 def _render_schema_header(adapter: str, description: str, uri_syntax: str) -> None:
@@ -923,8 +900,8 @@ def _render_adapter_schema_all(data: Dict[str, Any]) -> None:
 
 def _render_adapter_schema(data: Dict[str, Any]) -> None:
     """Render help://schemas/<adapter> — machine-readable adapter schema."""
-    if 'error' in data or (not data.get('adapter') and data.get('available_adapters')):
-        _render_schema_error(data)
+    if 'error' in data:
+        _render_error_detail(data)
         return
 
     if 'detail' in data and 'output_type' in data:
@@ -951,8 +928,8 @@ def _render_help_adapter_specific(data: Dict[str, Any]) -> None:
     Each section is handled by a dedicated function for clarity.
     """
     if 'error' in data:
-        print(f"Error: {data['message']}", file=sys.stderr)
-        sys.exit(1)
+        _render_error_detail(data)
+        return
 
     scheme = data.get('scheme', data.get('name', ''))
 
@@ -1056,9 +1033,6 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
     """
     if output_format == 'json':
         print_json_result(data)
-        exit_code = help_error_exit_code(data)
-        if exit_code:
-            sys.exit(exit_code)
         return
 
     if list_mode:
@@ -1076,6 +1050,7 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
         'query_recipes': _render_query_recipes,
         'query_recipes_index': _render_query_recipes_index,
         'adapter_schema': _render_adapter_schema,
+        'adapter_schema_index': _render_adapter_schema_index,
         'adapter_schema_all': _render_adapter_schema_all,
         'help_rules': _render_help_rules,
         'help_languages': _render_help_languages,

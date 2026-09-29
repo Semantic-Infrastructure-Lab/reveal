@@ -998,7 +998,7 @@ class TestClaudeMessageRenderer:
         assert 'user' in out
         assert 'this is the message text' in out
 
-    def test_renders_error(self, capsys):
+    def test_error_renders_nothing(self, capsys):
         from reveal.adapters.claude.renderer import ClaudeRenderer
 
         result = {
@@ -1009,8 +1009,9 @@ class TestClaudeMessageRenderer:
         ClaudeRenderer._render_claude_message(result)
         out = capsys.readouterr().out
 
-        assert 'Error:' in out
-        assert 'out of range' in out
+        # The router prints the error and exits 1 (BACK-1059, tests/test_result_outcome.py);
+        # the renderer must not print it again or render the missing message.
+        assert out == ''
 
     def test_fallback_to_block_summary(self, capsys):
         from reveal.adapters.claude.renderer import ClaudeRenderer

@@ -13,6 +13,7 @@ from typing import Any, List, Optional
 
 from ...errors import NotApplicableError
 from ...utils import print_json_result, write_also_json
+from ...utils.results import outcome_of
 from .flag_specs import exclude_fragment, inject_query_flags, strip_result_control_keys
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
 from .formats import declared_output_formats, require_supported_format
@@ -685,8 +686,7 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
             if _mode(result, args, _text_field, _label):
                 return
 
-    write_also_json(result, args)
-    renderer_class.render_element(result, args.format)
+    _emit_result(result, args, scheme, renderer_class.render_element)
 
 
 def _build_adapter_kwargs(adapter, args: 'Namespace', scheme: Optional[str] = None, resource: Optional[str] = None) -> dict:
@@ -900,8 +900,31 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
         if available_elements:
             result['available_elements'] = available_elements
 
+    _emit_result(result, args, scheme, renderer_class.render_structure,
+                 **_render_structure_top_kwargs(renderer_class, args))
+
+
+def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render, **render_kwargs) -> None:
+    """Render a URI result and turn its outcome into the exit code (BACK-1059).
+
+    Every URI result, for the CLI and MCP alike, ends here (_render_structure and
+    _render_element), so this is the one place a result's outcome becomes the exit code
+    and the one place its error is reported. Before it, each adapter or renderer decided
+    for itself: an error result from calls://, codex://, claude:// or json:// rendered and
+    exited 0, which reads as success to a script or agent, and some text renderers dropped
+    the error entirely (codex:// with no DB rendered "Codex Sessions: 0 total").
+
+    The error line comes before the render, so renderers add only detail (an example, the
+    valid names) and never print the error themselves. The exit comes after it, so
+    --format json still prints the whole error envelope.
+    """
+    failed = outcome_of(result) == 'failed'
+    if failed:
+        print(f"Error ({scheme or 'unknown'}://): {result['error']}", file=sys.stderr)
     write_also_json(result, args)
-    renderer_class.render_structure(result, args.format, **_render_structure_top_kwargs(renderer_class, args))
+    render(result, args.format, **render_kwargs)
+    if failed:
+        sys.exit(1)
 
 
 def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace') -> dict:

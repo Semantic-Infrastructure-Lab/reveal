@@ -368,7 +368,6 @@ def _render_claude_message(result: dict) -> None:
     ts = (result.get('timestamp') or '')[:16].replace('T', ' ')
 
     if 'error' in result:
-        print(f"Error: {result['error']}")
         return
 
     turn = result.get('turn')

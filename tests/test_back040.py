@@ -389,10 +389,11 @@ class TestFileSessionsRenderer:
         assert 'adapter.py' in output
         assert '0' in output
 
-    def test_renders_error_message(self):
+    def test_error_is_left_to_the_router(self):
+        # The router prints the error and exits 1 (BACK-1059, tests/test_result_outcome.py).
         result = self._make_result(error='Corpus directory not found')
         output = self._render(result)
-        assert 'Corpus directory not found' in output
+        assert 'Corpus directory not found' not in output
 
     def test_multiple_sessions_all_rendered(self):
         sessions = [

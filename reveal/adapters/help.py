@@ -692,11 +692,11 @@ class HelpAdapter(ResourceAdapter):
             # Only list adapters that actually provide a schema — listing a
             # meta-adapter (e.g. help://) that returns None would walk an agent
             # straight into a "no schema available" error from its own menu (N1).
+            # A navigational index, not a failure: its own success type with no
+            # 'error' key, as BACK-998 did for help://examples (BACK-1059).
             adapters = self._adapters_with_schema()
             return {
-                'type': 'adapter_schema',
-                'adapter': '',
-                'error': 'No adapter specified',
+                'type': 'adapter_schema_index',
                 'available_adapters': adapters,
                 'usage': 'reveal help://schemas/<adapter>',
                 'examples': [

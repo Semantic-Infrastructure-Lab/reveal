@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 
 from reveal.utils.json_utils import print_json_result
+from reveal.utils.results import outcome_of
 
 
 class RendererMixin:
@@ -217,6 +218,10 @@ class TypeDispatchRenderer(BaseRenderer):
 
         if method and callable(method):
             method(result)
+        elif outcome_of(result) == 'failed':
+            # An error-only type (codex_error, ...) has no text view, and the router has
+            # already printed its error (BACK-1059); a JSON dump would only repeat it.
+            return
         else:
             # Fallback to JSON for unknown types
             cls.render_json(result)

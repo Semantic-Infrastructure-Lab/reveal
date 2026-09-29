@@ -1564,8 +1564,9 @@ class TestCallsRendererMissingTarget(unittest.TestCase):
             sys.stderr = old_stderr
         return buf.getvalue()
 
-    def test_missing_target_shows_error_not_question_mark(self):
-        """When data has 'error' key and no 'target', renderer shows error to stderr."""
+    def test_missing_target_shows_example_not_question_mark(self):
+        """With an 'error' and no 'target', the renderer adds the example on stderr. The
+        router prints the error itself and exits 1 (BACK-1059, BACK-1526)."""
         from reveal.adapters.calls.renderer import render_calls_structure
         data = {
             'path': '/some/path',
@@ -1573,8 +1574,8 @@ class TestCallsRendererMissingTarget(unittest.TestCase):
             'example': 'calls:///some/path?target=my_function',
         }
         err = self._capture_stderr(render_calls_structure, data, 'text')
-        self.assertIn('Missing required parameter', err)
-        self.assertIn('calls://', err)
+        self.assertIn('Example: calls:///some/path?target=my_function', err)
+        self.assertNotIn('?', err.replace('?target', ''))
 
     def test_error_case_does_not_print_callers_of_question_mark(self):
         """The 'Callers of: ?' text should NOT appear when target is missing."""

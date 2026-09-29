@@ -151,7 +151,6 @@ def _render_claude_file_sessions(result: dict) -> None:
     print(f'Scanned {scanned} sessions  |  Found {count} sessions touching this file')
 
     if error:
-        print(f'Error: {error}')
         return
     if count == 0:
         return
@@ -203,7 +202,6 @@ def _render_claude_history(result: dict) -> None:
         print('Filters: ' + ' | '.join(filters))
 
     if error:
-        print(f'Error: {error}')
         return
 
     entries = result.get('entries', [])
@@ -293,7 +291,6 @@ def _render_claude_cross_session_search(result: dict) -> None:
     print(f'Scanned {scanned} sessions  |  Found {count} matches')
 
     if error:
-        print(f'Error: {error}')
         return
     if count == 0:
         return

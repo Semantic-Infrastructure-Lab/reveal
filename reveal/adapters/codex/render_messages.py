@@ -27,7 +27,6 @@ def _render_codex_digest(result: dict) -> None:
     title = result.get('title')
 
     if 'error' in result:
-        print(f"Error: {result['error']}")
         return
 
     print(f"Digest: {session_id}" + (f" — {title}" if title else ''))
@@ -68,7 +67,6 @@ def _render_codex_exchanges(result: dict) -> None:
     count = result.get('exchange_count', 0)
 
     if 'error' in result:
-        print(f"Error: {result['error']}")
         return
 
     print(f"Exchanges: {session_id} ({count} total)")
@@ -97,7 +95,6 @@ def _render_codex_message(result: dict) -> None:
     session_id = result.get('session_id', 'unknown')
 
     if 'error' in result:
-        print(f"Error: {result['error']}")
         return
 
     idx = result.get('record_index', '?')

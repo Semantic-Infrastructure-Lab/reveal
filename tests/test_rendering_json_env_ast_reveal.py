@@ -4,7 +4,7 @@ import unittest
 import sys
 import io
 from pathlib import Path
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 
 # Add parent directory to path to import reveal
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -39,14 +39,20 @@ class TestRenderJsonResult(unittest.TestCase):
         self.assertIn('json-value', output)
 
     def test_json_error(self):
-        """Should handle JSON errors and exit."""
+        """An error result adds only its valid queries (on stderr); the router prints the
+        error and exits 1 (BACK-1059). The type is the adapter's real 'json_error': this
+        test used 'json-error', which the adapter never emits, so the renderer's branch for
+        it was dead and a json:// error rendered as data with exit 0."""
         data = {
-            'type': 'json-error',
+            'type': 'json_error',
             'error': 'Invalid path',
             'valid_queries': ['$.foo', '$.bar']
         }
-        with self.assertRaises(SystemExit):
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
             render_json_result(data, 'text')
+        self.assertEqual(out.getvalue(), '')
+        self.assertIn('Valid queries: $.foo, $.bar', err.getvalue())
 
     def test_json_value_simple(self):
         """Should render simple JSON values."""

@@ -9,15 +9,20 @@ failure mode BACK-1363 describes.
 
 Each run goes through ``handle_uri`` with ``--format json`` from a temp cwd, using a
 relative URI. That is the same result dict the CLI and MCP produce. Runs are hermetic: HOME
-points at an empty directory, and so does every adapter class attribute holding a ``Path``
+points at a fixture home, and so does every adapter class attribute holding a ``Path``
 under the real home (``CodexAdapter.CODEX_DB``, ``ClaudeAdapter.CONVERSATION_BASE``, ...),
-since those are resolved once at import. Invariants:
+since those are resolved once at import. The fixture home holds an empty Claude projects
+directory and an empty Codex session DB, so claude:// and codex:// return a real (empty)
+answer. Without them their result is an error, and a contract check on an error envelope
+proves nothing about the adapter's normal output. Invariants:
 
 1. ``contract``: Output Contract fields are present, and ``type`` is one the schema declares.
 2. ``missing``: a nonexistent resource exits nonzero. It is never a clean empty answer
    (BACK-1321).
 3. ``error_exit``: a result carrying a top-level ``error`` exits nonzero. An error must not
-   read as success.
+   read as success. The router enforces this for every adapter since BACK-1059
+   (``cli/routing/uri._emit_result``); the fixture runs below are normally clean, so
+   the error paths themselves are pinned in ``tests/test_result_outcome.py``.
 4. ``abs_path``: no string in the result contains the fixture root's absolute path. The
    input was relative, so an absolute path is a leak (BACK-1366).
 
@@ -103,12 +108,9 @@ MISSING_URIS = {
 
 KNOWN_VIOLATIONS = {
     ('contract', 'codex'): 'BACK-1522',
-    ('missing', 'codex'): 'BACK-1520',
     ('missing', 'nginx'): 'BACK-1523',
     ('missing', 'trace'): 'BACK-1524',
     ('missing', 'reveal'): 'BACK-1521',
-    ('error_exit', 'claude'): 'BACK-1525',
-    ('error_exit', 'codex'): 'BACK-1525',
     ('abs_path', 'architecture'): 'BACK-1366',
     ('abs_path', 'deps'): 'BACK-1366',
     ('abs_path', 'imports'): 'BACK-1366',
@@ -142,6 +144,16 @@ def _build_tree(root: Path) -> None:
     proj = root / 'proj'
     (proj / 'tests').mkdir(parents=True)
     (root / 'home').mkdir()
+    (root / 'home' / '.claude' / 'projects').mkdir(parents=True)
+    (root / 'home' / '.codex').mkdir()
+    conn = sqlite3.connect(str(root / 'home' / '.codex' / 'state_5.sqlite'))
+    conn.execute(
+        'CREATE TABLE threads (id TEXT, title TEXT, first_user_message TEXT, model TEXT, '
+        'model_provider TEXT, reasoning_effort TEXT, tokens_used INTEGER, cwd TEXT, '
+        'created_at INTEGER, updated_at INTEGER, cli_version TEXT, git_branch TEXT, '
+        'approval_mode TEXT, thread_source TEXT, archived INTEGER)')
+    conn.commit()
+    conn.close()
     (proj / 'app.py').write_text(
         'import os\n\n\ndef main():\n    return helper()\n\n\n'
         'def helper():\n    return os.getcwd()\n', encoding='utf-8')

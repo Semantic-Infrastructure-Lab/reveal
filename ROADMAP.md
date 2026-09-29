@@ -291,16 +291,20 @@ a check that counts violations and lets the count only fall. Then the cause is r
 
    Still open: BACK-1513's remaining invariants (truncation disclosure, the subcommand
    forms, POSIX separators on Windows).
-2. **The largest class:** BACK-1514, the flag ledger. It landed on 2026-09-26 for the URI
-   path and then the subcommands: a flag or query key the user sets is used, or a note names
-   it (`reveal/cli/routing/ledger.py`, ratchet `tests/test_flag_ledger.py`). Subcommands also
-   get the URI form's `--exclude`/REVEAL_IGNORE walk scope from one seam
-   (`reveal/cli/routing/subcommand.py`). BACK-1537 then made a parsed key count only once a
-   view reads it, so a key an adapter parses and then ignores is named too. BACK-1058 then
-   parsed the command line once, into an Invocation that one dispatch path runs for both
-   forms; `sys.argv` is read only in `main()` (ratchet: `check_boundaries.py` `argv`).
+2. **The largest class** (flags dropped between invocation forms) is retired at its cause.
+   Landed 2026-09-26: the flag ledger, where a flag or query key the user sets is used, or a
+   note names it (`reveal/cli/routing/ledger.py`, ratchet `tests/test_flag_ledger.py`). The
+   subcommands share the URI form's walk scope (`reveal/cli/routing/subcommand.py`), and the
+   command line is parsed once into one Invocation, so `sys.argv` is read only in `main()`
+   (ratchet: `check_boundaries.py` `argv`). Open follow-up: BACK-1538 (flag/adapter pairs that
+   are read but have no visible effect on the fixture).
 3. **The result contract:** BACK-1059 (typed outcomes), BACK-1491 (cache whole results),
-   BACK-916 (one rendering layer) and BACK-1052 (a shared scan budget).
+   BACK-916 (one rendering layer) and BACK-1052 (a shared scan budget). BACK-1059's first
+   slice landed on 2026-09-28: one definition of a failed result (`outcome_of`, a top-level
+   `error`), which the URI router reports and turns into exit 1 for every adapter
+   (`cli/routing/uri._emit_result`); renderers no longer print or exit on it. Still open:
+   `partial` and truncated as outcomes (truncation is spelled 3 ways), the subcommand forms,
+   and file-path results.
 4. **One seam per concern:** BACK-1223 (one walker), BACK-1045 (parser seam), BACK-1366
    (one path pass), BACK-1372 (root finders) and BACK-1054 (import resolution).
 

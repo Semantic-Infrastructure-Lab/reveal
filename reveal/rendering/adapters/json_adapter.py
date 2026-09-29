@@ -5,6 +5,7 @@ import sys
 from typing import Any, Dict
 
 from reveal.utils import print_json_result
+from reveal.utils.results import outcome_of
 
 
 def _print_header(file_path: str, json_path: str) -> None:
@@ -13,10 +14,9 @@ def _print_header(file_path: str, json_path: str) -> None:
 
 
 def _render_json_error(data: Dict[str, Any]) -> None:
-    print(f"Error: {data.get('error', 'Unknown error')}", file=sys.stderr)
+    # The router prints the error and exits 1 (BACK-1059); this adds the valid queries.
     if 'valid_queries' in data:
         print(f"Valid queries: {', '.join(data['valid_queries'])}", file=sys.stderr)
-    sys.exit(1)
 
 
 def _render_json_value(data: Dict[str, Any], file_path: str, json_path: str) -> None:
@@ -102,8 +102,11 @@ def render_json_result(data: Dict[str, Any], output_format: str) -> None:
         print_json_result(data)
         return
 
-    if result_type == 'json-error':
+    # Keyed on the outcome, not the type: this branch tested 'json-error' while the
+    # adapter emits 'json_error', so it never ran and an error rendered as data.
+    if outcome_of(data) == 'failed':
         _render_json_error(data)
+        return
 
     file_path = data.get('file', '')
     json_path = data.get('path', '(root)')

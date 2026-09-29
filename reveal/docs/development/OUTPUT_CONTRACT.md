@@ -324,6 +324,30 @@ Adapters MAY include additional fields beyond the contract. These fields:
 
 ---
 
+## Outcomes: failed, not applicable, ok
+
+A result says what happened through two top-level fields. `reveal.utils.results.outcome_of`
+is the one definition, and the URI router turns it into the exit code for every adapter,
+in text and JSON alike (BACK-1059):
+
+| Outcome | How the result says it | Exit | Build it with |
+|---|---|---|---|
+| `failed` | a non-empty top-level `error` string | 1 | `ResultBuilder.create_error(...)` |
+| `not_applicable` | `applicable: false` plus a `reason` | 0 | `raise NotApplicableError(reason)` |
+| `ok` | neither; an empty answer is still `ok` | 0 | `ResultBuilder.create(...)` |
+
+- **Return the error; don't exit or print it.** The router prints `Error (<scheme>://): <error>`
+  on stderr before rendering and exits 1 after, so `--format json` still gets the whole
+  envelope. A renderer adds only detail for an error result (an example, the valid names)
+  and must not print the error again.
+- **Problems inside an answer are not a failure.** Per-file parse failures in a result that
+  was still produced go in `meta.errors` (v1.1). An error on one item of a list stays on that
+  item. Neither changes the outcome.
+- `tests/test_result_outcome.py` pins the definition and the exit path;
+  `tests/test_output_contract_compliance.py` runs every registered adapter against it.
+
+---
+
 ## Reserved Field Names
 
 The following field names are reserved and MUST NOT be used for adapter-specific data:
@@ -338,7 +362,7 @@ The following field names are reserved and MUST NOT be used for adapter-specific
 - `next_steps`
 - `status`
 - `issues`
-- `error` (use `status.errors` or `meta.errors` instead)
+- `error`: only for a failed result (see [Outcomes](#outcomes-failed-not-applicable-ok))
 - `version` (use `contract_version` instead)
 
 ---

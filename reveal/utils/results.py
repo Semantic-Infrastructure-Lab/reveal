@@ -35,10 +35,13 @@ Usage:
         source=Path('/path/to/dir'),
         error='Directory not found'
     )
+
+An error result is a failure wherever it is rendered: ``outcome_of`` reads it, and the URI
+router exits nonzero for it. An adapter returns the error; it does not exit.
 """
 
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List, Literal, Union
 
 from reveal.reveal_types import CONTRACT_VERSION, RevealMeta, RevealResult, WarningEntry
 
@@ -46,6 +49,30 @@ from reveal.reveal_types import CONTRACT_VERSION, RevealMeta, RevealResult, Warn
 _CONTRACT_FIELDS: frozenset = frozenset(
     {'contract_version', 'type', 'source', 'source_type', 'meta', 'scope'}
 )
+
+Outcome = Literal['ok', 'not_applicable', 'failed']
+
+
+def outcome_of(result: Any) -> Outcome:
+    """What a result says happened: the one definition the router turns into an exit code.
+
+    - ``failed``: a top-level ``error`` is set (``ResultBuilder.create_error`` and the
+      hand-built ``{'error': ...}`` dicts alike). The query did not produce its answer.
+    - ``not_applicable``: ``applicable`` is False (BACK-1210). The query ran and does not
+      apply to this target; that is a recorded answer, not a failure.
+    - ``ok``: anything else, including an empty answer.
+
+    Only the top-level key counts. ``meta.errors`` holds per-file problems inside an
+    answer that was still produced (parse failures in ast/contracts/surface/patches), and
+    a nested ``error`` belongs to one item of a list, not to the result (BACK-1059).
+    """
+    if not isinstance(result, dict):
+        return 'ok'
+    if result.get('error'):
+        return 'failed'
+    if result.get('applicable') is False:
+        return 'not_applicable'
+    return 'ok'
 
 
 class ResultBuilder:
