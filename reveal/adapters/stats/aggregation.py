@@ -77,9 +77,8 @@ def aggregate_stats(file_stats: List[Dict[str, Any]], source_path: Path) -> Dict
 def identify_hotspots(
     file_stats: List[Dict[str, Any]],
     churn_counts: Optional[Dict[str, int]] = None,
-    limit: int = 10,
 ) -> List[Dict[str, Any]]:
-    """Identify top hotspot files.
+    """Rank every hotspot file, most severe first.
 
     Hotspots are files with quality issues: long functions, high complexity,
     deep nesting, or low quality scores — optionally weighted by churn.
@@ -90,11 +89,11 @@ def identify_hotspots(
             touch count in scope (BACK-483). None when git is unavailable or
             churn scoring was opted out of (?churn=false) — in that case
             scoring falls back to today's complexity-only behavior.
-        limit: Max number of hotspot files to return (BACK-1179 — this used
-            to be a hardcoded 10, immune to hotspots://?top=N).
 
     Returns:
-        List of top `limit` hotspot files sorted by severity
+        Every file with a positive hotspot score, sorted by severity. The caller cuts
+        it to its ``?top=N`` and records the cut (BACK-1543): a cap applied here lost
+        the total, so ``stats://?hotspots=true`` showed 10 of 387 as the whole list.
     """
     # Score each file by number and severity of issues
     scored_files = []
@@ -149,6 +148,5 @@ def identify_hotspots(
                 'details': details,
             })
 
-    # Sort by hotspot score (descending) and return the top `limit`
     scored_files.sort(key=lambda x: x['hotspot_score'], reverse=True)
-    return scored_files[:limit]
+    return scored_files

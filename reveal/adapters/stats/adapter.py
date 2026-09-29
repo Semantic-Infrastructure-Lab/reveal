@@ -91,7 +91,7 @@ def _i002_init_worker(graph_cache: dict) -> None:
 
 _SCHEMA_QUERY_PARAMS = {
     'hotspots': {'type': 'boolean', 'description': 'Include hotspot analysis (files needing attention)', 'examples': ['hotspots=true']},
-    'top': {'type': 'integer', 'description': 'Max number of hotspot files to return when hotspots=true (default: 10)', 'examples': ['top=25']},
+    'top': {'type': 'integer', 'description': 'Max number of hotspot files to return when hotspots=true (default: 10, 0 = all)', 'examples': ['top=25']},
     'code_only': {'type': 'boolean', 'description': 'Exclude data/config files from analysis', 'examples': ['code_only=true']},
     'min_lines': {'type': 'integer', 'description': 'Filter files with at least this many lines', 'examples': ['min_lines=50']},
     'max_lines': {'type': 'integer', 'description': 'Filter files with at most this many lines', 'examples': ['max_lines=500']},
@@ -363,6 +363,17 @@ class StatsAdapter(ResourceAdapter):
             result = result[:self.result_control.limit]
         return result
 
+    def _top_hotspots(self, result: dict, ranked: list) -> list:
+        """Cut the ranked hotspots to ``?top=N`` and record the cut (BACK-1179, BACK-1543).
+
+        ``?top=0`` means no cap, as it does for hotspots:// (BACK-1505): ``[:0]`` was an
+        empty list, which reads as a clean codebase.
+        """
+        top = self.int_param('top', 10)
+        shown = ranked[:top] if top > 0 else ranked
+        note_truncation(result, 'hotspots', len(shown), len(ranked), 'limit', hint='raise ?top=N')
+        return shown
+
     def _add_truncation_metadata(self, result: dict, displayed: int, total: int) -> None:
         """Record a ?limit/?offset cut of the files list (note_truncation, BACK-1059)."""
         if displayed < total:
@@ -522,10 +533,8 @@ class StatsAdapter(ResourceAdapter):
                         'type': 'churn_unavailable',
                         'message': self._churn_disclosure,
                     })
-            # BACK-1179: honor ?top=N (as hotspots:// itself does for
-            # function_hotspots) instead of a hardcoded top-10.
-            top = self.int_param('top', 10)
-            result['hotspots'] = identify_hotspots(controlled_stats, churn_counts=churn_counts, limit=top)
+            result['hotspots'] = self._top_hotspots(
+                result, identify_hotspots(controlled_stats, churn_counts=churn_counts))
 
         if summary_only:
             result.pop('files', None)

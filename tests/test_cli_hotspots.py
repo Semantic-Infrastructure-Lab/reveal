@@ -23,6 +23,7 @@ from reveal.adapters.hotspots import (
     _run_file_hotspots,
     _run_function_hotspots,
 )
+from reveal.utils.results import note_truncation
 from reveal.cli.commands.hotspots import (
     create_hotspots_parser,
     run_hotspots,
@@ -122,10 +123,17 @@ class TestRunFileHotspots(unittest.TestCase):
         self.assertEqual(result[0]['file'], 'a.py')
 
     @patch('reveal.adapters.stats.StatsAdapter.get_structure')
-    def test_respects_top_limit(self, mock_gs):
-        mock_gs.return_value = {'hotspots': [_file_hotspot(f'f{i}.py', 50) for i in range(20)]}
+    def test_stats_cut_is_restated_as_file_hotspots(self, mock_gs):
+        """BACK-1543: stats cuts to ?top=N and records it; this report shows that list
+        as file_hotspots, raised by its own ?top=N. A second [:top] here hid the total."""
+        child = {'hotspots': [_file_hotspot(f'f{i}.py', 50) for i in range(5)]}
+        note_truncation(child, 'hotspots', 5, 20, 'limit', hint='raise ?top=N')
+        mock_gs.return_value = child
         result = _run_file_hotspots(self.adapter, Path('.'), top=5)
         self.assertEqual(len(result), 5)
+        [cut] = self.adapter.composed_meta()['warnings']
+        self.assertEqual((cut['field'], cut['shown'], cut['total']), ('file_hotspots', 5, 20))
+        self.assertIn('raise ?top=N', cut['message'])
 
     @patch('reveal.adapters.stats.StatsAdapter.get_structure')
     def test_missing_hotspots_key_returns_empty(self, mock_gs):
@@ -193,11 +201,13 @@ class TestRunFunctionHotspots(unittest.TestCase):
         result = _run_function_hotspots(self.adapter, Path('/tmp'), min_complexity=10, top=10)
         self.assertEqual(len(result), 1)
 
-    @patch('reveal.adapters.ast.AstAdapter.get_structure')
-    def test_respects_top_limit(self, mock_gs):
-        mock_gs.return_value = {'results': [_fn_hotspot(f'fn{i}', 10 + i) for i in range(15)]}
-        result = _run_function_hotspots(self.adapter, Path('/tmp'), min_complexity=10, top=5)
-        self.assertEqual(len(result), 5)
+    @patch('reveal.adapters.ast.AstAdapter.__init__', return_value=None)
+    @patch('reveal.adapters.ast.AstAdapter.get_structure', return_value={'results': []})
+    def test_asks_ast_for_top(self, _mock_gs, mock_init):
+        """The cap is ast://'s ?limit (which records its cut), not a slice here (BACK-1543)."""
+        _run_function_hotspots(self.adapter, Path('/tmp'), min_complexity=10, top=5)
+        _resource, query = mock_init.call_args.args
+        self.assertIn('limit=5', query)
 
     @patch('reveal.adapters.ast.AstAdapter.get_structure', side_effect=Exception("oops"))
     def test_exception_returns_empty(self, _mock):

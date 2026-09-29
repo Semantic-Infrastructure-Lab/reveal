@@ -230,13 +230,72 @@ def test_a_subcommand_cut_is_printed_before_its_findings_exit(proj):
     assert '⚠ Truncated function_hotspots: showing 1 of ' in r.stdout
     payload = json.loads(_run_reveal_direct(
         'hotspots', '.', '--top', '1', '--min-complexity', '1', '--format', 'json').stdout)
-    assert [c['field'] for c in truncations_of(payload)] == ['function_hotspots']
+    # Both files score as hotspots too; that cut was silent until BACK-1543.
+    assert sorted(c['field'] for c in truncations_of(payload)) == [
+        'file_hotspots', 'function_hotspots']
 
 
 def test_an_uncut_subcommand_says_nothing(proj):
     """Negative control for the two tests above."""
     _two_complex_functions(proj)
     r = _run_reveal_direct('overview', '.', '--no-git')
+    assert r.returncode == 0, r.stderr
+    assert 'Truncated' not in r.stdout + r.stderr
+
+
+# -- an adapter's own cap (BACK-1543) -------------------------------------------------------
+
+def _two_hotspot_files(proj):
+    """Two files deep nesting alone makes hotspots of (no churn: tmp_path is no git repo)."""
+    nested = 'def f(x):\n' + ''.join('    ' * (i + 1) + f'if x > {i}:\n' for i in range(6)) \
+        + '    ' * 7 + 'return x\n    return 0\n'
+    for name in ('a', 'b'):
+        (proj / f'deep_{name}.py').write_text(nested, encoding='utf-8')
+
+
+# (argv, field): stats ranked every hotspot file, then kept ?top=N and dropped the total.
+OWN_CAPS = [
+    (['stats://.?hotspots=true&top=1'], 'hotspots'),
+    (['hotspots://.?top=1'], 'file_hotspots'),
+    (['hotspots', '.', '--top', '1'], 'file_hotspots'),
+    (['overview://.?top=1&no_git=true&no_imports=true'], 'hotspots'),
+    (['overview', '.', '--top', '1', '--no-git', '--no-imports'], 'hotspots'),
+]
+
+
+@pytest.mark.parametrize('argv, field', OWN_CAPS)
+def test_an_adapters_own_cap_is_disclosed(proj, argv, field):
+    _two_hotspot_files(proj)
+    r = _run_reveal_direct(*argv)
+    assert f'⚠ Truncated {field}: showing 1 of 2 — raise ?top=N' in r.stdout, r.stdout
+    payload = json.loads(_run_reveal_direct(*argv, '--format', 'json').stdout)
+    cuts = {c['field']: (c['shown'], c['total']) for c in truncations_of(payload)}
+    assert cuts[field] == (1, 2)
+
+
+@pytest.mark.parametrize('argv', [
+    ['stats://.?hotspots=true&top=0'],
+    ['hotspots://.?top=0'],
+])
+def test_top_zero_lists_every_hotspot(proj, argv):
+    """0 means no cap (BACK-1505); stats:// gave [:0], an empty list that reads as clean."""
+    _two_hotspot_files(proj)
+    payload = json.loads(_run_reveal_direct(*argv, '--format', 'json').stdout)
+    field = 'hotspots' if 'hotspots' in payload else 'file_hotspots'
+    assert len(payload[field]) == 2
+    assert truncations_of(payload) == []
+
+
+def test_all_reaches_the_overview_uri_forms_data(proj):
+    """--all lifted overview://'s render cap only: the data kept ?top's default 5, so
+    'overview://X --all' printed 'showing 5 of 387' complex functions (BACK-1543)."""
+    branches = ''.join(f'    if x == {i}:\n        return {i}\n' for i in range(12))
+    for i in range(6):
+        (proj / f'cx_{i}.py').write_text(f'def c{i}(x):\n{branches}    return -1\n',
+                                         encoding='utf-8')
+    capped = _run_reveal_direct('overview://.?no_git=true&no_imports=true')
+    assert '⚠ Truncated complex_functions: showing 5 of 6' in capped.stdout
+    r = _run_reveal_direct('overview://.?no_git=true&no_imports=true', '--all')
     assert r.returncode == 0, r.stderr
     assert 'Truncated' not in r.stdout + r.stderr
 

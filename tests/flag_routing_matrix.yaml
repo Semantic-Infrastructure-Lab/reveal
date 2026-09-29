@@ -548,6 +548,7 @@ adapters:
   overview:
     all:
       via:
+      - declared
       - routing-special
     respect_gitignore:
       via:

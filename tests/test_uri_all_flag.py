@@ -30,6 +30,7 @@ def test_hotspots_declares_top():
 @pytest.mark.parametrize('scheme,fragment', [
     ('ast', 'limit=1000000'), ('calls', 'top=1000000'), ('patches', 'limit=1000000'),
     ('testability', 'top=1000000'), ('stats', 'top=1000000'), ('git', 'limit=1000000'),
+    ('overview', 'top=1000000'),  # BACK-1543: --all lifted only the render cap
 ])
 def test_back1379_adapters_declare_all(scheme, fragment):
     from reveal import adapters  # noqa: F401
@@ -57,7 +58,7 @@ def test_without_all_flag_nothing_changes():
     assert inject_query_flags('src', 'hotspots', _args()) == 'src'
 
 
-@pytest.mark.parametrize('scheme', ['surface', 'claude', 'overview', 'nosuchscheme'])
+@pytest.mark.parametrize('scheme', ['surface', 'claude', 'nosuchscheme'])
 def test_adapters_without_declaration_untouched(scheme):
     assert inject_query_flags('src', scheme, _args(all=True)) == 'src'
 

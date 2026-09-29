@@ -60,21 +60,26 @@ _NON_CODE_EXT_LABELS: Dict[str, str] = {
 
 # ── Data collectors ────────────────────────────────────────────────────────────
 
-def _run_stats(adapter: 'OverviewAdapter', path: Path) -> Dict[str, Any]:
-    """Fetch stats and hotspots via StatsAdapter.
+def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int) -> Dict[str, Any]:
+    """Fetch stats and the top ``top`` hotspots via StatsAdapter.
 
     BACK-1042: forwards --exclude/--respect-gitignore as a raw query string
     (not compose()'s **params/urlencode path — nothing downstream in
     parse_query_params URL-decodes, so an urlencoded '*' would reach
     find_analyzable_files still percent-escaped and never match). ',', '&', '='
     and '%' inside a pattern are escaped by join_exclude_patterns (BACK-1380).
+
+    BACK-1543: ``?top=N`` is forwarded, and stats' cut is restated as this report's
+    ``hotspots``. Before, stats kept its own top 10 and dropped the total, so
+    ``?top=2`` still listed 5 and "... and 5 more" counted against that hidden 10.
     """
-    query = 'hotspots=true'
+    query = f'hotspots=true&top={top}'
     exclude_patterns = adapter.exclude_patterns
     if exclude_patterns:
         query += f'&exclude={join_exclude_patterns(exclude_patterns)}'
     query += f'&respect_gitignore={"true" if adapter.respect_gitignore else "false"}'
-    return adapter.compose(StatsAdapter, str(path), default={}, query=query)
+    return adapter.compose(StatsAdapter, str(path), default={}, query=query,
+                           cut_as=('hotspots', 'raise ?top=N'))
 
 
 def _run_scope(adapter: 'OverviewAdapter', path: Path) -> Dict[str, Any]:
@@ -581,7 +586,9 @@ class OverviewAdapter(ResourceAdapter):
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
-    CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # --no-gitignore (BACK-1202)
+    # --no-gitignore (BACK-1202). --all lifts ?top=N for the data, not only the render
+    # (BACK-1543): overview://X --all printed "showing 5 of 387" complex functions.
+    CLI_QUERY_FLAGS = {'all': 'top=1000000', 'respect_gitignore': 'respect_gitignore=false'}
 
     def __init__(self, resource: str, query: Optional[str] = None):
         self.path = str(Path(resource).expanduser())
@@ -678,7 +685,7 @@ class OverviewAdapter(ResourceAdapter):
         no_git = str(self.query_params.get('no_git', False)).lower() == 'true'
         no_imports = str(self.query_params.get('no_imports', False)).lower() == 'true'
 
-        stats = _run_stats(self, path)
+        stats = _run_stats(self, path, top)
         git_log = [] if no_git else _run_git_log(self, path, top)
         git_foreign_root: Optional[Path] = None
         if git_log:

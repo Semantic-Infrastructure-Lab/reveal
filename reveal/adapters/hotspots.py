@@ -66,9 +66,9 @@ def _run_file_hotspots(adapter: 'HotspotsAdapter', path: Path, top: int) -> List
     # for its function list (via ast://) but not its file list.
     _root, _patterns = active_exclusions()
     extra: Dict[str, Any] = {'exclude': list(_patterns)} if _patterns else {}
-    data = adapter.compose(StatsAdapter, str(path), default={}, hotspots=True, top=top, **extra)
-    hotspots = data.get('hotspots', [])
-    return cast(List[Dict[str, Any]], hotspots[:top])
+    data = adapter.compose(StatsAdapter, str(path), default={}, hotspots=True, top=top,
+                           cut_as=('file_hotspots', 'raise ?top=N'), **extra)
+    return cast(List[Dict[str, Any]], data.get('hotspots', []))
 
 
 def _run_function_hotspots(adapter: 'HotspotsAdapter', path: Path, min_complexity: int, top: int) -> List[Dict[str, Any]]:
@@ -79,8 +79,7 @@ def _run_function_hotspots(adapter: 'HotspotsAdapter', path: Path, min_complexit
     query = f'complexity>={min_complexity}&sort=-complexity&limit={top}'
     data = adapter.compose(AstAdapter, str(path), default={}, query=query,
                            cut_as=('function_hotspots', 'raise ?top=N'))
-    results = data.get('results', data.get('elements', []))
-    return cast(List[Dict[str, Any]], results[:top])
+    return cast(List[Dict[str, Any]], data.get('results', data.get('elements', [])))
 
 
 def _camel_to_snake(name: str) -> str:

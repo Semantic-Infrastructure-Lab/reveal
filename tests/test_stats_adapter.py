@@ -484,10 +484,10 @@ def complex1(x):
         assert result[0]['details']['commit_count'] == 0
 
 
-class TestIdentifyHotspotsLimit:
-    """BACK-1179: identify_hotspots() hardcoded [:10] regardless of caller
-    intent — hotspots://?top=N reached function_hotspots but silently had
-    no effect on file_hotspots."""
+class TestIdentifyHotspotsRanksAll:
+    """BACK-1543: identify_hotspots() ranks every hotspot file; the adapter cuts it to
+    ?top=N and records the cut. A cap here (BACK-1179's ``limit=``) lost the total, so
+    stats://?hotspots=true showed 10 of 43 as the whole list."""
 
     def _stats(self, n):
         from reveal.adapters.stats.aggregation import identify_hotspots
@@ -495,25 +495,16 @@ class TestIdentifyHotspotsLimit:
             'file': f'f{i}.py',
             'lines': {'total': 10},
             'elements': {'functions': 1},
-            'complexity': {'average': 15.0},
+            'complexity': {'average': 15.0 + i},
             'quality': {'score': 50.0, 'long_functions': 0, 'deep_nesting': 0},
         } for i in range(n)]
         return identify_hotspots, stats
 
-    def test_default_limit_is_ten(self):
+    def test_returns_every_hotspot_most_severe_first(self):
         identify_hotspots, stats = self._stats(20)
         result = identify_hotspots(stats)
-        assert len(result) == 10
-
-    def test_explicit_limit_expands_past_ten(self):
-        identify_hotspots, stats = self._stats(20)
-        result = identify_hotspots(stats, limit=20)
         assert len(result) == 20
-
-    def test_explicit_limit_below_ten_still_caps(self):
-        identify_hotspots, stats = self._stats(20)
-        result = identify_hotspots(stats, limit=3)
-        assert len(result) == 3
+        assert result[0]['file'] == 'f19.py'
 
 
 class TestStatsAdapterHotspotsTop:
@@ -542,6 +533,23 @@ class TestStatsAdapterHotspotsTop:
         adapter = StatsAdapter(str(many_hotspot_files), 'hotspots=true&top=15')
         result = adapter.get_structure()
         assert len(result['hotspots']) == 15
+        assert truncations_of(result) == []
+
+    def test_a_cut_hotspot_list_is_disclosed(self, many_hotspot_files):
+        """BACK-1543: the cut names the list, both counts and the knob that raises it."""
+        adapter = StatsAdapter(str(many_hotspot_files), 'hotspots=true&top=3')
+        result = adapter.get_structure()
+        assert len(result['hotspots']) == 3
+        [cut] = truncations_of(result)
+        assert (cut['field'], cut['shown'], cut['total']) == ('hotspots', 3, 15)
+        assert 'raise ?top=N' in cut['message']
+
+    def test_top_zero_means_no_cap(self, many_hotspot_files):
+        """BACK-1543 (the BACK-1505 class): [:0] was an empty list, read as clean."""
+        adapter = StatsAdapter(str(many_hotspot_files), 'hotspots=true&top=0')
+        result = adapter.get_structure()
+        assert len(result['hotspots']) == 15
+        assert truncations_of(result) == []
 
 
 class TestStatsAdapterChurnIntegration:
