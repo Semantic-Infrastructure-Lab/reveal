@@ -10,6 +10,8 @@ indexed declaration, so renderers can say "partial" instead of looking complete
 
 from typing import Any, Dict, List, Optional, Set
 
+from reveal.utils.results import truncations_of
+
 # Categories that describe code declarations. A structure with any other key
 # (headings, frontmatter, rows, ...) is not code-shaped and is never assessed.
 _DECLARATION_CATEGORIES = frozenset({'functions', 'classes', 'structs', 'interfaces', 'enums', 'traits'})
@@ -23,6 +25,21 @@ MIN_UNCOVERED_LINES = 100
 MAX_COVERED_FRACTION = 0.5
 
 
+def _assessable(structure: Dict[str, Any]) -> bool:
+    """A whole code outline: declarations, nothing but listed categories, and not cut.
+
+    A cut listing covers little of the file by construction; its truncation note says so,
+    and a coverage claim would mislead (BACK-1424, BACK-1564). ``meta`` is the result's
+    envelope (where that note lives), not a category.
+    """
+    if not structure or not any(structure.get(c) for c in _DECLARATION_CATEGORIES):
+        return False
+    if truncations_of(structure):
+        return False
+    return all(key in _LISTED_CATEGORIES or key.startswith('_') or key == 'meta'
+               for key in structure)
+
+
 def outline_coverage(structure: Dict[str, Any], lines: List[str]) -> Optional[Dict[str, Any]]:
     """Return a coverage record when the outline is partial, else None.
 
@@ -30,9 +47,7 @@ def outline_coverage(structure: Dict[str, Any], lines: List[str]) -> Optional[Di
     (non-blank), `covered_lines`, `uncovered_lines`, `covered_fraction` and
     `first_uncovered_line` (1-based).
     """
-    if not structure or not any(structure.get(c) for c in _DECLARATION_CATEGORIES):
-        return None
-    if any(key not in _LISTED_CATEGORIES and not key.startswith('_') for key in structure):
+    if not _assessable(structure):
         return None
 
     covered: Set[int] = set()

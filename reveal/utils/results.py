@@ -59,6 +59,7 @@ _TRUNCATION_HINTS = {
     'limit': 'raise ?limit=N or page with ?offset=N',
     'auto_cap': 'add filters, or set ?limit=N',
     'max_items': 'raise --max-items',
+    'display_cap': 'use --all for everything, or --max-items N',
     'sample': 'choose others with --head/--tail/--range',
 }
 

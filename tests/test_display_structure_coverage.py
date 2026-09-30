@@ -906,7 +906,7 @@ class TestApplyFileBudgetConstraints:
         args = MagicMock(max_items=None, max_snippet_chars=None)
         result = _apply_file_budget_constraints(structure, args)
         assert result['functions'] == [{'name': 'a'}, {'name': 'b'}]
-        assert '_budget' not in result
+        assert 'meta' not in result
 
     def test_max_items_truncates_each_list_category_independently(self):
         structure = {
@@ -917,9 +917,8 @@ class TestApplyFileBudgetConstraints:
         result = _apply_file_budget_constraints(structure, args)
         assert result['functions'] == [{'name': 'a'}, {'name': 'b'}]
         assert result['imports'] == [{'name': 'os'}]  # under budget, untouched
-        assert result['_budget']['functions']['truncated'] is True
-        assert result['_budget']['functions']['total_available'] == 3
-        assert 'imports' not in result['_budget']
+        [cut] = result['meta']['warnings']
+        assert (cut['field'], cut['shown'], cut['total'], cut['cause']) == ('functions', 2, 3, 'max_items')
 
     def test_max_snippet_chars_truncates_string_values(self):
         structure = {'functions': [{'name': 'a', 'doc': 'x' * 50}]}
@@ -957,4 +956,5 @@ class TestApplyFileBudgetConstraints:
         import json
         result = json.loads(out)
         assert len(result['structure']['functions']) == 2
-        assert result['structure']['_budget']['functions']['truncated'] is True
+        assert result['meta']['warnings'][0]['field'] == 'functions'
+        assert '_budget' not in result['structure']

@@ -318,8 +318,8 @@ a check that counts violations and lets the count only fall. Then the cause is r
    answer `reveal <uri>` gives, resolved by the router without printing
    (`cli/routing/uri.resolve_uri`). A file's `--head`/`--tail`/`--range` is cut once, in
    the display layer, and disclosed with the same marker; analyzers never see the flags
-   (`FileAnalyzer.cut_structure`, BACK-1548). Still open: the broad `except`s, and file
-   mode's `--max-items`/default cap, which still spells its cut `_budget` (BACK-1564).
+   (`FileAnalyzer.cut_structure`), and its `--max-items` and default text cap record their
+   cut with the same marker. Still open: the broad `except`s.
 4. **One seam per concern:** BACK-1223 (one walker), BACK-1045 (parser seam), BACK-1366
    (one path pass), BACK-1372 (root finders) and BACK-1054 (import resolution).
 

@@ -8,7 +8,7 @@ from reveal.base import FileAnalyzer
 from reveal.defaults import DisplayDefaults
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
 from reveal.utils.path_utils import is_minified_content, is_minified_filename
-from reveal.utils.results import truncations_of
+from reveal.utils.results import note_truncation, truncations_of
 
 from .coverage import format_coverage_warning, outline_coverage
 from .element import listed_item_line
@@ -544,7 +544,7 @@ _CATEGORY_FORMATTERS = {
 
 def _render_single_category(category: str, items: Any, path: Path, output_format: str,
                              heading_depth: Optional[int] = None,
-                             budget: Optional[Dict[str, Any]] = None) -> None:
+                             total: Optional[int] = None) -> None:
     """Render a single category."""
     # Handle dict-type metadata specially (HTML metadata as dict, not list)
     if category == 'metadata' and isinstance(items, dict):
@@ -573,8 +573,8 @@ def _render_single_category(category: str, items: Any, path: Path, output_format
 
     count = len(items)
 
-    if budget:
-        print(f"{category.capitalize()} ({count} of {budget['total_available']} shown):")
+    if total is not None:
+        print(f"{category.capitalize()} ({count} of {total} shown):")
     else:
         print(f"{category.capitalize()} ({count}):")
 
@@ -589,13 +589,13 @@ def _render_single_category(category: str, items: Any, path: Path, output_format
 
 def _render_text_categories(structure: Dict[str, List[Dict[str, Any]]],
                             path: Path, output_format: str, heading_depth: Optional[int] = None) -> None:
-    """Render each category in text format."""
-    budgets: Dict[str, Any] = cast(Dict[str, Any], structure.get('_budget') or {})
+    """Render each category in text format; a cut one's header says so (its note_truncation)."""
+    totals = {w['field']: w['total'] for w in truncations_of(structure)}
     for category, items in structure.items():
-        if category in ('_budget', '_looks_minified') or _should_skip_category(category, items):
+        if _should_skip_category(category, items):
             continue
         _render_single_category(category, items, path, output_format, heading_depth=heading_depth,
-                                budget=budgets.get(category))
+                                total=totals.get(category))
 
 
 def _build_outline_hierarchy(structure: Dict[str, List[Dict[str, Any]]]):
@@ -627,21 +627,11 @@ def _build_outline_hierarchy(structure: Dict[str, List[Dict[str, Any]]]):
     return build_hierarchy(structure)
 
 
+MINIFIED_CAP_HINT = ("this file looks minified/bundled, so its listing is capped low; "
+                     "use --all for everything, or --max-items N")
+
 PARSE_RECOVERY_NOTICE = ("⚠️  Parse recovered from syntax tree-sitter could not read: this outline may be "
                          "incomplete or wrong (a grammar gap or a real syntax error).")
-
-
-def _print_truncation_notice(structure: Dict[str, Any]) -> None:
-    """Say so when a category list was cut short (default cap, --max-items)."""
-    budgets = structure.get('_budget') if isinstance(structure, dict) else None
-    if not budgets:
-        return
-    parts = ", ".join(f"{cat} {b['returned']} of {b['total_available']}" for cat, b in budgets.items())
-    print(f"Truncated: {parts}.")
-    if structure.get('_looks_minified'):
-        print("  This file looks minified/bundled; its listing is capped low.")
-    print("  Use --all for everything, or --max-items N to set the cap.")
-    print()
 
 
 def _print_coverage_warning(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]]) -> None:
@@ -651,9 +641,7 @@ def _print_coverage_warning(analyzer: FileAnalyzer, structure: Dict[str, List[Di
     if isinstance(structure, dict) and structure.get('_has_errors'):
         print()
         print(PARSE_RECOVERY_NOTICE)
-    # A budget-truncated listing covers little of the file by construction; the
-    # truncation notice already says so, and a coverage claim would mislead.
-    coverage = None if structure.get('_budget') else outline_coverage(structure, analyzer.lines)
+    coverage = outline_coverage(structure, analyzer.lines)
     if coverage:
         print()
         for line in format_coverage_warning(coverage, analyzer.path):
@@ -692,7 +680,6 @@ def _handle_outline_mode(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[
 
     hierarchy = _build_outline_hierarchy(structure)
     render_outline(hierarchy, path)
-    _print_truncation_notice(structure)
     _print_coverage_warning(analyzer, structure)
 
     # Navigation hints
@@ -757,7 +744,6 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
     # Text output: show header, categories, and navigation hints
     _print_file_header(path, is_fallback, fallback_lang)
     _render_text_categories(structure, path, output_format, heading_depth=heading_depth)
-    _print_truncation_notice(structure)
     _print_coverage_warning(analyzer, structure)
 
     # Navigation hints
@@ -783,44 +769,35 @@ def _default_file_item_cap(analyzer: FileAnalyzer, args, output_format: str) -> 
 def _apply_file_budget_constraints(structure: Dict[str, Any], args=None,
                                    default_cap: Optional[int] = None,
                                    looks_minified: bool = False) -> Dict[str, Any]:
-    """Apply --max-items/--max-snippet-chars to a bare-file structure dict.
+    """Apply --max-items/--max-snippet-chars, or the text view's default cap, to a file's lists.
 
-    Mirrors cli/routing/uri.py::_apply_budget_constraints, but a file's
-    structure has multiple list-valued categories (functions, classes,
-    imports, ...) rather than one adapter-declared list field (BACK-1203:
-    these flags were a silent no-op on bare file/directory paths, working
-    only via the ast:// URI form). Each list-of-dicts category is budgeted
-    independently; per-category truncation metadata is recorded under the
-    underscored '_budget' key, matching this dict's existing convention for
-    meta signaling (e.g. '_domain_not_found').
+    Mirrors cli/routing/uri.py::_apply_budget_constraints, but a file's structure has
+    several list categories (functions, classes, imports, ...), each capped on its own
+    (BACK-1203). Each cut is a ``note_truncation`` entry, like --head's (BACK-1564): it was
+    a private ``_budget`` key that JSON showed as ``structure._budget`` and text as its own
+    "Truncated:" line, so ``--head 3 --max-items 2`` disclosed "3 of 8" and "2 of 3" for a
+    list of 2 of 8.
     """
     if not isinstance(structure, dict) or args is None:
         return structure
 
     max_items = getattr(args, 'max_items', None)
     max_snippet_chars = getattr(args, 'max_snippet_chars', None)
-    if max_items is None:
-        max_items = default_cap
+    cause, hint = 'max_items', None
+    if max_items is None and default_cap is not None:
+        max_items, cause = default_cap, 'display_cap'
+        hint = MINIFIED_CAP_HINT if looks_minified else None
     if max_items is None and max_snippet_chars is None:
         return structure
 
     from reveal.utils.query import apply_budget_limits
 
-    budget_meta = {}
-    for category, items in structure.items():
+    for category, items in list(structure.items()):
         if not isinstance(items, list) or not items or not isinstance(items[0], dict):
             continue
-        budget_result = apply_budget_limits(
-            items, max_items=max_items, truncate_strings=max_snippet_chars
-        )
-        structure[category] = budget_result['items']
-        if budget_result['meta']['truncated']:
-            budget_meta[category] = budget_result['meta']
-
-    if budget_meta:
-        structure['_budget'] = budget_meta
-        if looks_minified:
-            structure['_looks_minified'] = True
+        structure[category] = apply_budget_limits(
+            items, max_items=max_items, truncate_strings=max_snippet_chars)['items']
+        note_truncation(structure, category, len(structure[category]), len(items), cause, hint)
 
     return structure
 
