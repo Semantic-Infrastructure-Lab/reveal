@@ -1,5 +1,7 @@
 """MySQL result rendering for CLI output."""
 
+import sys
+
 from reveal.rendering import TypeDispatchRenderer
 
 
@@ -160,9 +162,8 @@ class MySQLRenderer(TypeDispatchRenderer):
     def _render_slow_queries(result: dict) -> None:
         """Render slow-query-log element."""
         if 'error' in result:
-            print("MySQL Slow Queries: unavailable")
-            print(f"  {result['message']}")
-            print(f"  ({result['error']})")
+            # A failed result: the router has printed the error; add only the likely cause.
+            print(f"  {result['message']}", file=sys.stderr)
             return
 
         print(f"MySQL Slow Queries (last {result['period']})")

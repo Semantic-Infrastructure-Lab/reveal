@@ -614,9 +614,12 @@ class TestAutosslRenderer:
             'log_dir': '/nonexistent',
         }
         AutosslRenderer.render_structure(result)
-        out = capsys.readouterr().out
-        assert 'Error' in out
-        assert 'File not found' in out
+        captured = capsys.readouterr()
+        # A failed result: the router prints the error once; the renderer adds only detail,
+        # on stderr, so text stdout stays empty (BACK-1553).
+        assert captured.out == ''
+        assert 'File not found' not in captured.err
+        assert captured.err == '  Log dir: /nonexistent\n'
 
     def test_render_no_runs(self, capsys):
         result = {

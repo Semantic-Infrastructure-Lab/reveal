@@ -209,11 +209,9 @@ def _render_python_package_details(data: Dict[str, Any]) -> None:
 
 
 def _handle_python_error(data: Dict[str, Any]) -> None:
-    """Handle and display Python runtime error."""
-    print(f"Error: {data['error']}", file=sys.stderr)
+    """Add detail to a failed result. The router prints the error and exits 1 (BACK-1059)."""
     if 'details' in data:
         print(f"Details: {data['details']}", file=sys.stderr)
-    sys.exit(1)
 
 
 _PYTHON_ELEMENT_CHECKS = [

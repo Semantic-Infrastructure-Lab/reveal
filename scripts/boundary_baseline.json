@@ -10,8 +10,7 @@
   "reveal/file_handler.py": 6,
   "reveal/grep_handler.py": 3,
   "reveal/logging_setup.py": 1,
-  "reveal/nav_handlers.py": 2,
-  "reveal/rendering/adapters/python.py": 1
+  "reveal/nav_handlers.py": 2
  },
  "print": {
   "reveal/adapters/architecture.py": 18,

@@ -9,7 +9,9 @@ Tests cover:
 - Health checks (--check flag)
 """
 
+import io
 import unittest
+from contextlib import redirect_stderr
 from unittest.mock import Mock, MagicMock, patch, mock_open
 import sys
 import os
@@ -1179,15 +1181,19 @@ class TestMySQLRenderer(unittest.TestCase):
         self.assertNotIn('"type"', output)
 
     def test_renderer_slow_queries_unavailable(self):
-        """Renderer should handle the slow-query-log-unavailable error shape."""
+        """A failed slow-query result: the router prints the error; the renderer adds only the
+        likely cause, on stderr, and never repeats the error (BACK-1553)."""
         result = {
             'type': 'slow_queries',
             'error': "Table 'mysql.slow_log' doesn't exist",
             'message': 'Slow query log may not be enabled or accessible',
         }
-        output = self._render_and_capture(result)
-        self.assertIn('MySQL Slow Queries: unavailable', output)
-        self.assertIn('Slow query log may not be enabled', output)
+        err = io.StringIO()
+        with redirect_stderr(err):
+            output = self._render_and_capture(result)
+        self.assertEqual(output, '')
+        self.assertIn('Slow query log may not be enabled', err.getvalue())
+        self.assertNotIn('slow_log', err.getvalue())
 
     def test_renderer_tables_output(self):
         """Renderer should format the tables element as text, not raw JSON."""

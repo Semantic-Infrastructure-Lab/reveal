@@ -1,5 +1,6 @@
 """Renderer for AutoSSL adapter output (autossl://)."""
 
+import sys
 from typing import Any, Dict, List
 
 from ...utils import print_json_result
@@ -116,9 +117,9 @@ class AutosslRenderer:
 
     @staticmethod
     def _render_error(r: Dict[str, Any]) -> None:
-        print(f"AutoSSL run: {r.get('run_timestamp', '?')}")
-        print(f"  Error: {r.get('error', 'unknown error')}")
-        print(f"  Log dir: {r.get('log_dir', '?')}")
+        # A failed result: the router has printed the error; add only where to look.
+        if r.get('log_dir'):
+            print(f"  Log dir: {r['log_dir']}", file=sys.stderr)
 
     @staticmethod
     def _render_run(r: Dict[str, Any]) -> None:

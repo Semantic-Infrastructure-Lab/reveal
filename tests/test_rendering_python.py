@@ -4,7 +4,7 @@ import unittest
 import sys
 import io
 from pathlib import Path
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 
 # Add parent directory to path to import reveal
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -422,13 +422,17 @@ class TestRenderPythonElement(unittest.TestCase):
         self.assertIn('data', output)
 
     def test_error_handling(self):
-        """Should handle errors and exit."""
+        """A failed result: the router prints the error and exits 1; the renderer adds only its
+        details, on stderr. It used to print the error again and exit itself (BACK-1553)."""
         data = {
             'error': 'Module not found',
             'details': 'No module named foo'
         }
-        with self.assertRaises(SystemExit):
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
             render_python_element(data, 'text')
+        self.assertEqual(out.getvalue(), '')
+        self.assertEqual(err.getvalue(), 'Details: No module named foo\n')
 
     def test_dispatches_to_packages(self):
         """Should dispatch to packages renderer."""
