@@ -359,7 +359,7 @@ class TestGenericAdapterHandlerBasePath:
         args = _args(base_path='/new', format='text')
 
         # _default_from_uri is called when adapter_class is not a real type
-        with patch('reveal.cli.routing.uri._handle_rendering'):
+        with patch('reveal.cli.routing.uri._view_answer'):
             with patch('reveal.adapters.base._default_from_uri', return_value=mock_adapter):
                 from reveal.cli.routing import generic_adapter_handler
                 generic_adapter_handler(mock_adapter_cls, mock_renderer_cls, 'claude', 'session/X', None, args)
@@ -367,7 +367,7 @@ class TestGenericAdapterHandlerBasePath:
         mock_adapter.reconfigure_base_path.assert_called_once_with(Path('/new'))
 
     def test_check_mode_returns_early(self):
-        """Cover line 114: --check mode calls _handle_check_mode then returns."""
+        """Cover line 114: --check mode answers through _check_answer, not the view."""
         mock_adapter = MagicMock()
         mock_adapter_cls = MagicMock()
         mock_adapter_cls.from_uri.return_value = mock_adapter
@@ -375,8 +375,8 @@ class TestGenericAdapterHandlerBasePath:
         mock_renderer_cls = MagicMock()
         args = _args(check=True, base_path=None, format='text')
 
-        with patch('reveal.cli.routing.uri._handle_check_mode') as mock_check:
-            with patch('reveal.cli.routing.uri._handle_rendering') as mock_render:
+        with patch('reveal.cli.routing.uri._check_answer') as mock_check:
+            with patch('reveal.cli.routing.uri._view_answer') as mock_render:
                 from reveal.cli.routing import generic_adapter_handler
                 generic_adapter_handler(mock_adapter_cls, mock_renderer_cls, 'domain', 'example.com', None, args)
 
@@ -1085,7 +1085,7 @@ class TestGenericAdapterHandlerFromUri:
                      fields=None, max_items=None, max_snippet_chars=None)
 
         with patch('reveal.cli.routing.uri._build_adapter_kwargs', return_value={}):
-            with patch('reveal.cli.routing.uri._handle_rendering'):
+            with patch('reveal.cli.routing.uri._view_answer'):
                 generic_adapter_handler(FakeAdapter, FakeRenderer, 'fake', 'res', None, args)
 
 

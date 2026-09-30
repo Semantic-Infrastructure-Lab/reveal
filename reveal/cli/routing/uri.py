@@ -9,7 +9,9 @@ import os
 import re
 import sys
 from argparse import Namespace
-from typing import Any, Callable, List, NoReturn, Optional
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Any, Callable, Iterable, Iterator, List, NoReturn, Optional, Tuple
 
 from ...errors import NotApplicableError
 from ...reveal_types import CONTRACT_VERSION, RevealResult
@@ -22,33 +24,63 @@ from .formats import declared_output_formats, require_supported_format
 logger = logging.getLogger(__name__)
 
 
-# _call_adapter's return once the adapter declined as not applicable and that answer is out.
-_DECLINED: Any = object()
+@dataclass
+class Answer:
+    """One URI query's answer, before anything is printed (BACK-1554).
+
+    ``kind`` is the call that produced ``result``: 'structure', 'element', 'check', or
+    'router' when the router built it (the adapter raised, declined, or has no such
+    element). ``emit`` prints it the way the CLI does and exits as its outcome says.
+    handle_uri emits; stdin --batch reads ``result`` and aggregates, so both answer a URI
+    through the same resolution.
+    """
+    result: Any
+    kind: str
+    emit: Callable[[], None]
 
 
-def _call_adapter(call: Callable[[], Any], scheme: str, resource: str, args: 'Namespace',
+class _Answered(Exception):
+    """Ends resolution with a result the router built (_fail, _decline). _answer turns it
+    into the query's Answer, so a query that stops early is answered like one that ends."""
+
+    def __init__(self, result: RevealResult, detail: Optional[Callable[[], None]] = None):
+        super().__init__(result.get('error') or result.get('reason'))
+        self.result = result
+        self.detail = detail
+
+
+class UriUsageError(Exception):
+    """The query is malformed before any adapter is chosen: no ``://``, an unknown scheme.
+    handle_uri prints it on stderr and exits 1, like argparse (BACK-1553 decision);
+    resolve_uri raises it, so a batch records it and goes on."""
+
+    def __init__(self, message: str, hint: str = ''):
+        super().__init__(message)
+        self.message = message
+        self.hint = hint
+
+
+def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
                   adapter_class: Any = None) -> Any:
     """Run one call into an adapter; what it raises becomes a result like any returned one.
 
     Every call the router makes into an adapter goes through here: constructing it,
-    --base-path, check(), get_element(), get_structure() and post_process(). A raise leaves
-    through _emit_result as a failed result (exit 1), and a NotApplicableError as a
-    not-applicable one (exit 0, BACK-1210), so both read the same as a returned result: one
-    stderr line, one JSON envelope, --also-json written. Each site used to catch for
-    itself, print its own error line (three spellings) and hand-build its own envelope, so
-    a raised error printed twice in text, carried contract_version 1.0 and source_type
-    'file', and wrote no --also-json (BACK-1553).
-
-    Returns the call's value, or _DECLINED once the not-applicable answer is out.
+    --base-path, check(), get_element(), get_structure() and post_process(). A raise ends
+    the query as a failed result (exit 1), and a NotApplicableError as a not-applicable one
+    (exit 0, BACK-1210), so both read the same as a returned result: one stderr line, one
+    JSON envelope, --also-json written. Each site used to catch for itself, print its own
+    error line (three spellings) and hand-build its own envelope, so a raised error printed
+    twice in text, carried contract_version 1.0 and source_type 'file', and wrote no
+    --also-json (BACK-1553). The result leaves as an _Answered, not an exit, so stdin
+    --batch gets it as a result too (BACK-1554).
     """
     try:
         return call()
     except NotApplicableError as e:
-        _decline(scheme, resource, e.reason, args, adapter_class)
-        return _DECLINED
-    except Exception as e:  # not silent: _fail prints the error on stderr and exits 1
+        _decline(scheme, resource, e.reason, adapter_class)
+    except Exception as e:  # not silent: the query ends as a failed result (_fail)
         logger.debug('%s:// adapter call raised', scheme, exc_info=True)
-        _fail(scheme, resource, _exception_message(e), args, adapter_class=adapter_class)
+        _fail(scheme, resource, _exception_message(e), adapter_class=adapter_class)
 
 
 def _exception_message(e: Exception) -> str:
@@ -88,10 +120,10 @@ def _router_result(scheme: str, resource: str, adapter_class: Any = None, **fiel
     )
 
 
-def _fail(scheme: str, resource: str, message: str, args: 'Namespace', *,
+def _fail(scheme: str, resource: str, message: str, *,
           adapter_class: Any = None, code: str = 'adapter_error',
           detail: Optional[Callable[[], None]] = None, **fields: Any) -> NoReturn:
-    """Fail the query with an error result through _emit_result, which exits 1.
+    """End the query with an error result; emitted, it exits 1 (_emit_result).
 
     ``meta.errors`` carries the error once more with a code (``adapter_error`` for a raise,
     ``element_not_found``, ...), which is how JSON tells a router-built failure from one an
@@ -99,18 +131,27 @@ def _fail(scheme: str, resource: str, message: str, args: 'Namespace', *,
     """
     result = _router_result(scheme, resource, adapter_class,
                             errors=[{'code': code, 'message': message}], error=message, **fields)
-    _emit_result(result, args, scheme, _render_router_result, detail=detail)
-    sys.exit(1)  # _emit_result has exited on the failed outcome; this tells the type checker
+    raise _Answered(result, detail)
 
 
-def _decline(scheme: str, resource: str, reason: str, args: 'Namespace', adapter_class: Any = None) -> None:
-    """Answer 'not applicable' for a query that genuinely does not apply to the target
+def _decline(scheme: str, resource: str, reason: str, adapter_class: Any = None) -> NoReturn:
+    """End the query 'not applicable' when it genuinely does not apply to the target
     (testability:// with no tests, git:// outside a repository): a recorded answer that
     exits 0, not a failure (BACK-1210)."""
     result = _router_result(scheme, resource, adapter_class,
                             warnings=[{'code': 'not_applicable', 'message': reason}],
                             applicable=False, reason=reason)
-    _emit_result(result, args, scheme, _render_router_result)
+    raise _Answered(result)
+
+
+def _answer(resolve: Callable[[], Answer], scheme: str, args: 'Namespace') -> Answer:
+    """Run one resolution; a query it ended early (_Answered) is answered by the router's result."""
+    try:
+        return resolve()
+    except _Answered as e:
+        result, detail = e.result, e.detail  # `e` is unbound once the handler ends
+    return Answer(result, 'router',
+                  lambda: _emit_result(result, args, scheme, _render_router_result, detail=detail))
 
 
 def _render_router_result(result: Any, output_format: str,
@@ -183,17 +224,48 @@ def _parse_text_frontmatter(text: str) -> Optional[dict]:
     return {'data': data, 'line_start': 1, 'line_end': line_end, 'raw': yaml_content.strip()}
 
 
-def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
-    """Handle URI-based resources (env://, ast://, etc.).
+def handle_uri(uri: str, element: Optional[str], args: 'Namespace',
+               consumed: Iterable[str] = ()) -> None:
+    """Answer a URI query (env://, ast://, ...) and print it.
 
     Args:
         uri: Full URI (e.g., env://, env://PATH)
         element: Optional element to extract
         args: Parsed command line arguments
+        consumed: Flags the caller applied itself (``--stdin``), so the flag ledger does not
+            report them as having no effect on the adapter
     """
-    if '://' not in uri:
-        print(f"Error: Invalid URI format: {uri}", file=sys.stderr)
+    try:
+        with _dispatch(uri, element, args, consumed) as (adapter_class, scheme, resource, args):
+            handle_adapter(adapter_class, scheme, resource, element, args)
+    except UriUsageError as e:
+        print(f"Error: {e.message}", file=sys.stderr)
+        if e.hint:
+            print(e.hint, file=sys.stderr)
         sys.exit(1)
+
+
+def resolve_uri(uri: str, args: 'Namespace', consumed: Iterable[str] = ()) -> Answer:
+    """Answer a URI query without printing it (BACK-1554), for callers that aggregate
+    several (stdin --batch). The same dispatch as handle_uri: the flag injection, the walk
+    scope and the flag ledger, from_uri, the missing-path check, check() arguments, and
+    element lookup, with a raise or a missing element as a failed result. Raises
+    UriUsageError for a URI with no ``://`` or an unknown scheme.
+    """
+    with _dispatch(uri, None, args, consumed) as (adapter_class, scheme, resource, args):
+        return resolve_adapter(adapter_class, _renderer_class_of(scheme), scheme, resource,
+                               None, args)
+
+
+@contextmanager
+def _dispatch(uri: str, element: Optional[str], args: 'Namespace',
+              consumed: Iterable[str]) -> Iterator[Tuple[type, str, str, 'Namespace']]:
+    """Everything around one adapter dispatch: parse the URI, start its flag ledger, inject
+    flags into the query, look up the adapter, and hold the walk scope while the body runs.
+    Yields (adapter class, scheme, final resource, tracked args); the ledger reports when
+    the body ends without an error exit."""
+    if '://' not in uri:
+        raise UriUsageError(f"Invalid URI format: {uri}")
 
     scheme, resource = uri.split('://', 1)
 
@@ -203,6 +275,7 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
     if ledger_of(args) is None and isinstance(args, Namespace):
         ledger = FlagLedger(args)
         args = ledger.track(args)
+        mark(args, *consumed)
 
     # Expand a leading ~/... in the resource path before dispatch. A single-quoted
     # 'scheme://~/dir?query' never reaches shell tilde expansion (the ? forces
@@ -254,10 +327,9 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
 
     adapter_class = get_adapter_class(scheme)
     if not adapter_class:
-        print(f"Error: Unsupported URI scheme: {scheme}://", file=sys.stderr)
         schemes = ', '.join(f"{s}://" for s in list_supported_schemes())
-        print(f"Supported schemes: {schemes}", file=sys.stderr)
-        sys.exit(1)
+        raise UriUsageError(f"Unsupported URI scheme: {scheme}://",
+                            f"Supported schemes: {schemes}")
 
     # BACK-1385: sort=/limit=/offset= typed on an adapter that cannot receive them would be glued
     # onto its resource ("Element '?limit=2' not found"). Strip them with the same warning every
@@ -286,10 +358,10 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
     try:
         with gitignore_scope(respect_gitignore):
             if ledger is None:
-                handle_adapter(adapter_class, scheme, resource, element, args)
+                yield adapter_class, scheme, resource, args
             else:
                 with ledger.dispatching(resource):
-                    handle_adapter(adapter_class, scheme, resource, element, args)
+                    yield adapter_class, scheme, resource, args
                 ledger.complete = True
     finally:
         clear_active_exclusions()
@@ -347,8 +419,8 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:
     return resource
 
 
-def _reject_missing_path(adapter_class: type, scheme: str, resource: str, args: 'Namespace') -> None:
-    """Exit 1 when a path-taking adapter (RESOURCE_IS_PATH) is given a path that
+def _reject_missing_path(adapter_class: type, scheme: str, resource: str) -> None:
+    """Fail the query when a path-taking adapter (RESOURCE_IS_PATH) is given a path that
     does not exist (BACK-1321). One shared check instead of per-adapter ones, so
     a typo'd path can no longer read as a clean empty result with exit 0."""
     if getattr(adapter_class, 'RESOURCE_IS_PATH', False) is not True:
@@ -359,16 +431,13 @@ def _reject_missing_path(adapter_class: type, scheme: str, resource: str, args: 
         path = resolve(path)
     if not path or os.path.exists(path):
         return
-    _fail(scheme, resource, f"Path not found: {path}", args, adapter_class=adapter_class)
+    _fail(scheme, resource, f"Path not found: {path}", adapter_class=adapter_class)
 
 
 def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
                            scheme: str, resource: str, element: Optional[str],
                            args: 'Namespace') -> None:
-    """Generic handler for adapters with registered renderers.
-
-    This is the new simplified handler that works with any adapter/renderer pair.
-    Replaces the need for scheme-specific handlers in most cases.
+    """Answer a query on any adapter/renderer pair and print it.
 
     Args:
         adapter_class: The adapter class to instantiate
@@ -378,18 +447,32 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
         element: Optional element to extract
         args: CLI arguments
     """
+    # An unsupported --format is a usage error, so it comes before any adapter work. Check
+    # mode renders through render_check, which declares no formats.
+    if not (peek(args, 'check', False) and hasattr(adapter_class, 'check')):
+        require_supported_format(args, declared_output_formats(adapter_class), f"{scheme}://")
+    resolve_adapter(adapter_class, renderer_class, scheme, resource, element, args).emit()
+
+
+def resolve_adapter(adapter_class: type, renderer_class: type[Any], scheme: str,
+                    resource: str, element: Optional[str], args: 'Namespace') -> Answer:
+    """Answer a query on an adapter without printing it (see resolve_uri)."""
+    return _answer(lambda: _resolve(adapter_class, renderer_class, scheme, resource, element, args),
+                   scheme, args)
+
+
+def _resolve(adapter_class: type, renderer_class: type[Any], scheme: str, resource: str,
+             element: Optional[str], args: 'Namespace') -> Answer:
     # Initialize adapter via from_uri.  Use _default_from_uri when adapter_class is
     # not a real type (e.g. a Mock callable in tests) or lacks from_uri.
     from ...adapters.base import _default_from_uri
-    _reject_missing_path(adapter_class, scheme, resource, args)
+    _reject_missing_path(adapter_class, scheme, resource)
     if isinstance(adapter_class, type) and hasattr(adapter_class, 'from_uri'):
         adapter = _call_adapter(lambda: adapter_class.from_uri(scheme, resource, element),
-                                scheme, resource, args, adapter_class)
+                                scheme, resource, adapter_class)
     else:
         adapter = _call_adapter(lambda: _default_from_uri(adapter_class, scheme, resource, element),
-                                scheme, resource, args, adapter_class)
-    if adapter is _DECLINED:
-        return
+                                scheme, resource, adapter_class)
 
     # Apply --base-path override for adapters that support it (e.g., claude://)
     # REVEAL_CLAUDE_BASE_PATH env var acts as a persistent default for --base-path.
@@ -397,23 +480,19 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
     if path_override and hasattr(adapter, 'reconfigure_base_path'):
         mark(args, 'base_path')
         from pathlib import Path as _Path
-        if _call_adapter(lambda: adapter.reconfigure_base_path(_Path(path_override)),
-                         scheme, resource, args, adapter_class) is _DECLINED:
-            return
+        _call_adapter(lambda: adapter.reconfigure_base_path(_Path(path_override)),
+                      scheme, resource, adapter_class)
 
-    # Handle --check mode if requested
     if peek(args, 'check', False) and hasattr(adapter, 'check'):
         mark(args, 'check')
-        _handle_check_mode(adapter, renderer_class, args, scheme, resource)
-        return  # check mode exits directly
+        return _check_answer(adapter, renderer_class, args, scheme, resource)
 
     # An adapter may carry the element inside its resource (diff://a.py:b.py/func).
     embedded = getattr(adapter, 'embedded_element', None)
     if not element and isinstance(embedded, str):
         element = embedded
 
-    # Render element or structure based on adapter type
-    _handle_rendering(adapter, renderer_class, scheme, resource, element, args)
+    return _view_answer(adapter, renderer_class, scheme, resource, element, args)
 
 
 def _build_check_kwargs(adapter, args: 'Namespace') -> dict:
@@ -495,7 +574,7 @@ def _build_render_opts(renderer_class: type[Any], args: 'Namespace', query_param
 
 def _handle_check_mode(adapter, renderer_class: type[Any], args: 'Namespace',
                        scheme: Optional[str] = None, resource: str = '') -> None:
-    """Execute check mode and exit.
+    """Run check mode, print it and exit.
 
     Args:
         adapter: Initialized adapter with check() method
@@ -504,12 +583,20 @@ def _handle_check_mode(adapter, renderer_class: type[Any], args: 'Namespace',
         scheme: URI scheme, for the error result if check() raises
         resource: Resource part of the URI, likewise
     """
-    # Build check kwargs and execute
+    _answer(lambda: _check_answer(adapter, renderer_class, args, scheme, resource),
+            scheme or 'unknown', args).emit()
+
+
+def _check_answer(adapter, renderer_class: type[Any], args: 'Namespace',
+                  scheme: Optional[str] = None, resource: str = '') -> Answer:
     check_kwargs = _build_check_kwargs(adapter, args)
     result = _call_adapter(lambda: adapter.check(**check_kwargs),
-                           scheme or 'unknown', resource, args, type(adapter))
-    if result is _DECLINED:
-        return
+                           scheme or 'unknown', resource, type(adapter))
+    return Answer(result, 'check', lambda: _emit_check(result, adapter, renderer_class, args))
+
+
+def _emit_check(result: Any, adapter, renderer_class: type[Any], args: 'Namespace') -> NoReturn:
+    """Print a check result and exit with its own exit_code (EXIT_CODE_CONTRACT)."""
     write_also_json(result, args)
 
     # Render check results
@@ -534,9 +621,9 @@ def _handle_check_mode(adapter, renderer_class: type[Any], args: 'Namespace',
     sys.exit(exit_code)
 
 
-def _handle_rendering(adapter, renderer_class: type[Any], scheme: str,
-                      resource: str, element: Optional[str], args: 'Namespace') -> None:
-    """Render element or structure based on adapter capabilities.
+def _view_answer(adapter, renderer_class: type[Any], scheme: str,
+                 resource: str, element: Optional[str], args: 'Namespace') -> Answer:
+    """Answer with an element or the structure, as the adapter supports.
 
     Args:
         adapter: Initialized adapter
@@ -546,8 +633,6 @@ def _handle_rendering(adapter, renderer_class: type[Any], scheme: str,
         element: Optional element to extract
         args: CLI arguments
     """
-    require_supported_format(args, declared_output_formats(type(adapter)), f"{scheme}://")
-
     # Get element or structure based on adapter capabilities
     # Adapters with render_element (env, python, help) support element-based access
     # Others (ast, json, stats) always use get_structure() unless element explicitly provided
@@ -559,9 +644,8 @@ def _handle_rendering(adapter, renderer_class: type[Any], scheme: str,
     resource_is_element = getattr(adapter.__class__, 'ELEMENT_NAMESPACE_ADAPTER', False)
 
     if supports_elements and (element or (resource and resource_is_element)):
-        _render_element(adapter, renderer_class, element, resource, args, scheme=scheme)
-    else:
-        _render_structure(adapter, renderer_class, args, scheme=scheme, resource=resource)
+        return _element_answer(adapter, renderer_class, element, resource, args, scheme)
+    return _structure_answer(adapter, renderer_class, args, scheme, resource)
 
 
 def _handle_outline_mode(result: dict, args: 'Namespace', text_field: Optional[str], label: Any) -> bool:
@@ -665,7 +749,7 @@ def _print_help_not_found_hints(adapter, element_name: str, section: Optional[st
 
 
 def _fail_element_not_found(adapter, element_name: str, section: Optional[str], resource: str,
-                            args: 'Namespace', scheme: Optional[str]) -> NoReturn:
+                            scheme: Optional[str]) -> NoReturn:
     """Fail an element lookup that found nothing. The adapter's element names go in the
     result (``available_elements``) and, in text, on stderr after the error; help:// adds its
     way back into discovery. This exit used to print on stderr only, so ``--format json``
@@ -679,13 +763,13 @@ def _fail_element_not_found(adapter, element_name: str, section: Optional[str], 
             _print_help_not_found_hints(adapter, element_name, section)
 
     extra = {'available_elements': elements} if elements else {}
-    _fail(scheme or 'unknown', resource, f"Element '{element_name}' not found", args,
+    _fail(scheme or 'unknown', resource, f"Element '{element_name}' not found",
           adapter_class=type(adapter), code='element_not_found', detail=detail, **extra)
 
 
 def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
                     resource: str, args: 'Namespace', scheme: Optional[str] = None) -> None:
-    """Render a specific element from adapter.
+    """Answer with a specific element from adapter and print it.
 
     Args:
         adapter: Adapter with get_element() method
@@ -695,17 +779,21 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
         args: CLI arguments
         scheme: URI scheme (used to tailor the not-found hint, e.g. help://)
     """
+    _answer(lambda: _element_answer(adapter, renderer_class, element, resource, args, scheme),
+            scheme or 'unknown', args).emit()
+
+
+def _element_answer(adapter, renderer_class: type[Any], element: Optional[str],
+                    resource: str, args: 'Namespace', scheme: Optional[str] = None) -> Answer:
     element_name = element if element else resource
     element_kwargs = {}
     section = getattr(args, 'section', None)
     if section:
         element_kwargs['section'] = section
     result = _call_adapter(lambda: adapter.get_element(element_name, **element_kwargs),
-                           scheme or 'unknown', resource or '', args, type(adapter))
-    if result is _DECLINED:
-        return
+                           scheme or 'unknown', resource or '', type(adapter))
     if result is None:
-        _fail_element_not_found(adapter, element_name, section, resource or '', args, scheme)
+        _fail_element_not_found(adapter, element_name, section, resource or '', scheme)
 
     # Apply --head/--tail to text-body content (BACK-355).
     # Probe canonical field names; first match wins.
@@ -723,6 +811,11 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
                 result = {**result, field: '\n'.join(lines)}
                 break
 
+    return Answer(result, 'element', lambda: _emit_element(result, renderer_class, args, scheme))
+
+
+def _emit_element(result: Any, renderer_class: type[Any], args: 'Namespace',
+                  scheme: Optional[str]) -> None:
     # --outline / --links / --frontmatter: alternate rendering modes on text-body
     # content (BACK-356, BACK-357), dispatched via the _ELEMENT_RENDER_MODES
     # registry (BACK-360). At most one fires since the CLI flags are mutually
@@ -919,7 +1012,7 @@ def _apply_head_tail_range(result: dict, args: 'Namespace', adapter=None,
 
 def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
                       scheme: Optional[str] = None, resource: Optional[str] = None) -> None:
-    """Render full structure from adapter.
+    """Answer with the full structure from adapter and print it.
 
     Args:
         adapter: Adapter with get_structure() method
@@ -928,15 +1021,19 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
         scheme: Optional URI scheme (for adapters that need full URI)
         resource: Optional resource string (for adapters that need full URI)
     """
+    _answer(lambda: _structure_answer(adapter, renderer_class, args, scheme, resource),
+            scheme or 'unknown', args).emit()
+
+
+def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
+                      scheme: Optional[str] = None, resource: Optional[str] = None) -> Answer:
     # Build adapter kwargs
     structure_kwargs = _build_adapter_kwargs(adapter, args, scheme, resource)
 
     # Get structure from adapter
     scheme_name, source = scheme or 'unknown', resource or ''
     result = _call_adapter(lambda: adapter.get_structure(**structure_kwargs),
-                           scheme_name, source, args, type(adapter))
-    if result is _DECLINED:
-        return
+                           scheme_name, source, type(adapter))
 
     # Apply post-processing
     result = _apply_field_selection(result, args)
@@ -946,9 +1043,7 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
     if post_process is not None:
         processed = result
         result = _call_adapter(lambda: adapter.post_process(processed, args),
-                               scheme_name, source, args, type(adapter))
-        if result is _DECLINED:
-            return
+                               scheme_name, source, type(adapter))
 
     # Add available elements if adapter supports discovery
     if hasattr(adapter, 'get_available_elements'):
@@ -956,16 +1051,18 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
         if available_elements:
             result['available_elements'] = available_elements
 
-    _emit_result(result, args, scheme, renderer_class.render_structure,
-                 **_render_structure_top_kwargs(renderer_class, args))
+    return Answer(result, 'structure',
+                  lambda: _emit_result(result, args, scheme, renderer_class.render_structure,
+                                       **_render_structure_top_kwargs(renderer_class, args)))
 
 
 def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render, **render_kwargs) -> None:
     """Render a URI result and turn its outcome into the exit code (BACK-1059).
 
-    Every URI result, for the CLI and MCP alike, ends here (_render_structure and
-    _render_element), so this is the one place a result's outcome becomes the exit code
-    and the one place its error is reported. Before it, each adapter or renderer decided
+    Every printed URI result, for the CLI and MCP alike, ends here (the emit of a
+    structure, element or router-built Answer), so this is the one place a result's outcome
+    becomes the exit code and the one place its error is reported; stdin --batch reads the
+    same outcome from the unprinted Answer (BACK-1554). Before it, each adapter or renderer decided
     for itself: an error result from calls://, codex://, claude:// or json:// rendered and
     exited 0, which reads as success to a script or agent, and some text renderers dropped
     the error entirely (codex:// with no DB rendered "Codex Sessions: 0 total").
@@ -1042,15 +1139,16 @@ def handle_adapter(adapter_class: type, scheme: str, resource: str,
         element: Optional element to extract
         args: CLI arguments
     """
-    # Get renderer for this adapter
+    generic_adapter_handler(adapter_class, _renderer_class_of(scheme), scheme, resource,
+                            element, args)
+
+
+def _renderer_class_of(scheme: str) -> type[Any]:
     from ...adapters.base import get_renderer_class
     renderer_class = get_renderer_class(scheme)
-
     if not renderer_class:
         # This shouldn't happen if adapter is properly registered
         print(f"Error: No renderer registered for scheme '{scheme}'", file=sys.stderr)
         print("This is a bug - adapter is registered but renderer is not.", file=sys.stderr)
         sys.exit(1)
-
-    # Use generic handler for all adapters
-    generic_adapter_handler(adapter_class, renderer_class, scheme, resource, element, args)
+    return renderer_class

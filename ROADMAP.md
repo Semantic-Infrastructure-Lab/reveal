@@ -314,8 +314,10 @@ a check that counts violations and lets the count only fall. Then the cause is r
    adapter's own `?top`/`?limit` cut is recorded the same way; and a read that stops early
    records a lower bound (`showing 50 of 51+`), with git:// walking history once for every
    view. An adapter that raises fails through the same handling as one that returns an
-   error (`cli/routing/uri._call_adapter`). Still open: file-path results (BACK-1548), stdin
-   `--batch`, which runs adapters outside that handling (BACK-1554), and the broad `except`s.
+   error (`cli/routing/uri._call_adapter`), and a URI piped to `--stdin --batch` gets the
+   answer `reveal <uri>` gives, resolved by the router without printing
+   (`cli/routing/uri.resolve_uri`). Still open: file-path results (BACK-1548) and the broad
+   `except`s.
 4. **One seam per concern:** BACK-1223 (one walker), BACK-1045 (parser seam), BACK-1366
    (one path pass), BACK-1372 (root finders) and BACK-1054 (import resolution).
 

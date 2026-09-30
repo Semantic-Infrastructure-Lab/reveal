@@ -589,20 +589,25 @@ echo -e "domain://example.com\ndomain://google.com\ndomain://github.com" | \
   reveal --stdin --batch --check
 ```
 
-**Output structure**:
+**Output structure** (`--format json`):
 ```json
 {
-  "type": "batch_results",
+  "type": "batch_check",
   "total": 3,
-  "successful": 2,
-  "failed": 1,
+  "status": "warning",
+  "summary": {"successful": 2, "warnings": 1, "failures": 0, "not_applicable": 0},
+  "adapters": ["domain"],
   "results": [
-    {"domain": "example.com", "status": "pass"},
-    {"domain": "google.com", "status": "pass"},
-    {"domain": "github.com", "status": "warning", "issues": ["SSL expiring"]}
+    {"uri": "domain://example.com", "scheme": "domain", "status": "pass", "data": {...}},
+    {"uri": "domain://google.com", "scheme": "domain", "status": "pass", "data": {...}},
+    {"uri": "domain://github.com", "scheme": "domain", "status": "warning", "data": {...}}
   ]
 }
 ```
+
+Each entry's `data` is the result `reveal <uri> --check --format json` gives for that URI,
+with the same flags applied. A query that fails there (exit 1) is `"status": "error"` here,
+with its message in `error`. The batch exits 2 when any entry failed, else 0.
 
 **Use cases**:
 - Monitor multiple domains in parallel

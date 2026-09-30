@@ -9,8 +9,18 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Dict, List, Any, Tuple
 
+from ...utils.results import outcome_of
+
 if TYPE_CHECKING:
     from argparse import Namespace
+    from ..routing.uri import Answer
+
+# Flags this driver applies itself, so each URI's flag ledger (BACK-1514) does not report
+# them as having no effect on the adapter: --stdin for every URI, and whatever renders the
+# aggregate for --batch and the legacy ssl:// --check batch.
+_STDIN_FLAGS = ('stdin',)
+_BATCH_FLAGS = ('stdin', 'batch', 'format', 'summary', 'only_failures')
+_SSL_BATCH_FLAGS = ('stdin', 'format', 'summary', 'only_failures', 'expiring_within')
 
 
 def _passes_ext_filter(target: str, ext_filter: Optional[str]) -> bool:
@@ -44,14 +54,12 @@ def _process_stdin_uri(target: str, args: 'Namespace', is_batch_mode: bool,
 
     # Legacy SSL-specific batch mode for backward compatibility
     if is_ssl_batch_check and target.startswith('ssl://'):
-        ssl_result: Optional[Dict[str, Any]] = _collect_ssl_check_result(target, args)
-        if ssl_result:
-            ssl_check_results.append(ssl_result)
+        ssl_check_results.append(_collect_ssl_check_result(target, args))
         return
 
     # Non-batch URIs go through normal path
     try:
-        handle_uri(target, None, args)
+        handle_uri(target, None, args, consumed=_STDIN_FLAGS)
     except SystemExit as e:
         # Only warn for actual failures (non-zero exit codes)
         if e.code != 0:
@@ -186,63 +194,56 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
         return
 
     # Render aggregated SSL batch results if we collected any (legacy path)
-    if ssl_check_results:
-        _render_ssl_batch_results(ssl_check_results, args)
+    ssl_exit = _render_ssl_batch_results(ssl_check_results, args) if ssl_check_results else 0
 
     if is_check_mode:
         # BACK-1099: reuse `reveal check`'s own 0/1/3 contract instead of
         # this path's previous 0/1-only exit, so a degraded/unparseable
         # file piped through --stdin --check is distinguishable from a
         # clean run at the shell level, same as the directory-mode fix.
+        # The ssl:// batch's own exit (2 on a failed domain, as `reveal
+        # ssl://HOST --check`) counts too: it used to be printed as
+        # "Exit code: 2" while the process exited 0 (BACK-1554).
         from reveal.cli.file_checker import check_exit_code
         degraded_count = 1 if any_file_degraded else 0
-        sys.exit(check_exit_code(
-            total_file_violations, files_degraded=degraded_count,
-            exit_zero=getattr(args, 'exit_zero', False),
-        ))
+        exit_zero = getattr(args, 'exit_zero', False)
+        file_exit = check_exit_code(
+            total_file_violations, files_degraded=degraded_count, exit_zero=exit_zero,
+        )
+        sys.exit(0 if exit_zero else max(file_exit, ssl_exit))
 
     sys.exit(1 if total_file_violations > 0 else 0)
 
 
-def _collect_ssl_check_result(uri: str, args: 'Namespace') -> Optional[Dict[str, Any]]:
-    """Collect SSL check result without rendering.
+def _collect_ssl_check_result(uri: str, args: 'Namespace') -> Dict[str, Any]:
+    """One ssl:// check for the legacy ``--stdin --check`` batch, answered by the router
+    (resolve_uri): the check gets the same arguments as ``reveal ssl://HOST --check``
+    (``--expiring-within``, ``--advanced``, ...). A failed answer, raised or returned, is
+    a failed domain in the batch."""
+    from ..routing.uri import resolve_uri
 
-    Args:
-        uri: SSL URI (ssl://domain.com)
-        args: CLI arguments
-
-    Returns:
-        Check result dict or None on error
-    """
-    from ...adapters.base import get_adapter_class
-
-    try:
-        adapter_class = get_adapter_class('ssl')
-        if not adapter_class:
-            return None
-
-        adapter = adapter_class(uri)
-        result = adapter.check()
+    result = resolve_uri(uri, args, consumed=_SSL_BATCH_FLAGS).result
+    if outcome_of(result) != 'failed':
         return result  # type: ignore[no-any-return]
-    except Exception as e:
-        # Return error result so it shows up in batch output
-        host = uri.replace('ssl://', '')
-        return {
-            'host': host,
-            'port': 443,
-            'status': 'failure',
-            'error': str(e),
-            'summary': {'total': 1, 'passed': 0, 'warnings': 0, 'failures': 1},
-            'exit_code': 2,
-        }
+    return {
+        'host': uri.replace('ssl://', ''),
+        'port': 443,
+        'status': 'failure',
+        'error': result['error'],
+        'summary': {'total': 1, 'passed': 0, 'warnings': 0, 'failures': 1},
+        'exit_code': 2,
+    }
 
 
-def _render_ssl_batch_results(results: list, args: 'Namespace') -> None:
+def _render_ssl_batch_results(results: list, args: 'Namespace') -> int:
     """Render collected SSL check results as a batch.
 
     Args:
         results: List of individual check results
         args: CLI arguments with batch flags
+
+    Returns:
+        The batch's exit code: 2 when any domain failed, else 0
     """
     from ...adapters.ssl.renderer import SSLRenderer
 
@@ -251,6 +252,7 @@ def _render_ssl_batch_results(results: list, args: 'Namespace') -> None:
     passed = sum(1 for r in results if r.get('status') == 'pass')
     warnings = sum(1 for r in results if r.get('status') == 'warning')
     failures = sum(1 for r in results if r.get('status') == 'failure')
+    exit_code = 0 if failures == 0 else 2
 
     batch_result = {
         'type': 'ssl_batch_check',
@@ -266,7 +268,7 @@ def _render_ssl_batch_results(results: list, args: 'Namespace') -> None:
             'failures': failures,
         },
         'results': results,
-        'exit_code': 0 if failures == 0 else 2,
+        'exit_code': exit_code,
     }
 
     # Get batch flags from args
@@ -281,71 +283,47 @@ def _render_ssl_batch_results(results: list, args: 'Namespace') -> None:
         summary=summary,
         expiring_within=expiring_within
     )
+    return exit_code
 
 
 def _collect_batch_result(uri: str, args: 'Namespace') -> dict:
-    """Collect check result from any adapter without rendering.
+    """One ``--batch`` entry: the URI's answer from the router (resolve_uri), not rendered.
 
-    Args:
-        uri: URI to check (ssl://domain.com, domain://example.com, etc.)
-        args: CLI arguments
+    The answer is the one ``reveal URI`` prints: the adapter built by from_uri, the
+    missing-path check, element lookup, --check arguments, the flag ledger. The status
+    comes from its outcome, so an error result is an error here, as it exits 1 there.
+    This used to build the adapter itself as adapter_class(uri), with the whole URI as its
+    resource and get_structure() only, and label every returned result 'success'
+    (BACK-1554): ast:// found nothing on any path, env://HOME listed the whole environment,
+    and a missing path or parameter counted as successful with exit 0.
 
     Returns:
-        Result dict with status and data, or error result
+        {uri, scheme, status, data} plus ``error`` when the answer failed
     """
-    from ...adapters.base import get_adapter_class
+    from ..routing.uri import UriUsageError, resolve_uri
 
+    scheme = uri.split('://', 1)[0]
     try:
-        # Parse scheme from URI
-        if '://' not in uri:
-            return {
-                'uri': uri,
-                'status': 'error',
-                'error': 'Invalid URI format (missing scheme://)',
-            }
+        answer = resolve_uri(uri, args, consumed=_BATCH_FLAGS)
+    except UriUsageError as e:
+        return {'uri': uri, 'scheme': scheme, 'status': 'error', 'error': e.message}
+    entry = {'uri': uri, 'scheme': scheme, 'status': _batch_status(answer), 'data': answer.result}
+    if entry['status'] == 'error':
+        entry['error'] = answer.result['error']
+    return entry
 
-        scheme = uri.split('://')[0]
-        adapter_class = get_adapter_class(scheme)
 
-        if not adapter_class:
-            return {
-                'uri': uri,
-                'status': 'error',
-                'error': f'No adapter found for scheme: {scheme}',
-            }
-
-        # Initialize adapter
-        adapter = adapter_class(uri)
-
-        # If --check flag and adapter has check method, use it
-        if getattr(args, 'check', False) and hasattr(adapter, 'check'):
-            result = adapter.check(
-                advanced=getattr(args, 'advanced', False),
-                only_failures=getattr(args, 'only_failures', False),
-            )
-            return {
-                'uri': uri,
-                'scheme': scheme,
-                'status': result.get('status', 'unknown'),
-                'data': result,
-            }
-
-        # Otherwise get structure
-        result = adapter.get_structure()
-        return {
-            'uri': uri,
-            'scheme': scheme,
-            'status': 'success',
-            'data': result,
-        }
-
-    except Exception as e:
-        return {
-            'uri': uri,
-            'scheme': scheme if '://' in uri else 'unknown',
-            'status': 'error',
-            'error': str(e),
-        }
+def _batch_status(answer: 'Answer') -> str:
+    """A batch entry's status: a failed answer is 'error' and a not-applicable one
+    'not_applicable' (outcome_of); a check reports its own status; anything else ran."""
+    outcome = outcome_of(answer.result)
+    if outcome == 'failed':
+        return 'error'
+    if outcome == 'not_applicable':
+        return 'not_applicable'
+    if answer.kind == 'check':
+        return str(answer.result.get('status', 'unknown'))
+    return 'success'
 
 
 def _aggregate_batch_stats(results: list) -> dict:
@@ -355,13 +333,14 @@ def _aggregate_batch_stats(results: list) -> dict:
         results: List of individual results
 
     Returns:
-        Dict with total, successful, warnings, failures counts
+        Dict with total, successful, warnings, failures, not_applicable counts
     """
     return {
         'total': len(results),
         'successful': sum(1 for r in results if r['status'] in ('success', 'pass')),
         'warnings': sum(1 for r in results if r['status'] == 'warning'),
         'failures': sum(1 for r in results if r['status'] in ('failure', 'error')),
+        'not_applicable': sum(1 for r in results if r['status'] == 'not_applicable'),
     }
 
 
@@ -426,6 +405,8 @@ def _get_status_indicator(status: str) -> str:
         return '✓'
     elif status == 'warning':
         return '⚠'
+    elif status == 'not_applicable':
+        return '–'
     else:
         return '✗'
 
@@ -451,6 +432,8 @@ def _render_batch_text_output(stats: dict, overall_status: str,
         print(f"Warnings: {stats['warnings']} ⚠")
     if stats['failures'] > 0:
         print(f"Failures: {stats['failures']} ✗")
+    if stats['not_applicable'] > 0:
+        print(f"Not applicable: {stats['not_applicable']} –")
     print(f"Overall Status: {overall_status.upper()}")
 
     if len(by_scheme) > 1:
@@ -473,6 +456,8 @@ def _render_batch_text_output(stats: dict, overall_status: str,
             # Show error details
             if 'error' in result:
                 print(f"  Error: {result['error']}")
+            elif status == 'not_applicable':
+                print(f"  Reason: {result['data'].get('reason', '')}")
 
 
 def _calculate_batch_exit_code(failures: int, warnings: int) -> int:
@@ -524,6 +509,7 @@ def _render_batch_results(results: list, args: 'Namespace') -> None:
             'successful': stats['successful'],
             'warnings': stats['warnings'],
             'failures': stats['failures'],
+            'not_applicable': stats['not_applicable'],
         },
         'adapters': list(by_scheme.keys()),
         'results': display_results,

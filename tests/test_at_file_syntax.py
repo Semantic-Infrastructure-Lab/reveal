@@ -338,9 +338,10 @@ class TestRenderBatchTextOutput:
 
     def test_summary_only_suppresses_uri_lines(self, capsys):
         from reveal.cli.handlers import _render_batch_text_output
+        from reveal.cli.handlers.batch import _aggregate_batch_stats
         results = self._make_results(5)
         by_scheme = {'env': results}
-        stats = {'total': 5, 'successful': 5, 'warnings': 0, 'failures': 0}
+        stats = _aggregate_batch_stats(results)
         _render_batch_text_output(stats, 'pass', by_scheme, results, summary_only=True)
         out = capsys.readouterr().out
         assert 'BATCH CHECK RESULTS' in out
@@ -349,9 +350,10 @@ class TestRenderBatchTextOutput:
 
     def test_summary_only_false_shows_uri_lines(self, capsys):
         from reveal.cli.handlers import _render_batch_text_output
+        from reveal.cli.handlers.batch import _aggregate_batch_stats
         results = self._make_results(3)
         by_scheme = {'env': results}
-        stats = {'total': 3, 'successful': 3, 'warnings': 0, 'failures': 0}
+        stats = _aggregate_batch_stats(results)
         _render_batch_text_output(stats, 'pass', by_scheme, results, summary_only=False)
         out = capsys.readouterr().out
         assert 'BATCH CHECK RESULTS' in out

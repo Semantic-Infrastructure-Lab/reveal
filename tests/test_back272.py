@@ -64,7 +64,7 @@ class TestEnvVarAppliedInHandler:
         renderer_class = MagicMock()
 
         with patch.dict(os.environ, {'REVEAL_CLAUDE_BASE_PATH': str(projects)}):
-            with patch('reveal.cli.routing.uri._handle_rendering'):
+            with patch('reveal.cli.routing.uri._view_answer'):
                 generic_adapter_handler(
                     adapter_class, renderer_class,
                     'claude', 'session/my-sess', None, _make_args()
@@ -83,7 +83,7 @@ class TestEnvVarAppliedInHandler:
         renderer_class = MagicMock()
 
         with patch.dict(os.environ, {'REVEAL_CLAUDE_BASE_PATH': str(projects_env)}):
-            with patch('reveal.cli.routing.uri._handle_rendering'):
+            with patch('reveal.cli.routing.uri._view_answer'):
                 generic_adapter_handler(
                     adapter_class, renderer_class,
                     'claude', 'session/my-sess', None,
@@ -102,7 +102,7 @@ class TestEnvVarAppliedInHandler:
 
         env = {k: v for k, v in os.environ.items() if k != 'REVEAL_CLAUDE_BASE_PATH'}
         with patch.dict(os.environ, env, clear=True):
-            with patch('reveal.cli.routing.uri._handle_rendering'):
+            with patch('reveal.cli.routing.uri._view_answer'):
                 generic_adapter_handler(
                     adapter_class, renderer_class,
                     'claude', 'session/my-sess', None, _make_args()
@@ -119,7 +119,7 @@ class TestEnvVarAppliedInHandler:
         renderer_class = MagicMock()
 
         with patch.dict(os.environ, {'REVEAL_CLAUDE_BASE_PATH': str(projects)}):
-            with patch('reveal.cli.routing.uri._handle_rendering'):
+            with patch('reveal.cli.routing.uri._view_answer'):
                 generic_adapter_handler(
                     adapter_class, renderer_class,
                     'ast', 'src/', None, _make_args()

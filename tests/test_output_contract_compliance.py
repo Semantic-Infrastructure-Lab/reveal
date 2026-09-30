@@ -51,6 +51,12 @@ proves nothing about the adapter's normal output. Invariants:
    written. A raise used to print twice, carry ``contract_version`` 1.0 and skip
    ``--also-json`` (BACK-1553). ``test_the_failure_invariant_bites`` checks that both kinds
    are compared.
+9. ``batch``: ``--stdin --batch`` answers each URI as ``reveal URI`` does: the entry's ``data``
+   is the same result, and its status is ``error`` exactly when the URI form exits nonzero
+   (``not_applicable`` when it declines). Batch built each adapter itself from the whole URI
+   and called only get_structure(), so ast:// found nothing on any path, env://HOME listed
+   the whole environment, and a failed query counted as successful with exit 0 (BACK-1554).
+   ``test_the_batch_invariant_bites`` checks that every status is compared.
 
 Violations that exist today are listed in ``KNOWN_VIOLATIONS`` as strict xfails, each
 naming its task. A fix makes its case XPASS, which fails the run until the entry is
@@ -80,7 +86,7 @@ from reveal.cli.routing import subcommand as subcommand_seam
 from reveal.cli.routing.uri import handle_uri
 from reveal.main import main
 from reveal.reveal_types import CONTRACT_VERSION
-from reveal.utils.results import truncations_of
+from reveal.utils.results import outcome_of, truncations_of
 
 pytestmark = pytest.mark.contract
 
@@ -194,6 +200,12 @@ OWN_CAP_URIS = {
     'imports': ['imports://wide?rank=fan-in'],
     'stats': ['stats://wide?hotspots=true'],
     'xlsx': ['xlsx://wide/data.xlsx?sheet=Sheet', 'xlsx://wide/data.xlsx?search=n'],
+}
+
+# Invariant 9 compares each adapter's fixture and missing URIs through --batch, plus these: a
+# not-applicable answer (the fixture home has no tests), so a declined query is compared too.
+BATCH_URIS = {
+    'testability': ['testability://home'],
 }
 
 _REQUIRED_FIELDS = ['contract_version', 'type', 'source', 'source_type']
@@ -406,6 +418,23 @@ class _Harness:
                 except SystemExit as exc:
                     code = exc.code if isinstance(exc.code, int) else 1
             self._cache[key] = (code, out.getvalue(), err.getvalue(), results)
+        return self._cache[key]
+
+    def run_batch(self, uri):
+        """(exit code, the one entry) for `uri` piped to `reveal --stdin --batch --format json`."""
+        key = ('--batch', uri)
+        if key not in self._cache:
+            out, err, code = StringIO(), StringIO(), 0
+            with self._hermetic(), redirect_stdout(out), redirect_stderr(err), \
+                    pytest.MonkeyPatch.context() as mp:
+                mp.setattr('sys.stdin', StringIO(uri + '\n'))
+                try:
+                    main(['reveal', '--stdin', '--batch', '--format', 'json'])
+                except SystemExit as exc:
+                    code = exc.code if isinstance(exc.code, int) else 1
+            entries = json.loads(out.getvalue())['results']
+            assert len(entries) == 1, entries
+            self._cache[key] = (code, entries[0])
         return self._cache[key]
 
     def fixture_uri(self, scheme):
@@ -731,3 +760,41 @@ def test_the_own_cap_invariant_bites(harness):
     bitten = [scheme for scheme in sorted(s for s in FIXTURE_URIS if _cap_knobs(s))
               if any(shortened for shortened, _, _ in _knob_cuts(harness, scheme).values())]
     assert bitten == expected
+
+
+def _batch_uris(harness, scheme):
+    return (harness.fixture_uri(scheme), _missing_uri(scheme), *BATCH_URIS.get(scheme, ()))
+
+
+def _expected_batch_status(code, payload):
+    if code:
+        return 'error'
+    return 'not_applicable' if outcome_of(payload) == 'not_applicable' else 'success'
+
+
+@pytest.mark.parametrize('scheme', _cases('batch', sorted(FIXTURE_URIS)))
+def test_batch_answers_like_the_uri(harness, scheme):
+    """Invariant 9: a URI piped to --batch gets the answer `reveal URI` gives, and a failure
+    there is a failure here (BACK-1554)."""
+    for uri in _batch_uris(harness, scheme):
+        code, payload, _ = harness.run(uri)
+        batch_code, entry = harness.run_batch(uri)
+        expected = _expected_batch_status(code, payload)
+        assert entry['status'] == expected, (
+            f"{uri}: --batch says {entry['status']!r}, the URI form exits {code} ({expected!r})")
+        assert entry.get('data') == payload, f'{uri}: --batch answered differently from the URI form'
+        assert batch_code == (2 if expected == 'error' else 0), (
+            f'{uri}: --batch exited {batch_code} for a {expected!r} entry')
+
+
+def test_the_batch_invariant_bites(harness):
+    """Positive control: invariant 9 compares successes, failures and a not-applicable
+    answer, and the fixture answers are not empty, so equal answers are not vacuous."""
+    statuses = {}
+    for scheme in sorted(FIXTURE_URIS):
+        for uri in _batch_uris(harness, scheme):
+            code, payload, _ = harness.run(uri)
+            statuses.setdefault(_expected_batch_status(code, payload), []).append(uri)
+    assert {'success', 'error', 'not_applicable'} <= set(statuses), statuses
+    _, ast_entry = harness.run_batch(harness.fixture_uri('ast'))
+    assert ast_entry['data']['results'], 'ast://proj found nothing: the fixture answer is empty'
