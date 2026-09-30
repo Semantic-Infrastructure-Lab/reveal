@@ -1,5 +1,6 @@
 """Bytecode checking utilities for Python adapter."""
 
+import os
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Dict, List, Set
@@ -71,14 +72,10 @@ def _check_stale_bytecode(py_file: Path, pyc_file: Path) -> Dict[str, Any]:
     }
 
 
-def _should_skip_bytecode_path(path: Path) -> bool:
-    """Return True if path contains a directory that should be skipped."""
-    for part in path.parts:
-        if part in BYTECODE_SKIP_DIRS:
-            return True
-        if any('*' in pat and fnmatch(part, pat) for pat in BYTECODE_SKIP_DIRS):
-            return True
-    return False
+def _is_bytecode_skip_dir(name: str) -> bool:
+    """True if a directory named *name* is never scanned for stale bytecode."""
+    return name in BYTECODE_SKIP_DIRS or any(
+        '*' in pat and fnmatch(name, pat) for pat in BYTECODE_SKIP_DIRS)
 
 
 def _check_pyc_file(pyc_file: Path) -> Dict[str, Any]:
@@ -113,15 +110,20 @@ def check_bytecode(root_path: str = ".") -> Dict[str, Any]:
         Dict with issues found
     """
     issues: List[Dict[str, Any]] = []
-    root = Path(root_path)
 
     try:
-        for pyc_file in root.rglob("**/*.pyc"):
-            if _should_skip_bytecode_path(pyc_file):
-                continue
-            issue = _check_pyc_file(pyc_file)
-            if issue:
-                issues.append(issue)
+        # BACK-1583: skip dirs are judged by name below the root (the old filter tested
+        # every part of the absolute path, so a project under /opt/venv/ or ~/.cache/
+        # reported clean) and pruned before descent (an rglob enumerated 384,796 .pyc
+        # on ~/src/tia to keep 76).
+        # boundary-ok: walker -- bytecode lives in __pycache__, which every seam purpose prunes
+        for dirpath, dirs, files in os.walk(root_path):
+            dirs[:] = sorted(d for d in dirs if not _is_bytecode_skip_dir(d))
+            for name in sorted(files):
+                if name.endswith('.pyc'):
+                    issue = _check_pyc_file(Path(dirpath) / name)
+                    if issue:
+                        issues.append(issue)
     except Exception as e:
         return {"error": f"Failed to scan for bytecode issues: {str(e)}", "status": "error"}
 

@@ -75,7 +75,5 @@
   "reveal/testability/patches.py": 2,
   "reveal/treesitter.py": 1
  },
- "walker": {
-  "reveal/adapters/python/bytecode.py": 1
- }
+ "walker": {}
 }
