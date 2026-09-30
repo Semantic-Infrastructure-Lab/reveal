@@ -294,6 +294,53 @@ class TestZeroArgPositionFallback(unittest.TestCase):
             _zero_arg(self._MethodStyleNode(), 'nonexistent_accessor')
 
 
+class TestZeroArgResolvedOncePerClass(unittest.TestCase):
+    """BACK-1559: _zero_arg resolves (class, name) once and caches a plain getter,
+    instead of paying getattr + AttributeError + callable() on every node."""
+
+    class _PropertyNode:
+        """>=1.12.5 shape: accessors are data descriptors; no .kind, only .type."""
+
+        @property
+        def type(self):
+            return 'module'
+
+        @property
+        def child_count(self):
+            return 3
+
+    class _MethodNode:
+        """<1.12.5 shape: accessors are methods under the Rust names."""
+
+        def kind(self):
+            return 'module'
+
+        def child_count(self):
+            return 3
+
+    def test_each_shape_resolves_and_is_cached(self):
+        from reveal.core import treesitter_compat as compat
+        for cls in (self._PropertyNode, self._MethodNode):
+            for name, expected in (('kind', 'module'), ('child_count', 3)):
+                self.assertEqual(_zero_arg(cls(), name), expected)
+                self.assertIn((cls, name), compat._ACCESSORS)
+
+    def test_cached_getter_is_reused(self):
+        from unittest import mock
+        from reveal.core import treesitter_compat as compat
+        node = self._PropertyNode()
+        _zero_arg(node, 'kind')
+        with mock.patch.object(compat, '_resolve_accessor', side_effect=AssertionError('re-resolved')):
+            self.assertEqual(_zero_arg(node, 'kind'), 'module')
+
+    def test_real_installed_node_agrees_with_uncached_path(self):
+        from reveal.core.treesitter_compat import _zero_arg_uncached, iter_tree
+        tree = ts_parse(ts.get_parser('python'), 'def f(x):\n    return x + 1\n')
+        for node in iter_tree(tree_root(tree)):
+            for name in ('kind', 'child_count', 'start_byte', 'end_byte'):
+                self.assertEqual(_zero_arg(node, name), _zero_arg_uncached(node, name))
+
+
 class TestTsParse(unittest.TestCase):
     """ts_parse() must work across the 1.12.5 str→bytes change in Parser.parse()."""
 
@@ -325,6 +372,21 @@ class TestTsParse(unittest.TestCase):
     def test_bytes_only_parser_falls_back_to_bytes(self):
         result = ts_parse(self._BytesOnlyParser(), 'hello')
         self.assertEqual(result, ('parsed-bytes', b'hello'))
+
+    def test_bytes_convention_is_remembered(self):
+        """BACK-1563: after the first TypeError, a bytes-only parser class is
+        called with bytes directly -- no failed str call per parse."""
+        calls = []
+
+        class _CountingBytesParser(self._BytesOnlyParser):
+            def parse(self, source):
+                calls.append(type(source))
+                return super().parse(source)
+
+        ts_parse(_CountingBytesParser(), 'a')
+        calls.clear()
+        self.assertEqual(ts_parse(_CountingBytesParser(), 'b'), ('parsed-bytes', b'b'))
+        self.assertEqual(calls, [bytes])
 
 
 if __name__ == '__main__':

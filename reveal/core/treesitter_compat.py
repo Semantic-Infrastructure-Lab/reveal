@@ -34,6 +34,8 @@ Related Issues:
 - Mobile platform test fixes (session: interstellar-blackhole-0113)
 """
 
+import inspect
+import operator
 import re
 import warnings
 from typing import List, Tuple
@@ -98,7 +100,56 @@ def _zero_arg(obj, name):
     unconditionally once the ceiling lifts for these three; fall back to the
     renamed equivalent rather than pushing this asymmetry onto every call
     site.
+
+    BACK-1559: which of those shapes applies is a property of the class, not
+    the node, so it is resolved once per (class, name) and cached as a plain
+    getter. Resolving per call ran the AttributeError fallback on every `kind`
+    read under the core binding (~8x a direct `.type`, millions per grep).
     """
+    cls = type(obj)
+    getter = _ACCESSORS.get((cls, name))
+    if getter is None:
+        getter = _resolve_accessor(cls, name)
+        if getter is None:
+            return _zero_arg_uncached(obj, name)
+        _ACCESSORS[cls, name] = getter
+    return getter(obj)
+
+
+# BACK-1559: (class, accessor name) -> getter, filled on first use by _zero_arg.
+_ACCESSORS: dict = {}
+
+# The three Rust-named accessors the core binding exposes under other names
+# (see _zero_arg).
+_ACCESSOR_RENAMES = {'kind': 'type', 'start_position': 'start_point', 'end_position': 'end_point'}
+
+
+def _resolve_accessor(cls, name):
+    """A getter for `name` on instances of `cls`, or None when the class alone
+    can't say (an instance attribute, e.g. a Mock) -- the caller then takes the
+    per-call path and caches nothing.
+
+    Classifies the class attribute: a data descriptor (property/getset, the
+    >=1.12.5 shape) reads as an attribute, a routine (method_descriptor, the
+    pre-1.12.5 shape) is called. A name the class lacks falls back to its
+    rename only if the class has that.
+    """
+    for attr_name in (name, _ACCESSOR_RENAMES.get(name)):
+        if attr_name is None:
+            continue
+        attr = getattr(cls, attr_name, None)
+        if attr is None:
+            continue
+        if inspect.isdatadescriptor(attr):
+            return operator.attrgetter(attr_name)
+        if inspect.isroutine(attr):
+            return operator.methodcaller(attr_name)
+        return None
+    return None
+
+
+def _zero_arg_uncached(obj, name):
+    """_zero_arg's per-call resolution, for objects whose class can't be classified."""
     try:
         val = getattr(obj, name)
     except AttributeError:
@@ -215,12 +266,24 @@ def ts_parse(parser, source):
 
     Tries the pre-1.12.5 `str` calling convention first (the pinned floor,
     1.8.1, in normal operation), falling back to UTF-8-encoded `bytes` on
-    the `TypeError` 1.12.5+ raises for a `str` argument.
+    the `TypeError` 1.12.5+ raises for a `str` argument. BACK-1563: the
+    outcome is remembered per parser class, so only the first parse of a
+    process pays the failed `str` call.
     """
-    try:
-        return parser.parse(source)
-    except TypeError:
-        return parser.parse(source.encode('utf-8'))
+    cls = type(parser)
+    if not _PARSE_TAKES_BYTES.get(cls, False):
+        try:
+            tree = parser.parse(source)
+        except TypeError:
+            _PARSE_TAKES_BYTES[cls] = True
+        else:
+            _PARSE_TAKES_BYTES[cls] = False
+            return tree
+    return parser.parse(source.encode('utf-8'))
+
+
+# BACK-1563: parser class -> whether Parser.parse() needs bytes (>=1.12.5).
+_PARSE_TAKES_BYTES: dict = {}
 
 
 def node_sexp(node) -> str:
