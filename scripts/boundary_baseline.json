@@ -76,7 +76,6 @@
   "reveal/treesitter.py": 1
  },
  "walker": {
-  "reveal/adapters/ast/analysis.py": 1,
   "reveal/adapters/ast/nav_reveal_type.py": 1,
   "reveal/adapters/calls/index.py": 3,
   "reveal/adapters/contracts.py": 1,
