@@ -8,7 +8,8 @@ from typing import Dict, List, Any, Optional, Set, Tuple, cast
 from urllib.parse import urlparse
 from pathlib import Path
 from ..registry import register
-from ..treesitter import TreeSitterAnalyzer
+from ..treesitter import TreeSitterAnalyzer, _structure_cache_max_files
+from ..core import disk_cache
 from ..structure_options import StructureOptions
 from ..core import node_children as _children
 from ..core import tree_root, ts_parse
@@ -20,6 +21,9 @@ from reveal.reveal_types import CONTRACT_VERSION
 # Avoids re-parsing the same file's inline content when multiple rules or
 # calls analyze the same markdown file in a single --check run.
 _inline_parse_cache: Dict[Tuple[str, int], Any] = {}
+
+# BACK-1562: _heading_index()'s tree-derived result, per file, in the disk cache.
+_HEADINGS_CACHE_NAMESPACE = "markdown-headings"
 
 
 @dataclass
@@ -67,27 +71,39 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         - 'markdown_inline' for inline elements (links, emphasis, code spans)
         """
         super().__init__(path)
+        self._inline_tree: Optional[Any] = None
+        self._inline_parsed = False
+        self._headings_from_disk = False  # set by a heading-index disk-cache hit
 
-        # Parse inline content separately for link/code extraction.
-        # Uses the same (path, mtime_ns) cache key as TreeSitterAnalyzer so
-        # multiple rule passes on the same file share a single parse.
-        self.inline_tree = None
+    @property
+    def inline_tree(self) -> Optional[Any]:
+        """The markdown_inline parse (links, code spans), parsed on first access.
+
+        Lazy like TreeSitterAnalyzer.tree (BACK-1562): headings come from the block
+        tree alone, so the outline and --grep never pay this second whole-file parse.
+        Uses the same (path, mtime_ns) cache key as TreeSitterAnalyzer so multiple
+        rule passes on the same file share a single parse.
+        """
+        if self._inline_parsed:
+            return self._inline_tree
+        self._inline_parsed = True
         cache_key = getattr(self, '_cache_key', None)
         if cache_key is not None and cache_key in _inline_parse_cache:
-            self.inline_tree = _inline_parse_cache[cache_key]
-        else:
-            try:
-                from tree_sitter_language_pack import get_parser
-                import warnings
-                warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
+            self._inline_tree = _inline_parse_cache[cache_key]
+            return self._inline_tree
+        try:
+            from tree_sitter_language_pack import get_parser
+            import warnings
+            warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
 
-                inline_parser = get_parser('markdown_inline')
-                self.inline_tree = ts_parse(inline_parser, self.content)
-                if cache_key is not None:
-                    _inline_parse_cache[cache_key] = self.inline_tree
-            except Exception:
-                # Inline parsing failed - fall back to regex for links/code
-                pass
+            inline_parser = get_parser('markdown_inline')
+            self._inline_tree = ts_parse(inline_parser, self.content)
+            if cache_key is not None:
+                _inline_parse_cache[cache_key] = self._inline_tree
+        except Exception:
+            # Inline parsing failed - fall back to regex for links/code
+            pass
+        return self._inline_tree
 
     def _find_nodes_in_tree(self, tree, node_type: str) -> List:
         """Find all nodes of a given type in a specific tree.
@@ -196,7 +212,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 limit=options.related_limit
             )
 
-        parse_mode = 'tree_sitter_full' if self.tree else 'regex'
+        parse_mode = 'tree_sitter_full' if self._headings_from_disk or self.tree else 'regex'
         return ResultBuilder.create(
             result_type='markdown_structure',
             source=self.path,
@@ -226,8 +242,33 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         cached: Optional[List[Tuple[int, int, str]]] = getattr(self, '_headings_cache', None)
         if cached is not None:
             return cached
-        index = self._heading_index_from_tree() if self.tree else self._heading_index_regex()
+        index = self._tree_heading_index_from_disk()
+        if index is None:
+            index = self._heading_index_from_tree() if self.tree else self._heading_index_regex()
         self._headings_cache: List[Tuple[int, int, str]] = index
+        return index
+
+    def _tree_heading_index_from_disk(self) -> Optional[List[Tuple[int, int, str]]]:
+        """The tree-derived heading index via the per-file structure disk cache, or None
+        when the tree can't be parsed (the regex fallback is never cached).
+
+        BACK-1562: markdown bypassed TreeSitterAnalyzer's structure cache, so every
+        outline or --grep re-parsed the file and re-walked its tree. Keyed by the same
+        (path, mtime_ns, size, language) fingerprint; a hit sets _headings_from_disk so
+        get_structure() reports the tree parse mode without parsing.
+        """
+        fingerprint = self._structure_fingerprint()
+        if fingerprint is None:
+            return None
+        hit = disk_cache.get(_HEADINGS_CACHE_NAMESPACE, fingerprint)
+        if hit is not None:
+            self._headings_from_disk = True
+            return cast(List[Tuple[int, int, str]], hit)
+        if not self.tree:
+            return None
+        index = self._heading_index_from_tree()
+        disk_cache.put(_HEADINGS_CACHE_NAMESPACE, fingerprint, index,
+                       max_entries=_structure_cache_max_files())
         return index
 
     def _heading_index_from_tree(self) -> List[Tuple[int, int, str]]:
