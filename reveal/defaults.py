@@ -44,7 +44,7 @@ TEST_FRAMEWORK_CALLEE_NAMES = frozenset({
 
 SKIP_DIRECTORIES = frozenset({
     # Version control
-    '.git',
+    '.git', '.hg', '.svn',
     # Python caches / build
     '__pycache__', '.pytest_cache', '.mypy_cache', '.ruff_cache',
     '.cache', '.hypothesis',

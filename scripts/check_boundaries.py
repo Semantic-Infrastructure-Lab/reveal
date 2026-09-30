@@ -19,9 +19,9 @@ Rules (home = where the concern is allowed to live):
     ``recursive=True``, and a one-level listing (``iterdir``/``scandir``/``listdir``) in a
     function that recurses (directly or through other functions in the module), in a
     helper such a function calls, or in a ``while`` loop that grows a worklist (BACK-1573).
-    Home: ``reveal/utils/path_utils.py::_walk_code_files``. A walk over something that
-    is not the user's target (reveal's own package, its cache, ~/.claude) is legitimate:
-    mark it ``# boundary-ok: walker -- <why>``.
+    Home: ``reveal/utils/path_utils.py`` (``_walk_code_files``, ``walk_tree``,
+    ``list_dir``). A walk over something that is not the user's target (reveal's own
+    package, its cache, ~/.claude) is legitimate: mark it ``# boundary-ok: walker -- <why>``.
 ``tree-sitter-import`` (BACK-1046 -> BACK-1045)
     ``import tree_sitter*`` / ``from tree_sitter* import``. Home:
     ``reveal/core/treesitter*.py``. Imports under ``if TYPE_CHECKING:`` are exempt.
@@ -78,8 +78,9 @@ _ENTRY_POINTS: Tuple[Home, ...] = (('prefix', 'reveal/main.py'), ('prefix', 'rev
 RULES: Dict[str, Dict[str, Any]] = {
     'walker': {
         'task': 'BACK-1515 (removal: BACK-1223)',
-        'fix': 'walk through reveal.utils.path_utils._walk_code_files',
-        'home': (('func', 'reveal/utils/path_utils.py', '_walk_code_files'),),
+        'fix': 'walk through reveal.utils.path_utils (_walk_code_files, walk_tree, list_dir)',
+        'home': tuple(('func', 'reveal/utils/path_utils.py', f)
+                      for f in ('_walk_code_files', 'walk_tree', 'list_dir')),
     },
     'tree-sitter-import': {
         'task': 'BACK-1046 (removal: BACK-1045)',

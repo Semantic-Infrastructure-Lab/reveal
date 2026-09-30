@@ -11,7 +11,7 @@ import tempfile
 from dataclasses import dataclass, field
 from itertools import islice
 from pathlib import Path, PurePath
-from typing import Any, Callable, Dict, Iterable, Iterator, Optional, List, Set, Union
+from typing import Any, Callable, Dict, Iterable, Iterator, Optional, List, Set, Tuple, Union
 
 from ..defaults import (
     SKIP_DIRECTORIES,
@@ -38,13 +38,28 @@ _AMBIGUOUS_SKIP_DIRS: frozenset = AMBIGUOUS_SKIP_DIRECTORIES
 
 def is_skippable_dir(parent: Path, name: str) -> bool:
     """True if directory *name* under *parent* is a build/vendor/cache dir a
-    walk should exclude — the SKIP_DIRECTORIES membership check, made
-    context-sensitive for ambiguous names.
+    walk should exclude, or the CLI's active ``--exclude`` scope covers it.
 
-    Callers combine this with their own hidden-dir (``startswith('.')``)
-    filtering as before; this function does not itself treat dot-dirs
-    specially, so it's a drop-in replacement for ``name in SKIP_DIRECTORIES``
-    without changing hidden-dir behavior at any call site.
+    The legacy predicate for walkers not yet on the seam (BACK-1223): it reads the
+    process-global scope, so no caller can opt out of ``--exclude``. The seam itself
+    (``walk_filter``) uses ``is_noise_dir`` and applies ``--exclude`` per walk purpose.
+    Callers combine this with their own hidden-dir (``startswith('.')``) filtering.
+    """
+    if name in _SKIP_DIRS:
+        return True
+    # BACK-1257: honor the CLI's active --exclude scope here, the one predicate
+    # every walker already routes directory pruning through, so all URI-form
+    # adapters gain exclusion at once instead of 13+ hand-wired patches. Placed
+    # after the cheap membership test and early-outs on an empty scope, so the
+    # hot path is unchanged when --exclude wasn't passed.
+    from .exclusions import dir_is_excluded
+    if dir_is_excluded(parent / name):
+        return True
+    return is_noise_dir(parent, name)
+
+
+def is_noise_dir(parent: Path, name: str) -> bool:
+    """True if directory *name* under *parent* is VCS/cache/virtualenv/build noise.
 
     Unconditional names (SKIP_DIRECTORIES) always skip. Ambiguous names
     (AMBIGUOUS_SKIP_DIRECTORIES — ``env``/``venv``/``build``/``dist``) only
@@ -59,14 +74,6 @@ def is_skippable_dir(parent: Path, name: str) -> bool:
     ambiguous name encountered, not a sub-walk.
     """
     if name in _SKIP_DIRS:
-        return True
-    # BACK-1257: honor the CLI's active --exclude scope here, the one predicate
-    # every walker already routes directory pruning through, so all URI-form
-    # adapters gain exclusion at once instead of 13+ hand-wired patches. Placed
-    # after the cheap membership test and early-outs on an empty scope, so the
-    # hot path is unchanged when --exclude wasn't passed.
-    from .exclusions import dir_is_excluded
-    if dir_is_excluded(parent / name):
         return True
     if name not in _AMBIGUOUS_SKIP_DIRS:
         return False
@@ -584,31 +591,54 @@ def _display_name_for_language(lang: str) -> str:
     return LANGUAGE_DISPLAY_NAMES.get(lang, lang.capitalize())
 
 
+@dataclass(frozen=True)
+class WalkPurpose:
+    """Why a walk walks, which decides what it leaves out (BACK-1223).
+
+    One predicate serves every walk; the purpose, not the call site, picks the skip causes
+    (internal-docs/design/WALKER_SEAM_2026-09-30.md). *noise* ``'all'`` prunes
+    ``is_noise_dir`` directories, ``'git'`` only ``.git``. *honor_exclude* False is for
+    project-wide evidence (M102's importers, I002's graph): narrowing the report with
+    ``--exclude`` must not shrink the facts that judge it (BACK-1259). *hide_dot* hides dot
+    files and dirs, as a reader's view of the tree does.
+    """
+    name: str
+    noise: str = 'all'
+    honor_exclude: bool = True
+    hide_dot: bool = False
+
+
+ANALYSIS = WalkPurpose('analysis')
+EVIDENCE = WalkPurpose('evidence', honor_exclude=False)
+DOCS = WalkPurpose('docs', noise='git')
+
+OnHidden = Callable[[Path, bool, str], None]
+
+
 def _walk_code_files(
     path: Path,
     exclude_patterns: Optional[List[str]] = None,
     respect_gitignore: Optional[bool] = None,
     prune_noise: bool = True,
+    *,
+    purpose: Optional[WalkPurpose] = None,
+    on_hidden: Optional[OnHidden] = None,
+    sort: bool = False,
 ) -> Iterator[Path]:
-    """Yield every file under *path*, skip-dir-correct (BACK-887's
-    ``is_skippable_dir`` fix — shared so every census walk agrees).
+    """Yield every file under *path* that a walk for *purpose* keeps (default: analysis).
 
     The one walk over a user's target (BACK-1223): what git ignores, ``REVEAL_IGNORE`` /
     config ``ignore:``, and ``--exclude`` (passed in, or the CLI's active scope) are
     applied here, so a walker that moves onto it gets all of them. *prune_noise* False
-    keeps build/vendor/cache directories (``is_skippable_dir``) and prunes only ``.git``:
-    a docs walk wants a ``build/README.md`` that a code census skips (markdown://,
-    BACK-1516, which honored neither ``--exclude`` nor ``REVEAL_IGNORE`` on its own walk).
+    is the docs purpose: a docs walk wants a ``build/README.md`` that a code census skips
+    (markdown://, BACK-1516).
 
-    Does NOT blanket-skip dot-directories — only ``is_skippable_dir``
-    membership (``.git``, ``.venv``, caches, ...) excludes a directory.
-    ``collect_files_to_check`` (``check``'s own walk) never applied a
-    dot-dir filter either; before this fix the two walks silently
-    disagreed on real source living under e.g. ``.fastlane/``/``.github/``,
-    producing a language-census mismatch between ``check`` and
-    ``overview``/``architecture`` on the same target (BACK-1038).
+    Does NOT blanket-skip dot-directories — only noise (``.git``, ``.venv``, caches, ...)
+    excludes a directory. ``collect_files_to_check`` (``check``'s own walk) never applied a
+    dot-dir filter either; before this the two walks silently disagreed on real source
+    living under e.g. ``.fastlane/``/``.github/`` (BACK-1038).
 
-    BACK-1042: *exclude_patterns* are opt-in fnmatch patterns (``--exclude``).
+    BACK-1042: *exclude_patterns* are opt-in patterns (``--exclude``).
     BACK-1386: what git ignores is skipped by default (utils/gitignore.py);
     *respect_gitignore* None follows the process switch (``--no-gitignore``),
     so every census agrees with the file sets the analyses actually walk.
@@ -616,24 +646,88 @@ def _walk_code_files(
     if path.is_file():
         yield path
         return
-    hidden = _walk_filter(path, exclude_patterns, respect_gitignore, prune_noise)
+    if purpose is None:
+        purpose = ANALYSIS if prune_noise else DOCS
+    for root, _, filenames in walk_tree(path, purpose, exclude_patterns=exclude_patterns,
+                                        respect_gitignore=respect_gitignore,
+                                        on_hidden=on_hidden, sort=sort):
+        for fname in filenames:
+            yield root / fname
+
+
+def walk_tree(
+    path: Path,
+    purpose: WalkPurpose = ANALYSIS,
+    *,
+    exclude_patterns: Optional[List[str]] = None,
+    respect_gitignore: Optional[bool] = None,
+    on_hidden: Optional[OnHidden] = None,
+    sort: bool = False,
+) -> Iterator[Tuple[Path, List[str], List[str]]]:
+    """``os.walk`` over *path* with the purpose's skip rules applied: ``(dir, dirs, files)``.
+
+    *dirs* is the kept subdirectory list and may still be pruned by the caller.
+    *on_hidden(path, is_dir, cause)* is called once per pruned directory (not for its
+    subtree) and once per skipped file -- check's ``skipped_*`` counts and grep's and the
+    tree's "N hidden" footers. *sort* orders dirs and files by name, for output that must
+    not depend on the filesystem's listing order.
+    """
+    hidden = walk_filter(path, purpose, exclude_patterns, respect_gitignore)
+
+    def kept(p: Path, is_dir: bool) -> bool:
+        cause = hidden(p, is_dir)
+        if cause is not None and on_hidden is not None:
+            on_hidden(p, is_dir, cause)
+        return cause is None
+
     for root, dirs, filenames in os.walk(str(path)):
         root_path = Path(root)
-        dirs[:] = [d for d in dirs if not hidden(root_path / d, True)]
-        for fname in filenames:
-            fp = root_path / fname
-            if not hidden(fp, False):
-                yield fp
+        dirs[:] = [d for d in (sorted(dirs) if sort else dirs) if kept(root_path / d, True)]
+        yield root_path, dirs, [f for f in (sorted(filenames) if sort else filenames)
+                                if kept(root_path / f, False)]
 
 
-def _walk_filter(
+def list_dir(
+    directory: Path,
+    hidden: Callable[[Path, bool], Optional[str]],
+    on_hidden: Optional[OnHidden] = None,
+) -> Optional[List[Tuple[Path, bool]]]:
+    """One level of *directory* as ``(path, is_dir)``, filtered by a ``walk_filter``
+    predicate: the seam for walkers that recurse themselves (the tree view renders each
+    directory's sorted children before descending, which a generator of ``os.walk`` triples
+    can't give it). None when the directory can't be listed. Symlinked directories count
+    as directories, as ``Path.is_dir`` does.
+    """
+    try:
+        with os.scandir(directory) as it:
+            entries = list(it)
+    except OSError:
+        return None
+    out = []
+    for entry in entries:
+        p = Path(entry.path)
+        try:
+            is_dir = entry.is_dir()
+        except OSError:
+            is_dir = False
+        cause = hidden(p, is_dir)
+        if cause is None:
+            out.append((p, is_dir))
+        elif on_hidden is not None:
+            on_hidden(p, is_dir, cause)
+    return out
+
+
+def walk_filter(
     path: Path,
-    exclude_patterns: Optional[List[str]],
-    respect_gitignore: Optional[bool],
-    prune_noise: bool,
+    purpose: WalkPurpose = ANALYSIS,
+    exclude_patterns: Optional[List[str]] = None,
+    respect_gitignore: Optional[bool] = None,
 ) -> Callable[[Path, bool], Optional[str]]:
-    """``_walk_code_files``' skip rules as one predicate: why ``(p, is_dir)`` is left out
-    of the walk (``'noise'``, ``'reveal_ignore'``, ``'gitignore'``, ``'exclude'``), or None.
+    """The seam's skip rules as one predicate: why ``(p, is_dir)`` under *path* is left out
+    of a walk for *purpose* (``'noise'``, ``'dot'``, ``'reveal_ignore'``, ``'gitignore'``,
+    ``'exclude'``), or None. Noise is decided first, so a footer never tells the user that
+    ``--no-gitignore`` would show a ``node_modules/``.
     """
     # BACK-1201: REVEAL_IGNORE / config.yaml 'ignore:' patterns were parsed
     # into RevealConfig but should_ignore() had zero callers anywhere --
@@ -647,28 +741,27 @@ def _walk_filter(
     config = RevealConfig.get(start_path=path)
     from .gitignore import gitignore_filter
     gi = gitignore_filter(path, respect_gitignore)
-    skip_patterns = list(exclude_patterns or [])
+    skip_patterns = list(exclude_patterns or []) if purpose.honor_exclude else []
     if skip_patterns:
         from ..cli.file_checker import should_skip_file  # deferred: cli cycle
     from .exclusions import dir_is_excluded, path_is_excluded
+    all_noise = purpose.noise == 'all'
 
     def hidden(p: Path, is_dir: bool) -> Optional[str]:
-        if is_dir:
-            if prune_noise and is_skippable_dir(p.parent, p.name):
-                return 'noise'
-            if not prune_noise and p.name == '.git':
-                return 'noise'
-            if not prune_noise and dir_is_excluded(p):
-                return 'exclude'
+        if is_dir and (p.name == '.git' or (all_noise and is_noise_dir(p.parent, p.name))):
+            return 'noise'
+        if purpose.hide_dot and p.name.startswith('.'):
+            return 'dot'
         if config.should_ignore(p):
             return 'reveal_ignore'
         if gi is not None and gi.ignored(p, is_dir=is_dir):
             return 'gitignore'
-        if skip_patterns and should_skip_file(p.relative_to(path) / '_' if is_dir
-                                              else p.relative_to(path), skip_patterns):
-            return 'exclude'
-        if not is_dir and path_is_excluded(p):
-            return 'exclude'
+        if purpose.honor_exclude:
+            if skip_patterns and should_skip_file(p.relative_to(path) / '_' if is_dir
+                                                  else p.relative_to(path), skip_patterns):
+                return 'exclude'
+            if dir_is_excluded(p) if is_dir else path_is_excluded(p):
+                return 'exclude'
         return None
 
     return hidden
