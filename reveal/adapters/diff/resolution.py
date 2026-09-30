@@ -1,15 +1,13 @@
 """General URI resolution and utilities for diff adapter."""
 
 import inspect
-import os
 from pathlib import Path
 from typing import Dict, Any, Optional, Iterator, cast
 
 from .git import resolve_git_ref, resolve_git_adapter, read_git_text
 from ..base import get_adapter_class
 from ...registry import get_analyzer
-from ...utils.gitignore import gitignore_filter
-from ...utils.path_utils import is_skippable_dir
+from ...utils.path_utils import _walk_code_files
 
 
 def resolve_uri(uri: str, **kwargs) -> Dict[str, Any]:
@@ -196,23 +194,11 @@ def find_analyzable_files(directory: Path) -> Iterator[Path]:
         File paths that have analyzers (generator — avoids materializing
         the full list into memory before processing begins).
     """
-    gi = gitignore_filter(directory)  # BACK-1386
-    for root, dirs, files in os.walk(directory):
-        # Skip common ignore directories (BACK-552: 'venv'/'dist'/'build' etc.
-        # are ambiguous — only skipped when they hold no source at their own
-        # top level, since a real package can legitimately use those names)
-        root_path = Path(root)
-        dirs[:] = [d for d in dirs if not is_skippable_dir(root_path, d)]
-        if gi is not None:
-            gi.prune(root, dirs)
-
-        for file in files:
-            file_path = Path(root) / file
-            if gi is not None and gi.ignored(file_path):
-                continue
-            # Check if reveal can analyze this file
-            if get_analyzer(str(file_path), allow_fallback=False):
-                yield file_path
+    # The shared walk (BACK-1223): its own os.walk applied .gitignore (BACK-1386) and the
+    # skip-dir list (BACK-552) but not REVEAL_IGNORE or --exclude.
+    for file_path in _walk_code_files(directory):
+        if get_analyzer(str(file_path), allow_fallback=False):
+            yield file_path
 
 
 def extract_metadata(structure: Dict[str, Any], uri: str) -> Dict[str, str]:

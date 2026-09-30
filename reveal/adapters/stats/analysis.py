@@ -1,12 +1,10 @@
 """File analysis functions for stats adapter."""
 
-import os
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Iterator, cast
 
 from ...registry import DECLARATION_ONLY_EXTENSIONS, get_analyzer
-from ...utils.gitignore import gitignore_filter
-from ...utils.path_utils import is_skippable_dir
+from ...utils.path_utils import _walk_code_files
 
 
 def _is_excluded_code_only(file_path: Path) -> bool:
@@ -58,74 +56,25 @@ def find_analyzable_files(
         Analyzable file paths one at a time (generator — avoids materializing
         the full list into memory before analysis begins).
     """
-    # BACK-1485: git's own verdict, not a root-.gitignore pattern matcher that
-    # dropped tracked files and ignored '!negation'.
-    gi = gitignore_filter(directory, respect_gitignore)
-    skip_patterns = list(exclude_patterns or [])
+    # The shared walk (BACK-1223): .gitignore via git's own verdict (BACK-1485),
+    # REVEAL_IGNORE/config 'ignore:' (BACK-1221) and --exclude (BACK-1042), pruning
+    # well-known directories so os.walk never descends into them. This walker had its own
+    # copy of each rule.
+    for file_path in _walk_code_files(directory, exclude_patterns, respect_gitignore):
+        # Check if reveal can analyze this file type (a .pyi stub can, but a
+        # scan skips declaration-only files -- DECLARATION_ONLY_EXTENSIONS)
+        if (file_path.suffix.lower() in DECLARATION_ONLY_EXTENSIONS
+                or not get_analyzer(str(file_path))):
+            if excluded_by_extension is not None:
+                ext = file_path.suffix.lower() or '(no extension)'
+                excluded_by_extension[ext] = excluded_by_extension.get(ext, 0) + 1
+            continue
 
-    # BACK-1221: honor REVEAL_IGNORE/config.yaml 'ignore:' here too — this is
-    # one of several independent walkers that never routed through
-    # RevealConfig.should_ignore() despite it being documented as always-on
-    # (see BACK-1221's investigation note for the full list).
-    from ...config import RevealConfig  # deferred: cli/config cycle
-    config = RevealConfig.get(start_path=directory)
+        # Apply code_only filter
+        if code_only and _is_excluded_code_only(file_path):
+            continue
 
-    for root, dirs, files in os.walk(directory):
-        root_path = Path(root)
-
-        # Prune well-known, gitignored, and --exclude'd directories in-place
-        # so os.walk never descends into them.
-        def _keep_dir(d: str) -> bool:
-            if is_skippable_dir(root_path, d):
-                return False
-            if config.should_ignore(root_path / d):
-                return False
-            if gi is not None and gi.ignored(root_path / d, is_dir=True):
-                return False
-            if skip_patterns:
-                from ...cli.file_checker import should_skip_file  # deferred: cli cycle
-                try:
-                    rel = (root_path / d).relative_to(directory)
-                    # Append a dummy filename so should_skip_file sees parts correctly
-                    if should_skip_file(rel / '_', skip_patterns):
-                        return False
-                except ValueError:
-                    pass
-            return True
-
-        dirs[:] = [d for d in dirs if _keep_dir(d)]
-
-        for file in files:
-            file_path = root_path / file
-
-            if config.should_ignore(file_path):
-                continue
-
-            if gi is not None and gi.ignored(file_path):
-                continue
-
-            if skip_patterns:
-                from ...cli.file_checker import should_skip_file  # deferred: cli cycle
-                try:
-                    if should_skip_file(file_path.relative_to(directory), skip_patterns):
-                        continue
-                except ValueError:
-                    pass
-
-            # Check if reveal can analyze this file type (a .pyi stub can, but a
-            # scan skips declaration-only files -- DECLARATION_ONLY_EXTENSIONS)
-            if (file_path.suffix.lower() in DECLARATION_ONLY_EXTENSIONS
-                    or not get_analyzer(str(file_path))):
-                if excluded_by_extension is not None:
-                    ext = file_path.suffix.lower() or '(no extension)'
-                    excluded_by_extension[ext] = excluded_by_extension.get(ext, 0) + 1
-                continue
-
-            # Apply code_only filter
-            if code_only and _is_excluded_code_only(file_path):
-                continue
-
-            yield file_path
+        yield file_path
 
 
 def analyze_file(file_path: Path, calculate_file_stats_func) -> Optional[Dict[str, Any]]:
