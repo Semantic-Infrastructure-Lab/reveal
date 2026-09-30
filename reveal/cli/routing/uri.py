@@ -903,37 +903,40 @@ def _budget_list_fields(result: dict, adapter=None) -> list[str]:
     return []
 
 
-def _find_budget_list_field(result: dict, adapter=None) -> Optional[str]:
-    """The one list --max-items/--max-snippet-chars apply to; None when a result has
-    several (BACK-1498 tracks budgeting those)."""
-    fields = _budget_list_fields(result, adapter)
-    return fields[0] if len(fields) == 1 else None
+def _apply_budget_constraints(result: dict, args: 'Namespace', adapter=None,
+                              scheme: Optional[str] = None) -> dict:
+    """Apply --max-items/--max-snippet-chars to a URI result's lists.
 
-
-def _apply_budget_constraints(result: dict, args: 'Namespace', adapter=None) -> dict:
-    """Apply budget constraints to result list fields."""
+    Each list the adapter declares is cut and disclosed on its own, as --head's are
+    (BACK-1497). A result with several lists (hotspots:// file and function hotspots,
+    reveal:// analyzers/adapters/rules) was left whole, and the ledger said the flag had
+    no effect where --head cut every list (BACK-1498). ``meta.budget`` and its cursor
+    belong to a one-list result: a cursor is an offset into one list.
+    """
     if not isinstance(result, dict):
         return result
 
-    list_field = _find_budget_list_field(result, adapter)
-    if not list_field:
+    fields = _budget_list_fields(result, adapter)
+    max_items = peek(args, 'max_items')
+    if not fields or (max_items is None and peek(args, 'max_snippet_chars') is None):
         return result
 
     from reveal.utils.query import apply_budget_limits
 
     mark(args, 'max_items', 'max_snippet_chars')
-    budget_result = apply_budget_limits(
-        result[list_field],
-        max_items=peek(args, 'max_items'),
-        truncate_strings=peek(args, 'max_snippet_chars')
-    )
-
-    total = len(result[list_field])
-    result[list_field] = budget_result['items']
-    if budget_result['meta']['truncated']:
-        _record_cut(result, list_field, total, 'max_items', sole=True)
-        result['meta']['budget'] = budget_result['meta']
-
+    for field in fields:
+        budget_result = apply_budget_limits(
+            result[field], max_items=max_items,
+            truncate_strings=peek(args, 'max_snippet_chars'))
+        total = len(result[field])
+        result[field] = budget_result['items']
+        if budget_result['meta']['truncated']:
+            _record_cut(result, field, total, 'max_items', sole=len(fields) == 1)
+            if len(fields) == 1:
+                result['meta']['budget'] = budget_result['meta']
+    if len(fields) > 1 and max_items is not None:
+        print(f"Note: --max-items applied to each of {', '.join(fields)} -- "
+              f"{scheme or 'this'}:// returns several lists.", file=sys.stderr)
     return result
 
 
@@ -1031,7 +1034,7 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
     # Apply post-processing
     result = _apply_field_selection(result, args)
     result = _apply_head_tail_range(result, args, adapter, scheme)
-    result = _apply_budget_constraints(result, args, adapter)
+    result = _apply_budget_constraints(result, args, adapter, scheme)
     post_process = getattr(type(adapter), 'post_process', None)
     if post_process is not None:
         processed = result

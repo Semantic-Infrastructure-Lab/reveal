@@ -2899,7 +2899,7 @@ reveal 'calls://./src?rank=callers' --max-snippet-chars 80
 # Combine: first 50 items, strings max 80 chars
 reveal 'calls://./src?uncalled' --max-items 50 --max-snippet-chars 80
 ```
-Any cut list is disclosed the same way, whatever cut it (`--max-items`, `--head`, `?limit=`, an adapter's default cap): text output ends with `⚠ Truncated <field>: showing N of M — <how to see more>`, and JSON carries it as a `meta.warnings` entry `{"type": "truncated", "field", "shown", "total", "cause", "message"}`. On a URI result, `--max-items` also adds `meta.budget` with a cursor for pagination; a file's lists are each cut on their own, so file mode has only the per-list entries. A truncated result exits 0.
+Any cut list is disclosed the same way, whatever cut it (`--max-items`, `--head`, `?limit=`, an adapter's default cap): text output ends with `⚠ Truncated <field>: showing N of M — <how to see more>`, and JSON carries it as a `meta.warnings` entry `{"type": "truncated", "field", "shown", "total", "cause", "message"}`. When a URI result has one list, `--max-items` also adds `meta.budget` with a cursor for pagination. A result with several lists (`hotspots://`, `reveal://`) and a file's lists are each cut on their own, like `--head`, so they carry only the per-list entries. A truncated result exits 0.
 
 ### JSON Format Details
 

@@ -22,7 +22,7 @@ import pytest
 import reveal.adapters  # noqa: F401  registers every adapter
 from reveal.adapters.base import get_adapter_class
 from reveal.cli.routing.flag_specs import inject_query_flags
-from reveal.cli.routing.uri import _apply_head_tail_range, _find_budget_list_field
+from reveal.cli.routing.uri import _apply_budget_constraints, _apply_head_tail_range
 
 
 def run_reveal(*args):
@@ -202,11 +202,30 @@ class TestHeadTailRangeOnSeveralLists:
         _apply_head_tail_range({'name': 'x'}, _nav())
         assert capsys.readouterr().err == ''
 
-    def test_budget_field_stays_single(self):
-        # --max-items still applies to one list only (multi-list budgeting: BACK-1498).
+    def test_max_items_cuts_each_list_like_head(self, capsys):
+        """BACK-1498: --max-items left a several-list result whole, where --head cut each."""
         hotspots = get_adapter_class('hotspots')
-        assert _find_budget_list_field(dict(self.RESULT), hotspots) is None
-        assert _find_budget_list_field({'file_hotspots': []}, hotspots) == 'file_hotspots'
+        out = _apply_budget_constraints(
+            {k: list(v) for k, v in self.RESULT.items()},
+            Namespace(max_items=2, max_snippet_chars=None), hotspots, 'hotspots')
+        assert (len(out['file_hotspots']), len(out['function_hotspots'])) == (2, 2)
+        assert len(out['risks']) == 4  # not a declared list
+        cuts = {w['field']: (w['shown'], w['total']) for w in out['meta']['warnings']}
+        assert cuts == {'file_hotspots': (2, 5), 'function_hotspots': (2, 6)}
+        assert 'budget' not in out['meta']  # a cursor is an offset into one list
+        assert '--max-items applied to each of file_hotspots, function_hotspots' in capsys.readouterr().err
+
+    def test_one_list_keeps_its_cursor(self):
+        out = _apply_budget_constraints({'file_hotspots': [{'n': i} for i in range(5)]},
+                                        Namespace(max_items=2, max_snippet_chars=None),
+                                        get_adapter_class('hotspots'), 'hotspots')
+        assert out['meta']['budget']['next_cursor'] == 'offset=2'
+
+    def test_live_hotspots_max_items(self, tree):
+        proc = run_reveal(f'hotspots://{tree}', '--max-items', '1', '--format', 'json')
+        assert proc.returncode == 0, proc.stderr
+        assert _lists(proc.stdout)['file_hotspots'] == 1
+        assert 'has no effect' not in proc.stderr
 
     def test_live_hotspots_head(self, tree):
         proc = run_reveal(f'hotspots://{tree}', '--head', '1', '--format', 'json')
