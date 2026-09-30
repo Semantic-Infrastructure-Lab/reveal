@@ -126,23 +126,17 @@ def dir_is_excluded(path: Path) -> bool:
     """True if the *directory* at *path* is entirely excluded, so a walk can
     prune it rather than visiting every file inside.
 
-    should_skip_file only ever sees file paths, so it answers 'app/assets/*'
-    for 'app/assets/lib.js' but not for the directory 'app/assets' itself --
-    fnmatch needs something after the slash. Probing with a synthetic child is
-    what makes 'prune this whole subtree' expressible, and it stays precise:
-    'app/assets/*.js' does not match the probe, so that directory is correctly
-    still walked and filtered file by file.
+    ``PatternSet.covers_dir`` answers it: the directory matches, or every child would
+    ('app/assets/*'), and it stays precise -- 'app/assets/*.js' covers no directory, so
+    that one is still walked and filtered file by file.
     """
     global _CONSULTED
     if not _ACTIVE_PATTERNS or _ACTIVE_ROOT is None:
         return False
     _CONSULTED = True
-    from ..cli.file_checker import should_skip_file
+    from .gitignore import pattern_set
+    from .path_utils import to_posix
     rel = _relative_to_scope(path)
     if rel is None:
         return False
-    patterns = list(_ACTIVE_PATTERNS)
-    return (
-        should_skip_file(rel, patterns)
-        or should_skip_file(rel / '__reveal_probe__', patterns)
-    )
+    return pattern_set(_ACTIVE_PATTERNS).covers_dir(to_posix(rel))

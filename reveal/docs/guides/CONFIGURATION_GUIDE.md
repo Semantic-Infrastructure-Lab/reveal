@@ -288,6 +288,12 @@ Every command that walks a directory honors it -- `scheme://` URIs and the subco
 `--exclude` and match relative to the analysed path, so `vendor/**` prunes `src/vendor/`
 when you run `reveal surface src`.
 
+`--exclude`, `REVEAL_IGNORE` and the config file's `ignore:` all use `.gitignore` syntax:
+a bare name (`fixtures`, `*.min.js`) matches at any depth, a pattern with a slash
+(`src/gen`, `app/*`) is anchored at the analysed path, a trailing `/` matches directories
+only, `**` spans directories, `!` re-includes, and everything under a matched directory is
+excluded. `*` does not cross a slash: `src/*.py` is `src/a.py` but not `src/a/b.py`.
+
 ### Rule-Specific Thresholds
 
 #### `REVEAL_C901_THRESHOLD`

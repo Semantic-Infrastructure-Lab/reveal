@@ -690,16 +690,17 @@ class RevealConfig:
         """
         return _lookup_rule_config(self._config, rule_code, key, default)
 
-    def should_ignore(self, path: Path) -> bool:
-        """Check if a path should be ignored.
+    def should_ignore(self, path: Path, is_dir: bool = False) -> bool:
+        """True if *path* matches a REVEAL_IGNORE / config ``ignore:`` pattern.
 
-        Args:
-            path: Path to check
-
-        Returns:
-            True if path matches ignore patterns
+        Patterns are gitignore syntax (BACK-1576, ``utils.gitignore.PatternSet``), matched
+        against the path relative to the project root. The walk seam also matches them
+        against the analysed path (``utils.exclusions.dispatch_scope``), as the docs say.
+        *is_dir* lets a directory-only pattern (``gen/``) prune the directory itself.
         """
         ignore_patterns = self._config.get('ignore', [])
+        if not ignore_patterns:
+            return False
 
         # Normalize to relative path
         if self._project_root:
@@ -713,12 +714,9 @@ class RevealConfig:
         else:
             rel_path = path
 
-        # Use glob_match for proper ** support
-        for pattern in ignore_patterns:
-            if glob_match(rel_path, pattern):
-                return True
-
-        return False
+        from .utils.gitignore import pattern_set
+        return pattern_set(tuple(ignore_patterns)).matches(
+            str(rel_path).replace(os.sep, '/'), is_dir)
 
     def ignore_patterns(self) -> List[str]:
         """The raw REVEAL_IGNORE / config.yaml ``ignore:`` pattern list, if

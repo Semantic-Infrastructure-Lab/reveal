@@ -398,47 +398,15 @@ def _print_grouped_detections(
 
 
 def should_skip_file(relative_path: Path, gitignore_patterns: List[str]) -> bool:
-    """Check if file should be skipped based on gitignore patterns.
+    """True if *relative_path* matches an ``--exclude`` / REVEAL_IGNORE pattern.
 
-    Args:
-        relative_path: File path relative to repository root
-        gitignore_patterns: List of gitignore patterns
-
-    Returns:
-        True if file should be skipped
+    Patterns are gitignore syntax (BACK-1576, ``utils.gitignore.PatternSet``): a bare name
+    matches at any depth, a pattern with a slash is anchored at the root *relative_path*
+    is relative to, and a file under a matched directory is matched. Callers asking about a
+    directory pass a synthetic child (``rel / '_'``).
     """
-    import fnmatch
-
-    path_str = to_posix(relative_path)
-    parts = relative_path.parts
-
-    for pattern in gitignore_patterns:
-        # Exact fnmatch on full path
-        if fnmatch.fnmatch(path_str, pattern):
-            return True
-        # Directory patterns (trailing /): match any file whose path starts with that dir
-        # gitignore's "htmlcov/" means "htmlcov/ and all its contents".
-        # BACK-1249: a multi-segment pattern (e.g. "app/models/") only ever
-        # compared parts[0] ("app") against the WHOLE pattern string
-        # ("app/models") -- never equal, so it silently matched nothing at
-        # any depth, not just "one level down" as originally reported. Now
-        # splits the pattern into segments and compares each of parts[0:N]
-        # against the corresponding segment (still root-anchored, same as
-        # the single-segment case below preserved this way all along).
-        if pattern.endswith('/'):
-            dir_segments = [seg for seg in pattern.rstrip('/').split('/') if seg]
-            if (
-                dir_segments
-                and len(parts) >= len(dir_segments)
-                and all(fnmatch.fnmatch(parts[i], seg) for i, seg in enumerate(dir_segments))
-            ):
-                return True
-        # Bare directory name without slash: also treat as directory prefix match
-        # e.g. "htmlcov" should match "htmlcov/index.html"
-        elif '/' not in pattern and '.' not in pattern and '*' not in pattern:
-            if parts and fnmatch.fnmatch(parts[0], pattern):
-                return True
-    return False
+    from ..utils.gitignore import pattern_set
+    return pattern_set(tuple(gitignore_patterns)).matches(to_posix(relative_path))
 
 
 @dataclass

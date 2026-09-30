@@ -36,8 +36,9 @@ def add_gitignore_arguments(parser: Any) -> None:
 
 
 _EXCLUDE_HELP = ('Exclude files/directories matching pattern from analysis entirely '
-                 '(e.g., --exclude "*.min.js" --exclude "vendor/"). Repeatable. Patterns are '
-                 'relative to the analysed path; REVEAL_IGNORE patterns are added to them.')
+                 '(e.g., --exclude "*.min.js" --exclude "vendor/"). Repeatable. .gitignore '
+                 'syntax, relative to the analysed path: a bare name matches at any depth; '
+                 'REVEAL_IGNORE patterns are added to them.')
 
 
 def add_exclude_argument(parser: Any, help: str = _EXCLUDE_HELP) -> None:

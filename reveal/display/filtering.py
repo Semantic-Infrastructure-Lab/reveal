@@ -176,21 +176,17 @@ class PathFilter:
         return False
 
     def _matches_exclude_pattern(self, path: Path) -> bool:
-        """Check if path matches custom exclude patterns.
-
-        Args:
-            path: Path to check
-
-        Returns:
-            True if matches exclude pattern
-        """
-        name = path.name
-
-        for pattern in self.exclude_patterns:
-            if fnmatch.fnmatch(name, pattern):
-                return True
-
-        return False
+        """True if *path* matches a ``--exclude`` pattern: gitignore syntax relative to
+        the root, the same matcher every other walk uses (BACK-1576). This used to be an
+        fnmatch on the name alone, so ``--exclude sub/skipme`` never matched here."""
+        if not self.exclude_patterns:
+            return False
+        from ..utils.gitignore import pattern_set
+        try:
+            rel = path.relative_to(self.root_path).as_posix()
+        except ValueError:
+            rel = path.name
+        return pattern_set(tuple(self.exclude_patterns)).matches(rel, path.is_dir())
 
 
 def should_filter_path(path: Path,

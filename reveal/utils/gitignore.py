@@ -34,6 +34,7 @@ Results are cached per repository root for ``_CACHE_TTL_S`` seconds: one
 still sees files created since.
 """
 
+import functools
 import logging
 import os
 import re
@@ -294,6 +295,56 @@ class _PatternMatcher:
             if verdict:
                 return True
         return self._match(rel, is_dir)
+
+
+class PatternSet:
+    """``--exclude`` and REVEAL_IGNORE / config ``ignore:`` patterns, in gitignore(5) syntax.
+
+    One syntax for every user-written skip pattern (BACK-1576): a bare name (``fixtures``,
+    ``*.min.js``) matches at any depth, a pattern with a slash (``src/gen``, ``app/*``) is
+    anchored at the root it is matched against, a trailing ``/`` matches directories only,
+    ``**`` spans directories and ``!`` re-includes. As in git, a path under a matched
+    directory is matched. Before this, three matchers each read patterns their own way, so
+    ``--exclude skipme`` hid ``sub/skipme/`` in the tree but not in ``check``, and
+    ``--exclude sub/skipme`` did the reverse.
+    """
+
+    __slots__ = ('rules', 'negates')
+
+    def __init__(self, patterns: Tuple[str, ...]):
+        self.rules = [r for r in (compile_gitignore_line(p) for p in patterns) if r is not None]
+        self.negates = any(r.negate for r in self.rules)
+
+    def _match(self, rel: str, is_dir: bool) -> bool:
+        verdict = False
+        for rule in self.rules:
+            if (is_dir or not rule.dir_only) and rule.regex.match(rel):
+                verdict = not rule.negate
+        return verdict
+
+    def matches(self, rel: str, is_dir: bool = False) -> bool:
+        """True if the path *rel* (posix, relative to the patterns' root) is matched."""
+        if not self.rules or rel in ('', '.'):
+            return False
+        segments = rel.split('/')
+        for depth in range(1, len(segments)):
+            if self._match('/'.join(segments[:depth]), True):
+                return True
+        return self._match(rel, is_dir)
+
+    def covers_dir(self, rel: str) -> bool:
+        """True if everything under directory *rel* is matched, so a walk can prune it:
+        the directory itself matches, or any child would (``app/*``, ``vendor/**``) and no
+        ``!`` rule could re-include one."""
+        if self.matches(rel, True):
+            return True
+        return not self.negates and self.matches(rel + '/__reveal_probe__', False)
+
+
+@functools.lru_cache(maxsize=64)
+def pattern_set(patterns: Tuple[str, ...]) -> PatternSet:
+    """The compiled ``PatternSet`` for *patterns* (a run uses a handful of pattern lists)."""
+    return PatternSet(patterns)
 
 
 # --------------------------------------------------------------------------

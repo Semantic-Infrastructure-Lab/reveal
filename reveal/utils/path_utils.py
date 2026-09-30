@@ -752,7 +752,7 @@ def walk_filter(
             return 'noise'
         if purpose.hide_dot and p.name.startswith('.'):
             return 'dot'
-        if config.should_ignore(p):
+        if config.should_ignore(p, is_dir):
             return 'reveal_ignore'
         if gi is not None and gi.ignored(p, is_dir=is_dir):
             return 'gitignore'

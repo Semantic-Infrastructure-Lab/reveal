@@ -124,16 +124,16 @@ COMMANDS = {
 
 # command -> why it disagrees today, and the task that fixes it. Shrink-only.
 KNOWN_DISAGREEMENTS = {
-    'tree': 'PathFilter: no REVEAL_IGNORE, basename --exclude, build/ always hidden (BACK-1581)',
-    '--files': 'PathFilter: no REVEAL_IGNORE, basename --exclude, build/ always hidden (BACK-1581)',
-    '--grep': 'own walk: no REVEAL_IGNORE, root-only bare --exclude (BACK-1581, BACK-1576)',
-    'pack://': 'own walk; root-only bare --exclude (BACK-1581, BACK-1576)',
-    'check': 'root-only bare --exclude; env/ dropped (BACK-1576, BACK-1582)',
-    'ast://': 'root-only bare --exclude; env/ dropped (BACK-1576, BACK-1582)',
-    'stats://': 'root-only bare --exclude; env/ dropped (BACK-1576, BACK-1582)',
-    'surface://': 'own walk drops dot-dirs; root-only bare --exclude (BACK-1577, BACK-1576)',
-    'imports://': 'own walk drops dot-dirs; root-only bare --exclude (BACK-1580, BACK-1576)',
-    'markdown://': 'docs walk prunes only .git, so .venv/.hg docs are listed (BACK-1575)',
+    'tree': 'PathFilter: no REVEAL_IGNORE, build/ with code always hidden (BACK-1581)',
+    '--files': 'PathFilter: no REVEAL_IGNORE, build/ with code always hidden (BACK-1581)',
+    '--grep': 'own walk: no REVEAL_IGNORE; nested-only env/ dropped (BACK-1581, BACK-1582)',
+    'pack://': 'nested-only env/ dropped (BACK-1582)',
+    'check': 'nested-only env/ dropped (BACK-1582)',
+    'ast://': 'nested-only env/ dropped (BACK-1582)',
+    'stats://': 'nested-only env/ dropped (BACK-1582)',
+    'surface://': 'own walk drops dot-dirs; nested-only env/ dropped (BACK-1577, BACK-1582)',
+    'imports://': 'own walk drops dot-dirs; nested-only env/ dropped (BACK-1580, BACK-1582)',
+    'markdown://': 'docs purpose prunes only .git, so .venv/.hg docs are listed (BACK-1223)',
 }
 
 
