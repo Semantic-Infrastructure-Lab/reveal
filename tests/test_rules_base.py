@@ -439,7 +439,9 @@ class TestSkipCategories:
             lambda code, key, default=None: [] if key == 'skip_categories' else default
         )
 
-        with patch('reveal.config.RevealConfig.get', return_value=fake_config):
+        project_config = MagicMock()  # the target's config (BACK-1571), overrides applied
+        project_config.get_file_config.return_value = fake_config
+        with patch('reveal.config.RevealConfig.get', return_value=project_config):
             # Empty override list disables skipping entirely.
             assert TestRule.matches_target("config.yaml")
 

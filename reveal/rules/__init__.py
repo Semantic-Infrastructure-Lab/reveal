@@ -18,6 +18,25 @@ from reveal.config import get_config
 logger = logging.getLogger(__name__)
 
 
+def _as_checked(file_path: str) -> str:
+    """The path rules are handed: an existing file resolved, as a directory check hands it
+    (BACK-1571); a URI or a name with no file behind it (inline content) as given."""
+    if '://' in file_path:
+        return file_path
+    path = Path(file_path)
+    if not path.exists():
+        return file_path
+    from reveal.config import _cached_resolve
+    return str(_cached_resolve(path))
+
+
+def _file_config(file_path: str) -> Any:
+    """The config in effect for *file_path*: the config files that govern it, plus the
+    overrides that match it."""
+    path = Path(file_path)
+    return get_config(start_path=path.parent).get_file_config(path)
+
+
 class RuleRegistry:
     """
     Auto-discover rules by filename.
@@ -460,15 +479,7 @@ class RuleRegistry:
         rule_class = cls.get_rule(code)
         if rule_class is None:
             return None
-
-        rule = rule_class()
-        config = get_config(start_path=Path(file_path).parent)
-        file_config = config.get_file_config(Path(file_path))
-        rules_config = file_config._config.get('rules', {})
-        rule_config = rules_config.get(code, {})
-        if rule_config and isinstance(rule_config, dict):
-            cls._apply_rule_config(rule, rule_config)
-        return rule
+        return cls._configured_rule(rule_class, _file_config(_as_checked(file_path)))
 
     @classmethod
     def _matches_patterns(cls, rule_class: Type[BaseRule], patterns: List[str]) -> bool:
@@ -589,6 +600,18 @@ class RuleRegistry:
     })
 
     @classmethod
+    def _configured_rule(cls, rule_class: Type[BaseRule], file_config: Any) -> BaseRule:
+        """An instance of *rule_class* configured for one file: its ``rules.<CODE>`` keys set
+        as attributes, and ``get_config``/``get_threshold`` reading that file's config
+        (overrides applied) instead of the cwd's (BACK-1571)."""
+        rule = rule_class()
+        rule._config = file_config
+        rule_config = file_config._config.get('rules', {}).get(rule_class.code, {})
+        if rule_config and isinstance(rule_config, dict):
+            cls._apply_rule_config(rule, rule_config)
+        return rule
+
+    @classmethod
     def _apply_rule_config(cls, rule, rule_config: dict) -> None:
         """Apply config key-value pairs to a rule instance."""
         for key, value in rule_config.items():
@@ -634,11 +657,13 @@ class RuleRegistry:
         if not cls._discovered:
             cls.discover()
 
-        # Load config for this file
-        from pathlib import Path
-        file_path_obj = Path(file_path)
-        config = get_config(start_path=file_path_obj.parent)
-        file_config = config.get_file_config(file_path_obj)
+        # BACK-1571: rules see the file the way a directory check shows it to them -- resolved
+        # -- so a walk up for a project marker, .reveal.yaml or docs/ starts from the real
+        # directory. The path as typed stopped at '.': `reveal check main.py` from inside a
+        # package missed what `reveal check .` found. Detections still name the file as typed.
+        spelled = file_path
+        file_path = _as_checked(file_path)
+        file_config = _file_config(file_path)
 
         # Get base rules filtered by CLI select/ignore
         rules = cls.get_rules(select=select, ignore=ignore)
@@ -657,21 +682,16 @@ class RuleRegistry:
                 continue
 
             try:
-                # Instantiate rule and run check
-                rule = rule_class()
-
-                # Pass config values to rule if it needs them
-                rules_config = file_config._config.get('rules', {})
-                rule_config = rules_config.get(rule_class.code, {})
-                if rule_config and isinstance(rule_config, dict):
-                    cls._apply_rule_config(rule, rule_config)
-
+                rule = cls._configured_rule(rule_class, file_config)
                 if profile is not None:
                     start = time.perf_counter()
                     rule_detections = rule.check(file_path, structure, content)
                     profile[rule_class.code] = profile.get(rule_class.code, 0.0) + (time.perf_counter() - start)
                 else:
                     rule_detections = rule.check(file_path, structure, content)
+                for detection in rule_detections:
+                    if detection.file_path == file_path:
+                        detection.file_path = spelled
                 detections.extend(rule_detections)
                 num_issues = len(rule_detections)
                 logger.debug(

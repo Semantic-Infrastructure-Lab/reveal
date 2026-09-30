@@ -284,10 +284,14 @@ class BaseRule(ABC):
         self._config: Optional[Any] = None  # Lazy-loaded per-instance
 
     def get_config(self):
-        """Get configuration instance (lazy-loaded).
+        """The config this rule reads its settings from (``get_threshold``).
+
+        ``RuleRegistry`` sets it to the checked file's config, overrides applied
+        (BACK-1571). A rule built outside the registry falls back to the cwd's
+        project config.
 
         Returns:
-            RevealConfig instance
+            FileConfig or RevealConfig instance
         """
         if self._config is None:
             try:
@@ -477,7 +481,7 @@ class BaseRule(ABC):
         disable skipping entirely, or a narrower list to skip less).
         """
         try:
-            effective_skip = cls._effective_skip_categories()
+            effective_skip = cls._effective_skip_categories(target)
             if not effective_skip:
                 return False
 
@@ -492,11 +496,13 @@ class BaseRule(ABC):
             return False
 
     @classmethod
-    def _effective_skip_categories(cls) -> set:
-        """skip_categories, overridden by rules.<CODE>.skip_categories in .reveal.yaml."""
+    def _effective_skip_categories(cls, target: str) -> set:
+        """skip_categories, overridden by rules.<CODE>.skip_categories in the .reveal.yaml
+        that governs *target* (not the cwd's, BACK-1571)."""
         try:
             from reveal.config import RevealConfig
-            config = RevealConfig.get()
+            path = Path(target)
+            config = RevealConfig.get(start_path=path.parent).get_file_config(path)
             override = config.get_rule_config(cls.code, 'skip_categories', None)
             if override is not None:
                 return set(override)
