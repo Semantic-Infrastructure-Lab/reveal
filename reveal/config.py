@@ -20,7 +20,7 @@ import sys
 import logging
 import json
 import re
-from typing import Optional, List, Dict, Any, cast
+from typing import Optional, List, Dict, Any, Tuple, Union, cast
 from dataclasses import dataclass
 import fnmatch
 import functools
@@ -59,7 +59,8 @@ def _apply_int_rule_env(config: dict, env_var: str, rule_key: str, field_key: st
         logger.warning(f"Invalid {env_var} value: {value}")
 
 
-_path_resolve_cache: Dict[Path, Path] = {}
+_ResolveKey = Union[Path, Tuple[str, Path]]  # absolute path, or (cwd, relative path)
+_path_resolve_cache: Dict[_ResolveKey, Path] = {}
 
 
 def _cached_resolve(path: Path) -> Path:
@@ -67,11 +68,17 @@ def _cached_resolve(path: Path) -> Path:
 
     Path.resolve() traverses every path component via lstat to canonicalize
     symlinks. With many files and override patterns this adds up fast.
+
+    A relative path is keyed with the cwd it was resolved in. Keyed alone ('.', 'build')
+    it pinned the cwd of its first caller, so a process that changes directory (the test
+    suite, any in-process host) got the first directory's config, and its ignore
+    patterns, for every later '.' (BACK-1568).
     """
-    resolved = _path_resolve_cache.get(path)
+    key: _ResolveKey = path if path.is_absolute() else (os.getcwd(), path)
+    resolved = _path_resolve_cache.get(key)
     if resolved is None:
         resolved = path.resolve()
-        _path_resolve_cache[path] = resolved
+        _path_resolve_cache[key] = resolved
     return resolved
 
 
