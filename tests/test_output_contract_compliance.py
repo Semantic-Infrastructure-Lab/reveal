@@ -143,10 +143,6 @@ MISSING_URIS = {
 }
 
 KNOWN_VIOLATIONS = {
-    ('contract', 'codex'): 'BACK-1522',
-    ('failure', 'codex'): 'BACK-1522',
-    ('missing', 'nginx'): 'BACK-1523',
-    ('missing', 'reveal'): 'BACK-1521',
     ('abs_path', 'architecture'): 'BACK-1366',
     ('abs_path', 'deps'): 'BACK-1366',
     ('abs_path', 'imports'): 'BACK-1366',

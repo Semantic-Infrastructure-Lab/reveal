@@ -2,15 +2,20 @@
 
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from reveal.reveal_types import CONTRACT_VERSION
+from reveal.reveal_types import CONTRACT_VERSION, RevealResult
 
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
 from ...rules.validation.utils import find_reveal_root
+from ...utils.path_utils import to_posix
 from ...utils.results import ResultBuilder
 
 from .renderer import RevealRenderer
 from .help import get_schema, get_help
 from . import structure, operations, formatting
+
+
+# The views reveal:// answers without an element (structure.get_structure).
+SECTIONS = ('config', 'analyzers', 'rules', 'adapters')
 
 
 @register_adapter('reveal')
@@ -77,13 +82,15 @@ class RevealAdapter(ResourceAdapter):
 
         return root
 
-    def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+    def get_structure(self, **kwargs: Any) -> RevealResult:
         """Get reveal's internal structure.
 
         Returns:
             Dict containing analyzers, adapters, rules, etc.
             Filtered by self.component if specified.
         """
+        if self.component and self.component.lower() not in SECTIONS:
+            return self._unknown_section()
         result = structure.get_structure(self.reveal_root, self.component, **kwargs)
         return ResultBuilder.create(
             result_type='reveal_structure',
@@ -92,6 +99,21 @@ class RevealAdapter(ResourceAdapter):
             contract_version=CONTRACT_VERSION,
             data=result,
         )
+
+    def _unknown_section(self) -> RevealResult:
+        """An unknown section fails, naming the real ones (BACK-1521).
+
+        It fell through to the full view with exit 0, so a typo (``reveal://analyzer``)
+        answered a different question as if it were the one asked.
+        """
+        message = (f"Unknown reveal:// section '{self.component}'. "
+                   f"Sections: {', '.join(SECTIONS)}.")
+        source_file = self.reveal_root / str(self.component)
+        if source_file.is_file():
+            message += f" To read that source file: reveal {to_posix(source_file)}"
+        return ResultBuilder.create_error(
+            result_type='reveal_structure', source=f'reveal://{self.component}',
+            error=message, contract_version=CONTRACT_VERSION, source_type='runtime')
 
     def check(self, select: Optional[List[str]] = None, ignore: Optional[List[str]] = None) -> Dict[str, Any]:
         """Run validation rules on reveal itself.

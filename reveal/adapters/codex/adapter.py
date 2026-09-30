@@ -98,7 +98,7 @@ class CodexAdapter(ResourceAdapter):
             'contract_version': CONTRACT_VERSION,
             'type': '',
             'source': str(self.CODEX_DB),
-            'source_type': 'sqlite',
+            'source_type': 'database',
         }
 
     def _is_uuid(self, s: str) -> bool:

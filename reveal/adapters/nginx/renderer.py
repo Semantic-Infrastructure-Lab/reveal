@@ -40,21 +40,20 @@ class NginxUriRenderer(TypeDispatchRenderer):
 
     @staticmethod
     def _render_nginx_vhost_not_found(result: dict) -> None:
-        domain = result.get('domain', '?')
-        print(f"\n❌ No nginx config found for: {domain}\n")
+        """Detail under the router's error line, on stderr with it (BACK-1523, BACK-1553)."""
+        err = sys.stderr
         if result.get('config_file'):
-            print(f"  Config file: {result['config_file']}")
+            print(f"  Config file: {result['config_file']}", file=err)
         if result.get('note'):
-            print(f"  Note: {result['note']}")
+            print(f"  Note: {result['note']}", file=err)
         searched = result.get('searched', [])
         if searched:
-            print(f"\n  Searched:")
+            print("  Searched:", file=err)
             for d in searched:
-                print(f"    • {d}")
+                print(f"    • {d}", file=err)
         if result.get('next_steps'):
-            print()
             for step in result['next_steps']:
-                print(f"  • {step}")
+                print(f"  • {step}", file=err)
 
     @staticmethod
     def _print_ports(ports: list) -> None:

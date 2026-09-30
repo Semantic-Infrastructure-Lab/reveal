@@ -303,6 +303,7 @@ class ResultBuilder:
         source: Union[str, Path],
         error: str,
         contract_version: str = '1.0',
+        source_type: Optional[str] = None,
         **extra_fields
     ) -> RevealResult:
         """Build error result dictionary.
@@ -312,6 +313,8 @@ class ResultBuilder:
             source: Source path
             error: Error message
             contract_version: Contract version
+            source_type: As in ``create``; by default guessed from the filesystem, which
+                calls anything that isn't a directory a 'file' (reveal://analyzer included)
             **extra_fields: Additional fields
 
         Returns:
@@ -332,7 +335,7 @@ class ResultBuilder:
             'contract_version': contract_version,
             'type': result_type,
             'source': str(source),
-            'source_type': 'directory' if source_path.is_dir() else 'file',
+            'source_type': source_type or ('directory' if source_path.is_dir() else 'file'),
             'error': error,
         }
 

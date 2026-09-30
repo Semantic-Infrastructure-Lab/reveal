@@ -79,30 +79,35 @@ class TestRenderNginxSitesOverview:
 # ---------------------------------------------------------------------------
 
 class TestRenderNginxVhostNotFound:
-    def test_shows_domain(self, capsys):
-        R._render_nginx_vhost_not_found({'domain': 'missing.com'})
-        out = capsys.readouterr().out
-        assert 'missing.com' in out
-        assert '❌' in out
+    """A miss is a failed result (BACK-1523): the router prints its error; the renderer
+    adds only the detail, on stderr, and nothing on stdout (BACK-1553)."""
+
+    def test_adds_detail_on_stderr_only(self, capsys):
+        R._render_nginx_vhost_not_found({'domain': 'missing.com', 'error': 'x',
+                                         'searched': ['/etc/nginx/sites-enabled']})
+        captured = capsys.readouterr()
+        assert captured.out == ''
+        assert '/etc/nginx/sites-enabled' in captured.err
+        assert 'missing.com' not in captured.err  # the router's error line names it
 
     def test_shows_config_file_when_present(self, capsys):
         R._render_nginx_vhost_not_found({'domain': 'x.com', 'config_file': '/etc/nginx/x.conf'})
-        out = capsys.readouterr().out
+        out = capsys.readouterr().err
         assert '/etc/nginx/x.conf' in out
 
     def test_shows_note(self, capsys):
         R._render_nginx_vhost_not_found({'domain': 'x.com', 'note': 'Check sites-enabled'})
-        out = capsys.readouterr().out
+        out = capsys.readouterr().err
         assert 'Check sites-enabled' in out
 
     def test_searched_dirs_listed(self, capsys):
         R._render_nginx_vhost_not_found({'domain': 'x.com', 'searched': ['/etc/nginx/sites-enabled']})
-        out = capsys.readouterr().out
+        out = capsys.readouterr().err
         assert '/etc/nginx/sites-enabled' in out
 
     def test_next_steps_printed(self, capsys):
         R._render_nginx_vhost_not_found({'domain': 'x.com', 'next_steps': ['Check DNS']})
-        out = capsys.readouterr().out
+        out = capsys.readouterr().err
         assert 'Check DNS' in out
 
 

@@ -1036,9 +1036,12 @@ class NginxUriAdapter(ResourceAdapter):
             return ResultBuilder.create(
                 result_type='nginx_vhost_not_found',
                 source=f'nginx://{self.domain}',
-                source_type='nginx_vhost',
+                source_type='runtime',
                 contract_version=CONTRACT_VERSION,
                 data={
+                    # A lookup miss fails like env://NAME's and help://TOPIC's (BACK-1523): the
+                    # router exits 1 on it; the rest is the detail its renderer adds.
+                    'error': f"No nginx config found for '{self.domain}'",
                     'domain': self.domain,
                     'searched': _NGINX_SEARCH_DIRS,
                     'next_steps': [
@@ -1053,9 +1056,10 @@ class NginxUriAdapter(ResourceAdapter):
             return ResultBuilder.create(
                 result_type='nginx_vhost_not_found',
                 source=f'nginx://{self.domain}',
-                source_type='nginx_vhost',
+                source_type='runtime',
                 contract_version=CONTRACT_VERSION,
                 data={
+                    'error': f"No nginx server block matched '{self.domain}' in {config_path}",
                     'domain': self.domain,
                     'config_file': config_path,
                     'note': 'Config file found but no server block matched this domain',
@@ -1087,7 +1091,7 @@ class NginxUriAdapter(ResourceAdapter):
         result = ResultBuilder.create(
             result_type='nginx_vhost_summary',
             source=f'nginx://{self.domain}',
-            source_type='nginx_vhost',
+            source_type='runtime',
             contract_version=CONTRACT_VERSION,
             data={
                 'domain': self.domain,

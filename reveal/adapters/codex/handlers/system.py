@@ -55,7 +55,7 @@ def get_info(codex_home: Path, db_path: Path) -> Dict[str, Any]:
     base: Dict[str, Any] = ResultBuilder.create(
         result_type='codex_info',
         source=str(db_path),
-        source_type='sqlite',
+        source_type='database',
         contract_version=CONTRACT_VERSION,
     )
 
@@ -201,7 +201,7 @@ def get_memories_pipeline(db_path: Path) -> Dict[str, Any]:
     base: Dict[str, Any] = ResultBuilder.create(
         result_type='codex_memories_pipeline',
         source=str(db_path),
-        source_type='sqlite',
+        source_type='database',
         contract_version=CONTRACT_VERSION,
     )
 

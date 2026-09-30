@@ -207,6 +207,8 @@ def render_reveal_structure(data: Dict[str, Any], output_format: str) -> None:
     if output_format == 'json':
         print_json_result(data)
         return
+    if 'error' in data:
+        return  # the router prints it (BACK-1553); an empty structure view under it misleads
 
     # Check if this is a config structure
     if 'active_config' in data and 'sources' in data:

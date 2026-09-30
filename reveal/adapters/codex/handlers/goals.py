@@ -14,7 +14,7 @@ def get_goal(codex_home: Path, thread_id: str) -> Dict[str, Any]:
     base: Dict[str, Any] = ResultBuilder.create(
         result_type='codex_goal',
         source=str(goals_db),
-        source_type='sqlite',
+        source_type='database',
         contract_version=CONTRACT_VERSION,
         data={'thread_id': thread_id},
     )
