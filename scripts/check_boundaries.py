@@ -16,7 +16,9 @@ Rules (home = where the concern is allowed to live):
 
 ``walker`` (BACK-1515 -> BACK-1223)
     ``os.walk``, ``.rglob()``, ``.glob()`` / ``glob.glob()`` with ``**`` or
-    ``recursive=True``, and ``.iterdir()`` inside a function that calls itself.
+    ``recursive=True``, and a one-level listing (``iterdir``/``scandir``/``listdir``) in a
+    function that recurses (directly or through other functions in the module), in a
+    helper such a function calls, or in a ``while`` loop that grows a worklist (BACK-1573).
     Home: ``reveal/utils/path_utils.py::_walk_code_files``. A walk over something that
     is not the user's target (reveal's own package, its cache, ~/.claude) is legitimate:
     mark it ``# boundary-ok: walker -- <why>``.
@@ -49,7 +51,7 @@ Code under ``if __name__ == '__main__':`` is exempt from ``exit`` and ``print``.
 Suppress one deliberate site with ``# boundary-ok: <rule> -- <why>`` on any line of the
 call, or on a comment line directly above it.
 Not detected: aliased callables (``w = os.walk``), ``Path.walk`` (3.12+, and reveal
-supports 3.10), and recursion through a second function.
+supports 3.10), and recursion across modules.
 
 Run:
     python scripts/check_boundaries.py                   # exits 1 on regression or stale baseline
@@ -171,6 +173,7 @@ class _Scanner(ast.NodeVisitor):
         self.main_guard = 0
         self.from_os: Dict[str, str] = {}
         self.from_sys: Dict[str, str] = {}
+        self.walk_listings: Set[int] = set()
 
     # -- bookkeeping --------------------------------------------------------
     def _add(self, rule: str, node: Any) -> None:
@@ -194,11 +197,6 @@ class _Scanner(ast.NodeVisitor):
 
     def _visit_func(self, node) -> None:
         self.func_stack.append(node.name)
-        if any(isinstance(n, ast.Call) and _calls_name(n, node.name) for n in ast.walk(node)):
-            for n in ast.walk(node):
-                if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) \
-                        and n.func.attr == 'iterdir':
-                    self._add('walker', n)
         self.generic_visit(node)
         self.func_stack.pop()
 
@@ -260,7 +258,7 @@ class _Scanner(ast.NodeVisitor):
             name = self.from_os.get(name) or self.from_sys.get(name) or name
         attr = node.func.attr if isinstance(node.func, ast.Attribute) else ''
 
-        if name == 'os.walk' or attr == 'rglob':
+        if name == 'os.walk' or attr == 'rglob' or id(node) in self.walk_listings:
             self._add('walker', node)
         elif name in ('glob.glob', 'glob.iglob') and _kw_true(node, 'recursive'):
             self._add('walker', node)
@@ -285,10 +283,64 @@ def _calls_name(call: ast.Call, name: str) -> bool:
         and isinstance(f.value, ast.Name) and f.value.id in ('self', 'cls')
 
 
+_LISTING = ('iterdir', 'scandir', 'listdir')
+_WORKLIST_GROW = ('append', 'appendleft', 'extend', 'put')
+
+
+def _is_listing(node: ast.AST) -> bool:
+    """``p.iterdir()``, ``os.scandir(d)``, ``os.listdir(d)`` (or a bare imported name)."""
+    if not isinstance(node, ast.Call):
+        return False
+    f = node.func
+    return (isinstance(f, ast.Attribute) and f.attr in _LISTING) or \
+        (isinstance(f, ast.Name) and f.id in ('scandir', 'listdir'))
+
+
+def _walk_listings(tree: ast.AST) -> Set[int]:
+    """``id()`` of every one-level listing call that is really a recursive walk (BACK-1573).
+
+    A listing call walks a tree when it sits in a function that recurses -- itself, or
+    through other functions in the module (tree_view's renderer recursed through
+    ``_process_dir_entry``) -- or in a helper such a function calls (``_get_sorted_entries``),
+    or in a ``while`` loop that grows a worklist (D005's ``scandir`` stack).
+    """
+    funcs = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    names = {f.name for f in funcs}
+    calls: Dict[str, Set[str]] = {}
+    for f in funcs:
+        calls.setdefault(f.name, set()).update(
+            name for n in ast.walk(f) if isinstance(n, ast.Call)
+            for name in names if _calls_name(n, name))
+
+    def recursive(name: str) -> bool:
+        seen, todo = set(), list(calls.get(name, ()))
+        while todo:
+            callee = todo.pop()
+            if callee == name:
+                return True
+            if callee not in seen:
+                seen.add(callee)
+                todo.extend(calls.get(callee, ()))
+        return False
+
+    walkers = {n for n in names if recursive(n)}
+    walkers |= {callee for n in walkers for callee in calls.get(n, ())}
+    found = {id(n) for f in funcs if f.name in walkers for n in ast.walk(f) if _is_listing(n)}
+    for loop in ast.walk(tree):
+        if isinstance(loop, ast.While):
+            inner = [n for n in ast.walk(loop) if isinstance(n, ast.Call)]
+            if any(isinstance(n.func, ast.Attribute) and n.func.attr in _WORKLIST_GROW
+                   for n in inner):
+                found.update(id(n) for n in inner if _is_listing(n))
+    return found
+
+
 def find_sites(source: str, rel: str) -> Sites:
     """Rule -> sorted line numbers of every out-of-home site in one file."""
     scanner = _Scanner(rel, source.splitlines())
-    scanner.visit(ast.parse(source))
+    tree = ast.parse(source)
+    scanner.walk_listings = _walk_listings(tree)
+    scanner.visit(tree)
     return {rule: sorted(lines) for rule, lines in scanner.sites.items()}
 
 

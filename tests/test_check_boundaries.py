@@ -26,6 +26,15 @@ def _hits(src, rel=PLAIN):
     "import glob\nglob.glob(pat, recursive=True)",
     "def scan(d):\n    for c in d.iterdir():\n        scan(c)",
     "class A:\n    def scan(self, d):\n        for c in d.iterdir():\n            self.scan(c)",
+    # BACK-1573: recursion through a second function (tree_view's renderer) ...
+    "def walk(d):\n    for c in os.scandir(d):\n        visit(c)\n"
+    "def visit(c):\n    walk(c.path)",
+    # ... a listing helper called by a recursive function ...
+    "def entries(d):\n    return sorted(d.iterdir())\n"
+    "def walk(d):\n    for c in entries(d):\n        walk(c)",
+    # ... and a worklist loop (D005's scandir stack).
+    "def walk(root):\n    stack = [root]\n    while stack:\n"
+    "        for e in os.scandir(stack.pop()):\n            stack.append(e.path)",
 ])
 def test_walker_flagged(src):
     assert set(_hits(src)) == {'walker'}
@@ -36,6 +45,9 @@ def test_walker_flagged(src):
     "import glob\nglob.glob(pat)",
     "def ls(d):\n    return list(d.iterdir())",
     "import ast\nast.walk(tree)",
+    # One level, even called from a loop: no recursion, no worklist.
+    "def ls(d):\n    return os.listdir(d)\ndef main(ds):\n    return [ls(d) for d in ds]",
+    "def poll(d):\n    while True:\n        if os.listdir(d):\n            return",
 ])
 def test_walker_not_flagged(src):
     assert _hits(src) == {}
