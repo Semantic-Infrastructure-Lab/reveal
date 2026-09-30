@@ -1268,7 +1268,7 @@ class DependsAdapter(ResourceAdapter):
         substring pre-filter (real corpus: 89/1927 WordPress files call
         `define(` at all) narrows the fixed-point loop to the files that can
         possibly matter, before any tree-sitter parse — same "cheap check
-        before the expensive one" shape as `is_skippable_dir`.
+        before the expensive one" shape as `is_noise_dir`.
         """
         candidate_files: List[Path] = []
         for file_path in files:

@@ -8,13 +8,11 @@ discarded. Threading an ``exclude_patterns`` kwarg through every walker is the
 consolidation project, not a fix.
 
 Instead the CLI publishes the active scope here once at dispatch time (``dispatch_scope``,
-from handle_uri and from the subcommand seam, BACK-1539), and the
-one directory-pruning predicate every walker already routes through
-(``utils.path_utils.is_skippable_dir``, 30 call sites) consults it. Semantics
-are delegated to ``cli.file_checker.should_skip_file`` so URI-form ``--exclude``
-matches what the ``check`` subcommand has always done, including BACK-1249's
-trailing-slash handling -- one matcher, not a second implementation that can
-drift.
+from handle_uri, the subcommand seam, BACK-1539, and a bare directory path, BACK-1581), and
+the shared walker's predicate (``utils.path_utils.walk_filter``, which every walk over the
+user's target goes through since BACK-1223) consults it, per walk purpose: an evidence walk
+does not. Patterns are gitignore syntax, one matcher (``utils.gitignore.PatternSet``,
+BACK-1576).
 
 Scope is process-global and therefore must be cleared between dispatches in any
 long-lived host (the MCP server, the test suite). Use ``exclusion_scope`` rather

@@ -613,7 +613,7 @@ def test_walk_scope_reaches_every_walking_subcommand(subcommand_harness, name, p
     assert honored or 'Note: --exclude' in err, (
         f'{probe} on reveal {name} changed nothing and no note named it. The walk scope is '
         f'published by reveal/cli/routing/subcommand.py; a walker that bypasses '
-        f'utils.path_utils.is_skippable_dir does not see it.')
+        f'the shared walker (utils.path_utils.walk_filter) does not see it.')
 
 
 @pytest.mark.parametrize('name', sorted(VERBOSE_TAKERS))

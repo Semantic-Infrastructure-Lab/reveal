@@ -175,3 +175,27 @@ def test_scope_matcher_from_a_walk_root_above_the_scope(tree):
         assert not above('keep', True)           # the scope root itself
     with exclusion_scope(tree / 'keep', ['a.py']):
         assert not exclusions.scope_matcher(tree / 'z')('b.py', False)  # disjoint
+
+
+def test_git_tree_noise_uses_the_same_virtualenv_rule(tmp_path):
+    """diff:// over git refs judges env/venv as the filesystem walk does (BACK-1582)."""
+    import os
+    import shutil
+    import subprocess
+    pygit2 = pytest.importorskip('pygit2')
+    if shutil.which('git') is None:
+        pytest.skip('git not installed')
+    from reveal.diff.architecture_diff import _is_skippable_tree_entry
+    for rel in ('env/common/source.ts', 'venv/pyvenv.cfg', 'venv/lib/x.py', 'build/lib/y.py',
+                'pkg.egg-info/PKG-INFO'):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text('x\n', encoding='utf-8')
+    env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull)
+    git = ['git', '-C', str(tmp_path), '-c', 'user.name=t', '-c', 'user.email=t@t']
+    subprocess.run([*git, 'init', '-q'], check=True, env=env)
+    subprocess.run([*git, 'add', '-A'], check=True, env=env)
+    subprocess.run([*git, 'commit', '-q', '-m', 'x'], check=True, env=env)
+    repo = pygit2.Repository(str(tmp_path))
+    tree = repo.revparse_single('HEAD').peel(pygit2.Tree)
+    verdicts = {entry.name: _is_skippable_tree_entry(repo, entry) for entry in tree}
+    assert verdicts == {'env': False, 'venv': True, 'build': True, 'pkg.egg-info': True}

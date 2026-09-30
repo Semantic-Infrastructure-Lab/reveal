@@ -15,7 +15,7 @@ from reveal.utils.path_utils import (
     to_posix,
     to_relative_display,
     is_unsafe_scan_root,
-    is_skippable_dir,
+    is_noise_dir,
     is_test_dir,
     is_test_filename,
     is_vendor_dir,
@@ -928,27 +928,27 @@ class TestIsSkippableDir:
     not a bare-name membership check. A directory-walk pruning helper."""
 
     def test_unconditional_names_always_skip(self, tmp_path):
-        assert is_skippable_dir(tmp_path, '.git') is True
-        assert is_skippable_dir(tmp_path, 'node_modules') is True
-        assert is_skippable_dir(tmp_path, '__pycache__') is True
+        assert is_noise_dir(tmp_path, '.git') is True
+        assert is_noise_dir(tmp_path, 'node_modules') is True
+        assert is_noise_dir(tmp_path, '__pycache__') is True
 
     def test_unrelated_name_never_skips(self, tmp_path):
-        assert is_skippable_dir(tmp_path, 'src') is False
-        assert is_skippable_dir(tmp_path, 'lib') is False
+        assert is_noise_dir(tmp_path, 'src') is False
+        assert is_noise_dir(tmp_path, 'lib') is False
 
     def test_ambiguous_name_with_source_files_not_skipped(self, tmp_path):
         for name in ('env', 'venv', 'build', 'dist'):
             d = tmp_path / name
             d.mkdir()
             (d / 'Real.java').write_text('class Real {}')
-            assert is_skippable_dir(tmp_path, name) is False, name
+            assert is_noise_dir(tmp_path, name) is False, name
 
     def test_ambiguous_name_with_no_source_files_skipped(self, tmp_path):
         for name in ('build', 'dist'):
             d = tmp_path / name
             d.mkdir()
             (d / 'nested').mkdir()
-            assert is_skippable_dir(tmp_path, name) is True, name
+            assert is_noise_dir(tmp_path, name) is True, name
 
     def test_env_without_virtualenv_markers_is_walked(self, tmp_path):
         # BACK-1582: env/venv are skipped on a virtualenv's markers, not for lacking
@@ -956,13 +956,13 @@ class TestIsSkippableDir:
         for name in ('env', 'venv'):
             d = tmp_path / name
             (d / 'nested').mkdir(parents=True)
-            assert is_skippable_dir(tmp_path, name) is False, name
+            assert is_noise_dir(tmp_path, name) is False, name
             (d / 'pyvenv.cfg').write_text('home = /usr/bin\n', encoding='utf-8')
-            assert is_skippable_dir(tmp_path, name) is True, name
+            assert is_noise_dir(tmp_path, name) is True, name
 
     def test_ambiguous_name_missing_dir_skipped(self, tmp_path):
         # Directory doesn't exist on disk (e.g. a stale walk entry) — fail safe.
-        assert is_skippable_dir(tmp_path, 'build') is True
+        assert is_noise_dir(tmp_path, 'build') is True
 
     def test_ambiguous_name_with_only_data_files_skipped(self, tmp_path):
         # A real venv/build dir with non-source files (configs, binaries) at
@@ -971,7 +971,7 @@ class TestIsSkippableDir:
         d.mkdir()
         (d / 'package-1.0.whl').write_bytes(b'')
         (d / 'pyvenv.cfg').write_text('')
-        assert is_skippable_dir(tmp_path, 'dist') is True
+        assert is_noise_dir(tmp_path, 'dist') is True
 
 
 class TestIsTestDir:

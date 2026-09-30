@@ -349,12 +349,12 @@ def _dir_cache_key(directory: Path) -> Any:
     If the directory can't be stat'ed or listed there is nothing to index, and a
     walk of it would find nothing either: the key says so.
     """
-    from ...utils.path_utils import is_skippable_dir
+    from ...utils.path_utils import is_noise_dir
     try:
         mtimes = [os.stat(directory).st_mtime_ns]
         with os.scandir(directory) as it:
             for entry in it:
-                if entry.is_dir(follow_symlinks=False) and not is_skippable_dir(directory, entry.name):
+                if entry.is_dir(follow_symlinks=False) and not is_noise_dir(directory, entry.name):
                     try:
                         mtimes.append(os.stat(entry).st_mtime_ns)
                     except OSError:

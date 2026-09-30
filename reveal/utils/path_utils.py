@@ -18,6 +18,8 @@ from ..defaults import (
     AMBIGUOUS_SKIP_DIRECTORIES,
     TEST_DIR_NAMES,
     VENDOR_DIR_NAMES,
+    VENV_DIR_NAMES,
+    VENV_MARKERS,
     MINIFIED_FILENAME_RE,
     DisplayDefaults,
 )
@@ -36,34 +38,6 @@ _SKIP_DIRS: frozenset = SKIP_DIRECTORIES
 _AMBIGUOUS_SKIP_DIRS: frozenset = AMBIGUOUS_SKIP_DIRECTORIES
 
 
-def is_skippable_dir(parent: Path, name: str) -> bool:
-    """True if directory *name* under *parent* is a build/vendor/cache dir a
-    walk should exclude, or the CLI's active ``--exclude`` scope covers it.
-
-    The legacy predicate for walkers not yet on the seam (BACK-1223): it reads the
-    process-global scope, so no caller can opt out of ``--exclude``. The seam itself
-    (``walk_filter``) uses ``is_noise_dir`` and applies ``--exclude`` per walk purpose.
-    Callers combine this with their own hidden-dir (``startswith('.')``) filtering.
-    """
-    if name in _SKIP_DIRS:
-        return True
-    # BACK-1257: honor the CLI's active --exclude scope here, the one predicate
-    # every walker already routes directory pruning through, so all URI-form
-    # adapters gain exclusion at once instead of 13+ hand-wired patches. Placed
-    # after the cheap membership test and early-outs on an empty scope, so the
-    # hot path is unchanged when --exclude wasn't passed.
-    from .exclusions import dir_is_excluded
-    if dir_is_excluded(parent / name):
-        return True
-    return is_noise_dir(parent, name)
-
-
-_VENV_NAMES = frozenset({'env', 'venv'})
-# What every environment tool leaves at a virtualenv's top level: PEP 405's pyvenv.cfg
-# (venv, virtualenv 20+, uv, poetry), conda's conda-meta/, and older virtualenvs' activate.
-_VENV_MARKERS = ('pyvenv.cfg', 'conda-meta', 'bin/activate', 'Scripts/activate')
-
-
 def is_noise_dir(parent: Path, name: str) -> bool:
     """True if directory *name* under *parent* is VCS/cache/virtualenv/build noise.
 
@@ -72,7 +46,7 @@ def is_noise_dir(parent: Path, name: str) -> bool:
     ``org.elasticsearch.env``, 297 `.java` files, was silently excluded by bare-name match
     alone), so they skip only on evidence:
 
-    - ``env``/``venv`` skip when they are a virtualenv (``_VENV_MARKERS``). A source
+    - ``env``/``venv`` skip when they are a virtualenv (``VENV_MARKERS``). A source
       package with its code in subdirectories (vscode's ``platform/env/common/``) used to be
       dropped by the old test, "no code file directly inside" (BACK-1582).
     - ``build``/``dist`` have no such marker, so they skip unless a source-code file sits
@@ -87,8 +61,8 @@ def is_noise_dir(parent: Path, name: str) -> bool:
     if name not in _AMBIGUOUS_SKIP_DIRS:
         return False
     directory = parent / name
-    if name in _VENV_NAMES:
-        return any(os.path.exists(directory / marker) for marker in _VENV_MARKERS)
+    if name in VENV_DIR_NAMES:
+        return any(os.path.exists(directory / marker) for marker in VENV_MARKERS)
     from ..registry import get_code_extensions
     code_exts = get_code_extensions()
     try:

@@ -66,11 +66,16 @@ SKIP_DIRECTORIES = frozenset({
 # be named any of them (confirmed on Elasticsearch: `org.elasticsearch.env`,
 # 297 files, was silently excluded from every directory walk by bare-name
 # match alone). Unlike SKIP_DIRECTORIES, membership here is not sufficient to
-# skip a directory — callers must also check
-# ``reveal.utils.path_utils.is_skippable_dir()``, which only skips these names
-# when the directory itself carries no direct evidence of being real source
-# (no source-code files at its own top level).
+# skip a directory — ``reveal.utils.path_utils.is_noise_dir()`` decides on evidence:
+# a virtualenv's markers for env/venv (VENV_MARKERS), no source file at the top level
+# for build/dist.
 AMBIGUOUS_SKIP_DIRECTORIES = frozenset({'env', 'venv', 'build', 'dist'})
+
+# BACK-1582: `env`/`venv` skip only when they are a virtualenv -- what every environment tool
+# leaves at the top: PEP 405's pyvenv.cfg (venv, virtualenv 20+, uv, poetry), conda's
+# conda-meta/, older virtualenvs' activate script. A same-named source package has none.
+VENV_DIR_NAMES = frozenset({'env', 'venv'})
+VENV_MARKERS = ('pyvenv.cfg', 'conda-meta', 'bin/activate', 'Scripts/activate')
 
 # Canonical test-directory vocabulary (BACK-1199).
 #

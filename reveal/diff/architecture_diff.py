@@ -54,31 +54,42 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
-from ..defaults import SKIP_DIRECTORIES, AMBIGUOUS_SKIP_DIRECTORIES
+from ..defaults import (
+    AMBIGUOUS_SKIP_DIRECTORIES, SKIP_DIRECTORIES, VENV_DIR_NAMES, VENV_MARKERS,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def _is_skippable_tree_entry(repo, entry) -> bool:
-    """Git-tree analog of ``reveal.utils.path_utils.is_skippable_dir``.
+    """Git-tree analog of ``reveal.utils.path_utils.is_noise_dir``, read from the tree
+    itself rather than ``os.scandir``, since this walk is over a ref, not the filesystem.
 
-    Same unconditional/ambiguous split (BACK-552: 'env'/'venv'/'build'/'dist'
-    only skip when the entry holds no source file directly at its own top
-    level — a real package can legitimately use one of those names). Reads
-    the ambiguous check from the git tree itself rather than ``os.scandir``,
-    since this walk is over a ref, not the filesystem.
+    Same rules: SKIP_DIRECTORIES and ``*.egg-info`` always skip; ``env``/``venv`` skip only
+    when they are a virtualenv (a marker at their top, BACK-1582); ``build``/``dist`` only
+    when no source file sits directly inside (BACK-552).
     """
     name = entry.name
-    if name in SKIP_DIRECTORIES:
+    if name in SKIP_DIRECTORIES or name.endswith('.egg-info'):
         return True
     if name not in AMBIGUOUS_SKIP_DIRECTORIES:
         return False
+    subtree = repo[entry.id]
+    if name in VENV_DIR_NAMES:
+        return any(_tree_has(subtree, marker) for marker in VENV_MARKERS)
     from ..registry import get_code_extensions
     code_exts = get_code_extensions()
-    subtree = repo[entry.id]
     for child in subtree:
         if child.type_str == 'blob' and Path(child.name).suffix.lower() in code_exts:
             return False
+    return True
+
+
+def _tree_has(tree, path: str) -> bool:
+    try:
+        tree[path]
+    except KeyError:
+        return False
     return True
 
 
