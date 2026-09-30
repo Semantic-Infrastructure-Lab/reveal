@@ -157,7 +157,7 @@ File History / Blame
 ```bash
 # 1. Start with repository overview
 reveal git://.
-# Shows: branches (10), tags (10), recent commits (10)
+# Shows: the newest 10 branches, tags and commits; ?limit=N or --all changes all three
 
 # 2. Drill into specific branch
 reveal git://.@main

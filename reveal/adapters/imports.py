@@ -1489,7 +1489,13 @@ class ImportsAdapter(ResourceAdapter):
             contract_version=CONTRACT_VERSION,
             data=data_fields,
         )
-        response['metadata'] = self.get_metadata()
+        response['metadata'] = metadata = self.get_metadata()
+        failed = metadata.get('files_failed')
+        if isinstance(failed, list):
+            # get_metadata keeps the first 50 paths; the count is exact (BACK-1551).
+            note_truncation(response, 'metadata.files_failed', len(failed),
+                            metadata['files_failed_count'], 'auto_cap',
+                            hint='the first 50 by path; files_failed_count is exact')
         return response
 
     def _format_all(self) -> Dict[str, Any]:

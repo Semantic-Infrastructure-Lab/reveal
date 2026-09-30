@@ -54,7 +54,8 @@ def check_cwd_shadowing() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
             warnings.append(
                 {
                     "category": "import_shadowing",
-                    "message": f"CWD ({cwd}) is sys.path[0] and contains {len(py_files)} .py files",
+                    "message": (f"CWD ({cwd}) is sys.path[0] and contains {len(py_files)} .py files"
+                                + ("; the first 5 are listed" if len(py_files) > 5 else "")),
                     "impact": "Local modules may shadow installed packages",
                     "files": [f.name for f in py_files[:5]],
                 }

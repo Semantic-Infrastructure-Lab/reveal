@@ -944,7 +944,9 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             headings = related_analyzer._extract_headings()
             result = {
                 'path': rel_path, 'resolved_path': str(resolved), 'exists': True,
-                'headings': [h.get('name', '') for h in headings[:10]], 'related': []
+                # Every heading (BACK-1551): a [:10] here made the text view's "... and N
+                # more" footer unreachable and JSON's list look whole.
+                'headings': [h.get('name', '') for h in headings], 'related': []
             }
             # depth=0 means unlimited, depth>1 means continue recursing
             if tracker.depth == 0 or tracker.depth > 1:

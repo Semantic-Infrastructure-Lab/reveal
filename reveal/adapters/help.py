@@ -1997,10 +1997,13 @@ class HelpAdapter(ResourceAdapter):
         if isinstance(examples, list) and len(examples) > self._MAX_DEFAULT_EXAMPLES:
             total = len(examples)
             schema_data['example_queries'] = examples[:self._MAX_DEFAULT_EXAMPLES]
-            schema_data['example_queries_detail'] = (
-                f'Showing {self._MAX_DEFAULT_EXAMPLES} of {total} examples — '
-                f'reveal help://schemas/{adapter_name}/full for all of them.'
-            )
+            # A note, not an example_queries_detail string text never showed (BACK-1551).
+            # The meta is copied first: schema_data is a shallow copy of a cached schema.
+            meta = dict(schema_data.get('meta') or {})
+            meta['warnings'] = list(meta.get('warnings') or [])
+            schema_data['meta'] = meta
+            note_truncation(schema_data, 'example_queries', self._MAX_DEFAULT_EXAMPLES, total,
+                            'auto_cap', hint=f'reveal help://schemas/{adapter_name}/full for all')
             pointers.append(f'reveal help://schemas/{adapter_name}/full')
 
         if pointers:

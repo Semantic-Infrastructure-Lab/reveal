@@ -147,8 +147,8 @@ def _get_branch_info(repo, branch_name) -> 'Dict[str, Any] | None':
         return None
 
 
-def list_branches(repo: 'pygit2.Repository', limit: int = 20) -> List[Dict[str, Any]]:
-    """List repository branches."""
+def list_branches(repo: 'pygit2.Repository') -> List[Dict[str, Any]]:
+    """List repository branches, newest first. The caller cuts (BACK-1551)."""
     branches = []
     try:
         for branch_name in repo.branches.local:
@@ -157,7 +157,7 @@ def list_branches(repo: 'pygit2.Repository', limit: int = 20) -> List[Dict[str, 
                 branches.append(info)
     except Exception:  # pygit2 errors vary — return partial results collected so far
         pass
-    return sorted(branches, key=lambda b: cast(int, b.get('timestamp', 0)), reverse=True)[:limit]
+    return sorted(branches, key=lambda b: cast(int, b.get('timestamp', 0)), reverse=True)
 
 
 def _get_tag_info(repo, ref_name) -> 'Dict[str, Any] | None':
@@ -185,8 +185,8 @@ def _get_tag_info(repo, ref_name) -> 'Dict[str, Any] | None':
         return None
 
 
-def list_tags(repo: 'pygit2.Repository', limit: int = 20) -> List[Dict[str, Any]]:
-    """List repository tags."""
+def list_tags(repo: 'pygit2.Repository') -> List[Dict[str, Any]]:
+    """List repository tags, newest first. The caller cuts (BACK-1551)."""
     tags = []
     try:
         for ref_name in repo.references:
@@ -197,4 +197,4 @@ def list_tags(repo: 'pygit2.Repository', limit: int = 20) -> List[Dict[str, Any]
                 tags.append(info)
     except Exception:  # pygit2 errors vary — return partial results collected so far
         pass
-    return sorted(tags, key=lambda t: cast(int, t.get('timestamp', 0)), reverse=True)[:limit]
+    return sorted(tags, key=lambda t: cast(int, t.get('timestamp', 0)), reverse=True)

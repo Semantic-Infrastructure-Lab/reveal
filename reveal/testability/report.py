@@ -89,7 +89,7 @@ def _rank_targets(
                     'lines': p.lines,
                     'categories': sorted(p.categories),
                 }
-                for p in matches[:5]
+                for p in matches
             ],
             'boundary_categories': categories,
             'suggestion': _suggestion(group.key, categories, group.patch_count),

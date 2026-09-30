@@ -289,8 +289,8 @@ a check that counts violations and lets the count only fall. Then the cause is r
    - the grammar-coverage test (`tests/test_grammar_coverage.py`);
    - the registry-driven contract harness (`tests/test_output_contract_compliance.py`).
 
-   Still open: BACK-1513's remaining invariants (caps with no knob, BACK-1551; POSIX
-   separators on Windows). Since 2026-09-28 the harness checks that a list the router cuts is
+   Still open: BACK-1513's last invariant, POSIX separators on Windows. Caps with no knob,
+   which invariant 7 can't vary, now list everything or record their cut (2026-09-30). Since 2026-09-28 the harness checks that a list the router cuts is
    disclosed, and runs every subcommand through the same result handling (all but `check`,
    BACK-1545). Since 2026-09-29 it also runs each adapter's own cap knob (`?top`, `?limit`) at
    1 and uncapped: a list that got shorter must be disclosed, must be the uncapped list's

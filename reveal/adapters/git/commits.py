@@ -131,7 +131,9 @@ def get_repository_overview(
     """Generate repository overview structure.
 
     ``recent_limit`` is ``?limit`` (default 10), so ``--all`` reaches the recent-commit list
-    too; it was a fixed 10 that neither lifted (BACK-1547).
+    too; it was a fixed 10 that neither lifted (BACK-1547). It cuts the newest branches and
+    tags the same way, disclosed: they were a silent 20 inside ``list_branches``/``list_tags``
+    and then ``[:10]`` here, with only the ``count`` sibling to say so (BACK-1551).
     """
     head_info = get_head_info_func(repo)
     branches = list_branches_func(repo)
@@ -147,11 +149,11 @@ def get_repository_overview(
         head=head_info,
         branches={
             'count': len(list(repo.branches.local)),
-            'recent': branches[:10],
+            'recent': branches[:recent_limit],
         },
         tags={
             'count': len([ref for ref in repo.references if ref.startswith('refs/tags/')]),
-            'recent': tags[:10],
+            'recent': tags[:recent_limit],
         },
         commits={
             'recent': recent.commits,
@@ -163,6 +165,9 @@ def get_repository_overview(
         }
     )
     recent.disclose(result, 'commits.recent')
+    for field, listed in (('branches.recent', branches), ('tags.recent', tags)):
+        note_truncation(result, field, min(recent_limit, len(listed)), len(listed), 'limit',
+                        hint='raise ?limit=N, or --all')
     # BACK-1166: surface a content-pattern search degradation, if the caller
     # requested one (get_recent_commits_func resets this before running).
     from .files import get_content_search_disclosure

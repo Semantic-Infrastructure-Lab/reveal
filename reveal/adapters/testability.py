@@ -60,7 +60,9 @@ def _render_patch_hotspots(rows: List[Dict[str, Any]], note: str = '') -> None:
             print(f"    boundary categories: {', '.join(categories)}")
         profiles = row.get('related_profiles') or []
         if profiles:
-            print("    related production functions:")
+            # JSON lists every profile; the header says when text shows only 3 (BACK-1551).
+            shown = f" (3 of {len(profiles)}; --format json lists all)" if len(profiles) > 3 else ""
+            print(f"    related production functions{shown}:")
             for profile in profiles[:3]:
                 print(
                     f"      {profile.get('file')}::{profile.get('function')} "

@@ -770,7 +770,7 @@ class GitAdapter(ResourceAdapter):
                 'element': 'For blame/diff/history: function/class name to scope output to that element. For ?type=history, runs the analyzer at each commit — use ?limit=N on files with deep history.',
                 'ignore': 'For blame: comma-separated commit hash prefixes to suppress (e.g. ignore=69b0093,f5fcac0). Any prefix length works — 4–7 chars is typical.',
                 'context': 'For diff: number of context lines (default 3)',
-                'limit': 'Limit number of results (default: 10 recent commits for the repository view, 50 for history, 20 for refs, 20000 for bucket= timelines — timelines need the full matching range, not a short page). A cut history says so: "showing 50 of 51+" (at least 51).',
+                'limit': 'Limit number of results (default: 10 recent commits, branches and tags for the repository view, 50 for history, 20 for refs, 20000 for bucket= timelines — timelines need the full matching range, not a short page). A cut history says so: "showing 50 of 51+" (at least 51).',
                 'sort': 'Order commits by a field: date, author, message (-field for descending). History is newest first without it; a sort reads all matching history before ?limit cuts it.',
                 'author': 'Filter commits by author name (case-insensitive, use ~= for regex)',
                 'email': 'Filter commits by author email (case-insensitive, use ~= for regex)',

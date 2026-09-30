@@ -194,7 +194,8 @@ OWN_CAP_URIS = {
     'calls': ['calls://wide?uncalled', 'calls://wide?rank=callers'],
     'depends': ['depends://wide/pkg/y.py'],
     # history newest-first, the same file oldest-first (a sort must see every commit, not
-    # the ones walked before the limit), and the repository view's recent commits
+    # the ones walked before the limit), and the repository view's recent commits, branches
+    # and tags
     'git': ['git://wide/app.py?type=history', 'git://wide/app.py?type=history&sort=date',
             'git://.'],
     'imports': ['imports://wide?rank=fan-in'],
@@ -279,6 +280,11 @@ def _build_tree(root: Path) -> None:
             with open(root / 'wide' / 'app.py', 'a', encoding='utf-8') as f:
                 f.write(f'\n\ndef {name}():\n    pass\n')
             git('commit', '-q', '-am', name, day=day)
+        # Two of each ref, a day apart, so the repository view's ?limit cuts its newest
+        # branches and tags too (BACK-1551).
+        git('branch', 'first', 'HEAD~2')
+        git('tag', 'v1', 'HEAD~1')
+        git('tag', 'v2')
 
 
 def _build_wide_tree(wide: Path) -> None:
