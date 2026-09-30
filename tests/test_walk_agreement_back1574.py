@@ -126,13 +126,9 @@ COMMANDS = {
 KNOWN_DISAGREEMENTS = {
     'tree': 'PathFilter: no REVEAL_IGNORE, build/ with code always hidden (BACK-1581)',
     '--files': 'PathFilter: no REVEAL_IGNORE, build/ with code always hidden (BACK-1581)',
-    '--grep': 'own walk: no REVEAL_IGNORE; nested-only env/ dropped (BACK-1581, BACK-1582)',
-    'pack://': 'nested-only env/ dropped (BACK-1582)',
-    'check': 'nested-only env/ dropped (BACK-1582)',
-    'ast://': 'nested-only env/ dropped (BACK-1582)',
-    'stats://': 'nested-only env/ dropped (BACK-1582)',
-    'surface://': 'own walk drops dot-dirs; nested-only env/ dropped (BACK-1577, BACK-1582)',
-    'imports://': 'own walk drops dot-dirs; nested-only env/ dropped (BACK-1580, BACK-1582)',
+    '--grep': 'own walk: no REVEAL_IGNORE (BACK-1581)',
+    'surface://': 'own walk drops dot-dirs (BACK-1577)',
+    'imports://': 'own walk drops dot-dirs (BACK-1580)',
 }
 
 

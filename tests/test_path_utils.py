@@ -944,15 +944,25 @@ class TestIsSkippableDir:
             assert is_skippable_dir(tmp_path, name) is False, name
 
     def test_ambiguous_name_with_no_source_files_skipped(self, tmp_path):
-        for name in ('env', 'venv', 'build', 'dist'):
+        for name in ('build', 'dist'):
             d = tmp_path / name
             d.mkdir()
             (d / 'nested').mkdir()
             assert is_skippable_dir(tmp_path, name) is True, name
 
+    def test_env_without_virtualenv_markers_is_walked(self, tmp_path):
+        # BACK-1582: env/venv are skipped on a virtualenv's markers, not for lacking
+        # top-level code -- vscode's platform/env/ keeps its source in subdirectories.
+        for name in ('env', 'venv'):
+            d = tmp_path / name
+            (d / 'nested').mkdir(parents=True)
+            assert is_skippable_dir(tmp_path, name) is False, name
+            (d / 'pyvenv.cfg').write_text('home = /usr/bin\n')
+            assert is_skippable_dir(tmp_path, name) is True, name
+
     def test_ambiguous_name_missing_dir_skipped(self, tmp_path):
         # Directory doesn't exist on disk (e.g. a stale walk entry) — fail safe.
-        assert is_skippable_dir(tmp_path, 'venv') is True
+        assert is_skippable_dir(tmp_path, 'build') is True
 
     def test_ambiguous_name_with_only_data_files_skipped(self, tmp_path):
         # A real venv/build dir with non-source files (configs, binaries) at

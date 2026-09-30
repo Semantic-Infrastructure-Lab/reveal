@@ -108,3 +108,29 @@ def test_evidence_still_honors_reveal_ignore(tree, monkeypatch):
     monkeypatch.setattr(RevealConfig, '_cache', {})
     assert 'tests/t.py' not in _rel(tree, _walk_code_files(tree, respect_gitignore=False,
                                                            purpose=EVIDENCE))
+
+
+@pytest.mark.parametrize('marker, is_venv', [
+    ('pyvenv.cfg', True), ('conda-meta/', True), ('bin/activate', True),
+    ('Scripts/activate', True), ('common/source.ts', False), ('README.md', False),
+])
+def test_env_is_noise_only_when_it_is_a_virtualenv(tmp_path, marker, is_venv):
+    """BACK-1582: an env/ whose source sits in subdirectories is a package, not a venv."""
+    from reveal.utils.path_utils import is_noise_dir
+    for name in ('env', 'venv'):
+        target = tmp_path / name / marker
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if marker.endswith('/'):
+            target.mkdir(exist_ok=True)
+        else:
+            target.write_text('x\n', encoding='utf-8')
+        assert is_noise_dir(tmp_path, name) is is_venv
+
+
+def test_build_without_top_level_code_is_still_noise(tmp_path):
+    from reveal.utils.path_utils import is_noise_dir
+    (tmp_path / 'build' / 'lib').mkdir(parents=True)
+    (tmp_path / 'build' / 'lib' / 'x.py').write_text('x = 1\n', encoding='utf-8')
+    assert is_noise_dir(tmp_path, 'build')
+    (tmp_path / 'build' / 'main.py').write_text('x = 1\n', encoding='utf-8')
+    assert not is_noise_dir(tmp_path, 'build')

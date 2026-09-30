@@ -58,29 +58,39 @@ def is_skippable_dir(parent: Path, name: str) -> bool:
     return is_noise_dir(parent, name)
 
 
+_VENV_NAMES = frozenset({'env', 'venv'})
+# What every environment tool leaves at a virtualenv's top level: PEP 405's pyvenv.cfg
+# (venv, virtualenv 20+, uv, poetry), conda's conda-meta/, and older virtualenvs' activate.
+_VENV_MARKERS = ('pyvenv.cfg', 'conda-meta', 'bin/activate', 'Scripts/activate')
+
+
 def is_noise_dir(parent: Path, name: str) -> bool:
     """True if directory *name* under *parent* is VCS/cache/virtualenv/build noise.
 
     Unconditional names (SKIP_DIRECTORIES) always skip. Ambiguous names
-    (AMBIGUOUS_SKIP_DIRECTORIES — ``env``/``venv``/``build``/``dist``) only
-    skip when the directory has no source-code file directly at its own top
-    level — a real virtualenv or build-output directory never does (a venv's
-    Python files live many `site-packages/pkg/` levels down; setuptools'
-    `build/` holds `lib/`/`bdist.*/` subdirs, not source at the top). A
-    same-named source package does (BACK-552: Elasticsearch's
-    ``org.elasticsearch.env``, 297 `.java` files directly inside, was
-    silently excluded from every walk by bare-name match alone before this
-    check existed). Not recursive — deliberately cheap, one `os.scandir` per
-    ambiguous name encountered, not a sub-walk.
+    (AMBIGUOUS_SKIP_DIRECTORIES) are also ordinary package names (BACK-552: Elasticsearch's
+    ``org.elasticsearch.env``, 297 `.java` files, was silently excluded by bare-name match
+    alone), so they skip only on evidence:
+
+    - ``env``/``venv`` skip when they are a virtualenv (``_VENV_MARKERS``). A source
+      package with its code in subdirectories (vscode's ``platform/env/common/``) used to be
+      dropped by the old test, "no code file directly inside" (BACK-1582).
+    - ``build``/``dist`` have no such marker, so they skip unless a source-code file sits
+      directly inside (setuptools' ``build/`` holds ``lib/``/``bdist.*/``, not source).
+
+    Cheap: a few ``stat`` calls or one ``os.scandir`` per ambiguous name, never a sub-walk.
     """
     if name in _SKIP_DIRS:
         return True
     if name not in _AMBIGUOUS_SKIP_DIRS:
         return False
+    directory = parent / name
+    if name in _VENV_NAMES:
+        return any(os.path.exists(directory / marker) for marker in _VENV_MARKERS)
     from ..registry import get_code_extensions
     code_exts = get_code_extensions()
     try:
-        with os.scandir(parent / name) as entries:
+        with os.scandir(directory) as entries:
             for entry in entries:
                 if entry.is_file() and Path(entry.name).suffix.lower() in code_exts:
                     return False
