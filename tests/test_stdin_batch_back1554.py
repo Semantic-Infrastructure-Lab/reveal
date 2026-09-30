@@ -25,6 +25,16 @@ from reveal.main import main
 
 pytestmark = pytest.mark.component
 
+# A variable this module sets, not HOME: Windows runners have no HOME, so env://HOME failed
+# there, and a failed URI skips the flag ledger, so the ledger tests passed without checking.
+_VAR = 'REVEAL_BACK1554_PROBE'
+
+
+@pytest.fixture(autouse=True)
+def _probe_var(monkeypatch):
+    monkeypatch.setenv(_VAR, 'x')
+
+
 _FAILED = {'host': 'expired.example', 'port': 443, 'status': 'failure', 'exit_code': 2,
            'summary': {'total': 1, 'passed': 0, 'warnings': 0, 'failures': 1}, 'checks': []}
 _PASSED = {**_FAILED, 'host': 'ok.example', 'status': 'pass', 'exit_code': 0,
@@ -87,23 +97,24 @@ def test_a_raising_ssl_check_is_a_failed_domain():
 
 
 def test_a_usage_error_is_one_failed_entry_and_the_batch_goes_on():
-    code, out, _ = _run('nope://x\nenv://HOME\n', '--stdin', '--batch', '--format', 'json')
+    code, out, _ = _run(f'nope://x\nenv://{_VAR}\n', '--stdin', '--batch', '--format', 'json')
     first, second = json.loads(out)['results']
     assert first['status'] == 'error' and 'Unsupported URI scheme: nope://' in first['error']
-    assert second['status'] == 'success' and second['data']['name'] == 'HOME'
+    assert second['status'] == 'success' and second['data']['name'] == _VAR
     assert code == 2
 
 
 @pytest.mark.parametrize('argv', [['--stdin'], ['--stdin', '--batch', '--summary']],
                          ids=['stdin', 'batch'])
 def test_the_drivers_own_flags_are_not_reported_unused(argv):
-    _, _, err = _run('env://HOME\n', *argv)
+    _, _, err = _run(f'env://{_VAR}\n', *argv)
     assert 'has no effect' not in err, err
 
 
-def test_a_flag_nothing_applies_is_still_reported():
-    """Positive control for the test above: the ledger still runs per URI."""
-    _, _, err = _run('env://HOME\n', '--stdin', '--batch', '--max-items', '3')
+@pytest.mark.parametrize('argv', [['--stdin'], ['--stdin', '--batch']], ids=['stdin', 'batch'])
+def test_a_flag_nothing_applies_is_still_reported(argv):
+    """Positive control for the test above: the ledger still runs per URI, under both drivers."""
+    _, _, err = _run(f'env://{_VAR}\n', *argv, '--max-items', '3')
     assert '--max-items has no effect on env://' in err, err
 
 
