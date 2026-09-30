@@ -111,6 +111,16 @@ class FileAnalyzer(ABC):
         """
         pass  # Abstract method - must be implemented by subclasses
 
+    def get_outline(self) -> Dict[str, Any]:
+        """Return the file's structure for locating code: every element's name and line
+        range, in get_structure()'s shape, but an analyzer may leave out what costs more
+        than it locates (metrics, calls, imports). --grep uses it to group hits by
+        enclosing element (BACK-1560).
+
+        Default: the full get_structure(). TreeSitterAnalyzer overrides it.
+        """
+        return self.get_structure()
+
     def cut_structure(self, structure: Any, head: Optional[int] = None, tail: Optional[int] = None,
                       range_: Optional[tuple] = None) -> List[str]:
         """Cut this analyzer's ``get_structure()`` result for --head/--tail/--range, in place.

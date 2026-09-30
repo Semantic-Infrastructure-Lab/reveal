@@ -101,7 +101,7 @@ def _get_structural_elements(path: str) -> List[Dict[str, Any]]:
         analyzer_class = get_analyzer(path)
         if analyzer_class is None:
             return []
-        structure = analyzer_class(path).get_structure()
+        structure = analyzer_class(path).get_outline()
     except Exception:
         return []
 

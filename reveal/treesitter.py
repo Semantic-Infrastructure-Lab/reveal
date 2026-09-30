@@ -84,6 +84,9 @@ def _get_parse_cache() -> "OrderedDict[Tuple[str, int], Dict[str, Any]]":
 # invocation. Keyed per-file on (path, mtime_ns, size, language) so one edited
 # file invalidates one entry, unlike I002's whole-tree import-graph cache.
 _STRUCTURE_CACHE_NAMESPACE = "structure"
+# get_outline()'s cheaper build (BACK-1560) under its own namespace, so it can never
+# be served as a full structure. A full entry answers an outline lookup, not vice versa.
+_OUTLINE_CACHE_NAMESPACE = "structure-outline"
 
 # One entry per source file (unlike I002's one-entry-per-project-root), so
 # disk_cache's default 64-entry-per-namespace prune cap would thrash on any
@@ -446,6 +449,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         self._node_cache: Optional[Dict[str, List[Any]]] = None  # None = unbuilt; {} = built but empty
         self._content_bytes: Optional[bytes] = None
         self.parse_error: Optional[str] = None  # BACK-979: set when _parse_tree()'s except branch fires
+        self._outline_only: bool = False  # set only for the duration of get_outline()
 
         # Cache key is cheap (one stat) and computed eagerly — some subclasses
         # (e.g. MarkdownAnalyzer's inline-tree cache) read it right after
@@ -560,6 +564,21 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # it is shared with later hits.
         return {k: v for k, v in structure.items() if v}
 
+    def get_outline(self) -> Dict[str, Any]:
+        """get_structure() without the per-function metrics, calls and imports.
+
+        Runs the subclass's own get_structure() (Kotlin's interface split, Bash's
+        variables, ... still apply) with _outline_only set, which makes
+        _get_or_build_structure() build the cheap form. Functions keep name, line,
+        line_end and decorators; imports and callers are omitted. A subclass that
+        builds its structure without _get_or_build_structure() returns its full one.
+        """
+        self._outline_only = True
+        try:
+            return self.get_structure()
+        finally:
+            self._outline_only = False
+
     def _structure_fingerprint(self) -> Optional[str]:
         """Disk-cache key for this file's built structure, or None to skip caching.
 
@@ -590,22 +609,32 @@ class TreeSitterAnalyzer(FileAnalyzer):
         The fingerprint/cache lookup happens before `self.tree` is touched
         anywhere below — `tree` parses lazily on first access, so a cache hit
         here means the file is never even parsed, not just not re-extracted.
+
+        Under get_outline() (_outline_only) a full entry is used if present,
+        else the outline entry; a build skips imports, metrics and callers and
+        is stored only as an outline.
         """
         fingerprint = self._structure_fingerprint()
+        namespaces = [_STRUCTURE_CACHE_NAMESPACE]
+        if self._outline_only:
+            namespaces.append(_OUTLINE_CACHE_NAMESPACE)
         if fingerprint is not None:
-            cached = disk_cache.get(_STRUCTURE_CACHE_NAMESPACE, fingerprint)
-            if cached is not None:
-                return cached
+            for namespace in namespaces:
+                cached = disk_cache.get(namespace, fingerprint)
+                if cached is not None:
+                    return cached
 
         if not self.tree:  # first access here triggers the actual parse
             return {}
 
         structure: Dict[str, Any] = {}
-        structure['imports'] = self._extract_imports()
+        if not self._outline_only:
+            structure['imports'] = self._extract_imports()
         functions = self._extract_functions()
-        callers_index = build_callers_index(functions)
-        for func in functions:
-            func['called_by'] = callers_index.get(func['name'], [])
+        if not self._outline_only:
+            callers_index = build_callers_index(functions)
+            for func in functions:
+                func['called_by'] = callers_index.get(func['name'], [])
         structure['functions'] = functions
         structure['classes'] = self._extract_classes()
         structure['structs'] = self._extract_structs()
@@ -634,7 +663,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         structure['_has_errors'] = self._has_recovery_artifacts()
 
         if fingerprint is not None:
-            disk_cache.put(_STRUCTURE_CACHE_NAMESPACE, fingerprint, structure,
+            disk_cache.put(namespaces[-1], fingerprint, structure,
                            max_entries=_structure_cache_max_files())
         return structure
 
@@ -845,6 +874,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
         line_start = _zero_arg(bounds_node, 'start_position').row + 1
         end_node = self._function_end_node(bounds_node)
         line_end = _zero_arg(end_node, 'end_position').row + 1
+        if self._outline_only:  # BACK-1560: get_outline() locates, it doesn't measure
+            return {'line': line_start, 'line_end': line_end, 'name': name, 'decorators': decorators}
         # For Dart, end_node is the sibling function_body — walk that for
         # complexity/calls too, or both metrics silently see an empty body
         # (same blindness _function_end_node's docstring describes).
