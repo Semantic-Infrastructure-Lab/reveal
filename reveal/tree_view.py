@@ -321,9 +321,9 @@ def _count_entries_with_suppressed(path: Path, depth: int, hidden: Hidden) -> Tu
 def _format_suppressed_footer(suppressed: Counter) -> Optional[str]:
     """Render the 'N entries hidden by ...' footer from a cause tally (BACK-1224).
 
-    Surfaces gitignore/noise/exclude counts, but only gitignore gets a
-    "use --flag" hint: noise patterns have no CLI escape hatch, and a user
-    who typed --exclude already knows why those entries are missing. Hidden
+    Surfaces gitignore/noise/exclude/REVEAL_IGNORE counts, but only gitignore gets a
+    "use --flag" hint: noise patterns have no CLI escape hatch, and a user who typed
+    --exclude or set REVEAL_IGNORE already knows why those entries are missing. Hidden
     dotfiles are omitted entirely: no CLI flag currently exposes show_hidden,
     so a hint would point at nothing actionable.
     """

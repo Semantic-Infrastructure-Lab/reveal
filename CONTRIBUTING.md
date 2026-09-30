@@ -288,8 +288,12 @@ reproduce a Windows encoding bug on Linux, run under the cp1252 simulator:
 `PYTHONUTF8=0 PYTHONPATH=scripts/cp1252_sim reveal check some.conf`.
 
 **Shared infrastructure (call the seam, don't copy it):** walk the user's files through
-`reveal.utils.path_utils._walk_code_files` (not `os.walk`/`rglob`), and keep `sys.exit` in
-`reveal/cli/` and `print` in the rendering layer. A second walker is how `--exclude` and
+`reveal.utils.path_utils` -- `_walk_code_files` (flat), `walk_tree` (prunable dirs,
+`on_hidden` tally, `sort`), `walk_with_causes` (resolution index) or `list_dir` (a renderer that
+recurses itself) -- never `os.walk`/`rglob`, and pick the walk's `WalkPurpose` (`ANALYSIS`,
+`EVIDENCE` for project-wide facts that `--exclude` must not shrink, `RESOLUTION`, `DISPLAY`,
+`DOCS`, see the `WalkPurpose` docstring) instead of adding skip rules at the call site. Keep `sys.exit`
+in `reveal/cli/` and `print` in the rendering layer. A second walker is how `--exclude` and
 `REVEAL_IGNORE` came to work on some commands and silently not on others.
 `scripts/check_boundaries.py` counts these per file and fails on any increase; a walk over
 something that is not the user's target (reveal's own docs, a cache) takes
