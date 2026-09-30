@@ -83,7 +83,6 @@
   "reveal/analyzers/imports/generic.py": 4,
   "reveal/cli/routing/file.py": 1,
   "reveal/grep_handler.py": 1,
-  "reveal/rules/duplicates/D005.py": 1,
   "reveal/tree_view.py": 3
  }
 }

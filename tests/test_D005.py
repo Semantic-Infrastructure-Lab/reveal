@@ -129,6 +129,29 @@ class TestD005Integration(unittest.TestCase):
         self.assertGreater(len(detections), 0)
         self.assertIn("3 files", detections[0].message)
 
+    def test_project_under_a_dot_directory_is_scanned(self):
+        """BACK-1578: skip dirs are judged relative to the project root, not on the
+        absolute path -- a project under ~/.config/ used to have every file skipped."""
+        self._tmpdir = str(Path(self._tmpdir, '.config', 'proj'))
+        Path(self._tmpdir).mkdir(parents=True)
+        Path(self._tmpdir, 'pyproject.toml').write_text('[project]\nname="test"',
+                                                        encoding='utf-8')
+        code = "EXTS = ['.py', '.js', '.ts', '.rs', '.go']\n"
+        self._check('a.py', code)
+        self._check('b.py', code)
+        _clear_index()
+        self.assertGreater(len(self._check('c.py', code)), 0)
+
+    def test_a_venv_copy_is_not_part_of_the_cluster(self):
+        """Noise dirs are not the project's literals: two project files plus a copy under
+        .venv stay below the 3-file threshold."""
+        code = "EXTS = ['.py', '.js', '.ts', '.rs', '.go']\n"
+        Path(self._tmpdir, '.venv', 'lib').mkdir(parents=True)
+        _write(self._tmpdir, '.venv/lib/x.py', code)
+        self._check('a.py', code)
+        _clear_index()
+        self.assertEqual(self._check('b.py', code), [])
+
     # ── Order independence ────────────────────────────────────────────────────
 
     def test_different_order_same_values_detected(self):
@@ -370,9 +393,26 @@ class TestD005VanishingDirectory(unittest.TestCase):
 
         real_scandir = os.scandir
 
+        class _Listing:  # what os.walk needs of scandir: a context-managed iterator
+            def __init__(self, entries):
+                self._it = iter(entries)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                return next(self._it)
+
         def scandir_with_ghost(path='.'):
             if Path(path) == Path(self._tmpdir):
-                return list(real_scandir(path)) + [_FlakyEntry()]
+                with real_scandir(path) as it:
+                    return _Listing(list(it) + [_FlakyEntry()])
             return real_scandir(path)
 
         with mock.patch('os.scandir', side_effect=scandir_with_ghost):
