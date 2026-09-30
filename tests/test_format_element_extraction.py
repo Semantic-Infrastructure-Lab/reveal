@@ -176,6 +176,7 @@ def test_jsonl_non_string_type_and_non_object_records_do_not_crash(tmp_path):
     path = tmp_path / "odd.jsonl"
     path.write_text('[1, 2]\n"str"\n{"type": {"name": "Settings"}}\n{"type": "x"}\n', encoding='utf-8')
     analyzer = get_analyzer(str(path))(str(path))
-    names = [r['name'] for r in analyzer.get_structure()['records']]
-    assert names == ['📊 Summary: 4 records', 'record #1', 'record #2', 'record #3', 'x #4']
+    structure = analyzer.get_structure()
+    assert structure['summary'][0]['name'] == '📊 Summary: 4 records'
+    assert [r['name'] for r in structure['records']] == ['record #1', 'record #2', 'record #3', 'x #4']
     assert _span(_extract(path, "x")) == (4, 4)

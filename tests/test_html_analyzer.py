@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from reveal.analyzers.html import HTMLAnalyzer
+from conftest import sliced_structure
 
 # BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -778,63 +779,42 @@ class TestHTMLAnalyzer(unittest.TestCase):
         self.assertIn('color: red', inline['preview'])
 
     # ========================================
-    # Line Extraction Tests
+    # --head/--tail/--range (BACK-1548)
     # ========================================
+    # They cut HTML's lists like every analyzer's; they no longer print raw lines, which
+    # `reveal page.html :2-4` shows.
 
-    def test_head_lines(self):
-        """Test extracting first N lines."""
-        html = """<html>
+    NAV_HTML = """<html>
 <head><title>Test</title></head>
 <body>
-<p>Line 4</p>
-<p>Line 5</p>
+<a href="/one">1</a><a href="/two">2</a><a href="/three">3</a>
 </body>
 </html>"""
 
-        path = self.create_temp_html(html)
-        analyzer = HTMLAnalyzer(path)
-        result = analyzer.get_structure(head=3)
+    def _cut_of(self, result, field):
+        return [(w['shown'], w['total']) for w in result['meta']['warnings']
+                if w['type'] == 'truncated' and w['field'] == field]
 
-        self.assertEqual(result['type'], 'html')
-        lines = result['content'].split('\n')
-        self.assertEqual(len(lines), 3)
+    def test_head_cuts_the_links_and_says_so(self):
+        analyzer = HTMLAnalyzer(self.create_temp_html(self.NAV_HTML))
+        result = sliced_structure(analyzer, head=2, links=True)
+        self.assertEqual([link['url'] for link in result['links']], ['/one', '/two'])
+        self.assertEqual(self._cut_of(result, 'links'), [(2, 3)])
 
-    def test_tail_lines(self):
-        """Test extracting last N lines."""
-        html = """<html>
-<head><title>Test</title></head>
-<body>
-<p>Line 4</p>
-<p>Line 5</p>
-</body>
-</html>"""
+    def test_tail_and_range_cut_the_links(self):
+        analyzer = HTMLAnalyzer(self.create_temp_html(self.NAV_HTML))
+        self.assertEqual([link['url'] for link in sliced_structure(analyzer, tail=1, links=True)['links']],
+                         ['/three'])
+        self.assertEqual([link['url'] for link in
+                          sliced_structure(analyzer, range=(2, 3), links=True)['links']],
+                         ['/two', '/three'])
 
-        path = self.create_temp_html(html)
-        analyzer = HTMLAnalyzer(path)
-        result = analyzer.get_structure(tail=2)
-
-        self.assertEqual(result['type'], 'html')
-        lines = result['content'].split('\n')
-        self.assertEqual(len(lines), 2)
-
-    def test_range_lines(self):
-        """Test extracting line range."""
-        html = """<html>
-<head><title>Test</title></head>
-<body>
-<p>Line 4</p>
-<p>Line 5</p>
-</body>
-</html>"""
-
-        path = self.create_temp_html(html)
-        analyzer = HTMLAnalyzer(path)
-        result = analyzer.get_structure(range=(2, 4))
-
-        self.assertEqual(result['type'], 'html')
-        content = result['content']
-        self.assertIn('<head>', content)
-        self.assertIn('<body>', content)
+    def test_the_default_view_has_no_list_to_cut(self):
+        """The overview is dicts; the CLI says --head had no effect instead of printing lines."""
+        analyzer = HTMLAnalyzer(self.create_temp_html(self.NAV_HTML))
+        result = analyzer.get_structure()
+        self.assertEqual(analyzer.cut_structure(result, head=3), [])
+        self.assertNotIn('content', result)
 
     # ========================================
     # Edge Cases and Error Handling

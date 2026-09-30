@@ -83,6 +83,8 @@ class OdfAnalyzer(ZipXMLAnalyzer):
 class OdtAnalyzer(OdfAnalyzer):
     """Analyzer for LibreOffice/OpenOffice Writer documents (.odt)."""
 
+    SLICE_FIELDS = ('sections', 'tables')  # not the one-row overview
+
     # ODF heading outline levels
     HEADING_STYLES = {'Heading': True}  # ODF uses outline-level attribute
 
@@ -132,9 +134,7 @@ class OdtAnalyzer(OdfAnalyzer):
         return 0, 0
 
     def _build_odf_result(self, sections: List[Dict[str, Any]], tables: List[Dict[str, Any]],
-                         para_count: int, word_count: int,
-                         head: Optional[int], tail: Optional[int],
-                         range: Optional[tuple]) -> Dict[str, Any]:
+                         para_count: int, word_count: int) -> Dict[str, Any]:
         """Build the final ODF structure result.
 
         Args:
@@ -142,9 +142,6 @@ class OdtAnalyzer(OdfAnalyzer):
             tables: List of tables
             para_count: Total paragraph count
             word_count: Total word count
-            head: Head limit
-            tail: Tail limit
-            range: Range tuple
 
         Returns:
             Result dictionary
@@ -152,7 +149,6 @@ class OdtAnalyzer(OdfAnalyzer):
         result: Dict[str, Any] = {}
 
         if sections:
-            sections = self._apply_semantic_slice(sections, head, tail, range)
             result['sections'] = sections
 
         if tables:
@@ -174,8 +170,7 @@ class OdtAnalyzer(OdfAnalyzer):
 
         return result
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract document structure: headings, paragraphs, tables."""
         if self.parse_error:
             return self._error_result('odt_structure', self.parse_error)
@@ -207,7 +202,7 @@ class OdtAnalyzer(OdfAnalyzer):
             para_count += para_inc
             word_count += word_inc
 
-        result = self._build_odf_result(sections, tables, para_count, word_count, head, tail, range)
+        result = self._build_odf_result(sections, tables, para_count, word_count)
         return ResultBuilder.create(
             result_type='odt_structure',
             source=self.path,
@@ -296,8 +291,7 @@ class OdtAnalyzer(OdfAnalyzer):
 class OdsAnalyzer(OdfAnalyzer):
     """Analyzer for LibreOffice/OpenOffice Calc spreadsheets (.ods)."""
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract spreadsheet structure: sheets, dimensions."""
         if self.parse_error:
             return self._error_result('ods_structure', self.parse_error)
@@ -336,7 +330,6 @@ class OdsAnalyzer(OdfAnalyzer):
                     'name': f"{s['name']} - {s['rows']} rows, {s['cols']} cols",
                     'line': s['line'],
                 })
-            formatted_sheets = self._apply_semantic_slice(formatted_sheets, head, tail, range)
             data['sheets'] = formatted_sheets
 
         return ResultBuilder.create(
@@ -446,8 +439,7 @@ class OdsAnalyzer(OdfAnalyzer):
 class OdpAnalyzer(OdfAnalyzer):
     """Analyzer for LibreOffice/OpenOffice Impress presentations (.odp)."""
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract presentation structure: slides with titles."""
         if self.parse_error:
             return self._error_result('odp_structure', self.parse_error)
@@ -485,7 +477,6 @@ class OdpAnalyzer(OdfAnalyzer):
                     'name': f"[{s['slide_num']}] {s['name']}{frames_info}",
                     'line': s['line'],
                 })
-            formatted_slides = self._apply_semantic_slice(formatted_slides, head, tail, range)
             data['slides'] = formatted_slides
 
         # Media

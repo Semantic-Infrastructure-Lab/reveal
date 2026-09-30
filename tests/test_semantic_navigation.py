@@ -10,101 +10,106 @@ from pathlib import Path
 import pytest
 
 from reveal.analyzers.jsonl import JsonlAnalyzer
-from reveal.analyzers.markdown import MarkdownAnalyzer
+from reveal.api import analyze
+from reveal.utils.results import slice_items, slice_structure
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
 pytestmark = pytest.mark.component
 
 
-class TestSemanticSliceHelper(unittest.TestCase):
-    """Test the base _apply_semantic_slice helper function."""
+def _cut(result, field):
+    """The (shown, total, cause) a result records for a cut ``field``, or None."""
+    for w in (result.get('meta') or {}).get('warnings') or []:
+        if w.get('type') == 'truncated' and w.get('field') == field:
+            return w['shown'], w['total'], w['cause']
+    return None
 
-    def setUp(self):
-        """Create test data."""
-        self.test_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
-        self.test_file.write("test content")
-        self.test_file.close()
-        self.analyzer = JsonlAnalyzer(self.test_file.name)
 
-        # Sample data
-        self.items = [
-            {'name': 'item1', 'line': 1},
-            {'name': 'item2', 'line': 2},
-            {'name': 'item3', 'line': 3},
-            {'name': 'item4', 'line': 4},
-            {'name': 'item5', 'line': 5},
-            {'name': 'item6', 'line': 6},
-            {'name': 'item7', 'line': 7},
-            {'name': 'item8', 'line': 8},
-            {'name': 'item9', 'line': 9},
-            {'name': 'item10', 'line': 10},
-        ]
+class TestSliceItems(unittest.TestCase):
+    """reveal.utils.results.slice_items: --head/--tail/--range on one list (BACK-1548)."""
 
-    def tearDown(self):
-        """Clean up test file."""
-        Path(self.test_file.name).unlink(missing_ok=True)
+    items = [{'name': f'item{i}', 'line': i} for i in range(1, 11)]
 
     def test_head_basic(self):
-        """Test head slicing."""
-        result = self.analyzer._apply_semantic_slice(self.items, head=3)
-        self.assertEqual(len(result), 3)
-        self.assertEqual(result[0]['name'], 'item1')
-        self.assertEqual(result[2]['name'], 'item3')
+        result = slice_items(self.items, head=3)
+        self.assertEqual([r['name'] for r in result], ['item1', 'item2', 'item3'])
 
     def test_head_larger_than_list(self):
-        """Test head with N > list length."""
-        result = self.analyzer._apply_semantic_slice(self.items, head=20)
-        self.assertEqual(len(result), 10)  # Returns all items
+        self.assertEqual(len(slice_items(self.items, head=20)), 10)
 
-    def test_head_zero(self):
-        """Test head with N = 0."""
-        result = self.analyzer._apply_semantic_slice(self.items, head=0)
-        self.assertEqual(len(result), 0)
+    def test_head_zero_cuts_nothing(self):
+        """0 is 'no flag', as `reveal f.py --head 0` has always shown the whole list."""
+        self.assertEqual(slice_items(self.items, head=0), self.items)
 
     def test_tail_basic(self):
-        """Test tail slicing."""
-        result = self.analyzer._apply_semantic_slice(self.items, tail=3)
-        self.assertEqual(len(result), 3)
-        self.assertEqual(result[0]['name'], 'item8')
-        self.assertEqual(result[2]['name'], 'item10')
+        result = slice_items(self.items, tail=3)
+        self.assertEqual([r['name'] for r in result], ['item8', 'item9', 'item10'])
 
     def test_tail_larger_than_list(self):
-        """Test tail with N > list length."""
-        result = self.analyzer._apply_semantic_slice(self.items, tail=20)
-        self.assertEqual(len(result), 10)  # Returns all items
+        self.assertEqual(len(slice_items(self.items, tail=20)), 10)
 
-    def test_range_basic(self):
-        """Test range slicing (1-indexed, inclusive)."""
-        result = self.analyzer._apply_semantic_slice(self.items, range=(3, 5))
-        self.assertEqual(len(result), 3)  # items 3, 4, 5
-        self.assertEqual(result[0]['name'], 'item3')
-        self.assertEqual(result[2]['name'], 'item5')
+    def test_range_is_one_indexed_and_inclusive(self):
+        result = slice_items(self.items, range_=(3, 5))
+        self.assertEqual([r['name'] for r in result], ['item3', 'item4', 'item5'])
 
     def test_range_single_item(self):
-        """Test range with start == end."""
-        result = self.analyzer._apply_semantic_slice(self.items, range=(5, 5))
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]['name'], 'item5')
+        self.assertEqual(slice_items(self.items, range_=(5, 5)), [self.items[4]])
 
     def test_range_full_list(self):
-        """Test range covering entire list."""
-        result = self.analyzer._apply_semantic_slice(self.items, range=(1, 10))
-        self.assertEqual(len(result), 10)
+        self.assertEqual(len(slice_items(self.items, range_=(1, 10))), 10)
 
     def test_no_slicing(self):
-        """Test with no arguments - returns all items."""
-        result = self.analyzer._apply_semantic_slice(self.items)
-        self.assertEqual(len(result), 10)
-        self.assertEqual(result, self.items)
+        self.assertEqual(slice_items(self.items), self.items)
 
     def test_empty_list(self):
-        """Test slicing empty list."""
-        result = self.analyzer._apply_semantic_slice([], head=5)
-        self.assertEqual(result, [])
+        self.assertEqual(slice_items([], head=5), [])
+
+
+class TestSliceStructure(unittest.TestCase):
+    """reveal.utils.results.slice_structure: file mode's one cut, disclosed (BACK-1548)."""
+
+    def _structure(self):
+        return {'functions': [{'name': f'f{i}'} for i in range(6)],
+                'classes': [{'name': f'C{i}'} for i in range(3)],
+                'stats': {'total': 9}, '_has_errors': True}
+
+    def test_every_list_is_cut_per_category_and_disclosed(self):
+        s = self._structure()
+        self.assertEqual(slice_structure(s, head=2), ['functions', 'classes'])
+        self.assertEqual((len(s['functions']), len(s['classes'])), (2, 2))
+        self.assertEqual(_cut(s, 'functions'), (2, 6, 'head'))
+        self.assertEqual(_cut(s, 'classes'), (2, 3, 'head'))
+        self.assertEqual(s['stats'], {'total': 9})  # not a list: untouched
+
+    def test_a_list_the_cut_leaves_whole_records_nothing(self):
+        s = self._structure()
+        slice_structure(s, head=5)
+        self.assertIsNotNone(_cut(s, 'functions'))
+        self.assertIsNone(_cut(s, 'classes'))
+
+    def test_fields_limits_the_cut(self):
+        s = self._structure()
+        self.assertEqual(slice_structure(s, tail=1, fields=('classes',)), ['classes'])
+        self.assertEqual(len(s['functions']), 6)
+        self.assertEqual(s['classes'], [{'name': 'C2'}])
+
+    def test_default_head_is_a_disclosed_sample(self):
+        s = self._structure()
+        slice_structure(s, default_head=4, fields=('functions',))
+        self.assertEqual(_cut(s, 'functions'), (4, 6, 'sample'))
+
+    def test_a_flag_overrides_the_default_sample(self):
+        s = self._structure()
+        slice_structure(s, head=5, default_head=2, fields=('functions',))
+        self.assertEqual(len(s['functions']), 5)
+
+    def test_nothing_to_slice_returns_no_fields(self):
+        self.assertEqual(slice_structure({'stats': {}}, head=2), [])
+        self.assertEqual(slice_structure(self._structure()), [])
 
 
 class TestJsonlAnalyzerNavigation(unittest.TestCase):
-    """Test semantic navigation in JSONL analyzer."""
+    """--head/--tail/--range on JSONL records, through reveal.api.analyze (the CLI's cut)."""
 
     def setUp(self):
         """Create test JSONL file."""
@@ -122,52 +127,50 @@ class TestJsonlAnalyzerNavigation(unittest.TestCase):
             self.test_file.write(json.dumps(record) + '\n')
 
         self.test_file.close()
-        self.analyzer = JsonlAnalyzer(self.test_file.name)
+        self.path = self.test_file.name
 
     def tearDown(self):
         """Clean up test file."""
         Path(self.test_file.name).unlink(missing_ok=True)
 
     def test_default_shows_first_10(self):
-        """Default behavior shows first 10 records (+ summary)."""
-        structure = self.analyzer.get_structure()
-        # Summary + 10 records
-        self.assertEqual(len(structure['records']), 11)
-        self.assertEqual(structure['records'][0]['name'], '📊 Summary: 20 records')
+        """Default behavior shows a disclosed sample of the first 10 records."""
+        structure = analyze(self.path)
+        self.assertEqual(len(structure['records']), 10)
+        self.assertEqual(_cut(structure, 'records'), (10, 20, 'sample'))
+
+    def test_the_analyzer_returns_every_record(self):
+        self.assertEqual(len(JsonlAnalyzer(self.path).get_structure()['records']), 20)
 
     def test_head_argument(self):
-        """Test --head shows first N records (+ summary)."""
-        structure = self.analyzer.get_structure(head=5)
-        # Summary + 5 records
-        self.assertEqual(len(structure['records']), 6)
-        self.assertIn('assistant #1', structure['records'][1]['name'])
-        self.assertIn('assistant #5', structure['records'][5]['name'])
+        structure = analyze(self.path, head=5)
+        self.assertEqual(len(structure['records']), 5)
+        self.assertIn('assistant #1', structure['records'][0]['name'])
+        self.assertIn('assistant #5', structure['records'][4]['name'])
+        self.assertEqual(_cut(structure, 'records'), (5, 20, 'head'))
 
     def test_tail_argument(self):
-        """Test --tail shows last N records (+ summary)."""
-        structure = self.analyzer.get_structure(tail=3)
-        # Summary + 3 records
-        self.assertEqual(len(structure['records']), 4)
-        self.assertIn('#18', structure['records'][1]['name'])
-        self.assertIn('#20', structure['records'][3]['name'])
+        structure = analyze(self.path, tail=3)
+        self.assertEqual(len(structure['records']), 3)
+        self.assertIn('#18', structure['records'][0]['name'])
+        self.assertIn('#20', structure['records'][2]['name'])
 
     def test_range_argument(self):
-        """Test --range shows specific range (+ summary)."""
-        structure = self.analyzer.get_structure(range=(5, 7))
-        # Summary + 3 records (5, 6, 7)
-        self.assertEqual(len(structure['records']), 4)
-        self.assertIn('#5', structure['records'][1]['name'])
-        self.assertIn('#7', structure['records'][3]['name'])
+        structure = analyze(self.path, range=(5, 7))
+        self.assertEqual(len(structure['records']), 3)
+        self.assertIn('#5', structure['records'][0]['name'])
+        self.assertIn('#7', structure['records'][2]['name'])
 
-    def test_summary_always_included(self):
-        """Summary should always be present."""
+    def test_summary_is_its_own_field_and_never_cut(self):
+        """The summary was records[0], so a --head cut counted it as a record."""
         for kwargs in [{'head': 3}, {'tail': 3}, {'range': (1, 5)}, {}]:
-            structure = self.analyzer.get_structure(**kwargs)
-            self.assertEqual(structure['records'][0]['name'], '📊 Summary: 20 records')
+            structure = analyze(self.path, **kwargs)
+            self.assertEqual(structure['summary'][0]['name'], '📊 Summary: 20 records')
+            self.assertNotIn('Summary', structure['records'][0]['name'])
 
 
 class TestPythonAnalyzerNavigation(unittest.TestCase):
-    """Test semantic navigation in Python analyzer (via TreeSitter)."""
+    """--head/--tail/--range on tree-sitter functions, through reveal.api.analyze."""
 
     def setUp(self):
         """Create test Python file with multiple functions."""
@@ -189,51 +192,27 @@ class TestPythonAnalyzerNavigation(unittest.TestCase):
         Path(self.test_file.name).unlink(missing_ok=True)
 
     def test_head_functions(self):
-        """Test --head shows first N functions."""
-        try:
-            # PythonAnalyzer is a TreeSitterAnalyzer subclass
-            from reveal.analyzers.python import PythonAnalyzer
-            analyzer = PythonAnalyzer(self.test_file.name)
-            structure = analyzer.get_structure(head=3)
-
-            self.assertIn('functions', structure)
-            self.assertEqual(len(structure['functions']), 3)
-            self.assertIn('func1', structure['functions'][0]['name'])
-            self.assertIn('func3', structure['functions'][2]['name'])
-        except ImportError:
-            self.skipTest("tree-sitter-languages not available")
+        structure = analyze(self.test_file.name, head=3)
+        self.assertEqual(len(structure['functions']), 3)
+        self.assertIn('func1', structure['functions'][0]['name'])
+        self.assertIn('func3', structure['functions'][2]['name'])
+        self.assertEqual(_cut(structure, 'functions'), (3, 10, 'head'))
 
     def test_tail_functions(self):
-        """Test --tail shows last N functions."""
-        try:
-            from reveal.analyzers.python import PythonAnalyzer
-            analyzer = PythonAnalyzer(self.test_file.name)
-            structure = analyzer.get_structure(tail=3)
-
-            self.assertIn('functions', structure)
-            self.assertEqual(len(structure['functions']), 3)
-            self.assertIn('func8', structure['functions'][0]['name'])
-            self.assertIn('func10', structure['functions'][2]['name'])
-        except ImportError:
-            self.skipTest("tree-sitter-languages not available")
+        structure = analyze(self.test_file.name, tail=3)
+        self.assertEqual(len(structure['functions']), 3)
+        self.assertIn('func8', structure['functions'][0]['name'])
+        self.assertIn('func10', structure['functions'][2]['name'])
 
     def test_range_functions(self):
-        """Test --range shows specific range of functions."""
-        try:
-            from reveal.analyzers.python import PythonAnalyzer
-            analyzer = PythonAnalyzer(self.test_file.name)
-            structure = analyzer.get_structure(range=(3, 5))
-
-            self.assertIn('functions', structure)
-            self.assertEqual(len(structure['functions']), 3)
-            self.assertIn('func3', structure['functions'][0]['name'])
-            self.assertIn('func5', structure['functions'][2]['name'])
-        except ImportError:
-            self.skipTest("tree-sitter-languages not available")
+        structure = analyze(self.test_file.name, range=(3, 5))
+        self.assertEqual(len(structure['functions']), 3)
+        self.assertIn('func3', structure['functions'][0]['name'])
+        self.assertIn('func5', structure['functions'][2]['name'])
 
 
 class TestMarkdownAnalyzerNavigation(unittest.TestCase):
-    """Test semantic navigation in Markdown analyzer."""
+    """--head/--tail/--range on markdown headings, through reveal.api.analyze."""
 
     def setUp(self):
         """Create test Markdown file with multiple headings."""
@@ -247,48 +226,44 @@ class TestMarkdownAnalyzerNavigation(unittest.TestCase):
             self.test_file.write(f"Content for section {i}.\n\n")
 
         self.test_file.close()
-        self.analyzer = MarkdownAnalyzer(self.test_file.name)
+        self.path = self.test_file.name
 
     def tearDown(self):
         """Clean up test file."""
         Path(self.test_file.name).unlink(missing_ok=True)
 
     def test_head_headings(self):
-        """Test --head shows first N headings."""
-        structure = self.analyzer.get_structure(head=3)
+        structure = analyze(self.path, head=3)
         self.assertEqual(len(structure['headings']), 3)
         self.assertIn('Heading 1', structure['headings'][0]['name'])
         self.assertIn('Heading 3', structure['headings'][2]['name'])
 
     def test_tail_headings(self):
-        """Test --tail shows last N headings."""
-        structure = self.analyzer.get_structure(tail=3)
+        structure = analyze(self.path, tail=3)
         self.assertEqual(len(structure['headings']), 3)
         self.assertIn('Heading 8', structure['headings'][0]['name'])
         self.assertIn('Heading 10', structure['headings'][2]['name'])
 
     def test_range_headings(self):
-        """Test --range shows specific range of headings."""
-        structure = self.analyzer.get_structure(range=(4, 6))
+        structure = analyze(self.path, range=(4, 6))
         self.assertEqual(len(structure['headings']), 3)
         self.assertIn('Heading 4', structure['headings'][0]['name'])
         self.assertIn('Heading 6', structure['headings'][2]['name'])
 
     def test_navigation_with_links_extraction(self):
-        """Test that navigation works with link extraction enabled."""
-        # Add some links to test file
+        """--head with --links keeps headings beside the links (c3b33c66), both cut."""
         test_file2 = tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False)
         test_file2.write("# Section 1\n[Link 1](http://example.com)\n\n")
         test_file2.write("# Section 2\n[Link 2](http://test.com)\n\n")
         test_file2.write("# Section 3\n[Link 3](http://demo.com)\n\n")
         test_file2.close()
 
-        analyzer = MarkdownAnalyzer(test_file2.name)
-        structure = analyzer.get_structure(head=2, extract_links=True)
+        structure = analyze(test_file2.name, head=2, extract_links=True)
 
-        # Should have 2 headings and 2 links
         self.assertEqual(len(structure['headings']), 2)
         self.assertEqual(len(structure['links']), 2)
+        # Without a walk, --links is a filter: links only.
+        self.assertNotIn('headings', analyze(test_file2.name, extract_links=True))
 
         Path(test_file2.name).unlink(missing_ok=True)
 

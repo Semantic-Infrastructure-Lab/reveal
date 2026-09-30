@@ -817,24 +817,38 @@ class TestAnalyzer:
             self.assertEqual(len(detections), 1)
             self.assertIn('kwargs', detections[0].message.lower())
 
-    def test_detects_missing_base_params(self):
-        """Test detection of get_structure with **kwargs but missing base params."""
+    def test_kwargs_only_is_the_contract(self):
+        """get_structure(self, **kwargs) is the whole contract (BACK-1548)."""
         with tempfile.TemporaryDirectory() as tmpdir:
             analyzer_path = Path(tmpdir) / "test_analyzer.py"
-            # Create analyzer with **kwargs but missing head/tail/range
             analyzer_path.write_text("""
 class TestAnalyzer:
     def get_structure(self, **kwargs):
         return {}
-""")
+""", encoding='utf-8')
+            self.assertEqual(self.rule._check_analyzer_file(analyzer_path), [])
 
+    def test_detects_slicing_params(self):
+        """An analyzer that declares head/tail/range slices nothing: the display layer cuts."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            analyzer_path = Path(tmpdir) / "test_analyzer.py"
+            analyzer_path.write_text("""
+class TestAnalyzer:
+    def get_structure(self, head=None, tail=None, range=None, **kwargs):
+        return {}
+""", encoding='utf-8')
             detections = self.rule._check_analyzer_file(analyzer_path)
             self.assertEqual(len(detections), 1)
-            self.assertIn('missing base parameters', detections[0].message.lower())
-            # Should mention at least one of: head, tail, range
-            self.assertTrue(
-                any(param in detections[0].message for param in ['head', 'tail', 'range'])
-            )
+            self.assertIn('declares head, tail, range', detections[0].message)
+            self.assertIn('SLICE_FIELDS', detections[0].suggestion)
+
+    def test_no_reveal_analyzer_declares_slicing_params(self):
+        """The ratchet: reveal's own analyzers stay clean."""
+        root = find_reveal_root()
+        self.assertIsNotNone(root)
+        detections = [d for f in self.rule._get_analyzer_files(root)
+                      for d in self.rule._check_analyzer_file(f)]
+        self.assertEqual([d.message for d in detections], [])
 
     def test_get_analyzer_files_no_directory(self):
         """Test _get_analyzer_files returns empty list when analyzers/ doesn't exist."""

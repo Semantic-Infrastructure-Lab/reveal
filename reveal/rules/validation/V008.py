@@ -1,7 +1,10 @@
 """V008: Analyzer get_structure signature validation.
 
-Validates that all analyzer get_structure() methods accept **kwargs.
-This prevents TypeError when the display layer passes optional parameters.
+Validates that all analyzer get_structure() methods accept **kwargs, and that none
+declares head/tail/range. **kwargs prevents a TypeError when the display layer passes
+optional parameters. head/tail/range are never passed: the display layer cuts the
+result once (FileAnalyzer.cut_structure, BACK-1548), so an analyzer that declares them
+slices nothing and reads as if it did.
 
 Example violation:
     - Analyzer: reveal/analyzers/yaml_json.py (JsonAnalyzer)
@@ -38,7 +41,7 @@ class DetectionContext:
 
 
 class V008(BaseRule):
-    """Validate that all analyzer get_structure methods accept **kwargs."""
+    """Validate analyzer get_structure signatures: **kwargs, and no head/tail/range."""
 
     code = "V008"
     message = "Analyzer get_structure() missing **kwargs parameter"
@@ -125,25 +128,13 @@ class V008(BaseRule):
         if not has_kwargs:
             return self._create_missing_kwargs_detection(ctx)
 
-        # Check for required base parameters
-        param_names = [arg.arg for arg in func.args.args if arg.arg != 'self']
-        missing_params = self._find_missing_base_params(param_names)
-        if missing_params:
-            return self._create_missing_params_detection(ctx, missing_params)
+        # head/tail/range are the display layer's cut, never an analyzer's (BACK-1548)
+        param_names = [arg.arg for arg in func.args.args + func.args.kwonlyargs]
+        slicing = [param for param in ('head', 'tail', 'range') if param in param_names]
+        if slicing:
+            return self._create_slicing_params_detection(ctx, slicing)
 
         return None
-
-    def _find_missing_base_params(self, param_names: List[str]) -> List[str]:
-        """Find which required base parameters are missing.
-
-        Args:
-            param_names: List of parameter names from function signature
-
-        Returns:
-            List of missing parameter names (empty if all present)
-        """
-        required = ['head', 'tail', 'range']
-        return [param for param in required if param not in param_names]
 
     def _create_missing_kwargs_detection(
         self, ctx: DetectionContext
@@ -159,34 +150,37 @@ class V008(BaseRule):
             message=f"Class '{ctx.class_name}.get_structure()' missing **kwargs parameter",
             suggestion=(
                 "Update signature to match base class:\n"
-                "def get_structure(self, head=None, tail=None, range=None, **kwargs):"
+                "def get_structure(self, **kwargs):"
             ),
             context=(
-                "Base class FileAnalyzer.get_structure() accepts head/tail/range/**kwargs. "
+                "Base class FileAnalyzer.get_structure() accepts **kwargs. "
                 "Subclasses must maintain this contract (Liskov Substitution Principle)."
             )
         )
 
-    def _create_missing_params_detection(
-        self, ctx: DetectionContext, missing_params: List[str]
+    def _create_slicing_params_detection(
+        self, ctx: DetectionContext, params: List[str]
     ) -> Detection:
-        """Create detection for missing base parameters.
+        """Create detection for a get_structure that declares head/tail/range.
 
         Args:
             ctx: Location context for the detection
-            missing_params: List of parameter names that are missing
+            params: The slicing parameter names it declares
         """
         return self.create_detection(
             file_path=str(ctx.analyzer_path),
             line=ctx.line,
-            message=f"Class '{ctx.class_name}.get_structure()' missing base parameters: {', '.join(missing_params)}",
+            message=f"Class '{ctx.class_name}.get_structure()' declares {', '.join(params)}, "
+                    f"which it is never passed",
             suggestion=(
-                "Add base parameters for consistency:\n"
-                "def get_structure(self, head=None, tail=None, range=None, **kwargs):"
+                "Return every item and drop the parameters:\n"
+                "def get_structure(self, **kwargs):\n"
+                "Name the lists --head means with SLICE_FIELDS, and a no-flag sample with "
+                "DEFAULT_HEAD."
             ),
             context=(
-                "While **kwargs technically accepts these, explicitly declaring "
-                "head/tail/range improves clarity and matches base class contract."
+                "The display layer cuts get_structure()'s result once and discloses the cut "
+                "(FileAnalyzer.cut_structure, BACK-1548); an analyzer never sees --head."
             )
         )
 

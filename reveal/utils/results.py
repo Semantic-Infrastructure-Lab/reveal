@@ -59,6 +59,7 @@ _TRUNCATION_HINTS = {
     'limit': 'raise ?limit=N or page with ?offset=N',
     'auto_cap': 'add filters, or set ?limit=N',
     'max_items': 'raise --max-items',
+    'sample': 'choose others with --head/--tail/--range',
 }
 
 
@@ -147,6 +148,52 @@ def _truncation_message(field: str, shown: int, total: int, hint: str,
                         exact: bool = True) -> str:
     of = f'{total}' if exact else f'{total}+'
     return f'{field}: showing {shown} of {of}' + (f' — {hint}' if hint else '')
+
+
+def slice_items(items: list, head: Optional[int] = None, tail: Optional[int] = None,
+                range_: Optional[tuple] = None) -> list:
+    """``--head``/``--tail``/``--range`` on one list; ``range_`` is 1-indexed and inclusive."""
+    if head:
+        return items[:head]
+    if tail:
+        return items[-tail:]
+    if range_:
+        start, end = range_
+        return items[max(start - 1, 0):end]
+    return items
+
+
+def slice_structure(structure: Any, head: Optional[int] = None, tail: Optional[int] = None,
+                    range_: Optional[tuple] = None, fields: Optional[tuple] = None,
+                    default_head: Optional[int] = None) -> List[str]:
+    """Cut a file's structure for ``--head``/``--tail``/``--range``, once, and disclose it.
+
+    File mode's one slicer (BACK-1548). Each analyzer used to slice its own lists, eleven
+    through ``_apply_semantic_slice`` and five by hand, and none could record the cut:
+    ``reveal f.py --head 2`` returned 2 of 12 functions as the whole list, and seven
+    analyzers accepted the flag and dropped it. Every list in ``fields`` is cut
+    independently (``--head 5`` is the first 5 functions and the first 5 classes). With
+    ``fields=None`` that is every top-level list, except ``meta`` and ``_``-prefixed keys.
+
+    ``default_head`` is an analyzer's sample size when no flag is given (csv's 5 rows,
+    jsonl's 10 records), disclosed the same way. Returns the fields present, cut or not;
+    none means the flag had nothing to apply to.
+    """
+    if not isinstance(structure, dict):
+        return []
+    cause = 'head' if head else 'tail' if tail else 'range' if range_ else None
+    if cause is None:
+        if not default_head:
+            return []
+        head, cause = default_head, 'sample'
+    names = fields if fields is not None else [
+        k for k in structure if not k.startswith('_') and k != 'meta']
+    present = [k for k in names if isinstance(structure.get(k), list)]
+    for field in present:
+        total = len(structure[field])
+        structure[field] = slice_items(structure[field], head, tail, range_)
+        note_truncation(structure, field, len(structure[field]), total, cause)
+    return present
 
 
 def truncations_of(result: Any) -> List[Dict[str, Any]]:

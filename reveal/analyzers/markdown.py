@@ -123,7 +123,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             True if headings should be included
         """
         specific_features_requested = options.extract_links or options.extract_code
-        navigation_mode = options.head is not None or options.tail is not None or options.range is not None
+        navigation_mode = options.navigate
 
         # Include headings when:
         # - No specific features requested (default: show structure)
@@ -131,50 +131,22 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         # - Outline mode active (requires headings for hierarchy)
         return not specific_features_requested or navigation_mode or outline_mode
 
-    def _apply_slicing_to_results(self, result: Dict[str, Any],
-                                   head: Optional[int], tail: Optional[int], range: Optional[tuple]) -> None:
-        """Apply semantic slicing to all result categories except frontmatter.
-
-        Args:
-            result: Results dict to modify in place
-            head: Show first N items
-            tail: Show last N items
-            range: Show items in range (start, end)
-        """
-        for category in result:
-            if category != 'frontmatter':
-                result[category] = self._apply_semantic_slice(
-                    result[category], head, tail, range
-                )
-
     @staticmethod
-    def _build_md_options(options, head, tail, range, kwargs) -> 'StructureOptions':
+    def _build_md_options(options, kwargs) -> 'StructureOptions':
         """Build StructureOptions from explicit params and kwargs."""
         if options is not None:
             return cast('StructureOptions', options)
-        if head is not None:
-            kwargs['head'] = head
-        if tail is not None:
-            kwargs['tail'] = tail
-        if range is not None:
-            kwargs['range'] = range
         result: StructureOptions = StructureOptions.from_kwargs(**kwargs)
         return result
 
-    def get_structure(self, options: Optional[StructureOptions] = None, head: Optional[int] = None, tail: Optional[int] = None, range: Optional[str] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:  # type: ignore[override]
+    def get_structure(self, options: Optional[StructureOptions] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract markdown structure.
 
         Args:
             options: StructureOptions config object (recommended)
-            head: Show first N semantic units (per category)
-            tail: Show last N semantic units (per category)
-            range: Show semantic units in range (start, end) - 1-indexed (per category)
             **kwargs: Additional options for backward compatibility
 
         Supported options (via StructureOptions or kwargs):
-            head: Show first N semantic units (per category)
-            tail: Show last N semantic units (per category)
-            range: Show semantic units in range (start, end) - 1-indexed (per category)
             extract_links: Include link extraction
             link_type: Filter links by type (internal, external, email)
             domain: Filter links by domain
@@ -188,15 +160,12 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         Returns:
             Dict with headings and optionally links/code/frontmatter/related
-
-        Note: Slicing applies to each category independently
-        (e.g., --head 5 shows first 5 headings AND first 5 links)
         """
-        options = self._build_md_options(options, head, tail, range, kwargs)
+        options = self._build_md_options(options, kwargs)
 
         data: Dict[str, Any] = {}
 
-        # Extract front matter if requested (always first, not affected by slicing)
+        # Extract front matter if requested (always first; a dict, so --head never cuts it)
         if options.extract_frontmatter:
             data['frontmatter'] = self._extract_frontmatter()
 
@@ -226,10 +195,6 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 depth=options.related_depth,
                 limit=options.related_limit
             )
-
-        # Apply semantic slicing to each category (but not frontmatter - it's unique)
-        if options.head or options.tail or options.range:
-            self._apply_slicing_to_results(data, options.head, options.tail, options.range)
 
         parse_mode = 'tree_sitter_full' if self.tree else 'regex'
         return ResultBuilder.create(

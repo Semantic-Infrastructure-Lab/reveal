@@ -16,9 +16,9 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
     and message schemas.
     """
     language = 'proto'
+    SLICE_FIELDS = ('services', 'rpcs', 'messages', 'enums')  # not the file's one package
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract Protocol Buffers structure."""
         if not self.tree:
             return {}
@@ -47,14 +47,6 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
 
         structure['messages'] = self._extract_messages()
         structure['enums'] = self._extract_enums()
-
-        # Apply semantic slicing to each category
-        if head or tail or range:
-            for category in structure:
-                if category != 'package':  # Don't slice package (only one)
-                    structure[category] = self._apply_semantic_slice(
-                        structure[category], head, tail, range
-                    )
 
         # Remove empty categories and add output contract fields
         return ResultBuilder.create(

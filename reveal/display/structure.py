@@ -8,6 +8,7 @@ from reveal.base import FileAnalyzer
 from reveal.defaults import DisplayDefaults
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
 from reveal.utils.path_utils import is_minified_content, is_minified_filename
+from reveal.utils.results import truncations_of
 
 from .coverage import format_coverage_warning, outline_coverage
 from .element import listed_item_line
@@ -26,6 +27,7 @@ from .formatting import (
     _format_xml_children,
     _format_markdown_headings,
     _build_analyzer_kwargs,
+    print_truncations,
 )
 
 
@@ -408,15 +410,20 @@ def _build_extractable_meta(structure: Dict[str, List[Dict[str, Any]]], file_pat
     }
 
 
-def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]]) -> None:
-    """Render structure as JSON output (standard format)."""
-    is_fallback = getattr(analyzer, 'is_fallback', False)
-    fallback_lang = getattr(analyzer, 'fallback_language', None)
-    file_path = str(analyzer.path)
-
-    # Add 'file' field to each element in structure for --stdin compatibility
-    enriched_structure = {}
+def _enrich_structure(structure: Dict[str, Any], file_path: str) -> Dict[str, Any]:
+    """The structure as JSON shows it: each item carries its 'file' (for --stdin), and the
+    cuts are the envelope's, not repeated here."""
+    enriched_structure: Dict[str, Any] = {}
     for category, items in structure.items():
+        # A cut is the envelope's meta.warnings entry (_render_json_output), not also the
+        # structure's; a meta that held only cuts (a tree-sitter result's) goes.
+        if category == 'meta' and isinstance(items, dict):
+            cuts = truncations_of(structure)
+            own_meta = dict(items, warnings=[w for w in items.get('warnings') or [] if w not in cuts])
+            if own_meta != {'warnings': []}:
+                enriched_structure[category] = own_meta
+            continue
+
         # Special handling for frontmatter and stats (single dict, not a list)
         if category in ('frontmatter', 'stats'):
             if isinstance(items, dict):
@@ -444,6 +451,16 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
             enriched_item['file'] = file_path
             enriched_items.append(enriched_item)
         enriched_structure[category] = enriched_items
+    return enriched_structure
+
+
+def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]]) -> None:
+    """Render structure as JSON output (standard format)."""
+    is_fallback = getattr(analyzer, 'is_fallback', False)
+    fallback_lang = getattr(analyzer, 'fallback_language', None)
+    file_path = str(analyzer.path)
+
+    enriched_structure = _enrich_structure(structure, file_path)
 
     # Build extractable meta for agent discoverability
     extractable_meta = _build_extractable_meta(structure, file_path)
@@ -474,6 +491,8 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
             'message': parse_error,
             'hint': 'Tree-sitter grammar fetch/parse failed — see INSTALL.md#network-requirements',
         }
+    if truncations_of(structure):
+        cast(Dict[str, Any], result['meta'])['warnings'] = truncations_of(structure)
     if structure.get('_has_errors'):
         cast(Dict[str, Any], result['meta'])['parse_recovered'] = True
     coverage = outline_coverage(structure, analyzer.lines)
@@ -806,6 +825,23 @@ def _apply_file_budget_constraints(structure: Dict[str, Any], args=None,
     return structure
 
 
+def _apply_head_tail_range(analyzer: FileAnalyzer, structure: Any, args) -> None:
+    """Cut a file's lists for --head/--tail/--range here, once, not in each analyzer (BACK-1548).
+
+    The cut is a ``note_truncation`` entry: JSON carries it in ``meta.warnings`` and text
+    prints it after the body. An analyzer names the lists the flags mean (csv: its sample
+    rows, not its columns) with ``SLICE_FIELDS``, and its no-flag sample with ``DEFAULT_HEAD``.
+    """
+    head = getattr(args, 'head', None) if args else None
+    tail = getattr(args, 'tail', None) if args else None
+    range_ = getattr(args, 'range', None) if args else None
+    sliced = analyzer.cut_structure(structure, head, tail, range_)
+    if (head or tail or range_) and not sliced:
+        flag = '--head' if head else '--tail' if tail else '--range'
+        print(f"Note: {flag} has no effect on {analyzer.path.name} -- its structure has no "
+              f"list to slice.", file=sys.stderr)
+
+
 def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config=None):
     """Show file structure.
 
@@ -825,11 +861,11 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
         kwargs['outline'] = args.outline
 
     structure = analyzer.get_structure(**kwargs)
+    _apply_head_tail_range(analyzer, structure, args)
     default_cap = _default_file_item_cap(analyzer, args, output_format)
     structure = _apply_file_budget_constraints(
         structure, args, default_cap=default_cap,
         looks_minified=default_cap == DisplayDefaults.MINIFIED_FILE_MAX_ITEMS)
-    path = analyzer.path
 
     # --frontmatter is a silent no-op in text mode (data is extracted but not
     # rendered) — hint instead of leaving the user to discover this by reading
@@ -852,10 +888,6 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
             file=sys.stderr,
         )
 
-    # Get fallback info
-    is_fallback = getattr(analyzer, 'is_fallback', False)
-    fallback_lang = cast(Optional[str], getattr(analyzer, 'fallback_language', None))
-
     # Handle --related-flat: output just paths, no decoration
     if args and getattr(args, 'related_flat', False) and 'related' in structure:
         from .formatting import _format_related_flat
@@ -863,6 +895,18 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
         for p in paths:
             print(p)
         return
+
+    _render_structure_view(analyzer, structure, output_format, args, config)
+    if truncations_of(structure):
+        print_truncations(structure, output_format)
+
+
+def _render_structure_view(analyzer: FileAnalyzer, structure: Dict[str, Any], output_format: str,
+                           args=None, config=None) -> None:
+    """Render a file's structure as the typed, outline or standard (JSON/text) view."""
+    path = analyzer.path
+    is_fallback = getattr(analyzer, 'is_fallback', False)
+    fallback_lang = cast(Optional[str], getattr(analyzer, 'fallback_language', None))
 
     # Handle --typed flag (new Type-First Architecture)
     if args and getattr(args, 'typed', False):

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from reveal.analyzers.markdown import MarkdownAnalyzer
+from conftest import sliced_structure
 
 # BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -339,7 +340,7 @@ Content here.
         path = self.create_temp_markdown(content)
         try:
             analyzer = MarkdownAnalyzer(path)
-            structure = analyzer.get_structure(head=2)
+            structure = sliced_structure(analyzer, head=2)
 
             headings = structure['headings']
             self.assertEqual(len(headings), 2)
@@ -360,7 +361,7 @@ Content here.
         path = self.create_temp_markdown(content)
         try:
             analyzer = MarkdownAnalyzer(path)
-            structure = analyzer.get_structure(tail=2)
+            structure = sliced_structure(analyzer, tail=2)
 
             headings = structure['headings']
             self.assertEqual(len(headings), 2)

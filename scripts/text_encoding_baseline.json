@@ -146,7 +146,7 @@
  "tests/test_schema_validation_cli.py": 19,
  "tests/test_scope_census.py": 2,
  "tests/test_section_cli_regression.py": 2,
- "tests/test_semantic_navigation.py": 6,
+ "tests/test_semantic_navigation.py": 5,
  "tests/test_shebang_detection.py": 3,
  "tests/test_sqlite_adapter.py": 13,
  "tests/test_ssl_adapter.py": 8,
@@ -168,7 +168,7 @@
  "tests/test_utils_updates.py": 4,
  "tests/test_v022_package_manifest.py": 38,
  "tests/test_v026_rule.py": 6,
- "tests/test_validation_rules.py": 26,
+ "tests/test_validation_rules.py": 25,
  "tests/test_version.py": 2,
  "tests/test_warning_disclosure.py": 13,
  "tests/test_worker_logging.py": 2

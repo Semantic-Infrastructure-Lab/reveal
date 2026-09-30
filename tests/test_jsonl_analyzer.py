@@ -7,6 +7,7 @@ import json
 import pytest
 
 from reveal.analyzers.jsonl import JsonlAnalyzer
+from conftest import sliced_structure
 
 # BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -49,13 +50,9 @@ class TestJsonlAnalyzer(unittest.TestCase):
             analyzer = JsonlAnalyzer(path)
             structure = analyzer.get_structure()
 
-            self.assertIn('records', structure)
-            # Summary + records
-            records_out = structure['records']
-            self.assertGreater(len(records_out), 0)
-
-            # First should be summary
-            self.assertIn('Summary', records_out[0]['name'])
+            # The summary is its own field; records holds records only (BACK-1548)
+            self.assertIn('Summary', structure['summary'][0]['name'])
+            self.assertEqual(len(structure['records']), 3)
 
         finally:
             self.teardown_file(path)
@@ -72,7 +69,7 @@ class TestJsonlAnalyzer(unittest.TestCase):
             analyzer = JsonlAnalyzer(path)
             structure = analyzer.get_structure()
 
-            summary = structure['records'][0]
+            summary = structure['summary'][0]
             # Should show type distribution
             self.assertIn('a: 2', summary['preview'])
             self.assertIn('b: 1', summary['preview'])
@@ -88,7 +85,8 @@ class TestJsonlAnalyzer(unittest.TestCase):
             structure = analyzer.get_structure()
 
             # Should have summary showing 0 records
-            self.assertIn('0 records', structure['records'][0]['name'])
+            self.assertIn('0 records', structure['summary'][0]['name'])
+            self.assertEqual(structure['records'], [])
 
         finally:
             self.teardown_file(path)
@@ -208,10 +206,9 @@ class TestJsonlAnalyzer(unittest.TestCase):
         path = self.create_temp_jsonl(records)
         try:
             analyzer = JsonlAnalyzer(path)
-            structure = analyzer.get_structure(head=3)
+            structure = sliced_structure(analyzer, head=3)
 
-            # Summary + 3 records
-            self.assertEqual(len(structure['records']), 4)
+            self.assertEqual(len(structure['records']), 3)
 
         finally:
             self.teardown_file(path)
@@ -222,10 +219,9 @@ class TestJsonlAnalyzer(unittest.TestCase):
         path = self.create_temp_jsonl(records)
         try:
             analyzer = JsonlAnalyzer(path)
-            structure = analyzer.get_structure(tail=3)
+            structure = sliced_structure(analyzer, tail=3)
 
-            # Summary + 3 records
-            self.assertEqual(len(structure['records']), 4)
+            self.assertEqual(len(structure['records']), 3)
 
         finally:
             self.teardown_file(path)
@@ -236,10 +232,13 @@ class TestJsonlAnalyzer(unittest.TestCase):
         path = self.create_temp_jsonl(records)
         try:
             analyzer = JsonlAnalyzer(path)
-            structure = analyzer.get_structure()
+            self.assertEqual(len(analyzer.get_structure()['records']), 50)  # the analyzer's is whole
 
-            # Summary + 10 default records
-            self.assertEqual(len(structure['records']), 11)
+            # The display shows a 10-record sample, and says so
+            structure = sliced_structure(analyzer)
+            self.assertEqual(len(structure['records']), 10)
+            cut, = [w for w in structure['meta']['warnings'] if w['type'] == 'truncated']
+            self.assertEqual((cut['shown'], cut['total'], cut['cause']), (10, 50, 'sample'))
 
         finally:
             self.teardown_file(path)
@@ -253,7 +252,7 @@ class TestJsonlAnalyzer(unittest.TestCase):
             structure = analyzer.get_structure()
 
             # Should find 3 records despite empty lines
-            self.assertIn('3 records', structure['records'][0]['name'])
+            self.assertIn('3 records', structure['summary'][0]['name'])
 
         finally:
             self.teardown_file(path)

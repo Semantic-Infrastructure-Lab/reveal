@@ -26,11 +26,11 @@ from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import Any, Callable, Dict, Union
 
+from ...display.formatting import print_truncations
 from ...utils.exclusions import dispatch_scope, exclusion_scope
 from ...utils.json_utils import attach_provenance
 from ...utils.results import add_cli_contract_fields, outcome_of
 from .ledger import FlagLedger, peek
-from .uri import print_truncations
 
 # The adapter's own identity keys: a subcommand re-states them with its own name and the
 # resolved path it was given. contract_version and meta stay (BACK-1178).

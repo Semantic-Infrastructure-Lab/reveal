@@ -1137,10 +1137,10 @@ reveal 'json://config.json?flatten'
 reveal conversation.jsonl --head 10    # First 10 records
 reveal conversation.jsonl --tail 5     # Last 5 records
 reveal conversation.jsonl --range 48-52 # Records 48-52
-reveal conversation.jsonl --range 42-42  # One specific record (a bare `42` prints a ±10-line raw window)
+reveal conversation.jsonl 42           # Record 42 (as --range 42-42 does)
 ```
 
-**JSONL is different:** Each line is a separate JSON object (common for logs, LLM conversations, datasets). Use `--head`, `--tail`, `--range` to navigate records without loading entire file.
+**JSONL is different:** Each line is a separate JSON object (common for logs, LLM conversations, datasets). `--head`, `--tail`, `--range` pick the records shown; the whole file is parsed either way. With none, the view shows the first 10 and says so.
 
 **json:// query parameters:**
 - `?schema` - Show JSON structure (types, keys)

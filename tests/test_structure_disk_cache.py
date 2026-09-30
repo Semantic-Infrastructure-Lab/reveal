@@ -14,6 +14,7 @@ import pytest
 from reveal.core import disk_cache
 from reveal import treesitter as ts_mod
 from reveal.analyzers.python import PythonAnalyzer
+from conftest import sliced_structure
 
 # BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
 pytestmark = pytest.mark.component
@@ -131,7 +132,7 @@ def test_slicing_applies_uniformly_to_cache_hit(tmp_path):
 
     ts_mod._get_parse_cache().clear()
     cached = PythonAnalyzer(str(src))
-    sliced = cached.get_structure(head=1)
+    sliced = sliced_structure(cached, head=1)
     assert len(sliced["functions"]) == 1
     assert sliced["functions"][0]["name"] == "alpha"
 

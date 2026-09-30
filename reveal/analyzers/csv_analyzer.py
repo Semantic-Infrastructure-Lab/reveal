@@ -33,6 +33,9 @@ class CsvAnalyzer(FileAnalyzer):
     Extract by row number to view specific records.
     """
 
+    SLICE_FIELDS = ('sample_rows',)  # --head picks rows; columns and schema are the whole file's
+    DEFAULT_HEAD = 5
+
     def _infer_type(self, values: List[str]) -> str:
         """Infer data type from sample values.
 
@@ -140,41 +143,15 @@ class CsvAnalyzer(FileAnalyzer):
             'sample_values': unique_values[:3]
         }
 
-    def _filter_sample_rows(self, rows: list, head: Optional[int] = None,
-                           tail: Optional[int] = None, range: Optional[tuple] = None) -> list:
-        """Apply filtering to rows based on head/tail/range.
-
-        Args:
-            rows: All data rows
-            head: Show first N rows
-            tail: Show last N rows
-            range: Show rows in range (start, end) - 1-indexed
-
-        Returns:
-            Filtered rows
-        """
-        if head is not None:
-            return rows[:head]
-        elif tail is not None:
-            return rows[-tail:]
-        elif range is not None:
-            start, end = range
-            return rows[start-1:end]  # Convert to 0-indexed
-        else:
-            return rows[:5]  # Default: show first 5 rows
-
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract CSV schema and statistics.
 
         Args:
-            head: Show first N rows
-            tail: Show last N rows
-            range: Show rows in range (start, end) - 1-indexed
             **kwargs: Additional parameters (unused)
 
         Returns:
-            Dict with schema, statistics, and sample rows
+            Dict with schema, statistics, and every row in 'sample_rows'; the display
+            shows DEFAULT_HEAD of them unless --head/--tail/--range picks rows.
         """
         delimiter = self._get_delimiter(self.content)
 
@@ -216,9 +193,6 @@ class CsvAnalyzer(FileAnalyzer):
                 for col_idx, col_name in enumerate(columns)
             ]
 
-            # Filter rows for sample
-            sample_rows = self._filter_sample_rows(rows, head, tail, range)
-
             return ResultBuilder.create(
                 result_type='csv_structure',
                 source=self.path,
@@ -227,7 +201,7 @@ class CsvAnalyzer(FileAnalyzer):
                     'column_count': len(columns),
                     'row_count': len(rows),
                     'schema': schema,
-                    'sample_rows': [dict(zip(columns, row)) for row in sample_rows],
+                    'sample_rows': [dict(zip(columns, row)) for row in rows],
                     'delimiter': 'comma' if delimiter == ',' else 'tab'
                 },
                 contract_version=CONTRACT_VERSION,

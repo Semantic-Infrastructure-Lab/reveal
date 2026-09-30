@@ -72,15 +72,12 @@ class BashAnalyzer(TreeSitterAnalyzer):
             })
         return variables
 
-    def get_structure(self, head=None, tail=None, range=None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract bash structure: functions + top-level variable assignments."""
-        structure = super().get_structure(head=head, tail=tail, range=range, **kwargs)
+        structure = super().get_structure(**kwargs)
 
         variables = self._extract_bash_variables()
         if variables:
-            if head or tail or range:
-                variables = self._apply_semantic_slice(variables, head, tail, range)
-            if variables:
-                structure['variables'] = variables
+            structure['variables'] = variables
 
         return structure

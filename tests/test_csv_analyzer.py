@@ -6,6 +6,7 @@ import os
 import pytest
 
 from reveal.analyzers.csv_analyzer import CsvAnalyzer
+from conftest import sliced_structure
 
 # BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -153,7 +154,7 @@ Bob\t25\tLA"""
 
         path = self.create_csv_file(content)
         analyzer = CsvAnalyzer(path)
-        structure = analyzer.get_structure(head=2)
+        structure = sliced_structure(analyzer, head=2)
 
         self.assertEqual(len(structure['sample_rows']), 2)
         self.assertEqual(structure['sample_rows'][0]['name'], 'Alice')
@@ -170,7 +171,7 @@ Bob\t25\tLA"""
 
         path = self.create_csv_file(content)
         analyzer = CsvAnalyzer(path)
-        structure = analyzer.get_structure(tail=2)
+        structure = sliced_structure(analyzer, tail=2)
 
         self.assertEqual(len(structure['sample_rows']), 2)
         self.assertEqual(structure['sample_rows'][0]['name'], 'David')
@@ -187,7 +188,7 @@ Bob\t25\tLA"""
 
         path = self.create_csv_file(content)
         analyzer = CsvAnalyzer(path)
-        structure = analyzer.get_structure(range=(2, 4))
+        structure = sliced_structure(analyzer, range=(2, 4))
 
         self.assertEqual(len(structure['sample_rows']), 3)
         self.assertEqual(structure['sample_rows'][0]['name'], 'Bob')

@@ -16,6 +16,7 @@ from reveal.analyzers.markdown import MarkdownAnalyzer
 from reveal.display import build_heading_hierarchy
 
 import pytest
+from conftest import sliced_structure
 
 # BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
 pytestmark = pytest.mark.component
@@ -377,11 +378,11 @@ x = 1
 
             # Should support all these without error
             structure1 = analyzer.get_structure()
-            structure2 = analyzer.get_structure(head=2)
-            structure3 = analyzer.get_structure(tail=2)
+            structure2 = sliced_structure(analyzer, head=2)
+            structure3 = sliced_structure(analyzer, tail=2)
             structure4 = analyzer.get_structure(extract_links=True)
             structure5 = analyzer.get_structure(extract_code=True)
-            structure6 = analyzer.get_structure(range=(1, 2))
+            structure6 = sliced_structure(analyzer, range=(1, 2))
             structure7 = analyzer.get_structure(outline=True)  # NEW: outline flag
 
             # All should return valid structures

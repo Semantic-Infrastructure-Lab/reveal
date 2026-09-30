@@ -16,7 +16,9 @@ from typing import Any, Callable, Iterable, Iterator, List, NoReturn, Optional, 
 from ...errors import NotApplicableError
 from ...reveal_types import CONTRACT_VERSION, RevealResult
 from ...utils import print_json_result, write_also_json
-from ...utils.results import ResultBuilder, note_truncation, outcome_of, truncations_of
+from ...display.formatting import print_truncations
+from ...utils.results import (ResultBuilder, note_truncation, outcome_of, slice_items,
+                             truncations_of)
 from .flag_specs import exclude_fragment, inject_query_flags, strip_result_control_keys
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
 from .formats import declared_output_formats, require_supported_format
@@ -949,21 +951,12 @@ def _record_cut(result: dict, field: str, total: int, cause: str, sole: bool) ->
         result['displayed_results'] = shown
 
 
-def _slice_items(items: list, head, tail, range_) -> list:
-    if head:
-        return items[:head]
-    if tail:
-        return items[-tail:]
-    start, end = range_
-    return items[max(start - 1, 0):end]
-
-
 def _apply_head_tail_range(result: dict, args: 'Namespace', adapter=None,
                            scheme: Optional[str] = None) -> dict:
     """Apply --head/--tail/--range to a directory-shaped URI structure result.
 
     BACK-1204: these flags already worked on bare-file structural listings
-    (display/formatting.py forwards them into analyzer.get_structure()) and
+    (display/structure.py cuts the analyzer's result, BACK-1548) and
     on element/text-body retrieval (BACK-355, uri.py's _render_element), but
     were a silent no-op specifically on a URI adapter's structure()-level
     list results (e.g. ast://<dir>'s 'results' field) -- confirmed live:
@@ -1002,7 +995,7 @@ def _apply_head_tail_range(result: dict, args: 'Namespace', adapter=None,
     cause = flag.lstrip('-')
     for field in fields:
         total = len(result[field])
-        result[field] = _slice_items(result[field], head, tail, range_)
+        result[field] = slice_items(result[field], head, tail, range_)
         _record_cut(result, field, total, cause, sole=len(fields) == 1)
     if len(fields) > 1:
         print(f"Note: {flag} applied to each of {', '.join(fields)} -- {scheme or 'this'}:// "
@@ -1081,26 +1074,6 @@ def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render, 
         print_truncations(result, args.format)
     if outcome == 'failed':
         sys.exit(1)
-
-
-def print_truncations(result: dict, output_format: str) -> None:
-    """Say, once, which lists the rendered answer shows only part of (BACK-1059).
-
-    Shared with the subcommand seam (subcommand.emit_subcommand_result), so ``reveal
-    overview`` and ``overview://`` disclose a cut the same way (BACK-1544).
-
-    Truncation was disclosed by whichever renderer knew the adapter's spelling of it, so
-    ``stats://?limit=2`` and ``markdown://?limit=2`` printed a cut list as the whole
-    answer. Renderers leave ``truncated`` warnings to this. JSON already carries them in
-    ``meta.warnings``; text gets them after the body, on stdout with it; any other format
-    (grep) gets them on stderr, so its lines stay parseable.
-    """
-    if output_format == 'json':
-        return
-    stream = sys.stdout if output_format == 'text' else sys.stderr
-    print(file=stream)
-    for entry in truncations_of(result):
-        print(f"⚠ Truncated {entry['message']}", file=stream)
 
 
 def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace') -> dict:

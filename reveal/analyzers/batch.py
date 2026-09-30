@@ -45,14 +45,10 @@ class BatchAnalyzer(FileAnalyzer):
     SETLOCAL_PATTERN = re.compile(r'\bsetlocal\b', re.IGNORECASE)
     REM_PATTERN = re.compile(r'^\s*(?:rem\s|::)', re.IGNORECASE)
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract batch file structure.
 
         Args:
-            head: Show first N labels
-            tail: Show last N labels
-            range: Show labels in range (start, end) - 1-indexed
             **kwargs: Additional parameters (unused)
 
         Returns:
@@ -63,15 +59,6 @@ class BatchAnalyzer(FileAnalyzer):
         variables = self._extract_variables()
         internal_calls = self._extract_internal_calls()
         external_calls = self._extract_external_calls()
-
-        # Apply filtering if requested
-        if head is not None:
-            labels = labels[:head]
-        elif tail is not None:
-            labels = labels[-tail:]
-        elif range is not None:
-            start, end = range
-            labels = labels[start-1:end]
 
         # Calculate statistics
         stats = self._calculate_stats()

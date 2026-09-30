@@ -542,36 +542,21 @@ class TreeSitterAnalyzer(FileAnalyzer):
             if len(parse_cache) > _MAX_PARSE_CACHE:
                 parse_cache.popitem(last=False)  # evict least-recently-used
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract structure using tree-sitter.
 
         Args:
-            head: Show first N semantic units (per category)
-            tail: Show last N semantic units (per category)
-            range: Show semantic units in range (start, end) - 1-indexed (per category)
             **kwargs: Additional parameters (unused)
 
         Returns imports, functions, classes, structs, etc.
         Works for ANY tree-sitter language!
-
-        Note: Slicing applies to each category independently
-        (e.g., --head 5 shows first 5 functions AND first 5 classes)
         """
         structure = self._get_or_build_structure()
         if not structure:
             return {}
 
-        # Apply semantic slicing to each category. `_apply_semantic_slice`
-        # returns new lists (never mutates in place), so slicing a
-        # disk-cache hit is safe even though it's shared with future hits.
-        if head or tail or range:
-            structure = {
-                category: self._apply_semantic_slice(items, head, tail, range)
-                for category, items in structure.items()
-            }
-
-        # Remove empty categories
+        # Remove empty categories. A new dict: the caller's --head cut (slice_structure)
+        # replaces its lists, and the disk-cache hit behind it is shared with later hits.
         result = {k: v for k, v in structure.items() if v}
 
         # BACK-1084: tree-sitter's error-tolerant parser still fabricates

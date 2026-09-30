@@ -41,7 +41,9 @@ def analyze(path: str, **kwargs: Any) -> Dict[str, Any]:
     Args:
         path: Path to the file to analyze.
         **kwargs: Additional keyword arguments forwarded to the analyzer's
-            ``get_structure()`` method (e.g. ``head``, ``tail``).
+            ``get_structure()`` method. ``head``, ``tail`` and ``range`` (1-indexed
+            ``(start, end)``) are not forwarded: they cut each list of the result, as
+            ``reveal FILE --head N`` does, and each cut is a ``meta.warnings`` entry.
 
     Returns:
         Dict with keys such as ``"functions"``, ``"classes"``, ``"imports"``,
@@ -67,8 +69,13 @@ def analyze(path: str, **kwargs: Any) -> Dict[str, Any]:
     if analyzer_class is None:
         raise ValueError(f"No analyzer available for: {path}")
 
+    head, tail, range_ = (kwargs.pop(k, None) for k in ('head', 'tail', 'range'))
+    if head or tail or range_:
+        kwargs.setdefault('navigate', True)  # as the CLI tells markdown (StructureOptions)
     analyzer = analyzer_class(str(file_path))
-    return analyzer.get_structure(**kwargs)
+    structure = analyzer.get_structure(**kwargs)
+    analyzer.cut_structure(structure, head, tail, range_)
+    return structure
 
 
 def element(

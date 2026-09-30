@@ -29,6 +29,9 @@ class JsonlAnalyzer(FileAnalyzer):
     Extract by record number to view specific entries.
     """
 
+    SLICE_FIELDS = ('records',)
+    DEFAULT_HEAD = 10  # sample shown when no --head/--tail/--range is given
+
     @staticmethod
     def _record_type(obj: Any, default: str = 'record') -> str:
         """A record's `type` when it is a string label; anything else (an
@@ -93,24 +96,16 @@ class JsonlAnalyzer(FileAnalyzer):
 
         return ' | '.join(parts) if parts else ''
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract JSONL record summary.
 
         Args:
-            head: Show first N records
-            tail: Show last N records
-            range: Show records in range (start, end) - 1-indexed
             **kwargs: Additional parameters (unused)
 
         Returns:
-            Dict with 'records' key containing record summaries
-
-        Default (no args): Shows first 10 records as samples
+            Dict with 'summary' (record count and types) and every record in 'records';
+            the display shows a sample of DEFAULT_HEAD unless --head/--tail/--range picks.
         """
-        DEFAULT_LIMIT = 10  # Show first 10 when no args specified
-
-        # First pass: parse all records and track metadata
         all_records = []
         record_types: Dict[str, int] = {}
         total_records = 0
@@ -129,7 +124,6 @@ class JsonlAnalyzer(FileAnalyzer):
                 rec_type = self._record_type(obj)
                 record_types[rec_type] = record_types.get(rec_type, 0) + 1
 
-                # Store all records for slicing
                 preview = self._build_preview(obj)
                 all_records.append({
                     'line_start': i,
@@ -148,15 +142,7 @@ class JsonlAnalyzer(FileAnalyzer):
                     'preview': f'Parse error: {str(e)[:50]}',
                 })
 
-        # Apply semantic slicing using base class helper
-        if head or tail or range:
-            # User explicitly requested slicing - apply it
-            selected_records = self._apply_semantic_slice(all_records, head, tail, range)
-        else:
-            # Default: show first 10 as samples
-            selected_records = all_records[:DEFAULT_LIMIT]
-
-        # Add summary as metadata (always included)
+        # Its own field, not records[0]: a --head cut counts records only (BACK-1548).
         summary = {
             'line_start': 0,
             'name': f'📊 Summary: {total_records} records',
@@ -167,7 +153,7 @@ class JsonlAnalyzer(FileAnalyzer):
         result = ResultBuilder.create(
             result_type='jsonl_structure',
             source=self.path,
-            data={'records': [summary] + selected_records},
+            data={'summary': [summary], 'records': all_records},
             contract_version=CONTRACT_VERSION,
             confidence=1.0 if not malformed else 0.5,
         )

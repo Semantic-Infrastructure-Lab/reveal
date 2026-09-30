@@ -48,9 +48,9 @@ class ElixirAnalyzer(TreeSitterAnalyzer):
     """
     language = 'elixir'
 
-    def get_structure(self, head=None, tail=None, range=None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract Elixir code structure with output contract fields."""
-        structure = super().get_structure(head=head, tail=tail, range=range, **kwargs)
+        structure = super().get_structure(**kwargs)
         return ResultBuilder.create(
             result_type='elixir_structure',
             source=self.path,

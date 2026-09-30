@@ -20,9 +20,7 @@ class TestStructureOptions(unittest.TestCase):
         opts = StructureOptions()
 
         # All options should be None or False by default
-        assert opts.head is None
-        assert opts.tail is None
-        assert opts.range is None
+        assert opts.navigate is False
         assert opts.extract_links is False
         assert opts.link_type is None
         assert opts.domain is None
@@ -44,7 +42,7 @@ class TestStructureOptions(unittest.TestCase):
     def test_initialization_with_values(self):
         """Test creating StructureOptions with custom values."""
         opts = StructureOptions(
-            head=10,
+            navigate=True,
             extract_links=True,
             link_type='external',
             domain='example.com',
@@ -52,7 +50,7 @@ class TestStructureOptions(unittest.TestCase):
             language='python'
         )
 
-        assert opts.head == 10
+        assert opts.navigate is True
         assert opts.extract_links is True
         assert opts.link_type == 'external'
         assert opts.domain == 'example.com'
@@ -62,12 +60,12 @@ class TestStructureOptions(unittest.TestCase):
     def test_from_kwargs_with_known_fields(self):
         """Test creating StructureOptions from kwargs with known fields."""
         opts = StructureOptions.from_kwargs(
-            head=5,
+            navigate=True,
             extract_links=True,
             outline=True
         )
 
-        assert opts.head == 5
+        assert opts.navigate is True
         assert opts.extract_links is True
         assert opts.outline is True
         assert opts.extra == {}
@@ -75,12 +73,12 @@ class TestStructureOptions(unittest.TestCase):
     def test_from_kwargs_with_unknown_fields(self):
         """Test that unknown kwargs go into extra dict."""
         opts = StructureOptions.from_kwargs(
-            head=10,
+            navigate=True,
             custom_option='value',
             another_option=42
         )
 
-        assert opts.head == 10
+        assert opts.navigate is True
         assert opts.extra == {
             'custom_option': 'value',
             'another_option': 42
@@ -89,14 +87,14 @@ class TestStructureOptions(unittest.TestCase):
     def test_from_kwargs_mixed_known_and_unknown(self):
         """Test from_kwargs with mix of known and unknown fields."""
         opts = StructureOptions.from_kwargs(
-            head=20,
+            navigate=True,
             extract_links=True,
             custom_field='custom_value',
             extract_code=True,
             unknown_param=123
         )
 
-        assert opts.head == 20
+        assert opts.navigate is True
         assert opts.extract_links is True
         assert opts.extract_code is True
         assert opts.extra == {
@@ -119,14 +117,14 @@ class TestStructureOptions(unittest.TestCase):
     def test_to_dict_with_values(self):
         """Test to_dict() with custom values."""
         opts = StructureOptions(
-            head=10,
+            navigate=True,
             extract_links=True,
             language='python',
             outline=True
         )
         result = opts.to_dict()
 
-        assert result['head'] == 10
+        assert result['navigate'] is True
         assert result['extract_links'] is True
         assert result['language'] == 'python'
         assert result['outline'] is True
@@ -140,12 +138,12 @@ class TestStructureOptions(unittest.TestCase):
     def test_to_dict_merges_extra_kwargs(self):
         """Test that to_dict() merges extra kwargs into result."""
         opts = StructureOptions(
-            head=5,
+            navigate=True,
             extra={'custom_option': 'value', 'another': 42}
         )
         result = opts.to_dict()
 
-        assert result['head'] == 5
+        assert result['navigate'] is True
         assert result['custom_option'] == 'value'
         assert result['another'] == 42
         assert result['related_depth'] == 1
@@ -154,8 +152,8 @@ class TestStructureOptions(unittest.TestCase):
     def test_to_dict_filters_none_and_false(self):
         """Test that to_dict() filters out None and False values."""
         opts = StructureOptions(
-            head=10,
-            tail=None,
+            navigate=True,
+            semantic=None,
             extract_links=False,
             language='python',
             domain=None,
@@ -164,8 +162,8 @@ class TestStructureOptions(unittest.TestCase):
         result = opts.to_dict()
 
         # Only non-None and non-False values
-        assert 'head' in result
-        assert 'tail' not in result
+        assert 'navigate' in result
+        assert 'semantic' not in result
         assert 'extract_links' not in result
         assert 'language' in result
         assert 'domain' not in result

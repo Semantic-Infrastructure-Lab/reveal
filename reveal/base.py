@@ -4,14 +4,13 @@ import os
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional, Dict, Any, List, TypeVar
+from typing import Optional, Dict, Any, List
 
 from reveal.utils import format_size, get_file_type_from_analyzer
+from reveal.utils.results import slice_structure
 
 logger = logging.getLogger(__name__)
 
-
-_T = TypeVar('_T')  # a record type (plain dict or StructureItem) -- slicing preserves it
 
 class FileAnalyzer(ABC):
     """Abstract base class for all file analyzers.
@@ -31,6 +30,13 @@ class FileAnalyzer(ABC):
     This is an Abstract Base Class - attempting to instantiate FileAnalyzer directly
     will raise TypeError. All concrete analyzer classes must implement get_structure().
     """
+
+    # --head/--tail/--range never reach get_structure(): the display layer cuts the result
+    # once (reveal.utils.results.slice_structure, BACK-1548). SLICE_FIELDS names the lists
+    # they mean -- None is every top-level list, cut per category. DEFAULT_HEAD is the
+    # sample shown when no flag is given, disclosed as a cut.
+    SLICE_FIELDS: Optional[tuple] = None
+    DEFAULT_HEAD: Optional[int] = None
 
     def __init__(self, path: str):
         self.path = Path(path)
@@ -91,54 +97,29 @@ class FileAnalyzer(ABC):
         }
 
     @abstractmethod
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
-        """Return file structure (imports, functions, classes, etc.).
+    def get_structure(self, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+        """Return file structure (imports, functions, classes, etc.), complete.
 
         Args:
-            head: Show first N semantic units
-            tail: Show last N semantic units
-            range: Show semantic units in range (start, end) - 1-indexed
             **kwargs: Additional analyzer-specific parameters
 
         REQUIRED: Must be implemented by all analyzer subclasses.
         This method defines the core contract for file analysis.
 
-        Note: head/tail/range are mutually exclusive and apply to semantic units
-        (records, functions, sections) not raw text lines.
+        Return every item: --head/--tail/--range are applied to the result by the caller
+        (see SLICE_FIELDS), so an analyzer never sees them.
         """
         pass  # Abstract method - must be implemented by subclasses
 
-    def _apply_semantic_slice(self, items: List[_T],
-                              head: Optional[int] = None, tail: Optional[int] = None,
-                              range: Optional[tuple] = None) -> List[_T]:
-        """Apply head/tail/range slicing to a list of semantic units.
+    def cut_structure(self, structure: Any, head: Optional[int] = None, tail: Optional[int] = None,
+                      range_: Optional[tuple] = None) -> List[str]:
+        """Cut this analyzer's ``get_structure()`` result for --head/--tail/--range, in place.
 
-        Args:
-            items: List of semantic units (records, functions, sections, etc.)
-            head: Show first N units
-            tail: Show last N units
-            range: Show units in range (start, end) - 1-indexed
-
-        Returns:
-            Sliced list of items
-
-        This is a shared helper that all analyzers can use to implement
-        semantic navigation consistently.
+        The one step the CLI (display.structure.show_structure) and reveal.api.analyze
+        share. Returns the fields the flags applied to (see slice_structure).
         """
-        if not items:
-            return items
-
-        if head is not None:
-            return items[:head]
-        elif tail is not None:
-            return items[-tail:]
-        elif range is not None:
-            start, end = range
-            # Convert 1-indexed to 0-indexed, inclusive range
-            return items[start-1:end]
-        else:
-            return items
+        return slice_structure(structure, head, tail, range_, fields=self.SLICE_FIELDS,
+                               default_head=self.DEFAULT_HEAD)
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract a specific element from the file.

@@ -459,8 +459,7 @@ class NginxAnalyzer(FileAnalyzer):
                     'signature': sig,
                 })
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract nginx config structure."""
         servers: List[Dict[str, Any]] = []
         locations: List[Dict[str, Any]] = []

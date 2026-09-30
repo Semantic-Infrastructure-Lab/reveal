@@ -94,8 +94,7 @@ class JupyterAnalyzer(FileAnalyzer):
             'outputs_count': outputs_count,
         }
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Analyze Jupyter notebook structure."""
         if self.parse_error:
             return ResultBuilder.create_error(

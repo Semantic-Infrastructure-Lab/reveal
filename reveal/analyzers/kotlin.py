@@ -49,9 +49,8 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
     # (plain supertype) or a 'constructor_invocation' → 'user_type' (superclass
     # constructor call). Abstract classes carry a 'modifiers' → 'abstract' token.
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
-        structure = super().get_structure(head=head, tail=tail, range=range, **kwargs)
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
+        structure = super().get_structure(**kwargs)
         interface_lines = self._interface_declaration_lines()
         if interface_lines:
             classes = structure.get('classes', [])

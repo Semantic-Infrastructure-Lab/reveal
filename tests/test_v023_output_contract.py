@@ -247,8 +247,8 @@ class TestAdapter(ResourceAdapter):
         already inherit silently (no def to scan = no detection)."""
         content = """
 class TestAnalyzer(TreeSitterAnalyzer):
-    def get_structure(self, head=None, tail=None, range=None, **kwargs):
-        structure = super().get_structure(head=head, tail=tail, range=range, **kwargs)
+    def get_structure(self, **kwargs):
+        structure = super().get_structure(**kwargs)
         structure['variables'] = self._extract_variables()
         return structure
 """

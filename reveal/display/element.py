@@ -22,6 +22,7 @@ _DOMINANT_CATEGORY_PRIORITY = [
     'resources', 'variables',            # Terraform
     'keys', 'tables',                    # Config
     'cells',                             # Jupyter
+    'records',                           # JSONL (not its one-row summary)
     'schema',                            # CSV columns
 ]
 

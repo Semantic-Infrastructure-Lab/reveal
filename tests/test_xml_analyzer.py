@@ -6,6 +6,7 @@ import os
 import pytest
 
 from reveal.analyzers.xml_analyzer import XmlAnalyzer
+from conftest import sliced_structure
 
 # BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -186,13 +187,13 @@ class TestXmlAnalyzer(unittest.TestCase):
 
         path = self.create_xml_file(content)
         analyzer = XmlAnalyzer(path)
-        structure = analyzer.get_structure(head=3)
+        structure = sliced_structure(analyzer, head=3)
 
         self.assertEqual(len(structure['children']), 3)
         self.assertEqual(structure['children'][0]['tag'], 'item1')
         self.assertEqual(structure['children'][2]['tag'], 'item3')
-        self.assertEqual(structure['filtered']['showing'], 3)
-        self.assertEqual(structure['filtered']['total'], 5)
+        cut, = [w for w in structure['meta']['warnings'] if w['type'] == 'truncated']
+        self.assertEqual((cut['field'], cut['shown'], cut['total']), ('children', 3, 5))
 
     def test_tail_filtering(self):
         """Test tail parameter for filtering top-level children."""
@@ -207,7 +208,7 @@ class TestXmlAnalyzer(unittest.TestCase):
 
         path = self.create_xml_file(content)
         analyzer = XmlAnalyzer(path)
-        structure = analyzer.get_structure(tail=2)
+        structure = sliced_structure(analyzer, tail=2)
 
         self.assertEqual(len(structure['children']), 2)
         self.assertEqual(structure['children'][0]['tag'], 'item4')
@@ -226,7 +227,7 @@ class TestXmlAnalyzer(unittest.TestCase):
 
         path = self.create_xml_file(content)
         analyzer = XmlAnalyzer(path)
-        structure = analyzer.get_structure(range=(2, 4))
+        structure = sliced_structure(analyzer, range=(2, 4))
 
         self.assertEqual(len(structure['children']), 3)
         self.assertEqual(structure['children'][0]['tag'], 'item2')
@@ -385,12 +386,14 @@ class TestXmlAnalyzer(unittest.TestCase):
 
         path = self.create_xml_file(content)
         analyzer = XmlAnalyzer(path)
-        structure = analyzer.get_structure()
+        self.assertEqual(len(analyzer.get_structure()['children']), 15)  # the analyzer's is whole
 
-        # Should show only first 10 by default
+        # The display shows the first 10 by default, and says so
+        structure = sliced_structure(analyzer)
         self.assertEqual(len(structure['children']), 10)
-        self.assertEqual(structure['filtered']['showing'], 10)
-        self.assertEqual(structure['filtered']['total'], 15)
+        cut, = [w for w in structure['meta']['warnings'] if w['type'] == 'truncated']
+        self.assertEqual((cut['shown'], cut['total'], cut['cause']), (10, 15, 'sample'))
+        self.assertEqual(structure['statistics']['child_count'], 15)
 
     def test_no_namespace(self):
         """Test XML document without namespaces."""

@@ -316,8 +316,10 @@ a check that counts violations and lets the count only fall. Then the cause is r
    view. An adapter that raises fails through the same handling as one that returns an
    error (`cli/routing/uri._call_adapter`), and a URI piped to `--stdin --batch` gets the
    answer `reveal <uri>` gives, resolved by the router without printing
-   (`cli/routing/uri.resolve_uri`). Still open: file-path results (BACK-1548) and the broad
-   `except`s.
+   (`cli/routing/uri.resolve_uri`). A file's `--head`/`--tail`/`--range` is cut once, in
+   the display layer, and disclosed with the same marker; analyzers never see the flags
+   (`FileAnalyzer.cut_structure`, BACK-1548). Still open: the broad `except`s, and file
+   mode's `--max-items`/default cap, which still spells its cut `_budget` (BACK-1564).
 4. **One seam per concern:** BACK-1223 (one walker), BACK-1045 (parser seam), BACK-1366
    (one path pass), BACK-1372 (root finders) and BACK-1054 (import resolution).
 

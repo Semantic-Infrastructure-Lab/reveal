@@ -17,8 +17,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
     """
     language = 'graphql'
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract GraphQL schema structure."""
         if not self.tree:
             return {}
@@ -35,13 +34,6 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
         structure['unions'] = self._extract_unions()
         structure['scalars'] = self._extract_scalars()
         structure['inputs'] = self._extract_input_types()
-
-        # Apply semantic slicing to each category
-        if head or tail or range:
-            for category in structure:
-                structure[category] = self._apply_semantic_slice(
-                    structure[category], head, tail, range
-                )
 
         # Remove empty categories and add output contract fields
         return ResultBuilder.create(

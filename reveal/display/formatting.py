@@ -1,9 +1,11 @@
 """Formatting helpers for display output."""
 
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from reveal.base import FileAnalyzer
+from reveal.utils.results import truncations_of
 
 
 # Constants for field filtering
@@ -819,24 +821,6 @@ def _format_xml_children(items: List[Dict[str, Any]], indent: int = 1) -> None:
             _format_xml_children(children, indent + 1)
 
 
-def _add_navigation_kwargs(kwargs: Dict[str, Any], args) -> None:
-    """Add navigation/slicing arguments to kwargs.
-
-    Args:
-        kwargs: Dict to update with navigation args
-        args: Command-line arguments
-    """
-    if not args:
-        return
-
-    if getattr(args, 'head', None):
-        kwargs['head'] = args.head
-    if getattr(args, 'tail', None):
-        kwargs['tail'] = args.tail
-    if getattr(args, 'range', None):
-        kwargs['range'] = args.range
-
-
 def _add_markdown_link_kwargs(kwargs: Dict[str, Any], args) -> None:
     """Add markdown link extraction arguments to kwargs.
 
@@ -908,13 +892,14 @@ def _build_analyzer_kwargs(analyzer: FileAnalyzer, args) -> Dict[str, Any]:
     """
     kwargs: Dict[str, Any] = {}
 
-    # Navigation/slicing arguments (apply to all analyzers)
-    _add_navigation_kwargs(kwargs, args)
+    # --head/--tail/--range are not an analyzer's: show_structure cuts the result (BACK-1548).
 
     # Markdown-specific filters
     if args and hasattr(analyzer, '_extract_links'):
         _add_markdown_link_kwargs(kwargs, args)
         _add_markdown_code_kwargs(kwargs, args)
+        if getattr(args, 'head', None) or getattr(args, 'tail', None) or getattr(args, 'range', None):
+            kwargs['navigate'] = True
 
         if args.frontmatter:
             kwargs['extract_frontmatter'] = True
@@ -946,3 +931,23 @@ def _build_analyzer_kwargs(analyzer: FileAnalyzer, args) -> Dict[str, Any]:
         kwargs['server_name'] = args.server_name
 
     return kwargs
+
+
+def print_truncations(result: dict, output_format: str) -> None:
+    """Say, once, which lists the rendered answer shows only part of (BACK-1059).
+
+    Shared with the subcommand seam (subcommand.emit_subcommand_result), so ``reveal
+    overview`` and ``overview://`` disclose a cut the same way (BACK-1544).
+
+    Truncation was disclosed by whichever renderer knew the adapter's spelling of it, so
+    ``stats://?limit=2`` and ``markdown://?limit=2`` printed a cut list as the whole
+    answer. Renderers leave ``truncated`` warnings to this. JSON already carries them in
+    ``meta.warnings``; text gets them after the body, on stdout with it; any other format
+    (grep) gets them on stderr, so its lines stay parseable.
+    """
+    if output_format == 'json':
+        return
+    stream = sys.stdout if output_format == 'text' else sys.stderr
+    print(file=stream)
+    for entry in truncations_of(result):
+        print(f"⚠ Truncated {entry['message']}", file=stream)

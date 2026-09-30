@@ -269,7 +269,7 @@ The HTML analyzer follows reveal's progressive disclosure philosophy:
 **Full details when needed**:
 - Element extraction shows complete HTML
 - `--format json` for machine processing
-- `--head`/`--tail`/`--range` for line-based navigation
+- `--head`/`--tail`/`--range` to cut each list (`--links`, `--scripts`, ...); `reveal page.html :10-50` for raw lines
 
 ## Template Support
 
@@ -312,10 +312,12 @@ The HTML analyzer follows reveal's progressive disclosure philosophy:
 Works with all standard reveal features:
 
 ```bash
-# Line navigation
-reveal page.html --head 50        # First 50 lines
-reveal page.html --tail 30        # Last 30 lines
-reveal page.html --range 10-50    # Lines 10-50
+# List navigation: cut each list, as for any file (says when it cut)
+reveal page.html --links --head 20    # First 20 links
+reveal page.html --scripts all --tail 5  # Last 5 scripts
+
+# Raw lines
+reveal page.html :10-50           # Lines 10-50
 
 # Output formats
 reveal page.html --format json    # JSON output

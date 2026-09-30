@@ -842,53 +842,6 @@ class TestFormatXmlChildren:
 class TestKwargsBuilders:
     """Tests for kwargs builder functions."""
 
-    def test_add_navigation_kwargs_empty_args(self):
-        """Test add_navigation_kwargs with None args."""
-        from reveal.display.formatting import _add_navigation_kwargs
-
-        kwargs = {}
-        _add_navigation_kwargs(kwargs, None)
-        assert kwargs == {}
-
-    def test_add_navigation_kwargs_head(self):
-        """Test add_navigation_kwargs with head argument."""
-        from reveal.display.formatting import _add_navigation_kwargs
-
-        args = Mock()
-        args.head = 10
-        args.tail = None
-        args.range = None
-
-        kwargs = {}
-        _add_navigation_kwargs(kwargs, args)
-        assert kwargs['head'] == 10
-
-    def test_add_navigation_kwargs_tail(self):
-        """Test add_navigation_kwargs with tail argument."""
-        from reveal.display.formatting import _add_navigation_kwargs
-
-        args = Mock()
-        args.head = None
-        args.tail = 20
-        args.range = None
-
-        kwargs = {}
-        _add_navigation_kwargs(kwargs, args)
-        assert kwargs['tail'] == 20
-
-    def test_add_navigation_kwargs_range(self):
-        """Test add_navigation_kwargs with range argument."""
-        from reveal.display.formatting import _add_navigation_kwargs
-
-        args = Mock()
-        args.head = None
-        args.tail = None
-        args.range = '10-20'
-
-        kwargs = {}
-        _add_navigation_kwargs(kwargs, args)
-        assert kwargs['range'] == '10-20'
-
     def test_add_markdown_link_kwargs_no_flags(self):
         """Test add_markdown_link_kwargs with no link flags."""
         from reveal.display.formatting import _add_markdown_link_kwargs
@@ -1431,6 +1384,23 @@ class TestBuildAnalyzerKwargsRelated:
         assert kwargs.get('extract_related') is True
         assert kwargs.get('related_depth') == 2
         assert kwargs.get('related_limit') == 25
+
+
+    @pytest.mark.parametrize('flag, value', [('head', 3), ('tail', 2), ('range', (1, 4))])
+    def test_navigation_flags_never_reach_the_analyzer(self, flag, value):
+        """BACK-1548: show_structure cuts the result; markdown only learns a walk is on."""
+        from reveal.display.formatting import _build_analyzer_kwargs
+        from unittest.mock import Mock
+
+        analyzer = Mock()
+        analyzer._extract_links = lambda: None
+        args = self._make_args()
+        setattr(args, flag, value)
+
+        kwargs = _build_analyzer_kwargs(analyzer, args)
+        assert not {'head', 'tail', 'range'} & set(kwargs)
+        assert kwargs.get('navigate') is True
+        assert 'navigate' not in _build_analyzer_kwargs(analyzer, self._make_args())
 
 
 class TestDiscriminatingLevel:

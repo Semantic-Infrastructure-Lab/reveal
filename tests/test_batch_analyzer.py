@@ -4,6 +4,7 @@ import pytest
 import tempfile
 import os
 from reveal.analyzers.batch import BatchAnalyzer
+from conftest import sliced_structure
 
 # BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -150,7 +151,7 @@ class TestBatchFiltering:
     def test_head_filter(self, simple_batch):
         """Should limit to first N labels."""
         analyzer = BatchAnalyzer(simple_batch)
-        structure = analyzer.get_structure(head=1)
+        structure = sliced_structure(analyzer, head=1)
 
         assert len(structure['functions']) == 1
         assert structure['functions'][0]['name'] == 'setup'
@@ -158,7 +159,7 @@ class TestBatchFiltering:
     def test_tail_filter(self, simple_batch):
         """Should limit to last N labels."""
         analyzer = BatchAnalyzer(simple_batch)
-        structure = analyzer.get_structure(tail=1)
+        structure = sliced_structure(analyzer, tail=1)
 
         assert len(structure['functions']) == 1
         assert structure['functions'][0]['name'] == 'build'
@@ -166,7 +167,7 @@ class TestBatchFiltering:
     def test_range_filter(self, simple_batch):
         """Should filter labels by range."""
         analyzer = BatchAnalyzer(simple_batch)
-        structure = analyzer.get_structure(range=(1, 1))
+        structure = sliced_structure(analyzer, range=(1, 1))
 
         assert len(structure['functions']) == 1
         assert structure['functions'][0]['name'] == 'setup'

@@ -6,6 +6,7 @@ import os
 import pytest
 
 from reveal.analyzers.powershell import PowerShellAnalyzer
+from conftest import sliced_structure
 
 # BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -232,7 +233,7 @@ function Func5 { Write-Host "5" }
 
         path = self.create_ps1_file(content)
         analyzer = PowerShellAnalyzer(path)
-        structure = analyzer.get_structure(head=3)
+        structure = sliced_structure(analyzer, head=3)
 
         self.assertIn('functions', structure)
         self.assertEqual(len(structure['functions']), 3)
@@ -254,7 +255,7 @@ function Func5 { Write-Host "5" }
 
         path = self.create_ps1_file(content)
         analyzer = PowerShellAnalyzer(path)
-        structure = analyzer.get_structure(tail=2)
+        structure = sliced_structure(analyzer, tail=2)
 
         self.assertIn('functions', structure)
         self.assertEqual(len(structure['functions']), 2)
@@ -274,7 +275,7 @@ function Func5 { Write-Host "5" }
 
         path = self.create_ps1_file(content)
         analyzer = PowerShellAnalyzer(path)
-        structure = analyzer.get_structure(range=(2, 4))
+        structure = sliced_structure(analyzer, range=(2, 4))
 
         self.assertIn('functions', structure)
         self.assertEqual(len(structure['functions']), 3)

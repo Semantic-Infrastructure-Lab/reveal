@@ -13,6 +13,7 @@ import pytest
 
 from reveal.display.element import _extract_by_syntax, _parse_element_syntax
 from reveal.registry import get_analyzer
+from conftest import sliced_structure
 
 pytestmark = pytest.mark.component
 
@@ -97,8 +98,8 @@ def test_listed_declarations_are_extractable_by_name(tmp_path, name):
 
 def test_declaration_categories_honor_semantic_slicing(tmp_path):
     analyzer = _analyzer(tmp_path, "b.rs", "pub enum A { X }\npub enum B { Y }\npub enum C { Z }\n")
-    assert [e["name"] for e in analyzer.get_structure(head=2)["enums"]] == ["A", "B"]
-    assert [e["name"] for e in analyzer.get_structure(tail=1)["enums"]] == ["C"]
+    assert [e["name"] for e in sliced_structure(analyzer, head=2)["enums"]] == ["A", "B"]
+    assert [e["name"] for e in sliced_structure(analyzer, tail=1)["enums"]] == ["C"]
 
 
 def test_typed_output_names_the_property_category(tmp_path):

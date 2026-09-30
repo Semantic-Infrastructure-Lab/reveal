@@ -20,8 +20,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
     language = 'zig'
     IMPORTS_VIA_EXTRACTOR = True  # BACK-1089
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract Zig code structure."""
         if not self.tree:
             return {}
@@ -35,13 +34,6 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         structure['enums'] = self._extract_container_decls('enum')
         structure['unions'] = self._extract_container_decls('union')
         structure['tests'] = self._extract_tests()
-
-        # Apply semantic slicing to each category
-        if head or tail or range:
-            for category in structure:
-                structure[category] = self._apply_semantic_slice(
-                    structure[category], head, tail, range
-                )
 
         # Remove empty categories and add output contract fields
         return ResultBuilder.create(

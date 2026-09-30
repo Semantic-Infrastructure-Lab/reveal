@@ -6,6 +6,7 @@ import os
 import pytest
 
 from reveal.analyzers.ini_analyzer import IniAnalyzer
+from conftest import sliced_structure
 
 # BACK-1149: component-layer test -- single analyzer in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -161,7 +162,7 @@ key3 = value3"""
 
         path = self.create_ini_file(content)
         analyzer = IniAnalyzer(path)
-        structure = analyzer.get_structure(head=2)
+        structure = sliced_structure(analyzer, head=2)
 
         self.assertEqual(len(structure['sections']), 2)
         self.assertEqual(structure['sections'][0]['name'], 'section1')
@@ -180,7 +181,7 @@ key3 = value3"""
 
         path = self.create_ini_file(content)
         analyzer = IniAnalyzer(path)
-        structure = analyzer.get_structure(tail=2)
+        structure = sliced_structure(analyzer, tail=2)
 
         self.assertEqual(len(structure['sections']), 2)
         self.assertEqual(structure['sections'][0]['name'], 'section2')
@@ -202,7 +203,7 @@ key4 = value4"""
 
         path = self.create_ini_file(content)
         analyzer = IniAnalyzer(path)
-        structure = analyzer.get_structure(range=(2, 3))
+        structure = sliced_structure(analyzer, range=(2, 3))
 
         self.assertEqual(len(structure['sections']), 2)
         self.assertEqual(structure['sections'][0]['name'], 'section2')

@@ -47,36 +47,27 @@ class HTMLAnalyzer(FileAnalyzer):
         self.template_type = self._detect_template_type()
 
     @staticmethod
-    def _build_structure_options(head, tail, range, kwargs) -> 'StructureOptions':
-        """Build StructureOptions from explicit params and kwargs."""
+    def _build_structure_options(kwargs) -> 'StructureOptions':
+        """Build StructureOptions from kwargs."""
         existing = kwargs.get('options')
         if existing is not None:
             return cast('StructureOptions', existing)
-        if head is not None:
-            kwargs['head'] = head
-        if tail is not None:
-            kwargs['tail'] = tail
-        if range is not None:
-            kwargs['range'] = range
         built: StructureOptions = StructureOptions.from_kwargs(**kwargs)
         if 'links' in kwargs:
             built.extract_links = kwargs['links']
         return built
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None, range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract HTML structure progressively.
+
+        --head/--tail/--range cut the lists this returns, as for every analyzer (BACK-1548);
+        they no longer mean raw lines, which ``reveal page.html :10-50`` shows.
 
         Args:
             options: StructureOptions config object (recommended)
-            head: Show first N lines
-            tail: Show last N lines
-            range: Line range (e.g., "10-20")
             **kwargs: Additional options for backward compatibility
 
         Supported options (via StructureOptions or kwargs):
-            head: Show first N lines
-            tail: Show last N lines
-            range: Show line range (start, end)
             semantic: Extract semantic elements (navigation, content, forms, media, etc.)
             links: Extract all links (maps to extract_links in StructureOptions)
             link_type: Filter links by type (internal, external, anchor, mailto, tel)
@@ -90,11 +81,7 @@ class HTMLAnalyzer(FileAnalyzer):
         Returns:
             Dict with HTML structure based on requested features
         """
-        options = self._build_structure_options(head, tail, range, kwargs)
-
-        # Handle line extraction (head/tail/range)
-        if options.head or options.tail or options.range:
-            return self._extract_lines(options.head, options.tail, options.range)
+        options = self._build_structure_options(kwargs)
 
         # Specialized extractions (filtering mode)
         def _build(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -707,36 +694,6 @@ class HTMLAnalyzer(FileAnalyzer):
         end = start + elem_lines
 
         return f"{start}-{end}"
-
-    def _extract_lines(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None) -> Dict[str, Any]:
-        """Extract specific lines from HTML.
-
-        Args:
-            head: First N lines
-            tail: Last N lines
-            range: Line range (start, end)
-
-        Returns:
-            Dict with content
-        """
-        if range:
-            start, end = range
-            content = '\n'.join(self.lines[start-1:end])
-        elif head:
-            content = '\n'.join(self.lines[:head])
-        elif tail:
-            content = '\n'.join(self.lines[-tail:])
-        else:
-            content = self.content
-
-        return ResultBuilder.create(
-            result_type='html',
-            source=self.path,
-            data={'content': content},
-            contract_version=CONTRACT_VERSION,
-            confidence=1.0,
-        )
 
     def extract_by_selector(self, selector: str) -> Optional[Dict[str, Any]]:
         """Extract a single element by CSS selector, id, or tag name.

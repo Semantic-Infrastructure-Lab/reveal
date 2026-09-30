@@ -3,6 +3,7 @@
 import pytest
 
 from reveal.analyzers.rust import RustAnalyzer
+from conftest import sliced_structure
 
 CODE = '''pub trait Shape {
     fn area(&self) -> f64;
@@ -49,7 +50,7 @@ def test_structs_and_functions_unchanged(structure):
 def test_head_slice_applies_to_interfaces(tmp_path):
     path = tmp_path / 'shapes.rs'
     path.write_text(CODE, encoding='utf-8')
-    sliced = RustAnalyzer(str(path)).get_structure(head=1)
+    sliced = sliced_structure(RustAnalyzer(str(path)), head=1)
     assert [i['name'] for i in sliced['interfaces']] == ['Shape']
 
 

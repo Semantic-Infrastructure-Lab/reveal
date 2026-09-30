@@ -16,26 +16,6 @@ from reveal.reveal_types import CONTRACT_VERSION
 logger = logging.getLogger(__name__)
 
 
-def _filter_xml_children(
-    children: List[Any],
-    head: Optional[int],
-    tail: Optional[int],
-    range: Optional[Tuple[int, int]],
-    child_count: int,
-) -> List[Any]:
-    """Apply head/tail/range filtering to a list of XML children."""
-    if head is not None:
-        return children[:head]
-    if tail is not None:
-        return children[-tail:]
-    if range is not None:
-        start, end = range
-        return children[start-1:end]
-    if child_count > 10:
-        return children[:10]
-    return children
-
-
 @register('.xml', name='XML', icon='📄', category='data')
 class XmlAnalyzer(FileAnalyzer):
     """XML file analyzer.
@@ -46,11 +26,14 @@ class XmlAnalyzer(FileAnalyzer):
     Structure view shows:
     - Root element with namespace
     - Document statistics (element count, max depth, namespaces)
-    - Top-level child elements with attributes and text preview
-    - Filtering options (head, tail, range)
+    - Top-level child elements with attributes and text preview (the first
+      DEFAULT_HEAD unless --head/--tail/--range picks)
 
     Extract by element name or path to view specific elements.
     """
+
+    SLICE_FIELDS = ('children',)  # not 'namespaces'
+    DEFAULT_HEAD = 10
 
     def _strip_namespace(self, tag: str) -> str:
         """Remove namespace prefix from tag name.
@@ -197,14 +180,10 @@ class XmlAnalyzer(FileAnalyzer):
 
         return result
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract XML document structure.
 
         Args:
-            head: Show first N top-level children
-            tail: Show last N top-level children
-            range: Show children in range (start, end) - 1-indexed
             **kwargs: Additional parameters (unused)
 
         Returns:
@@ -222,9 +201,6 @@ class XmlAnalyzer(FileAnalyzer):
             # Get top-level children
             children = list(root)
             child_count = len(children)
-
-            # Apply filtering if requested
-            filtered_children = _filter_xml_children(children, head, tail, range, child_count)
 
             # Convert root and children to dict
             root_data: Dict[str, Any] = {
@@ -246,7 +222,7 @@ class XmlAnalyzer(FileAnalyzer):
                         'child_count': child_count,
                         'namespace_count': len(namespaces)
                     },
-                    'children': [self._element_to_dict(child) for child in filtered_children]
+                    'children': [self._element_to_dict(child) for child in children]
                 },
                 contract_version=CONTRACT_VERSION,
                 confidence=1.0,
@@ -258,13 +234,6 @@ class XmlAnalyzer(FileAnalyzer):
                     {'uri': uri, 'usage_count': count}
                     for uri, count in sorted(namespaces.items(), key=lambda x: x[1], reverse=True)
                 ]
-
-            # Add filtering info if applied
-            if filtered_children != children:
-                result['filtered'] = {
-                    'showing': len(filtered_children),
-                    'total': child_count
-                }
 
             return result
 

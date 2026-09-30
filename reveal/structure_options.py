@@ -5,7 +5,7 @@ related options into typed configuration objects.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, Tuple
+from typing import Optional
 
 
 @dataclass
@@ -16,14 +16,13 @@ class StructureOptions:
     parameters into a single config object.
 
     Example:
-        >>> opts = StructureOptions(head=10, extract_links=True)
+        >>> opts = StructureOptions(extract_links=True)
         >>> analyzer.get_structure(opts)
     """
 
-    # Filtering options
-    head: Optional[int] = None
-    tail: Optional[int] = None
-    range: Optional[Tuple[int, int]] = None
+    # A --head/--tail/--range walk is on. The cut itself is the caller's (BACK-1548); an
+    # analyzer only learns the walk is on (markdown keeps headings beside --links, c3b33c66).
+    navigate: bool = False
 
     # Link extraction options
     extract_links: bool = False
@@ -65,7 +64,7 @@ class StructureOptions:
             StructureOptions instance
 
         Example:
-            >>> opts = StructureOptions.from_kwargs(head=10, extract_links=True)
+            >>> opts = StructureOptions.from_kwargs(extract_links=True)
         """
         # Get known field names
         known_fields = {f.name for f in cls.__dataclass_fields__.values()}

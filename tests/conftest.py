@@ -51,6 +51,16 @@ def _run_reveal_direct(*args):
     return _Result(rc, buf_out.getvalue(), buf_err.getvalue())
 
 
+def sliced_structure(analyzer, head=None, tail=None, range=None, **kwargs) -> dict:
+    """``analyzer``'s structure cut as ``reveal FILE --head N`` cuts it (BACK-1548).
+
+    An analyzer never sees --head/--tail/--range; the caller cuts its result.
+    """
+    structure = analyzer.get_structure(**kwargs)
+    analyzer.cut_structure(structure, head, tail, range)
+    return structure
+
+
 def native(posix_path: str) -> str:
     """Convert a POSIX path string to the platform-native string form.
 

@@ -36,6 +36,7 @@ class DocxAnalyzer(ZipXMLAnalyzer):
 
     CONTENT_PATH = 'word/document.xml'
     NAMESPACES = OPENXML_NS
+    SLICE_FIELDS = ('sections', 'tables')  # not the one-row overview
 
     # Mapping of Word style IDs to heading levels
     HEADING_STYLES = {
@@ -54,8 +55,7 @@ class DocxAnalyzer(ZipXMLAnalyzer):
         if subject:
             self.metadata['subject'] = subject
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract document structure: headings, paragraphs, tables."""
         if self.parse_error:
             return self._error_result('docx_structure', self.parse_error)
@@ -77,7 +77,6 @@ class DocxAnalyzer(ZipXMLAnalyzer):
         data: Dict[str, Any] = {}
 
         if sections:
-            sections = self._apply_semantic_slice(sections, head, tail, range)
             data['sections'] = sections
 
         if tables:
@@ -252,8 +251,7 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
                     text_parts.append(t.text)
             self.shared_strings.append(''.join(text_parts))
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract spreadsheet structure: sheets, dimensions, formulas."""
         if self.parse_error:
             return self._error_result('xlsx_structure', self.parse_error)
@@ -307,7 +305,6 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
                     'name': label,
                     'line_start': s['line_start'],
                 })
-            formatted_sheets = self._apply_semantic_slice(formatted_sheets, head, tail, range)
             data['sheets'] = formatted_sheets
 
         return ResultBuilder.create(
@@ -531,8 +528,7 @@ class PptxAnalyzer(ZipXMLAnalyzer):
     CONTENT_PATH = 'ppt/presentation.xml'
     NAMESPACES = OPENXML_NS
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract presentation structure: slides with titles."""
         if self.parse_error:
             return self._error_result('pptx_structure', self.parse_error)
@@ -557,7 +553,6 @@ class PptxAnalyzer(ZipXMLAnalyzer):
                     'name': f"[{s['slide_num']}] {s['name']}{shapes_info}",
                     'line_start': s['line_start'],
                 })
-            formatted_slides = self._apply_semantic_slice(formatted_slides, head, tail, range)
             data['slides'] = formatted_slides
 
         # Media

@@ -72,14 +72,10 @@ class IniAnalyzer(FileAnalyzer):
 
         return 'string'
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Extract INI file structure.
 
         Args:
-            head: Show first N sections
-            tail: Show last N sections
-            range: Show sections in range (start, end) - 1-indexed
             **kwargs: Additional parameters (unused)
 
         Returns:
@@ -107,8 +103,6 @@ class IniAnalyzer(FileAnalyzer):
             # Handle DEFAULT section if it has keys
             if config.defaults():
                 all_sections.insert(0, 'DEFAULT')
-
-            all_sections = self._apply_section_filter(all_sections, head, tail, range)
 
             total_keys = 0
             for section in all_sections:
@@ -150,18 +144,6 @@ class IniAnalyzer(FileAnalyzer):
             logger.debug(f"Error parsing INI {self.path}: {e}")
             # Try to parse as simple properties file (Java-style, no sections)
             return self._parse_properties()
-
-    @staticmethod
-    def _apply_section_filter(sections: list, head, tail, range_tuple) -> list:
-        """Apply head/tail/range slice to *sections* list."""
-        if head is not None:
-            return sections[:head]
-        if tail is not None:
-            return sections[-tail:]
-        if range_tuple is not None:
-            start, end = range_tuple
-            return sections[start - 1:end]
-        return sections
 
     @staticmethod
     def _section_ends(section_lines: Dict[str, int], text_lines: list) -> Dict[str, int]:

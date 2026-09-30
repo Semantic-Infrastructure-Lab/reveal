@@ -15,6 +15,7 @@ from reveal.analyzers.office import (
     OdpAnalyzer,
 )
 from reveal.analyzers.office.base import ZipXMLAnalyzer
+from conftest import sliced_structure
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
 pytestmark = pytest.mark.component
@@ -633,10 +634,10 @@ class TestEdgeCases:
         analyzer = DocxAnalyzer(str(minimal_docx))
 
         # Test head
-        structure = analyzer.get_structure(head=1)
+        structure = sliced_structure(analyzer, head=1)
         assert len(structure['sections']) == 1
 
         # Test tail
-        structure = analyzer.get_structure(tail=1)
+        structure = sliced_structure(analyzer, tail=1)
         assert len(structure['sections']) == 1
         assert 'Conclusion' in structure['sections'][0]['name']
