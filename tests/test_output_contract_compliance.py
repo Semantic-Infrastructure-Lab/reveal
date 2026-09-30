@@ -378,14 +378,17 @@ class _Harness:
         """(exit code, stdout, stderr) for `uri` with CLI `flags`, run once and cached."""
         key = (uri, tuple(sorted(flags.items())))
         if key not in self._cache:
-            out, err, code = StringIO(), StringIO(), 0
-            with self._hermetic(), redirect_stdout(out), redirect_stderr(err):
-                try:
-                    handle_uri(uri, None, _default_args(**flags))
-                except SystemExit as exc:
-                    code = exc.code if isinstance(exc.code, int) else 1
-            self._cache[key] = (code, out.getvalue(), err.getvalue())
+            self._cache[key] = self._invoke(uri, **flags)
         return self._cache[key]
+
+    def _invoke(self, uri, **flags):
+        out, err, code = StringIO(), StringIO(), 0
+        with self._hermetic(), redirect_stdout(out), redirect_stderr(err):
+            try:
+                handle_uri(uri, None, _default_args(**flags))
+            except SystemExit as exc:
+                code = exc.code if isinstance(exc.code, int) else 1
+        return code, out.getvalue(), err.getvalue()
 
     def run(self, uri, **flags):
         """(exit code, parsed JSON or None, stderr) for `uri` with --format json."""
@@ -421,9 +424,17 @@ class _Harness:
         return self._cache[key]
 
     def run_batch(self, uri):
-        """(exit code, the one entry) for `uri` piped to `reveal --stdin --batch --format json`."""
+        """(URI-form exit code, URI-form JSON, batch exit code, the one batch entry) for `uri`
+        run as `reveal URI --format json` and piped to `reveal --stdin --batch --format json`.
+        The two run back to back, not from the cache: env:// reads os.environ, which other
+        tests in the worker change between an earlier cached run and this one."""
         key = ('--batch', uri)
         if key not in self._cache:
+            direct_code, direct_out, _ = self._invoke(uri, format='json')
+            try:
+                direct = json.loads(direct_out)
+            except ValueError:
+                direct = None
             out, err, code = StringIO(), StringIO(), 0
             with self._hermetic(), redirect_stdout(out), redirect_stderr(err), \
                     pytest.MonkeyPatch.context() as mp:
@@ -434,7 +445,7 @@ class _Harness:
                     code = exc.code if isinstance(exc.code, int) else 1
             entries = json.loads(out.getvalue())['results']
             assert len(entries) == 1, entries
-            self._cache[key] = (code, entries[0])
+            self._cache[key] = (direct_code, direct, code, entries[0])
         return self._cache[key]
 
     def fixture_uri(self, scheme):
@@ -777,8 +788,7 @@ def test_batch_answers_like_the_uri(harness, scheme):
     """Invariant 9: a URI piped to --batch gets the answer `reveal URI` gives, and a failure
     there is a failure here (BACK-1554)."""
     for uri in _batch_uris(harness, scheme):
-        code, payload, _ = harness.run(uri)
-        batch_code, entry = harness.run_batch(uri)
+        code, payload, batch_code, entry = harness.run_batch(uri)
         expected = _expected_batch_status(code, payload)
         assert entry['status'] == expected, (
             f"{uri}: --batch says {entry['status']!r}, the URI form exits {code} ({expected!r})")
@@ -793,8 +803,8 @@ def test_the_batch_invariant_bites(harness):
     statuses = {}
     for scheme in sorted(FIXTURE_URIS):
         for uri in _batch_uris(harness, scheme):
-            code, payload, _ = harness.run(uri)
+            code, payload, _, _ = harness.run_batch(uri)
             statuses.setdefault(_expected_batch_status(code, payload), []).append(uri)
     assert {'success', 'error', 'not_applicable'} <= set(statuses), statuses
-    _, ast_entry = harness.run_batch(harness.fixture_uri('ast'))
+    *_, ast_entry = harness.run_batch(harness.fixture_uri('ast'))
     assert ast_entry['data']['results'], 'ast://proj found nothing: the fixture answer is empty'
