@@ -616,6 +616,25 @@ def _walk_code_files(
     if path.is_file():
         yield path
         return
+    hidden = _walk_filter(path, exclude_patterns, respect_gitignore, prune_noise)
+    for root, dirs, filenames in os.walk(str(path)):
+        root_path = Path(root)
+        dirs[:] = [d for d in dirs if not hidden(root_path / d, True)]
+        for fname in filenames:
+            fp = root_path / fname
+            if not hidden(fp, False):
+                yield fp
+
+
+def _walk_filter(
+    path: Path,
+    exclude_patterns: Optional[List[str]],
+    respect_gitignore: Optional[bool],
+    prune_noise: bool,
+) -> Callable[[Path, bool], Optional[str]]:
+    """``_walk_code_files``' skip rules as one predicate: why ``(p, is_dir)`` is left out
+    of the walk (``'noise'``, ``'reveal_ignore'``, ``'gitignore'``, ``'exclude'``), or None.
+    """
     # BACK-1201: REVEAL_IGNORE / config.yaml 'ignore:' patterns were parsed
     # into RevealConfig but should_ignore() had zero callers anywhere --
     # wired in here (the BACK-887 single-source-of-truth walker) so every
@@ -632,36 +651,27 @@ def _walk_code_files(
     if skip_patterns:
         from ..cli.file_checker import should_skip_file  # deferred: cli cycle
     from .exclusions import dir_is_excluded, path_is_excluded
-    for root, dirs, filenames in os.walk(str(path)):
-        root_path = Path(root)
-        kept_dirs = []
-        for d in dirs:
-            if prune_noise and is_skippable_dir(root_path, d):
-                continue
-            dir_path = root_path / d
-            if not prune_noise and (d == '.git' or dir_is_excluded(dir_path)):
-                continue
-            if config.should_ignore(dir_path):
-                continue
-            if gi is not None and gi.ignored(dir_path, is_dir=True):
-                continue
-            if skip_patterns:
-                rel_dir = dir_path.relative_to(path)
-                if should_skip_file(rel_dir / '_', skip_patterns):
-                    continue
-            kept_dirs.append(d)
-        dirs[:] = kept_dirs
-        for fname in filenames:
-            fp = root_path / fname
-            if config.should_ignore(fp):
-                continue
-            if gi is not None and gi.ignored(fp):
-                continue
-            if skip_patterns and should_skip_file(fp.relative_to(path), skip_patterns):
-                continue
-            if path_is_excluded(fp):
-                continue
-            yield fp
+
+    def hidden(p: Path, is_dir: bool) -> Optional[str]:
+        if is_dir:
+            if prune_noise and is_skippable_dir(p.parent, p.name):
+                return 'noise'
+            if not prune_noise and p.name == '.git':
+                return 'noise'
+            if not prune_noise and dir_is_excluded(p):
+                return 'exclude'
+        if config.should_ignore(p):
+            return 'reveal_ignore'
+        if gi is not None and gi.ignored(p, is_dir=is_dir):
+            return 'gitignore'
+        if skip_patterns and should_skip_file(p.relative_to(path) / '_' if is_dir
+                                              else p.relative_to(path), skip_patterns):
+            return 'exclude'
+        if not is_dir and path_is_excluded(p):
+            return 'exclude'
+        return None
+
+    return hidden
 
 
 def tally_files_by_language(files: Iterable[Path]) -> Dict[str, Dict[str, Any]]:
