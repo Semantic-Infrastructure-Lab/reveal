@@ -846,7 +846,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install reveal
-        run: pip install reveal-toolkit
+        run: pip install reveal-cli
 
       - name: Check production certificates
         run: |

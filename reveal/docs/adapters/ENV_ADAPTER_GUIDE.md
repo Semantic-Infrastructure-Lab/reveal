@@ -633,7 +633,7 @@ Length: 87 characters
          - uses: actions/checkout@v3
 
          - name: Install reveal
-           run: pip install reveal-toolkit
+           run: pip install reveal-cli
 
          - name: Check required variables
            run: |

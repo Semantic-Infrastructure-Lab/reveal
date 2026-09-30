@@ -1014,7 +1014,7 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Install reveal
-        run: pip install reveal-toolkit
+        run: pip install reveal-cli
 
       - name: Checkout base branch
         run: |
