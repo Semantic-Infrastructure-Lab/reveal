@@ -597,7 +597,9 @@ class WalkPurpose:
 
     One predicate serves every walk; the purpose, not the call site, picks the skip causes
     (internal-docs/design/WALKER_SEAM_2026-09-30.md). *noise* ``'all'`` prunes
-    ``is_noise_dir`` directories, ``'git'`` only ``.git``. *honor_exclude* False is for
+    ``is_noise_dir`` directories; ``'reserved'`` prunes only names that are never source
+    (``SKIP_DIRECTORIES``: ``.git``, ``.venv``, ``node_modules``, caches), keeping ``build/``
+    or ``dist/`` whatever they hold. *honor_exclude* False is for
     project-wide evidence (M102's importers, I002's graph): narrowing the report with
     ``--exclude`` must not shrink the facts that judge it (BACK-1259). *hide_dot* hides dot
     files and dirs, as a reader's view of the tree does.
@@ -610,7 +612,7 @@ class WalkPurpose:
 
 ANALYSIS = WalkPurpose('analysis')
 EVIDENCE = WalkPurpose('evidence', honor_exclude=False)
-DOCS = WalkPurpose('docs', noise='git')
+DOCS = WalkPurpose('docs', noise='reserved')
 
 OnHidden = Callable[[Path, bool, str], None]
 
@@ -631,7 +633,7 @@ def _walk_code_files(
     config ``ignore:``, and ``--exclude`` (passed in, or the CLI's active scope) are
     applied here, so a walker that moves onto it gets all of them. *prune_noise* False
     is the docs purpose: a docs walk wants a ``build/README.md`` that a code census skips
-    (markdown://, BACK-1516).
+    (markdown://, BACK-1516), but not every README under ``node_modules/``.
 
     Does NOT blanket-skip dot-directories — only noise (``.git``, ``.venv``, caches, ...)
     excludes a directory. ``collect_files_to_check`` (``check``'s own walk) never applied a
@@ -748,7 +750,7 @@ def walk_filter(
     all_noise = purpose.noise == 'all'
 
     def hidden(p: Path, is_dir: bool) -> Optional[str]:
-        if is_dir and (p.name == '.git' or (all_noise and is_noise_dir(p.parent, p.name))):
+        if is_dir and (p.name in _SKIP_DIRS or (all_noise and is_noise_dir(p.parent, p.name))):
             return 'noise'
         if purpose.hide_dot and p.name.startswith('.'):
             return 'dot'

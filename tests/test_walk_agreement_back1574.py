@@ -133,7 +133,6 @@ KNOWN_DISAGREEMENTS = {
     'stats://': 'nested-only env/ dropped (BACK-1582)',
     'surface://': 'own walk drops dot-dirs; nested-only env/ dropped (BACK-1577, BACK-1582)',
     'imports://': 'own walk drops dot-dirs; nested-only env/ dropped (BACK-1580, BACK-1582)',
-    'markdown://': 'docs purpose prunes only .git, so .venv/.hg docs are listed (BACK-1223)',
 }
 
 

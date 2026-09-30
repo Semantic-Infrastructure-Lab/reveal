@@ -45,11 +45,12 @@ def test_evidence_ignores_exclude_explicit_and_active_scope(tree):
     assert 'tests/t.py' not in analysis  # positive control: the scope is live
 
 
-def test_docs_purpose_keeps_build_and_prunes_git_only(tree):
+def test_docs_purpose_keeps_build_and_prunes_reserved_noise(tree):
     assert 'build/README.md' in _rel(tree, _walk_code_files(tree, respect_gitignore=False,
                                                             prune_noise=False))
-    assert 'build/README.md' in _rel(tree, _walk_code_files(tree, respect_gitignore=False,
-                                                            purpose=DOCS))
+    docs = _rel(tree, _walk_code_files(tree, respect_gitignore=False, purpose=DOCS))
+    assert 'build/README.md' in docs
+    assert not any(p.startswith(('.venv/', '.hg/')) for p in docs)
 
 
 def test_on_hidden_reports_each_pruned_dir_once_with_its_cause(tree):
