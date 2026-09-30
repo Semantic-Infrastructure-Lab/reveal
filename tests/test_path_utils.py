@@ -957,7 +957,7 @@ class TestIsSkippableDir:
             d = tmp_path / name
             (d / 'nested').mkdir(parents=True)
             assert is_skippable_dir(tmp_path, name) is False, name
-            (d / 'pyvenv.cfg').write_text('home = /usr/bin\n')
+            (d / 'pyvenv.cfg').write_text('home = /usr/bin\n', encoding='utf-8')
             assert is_skippable_dir(tmp_path, name) is True, name
 
     def test_ambiguous_name_missing_dir_skipped(self, tmp_path):
