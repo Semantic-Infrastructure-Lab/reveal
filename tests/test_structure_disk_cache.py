@@ -82,6 +82,41 @@ def test_second_build_served_from_disk(tmp_path, monkeypatch):
     assert cached_structure == fresh_structure
 
 
+def _fresh_process_analyzer(src, monkeypatch):
+    """A new analyzer with the in-process parse cache cleared, whose parse fails loudly."""
+    ts_mod._get_parse_cache().clear()
+    analyzer = PythonAnalyzer(str(src))
+
+    def _boom(*a, **k):
+        raise AssertionError("disk cache hit parsed the file")
+
+    monkeypatch.setattr(analyzer, "_parse_tree", _boom)
+    return analyzer
+
+
+def test_get_structure_cache_hit_never_parses(tmp_path, monkeypatch):
+    """BACK-1558: get_structure() read self.tree for the BACK-1084 _has_errors flag
+    after the disk cache returned, so every hit still paid the full parse."""
+    src = _write_module(tmp_path / "mod.py")
+    fresh = PythonAnalyzer(str(src)).get_structure()
+
+    cached = _fresh_process_analyzer(src, monkeypatch).get_structure()
+
+    assert cached == fresh
+    assert '_has_errors' not in cached
+
+
+def test_has_errors_flag_survives_cache_hit(tmp_path, monkeypatch):
+    """The BACK-1084 flag is cached with the structure, so a hit still reports it."""
+    src = tmp_path / "broken.py"
+    src.write_text("def foo(:\n    return 1\n", encoding="utf-8")
+    assert PythonAnalyzer(str(src)).get_structure().get('_has_errors') is True
+
+    cached = _fresh_process_analyzer(src, monkeypatch).get_structure()
+
+    assert cached.get('_has_errors') is True
+
+
 def test_disk_structure_equals_fresh_scan(tmp_path):
     src = _write_module(tmp_path / "mod.py")
     analyzer = PythonAnalyzer(str(src))

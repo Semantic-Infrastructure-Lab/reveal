@@ -555,22 +555,10 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if not structure:
             return {}
 
-        # Remove empty categories. A new dict: the caller's --head cut (slice_structure)
-        # replaces its lists, and the disk-cache hit behind it is shared with later hits.
-        result = {k: v for k, v in structure.items() if v}
-
-        # BACK-1084: tree-sitter's error-tolerant parser still fabricates
-        # plausible-looking structure from a plain syntax error (e.g. a
-        # function with a garbled signature) rather than signaling failure,
-        # so a caller has no way to tell confident structure from a guess
-        # recovered around an ERROR node. Additive, `_`-prefixed key --
-        # TypedStructure.from_analyzer_output already skips `_`-prefixed
-        # keys (reveal/structure.py), so this can't be mistaken for a real
-        # element category by anything already consuming this dict.
-        if self._has_recovery_artifacts():
-            result['_has_errors'] = True
-
-        return result
+        # Remove empty categories (and a False `_has_errors`). A new dict: the caller's
+        # --head cut (slice_structure) replaces its lists, and the disk-cache hit behind
+        # it is shared with later hits.
+        return {k: v for k, v in structure.items() if v}
 
     def _structure_fingerprint(self) -> Optional[str]:
         """Disk-cache key for this file's built structure, or None to skip caching.
@@ -632,6 +620,18 @@ class TreeSitterAnalyzer(FileAnalyzer):
                              key=lambda entry: entry['line'])
             if entries:
                 structure[category] = entries
+
+        # BACK-1084: tree-sitter's error-tolerant parser still fabricates
+        # plausible-looking structure from a plain syntax error (e.g. a
+        # function with a garbled signature) rather than signaling failure,
+        # so a caller has no way to tell confident structure from a guess
+        # recovered around an ERROR node. Additive, `_`-prefixed key --
+        # TypedStructure.from_analyzer_output already skips `_`-prefixed
+        # keys (reveal/structure.py), so this can't be mistaken for a real
+        # element category by anything already consuming this dict.
+        # BACK-1558: computed here and cached with the structure, not in
+        # get_structure() -- reading self.tree there parsed every file on a hit.
+        structure['_has_errors'] = self._has_recovery_artifacts()
 
         if fingerprint is not None:
             disk_cache.put(_STRUCTURE_CACHE_NAMESPACE, fingerprint, structure,
