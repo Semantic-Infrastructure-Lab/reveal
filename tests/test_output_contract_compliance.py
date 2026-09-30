@@ -246,6 +246,9 @@ def _build_tree(root: Path) -> None:
         'from unittest import mock\n\n\ndef test_main():\n'
         '    with mock.patch("app.helper"):\n        pass\n', encoding='utf-8')
     (proj / 'README.md').write_text('# Proj\n\nSee [app](app.py).\n', encoding='utf-8')
+    # A doc under tests/, so the flag ledger's '--exclude tests' probe has something to drop
+    # on markdown://, which walks through the shared walker since BACK-1516.
+    (proj / 'tests' / 'NOTES.md').write_text('# Test notes\n', encoding='utf-8')
     (proj / 'data.json').write_text('{"key": "value", "items": [1, 2]}', encoding='utf-8')
     conn = sqlite3.connect(str(proj / 'app.db'))
     conn.execute('CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)')
