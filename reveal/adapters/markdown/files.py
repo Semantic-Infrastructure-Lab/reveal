@@ -1,14 +1,13 @@
 """File operations for markdown adapter."""
 
 import logging
-import os
 import re
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, List, cast
 
 from ...registry import get_markdown_extensions
-from ...utils.gitignore import gitignore_filter
+from ...utils.path_utils import _walk_code_files
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +21,8 @@ def find_markdown_files(base_path: Path) -> List[Path]:
     Returns:
         List of Path objects to markdown files
     """
-    files: List[Path] = []
     if not base_path.exists():
-        return files
+        return []
 
     md_exts = tuple(get_markdown_extensions())
 
@@ -33,21 +31,11 @@ def find_markdown_files(base_path: Path) -> List[Path]:
             return [base_path]
         return []
 
-    # BACK-1386: skip what git ignores (--no-gitignore turns it off). Only
-    # .git itself is pruned beyond that -- the code walkers' skip list
-    # (build/, dist/, vendor/...) is not applied to docs.
-    gi = gitignore_filter(base_path)
-    for root, dirs, filenames in os.walk(base_path):
-        dirs[:] = [d for d in dirs if d != '.git']
-        if gi is not None:
-            gi.prune(root, dirs)
-        for filename in filenames:
-            if filename.lower().endswith(md_exts):
-                fp = Path(root) / filename
-                if gi is None or not gi.ignored(fp):
-                    files.append(fp)
-
-    return sorted(files)
+    # The shared walk (BACK-1516): what git ignores (BACK-1386), REVEAL_IGNORE and
+    # --exclude. Its own os.walk honored only .gitignore. Only .git is pruned beyond
+    # those -- the code walkers' skip list (build/, dist/, vendor/...) is not applied to docs.
+    return sorted(fp for fp in _walk_code_files(base_path, prune_noise=False)
+                  if fp.name.lower().endswith(md_exts))
 
 
 def read_body_text(path: Path) -> str:

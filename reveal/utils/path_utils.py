@@ -588,9 +588,17 @@ def _walk_code_files(
     path: Path,
     exclude_patterns: Optional[List[str]] = None,
     respect_gitignore: Optional[bool] = None,
+    prune_noise: bool = True,
 ) -> Iterator[Path]:
     """Yield every file under *path*, skip-dir-correct (BACK-887's
     ``is_skippable_dir`` fix — shared so every census walk agrees).
+
+    The one walk over a user's target (BACK-1223): what git ignores, ``REVEAL_IGNORE`` /
+    config ``ignore:``, and ``--exclude`` (passed in, or the CLI's active scope) are
+    applied here, so a walker that moves onto it gets all of them. *prune_noise* False
+    keeps build/vendor/cache directories (``is_skippable_dir``) and prunes only ``.git``:
+    a docs walk wants a ``build/README.md`` that a code census skips (markdown://,
+    BACK-1516, which honored neither ``--exclude`` nor ``REVEAL_IGNORE`` on its own walk).
 
     Does NOT blanket-skip dot-directories — only ``is_skippable_dir``
     membership (``.git``, ``.venv``, caches, ...) excludes a directory.
@@ -623,13 +631,16 @@ def _walk_code_files(
     skip_patterns = list(exclude_patterns or [])
     if skip_patterns:
         from ..cli.file_checker import should_skip_file  # deferred: cli cycle
+    from .exclusions import dir_is_excluded, path_is_excluded
     for root, dirs, filenames in os.walk(str(path)):
         root_path = Path(root)
         kept_dirs = []
         for d in dirs:
-            if is_skippable_dir(root_path, d):
+            if prune_noise and is_skippable_dir(root_path, d):
                 continue
             dir_path = root_path / d
+            if not prune_noise and (d == '.git' or dir_is_excluded(dir_path)):
+                continue
             if config.should_ignore(dir_path):
                 continue
             if gi is not None and gi.ignored(dir_path, is_dir=True):
@@ -647,6 +658,8 @@ def _walk_code_files(
             if gi is not None and gi.ignored(fp):
                 continue
             if skip_patterns and should_skip_file(fp.relative_to(path), skip_patterns):
+                continue
+            if path_is_excluded(fp):
                 continue
             yield fp
 
