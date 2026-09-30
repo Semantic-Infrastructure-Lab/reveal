@@ -84,11 +84,12 @@ def _find_tsconfig(start_dir: Path, stop_at: Optional[Path]) -> Optional[Path]:
     above stop_at (the scan root passed in as search_paths[0] -- walking
     past it risks picking up an unrelated tsconfig.json from an enclosing
     directory outside the scanned project)."""
-    key = f"{start_dir}|{stop_at}"
-    if key in _TSCONFIG_FIND_CACHE:
-        return _TSCONFIG_FIND_CACHE[key]
     current = start_dir.resolve()
     boundary = stop_at.resolve() if stop_at else None
+    # Keyed resolved: a relative 'src' names a different directory after a chdir (BACK-1571).
+    key = f"{current}|{boundary}"
+    if key in _TSCONFIG_FIND_CACHE:
+        return _TSCONFIG_FIND_CACHE[key]
     result = None
     while True:
         candidate = current / 'tsconfig.json'
@@ -354,6 +355,7 @@ def _find_workspace_packages(workspace_root: Path) -> Dict[str, Path]:
     Negated glob entries (`"!packages/excluded-*"`, real npm/pnpm workspace
     syntax) exclude matching directories from the result.
     """
+    workspace_root = workspace_root.resolve()  # a relative root moves with the cwd (BACK-1571)
     key = str(workspace_root)
     if key in _WORKSPACE_PACKAGES_CACHE:
         return _WORKSPACE_PACKAGES_CACHE[key]

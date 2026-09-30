@@ -50,16 +50,18 @@ class SchemaLoader:
             >>> schema = SchemaLoader.load_schema('session')
             >>> schema = SchemaLoader.load_schema('/tmp/custom.yaml')
         """
-        # Check cache
-        if schema_name_or_path in cls._schema_cache:
-            logger.debug(f"Schema '{schema_name_or_path}' loaded from cache")
-            return cls._schema_cache[schema_name_or_path]
-
         # Resolve to file path
         schema_path = cls._resolve_schema_path(schema_name_or_path)
         if not schema_path or not schema_path.exists():
             logger.error(f"Schema not found: {schema_name_or_path}")
             return None
+
+        # Cached by the file, not the name as typed: a relative './s.yaml' names a
+        # different file after a chdir (BACK-1571).
+        cache_key = str(schema_path.resolve())
+        if cache_key in cls._schema_cache:
+            logger.debug(f"Schema '{schema_name_or_path}' loaded from cache")
+            return cls._schema_cache[cache_key]
 
         # Load YAML
         try:
@@ -76,7 +78,7 @@ class SchemaLoader:
                 return None
 
             # Cache and return
-            cls._schema_cache[schema_name_or_path] = schema
+            cls._schema_cache[cache_key] = schema
             logger.debug(f"Schema '{schema_name_or_path}' loaded from {schema_path}")
             return cast(Dict[str, Any], schema)
 
