@@ -9,13 +9,15 @@ import logging
 import os
 import stat as stat_module
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Iterator, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...analyzers.imports import ImportGraph
 from ...analyzers.imports.base import get_extractor, get_all_extensions
 from ...core import disk_cache
-from ...utils.path_utils import is_unsafe_scan_root, resolve_project_root
+from ...utils.path_utils import (
+    EVIDENCE, _walk_code_files, is_unsafe_scan_root, resolve_project_root,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +26,9 @@ logger = logging.getLogger(__name__)
 # edit/add/delete/rename under the root produces a different key and misses.
 # Bumped to v2 (BACK-982): ImportGraph gained a failed_files field, so an
 # old-shape cached object (pickled before this field existed) must never be
-# unpickled and returned as-is.
-_IMPORT_GRAPH_NAMESPACE = "import_graph_v2"
+# unpickled and returned as-is. v3 (BACK-1579): the file set is now the evidence walk's
+# (noise dirs, gitignored and REVEAL_IGNORE'd files left out), not every file under the root.
+_IMPORT_GRAPH_NAMESPACE = "import_graph_v3"
 
 # Module-level cache: project_root → ImportGraph.
 # _build_import_graph scans every source file under the project root via
@@ -139,11 +142,26 @@ def _cycle_detection_max_files() -> int:
     return _DEFAULT_CYCLE_DETECTION_MAX_FILES
 
 
+def _graph_source_files(directory: Path, supported) -> Iterator[Path]:
+    """The source files I002's import graph is built from: one selection, shared by the
+    disk-cache fingerprint and ``_collect_raw_imports``' Pass A, so the two cannot drift.
+
+    An evidence walk (BACK-1579): noise directories (``.venv``, ``node_modules``, ...), what
+    git ignores and REVEAL_IGNORE are left out; ``--exclude`` is not, since narrowing the
+    report must not hide a cycle that runs through an excluded file. It used to be a bare
+    ``rglob('*')``: an in-tree ``.venv`` pushed a small project over the cycle-detection
+    limit and real cycles went unreported.
+    """
+    for file_path in _walk_code_files(directory, purpose=EVIDENCE):
+        if file_path.suffix in supported:
+            yield file_path
+
+
 def _tree_fingerprint(directory: Path) -> Optional[str]:
     """Hash the source-file set under ``directory`` for the disk-cache key.
 
-    Mirrors ``_collect_raw_imports`` Pass A's file selection exactly (supported
-    extension + is_file), then digests each file's ``(relpath, mtime_ns, size)``.
+    Selects files with ``_graph_source_files``, as Pass A does, then digests each file's
+    ``(relpath, mtime_ns, size)``.
     A content edit bumps mtime_ns (and usually size); an add/delete/rename
     changes the file set — every realistic change yields a different digest, so
     a stale graph is never served. Stat-only (no parse), so it is cheap relative
@@ -174,9 +192,7 @@ def _tree_fingerprint(directory: Path) -> Optional[str]:
         hasher.update(("\x00".join(sorted(supported))).encode("utf-8", "replace"))
         hasher.update(b"\x01")
         entries = []
-        for file_path in directory.rglob("*"):
-            if file_path.suffix not in supported:
-                continue
+        for file_path in _graph_source_files(directory, supported):
             try:
                 st = file_path.stat()
             except OSError:
@@ -416,9 +432,7 @@ class I002(BaseRule):
 
         # Pass A: cheap count-only walk — abort before any parsing if over ceiling.
         source_files = []
-        for file_path in directory.rglob("*"):
-            if file_path.suffix not in supported_extensions:
-                continue
+        for file_path in _graph_source_files(directory, supported_extensions):
             if not file_path.is_file():
                 continue
             source_files.append(file_path)

@@ -91,7 +91,6 @@
   "reveal/cli/routing/file.py": 1,
   "reveal/grep_handler.py": 1,
   "reveal/rules/duplicates/D005.py": 1,
-  "reveal/rules/imports/I002.py": 2,
   "reveal/rules/maintainability/M102.py": 1,
   "reveal/testability/patches.py": 1,
   "reveal/tree_view.py": 3,
