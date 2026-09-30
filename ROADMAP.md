@@ -313,7 +313,9 @@ a check that counts violations and lets the count only fall. Then the cause is r
    (`cli/routing/subcommand.emit_subcommand_result`), except `check` (BACK-1545); an
    adapter's own `?top`/`?limit` cut is recorded the same way; and a read that stops early
    records a lower bound (`showing 50 of 51+`), with git:// walking history once for every
-   view. Still open: file-path results (BACK-1548) and the broad `except`s.
+   view. An adapter that raises fails through the same handling as one that returns an
+   error (`cli/routing/uri._call_adapter`, BACK-1553). Still open: file-path results
+   (BACK-1548) and the broad `except`s.
 4. **One seam per concern:** BACK-1223 (one walker), BACK-1045 (parser seam), BACK-1366
    (one path pass), BACK-1372 (root finders) and BACK-1054 (import resolution).
 

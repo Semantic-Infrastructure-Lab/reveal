@@ -130,12 +130,12 @@ def load_json(file_path: Path) -> Any:
         if file_ext in file_type_hints:
             file_type, description = file_type_hints[file_ext]
             raise ValueError(
-                f"Error: {file_path.name} is {description}, not JSON.\n"
+                f"{file_path.name} is {description}, not JSON.\n"
                 f"Suggestion: Use 'reveal {file_path}' instead of 'reveal json://{file_path}'"
             ) from e
         else:
             raise ValueError(
-                f"Error: {file_path.name} is not valid JSON.\n"
+                f"{file_path.name} is not valid JSON.\n"
                 f"Parse error at line {e.lineno}, column {e.colno}: {e.msg}\n"
                 f"Suggestion: Check file format or use 'reveal {file_path}' for structure analysis"
             ) from e

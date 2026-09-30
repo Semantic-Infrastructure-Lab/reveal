@@ -9,11 +9,12 @@ import os
 import re
 import sys
 from argparse import Namespace
-from typing import Any, List, Optional
+from typing import Any, Callable, List, NoReturn, Optional
 
 from ...errors import NotApplicableError
+from ...reveal_types import CONTRACT_VERSION, RevealResult
 from ...utils import print_json_result, write_also_json
-from ...utils.results import note_truncation, outcome_of, truncations_of
+from ...utils.results import ResultBuilder, note_truncation, outcome_of, truncations_of
 from .flag_specs import exclude_fragment, inject_query_flags, strip_result_control_keys
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
 from .formats import declared_output_formats, require_supported_format
@@ -21,53 +22,112 @@ from .formats import declared_output_formats, require_supported_format
 logger = logging.getLogger(__name__)
 
 
-def _emit_not_applicable_envelope(scheme: str, resource: str, reason: str, args: 'Namespace') -> None:
-    """Emit a valid envelope for a query that genuinely does not apply to
-    the target (BACK-1210) — e.g. testability:// with no tests, git://
-    on a non-repo — exiting 0, not 1. This is a recorded result ("ran,
-    nothing applicable, here's why"), not a failure to work around; a
-    scripted batch consumer can no longer confuse it with a genuine
-    adapter crash (which still exits 1 via _emit_adapter_error_envelope).
-    Composes with BACK-1209's envelope fix: same shape, meta.applicable
-    added.
-    """
-    from ...reveal_types import CONTRACT_VERSION
-    from ...utils.results import ResultBuilder
+# _call_adapter's return once the adapter declined as not applicable and that answer is out.
+_DECLINED: Any = object()
 
-    result = ResultBuilder.create(
+
+def _call_adapter(call: Callable[[], Any], scheme: str, resource: str, args: 'Namespace',
+                  adapter_class: Any = None) -> Any:
+    """Run one call into an adapter; what it raises becomes a result like any returned one.
+
+    Every call the router makes into an adapter goes through here: constructing it,
+    --base-path, check(), get_element(), get_structure() and post_process(). A raise leaves
+    through _emit_result as a failed result (exit 1), and a NotApplicableError as a
+    not-applicable one (exit 0, BACK-1210), so both read the same as a returned result: one
+    stderr line, one JSON envelope, --also-json written. Each site used to catch for
+    itself, print its own error line (three spellings) and hand-build its own envelope, so
+    a raised error printed twice in text, carried contract_version 1.0 and source_type
+    'file', and wrote no --also-json (BACK-1553).
+
+    Returns the call's value, or _DECLINED once the not-applicable answer is out.
+    """
+    try:
+        return call()
+    except NotApplicableError as e:
+        _decline(scheme, resource, e.reason, args, adapter_class)
+        return _DECLINED
+    except Exception as e:  # not silent: _fail prints the error on stderr and exits 1
+        logger.debug('%s:// adapter call raised', scheme, exc_info=True)
+        _fail(scheme, resource, _exception_message(e), args, adapter_class=adapter_class)
+
+
+def _exception_message(e: Exception) -> str:
+    """The error text for a raised exception. The router prints ``Error (scheme://): ``, so a
+    message's own leading ``Error: `` (RevealError.__str__ adds one) is dropped. An exception
+    with no message is named by its type: an empty ``error`` would read as success."""
+    message = str(e).strip()
+    if message.startswith('Error: '):
+        message = message[len('Error: '):]
+    return message or type(e).__name__
+
+
+def _source_type_of(resource: str, adapter_class: Any = None) -> str:
+    """What a result the router builds says its source is. Only an existing directory or file
+    is known; anything else (a missing path, a ref, a host, an env var) is 'unknown', not
+    the 'file' that auto-detection on a nonexistent path would claim."""
+    path = resource.partition('?')[0]
+    resolve = getattr(adapter_class, 'resource_path', None) if isinstance(adapter_class, type) else None
+    if resolve is not None:  # calls:// path:name (BACK-1499)
+        path = resolve(path)
+    if path and os.path.isdir(path):
+        return 'directory'
+    if path and os.path.isfile(path):
+        return 'file'
+    return 'unknown'
+
+
+def _router_result(scheme: str, resource: str, adapter_class: Any = None, **fields: Any) -> RevealResult:
+    """The result the router builds when an adapter gave none: it raised, declined, or has no
+    such element. ``type`` is the scheme."""
+    return ResultBuilder.create(
         result_type=scheme,
         source=resource,
         contract_version=CONTRACT_VERSION,
-        warnings=[{'code': 'not_applicable', 'message': reason}],
-        applicable=False,
-        reason=reason,
+        source_type=_source_type_of(resource, adapter_class),
+        **fields,
     )
-    if getattr(args, 'format', 'text') == 'json':
-        print_json_result(result)
-    else:
-        print(f"({scheme}://) not applicable: {reason}")
 
 
-def _emit_adapter_error_envelope(scheme: str, resource: str, error_msg: str, args: 'Namespace') -> None:
-    """Emit a valid Output Contract envelope for an adapter-error path instead
-    of leaving stdout empty (BACK-1209). Adapters that raise instead of
-    returning ResultBuilder.create_error() themselves (e.g. testability://,
-    git://, diff://) previously left stdout at 0 bytes in both --format json
-    and --format text, indistinguishable from a crashed/hung process to a
-    scripted consumer globbing artifacts.
+def _fail(scheme: str, resource: str, message: str, args: 'Namespace', *,
+          adapter_class: Any = None, code: str = 'adapter_error',
+          detail: Optional[Callable[[], None]] = None, **fields: Any) -> NoReturn:
+    """Fail the query with an error result through _emit_result, which exits 1.
+
+    ``meta.errors`` carries the error once more with a code (``adapter_error`` for a raise,
+    ``element_not_found``, ...), which is how JSON tells a router-built failure from one an
+    adapter returned. ``detail`` prints hints after the error line, on stderr, in text only.
     """
-    from ...utils.results import ResultBuilder
+    result = _router_result(scheme, resource, adapter_class,
+                            errors=[{'code': code, 'message': message}], error=message, **fields)
+    _emit_result(result, args, scheme, _render_router_result, detail=detail)
+    sys.exit(1)  # _emit_result has exited on the failed outcome; this tells the type checker
 
-    result = ResultBuilder.create_error(
-        result_type=scheme,
-        source=resource,
-        error=error_msg,
-    )
-    result['meta'] = ResultBuilder.create_meta(errors=[{'code': 'adapter_error', 'message': error_msg}])
-    if getattr(args, 'format', 'text') == 'json':
+
+def _decline(scheme: str, resource: str, reason: str, args: 'Namespace', adapter_class: Any = None) -> None:
+    """Answer 'not applicable' for a query that genuinely does not apply to the target
+    (testability:// with no tests, git:// outside a repository): a recorded answer that
+    exits 0, not a failure (BACK-1210)."""
+    result = _router_result(scheme, resource, adapter_class,
+                            warnings=[{'code': 'not_applicable', 'message': reason}],
+                            applicable=False, reason=reason)
+    _emit_result(result, args, scheme, _render_router_result)
+
+
+def _render_router_result(result: Any, output_format: str,
+                          detail: Optional[Callable[[], None]] = None) -> None:
+    """Render a result the router built. JSON is the envelope. Text says 'not applicable' on
+    stdout, since that is the answer; for a failure it prints nothing on stdout, as for an
+    error an adapter returns, because _emit_result has already printed the error line on
+    stderr. BACK-1209 had a raised error also print a copy on stdout, so the error printed
+    twice; its reason, a scripted consumer finding no artifact, is met by the JSON envelope
+    and --also-json."""
+    if output_format == 'json':
         print_json_result(result)
-    else:
-        print(f"Error ({scheme}://): {error_msg} — adapter produced no result")
+        return
+    if outcome_of(result) == 'not_applicable':
+        print(f"({result['type']}://) not applicable: {result['reason']}")
+    elif detail is not None:
+        detail()
 
 
 def _parse_text_headings(text: str) -> List[dict]:
@@ -299,11 +359,7 @@ def _reject_missing_path(adapter_class: type, scheme: str, resource: str, args: 
         path = resolve(path)
     if not path or os.path.exists(path):
         return
-    msg = f"Path not found: {path}"
-    print(f"Error ({scheme}://): {msg}", file=sys.stderr)
-    if getattr(args, 'format', 'text') == 'json':
-        _emit_adapter_error_envelope(scheme, resource, msg, args)
-    sys.exit(1)
+    _fail(scheme, resource, f"Path not found: {path}", args, adapter_class=adapter_class)
 
 
 def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
@@ -326,19 +382,14 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
     # not a real type (e.g. a Mock callable in tests) or lacks from_uri.
     from ...adapters.base import _default_from_uri
     _reject_missing_path(adapter_class, scheme, resource, args)
-    try:
-        if isinstance(adapter_class, type) and hasattr(adapter_class, 'from_uri'):
-            adapter = adapter_class.from_uri(scheme, resource, element)
-        else:
-            adapter = _default_from_uri(adapter_class, scheme, resource, element)
-    except ImportError as e:
-        renderer_class.render_error(e)
-        _emit_adapter_error_envelope(scheme, resource, str(e), args)
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error initializing {scheme}:// adapter: {e}", file=sys.stderr)
-        _emit_adapter_error_envelope(scheme, resource, f"initializing {scheme}:// adapter: {e}", args)
-        sys.exit(1)
+    if isinstance(adapter_class, type) and hasattr(adapter_class, 'from_uri'):
+        adapter = _call_adapter(lambda: adapter_class.from_uri(scheme, resource, element),
+                                scheme, resource, args, adapter_class)
+    else:
+        adapter = _call_adapter(lambda: _default_from_uri(adapter_class, scheme, resource, element),
+                                scheme, resource, args, adapter_class)
+    if adapter is _DECLINED:
+        return
 
     # Apply --base-path override for adapters that support it (e.g., claude://)
     # REVEAL_CLAUDE_BASE_PATH env var acts as a persistent default for --base-path.
@@ -346,16 +397,14 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
     if path_override and hasattr(adapter, 'reconfigure_base_path'):
         mark(args, 'base_path')
         from pathlib import Path as _Path
-        try:
-            adapter.reconfigure_base_path(_Path(path_override))
-        except ValueError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            sys.exit(1)
+        if _call_adapter(lambda: adapter.reconfigure_base_path(_Path(path_override)),
+                         scheme, resource, args, adapter_class) is _DECLINED:
+            return
 
     # Handle --check mode if requested
     if peek(args, 'check', False) and hasattr(adapter, 'check'):
         mark(args, 'check')
-        _handle_check_mode(adapter, renderer_class, args)
+        _handle_check_mode(adapter, renderer_class, args, scheme, resource)
         return  # check mode exits directly
 
     # An adapter may carry the element inside its resource (diff://a.py:b.py/func).
@@ -444,17 +493,23 @@ def _build_render_opts(renderer_class: type[Any], args: 'Namespace', query_param
     return opts
 
 
-def _handle_check_mode(adapter, renderer_class: type[Any], args: 'Namespace') -> None:
+def _handle_check_mode(adapter, renderer_class: type[Any], args: 'Namespace',
+                       scheme: Optional[str] = None, resource: str = '') -> None:
     """Execute check mode and exit.
 
     Args:
         adapter: Initialized adapter with check() method
         renderer_class: Renderer for check results
         args: CLI arguments with check flags
+        scheme: URI scheme, for the error result if check() raises
+        resource: Resource part of the URI, likewise
     """
     # Build check kwargs and execute
     check_kwargs = _build_check_kwargs(adapter, args)
-    result = adapter.check(**check_kwargs)
+    result = _call_adapter(lambda: adapter.check(**check_kwargs),
+                           scheme or 'unknown', resource, args, type(adapter))
+    if result is _DECLINED:
+        return
     write_also_json(result, args)
 
     # Render check results
@@ -609,13 +664,23 @@ def _print_help_not_found_hints(adapter, element_name: str, section: Optional[st
     )
 
 
-def _adapter_error_text(e: Exception, scheme: Optional[str]) -> str:
-    """One-line ``Error (scheme://): msg`` text; multi-line messages print bare."""
-    error_msg = str(e)
-    if '\n' in error_msg:
-        return f"Error: {error_msg}"
-    scheme_hint = f" ({scheme}://)" if scheme else ""
-    return f"Error{scheme_hint}: {error_msg}"
+def _fail_element_not_found(adapter, element_name: str, section: Optional[str], resource: str,
+                            args: 'Namespace', scheme: Optional[str]) -> NoReturn:
+    """Fail an element lookup that found nothing. The adapter's element names go in the
+    result (``available_elements``) and, in text, on stderr after the error; help:// adds its
+    way back into discovery. This exit used to print on stderr only, so ``--format json``
+    got 0 bytes on stdout and --also-json was never written (BACK-1553)."""
+    elements = list(adapter.list_elements()) if hasattr(adapter, 'list_elements') else []
+
+    def detail() -> None:
+        if elements:
+            print(f"Available elements: {', '.join(elements)}", file=sys.stderr)
+        if scheme == 'help':
+            _print_help_not_found_hints(adapter, element_name, section)
+
+    extra = {'available_elements': elements} if elements else {}
+    _fail(scheme or 'unknown', resource, f"Element '{element_name}' not found", args,
+          adapter_class=type(adapter), code='element_not_found', detail=detail, **extra)
 
 
 def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
@@ -635,25 +700,12 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
     section = getattr(args, 'section', None)
     if section:
         element_kwargs['section'] = section
-    try:
-        result = adapter.get_element(element_name, **element_kwargs)
-    except NotApplicableError as e:
-        _emit_not_applicable_envelope(scheme or 'unknown', resource, e.reason, args)
+    result = _call_adapter(lambda: adapter.get_element(element_name, **element_kwargs),
+                           scheme or 'unknown', resource or '', args, type(adapter))
+    if result is _DECLINED:
         return
-    except Exception as e:
-        print(_adapter_error_text(e, scheme), file=sys.stderr)
-        _emit_adapter_error_envelope(scheme or 'unknown', resource or '', str(e), args)
-        sys.exit(1)
-
     if result is None:
-        print(f"Error: Element '{element_name}' not found", file=sys.stderr)
-        # Try to show available elements if adapter provides them
-        if hasattr(adapter, 'list_elements'):
-            elements = adapter.list_elements()
-            print(f"Available elements: {', '.join(elements)}", file=sys.stderr)
-        if scheme == 'help':
-            _print_help_not_found_hints(adapter, element_name, section)
-        sys.exit(1)
+        _fail_element_not_found(adapter, element_name, section, resource or '', args, scheme)
 
     # Apply --head/--tail to text-body content (BACK-355).
     # Probe canonical field names; first match wins.
@@ -880,17 +932,11 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
     structure_kwargs = _build_adapter_kwargs(adapter, args, scheme, resource)
 
     # Get structure from adapter
-    try:
-        result = adapter.get_structure(**structure_kwargs)
-    except NotApplicableError as e:
-        # BACK-1210: the query genuinely doesn't apply to this target (no
-        # tests, not a git repo) -- a recorded result, not a failure.
-        _emit_not_applicable_envelope(scheme or 'unknown', resource or '', e.reason, args)
+    scheme_name, source = scheme or 'unknown', resource or ''
+    result = _call_adapter(lambda: adapter.get_structure(**structure_kwargs),
+                           scheme_name, source, args, type(adapter))
+    if result is _DECLINED:
         return
-    except Exception as e:
-        print(_adapter_error_text(e, scheme), file=sys.stderr)
-        _emit_adapter_error_envelope(scheme or 'unknown', resource or '', str(e), args)
-        sys.exit(1)
 
     # Apply post-processing
     result = _apply_field_selection(result, args)
@@ -898,15 +944,11 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
     result = _apply_budget_constraints(result, args, adapter)
     post_process = getattr(type(adapter), 'post_process', None)
     if post_process is not None:
-        try:
-            result = adapter.post_process(result, args)
-        except NotApplicableError as e:
-            _emit_not_applicable_envelope(scheme or 'unknown', resource or '', e.reason, args)
+        processed = result
+        result = _call_adapter(lambda: adapter.post_process(processed, args),
+                               scheme_name, source, args, type(adapter))
+        if result is _DECLINED:
             return
-        except Exception as e:
-            print(_adapter_error_text(e, scheme), file=sys.stderr)
-            _emit_adapter_error_envelope(scheme or 'unknown', resource or '', str(e), args)
-            sys.exit(1)
 
     # Add available elements if adapter supports discovery
     if hasattr(adapter, 'get_available_elements'):

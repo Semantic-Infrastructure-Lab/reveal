@@ -81,7 +81,7 @@ Every adapter/analyzer output MUST include these fields:
 
 **`source_type`** (required)
 - **Type**: String (enum)
-- **Values**: `"file"` | `"directory"` | `"database"` | `"runtime"` | `"network"`
+- **Values**: `"file"` | `"directory"` | `"database"` | `"runtime"` | `"network"` | `"unknown"` (a failed result the router built for a source that isn't an existing file or directory)
 - **Purpose**: Categorizes the source for filtering/processing
 - **Examples**:
   - `"file"` - Single file path
@@ -345,6 +345,15 @@ both forms (BACK-1544). A subcommand's findings exit (`hotspots`/`deps` exit 1 o
   on stderr before rendering and exits 1 after, so `--format json` still gets the whole
   envelope. A renderer adds only detail for an error result (an example, the valid names)
   and must not print the error again.
+- **A raise is the same failure.** Every call the router makes into an adapter (construct,
+  `--base-path`, `check`, `get_element`, `get_structure`, `post_process`) goes through
+  `cli/routing/uri._call_adapter`, which turns an exception into an error result and handles
+  it as above: the error once on stderr, text stdout empty, the envelope in JSON,
+  `--also-json` written, exit 1 (BACK-1553). An element lookup that returns `None` fails the
+  same way, with the adapter's `available_elements`. Such a result has `type` = the scheme,
+  `source_type` `unknown` unless the source is an existing file or directory, and one
+  `meta.errors` entry whose `code` (`adapter_error`, `element_not_found`) says the router
+  built it. A `NotApplicableError` becomes a `not_applicable` result the same way.
 - **Record a cut list; don't print it.** `note_truncation` is the only spelling of a cut
   (`cause`: `limit`, `auto_cap`, `max_items`, `head`, `tail`, `range`). The router records
   its own `--max-items`/`--head` cuts the same way and prints every cut once, after the

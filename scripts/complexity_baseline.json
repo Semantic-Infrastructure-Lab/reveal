@@ -22,7 +22,7 @@
   "reveal/analyzers/imports/javascript.py::_get_tsconfig_aliases": 25,
   "reveal/cli/file_checker.py::_check_files_text": 32,
   "reveal/cli/handlers/introspection.py::build_discover_payload": 22,
-  "reveal/cli/routing/uri.py::_render_element": 27,
+  "reveal/cli/routing/uri.py::_render_element": 24,
   "reveal/core/callees/generic.py::callee_name_from_node": 22,
   "reveal/display/coverage.py::outline_coverage": 22,
   "reveal/display/structure.py::show_structure": 22,

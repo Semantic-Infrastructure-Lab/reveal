@@ -9,7 +9,7 @@ import json
 import shutil
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import Mock, MagicMock, patch
 from argparse import Namespace
 
@@ -326,42 +326,27 @@ class TestGenericAdapterHandler(unittest.TestCase):
             f"Empty resource should default to '.', got: {init_called}"
         )
 
-    def test_import_error_special_handling(self):
-        """Verify ImportError gets special error rendering.
-
-        Tests that when an adapter raises ImportError (e.g., missing dependency),
-        the routing handler catches it and calls renderer.render_error() instead
-        of just printing a generic error message.
-        """
+    def test_import_error_message_is_the_error(self):
+        """A missing dependency (ImportError at construction) fails like any raise: its
+        message, which carries the install hint, is printed once on stderr and exits 1.
+        It used to go to renderer.render_error, which printed its own spelling (BACK-1553)."""
         class MissingDependencyAdapter:
             def __init__(self, *args, **kwargs):
-                raise ImportError("pip install some-package")
+                raise ImportError("test:// requires some-package\nInstall with: pip install some-package")
 
             def get_structure(self):
                 return {'type': 'test'}
 
-        with patch('sys.stdout'), patch('sys.stderr'):
-            with patch.object(self.mock_renderer, 'render_error') as mock_render:
-                with patch('sys.exit', side_effect=SystemExit(1)) as mock_exit:
-                    # Call will trigger ImportError which should be handled gracefully
-                    with self.assertRaises(SystemExit):
-                        generic_adapter_handler(
-                            MissingDependencyAdapter,
-                            self.mock_renderer,
-                            'test',
-                            'resource',
-                            None,
-                            self.mock_args
-                        )
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            with self.assertRaises(SystemExit) as exc:
+                generic_adapter_handler(MissingDependencyAdapter, self.mock_renderer,
+                                        'test', 'resource', None, self.mock_args)
 
-                    # Should call render_error for ImportError
-                    mock_render.assert_called_once()
-                    # Verify the error passed is an ImportError
-                    call_args = mock_render.call_args[0]
-                    self.assertIsInstance(call_args[0], ImportError)
-                    self.assertIn("pip install some-package", str(call_args[0]))
-                    # Should exit with error code 1
-                    mock_exit.assert_called_once_with(1)
+        self.assertEqual(exc.exception.code, 1)
+        self.assertEqual(out.getvalue(), '')
+        self.assertEqual(err.getvalue().count('pip install some-package'), 1)
+        self.assertTrue(err.getvalue().startswith('Error (test://): test:// requires some-package'))
 
     def test_element_parameter_appended_for_uri(self):
         """Verify element is appended to URI for URI-based adapters.
@@ -1577,8 +1562,9 @@ class TestRoutingEdgeCases(unittest.TestCase):
 
 
 class TestAdapterErrorEnvelope(unittest.TestCase):
-    """BACK-1209: adapter errors must still emit a valid, non-empty envelope
-    on stdout (in both --format json and text), not leave it at 0 bytes.
+    """BACK-1209: an adapter that raises still gives --format json a valid envelope on
+    stdout, not 0 bytes. BACK-1553: in text the error is printed once, on stderr, as for
+    an error an adapter returns; stdout stays empty.
     """
 
     def test_construction_error_emits_json_envelope(self):
@@ -1624,21 +1610,22 @@ class TestAdapterErrorEnvelope(unittest.TestCase):
         self.assertEqual(envelope['type'], 'testability')
         self.assertEqual(envelope['meta']['errors'][0]['message'], 'no tests found for src')
 
-    def test_get_structure_error_emits_text_line(self):
-        """--format text must also print at least one line, not stay silent."""
+    def test_get_structure_error_prints_once_on_stderr(self):
+        """--format text prints the error once, on stderr. BACK-1209 also printed a copy on
+        stdout, so the same error read twice (BACK-1553)."""
         class RaisingAdapter:
             def get_structure(self, **kwargs):
                 raise ValueError("Not a git repository: .")
 
         mock_args = Namespace(format='text')
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            with self.assertRaises(SystemExit):
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            with self.assertRaises(SystemExit) as exc:
                 _render_structure(RaisingAdapter(), MockRenderer, mock_args, scheme='git', resource='src')
 
-        stdout = buf.getvalue()
-        self.assertTrue(stdout.strip(), "stdout must not be empty on get_structure() error (text format)")
-        self.assertIn('Not a git repository', stdout)
+        self.assertEqual(exc.exception.code, 1)
+        self.assertEqual(out.getvalue(), '')
+        self.assertEqual(err.getvalue(), 'Error (git://): Not a git repository: .\n')
 
 
 class TestNotApplicableEnvelope(unittest.TestCase):

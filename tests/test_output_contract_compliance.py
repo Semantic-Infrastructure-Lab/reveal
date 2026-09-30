@@ -45,6 +45,12 @@ proves nothing about the adapter's normal output. Invariants:
    ``?sort=date&limit=1`` listed the newest commit, sorted after the walk stopped), and a
    disclosed ``total`` is the uncapped length, or at most it when ``exact`` is false
    (xlsx said ``total_matches: 3`` where 684 matched) (BACK-1547).
+8. ``failure``: a query that fails on a missing resource reads the same whether the adapter
+   returned the error or raised it: the error once, on stderr, in text; a JSON envelope
+   with the Output Contract fields and the current ``contract_version``; ``--also-json``
+   written. A raise used to print twice, carry ``contract_version`` 1.0 and skip
+   ``--also-json`` (BACK-1553). ``test_the_failure_invariant_bites`` checks that both kinds
+   are compared.
 
 Violations that exist today are listed in ``KNOWN_VIOLATIONS`` as strict xfails, each
 naming its task. A fix makes its case XPASS, which fails the run until the entry is
@@ -73,6 +79,7 @@ from reveal.cli.invocation import COMMANDS
 from reveal.cli.routing import subcommand as subcommand_seam
 from reveal.cli.routing.uri import handle_uri
 from reveal.main import main
+from reveal.reveal_types import CONTRACT_VERSION
 from reveal.utils.results import truncations_of
 
 pytestmark = pytest.mark.contract
@@ -131,6 +138,7 @@ MISSING_URIS = {
 
 KNOWN_VIOLATIONS = {
     ('contract', 'codex'): 'BACK-1522',
+    ('failure', 'codex'): 'BACK-1522',
     ('missing', 'nginx'): 'BACK-1523',
     ('missing', 'reveal'): 'BACK-1521',
     ('abs_path', 'architecture'): 'BACK-1366',
@@ -446,7 +454,7 @@ def test_every_registered_adapter_is_covered():
 def test_known_violations_name_real_cases():
     for invariant, scheme in KNOWN_VIOLATIONS:
         assert invariant in ('contract', 'missing', 'error_exit', 'abs_path', 'truncation',
-                             'subcommand', 'own_cap')
+                             'subcommand', 'own_cap', 'failure')
         assert scheme in (SUBCOMMAND_ARGV if invariant == 'subcommand' else FIXTURE_URIS)
 
 
@@ -478,6 +486,50 @@ def test_error_in_result_exits_nonzero(harness, scheme):
     code, payload, _ = harness.run_fixture(scheme)
     if isinstance(payload, dict) and payload.get('error'):
         assert code != 0, f"{scheme}: result carries error {payload['error']!r} but exited 0"
+
+
+def _missing_uri(scheme):
+    return MISSING_URIS.get(scheme, f'{scheme}://nonexistent_zz_1513')
+
+
+@pytest.mark.parametrize('scheme', _cases('failure', sorted(FIXTURE_URIS)))
+def test_a_failure_reads_the_same_however_it_happened(harness, scheme, tmp_path):
+    """Invariant 8: a failed query reports its error once, as one envelope, whether the
+    adapter returned the error or raised it (BACK-1553)."""
+    code, payload, _ = harness.run(_missing_uri(scheme))
+    if code == 0:
+        return  # not a failure: invariant 2 ('missing') owns an exit 0 here
+    assert isinstance(payload, dict), f'{scheme}: a failure printed no JSON envelope'
+    for field in _REQUIRED_FIELDS:
+        assert payload.get(field), f'{scheme}: failure envelope lacks {field!r}'
+    assert payload['contract_version'] == CONTRACT_VERSION, (
+        f"{scheme}: failure envelope says contract_version {payload['contract_version']!r}")
+    assert payload['source_type'] in _VALID_SOURCE_TYPES | {'unknown'}, payload['source_type']
+    error = payload.get('error')
+    assert error, f'{scheme}: exited {code} with no top-level error in its envelope'
+
+    also = tmp_path / 'also.json'
+    _, out, err = harness.run_raw(_missing_uri(scheme), format='text', also_json=str(also))
+    first = error.splitlines()[0]
+    assert (out + err).count(first) == 1, (
+        f'{scheme}: text printed the error {(out + err).count(first)} times, not once '
+        f'(stdout {out[:120]!r}, stderr {err[:120]!r})')
+    assert first not in out, f'{scheme}: the error went to stdout, not stderr'
+    assert also.exists() and json.loads(also.read_text(encoding='utf-8')).get('error') == error, (
+        f'{scheme}: --also-json did not get the failure envelope')
+
+
+def test_the_failure_invariant_bites(harness):
+    """Positive control: the missing resources fail both ways, so invariant 8 compares an
+    error an adapter returned with one the router built from a raise."""
+    built, returned = [], []
+    for scheme in sorted(FIXTURE_URIS):
+        code, payload, _ = harness.run(_missing_uri(scheme))
+        if code and isinstance(payload, dict):
+            codes = {e.get('code') for e in (payload.get('meta') or {}).get('errors') or []}
+            (built if codes & {'adapter_error', 'element_not_found'} else returned).append(scheme)
+    assert {'ast', 'env', 'git', 'json'} <= set(built), built
+    assert returned, 'no adapter returned its own failure on a missing resource'
 
 
 @pytest.mark.parametrize('scheme', _cases(
