@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from ...utils.path_utils import is_test_path, is_unsafe_scan_root
+from ...utils.path_utils import EVIDENCE, _walk_code_files, is_test_path, is_unsafe_scan_root
 from ...utils.pyparse import parse_python
 
 logger = logging.getLogger(__name__)
@@ -370,13 +370,13 @@ class M102(BaseRule):
 
         imports: set[str] = set()
 
-        try:
-            candidates = list(package_root.rglob('*.py'))
-        except OSError:
-            # BACK-1259: rglob itself can raise if a directory disappears
-            # mid-walk (concurrent temp-dir cleanup), which must degrade to
-            # "no evidence" rather than propagate out of a lint rule.
-            candidates = []
+        # BACK-1578: the evidence walk -- noise dirs (.venv, node_modules), what git ignores
+        # and REVEAL_IGNORE are not the project's importers; --exclude narrows the report,
+        # not the evidence (check --exclude tests must not make test-only imports orphans,
+        # BACK-1259). os.walk skips a directory that vanishes mid-walk (BACK-1259's
+        # concurrent temp-dir cleanup) instead of raising.
+        candidates = [f for f in _walk_code_files(package_root, purpose=EVIDENCE)
+                      if f.suffix == '.py']
 
         for py_file in candidates:
             try:

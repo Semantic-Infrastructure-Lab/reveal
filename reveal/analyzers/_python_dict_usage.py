@@ -41,14 +41,13 @@ TypedDict record: {'name': str, 'file': str, 'line': int, 'fields': List[str]}
 from __future__ import annotations
 
 import ast
-import os
 import re
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, Iterable, Iterator, List, Optional, Set, Tuple
 
-from ..utils.path_utils import is_skippable_dir
+from ..utils.path_utils import WalkPurpose, _walk_code_files
 from ..utils.pyparse import parse_python
 
 _TypeAliasStmt = getattr(ast, 'TypeAlias', None)  # `type X = ...`, Python 3.12+
@@ -114,7 +113,10 @@ def has_python_files(path: str) -> bool:
     return next(iter_python_files(path), None) is not None
 
 
-def iter_python_files(path: str) -> Iterator[str]:
+def iter_python_files(path: str, purpose: Optional[WalkPurpose] = None) -> Iterator[str]:
+    """The .py/.pyi files under *path*, in a stable order, through the shared walker
+    (BACK-1223): the dict heatmap is an analysis walk; T006's project index passes
+    ``EVIDENCE``, so ``--exclude`` narrows its report, not the aliases it matches against."""
     path_obj = Path(path)
     if path_obj.is_file():
         if path_obj.suffix in ('.py', '.pyi'):
@@ -122,16 +124,9 @@ def iter_python_files(path: str) -> Iterator[str]:
         return
     if not path_obj.is_dir():
         return
-    for root, dirs, files in os.walk(str(path_obj)):
-        dirs[:] = sorted(
-            d for d in dirs
-            if not d.startswith('.')
-            and not is_skippable_dir(Path(root), d)
-            and not d.endswith('.egg-info')
-        )
-        for name in sorted(files):
-            if name.endswith(('.py', '.pyi')):
-                yield str(Path(root) / name)
+    for file_path in _walk_code_files(path_obj, purpose=purpose, sort=True):
+        if file_path.suffix in ('.py', '.pyi'):
+            yield str(file_path)
 
 
 def parse_file(file_path: str) -> Optional[ast.Module]:

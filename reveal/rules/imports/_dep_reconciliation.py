@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Callable, FrozenSet, Set
 
 from ...analyzers.imports.base import get_extractor
-from ...utils.path_utils import _walk_code_files
+from ...utils.path_utils import EVIDENCE, _walk_code_files
 
 # ---------------------------------------------------------------------------
 # Python: known PyPI distribution-name <-> top-level-import-name mismatches.
@@ -97,7 +97,7 @@ def _scan_project_imports(
     triggers on a manifest file, typically one per project per `check` run).
     """
     names: Set[str] = set()
-    for file_path in _walk_code_files(root):
+    for file_path in _walk_code_files(root, purpose=EVIDENCE):
         if file_path.suffix.lower() not in extensions:
             continue
         extractor = get_extractor(file_path)

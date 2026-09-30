@@ -7,7 +7,6 @@ every other capability follows.
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, cast
@@ -19,7 +18,7 @@ from ..conventions import LanguageConventions, conventions_for, family_for_path
 from ..defaults import TEST_DIR_NAMES, VENDOR_DIR_NAMES
 from ..utils.formatting import cwd_path
 from ..utils import print_json_result
-from ..utils.gitignore import gitignore_filter
+from ..utils.path_utils import EVIDENCE, walk_tree
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
 
@@ -86,8 +85,9 @@ def _camel_to_snake(name: str) -> str:
     return re.sub(r'([A-Z])', lambda m: '_' + m.group(1).lower(), name).lstrip('_')
 
 
-# Directories never worth walking for tests (vendored/build output).
-_SKIP_WALK_DIRS = VENDOR_DIR_NAMES | {'target', 'build', 'dist', '__pycache__'}
+# Vendored trees and Rust/Maven build output, never walked for tests. build/, dist/ and
+# caches are the shared walker's noise (build/ with code at its top level is source, BACK-552).
+_SKIP_WALK_DIRS = VENDOR_DIR_NAMES | {'target'}
 
 
 def _add_names(names: Set[str], raw: str) -> None:
@@ -130,19 +130,19 @@ def _build_test_name_index(path: Path, families: Optional[Iterable[str]] = None)
     names: Set[str] = set()
     if not convs:
         return names
-    gi = gitignore_filter(path)  # BACK-1386
-    for root, dirs, files in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in _SKIP_WALK_DIRS]
-        if gi is not None:
-            gi.prune(root, dirs)
-        in_test_dir = any(part in TEST_DIR_NAMES for part in Path(root).relative_to(path).parts)
+    # BACK-1578: an evidence walk -- --exclude narrows which hotspots are reported, not which
+    # tests count (check --exclude tests must not mark every hotspot untested). Vendored
+    # trees are pruned before descent: their tests cover vendored code, not the project's.
+    for root, dirs, files in walk_tree(path, EVIDENCE):
+        dirs[:] = [d for d in dirs if d not in _SKIP_WALK_DIRS]
+        in_test_dir = any(part in TEST_DIR_NAMES for part in root.relative_to(path).parts)
         for fname in files:
             conv = convs.get(family_for_path(fname))
             if conv is None:
                 continue
             is_test_file = in_test_dir or any(p.match(fname) for p in conv.test_file_patterns)
             if is_test_file or conv.colocated_test_symbols:
-                _scan_test_file(names, conv, fname, os.path.join(root, fname), is_test_file)
+                _scan_test_file(names, conv, fname, str(root / fname), is_test_file)
     return names
 
 

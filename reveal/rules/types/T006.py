@@ -37,7 +37,7 @@ from ...analyzers._python_dict_usage import (
     iter_python_files,
     resolve_typeddicts,
 )
-from ...utils.path_utils import resolve_project_root
+from ...utils.path_utils import EVIDENCE, resolve_project_root
 
 logger = logging.getLogger(__name__)
 
@@ -236,7 +236,7 @@ def _build_index(project_root: Path) -> Dict[str, Any]:
     """
     ceiling = _max_project_files()
     files = []
-    for file_path in iter_python_files(str(project_root)):
+    for file_path in iter_python_files(str(project_root), purpose=EVIDENCE):
         files.append(file_path)
         if len(files) > ceiling:
             reason = (
