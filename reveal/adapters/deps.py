@@ -370,10 +370,6 @@ class DepsRenderer:
             return
         _render_deps(result, top)
 
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        print(f"Error scanning deps: {error}")
-
 
 @register_adapter('deps')
 @register_renderer(DepsRenderer)

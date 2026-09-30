@@ -10,7 +10,6 @@ Usage:
 """
 
 import os
-import sys
 from pathlib import Path
 from typing import Dict, Any, List, NamedTuple, Optional, Set, Tuple
 from reveal.reveal_types import CONTRACT_VERSION
@@ -380,10 +379,6 @@ class DependsRenderer:
             print_json_result(result)
             return
         DependsRenderer._render_dependents(result, verbose=True)
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        print(f"Error: {error}", file=sys.stderr)
 
 
 @register_adapter('depends')

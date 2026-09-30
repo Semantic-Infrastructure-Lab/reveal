@@ -1,6 +1,5 @@
 """Claude adapter renderer for text output."""
 
-import sys
 from ...rendering import TypeDispatchRenderer
 
 from .render_sessions import (
@@ -139,8 +138,3 @@ class ClaudeRenderer(TypeDispatchRenderer):
                     print(f"{key}: [{type(value).__name__} with {len(value)} items]")
                 else:
                     print(f"{key}: {value}")
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly errors."""
-        print(f"Error: {error}", file=sys.stderr)

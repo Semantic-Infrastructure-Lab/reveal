@@ -1684,25 +1684,6 @@ class TestImportsRenderer:
         parsed = json.loads(output)
         assert 'type' in parsed
 
-    def test_renderer_error_handling(self):
-        """Renderer should handle errors gracefully."""
-        from reveal.adapters.imports import ImportsRenderer
-        from io import StringIO
-        import sys
-
-        # Capture stderr (render_error outputs to stderr)
-        old_stderr = sys.stderr
-        sys.stderr = captured_output = StringIO()
-
-        error = FileNotFoundError("Import analysis failed")
-        ImportsRenderer.render_error(error)
-
-        sys.stderr = old_stderr
-        output = captured_output.getvalue()
-
-        assert 'Error' in output
-        assert 'Import analysis failed' in output
-
     def test_renderer_unused_imports(self, tmp_path):
         """Renderer should format unused imports correctly."""
         from reveal.adapters.imports import ImportsRenderer

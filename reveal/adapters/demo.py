@@ -1,6 +1,5 @@
 """Demo adapter for demo:// URIs."""
 
-import sys
 from typing import Dict, Any, Optional
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils import print_json_result
@@ -43,11 +42,6 @@ class DemoRenderer:
         else:
             # TODO: Implement element rendering
             print(f"Element: {result.get('name', 'unknown')}")
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly errors."""
-        print(f"Error accessing demo: {error}", file=sys.stderr)
 
 
 @register_adapter('demo')

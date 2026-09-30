@@ -1,7 +1,5 @@
 """Renderer for statistics adapter results."""
 
-import sys
-
 from ...utils import print_json_result
 
 
@@ -97,8 +95,3 @@ class StatsRenderer:
         print(f"  Score:     {result['quality']['score']:.1f}/100")
         print(f"  Long funcs: {result['quality']['long_functions']}")
         print(f"  Deep nest:  {result['quality']['deep_nesting']}")
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly errors."""
-        print(f"Error analyzing statistics: {error}", file=sys.stderr)

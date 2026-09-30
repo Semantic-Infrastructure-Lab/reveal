@@ -68,7 +68,3 @@ class PatchesRenderer:
         # from the start and never printed, so the text render stated findings
         # with more confidence than the contract does.
         render_meta_warnings(result)
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        print(f"Error scanning patches: {error}")

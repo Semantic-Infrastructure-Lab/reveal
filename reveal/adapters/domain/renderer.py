@@ -1,7 +1,5 @@
 """Domain result rendering for CLI output."""
 
-import sys
-
 from reveal.rendering import TypeDispatchRenderer
 
 
@@ -477,23 +475,3 @@ class DomainRenderer(TypeDispatchRenderer):
             print("Next Steps:")
             for step in result['next_steps']:
                 print(f"  • {step}")
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly error messages.
-
-        Args:
-            error: Exception to render
-        """
-        error_msg = str(error)
-
-        if 'dnspython' in error_msg:
-            print("Error: dnspython is not installed", file=sys.stderr)
-            print("", file=sys.stderr)
-            print("Install with: pip install reveal-cli[dns]", file=sys.stderr)
-        elif 'Domain URI requires' in error_msg:
-            print(f"Error: {error_msg}", file=sys.stderr)
-            print("", file=sys.stderr)
-            print("Usage: reveal domain://example.com", file=sys.stderr)
-        else:
-            print(f"Error: {error}", file=sys.stderr)

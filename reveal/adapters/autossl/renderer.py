@@ -1,6 +1,5 @@
 """Renderer for AutoSSL adapter output (autossl://)."""
 
-import sys
 from typing import Any, Dict, List
 
 from ...utils import print_json_result
@@ -94,10 +93,6 @@ class AutosslRenderer:
     @staticmethod
     def render_element(result: Dict[str, Any], format: str = 'text') -> None:
         AutosslRenderer.render_structure(result, format)
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        print(f"Error: {error}", file=sys.stderr)
 
     @staticmethod
     def _render_runs(r: Dict[str, Any]) -> None:

@@ -755,23 +755,6 @@ class TestSQLiteRenderer(unittest.TestCase):
         self.assertIn('Indexes', output)
         self.assertIn('idx_username', output)
 
-    def test_renderer_error_handling(self):
-        """Renderer should handle errors gracefully."""
-        from reveal.adapters.sqlite.renderer import SqliteRenderer
-        from io import StringIO
-
-        # Capture stderr
-        old_stderr = sys.stderr
-        sys.stderr = captured_output = StringIO()
-
-        error = FileNotFoundError("Database not found")
-        SqliteRenderer.render_error(error)
-
-        sys.stderr = old_stderr
-        output = captured_output.getvalue()
-
-        self.assertIn('Error accessing SQLite database', output)
-
 
 class TestSQLiteAdapterEdgeCases(unittest.TestCase):
     """Test edge cases and special scenarios."""

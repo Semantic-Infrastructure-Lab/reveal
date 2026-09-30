@@ -1189,25 +1189,6 @@ class TestStatsRenderer:
         assert 'type' in parsed
         assert parsed['type'] == 'stats_summary'
 
-    def test_renderer_error_handling(self):
-        """Renderer should handle errors gracefully."""
-        from reveal.adapters.stats import StatsRenderer
-        from io import StringIO
-        import sys
-
-        # Capture stderr
-        old_stderr = sys.stderr
-        sys.stderr = captured_output = StringIO()
-
-        error = FileNotFoundError("Path not found")
-        StatsRenderer.render_error(error)
-
-        sys.stderr = old_stderr
-        output = captured_output.getvalue()
-
-        assert 'Error' in output
-        assert 'Path not found' in output
-
     def test_renderer_element(self, tmp_path):
         """Renderer should format element statistics correctly."""
         from reveal.adapters.stats import StatsRenderer

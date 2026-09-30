@@ -58,10 +58,6 @@ class CpanelRenderer:
         CpanelRenderer.render_structure(result, format)
 
     @staticmethod
-    def render_error(error: Exception) -> None:
-        print(f"Error: {error}", file=sys.stderr)
-
-    @staticmethod
     def _render_overview(r: Dict[str, Any]) -> None:
         username = r.get('username', '?')
         print(f"cPanel user: {username}")

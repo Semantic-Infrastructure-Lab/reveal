@@ -1,7 +1,5 @@
 """MySQL result rendering for CLI output."""
 
-import sys
-
 from reveal.rendering import TypeDispatchRenderer
 
 
@@ -359,21 +357,3 @@ class MySQLRenderer(TypeDispatchRenderer):
 
         # Exit code hint
         print(f"Exit code: {result['exit_code']}")
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly error messages.
-
-        Args:
-            error: Exception to render
-        """
-        if isinstance(error, ImportError):
-            print("Error: mysql:// adapter requires pymysql", file=sys.stderr)
-            print("", file=sys.stderr)
-            print("Install with:", file=sys.stderr)
-            print("  pip install reveal-cli[database]", file=sys.stderr)
-            print("  # or", file=sys.stderr)
-            print("  pip install pymysql", file=sys.stderr)
-        else:
-            # Generic error display
-            print(f"Error: {error}", file=sys.stderr)

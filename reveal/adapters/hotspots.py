@@ -284,10 +284,6 @@ class HotspotsRenderer:
             return
         _render_report(result, top, test_index=test_index)
 
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        print(f"Error scanning hotspots: {error}")
-
 
 @register_adapter('hotspots')
 @register_renderer(HotspotsRenderer)

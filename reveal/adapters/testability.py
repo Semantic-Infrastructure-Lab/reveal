@@ -117,10 +117,6 @@ class TestabilityRenderer:
             return
         _render_report(result)
 
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        print(f"Error building testability report: {error}")
-
 
 @register_adapter('testability')
 @register_renderer(TestabilityRenderer)

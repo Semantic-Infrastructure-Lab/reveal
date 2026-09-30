@@ -1007,24 +1007,6 @@ class TestMySQLRenderer(unittest.TestCase):
         self.assertIn('Fail Check', output)
         self.assertNotIn('Pass Check', output)
 
-    def test_renderer_error_handling(self):
-        """Renderer should handle errors gracefully."""
-        from reveal.adapters.mysql.renderer import MySQLRenderer
-        from io import StringIO
-
-        # Capture stderr (render_error outputs to stderr)
-        old_stderr = sys.stderr
-        sys.stderr = captured_output = StringIO()
-
-        error = ConnectionError("Failed to connect to MySQL")
-        MySQLRenderer.render_error(error)
-
-        sys.stderr = old_stderr
-        output = captured_output.getvalue()
-
-        self.assertIn('Error', output)
-        self.assertIn('Failed to connect to MySQL', output)
-
     def test_renderer_server_output(self):
         """Renderer should format server overview correctly."""
         from reveal.adapters.mysql.renderer import MySQLRenderer

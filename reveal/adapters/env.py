@@ -2,7 +2,6 @@
 
 import os
 import re
-import sys
 from typing import Dict, Any, Optional
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer
 from ..utils.results import ResultBuilder
@@ -132,11 +131,6 @@ class EnvRenderer:
         """
         from ..rendering import render_env_variable
         render_env_variable(result, format)
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly errors."""
-        print(f"Error accessing environment: {error}", file=sys.stderr)
 
 
 @register_adapter('env')

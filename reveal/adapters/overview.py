@@ -563,10 +563,6 @@ class OverviewRenderer:
             sys.exit(2)
         _render_overview(result, top)
 
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        print(f"Error building overview: {error}")
-
 
 @register_adapter('overview')
 @register_renderer(OverviewRenderer)

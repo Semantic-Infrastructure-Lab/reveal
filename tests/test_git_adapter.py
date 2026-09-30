@@ -1450,24 +1450,6 @@ class TestGitRenderer(unittest.TestCase):
         self.assertIn('type', parsed)
         self.assertEqual(parsed['type'], 'git_repository')
 
-    def test_renderer_error_handling(self):
-        """Renderer should handle errors gracefully."""
-        from reveal.adapters.git.adapter import GitRenderer
-        from io import StringIO
-
-        # Capture stderr (render_error outputs to stderr)
-        old_stderr = sys.stderr
-        sys.stderr = captured_output = StringIO()
-
-        error = FileNotFoundError("Repository not found")
-        GitRenderer.render_error(error)
-
-        sys.stderr = old_stderr
-        output = captured_output.getvalue()
-
-        self.assertIn('Error', output)
-        self.assertIn('Repository not found', output)
-
     def test_renderer_file_history(self):
         """Renderer should format file history correctly."""
         from reveal.adapters.git.adapter import GitRenderer

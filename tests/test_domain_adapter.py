@@ -584,24 +584,6 @@ class TestDomainRenderer(unittest.TestCase):
         self.assertEqual(parsed['type'], 'domain_overview')
         self.assertEqual(parsed['domain'], 'example.com')
 
-    def test_renderer_error_handling(self):
-        """Renderer should handle errors gracefully."""
-        from reveal.adapters.domain.renderer import DomainRenderer
-        from io import StringIO
-
-        # Capture stderr (render_error outputs to stderr)
-        old_stderr = sys.stderr
-        sys.stderr = captured_output = StringIO()
-
-        error = Exception("DNS lookup failed")
-        DomainRenderer.render_error(error)
-
-        sys.stderr = old_stderr
-        output = captured_output.getvalue()
-
-        self.assertIn('Error', output)
-        self.assertIn('DNS lookup failed', output)
-
     def test_renderer_dns_records(self):
         """Renderer should format DNS records correctly."""
         from reveal.adapters.domain.renderer import DomainRenderer

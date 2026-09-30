@@ -636,17 +636,6 @@ class TestClaudeRenderer:
         assert '[dict with 10 items]' in captured.out
 
 
-    def test_render_error(self, capsys):
-        """Test render_error outputs to stderr."""
-        from reveal.adapters.claude.renderer import ClaudeRenderer
-
-        error = ValueError('Test error message')
-        ClaudeRenderer.render_error(error)
-        captured = capsys.readouterr()
-
-        assert 'Error: Test error message' in captured.err
-
-
 class TestClaudeThinkingRenderer:
     """Tests for _render_claude_thinking."""
 

@@ -197,8 +197,6 @@ class {class_name}Adapter(ResourceAdapter):
 
 RENDERER_TEMPLATE = '''"""Renderer for {adapter_name} adapter results."""
 
-import sys
-
 
 class {class_name}Renderer:
     """Renderer for {adapter_name} adapter results."""
@@ -237,11 +235,6 @@ class {class_name}Renderer:
         else:
             # TODO: Implement element rendering
             print(f"Element: {{result.get('name', 'unknown')}}")
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly errors."""
-        print(f"Error accessing {adapter_name}: {{error}}", file=sys.stderr)
 '''
 
 TEST_TEMPLATE = '''"""Tests for {adapter_name} adapter."""

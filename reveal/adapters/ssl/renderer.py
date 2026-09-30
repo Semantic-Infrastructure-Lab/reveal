@@ -1,6 +1,5 @@
 """SSL certificate result rendering for CLI output."""
 
-import sys
 from datetime import datetime
 from typing import Optional
 
@@ -796,27 +795,3 @@ class SSLRenderer(TypeDispatchRenderer):
         SSLRenderer._render_cert_file_warnings([r for r in all_results if r['status'] == 'warning'])
         SSLRenderer._render_cert_file_passes([r for r in all_results if r['status'] == 'pass'], only_failures)
         print(f"Exit code: {result['exit_code']}")
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly error messages.
-
-        Args:
-            error: Exception to render
-        """
-        error_msg = str(error)
-
-        if 'getaddrinfo failed' in error_msg or 'Name or service not known' in error_msg:
-            print("Error: Could not resolve hostname", file=sys.stderr)
-            print("", file=sys.stderr)
-            print("Check that the domain name is correct and DNS is working.", file=sys.stderr)
-        elif 'Connection refused' in error_msg:
-            print("Error: Connection refused", file=sys.stderr)
-            print("", file=sys.stderr)
-            print("The server is not accepting connections on this port.", file=sys.stderr)
-        elif 'timed out' in error_msg.lower():
-            print("Error: Connection timed out", file=sys.stderr)
-            print("", file=sys.stderr)
-            print("The server did not respond. Check network connectivity.", file=sys.stderr)
-        else:
-            print(f"Error: {error}", file=sys.stderr)

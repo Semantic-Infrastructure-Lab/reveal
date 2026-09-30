@@ -17,7 +17,7 @@
  "reveal/adapters/autossl/adapter.py::return-value": 2,
  "reveal/adapters/autossl/parser.py::return-value": 2,
  "reveal/adapters/base.py::no-any-return": 1,
- "reveal/adapters/calls/adapter.py::misc": 2,
+ "reveal/adapters/calls/adapter.py::misc": 1,
  "reveal/adapters/calls/index.py::arg-type": 4,
  "reveal/adapters/calls/index.py::no-any-return": 2,
  "reveal/adapters/calls/index.py::return-value": 2,

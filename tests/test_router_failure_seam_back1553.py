@@ -188,3 +188,15 @@ def test_every_adapter_call_goes_through_the_seam():
                 and isinstance(h.type, ast.Name) and h.type.id == 'Exception'
                 and not any(isinstance(n, ast.Raise) for n in ast.walk(h))]
     assert handlers == ['_call_adapter'], f'`except Exception` outside the seam: {handlers}'
+
+
+def test_no_renderer_reports_errors_itself():
+    """The router reports every failure, so a renderer's render_error would never be called.
+    Its one caller was the missing-dependency branch; 36 copies printed their own spelling
+    of the error, and git's printed its pygit2 hint twice (the hint is in the ImportError)."""
+    from conftest import production_schemes
+    from reveal import adapters  # noqa: F401  (registers every adapter)
+    from reveal.adapters.base import get_renderer_class
+
+    stale = [s for s in production_schemes() if hasattr(get_renderer_class(s), 'render_error')]
+    assert not stale, f'renderers defining render_error, which nothing calls: {stale}'

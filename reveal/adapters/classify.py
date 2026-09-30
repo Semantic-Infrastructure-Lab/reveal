@@ -136,10 +136,6 @@ class ClassifyRenderer:
         for row in rows:
             print(f"  {row['provenance']:>11}  {row['file']}")
 
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        print(f"Error classifying provenance: {error}")
-
 
 @register_adapter('classify')
 @register_renderer(ClassifyRenderer)

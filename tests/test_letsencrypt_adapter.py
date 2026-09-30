@@ -466,15 +466,6 @@ class TestLetsEncryptRenderer(unittest.TestCase):
         parsed = json.loads(buf.getvalue().strip())
         self.assertEqual(parsed['type'], 'letsencrypt_inventory')
 
-    def test_render_error_accepts_exception(self):
-        """BACK-168: render_error must accept Exception, not just str."""
-        import io
-        buf = io.StringIO()
-        err = ImportError("missing dependency")
-        with patch('builtins.print', side_effect=lambda *a, **kw: buf.write(str(a[0]) + '\n')):
-            self.renderer.render_error(err)
-        self.assertIn('missing dependency', buf.getvalue())
-
     def test_render_structure_format_kwarg(self):
         """BACK-169: render_structure parameter must be named 'format', not 'output_format'."""
         import io, json, inspect

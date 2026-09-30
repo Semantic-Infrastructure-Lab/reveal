@@ -1,7 +1,5 @@
 """Codex adapter renderer — dispatches by result['type']."""
 
-import sys
-
 from ...rendering import TypeDispatchRenderer
 
 from .render_sessions import (
@@ -77,7 +75,3 @@ class CodexRenderer(TypeDispatchRenderer):
 
     # Content search renderer
     _render_codex_content_search = staticmethod(_render_codex_content_search)
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        print(f"Error: {error}", file=sys.stderr)

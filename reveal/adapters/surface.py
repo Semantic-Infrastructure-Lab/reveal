@@ -488,10 +488,6 @@ class SurfaceRenderer:
             return
         _render_report(result, top=top)
 
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        print(f"Error scanning surface: {error}")
-
 
 @register_adapter('surface')
 @register_renderer(SurfaceRenderer)

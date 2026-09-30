@@ -1,7 +1,6 @@
 """Help adapter (help://) - Meta-adapter for exploring reveal's capabilities."""
 
 import re
-import sys
 from dataclasses import dataclass, asdict, replace
 from pathlib import Path
 from typing import Dict, List, Any, Optional
@@ -275,11 +274,6 @@ class HelpRenderer:
         """
         from ..rendering import render_help
         render_help(result, format)
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly errors."""
-        print(f"Error accessing help: {error}", file=sys.stderr)
 
 
 # help://search lists at most this many hits and records the rest as a cut (BACK-1543).

@@ -1,7 +1,5 @@
 """Renderer for JSON navigation adapter results."""
 
-import sys
-
 
 class JsonRenderer:
     """Renderer for JSON navigation results."""
@@ -16,8 +14,3 @@ class JsonRenderer:
         """
         from ...rendering import render_json_result
         render_json_result(result, format)
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly errors."""
-        print(f"Error querying JSON: {error}", file=sys.stderr)

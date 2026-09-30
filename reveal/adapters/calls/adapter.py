@@ -255,9 +255,6 @@ class CallsRenderer:
         effective_format = result.get('_query_format') or format
         render_calls_structure(result, effective_format)
 
-    def render_error(error: Exception) -> None:  # noqa: N805
-        print(f"Error: {error}")
-
 
 @register_adapter('calls')
 @register_renderer(CallsRenderer)

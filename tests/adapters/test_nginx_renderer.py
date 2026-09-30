@@ -340,20 +340,3 @@ class TestElementRenderers:
         R._render_nginx_vhost_ports({'domain': 'x.com', 'ports': [], 'next_steps': ['reload nginx']})
         out = capsys.readouterr().out
         assert 'reload nginx' in out
-
-
-# ---------------------------------------------------------------------------
-# render_error
-# ---------------------------------------------------------------------------
-
-class TestRenderError:
-    def test_unknown_element_error(self, capsys):
-        R.render_error(ValueError("Unknown element: foo"))
-        err = capsys.readouterr().err
-        assert 'Unknown element' in err
-        assert 'Available elements' in err
-
-    def test_generic_error(self, capsys):
-        R.render_error(RuntimeError("Something went wrong"))
-        err = capsys.readouterr().err
-        assert 'Something went wrong' in err

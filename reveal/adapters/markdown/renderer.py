@@ -1,7 +1,5 @@
 """Renderer for markdown query results."""
 
-import sys
-
 from ...rendering.adapters.markdown_query import render_markdown_query
 
 
@@ -27,8 +25,3 @@ class MarkdownRenderer:
             format: Output format ('text', 'json', 'grep')
         """
         render_markdown_query(result, format, single_file=True)
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly errors."""
-        print(f"Error querying markdown: {error}", file=sys.stderr)

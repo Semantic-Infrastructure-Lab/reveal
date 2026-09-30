@@ -1,7 +1,5 @@
 """Git repository rendering for text and JSON output."""
 
-import sys
-
 from ...utils import print_json_result
 
 
@@ -334,16 +332,3 @@ class GitRenderer:
             print(f"Element filter: {result['element_filter']}")
         print()
         print(result['diff_text'])
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render error message."""
-        print(f"Error: {error}", file=sys.stderr)
-        if isinstance(error, ImportError):
-            # pygit2 not installed
-            print(file=sys.stderr)
-            print("The git:// adapter requires pygit2.", file=sys.stderr)
-            print("Install with: pip install reveal-cli[git]", file=sys.stderr)
-            print("Alternative: pip install pygit2>=1.14.0", file=sys.stderr)
-            print(file=sys.stderr)
-            print("For more info: reveal help://git", file=sys.stderr)

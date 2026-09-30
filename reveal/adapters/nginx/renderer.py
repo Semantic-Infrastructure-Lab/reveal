@@ -355,13 +355,3 @@ class NginxUriRenderer(TypeDispatchRenderer):
 
         if has_gaps:
             sys.exit(2)
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        msg = str(error)
-        if 'Unknown element' in msg:
-            print(f"Error: {msg}", file=sys.stderr)
-            print("", file=sys.stderr)
-            print("Available elements: ports, upstream, auth, locations, config", file=sys.stderr)
-        else:
-            print(f"Error: {error}", file=sys.stderr)

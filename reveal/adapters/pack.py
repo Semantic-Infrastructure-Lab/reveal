@@ -901,10 +901,6 @@ class PackRenderer:
         if content:
             _emit_content_section(selected)
 
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        print(f"Error building pack: {error}")
-
 
 @register_adapter('pack')
 @register_renderer(PackRenderer)

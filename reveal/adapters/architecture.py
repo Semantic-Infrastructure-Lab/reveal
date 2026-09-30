@@ -445,10 +445,6 @@ class ArchitectureRenderer:
             return
         _render_brief(result, top, Path(result['path']), no_imports=no_imports)
 
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        print(f"Error building architecture brief: {error}")
-
 
 @register_adapter('architecture')
 @register_renderer(ArchitectureRenderer)

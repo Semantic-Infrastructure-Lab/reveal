@@ -924,10 +924,6 @@ class ContractsRenderer:
             return
         _render_report(result)
 
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        print(f"Error scanning contracts: {error}")
-
 
 @register_adapter('contracts')
 @register_renderer(ContractsRenderer)

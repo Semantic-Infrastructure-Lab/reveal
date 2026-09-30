@@ -1447,25 +1447,6 @@ class TestClaudeRenderer:
         assert parsed['type'] == 'claude_session_overview'
         assert parsed['session'] == 'test-session'
 
-    def test_renderer_error_handling(self):
-        """Renderer should handle errors gracefully."""
-        from reveal.adapters.claude.renderer import ClaudeRenderer
-        from io import StringIO
-        import sys
-
-        # Capture stderr (render_error outputs to stderr)
-        old_stderr = sys.stderr
-        sys.stderr = captured_output = StringIO()
-
-        error = FileNotFoundError("Session file not found")
-        ClaudeRenderer.render_error(error)
-
-        sys.stderr = old_stderr
-        output = captured_output.getvalue()
-
-        assert 'Error' in output
-        assert 'Session file not found' in output
-
     def test_renderer_tool_calls(self, mock_session_file):
         """Renderer should format tool calls correctly."""
         from reveal.adapters.claude.renderer import ClaudeRenderer

@@ -40,7 +40,3 @@ class TasksRenderer:
         if result.get('description'):
             print()
             print(result['description'])
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        print(f"Error accessing tasks: {error}", file=sys.stderr)

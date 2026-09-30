@@ -1,7 +1,6 @@
 """Xlsx adapter for xlsx:// URIs - Excel spreadsheet analysis and extraction."""
 
 import logging
-import sys
 import re
 import base64
 import csv
@@ -425,11 +424,6 @@ class XlsxRenderer:
     def render_element(result: dict, format: str = 'text') -> None:
         """Render specific xlsx element (same as structure for sheets)."""
         XlsxRenderer.render_structure(result, format)
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly errors."""
-        print(f"Error accessing Excel file: {error}", file=sys.stderr)
 
 
 _SCHEMA_QUERY_PARAMS = {

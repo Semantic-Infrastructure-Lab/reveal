@@ -62,7 +62,6 @@ class TestEnvVarAppliedInHandler:
         adapter_class.from_uri = MagicMock(return_value=adapter)
         adapter.reconfigure_base_path = MagicMock()
         renderer_class = MagicMock()
-        renderer_class.render_error = MagicMock()
 
         with patch.dict(os.environ, {'REVEAL_CLAUDE_BASE_PATH': str(projects)}):
             with patch('reveal.cli.routing.uri._handle_rendering'):

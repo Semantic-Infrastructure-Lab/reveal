@@ -15,7 +15,6 @@ Usage:
 import hashlib
 import os
 import stat as stat_module
-import sys
 from pathlib import Path
 from typing import Callable, Dict, Any, List, Optional, Tuple
 from reveal.reveal_types import CONTRACT_VERSION
@@ -838,11 +837,6 @@ class ImportsRenderer:
                 print(f"  • {imp['module']} (line {imp['line']})")
         else:
             print("  No imports found")
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly errors."""
-        print(f"Error analyzing imports: {error}", file=sys.stderr)
 
 
 from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages  # noqa: E402

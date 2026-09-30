@@ -1,7 +1,5 @@
 """Renderer for SQLite adapter results."""
 
-import sys
-
 from reveal.rendering import TypeDispatchRenderer
 
 
@@ -104,10 +102,3 @@ class SqliteRenderer(TypeDispatchRenderer):
             print("Next Steps:")
             for step in result['next_steps']:
                 print(f"  {step}")
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly errors."""
-        print(f"Error accessing SQLite database: {error}", file=sys.stderr)
-        if isinstance(error, ImportError):
-            print("Note: SQLite support uses Python's built-in sqlite3 module", file=sys.stderr)

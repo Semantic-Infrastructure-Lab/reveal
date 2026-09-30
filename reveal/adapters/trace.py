@@ -354,10 +354,6 @@ class TraceRenderer:
             return
         _render_trace(result)
 
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        print(f"Error building trace: {error}")
-
 
 @register_adapter('trace')
 @register_renderer(TraceRenderer)

@@ -1,7 +1,5 @@
 """Renderer for reveal self-inspection results."""
 
-import sys
-
 
 class RevealRenderer:
     """Renderer for reveal self-inspection results."""
@@ -54,8 +52,3 @@ class RevealRenderer:
         for d in sorted(detections, key=lambda x: (x.line, x.column)):
             print(d)
             print()
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly errors."""
-        print(f"Error inspecting reveal: {error}", file=sys.stderr)

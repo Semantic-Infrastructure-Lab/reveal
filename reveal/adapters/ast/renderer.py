@@ -1,7 +1,5 @@
 """Rendering for AST query adapter."""
 
-import sys
-
 
 class AstRenderer:
     """Renderer for AST query results."""
@@ -16,8 +14,3 @@ class AstRenderer:
         """
         from ...rendering import render_ast_structure
         render_ast_structure(result, format)
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly errors."""
-        print(f"Error querying AST: {error}", file=sys.stderr)

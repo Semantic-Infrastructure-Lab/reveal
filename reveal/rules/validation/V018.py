@@ -71,7 +71,6 @@ class V018(BaseRule):
                         f"Add renderer class and @register_renderer decorator:\n"
                         f"  1. Create {scheme.title()}Renderer class with:\n"
                         f"     - render_structure(result, format)\n"
-                        f"     - render_error(error)\n"
                         f"     - render_element(result, format) [if adapter supports elements]\n"
                         f"  2. Add @register_renderer({scheme.title()}Renderer) above @register_adapter('{scheme}')"
                     ),
@@ -137,6 +136,7 @@ class V018(BaseRule):
         return (
             "Ensures all registered adapters have corresponding renderers. "
             "The renderer-based architecture requires every adapter to have "
-            "a renderer class with render_structure() and render_error() methods. "
+            "a renderer class with a render_structure() method (errors are reported by "
+            "the router, not the renderer). "
             "Without a renderer, the adapter is registered but unusable."
         )

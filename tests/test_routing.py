@@ -37,10 +37,6 @@ class MockRenderer:
     def render_element(result, format='text'):
         pass
 
-    @staticmethod
-    def render_error(error):
-        pass
-
 
 class TestGenericAdapterHandler(unittest.TestCase):
     """Tests for generic_adapter_handler function."""
@@ -373,10 +369,6 @@ class TestGenericAdapterHandler(unittest.TestCase):
             def render_structure(result, format='text'):
                 pass
 
-            @staticmethod
-            def render_error(error):
-                pass
-
         with patch('sys.stdout'):
             generic_adapter_handler(
                 URIAdapter,
@@ -623,10 +615,6 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
             def render_structure(result, format='text'):
                 pass
 
-            @staticmethod
-            def render_error(error):
-                pass
-
         mock_args = Namespace(
             format='text',
             check=True,
@@ -672,10 +660,6 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
             def render_check(result, format='text', **kwargs):
                 pass
 
-            @staticmethod
-            def render_error(error):
-                pass
-
         mock_args = Namespace(
             format='text',
             check=True,
@@ -717,10 +701,6 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
         class CheckRenderer:
             @staticmethod
             def render_check(result, format='text', **kwargs):
-                pass
-
-            @staticmethod
-            def render_error(error):
                 pass
 
         mock_args = Namespace(
@@ -766,10 +746,6 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
             def render_check(result, format='text', **kwargs):
                 pass
 
-            @staticmethod
-            def render_error(error):
-                pass
-
         mock_args = Namespace(
             format='text',
             check=True,
@@ -809,10 +785,6 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
         class CheckRenderer:
             @staticmethod
             def render_check(result, format='text', **kwargs):
-                pass
-
-            @staticmethod
-            def render_error(error):
                 pass
 
         mock_args = Namespace(
@@ -865,10 +837,6 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
 
             @staticmethod
             def render_structure(result, format='text'):
-                pass
-
-            @staticmethod
-            def render_error(error):
                 pass
 
         mock_args = Namespace(

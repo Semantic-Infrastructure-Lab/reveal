@@ -1,7 +1,5 @@
 """Renderer for Python adapter results."""
 
-import sys
-
 
 class PythonRenderer:
     """Renderer for Python runtime inspection results."""
@@ -27,8 +25,3 @@ class PythonRenderer:
         """
         from ...rendering import render_python_element
         render_python_element(result, format)
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render user-friendly errors."""
-        print(f"Error accessing Python runtime: {error}", file=sys.stderr)

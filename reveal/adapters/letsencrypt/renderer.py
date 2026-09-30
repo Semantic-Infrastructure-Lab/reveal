@@ -56,10 +56,6 @@ class LetsEncryptRenderer:
             for step in next_steps:
                 print(f"  {step}")
 
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        print(f"Error: {error}")
-
 
 def _expiry_label(days: int, is_expired: bool) -> str:
     if is_expired:
