@@ -21,14 +21,14 @@ from ..registry import (
     JS_TS_LANGUAGES, _is_cpp_header_content, extensions_for_languages, language_for_extension,
 )
 from ..utils import print_json_result
-from ..utils.gitignore import gitignore_filter
 from ..utils.path_utils import (
+    ANALYSIS,
     census_and_coverage_for_path,
     detect_non_python_language,
-    is_skippable_dir,
     is_test_dir,
     is_test_filename,
     is_test_basename_for_language,
+    walk_tree,
 )
 from ..utils.query import parse_query_params
 from .ast.surface_matrix import CATEGORIES, RECOVERED_KEY, UNPARSED_KEY, coverage_matrix
@@ -144,20 +144,14 @@ def _collect_source_files(path: Path, source_only: bool = False) -> Dict['_Surfa
             buckets[spec].append(path)
         return buckets
 
-    gi = gitignore_filter(path)  # BACK-1386
-    for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [
-            d for d in dirs
-            if not is_skippable_dir(Path(root), d) and not d.startswith('.')
-            and not (source_only and _is_test_dir(d))
-        ]
-        if gi is not None:
-            gi.prune(root, dirs)
+    # The shared walker (BACK-1577): the same files the coverage census below counts,
+    # dot-dir source included (BACK-1038). source_only prunes test dirs before descent.
+    for root, dirs, filenames in walk_tree(path, ANALYSIS):
+        if source_only:
+            dirs[:] = [d for d in dirs if not _is_test_dir(d)]
         for fname in filenames:
-            fpath = Path(os.path.join(root, fname))
+            fpath = root / fname
             if source_only and _is_test_file(fpath):
-                continue
-            if gi is not None and gi.ignored(fpath):
                 continue
             spec = _scanner_for(fpath)
             if spec is not None:

@@ -314,8 +314,9 @@ KNOWN_SILENT = {
     ('patches', 'max_items'): _NOT_VISIBLE,
     ('calls', 'exclude'): _NOT_VISIBLE,
     ('hotspots', 'exclude'): _NOT_VISIBLE,
-    ('testability', 'exclude'): _NOT_VISIBLE,
     ('trace', 'exclude'): _NOT_VISIBLE,
+    # The target is proj/tests, so --exclude tests (relative to it) matches nothing there.
+    ('patches', 'exclude'): _NOT_VISIBLE,
     ('architecture', 'all'): _NOT_VISIBLE,
     ('ast', 'all'): _NOT_VISIBLE,
     ('calls', 'all'): _NOT_VISIBLE,

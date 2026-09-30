@@ -20,8 +20,8 @@ from ...utils.pyparse import parse_python
 from ..ast.call_graph import build_alias_map, build_symbol_map, resolve_callees as _resolve_callees
 from ...conventions import conventions_for, family_for_path, is_builtin_anywhere
 from ...defaults import TEST_FRAMEWORK_CALLEE_NAMES
-from ...utils.gitignore import gitignore_enabled, gitignore_filter
-from ...utils.path_utils import is_unsafe_scan_root
+from ...utils.gitignore import gitignore_enabled
+from ...utils.path_utils import _walk_code_files, is_unsafe_scan_root
 from ...core.definition_names import lookup_keys, name_matches
 
 # Module-level LRU cache: directory → (cache_key, index)
@@ -327,28 +327,16 @@ def _python_referenced_names(directory: Path) -> Set[str]:
 
 
 def _iter_python_files(directory: Path) -> Iterator[Path]:
-    """The .py files the callers index sees: the same pruning as
-    collect_structures (skip dirs, --exclude, what git ignores).
+    """The .py files the callers index sees: the shared walker's, as collect_structures'
+    (BACK-1577) -- skip dirs, what git ignores, REVEAL_IGNORE and --exclude.
 
     BACK-1386: this was a bare rglob('*.py') that walked .venv/,
     node_modules/ and every git-ignored tree, so a name referenced only in a
     vendored or generated file hid a genuinely uncalled function.
     """
-    from ...utils.path_utils import is_skippable_dir
-    gi = gitignore_filter(directory)
-    for root, dirs, files in os.walk(directory):
-        dirs[:] = [
-            d for d in dirs
-            if not is_skippable_dir(Path(root), d) and not d.endswith('.egg-info')
-        ]
-        if gi is not None:
-            gi.prune(root, dirs)
-        for name in files:
-            if not name.endswith('.py'):
-                continue
-            fp = Path(root) / name
-            if is_code_file(fp) and not (gi is not None and gi.ignored(fp)):
-                yield fp
+    for fp in _walk_code_files(directory):
+        if fp.suffix == '.py' and is_code_file(fp):
+            yield fp
 
 
 def _dir_cache_key(directory: Path) -> Any:
@@ -358,7 +346,8 @@ def _dir_cache_key(directory: Path) -> Any:
     A single top-level stat is insufficient on Linux because editing a nested
     file only updates the *containing subdirectory's* mtime, not the root.
 
-    Fallback: if all stats fail, walk code-file mtimes (slow but correct).
+    If the directory can't be stat'ed or listed there is nothing to index, and a
+    walk of it would find nothing either: the key says so.
     """
     from ...utils.path_utils import is_skippable_dir
     try:
@@ -372,14 +361,7 @@ def _dir_cache_key(directory: Path) -> Any:
                         pass
         return ('dir_mtimes', tuple(sorted(mtimes)))
     except OSError:
-        entries = []
-        for fp in sorted(directory.rglob('*')):
-            if fp.is_file() and is_code_file(fp):
-                try:
-                    entries.append((str(fp), os.stat(fp).st_mtime_ns))
-                except OSError:
-                    pass
-        return tuple(entries)
+        return ('unreadable', str(directory))
 
 
 def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
@@ -724,23 +706,14 @@ def _parent_hint_scan_is_cheap(parent: str) -> bool:
     crosses the ceiling, so it stays fast even when the answer is "no". Also
     refuses outright on system/home roots (e.g. a tempdir whose parent is /tmp).
     """
-    from ...utils.path_utils import is_skippable_dir
     if is_unsafe_scan_root(parent):
         return False
     count = 0
-    gi = gitignore_filter(parent)  # count what the scan itself would see
-    for root, dirs, files in os.walk(parent):
-        dirs[:] = [
-            d for d in dirs
-            if not is_skippable_dir(Path(root), d) and not d.endswith('.egg-info')
-        ]
-        if gi is not None:
-            gi.prune(root, dirs)
-        for name in files:
-            if is_code_file(Path(name)):
-                count += 1
-                if count > _HINT_SCAN_MAX_FILES:
-                    return False
+    for fp in _walk_code_files(Path(parent)):  # count what the scan itself would see
+        if is_code_file(fp):
+            count += 1
+            if count > _HINT_SCAN_MAX_FILES:
+                return False
     return True
 
 

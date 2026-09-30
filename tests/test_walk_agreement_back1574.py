@@ -127,7 +127,6 @@ KNOWN_DISAGREEMENTS = {
     'tree': 'PathFilter: no REVEAL_IGNORE, build/ with code always hidden (BACK-1581)',
     '--files': 'PathFilter: no REVEAL_IGNORE, build/ with code always hidden (BACK-1581)',
     '--grep': 'own walk: no REVEAL_IGNORE (BACK-1581)',
-    'surface://': 'own walk drops dot-dirs (BACK-1577)',
     'imports://': 'own walk drops dot-dirs (BACK-1580)',
 }
 

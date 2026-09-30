@@ -78,9 +78,11 @@ def is_noise_dir(parent: Path, name: str) -> bool:
     - ``build``/``dist`` have no such marker, so they skip unless a source-code file sits
       directly inside (setuptools' ``build/`` holds ``lib/``/``bdist.*/``, not source).
 
+    ``*.egg-info`` (setuptools metadata) is noise wherever it sits (BACK-093).
+
     Cheap: a few ``stat`` calls or one ``os.scandir`` per ambiguous name, never a sub-walk.
     """
-    if name in _SKIP_DIRS:
+    if name in _SKIP_DIRS or name.endswith('.egg-info'):
         return True
     if name not in _AMBIGUOUS_SKIP_DIRS:
         return False
@@ -510,12 +512,10 @@ def detect_non_python_language(path: Path) -> str:
     if path.is_file():
         return _non_python_display_name(path)
     counts: Dict[str, int] = {}
-    for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
-        for fname in filenames:
-            lang = _non_python_display_name(Path(os.path.join(root, fname)))
-            if lang:
-                counts[lang] = counts.get(lang, 0) + 1
+    for fpath in _walk_code_files(path):  # the files the empty scan itself looked at
+        lang = _non_python_display_name(fpath)
+        if lang:
+            counts[lang] = counts.get(lang, 0) + 1
     return max(counts, key=counts.__getitem__) if counts else ''
 
 

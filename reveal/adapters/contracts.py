@@ -7,7 +7,6 @@ capability follows (BACK-901). Same treatment as surface.py (BACK-904).
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
@@ -17,12 +16,10 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from .surface import _supported_coverage_languages
 from ..registry import JS_TS_LANGUAGES, _is_cpp_header_content, extensions_for_languages
 from ..utils import print_json_result
-from ..utils.gitignore import gitignore_filter
-from ..utils.exclusions import path_is_excluded
 from ..utils.path_utils import (
+    _walk_code_files,
     assess_language_coverage,
     detect_non_python_language,
-    is_skippable_dir,
 )
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
@@ -79,21 +76,16 @@ def _is_cpp_file(fpath: Path) -> bool:
 
 
 def _walk_matching(path: Path, matches: Callable[[Path], bool]) -> Iterator[Path]:
-    """Files under *path* (or *path* itself) that *matches* accepts, skipping
-    vendored/build and dot directories and what git ignores."""
+    """Files under *path* (or *path* itself) that *matches* accepts, through the shared
+    walker (BACK-1577): the same files ``collect_structures`` hands the Python and
+    TypeScript scanners, dot-dir source included (BACK-1038)."""
     if path.is_file():
         if matches(path):
             yield path
         return
-    gi = gitignore_filter(path)  # BACK-1386
-    for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
-        if gi is not None:
-            gi.prune(root, dirs)
-        for fname in filenames:
-            fpath = Path(os.path.join(root, fname))
-            if matches(fpath) and not (gi is not None and gi.ignored(fpath)):
-                yield fpath
+    for fpath in _walk_code_files(path):
+        if matches(fpath):
+            yield fpath
 
 
 def _has_files(path: Path, matches: Callable[[Path], bool]) -> bool:
@@ -101,11 +93,8 @@ def _has_files(path: Path, matches: Callable[[Path], bool]) -> bool:
 
 
 def _collect_files(path: Path, matches: Callable[[Path], bool]) -> List[Path]:
-    """Files a scanner reads: as _walk_matching, minus user exclusions (an
-    explicitly named single file is never excluded)."""
-    if path.is_file():
-        return [path] if matches(path) else []
-    return [f for f in _walk_matching(path, matches) if not path_is_excluded(f)]
+    """Files a scanner reads (an explicitly named single file is never excluded)."""
+    return list(_walk_matching(path, matches))
 
 
 # Each contract scanner and the files that make it active, in merge order.

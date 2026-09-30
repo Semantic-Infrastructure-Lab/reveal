@@ -18,7 +18,6 @@ Returns a list of evidence dicts:
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -26,8 +25,7 @@ from ...core import suppress_treesitter_warnings  # noqa: F401 — called at sca
 from ...core import node_children as _children
 from ...core import tree_root
 from ...core.treesitter_compat import _zero_arg
-from ...utils.gitignore import gitignore_filter
-from ...utils.path_utils import is_skippable_dir
+from ...utils.path_utils import _walk_code_files
 
 
 # ─────────────────────────── public entry point ──────────────────────────────
@@ -40,18 +38,9 @@ def collect_type_evidence(path: str, var_name: str) -> List[Dict[str, Any]]:
     if path_obj.is_file():
         _scan_file(str(path_obj), var_name, evidence)
     elif path_obj.is_dir():
-        gi = gitignore_filter(path_obj)  # BACK-1386
-        for root, dirs, files in os.walk(str(path_obj)):
-            dirs[:] = [
-                d for d in dirs
-                if not is_skippable_dir(Path(root), d) and not d.endswith('.egg-info')
-            ]
-            if gi is not None:
-                gi.prune(root, dirs)
-            for name in files:
-                fp = str(Path(root) / name)
-                if _is_python_file(fp) and not (gi is not None and gi.ignored(fp)):
-                    _scan_file(fp, var_name, evidence)
+        for fp in _walk_code_files(path_obj):  # the shared walker (BACK-1577)
+            if _is_python_file(str(fp)):
+                _scan_file(str(fp), var_name, evidence)
 
     return evidence
 

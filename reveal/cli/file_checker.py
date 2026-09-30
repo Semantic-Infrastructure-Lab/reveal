@@ -20,7 +20,7 @@ from typing import Optional, List, Dict, TYPE_CHECKING
 from ..utils.path_utils import (
     ScopeCensus,
     _language_for_path,
-    is_skippable_dir,
+    _walk_code_files,
     tally_files_by_language,
     to_posix,
 )
@@ -476,7 +476,7 @@ def collect_files_to_check(
             utils/gitignore.py: tracked files are never skipped); None
             follows the process switch (--no-gitignore)
         exclude_patterns: Additional user-supplied --exclude patterns
-            (BACK-1042), fnmatch'd by should_skip_file; a directory pattern
+            (BACK-1042), gitignore syntax (BACK-1576); a directory pattern
             like "wp-includes/js/dist/*" prunes the whole subtree instead of
             just filtering it out of the final report.
 
@@ -487,84 +487,40 @@ def collect_files_to_check(
 
     code_exts = get_code_extensions()
     files_to_check: List[Path] = []
-    skipped_gitignore = 0
+    skipped = {True: 0, False: 0}  # is_dir -> count, whatever the cause
     skipped_no_analyzer = 0
-    skipped_dirs = 0
     no_analyzer_by_language: Dict[str, Dict[str, object]] = {}
-    from ..utils.gitignore import gitignore_filter
-    gi = gitignore_filter(directory, respect_gitignore)
-    skip_patterns = list(exclude_patterns or [])
 
-    # BACK-1221: REVEAL_IGNORE / config.yaml 'ignore:' patterns were wired
-    # into _walk_code_files's walk (BACK-1201) but this is `check`'s own,
-    # separate walk (see BACK-1221's investigation note for the full list
-    # of independent walkers) -- honor them here too so `reveal check`
-    # actually respects the documented always-on env var.
-    from ..config import RevealConfig  # deferred: cli/config cycle
-    config = RevealConfig.get(start_path=directory)
+    def count_hidden(_path: Path, is_dir: bool, _cause: str) -> None:
+        skipped[is_dir] += 1
 
-    for root, dirs, files in os.walk(directory):
-        # Filter out excluded directories and *.egg-info build artifacts
-        root_path = Path(root)
-        kept_dirs = []
-        for d in dirs:
-            if is_skippable_dir(root_path, d) or d.endswith('.egg-info'):
-                skipped_dirs += 1
-                continue
-            dir_path = root_path / d
-            if config.should_ignore(dir_path):
-                skipped_dirs += 1
-                continue
-            if gi is not None and gi.ignored(dir_path, is_dir=True):
-                skipped_dirs += 1
-                continue
-            if skip_patterns:
-                rel_dir = dir_path.relative_to(directory)
-                # Append a dummy filename so should_skip_file sees parts correctly
-                if should_skip_file(rel_dir / '_', skip_patterns):
-                    skipped_dirs += 1
-                    continue
-            kept_dirs.append(d)
-        dirs[:] = kept_dirs
-
-        for filename in files:
-            file_path = root_path / filename
-            relative_path = file_path.relative_to(directory)
-
-            # Skip REVEAL_IGNORE/config.yaml-ignored files
-            if config.should_ignore(file_path):
-                skipped_gitignore += 1
-                continue
-
-            # Skip gitignored/excluded files
-            if (gi is not None and gi.ignored(file_path)) or (
-                    skip_patterns and should_skip_file(relative_path, skip_patterns)):
-                skipped_gitignore += 1
-                continue
-
-            # Check if file has a supported analyzer
-            if get_analyzer(str(file_path), allow_fallback=False):
-                files_to_check.append(file_path)
-            else:
-                skipped_no_analyzer += 1
-                # BACK-1038: a recognized code extension with no analyzer
-                # (e.g. Objective-C) is still a language *present* in the
-                # target — track it separately so to_scope_census() can
-                # report it (matching overview's un-gated census) without
-                # adding the file to files_to_check (rules still can't run
-                # on it, that part of the behavior is correct as-is).
-                ext = file_path.suffix.lower()
-                if ext in code_exts:
-                    lang = _language_for_path(file_path)
-                    if lang:
-                        entry = no_analyzer_by_language.setdefault(lang, {'count': 0, 'ext': ext})
-                        entry['count'] += 1
+    # The shared walker (BACK-1577): noise dirs, what git ignores, REVEAL_IGNORE and
+    # --exclude are the seam's, so check sees the files ast:// and stats:// see.
+    for file_path in _walk_code_files(directory, exclude_patterns, respect_gitignore,
+                                      on_hidden=count_hidden):
+        # Check if file has a supported analyzer
+        if get_analyzer(str(file_path), allow_fallback=False):
+            files_to_check.append(file_path)
+        else:
+            skipped_no_analyzer += 1
+            # BACK-1038: a recognized code extension with no analyzer
+            # (e.g. Objective-C) is still a language *present* in the
+            # target — track it separately so to_scope_census() can
+            # report it (matching overview's un-gated census) without
+            # adding the file to files_to_check (rules still can't run
+            # on it, that part of the behavior is correct as-is).
+            ext = file_path.suffix.lower()
+            if ext in code_exts:
+                lang = _language_for_path(file_path)
+                if lang:
+                    entry = no_analyzer_by_language.setdefault(lang, {'count': 0, 'ext': ext})
+                    entry['count'] += 1
 
     return FileCollectionResult(
         files=files_to_check,
-        skipped_gitignore=skipped_gitignore,
+        skipped_gitignore=skipped[False],
         skipped_no_analyzer=skipped_no_analyzer,
-        skipped_dirs=skipped_dirs,
+        skipped_dirs=skipped[True],
         no_analyzer_by_language=no_analyzer_by_language,
     )
 
