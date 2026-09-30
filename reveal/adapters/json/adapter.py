@@ -5,6 +5,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...utils.results import ResultBuilder, note_truncation
+from ...utils.query_parser import note_query_parsed
 from ...utils.query import (
     parse_query_filters,
     parse_result_control,
@@ -24,11 +25,12 @@ from .queries import (
     navigate_to_path
 )
 def _parse_filters_safe(filter_query: str) -> list:
-    """Parse query filters, returning empty list on failure."""
+    """Parse query filters, returning empty list on failure. A key counts as used only when
+    ``_process_value`` applies the filters (an array), not when parsed (BACK-1542)."""
     if not filter_query:
         return []
     try:
-        return parse_query_filters(filter_query)
+        return parse_query_filters(filter_query, record=False)
     except Exception:
         return []
 
@@ -71,6 +73,7 @@ class JsonAdapter(ResourceAdapter):
         path, query_string = resource, query
         self.query_string = query_string
         self.query_filters = []
+        self._filter_query = ''
         self.result_control = ResultControl()
 
         # Parse file path and JSON path
@@ -90,6 +93,7 @@ class JsonAdapter(ResourceAdapter):
                 # Parse result control first (removes sort/limit/offset from query)
                 filter_query, self.result_control = parse_result_control(query_string)
                 self.query_filters = _parse_filters_safe(filter_query)
+                self._filter_query = filter_query
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Get JSON data with optional query processing.
@@ -229,11 +233,7 @@ class JsonAdapter(ResourceAdapter):
             self.query_filters and
             all(qf.op == '?' for qf in self.query_filters)
         )
-        has_no_result_control = (
-            not self.result_control.sort_field and
-            self.result_control.limit is None and
-            (self.result_control.offset is None or self.result_control.offset == 0)
-        )
+        has_no_result_control = not self.result_control.any_set()
 
         if has_only_existence_checks or (not self.query_filters and has_no_result_control):
             legacy_modes = {'schema', 'flatten', 'gron', 'type', 'keys', 'length'}
@@ -261,6 +261,11 @@ class JsonAdapter(ResourceAdapter):
         parts = [p.strip() for p in self.query_string.lower().split('&')]
         query = parts[0]
         data_only = 'data-only' in parts
+        # The mode is read here, from the raw query, so tell the flag ledger (BACK-1542):
+        # it noted a documented ?keys as unread. data-only means something to flatten only.
+        note_query_parsed(query)
+        if data_only and query in ('flatten', 'gron'):
+            note_query_parsed('data-only')
 
         if query == 'schema':
             return get_schema_result(value, self.file_path, self.json_path)
@@ -300,6 +305,7 @@ class JsonAdapter(ResourceAdapter):
 
         # Apply filters
         if self.query_filters:
+            note_query_parsed(self._filter_query)
             original = value
             value = filter_array(value, self.query_filters, get_field_value, compare)
 
@@ -334,8 +340,4 @@ class JsonAdapter(ResourceAdapter):
         Returns:
             True if any result control parameters set
         """
-        return (
-            self.result_control.sort_field is not None or
-            self.result_control.limit is not None or
-            (self.result_control.offset is not None and self.result_control.offset > 0)
-        )
+        return self.result_control.any_set()

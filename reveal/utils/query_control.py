@@ -27,6 +27,17 @@ class ResultControl:
     limit: Optional[int] = None
     offset: int = 0
 
+    def any_set(self) -> bool:
+        """Whether any control was asked for, without counting it as read (BACK-1542).
+
+        A check before applying is not an application: json:// validated ``?limit=`` on an
+        object, which it never limits, and the ledger took that for a use.
+        """
+        fields = object.__getattribute__(self, '__dict__')
+        return (fields.get('sort_field', type(self).sort_field) is not None
+                or fields.get('limit', type(self).limit) is not None
+                or (fields.get('offset', type(self).offset) or 0) > 0)
+
     def __getattribute__(self, name: str) -> Any:
         key = _FIELD_KEYS.get(name)
         if key is not None:

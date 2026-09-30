@@ -384,15 +384,24 @@ def _try_parse_single_char_operators(part: str, coerce_numeric: bool) -> Optiona
 def parse_query_filters(
     query: str,
     coerce_numeric: bool = True,
-    support_existence: bool = True
+    support_existence: bool = True,
+    record: bool = True,
 ) -> List[QueryFilter]:
     """Parse query string into list of QueryFilter objects.
 
     Supports operators: >, <, >=, <=, =, ==, !=, ~=, .., ?, !
+
+    Parsing a filter counts its key as used (the flag ledger). ``record=False`` marks the
+    keys only as parsed, for an adapter that applies its filters to some targets and not
+    others: it calls ``note_query_parsed`` when it does apply them (json:// filters arrays,
+    never an object, BACK-1542).
     """
     if not query:
         return []
-    note_query_parsed(query)
+    if record:
+        note_query_parsed(query)
+    else:
+        query_key_recorder(*(part for part in query.split('&') if part.strip()))
 
     filters = []
     parts = query.split('&')

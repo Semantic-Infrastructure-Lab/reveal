@@ -237,6 +237,33 @@ def test_exclude_on_an_adapter_that_never_walks_is_named(db):
     assert 'Note: --exclude has no effect on sqlite://' in proc.stderr
 
 
+@pytest.fixture
+def jsons(tmp_path):
+    (tmp_path / 'obj.json').write_text('{"a": 1, "b": [1, 2, 3]}', encoding='utf-8')
+    (tmp_path / 'arr.json').write_text('[{"n": 1}, {"n": 2}]', encoding='utf-8')
+    return tmp_path
+
+
+@pytest.mark.parametrize('uri', ['json://obj.json?keys', 'json://obj.json?schema',
+                                 'json://obj.json?flatten&data-only', 'json://arr.json?n=1',
+                                 'json://arr.json?limit=1'])
+def test_json_modes_and_applied_filters_get_no_note(jsons, uri):
+    """BACK-1542: the legacy modes are read from the raw query, so ?keys (which works) was
+    told 'this adapter does not read it'."""
+    proc = _cli(uri, '--format', 'json', cwd=jsons)
+    assert proc.returncode == 0, proc.stderr
+    assert 'has no effect' not in proc.stderr, proc.stderr
+
+
+@pytest.mark.parametrize('uri, key', [('json://obj.json?bogus=1', 'bogus'),
+                                      ('json://obj.json?limit=1', 'limit')])
+def test_json_filters_on_an_object_are_named(jsons, uri, key):
+    """BACK-1542: filters and ?limit apply to arrays; on an object they were silently
+    dropped (a filter counted as used when parsed, ?limit when validated)."""
+    proc = _cli(uri, '--format', 'json', cwd=jsons)
+    assert f"query param '{key}' has no effect on this json:// query" in proc.stderr
+
+
 def test_check_on_an_adapter_without_check_is_named(db):
     proc = _cli('env://', '--check', cwd=db)
     assert 'Note: --check has no effect on env://' in proc.stderr
