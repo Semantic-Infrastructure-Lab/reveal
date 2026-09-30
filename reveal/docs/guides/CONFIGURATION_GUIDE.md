@@ -76,7 +76,7 @@ Reveal merges configurations from multiple sources with the following precedence
 1. **CLI flags** (`--select`, `--ignore`) - Highest priority
 2. **Environment variables** (`REVEAL_RULES_DISABLE`, etc.)
 3. **REVEAL_CONFIG file** (if `REVEAL_CONFIG` env var is set)
-4. **Project configs** (walk up from current directory)
+4. **Project configs** (walk up from the checked file's directory, so `reveal check /other/proj/f.py` uses `/other/proj`'s `.reveal.yaml` wherever you run it)
 5. **User config** (`~/.config/reveal/config.yaml`)
 6. **System config** (`/etc/reveal/config.yaml`)
 7. **Built-in defaults** - Lowest priority
