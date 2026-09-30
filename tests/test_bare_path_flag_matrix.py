@@ -22,7 +22,7 @@ and the cell needs reclassifying, not a silent drift).
 Found and fixed this session: `--meta`'s directory summary (`_collect_dir_stats`) walked raw
 `os.walk()` with no filtering at all -- `.gitignore`, `--exclude`, and even `.git/` internals
 were silently included, unlike every sibling bare-path directory view (tree, `--files`,
-`--grep`), which all share `display.filtering.PathFilter`. Now wired the same way.
+`--grep`), which all walk the shared walker's display purpose (BACK-1581). Now wired the same way.
 
 Cell classification, per (shape, flag):
   honored           the branch reads the flag (directly or by forwarding into a shared seam,

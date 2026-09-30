@@ -170,10 +170,6 @@ overrides:
     rules:
       disable:
         - M104  # Adapter lookup tables for Claude message type handling
-  - files: "reveal/display/filtering.py"
-    rules:
-      disable:
-        - M104  # DEFAULT_NOISE_PATTERNS is a filtering constant by design
   - files: "reveal/registry.py"
     rules:
       disable:

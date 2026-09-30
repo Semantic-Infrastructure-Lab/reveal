@@ -23,7 +23,7 @@ than calling the setters directly wherever a scope has a natural extent.
 
 from contextlib import contextmanager
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 _ACTIVE_ROOT: Optional[Path] = None
 _ACTIVE_PATTERNS: Tuple[str, ...] = ()
@@ -93,6 +93,35 @@ def exclusion_scope(root: Optional[Path], patterns: Optional[List[str]]):
         yield
     finally:
         _ACTIVE_ROOT, _ACTIVE_PATTERNS = prev
+
+
+def scope_matcher(root: Path) -> Optional[Callable[[str, bool], bool]]:
+    """The active scope as a matcher on posix paths relative to *root*, a walk's root, which
+    is resolved once rather than every path the walk visits (BACK-1581). None when no scope
+    is active. A root outside the scope matches nothing, but still counts as consulted.
+    """
+    if not _ACTIVE_PATTERNS or _ACTIVE_ROOT is None:
+        return None
+    from .gitignore import pattern_set
+    compiled = pattern_set(_ACTIVE_PATTERNS)
+    try:
+        prefix: Optional[str] = Path(root).resolve().relative_to(
+            Path(_ACTIVE_ROOT).resolve()).as_posix()
+    except (ValueError, OSError):
+        prefix = None
+    if prefix == '.':
+        prefix = ''
+    elif prefix is not None:
+        prefix += '/'
+
+    def excluded(rel: str, is_dir: bool) -> bool:
+        global _CONSULTED
+        _CONSULTED = True
+        if prefix is None:
+            return False
+        return compiled.covers_dir(prefix + rel) if is_dir else compiled.matches(prefix + rel)
+
+    return excluded
 
 
 def _relative_to_scope(path: Path) -> Optional[Path]:

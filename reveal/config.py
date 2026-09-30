@@ -20,7 +20,7 @@ import sys
 import logging
 import json
 import re
-from typing import Optional, List, Dict, Any, Tuple, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 from dataclasses import dataclass
 import fnmatch
 import functools
@@ -717,6 +717,25 @@ class RevealConfig:
         from .utils.gitignore import pattern_set
         return pattern_set(tuple(ignore_patterns)).matches(
             str(rel_path).replace(os.sep, '/'), is_dir)
+
+    def ignore_matcher(self, walk_root: Path) -> Optional[Callable[[str, bool], bool]]:
+        """``should_ignore`` for a walk: a matcher on posix paths relative to *walk_root*,
+        which is resolved once rather than every path a walk visits (BACK-1581; two
+        ``resolve()`` calls per file were a walk's largest cost). None when there is nothing
+        to match or the root is outside the project; callers then use ``should_ignore``.
+        """
+        patterns = self._config.get('ignore', [])
+        if not patterns or not self._project_root:
+            return None
+        try:
+            prefix = _cached_resolve(walk_root).relative_to(
+                _cached_resolve(self._project_root)).as_posix()
+        except ValueError:
+            return None
+        from .utils.gitignore import pattern_set
+        compiled = pattern_set(tuple(patterns))
+        prefix = '' if prefix == '.' else prefix + '/'
+        return lambda rel, is_dir: compiled.matches(prefix + rel, is_dir)
 
     def ignore_patterns(self) -> List[str]:
         """The raw REVEAL_IGNORE / config.yaml ``ignore:`` pattern list, if

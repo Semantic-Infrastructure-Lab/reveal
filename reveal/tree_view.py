@@ -4,12 +4,28 @@ import datetime
 import heapq
 import os
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Generator, List, Optional, Tuple
+from typing import Any, Callable, Generator, List, Optional, Tuple
 from .registry import get_analyzer
-from .display.filtering import PathFilter
 from .utils import format_size
+from .utils.path_utils import DISPLAY, WalkPurpose, _walk_code_files, list_dir, walk_filter
+
+Hidden = Callable[[Path, bool], Optional[str]]
+
+
+def _display_purpose(show_hidden: bool) -> WalkPurpose:
+    """The display walk (BACK-1581): the tree, --files, --meta, --grep and pack:// show the
+    same files -- analysis's, minus dot entries unless asked for and file droppings."""
+    return replace(DISPLAY, hide_dot=False) if show_hidden else DISPLAY
+
+
+def display_filter(root_path: Path, show_hidden: bool = False,
+                   respect_gitignore: Optional[bool] = True,
+                   exclude_patterns: Optional[List[str]] = None) -> Hidden:
+    """The display walk's skip predicate for a tree rooted at *root_path*."""
+    return walk_filter(root_path, _display_purpose(show_hidden), exclude_patterns,
+                       respect_gitignore)
 
 
 @dataclass
@@ -28,25 +44,18 @@ class TreeViewOptions:
 
 
 def _collect_matching_files(
-    root_path: Path, show_hidden: bool, path_filter: Any, exts: Optional[set]
+    root_path: Path, show_hidden: bool, respect_gitignore: Optional[bool],
+    exclude_patterns: Optional[List[str]], exts: Optional[set],
 ) -> Generator[Tuple[Path, os.stat_result], None, None]:
-    """Yield (fpath, stat) for each file in root_path that passes all filters."""
-    for root, dirs, filenames in os.walk(root_path):
-        if not show_hidden:
-            dirs[:] = [d for d in dirs if not d.startswith('.')]
-        dirs[:] = [d for d in dirs if not path_filter.should_filter(Path(root) / d)]
-        for fname in filenames:
-            fpath = Path(root) / fname
-            if not show_hidden and fname.startswith('.'):
-                continue
-            if path_filter.should_filter(fpath):
-                continue
-            if exts and fpath.suffix.lower().lstrip('.') not in exts:
-                continue
-            try:
-                yield fpath, fpath.stat()
-            except OSError:
-                continue
+    """Yield (fpath, stat) for each file the display walk keeps under root_path."""
+    for fpath in _walk_code_files(root_path, exclude_patterns, respect_gitignore,
+                                  purpose=_display_purpose(show_hidden)):
+        if exts and fpath.suffix.lower().lstrip('.') not in exts:
+            continue
+        try:
+            yield fpath, fpath.stat()
+        except OSError:
+            continue
 
 
 def _sort_files(files: list, sort_by: Optional[str], sort_desc: bool) -> None:
@@ -75,16 +84,11 @@ def _collect_sorted_file_entries(root_path: Path, show_hidden: bool,
         (files, total_count) — total_count is set only when capping discarded
         entries beyond max_entries (None if unlimited or nothing was capped).
     """
-    path_filter = PathFilter(
-        root_path=root_path,
-        respect_gitignore=respect_gitignore,
-        exclude_patterns=exclude_patterns,
-        include_defaults=True
-    )
     exts = {e.lower().lstrip('.') for e in include_extensions} if include_extensions else None
 
     effective_sort = sort_by or 'mtime'
-    file_gen = _collect_matching_files(root_path, show_hidden, path_filter, exts)
+    file_gen = _collect_matching_files(root_path, show_hidden, respect_gitignore,
+                                       exclude_patterns, exts)
     unlimited = max_entries <= 0
 
     # For mtime sort (the default and most common case) use a bounded heap so we
@@ -230,17 +234,11 @@ def show_directory_tree(path: str, options: Optional[TreeViewOptions] = None, **
     if not root_path.is_dir():
         return f"Error: {root_path} is not a directory"
 
-    # Create path filter
-    path_filter = PathFilter(
-        root_path=root_path,
-        respect_gitignore=options.respect_gitignore,
-        exclude_patterns=options.exclude_patterns,
-        include_defaults=True
-    )
+    hidden = display_filter(root_path, options.show_hidden, options.respect_gitignore,
+                            options.exclude_patterns)
 
     # Count total entries first for warnings, plus tally what's suppressed (BACK-1224)
-    total_entries, suppressed = _count_entries_with_suppressed(
-        root_path, options.depth, options.show_hidden, path_filter)
+    total_entries, suppressed = _count_entries_with_suppressed(root_path, options.depth, hidden)
 
     lines = [f"{root_path.name or root_path}/\n"]
 
@@ -259,8 +257,8 @@ def show_directory_tree(path: str, options: Optional[TreeViewOptions] = None, **
         'sort_desc': options.sort_desc, 'include_extensions': options.include_extensions,
         'max_entries_hit': False, 'dir_limit_hit': False,
     }
-    _walk_directory(root_path, lines, depth=options.depth, show_hidden=options.show_hidden,
-                   fast=options.fast, context=context, path_filter=path_filter)
+    _walk_directory(root_path, lines, depth=options.depth, fast=options.fast, context=context,
+                   hidden=hidden)
 
     # Show truncation message if we hit the limit — name whichever flag(s) actually fired,
     # since --max-entries 0 alone won't expand a directory still capped by --dir-limit (BACK-864).
@@ -283,49 +281,37 @@ def show_directory_tree(path: str, options: Optional[TreeViewOptions] = None, **
     return '\n'.join(lines)
 
 
-def _count_entries(path: Path, depth: int, show_hidden: bool, path_filter: PathFilter) -> int:
+def _count_entries(path: Path, depth: int, hidden: Hidden) -> int:
     """Count total entries in directory tree (fast, no analysis)."""
-    count, _ = _count_entries_with_suppressed(path, depth, show_hidden, path_filter)
+    count, _ = _count_entries_with_suppressed(path, depth, hidden)
     return count
 
 
-def _count_entries_with_suppressed(path: Path, depth: int, show_hidden: bool,
-                                    path_filter: PathFilter) -> Tuple[int, Counter]:
+# A walk cause -> the tally key the footer and JSON suppressed_count use.
+_TALLY_KEY = {'dot': 'hidden'}
+
+
+def _count_entries_with_suppressed(path: Path, depth: int, hidden: Hidden) -> Tuple[int, Counter]:
     """Count kept entries, plus a tally of suppressed ones by cause (BACK-1224).
 
-    Same recursion as _count_entries: only descends into KEPT directories, so
-    a suppressed directory contributes one tally entry for itself rather than
-    walking its full subtree. That matches the footer's framing ("N entries
-    hidden here") rather than a recursive file count of what's inside an
-    entirely-hidden tree — cheap, and consistent with what _count_entries
-    already measured before this function existed.
+    Only descends into KEPT directories, so a suppressed directory contributes one tally
+    entry for itself rather than walking its full subtree -- the footer's framing ("N
+    entries hidden here"), and cheap.
     """
     suppressed: Counter = Counter()
 
     if depth <= 0:
         return 0, suppressed
 
-    try:
-        entries = list(path.iterdir())
-    except PermissionError:
+    kept = list_dir(path, hidden, lambda _p, _d, cause: suppressed.update(
+        [_TALLY_KEY.get(cause, cause)]))
+    if kept is None:
         return 0, suppressed
 
-    kept = []
-    for entry in entries:
-        if not show_hidden and entry.name.startswith('.'):
-            suppressed['hidden'] += 1
-            continue
-        reason = path_filter.filter_reason(entry)
-        if reason is not None:
-            suppressed[reason] += 1
-            continue
-        kept.append(entry)
-
     count = len(kept)
-    for entry in kept:
-        if entry.is_dir():
-            sub_count, sub_suppressed = _count_entries_with_suppressed(
-                entry, depth - 1, show_hidden, path_filter)
+    for entry, is_dir in kept:
+        if is_dir:
+            sub_count, sub_suppressed = _count_entries_with_suppressed(entry, depth - 1, hidden)
             count += sub_count
             suppressed += sub_suppressed
 
@@ -348,6 +334,8 @@ def _format_suppressed_footer(suppressed: Counter) -> Optional[str]:
         causes.append((suppressed['noise'], 'default noise filters', ''))
     if suppressed.get('exclude'):
         causes.append((suppressed['exclude'], '--exclude', ''))
+    if suppressed.get('reveal_ignore'):
+        causes.append((suppressed['reveal_ignore'], 'REVEAL_IGNORE / config ignore:', ''))
 
     if not causes:
         return None
@@ -366,13 +354,13 @@ def _initialize_context() -> dict:
              'max_entries_hit': False, 'dir_limit_hit': False}
 
 
-def _get_sorted_entries(path: Path, sort_by: Optional[str] = None,
+def _get_sorted_entries(path: Path, hidden: Hidden, sort_by: Optional[str] = None,
                         sort_desc: bool = False) -> Optional[List[Path]]:
-    """Get sorted directory entries, handling permission errors."""
-    try:
-        entries = list(path.iterdir())
-    except PermissionError:
+    """The display walk's entries of one directory, sorted; None if it can't be listed."""
+    listed = list_dir(path, hidden)
+    if listed is None:
         return None
+    entries = [entry for entry, _ in listed]
 
     if sort_by in ('mtime', 'modified'):
         entries.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=sort_desc)
@@ -387,13 +375,9 @@ def _get_sorted_entries(path: Path, sort_by: Optional[str] = None,
     return entries
 
 
-def _filter_entries(entries: List[Path], show_hidden: bool, path_filter: Optional[PathFilter],
+def _filter_entries(entries: List[Path],
                     include_extensions: Optional[List[str]] = None) -> List[Path]:
-    """Apply hidden file and path filtering to entries."""
-    if not show_hidden:
-        entries = [e for e in entries if not e.name.startswith('.')]
-    if path_filter:
-        entries = [e for e in entries if not path_filter.should_filter(e)]
+    """Keep directories, and files with one of *include_extensions* (all if unset)."""
     if include_extensions:
         exts = {e.lower().lstrip('.') for e in include_extensions}
         entries = [e for e in entries if e.is_dir() or e.suffix.lower().lstrip('.') in exts]
@@ -455,8 +439,7 @@ def _process_file_entry(entry: Path, lines: List[str], prefix: str, connector: s
 
 
 def _process_dir_entry(entry: Path, lines: List[str], prefix: str, connector: str, extension: str,
-                      context: dict, depth: int, show_hidden: bool, fast: bool,
-                      path_filter: Optional[PathFilter]) -> int:
+                      context: dict, depth: int, fast: bool, hidden: Hidden) -> int:
     """Process directory entry and recurse.
 
     Returns:
@@ -464,14 +447,13 @@ def _process_dir_entry(entry: Path, lines: List[str], prefix: str, connector: st
     """
     lines.append(f"{prefix}{connector}{entry.name}/")
     context['count'] += 1
-    _walk_directory(entry, lines, prefix + extension, depth - 1,
-                   show_hidden, fast, context, path_filter)
+    _walk_directory(entry, lines, prefix + extension, depth - 1, fast, context, hidden)
     return 1
 
 
 def _walk_directory(path: Path, lines: List[str], prefix: str = '', depth: int = 3,
-                   show_hidden: bool = False, fast: bool = False, context: Optional[dict] = None,
-                   path_filter: Optional[PathFilter] = None):
+                   fast: bool = False, context: Optional[dict] = None,
+                   hidden: Optional[Hidden] = None):
     """Recursively walk directory and build tree.
 
     Args:
@@ -479,25 +461,25 @@ def _walk_directory(path: Path, lines: List[str], prefix: str = '', depth: int =
         lines: Output lines list
         prefix: Tree prefix for indentation
         depth: Remaining depth
-        show_hidden: Show hidden files
         fast: Skip expensive operations
         context: Shared context dict with 'count', 'max_entries', 'truncated', 'dir_limit'
-        path_filter: PathFilter for smart filtering
+        hidden: the display walk's predicate (``display_filter``); default: rooted at *path*
     """
     if depth <= 0:
         return
 
     context = context or _initialize_context()
+    hidden = hidden or display_filter(path)
 
     sort_by = context.get('sort_by')
     sort_desc = context.get('sort_desc', False)
     include_extensions = context.get('include_extensions')
 
-    entries = _get_sorted_entries(path, sort_by=sort_by, sort_desc=sort_desc)
+    entries = _get_sorted_entries(path, hidden, sort_by=sort_by, sort_desc=sort_desc)
     if entries is None:
         return
 
-    entries = _filter_entries(entries, show_hidden, path_filter, include_extensions=include_extensions)
+    entries = _filter_entries(entries, include_extensions=include_extensions)
 
     dir_limit = context.get('dir_limit', 0)
     dir_entry_count = 0
@@ -516,7 +498,7 @@ def _walk_directory(path: Path, lines: List[str], prefix: str = '', depth: int =
             dir_entry_count += _process_file_entry(entry, lines, prefix, connector, context, fast)
         elif entry.is_dir():
             dir_entry_count += _process_dir_entry(entry, lines, prefix, connector, extension,
-                                                  context, depth, show_hidden, fast, path_filter)
+                                                  context, depth, fast, hidden)
 
 
 def show_directory_tree_json(path: str, options: Optional[TreeViewOptions] = None, **kwargs) -> dict:
@@ -542,12 +524,8 @@ def show_directory_tree_json(path: str, options: Optional[TreeViewOptions] = Non
     if not root_path.is_dir():
         return {'error': f'{root_path} is not a directory'}
 
-    path_filter = PathFilter(
-        root_path=root_path,
-        respect_gitignore=options.respect_gitignore,
-        exclude_patterns=options.exclude_patterns,
-        include_defaults=True
-    )
+    hidden = display_filter(root_path, options.show_hidden, options.respect_gitignore,
+                            options.exclude_patterns)
 
     context: dict[str, Any] = {
         'count': 0, 'max_entries': options.max_entries, 'truncated': 0,
@@ -555,8 +533,8 @@ def show_directory_tree_json(path: str, options: Optional[TreeViewOptions] = Non
         'sort_desc': options.sort_desc, 'include_extensions': options.include_extensions,
         'max_entries_hit': False, 'dir_limit_hit': False,
     }
-    entries = _walk_directory_json(root_path, depth=options.depth, show_hidden=options.show_hidden,
-                                   fast=options.fast, context=context, path_filter=path_filter)
+    entries = _walk_directory_json(root_path, depth=options.depth, fast=options.fast,
+                                   context=context, hidden=hidden)
 
     result: dict = {'path': str(root_path), 'name': root_path.name or str(root_path), 'entries': entries}
     if context['truncated'] > 0:
@@ -564,7 +542,7 @@ def show_directory_tree_json(path: str, options: Optional[TreeViewOptions] = Non
 
     # Suppressed-entries tally (BACK-1224) — same footer info as show_directory_tree,
     # structured for MCP/agent consumers instead of formatted text.
-    _, suppressed = _count_entries_with_suppressed(root_path, options.depth, options.show_hidden, path_filter)
+    _, suppressed = _count_entries_with_suppressed(root_path, options.depth, hidden)
     if suppressed:
         result['suppressed_count'] = {'total': sum(suppressed.values()), **dict(suppressed)}
 
@@ -602,25 +580,26 @@ def _file_entry_json(path: Path, fast: bool) -> dict:
     return entry
 
 
-def _walk_directory_json(path: Path, depth: int = 3, show_hidden: bool = False, fast: bool = False,
+def _walk_directory_json(path: Path, depth: int = 3, fast: bool = False,
                          context: Optional[dict] = None,
-                         path_filter: Optional[PathFilter] = None) -> List[dict]:
+                         hidden: Optional[Hidden] = None) -> List[dict]:
     """JSON counterpart to _walk_directory — same traversal/filter/limit
     logic, building nested entry dicts instead of ASCII tree lines."""
     if depth <= 0:
         return []
 
     context = context or _initialize_context()
+    hidden = hidden or display_filter(path)
 
     sort_by = context.get('sort_by')
     sort_desc = context.get('sort_desc', False)
     include_extensions = context.get('include_extensions')
 
-    entries = _get_sorted_entries(path, sort_by=sort_by, sort_desc=sort_desc)
+    entries = _get_sorted_entries(path, hidden, sort_by=sort_by, sort_desc=sort_desc)
     if entries is None:
         return []
 
-    entries = _filter_entries(entries, show_hidden, path_filter, include_extensions=include_extensions)
+    entries = _filter_entries(entries, include_extensions=include_extensions)
 
     dir_limit = context.get('dir_limit', 0)
     dir_entry_count = 0
@@ -638,7 +617,7 @@ def _walk_directory_json(path: Path, depth: int = 3, show_hidden: bool = False, 
             context['count'] += 1
             dir_entry_count += 1
         elif entry.is_dir():
-            children = _walk_directory_json(entry, depth - 1, show_hidden, fast, context, path_filter)
+            children = _walk_directory_json(entry, depth - 1, fast, context, hidden)
             result.append({'name': entry.name, 'type': 'dir', 'children': children})
             context['count'] += 1
             dir_entry_count += 1

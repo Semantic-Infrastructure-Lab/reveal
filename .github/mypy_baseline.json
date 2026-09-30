@@ -133,7 +133,6 @@
  "reveal/adapters/overview.py::override": 1,
  "reveal/adapters/overview.py::return-value": 1,
  "reveal/adapters/pack.py::arg-type": 1,
- "reveal/adapters/pack.py::assignment": 1,
  "reveal/adapters/pack.py::override": 1,
  "reveal/adapters/pack.py::return-value": 1,
  "reveal/adapters/patches/adapter.py::arg-type": 1,

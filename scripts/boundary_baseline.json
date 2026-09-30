@@ -78,11 +78,7 @@
  "walker": {
   "reveal/adapters/depends.py": 2,
   "reveal/adapters/imports.py": 1,
-  "reveal/adapters/pack.py": 1,
   "reveal/adapters/python/bytecode.py": 1,
-  "reveal/analyzers/imports/generic.py": 4,
-  "reveal/cli/routing/file.py": 1,
-  "reveal/grep_handler.py": 1,
-  "reveal/tree_view.py": 3
+  "reveal/analyzers/imports/generic.py": 4
  }
 }

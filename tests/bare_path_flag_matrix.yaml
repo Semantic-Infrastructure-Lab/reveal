@@ -57,8 +57,8 @@ shapes:
       review: honored
       reason: 'BACK-1362 fix this session: _collect_dir_stats previously walked raw os.walk()
         with zero filtering -- .gitignore, --exclude, and even .git/ internals were all
-        silently counted. Now shares display.filtering.PathFilter with the tree/files/grep
-        views (reveal/cli/routing/file.py).'
+        silently counted. Now walks the display purpose with the tree/files/grep views
+        (reveal/cli/routing/file.py, BACK-1581).'
   dir_grep:
     verbose:
       review: not-applicable

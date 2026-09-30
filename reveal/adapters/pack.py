@@ -9,7 +9,6 @@ from cli/commands/pack.py, so the MCP tool is untouched by this refactor.
 """
 
 import io
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -21,8 +20,7 @@ from reveal.registry import get_code_extensions
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..conventions import conventions_for_path
 from ..utils import print_json_result
-from ..utils.gitignore import gitignore_filter
-from ..utils.path_utils import classify_path_provenance, is_skippable_dir, to_posix
+from ..utils.path_utils import DISPLAY, _walk_code_files, classify_path_provenance, to_posix
 from ..utils.query import parse_query_params
 from ..utils.query_parser import split_exclude_param
 from ..utils.results import ResultBuilder
@@ -610,9 +608,8 @@ def _walk_files(
     BACK-1196: *exclude_patterns* (from ?exclude=, the inverse of ?focus=)
     lets a caller drop a whole area (fixtures, generated code, a vendored
     subtree) from candidacy entirely, rather than only being able to boost
-    relevance elsewhere. Matched via the same should_skip_file() mechanism
-    overview://'s ?exclude= already uses (BACK-1042), for consistent
-    pattern semantics across adapters.
+    relevance elsewhere. Gitignore syntax, the same matcher every walk uses
+    (BACK-1576).
     """
     # BACK-1032: union the registry's full code-extension set (58+, all
     # tree-sitter-backed languages) with the doc/config extras pack wants
@@ -625,39 +622,20 @@ def _walk_files(
     _ROOT_FILES = {'Makefile', 'Dockerfile', 'pyproject.toml', 'package.json',
                    'Cargo.toml', 'go.mod', 'requirements.txt', 'setup.py'}
 
-    should_skip_file = None
-    if exclude_patterns:
-        from ..cli.file_checker import should_skip_file  # deferred: cli cycle
-
     if path.is_file():
         yield path
         return
 
-    # BACK-1386: a pruned walk (hidden/skippable dirs and what git ignores are
-    # never entered) instead of rglob('*') + a per-file parent check, which
-    # enumerated every file under .git/ and node_modules/ only to drop it.
-    gi = gitignore_filter(path)
-    for root, dirs, files in os.walk(path):
-        root_path = Path(root)
-        # BACK-552: env/venv/build/dist checked against actual directory
-        # content, not just bare name
-        dirs[:] = [d for d in dirs if not d.startswith('.') and not is_skippable_dir(root_path, d)]
-        if gi is not None:
-            gi.prune(root, dirs)
-        for name in files:
-            item = root_path / name
-            if gi is not None and gi.ignored(item):
-                continue
-            rel = item.relative_to(path)
-            if should_skip_file is not None and should_skip_file(rel, exclude_patterns):
-                continue
-            # Include root config files
-            if root_path == path and name in _ROOT_FILES:
-                yield item
-                continue
-            # Include code files by extension
-            if item.suffix.lower() in _CODE_EXTENSIONS:
-                yield item
+    # The display walk (BACK-1581): pack:// packs what `reveal DIR` shows -- noise and
+    # dot dirs never entered, gitignore, REVEAL_IGNORE and --exclude/?exclude= applied.
+    for item in _walk_code_files(path, exclude_patterns, purpose=DISPLAY):
+        # Include root config files
+        if item.parent == path and item.name in _ROOT_FILES:
+            yield item
+            continue
+        # Include code files by extension
+        if item.suffix.lower() in _CODE_EXTENSIONS:
+            yield item
 
 
 def _count_lines(path: Path) -> int:

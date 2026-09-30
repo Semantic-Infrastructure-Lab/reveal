@@ -184,7 +184,7 @@ def test_is_gitignored_one_off(repo):
 
 def test_tree_view_filter_shows_tracked_file(repo):
     """The tree view / --files filter used a second parser that hid tracked files."""
-    from reveal.display.filtering import PathFilter
+    from reveal.tree_view import display_filter
     _write(repo, '.gitignore', '**/env/\n')
     _write(repo, 'env/settings.py')
     _write(repo, 'build/out.py')
@@ -192,11 +192,11 @@ def test_tree_view_filter_shows_tracked_file(repo):
     _git(repo, 'add', '-f', '.gitignore', 'env/settings.py')
     _git(repo, 'commit', '-q', '-m', 'init')
 
-    pf = PathFilter(repo, respect_gitignore=True, include_defaults=False)
+    hidden = display_filter(repo, respect_gitignore=True)
 
-    assert pf.filter_reason(repo / 'env') is None
-    assert pf.filter_reason(repo / 'env' / 'settings.py') is None
-    assert pf.filter_reason(repo / 'build') == 'gitignore'
+    assert hidden(repo / 'env', True) is None
+    assert hidden(repo / 'env' / 'settings.py', False) is None
+    assert hidden(repo / 'build', True) == 'gitignore'
 
 
 @pytest.mark.parametrize('resource,expected', [

@@ -612,17 +612,26 @@ class WalkPurpose:
     or ``dist/`` whatever they hold. *honor_exclude* False is for
     project-wide evidence (M102's importers, I002's graph): narrowing the report with
     ``--exclude`` must not shrink the facts that judge it (BACK-1259). *hide_dot* hides dot
-    files and dirs, as a reader's view of the tree does.
+    files and dirs, as a reader's view of the tree does; *file_noise* hides editor/OS/
+    bytecode droppings (``.DS_Store``, ``*.swp``, ``*.pyc``) a reader never wants listed.
     """
     name: str
     noise: str = 'all'
     honor_exclude: bool = True
     hide_dot: bool = False
+    file_noise: bool = False
 
 
 ANALYSIS = WalkPurpose('analysis')
 EVIDENCE = WalkPurpose('evidence', honor_exclude=False)
 DOCS = WalkPurpose('docs', noise='reserved')
+# What a reader sees of the tree -- so also what --grep searches and pack:// packs
+# (BACK-1581): analysis's files, minus dot entries (as ls and rg) and file droppings.
+DISPLAY = WalkPurpose('display', hide_dot=True, file_noise=True)
+
+_DISPLAY_FILE_NOISE = re.compile(
+    r'.*\.(pyc|pyo|pyd|egg|swp|swo|tmp)$|.*~$|\.DS_Store$|\.coverage(\..*)?$'
+    r'|pip-log\.txt$|pip-delete-this-directory\.txt$|npm-debug\.log$|yarn-error\.log$')
 
 OnHidden = Callable[[Path, bool, str], None]
 
@@ -756,24 +765,51 @@ def walk_filter(
     skip_patterns = list(exclude_patterns or []) if purpose.honor_exclude else []
     if skip_patterns:
         from ..cli.file_checker import should_skip_file  # deferred: cli cycle
-    from .exclusions import dir_is_excluded, path_is_excluded
+    from .exclusions import dir_is_excluded, path_is_excluded, scope_matcher
     all_noise = purpose.noise == 'all'
+    # Matchers on the path relative to *path*: the root is resolved once, not every path.
+    ignored_by_config = config.ignore_matcher(path)
+    in_scope = scope_matcher(path) if purpose.honor_exclude else None
 
-    def hidden(p: Path, is_dir: bool) -> Optional[str]:
+    def by_shape(p: Path, is_dir: bool) -> Optional[str]:
+        """What the name alone says: noise directories, dot entries, file droppings."""
         if is_dir and (p.name in _SKIP_DIRS or (all_noise and is_noise_dir(p.parent, p.name))):
             return 'noise'
         if purpose.hide_dot and p.name.startswith('.'):
             return 'dot'
-        if config.should_ignore(p, is_dir):
+        if purpose.file_noise and not is_dir and _DISPLAY_FILE_NOISE.match(p.name):
+            return 'noise'
+        return None
+
+    def by_config(p: Path, rel: Optional[str], is_dir: bool) -> bool:
+        if ignored_by_config is not None and rel is not None:
+            return ignored_by_config(rel, is_dir)
+        return config.should_ignore(p, is_dir)
+
+    def by_exclude(p: Path, rel: Optional[str], is_dir: bool) -> bool:
+        if skip_patterns and should_skip_file(p.relative_to(path) / '_' if is_dir
+                                              else p.relative_to(path), skip_patterns):
+            return True
+        if in_scope is None:
+            return False
+        if rel is not None:
+            return in_scope(rel, is_dir)
+        return dir_is_excluded(p) if is_dir else path_is_excluded(p)
+
+    def hidden(p: Path, is_dir: bool) -> Optional[str]:
+        cause = by_shape(p, is_dir)
+        if cause is not None:
+            return cause
+        try:
+            rel: Optional[str] = p.relative_to(path).as_posix()
+        except ValueError:  # not under the walk root: ask the per-path checks
+            rel = None
+        if by_config(p, rel, is_dir):
             return 'reveal_ignore'
         if gi is not None and gi.ignored(p, is_dir=is_dir):
             return 'gitignore'
-        if purpose.honor_exclude:
-            if skip_patterns and should_skip_file(p.relative_to(path) / '_' if is_dir
-                                                  else p.relative_to(path), skip_patterns):
-                return 'exclude'
-            if dir_is_excluded(p) if is_dir else path_is_excluded(p):
-                return 'exclude'
+        if purpose.honor_exclude and by_exclude(p, rel, is_dir):
+            return 'exclude'
         return None
 
     return hidden

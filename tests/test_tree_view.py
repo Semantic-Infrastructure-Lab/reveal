@@ -18,7 +18,7 @@ from reveal.tree_view import (
     _walk_directory
 )
 from reveal.utils import format_size
-from reveal.display.filtering import PathFilter
+from reveal.tree_view import display_filter
 from pathlib import Path
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
@@ -307,8 +307,8 @@ class TestCountEntries(unittest.TestCase):
     def test_count_entries(self):
         """Test entry counting."""
         path = Path(self.temp_dir)
-        path_filter = PathFilter(root_path=path, respect_gitignore=False, include_defaults=False)
-        count = _count_entries(path, depth=3, show_hidden=False, path_filter=path_filter)
+        count = _count_entries(path, depth=3,
+                               hidden=display_filter(path, show_hidden=False, respect_gitignore=False))
 
         # file1.txt + sub/ + nested.txt = 3
         self.assertEqual(count, 3)
@@ -316,8 +316,8 @@ class TestCountEntries(unittest.TestCase):
     def test_count_with_hidden(self):
         """Test counting includes hidden when requested."""
         path = Path(self.temp_dir)
-        path_filter = PathFilter(root_path=path, respect_gitignore=False, include_defaults=False)
-        count = _count_entries(path, depth=3, show_hidden=True, path_filter=path_filter)
+        count = _count_entries(path, depth=3,
+                               hidden=display_filter(path, show_hidden=True, respect_gitignore=False))
 
         # file1.txt + .hidden + sub/ + nested.txt = 4
         self.assertEqual(count, 4)
@@ -325,8 +325,8 @@ class TestCountEntries(unittest.TestCase):
     def test_count_depth_zero(self):
         """Test depth=0 returns 0."""
         path = Path(self.temp_dir)
-        path_filter = PathFilter(root_path=path, respect_gitignore=False, include_defaults=False)
-        count = _count_entries(path, depth=0, show_hidden=False, path_filter=path_filter)
+        count = _count_entries(path, depth=0,
+                               hidden=display_filter(path, show_hidden=False, respect_gitignore=False))
 
         self.assertEqual(count, 0)
 
@@ -355,9 +355,8 @@ class TestSuppressedEntriesFooter(unittest.TestCase):
     def test_count_with_suppressed_tallies_gitignore(self):
         """A gitignored directory is counted as one suppressed entry, by cause."""
         path = Path(self.temp_dir)
-        path_filter = PathFilter(root_path=path, respect_gitignore=True, include_defaults=False)
         count, suppressed = _count_entries_with_suppressed(
-            path, depth=3, show_hidden=False, path_filter=path_filter)
+            path, depth=3, hidden=display_filter(path, show_hidden=False, respect_gitignore=True))
 
         # README.md kept; .gitignore is dotfile-hidden by default
         self.assertEqual(count, 1)
@@ -375,9 +374,8 @@ class TestSuppressedEntriesFooter(unittest.TestCase):
             os.makedirs(os.path.join(noise_dir, 'vendored'))
 
             path = Path(noise_dir)
-            path_filter = PathFilter(root_path=path, respect_gitignore=True, include_defaults=True)
             _, suppressed = _count_entries_with_suppressed(
-                path, depth=3, show_hidden=False, path_filter=path_filter)
+                path, depth=3, hidden=display_filter(path, show_hidden=False, respect_gitignore=True))
 
             self.assertEqual(suppressed['gitignore'], 1)   # vendored/
             self.assertEqual(suppressed['noise'], 1)        # __pycache__/
@@ -387,9 +385,8 @@ class TestSuppressedEntriesFooter(unittest.TestCase):
     def test_suppressed_directory_not_recursed_into(self):
         """A suppressed dir counts as 1 entry, not 1 + its contents (cheap by design)."""
         path = Path(self.temp_dir)
-        path_filter = PathFilter(root_path=path, respect_gitignore=True, include_defaults=False)
         _, suppressed = _count_entries_with_suppressed(
-            path, depth=3, show_hidden=False, path_filter=path_filter)
+            path, depth=3, hidden=display_filter(path, show_hidden=False, respect_gitignore=True))
 
         # vendored/lib.py must not add a second gitignore tally
         self.assertEqual(suppressed['gitignore'], 1)
@@ -613,13 +610,10 @@ class TestCollectMatchingFilesGenerator(unittest.TestCase):
         """_collect_matching_files must yield, not return a list."""
         import types
         from reveal.tree_view import _collect_matching_files
-        from reveal.display.filtering import PathFilter
 
         with tempfile.TemporaryDirectory() as d:
             Path(os.path.join(d, 'a.txt')).write_text('x')
-            pf = PathFilter(root_path=Path(d), respect_gitignore=False,
-                            exclude_patterns=None, include_defaults=False)
-            result = _collect_matching_files(Path(d), show_hidden=False, path_filter=pf, exts=None)
+            result = _collect_matching_files(Path(d), False, False, None, None)
         self.assertIsInstance(result, types.GeneratorType,
                               "_collect_matching_files must be a generator (use yield, not return list)")
 
@@ -627,14 +621,11 @@ class TestCollectMatchingFilesGenerator(unittest.TestCase):
         """Yielded items must be (Path, stat_result) tuples."""
         import stat
         from reveal.tree_view import _collect_matching_files
-        from reveal.display.filtering import PathFilter
 
         with tempfile.TemporaryDirectory() as d:
             fpath = Path(os.path.join(d, 'sample.txt'))
             fpath.write_text('hello')
-            pf = PathFilter(root_path=Path(d), respect_gitignore=False,
-                            exclude_patterns=None, include_defaults=False)
-            items = list(_collect_matching_files(Path(d), show_hidden=False, path_filter=pf, exts=None))
+            items = list(_collect_matching_files(Path(d), False, False, None, None))
 
         self.assertEqual(len(items), 1)
         path, st = items[0]

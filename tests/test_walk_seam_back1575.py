@@ -134,3 +134,30 @@ def test_build_without_top_level_code_is_still_noise(tmp_path):
     assert is_noise_dir(tmp_path, 'build')
     (tmp_path / 'build' / 'main.py').write_text('x = 1\n', encoding='utf-8')
     assert not is_noise_dir(tmp_path, 'build')
+
+
+def test_scope_matcher_agrees_with_the_per_path_checks_and_counts_as_consulted(tree):
+    """BACK-1581: a walk resolves its root once; the answers must be the per-path ones."""
+    from reveal.utils import exclusions
+    with exclusion_scope(tree, ['tests', 'm/*.py']):
+        match = exclusions.scope_matcher(tree)
+        exclusions._CONSULTED = False
+        for rel, is_dir in (('tests', True), ('tests/t.py', False), ('m/a.py', False),
+                            ('keep/a.py', False), ('m', True)):
+            per_path = (exclusions.dir_is_excluded if is_dir
+                        else exclusions.path_is_excluded)(tree / rel)
+            assert match(rel, is_dir) is per_path, rel
+        assert exclusions.exclusions_consulted()
+    assert exclusions.scope_matcher(tree) is None  # no scope, nothing to consult
+
+
+def test_ignore_matcher_agrees_with_should_ignore(tree, monkeypatch):
+    from reveal.config import RevealConfig
+    (tree / '.git').mkdir()
+    monkeypatch.setenv('REVEAL_IGNORE', 'tests/,*.py')
+    monkeypatch.setattr(RevealConfig, '_cache', {})
+    config = RevealConfig.get(start_path=tree / 'keep')
+    match = config.ignore_matcher(tree / 'keep')
+    assert match is not None
+    assert match('a.py', False) is config.should_ignore(tree / 'keep' / 'a.py') is True
+    assert match('README', False) is config.should_ignore(tree / 'keep' / 'README') is False

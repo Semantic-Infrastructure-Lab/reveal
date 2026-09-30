@@ -81,39 +81,29 @@ def _collect_dir_stats(
 ) -> tuple:
     """Walk a directory and collect file count, size, mtime, extension counts.
 
-    BACK-1362: unlike show_directory_tree/show_file_list, this used to walk raw
-    os.walk() with no filtering at all -- .git internals, node_modules, and
-    gitignored files were all silently counted, and --no-gitignore/--exclude
-    (declared on every bare-path invocation) had no effect. Now uses the same
-    PathFilter the sibling views share.
+    BACK-1362: this used to walk raw os.walk() with no filtering at all -- .git
+    internals, node_modules, and gitignored files were all silently counted. It is the
+    display walk (BACK-1581): --meta counts exactly what the tree and --files list.
 
     Returns:
         (ext_counts, total_files, total_size, newest_mtime, oldest_mtime)
     """
     from collections import defaultdict
-    from ...display.filtering import PathFilter
-    path_filter = PathFilter(
-        root_path=path, respect_gitignore=respect_gitignore,
-        exclude_patterns=exclude_patterns, include_defaults=True)
+    from ...utils.path_utils import DISPLAY, _walk_code_files
     ext_counts: dict = defaultdict(int)
     total_files = 0
     total_size = 0
     newest_mtime = 0.0
     oldest_mtime = float('inf')
-    for root, dirs, files in os.walk(path):
-        dirs[:] = [d for d in dirs if not path_filter.should_filter(Path(root) / d)]
-        for fname in files:
-            fpath = Path(root) / fname
-            if path_filter.should_filter(fpath):
-                continue
-            result = _stat_one_file(fpath, ext_counts)
-            if result is None:
-                continue
-            size, mtime = result
-            total_files += 1
-            total_size += size
-            newest_mtime = max(newest_mtime, mtime)
-            oldest_mtime = min(oldest_mtime, mtime)
+    for fpath in _walk_code_files(path, exclude_patterns, respect_gitignore, purpose=DISPLAY):
+        result = _stat_one_file(fpath, ext_counts)
+        if result is None:
+            continue
+        size, mtime = result
+        total_files += 1
+        total_size += size
+        newest_mtime = max(newest_mtime, mtime)
+        oldest_mtime = min(oldest_mtime, mtime)
     return ext_counts, total_files, total_size, newest_mtime, oldest_mtime
 
 
@@ -432,7 +422,11 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     _validate_path_exists(path, path_str)
 
     if path.is_dir():
-        _handle_directory_path(path, args)
+        # The walk scope every entry point publishes (BACK-1581): --exclude plus
+        # REVEAL_IGNORE, relative to this directory, as for a URI or a subcommand.
+        from ...utils.exclusions import dispatch_scope, exclusion_scope
+        with exclusion_scope(*dispatch_scope(str(path), getattr(args, 'exclude', None))):
+            _handle_directory_path(path, args)
     elif path.is_file():
         _handle_file_path(path, element_from_path, args)
     else:

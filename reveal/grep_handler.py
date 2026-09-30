@@ -6,7 +6,6 @@ Groups matching lines by their enclosing structural element:
   - Flat files → bare line numbers
 """
 
-import os
 import re
 import sys
 from collections import Counter
@@ -15,7 +14,6 @@ from argparse import Namespace
 from typing import Any, Dict, List, Optional
 
 from .utils import safe_json_dumps
-from .utils.path_utils import is_skippable_dir
 from .tree_view import _format_suppressed_footer
 
 _BINARY_EXTENSIONS = frozenset({
@@ -305,58 +303,33 @@ def _collect_dir_results(
 ) -> 'tuple[List[Dict[str, Any]], int, Dict[str, Any]]':
     """Walk dir_path and return (file_results, total_hits, scope).
 
-    BACK-1485: gitignore via the shared git-backed oracle. --exclude patterns
-    were read by handle_grep_directory and then dropped; now fnmatch'd here
-    with the same should_skip_file semantics as ``check``.
+    The display walk (BACK-1581): ``reveal DIR --grep X`` searches the files ``reveal DIR``
+    lists -- gitignore, REVEAL_IGNORE and ``--exclude`` (gitignore syntax) included, dot
+    entries and noise left out -- in a stable, sorted order.
 
     ``scope`` is what the walk searched and what it left out: ``files_searched``, and
-    ``hidden``, the entries (files and pruned directories) skipped by ``.gitignore`` and
-    ``--exclude``, tallied as the directory view does. A search of a gitignored directory
-    said "No matches found" as if it had looked (BACK-1546).
+    ``hidden``, the entries (files and pruned directories) skipped by ``.gitignore``,
+    ``--exclude`` or REVEAL_IGNORE, tallied as the directory view does. A search of a
+    gitignored directory said "No matches found" as if it had looked (BACK-1546).
     """
-    from .cli.file_checker import should_skip_file  # noqa: I006  # deferred: cli cycle
-    from .utils.gitignore import gitignore_filter
-    gi = gitignore_filter(dir_path, respect_gitignore)
-    excludes = list(exclude_patterns or [])
+    from .utils.path_utils import DISPLAY, walk_tree
+    hidden: Counter = Counter()
 
-    def _excluded(p: Path) -> bool:
-        try:
-            return should_skip_file(p.relative_to(dir_path), excludes)
-        except ValueError:
-            return False
-
-    def _hidden_by(p: Path, is_dir: bool = False) -> Optional[str]:
-        if gi is not None and gi.ignored(p, is_dir=is_dir):
-            return 'gitignore'
-        if excludes and _excluded(p / '_' if is_dir else p):
-            return 'exclude'
-        return None
+    def tally(_path: Path, _is_dir: bool, cause: str) -> None:
+        if cause in ('gitignore', 'exclude', 'reveal_ignore'):  # what the user can act on
+            hidden[cause] += 1
 
     file_results: List[Dict[str, Any]] = []
     total_hits = 0
-    hidden: Counter = Counter()
     searched = 0
-    for root, dirs, files in os.walk(str(dir_path)):
-        root_path = Path(root)
-        kept = []
-        for d in sorted(dirs):
-            if is_skippable_dir(root_path, d) or d.startswith('.'):
-                continue
-            cause = _hidden_by(root_path / d, is_dir=True)
-            if cause:
-                hidden[cause] += 1
-            else:
-                kept.append(d)
-        dirs[:] = kept
-        for fname in sorted(files):
+    for root_path, _dirs, files in walk_tree(dir_path, DISPLAY, exclude_patterns=exclude_patterns,
+                                             respect_gitignore=respect_gitignore,
+                                             on_hidden=tally, sort=True):
+        for fname in files:
             fpath = root_path / fname
             if fpath.suffix in _BINARY_EXTENSIONS:
                 continue
             if fpath.suffix == '' and _looks_binary(fpath):
-                continue
-            cause = _hidden_by(fpath)
-            if cause:
-                hidden[cause] += 1
                 continue
             searched += 1
             try:
