@@ -161,3 +161,17 @@ def test_ignore_matcher_agrees_with_should_ignore(tree, monkeypatch):
     assert match is not None
     assert match('a.py', False) is config.should_ignore(tree / 'keep' / 'a.py') is True
     assert match('README', False) is config.should_ignore(tree / 'keep' / 'README') is False
+
+
+def test_scope_matcher_from_a_walk_root_above_the_scope(tree):
+    """depends:// walks from the project root while the scope is its target below it: a
+    path is judged relative to the scope root, and paths outside the scope never match."""
+    from reveal.utils import exclusions
+    with exclusion_scope(tree / 'keep', ['a.py']):
+        above = exclusions.scope_matcher(tree)
+        inside = exclusions.scope_matcher(tree / 'keep')
+        assert above('keep/a.py', False) and inside('a.py', False)
+        assert not above('m/a.py', False)        # outside the scope
+        assert not above('keep', True)           # the scope root itself
+    with exclusion_scope(tree / 'keep', ['a.py']):
+        assert not exclusions.scope_matcher(tree / 'z')('b.py', False)  # disjoint

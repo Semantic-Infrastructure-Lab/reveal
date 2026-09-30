@@ -98,30 +98,50 @@ def exclusion_scope(root: Optional[Path], patterns: Optional[List[str]]):
 def scope_matcher(root: Path) -> Optional[Callable[[str, bool], bool]]:
     """The active scope as a matcher on posix paths relative to *root*, a walk's root, which
     is resolved once rather than every path the walk visits (BACK-1581). None when no scope
-    is active. A root outside the scope matches nothing, but still counts as consulted.
+    is active. The walk root may sit under the scope root, or above it (depends:// walks
+    from the project root while the scope is the target it was given); a path outside the
+    scope matches nothing, but the check still counts as consulted.
     """
     if not _ACTIVE_PATTERNS or _ACTIVE_ROOT is None:
         return None
     from .gitignore import pattern_set
     compiled = pattern_set(_ACTIVE_PATTERNS)
+    walk_root: Optional[Path] = None
+    scope_root: Optional[Path] = None
     try:
-        prefix: Optional[str] = Path(root).resolve().relative_to(
-            Path(_ACTIVE_ROOT).resolve()).as_posix()
-    except (ValueError, OSError):
-        prefix = None
-    if prefix == '.':
-        prefix = ''
-    elif prefix is not None:
-        prefix += '/'
+        walk_root, scope_root = Path(root).resolve(), Path(_ACTIVE_ROOT).resolve()
+    except OSError:
+        pass  # neither resolves: nothing can be matched against the scope
+    to_scope = _to_scope_relative(walk_root, scope_root)
 
     def excluded(rel: str, is_dir: bool) -> bool:
         global _CONSULTED
         _CONSULTED = True
-        if prefix is None:
+        scoped = to_scope(rel)
+        if not scoped:
             return False
-        return compiled.covers_dir(prefix + rel) if is_dir else compiled.matches(prefix + rel)
+        return compiled.covers_dir(scoped) if is_dir else compiled.matches(scoped)
 
     return excluded
+
+
+def _to_scope_relative(walk_root: Optional[Path],
+                       scope_root: Optional[Path]) -> Callable[[str], Optional[str]]:
+    """Map a path relative to *walk_root* to one relative to *scope_root* (None outside it)."""
+    if walk_root is None or scope_root is None:
+        return lambda rel: None
+    try:
+        prefix = walk_root.relative_to(scope_root).as_posix()
+    except ValueError:
+        prefix = None
+    if prefix is not None:  # the walk is inside the scope
+        head = '' if prefix == '.' else prefix + '/'
+        return lambda rel: head + rel
+    try:
+        below = scope_root.relative_to(walk_root).as_posix() + '/'
+    except ValueError:  # disjoint
+        return lambda rel: None
+    return lambda rel: rel[len(below):] if rel.startswith(below) else None
 
 
 def _relative_to_scope(path: Path) -> Optional[Path]:

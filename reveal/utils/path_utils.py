@@ -11,7 +11,7 @@ import tempfile
 from dataclasses import dataclass, field
 from itertools import islice
 from pathlib import Path, PurePath
-from typing import Any, Callable, Dict, Iterable, Iterator, Optional, List, Set, Tuple, Union
+from typing import Any, Callable, Dict, FrozenSet, Iterable, Iterator, Optional, List, Set, Tuple, Union
 
 from ..defaults import (
     SKIP_DIRECTORIES,
@@ -614,17 +614,26 @@ class WalkPurpose:
     ``--exclude`` must not shrink the facts that judge it (BACK-1259). *hide_dot* hides dot
     files and dirs, as a reader's view of the tree does; *file_noise* hides editor/OS/
     bytecode droppings (``.DS_Store``, ``*.swp``, ``*.pyc``) a reader never wants listed.
+    *soft_files*/*soft_dirs* are causes that tag rather than hide, for ``walk_with_causes``:
+    a gitignored generated module is still a real import target (BACK-1487).
     """
     name: str
     noise: str = 'all'
     honor_exclude: bool = True
     hide_dot: bool = False
     file_noise: bool = False
+    soft_files: FrozenSet[str] = frozenset()
+    soft_dirs: FrozenSet[str] = frozenset()
 
 
 ANALYSIS = WalkPurpose('analysis')
 EVIDENCE = WalkPurpose('evidence', honor_exclude=False)
 DOCS = WalkPurpose('docs', noise='reserved')
+# Where an import can point (BACK-1580): analysis's files, plus gitignored and --exclude'd
+# files tagged with that cause -- not graph nodes, still resolution targets. An --exclude'd
+# directory is not walked; a gitignored one is (generated code lives there).
+RESOLUTION = WalkPurpose('resolution', soft_files=frozenset({'gitignore', 'exclude'}),
+                         soft_dirs=frozenset({'gitignore'}))
 # What a reader sees of the tree -- so also what --grep searches and pack:// packs
 # (BACK-1581): analysis's files, minus dot entries (as ls and rg) and file droppings.
 DISPLAY = WalkPurpose('display', hide_dot=True, file_noise=True)
@@ -706,6 +715,33 @@ def walk_tree(
         dirs[:] = [d for d in (sorted(dirs) if sort else dirs) if kept(root_path / d, True)]
         yield root_path, dirs, [f for f in (sorted(filenames) if sort else filenames)
                                 if kept(root_path / f, False)]
+
+
+def walk_with_causes(
+    path: Path,
+    purpose: WalkPurpose,
+    *,
+    exclude_patterns: Optional[List[str]] = None,
+    respect_gitignore: Optional[bool] = None,
+) -> Iterator[Tuple[Path, Optional[str]]]:
+    """Every file a walk for *purpose* reaches, with the soft cause that would hide it from
+    a plain walk (None when it would be kept): the resolution index needs gitignored and
+    ``--exclude``'d files as import targets while leaving them out of the graph (BACK-1580).
+    Directories with a cause in ``purpose.soft_dirs`` are still descended.
+    """
+    if path.is_file():
+        yield path, None
+        return
+    hidden = walk_filter(path, purpose, exclude_patterns, respect_gitignore)
+    for root, dirs, filenames in os.walk(str(path)):
+        root_path = Path(root)
+        dirs[:] = [d for d in dirs
+                   if hidden(root_path / d, True) in (None, *purpose.soft_dirs)]
+        for fname in filenames:
+            file_path = root_path / fname
+            cause = hidden(file_path, False)
+            if cause is None or cause in purpose.soft_files:
+                yield file_path, cause
 
 
 def list_dir(

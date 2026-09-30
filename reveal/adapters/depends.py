@@ -20,12 +20,10 @@ from ..analyzers._capability_table import depends_intra_project_classification_s
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages
 from ..analyzers.imports.generic import CImportExtractor, CppImportExtractor
-from ..defaults import SKIP_DIRECTORIES
+from ..analyzers.imports.file_index import discover_import_files, load_path_manifests
 from ..utils.query import parse_query_params
-from ..utils.gitignore import gitignore_filter
 from ..utils.results import ResultBuilder, note_truncation
 from ..utils.path_utils import (
-    is_skippable_dir,
     is_unsafe_scan_root,
     resolve_project_root,
     search_parents,
@@ -679,10 +677,10 @@ class DependsAdapter(ResourceAdapter):
         """Walk `scan_root` into the parse corpus + a basename index.
 
         BACK-498: discover files the same way ImportsAdapter._build_graph does —
-        os.walk honoring SKIP_DIRECTORIES/hidden dirs (not a raw rglob, which
-        both scans build artifacts/vendor dirs it shouldn't and, on a repo where
-        scan_root ends up far above the real project, times out) — and build a
-        basename -> [full paths] index alongside it. Package/namespace-resolved
+        since BACK-1580 literally the same walk (``discover_import_files``), not a
+        raw rglob, which both scans build artifacts/vendor dirs it shouldn't and,
+        on a repo where scan_root ends up far above the real project, times out —
+        and build a basename -> [full paths] index alongside it. Package/namespace-resolved
         languages (Java, Kotlin, C#, PHP, Swift) need that index to resolve a
         dotted/qualified import to a file without their own tree walk; without
         it `resolve_import` silently fails for every such import and depends://
@@ -691,37 +689,14 @@ class DependsAdapter(ResourceAdapter):
 
         Sets ``self._scan_capped`` as a side effect (the file-count cap).
         """
-        files: List[Path] = []
-        file_index: Dict[str, List[Path]] = {}
         if scan_root.is_file():
-            if scan_root.suffix in supported_exts:
-                files.append(scan_root)
-        else:
-            # BACK-1386: gitignored files are not parsed (not dependents), but
-            # stay in file_index as resolution targets, as in imports://.
-            gi = gitignore_filter(scan_root)
-            for root, dirs, filenames in os.walk(str(scan_root)):
-                dirs[:] = [d for d in dirs if not is_skippable_dir(Path(root), d) and not d.startswith('.')]
-                capped = False
-                for fname in filenames:
-                    fp = Path(root) / fname
-                    # file_index stays extension-agnostic (BACK-491: quoted
-                    # C/C++ #include targets can be non-source extensions
-                    # like .inc/.tcc) even when scan_extensions narrows what
-                    # actually gets *parsed* below — only the parse corpus
-                    # is the expensive part language-scoping needs to cut.
-                    file_index.setdefault(fname, []).append(fp)
-                    if fp.suffix not in supported_exts:
-                        continue
-                    if gi is not None and gi.ignored(fp):
-                        continue
-                    if len(files) >= self._SCAN_FILE_CAP:
-                        capped = True
-                        break
-                    files.append(fp)
-                if capped:
-                    self._scan_capped = True
-                    break
+            return ([scan_root] if scan_root.suffix in supported_exts else []), {}
+        # BACK-1580: the walk imports:// uses, so the two cannot drift again -- depends://
+        # lacked REVEAL_IGNORE, file-level --exclude and the declaration-only skip.
+        files, file_index, capped = discover_import_files(
+            scan_root, lambda fp: fp.suffix in supported_exts, cap=self._SCAN_FILE_CAP)
+        if capped:
+            self._scan_capped = True
         return files, file_index
 
     def _build_resolution_indices(self, files: List[Path], scan_root: Path) -> '_ResolutionIndices':
@@ -952,19 +927,12 @@ class DependsAdapter(ResourceAdapter):
             if manifest_glob:
                 glob = (manifest_glob, getattr(spec, 'load_path_lib_dirname', None))
                 break
-        if not glob or not glob[1]:
+        if not glob or not glob[1] or not scan_root.is_dir():
             return []
-        manifest_glob, lib_dirname = glob
-        roots: List[Path] = []
-        if not scan_root.is_dir():
-            return roots
-        for manifest in scan_root.rglob(manifest_glob):
-            if any(part in SKIP_DIRECTORIES for part in manifest.parts):
-                continue
-            lib_dir = manifest.parent / lib_dirname
-            if lib_dir.is_dir():
-                roots.append(lib_dir)
-        return roots
+        manifest_glob, lib_dirname = glob[0], str(glob[1])
+        lib_dirs = (manifest.parent / lib_dirname
+                    for manifest in load_path_manifests(scan_root, manifest_glob))
+        return [lib_dir for lib_dir in lib_dirs if lib_dir.is_dir()]
 
     @staticmethod
     def _build_manifest_module_dirs(files: List[Path]) -> List[Tuple[Path, str]]:

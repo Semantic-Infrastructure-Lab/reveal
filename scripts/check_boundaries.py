@@ -78,9 +78,10 @@ _ENTRY_POINTS: Tuple[Home, ...] = (('prefix', 'reveal/main.py'), ('prefix', 'rev
 RULES: Dict[str, Dict[str, Any]] = {
     'walker': {
         'task': 'BACK-1515 (removal: BACK-1223)',
-        'fix': 'walk through reveal.utils.path_utils (_walk_code_files, walk_tree, list_dir)',
+        'fix': 'walk through reveal.utils.path_utils (_walk_code_files, walk_tree, walk_with_causes, list_dir)',
         'home': tuple(('func', 'reveal/utils/path_utils.py', f)
-                      for f in ('_walk_code_files', 'walk_tree', 'list_dir')),
+                      for f in ('_walk_code_files', 'walk_tree', 'walk_with_causes',
+                                'list_dir')),
     },
     'tree-sitter-import': {
         'task': 'BACK-1046 (removal: BACK-1045)',

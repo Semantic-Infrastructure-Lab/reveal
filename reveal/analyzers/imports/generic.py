@@ -52,7 +52,6 @@ Verified node kinds against tree-sitter-language-pack 1.8.x real parses
 """
 
 import logging
-import os
 import re
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -62,10 +61,9 @@ from typing import ClassVar, Dict, FrozenSet, List, Optional, Set, Tuple
 from ...core import node_children as _children
 from ...core import tree_root
 from ...core.treesitter_compat import _zero_arg
-from ...defaults import SKIP_DIRECTORIES
 from ...registry import extensions_for_languages
-from ...utils.path_utils import is_skippable_dir
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
+from .file_index import basename_index, load_path_manifests
 from .types import ImportStatement
 
 # Cross-invocation disk cache (BACK-626, extending BACK-625): same
@@ -2152,20 +2150,11 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
             # same walk order and with the same skip-dir filter, the first
             # full-suffix match here is the same file the os.walk below would
             # return — just without the O(tree) scan per include.
-            if file_index is not None:
-                for candidate in file_index.get(target_parts[-1], ()):
-                    if candidate.parts[-n:] == target_parts:
-                        return candidate.resolve()
-                continue
-            for dirpath, dirnames, filenames in os.walk(root):
-                dirnames[:] = [
-                    d for d in dirnames
-                    if not is_skippable_dir(Path(dirpath), d) and not d.startswith('.')
-                ]
-                for fname in filenames:
-                    candidate = Path(dirpath) / fname
-                    if candidate.parts[-n:] == target_parts:
-                        return candidate.resolve()
+            # A caller with no prebuilt index gets one built by the same walk (BACK-1580).
+            index = file_index if file_index is not None else basename_index([root])
+            for candidate in index.get(target_parts[-1], ()):
+                if candidate.parts[-n:] == target_parts:
+                    return candidate.resolve()
         return None
 
     # --- BACK-487/488: non-#include edge resolution ----------------------
@@ -2549,25 +2538,13 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
 
         exts = self.spec.source_extensions
         candidates: Set[Path] = set()
-        if file_index is not None:
-            for paths in file_index.values():
-                if not isinstance(paths, list):
-                    continue  # a different resolver's cached sentinel value
-                for p in paths:
-                    if p.suffix in exts:
-                        candidates.add(p)
-        else:
-            for root in search_paths or []:
-                if not root.is_dir():
-                    continue
-                for dirpath, dirnames, filenames in os.walk(root):
-                    dirnames[:] = [
-                        d for d in dirnames
-                        if not is_skippable_dir(Path(dirpath), d) and not d.startswith('.')
-                    ]
-                    for fname in filenames:
-                        if Path(fname).suffix in exts:
-                            candidates.add(Path(dirpath) / fname)
+        source = file_index if file_index is not None else basename_index(search_paths or [])
+        for paths in source.values():
+            if not isinstance(paths, list):
+                continue  # a different resolver's cached sentinel value
+            for p in paths:
+                if p.suffix in exts:
+                    candidates.add(p)
 
         index: Dict[str, Path] = {}
         for f in candidates:
@@ -2590,21 +2567,10 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         file_index: Optional[Dict[str, List[Path]]],
     ) -> List[Path]:
         """All in-tree files bearing ``basename`` — via the prebuilt index when
-        available (BACK-491), else a bounded walk of the search paths."""
-        if file_index is not None:
-            return list(file_index.get(basename, ()))
-        found: List[Path] = []
-        for root in search_paths or []:
-            if not root.is_dir():
-                continue
-            for dirpath, dirnames, filenames in os.walk(root):
-                dirnames[:] = [
-                    d for d in dirnames
-                    if not is_skippable_dir(Path(dirpath), d) and not d.startswith('.')
-                ]
-                if basename in filenames:
-                    found.append(Path(dirpath) / basename)
-        return found
+        available (BACK-491), else one built from the search paths by the same walk."""
+        if file_index is None:
+            file_index = basename_index(search_paths or [])
+        return list(file_index.get(basename, ()))
 
 
 # --- Language specs + registered subclasses ------------------------------
@@ -2998,9 +2964,7 @@ def _ruby_gem_inventory(project_root: Path) -> Tuple[FrozenSet[str], FrozenSet[s
 
     local: Set[str] = set()
     _add_lib_entries(project_root / 'lib')
-    for gemspec in project_root.rglob('*.gemspec'):
-        if any(part in SKIP_DIRECTORIES for part in gemspec.parts):
-            continue
+    for gemspec in load_path_manifests(project_root, '*.gemspec'):
         local.add(gemspec.stem.replace('-', '_'))
         _add_lib_entries(gemspec.parent / 'lib')
 

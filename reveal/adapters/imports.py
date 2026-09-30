@@ -30,10 +30,9 @@ from ..conventions import family_for_path
 from ..analyzers.imports.base import build_project_namespaces
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
-from ..registry import DECLARATION_ONLY_EXTENSIONS, get_code_extensions
-from ..utils.exclusions import path_is_excluded
-from ..utils.gitignore import gitignore_filter
-from ..utils.path_utils import is_skippable_dir, to_posix, to_relative_display
+from ..analyzers.imports.file_index import discover_import_files
+from ..registry import get_code_extensions
+from ..utils.path_utils import to_posix, to_relative_display
 from ..utils.results import ResultBuilder, note_truncation
 
 # Disk-cache namespace for this adapter's resolved import graph (BACK-834).
@@ -1184,60 +1183,21 @@ class ImportsAdapter(ResourceAdapter):
     ) -> Tuple[List[Path], Dict[str, List[Path]]]:
         """Walk target_path for candidate code files (serial, cheap: no parsing).
 
-        Preserves the original walk semantics exactly (skip-dirs, hidden dirs,
-        supported-or-code extension filter).
-
-        BACK-491: during this same walk, build a `basename -> [full paths]`
-        index of *every* file under the tree (not just candidates — C/C++
-        include targets such as .inc/.tcc headers are not code-extension
-        files and must still be resolvable). Handed to include-resolving
-        extractors below so `#include` edge resolution is a dict lookup
-        instead of a full os.walk(root) per include. Built in walk order with
-        the same skip-dir/hidden filter, so it's byte-identical to the walk it
-        replaces in generic.py:resolve_import.
+        One resolution walk (BACK-1580, ``analyzers.imports.file_index``) yields both the
+        graph's files and a ``basename -> [full paths]`` index of every file an import can
+        point to (BACK-491: C/C++ include targets such as .inc/.tcc must resolve too), so
+        ``#include`` resolution is a dict lookup. Gitignored and --exclude'd files stay in
+        the index as targets but are not graph nodes (BACK-1386, BACK-1495); REVEAL_IGNORE
+        drops a file from both (BACK-1362); declaration-only stubs are not nodes (BACK-1467).
         """
-        candidates: List[Path] = []
-        file_index: Dict[str, List[Path]] = {}
         if target_path.is_file():
             ext = target_path.suffix.lower()
             if target_path.suffix in supported_exts or ext in code_exts:
-                candidates.append(target_path)
-        else:
-            # BACK-1362: REVEAL_IGNORE / .reveal.yaml 'ignore:' patterns were wired into
-            # utils.path_utils._walk_code_files (BACK-1201) as the single-source-of-truth
-            # walker, but this adapter's own walk (imports://, deps://, and
-            # architecture://'s Components/entry-points/core-abstractions, which all
-            # source from this same graph) never adopted it -- ignore: silently had no
-            # effect here while check/stats:///census reporting all honored it.
-            from ..config import RevealConfig  # deferred: cli/config cycle
-            config = RevealConfig.get(start_path=target_path)
-            # BACK-1386: what git ignores is not parsed as a graph node, but it
-            # stays in file_index -- a gitignored generated header or module is
-            # still a real #include/import target, so ignored dirs are walked,
-            # not pruned.
-            gi = gitignore_filter(target_path)
-            for root, dirs, filenames in os.walk(str(target_path)):
-                root_path = Path(root)
-                dirs[:] = [
-                    d for d in dirs
-                    if not is_skippable_dir(root_path, d) and not d.startswith('.')
-                    and not config.should_ignore(root_path / d)
-                ]
-                for fname in filenames:
-                    fp = root_path / fname
-                    if config.should_ignore(fp):
-                        continue
-                    file_index.setdefault(fname, []).append(fp)
-                    if fp.suffix.lower() in DECLARATION_ONLY_EXTENSIONS:
-                        continue  # a stub would duplicate its module's edges (BACK-1467)
-                    if fp.suffix in supported_exts or fp.suffix.lower() in code_exts:
-                        if gi is not None and gi.ignored(fp):
-                            continue
-                        # BACK-1495: --exclude file patterns (c.py, *.min.js) drop the file
-                        # as a graph node, but like gitignored files it stays in file_index.
-                        if path_is_excluded(fp):
-                            continue
-                        candidates.append(fp)
+                return [target_path], {}
+            return [], {}
+        candidates, file_index, _ = discover_import_files(
+            target_path,
+            lambda fp: fp.suffix in supported_exts or fp.suffix.lower() in code_exts)
         return candidates, file_index
 
     def _process_extracted_files(

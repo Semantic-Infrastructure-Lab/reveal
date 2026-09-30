@@ -123,9 +123,7 @@ COMMANDS = {
 }
 
 # command -> why it disagrees today, and the task that fixes it. Shrink-only.
-KNOWN_DISAGREEMENTS = {
-    'imports://': 'own walk drops dot-dirs (BACK-1580)',
-}
+KNOWN_DISAGREEMENTS: dict = {}
 
 
 def _source(name):

@@ -55,7 +55,6 @@
  "reveal/adapters/depends.py::attr-defined": 2,
  "reveal/adapters/depends.py::no-any-return": 1,
  "reveal/adapters/depends.py::no-redef": 1,
- "reveal/adapters/depends.py::operator": 1,
  "reveal/adapters/depends.py::override": 2,
  "reveal/adapters/depends.py::return-value": 3,
  "reveal/adapters/depends.py::typeddict-unknown-key": 7,
