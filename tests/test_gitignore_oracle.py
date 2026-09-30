@@ -277,9 +277,25 @@ def test_grep_directory_honors_gitignore_and_exclude(repo):
     _write(repo, 'vendor/lib.py', 'needle = 2\n')
     _write(repo, 'app.py', 'needle = 3\n')
 
-    results, _ = _collect_dir_results(repo, re.compile('needle'), None, ['vendor/*'])
+    results, _, scope = _collect_dir_results(repo, re.compile('needle'), None, ['vendor/*'])
 
     assert [Path(r['path']).name for r in results] == ['app.py']
+    assert scope['hidden'] == {'gitignore': 1, 'exclude': 1}  # gen/ and vendor/ (BACK-1546)
+
+
+def test_grep_of_a_gitignored_directory_says_what_it_skipped(repo):
+    """BACK-1546: 'reveal <ignored dir> --grep X' printed a clean 'No matches found.'"""
+    import json
+    from conftest import _run_reveal_direct
+    _write(repo, '.gitignore', 'sessions/\n')
+    _write(repo, 'sessions/s1/README.md', 'needle\n')
+    target = repo / 'sessions' / 's1'
+    text = _run_reveal_direct(str(target), '--grep', 'needle').stdout
+    assert 'No matches found in 0 files.' in text
+    assert 'entries hidden by .gitignore (use --no-gitignore to show)' in text
+    data = json.loads(_run_reveal_direct(str(target), '--grep', 'needle', '--format', 'json').stdout)
+    assert (data['files_searched'], data['hidden'].get('gitignore', 0) > 0) == (0, True)
+    assert _run_reveal_direct(str(target), '--grep', 'needle', '--no-gitignore').stdout.count('README.md') == 1
 
 
 @pytest.mark.parametrize('line', ['', '   ', '# comment', '/', '!'])

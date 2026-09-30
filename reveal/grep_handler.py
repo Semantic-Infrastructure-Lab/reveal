@@ -9,12 +9,14 @@ Groups matching lines by their enclosing structural element:
 import os
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 from argparse import Namespace
 from typing import Any, Dict, List, Optional
 
 from .utils import safe_json_dumps
 from .utils.path_utils import is_skippable_dir
+from .tree_view import _format_suppressed_footer
 
 _BINARY_EXTENSIONS = frozenset({
     '.pyc', '.pyo', '.pyd', '.so', '.dylib', '.dll', '.exe', '.bin', '.o', '.a',
@@ -286,13 +288,13 @@ def handle_grep_directory(path: str, pattern: str, args: Namespace) -> None:
         sys.exit(1)
 
     dir_path = Path(path)
-    file_results, total_hits = _collect_dir_results(
+    file_results, total_hits, scope = _collect_dir_results(
         dir_path, compiled, respect_gitignore, exclude_patterns)
 
     if output_format == 'json':
-        _render_dir_json(file_results, path, pattern, total_hits)
+        _render_dir_json(file_results, path, pattern, total_hits, scope)
     else:
-        _render_dir_text(file_results, dir_path, total_hits, path, pattern)
+        _render_dir_text(file_results, dir_path, total_hits, path, pattern, scope)
 
 
 def _collect_dir_results(
@@ -300,12 +302,17 @@ def _collect_dir_results(
     compiled: 're.Pattern[str]',
     respect_gitignore: Optional[bool] = None,
     exclude_patterns: Optional[List[str]] = None,
-) -> 'tuple[List[Dict[str, Any]], int]':
-    """Walk dir_path and return (file_results, total_hits).
+) -> 'tuple[List[Dict[str, Any]], int, Dict[str, Any]]':
+    """Walk dir_path and return (file_results, total_hits, scope).
 
     BACK-1485: gitignore via the shared git-backed oracle. --exclude patterns
     were read by handle_grep_directory and then dropped; now fnmatch'd here
     with the same should_skip_file semantics as ``check``.
+
+    ``scope`` is what the walk searched and what it left out: ``files_searched``, and
+    ``hidden``, the entries (files and pruned directories) skipped by ``.gitignore`` and
+    ``--exclude``, tallied as the directory view does. A search of a gitignored directory
+    said "No matches found" as if it had looked (BACK-1546).
     """
     from .cli.file_checker import should_skip_file  # noqa: I006  # deferred: cli cycle
     from .utils.gitignore import gitignore_filter
@@ -318,26 +325,40 @@ def _collect_dir_results(
         except ValueError:
             return False
 
+    def _hidden_by(p: Path, is_dir: bool = False) -> Optional[str]:
+        if gi is not None and gi.ignored(p, is_dir=is_dir):
+            return 'gitignore'
+        if excludes and _excluded(p / '_' if is_dir else p):
+            return 'exclude'
+        return None
+
     file_results: List[Dict[str, Any]] = []
     total_hits = 0
+    hidden: Counter = Counter()
+    searched = 0
     for root, dirs, files in os.walk(str(dir_path)):
         root_path = Path(root)
-        dirs[:] = sorted(
-            d for d in dirs
-            if not is_skippable_dir(root_path, d) and not d.startswith('.')
-            and not (gi is not None and gi.ignored(root_path / d, is_dir=True))
-            and not (excludes and _excluded(root_path / d / '_'))
-        )
+        kept = []
+        for d in sorted(dirs):
+            if is_skippable_dir(root_path, d) or d.startswith('.'):
+                continue
+            cause = _hidden_by(root_path / d, is_dir=True)
+            if cause:
+                hidden[cause] += 1
+            else:
+                kept.append(d)
+        dirs[:] = kept
         for fname in sorted(files):
             fpath = root_path / fname
             if fpath.suffix in _BINARY_EXTENSIONS:
                 continue
             if fpath.suffix == '' and _looks_binary(fpath):
                 continue
-            if gi is not None and gi.ignored(fpath):
+            cause = _hidden_by(fpath)
+            if cause:
+                hidden[cause] += 1
                 continue
-            if excludes and _excluded(fpath):
-                continue
+            searched += 1
             try:
                 content = fpath.read_text(encoding='utf-8', errors='replace')
             except (OSError, UnicodeDecodeError):
@@ -350,7 +371,7 @@ def _collect_dir_results(
             elements = _get_structural_elements(str(fpath))
             groups = _group_by_element(hit_lines, elements)
             file_results.append({'path': str(fpath), 'hits': hit_lines, 'groups': groups})
-    return file_results, total_hits
+    return file_results, total_hits, {'files_searched': searched, 'hidden': dict(hidden)}
 
 
 def _render_dir_text(
@@ -359,12 +380,19 @@ def _render_dir_text(
     total_hits: int,
     path: str,
     pattern: str,
+    scope: Optional[Dict[str, Any]] = None,
 ) -> None:
     file_word = "file" if len(file_results) == 1 else "files"
     hit_word = "hit" if total_hits == 1 else "hits"
     print(f"Text search: {path}  —  pattern: {pattern}")
     if not file_results:
-        print("No matches found.")
+        searched = (scope or {}).get('files_searched')
+        lines = ["No matches found." if searched is None else
+                 f"No matches found in {searched} file{'' if searched == 1 else 's'}."]
+        footer = _format_suppressed_footer(Counter((scope or {}).get('hidden') or {}))
+        if footer:
+            lines.append(f"  {footer}")
+        print("\n".join(lines))
         bre_hint = _bre_alternation_hint(pattern)
         if bre_hint:
             print(f"  Tip: {bre_hint}")
@@ -397,12 +425,16 @@ def _render_dir_json(
     path: str,
     pattern: str,
     total_hits: int,
+    scope: Optional[Dict[str, Any]] = None,
 ) -> None:
     result: Dict[str, Any] = {
         'type': 'grep_results',
         'path': path,
         'pattern': pattern,
         'total_hits': total_hits,
+        # What was searched and what was left out (BACK-1546): a zero is only a zero
+        # over the files actually read.
+        **(scope or {}),
         'files': [
             {
                 'path': r['path'],
