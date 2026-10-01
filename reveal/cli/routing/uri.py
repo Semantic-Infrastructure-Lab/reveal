@@ -17,7 +17,7 @@ from ...errors import NotApplicableError
 from ...reveal_types import CONTRACT_VERSION, RevealResult
 from ...utils import print_json_result, write_also_json
 from ...display.formatting import print_truncations
-from ...utils.results import (ResultBuilder, echo_source, note_truncation, outcome_of,
+from ...utils.results import (Outcome, ResultBuilder, echo_source, note_truncation, outcome_of,
                              slice_items, truncations_of)
 from .flag_specs import exclude_fragment, inject_query_flags, strip_result_control_keys
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
@@ -1077,13 +1077,26 @@ def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render, 
     --format json still prints the whole error envelope. A truncated result exits 0; what
     it left out is printed after the render (print_truncations).
     """
-    outcome = outcome_of(result)
-    if outcome == 'failed':
-        print(f"Error ({scheme or 'unknown'}://): {result['error']}", file=sys.stderr)
+    outcome = announce_outcome(result, f"{scheme or 'unknown'}://")
     write_also_json(result, args)
     render(result, args.format, **render_kwargs)
+    conclude_outcome(result, outcome, args.format)
+
+
+def announce_outcome(result: Any, label: str) -> Outcome:
+    """A result's outcome; a failed one's error goes to stderr here, once (BACK-1059).
+
+    `label` names what failed: `<scheme>://` for a URI, the path for a file view."""
+    outcome = outcome_of(result)
+    if outcome == 'failed':
+        print(f"Error ({label}): {result['error']}", file=sys.stderr)
+    return outcome
+
+
+def conclude_outcome(result: Any, outcome: Outcome, output_format: str) -> None:
+    """After the render: print what a truncated result left out; exit 1 on a failed one."""
     if outcome == 'truncated':
-        print_truncations(result, args.format)
+        print_truncations(result, output_format)
     if outcome == 'failed':
         sys.exit(1)
 

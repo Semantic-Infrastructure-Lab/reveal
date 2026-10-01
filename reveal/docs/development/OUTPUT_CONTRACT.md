@@ -389,6 +389,12 @@ both forms (BACK-1544). A subcommand's findings exit (`hotspots`/`deps` exit 1 o
   it when `?sort=` asks for another order. Before, `?sort=date&limit=3` sorted the 3 commits it
   had walked and listed the 3 newest (BACK-1547). A read that fails partway fails the query; it
   doesn't return what it had as the whole answer.
+- **A file's own parser failing is a failed outcome too.** An analyzer whose parser fails
+  outright (XML, CSV, a notebook) returns `ResultBuilder.create_error`; the file view
+  (`reveal <file>`) reports it through the router's `announce_outcome`/`conclude_outcome`:
+  `Error (<path>): <error>` on stderr, the error at the top of the JSON envelope, exit 1
+  (BACK-1590). A tree-sitter parse that *recovered* around errors is not a failure: it
+  sets `_has_errors`, prints the parse-recovered note, and exits 0.
 - **Problems inside an answer are not a failure.** Per-file parse failures in a result that
   was still produced go in `meta.errors` (v1.1). An error on one item of a list stays on that
   item. Neither changes the outcome.

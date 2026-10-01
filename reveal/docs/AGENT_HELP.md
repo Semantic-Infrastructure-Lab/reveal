@@ -3422,6 +3422,7 @@ The message now includes line count — use it to decide whether `Read` is worth
 
 1. **Syntax errors or grammar gaps in the file** — reveal tells you; you don't need a separate check.
    - The outline (bare and `--outline`) prints `⚠️  Parse recovered from syntax tree-sitter could not read: this outline may be incomplete or wrong (a grammar gap or a real syntax error).` and JSON carries `meta.parse_recovered: true`. Treat that outline as a lower bound.
+   - A file whose own parser fails outright (malformed XML, a notebook that isn't JSON) prints `Error (<file>): <the parser's message>` on stderr and exits `1`; JSON carries it as the top-level `error`.
    - `reveal check` reports `⚠️  file did not parse cleanly — results may be incomplete or incorrect` and exits `3` (scan incomplete), including for malformed JSON/YAML/TOML/XML/notebooks/JSONL.
    - A file whose substance is top-level code (no enclosing function) gets `⚠️  Partial outline: N of M code lines (P%) are top-level code outside any listed function/class (first at line X).` plus a ready `reveal "<file>" :X-<end>` command; JSON carries `meta.coverage`.
    ```bash

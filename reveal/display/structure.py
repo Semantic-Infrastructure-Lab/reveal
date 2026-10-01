@@ -8,7 +8,7 @@ from reveal.base import FileAnalyzer
 from reveal.defaults import DisplayDefaults
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
 from reveal.utils.path_utils import is_minified_content, is_minified_filename
-from reveal.utils.results import note_truncation, truncations_of
+from reveal.utils.results import note_truncation, outcome_of, truncations_of
 
 from .coverage import format_coverage_warning, outline_coverage
 from .element import listed_item_line
@@ -491,9 +491,11 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
             'message': parse_error,
             'hint': 'Tree-sitter grammar fetch/parse failed — see INSTALL.md#network-requirements',
         }
+    elif outcome_of(structure) == 'failed':  # the analyzer's own parser failed (BACK-1590)
+        result['error'] = structure['error']
     if truncations_of(structure):
         cast(Dict[str, Any], result['meta'])['warnings'] = truncations_of(structure)
-    if structure.get('_has_errors'):
+    if _parse_recovered(structure):
         cast(Dict[str, Any], result['meta'])['parse_recovered'] = True
     coverage = outline_coverage(structure, analyzer.lines)
     if coverage:
@@ -634,11 +636,18 @@ PARSE_RECOVERY_NOTICE = ("⚠️  Parse recovered from syntax tree-sitter could 
                          "incomplete or wrong (a grammar gap or a real syntax error).")
 
 
+def _parse_recovered(structure: Any) -> bool:
+    """The parse went through with errors (`_has_errors`) rather than failing outright."""
+    return (isinstance(structure, dict) and bool(structure.get('_has_errors'))
+            and outcome_of(structure) != 'failed')
+
+
 def _print_coverage_warning(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]]) -> None:
     """Say so when the outline is not the whole story: the parse recovered around
     errors (BACK-1084's `_has_errors`, already disclosed by `check`), or it covers
-    only a small part of a code file (BACK-1113)."""
-    if isinstance(structure, dict) and structure.get('_has_errors'):
+    only a small part of a code file (BACK-1113). A parse that failed outright says
+    so as its error instead (BACK-1590): nothing was recovered."""
+    if _parse_recovered(structure):
         print()
         print(PARSE_RECOVERY_NOTICE)
     coverage = outline_coverage(structure, analyzer.lines)
@@ -819,8 +828,8 @@ def _apply_head_tail_range(analyzer: FileAnalyzer, structure: Any, args) -> None
               f"list to slice.", file=sys.stderr)
 
 
-def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config=None):
-    """Show file structure.
+def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config=None) -> Any:
+    """Show file structure, and return it so the caller can act on its outcome.
 
     Refactored to reduce complexity from 42 → ~18 by extracting mode handlers.
 
@@ -871,11 +880,12 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
         paths = _format_related_flat(structure['related'])
         for p in paths:
             print(p)
-        return
+        return structure
 
     _render_structure_view(analyzer, structure, output_format, args, config)
     if truncations_of(structure):
         print_truncations(structure, output_format)
+    return structure
 
 
 def _render_structure_view(analyzer: FileAnalyzer, structure: Dict[str, Any], output_format: str,

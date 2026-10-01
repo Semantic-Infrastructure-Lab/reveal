@@ -14,6 +14,7 @@ from typing import Optional, TYPE_CHECKING
 
 from .core import tree_root
 from .core.treesitter_compat import _zero_arg
+from .utils.results import outcome_of
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -385,4 +386,9 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         extract_element(analyzer, element, output_format, config=config)
         return
 
-    show_structure(analyzer, output_format, args, config=config)
+    # An analyzer whose own parser failed (XML, CSV, a notebook) returns a failed result:
+    # report it and exit 1 as the router does for a URI, not 0 under a clean header (BACK-1590).
+    from .cli.routing.uri import announce_outcome, conclude_outcome  # noqa: I006 — circular avoidance
+    structure = show_structure(analyzer, output_format, args, config=config)
+    if outcome_of(structure) == 'failed':
+        conclude_outcome(structure, announce_outcome(structure, path), output_format)
