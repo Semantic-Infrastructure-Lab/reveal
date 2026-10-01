@@ -96,6 +96,6 @@ def test_meta_counts_what_files_lists(tree):
 
 def test_grep_searches_what_files_lists(tree):
     out = _run_reveal_direct('.', '--grep', 'x = 1', '--format', 'json').stdout
-    searched = sorted(f['path'] for f in json.loads(out)['files'])
+    searched = sorted(Path(f['path']).as_posix() for f in json.loads(out)['files'])
     assert searched == _listed()
     assert json.loads(out)['hidden'] == {'reveal_ignore': 1}
