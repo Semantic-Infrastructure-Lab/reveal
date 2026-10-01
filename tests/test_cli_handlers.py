@@ -782,9 +782,9 @@ class TestBatchHelpers(unittest.TestCase):
         self.assertEqual(exit_code, 0)
 
     def test_calculate_batch_exit_code_warning_only(self):
-        """Test _calculate_batch_exit_code for warnings only (returns 0)."""
+        """Warnings only exit 1, as the same check of one host does (BACK-1557)."""
         exit_code = _calculate_batch_exit_code(failures=0, warnings=2)
-        self.assertEqual(exit_code, 0)  # Warnings alone don't cause non-zero exit
+        self.assertEqual(exit_code, 1)
 
     def test_calculate_batch_exit_code_failure_no_warnings(self):
         """Test _calculate_batch_exit_code for failures without warnings."""

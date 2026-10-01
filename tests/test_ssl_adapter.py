@@ -1368,6 +1368,20 @@ class TestStdinBatchSSLCheck(unittest.TestCase):
             self.assertEqual(result['status'], 'failure')
             self.assertIn('Connection refused', result.get('error', ''))
 
+    def test_render_ssl_batch_results_exits_1_on_a_warning(self):
+        """BACK-1557: a batch whose worst cert is only expiring soon exited 0, so the
+        CI recipe's gate never fired; one host's --check exits 1 on the same cert."""
+        from reveal.cli.handlers import _render_ssl_batch_results
+        from argparse import Namespace
+
+        args = Namespace(format='json', only_failures=False, summary=True, expiring_within='30')
+        results = [
+            {'host': 'a.com', 'status': 'pass', 'certificate': {'days_until_expiry': 60}},
+            {'host': 'b.com', 'status': 'warning', 'certificate': {'days_until_expiry': 15}},
+        ]
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(_render_ssl_batch_results(results, args), 1)
+
     def test_render_ssl_batch_results_aggregation(self):
         """_render_ssl_batch_results should build proper batch structure."""
         from reveal.cli.handlers import _render_ssl_batch_results

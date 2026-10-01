@@ -243,7 +243,7 @@ def _render_ssl_batch_results(results: list, args: 'Namespace') -> int:
         args: CLI arguments with batch flags
 
     Returns:
-        The batch's exit code: 2 when any domain failed, else 0
+        The batch's exit code: 2 when any domain failed, 1 when any warned, else 0
     """
     from ...adapters.ssl.renderer import SSLRenderer
 
@@ -252,7 +252,7 @@ def _render_ssl_batch_results(results: list, args: 'Namespace') -> int:
     passed = sum(1 for r in results if r.get('status') == 'pass')
     warnings = sum(1 for r in results if r.get('status') == 'warning')
     failures = sum(1 for r in results if r.get('status') == 'failure')
-    exit_code = 0 if failures == 0 else 2
+    exit_code = _calculate_batch_exit_code(failures, warnings)
 
     batch_result = {
         'type': 'ssl_batch_check',
@@ -472,6 +472,10 @@ def _calculate_batch_exit_code(failures: int, warnings: int) -> int:
     """
     if failures > 0:
         return 2
+    # A warning (a cert inside --expiring-within) exits 1, as the same check of one
+    # host does; batches returned 0, so a CI gate on them never fired (BACK-1557).
+    if warnings > 0:
+        return 1
     return 0
 
 
