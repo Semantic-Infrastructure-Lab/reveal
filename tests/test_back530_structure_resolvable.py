@@ -247,3 +247,15 @@ def test_js_class_field_arrow_method_resolves(tmp_path):
 
     syntax = _parse_element_syntax('handleClick')
     assert _extract_by_syntax(analyzer, 'handleClick', syntax) is not None
+
+
+def test_outline_lists_definitions_in_source_order(tmp_path):
+    """Decorated definitions were collected in a first pass, so a @property at :5
+    was listed above the plain method at :2."""
+    path = tmp_path / 'm.py'
+    path.write_text('class B:\n    def plain(self):\n        return 1\n\n'
+                    '    @property\n    def prop(self):\n        return 2\n\n\n'
+                    '@dataclass\nclass C:\n    x: int\n\n\nclass A:\n    pass\n', encoding='utf-8')
+    structure = _build(path).get_structure()
+    assert [f['name'] for f in structure['functions']] == ['plain', 'prop']
+    assert [c['name'] for c in structure['classes']] == ['B', 'C', 'A']

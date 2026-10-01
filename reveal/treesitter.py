@@ -773,6 +773,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         functions.extend(self._extract_language_specific_functions())
 
+        # Source order: the passes above append decorated definitions first, so the
+        # outline listed a @property at :5 above the plain method at :2.
+        functions.sort(key=lambda f: f.get('line') or 0)
         return functions
 
     def _extract_language_specific_functions(self) -> List[StructureItem]:
@@ -1031,6 +1034,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         undecorated_classes = self._extract_undecorated_classes(class_types, processed_classes)
         classes.extend(undecorated_classes)
 
+        classes.sort(key=lambda c: c.get('line') or 0)  # source order, as for functions
         return classes
 
     def _get_class_node_types(self) -> List[str]:
