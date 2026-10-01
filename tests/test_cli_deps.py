@@ -525,6 +525,15 @@ class TestRenderUnused(unittest.TestCase):
         out = _capture(_render_unused, [self._unused('typing', names=['Optional'])], Path('/project'), 10)
         self.assertIn('Optional', out)
 
+    def test_shows_only_the_unused_names(self):
+        """BACK-1371: `from typing import Dict, List, Any, Optional` with Dict and Any
+        unused listed all four; imports://?unused listed two."""
+        imp = dict(self._unused('typing', names=['Dict', 'List', 'Any', 'Optional']),
+                   unused_names=['Dict', 'Any'])
+        out = _capture(_render_unused, [imp], Path('/project'), 10)
+        self.assertIn('typing.Dict, Any', out)
+        self.assertNotIn('Optional', out)
+
     def test_shows_warning_icon(self):
         out = _capture(_render_unused, [self._unused('os')], Path('/project'), 10)
         self.assertIn('⚠️', out)

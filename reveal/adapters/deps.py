@@ -280,7 +280,9 @@ def _render_unused(unused: List[Dict[str, Any]], base_path: Path, top: int) -> N
         filepath = imp.get('file', '?')
         line = imp.get('line', '?')
         module = imp.get('module', '?')
-        names = imp.get('names', [])
+        # The unused ones, not every name the line imports (BACK-1371): `from typing
+        # import Dict, List, Any, Optional` with only Dict and Any unused listed all four.
+        names = imp.get('unused_names') or imp.get('names', [])
         rel = to_relative_display(filepath, base_path)
         name_str = f".{', '.join(names)}" if names else ''
         print(f"  ⚠️  {rel}:{line}  {module}{name_str}")
