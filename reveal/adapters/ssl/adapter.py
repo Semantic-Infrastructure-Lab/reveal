@@ -99,7 +99,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
 
 _SCHEMA_NOTES = [
     'Default port is 443; use ssl://host:PORT for non-standard ports',
-    '--expiring-within=N flags certs expiring within N days',
+    '--expiring-within=N warns on certs expiring within N days; it runs the health check (implies --check)',
     '--check uses exit codes for CI: 0=pass, 1=warning (expiring soon), 2=critical (expired)',
     'Reads live certificate from TLS handshake — requires network access',
     'For offline validation from nginx config path: reveal ssl://nginx:///path --local-certs',
@@ -136,6 +136,8 @@ class SSLAdapter(ResourceAdapter):
     # path — GUARDED_FLAG_EXTENSIONS stays empty and the guard always fires.
     # Example text is per-flag: --summary and --validate-nginx intentionally
     # omit the URI-param form (BACK-162).
+    # A health threshold: it only means something to check() (BACK-1593).
+    CHECK_IMPLIED_BY = ('expiring_within',)
     GUARDED_FLAG_CONTEXT = 'the ssl:// adapter'
     GUARDED_FLAG_HELP = 'ssl'
     GUARDED_FLAGS = (

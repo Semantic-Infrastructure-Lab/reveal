@@ -91,7 +91,7 @@ flags:
   --only-failures: 'Hide healthy results, show only warnings and failures [Universal flag]'
   --batch: 'Batch mode with aggregated results (works with --stdin) [Universal flag]'
   --summary: 'Show aggregated counts instead of per-domain details (batch mode). URI form: ?summary'
-  --expiring-within: 'Filter to certs expiring within N days (e.g., --expiring-within=30). URI form: ?expiring-within=30'
+  --expiring-within: 'Warn on certs expiring within N days; runs the health check, so it implies --check (e.g., --expiring-within=30). URI form: ?expiring-within=30 with --check'
   --validate-nginx: 'Cross-validate nginx SSL config against actual certificates (nginx mode only)'
   --stdin: 'Read URIs from stdin for batch processing (one URI per line)'
 
@@ -223,7 +223,7 @@ cli_flags:
   - flag: '--summary'
     description: 'Show counts only, no per-domain details (batch mode)'
   - flag: '--expiring-within N'
-    description: 'Filter: only show certs expiring within N days'
+    description: 'Health-check threshold: warn on certs expiring within N days (implies --check)'
   - flag: '--validate-nginx'
     description: 'Cross-validate nginx cert paths against actual certificates'
 

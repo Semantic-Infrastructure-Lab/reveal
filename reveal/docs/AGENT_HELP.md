@@ -2051,7 +2051,7 @@ reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check --expiri
 **Batch filter flags:**
 - `--only-failures` - Hide healthy certs, show only warnings/failures
 - `--summary` - Show aggregated counts instead of per-domain details
-- `--expiring-within=N` - Filter to certs expiring within N days
+- `--expiring-within=N` - Warn on certs expiring within N days (runs the health check; implies `--check`)
 
 **Health check thresholds:**
 - Warning: <30 days until expiry (exit code 1)

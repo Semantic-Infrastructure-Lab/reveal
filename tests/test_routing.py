@@ -1773,5 +1773,22 @@ class TestAlsoJson(unittest.TestCase):
         self.assertFalse(os.path.exists(self.out_path))
 
 
+def test_a_check_only_flag_selects_check_mode():
+    """BACK-1593: `ssl://host --expiring-within 30` (the form the docs teach) rendered
+    the plain certificate view and noted the flag had no effect; --expiring-within
+    only means something to check(), so the adapter lists it in CHECK_IMPLIED_BY."""
+    from argparse import Namespace
+    from reveal.adapters.ssl.adapter import SSLAdapter
+    from reveal.cli.routing.uri import _check_mode
+
+    class NoCheck:
+        CHECK_IMPLIED_BY = ('expiring_within',)
+
+    assert _check_mode(SSLAdapter, Namespace(check=False, expiring_within=30))
+    assert _check_mode(SSLAdapter, Namespace(check=True, expiring_within=None))
+    assert not _check_mode(SSLAdapter, Namespace(check=False, expiring_within=None))
+    assert not _check_mode(NoCheck, Namespace(check=True, expiring_within=30))
+
+
 if __name__ == '__main__':
     unittest.main()

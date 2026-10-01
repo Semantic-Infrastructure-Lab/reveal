@@ -451,7 +451,7 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
     """
     # An unsupported --format is a usage error, so it comes before any adapter work. Check
     # mode renders through render_check, which declares no formats.
-    if not (peek(args, 'check', False) and hasattr(adapter_class, 'check')):
+    if not _check_mode(adapter_class, args):
         require_supported_format(args, declared_output_formats(adapter_class), f"{scheme}://")
     resolve_adapter(adapter_class, renderer_class, scheme, resource, element, args).emit()
 
@@ -461,6 +461,17 @@ def resolve_adapter(adapter_class: type, renderer_class: type[Any], scheme: str,
     """Answer a query on an adapter without printing it (see resolve_uri)."""
     return _answer(lambda: _resolve(adapter_class, renderer_class, scheme, resource, element, args),
                    scheme, args)
+
+
+def _check_mode(adapter: Any, args: 'Namespace') -> bool:
+    """Whether this query runs the adapter's check(): --check, or a flag the adapter
+    lists in CHECK_IMPLIED_BY because it means nothing outside one (BACK-1593:
+    `ssl://host --expiring-within 30`, the form the docs teach, was a no-op)."""
+    if not hasattr(adapter, 'check'):
+        return False
+    implied = getattr(adapter, 'CHECK_IMPLIED_BY', ())
+    implied = implied if isinstance(implied, tuple) else ()  # as _declared() does: a Mock has every attr
+    return bool(peek(args, 'check', False)) or any(peek(args, flag) is not None for flag in implied)
 
 
 def _resolve(adapter_class: type, renderer_class: type[Any], scheme: str, resource: str,
@@ -485,7 +496,7 @@ def _resolve(adapter_class: type, renderer_class: type[Any], scheme: str, resour
         _call_adapter(lambda: adapter.reconfigure_base_path(_Path(path_override)),
                       scheme, resource, adapter_class)
 
-    if peek(args, 'check', False) and hasattr(adapter, 'check'):
+    if _check_mode(adapter, args):
         mark(args, 'check')
         return _check_answer(adapter, renderer_class, args, scheme, resource)
 
