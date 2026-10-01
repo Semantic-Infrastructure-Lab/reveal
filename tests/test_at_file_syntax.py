@@ -256,6 +256,15 @@ class TestAtFileWithFlags(unittest.TestCase):
 class TestAtFileBatchEquivalence(unittest.TestCase):
     """Tests for BACK-062: @file --batch produces same aggregated output as --stdin --batch."""
 
+    # Variables these tests set, not HOME/USER/SHELL/TERM: Windows has none of those, so
+    # there the URIs failed and assertions about their lines held vacuously.
+    VARS = ('REVEAL_AT_FILE_B', 'REVEAL_AT_FILE_C', 'REVEAL_AT_FILE_D', 'REVEAL_AT_FILE_E')
+
+    def setUp(self):
+        env = patch.dict(os.environ, {name: '1' for name in self.VARS})
+        env.start()
+        self.addCleanup(env.stop)
+
     def run_reveal(self, *args):
         """Run reveal in-process (no subprocess overhead)."""
         return _run_reveal_direct(*args)
@@ -263,7 +272,7 @@ class TestAtFileBatchEquivalence(unittest.TestCase):
     def test_at_file_batch_shows_batch_results_header(self):
         """@file --batch should produce BATCH CHECK RESULTS header."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-            f.write('env://PATH\nenv://HOME\n')
+            f.write('env://PATH\nenv://REVEAL_AT_FILE_B\n')
             list_file = f.name
 
         try:
@@ -276,7 +285,7 @@ class TestAtFileBatchEquivalence(unittest.TestCase):
     def test_at_file_batch_aggregates_counts(self):
         """@file --batch should show Total URIs count across all items in file."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-            f.write('env://PATH\nenv://HOME\nenv://USER\n')
+            f.write('env://PATH\nenv://REVEAL_AT_FILE_B\nenv://REVEAL_AT_FILE_C\n')
             list_file = f.name
 
         try:
@@ -290,7 +299,7 @@ class TestAtFileBatchEquivalence(unittest.TestCase):
     def test_at_file_batch_summary_flag_works(self):
         """@file --batch --summary should show aggregated summary."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-            f.write('env://PATH\nenv://HOME\n')
+            f.write('env://PATH\nenv://REVEAL_AT_FILE_B\n')
             list_file = f.name
 
         try:
@@ -303,7 +312,7 @@ class TestAtFileBatchEquivalence(unittest.TestCase):
     def test_at_file_batch_summary_suppresses_per_uri_lines(self):
         """BACK-060: --batch --summary must NOT emit one line per URI (header only)."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-            f.write('env://PATH\nenv://HOME\nenv://USER\nenv://SHELL\nenv://TERM\n')
+            f.write('env://PATH\nenv://REVEAL_AT_FILE_B\nenv://REVEAL_AT_FILE_C\nenv://REVEAL_AT_FILE_D\nenv://REVEAL_AT_FILE_E\n')
             list_file = f.name
 
         try:
@@ -312,21 +321,22 @@ class TestAtFileBatchEquivalence(unittest.TestCase):
             self.assertIn('Total URIs: 5', result.stdout)
             # Per-URI lines look like "✓ env://PATH: SUCCESS" — should be absent
             self.assertNotIn('env://PATH: ', result.stdout)
-            self.assertNotIn('env://HOME: ', result.stdout)
+            self.assertNotIn('env://REVEAL_AT_FILE_B: ', result.stdout)
         finally:
             os.unlink(list_file)
 
     def test_at_file_batch_without_summary_shows_per_uri_lines(self):
         """Without --summary, each URI gets its own output line."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-            f.write('env://PATH\nenv://HOME\n')
+            f.write('env://PATH\nenv://REVEAL_AT_FILE_B\n')
             list_file = f.name
 
         try:
             result = self.run_reveal(f'@{list_file}', '--batch')
             self.assertIn('BATCH CHECK RESULTS', result.stdout)
             # Per-URI lines must appear when --summary is NOT used
-            self.assertIn('env://', result.stdout)
+            self.assertIn('env://PATH: ', result.stdout)
+            self.assertIn('env://REVEAL_AT_FILE_B: ', result.stdout)
         finally:
             os.unlink(list_file)
 
