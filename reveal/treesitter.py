@@ -1,5 +1,6 @@
 """Tree-sitter based analyzer for multi-language support."""
 
+import functools
 import hashlib
 import logging
 import os
@@ -439,6 +440,32 @@ class TreeSitterAnalyzer(FileAnalyzer):
     # _get_node_name can read; the BACK-530 invariant test then requires each
     # listed entry to be extractable by that name.
     DECLARATION_CATEGORIES: Dict[str, Tuple[str, ...]] = {'interfaces': ('interface_declaration',)}
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Every subclass's own get_structure says when its parse was recovered (BACK-1589).
+
+        The base get_structure sets `_has_errors` (BACK-1084), but an analyzer that
+        overrides it never did: invalid JSON, YAML, TOML, HCL, GraphQL, Protobuf, Zig and
+        Dockerfile printed a clean outline at confidence 1.0, the answer for a valid file.
+        Wrapping the override here means a new format analyzer can't forget it. Checked
+        only once the override has parsed the tree; one that answered from super()'s
+        cached structure already carries the flag, and a parse just to ask would undo the
+        cache hit (BACK-1558)."""
+        super().__init_subclass__(**kwargs)
+        own = cls.__dict__.get('get_structure')
+        if own is None or getattr(own, '_discloses_recovery', False):
+            return
+
+        @functools.wraps(own)
+        def get_structure(self: 'TreeSitterAnalyzer', *args: Any, **kw: Any) -> Dict[str, Any]:
+            structure: Dict[str, Any] = own(self, *args, **kw)
+            if (self._tree_parsed and not (structure or {}).get('_has_errors')
+                    and self._has_recovery_artifacts()):
+                structure = {**(structure or {}), '_has_errors': True}
+            return structure
+
+        get_structure._discloses_recovery = True  # type: ignore[attr-defined]
+        cls.get_structure = get_structure  # type: ignore[method-assign]
 
     def __init__(self, path: str):
         super().__init__(path)

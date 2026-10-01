@@ -265,18 +265,16 @@ def _format_detections_text(
     _print_truncation_footer()
 
 
-def structure_parse_degraded(analyzer: Any, structure: Any) -> bool:
+def structure_parse_degraded(structure: Any) -> bool:
     """True when the file did not parse cleanly, so "no issues" is not a clean bill.
 
-    `_has_errors` (BACK-1084) is set by TreeSitterAnalyzer.get_structure and by
-    analyzers whose own parser failed (XML, notebooks, JSONL). Tree-sitter
-    analyzers that override get_structure (JSON, YAML, TOML, ...) never set it,
-    so their tree is asked directly (BACK-1404: truncated JSON read "✅ No issues").
+    `_has_errors` (BACK-1084) is set by TreeSitterAnalyzer.get_structure, by every
+    override of it (BACK-1589: the base class wraps them, so JSON, YAML, TOML, ...
+    no longer need their tree asked here, which BACK-1404 did after truncated JSON
+    read "✅ No issues"), and by analyzers whose own parser failed (XML, notebooks,
+    JSONL).
     """
-    if isinstance(structure, dict) and structure.get('_has_errors'):
-        return True
-    has_recovery = getattr(analyzer, '_has_recovery_artifacts', None)
-    return bool(has_recovery and has_recovery())
+    return isinstance(structure, dict) and bool(structure.get('_has_errors'))
 
 
 def run_pattern_detection(
@@ -329,7 +327,7 @@ def run_pattern_detection(
     # BACK-1083: a tree-sitter recovery parse (structure['_has_errors'], set by
     # BACK-1084) means rules ran against fabricated/partial structure — surface
     # that instead of letting "0 detections" read as "clean file".
-    parse_degraded = structure_parse_degraded(analyzer, structure)
+    parse_degraded = structure_parse_degraded(structure)
     # BACK-1466: the same rule/language gaps recursive check discloses (W-CAP-1
     # T006, W-CAP-2 I001) -- without them a single-file ✅ claims more than ran.
     disclosures = capability_disclosures([path], select, ignore)

@@ -646,7 +646,7 @@ def check_and_collect_file(
 
         status: dict = {"status": "ok"}
         from ..checks import structure_parse_degraded
-        if structure_parse_degraded(analyzer, structure):
+        if structure_parse_degraded(structure):
             status = {
                 "status": "warning",
                 "detail": "file did not parse cleanly; results may be incomplete or incorrect",
