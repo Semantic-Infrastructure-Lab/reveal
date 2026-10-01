@@ -13,13 +13,15 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
-from .surface import _supported_coverage_languages
+from .surface import _supported_coverage_languages, _unparsed_note
+from .ast.surface_matrix import UNPARSED_KEY
 from ..registry import JS_TS_LANGUAGES, _is_cpp_header_content, extensions_for_languages
 from ..utils import print_json_result
 from ..utils.path_utils import (
     _walk_code_files,
     assess_language_coverage,
     detect_non_python_language,
+    to_posix,
 )
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
@@ -95,6 +97,12 @@ def _has_files(path: Path, matches: Callable[[Path], bool]) -> bool:
 def _collect_files(path: Path, matches: Callable[[Path], bool]) -> List[Path]:
     """Files a scanner reads (an explicitly named single file is never excluded)."""
     return list(_walk_matching(path, matches))
+
+
+def _unparsed_files(unparsed: List[str]) -> List[str]:
+    """Files a tree-sitter contracts scanner could not parse (BACK-1588), spelled
+    like the entries' `file` (the walk's path, '/' on every OS)."""
+    return sorted(to_posix(f) for f in unparsed)
 
 
 # Each contract scanner and the files that make it active, in merge order.
@@ -183,13 +191,18 @@ def _scan_contracts(
         return result
 
     by_language = {name: _run(name) for name in active}
-    return {
+    report = {
         'path': str(path),
         'total_contracts': sum(g['total_contracts'] for g in by_language.values()),
         'unsupported_language': '',
         'coverage': coverage_dict,
         'by_language': by_language,
     }
+    # BACK-1588: only the tree-sitter scanners (Go/Rust/Ruby/C++) have an unparsed
+    # channel, so the key is present only when one of them ran.
+    if any('unparsed_files' in g for g in by_language.values()):
+        report['unparsed_files'] = sorted(f for g in by_language.values() for f in g.get('unparsed_files', []))
+    return report
 
 
 def _scan_contracts_python(
@@ -402,10 +415,12 @@ def _scan_contracts_ruby(
 
     modules: List[Dict[str, Any]] = []
     classes: List[Dict[str, Any]] = []
+    unparsed: List[str] = []
     for file_path in _collect_files(path, _is_ruby_file):
         scanned = scan_file_contracts_ruby(str(file_path))
         modules.extend(scanned['modules'])
         classes.extend(scanned['classes'])
+        unparsed.extend(scanned.get(UNPARSED_KEY, []))
 
     implementations = [] if abstract_only else [c for c in classes if c['bases']]
     contract_names: Set[str] = {m['name'] for m in modules}
@@ -423,6 +438,7 @@ def _scan_contracts_ruby(
         'basemodels': [],
         'path_heuristic': [],
         'unsupported_language': '',
+        'unparsed_files': _unparsed_files(unparsed),
         '_ruby_mode': True,
     }
 
@@ -452,10 +468,12 @@ def _scan_contracts_go(
     interfaces: List[Dict[str, Any]] = []
     structs: List[Dict[str, Any]] = []
     struct_methods: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    unparsed: List[str] = []
     for file_path in _collect_files(path, _is_go_file):
         scanned = scan_file_contracts_go(str(file_path))
         interfaces.extend(scanned['interfaces'])
         structs.extend(scanned['structs'])
+        unparsed.extend(scanned.get(UNPARSED_KEY, []))
         for m in scanned['methods']:
             struct_methods.setdefault(m['recv'], {})[m['name']] = m
 
@@ -520,6 +538,7 @@ def _scan_contracts_go(
         'basemodels': [],
         'path_heuristic': [],
         'unsupported_language': '',
+        'unparsed_files': _unparsed_files(unparsed),
         '_go_mode': True,
     }
 
@@ -539,10 +558,12 @@ def _scan_contracts_rust(
 
     traits: List[Dict[str, Any]] = []
     impls: List[Dict[str, Any]] = []
+    unparsed: List[str] = []
     for file_path in _collect_files(path, _is_rust_file):
         scanned = scan_file_contracts_rust(str(file_path))
         traits.extend(scanned['interfaces'])
         impls.extend(scanned['impls'])
+        unparsed.extend(scanned.get(UNPARSED_KEY, []))
 
     for tr in traits:
         tr['bases'] = []
@@ -584,6 +605,7 @@ def _scan_contracts_rust(
         'basemodels': [],
         'path_heuristic': [],
         'unsupported_language': '',
+        'unparsed_files': _unparsed_files(unparsed),
         '_rust_mode': True,
     }
 
@@ -603,9 +625,11 @@ def _scan_contracts_cpp(
     from reveal.adapters.ast.nav_contracts_cpp import scan_file_contracts_cpp
 
     classes: List[Dict[str, Any]] = []
+    unparsed: List[str] = []
     for file_path in _collect_files(path, _is_cpp_file):
         scanned = scan_file_contracts_cpp(str(file_path))
         classes.extend(scanned['classes'])
+        unparsed.extend(scanned.get(UNPARSED_KEY, []))
 
     contracts: List[Dict[str, Any]] = []
     contract_names: Set[str] = set()
@@ -641,6 +665,7 @@ def _scan_contracts_cpp(
         'basemodels': [],
         'path_heuristic': [],
         'unsupported_language': '',
+        'unparsed_files': _unparsed_files(unparsed),
         '_cpp_mode': True,
     }
 
@@ -828,8 +853,11 @@ def _render_report(report: Dict[str, Any]) -> None:
     # .py files in a Lua tree yielding "no contracts"), not a real verdict. The
     # coverage warning supersedes the legacy detect_non_python_language decline.
     warning = report.get('coverage', {}).get('warning', '')
-    if warning:
-        print(warning)
+    notices = [warning] if warning else []
+    if report.get('unparsed_files'):  # BACK-1588: a file with no grammar is not a clean file
+        notices.append(f"⚠ {_unparsed_note(report['unparsed_files'])}")
+    for notice in notices:
+        print(notice)
         print()
     print(f"Total contracts found: {total}")
     print()
@@ -979,6 +1007,7 @@ class ContractsAdapter(ResourceAdapter):
                             'total_contracts': {'type': 'integer'},
                             'abcs': {'type': 'array'},
                             'protocols': {'type': 'array'},
+                            'unparsed_files': {'type': 'array', 'description': 'Go/Rust/Ruby/C++ files that could not be parsed (no grammar) and contribute no entries'},
                         },
                     },
                 },
@@ -1002,6 +1031,8 @@ class ContractsAdapter(ResourceAdapter):
         coverage_warning = report.get('coverage', {}).get('warning', '')
         if coverage_warning:
             warnings.append({'code': 'W-CONTRACTS-1', 'message': coverage_warning})
+        if report.get('unparsed_files'):
+            warnings.append({'code': 'W-CONTRACTS-2', 'message': _unparsed_note(report['unparsed_files'])})
 
         return ResultBuilder.create(
             result_type='contracts',

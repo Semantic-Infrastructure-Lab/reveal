@@ -16,29 +16,24 @@ Emits per file:
 `contracts.py::_scan_contracts_rust` joins impls to traits by name.
 """
 
-import logging
-from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line
+from .nav_surface_common import _get_text, _get_line, scan_file_with_grammar
 
 from reveal.core import node_children as _children
-from reveal.core import get_tree, tree_root
+from reveal.core import tree_root
 from reveal.core.treesitter_compat import _zero_arg
 
-logger = logging.getLogger(__name__)
+_EMPTY_KEYS = ('interfaces', 'impls')
 
 
-def scan_file_contracts_rust(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
-    """Parse one Rust file → {'interfaces', 'impls'}."""
-    empty: Dict[str, List[Dict[str, Any]]] = {'interfaces': [], 'impls': []}
-    try:
-        source = Path(file_path).read_text(errors='replace', encoding='utf-8')
-        tree = get_tree('rust', source)
-    except Exception as e:
-        logger.warning("contracts scan (Rust) failed to parse %s: %s", file_path, e)
-        return empty
+def scan_file_contracts_rust(file_path: str) -> Dict[str, List[Any]]:
+    """Parse one Rust file → {'interfaces', 'impls'}; a file that can't be parsed
+    is listed under UNPARSED_KEY (BACK-1588)."""
+    return scan_file_with_grammar(file_path, 'rust', 'Rust', _scan_tree, _EMPTY_KEYS,
+                                  scan='contracts', disclose_recovery=False)
 
-    content_bytes = source.encode('utf-8')
+
+def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Any]]:
     result: Dict[str, List[Dict[str, Any]]] = {'interfaces': [], 'impls': []}
 
     stack = [tree_root(tree)]

@@ -20,28 +20,24 @@ shape as `nav_surface_ruby.py`.
   how it already treats "bases" as the full inheritance-relationship set.
 """
 
-import logging
-from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line
+from .nav_surface_common import _get_text, _get_line, scan_file_with_grammar
 
 from reveal.core import node_children as _children
-from reveal.core import get_tree, tree_root
+from reveal.core import tree_root
 from reveal.core.treesitter_compat import _zero_arg
 
-logger = logging.getLogger(__name__)
+_EMPTY_KEYS = ('modules', 'classes')
 
 
-def scan_file_contracts_ruby(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
-    """Parse one Ruby file and return {'modules': [...], 'classes': [...]}."""
-    try:
-        source = Path(file_path).read_text(errors='replace', encoding='utf-8')
-        tree = get_tree('ruby', source)
-    except Exception as e:
-        logger.warning("contracts scan (Ruby) failed to parse %s: %s", file_path, e)
-        return {'modules': [], 'classes': []}
+def scan_file_contracts_ruby(file_path: str) -> Dict[str, List[Any]]:
+    """Parse one Ruby file and return {'modules': [...], 'classes': [...]}; a file
+    that can't be parsed is listed under UNPARSED_KEY (BACK-1588)."""
+    return scan_file_with_grammar(file_path, 'ruby', 'Ruby', _scan_tree, _EMPTY_KEYS,
+                                  scan='contracts', disclose_recovery=False)
 
-    content_bytes = source.encode('utf-8')
+
+def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Any]]:
     modules: List[Dict[str, Any]] = []
     classes: List[Dict[str, Any]] = []
 

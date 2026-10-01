@@ -9,8 +9,8 @@ imports-analyzer fix never touched. Fix: log a warning so the failure is visible
 
 BACK-1045: the surface scanners share one parse path (nav_surface_common.
 scan_file_with_grammar) and also list the file under UNPARSED_KEY, as the Python
-scanner does, so the surface report says it contributed nothing. The contracts
-scanners still return the bare empty shape (no unparsed channel yet: BACK-1588).
+scanner does, so the surface report says it contributed nothing. BACK-1588: the
+contracts scanners use the same path, so they list it too.
 """
 
 import importlib
@@ -77,8 +77,7 @@ def test_parse_failure_logs_warning_and_returns_empty_shape(
         with caplog.at_level('WARNING', logger=module_path):
             result = scan_fn(str(fake_file))
 
-    if (module_path, func_name, expected_empty) in _SURFACE_SCANNERS:
-        expected_empty = {**expected_empty, UNPARSED_KEY: [str(fake_file)]}
+    expected_empty = {**expected_empty, UNPARSED_KEY: [str(fake_file)]}
     assert result == expected_empty, f'{func_name}: contract shape changed on parse failure'
     assert any(str(fake_file) in r.message for r in caplog.records), (
         f'{func_name}: parse failure produced no visible warning (BACK-990)'

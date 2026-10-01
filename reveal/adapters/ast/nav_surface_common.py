@@ -40,22 +40,28 @@ def scan_file_with_grammar(
     scan_tree: Callable[[Any, str, bytes], Dict[str, Any]],
     keys: Iterable[str],
     prepare: Optional[Callable[[str], str]] = None,
+    scan: str = 'surface',
+    disclose_recovery: bool = True,
 ) -> Dict[str, Any]:
-    """Read, parse and scan one file for a tree-sitter surface scanner (BACK-1045).
+    """Read, parse and scan one file for a tree-sitter surface or contracts scanner
+    (BACK-1045, BACK-1588).
 
     A file that can't be read or parsed (no grammar) is listed under UNPARSED_KEY, as
     the Python scanner does, so the report says it contributed nothing; the per-language
     copies of this returned empty lists, which counted it as clean. *prepare* rewrites
-    the source before the parse (C++ macro class modifiers)."""
+    the source before the parse (C++ macro class modifiers). *scan* names the scanner
+    in the log line. The contracts scanners pass disclose_recovery=False: their report
+    has no recovered-parse channel (BACK-1480 is surface's)."""
     try:
         source = Path(file_path).read_text(errors='replace', encoding='utf-8')
         if prepare is not None:
             source = prepare(source)
         tree = get_tree(grammar, source)
     except Exception as e:  # noqa: BLE001 - unreadable file, GrammarUnavailable, or a parser error
-        logger.warning("surface scan (%s) failed to parse %s: %s", label, file_path, e)
+        logger.warning("%s scan (%s) failed to parse %s: %s", scan, label, file_path, e)
         return {**{k: [] for k in keys}, UNPARSED_KEY: [file_path]}
-    return disclose_parse_recovery(tree, file_path, scan_tree(tree, file_path, source.encode('utf-8')))
+    result = scan_tree(tree, file_path, source.encode('utf-8'))
+    return disclose_parse_recovery(tree, file_path, result) if disclose_recovery else result
 
 
 def disclose_parse_recovery(tree, file_path: str, surfaces: Dict[str, Any]) -> Dict[str, Any]:

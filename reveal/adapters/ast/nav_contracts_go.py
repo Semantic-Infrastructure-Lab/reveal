@@ -30,19 +30,17 @@ promoted methods, which can still produce a false negative or false positive
 in the corners this text match doesn't resolve.
 """
 
-import logging
-from pathlib import Path
 from typing import Any, Dict, List
-from .nav_surface_common import _get_text, _get_line
+from .nav_surface_common import _get_text, _get_line, scan_file_with_grammar
 
 from reveal.core import node_children as _children
-from reveal.core import get_tree, tree_root
+from reveal.core import tree_root
 from reveal.core.treesitter_compat import _zero_arg
 
-logger = logging.getLogger(__name__)
+_EMPTY_KEYS = ('interfaces', 'structs', 'methods')
 
 
-def scan_file_contracts_go(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
+def scan_file_contracts_go(file_path: str) -> Dict[str, List[Any]]:
     """Parse one Go file → {'interfaces', 'structs', 'methods'}.
 
     - interfaces: [{name, file, line, methods: [{name, params: [str], returns: [str]}], embeds: [str]}]
@@ -50,17 +48,14 @@ def scan_file_contracts_go(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     - methods:    [{recv: str, name: str, params: [str], returns: [str]}]  (receiver type → method)
 
     `params`/`returns` are syntactic type text (whitespace-normalised), not
-    resolved types — see module docstring for the disclosed limitations.
+    resolved types — see module docstring for the disclosed limitations. A file
+    that can't be parsed is listed under UNPARSED_KEY (BACK-1588).
     """
-    empty: Dict[str, List[Dict[str, Any]]] = {'interfaces': [], 'structs': [], 'methods': []}
-    try:
-        source = Path(file_path).read_text(errors='replace', encoding='utf-8')
-        tree = get_tree('go', source)
-    except Exception as e:
-        logger.warning("contracts scan (Go) failed to parse %s: %s", file_path, e)
-        return empty
+    return scan_file_with_grammar(file_path, 'go', 'Go', _scan_tree, _EMPTY_KEYS,
+                                  scan='contracts', disclose_recovery=False)
 
-    content_bytes = source.encode('utf-8')
+
+def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Any]]:
     result: Dict[str, List[Dict[str, Any]]] = {'interfaces': [], 'structs': [], 'methods': []}
 
     stack = [tree_root(tree)]

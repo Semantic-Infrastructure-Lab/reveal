@@ -22,30 +22,27 @@ blank. Reaching `.h`-declared classes is a follow-on tied to the broader
 `.h`→C-vs-C++ classification question (matrix footnote 2), not a silent gap here.
 """
 
-import logging
-from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import _get_text, _get_line, normalize_cpp_macro_class_modifiers
+from .nav_surface_common import (
+    _get_text, _get_line, normalize_cpp_macro_class_modifiers, scan_file_with_grammar,
+)
 
 from reveal.core import node_children as _children
-from reveal.core import get_tree, tree_root
+from reveal.core import tree_root
 from reveal.core.treesitter_compat import _zero_arg
 
-logger = logging.getLogger(__name__)
+_EMPTY_KEYS = ('classes',)
 
 
-def scan_file_contracts_cpp(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
-    """Parse one C++ file → {'classes': [...]}."""
-    empty: Dict[str, List[Dict[str, Any]]] = {'classes': []}
-    try:
-        source = Path(file_path).read_text(errors='replace', encoding='utf-8')
-        source = normalize_cpp_macro_class_modifiers(source)
-        tree = get_tree('cpp', source)
-    except Exception as e:
-        logger.warning("contracts scan (C++) failed to parse %s: %s", file_path, e)
-        return empty
+def scan_file_contracts_cpp(file_path: str) -> Dict[str, List[Any]]:
+    """Parse one C++ file → {'classes': [...]}; a file that can't be parsed is
+    listed under UNPARSED_KEY (BACK-1588)."""
+    return scan_file_with_grammar(file_path, 'cpp', 'C++', _scan_tree, _EMPTY_KEYS,
+                                  prepare=normalize_cpp_macro_class_modifiers,
+                                  scan='contracts', disclose_recovery=False)
 
-    content_bytes = source.encode('utf-8')
+
+def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Any]]:
     result: Dict[str, List[Dict[str, Any]]] = {'classes': []}
 
     stack = [tree_root(tree)]

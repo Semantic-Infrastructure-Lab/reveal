@@ -126,3 +126,57 @@ class TestMissingGrammarIsDisclosed:
         assert report['total'] == 0
         assert report['unparsed_files'] == ['main.go']
         assert any('could not be parsed' in limit for limit in report['_meta']['known_limits'])
+
+
+def _go_contracts_tree(root: Path) -> Path:
+    (root / 'proj').mkdir()
+    (root / 'proj' / 'main.go').write_text(textwrap.dedent('''\
+        package main
+
+        type Shape interface {
+            Area() float64
+        }
+
+        type Square struct{}
+
+        func (s Square) Area() float64 { return 1 }
+    '''), encoding='utf-8')
+    return Path('proj')
+
+
+class TestMissingGrammarIsDisclosedByContracts:
+    """contracts:// on a Go tree with no Go grammar reported 0 contracts and nothing
+    else, the same answer as a Go tree with no interfaces (BACK-1588)."""
+
+    def test_positive_control_go_interface_is_found(self, tmp_path, monkeypatch):
+        from reveal.adapters.contracts import _scan_contracts
+        monkeypatch.chdir(tmp_path)
+        report = _scan_contracts(_go_contracts_tree(tmp_path))
+        assert [c['name'] for c in report['protocols']] == ['Shape']
+        assert report['unparsed_files'] == []
+
+    def test_file_without_a_grammar_is_reported_unparsed(self, tmp_path, monkeypatch, capsys):
+        from reveal.adapters.contracts import ContractsAdapter, ContractsRenderer
+        monkeypatch.chdir(tmp_path)
+        _go_contracts_tree(tmp_path)
+        with _no_go_grammar():
+            result = ContractsAdapter('proj').get_structure()
+        assert result['total_contracts'] == 0
+        assert result['unparsed_files'] == ['proj/main.go']
+        assert any(w['code'] == 'W-CONTRACTS-2' and 'proj/main.go' in w['message']
+                   for w in result['meta']['warnings'])
+        ContractsRenderer.render_structure(result, 'text')
+        assert '1 file(s) could not be parsed and contribute no entries: proj/main.go' in capsys.readouterr().out
+
+    def test_polyglot_tree_carries_the_unparsed_go_file_to_the_top(self, tmp_path, monkeypatch):
+        from reveal.adapters.contracts import _scan_contracts
+        monkeypatch.chdir(tmp_path)
+        _go_contracts_tree(tmp_path)
+        (tmp_path / 'proj' / 'shapes.py').write_text(
+            'from abc import ABC, abstractmethod\n\n\nclass Base(ABC):\n'
+            '    @abstractmethod\n    def area(self): ...\n', encoding='utf-8')
+        with _no_go_grammar():
+            report = _scan_contracts(Path('proj'))
+        assert report['unparsed_files'] == ['proj/main.go']
+        assert report['by_language']['go']['unparsed_files'] == ['proj/main.go']
+        assert report['total_contracts'] == 1   # the Python ABC still counts
