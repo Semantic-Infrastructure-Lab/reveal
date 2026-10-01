@@ -23,7 +23,7 @@ from ..defaults import (
     MINIFIED_FILENAME_RE,
     DisplayDefaults,
 )
-from ..registry import _is_cpp_header_content, language_for_extension, LANGUAGE_DISPLAY_NAMES
+from ..registry import _is_cpp_header_content, display_name_for_extension, language_for_extension, LANGUAGE_DISPLAY_NAMES
 
 
 def _language_for_path(fpath: Path) -> Optional[str]:
@@ -33,6 +33,16 @@ def _language_for_path(fpath: Path) -> Optional[str]:
     if ext == '.h' and _is_cpp_header_content(str(fpath)):
         return 'cpp'
     return language_for_extension(ext)
+
+
+def display_name_for_path(fpath: Path) -> str:
+    """The language label the scope census counts *fpath* under ('' if unknown):
+    display_name_for_extension, with `.h` content-sniffed for C++ the same way.
+    overview's text census labelled every `.h` C while its JSON scope said C++
+    (BACK-1428)."""
+    if fpath.suffix.lower() == '.h' and _language_for_path(fpath) == 'cpp':
+        return LANGUAGE_DISPLAY_NAMES.get('cpp', 'C++')
+    return display_name_for_extension(fpath.suffix)
 
 _SKIP_DIRS: frozenset = SKIP_DIRECTORIES
 _AMBIGUOUS_SKIP_DIRS: frozenset = AMBIGUOUS_SKIP_DIRECTORIES

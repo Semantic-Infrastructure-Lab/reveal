@@ -105,3 +105,19 @@ def test_subcommand_and_uri_agree(tmp_path, flags):
     sub = _json(['overview', '.', '--no-git', '--no-imports', '--format', 'json', *flags], root)
     uri = _json(['overview://.?no_git=true&no_imports=true', '--format', 'json', *flags], root)
     assert sub == uri
+
+
+def test_text_census_sniffs_cpp_headers_like_the_json_scope(tmp_path, capsys):
+    """BACK-1428: the text census labelled every .h as C (by extension) while
+    the JSON scope, which content-sniffs .h, counted the same files as C++."""
+    from reveal.adapters.overview import OverviewAdapter, _render_language_breakdown
+    (tmp_path / 'widget.h').write_text('namespace ui {\nclass Widget {\npublic:\n  int w;\n};\n}\n', encoding='utf-8')
+    (tmp_path / 'widget.cpp').write_text('#include "widget.h"\nint f() { return 1; }\n', encoding='utf-8')
+    (tmp_path / 'plain.h').write_text('int plain(void);\n', encoding='utf-8')
+    report = OverviewAdapter(str(tmp_path), 'no_git=true&no_imports=true').get_structure()
+    scope = {row['language']: row['files'] for row in report['scope']['languages']}
+    _render_language_breakdown(report['stats']['files'], 5)
+    out = capsys.readouterr().out
+    assert scope == {'C++': 2, 'C': 1}
+    assert 'C++                 2 files' in out
+    assert 'C                   1 files' in out

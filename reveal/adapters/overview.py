@@ -26,7 +26,7 @@ from ..utils.formatting import cwd_path
 from ..utils import print_json_result
 from ..utils.exclusions import exclusion_scope
 from ..utils.gitignore import respect_gitignore_param
-from ..utils.path_utils import as_spelled, is_test_path
+from ..utils.path_utils import as_spelled, display_name_for_path, is_test_path
 from ..utils.query import parse_query_params
 from ..utils.query_parser import join_exclude_patterns, split_exclude_param
 from ..utils.results import ResultBuilder
@@ -78,8 +78,14 @@ def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int) -> Dict[str, An
     if exclude_patterns:
         query += f'&exclude={join_exclude_patterns(exclude_patterns)}'
     query += f'&respect_gitignore={"true" if adapter.respect_gitignore else "false"}'
-    return adapter.compose(StatsAdapter, str(path), default={}, query=query,
-                           cut_as=('hotspots', 'raise ?top=N'))
+    stats = adapter.compose(StatsAdapter, str(path), default={}, query=query,
+                            cut_as=('hotspots', 'raise ?top=N'))
+    # Each file's language as the scope census names it, while the file can be
+    # read (`.h` is sniffed for C++); the text census counted by extension alone
+    # and contradicted the JSON scope (BACK-1428).
+    for entry in stats.get('files') or []:
+        entry['language'] = display_name_for_path(path / entry['file'] if path.is_dir() else path)
+    return stats
 
 
 def _run_scope(adapter: 'OverviewAdapter', path: Path) -> Dict[str, Any]:
@@ -197,7 +203,9 @@ def _language_breakdown(files: List[Dict[str, Any]]) -> List[tuple]:
         path = f.get('file', '')
         ext = Path(path).suffix.lower()
         # Dockerfile has no extension
-        if not ext and Path(path).name.lower() == 'dockerfile':
+        if f.get('language'):
+            lang = f['language']
+        elif not ext and Path(path).name.lower() == 'dockerfile':
             lang = 'Dockerfile'
         else:
             lang = (
