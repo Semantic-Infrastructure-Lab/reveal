@@ -10,7 +10,6 @@ from reveal.element_resolve import (
     TYPE_TIER, Resolution, ambiguity_note, describe_candidates, resolve_bare_name, resolve_path,
 )
 from reveal.treesitter import ELEMENT_TYPE_MAP, ALL_ELEMENT_NODE_TYPES
-from reveal.core.treesitter_compat import _zero_arg
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
 
 # Dominant category priority by file type
@@ -227,23 +226,7 @@ _DISPLAY_NAME_TIERS = (
 def _element_from_resolution(analyzer, resolution: Resolution, element: str):
     """Element dict for a resolved node, carrying every candidate when the name
     was ambiguous (BACK-1400) so each surface can say so."""
-    node = getattr(analyzer, '_extraction_node', lambda n: n)(resolution.node)
-    # Dart: node may be a function_signature whose body lives in a disjoint
-    # sibling (TreeSitterAnalyzer._function_end_node); every other language's
-    # node already spans its own body.
-    end_node = getattr(analyzer, '_function_end_node', lambda n: n)(node)
-    source = (
-        analyzer._get_node_text(node) if end_node is node
-        else analyzer._get_text_span(
-            _zero_arg(node, 'start_byte'), _zero_arg(end_node, 'end_byte')
-        )
-    )
-    result = {
-        'name': element,
-        'line_start': _zero_arg(node, 'start_position').row + 1,
-        'line_end': _zero_arg(end_node, 'end_position').row + 1,
-        'source': source,
-    }
+    result = {'name': element, **analyzer.element_span(resolution.node)}
     if resolution.ambiguous:
         result['candidates'] = describe_candidates(analyzer, resolution, element)
     return result
@@ -519,30 +502,24 @@ def _extract_element_at_line(analyzer, target_line: int):
     if not isinstance(analyzer, TreeSitterAnalyzer) or not analyzer.tree:
         return None
 
-    best_match = None
-    smallest_span = float('inf')
-
+    best_match, best_span = None, None
     for node_type in ALL_ELEMENT_NODE_TYPES:
         for node in analyzer._find_nodes_by_type(node_type):
-            start = _zero_arg(node, 'start_position').row + 1  # 1-indexed
-            end = _zero_arg(node, 'end_position').row + 1
-            if not (start <= target_line <= end):
+            # The element's own span (decorators, Dart bodies), not the bare
+            # node's, so a decorator line finds its definition (BACK-1597).
+            span = analyzer.element_span(node)
+            if not (span['line_start'] <= target_line <= span['line_end']):
                 continue
-            span = end - start
-            if span < smallest_span:
-                smallest_span = span
-                best_match = node
+            if best_span is None or (
+                span['line_end'] - span['line_start'] < best_span['line_end'] - best_span['line_start']
+            ):
+                best_match, best_span = node, span
 
-    if not best_match:
+    if best_match is None or best_span is None:
         return None
 
     name = analyzer._get_node_name(best_match) or f"element@{target_line}"
-    return {
-        'name': name,
-        'line_start': _zero_arg(best_match, 'start_position').row + 1,
-        'line_end': _zero_arg(best_match, 'end_position').row + 1,
-        'source': analyzer._get_node_text(best_match),
-    }
+    return {'name': name, **best_span}
 
 
 def _extract_markdown_section_at_line(analyzer, target_line: int):
@@ -780,9 +757,9 @@ def _get_source_for_item(analyzer, item, line_start, line_end):
     for node_type in ALL_ELEMENT_NODE_TYPES:
         nodes = analyzer._find_nodes_by_type(node_type)
         for node in nodes:
-            start = _zero_arg(node, 'start_position').row + 1
-            if start == line_start:
-                return analyzer._get_node_text(node)
+            span = analyzer.element_span(node)
+            if span['line_start'] == line_start:
+                return span['source']
 
     # Fallback to reading lines
     return _read_lines(analyzer.path, line_start, line_end)

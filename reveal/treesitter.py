@@ -1278,18 +1278,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             for node in nodes:
                 node_name = self._get_node_name(node)
                 if node_name == name:
-                    node = self._extraction_node(node)
-                    end_node = self._function_end_node(node)
-                    source = (
-                        self._get_node_text(node) if end_node is node
-                        else self._get_text_span(_zero_arg(node, 'start_byte'), _zero_arg(end_node, 'end_byte'))
-                    )
-                    return {
-                        'name': name,
-                        'line_start': _zero_arg(node, 'start_position').row + 1,
-                        'line_end': _zero_arg(end_node, 'end_position').row + 1,
-                        'source': source,
-                    }
+                    return {'name': name, **self.element_span(node)}
 
         # Fall back to grep
         return super().extract_element(element_type, name)
@@ -1386,39 +1375,63 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         IMPORTANT: Tree-sitter uses byte offsets, not character offsets!
         Must slice the UTF-8 bytes, not the string, to handle multi-byte characters.
-
-        Caches content.encode('utf-8') per instance to avoid re-encoding the
-        entire file on every call (hot path: called once per symbol/function/class).
         """
+        return self._get_text_span(_zero_arg(node, 'start_byte'), _zero_arg(node, 'end_byte'))
+
+    def _source_bytes(self) -> bytes:
+        """content.encode('utf-8'), cached per instance to avoid re-encoding the
+        entire file on every call (hot path: called once per symbol/function/class)."""
         try:
             if self._content_bytes is None:
                 raise AttributeError
-            content_bytes = self._content_bytes
+            return self._content_bytes
         except AttributeError:
-            content_bytes = self.content.encode('utf-8')
-            self._content_bytes = content_bytes
-        return content_bytes[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8')
+            self._content_bytes = self.content.encode('utf-8')
+            return self._content_bytes
 
     def _get_text_span(self, start_byte: int, end_byte: int) -> str:
         """Get source text for an arbitrary byte range spanning two nodes
         (e.g. Dart's disjoint function_signature + function_body pair) —
         same byte-not-character slicing rationale as _get_node_text."""
-        try:
-            if self._content_bytes is None:
-                raise AttributeError
-            content_bytes = self._content_bytes
-        except AttributeError:
-            content_bytes = self.content.encode('utf-8')
-            self._content_bytes = content_bytes
-        return content_bytes[start_byte:end_byte].decode('utf-8')
+        return self._source_bytes()[start_byte:end_byte].decode('utf-8')
+
+    def element_span(self, node) -> Dict[str, Any]:
+        """Line range and source of `node` as an extracted element.
+
+        The one definition every extraction route uses (by name, Class.method,
+        :LINE, ordinal -- BACK-1597). The node is widened by _extraction_node
+        (decorators, Go type specs) and ended by _function_end_node (Dart
+        bodies). The source starts at the beginning of its first line when only
+        indentation precedes the node, so a method's first line keeps its
+        indentation like every line after it; otherwise (`export function f`,
+        two definitions on one line) it starts at the node.
+        """
+        node = self._extraction_node(node)
+        end_node = self._function_end_node(node)
+        content = self._source_bytes()
+        start = _zero_arg(node, 'start_byte')
+        line_begin = start - _zero_arg(node, 'start_position').column
+        if not content[line_begin:start].strip():
+            start = line_begin
+        return {
+            'line_start': _zero_arg(node, 'start_position').row + 1,
+            'line_end': _zero_arg(end_node, 'end_position').row + 1,
+            'source': content[start:_zero_arg(end_node, 'end_byte')].decode('utf-8'),
+        }
 
     def _extraction_node(self, node):
         """The node whose span is shown when `node` is extracted by name.
 
-        Normally the node itself. A grammar whose declared body is a bare child
-        of a wrapper that carries the keyword and name (Go's `type_spec`) widens
-        it, so `reveal f.go Foo` prints `type Foo struct {...}`, not `struct {...}`.
+        Normally the node itself. Python's decorators sit in a
+        `decorated_definition` wrapper around the def; the outline counts the
+        definition from its first decorator, so extraction does too (BACK-1478).
+        A grammar whose declared body is a bare child of a wrapper that carries
+        the keyword and name (Go's `type_spec`) widens it, so `reveal f.go Foo`
+        prints `type Foo struct {...}`, not `struct {...}`.
         """
+        parent = _zero_arg(node, 'parent')
+        if parent is not None and _zero_arg(parent, 'kind') == 'decorated_definition':
+            return parent
         return node
 
     def _function_end_node(self, node):

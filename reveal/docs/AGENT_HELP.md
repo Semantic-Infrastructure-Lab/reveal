@@ -710,9 +710,9 @@ reveal app.py --tail 5                 # Last 5 functions (where bugs cluster!)
 # Extract multiple functions (with --format=json)
 reveal app.py --format=json | jq '.structure.functions[]? | select(.name | test("^handle_"))'
 
-# Extract a decorated function: extraction starts at `def`, the outline's
-# line number starts at the decorator -- use that range to include it
-reveal app.py :47-50
+# Extract a decorated function: by name, by Class.method or by line, the
+# extract starts at the first decorator, where the outline's line number does
+reveal app.py cached_lookup
 ```
 
 **Hierarchical view (--outline):**

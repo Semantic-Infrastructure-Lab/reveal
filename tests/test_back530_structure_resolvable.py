@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 
 from reveal.registry import get_analyzer
+from reveal.treesitter import TreeSitterAnalyzer
 from reveal.display.element import _parse_element_syntax, _extract_by_syntax, listed_item_line
 from reveal.display.structure import _build_extractable_meta
 
@@ -101,6 +102,7 @@ def test_every_outlined_element_is_resolvable_by_name(fixture):
     assert analyzer is not None, f"no analyzer for {fixture}"
 
     unresolved = []
+    exact_start = isinstance(analyzer, TreeSitterAnalyzer)
     for category, name, line, line_end in _enumerated_items(analyzer):
         syntax = _parse_element_syntax(name)
         # A name whose text parses as line/ordinal syntax is a position, not a
@@ -120,6 +122,15 @@ def test_every_outlined_element_is_resolvable_by_name(fixture):
             unresolved.append(
                 f"{category} '{name}' (listed {line}-{line_end}, returned "
                 f"{result['line_start']}-{result['line_end']}: truncated)"
+            )
+        elif exact_start and not any(span["line_start"] == line for span in hits):
+            # BACK-1478: extraction starts where the outline does (a
+            # decorated def from its first decorator). Tree-sitter definitions
+            # only: a notebook cell is listed at its JSON object and extracted
+            # as its source lines, by design.
+            unresolved.append(
+                f"{category} '{name}' (listed from {line}, returned from "
+                f"{result['line_start']}: different start)"
             )
 
     assert not unresolved, (
@@ -145,6 +156,42 @@ def test_advertised_extraction_examples_extract(fixture):
             if _extract_by_syntax(analyzer, name, _parse_element_syntax(name)) is None:
                 failed.append(name)
     assert not failed, f"{fixture.parent.name}/{fixture.name}: advertised but not extractable: {failed}"
+
+
+@pytest.mark.parametrize(
+    "fixture", _fixture_files(), ids=lambda p: f"{p.parent.name}/{p.name}"
+)
+def test_extracted_source_is_the_files_own_text(fixture):
+    """BACK-1597: an extracted element's source is the file's own text from the
+    start of its first line. It used to start at the node, so a method came
+    back as 'def f(self):' followed by body lines at their full indentation.
+    Only an element with code before it on its first line (`export function
+    f`, two definitions on one line) may start mid-line."""
+    analyzer = _build(fixture)
+    if not isinstance(analyzer, TreeSitterAnalyzer) or not analyzer.tree:
+        pytest.skip("not a tree-sitter analyzer")
+    lines = analyzer.content.splitlines(keepends=True)
+    misaligned = []
+    for _category, name, _line, _line_end in _enumerated_items(analyzer):
+        syntax = _parse_element_syntax(name)
+        if syntax["type"] not in ("name", "hierarchical"):
+            continue
+        result = _extract_by_syntax(analyzer, name, syntax)
+        if not result or not result.get("source"):
+            continue
+        source = result["source"]
+        text = "".join(lines[result["line_start"] - 1:result["line_end"]])
+        first_line = lines[result["line_start"] - 1]
+        if text.startswith(source):
+            continue
+        offset = first_line.find(source.split("\n", 1)[0])
+        if offset > 0 and first_line[:offset].strip() and source in text:
+            continue
+        misaligned.append(f"{name} ({result['line_start']}): {source.splitlines()[0]!r}")
+    assert not misaligned, (
+        f"{fixture.parent.name}/{fixture.name}: extracted source does not start "
+        f"at its line: {misaligned}"
+    )
 
 
 # ─────────────────── directly pinned divergence shapes ────────────────────
