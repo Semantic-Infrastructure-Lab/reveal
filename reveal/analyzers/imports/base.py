@@ -20,6 +20,7 @@ from typing import Callable, List, Set, ClassVar, Optional, Tuple, Type, Dict
 from .types import ImportStatement, restamp_file_path
 from ...core import disk_cache
 from ...registry import get_analyzer
+from ...utils.path_utils import search_parents_within_ceiling
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +218,20 @@ def get_supported_languages() -> List[str]:
             seen.add(extractor_cls.language_name)
             languages.append(extractor_cls.language_name)
     return sorted(languages)
+
+
+def nearest_marker_dir(start: Path, marker: str) -> Optional[Path]:
+    """The nearest directory at or above *start* holding *marker* (``go.mod``,
+    ``Cargo.toml``, ``Gemfile.lock``), for resolving one language's imports.
+
+    Climbs through the shared ``search_parents_within_ceiling``, so it stops at a
+    filesystem boundary, ``$HOME``, the temp dir or a system dir instead of reaching
+    an unrelated ancestor's marker. Go, Rust and Ruby each had their own unbounded
+    copy of this loop (BACK-1054 note 3); a stray ``~/go.mod`` became every Go
+    file's module root. Not ``resolve_project_root``: that finds the project, and
+    this needs the nearest marker of one language inside it.
+    """
+    return search_parents_within_ceiling(start.resolve(), lambda d: (d / marker).exists())
 
 
 def build_project_namespaces(files: List[Path]) -> Set[str]:

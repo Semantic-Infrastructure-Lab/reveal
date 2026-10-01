@@ -62,7 +62,7 @@ from ...core import node_children as _children
 from ...core import tree_root
 from ...core.treesitter_compat import _zero_arg
 from ...registry import extensions_for_languages
-from .base import ImportsDiskCache, LanguageExtractor, register_extractor
+from .base import ImportsDiskCache, LanguageExtractor, nearest_marker_dir, register_extractor
 from .file_index import basename_index, load_path_manifests
 from .types import ImportStatement
 
@@ -2906,12 +2906,7 @@ def _find_ruby_project_root(start_path: Path) -> Optional[Path]:
     version, unlike the ``Gemfile`` itself (an executable Ruby DSL,
     correctly declined per this ticket's own reasoning: decline honestly
     rather than half-parse)."""
-    current = start_path.resolve()
-    while current != current.parent:
-        if (current / 'Gemfile.lock').exists():
-            return current
-        current = current.parent
-    return None
+    return nearest_marker_dir(start_path, 'Gemfile.lock')
 
 
 @lru_cache(maxsize=None)

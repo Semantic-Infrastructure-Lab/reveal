@@ -19,7 +19,7 @@ from ...core.treesitter_compat import _zero_arg
 logger = logging.getLogger(__name__)
 
 from .types import ImportStatement
-from .base import ImportsDiskCache, LanguageExtractor, register_extractor
+from .base import ImportsDiskCache, LanguageExtractor, nearest_marker_dir, register_extractor
 
 try:
     import tomllib
@@ -552,16 +552,7 @@ class RustExtractor(LanguageExtractor):
         Returns:
             Directory containing Cargo.toml, or None if not found
         """
-        current = start_path.resolve()
-
-        # Walk up until we find Cargo.toml or hit filesystem root
-        while current != current.parent:
-            cargo_toml = current / 'Cargo.toml'
-            if cargo_toml.exists():
-                return current
-            current = current.parent
-
-        return None
+        return nearest_marker_dir(start_path, 'Cargo.toml')
 
     def is_intra_project_import(
         self,

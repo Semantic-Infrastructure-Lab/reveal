@@ -64,7 +64,7 @@ def _line_text(analyzer, line_number: int) -> str:
     return ""
 
 from .types import ImportStatement
-from .base import ImportsDiskCache, LanguageExtractor, register_extractor
+from .base import ImportsDiskCache, LanguageExtractor, nearest_marker_dir, register_extractor
 
 # Cross-invocation disk cache (BACK-626, extending BACK-625 to Go): same
 # independent-reparse gap as PythonExtractor had -- extract_imports() does not
@@ -417,16 +417,7 @@ class GoExtractor(LanguageExtractor):
         Returns:
             Directory containing go.mod, or None if not found
         """
-        current = start_path.resolve()
-
-        # Walk up until we find go.mod or hit filesystem root
-        while current != current.parent:
-            go_mod = current / 'go.mod'
-            if go_mod.exists():
-                return current
-            current = current.parent
-
-        return None
+        return nearest_marker_dir(start_path, 'go.mod')
 
     def _get_module_name(self, module_root: Path) -> Optional[str]:
         """Extract module name from go.mod file.
