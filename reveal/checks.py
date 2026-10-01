@@ -145,7 +145,9 @@ def _build_detections_json(
     document --format json prints, rather than a second shape.
     """
     from reveal.utils.results import add_cli_contract_fields
+    from reveal.utils.path_utils import to_posix
 
+    path = to_posix(path)  # '/' on every OS, like the directory envelope (BACK-1366)
     result = {
         'file': path,
         'detections': [
