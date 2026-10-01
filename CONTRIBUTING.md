@@ -297,7 +297,11 @@ in `reveal/cli/` and `print` in the rendering layer. A second walker is how `--e
 `REVEAL_IGNORE` came to work on some commands and silently not on others.
 `scripts/check_boundaries.py` counts these per file and fails on any increase; a walk over
 something that is not the user's target (reveal's own docs, a cache) takes
-`# boundary-ok: walker -- <why>`.
+`# boundary-ok: walker -- <why>`. Find a project's root with `path_utils.resolve_project_root`
+(bounded, honors `.reveal.yaml root: true`) and the top of a Python package with
+`python_package_top`; a rule that inspects reveal's own source gets it from
+`rules/validation/utils.find_reveal_root`. Each of M102, B005 and three V-rules once climbed
+on its own, and they disagreed (BACK-1372).
 
 **Flags and query keys (use them, or let the ledger say so):** a URI adapter is told about
 every flag and query key the user sets that its run never used

@@ -320,12 +320,14 @@ a check that counts violations and lets the count only fall. Then the cause is r
    the display layer, and disclosed with the same marker; analyzers never see the flags
    (`FileAnalyzer.cut_structure`), and its `--max-items` and default text cap record their
    cut with the same marker. Still open: the broad `except`s.
-4. **One seam per concern:** BACK-1045 (parser seam), BACK-1366 (one path pass), BACK-1372
-   (root finders) and BACK-1054 (import resolution). The walker seam landed 2026-09-30: every
-   walk over the user's target goes through one predicate chosen by the walk's purpose
-   (analysis, evidence, resolution, display, docs), `--exclude` and `REVEAL_IGNORE` are gitignore
-   syntax everywhere, the walker ratchet is at 0, and a cross-walker agreement test keeps ten
-   commands on the same file sets (CHANGELOG `[Unreleased]`).
+4. **One seam per concern:** BACK-1045 (parser seam), BACK-1366 (one path pass) and BACK-1054
+   (import resolution). The root finders landed 2026-09-30: M102, B005, the V-rules and
+   `reveal scaffold` each use the shared finder (CHANGELOG `[Unreleased]`). The walker seam
+   landed 2026-09-30: every walk over the user's target goes through one predicate chosen by
+   the walk's purpose (analysis, evidence, resolution, display, docs), `--exclude` and
+   `REVEAL_IGNORE` are gitignore syntax everywhere, the walker ratchet is at 0, and a
+   cross-walker agreement test keeps ten commands on the same file sets (CHANGELOG
+   `[Unreleased]`).
 
 These gates run continuously alongside the steps above:
 - BACK-1365: executable docs.
