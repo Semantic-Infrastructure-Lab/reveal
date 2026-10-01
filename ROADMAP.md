@@ -324,7 +324,10 @@ a check that counts violations and lets the count only fall. Then the cause is r
    cut with the same marker. Since 2026-09-30 the file view acts on a failed result too: a
    file whose own parser failed (XML, a notebook) reports its error and exits 1, and every
    tree-sitter analyzer, including those that build their own result (JSON, YAML, TOML, ...),
-   says when its parse was recovered (CHANGELOG `[Unreleased]`). Still open: the broad `except`s.
+   says when its parse was recovered (CHANGELOG `[Unreleased]`). Since 2026-10-01 element
+   results and the directory view carry the envelope too (the router wraps each element
+   result), and a partial parse is one `partial_parse` meta warning in the result, not a
+   stderr line per file (CHANGELOG `[Unreleased]`). Still open: the broad `except`s.
 4. **One seam per concern:** BACK-1054 (import resolution). The parser seam landed
    2026-09-30: every tree-sitter parser comes from `reveal/core/treesitter_parse.py`, a missing
    grammar raises `GrammarUnavailable` instead of reading as an empty result, and the
