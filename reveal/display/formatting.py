@@ -511,6 +511,43 @@ def _format_script_summary(script: Dict[str, Any]) -> None:
         print("    [inline]")
 
 
+def _format_html_overview(structure: Dict[str, Any], path: Path) -> None:
+    """HTML's default view: its document/head/body/stats summary (BACK-1416).
+
+    Those are dicts, not located item lists, so the category loop skips them and
+    `reveal page.html` printed only the file header while --format json had the
+    whole summary. The drill-down line names the views that list located items.
+    """
+    document = structure.get('document') or {}
+    head = structure.get('head') or {}
+    body = structure.get('body') or {}
+    stats = structure.get('stats') or {}
+    template = structure.get('template') or {}
+
+    doc_parts = []
+    if document.get('doctype'):
+        doc_parts.append(f"<!DOCTYPE {document['doctype']}>")
+    if document.get('language'):
+        doc_parts.append(f"lang={document['language']}")
+    if doc_parts:
+        print(f"Document: {', '.join(doc_parts)}")
+    if head.get('title'):
+        print(f"Title: {head['title']}")
+    if head.get('meta'):
+        print(f"Meta tags: {len(head['meta'])} ({', '.join(list(head['meta'])[:6])})")
+    if body.get('semantic'):
+        print(f"Sections: {', '.join(body['semantic'])}")
+    counts = [f"{stats[k]} {k}" for k in ('links', 'images', 'forms', 'tables') if isinstance(stats.get(k), int)]
+    if counts:
+        print(f"Elements: {', '.join(counts)}")
+    if template.get('type'):
+        variables = template.get('variables') or []
+        print(f"Template: {template['type']}" + (f" ({len(variables)} variables)" if variables else ''))
+    print(f"\nDrill down: reveal {path.name} --metadata | --semantic navigation|content|forms"
+          f" | --links | --scripts all | --styles all")
+    print()
+
+
 def _format_html_metadata(
     metadata: Dict[str, Any], path: Path, output_format: str
 ) -> None:

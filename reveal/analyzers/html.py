@@ -515,8 +515,12 @@ class HTMLAnalyzer(FileAnalyzer):
             'interactive': ['button', 'input', 'select', 'textarea'],
         }
 
-        # Get tags for requested type (or use type as tag name directly)
-        tags = semantic_map.get(element_type, [element_type])
+        # Get tags for requested type (or use type as tag name directly). 'all' is
+        # every type above; it fell through to a search for an <all> tag (BACK-1416).
+        if element_type == 'all':
+            tags = [tag for group in semantic_map.values() for tag in group]
+        else:
+            tags = semantic_map.get(element_type, [element_type])
 
         for tag in tags:
             for elem in self.soup.find_all(tag):
@@ -538,6 +542,8 @@ class HTMLAnalyzer(FileAnalyzer):
 
                 elements.append(elem_info)
 
+        if element_type == 'all':
+            elements.sort(key=lambda e: cast(int, e['line']))
         return elements
 
     def _extract_scripts(self, script_type: Optional[str] = None) -> List[Dict[str, Any]]:

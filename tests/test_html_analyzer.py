@@ -1133,5 +1133,47 @@ class TestHTMLAnalyzer(unittest.TestCase):
         self.assertLess(len(preview), len(large_script))
 
 
+_PAGE = """<!DOCTYPE html>
+<html lang="en">
+<head><title>Demo</title><meta name="description" content="d"></head>
+<body>
+  <nav id="top"><a href="/x">X</a></nav>
+  <main>
+    <h1>Hello</h1>
+    <form action="/login"><input name="u"></form>
+  </main>
+</body>
+</html>
+"""
+
+
+def _cli(*args):
+    import subprocess
+    import sys
+    return subprocess.run([sys.executable, '-m', 'reveal', *args],
+                          capture_output=True, text=True, encoding='utf-8', timeout=120)
+
+
+def test_default_text_view_shows_the_summary(tmp_path):
+    """BACK-1416: `reveal page.html` printed only its header; the JSON had the summary."""
+    page = tmp_path / 'page.html'
+    page.write_text(_PAGE, encoding='utf-8')
+    out = _cli(str(page)).stdout
+    assert 'Document: <!DOCTYPE html>, lang=en' in out
+    assert 'Title: Demo' in out
+    assert 'Sections: nav, main' in out
+    assert 'Elements: 1 links, 0 images, 1 forms, 0 tables' in out
+    assert 'Drill down: reveal page.html --metadata' in out
+
+
+def test_semantic_all_lists_every_type_in_line_order(tmp_path):
+    """BACK-1416: --semantic all searched for an <all> tag and found nothing."""
+    page = tmp_path / 'page.html'
+    page.write_text(_PAGE, encoding='utf-8')
+    elements = HTMLAnalyzer(str(page))._extract_semantic_elements('all')
+    assert [(e['tag'], e['line']) for e in elements] == [
+        ('nav', 5), ('main', 6), ('form', 8), ('input', 8)]
+
+
 if __name__ == '__main__':
     unittest.main()

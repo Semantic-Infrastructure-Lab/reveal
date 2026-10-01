@@ -20,6 +20,7 @@ from .formatting import (
     _format_code_blocks,
     _format_related,
     _format_html_metadata,
+    _format_html_overview,
     _format_html_elements,
     _format_standard_items,
     _format_csv_schema,
@@ -593,6 +594,9 @@ def _render_text_categories(structure: Dict[str, List[Dict[str, Any]]],
                             path: Path, output_format: str, heading_depth: Optional[int] = None) -> None:
     """Render each category in text format; a cut one's header says so (its note_truncation)."""
     totals = {w['field']: w['total'] for w in truncations_of(structure)}
+    summary = cast(Dict[str, Any], structure)
+    if summary.get('type') == 'html' and 'document' in summary:
+        _format_html_overview(summary, path)
     for category, items in structure.items():
         if _should_skip_category(category, items):
             continue
