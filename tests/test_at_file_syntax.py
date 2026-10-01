@@ -7,6 +7,7 @@ Tests reading URIs/paths from a file using @filename syntax:
 import unittest
 import tempfile
 import os
+from unittest.mock import patch
 from conftest import _run_reveal_direct
 
 import pytest
@@ -141,12 +142,15 @@ class TestAtFileSyntax(unittest.TestCase):
 
     def test_at_file_with_uris(self):
         """@file should handle URI syntax (env://)."""
+        # HOME is unset on Windows, and a failed URI now fails the run (BACK-1556),
+        # so the second variable is one the test sets on every OS.
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-            f.write('env://PATH\nenv://HOME\n')
+            f.write('env://PATH\nenv://REVEAL_AT_FILE_TEST\n')
             list_file = f.name
 
         try:
-            result = self.run_reveal(f'@{list_file}')
+            with patch.dict(os.environ, {'REVEAL_AT_FILE_TEST': '1'}):
+                result = self.run_reveal(f'@{list_file}')
             self.assertEqual(result.returncode, 0, f"Failed with: {result.stderr}")
             # Should show env var info
             # PATH or HOME should be in output (actual values)
