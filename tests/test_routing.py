@@ -1209,38 +1209,46 @@ class TestHandleFile(unittest.TestCase):
         from pathlib import Path
 
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outdir:
-            src = Path(tmp) / 'sample.py'
-            src.write_text("import os\n\n\ndef f(a):\n    return eval(a)\n")
+            proj = Path(tmp) / 'proj'
+            proj.mkdir()
+            (proj / 'sample.py').write_text("import os\n\n\ndef f(a):\n    return eval(a)\n", encoding='utf-8')
+            # A file T006 can't read, so the run has a scan disclosure to carry:
+            # an artifact that drops it says [] -- "the scan was complete".
+            (proj / 'a.js').write_text("function g(x) { return x; }\n", encoding='utf-8')
 
             # Both targets: a single file and a directory render check's JSON
             # through different code paths and emit different (correct) shapes.
-            # --also-json must follow whichever one the invocation used.
+            # --also-json must follow whichever one the invocation used, from
+            # both the text and the grep render. Targets are relative, as typed
+            # (BACK-1366): an absolute one hid a resolved `source` everywhere
+            # but macOS, whose temp dir is a symlink.
             # The artifact lives outside `tmp` so writing it doesn't add a file
             # to the very tree the directory case is scanning.
-            for target in (str(src), tmp):
-                artifact = Path(outdir) / 'out.json'
-                artifact.unlink(missing_ok=True)
-
+            for target in ('proj/sample.py', 'proj'):
                 def run(*extra):
                     return subprocess.run(
                         [_sys.executable, '-m', 'reveal', 'check', target,
                          '--exit-zero', *extra],
-                        capture_output=True, text=True, encoding='utf-8',
+                        capture_output=True, text=True, encoding='utf-8', cwd=tmp,
                     )
 
-                text_run = run('--also-json', str(artifact))
-                self.assertTrue(
-                    artifact.exists(),
-                    f"artifact not written for {target}: {text_run.stderr}",
-                )
-                written = json.loads(artifact.read_text())
                 printed = json.loads(run('--format', 'json').stdout)
-
-                self.assertEqual(written['type'], 'check')
-                self.assertEqual(
-                    written, printed,
-                    f"--also-json artifact differs from --format json for {target}",
-                )
+                self.assertEqual(printed['source'], target)
+                for render in ('text', 'grep'):
+                    artifact = Path(outdir) / f'{render}.json'
+                    rendered = run('--format', render, '--also-json', str(artifact))
+                    self.assertTrue(
+                        artifact.exists(),
+                        f"artifact not written for {target} ({render}): {rendered.stderr}",
+                    )
+                    written = json.loads(artifact.read_text(encoding='utf-8'))
+                    self.assertEqual(written['type'], 'check')
+                    self.assertEqual(
+                        written, printed,
+                        f"--also-json artifact ({render}) differs from --format json for {target}",
+                    )
+                if target == 'proj':
+                    self.assertTrue(printed['summary']['scan_disclosures'], "fixture lost its disclosure")
 
     def test_check_also_json_artifact_ignores_the_text_only_limit_flag(self):
         """BACK-1248: --limit is a print-density cap on the human report. It

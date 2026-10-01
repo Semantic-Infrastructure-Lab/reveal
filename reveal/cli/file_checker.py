@@ -1285,6 +1285,17 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     def scan_disclosures_all() -> List[str]:
         return _get_scan_disclosures() + capability_disclosures(files_to_check, select, ignore)
 
+    def report_kwargs(files_errored: int, items_truncated: bool) -> dict:
+        # One argument set for --format json and both --also-json writers, so the
+        # artifact is the document --format json prints (BACK-1248): same source
+        # spelling (BACK-1366) and the same scan disclosures -- [] there claims
+        # the scan was complete.
+        return dict(
+            source=shown, scope=collection.to_scope_census(), select=select, ignore=ignore,
+            files_errored=files_errored, scan_disclosures=scan_disclosures_all(),
+            exit_zero=getattr(args, 'exit_zero', False), items_truncated=items_truncated,
+        )
+
     # Check files based on output format
     files_degraded = 0
     if output_format == 'json':
@@ -1295,11 +1306,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         files_degraded = sum(1 for fr in file_results if fr.get("status") == "warning")
         _print_json_output(
             file_results, len(files_to_check), files_with_issues, total_issues,
-            scope=collection.to_scope_census(), source=shown,
-            select=select, ignore=ignore, files_errored=files_errored,
-            scan_disclosures=scan_disclosures_all(),
-            exit_zero=getattr(args, 'exit_zero', False),
-            items_truncated=items_truncated,
+            **report_kwargs(files_errored, items_truncated),
         )
     elif output_format == 'grep':
         # BACK-1035: this recursive/directory path only ever branched on
@@ -1308,17 +1315,15 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         # already honors grep correctly via checks.py's
         # _format_detections_grep — reuse the same file:line:col:rule:msg
         # shape here, built from the JSON-mode per-file detections.
-        total_issues, files_with_issues, file_results, files_errored, _ = _check_files_json(
+        total_issues, files_with_issues, file_results, files_errored, items_truncated = _check_files_json(
             files_to_check, directory, select, ignore, severity=severity
         )
         files_degraded = sum(1 for fr in file_results if fr.get("status") == "warning")
         _print_grep_output(file_results)
         if getattr(args, 'also_json', None):
             _write_also_json_report(
-                args.also_json, file_results, len(files_to_check), files_with_issues,
-                total_issues, directory,
-                scope=collection.to_scope_census(), select=select, ignore=ignore,
-                files_errored=files_errored, exit_zero=getattr(args, 'exit_zero', False),
+                args.also_json, file_results, len(files_to_check), files_with_issues, total_issues,
+                **report_kwargs(files_errored, items_truncated),
             )
         for reason in scan_disclosures_all():
             # BACK-1051: grep output is meant to stay machine-parseable
@@ -1352,11 +1357,8 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         )
         if also_json:
             _write_also_json_report(
-                also_json, json_file_results, len(files_to_check), files_with_issues,
-                total_issues, directory,
-                scope=collection.to_scope_census(), select=select, ignore=ignore,
-                files_errored=files_errored, exit_zero=getattr(args, 'exit_zero', False),
-                items_truncated=json_items_truncated,
+                also_json, json_file_results, len(files_to_check), files_with_issues, total_issues,
+                **report_kwargs(files_errored, json_items_truncated),
             )
 
     # Exit with appropriate code (BACK-1099: distinguish "clean" from
