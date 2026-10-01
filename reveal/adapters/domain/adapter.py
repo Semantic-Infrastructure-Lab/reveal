@@ -470,6 +470,17 @@ _SCHEMA_OUTPUT_TYPES = [
             'checks_passed': {'type': 'integer'}, 'checks_failed': {'type': 'integer'},
         }},
     },
+    {
+        # What --check answers; undeclared until BACK-1595.
+        'type': 'domain_health_check',
+        'description': 'Health check of one domain: DNS, SSL and HTTP checks, status and exit code',
+        'schema': {'type': 'object', 'properties': {
+            'type': {'type': 'string', 'const': 'domain_health_check'},
+            'domain': {'type': 'string'}, 'status': {'type': 'string'},
+            'checks': {'type': 'array'}, 'summary': {'type': 'object'},
+            'next_steps': {'type': 'array'}, 'exit_code': {'type': 'integer'},
+        }},
+    },
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [

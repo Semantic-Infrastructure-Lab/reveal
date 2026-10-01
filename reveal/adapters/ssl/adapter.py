@@ -82,6 +82,19 @@ _SCHEMA_OUTPUT_TYPES = [
     _ssl_output_type('ssl_full', 'Complete certificate dump (all fields)', {
         'type': {'type': 'string', 'const': 'ssl_full'}, 'host': {'type': 'string'}, 'certificate': {'type': 'object'}
     }),
+    # What --check answers (and --expiring-within, which implies it); undeclared until BACK-1595.
+    _ssl_output_type('ssl_check', 'Health check of one host: per-check results, status and exit code', {
+        'type': {'type': 'string', 'const': 'ssl_check'}, 'host': {'type': 'string'},
+        'port': {'type': 'integer'}, 'status': {'type': 'string', 'enum': ['pass', 'warning', 'failure']},
+        'checks': {'type': 'array'}, 'summary': {'type': 'object'}, 'certificate': {'type': 'object'},
+        'exit_code': {'type': 'integer'},
+    }),
+    _ssl_output_type('ssl_cert_file_validation', 'ssl://nginx://... --check --local-certs: '
+                     'the certificate files an nginx config names, validated on disk', {
+        'type': {'type': 'string', 'const': 'ssl_cert_file_validation'}, 'source': {'type': 'string'},
+        'certs_checked': {'type': 'integer'}, 'status': {'type': 'string'},
+        'summary': {'type': 'object'}, 'results': {'type': 'array'}, 'exit_code': {'type': 'integer'},
+    }),
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [
@@ -93,8 +106,8 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'ssl://example.com/issuer', 'description': 'Certificate issuer (CA name, org)', 'output_type': 'ssl_issuer'},
     {'uri': 'ssl://example.com/dates', 'description': 'Validity dates (not_before, not_after, days remaining)', 'output_type': 'ssl_dates'},
     {'uri': 'ssl://example.com/full', 'description': 'Complete certificate dump (all fields)', 'output_type': 'ssl_full'},
-    {'uri': 'ssl://example.com --check', 'description': 'Run health checks (expiry, validation)', 'cli_flag': '--check', 'output_type': 'ssl_certificate'},
-    {'uri': 'ssl://example.com --expiring-within=30', 'description': 'Check if certificate expires in 30 days', 'cli_flag': '--expiring-within', 'output_type': 'ssl_certificate'},
+    {'uri': 'ssl://example.com --check', 'description': 'Run health checks (expiry, validation)', 'cli_flag': '--check', 'output_type': 'ssl_check'},
+    {'uri': 'ssl://example.com --expiring-within=30', 'description': 'Check if certificate expires in 30 days', 'cli_flag': '--expiring-within', 'output_type': 'ssl_check'},
 ]
 
 _SCHEMA_NOTES = [

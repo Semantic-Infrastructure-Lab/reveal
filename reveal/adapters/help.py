@@ -102,7 +102,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'description': 'Security analysis and vulnerability detection',
         'recipes': [
             {'goal': 'Find authentication functions', 'query': 'ast://src?name~=auth&type=function', 'description': 'Locate authentication-related code', 'output_type': 'ast_query'},
-            {'goal': 'Check SSL certificate expiry', 'query': 'ssl://example.com --expiring-within=30', 'description': 'Find certificates expiring soon', 'output_type': 'ssl_certificate'},
+            {'goal': 'Check SSL certificate expiry', 'query': 'ssl://example.com --expiring-within=30', 'description': 'Find certificates expiring soon', 'output_type': 'ssl_check'},
             {'goal': 'Find SQL query construction', 'query': 'ast://src?name~=query&complexity>5', 'description': 'Locate complex database queries (SQL injection risk)', 'output_type': 'ast_query'},
             {'goal': 'Map the external attack surface', 'query': 'surface://src', 'description': 'Every CLI, HTTP route, env var, network call, and filesystem write the system touches — taxonomy-based, project-specific clients outside known libraries not detected', 'output_type': 'surface_scan'},
         ]
@@ -169,9 +169,9 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Inspect nginx vhost', 'query': 'nginx://example.com', 'description': 'Ports, upstreams, auth, locations for a domain', 'output_type': 'nginx_vhost_summary'},
             {'goal': 'List all nginx vhosts', 'query': 'nginx://', 'description': 'Overview of all enabled nginx sites', 'output_type': 'nginx_sites_overview'},
             {'goal': 'Check nginx upstream health', 'query': 'nginx://example.com/upstream', 'description': 'TCP reachability of proxy_pass backends', 'output_type': 'nginx_vhost_upstream'},
-            {'goal': 'Check SSL certificate', 'query': 'ssl://example.com --check', 'description': 'Certificate health, expiry, chain validity', 'output_type': 'ssl_certificate'},
-            {'goal': 'Validate nginx SSL certs from config', 'query': 'ssl://nginx:///etc/nginx/conf.d/*.conf --check --local-certs', 'description': 'Check cert files referenced by nginx (no network)', 'output_type': 'ssl_certificate'},
-            {'goal': 'Domain health check', 'query': 'domain://example.com --check', 'description': 'DNS propagation, SSL status, registration info', 'output_type': 'domain_health'},
+            {'goal': 'Check SSL certificate', 'query': 'ssl://example.com --check', 'description': 'Certificate health, expiry, chain validity', 'output_type': 'ssl_check'},
+            {'goal': 'Validate nginx SSL certs from config', 'query': 'ssl://nginx:///etc/nginx/conf.d/*.conf --check --local-certs', 'description': 'Check cert files referenced by nginx (no network)', 'output_type': 'ssl_cert_file_validation'},
+            {'goal': 'Domain health check', 'query': 'domain://example.com --check', 'description': 'DNS propagation, SSL status, registration info', 'output_type': 'domain_health_check'},
             {'goal': 'Check cPanel AutoSSL run outcomes', 'query': 'autossl://latest?only-failures', 'description': 'Most recent AutoSSL run, failures only — per-domain DCV/TLS outcomes without wading through the passing domains', 'output_type': 'autossl_run'},
             {'goal': 'Full cPanel user audit', 'query': 'cpanel://johndoe/full-audit', 'description': 'One-shot composite: SSL + ACL + nginx ACME readiness; exits 2 on any failure (add --format=json for scripting)', 'output_type': 'cpanel_full_audit'},
             {'goal': "Find Let's Encrypt cert issues", 'query': 'letsencrypt:// --check-orphans', 'description': 'Certs not referenced by any nginx ssl_certificate directive — renewal candidates nobody is using (also: --check-duplicates for identical-SAN certs)', 'output_type': 'letsencrypt_inventory'},
