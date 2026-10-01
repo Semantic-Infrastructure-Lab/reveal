@@ -305,27 +305,6 @@ def _handle_special_modes(args: Any) -> bool:
     return False
 
 
-def _process_at_file_target(target: str, args) -> None:
-    """Process a single URI or file path from an @file."""
-    from pathlib import Path
-
-    if '://' in target:
-        try:
-            handle_uri(target, None, args)
-        except SystemExit as e:
-            if e.code != 0:
-                print(f"Warning: {target} failed, skipping", file=sys.stderr)
-        return
-
-    target_path = Path(target)
-    if not target_path.exists():
-        print(f"Warning: {target} not found, skipping", file=sys.stderr)
-    elif target_path.is_dir():
-        print(f"Warning: {target} is a directory, skipping", file=sys.stderr)
-    elif target_path.is_file():
-        handle_file(str(target_path), None, args.meta, args.format, args)
-
-
 def _handle_at_file(file_path: str, args):
     """Handle @file syntax - read URIs/paths from a file.
 
@@ -353,23 +332,15 @@ def _handle_at_file(file_path: str, args):
         print(f"Error: No URIs found in {file_path}", file=sys.stderr)
         sys.exit(1)
 
-    # When batch or check mode is active, route through handle_stdin_mode for
-    # proper aggregation (equivalent to: cat @file | reveal --stdin --batch)
-    is_batch_mode = getattr(args, 'batch', False)
-    is_check_mode = getattr(args, 'check', False)
-    if is_batch_mode or is_check_mode:
-        old_stdin = sys.stdin
-        sys.stdin = io.StringIO('\n'.join(lines))
-        try:
-            handle_stdin_mode(args, handle_file)
-        finally:
-            sys.stdin = old_stdin
-        return
-
-    for target in lines:
-        _process_at_file_target(target, args)
-
-    sys.exit(0)
+    # `reveal @list` is `reveal --stdin < list`: one path for both, so a URI that fails
+    # is reported and counted the same way (BACK-1556; this had its own copy that
+    # skipped a failure and exited 0).
+    old_stdin = sys.stdin
+    sys.stdin = io.StringIO('\n'.join(lines))
+    try:
+        handle_stdin_mode(args, handle_file)
+    finally:
+        sys.stdin = old_stdin
 
 
 def _check_ghost_flags(invocation: Invocation) -> None:

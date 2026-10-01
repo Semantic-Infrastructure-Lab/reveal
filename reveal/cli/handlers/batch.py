@@ -33,8 +33,8 @@ def _passes_ext_filter(target: str, ext_filter: Optional[str]) -> bool:
 
 def _process_stdin_uri(target: str, args: 'Namespace', is_batch_mode: bool,
                        is_ssl_batch_check: bool, batch_results: list,
-                       ssl_check_results: list) -> None:
-    """Process a URI from stdin.
+                       ssl_check_results: list) -> int:
+    """Process a URI from stdin; return its exit code (the batch modes report later: 0).
 
     Args:
         target: URI to process
@@ -48,22 +48,25 @@ def _process_stdin_uri(target: str, args: 'Namespace', is_batch_mode: bool,
 
     # Generic batch mode - collect results from any adapter
     if is_batch_mode:
-        result = _collect_batch_result(target, args)
-        batch_results.append(result)
-        return
+        batch_results.append(_collect_batch_result(target, args))
+        return 0
 
     # Legacy SSL-specific batch mode for backward compatibility
     if is_ssl_batch_check and target.startswith('ssl://'):
         ssl_check_results.append(_collect_ssl_check_result(target, args))
-        return
+        return 0
 
-    # Non-batch URIs go through normal path
+    # Non-batch URIs go through the normal path, which prints the answer or the error.
+    # A failure no longer reads as a skip that exits 0 (BACK-1556): the run ends with
+    # the worst code, and under --check a verdict (1 warnings, 2 failures) is a verdict.
     try:
         handle_uri(target, None, args, consumed=_STDIN_FLAGS)
     except SystemExit as e:
-        # Only warn for actual failures (non-zero exit codes)
-        if e.code != 0:
-            print(f"Warning: {target} failed, skipping", file=sys.stderr)
+        code = e.code if isinstance(e.code, int) else 1
+        if code and not getattr(args, 'check', False):
+            print(f"Warning: {target} failed (exit {code}); continuing", file=sys.stderr)
+        return code
+    return 0
 
 
 def _process_stdin_file(
@@ -154,6 +157,7 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     # this is True — same shape as the directory-mode bug already fixed in
     # reveal/cli/file_checker.py; see internal-docs/design/EXIT_CODE_CONTRACT.md.
     any_file_degraded = False
+    uri_exit = 0  # the worst exit of a URI answered one at a time (BACK-1556)
 
     # Read paths/URIs from stdin (one per line)
     first_line_checked = False
@@ -176,8 +180,8 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
 
         # Check if this is a URI (scheme://resource)
         if '://' in target:
-            _process_stdin_uri(target, args, is_batch_mode, is_ssl_batch_check,
-                             batch_results, ssl_check_results)
+            uri_exit = max(uri_exit, _process_stdin_uri(target, args, is_batch_mode, is_ssl_batch_check,
+                                                         batch_results, ssl_check_results))
         else:
             # Apply --ext filter for file paths
             if _passes_ext_filter(target, getattr(args, 'ext', None)):
@@ -210,9 +214,9 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
         file_exit = check_exit_code(
             total_file_violations, files_degraded=degraded_count, exit_zero=exit_zero,
         )
-        sys.exit(0 if exit_zero else max(file_exit, ssl_exit))
+        sys.exit(0 if exit_zero else max(file_exit, ssl_exit, uri_exit))
 
-    sys.exit(1 if total_file_violations > 0 else 0)
+    sys.exit(1 if total_file_violations > 0 or uri_exit else 0)
 
 
 def _collect_ssl_check_result(uri: str, args: 'Namespace') -> Dict[str, Any]:
