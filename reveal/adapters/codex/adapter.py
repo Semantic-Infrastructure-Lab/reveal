@@ -73,7 +73,7 @@ class CodexAdapter(ResourceAdapter):
     # result holds one of them. Undeclared, the router's probe found none of these names and
     # 'codex://sessions/ --head 3' said "no list to slice" over 138 sessions (BACK-1604).
     BUDGET_LIST_FIELD = ('sessions', 'entries', 'memories', 'rules', 'skills', 'plugins',
-                         'messages', 'tools', 'errors', 'events', 'exchanges')
+                         'messages', 'tools', 'errors', 'events', 'exchanges', 'token_turns')
 
     # Base paths — override with env vars for testing / SSH
     CODEX_HOME: Path = (

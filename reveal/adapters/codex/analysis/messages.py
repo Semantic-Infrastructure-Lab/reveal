@@ -36,14 +36,32 @@ def extract_messages(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return turns
 
 
+def token_count_info(payload: Any) -> Dict[str, Any]:
+    """``payload.info`` of a token_count event, or {}.
+
+    Codex writes ``"info": null`` on a token_count sent before any usage is known (a rate-limit
+    update, the first event of a task). ``payload.get('info', {})`` returned that None, and the
+    overview of 29 of 138 real sessions raised AttributeError. Every reader goes through here.
+    """
+    info = payload.get('info') if isinstance(payload, dict) else None
+    return info if isinstance(info, dict) else {}
+
+
+def cumulative_total_tokens(payload: Any) -> Optional[int]:
+    """The session's running token total a token_count event reports, if any."""
+    total = (token_count_info(payload).get('total_token_usage') or {}).get('total_tokens')
+    if total is None and isinstance(payload, dict):
+        total = payload.get('total_tokens')  # the flat format the tests use
+    return total
+
+
 def _parse_token_usage(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Extract per-request token counts from a token_count payload.
 
     Handles both the real Codex format (payload.info.last_token_usage) and the
     simplified flat format used in tests (payload.input_tokens etc.).
     """
-    info = payload.get('info', {})
-    last: Dict[str, Any] = info.get('last_token_usage') or {}
+    last: Dict[str, Any] = token_count_info(payload).get('last_token_usage') or {}
     if last:
         return last
     # flat/legacy format
@@ -84,10 +102,7 @@ def get_grand_total_tokens(records: List[Dict[str, Any]]) -> Optional[int]:
             continue
         if _payload_type(rec) != 'token_count':
             continue
-        payload = rec.get('payload', {})
-        info = payload.get('info', {})
-        tu = info.get('total_token_usage', {})
-        tt = tu.get('total_tokens') or payload.get('total_tokens')
+        tt = cumulative_total_tokens(rec.get('payload'))
         if tt is not None:
             last_total = tt
     return last_total

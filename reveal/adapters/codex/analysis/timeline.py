@@ -2,6 +2,7 @@
 
 from typing import Any, Callable, Dict, List
 
+from .messages import cumulative_total_tokens
 from .normalize import text_of
 
 
@@ -13,8 +14,7 @@ def _cmd(payload: Dict[str, Any]) -> str:
 
 
 def _tok(payload: Dict[str, Any]) -> str:
-    info = payload.get('info', {})
-    total = (info.get('total_token_usage') or {}).get('total_tokens')
+    total = cumulative_total_tokens(payload)
     return f"tokens total={total}" if total is not None else 'token_count'
 
 

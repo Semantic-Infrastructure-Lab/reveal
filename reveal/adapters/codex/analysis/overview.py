@@ -2,6 +2,8 @@
 
 from typing import Any, Dict, List, Optional
 
+from .messages import cumulative_total_tokens
+
 
 def _payload_type(rec: Dict[str, Any]) -> str:
     return str(rec.get('payload', {}).get('type', ''))
@@ -51,10 +53,7 @@ def get_overview(records: List[Dict[str, Any]], session_row: Dict[str, Any]) -> 
                 if dm is not None:
                     duration_ms = (duration_ms or 0) + dm
             elif ptype == 'token_count':
-                # real format: payload.info.total_token_usage.total_tokens
-                info = payload.get('info', {})
-                tu = info.get('total_token_usage', {})
-                tt = tu.get('total_tokens') or payload.get('total_tokens')
+                tt = cumulative_total_tokens(payload)
                 if tt is not None:
                     total_tokens = tt
         elif rtype == 'response_item':

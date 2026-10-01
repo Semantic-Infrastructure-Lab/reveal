@@ -57,7 +57,8 @@ def _render_codex_session_overview(result: dict) -> None:
         effort = result.get('reasoning_effort')
         print(f"Model: {model}" + (f" (reasoning: {effort})" if effort else ''))
     print(f"Turns: user={result.get('user_turns', 0)}, agent={result.get('agent_turns', 0)}")
-    print(f"Tool calls: {result.get('tool_calls', 0)}, Shell calls: {result.get('shell_calls', 0)}")
+    # One exec tool call can run several commands, so the second count may be the larger.
+    print(f"Tool calls: {result.get('tool_calls', 0)}, shell commands run: {result.get('shell_calls', 0)}")
     tokens = result.get('tokens_used')
     if tokens is not None:
         print(f"Tokens used: {tokens:,}")

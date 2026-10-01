@@ -1509,7 +1509,7 @@ class TestRegressionCliFlags:
     ('codex_session_list', 'sessions'), ('codex_history', 'entries'),
     ('codex_memories', 'memories'), ('codex_rules', 'rules'), ('codex_skills', 'skills'),
     ('codex_messages', 'messages'), ('codex_tools', 'tools'), ('codex_errors', 'errors'),
-    ('codex_timeline', 'events'), ('codex_exchanges', 'exchanges'),
+    ('codex_timeline', 'events'), ('codex_exchanges', 'exchanges'), ('codex_tokens', 'token_turns'),
 ])
 def test_head_slices_each_codex_views_list(result_type, field, capsys):
     """Undeclared, the router's probe found none of these names: 'codex://sessions/ --head 3'
@@ -1521,4 +1521,32 @@ def test_head_slices_each_codex_views_list(result_type, field, capsys):
                                  adapter=CodexAdapter, scheme='codex')
     assert out[field] == [1]
     assert 'no list to slice' not in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# token_count with "info": null -- the overview of 29 of 138 real sessions crashed
+# ---------------------------------------------------------------------------
+
+_NULL_INFO = {'timestamp': '2026-04-26T00:00:01Z', 'type': 'event_msg',
+              'payload': {'type': 'token_count', 'info': None, 'rate_limits': {}}}
+_REAL_INFO = {'timestamp': '2026-04-26T00:00:02Z', 'type': 'event_msg',
+              'payload': {'type': 'token_count', 'info': {
+                  'total_token_usage': {'total_tokens': 1234},
+                  'last_token_usage': {'input_tokens': 10, 'total_tokens': 12}}}}
+
+
+def test_overview_survives_a_token_count_with_null_info():
+    """Codex writes "info": null before any usage is known; .get('info', {}) returned None
+    and every reader raised AttributeError."""
+    from reveal.adapters.codex.analysis.overview import get_overview
+    assert get_overview([_NULL_INFO, _REAL_INFO, _NULL_INFO], {})['tokens_used'] == 1234
+
+
+def test_token_readers_survive_null_info():
+    from reveal.adapters.codex.analysis.messages import get_grand_total_tokens, get_token_turns
+    from reveal.adapters.codex.analysis.timeline import get_timeline
+    assert get_grand_total_tokens([_REAL_INFO, _NULL_INFO]) == 1234
+    turns = get_token_turns([_NULL_INFO, _REAL_INFO])
+    assert [t.get('input_tokens') for t in turns] == [None, 10]
+    assert len(get_timeline([_NULL_INFO, _REAL_INFO])) == 2
 
