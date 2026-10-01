@@ -17,7 +17,7 @@ import os
 import stat as stat_module
 from pathlib import Path
 from typing import Callable, Dict, Any, List, Optional, Tuple
-from reveal.reveal_types import CONTRACT_VERSION
+from reveal.reveal_types import CONTRACT_VERSION, WarningEntry
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
@@ -132,6 +132,29 @@ _AUTOLOAD_REGIMES: Tuple[Tuple[str, str, str], ...] = (
 
 
 _AUTOLOAD_REGIME_MAX_WALK_UP = 6
+
+
+def parse_failure_warning(failed_files: List[str], base: Optional[Path] = None) -> Optional[WarningEntry]:
+    """One meta warning for the files tree-sitter parsed with errors (BACK-1598).
+
+    The per-file extractor only sets ``parse_failed``; every command that builds
+    an import graph discloses the set once, through this, rather than one log
+    line per file per extraction pass (364 stderr lines on a cold `reveal
+    overview` of Redis src/, none on a warm one, and never in the result).
+    """
+    if not failed_files:
+        return None
+    shown = [to_relative_display(f, base) if base else to_posix(f) for f in sorted(failed_files)[:5]]
+    more = f" and {len(failed_files) - len(shown)} more" if len(failed_files) > len(shown) else ''
+    return {
+        'type': 'partial_parse',
+        'count': len(failed_files),
+        'files': shown,
+        'message': (
+            f"{len(failed_files)} file(s) parsed with errors -- their imports may be incomplete, "
+            f"so import-graph results can under-report: {', '.join(shown)}{more}"
+        ),
+    }
 
 
 def detect_autoload_regime(path: Path) -> Optional[Dict[str, str]]:
@@ -659,8 +682,10 @@ class ImportsRenderer:
         # under-report: a real cycle running through one of these is invisible.
         files_failed_count = metadata.get('files_failed_count', 0)
         if files_failed_count:
-            print(f"  ⚠️  {files_failed_count} file(s) failed to parse — excluded from the graph above")
-            print("      (import/unused/cycle results may be incomplete for these files)")
+            # Their recovered imports ARE in the graph (BACK-1460); only what sat
+            # inside the error region is missing (BACK-1598 wording).
+            print(f"  ⚠️  {files_failed_count} file(s) parsed with errors — their imports may be incomplete")
+            print("      (import/cycle results can under-report; unused imports not checked in them)")
             for fp in metadata.get('files_failed', [])[:10]:
                 print(f"      - {fp}")
             if files_failed_count > 10:
@@ -1064,6 +1089,11 @@ class ImportsAdapter(ResourceAdapter):
                 }
 
         return None
+
+    def partial_parse_warning(self, base: Optional[Path] = None) -> Optional[WarningEntry]:
+        """This graph's parse_failure_warning, for the commands that build it
+        through _build_graph rather than get_structure (overview, architecture)."""
+        return parse_failure_warning([str(fp) for fp in self._files_failed], base)
 
     def get_metadata(self) -> Dict[str, Any]:
         """Get metadata about import analysis."""

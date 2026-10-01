@@ -224,7 +224,7 @@ def _render_summary(analysis: Dict[str, Any], cycle_count: int, unused_count: in
         print(f"Health    {' · '.join(health_parts)}")
     failed = meta.get('files_failed_count') or 0
     if failed:
-        print(f"          ⚠ {failed} file(s) could not be analyzed; their imports are missing above")
+        print(f"          ⚠ {failed} file(s) parsed with errors; their imports above may be incomplete")
     unsupported = meta.get('unsupported_extensions') or {}
     if unsupported:
         listing = ', '.join(f"{ext} ({n})" for ext, n in unsupported.items())

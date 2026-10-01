@@ -77,6 +77,9 @@ def _run_imports_analysis(adapter: 'ArchitectureAdapter', path: Path) -> Dict[st
         from reveal.adapters.imports import ImportsAdapter
         importer = ImportsAdapter(str(path))
         importer._build_graph(path)
+        partial = importer.partial_parse_warning(path)  # BACK-1598
+        if partial:
+            adapter.fold_meta({'warnings': [partial]})
         return _format_imports_data(importer, path)
     except Exception as exc:
         adapter.record_composed_error('ImportsAdapter', path, exc)
@@ -138,6 +141,9 @@ def _run_combined_analysis(adapter: 'ArchitectureAdapter', path: Path, limit: in
         importer._build_graph(path, collect_structures=True)
         structures = importer._structures
         graph_built = True
+        partial = importer.partial_parse_warning(path)  # BACK-1598
+        if partial:
+            adapter.fold_meta({'warnings': [partial]})
         imports_data = _format_imports_data(importer, path)
     except Exception as exc:
         adapter.record_composed_error('ImportsAdapter', path, exc)
@@ -366,6 +372,11 @@ def _render_brief(report: Dict[str, Any], top: int, base_path: Path, no_imports:
         if regime:
             print(f"\n{autoload_regime_warning(regime)}")
         print("\nNote: static imports only — dynamically loaded files (plugins, registries) may appear as entry points.")
+    # The JSON's meta.warnings (partial parses, failed sub-scans) had no text
+    # rendering, so `architecture` stated a brief over files it couldn't fully
+    # read without saying so (BACK-1598). Same block overview prints.
+    from ..utils.warning_render import render_meta_warnings
+    render_meta_warnings(report, heading="Caveats")
 
 
 def _is_test_file(file_str: str) -> bool:

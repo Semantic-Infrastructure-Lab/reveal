@@ -40,21 +40,22 @@ _DRIVER = textwrap.dedent("""
 """)
 
 
-def _corpus_with_parse_failures(tmp_path, n_files=250):
-    """A tree big enough to trip the parallel path, full of files that make
-    tree-sitter recover from ERROR nodes (which is what emits the warning).
+def _corpus_with_unreadable_files(tmp_path, n_files=250):
+    """A tree big enough to trip the parallel path, full of files the worker
+    cannot read (which is what emits the 'Parse failed' warning).
 
     _PARALLEL_MIN_FILES is 200, so the file count is load-bearing: below it the
-    work stays in-process and the bug cannot appear.
+    work stays in-process and the bug cannot appear. Partial parses were the
+    probe until BACK-1598 made them a once-per-result disclosure instead of a
+    per-file warning. chmod 000 has no effect as root or on Windows; the test
+    skips there rather than pass on nothing.
     """
     src = tmp_path / 'src'
     src.mkdir()
     for i in range(n_files):
-        # Unbalanced braces/parens -> ERROR nodes -> "Partial parse" warning.
-        (src / f'broken_{i}.c').write_text(
-            f'int f{i}(int a {{ return a + ; \n'
-            f'void g{i}(void) {{ if ( \n'
-        )
+        f = src / f'unreadable_{i}.c'
+        f.write_text(f'int f{i}(int a) {{ return a; }}\n')
+        f.chmod(0)
     return src
 
 
@@ -63,7 +64,7 @@ def test_worker_warnings_are_prefixed_under_non_fork_start_methods(tmp_path, sta
     if start_method not in __import__('multiprocessing').get_all_start_methods():
         pytest.skip(f'{start_method} unavailable on this platform')
 
-    src = _corpus_with_parse_failures(tmp_path)
+    src = _corpus_with_unreadable_files(tmp_path)
     driver = tmp_path / 'driver.py'
     driver.write_text(_DRIVER)
 
@@ -78,8 +79,8 @@ def test_worker_warnings_are_prefixed_under_non_fork_start_methods(tmp_path, sta
     ]
     if not warning_lines:
         pytest.skip(
-            'no partial-parse warnings emitted -- fixture did not trigger '
-            'tree-sitter error recovery on this grammar build'
+            'no parse-failure warnings emitted -- the fixture files stayed '
+            'readable (running as root, or on Windows)'
         )
 
     unprefixed = [ln for ln in warning_lines if not ln.startswith('WARNING: ')]

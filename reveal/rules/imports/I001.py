@@ -105,8 +105,11 @@ class I001(BaseRule):
         # set indistinguishable from "genuinely uses nothing" -- comparing
         # imports against that would flag every import in the file as unused
         # (a false positive, not a missing result). Skip rather than report.
+        # BACK-1598: debug, not warning -- `check` already marks the file
+        # ("did not parse cleanly") and overview/architecture/deps state the
+        # partial-parse set once; a warning here was one stderr line per file.
         if extractor.parse_failed:
-            logger.warning(
+            logger.debug(
                 "I001: %s failed to parse -- skipping unused-import check "
                 "(result would be unreliable, not confirmed clean)",
                 file_path,

@@ -772,7 +772,7 @@ class TestHonestSummaryAndRunnableNextSteps:
         out = self._summary(self._analysis(3, 9), {
             'scanned_files': 40, 'files_failed_count': 30,
             'unsupported_extensions': {'.m': 2}})
-        assert '30 file(s) could not be analyzed' in out
+        assert '30 file(s) parsed with errors' in out
         assert 'No import extraction for: .m (2)' in out
         assert '✅ no circular deps' in out
 

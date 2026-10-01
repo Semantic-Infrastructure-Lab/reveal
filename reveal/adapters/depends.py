@@ -15,6 +15,7 @@ from typing import Dict, Any, List, NamedTuple, Optional, Set, Tuple
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
+from .imports import parse_failure_warning
 from ..utils import print_json_result
 from ..analyzers._capability_table import depends_intra_project_classification_supported
 from ..analyzers.imports import ImportGraph, ImportStatement
@@ -453,6 +454,8 @@ class DependsAdapter(ResourceAdapter):
         # negative must disclose rather than assert a confident "nothing here".
         self._unresolved_intra = 0
         self._unresolved_examples: List[tuple] = []
+        # BACK-1598: files whose extractor set parse_failed, disclosed once.
+        self._files_failed: List[str] = []
         # BACK-1093: languages seen among unresolved imports whose extractor
         # has no real True/False intra-project classification at all (always
         # None) — for these, `_unresolved_intra` staying low/zero says
@@ -656,6 +659,7 @@ class DependsAdapter(ResourceAdapter):
         self._scan_capped = False
         self._unresolved_intra = 0
         self._unresolved_examples = []
+        self._files_failed = []
         self._zeitwerk_edges = 0
         self._constants_indexed = 0
         self._constants_ambiguous = 0
@@ -812,6 +816,8 @@ class DependsAdapter(ResourceAdapter):
             if not extractor:
                 continue
             self._index_one_file(file_path, extractor, constant_index, manifest_dirs, indices)
+            if extractor.parse_failed:
+                self._files_failed.append(str(file_path))  # BACK-1598
 
         return indices
 
@@ -1496,10 +1502,12 @@ class DependsAdapter(ResourceAdapter):
         a corpus with a few unresolved imports doesn't append a caveat to every
         confident, non-empty answer (that would be the cry-wolf failure honest-
         decline is meant to prevent)."""
+        partial = parse_failure_warning(self._files_failed, self._scan_root)
         parts = [
             self._root_override_warning(),
             self._scan_cap_warning(),
             self._root_inferred_warning(),
+            f"⚠️  {partial['message']}" if partial else '',
         ]
         if include_honest_decline:
             parts.append(self._honest_decline_warning())

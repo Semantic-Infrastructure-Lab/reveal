@@ -166,6 +166,9 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path) -> Dict[str, A
         # BACK-1495: this call bypasses compose(), so --exclude has to be scoped here.
         with exclusion_scope(path if path.is_dir() else path.parent, adapter.exclude_patterns):
             importer._build_graph(path)
+        partial = importer.partial_parse_warning(path)  # BACK-1598
+        if partial:
+            adapter.fold_meta({'warnings': [partial]})
         fan_in = importer._format_fan_in()
         entrypoints = importer._format_entrypoints()
         components = importer._format_components()

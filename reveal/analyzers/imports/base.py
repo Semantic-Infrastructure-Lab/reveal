@@ -356,7 +356,13 @@ class LanguageExtractor(ABC):
             # imports tree-sitter did recover.
             if hasattr(analyzer, 'has_parse_errors') and analyzer.has_parse_errors():
                 self.parse_failed = True
-                logger.warning(
+                # BACK-1598: debug, not warning. parse_failed is the disclosure;
+                # each command that builds a graph states the failed set once
+                # (adapters/imports.parse_failure_warning, deps, I002). A warning
+                # here printed one stderr line per file per extraction pass
+                # (364 on a cold `reveal overview` of Redis src/) and none on a
+                # warm run, where extraction is cached.
+                logger.debug(
                     "Partial parse for %s -- tree-sitter recovered with ERROR "
                     "node(s); imports/symbols for this file may be incomplete, "
                     "not confirmed complete",
