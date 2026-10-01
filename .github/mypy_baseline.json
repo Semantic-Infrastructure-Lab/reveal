@@ -26,7 +26,6 @@
  "reveal/adapters/claude/adapter.py::no-any-return": 2,
  "reveal/adapters/claude/adapter.py::override": 3,
  "reveal/adapters/claude/adapter.py::unused-ignore": 14,
- "reveal/adapters/claude/analysis/overview.py::assignment": 3,
  "reveal/adapters/claude/analysis/overview.py::no-any-return": 2,
  "reveal/adapters/claude/analysis/tools.py::arg-type": 6,
  "reveal/adapters/claude/handlers/sessions.py::assignment": 2,

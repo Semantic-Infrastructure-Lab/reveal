@@ -161,39 +161,64 @@ def _get_last_assistant_snippet(messages: List[Dict]) -> Optional[str]:
     return None
 
 
-def _collect_token_usage(messages: List[Dict]) -> Dict[str, Any]:
-    """Sum token usage across all complete assistant messages.
+_USAGE_FIELDS = (
+    ('input_tokens', 'input_tokens'),
+    ('output_tokens', 'output_tokens'),
+    ('cache_read_tokens', 'cache_read_input_tokens'),
+    ('cache_created_tokens', 'cache_creation_input_tokens'),
+)
 
-    Only counts messages with stop_reason set (not None) to avoid double-counting
-    streaming intermediates. Returns zeroed dict when no usage data is found.
+
+def _iter_message_usage(messages: List[Dict]) -> List[tuple]:
+    """One (record_index, record, usage) per API message, in first-appearance order.
+
+    Claude Code writes one JSONL record per content block of an assistant message,
+    and every record carries the message's usage: the input and cache figures repeat
+    and output_tokens grows as the reply streams. stop_reason does not mark the
+    final record -- a message can have it on several records (counted twice) or on
+    none (dropped) -- so records are grouped by message.id and each field takes its
+    largest value. A record without an id counts as its own message.
     """
-    totals = {
-        'input_tokens': 0,
-        'output_tokens': 0,
-        'cache_read_tokens': 0,
-        'cache_created_tokens': 0,
-        'messages_with_usage': 0,
-    }
-    for msg in messages:
+    by_id: Dict[Any, list] = {}
+    order: List[list] = []
+    for i, msg in enumerate(messages):
         if msg.get('type') != 'assistant':
             continue
-        m = msg.get('message', {})
-        if m.get('stop_reason') is None:
-            continue  # streaming intermediate — skip to avoid double-counting
+        m = msg.get('message') or {}
         usage = m.get('usage')
         if not isinstance(usage, dict):
             continue
-        totals['input_tokens'] += usage.get('input_tokens', 0)
-        totals['output_tokens'] += usage.get('output_tokens', 0)
-        totals['cache_read_tokens'] += usage.get('cache_read_input_tokens', 0)
-        totals['cache_created_tokens'] += usage.get('cache_creation_input_tokens', 0)
-        totals['messages_with_usage'] += 1
+        mid = m.get('id')
+        entry = by_id.get(mid) if mid else None
+        if entry is None:
+            entry = [i, msg, {raw: 0 for _, raw in _USAGE_FIELDS}]
+            order.append(entry)
+            if mid:
+                by_id[mid] = entry
+        for _, raw in _USAGE_FIELDS:
+            value = usage.get(raw) or 0
+            if isinstance(value, (int, float)) and value > entry[2][raw]:
+                entry[2][raw] = value
+    return [tuple(e) for e in order]
+
+
+def _cache_hit_rate(totals: Dict[str, Any]) -> str:
     total_input = totals['input_tokens'] + totals['cache_read_tokens'] + totals['cache_created_tokens']
-    if total_input > 0:
-        hit_pct = round(totals['cache_read_tokens'] / total_input * 100)
-        totals['cache_hit_rate'] = f"{hit_pct}%"
-    else:
-        totals['cache_hit_rate'] = '0%'
+    return f"{round(totals['cache_read_tokens'] / total_input * 100) if total_input > 0 else 0}%"
+
+
+def _collect_token_usage(messages: List[Dict]) -> Dict[str, Any]:
+    """Sum token usage across the session's API messages (see _iter_message_usage).
+
+    Returns zeroed dict when no usage data is found.
+    """
+    totals: Dict[str, Any] = {key: 0 for key, _ in _USAGE_FIELDS}
+    usages = _iter_message_usage(messages)
+    for _i, _msg, usage in usages:
+        for key, raw in _USAGE_FIELDS:
+            totals[key] += usage[raw]
+    totals['messages_with_usage'] = len(usages)
+    totals['cache_hit_rate'] = _cache_hit_rate(totals)
     return totals
 
 
@@ -413,8 +438,8 @@ def get_token_breakdown(messages: List[Dict], session_name: str,
 
     Route: claude://session/NAME?tokens
 
-    Each entry covers one complete assistant turn (stop_reason != None).
-    cumulative_input tracks total input context growth across turns.
+    Each entry covers one API message (records grouped by message.id; see
+    _iter_message_usage). cumulative_input tracks input context growth across them.
 
     Args:
         messages: List of message dictionaries
@@ -428,48 +453,19 @@ def get_token_breakdown(messages: List[Dict], session_name: str,
     base['type'] = 'claude_token_breakdown'
 
     entries = []
-    totals = {
-        'input_tokens': 0,
-        'output_tokens': 0,
-        'cache_read_tokens': 0,
-        'cache_created_tokens': 0,
-    }
+    totals: Dict[str, Any] = {key: 0 for key, _ in _USAGE_FIELDS}
     cumulative_input = 0
 
-    for i, msg in enumerate(messages):
-        if msg.get('type') != 'assistant':
-            continue
-        m = msg.get('message', {})
-        if m.get('stop_reason') is None:
-            continue
-        usage = m.get('usage')
-        if not isinstance(usage, dict):
-            continue
+    for i, msg, usage in _iter_message_usage(messages):
+        entry: Dict[str, Any] = {'message_index': i, 'timestamp': msg.get('timestamp')}
+        for key, raw in _USAGE_FIELDS:
+            entry[key] = usage[raw]
+            totals[key] += usage[raw]
+        cumulative_input += entry['input_tokens'] + entry['cache_read_tokens'] + entry['cache_created_tokens']
+        entry['cumulative_input'] = cumulative_input
+        entries.append(entry)
 
-        inp = usage.get('input_tokens', 0)
-        out = usage.get('output_tokens', 0)
-        cache_read = usage.get('cache_read_input_tokens', 0)
-        cache_created = usage.get('cache_creation_input_tokens', 0)
-        cumulative_input += inp + cache_read + cache_created
-
-        entries.append({
-            'message_index': i,
-            'timestamp': msg.get('timestamp'),
-            'input_tokens': inp,
-            'output_tokens': out,
-            'cache_read_tokens': cache_read,
-            'cache_created_tokens': cache_created,
-            'cumulative_input': cumulative_input,
-        })
-
-        totals['input_tokens'] += inp
-        totals['output_tokens'] += out
-        totals['cache_read_tokens'] += cache_read
-        totals['cache_created_tokens'] += cache_created
-
-    total_input = totals['input_tokens'] + totals['cache_read_tokens'] + totals['cache_created_tokens']
-    hit_pct = round(totals['cache_read_tokens'] / total_input * 100) if total_input > 0 else 0
-    totals['cache_hit_rate'] = f"{hit_pct}%"
+    totals['cache_hit_rate'] = _cache_hit_rate(totals)
 
     base.update({
         'session': session_name,

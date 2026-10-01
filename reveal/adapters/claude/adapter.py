@@ -113,6 +113,23 @@ from .schema import (
 )
 
 
+def _first_timestamp(jsonl_path: Path) -> str:
+    """The first record timestamp in a transcript ('~' sorts last when unreadable/absent)."""
+    try:
+        with open(jsonl_path, 'r', encoding='utf-8', errors='replace') as f:
+            for line in f:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                timestamp = record.get('timestamp') if isinstance(record, dict) else None
+                if isinstance(timestamp, str):
+                    return timestamp
+    except OSError:
+        pass
+    return '~'
+
+
 def _resolve_claude_home_dir() -> Path:
     """Return the ~/.claude config directory, checking platform-specific locations.
 
@@ -506,25 +523,34 @@ class ClaudeAdapter(ResourceAdapter):
     def _find_conversation(self) -> Optional[Path]:
         """Find conversation JSONL file for session.
 
-        Uses two strategies:
-        1. Session name matches project directory suffix (named sessions)
+        Strategies, in order:
+        1. Session name matches a project directory name (named sessions)
         2. Session name is a UUID matching a JSONL filename inside any project directory
+        3./4. Truncated UUID: suffix, then 8-char prefix, of a JSONL filename
 
         Returns:
             Path to conversation JSONL file, or None if not found
         """
+        self._other_transcripts: List[Path] = []
         if not self.session_name or not self.CONVERSATION_BASE.exists():
             return None
 
         dirs = [d for d in self.CONVERSATION_BASE.iterdir() if d.is_dir()]
 
-        # Strategy 1 (priority): session name appears in project dir name (named sessions)
-        for project_dir in dirs:
-            if self.session_name in project_dir.name:
-                jsonl_files = [f for f in project_dir.glob('*.jsonl')
-                               if not f.stem.startswith('agent-')]
-                if jsonl_files:
-                    return jsonl_files[0]
+        # Strategy 1 (priority): session name appears in project dir name (named sessions).
+        # A dir whose name ends with the session name beats a mere substring hit (a
+        # scratchpad dir also carries the session's name mid-path). A dir can hold
+        # several transcripts (the session was re-entered); take the first started and
+        # disclose the rest, rather than whichever the filesystem lists first.
+        named = [d for d in dirs if self.session_name in d.name]
+        named.sort(key=lambda d: not (d.name == self.session_name or d.name.endswith('-' + self.session_name)))
+        for project_dir in named:
+            jsonl_files = [f for f in project_dir.glob('*.jsonl')
+                           if not f.stem.startswith('agent-')]
+            if jsonl_files:
+                jsonl_files.sort(key=lambda f: (_first_timestamp(f), f.name))
+                self._other_transcripts = jsonl_files[1:]
+                return jsonl_files[0]
 
         # Strategy 2 (fallback): session name is a UUID matching a JSONL filename
         for project_dir in dirs:
@@ -754,8 +780,25 @@ class ClaudeAdapter(ResourceAdapter):
         contract_base = self._get_contract_base()
         conversation_path_str = str(self.conversation_path) if self.conversation_path else ''
         if self._is_composite_query():
-            return self._handle_composite_query(messages)
-        return self._route_query_handler(messages, conversation_path_str, contract_base)
+            result = self._handle_composite_query(messages)
+        else:
+            result = self._route_query_handler(messages, conversation_path_str, contract_base)
+        self._disclose_other_transcripts(result)
+        return result
+
+    def _disclose_other_transcripts(self, result: Dict[str, Any]) -> None:
+        """Say when the session name also covers transcripts this view did not read."""
+        others = getattr(self, '_other_transcripts', [])
+        if not others or not isinstance(result, dict):
+            return
+        addresses = ', '.join(f"claude://session/{f.stem}" for f in others)
+        result.setdefault('meta', {}).setdefault('warnings', []).append({
+            'type': 'other_transcripts', 'count': len(others),
+            'transcripts': [str(f) for f in others],
+            'message': (f"'{self.session_name}' has {len(others) + 1} transcripts; this reads the first "
+                        f"started ({self.conversation_path.stem if self.conversation_path else '?'}). "
+                        f"Others: {addresses}"),
+        })
 
     def _is_composite_query(self) -> bool:
         """Check if query has multiple filter parameters.

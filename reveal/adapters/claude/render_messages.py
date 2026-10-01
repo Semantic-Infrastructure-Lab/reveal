@@ -213,8 +213,12 @@ def _render_claude_thinking(result: dict) -> None:
     count = result.get('thinking_block_count', 0)
     total_tokens = result.get('total_tokens_estimate', 0)
 
+    without_text = result.get('blocks_without_text', 0)
     print(f"Thinking: {session}")
-    print(f"Blocks: {count} | ~{total_tokens} tokens")
+    if without_text and without_text < count:
+        print(f"Blocks: {count - without_text} with text, {without_text} without (content not stored) | ~{total_tokens} tokens")
+    else:
+        print(f"Blocks: {count} | ~{total_tokens} tokens")
     print()
 
     blocks = result.get('blocks', [])

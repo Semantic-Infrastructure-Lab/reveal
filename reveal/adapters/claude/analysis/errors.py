@@ -2,7 +2,7 @@
 
 from typing import Dict, List, Any, Optional
 
-from ....utils.patterns import Patterns
+from .tools import _build_tool_use_result_map, _collect_tool_use_map, classify_tool_error
 
 
 def _get_tool_input_preview(tool_input: dict) -> Optional[str]:
@@ -67,29 +67,19 @@ def get_error_context(messages: List[Dict], error_msg_index: int,
     return context
 
 
-def _classify_tool_result(content, msg, i, messages, strong_patterns, exit_code_pattern):
+def _classify_tool_result(content, msg, i, messages, tur_map, tool_use_map):
     """Check a content block for errors and return an error dict or None."""
     if not isinstance(content, dict) or content.get('type') != 'tool_result':
         return None
-    result_content = str(content.get('content', ''))
-    is_error = content.get('is_error', False)
-    exit_match = exit_code_pattern.search(result_content)
-    has_exit_error = exit_match and int(exit_match.group(1)) > 0
-    has_strong_pattern = bool(strong_patterns.search(result_content))
-    if is_error:
-        error_type = 'is_error_flag'
-    elif has_exit_error:
-        error_type = 'exit_code'
-    elif has_strong_pattern:
-        error_type = 'pattern_match'
-    else:
-        return None
     tool_use_id = content.get('tool_use_id')
+    error_type = classify_tool_error(content, tur_map.get(tool_use_id), tool_use_map.get(tool_use_id))
+    if error_type is None:
+        return None
     return {
         'message_index': i,
         'tool_use_id': tool_use_id,
         'error_type': error_type,
-        'content_preview': result_content[:300],
+        'content_preview': str(content.get('content', ''))[:300],
         'timestamp': msg.get('timestamp'),
         'context': get_error_context(messages, i, tool_use_id),
     }
@@ -99,14 +89,11 @@ def get_errors(messages: List[Dict], session_name: str,
                contract_base: Dict[str, Any]) -> Dict[str, Any]:
     """Extract all errors with context.
 
-    Detects errors through multiple signals (in priority order):
-    1. is_error: true in tool_result (definitive)
-    2. Exit codes > 0 in Bash output (definitive)
-    3. Traceback/Exception at start of line (strong signal)
-    4. Common error patterns at start of content (moderate signal)
-
-    Avoids false positives by NOT matching error keywords mid-content
-    (e.g., documentation mentioning "error handling").
+    Uses the same classification as /tools success rates (classify_tool_error):
+    the client's returnCodeInterpretation, the is_error flag, then exit codes and
+    error lines in command output. The text heuristics match only at line start
+    (not "error handling" mid-sentence) and are not applied to file, web or agent
+    text (Read, Grep, WebFetch, Agent, ...).
 
     Args:
         messages: List of message dictionaries
@@ -121,15 +108,14 @@ def get_errors(messages: List[Dict], session_name: str,
 
     errors = []
 
-    # Use centralized patterns from utils.patterns
-    strong_patterns = Patterns.ERROR_LINE_START
-    exit_code_pattern = Patterns.EXIT_CODE
+    tur_map = _build_tool_use_result_map(messages)
+    tool_use_map = _collect_tool_use_map(messages)
 
     for i, msg in enumerate(messages):
         if msg.get('type') != 'user':
             continue
         for content in msg.get('message', {}).get('content', []):
-            error = _classify_tool_result(content, msg, i, messages, strong_patterns, exit_code_pattern)
+            error = _classify_tool_result(content, msg, i, messages, tur_map, tool_use_map)
             if error:
                 errors.append(error)
 

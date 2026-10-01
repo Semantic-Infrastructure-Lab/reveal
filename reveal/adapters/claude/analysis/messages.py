@@ -51,7 +51,7 @@ def _content_to_blocks(content) -> list:
 # harness-injected, never something a human would plausibly type as their first word.
 _SYNTHETIC_PREFIX_RE = re.compile(
     r'^<(task-notification|local-command-caveat|local-command-stdout|'
-    r'local-command-stderr|command-name|command-message|bash-input)>'
+    r'local-command-stderr|command-name|command-message|bash-input|bash-stdout|bash-stderr)>'
 )
 
 
@@ -70,8 +70,12 @@ def _is_real_prompt(msg: Dict) -> bool:
       excluded via _SYNTHETIC_PREFIX_RE (confirmed on real sessions: async Agent-tool
       completions land as type=user/content=str, indistinguishable from a real prompt
       without this check — ~30% of "prompts" in Agent-heavy sessions before this fix)
+    - records the harness marks itself: isMeta (local-command caveats, pasted-image
+      source notes, skill bodies) and isCompactSummary (the summary that opens a
+      compacted session) — checked over 10,021 local sessions, where they were
+      ~2.2K false prompts, and bash-mode output (<bash-stdout>) another ~4.1K
     """
-    if msg.get('type') != 'user':
+    if msg.get('type') != 'user' or msg.get('isMeta') or msg.get('isCompactSummary'):
         return False
     blocks = _content_to_blocks(msg.get('message', {}).get('content', []))
     types = {b.get('type') for b in blocks if isinstance(b, dict)}
@@ -265,6 +269,9 @@ def get_thinking_blocks(messages: List[Dict], session_name: str,
     base.update({
         'session': session_name,
         'thinking_block_count': len(thinking_blocks),
+        # Signature-only blocks: the transcript keeps no text for them (most of a
+        # recent model's blocks), so a count of all blocks overstates what /thinking shows.
+        'blocks_without_text': sum(1 for b in thinking_blocks if not str(b['content']).strip()),
         'total_chars': sum(b['char_count'] for b in thinking_blocks),
         'total_tokens_estimate': sum(b['token_estimate'] for b in thinking_blocks),
         'blocks': thinking_blocks
@@ -531,30 +538,91 @@ def get_digest(messages: List[Dict], session_name: str, conversation_path: str,
     return base
 
 
+def _answer_text(msg: Dict) -> str:
+    if msg.get('type') != 'assistant':
+        return ''
+    return _extract_text(msg.get('message', {}).get('content', []))
+
+
+def _answer_walking_back(messages: List[Dict], by_uuid: Dict[str, tuple],
+                         prompt_index: int, end_index: Optional[int]) -> Any:
+    """Find the turn's final answer by walking parentUuid links back from its last record.
+
+    Each record has exactly one parent, so the walk back from the record the next
+    prompt hangs off (or the session's last record) follows the branch the
+    conversation actually took. Returns (index, msg) of the latest assistant text
+    after the prompt, or None when the walk reaches the prompt without one. A
+    compaction boundary mid-turn re-roots the chain, so the walk can stop short of
+    the prompt; what it found by then is still the turn's tail and is returned.
+    False means it found nothing either way.
+    """
+    prompt_uuid = messages[prompt_index].get('uuid')
+    node = end_index
+    found = None
+    seen = set()
+    while node is not None and node not in seen and node >= prompt_index:
+        seen.add(node)
+        msg = messages[node]
+        if msg.get('uuid') == prompt_uuid:
+            return found
+        if found is None and _answer_text(msg):
+            found = (node, msg)
+        parent = msg.get('parentUuid')
+        node = by_uuid[parent][0] if parent in by_uuid else None
+    return found if found is not None else False
+
+
+def _answer_walking_forward(by_uuid: Dict[str, tuple], children: Dict[str, List[str]],
+                            prompt_uuid: Optional[str], stop_uuid: Optional[str]) -> Optional[tuple]:
+    """Fallback when the backward walk is broken: follow first children forward.
+
+    Prefers a non-'progress' child: progress records (bash_progress heartbeats,
+    hook_progress callbacks) fork a dead-end chain off the same parent. At a parallel
+    tool-call fork this can still pick a dead-end tool_result branch, which is why it
+    is only the fallback.
+    """
+    found = None
+    node = prompt_uuid
+    seen = set()
+    while node and node not in seen:
+        seen.add(node)
+        kids = children.get(node, [])
+        if not kids:
+            break
+        non_progress = [k for k in kids if by_uuid.get(k, (None, {}))[1].get('type') != 'progress']
+        nxt_uuid = (non_progress or kids)[0]
+        if nxt_uuid == stop_uuid or nxt_uuid not in by_uuid:
+            break
+        nxt = by_uuid[nxt_uuid]
+        if _answer_text(nxt[1]):
+            found = nxt
+        node = nxt_uuid
+    return found
+
+
+def _last_conversation_index(messages: List[Dict], after: int) -> Optional[int]:
+    """Index of the session's last main-thread record after `after` (progress forks skipped)."""
+    for j in range(len(messages) - 1, after, -1):
+        msg = messages[j]
+        if msg.get('uuid') and msg.get('type') != 'progress' and not msg.get('isSidechain'):
+            return j
+    return None
+
+
 def get_exchanges(messages: List[Dict], session_name: str,
                   contract_base: Dict[str, Any]) -> Dict[str, Any]:
     """Pair each real human prompt with the assistant's final answer to it.
 
-    Walks the parentUuid chain forward from each prompt to the next prompt (or
-    end of session), returning the last assistant text block found along the
-    way — the "final answer" to that turn, skipping thinking-only and
-    tool-only turns in between.
-
-    IMPORTANT — progress-record branching: `type: 'progress'` records
-    (bash_progress heartbeats, hook_progress PostToolUse callbacks) fork a
-    parallel, self-contained side-chain off the *same* parentUuid as the real
-    conversational continuation — confirmed present in 52% of a broad real
-    session sample (>4000 sessions), not a rare case. A naive "take the first
-    child in file order" walk follows that dead-end progress chain (which
-    streams in before the real continuation is appended) and stops early,
-    silently returning answer=None for exchanges that do have a real answer.
-    Fixed here by always preferring a non-'progress' sibling when one exists.
-
-    Known limitation, not fixed here: a genuine multi-branch case (edited /
-    regenerated message producing more than one non-progress sibling) still
-    takes the first one in file order — only the progress-fork case above was
-    confirmed common enough to require a fix; true conversational branching
-    was not observed and is left as a documented gap, not a silent one.
+    The final answer is the last assistant text block of the turn, skipping
+    thinking-only and tool-only messages. It is found by walking parentUuid links
+    back from the record the next prompt hangs off (or the session's last record):
+    every record has one parent, so this follows the branch the conversation took.
+    Walking forward instead is ambiguous — parallel tool calls and progress records
+    give a record several children, and a first-child walk ran into a dead-end
+    tool_result branch for ~4K turns across 10,021 local sessions (answer missing or
+    an early "Let me check…" line). When the backward chain stops short of the
+    prompt (a compaction boundary re-roots it), the text found on the way is the
+    answer; with none, the forward walk is the fallback.
     """
     base = contract_base.copy()
     base['type'] = 'claude_exchanges'
@@ -576,37 +644,27 @@ def get_exchanges(messages: List[Dict], session_name: str,
     exchanges = []
     for pos, i in enumerate(prompt_indices):
         prompt_msg = messages[i]
-        stop_uuid = (
-            messages[prompt_indices[pos + 1]].get('uuid')
-            if pos + 1 < len(prompt_indices) else None
-        )
+        prompt_uuid = prompt_msg.get('uuid')
+        next_msg = messages[prompt_indices[pos + 1]] if pos + 1 < len(prompt_indices) else None
+        if next_msg is not None:
+            parent = next_msg.get('parentUuid')
+            end_index = by_uuid[parent][0] if parent in by_uuid else None
+        else:
+            end_index = _last_conversation_index(messages, i)
 
-        answer_text = answer_index = answer_ts = None
-        node = prompt_msg.get('uuid')
-        seen = set()
-        while node and node not in seen:
-            seen.add(node)
-            kids = children.get(node, [])
-            if not kids:
-                break
-            non_progress = [k for k in kids if by_uuid.get(k, (None, {}))[1].get('type') != 'progress']
-            nxt_uuid = (non_progress or kids)[0]
-            if nxt_uuid == stop_uuid or nxt_uuid not in by_uuid:
-                break
-            nxt_idx, nxt_msg = by_uuid[nxt_uuid]
-            if nxt_msg.get('type') == 'assistant':
-                text = _extract_text(nxt_msg.get('message', {}).get('content', []))
-                if text:
-                    answer_text, answer_ts, answer_index = text, nxt_msg.get('timestamp'), nxt_idx
-            node = nxt_uuid
+        answer = _answer_walking_back(messages, by_uuid, i, end_index) if prompt_uuid else False
+        if answer is False:
+            answer = _answer_walking_forward(by_uuid, children, prompt_uuid,
+                                             next_msg.get('uuid') if next_msg else None)
+        answer_index, answer_msg = answer if answer else (None, {})
 
         exchanges.append({
             'message_index': i,
             'timestamp': prompt_msg.get('timestamp'),
             'prompt': _extract_text(prompt_msg.get('message', {}).get('content', [])),
             'answer_message_index': answer_index,
-            'answer_timestamp': answer_ts,
-            'answer': answer_text,
+            'answer_timestamp': answer_msg.get('timestamp') if answer else None,
+            'answer': _answer_text(answer_msg) if answer else None,
         })
 
     base.update({

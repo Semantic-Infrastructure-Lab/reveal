@@ -51,46 +51,54 @@ def _build_tool_use_result_map(messages: List[Dict]) -> Dict[str, Dict]:
     return result
 
 
-def is_tool_error(content: Dict, tool_use_result: Optional[Dict] = None) -> bool:
-    """Check if a tool result indicates an error.
+# Tools whose result is file, web or agent text rather than a command's output. The
+# exit-code and error-line heuristics read command output; on these they matched
+# file contents instead (a Read of a doc that says "exit code 2"). Their failures
+# carry is_error. Checked over 10,021 local sessions: 179 false errors in 152.
+_CONTENT_RESULT_TOOLS = frozenset({
+    'Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'NotebookRead',
+    'Grep', 'Glob', 'WebFetch', 'WebSearch', 'Agent', 'Task', 'Skill', 'ToolSearch',
+})
 
-    Uses multiple signals in priority order:
-    - returnCodeInterpretation from toolUseResult (most reliable for Bash)
-    - is_error flag (definitive)
-    - Exit code > 0 in content (definitive for Bash)
-    - Error patterns at line start (strong signal)
 
-    Args:
-        content: Tool result content dictionary
-        tool_use_result: Optional structured toolUseResult dict from the outer message
+def classify_tool_error(content: Dict, tool_use_result: Optional[Dict] = None,
+                        tool_name: Optional[str] = None) -> Optional[str]:
+    """Return why a tool result is an error, or None if it is not one.
 
-    Returns:
-        True if the result indicates an error
+    Signals in priority order:
+    - 'return_code': returnCodeInterpretation == 'error' in toolUseResult (Bash;
+      computed by the client, so 'success' there also settles it as not an error)
+    - 'is_error_flag': the tool_result's is_error flag
+    - 'exit_code': "exit code N" (N > 0) in command output
+    - 'pattern_match': an error line (Traceback/Error:/fatal:/...) in command output
+    The last two are skipped for _CONTENT_RESULT_TOOLS.
     """
-    # Check returnCodeInterpretation first — pre-computed by the client, most reliable
-    if tool_use_result is not None:
+    if isinstance(tool_use_result, dict):
         rci = tool_use_result.get('returnCodeInterpretation')
         if rci == 'error':
-            return True
+            return 'return_code'
         if rci == 'success':
-            return False
+            return None
 
-    # Check explicit is_error flag (definitive)
     if content.get('is_error', False):
-        return True
+        return 'is_error_flag'
+
+    if tool_name in _CONTENT_RESULT_TOOLS:
+        return None
 
     result_content = str(content.get('content', ''))
-
-    # Check for exit code > 0 (definitive for Bash)
     exit_match = Patterns.EXIT_CODE.search(result_content)
     if exit_match and int(exit_match.group(1)) > 0:
-        return True
-
-    # Check for strong error patterns at line start
+        return 'exit_code'
     if Patterns.ERROR_LINE_START.search(result_content):
-        return True
+        return 'pattern_match'
+    return None
 
-    return False
+
+def is_tool_error(content: Dict, tool_use_result: Optional[Dict] = None,
+                  tool_name: Optional[str] = None) -> bool:
+    """True if a tool result indicates an error (see classify_tool_error)."""
+    return classify_tool_error(content, tool_use_result, tool_name) is not None
 
 
 def _collect_tool_use_map(messages: List[Dict]) -> Dict[str, str]:
@@ -127,7 +135,7 @@ def extract_all_tool_results(messages: List[Dict]) -> List[Dict]:
                 'tool_use_id': tool_id,
                 'tool_name': tool_use_map.get(tool_id, 'unknown'),
                 'content': str(content.get('content', ''))[:500],
-                'is_error': is_tool_error(content, tur_map.get(tool_id)),
+                'is_error': is_tool_error(content, tur_map.get(tool_id), tool_use_map.get(tool_id)),
                 'timestamp': msg.get('timestamp')
             })
     return results
@@ -308,7 +316,7 @@ def _track_tool_results(messages: List[Dict], tool_use_map: Dict[str, str],
         tool_name = tool_use_map[tool_id]
         tool_stats[tool_name]['total'] += 1
         tur = tur_map.get(tool_id) if tur_map else None
-        if is_tool_error(content, tur):
+        if is_tool_error(content, tur, tool_name):
             tool_stats[tool_name]['failure'] += 1
         else:
             tool_stats[tool_name]['success'] += 1
@@ -609,7 +617,7 @@ def _derive_step_outcome(tool_name: str, tur: Optional[Dict], result_content: Op
             elif status:
                 outcome = 'error'
     if outcome is None and result_content is not None:
-        outcome = 'error' if is_tool_error(result_content, tur) else 'success'
+        outcome = 'error' if is_tool_error(result_content, tur, tool_name) else 'success'
     return outcome
 
 

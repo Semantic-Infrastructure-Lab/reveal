@@ -392,35 +392,28 @@ Chronological sequence of tool operations:
 
 Find errors with full context:
 
-**What it detects**:
-- Tool call failures
-- Exception messages
-- Error responses
-- Context around errors (surrounding messages)
+**How a tool result is classified** (`error_type`, in priority order — the same rules give `/tools` its success rates):
+- `return_code`: the client's `returnCodeInterpretation` is `error` (Bash). When it says `success`, the result is not an error.
+- `is_error_flag`: the `tool_result` carries `is_error: true`.
+- `exit_code`: "exit code N" (N > 0) in the output.
+- `pattern_match`: a line starting with `Traceback`, `Error:`, `fatal:`, `panic:` or `exception` — a command that exited 0 but printed an error.
 
-**Example output** (actual field name is `error_count`, not `count`):
+The last two read command output only. They are not applied to tools whose result is file, web or agent text (`Read`, `Edit`, `Write`, `Grep`, `Glob`, `WebFetch`, `WebSearch`, `Agent`/`Task`, ...), where they matched the contents of a file instead.
+
+**Example output**:
 ```json
 {
   "type": "claude_errors",
   "session": "infernal-earth-0118",
-  "error_count": 2,
+  "error_count": 1,
   "errors": [
     {
-      "message_id": 67,
-      "tool": "Bash",
-      "error": "Command failed with exit code 1",
-      "command": "pytest tests/",
-      "context": {
-        "previous_message": "Running tests...",
-        "next_message": "Test failed, investigating..."
-      }
-    },
-    {
-      "message_id": 89,
-      "tool": "Edit",
-      "error": "Pattern not found in file",
-      "file": "/path/to/file.py",
-      "pattern": "def old_function"
+      "message_index": 67,
+      "tool_use_id": "toolu_01...",
+      "error_type": "is_error_flag",
+      "content_preview": "Exit code 1\nFAILED tests/test_auth.py::test_login",
+      "timestamp": "2026-01-18T10:22:31.000Z",
+      "context": {"...": "the tool call and surrounding messages"}
     }
   ]
 }
@@ -619,7 +612,7 @@ reveal 'claude://session/<session-name>/thinking'
 reveal claude://session/infernal-earth-0118/thinking
 ```
 
-**Output**: Thinking block content, token estimates, analysis, optimization insights
+**Output**: Thinking block content and token estimates (chars / 4). Recent models store most thinking blocks with a signature but no text; `blocks_without_text` counts them and the header says how many were not shown.
 
 **Use when**: Understand agent reasoning, identify token waste, optimize thinking patterns
 
@@ -874,9 +867,9 @@ reveal claude://session/infernal-earth-0118/exchanges
 **Output**: One entry per real prompt: `message_index`, `timestamp`, `prompt`, `answer_message_index`, `answer_timestamp`, `answer` (`null` if no assistant text was found before the next prompt or end of session — e.g. a purely tool-driven exchange).
 
 **Notes**:
-- Walks the JSONL `parentUuid` chain, not message order — `type: progress` records (bash/hook progress heartbeats) fork a parallel side-chain off the same parent as the real continuation; the walk always prefers the non-`progress` sibling, so it reaches the true final answer rather than dead-ending in a progress chain or stopping at a premature acknowledgment.
-- A prompt is "real" if it has typed text (bare string, or a text block — e.g. a pasted screenshot with a caption) and is not a synthetic text block riding on a `tool_result` turn (matches `/prompts`' definition exactly).
-- Known limitation: a genuine multi-branch case (an edited/regenerated message producing more than one non-`progress` sibling) takes the first one in file order — this was not observed in practice and is a documented gap, not a silently wrong one.
+- Walks the JSONL `parentUuid` chain *backward* from the record the next prompt hangs off (or the session's last record). Every record has exactly one parent, so this follows the branch the conversation actually took; walking forward is ambiguous, since parallel tool calls give each `tool_use` record its own `tool_result` child and `type: progress` records fork side-chains off the same parent.
+- A compaction boundary mid-turn re-roots the chain; the answer is then the last text found on the way back to the boundary. Only when that finds nothing does the walk fall back to following first (non-`progress`) children forward.
+- A prompt is "real" if it has typed text (bare string, or a text block — e.g. a pasted screenshot with a caption) and is not a synthetic text block riding on a `tool_result` turn, a harness-injected wrapper (`<task-notification>`, `<command-name>`, `<bash-input>`/`<bash-stdout>`, local-command caveats), or a record the harness marks `isMeta` or `isCompactSummary` (matches `/prompts`' definition exactly).
 
 **Use when**: You need "what did I ask, what did it finally say" for a specific turn or set of turns, without eyeballing timestamps between `/prompts` and `/messages` or binary-searching `/message/<n>` by hand.
 
@@ -1499,6 +1492,10 @@ Each error includes:
 
 ## Token Analysis
 
+### API Token Usage
+
+The overview's `token_summary` and the `?tokens` view report the API's own usage figures, not estimates. Claude Code writes one JSONL record per content block of a reply and every record repeats that reply's usage (input and cache figures stay the same, output grows while it streams), so records are grouped by `message.id` and counted once, at their largest value. `?tokens` has one entry per API message.
+
 ### Token Estimation
 
 **Formula**: `tokens ≈ characters / 4`
@@ -1843,6 +1840,7 @@ reveal claude://session/my-session/tools --format json | jq '.tools[] | select(.
    - **Limitation**: Session name must match directory name pattern
    - **Impact**: Non-standard session names may not be found
    - **Workaround**: Use exact session name from directory listing
+   - **Several transcripts under one name**: a session directory can hold more than one transcript (the session was re-entered). `claude://session/<name>` reads the first started and names the others in a warning; open one of them with `claude://session/<uuid>`.
 
 3. **Token estimation accuracy**
    - **Limitation**: Approximation (chars / 4), not exact tokenization

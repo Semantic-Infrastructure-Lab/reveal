@@ -1,6 +1,7 @@
 """Claude adapter renderer for text output."""
 
 from ...rendering import TypeDispatchRenderer
+from ...utils.warning_render import render_meta_warnings
 
 from .render_sessions import (
     _render_claude_session_list,
@@ -120,6 +121,9 @@ class ClaudeRenderer(TypeDispatchRenderer):
             method(result)
         else:
             cls._render_fallback(result)
+        # Every claude view prints its meta.warnings (e.g. other transcripts under the same
+        # session name); no per-view renderer does.
+        render_meta_warnings(result)
 
     @staticmethod
     def _render_fallback(result: dict) -> None:
