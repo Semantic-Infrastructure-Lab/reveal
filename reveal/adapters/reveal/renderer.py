@@ -16,6 +16,18 @@ class RevealRenderer:
         render_reveal_structure(result, format)
 
     @staticmethod
+    def render_element(result: dict, format: str = 'text') -> None:
+        """Render one element of a reveal source file, as the file view prints one."""
+        if format == 'json':
+            from ...utils import print_json_result
+            print_json_result(result)
+            return
+        start = result.get('line_start', 1)
+        print(f"reveal://{result.get('file')}:{start}-{result.get('line_end')} | {result.get('element')}\n")
+        for offset, line in enumerate(str(result.get('content', '')).splitlines()):
+            print(f"{start + offset:>6}  {line}")
+
+    @staticmethod
     def render_check(result: dict, format: str = 'text', **kwargs) -> None:
         """Render validation check results.
 

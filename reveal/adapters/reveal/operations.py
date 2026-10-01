@@ -1,10 +1,6 @@
-"""Operations (check, element extraction) for reveal adapter."""
+"""Operations (check) for reveal adapter. Element extraction: RevealAdapter.get_element."""
 
-import logging
-from pathlib import Path
 from typing import Dict, List, Any, Optional
-
-logger = logging.getLogger(__name__)
 
 
 def check(select: Optional[List[str]] = None, ignore: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -27,47 +23,3 @@ def check(select: Optional[List[str]] = None, ignore: Optional[List[str]] = None
         'detections': detections,  # Keep as Detection objects for render_check
         'total': len(detections)
     }
-
-
-def get_element(reveal_root: Path, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
-    """Extract a specific element from a reveal source file.
-
-    Args:
-        reveal_root: Path to reveal's root directory
-        element_name: Element to extract (e.g., function name) or resource path
-        **kwargs: Optional keyword arguments:
-            - resource: File path within reveal (e.g., "rules/links/L001.py")
-            - args: Command-line arguments
-
-    Returns:
-        Dict with success status if successful, None if failed
-    """
-    from ...file_handler import handle_file
-
-    # For backwards compatibility, support resource as kwarg
-    resource = kwargs.get('resource', element_name)
-    args = kwargs.get('args')
-
-    if not args:
-        # If no args provided, return None (cannot process)
-        return None
-
-    # Resolve the file path within reveal
-    file_path = reveal_root / resource
-
-    # Backward compatibility: redirect old reveal.py path to new adapter.py
-    if not file_path.exists() and resource == 'adapters/reveal.py':
-        file_path = reveal_root / 'adapters' / 'reveal' / 'adapter.py'
-
-    if not file_path.exists():
-        return None
-
-    # Use regular file processing to extract the element
-    # This delegates to the appropriate analyzer (Python, etc.)
-    try:
-        handle_file(str(file_path), element_name,
-                   show_meta=False, output_format=args.format, args=args)
-        return {'success': True}
-    except Exception as e:
-        logger.warning(f"Failed to extract {element_name!r} from {file_path}: {e}")
-        return None

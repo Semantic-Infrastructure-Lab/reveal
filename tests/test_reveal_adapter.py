@@ -301,67 +301,38 @@ class TestRevealAdapterFormatOutput:
 
 
 class TestRevealAdapterElementExtraction:
-    """Test element extraction from reveal source files."""
+    """`reveal reveal://<file> <element>` extracts from reveal's own source (BACK-1565)."""
 
-    def test_get_element_python_function(self, capsys):
-        """Extract a Python function from reveal source."""
-        from argparse import Namespace
-        adapter = RevealAdapter()
-        args = Namespace(format='text')
+    def test_get_element_python_function(self):
+        result = RevealAdapter('rules/links/L001.py').get_element('_extract_anchors_from_markdown')
+        assert result['type'] == 'code_element'
+        assert 'def _extract_anchors_from_markdown' in result['content']
+        assert result['line_start'] <= result['line_end']
 
-        # Extract a function from L001 rule
-        result = adapter.get_element('_extract_anchors_from_markdown',
-                                     resource='rules/links/L001.py',
-                                     args=args)
-
-        assert result == {'success': True}
-        captured = capsys.readouterr()
-        assert '_extract_anchors_from_markdown' in captured.out
-        assert 'def _extract_anchors_from_markdown' in captured.out
-
-    def test_get_element_python_class(self, capsys):
-        """Extract a Python class from reveal source."""
-        from argparse import Namespace
-        adapter = RevealAdapter()
-        args = Namespace(format='text')
-
-        # Extract MarkdownAnalyzer class
-        result = adapter.get_element('MarkdownAnalyzer',
-                                     resource='analyzers/markdown.py',
-                                     args=args)
-
-        assert result == {'success': True}
-        captured = capsys.readouterr()
-        assert 'MarkdownAnalyzer' in captured.out
-        assert 'class MarkdownAnalyzer' in captured.out
+    def test_get_element_python_class(self):
+        result = RevealAdapter('analyzers/markdown.py').get_element('MarkdownAnalyzer')
+        assert 'class MarkdownAnalyzer' in result['content']
 
     def test_get_element_nonexistent_file(self):
-        """get_element returns None for nonexistent file."""
-        from argparse import Namespace
-        adapter = RevealAdapter()
-        args = Namespace(format='text')
+        assert RevealAdapter('nonexistent/file.py').get_element('SomeElement') is None
 
-        result = adapter.get_element('SomeElement',
-                                     resource='nonexistent/file.py',
-                                     args=args)
+    def test_get_element_missing_element(self):
+        assert RevealAdapter('rules/links/L001.py').get_element('no_such_function') is None
 
-        assert result is None
+    def test_get_element_self_referential_via_the_schema_example_path(self):
+        """The schema's example names the pre-split adapters/reveal.py."""
+        result = RevealAdapter('adapters/reveal.py').get_element('get_element')
+        assert 'def get_element' in result['content']
 
-    def test_get_element_self_referential(self, capsys):
-        """Extract element from RevealAdapter itself."""
-        from argparse import Namespace
-        adapter = RevealAdapter()
-        args = Namespace(format='text')
-
-        # Extract get_element method from RevealAdapter
-        result = adapter.get_element('get_element',
-                                     resource='adapters/reveal.py',
-                                     args=args)
-
-        assert result == {'success': True}
-        captured = capsys.readouterr()
-        assert 'get_element' in captured.out
-        assert 'def get_element' in captured.out
+    def test_cli_answers_the_element_not_the_structure_view(self):
+        import subprocess
+        import sys
+        out = subprocess.run([sys.executable, '-m', 'reveal', 'reveal://adapters/reveal/adapter.py',
+                              'get_structure'], capture_output=True, text=True, encoding='utf-8',
+                             timeout=120)
+        assert out.returncode == 0, out.stderr
+        assert 'def get_structure' in out.stdout
+        assert 'Reveal Internal Structure' not in out.stdout
 
 
 class TestRevealAdapterComponentFiltering:

@@ -1,7 +1,7 @@
 """Reveal meta-adapter (reveal://) - Self-inspection and validation."""
 
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, cast
 from reveal.reveal_types import CONTRACT_VERSION, RevealResult
 
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
@@ -128,18 +128,44 @@ class RevealAdapter(ResourceAdapter):
         return operations.check(select=select, ignore=ignore)
 
     def get_element(self, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
-        """Extract a specific element from a reveal source file.
+        """One element of a reveal source file: ``reveal reveal://<file> <element>``.
 
-        Args:
-            element_name: Element to extract (e.g., function name) or resource path
-            **kwargs: Optional keyword arguments:
-                - resource: File path within reveal (e.g., "rules/links/L001.py")
-                - args: Command-line arguments
-
-        Returns:
-            Dict with success status if successful, None if failed
+        The file is named relative to reveal's own package, so a pip install's
+        source is readable without knowing its site-packages path. Extraction is
+        the file view's own (display.element), returned as a result the router
+        emits; it used to print through handle_file with no renderer to reach it,
+        so every form answered the structure view instead (BACK-1565).
         """
-        return operations.get_element(self.reveal_root, element_name, **kwargs)
+        from ...display.element import _extract_by_syntax, _parse_element_syntax
+        from ...registry import get_analyzer
+
+        source_file = self._source_file()
+        analyzer_class = get_analyzer(str(source_file), allow_fallback=True) if source_file else None
+        if source_file is None or analyzer_class is None:
+            return None
+        found = _extract_by_syntax(analyzer_class(str(source_file)), element_name,
+                                   _parse_element_syntax(element_name))
+        if not found:
+            return None
+        return cast(Dict[str, Any], ResultBuilder.create(
+            result_type='code_element',  # the schema's declared output type
+            source=f'reveal://{self.component}',
+            source_type='runtime',
+            contract_version=CONTRACT_VERSION,
+            # The schema's field names: 'source' is the envelope's target (reveal://<file>).
+            data={'element': element_name, 'file': to_posix(str(self.component)),
+                  'line_start': found['line_start'], 'line_end': found['line_end'],
+                  'content': found['source']},
+        ))
+
+    def _source_file(self) -> Optional[Path]:
+        """The reveal source file the resource names, or None."""
+        if not self.component:
+            return None
+        candidate = self.reveal_root / str(self.component)
+        if not candidate.is_file() and str(self.component) == 'adapters/reveal.py':
+            candidate = self.reveal_root / 'adapters' / 'reveal' / 'adapter.py'  # pre-split path
+        return candidate if candidate.is_file() else None
 
     def format_output(self, structure: Dict[str, Any], format_type: str = 'text') -> str:
         """Format reveal structure for display.
