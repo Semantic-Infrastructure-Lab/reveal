@@ -1499,3 +1499,26 @@ class TestRegressionCliFlags:
         out = capsys.readouterr().out
         assert '--json' in out
         assert '--verbose' in out
+
+
+# ---------------------------------------------------------------------------
+# BACK-1604: --head/--tail/--range slice the list each codex view returns
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize('result_type, field', [
+    ('codex_session_list', 'sessions'), ('codex_history', 'entries'),
+    ('codex_memories', 'memories'), ('codex_rules', 'rules'), ('codex_skills', 'skills'),
+    ('codex_messages', 'messages'), ('codex_tools', 'tools'), ('codex_errors', 'errors'),
+    ('codex_timeline', 'events'), ('codex_exchanges', 'exchanges'),
+])
+def test_head_slices_each_codex_views_list(result_type, field, capsys):
+    """Undeclared, the router's probe found none of these names: 'codex://sessions/ --head 3'
+    printed "no list to slice" and returned every session."""
+    from argparse import Namespace
+    from reveal.cli.routing.uri import _apply_head_tail_range
+    result = {'type': result_type, field: [1, 2, 3]}
+    out = _apply_head_tail_range(result, Namespace(head=1, tail=None, range=None),
+                                 adapter=CodexAdapter, scheme='codex')
+    assert out[field] == [1]
+    assert 'no list to slice' not in capsys.readouterr().err
+

@@ -69,6 +69,11 @@ class CodexAdapter(ResourceAdapter):
     # effect via --since alone). Only takes effect with ?search= or ?filter= —
     # the bare list mode (_h_list_sessions) ignores since/until entirely.
     CLI_QUERY_FLAGS = {'since': 'since={value}', 'until': 'until={value}'}
+    # The list each view returns, so --head/--tail/--range and --max-items slice it; each
+    # result holds one of them. Undeclared, the router's probe found none of these names and
+    # 'codex://sessions/ --head 3' said "no list to slice" over 138 sessions (BACK-1604).
+    BUDGET_LIST_FIELD = ('sessions', 'entries', 'memories', 'rules', 'skills', 'plugins',
+                         'messages', 'tools', 'errors', 'events', 'exchanges')
 
     # Base paths — override with env vars for testing / SSH
     CODEX_HOME: Path = (

@@ -2856,6 +2856,24 @@ class TestViewScopedParamWarnings:
         assert capsys.readouterr().err == ''
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    @pytest.mark.parametrize('query', [
+        {'type': 'history', 'element': 'foo'}, {'type': 'log', 'element': 'foo'},
+        {'type': 'diff', 'element': 'foo'}, {'type': 'log', 'bucket': 'month'},
+    ], ids=lambda q: '&'.join(f'{k}={v}' for k, v in q.items()))
+    def test_param_on_a_view_that_reads_it_is_silent(self, git_repo_ownership, capsys, query):
+        """BACK-1604: history/log narrow to an element's commits and diff to its hunks;
+        naming blame alone warned "no effect" over a correct element history."""
+        GitAdapter(path=str(git_repo_ownership), subpath='src/app.py', query=query)
+        assert capsys.readouterr().err == ''
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_element_on_a_file_without_type_names_the_file_view(self, git_repo_ownership, capsys):
+        GitAdapter(path=str(git_repo_ownership), subpath='src/app.py', query={'element': 'foo'})
+        err = capsys.readouterr().err
+        assert "view 'file content'" in err
+        assert '?type=history' in err
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_since_on_ownership_view_warns(self, git_repo_ownership, capsys):
         GitAdapter(path=str(git_repo_ownership), query={'type': 'ownership', 'since': '2020-01-01'})
         err = capsys.readouterr().err

@@ -26,7 +26,7 @@ _SCHEMA_QUERY_PARAMS = {
     'type': {'type': 'string', 'description': 'Query type for file operations', 'values': ['history', 'blame', 'diff', 'ownership'], 'examples': ['?type=history', '?type=blame', '?type=ownership']},
     'merges': {'type': 'string', 'description': 'For ownership: "1" includes merge commits (excluded by default)', 'examples': ['?type=ownership&merges=1']},
     'detail': {'type': 'string', 'description': 'Detail level for blame', 'values': ['full', 'summary'], 'examples': ['?type=blame&detail=full']},
-    'element': {'type': 'string', 'description': 'Semantic element for blame (function/class name)', 'examples': ['?type=blame&element=load_config']},
+    'element': {'type': 'string', 'description': 'Semantic element (function/class name) for blame, history/log and diff', 'examples': ['?type=blame&element=load_config', '?type=history&element=load_config']},
     'context': {'type': 'integer', 'description': 'For diff: number of context lines around each hunk (default: 3)', 'examples': ['?type=diff&context=10']},
     'author': {'type': 'string', 'description': 'Filter commits by author name (case-insensitive)', 'examples': ['?author=John', '?author~=john']},
     'email': {'type': 'string', 'description': 'Filter commits by author email (case-insensitive)', 'examples': ['?email=john@example.com', '?email~=@example.com']},
@@ -361,13 +361,16 @@ class GitAdapter(ResourceAdapter):
 
     # Params only meaningful when `type=` resolves to this exact value —
     # accepted (they're in the schema) but silently inert on any other view.
+    # Each names every view that reads it: ?element= is the blame target, narrows
+    # history/log to the commits touching that element and diff to its hunks, so naming
+    # blame alone warned "no effect" over a correct element history (BACK-1604).
     _VIEW_SCOPED_PARAMS = {
-        'merges': 'ownership',
-        'detail': 'blame',
-        'element': 'blame',
-        'context': 'diff',
-        'ignore': 'blame',
-        'bucket': 'history',
+        'merges': ('ownership',),
+        'detail': ('blame',),
+        'element': ('blame', 'history', 'log', 'diff'),
+        'context': ('diff',),
+        'ignore': ('blame',),
+        'bucket': ('history', 'log'),
     }
 
     def _warn_view_scoped_query_params(self) -> None:
@@ -379,7 +382,7 @@ class GitAdapter(ResourceAdapter):
         param says nothing — the signal is inverted relative to risk.
         """
         query_type = self.query.get('type')
-        resolved = query_type or 'default (log)'
+        resolved = query_type or ('file content' if self.subpath else 'default (log)')
 
         # BACK-1504: on a file or directory, commit filters are applied only by
         # ?type=history; the default view shows the file at the ref and never
@@ -394,11 +397,12 @@ class GitAdapter(ResourceAdapter):
                 file=sys.stderr,
             )
 
-        for key, valid_type in self._VIEW_SCOPED_PARAMS.items():
-            if key in self.query and query_type != valid_type:
+        for key, valid_types in self._VIEW_SCOPED_PARAMS.items():
+            if key in self.query and query_type not in valid_types:
+                applies = ', '.join(f'?type={t}' for t in valid_types)
                 print(
                     f"⚠ Query param '{key}' has no effect on git:// view "
-                    f"'{resolved}' — only applies to ?type={valid_type}. "
+                    f"'{resolved}' — only applies to {applies}. "
                     f"Result does not reflect it.",
                     file=sys.stderr,
                 )

@@ -37,7 +37,7 @@ import sys
 from argparse import ArgumentParser, Namespace
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Optional, Set, TextIO
-from urllib.parse import parse_qs
+from urllib.parse import unquote_plus
 
 from ...utils.exclusions import exclusions_consulted
 from ...utils.query_parser import collect_query_keys, query_key
@@ -105,7 +105,7 @@ class FlagLedger:
         """Run the adapter for ``resource`` (the final one, after injection)."""
         query = resource.partition('?')[2]
         self.query_keys = [query_key(p) for p in query.split('&') if query_key(p)]
-        typed = parse_qs(query, keep_blank_values=True)
+        typed = _query_values(query)
         for dest, value in self.set_flags.items():
             if dest not in self.delegated and str(value) in typed.get(dest, []):
                 self.delegated[dest] = dest
@@ -170,6 +170,22 @@ class FlagLedger:
         if unread:
             print(f"Note: query param {unread} has no effect on this {scheme}:// query -- "
                   f"{_NOT_HERE}", file=out)
+
+
+def _query_values(query: str) -> Dict[str, List[str]]:
+    """Each query key's values, read the way the query parser keys them (``query_key``).
+
+    ``parse_qs`` split ``name~=load`` into key ``name~``, so ``reveal f.py --name load``
+    (routed as ``ast://f.py?name~=load``) never matched its flag and drew a false
+    "no effect" note while the filter applied (BACK-1604).
+    """
+    values: Dict[str, List[str]] = {}
+    for part in query.split('&'):
+        key = query_key(part)
+        if key:
+            rest = part.strip().lstrip('!')[len(key):].lstrip('=<>!~')
+            values.setdefault(key, []).append(unquote_plus(rest))
+    return values
 
 
 def ledger_of(args: Any) -> Optional[FlagLedger]:

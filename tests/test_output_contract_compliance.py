@@ -11,9 +11,9 @@ Each run goes through ``handle_uri`` with ``--format json`` from a temp cwd, usi
 relative URI. That is the same result dict the CLI and MCP produce. Runs are hermetic: HOME
 points at a fixture home, and so does every adapter class attribute holding a ``Path``
 under the real home (``CodexAdapter.CODEX_DB``, ``ClaudeAdapter.CONVERSATION_BASE``, ...),
-since those are resolved once at import. The fixture home holds an empty Claude projects
-directory and an empty Codex session DB, so claude:// and codex:// return a real (empty)
-answer. Without them their result is an error, and a contract check on an error envelope
+since those are resolved once at import. The fixture home holds a Claude projects
+directory with one session and a Codex session DB with two, so claude:// and codex:// return
+a real answer, with a list for --since and --head to act on. Without them their result is an error, and a contract check on an error envelope
 proves nothing about the adapter's normal output. Invariants:
 
 1. ``contract``: Output Contract fields are present, and ``type`` is one the schema declares.
@@ -240,6 +240,10 @@ def _build_tree(root: Path) -> None:
         'model_provider TEXT, reasoning_effort TEXT, tokens_used INTEGER, cwd TEXT, '
         'created_at INTEGER, updated_at INTEGER, cli_version TEXT, git_branch TEXT, '
         'approval_mode TEXT, thread_source TEXT, archived INTEGER)')
+    # Two sessions, so --head/--max-items on codex:// have a list to cut (BACK-1604).
+    for n in (1, 2):
+        conn.execute('INSERT INTO threads (id, title, created_at, updated_at, archived) '
+                     'VALUES (?, ?, ?, ?, 0)', (f'fixture-codex-{n}', f'session {n}', n, n))
     conn.commit()
     conn.close()
     (proj / 'app.py').write_text(

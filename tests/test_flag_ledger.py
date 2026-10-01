@@ -100,6 +100,24 @@ def test_a_flag_whose_value_is_already_in_the_query_is_carried():
     assert ledger.unused_flags() == []
 
 
+@pytest.mark.parametrize('query', ['name~=load', 'name=load', '!name=load', 'name~=lo%20ad'])
+def test_a_flag_carried_as_a_filter_is_matched_by_its_parsed_key(query):
+    """reveal f.py --name load routes as ast://f.py?name~=load; parse_qs read the key as
+    'name~', so the flag never matched and drew a false "no effect" note (BACK-1604)."""
+    value = 'lo ad' if '%20' in query else 'load'
+    ledger = _ledger(name=value)
+    with ledger.dispatching(f'f.py?{query}'):
+        assert parse_query_filters(query)
+    assert ledger.unused_flags() == []
+
+
+def test_a_flag_whose_value_differs_from_the_filter_is_still_unused():
+    ledger = _ledger(name='load')
+    with ledger.dispatching('f.py?name~=save'):
+        pass
+    assert ledger.unused_flags() == ['name']
+
+
 def test_a_query_key_no_parser_saw_is_reported_once():
     ledger = _ledger()
     with ledger.dispatching('t.db?bogus=1&name>2&bogus=3'):
@@ -272,7 +290,8 @@ def test_check_on_an_adapter_without_check_is_named(db):
 def test_a_used_flag_gets_no_note(db):
     (db / 'm.py').write_text('def a():\n    pass\n\n\ndef b():\n    pass\n', encoding='utf-8')
     for argv in (('ast://m.py', '--limit', '1'), ('m.py', '--type', 'function'),
-                 ('ast://.', '--exclude', 'x'), ('ast://m.py', '--format', 'json')):
+                 ('ast://.', '--exclude', 'x'), ('ast://m.py', '--format', 'json'),
+                 ('m.py', '--name', 'a'), ('.', '--name', 'a'), ('m.py', '--search', 'a')):  # BACK-1604
         proc = _cli(*argv, cwd=db)
         assert proc.returncode == 0, (argv, proc.stderr)
         assert 'has no effect' not in proc.stderr, (argv, proc.stderr)
