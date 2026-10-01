@@ -283,13 +283,14 @@ a check that counts violations and lets the count only fall. Then the cause is r
 
 **Next, in priority order**
 
-1. **Finish the ratchets.** Most landed on 2026-09-26:
+1. **The ratchets are in place (2026-09-30).** Most landed on 2026-09-26:
    - the walker, parser-import, print/exit and complexity ratchets
      (`scripts/check_boundaries.py`, `scripts/check_complexity.py`);
    - the grammar-coverage test (`tests/test_grammar_coverage.py`);
    - the registry-driven contract harness (`tests/test_output_contract_compliance.py`).
 
-   Still open: POSIX separators on Windows (BACK-1586). Since 2026-09-30 no adapter or
+   Since 2026-09-30 every path in a result is written with `/` on every OS too, and the
+   harness checks it on the Windows CI legs. Since 2026-09-30 no adapter or
    subcommand answers a relative path with an absolute one. Caps with no knob,
    which invariant 7 can't vary, now list everything or record their cut (2026-09-30). Since 2026-09-28 the harness checks that a list the router cuts is
    disclosed, and runs every subcommand through the same result handling (all but `check`,
