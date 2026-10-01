@@ -63,10 +63,7 @@ ENVIRONMENT_NOISE = ('not yet downloaded',)
 # "dynamic dispatch is not resolved", complexity_is_unweighted) are true of every run.
 DRIFT_WARNING = re.compile(r'^unknown_')
 
-KNOWN_VIOLATIONS = {
-    'reveal src/': 'BACK-1591',
-    'reveal python://packages': 'BACK-1591',
-}
+KNOWN_VIOLATIONS: dict = {}
 
 
 def _recipes():

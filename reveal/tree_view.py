@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Generator, List, Optional, Tuple
 from .registry import get_analyzer
+from .reveal_types import CONTRACT_VERSION
 from .utils import format_size
 from .utils.path_utils import DISPLAY, WalkPurpose, _walk_code_files, list_dir, to_posix, walk_filter
 
@@ -195,7 +196,9 @@ def show_file_list_json(path: str, show_hidden: bool = False,
             'size': stat.st_size,
         })
 
-    result: dict = {'path': str(root_path), 'entries': entries}
+    result: dict = {'contract_version': CONTRACT_VERSION, 'type': 'file_list',  # BACK-1591
+                    'source': str(root_path), 'source_type': 'directory',
+                    'path': str(root_path), 'entries': entries}
     if total_count is not None:
         result['total_count'] = total_count
     return result
@@ -536,7 +539,10 @@ def show_directory_tree_json(path: str, options: Optional[TreeViewOptions] = Non
     entries = _walk_directory_json(root_path, depth=options.depth, fast=options.fast,
                                    context=context, hidden=hidden)
 
-    result: dict = {'path': str(root_path), 'name': root_path.name or str(root_path), 'entries': entries}
+    # The Output Contract envelope every other JSON answer carries (BACK-1591).
+    result: dict = {'contract_version': CONTRACT_VERSION, 'type': 'directory_tree',
+                    'source': str(root_path), 'source_type': 'directory',
+                    'path': str(root_path), 'name': root_path.name or str(root_path), 'entries': entries}
     if context['truncated'] > 0:
         result['truncated'] = context['truncated']
 

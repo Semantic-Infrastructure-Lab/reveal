@@ -796,6 +796,25 @@ def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
             scheme or 'unknown', args).emit()
 
 
+def _element_envelope(adapter: Any, result: Any, scheme: str, resource: str) -> Any:
+    """An element result in the Output Contract envelope, as every structure result is.
+
+    `env://HOME` and every `python://<element>` answered bare data: no `type`, no
+    `contract_version` (BACK-1591). The adapter's own fields win; the type defaults to
+    its ELEMENT_RESULT_TYPE, else `<scheme>_element`.
+    """
+    if not isinstance(result, dict) or 'contract_version' in result:
+        return result
+    declared = getattr(type(adapter), 'ELEMENT_RESULT_TYPE', None)
+    envelope = {
+        'contract_version': CONTRACT_VERSION,
+        'type': declared if isinstance(declared, str) else f'{scheme}_element',
+        'source': f'{scheme}://{resource}',
+        'source_type': 'runtime',
+    }
+    return {**envelope, **result}
+
+
 def _element_answer(adapter, renderer_class: type[Any], element: Optional[str],
                     resource: str, args: 'Namespace', scheme: Optional[str] = None) -> Answer:
     element_name = element if element else resource
@@ -807,6 +826,7 @@ def _element_answer(adapter, renderer_class: type[Any], element: Optional[str],
                            scheme or 'unknown', resource or '', type(adapter))
     if result is None:
         _fail_element_not_found(adapter, element_name, section, resource or '', scheme)
+    result = _element_envelope(adapter, result, scheme or 'unknown', resource or '')
 
     # Apply --head/--tail to text-body content (BACK-355).
     # Probe canonical field names; first match wins.

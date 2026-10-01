@@ -670,6 +670,8 @@ reveal --check reveal/adapters/ --select V023
 
 Run `reveal --check reveal/adapters/ --select V023` for a live compliance report. The static table that used to live here became stale faster than it could be maintained and was removed.
 
+Element results (`env://HOME`, `python://packages`, `reveal reveal://<file> <element>`) carry the envelope too: the router fills in `contract_version`, `type` (the adapter's `ELEMENT_RESULT_TYPE`, else `<scheme>_element`), `source` and `source_type` around the adapter's own fields, which win. The directory and `--files` views answer `directory_tree` / `file_list` (BACK-1591).
+
 ---
 
 ## FAQ

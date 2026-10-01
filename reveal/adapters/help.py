@@ -112,7 +112,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'task': 'codebase',
         'description': 'Codebase exploration and understanding',
         'recipes': [
-            {'goal': 'Get project overview', 'query': 'reveal src/', 'description': 'Progressive disclosure: structure first', 'output_type': 'reveal_structure'},
+            {'goal': 'Get project overview', 'query': 'reveal src/', 'description': 'Progressive disclosure: structure first'},  # a directory_tree; file-mode views declare no adapter schema
             {'goal': 'Find entry points', 'query': 'ast://src?name=main*&type=function', 'description': 'Locate main() and main_* entry point functions', 'output_type': 'ast_query'},
             {'goal': 'List all classes', 'query': 'ast://src?type=class&sort=name', 'description': 'Enumerate class hierarchy for structural overview', 'output_type': 'ast_query'},
             {'goal': 'Find complex code', 'query': 'ast://src?complexity>15', 'description': 'Locate high-complexity functions', 'output_type': 'ast_query'},
@@ -240,7 +240,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'recipes': [
             {'goal': 'All environment variables', 'query': 'reveal env://', 'description': 'Full env dump grouped by prefix', 'output_type': 'environment'},
             {'goal': 'Filter env by prefix', 'query': "reveal env:// | grep '^DB'", 'description': 'Show only DB_* variables (env:// takes no query params)', 'output_type': 'environment'},
-            {'goal': 'Python package versions', 'query': 'reveal python://packages', 'description': 'Installed packages with versions', 'output_type': 'python_runtime'},
+            {'goal': 'Python package versions', 'query': 'reveal python://packages', 'description': 'Installed packages with versions', 'output_type': 'python_packages'},
             {'goal': 'Reveal install info', 'query': 'reveal reveal://', 'description': 'Registered analyzers, adapters, rules', 'output_type': 'reveal_structure'},
         ]
     },

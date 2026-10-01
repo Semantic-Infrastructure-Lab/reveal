@@ -123,6 +123,15 @@ _SCHEMA_NOTES = [
 ]
 
 
+
+# Each element's output type, as get_schema() declares them; the rest are python_runtime.
+_ELEMENT_RESULT_TYPES = {
+    'packages': 'python_packages',
+    'module': 'python_module',
+    'doctor': 'python_doctor',
+    'debug': 'python_bytecode',
+}
+
 @register_adapter("python")
 @register_renderer(PythonRenderer)
 class PythonAdapter(ResourceAdapter):
@@ -252,8 +261,11 @@ class PythonAdapter(ResourceAdapter):
         parts = element_name.split("/", 1)
         base = parts[0]
 
-        # Route to handler
-        return self._route_element_handler(base, parts, **kwargs)
+        # Route to handler; the result's type is the one its schema declares (BACK-1591).
+        result = self._route_element_handler(base, parts, **kwargs)
+        if isinstance(result, dict):
+            result.setdefault('type', _ELEMENT_RESULT_TYPES.get(base, 'python_runtime'))
+        return result
 
     def get_available_elements(self) -> List[Dict[str, str]]:
         """Get list of available Python runtime elements.

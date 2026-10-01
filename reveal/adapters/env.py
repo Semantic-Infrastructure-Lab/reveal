@@ -138,6 +138,7 @@ class EnvRenderer:
 class EnvAdapter(ResourceAdapter):
     """Adapter for exploring environment variables via env:// URIs."""
     HELP_CLUSTER = 'Data & Config'
+    ELEMENT_RESULT_TYPE = 'env_variable'  # its schema's element type (BACK-1591)
 
     STABILITY = Stability.STABLE
     ELEMENT_NAMESPACE_ADAPTER = True
