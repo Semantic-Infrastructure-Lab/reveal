@@ -18,7 +18,7 @@ from ..conventions import LanguageConventions, conventions_for, family_for_path
 from ..defaults import TEST_DIR_NAMES, VENDOR_DIR_NAMES
 from ..utils.formatting import cwd_path
 from ..utils import print_json_result
-from ..utils.path_utils import EVIDENCE, walk_tree
+from ..utils.path_utils import EVIDENCE, resolve_project_root, walk_tree
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
 
@@ -133,17 +133,32 @@ def _build_test_name_index(path: Path, families: Optional[Iterable[str]] = None)
     # BACK-1578: an evidence walk -- --exclude narrows which hotspots are reported, not which
     # tests count (check --exclude tests must not mark every hotspot untested). Vendored
     # trees are pruned before descent: their tests cover vendored code, not the project's.
-    for root, dirs, files in walk_tree(path, EVIDENCE):
-        dirs[:] = [d for d in dirs if d not in _SKIP_WALK_DIRS]
-        in_test_dir = any(part in TEST_DIR_NAMES for part in root.relative_to(path).parts)
-        for fname in files:
-            conv = convs.get(family_for_path(fname))
-            if conv is None:
-                continue
-            is_test_file = in_test_dir or any(p.match(fname) for p in conv.test_file_patterns)
-            if is_test_file or conv.colocated_test_symbols:
-                _scan_test_file(names, conv, fname, str(root / fname), is_test_file)
+    for base, is_test_tree in [(path, False)] + [(d, True) for d in _outside_test_dirs(path)]:
+        for root, dirs, files in walk_tree(base, EVIDENCE):
+            dirs[:] = [d for d in dirs if d not in _SKIP_WALK_DIRS]
+            in_test_dir = is_test_tree or any(part in TEST_DIR_NAMES for part in root.relative_to(base).parts)
+            for fname in files:
+                conv = convs.get(family_for_path(fname))
+                if conv is None:
+                    continue
+                is_test_file = in_test_dir or any(p.match(fname) for p in conv.test_file_patterns)
+                if is_test_file or conv.colocated_test_symbols:
+                    _scan_test_file(names, conv, fname, str(root / fname), is_test_file)
     return names
+
+
+def _outside_test_dirs(path: Path) -> List[Path]:
+    """The project root's own test directories that sit outside *path*.
+
+    `reveal hotspots src/pkg` (a src layout) indexed only src/pkg, so the tests in
+    <root>/tests were never seen and every function read "no test found" (BACK-1370).
+    """
+    target = (path if path.is_dir() else path.parent).resolve()
+    root = resolve_project_root(target)
+    if root is None or root == target:
+        return []
+    return [d for d in (root / name for name in sorted(TEST_DIR_NAMES))
+            if d.is_dir() and not d.resolve().is_relative_to(target)]
 
 
 def _is_covered(name: str, loc: str, test_index: Set[str]) -> bool:

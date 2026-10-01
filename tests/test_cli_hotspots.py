@@ -828,3 +828,21 @@ class TestTopZeroMeansAll:
         path = self._tree(tmp_path)
         data = HotspotsAdapter(str(path), 'top=1&functions_only=true').get_structure()
         assert len(data['function_hotspots']) == 1
+
+
+def test_test_index_reaches_the_project_tests_dir_outside_a_src_layout_target(tmp_path):
+    """BACK-1370: `reveal hotspots src/pkg` indexed only src/pkg, so the tests in
+    <root>/tests were never seen and every function read "no test found"."""
+    from reveal.adapters.hotspots import _build_test_name_index
+    (tmp_path / 'pyproject.toml').write_text('[project]\nname = "pkg"\n', encoding='utf-8')
+    pkg = tmp_path / 'src' / 'pkg'
+    pkg.mkdir(parents=True)
+    (pkg / 'mod.py').write_text('def covered():\n    return 1\n\n\ndef lonely():\n    return 2\n',
+                                encoding='utf-8')
+    (tmp_path / 'tests').mkdir()
+    (tmp_path / 'tests' / 'test_mod.py').write_text(
+        'from pkg.mod import covered\n\n\ndef test_covered():\n    assert covered() == 1\n',
+        encoding='utf-8')
+    index = _build_test_name_index(pkg, ['python'])
+    assert 'covered' in index
+    assert 'lonely' not in index

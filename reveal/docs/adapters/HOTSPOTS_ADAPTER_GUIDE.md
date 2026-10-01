@@ -69,6 +69,9 @@ at render time and is not part of the JSON contract.
   quality scoring and `ast://`'s complexity metric for each language.
 - `has_test_hint` is a naming heuristic (does a plausibly-named test exist?)
   — it does not run coverage tooling and can both over- and under-count.
+- The test index covers the scanned path plus the project root's own test
+  directories (`tests/`, `test/`, `spec/`, ...), so `reveal hotspots src/pkg`
+  in a src layout still sees `<root>/tests`.
 
 ## See Also
 
