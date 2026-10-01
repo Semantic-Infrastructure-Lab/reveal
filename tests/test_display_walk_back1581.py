@@ -5,6 +5,7 @@ It replaced display/filtering.PathFilter, a second skip predicate with its own n
 purpose is the analysis walk minus dot entries (as ls and rg) and file droppings.
 """
 import json
+from pathlib import Path
 
 import pytest
 
@@ -74,7 +75,8 @@ def tree(tmp_path, monkeypatch):
 
 def _listed(*args):
     out = _run_reveal_direct('.', '--files', '--format', 'json', *args).stdout
-    return sorted(e['path'] for e in json.loads(out)['entries'])
+    # Windows prints native separators until BACK-1366; compare POSIX spellings
+    return sorted(Path(e['path']).as_posix() for e in json.loads(out)['entries'])
 
 
 def test_files_honor_reveal_ignore_and_path_exclude(tree):

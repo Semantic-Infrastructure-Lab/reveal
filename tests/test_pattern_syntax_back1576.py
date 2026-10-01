@@ -70,7 +70,8 @@ def repo(tmp_path, monkeypatch):
 
 def _ast_files(*args):
     out = _run_reveal_direct('ast://.', '--format', 'json', *args).stdout
-    return sorted({r['file'] for r in json.loads(out)['results']})
+    # Windows prints native separators until BACK-1366; compare POSIX spellings
+    return sorted({Path(r['file']).as_posix() for r in json.loads(out)['results']})
 
 
 def _tree_files(*args):
