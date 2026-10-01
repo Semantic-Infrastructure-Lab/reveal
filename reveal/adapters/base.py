@@ -357,8 +357,9 @@ class ResourceAdapter(ABC):
             return default
 
         if isinstance(result, dict):
+            from reveal.utils.results import echo_source, relabel_truncations
+            echo_source(result, str(resource))  # the sibling's source, as this adapter named it (BACK-1366)
             if cut_as:
-                from reveal.utils.results import relabel_truncations
                 relabel_truncations(result, *cut_as)
             self.fold_meta(result.get('meta'))
 

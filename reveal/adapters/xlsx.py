@@ -16,6 +16,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from ..analyzers.office.openxml import XlsxAnalyzer
 from ..utils import print_json_result
 from ..utils.query import parse_query_params
+from ..utils.path_utils import to_posix
 from ..utils.results import ResultBuilder, note_truncation
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -688,6 +689,8 @@ class XlsxAdapter(ResourceAdapter):
             self.file_path = Path(path_part)
         else:
             self.file_path = Path.cwd() / path_part
+        # Results name the file as the user did, not by its absolute path (BACK-1366).
+        self.file_display = to_posix(path_part)
 
         if not self.file_path.exists():
             raise ValueError(
@@ -796,7 +799,7 @@ class XlsxAdapter(ResourceAdapter):
 
         # Build result data
         result_data = {
-            'file': str(self.file_path),
+            'file': self.file_display,
             'sheets': enhanced_sheets
         }
 
@@ -1573,7 +1576,7 @@ class XlsxAdapter(ResourceAdapter):
                         result_type='xlsx_powerquery',
                         source=self.file_path,
                         data={
-                            'file': str(self.file_path),
+                            'file': self.file_display,
                             'mode': mode,
                             'has_powerquery': False,
                             'queries': [],
@@ -1614,7 +1617,7 @@ class XlsxAdapter(ResourceAdapter):
                         contract_version=CONTRACT_VERSION,
                         result_type='xlsx_names',
                         source=self.file_path,
-                        data={'file': str(self.file_path), 'ranges': []},
+                        data={'file': self.file_display, 'ranges': []},
                     )
                 root = ET.fromstring(zf.read('xl/workbook.xml'))
                 ranges: List[Dict[str, Any]] = []
@@ -1638,7 +1641,7 @@ class XlsxAdapter(ResourceAdapter):
                     contract_version=CONTRACT_VERSION,
                     result_type='xlsx_names',
                     source=self.file_path,
-                    data={'file': str(self.file_path), 'ranges': ranges},
+                    data={'file': self.file_display, 'ranges': ranges},
                 )
         except Exception as e:
             return ResultBuilder.create_error(
@@ -1675,7 +1678,7 @@ class XlsxAdapter(ResourceAdapter):
                         contract_version=CONTRACT_VERSION,
                         result_type='xlsx_connections',
                         source=self.file_path,
-                        data={'file': str(self.file_path), 'mode': mode, 'connections': []},
+                        data={'file': self.file_display, 'mode': mode, 'connections': []},
                     )
                 root = ET.fromstring(zf.read('xl/connections.xml'))
                 connections: List[Dict[str, Any]] = []
@@ -1697,7 +1700,7 @@ class XlsxAdapter(ResourceAdapter):
                     contract_version=CONTRACT_VERSION,
                     result_type='xlsx_connections',
                     source=self.file_path,
-                    data={'file': str(self.file_path), 'mode': mode, 'connections': connections},
+                    data={'file': self.file_display, 'mode': mode, 'connections': connections},
                 )
         except Exception as e:
             return ResultBuilder.create_error(
@@ -1727,7 +1730,7 @@ class XlsxAdapter(ResourceAdapter):
                         contract_version=CONTRACT_VERSION,
                         result_type='xlsx_powerpivot',
                         source=self.file_path,
-                        data={'file': str(self.file_path), 'has_model': False, 'mode': mode},
+                        data={'file': self.file_display, 'has_model': False, 'mode': mode},
                     )
 
                 xmla_item = self._find_xmla_item(zf)

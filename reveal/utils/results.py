@@ -197,6 +197,29 @@ def slice_structure(structure: Any, head: Optional[int] = None, tail: Optional[i
     return present
 
 
+def echo_source(result: Any, spelling: Union[str, Path, None]) -> None:
+    """Report a result's ``source`` the way whoever asked for it named the target (BACK-1366).
+
+    Adapters that resolve their target reported ``source`` as the absolute path, so
+    ``stats://proj`` said ``/home/<user>/.../proj`` where ``ast://proj`` says ``proj``. Each
+    place that hands a result back to the one who named the resource calls this: the URI
+    router, ``ResourceAdapter.compose`` for a sibling's nested result, and the subcommand
+    emitter. A ``source`` that isn't the target or under it is left alone: for a resource
+    that isn't a path (``claude://sessions``) it names something else.
+    """
+    from reveal.utils.path_utils import as_spelled
+
+    source = result.get('source') if isinstance(result, dict) else None
+    if not (isinstance(source, str) and spelling and Path(source).is_absolute()):
+        return
+    try:
+        target, found = Path(spelling).expanduser().resolve(), Path(source).resolve()
+    except (OSError, RuntimeError):
+        return
+    if found == target or target in found.parents:
+        result['source'] = as_spelled(source, spelling)
+
+
 def truncations_of(result: Any) -> List[Dict[str, Any]]:
     """The lists a result says were cut: its ``truncated`` meta warnings (``note_truncation``)."""
     meta = result.get('meta') if isinstance(result, dict) else None

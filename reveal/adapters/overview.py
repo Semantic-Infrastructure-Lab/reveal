@@ -26,7 +26,7 @@ from ..utils.formatting import cwd_path
 from ..utils import print_json_result
 from ..utils.exclusions import exclusion_scope
 from ..utils.gitignore import respect_gitignore_param
-from ..utils.path_utils import is_test_path
+from ..utils.path_utils import as_spelled, is_test_path
 from ..utils.query import parse_query_params
 from ..utils.query_parser import join_exclude_patterns, split_exclude_param
 from ..utils.results import ResultBuilder
@@ -481,7 +481,8 @@ def _render_git_log(history: List[Dict[str, Any]], foreign_root: Optional[str] =
         return
     print("\nRecent changes")
     if foreign_root:
-        print(f"  ⚠ this directory has no .git of its own — history is from the enclosing repo {foreign_root}")
+        # foreign_root is spelled from the cwd (BACK-1366), so it can be '.' or '../..'.
+        print(f"  ⚠ this directory has no .git of its own — history is from the enclosing repo at '{foreign_root}'")
     for commit in history:
         ts = commit.get('timestamp')
         age = _age_label(ts)
@@ -677,7 +678,8 @@ class OverviewAdapter(ResourceAdapter):
         git_foreign_root: Optional[Path] = None
         if git_log:
             git_root = _resolve_git_root(path)
-            if git_root is not None and git_root != path:
+            # Compare resolved: 'overview://.' at a repo root is not foreign to itself.
+            if git_root is not None and git_root.resolve() != path.resolve():
                 git_foreign_root = git_root
         complex_fns = _run_complex_functions(self, path, top)
         architecture = {} if no_imports else _run_imports_analysis(self, path)
@@ -688,7 +690,7 @@ class OverviewAdapter(ResourceAdapter):
             'path': str(path),
             'stats': stats,
             'git_log': git_log,
-            'git_foreign_root': str(git_foreign_root) if git_foreign_root else None,
+            'git_foreign_root': as_spelled(git_foreign_root, path) if git_foreign_root else None,
             'complex_functions': complex_fns,
             'architecture': architecture,
             'scope': _run_scope(self, path),

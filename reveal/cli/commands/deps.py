@@ -105,7 +105,7 @@ def _summarize_base_files(result: dict) -> dict:
 
 def run_deps(args: Namespace) -> None:
     """Run the dependency dashboard."""
-    path = Path(args.path).resolve()
+    path = Path(args.path)  # as the user named it, like the URI form (BACK-1366)
     if not path.exists():
         print(f"Error: path '{args.path}' does not exist", file=sys.stderr)
         sys.exit(1)

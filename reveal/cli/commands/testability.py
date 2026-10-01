@@ -83,7 +83,7 @@ def create_testability_parser() -> argparse.ArgumentParser:
 
 
 def run_testability(args: Namespace) -> None:
-    path = Path(args.path).resolve()
+    path = Path(args.path)  # as the user named it, like the URI form (BACK-1366)
     if not path.exists():
         print(f"reveal testability: path not found: {path}", file=sys.stderr)
         sys.exit(1)

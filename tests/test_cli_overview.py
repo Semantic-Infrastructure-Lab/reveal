@@ -1,6 +1,7 @@
 """Tests for reveal overview subcommand."""
 
 import json
+import os
 import sys
 import time
 import unittest
@@ -847,6 +848,23 @@ class TestRunOverview(unittest.TestCase):
                     patch('reveal.adapters.overview._resolve_git_root', return_value=own_root):
                 out = _capture(run_overview, _args(path=tmp))
                 self.assertNotIn('enclosing repo', out)
+
+    def test_repo_root_named_relatively_is_not_foreign(self):
+        """'overview://.' at a repo root said it had no .git of its own and named itself as
+        the enclosing repo: the resolved git root was compared with the unresolved '.'."""
+        import tempfile
+        p_stats, p_git, p_ast, p_arch = self._patch_runners()
+        with tempfile.TemporaryDirectory() as tmp:
+            own_root = Path(tmp).resolve()
+            cwd = os.getcwd()
+            os.chdir(own_root)
+            try:
+                with p_stats, p_git, p_ast, p_arch, \
+                        patch('reveal.adapters.overview._resolve_git_root', return_value=own_root):
+                    report = OverviewAdapter('.', 'no_imports=true').get_structure()
+            finally:
+                os.chdir(cwd)
+            self.assertIsNone(report['git_foreign_root'])
 
     def test_foreign_git_root_in_json_output(self):
         import tempfile

@@ -75,7 +75,7 @@ def tree(tmp_path, monkeypatch):
 
 def _listed(*args):
     out = _run_reveal_direct('.', '--files', '--format', 'json', *args).stdout
-    # Windows prints native separators until BACK-1366; compare POSIX spellings
+    # Windows prints native separators until BACK-1586; compare POSIX spellings
     return sorted(Path(e['path']).as_posix() for e in json.loads(out)['entries'])
 
 

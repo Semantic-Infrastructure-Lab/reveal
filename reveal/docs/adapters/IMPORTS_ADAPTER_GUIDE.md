@@ -195,7 +195,7 @@ reveal 'imports://src?unused' --format=json
 {
   "contract_version": "1.0",
   "type": "unused_imports",
-  "source": "/home/user/projects/myproject/src",
+  "source": "src",
   "source_type": "directory",
   "count": 12,
   "unused": [
@@ -292,7 +292,7 @@ reveal 'imports://src?circular' --format=json
 {
   "contract_version": "1.0",
   "type": "circular_dependencies",
-  "source": "/home/user/projects/myproject/src",
+  "source": "src",
   "source_type": "directory",
   "count": 3,
   "cycles": [
@@ -351,7 +351,7 @@ reveal 'imports://src?rank=fan-in&top=20'
 **Returns** (~200 tokens):
 
 ```
-Fan-in ranking: /home/user/projects/myproject/src
+Fan-in ranking: src
 Files: 10 of 45  (fan-in = number of files that import this file)
 
   FILE                            FAN-IN   FAN-OUT
@@ -394,12 +394,12 @@ reveal 'imports://src?rank=fan-in' --format=json
 {
   "contract_version": "1.0",
   "type": "fan_in_ranking",
-  "source": "/home/user/projects/myproject/src",
+  "source": "src",
   "source_type": "directory",
   "total": 45,
   "entries": [
-    { "file": "/home/user/projects/myproject/src/db/session.py", "fan_in": 18, "fan_out": 2 },
-    { "file": "/home/user/projects/myproject/src/utils/__init__.py", "fan_in": 15, "fan_out": 3 }
+    { "file": "db/session.py", "fan_in": 18, "fan_out": 2 },
+    { "file": "utils/__init__.py", "fan_in": 15, "fan_out": 3 }
   ],
   "metadata": { "total_imports": 238, "total_files": 45, "has_cycles": false }
 }
@@ -695,7 +695,7 @@ reveal 'imports://src?unused' | grep "api/"
 {
   "contract_version": "1.0",
   "type": "import_summary",
-  "source": "/home/user/projects/myproject/src",
+  "source": "src",
   "source_type": "directory",
   "metadata": {
     "total_files": 45,
@@ -715,7 +715,7 @@ reveal 'imports://src?unused' | grep "api/"
 {
   "contract_version": "1.0",
   "type": "unused_imports",
-  "source": "/home/user/projects/myproject/src",
+  "source": "src",
   "source_type": "directory",
   "count": 12,
   "unused": [
@@ -754,7 +754,7 @@ imports, `TYPE_CHECKING` imports and `__init__.py` re-exports.
 {
   "contract_version": "1.0",
   "type": "circular_dependencies",
-  "source": "/home/user/projects/myproject/src",
+  "source": "src",
   "source_type": "directory",
   "count": 3,
   "cycles": [
@@ -782,7 +782,7 @@ last node. `count` = number of distinct groups, not simple paths.
 {
   "contract_version": "1.0",
   "type": "layer_violations",
-  "source": "/home/user/projects/myproject/src",
+  "source": "src",
   "source_type": "directory",
   "count": 5,
   "violations": [
@@ -809,13 +809,13 @@ last node. `count` = number of distinct groups, not simple paths.
 {
   "contract_version": "1.0",
   "type": "fan_in_ranking",
-  "source": "/home/user/projects/myproject/src",
+  "source": "src",
   "source_type": "directory",
   "total": 45,
   "entries": [
-    { "file": "/home/user/projects/myproject/src/db/session.py", "fan_in": 18, "fan_out": 2 },
-    { "file": "/home/user/projects/myproject/src/utils/__init__.py", "fan_in": 15, "fan_out": 3 },
-    { "file": "/home/user/projects/myproject/src/main.py", "fan_in": 0, "fan_out": 3 }
+    { "file": "db/session.py", "fan_in": 18, "fan_out": 2 },
+    { "file": "utils/__init__.py", "fan_in": 15, "fan_out": 3 },
+    { "file": "main.py", "fan_in": 0, "fan_out": 3 }
   ],
   "metadata": {
     "total_imports": 238,
@@ -841,13 +841,13 @@ last node. `count` = number of distinct groups, not simple paths.
 {
   "contract_version": "1.0",
   "type": "entrypoints",
-  "source": "/home/user/projects/myproject/src",
+  "source": "src",
   "source_type": "directory",
   "total_scanned": 45,
   "entries": [
-    { "file": "/home/user/projects/myproject/src/main.py", "fan_out": 8 },
-    { "file": "/home/user/projects/myproject/src/cli.py", "fan_out": 3 },
-    { "file": "/home/user/projects/myproject/src/legacy_util.py", "fan_out": 0 }
+    { "file": "main.py", "fan_out": 8 },
+    { "file": "cli.py", "fan_out": 3 },
+    { "file": "legacy_util.py", "fan_out": 0 }
   ]
 }
 ```
@@ -869,12 +869,12 @@ last node. `count` = number of distinct groups, not simple paths.
 {
   "contract_version": "1.0",
   "type": "components",
-  "source": "/home/user/projects/myproject/src",
+  "source": "src",
   "source_type": "directory",
   "total": 8,
   "components": [
     {
-      "component": "/home/user/projects/myproject/src/utils",
+      "component": "utils",
       "files": 4,
       "internal": 6,
       "outgoing": 0,
@@ -883,13 +883,13 @@ last node. `count` = number of distinct groups, not simple paths.
       "top_bridge": null
     },
     {
-      "component": "/home/user/projects/myproject/src/api",
+      "component": "api",
       "files": 12,
       "internal": 8,
       "outgoing": 14,
       "incoming": 3,
       "cohesion": 0.364,
-      "top_bridge": "/home/user/projects/myproject/src/api/router.py"
+      "top_bridge": "api/router.py"
     }
   ]
 }

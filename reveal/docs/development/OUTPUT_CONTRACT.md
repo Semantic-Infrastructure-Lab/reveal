@@ -78,6 +78,20 @@ Every adapter/analyzer output MUST include these fields:
   - Database: `"localhost:3306/mydb"`
   - Runtime: `"env://"`
   - URL: `"https://api.example.com"`
+- **Paths are spelled as the user named the target** (BACK-1366): `stats://src` and
+  `reveal stats src` both report `"source": "src"`, never the resolved
+  `/home/<user>/.../src`, and an absolute input stays absolute. Separators are `/` on
+  every OS. The URI router, `ResourceAdapter.compose` (for a composed sibling's
+  `source`) and the subcommand emitter apply this once, through
+  `reveal.utils.results.echo_source`; an adapter that emits other paths it found spells
+  them with `reveal.utils.path_utils.as_spelled`. Paths inside a result are either
+  relative to `source` (`imports://` files) or spelled from the cwd like `source` itself
+  (`ast://`, `markdown://`'s `path`, suggested `next_commands`), so a consumer can always
+  resolve them from where it ran reveal. Kept on purpose (BACK-1216): `pack://`'s per-file
+  `path` is a drill-back anchor, and `depends://`'s warnings name the absolute scan root
+  that climbed. The contract harness
+  (`tests/test_output_contract_compliance.py`, invariant `abs_path`) runs every
+  registered adapter and subcommand on a relative path and fails on any absolute one.
 
 **`source_type`** (required)
 - **Type**: String (enum)

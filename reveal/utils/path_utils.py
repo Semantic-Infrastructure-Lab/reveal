@@ -388,6 +388,41 @@ def to_relative_display(file_str: Union[str, PurePath], base_path: Union[str, Pa
         return to_posix(file_str)
 
 
+def as_spelled(path: Union[str, PurePath], spelling: Union[str, PurePath]) -> str:
+    """``path`` written the way the user wrote the target, ``spelling`` (BACK-1366).
+
+    The user named a target as ``proj``, ``./src``, ``../lib``, ``~/x`` or an absolute
+    path. An adapter that resolves it to reach the filesystem reports what it found in that
+    form: ``spelling`` for the target itself, ``spelling/<rel>`` under it. That is how ast://
+    and calls:// already answer; the ones that emitted ``str(resolved)`` leaked the host's
+    layout, and their paths weren't ones the user could type.
+
+    A relative spelling is relative to the cwd, so a path outside the target (a git root
+    above it, a tests/ dir beside it) is written relative to the cwd too. With an absolute
+    spelling, or across Windows drives, a path outside the target is returned as given,
+    with POSIX separators. Call it on paths the answer found in the user's tree; a value
+    that only looks like one (a home-dir data store) is not this helper's to rewrite.
+    """
+    spelled = to_posix(spelling).rstrip('/') or '/'
+    try:
+        base = Path(spelling).expanduser().resolve()
+        found = Path(path).expanduser()
+        found = (found if found.is_absolute() else Path.cwd() / found).resolve()
+    except (OSError, RuntimeError):
+        return to_posix(path)
+    if found == base or base in found.parents:
+        rel = found.relative_to(base).as_posix()
+        if rel == '.':
+            return spelled
+        return rel if spelled in ('.', '') else f"{spelled}/{rel}"
+    if not Path(spelling).expanduser().is_absolute():
+        try:
+            return Path(os.path.relpath(found, Path.cwd().resolve())).as_posix()
+        except ValueError:  # another drive on Windows
+            pass
+    return to_posix(path)
+
+
 def to_posix(path: Union[str, PurePath]) -> str:
     """Serialize a path with forward slashes on every OS.
 

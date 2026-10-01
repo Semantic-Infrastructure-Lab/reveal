@@ -29,6 +29,7 @@ from typing import Any, Callable, Dict, Union
 from ...display.formatting import print_truncations
 from ...utils.exclusions import dispatch_scope, exclusion_scope
 from ...utils.json_utils import attach_provenance
+from ...utils.path_utils import to_posix
 from ...utils.results import add_cli_contract_fields, outcome_of
 from .ledger import FlagLedger, peek
 
@@ -72,8 +73,8 @@ def emit_subcommand_result(result: Dict[str, Any], args: Namespace, *, name: str
     ``reveal hotspots`` never had said so, while their URI forms did (BACK-1544).
 
     - JSON: the result under the subcommand's own envelope (``type`` = *name*, ``source``
-      = *source*), keeping the adapter's ``contract_version`` and ``meta``, where a cut is
-      already recorded.
+      = *source* as the user named it, POSIX -- BACK-1366), keeping the adapter's
+      ``contract_version`` and ``meta``, where a cut is already recorded.
     - Other formats: ``render(result)``, then each cut list once (``print_truncations``).
     - A failed result (top-level ``error``) is reported on stderr and exits 1, after the
       output, as the URI form does.
@@ -88,7 +89,7 @@ def emit_subcommand_result(result: Dict[str, Any], args: Namespace, *, name: str
         report = {k: v for k, v in result.items() if k not in _ADAPTER_IDENTITY_KEYS}
         print(json.dumps(
             attach_provenance(add_cli_contract_fields(
-                report, result_type=name, source=source, source_type=source_type,
+                report, result_type=name, source=to_posix(source), source_type=source_type,
             )),
             indent=2, default=str,
         ))

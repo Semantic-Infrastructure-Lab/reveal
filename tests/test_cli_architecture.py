@@ -808,12 +808,13 @@ class TestJsonFormatDoesNotLeakAbsolutePaths(unittest.TestCase):
                 self.assertFalse(risk['file'].startswith(root), risk['file'])
             if risk.get('representative'):
                 self.assertFalse(risk['representative'].startswith(root), risk['representative'])
-        # Per-file suggested commands must be relative; whole-directory
-        # commands (containing a URI scheme) legitimately reuse the root
-        # already exposed via 'path'/'source'.
-        for cmd in data['next_commands']:
-            if '://' not in cmd:
-                self.assertNotIn(root, cmd, cmd)
+        # Suggested commands name paths as the user named the target, so they run from
+        # the cwd (BACK-1366): this target was named absolutely, so a per-file command
+        # is too -- a bare 'main.py' didn't run from anywhere but the target.
+        file_cmds = [cmd for cmd in data['next_commands'] if '://' not in cmd]
+        self.assertTrue(file_cmds, data['next_commands'])
+        for cmd in file_cmds:
+            self.assertIn(f'{Path(tmp).as_posix()}/', cmd, cmd)
 
 
 # ── --against integration (BACK-441) ────────────────────────────────────────

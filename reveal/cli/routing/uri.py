@@ -17,8 +17,8 @@ from ...errors import NotApplicableError
 from ...reveal_types import CONTRACT_VERSION, RevealResult
 from ...utils import print_json_result, write_also_json
 from ...display.formatting import print_truncations
-from ...utils.results import (ResultBuilder, note_truncation, outcome_of, slice_items,
-                             truncations_of)
+from ...utils.results import (ResultBuilder, echo_source, note_truncation, outcome_of,
+                             slice_items, truncations_of)
 from .flag_specs import exclude_fragment, inject_query_flags, strip_result_control_keys
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
 from .formats import declared_output_formats, require_supported_format
@@ -1041,6 +1041,8 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
         result = _call_adapter(lambda: adapter.post_process(processed, args),
                                scheme_name, source, type(adapter))
 
+    _echo_source(result, type(adapter), resource)
+
     # Add available elements if adapter supports discovery
     if hasattr(adapter, 'get_available_elements'):
         available_elements = adapter.get_available_elements()
@@ -1050,6 +1052,13 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
     return Answer(result, 'structure',
                   lambda: _emit_result(result, args, scheme, renderer_class.render_structure,
                                        **_render_structure_top_kwargs(renderer_class, args)))
+
+
+def _echo_source(result: Any, adapter_class: type, resource: Optional[str]) -> None:
+    """Report ``source`` as the user named the target, for every adapter (BACK-1366)."""
+    spelled = (resource or '').partition('?')[0]
+    resource_path = getattr(adapter_class, 'resource_path', None)  # calls:// path:name
+    echo_source(result, resource_path(spelled) if resource_path and spelled else spelled)
 
 
 def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render, **render_kwargs) -> None:

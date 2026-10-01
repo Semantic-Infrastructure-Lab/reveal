@@ -8,6 +8,7 @@ from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...utils.query import parse_query_filters, parse_result_control, ResultControl
 from ...utils.results import ResultBuilder
 from ...utils.validation import require_directory
+from ...utils.path_utils import as_spelled
 
 from .renderer import MarkdownRenderer
 from .help import get_schema, get_help
@@ -223,6 +224,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
                 f"To read a single markdown file, use: reveal {clean_path}"
             )
         self.base_path = require_directory(resolved, f"markdown:// directory '{clean_path}'")
+        self.spelling = clean_path or '.'  # how results name paths (BACK-1366)
         self.query = query
 
         # Parse result control (sort, limit, offset) and get cleaned query
@@ -353,6 +355,10 @@ class MarkdownQueryAdapter(ResourceAdapter):
             self.explain,
         )
         result.update(contract_version=CONTRACT_VERSION, source_type='directory')
+        # Paths as the user named the directory, not its resolved location (BACK-1366).
+        result['base_path'] = as_spelled(self.base_path, self.spelling)
+        for item in result.get('results', []):
+            item['path'] = as_spelled(item['path'], self.spelling)
         return result
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:

@@ -24,7 +24,10 @@ proves nothing about the adapter's normal output. Invariants:
    (``cli/routing/uri._emit_result``); the fixture runs below are normally clean, so
    the error paths themselves are pinned in ``tests/test_result_outcome.py``.
 4. ``abs_path``: no string in the result contains the fixture root's absolute path. The
-   input was relative, so an absolute path is a leak (BACK-1366).
+   input was relative, so an absolute path is a leak (BACK-1366). The subcommand forms are held to the same rule (``subcommand_abs_path``):
+   their runners resolved the target before the adapter saw it, so ``reveal trace proj``
+   leaked every frame's file where ``trace://proj`` leaked none.
+   ``test_the_abs_path_invariant_bites`` checks that an absolute input is still caught.
 5. ``truncation``: every list that ``--head 1`` makes shorter is disclosed as a
    ``truncated`` meta warning naming it (``note_truncation``), and the text render prints
    it (BACK-1059). A cut list must not read as the whole answer.
@@ -143,14 +146,6 @@ MISSING_URIS = {
 }
 
 KNOWN_VIOLATIONS = {
-    ('abs_path', 'architecture'): 'BACK-1366',
-    ('abs_path', 'deps'): 'BACK-1366',
-    ('abs_path', 'imports'): 'BACK-1366',
-    ('abs_path', 'markdown'): 'BACK-1366',
-    ('abs_path', 'overview'): 'BACK-1366',
-    ('abs_path', 'stats'): 'BACK-1366',
-    ('abs_path', 'testability'): 'BACK-1366',
-    ('abs_path', 'xlsx'): 'BACK-1366',
     ('subcommand', 'check'): 'BACK-1545',
 }
 
@@ -499,8 +494,8 @@ def test_every_registered_adapter_is_covered():
 def test_known_violations_name_real_cases():
     for invariant, scheme in KNOWN_VIOLATIONS:
         assert invariant in ('contract', 'missing', 'error_exit', 'abs_path', 'truncation',
-                             'subcommand', 'own_cap', 'failure')
-        assert scheme in (SUBCOMMAND_ARGV if invariant == 'subcommand' else FIXTURE_URIS)
+                             'subcommand', 'subcommand_abs_path', 'own_cap', 'failure')
+        assert scheme in (SUBCOMMAND_ARGV if invariant.startswith('subcommand') else FIXTURE_URIS)
 
 
 # -- invariants ------------------------------------------------------------------------
@@ -581,9 +576,30 @@ def test_the_failure_invariant_bites(harness):
     'abs_path', sorted(s for s, uri in FIXTURE_URIS.items() if '://proj' in uri)))
 def test_no_absolute_fixture_path_in_result(harness, scheme):
     _, payload, _ = harness.run_fixture(scheme)
-    leaks = [(where, value) for where, value in _strings(payload)
-             if any(needle in value for needle in harness.needles)]
+    leaks = _path_leaks(harness, payload)
     assert not leaks, f'{scheme}: absolute path in a result for a relative input: {leaks[:3]}'
+
+
+def _path_leaks(harness, payload):
+    """Strings naming the fixture by its absolute path (BACK-1366). Native Windows
+    separators are BACK-1586: ast:// still prints them, which only Windows CI shows."""
+    return [(where, value) for where, value in _strings(payload)
+            if any(needle in value for needle in harness.needles)]
+
+
+@pytest.mark.parametrize('name', _cases('subcommand_abs_path', sorted(SUBCOMMAND_ARGV)))
+def test_no_absolute_fixture_path_in_subcommand_result(harness, name):
+    _, out, _, _ = harness.run_subcommand(name, *SUBCOMMAND_ARGV[name], '--format', 'json')
+    leaks = _path_leaks(harness, json.loads(out))
+    assert not leaks, f'reveal {name}: absolute path in a result for a relative input: {leaks[:3]}'
+
+
+def test_the_abs_path_invariant_bites(harness):
+    """Positive control: named by its absolute path, the target comes back that way, and
+    the check above sees it -- so a clean relative run is not a needle that never matches."""
+    absolute = str(harness.root / 'proj')
+    _, out, _, _ = harness.run_subcommand('overview', absolute, '--format', 'json')
+    assert _path_leaks(harness, json.loads(out))
 
 
 def _cut_lists(full, cut):

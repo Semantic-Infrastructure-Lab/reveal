@@ -60,7 +60,7 @@ def create_trace_parser() -> argparse.ArgumentParser:
 
 
 def run_trace(args: Namespace) -> None:
-    path = Path(args.path).resolve()
+    path = Path(args.path)  # as the user named it, like the URI form (BACK-1366)
     if not path.exists():
         print(f"reveal trace: path not found: {path}", file=sys.stderr)
         sys.exit(1)

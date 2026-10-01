@@ -205,7 +205,7 @@ class TestabilityAdapter(ResourceAdapter):
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
         from reveal.testability.report import build_testability_report
-        from reveal.utils.path_utils import detect_non_python_language
+        from reveal.utils.path_utils import as_spelled, detect_non_python_language
 
         path = Path(self.path)
         tests_param = self.query_params.get('tests')
@@ -229,6 +229,8 @@ class TestabilityAdapter(ResourceAdapter):
             min_categories=max(1, min_categories),
             include_unresolved=include_unresolved,
         )
+        # The tests dirs found were resolved; name them as the user named the target (BACK-1366).
+        report['tests'] = [as_spelled(p, self.path) for p in test_paths]
 
         # When no patches were found, check whether the test suite is
         # non-Python (patch pressure is Python-only) so the renderer can

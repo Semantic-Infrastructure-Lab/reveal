@@ -14,6 +14,7 @@ from reveal.utils.path_utils import (
     detect_non_python_language,
     to_posix,
     to_relative_display,
+    as_spelled,
     is_unsafe_scan_root,
     is_noise_dir,
     is_test_dir,
@@ -827,6 +828,42 @@ class TestToPosix:
     def test_output_never_contains_backslash(self):
         # The core contract: output is portable regardless of input separator.
         assert "\\" not in to_posix("a\\b\\c\\d.py")
+
+
+class TestAsSpelled:
+    """as_spelled() (BACK-1366): a path the answer found, written the way the user
+    named the target, so it can be pasted from the cwd and doesn't leak the host's layout."""
+
+    @pytest.fixture
+    def tree(self, tmp_path, monkeypatch):
+        (tmp_path / "proj" / "src").mkdir(parents=True)
+        (tmp_path / "proj" / "tests").mkdir()
+        monkeypatch.chdir(tmp_path)
+        return tmp_path.resolve()
+
+    def test_the_target_itself_is_its_spelling(self, tree):
+        assert as_spelled(tree / "proj", "proj") == "proj"
+        assert as_spelled(tree / "proj", "./proj/") == "./proj"
+
+    def test_a_path_under_the_target_extends_the_spelling(self, tree):
+        assert as_spelled(tree / "proj" / "src" / "a.py", "proj") == "proj/src/a.py"
+        assert as_spelled(tree / "proj" / "src" / "a.py", ".") == "proj/src/a.py"
+
+    def test_relative_input_paths_resolve_against_the_cwd(self, tree):
+        assert as_spelled("proj/src", "proj") == "proj/src"
+
+    def test_outside_a_relative_target_is_relative_to_the_cwd(self, tree):
+        """A tests/ dir beside the target, or a git root above it."""
+        assert as_spelled(tree / "proj" / "tests", "proj/src") == "proj/tests"
+        assert as_spelled(tree, "proj") == "."
+
+    def test_an_absolute_spelling_stays_absolute(self, tree):
+        spelled = (tree / "proj").as_posix()
+        assert as_spelled(tree / "proj" / "src", spelled) == f"{spelled}/src"
+        assert as_spelled(tree / "proj" / "tests", f"{spelled}/src") == f"{spelled}/tests"
+
+    def test_windows_spelling_comes_back_posix(self):
+        assert as_spelled(PureWindowsPath(r"C:\x\a.py"), PureWindowsPath(r"C:\x")).count("\\") == 0
 
 
 class TestToRelativeDisplay:

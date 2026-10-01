@@ -12,7 +12,8 @@ from reveal.utils.results import (
     ResultBuilder,
     create_result,
     create_error_result,
-    create_meta
+    create_meta,
+    echo_source,
 )
 
 # BACK-1149: guards an internal invariant/output-contract (registry, schema, or cross-module consistency)
@@ -549,3 +550,29 @@ class TestContractVersionSingleSource:
             f"Found raw '1.1' contract_version literal(s) instead of "
             f"reveal.reveal_types.CONTRACT_VERSION in: {offenders}"
         )
+
+
+class TestEchoSource:
+    """echo_source() (BACK-1366): source is reported as the user named the target."""
+
+    def test_a_resolved_source_takes_the_spelling(self, tmp_path, monkeypatch):
+        (tmp_path / "proj").mkdir()
+        monkeypatch.chdir(tmp_path)
+        result = {'source': str((tmp_path / "proj").resolve())}
+        echo_source(result, "proj")
+        assert result['source'] == "proj"
+
+    def test_a_source_outside_the_target_is_not_rewritten(self, tmp_path, monkeypatch):
+        """A non-path resource (claude://sessions) whose source is a data store elsewhere."""
+        (tmp_path / "cwd").mkdir()
+        monkeypatch.chdir(tmp_path / "cwd")
+        store = str(tmp_path / "store")
+        result = {'source': store}
+        echo_source(result, "sessions")
+        assert result['source'] == store
+
+    def test_a_relative_source_or_no_spelling_is_left_alone(self):
+        result = {'source': 'proj'}
+        echo_source(result, None)
+        echo_source(result, 'other')
+        assert result['source'] == 'proj'

@@ -20,6 +20,7 @@ from typing import Optional, List, Dict, TYPE_CHECKING
 from ..utils.path_utils import (
     ScopeCensus,
     _language_for_path,
+    as_spelled,
     _walk_code_files,
     tally_files_by_language,
     to_posix,
@@ -697,7 +698,8 @@ def _handle_no_files_found(directory: Path, output_format: str) -> None:
             }
         }
         print(json.dumps(
-            attach_provenance(add_cli_contract_fields(result, result_type='check', source=directory, source_type='directory')),
+            attach_provenance(add_cli_contract_fields(result, result_type='check', source=to_posix(directory),
+                                                    source_type='directory')),
             indent=2,
         ))
     else:
@@ -1247,7 +1249,9 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     """
     # Resolve to absolute so all downstream paths are absolute and can be
     # expressed relative to CWD (matching ruff/mypy/flake8 path behavior).
+    named = directory
     directory = directory.resolve()
+    shown = as_spelled(directory, named)  # the envelope names it as the user did (BACK-1366)
 
     # Build CLI overrides and initialize config
     cli_overrides = _build_cli_overrides(args)
@@ -1263,7 +1267,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     # Handle no files found
     output_format = getattr(args, 'format', 'text')
     if not files_to_check:
-        _handle_no_files_found(directory, output_format)
+        _handle_no_files_found(Path(shown), output_format)
         return
 
     # Parse select/ignore options
@@ -1291,7 +1295,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         files_degraded = sum(1 for fr in file_results if fr.get("status") == "warning")
         _print_json_output(
             file_results, len(files_to_check), files_with_issues, total_issues,
-            scope=collection.to_scope_census(), source=directory,
+            scope=collection.to_scope_census(), source=shown,
             select=select, ignore=ignore, files_errored=files_errored,
             scan_disclosures=scan_disclosures_all(),
             exit_zero=getattr(args, 'exit_zero', False),

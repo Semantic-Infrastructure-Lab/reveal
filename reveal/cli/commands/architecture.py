@@ -89,14 +89,14 @@ def create_architecture_parser() -> argparse.ArgumentParser:
 
 
 def run_architecture(args: Namespace) -> None:
-    path = Path(args.path).resolve()
+    path = Path(args.path)  # as the user named it, like the URI form (BACK-1366)
     if not path.exists():
         print(f"Error: path '{args.path}' does not exist", file=sys.stderr)
         sys.exit(1)
 
     against = getattr(args, 'against', None)
     if against:
-        _run_architecture_diff(path, against, args)
+        _run_architecture_diff(path.resolve(), against, args)
         return
 
     # BACK-1362: --verbose was declared (inherited from the global options

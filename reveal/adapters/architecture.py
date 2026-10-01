@@ -245,28 +245,38 @@ def _build_next_commands(
     risks: List[Dict[str, Any]],
     imports_data: Dict[str, Any],
 ) -> List[str]:
+    """Commands to run next, from the user's cwd: paths as they named the target (BACK-1366).
+
+    ``risks[].file`` is relative to the target by now (``_relativize_risks``), so a file
+    command is spelled under ``path``; the bare file name didn't run from the cwd.
+    """
+    from ..utils.path_utils import as_spelled
+
     cmds: List[str] = []
-    abs_path = str(path.resolve())
+    target = as_spelled(path, path)
+
+    def file_arg(rel: str) -> str:
+        return as_spelled(path / rel, path)
 
     if any(r['type'] == 'circular' for r in risks):
-        cmds.append(f"reveal 'imports://{abs_path}?circular'")
+        cmds.append(f"reveal 'imports://{target}?circular'")
 
     cx_entries = [r for r in risks if r['type'] == 'high_complexity_entry']
     if cx_entries:
         worst = max(cx_entries, key=lambda r: r.get('complexity', 0))
-        cmds.append(f"reveal {worst['file']} --boundary")
+        cmds.append(f"reveal {file_arg(worst['file'])} --boundary")
 
     if imports_data.get('core_abstractions'):
-        cmds.append(f"reveal 'ast://{abs_path}?complexity>20'")
+        cmds.append(f"reveal 'ast://{target}?complexity>20'")
 
     lb = [r for r in risks if r['type'] == 'load_bearing']
     if lb:
         top_lb = max(lb, key=lambda r: r.get('fan_in', 0))
-        cmds.append(f"reveal {top_lb['file']}")
+        cmds.append(f"reveal {file_arg(top_lb['file'])}")
 
     if not cmds:
-        cmds.append(f"reveal overview {abs_path}")
-        cmds.append(f"reveal {abs_path}")
+        cmds.append(f"reveal overview {target}")
+        cmds.append(f"reveal {target}")
 
     return cmds
 
@@ -413,12 +423,9 @@ def _relativize_risks(risks: List[Dict[str, Any]], base_path: Path) -> None:
     """Relativize `risks[].file`/`.representative` -- the structured fields
     `_compute_risks()` leaves raw even though it already relativizes the
     human-readable `description`/`.detail` strings computed from the same
-    values (BACK-1212). Called before `_build_next_commands()` so its
-    per-file suggested commands (`reveal <file> --boundary`) don't leak an
-    absolute path either -- unlike the two whole-directory commands, which
-    reuse the same root already exposed in the top-level `path`/`source`
-    fields (BACK-1194 precedent: the queried root itself isn't a leak).
-    Mutates in place.
+    values (BACK-1212). Called before `_build_next_commands()`, which spells
+    these target-relative files under the target as the user named it
+    (BACK-1366). Mutates in place.
     """
     from ..utils.path_utils import to_relative_display
 
