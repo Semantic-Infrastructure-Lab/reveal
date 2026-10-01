@@ -8,7 +8,7 @@ import sys
 from argparse import Namespace
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from ..global_flags import add_gitignore_arguments
+from ..global_flags import add_gitignore_arguments, rule_patterns
 from ..routing.ledger import complete
 from ..routing.subcommand import emit_subcommand_result
 from ...utils.results import note_truncation
@@ -47,6 +47,7 @@ def create_review_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         '--select',
+        type=rule_patterns,
         metavar='RULES',
         default='B,S,I,C,M',
         help='Rule categories (default: B,S,I,C,M)'

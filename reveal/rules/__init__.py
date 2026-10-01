@@ -412,6 +412,17 @@ class RuleRegistry:
         return [r for r in rules if r.enabled]
 
     @classmethod
+    def unknown_patterns(cls, patterns: List[str]) -> List[str]:
+        """The --select/--ignore patterns that match no registered rule (BACK-1605).
+
+        A pattern that matches nothing filters to nothing, so a typo in --select read as
+        "No issues found". Disabled, internal, user and project rules all count as known.
+        """
+        if not cls._discovered:
+            cls.discover()
+        return [p for p in patterns if not any(cls._matches_patterns(r, [p]) for r in cls._rules)]
+
+    @classmethod
     def get_rules(
         cls,
         select: Optional[List[str]] = None,
@@ -716,3 +727,17 @@ __all__ = [
     'Severity',
     'RuleRegistry',
 ]
+
+
+def parse_rule_patterns(value: str) -> List[str]:
+    """Split a --select/--ignore value and reject any pattern no rule matches (BACK-1605).
+
+    The one validation behind every --select/--ignore: the CLI forms through
+    ``cli.global_flags.rule_patterns`` and MCP's reveal_check directly.
+    """
+    patterns = [p.strip() for p in value.split(',') if p.strip()]
+    unknown = RuleRegistry.unknown_patterns(patterns)
+    if unknown:
+        raise ValueError(f"unknown rule code or prefix: {', '.join(unknown)} "
+                         "(reveal --rules lists them)")
+    return patterns

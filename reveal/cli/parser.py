@@ -12,7 +12,7 @@ from typing import Optional
 # shadowing the editable dev checkout (BACK-1014) shows up immediately as
 # an unexpected site-packages path instead of silently resolving.
 _PACKAGE_DIR = Path(__file__).resolve().parent.parent
-from .global_flags import add_exclude_argument, add_gitignore_arguments
+from .global_flags import add_exclude_argument, add_gitignore_arguments, rule_patterns
 
 
 def _build_core_examples() -> str:
@@ -413,9 +413,9 @@ def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
                         help='Run pattern detectors (code quality, security, complexity checks)')
     parser.add_argument('--config', type=str, metavar='FILE',
                         help='Configuration file to use (.reveal.yaml or pyproject.toml)')
-    parser.add_argument('--select', type=str, metavar='RULES',
+    parser.add_argument('--select', type=rule_patterns, metavar='RULES',
                         help='Select specific rules or categories (e.g., "B,S,T" or "B001,S701"). Categories: B=Bugs, C=Complexity, I=Imports, M=Maintainability, R=Refactoring, S=Security, T=Types')
-    parser.add_argument('--ignore', type=str, metavar='RULES',
+    parser.add_argument('--ignore', type=rule_patterns, metavar='RULES',
                         help='Ignore specific rules or categories (e.g., "E501" or "C")')
     parser.add_argument('--no-group', action='store_true', dest='no_group',
                         help='Show every check result individually (disables collapsing repeated rules)')

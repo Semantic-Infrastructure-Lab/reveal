@@ -151,7 +151,8 @@ With `content=True` (default):
 
 Run quality checks. Detects complexity hotspots, maintainability issues, style
 violations, broken links. `select`/`ignore` take comma-separated rule codes or
-series (e.g. `"M"`, `"B006,S012"`) — same as the CLI's `--select`/`--ignore`.
+series (e.g. `"M"`, `"B006,S701"`) — same as the CLI's `--select`/`--ignore`, and an
+unknown code is an error rather than a clean result.
 
 ```
 reveal_check("src/")

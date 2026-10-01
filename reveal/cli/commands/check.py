@@ -14,7 +14,7 @@ import sys
 import argparse
 from pathlib import Path
 from argparse import Namespace
-from ..global_flags import add_exclude_argument, add_gitignore_arguments
+from ..global_flags import add_exclude_argument, add_gitignore_arguments, rule_patterns
 from ..routing.ledger import complete
 
 
@@ -59,13 +59,13 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     """Add check-specific arguments to the subcommand parser."""
     parser.add_argument('path', nargs='?', help='File or directory to check')
     parser.add_argument(
-        '--select', type=str, metavar='RULES',
+        '--select', type=rule_patterns, metavar='RULES',
         help='Select specific rules or categories (e.g., "B,S,T" or "B001,S701"). '
              'Categories: B=Bugs, C=Complexity, I=Imports, M=Maintainability, '
              'R=Refactoring, S=Security, T=Types',
     )
     parser.add_argument(
-        '--ignore', type=str, metavar='RULES',
+        '--ignore', type=rule_patterns, metavar='RULES',
         help='Ignore specific rules or categories (e.g., "E501" or "C")',
     )
     parser.add_argument(

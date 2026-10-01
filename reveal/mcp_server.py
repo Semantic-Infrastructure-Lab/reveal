@@ -575,7 +575,7 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
     Args:
         path: File or directory to check (recurses into directories)
         severity: Minimum severity to show: 'low', 'medium', 'high', or 'critical'
-        select: Comma-separated rule codes/series to run, e.g. 'M' or 'B006,S012'
+        select: Comma-separated rule codes/series to run, e.g. 'M' or 'B006,S701'
             (same as CLI --select; see reveal_query('help://rules') for the list)
         ignore: Comma-separated rule codes/series to exclude, e.g. 'N'
     """
@@ -588,8 +588,13 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
         return f"[reveal error: {path}: no such file or directory]"
 
     severity_filter = severity or None
-    select_list = select.split(',') if select else None
-    ignore_list = ignore.split(',') if ignore else None
+    # BACK-1605: an unknown code is an error, as on the CLI, not a clean result.
+    from .rules import parse_rule_patterns
+    try:
+        select_list = parse_rule_patterns(select) or None
+        ignore_list = parse_rule_patterns(ignore) or None
+    except ValueError as e:
+        return f"[reveal error: {e}]"
 
     if p.is_dir():
         directory = p.resolve()

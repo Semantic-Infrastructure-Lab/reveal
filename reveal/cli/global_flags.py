@@ -52,6 +52,21 @@ def add_exclude_argument(parser: Any, help: str = _EXCLUDE_HELP) -> None:
     parser.add_argument('--exclude', action='append', metavar='PATTERN', help=help)
 
 
+def rule_patterns(value: str) -> str:
+    """argparse ``type`` for every --select/--ignore: an unknown rule code is a usage error.
+
+    Without it a typo selected no rules and the run reported a clean result (BACK-1605).
+    Returns the value normalized (spaces and empty items dropped), still comma-joined,
+    so every consumer's ``.split(',')`` keeps working.
+    """
+    from argparse import ArgumentTypeError
+    from ..rules import parse_rule_patterns
+    try:
+        return ','.join(parse_rule_patterns(value))
+    except ValueError as e:
+        raise ArgumentTypeError(str(e)) from None
+
+
 def apply_global_flags(args: Namespace) -> None:
     """Apply flags whose effect is process-global state, from a parsed ``args``."""
     set_provenance_enabled(bool(getattr(args, 'provenance', False)))

@@ -5,7 +5,7 @@ import sys
 from argparse import Namespace
 from pathlib import Path
 from typing import List
-from ..global_flags import add_gitignore_arguments
+from ..global_flags import add_gitignore_arguments, rule_patterns
 from ..routing.ledger import complete
 from ..routing.subcommand import emit_subcommand_result
 
@@ -41,6 +41,7 @@ def create_health_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         '--select',
+        type=rule_patterns,
         metavar='RULES',
         help='Rule categories to check (e.g., B,S,I,C)'
     )
