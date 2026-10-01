@@ -12,7 +12,8 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from ..utils.path_utils import _walk_code_files, is_test_basename_for_language
 from ..utils.pyparse import parse_python
-from ..core.treesitter_compat import _zero_arg, suppress_treesitter_warnings, tree_root, ts_parse
+from ..core.treesitter_compat import _zero_arg, suppress_treesitter_warnings, tree_root
+from ..core.treesitter_parse import get_tree
 from ..registry import JS_TS_LANGUAGES, extensions_for_languages, js_ts_grammar
 
 suppress_treesitter_warnings()
@@ -243,12 +244,6 @@ def scan_patches_ts(paths: Sequence[str | Path]) -> List[PatchUse]:
       jest.fn() / vi.fn()                          → kind='jest.fn' / 'vi.fn'
       jest.replaceProperty(obj, 'prop', val)       → kind='jest.replaceProperty' / ...
     """
-    try:
-        from tree_sitter_language_pack import get_parser
-    except ImportError:
-        logger.warning('tree_sitter_language_pack not installed; TypeScript patch scanning skipped')
-        return []
-
     uses: List[PatchUse] = []
     for file_path in iter_test_files(paths, extensions=list(_TS_TEST_EXTENSIONS)):
         uses.extend(_scan_file_ts(file_path))
@@ -258,20 +253,13 @@ def scan_patches_ts(paths: Sequence[str | Path]) -> List[PatchUse]:
 def _scan_file_ts(file_path: Path) -> List[PatchUse]:
     """Scan a single TypeScript/JS file for jest/vi mock calls (iterative DFS)."""
     try:
-        from tree_sitter_language_pack import get_parser
-    except ImportError:
-        return []
-
-    try:
         source = file_path.read_text(encoding='utf-8', errors='replace')
     except OSError:
         return []
 
     src_bytes = source.encode('utf-8', errors='replace')
     try:
-        parser = get_parser(js_ts_grammar(file_path.suffix))
-        tree = ts_parse(parser, source)
-        root = tree_root(tree)
+        root = tree_root(get_tree(js_ts_grammar(file_path.suffix), source))
     except Exception as exc:
         logger.warning('tree-sitter parse failed for %s: %s', file_path, exc)
         return []

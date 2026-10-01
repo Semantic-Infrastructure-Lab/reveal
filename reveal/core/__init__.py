@@ -9,6 +9,7 @@ This package contains foundational components used across reveal:
 
 Modules:
     treesitter_compat: Tree-sitter compatibility layer and warning suppression
+    treesitter_parse: The one place a parser or tree is obtained (BACK-1045)
 """
 
 from .treesitter_compat import (
@@ -21,6 +22,7 @@ from .treesitter_compat import (
     ts_parse,
     _zero_arg,
 )
+from .treesitter_parse import GrammarUnavailable, get_tree
 
 __all__ = [
     'suppress_treesitter_warnings',
@@ -31,4 +33,6 @@ __all__ = [
     'tree_root',
     'ts_parse',
     '_zero_arg',
+    'GrammarUnavailable',
+    'get_tree',
 ]

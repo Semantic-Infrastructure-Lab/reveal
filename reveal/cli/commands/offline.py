@@ -44,7 +44,7 @@ def run_offline(args: Namespace) -> None:
         from reveal.config import disable_update_check_permanently
         disable_update_check_permanently()
 
-    import tree_sitter_language_pack as tslp
+    from reveal.core import treesitter_parse as grammars
 
     if args.languages:
         names = [n.strip() for n in args.languages.split(',') if n.strip()]
@@ -53,14 +53,14 @@ def run_offline(args: Namespace) -> None:
             sys.exit(1)
         print(f"Downloading {len(names)} grammar(s): {', '.join(names)}")
         try:
-            count = tslp.download(names)
+            count = grammars.download(names)
         except Exception as e:
             print(f"❌ Download failed: {e}", file=sys.stderr)
             sys.exit(1)
     else:
         print("Downloading all tree-sitter grammars (this may take a while)...")
         try:
-            count = tslp.download_all()
+            count = grammars.download_all()
         except Exception as e:
             print(f"❌ Download failed: {e}", file=sys.stderr)
             sys.exit(1)

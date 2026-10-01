@@ -7,20 +7,17 @@ here), `System.getenv` for env access, `public static void main` for the CLI
 entrypoint, and import-root taxonomy for network/db/sdk egress.
 """
 
-import logging
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from .nav_surface_common import (
-    disclose_parse_recovery,
+    scan_file_with_grammar,
     INHERIT_KEY, ROUTE_CLASSES_KEY, SPRING_ROUTE_ANNOTATIONS, _get_text, _get_line, join_route_path,
     merge_routes_by_path, type_simple_name, mapping_paths, route_prefixes,
 )
 from .surface_rules import RuleScan
 
-logger = logging.getLogger(__name__)
 
 from reveal.core import node_children as _children
-from reveal.core import tree_root, ts_parse
+from reveal.core import tree_root
 from reveal.core.treesitter_compat import _zero_arg
 
 _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
@@ -28,17 +25,7 @@ _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
 def scan_file_surface_java(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     """Parse one Java file and return categorised surface entries."""
-    try:
-        from tree_sitter_language_pack import get_parser
-        source = Path(file_path).read_text(errors='replace', encoding='utf-8')
-        parser = get_parser('java')
-        tree = ts_parse(parser, source)
-    except Exception as e:
-        logger.warning("surface scan (Java) failed to parse %s: %s", file_path, e)
-        return {k: [] for k in _EMPTY_KEYS}
-
-    content_bytes = source.encode('utf-8')
-    return disclose_parse_recovery(tree, file_path, _scan_tree(tree, file_path, content_bytes))
+    return scan_file_with_grammar(file_path, 'java', 'Java', _scan_tree, _EMPTY_KEYS)
 
 
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:

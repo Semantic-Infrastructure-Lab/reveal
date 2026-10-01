@@ -55,6 +55,7 @@ from typing import Any, Dict, Iterator, List, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...core.treesitter_compat import _zero_arg, node_children, tree_root, ts_parse
+from ...core.treesitter_parse import get_parser
 from ...utils.path_utils import to_posix
 
 logger = logging.getLogger(__name__)
@@ -98,7 +99,6 @@ class V027(BaseRule):
             return []
 
         try:
-            from tree_sitter_language_pack import get_parser
             from reveal.adapters.base import _ADAPTER_REGISTRY
         except Exception as e:
             logger.warning(f"V027: failed to import parser/adapter registry: {e}")

@@ -245,8 +245,6 @@
  "reveal/display/formatting.py::no-any-return": 2,
  "reveal/mcp_server.py::call-arg": 6,
  "reveal/nav_handlers.py::no-any-return": 1,
- "reveal/registry.py::unused-ignore": 1,
- "reveal/rules/base_mixins.py::unused-ignore": 1,
  "reveal/rules/bugs/B001.py::no-any-return": 4,
  "reveal/rules/bugs/B003.py::no-any-return": 6,
  "reveal/rules/bugs/B006.py::no-any-return": 14,

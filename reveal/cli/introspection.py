@@ -49,7 +49,7 @@ def _language_support_line(analyzer_cls) -> str:
     if not (language and issubclass(analyzer_cls, TreeSitterAnalyzer)):
         return "   ✅ Full language-specific analysis"
 
-    from tree_sitter_language_pack import downloaded_languages
+    from ..core.treesitter_parse import downloaded_languages
     if language in downloaded_languages():
         base = "   ✅ Full language-specific analysis (grammar cached locally)"
     else:

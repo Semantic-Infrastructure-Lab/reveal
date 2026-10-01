@@ -34,16 +34,13 @@ shape but walks Rust's grammar:
 Still ❌ (no shared node shape with the languages above): C++.
 """
 
-import logging
-from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import disclose_parse_recovery, _get_text, _get_line
+from .nav_surface_common import scan_file_with_grammar, _get_text, _get_line
 from .surface_rules import RuleScan
 
-logger = logging.getLogger(__name__)
 
 from reveal.core import node_children as _children
-from reveal.core import tree_root, ts_parse
+from reveal.core import tree_root
 from reveal.core.treesitter_compat import _zero_arg
 
 _HTTP_VERBS: frozenset = frozenset({
@@ -55,17 +52,7 @@ _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
 def scan_file_surface_rust(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     """Parse one Rust file and return categorised surface entries."""
-    try:
-        from tree_sitter_language_pack import get_parser
-        source = Path(file_path).read_text(errors='replace', encoding='utf-8')
-        parser = get_parser('rust')
-        tree = ts_parse(parser, source)
-    except Exception as e:
-        logger.warning("surface scan (Rust) failed to parse %s: %s", file_path, e)
-        return {k: [] for k in _EMPTY_KEYS}
-
-    content_bytes = source.encode('utf-8')
-    return disclose_parse_recovery(tree, file_path, _scan_tree(tree, file_path, content_bytes))
+    return scan_file_with_grammar(file_path, 'rust', 'Rust', _scan_tree, _EMPTY_KEYS)
 
 
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:

@@ -29,11 +29,10 @@ import ast
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from tree_sitter_language_pack import get_parser
-
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
-from ...core.treesitter_compat import tree_root, ts_parse
+from ...core.treesitter_compat import tree_root
+from ...core.treesitter_parse import GrammarUnavailable, get_tree
 from ...registry import extensions_for_languages, language_for_extension
 from ._m104_treesitter import SUPPORTED_LANGUAGES, extract_collections
 
@@ -215,10 +214,9 @@ class M104(BaseRule, ASTParsingMixin):
     def _check_treesitter(self, file_path: str, content: str, language: str) -> List[Detection]:
         """Check for hardcoded collection literals via tree-sitter (JS/TS/Go/Rust/Java)."""
         try:
-            parser = get_parser(language)
-        except Exception:
+            tree = get_tree(language, content)
+        except GrammarUnavailable:
             return []
-        tree = ts_parse(parser, content)
         root = tree_root(tree)
         if root is None:
             return []

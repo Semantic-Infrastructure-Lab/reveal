@@ -12,12 +12,17 @@ BACK-912) is gone: import-based network/db/sdk classification is rule-driven
 which keeps its own ``_categorize_module``.
 """
 
+import logging
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from reveal.core.treesitter_compat import _zero_arg, error_node_spans, tree_has_recovery_artifacts, tree_root
+from reveal.core.treesitter_parse import get_tree
 
-from .surface_matrix import RECOVERED_KEY
+from .surface_matrix import RECOVERED_KEY, UNPARSED_KEY
+
+logger = logging.getLogger(__name__)
 
 
 def _get_text(node, content_bytes: bytes) -> str:
@@ -26,6 +31,31 @@ def _get_text(node, content_bytes: bytes) -> str:
 
 def _get_line(node) -> int:
     return int(_zero_arg(node, 'start_position').row) + 1
+
+
+def scan_file_with_grammar(
+    file_path: str,
+    grammar: str,
+    label: str,
+    scan_tree: Callable[[Any, str, bytes], Dict[str, Any]],
+    keys: Iterable[str],
+    prepare: Optional[Callable[[str], str]] = None,
+) -> Dict[str, Any]:
+    """Read, parse and scan one file for a tree-sitter surface scanner (BACK-1045).
+
+    A file that can't be read or parsed (no grammar) is listed under UNPARSED_KEY, as
+    the Python scanner does, so the report says it contributed nothing; the per-language
+    copies of this returned empty lists, which counted it as clean. *prepare* rewrites
+    the source before the parse (C++ macro class modifiers)."""
+    try:
+        source = Path(file_path).read_text(errors='replace', encoding='utf-8')
+        if prepare is not None:
+            source = prepare(source)
+        tree = get_tree(grammar, source)
+    except Exception as e:  # noqa: BLE001 - unreadable file, GrammarUnavailable, or a parser error
+        logger.warning("surface scan (%s) failed to parse %s: %s", label, file_path, e)
+        return {**{k: [] for k in keys}, UNPARSED_KEY: [file_path]}
+    return disclose_parse_recovery(tree, file_path, scan_tree(tree, file_path, source.encode('utf-8')))
 
 
 def disclose_parse_recovery(tree, file_path: str, surfaces: Dict[str, Any]) -> Dict[str, Any]:

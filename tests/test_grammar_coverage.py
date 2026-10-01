@@ -199,7 +199,7 @@ def grammar_kinds(language: str) -> Tuple[FrozenSet[str], FrozenSet[str]]:
 
 
 # A table is a module constant (``CALL_NODE_TYPES``, ``_DECISION_TYPES``). Lowercase names are
-# runtime state: treesitter's ``_warned_uncached_languages`` fills with language names while
+# runtime state: treesitter's ``_warned_failed_languages`` fills with language names while
 # tests run, and read as a dead node kind 'python' depending on test order.
 _CONSTANT = re.compile(r'_?[A-Z][A-Z0-9_]*')
 
@@ -313,7 +313,7 @@ def test_known_gaps_name_a_task():
 
 def test_runtime_state_is_not_a_table(monkeypatch):
     import reveal.treesitter
-    monkeypatch.setattr(reveal.treesitter, '_warned_uncached_languages', {'python'})
+    monkeypatch.setattr(reveal.treesitter, '_warned_failed_languages', {'python'})
     assert not any('_warned_' in name for name in central_tables())
 
 

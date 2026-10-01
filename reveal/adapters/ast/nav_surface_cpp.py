@@ -25,16 +25,13 @@ expansion) — it surfaces the common shapes and declines the rest rather than
 guess.
 """
 
-import logging
-from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import disclose_parse_recovery, _get_text, _get_line, normalize_cpp_macro_class_modifiers
+from .nav_surface_common import scan_file_with_grammar, _get_text, _get_line, normalize_cpp_macro_class_modifiers
 from .surface_rules import RuleScan
 
-logger = logging.getLogger(__name__)
 
 from reveal.core import node_children as _children
-from reveal.core import tree_root, ts_parse
+from reveal.core import tree_root
 from reveal.core.treesitter_compat import _zero_arg
 
 # cpp-httplib route verbs (title-case, as the library declares them).
@@ -53,18 +50,9 @@ _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
 def scan_file_surface_cpp(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     """Parse one C++ file and return categorised surface entries."""
-    try:
-        from tree_sitter_language_pack import get_parser
-        source = Path(file_path).read_text(errors='replace', encoding='utf-8')
-        source = normalize_cpp_macro_class_modifiers(source)
-        parser = get_parser('cpp')
-        tree = ts_parse(parser, source)
-    except Exception as e:
-        logger.warning("surface scan (C++) failed to parse %s: %s", file_path, e)
-        return {k: [] for k in _EMPTY_KEYS}
-
-    content_bytes = source.encode('utf-8')
-    return disclose_parse_recovery(tree, file_path, _scan_tree(tree, file_path, content_bytes))
+    return scan_file_with_grammar(
+        file_path, 'cpp', 'C++', _scan_tree, _EMPTY_KEYS, prepare=normalize_cpp_macro_class_modifiers,
+    )
 
 
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:

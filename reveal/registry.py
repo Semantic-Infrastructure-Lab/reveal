@@ -460,40 +460,35 @@ def _try_treesitter_fallback(ext: str) -> Optional[type]:
     if not language:
         return None
 
-    try:
-        # Test if parser is available
-        from tree_sitter_language_pack import get_parser
-        get_parser(language)  # type: ignore[arg-type]  # language is validated at runtime
-
-        # Import TreeSitterAnalyzer dynamically to avoid circular import
-        from .treesitter import TreeSitterAnalyzer
-
-        # Create dynamic analyzer class
-        class_name = f'Dynamic{language.title().replace("_", "")}Analyzer'
-        dynamic_class = type(
-            class_name,
-            (TreeSitterAnalyzer,),
-            {
-                'language': language,
-                'type_name': language.replace('_', ' ').title(),
-                'is_fallback': True,
-                'fallback_language': language,
-                'fallback_quality': 'basic',  # generic tree-sitter outline; see FALLBACK_SUPPORT_NOTE
-                'CATEGORY': 'code',
-            }
-        )
-
-        # Log fallback creation for transparency
-        logger.info(
-            f"Created tree-sitter fallback analyzer for {ext} (language: {language}, quality: basic)"
-        )
-
-        return dynamic_class
-
-    except Exception as e:
-        # Parser not available or import failed
-        logger.debug(f"Tree-sitter fallback failed for {ext}: {e}")
+    from .core.treesitter_parse import has_grammar
+    if not has_grammar(language):
+        logger.debug(f"Tree-sitter fallback unavailable for {ext}: no grammar for {language!r}")
         return None
+
+    # Import TreeSitterAnalyzer dynamically to avoid circular import
+    from .treesitter import TreeSitterAnalyzer
+
+    # Create dynamic analyzer class
+    class_name = f'Dynamic{language.title().replace("_", "")}Analyzer'
+    dynamic_class = type(
+        class_name,
+        (TreeSitterAnalyzer,),
+        {
+            'language': language,
+            'type_name': language.replace('_', ' ').title(),
+            'is_fallback': True,
+            'fallback_language': language,
+            'fallback_quality': 'basic',  # generic tree-sitter outline; see FALLBACK_SUPPORT_NOTE
+            'CATEGORY': 'code',
+        }
+    )
+
+    # Log fallback creation for transparency
+    logger.info(
+        f"Created tree-sitter fallback analyzer for {ext} (language: {language}, quality: basic)"
+    )
+
+    return dynamic_class
 
 
 def get_all_analyzers() -> Dict[str, Dict[str, Any]]:
@@ -612,20 +607,15 @@ def fallback_languages() -> Dict[str, str]:
     reveal could not open at all (BACK-1255).
     """
     from .core import suppress_treesitter_warnings
-    try:
-        from tree_sitter_language_pack import get_parser
-    except ImportError:
-        return {}
+    from .core.treesitter_parse import has_grammar
     suppress_treesitter_warnings()
     result = {}
     for ext, grammar in TREESITTER_EXTENSION_MAP.items():
         cls = _ANALYZER_REGISTRY.get(ext)
         if cls is not None and not getattr(cls, 'is_fallback', False):
             continue
-        try:
-            get_parser(grammar)
-        except Exception as e:
-            logger.debug("tree-sitter grammar %s unavailable for %s: %s", grammar, ext, e)
+        if not has_grammar(grammar):
+            logger.debug("tree-sitter grammar %s unavailable for %s", grammar, ext)
             continue
         result[ext] = grammar
     return result

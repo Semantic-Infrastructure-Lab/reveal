@@ -21,7 +21,6 @@ from .core import node_next_sibling as _next_sibling
 from .core import iter_tree as _iter_tree
 from .core.treesitter_compat import _zero_arg, tree_has_recovery_artifacts
 from .core import tree_root
-from .core import ts_parse
 from .core.node_taxonomy import (
     DEF_NODES as _DEF_NODES,
     CLASS_NODES as _CLASS_NODES,
@@ -32,15 +31,14 @@ from .core.node_taxonomy import (
 # Suppress tree-sitter deprecation warnings (centralized in core module)
 suppress_treesitter_warnings()
 
-from tree_sitter_language_pack import get_parser, downloaded_languages  # noqa: E402
+from .core.treesitter_parse import get_tree  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-# BACK-979: dedup state for the two grammar-availability warnings below, kept
-# module-level (not per-instance) so a directory scan touching hundreds of
-# files in an uncached/offline language only warns once per language, not
-# once per file.
-_warned_uncached_languages: Set[str] = set()
+# BACK-979: dedup state for the parse-failed warning below, kept module-level (not
+# per-instance) so a directory scan touching hundreds of files in an offline
+# language only warns once per language, not once per file. The not-yet-downloaded
+# warning is the seam's (core/treesitter_parse.get_parser).
 _warned_failed_languages: Set[str] = set()
 
 # Per-thread cache: (path_str, mtime_ns) -> {'tree': ..., 'node_cache': ...}
@@ -504,28 +502,14 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 self._node_cache = cached['node_cache']
             return
 
-        # Proactive check (BACK-979): downloaded_languages() is a local
-        # cache-directory read with no network attempt, unlike get_parser()
-        # below which downloads the grammar bundle on first use of a
-        # language. Warn before that fetch, not after it silently fails.
-        if self.language not in downloaded_languages() and self.language not in _warned_uncached_languages:
-            _warned_uncached_languages.add(self.language)
-            logger.warning(
-                "tree-sitter grammar for %r not yet downloaded — first parse "
-                "will attempt to fetch it from the network (see "
-                "INSTALL.md#network-requirements for offline setups)",
-                self.language,
-            )
-
         try:
-            parser = get_parser(self.language)  # type: ignore[arg-type]  # language is validated at runtime
             # self.content is '\n'.join(lines), which drops the file's final
             # newline. Grammars that end a statement at a newline (Dockerfile,
             # C preprocessor lines, Go) then report a MISSING token at EOF on a
             # perfectly clean file (BACK-1500). Parse what is on disk; appending
             # at the end moves no byte offset of the content before it.
             source = self.content + '\n' if getattr(self, '_ends_with_newline', False) else self.content
-            self.tree = ts_parse(parser, source)
+            self.tree = get_tree(self.language, source)  # warns before a first-use grammar fetch (BACK-979)
         except Exception as e:
             self.parse_error = str(e)
             if self.language not in _warned_failed_languages:

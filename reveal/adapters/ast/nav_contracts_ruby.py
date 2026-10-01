@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional
 from .nav_surface_common import _get_text, _get_line
 
 from reveal.core import node_children as _children
-from reveal.core import tree_root, ts_parse
+from reveal.core import get_tree, tree_root
 from reveal.core.treesitter_compat import _zero_arg
 
 logger = logging.getLogger(__name__)
@@ -35,10 +35,8 @@ logger = logging.getLogger(__name__)
 def scan_file_contracts_ruby(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     """Parse one Ruby file and return {'modules': [...], 'classes': [...]}."""
     try:
-        from tree_sitter_language_pack import get_parser
         source = Path(file_path).read_text(errors='replace', encoding='utf-8')
-        parser = get_parser('ruby')
-        tree = ts_parse(parser, source)
+        tree = get_tree('ruby', source)
     except Exception as e:
         logger.warning("contracts scan (Ruby) failed to parse %s: %s", file_path, e)
         return {'modules': [], 'classes': []}

@@ -1,14 +1,12 @@
 """Tree-sitter surface extraction for TypeScript/TSX/JavaScript/JSX — env vars, FS writes, HTTP routes, CLI, imports."""
 
-import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import disclose_parse_recovery, _get_text, _get_line, _add_once
+from .nav_surface_common import scan_file_with_grammar, _get_text, _get_line, _add_once
 
-logger = logging.getLogger(__name__)
 
 from reveal.core import node_children as _children
-from reveal.core import tree_root, ts_parse
+from reveal.core import tree_root
 from reveal.core.treesitter_compat import _zero_arg
 
 _NET_PACKAGES: frozenset = frozenset({
@@ -72,19 +70,8 @@ def scan_file_surface_ts(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     tree-walking (env vars, HTTP routes, FS writes, ...) with no type-annotation
     dependency. js_ts_grammar() picks the grammar (JS takes JSX-aware 'tsx').
     """
-    try:
-        from tree_sitter_language_pack import get_parser
-        from reveal.registry import js_ts_grammar
-        path = Path(file_path)
-        source = path.read_text(errors='replace', encoding='utf-8')
-        parser = get_parser(js_ts_grammar(path.suffix))
-        tree = ts_parse(parser, source)
-    except Exception as e:
-        logger.warning("surface scan (TS/JS) failed to parse %s: %s", file_path, e)
-        return {k: [] for k in _EMPTY_KEYS}
-
-    content_bytes = source.encode('utf-8')
-    return disclose_parse_recovery(tree, file_path, _scan_tree(tree, file_path, content_bytes))
+    from reveal.registry import js_ts_grammar  # lazy, as it was
+    return scan_file_with_grammar(file_path, js_ts_grammar(Path(file_path).suffix), 'TS/JS', _scan_tree, _EMPTY_KEYS)
 
 
 def _scan_tree(

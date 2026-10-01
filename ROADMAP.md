@@ -290,7 +290,7 @@ a check that counts violations and lets the count only fall. Then the cause is r
    - the registry-driven contract harness (`tests/test_output_contract_compliance.py`).
 
    Still open: POSIX separators on Windows (BACK-1586). Since 2026-09-30 no adapter or
-   subcommand answers a relative path with an absolute one (BACK-1366). Caps with no knob,
+   subcommand answers a relative path with an absolute one. Caps with no knob,
    which invariant 7 can't vary, now list everything or record their cut (2026-09-30). Since 2026-09-28 the harness checks that a list the router cuts is
    disclosed, and runs every subcommand through the same result handling (all but `check`,
    BACK-1545). Since 2026-09-29 it also runs each adapter's own cap knob (`?top`, `?limit`) at
@@ -321,7 +321,10 @@ a check that counts violations and lets the count only fall. Then the cause is r
    the display layer, and disclosed with the same marker; analyzers never see the flags
    (`FileAnalyzer.cut_structure`), and its `--max-items` and default text cap record their
    cut with the same marker. Still open: the broad `except`s.
-4. **One seam per concern:** BACK-1045 (parser seam) and BACK-1054 (import resolution). The
+4. **One seam per concern:** BACK-1054 (import resolution). The parser seam landed
+   2026-09-30: every tree-sitter parser comes from `reveal/core/treesitter_parse.py`, a missing
+   grammar raises `GrammarUnavailable` instead of reading as an empty result, and the
+   `tree-sitter-import` ratchet is at 0 (CHANGELOG `[Unreleased]`). The
    path pass landed 2026-09-30: results spell paths as the user named the target, set once
    for `source` by the router, `compose` and the subcommand envelope, and the subcommands
    hand adapters the path as typed (CHANGELOG `[Unreleased]`). The root finders landed 2026-09-30: M102, B005, the V-rules and

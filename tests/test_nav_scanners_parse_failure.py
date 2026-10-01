@@ -5,14 +5,20 @@ Each scanner used to catch a tree-sitter parse failure with a bare
 rendered as a clean, valid, empty result, indistinguishable from a file that
 genuinely has no findings. Same disease as BACK-979/981/982/984/991; this
 cluster (BACK-990) covers 14 sites across 11 languages that BACK-982's
-imports-analyzer fix never touched. Fix: log a warning (still returns the
-same empty shape — no contract change) so the failure is visible.
+imports-analyzer fix never touched. Fix: log a warning so the failure is visible.
+
+BACK-1045: the surface scanners share one parse path (nav_surface_common.
+scan_file_with_grammar) and also list the file under UNPARSED_KEY, as the Python
+scanner does, so the surface report says it contributed nothing. The contracts
+scanners still return the bare empty shape (no unparsed channel yet: BACK-1588).
 """
 
 import importlib
 from unittest.mock import patch
 
 import pytest
+
+from reveal.adapters.ast.surface_matrix import UNPARSED_KEY
 
 # BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
 pytestmark = pytest.mark.component
@@ -71,6 +77,8 @@ def test_parse_failure_logs_warning_and_returns_empty_shape(
         with caplog.at_level('WARNING', logger=module_path):
             result = scan_fn(str(fake_file))
 
+    if (module_path, func_name, expected_empty) in _SURFACE_SCANNERS:
+        expected_empty = {**expected_empty, UNPARSED_KEY: [str(fake_file)]}
     assert result == expected_empty, f'{func_name}: contract shape changed on parse failure'
     assert any(str(fake_file) in r.message for r in caplog.records), (
         f'{func_name}: parse failure produced no visible warning (BACK-990)'

@@ -21,7 +21,7 @@ import re
 from pathlib import Path
 from typing import Dict, Set, Tuple
 
-from ...core import iter_tree, ts_parse, _zero_arg
+from ...core import get_tree, iter_tree, _zero_arg
 from ...conventions import family_for_path
 from ...registry import language_for_extension
 
@@ -103,8 +103,7 @@ def _count_occurrences(file_path: str, family: str, names: Set[str], defined_her
     if not present:
         return
     try:
-        from tree_sitter_language_pack import get_parser
-        tree = ts_parse(get_parser(_parser_language(file_path, family)), text)
+        tree = get_tree(_parser_language(file_path, family), text)
     except Exception as e:  # noqa: BLE001 - unknown grammar or parse failure: skip the file
         logger.debug("referenced-names: cannot parse %s: %s", file_path, e)
         return

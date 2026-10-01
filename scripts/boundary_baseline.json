@@ -48,32 +48,6 @@
   "reveal/cli/commands/review.py": 1,
   "reveal/cli/file_checker.py": 2
  },
- "tree-sitter-import": {
-  "reveal/adapters/ast/nav_contracts_cpp.py": 1,
-  "reveal/adapters/ast/nav_contracts_go.py": 1,
-  "reveal/adapters/ast/nav_contracts_ruby.py": 1,
-  "reveal/adapters/ast/nav_contracts_rust.py": 1,
-  "reveal/adapters/ast/nav_surface_cpp.py": 1,
-  "reveal/adapters/ast/nav_surface_csharp.py": 1,
-  "reveal/adapters/ast/nav_surface_go.py": 1,
-  "reveal/adapters/ast/nav_surface_java.py": 1,
-  "reveal/adapters/ast/nav_surface_kotlin.py": 1,
-  "reveal/adapters/ast/nav_surface_php.py": 1,
-  "reveal/adapters/ast/nav_surface_ruby.py": 1,
-  "reveal/adapters/ast/nav_surface_rust.py": 1,
-  "reveal/adapters/ast/nav_surface_swift.py": 1,
-  "reveal/adapters/ast/nav_surface_ts.py": 1,
-  "reveal/adapters/ast/surface_facts.py": 1,
-  "reveal/adapters/calls/references.py": 1,
-  "reveal/analyzers/markdown.py": 1,
-  "reveal/cli/commands/offline.py": 1,
-  "reveal/cli/introspection.py": 1,
-  "reveal/registry.py": 2,
-  "reveal/rules/base_mixins.py": 1,
-  "reveal/rules/maintainability/M104.py": 1,
-  "reveal/rules/validation/V027.py": 1,
-  "reveal/testability/patches.py": 2,
-  "reveal/treesitter.py": 1
- },
+ "tree-sitter-import": {},
  "walker": {}
 }

@@ -12,7 +12,7 @@ from ..treesitter import TreeSitterAnalyzer, _structure_cache_max_files
 from ..core import disk_cache
 from ..structure_options import StructureOptions
 from ..core import node_children as _children
-from ..core import tree_root, ts_parse
+from ..core import get_tree, tree_root
 from ..core.treesitter_compat import _zero_arg
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
@@ -92,12 +92,10 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             self._inline_tree = _inline_parse_cache[cache_key]
             return self._inline_tree
         try:
-            from tree_sitter_language_pack import get_parser
             import warnings
             warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
 
-            inline_parser = get_parser('markdown_inline')
-            self._inline_tree = ts_parse(inline_parser, self.content)
+            self._inline_tree = get_tree('markdown_inline', self.content)
             if cache_key is not None:
                 _inline_parse_cache[cache_key] = self._inline_tree
         except Exception:

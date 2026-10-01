@@ -24,17 +24,9 @@ def _cached_treesitter_parse(content: str, file_path: str, language: str):
     language, grammar not installed, etc.) rather than raising, so callers
     can use the same "skip" pattern as the Python AST mixin.
     """
+    from ..core import get_tree, tree_root
     try:
-        from tree_sitter_language_pack import get_parser
-
-        from ..core import ts_parse, tree_root
-    except ImportError as e:
-        logger.warning(f"tree-sitter unavailable for {file_path}: {e}")
-        return None
-    try:
-        parser = get_parser(language)  # type: ignore[arg-type]
-        tree = ts_parse(parser, content)
-        return tree_root(tree)
+        return tree_root(get_tree(language, content))
     except Exception as e:
         logger.warning(f"tree-sitter parse failed for {file_path} ({language}): {e}")
         return None
