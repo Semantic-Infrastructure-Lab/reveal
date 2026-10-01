@@ -211,7 +211,7 @@ class TestCollectFunctionIndex(unittest.TestCase):
                 pass
         """)
         index = _collect_function_index(self.tmpdir)
-        self.assertEqual(index['my_func'][0]['file'], path)
+        self.assertEqual(index['my_func'][0]['file'], Path(path).as_posix())  # '/' on every OS (BACK-1586)
 
     def test_effects_captured(self):
         _write(self.tmpdir, 'd.py', """\
