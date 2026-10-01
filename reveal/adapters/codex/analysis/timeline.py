@@ -2,6 +2,8 @@
 
 from typing import Any, Callable, Dict, List
 
+from .normalize import text_of
+
 
 def _cmd(payload: Dict[str, Any]) -> str:
     cmd = payload.get('command', [])
@@ -22,12 +24,11 @@ def _msg80(payload: Dict[str, Any]) -> str:
 
 def _response_msg(payload: Dict[str, Any]) -> str:
     content = payload.get('content') or ''
-    if isinstance(content, list):
-        for block in content:
-            if isinstance(block, dict) and block.get('type') == 'input_text':
-                return str(block.get('text', ''))[:60]
+    # Any text block (input_text, output_text, Text), on one line (BACK-1566).
+    text = ' '.join(text_of(content).split())
+    if not text and isinstance(content, list):
         return f"[{len(content)} content block(s)]"
-    return str(content)[:60]
+    return text[:60]
 
 
 _EVENT_MSG_HANDLERS: Dict[str, Callable[[Dict[str, Any]], str]] = {

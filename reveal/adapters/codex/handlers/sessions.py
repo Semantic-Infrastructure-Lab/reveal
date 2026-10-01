@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder
+from ..analysis.normalize import normalize_record
 
 _USER_FILTER = "(thread_source IS NULL OR thread_source = 'user') AND archived = 0"
 
@@ -127,6 +128,27 @@ def filter_sessions(db_path: Path, filter_term: str, since: str = '', until: str
     return base_result
 
 
+def _message_snippet(line: str, term: str) -> Optional[Dict[str, Any]]:
+    """The user/agent message on one rollout line, if it contains *term*."""
+    try:
+        rec = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(rec, dict):
+        return None
+    rec = normalize_record(rec)  # current rollouts' item_completed turns (BACK-1566)
+    payload = rec.get('payload') or {}
+    ptype = payload.get('type', '')
+    text = payload.get('message') or ''
+    if ptype not in ('user_message', 'agent_message') or term not in text.lower():
+        return None
+    return {
+        'role': 'user' if ptype == 'user_message' else 'agent',
+        'timestamp': rec.get('timestamp'),
+        'snippet': text[:200],
+    }
+
+
 def search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3,
                      since: str = '', until: str = '') -> Dict[str, Any]:
     """Full-text search across session JSONL content.
@@ -198,21 +220,9 @@ def search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3,
                 break
             if term not in line.lower():
                 continue
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            ptype = rec.get('payload', {}).get('type', '')
-            if ptype not in ('user_message', 'agent_message'):
-                continue
-            text = rec.get('payload', {}).get('message', '')
-            if term not in (text or '').lower():
-                continue
-            snippets.append({
-                'role': 'user' if ptype == 'user_message' else 'agent',
-                'timestamp': rec.get('timestamp'),
-                'snippet': text[:200],
-            })
+            snippet = _message_snippet(line, term)
+            if snippet:
+                snippets.append(snippet)
 
         if snippets:
             matched.append({

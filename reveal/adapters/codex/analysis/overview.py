@@ -45,9 +45,11 @@ def get_overview(records: List[Dict[str, Any]], session_row: Dict[str, Any]) -> 
             elif ptype == 'exec_command_end':
                 shell_begins += 1
             elif ptype == 'task_complete':
+                # One per task; a session runs several, so the session's time is
+                # their sum, not the last one's (BACK-1566: 14.7s for a 250s session).
                 dm = payload.get('duration_ms')
                 if dm is not None:
-                    duration_ms = dm
+                    duration_ms = (duration_ms or 0) + dm
             elif ptype == 'token_count':
                 # real format: payload.info.total_token_usage.total_tokens
                 info = payload.get('info', {})

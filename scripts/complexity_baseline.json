@@ -8,7 +8,6 @@
   "reveal/adapters/ast/surface_rules.py::_call_fields": 23,
   "reveal/adapters/calls/index.py::find_uncalled": 30,
   "reveal/adapters/claude/handlers/post_process.py::_post_process_session_list": 22,
-  "reveal/adapters/codex/handlers/sessions.py::search_sessions": 23,
   "reveal/adapters/depends.py::DependsAdapter._format_file_dependents": 22,
   "reveal/adapters/depends.py::DependsAdapter._index_one_file": 25,
   "reveal/adapters/help.py::HelpAdapter._get_element_impl": 37,

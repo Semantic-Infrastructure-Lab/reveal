@@ -31,6 +31,7 @@ from .analysis.messages import (
     extract_messages, get_last_agent_message, get_token_turns, get_grand_total_tokens,
     get_exchanges as _analysis_get_exchanges, get_message_by_index as _analysis_get_message_by_index,
 )
+from .analysis.normalize import normalize_record
 from .analysis.tools import get_tool_pairs, get_shell_commands
 from .analysis.errors import get_errors as _analysis_get_errors
 from .analysis.overview import get_overview as _analysis_get_overview
@@ -172,11 +173,11 @@ class CodexAdapter(ResourceAdapter):
                         continue
                     # Envelope format: must have 'type' at top level
                     if 'type' in obj:
-                        records.append({
+                        records.append(normalize_record({
                             'timestamp': obj.get('timestamp'),
                             'type': obj.get('type'),
                             'payload': obj.get('payload', {}),
-                        })
+                        }))
                     else:
                         # Legacy bare-JSON — keep as unknown
                         records.append({'timestamp': None, 'type': 'unknown', 'payload': obj})
