@@ -721,9 +721,12 @@ class HelpAdapter(ResourceAdapter):
         # operation (see QUERY_PARAMETER_REFERENCE.md's Search vs Filter note).
         if topic == 'search' or topic.startswith('search?') or topic.startswith('search/'):
             if topic.startswith('search?'):
-                from urllib.parse import parse_qs
-                params = parse_qs(topic.split('?', 1)[1])
-                query_term = (params.get('search') or [''])[0]
+                # The shared parser records that ?search= was read; a private
+                # parse_qs left the flag ledger saying it had no effect (BACK-1569).
+                from urllib.parse import unquote_plus
+                from ..utils.query_parser import parse_query_params
+                params = parse_query_params(topic.split('?', 1)[1])
+                query_term = unquote_plus(str(params.get('search') or ''))
             elif topic.startswith('search/'):
                 query_term = topic.split('/', 1)[1]
             else:

@@ -1417,5 +1417,24 @@ class TestNoStaleAgentHelpDescriptions(unittest.TestCase):
                              f'QUICK_START.md calls --agent-help a quick reference: {line!r}')
 
 
+
+def test_help_search_query_param_is_counted_as_read():
+    """BACK-1569: help://search parsed ?search= with a private parse_qs, so the
+    flag ledger printed "query param 'search' has no effect on help://" over the
+    results it had just used it for. An unknown key is still reported."""
+    import subprocess
+    import sys
+
+    def run(uri):
+        return subprocess.run([sys.executable, '-m', 'reveal', uri], capture_output=True,
+                              text=True, encoding='utf-8', timeout=120)
+
+    used = run('help://search?search=progressive disclosure')
+    assert "Help Search: 'progressive disclosure'" in used.stdout
+    assert 'has no effect' not in used.stderr
+    unknown = run('help://search?search=extract&bogus=1')
+    assert "query param 'bogus' has no effect" in unknown.stderr
+
+
 if __name__ == '__main__':
     unittest.main()
