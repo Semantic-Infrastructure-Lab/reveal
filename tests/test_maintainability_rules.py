@@ -916,6 +916,21 @@ class TestM102ProjectRoot(unittest.TestCase):
             (pkg / 'module.py').write_text('x = 1\n', encoding='utf-8')
             assert _project_root(pkg / 'module.py') == pkg
 
+    def test_loose_script_is_judged_only_in_a_python_project(self):
+        """The shared resolver also roots at a bare .git; a script outside any
+        package there is nobody's import target (`reveal review` flagged a
+        one-file commit, test_documented_ci_gates_work)."""
+        from reveal.rules.maintainability.M102 import _project_root
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / '.git').mkdir()
+            script = root / 'tool.py'
+            script.write_text('def main():\n    return 1\n', encoding='utf-8')
+            assert _project_root(script) is None
+            assert M102().check(str(script), None, script.read_text(encoding='utf-8')) == []
+            (root / 'pyproject.toml').write_text('[project]\nname = "x"\n', encoding='utf-8')
+            assert _project_root(script) == root
+
     def test_module_named_setup_py_neither_roots_nor_rescans(self):
         """home-assistant's homeassistant/setup.py is a module. The old name root
         stopped at it while the importer scan climbed past it, so every file paid

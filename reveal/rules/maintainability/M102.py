@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 # Built once per package per process; safe because files don't change mid-run.
 _import_cache: Dict[Path, Set[str]] = {}
 
+# What makes a directory a Python project for a file outside any package.
+_PYTHON_BUILD_MARKERS = ('pyproject.toml', 'setup.py')
+
 # Compiled regexes for fast import extraction (replaces ast.parse + ast.walk in scan)
 # Handles both `import X` (including `import X, Y`) and `from X import Y, Z`.
 # Leading whitespace is allowed to catch imports inside functions/blocks.
@@ -97,9 +100,18 @@ def _project_root(path: Path) -> Optional[Path]:
     marker inside a package dir, so one root answers both. None when nothing
     safe is found: the scan is an unbounded walk, and a package sitting
     directly in $HOME or /tmp must not make it read every file under that.
+
+    A file outside any package is a module only in a Python project: a loose
+    script under a bare ``.git`` root (or a package.json) is nobody's import
+    target, so it gets None too -- the applicability M102 had before.
     """
     root = resolve_project_root(path, python_init_chain=True)
-    return None if root is None or is_unsafe_scan_root(root) else root
+    if root is None or is_unsafe_scan_root(root):
+        return None
+    if python_package_top(path) is None and not any(
+            (root / marker).exists() for marker in _PYTHON_BUILD_MARKERS):
+        return None
+    return root
 
 
 def _add_module_and_parents(imports: Set[str], module: str) -> None:
