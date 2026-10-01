@@ -471,6 +471,26 @@ class TestNginxVhostNotFound:
             result = adapter.get_structure()
         assert 'searched' in result
 
+    @pytest.mark.parametrize('element', ['upstream', 'ports', 'auth', 'locations', 'config'])
+    def test_an_element_of_a_missing_vhost_fails_like_the_vhost(self, element):
+        """BACK-1592: `nginx://<host>/<element>` returned a bare dict with no error, so a
+        missing vhost exited 0 where `nginx://<host>` exits 1."""
+        from reveal.utils.results import outcome_of
+        with patch('reveal.adapters.nginx.adapter._NGINX_SEARCH_DIRS', []):
+            vhost = NginxUriAdapter("nginx://missing.example.com").get_structure()
+            part = NginxUriAdapter(f"nginx://missing.example.com/{element}").get_structure()
+        assert outcome_of(vhost) == 'failed'
+        assert outcome_of(part) == 'failed'
+        assert part['error'] == vhost['error']
+        assert part['element'] == element
+
+    def test_an_element_of_a_missing_vhost_exits_1(self, tmp_path, monkeypatch):
+        from conftest import _run_reveal_direct
+        monkeypatch.setattr('reveal.adapters.nginx.adapter._NGINX_SEARCH_DIRS', [str(tmp_path)])
+        run = _run_reveal_direct('nginx://missing.example.com/upstream')
+        assert run.returncode == 1
+        assert "No nginx config found for 'missing.example.com'" in run.stderr
+
 
 # ---------------------------------------------------------------------------
 # Vhost summary (main endpoint)

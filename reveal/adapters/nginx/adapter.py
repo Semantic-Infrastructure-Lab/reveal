@@ -1027,45 +1027,47 @@ class NginxUriAdapter(ResourceAdapter):
             }
         )
 
+    def _vhost_not_found(self, config_path: Optional[str]) -> Dict[str, Any]:
+        """The failed result for a domain with no config, or none of whose server blocks match.
+
+        A lookup miss fails like env://NAME's and help://TOPIC's (BACK-1523): the router
+        exits 1 on its error; the rest is the detail its renderer adds. The vhost view and
+        its elements (`nginx://<host>/upstream`) share it -- the element form returned a
+        bare dict with no error and exited 0 (BACK-1592)."""
+        assert self.domain is not None
+        if config_path is None:
+            data: Dict[str, Any] = {
+                'error': f"No nginx config found for '{self.domain}'",
+                'domain': self.domain,
+                'searched': _NGINX_SEARCH_DIRS,
+                'next_steps': [
+                    "Check if nginx is installed: which nginx",
+                    f"Manually find config: grep -r 'server_name {self.domain}' /etc/nginx/",
+                    "Inspect a specific file: reveal /etc/nginx/conf.d/yourfile.conf",
+                ],
+            }
+        else:
+            data = {
+                'error': f"No nginx server block matched '{self.domain}' in {config_path}",
+                'domain': self.domain,
+                'config_file': config_path,
+                'note': 'Config file found but no server block matched this domain',
+                'next_steps': [f"Inspect the file: reveal {config_path}"],
+            }
+        return ResultBuilder.create(
+            result_type='nginx_vhost_not_found',
+            source=f'nginx://{self.domain}',
+            source_type='runtime',
+            contract_version=CONTRACT_VERSION,
+            data=data,
+        )
+
     def _get_vhost_summary(self) -> Dict[str, Any]:
         """Build the main vhost summary."""
         assert self.domain is not None
         config_path, content, server_block = self._load_vhost()
-
-        if config_path is None:
-            return ResultBuilder.create(
-                result_type='nginx_vhost_not_found',
-                source=f'nginx://{self.domain}',
-                source_type='runtime',
-                contract_version=CONTRACT_VERSION,
-                data={
-                    # A lookup miss fails like env://NAME's and help://TOPIC's (BACK-1523): the
-                    # router exits 1 on it; the rest is the detail its renderer adds.
-                    'error': f"No nginx config found for '{self.domain}'",
-                    'domain': self.domain,
-                    'searched': _NGINX_SEARCH_DIRS,
-                    'next_steps': [
-                        f"Check if nginx is installed: which nginx",
-                        f"Manually find config: grep -r 'server_name {self.domain}' /etc/nginx/",
-                        f"Inspect a specific file: reveal /etc/nginx/conf.d/yourfile.conf",
-                    ],
-                }
-            )
-
-        if server_block is None:
-            return ResultBuilder.create(
-                result_type='nginx_vhost_not_found',
-                source=f'nginx://{self.domain}',
-                source_type='runtime',
-                contract_version=CONTRACT_VERSION,
-                data={
-                    'error': f"No nginx server block matched '{self.domain}' in {config_path}",
-                    'domain': self.domain,
-                    'config_file': config_path,
-                    'note': 'Config file found but no server block matched this domain',
-                    'next_steps': [f"Inspect the file: reveal {config_path}"],
-                }
-            )
+        if config_path is None or server_block is None:
+            return self._vhost_not_found(config_path)
 
         symlink_info = _resolve_symlink_info(config_path)
         ports = _extract_ports(server_block)
@@ -1124,11 +1126,7 @@ class NginxUriAdapter(ResourceAdapter):
         config_path, content, server_block = self._load_vhost()
 
         if config_path is None or server_block is None:
-            return {
-                'type': 'nginx_vhost_not_found',
-                'domain': self.domain,
-                'element': element_name,
-            }
+            return {**self._vhost_not_found(config_path), 'element': element_name}
 
         handlers = {
             'ports': self._element_ports,

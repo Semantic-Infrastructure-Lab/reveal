@@ -125,7 +125,7 @@
  "reveal/adapters/nginx/adapter.py::assignment": 1,
  "reveal/adapters/nginx/adapter.py::no-any-return": 2,
  "reveal/adapters/nginx/adapter.py::override": 2,
- "reveal/adapters/nginx/adapter.py::return-value": 5,
+ "reveal/adapters/nginx/adapter.py::return-value": 4,
  "reveal/adapters/nginx/adapter.py::typeddict-unknown-key": 1,
  "reveal/adapters/nginx/handlers.py::no-any-return": 1,
  "reveal/adapters/overview.py::no-any-return": 3,
