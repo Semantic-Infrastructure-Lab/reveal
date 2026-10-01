@@ -900,21 +900,49 @@ class TestM102IsImported(unittest.TestCase):
         assert result is False
 
 
-class TestM102FindPackageRoot(unittest.TestCase):
-    """Cover _find_package_root fallback path (lines 284-286)."""
+class TestM102ProjectRoot(unittest.TestCase):
+    """BACK-1372: M102 takes its root from the shared resolver, one root per file."""
 
-    def test_fallback_to_init_boundary(self):
-        rule = M102()
+    def setUp(self):
+        import reveal.rules.maintainability.M102 as m
+        m._import_cache.clear()
+
+    def test_package_without_marker_roots_at_the_package_top(self):
+        from reveal.rules.maintainability.M102 import _project_root
         with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir = Path(tmpdir)
-            # Create a package without pyproject.toml
-            pkg = tmpdir / 'mypkg'
+            pkg = Path(tmpdir) / 'mypkg'
             pkg.mkdir()
-            (pkg / '__init__.py').write_text('')
-            (pkg / 'module.py').write_text('x = 1\n')
-            result = rule._find_package_root(pkg / 'module.py')
-            # Should fall back to __init__.py boundary
-            assert result == pkg
+            (pkg / '__init__.py').write_text('', encoding='utf-8')
+            (pkg / 'module.py').write_text('x = 1\n', encoding='utf-8')
+            assert _project_root(pkg / 'module.py') == pkg
+
+    def test_module_named_setup_py_neither_roots_nor_rescans(self):
+        """home-assistant's homeassistant/setup.py is a module. The old name root
+        stopped at it while the importer scan climbed past it, so every file paid
+        for two scans, one of them the whole project (BACK-1429)."""
+        import reveal.rules.maintainability.M102 as m
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            files = {
+                'pyproject.toml': '[project]\nname = "x"\n',
+                'mypkg/__init__.py': '',
+                'mypkg/setup.py': 'def async_setup():\n    return True\n',
+                'mypkg/sub/__init__.py': '',
+                'mypkg/sub/worker.py': 'def main():\n    return 1\n',
+                'mypkg/sub/orphan.py': 'def unused():\n    return 2\n',
+                'tests/test_worker.py': 'from mypkg.sub.worker import main\n',
+            }
+            for rel, body in files.items():
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                (root / rel).write_text(body, encoding='utf-8')
+            assert m._project_root(root / 'mypkg/sub/worker.py') == root
+            rule = M102()
+            worker = root / 'mypkg/sub/worker.py'
+            assert rule.check(str(worker), None, worker.read_text()) == []
+            orphan = root / 'mypkg/sub/orphan.py'
+            dets = rule.check(str(orphan), None, orphan.read_text())
+            assert [d.message.split("'")[1] for d in dets] == ['mypkg.sub.orphan']
+            assert list(m._import_cache) == [root]
 
 
 class TestM102HasMeaningfulCode(unittest.TestCase):

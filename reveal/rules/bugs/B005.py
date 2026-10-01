@@ -33,6 +33,7 @@ from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
 from ..imports import STDLIB_MODULES
 from ...analyzers.imports.javascript import JavaScriptExtractor
+from ...utils.path_utils import python_package_top
 
 
 class B005(BaseRule, ASTParsingMixin):
@@ -192,24 +193,16 @@ class B005(BaseRule, ASTParsingMixin):
         return detections
 
     def _find_project_root(self, file_dir: Path) -> Path:
-        """Return the project root: the parent of the topmost package directory.
-
-        Walks up while each directory is a package (has __init__.py). If the
-        file isn't inside a package, its own directory is the root. This is
-        what lets an absolute import of the project's own package
-        (`from homeassistant.core import ...` inside
+        """Return the directory absolute imports resolve against: the parent of
+        the topmost package directory, or the file's own directory when it isn't
+        inside a package. This is what lets an absolute import of the project's
+        own package (`from homeassistant.core import ...` inside
         homeassistant/components/mqtt/) resolve against the tree on disk
-        instead of being flagged (BACK-465).
+        instead of being flagged (BACK-465). Not the project root (BACK-612
+        keeps that question separate); the climb is the shared one (BACK-1372).
         """
-        current = file_dir
-        root = file_dir
-        while (current / "__init__.py").exists():
-            parent = current.parent
-            if parent == current:
-                break
-            root = parent
-            current = parent
-        return root
+        top = python_package_top(file_dir)
+        return top.parent if top is not None else file_dir
 
     def _same_project_module(self, dotted: str, project_root: Path) -> Optional[bool]:
         """Resolve an absolute dotted module path against the project root.

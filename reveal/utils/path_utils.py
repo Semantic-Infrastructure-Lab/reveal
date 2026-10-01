@@ -1270,12 +1270,17 @@ def _has_vcs_marker(directory: Path) -> bool:
     return any((directory / marker).exists() for marker in _VCS_ROOT_MARKERS)
 
 
-def _python_package_top(target_path: Path) -> Optional[Path]:
+def python_package_top(target_path: Path) -> Optional[Path]:
     """Tier 3 (opt-in): the top of the *contiguous* ``__init__.py`` chain
     rooted at the target's own directory — the Python-package fallback the
     I002 circular-import rule needs (BACK-338). Returns ``None`` when the
     target directory is not itself a package, so a stray far-ancestor
     ``__init__.py`` can never hijack the root of an unrelated tree.
+
+    The one ``__init__.py`` climb (BACK-1372): B005 and M102 ask a different
+    question than "where is the project" -- the directory a package's
+    absolute imports resolve against is this top's *parent* -- and answer it
+    from here instead of climbing on their own.
     """
     start = target_path if target_path.is_dir() else target_path.parent
     if not (start / '__init__.py').exists():
@@ -1346,7 +1351,7 @@ def resolve_project_root(
     if use_vcs and vcs_root is not None:
         return vcs_root
     if python_init_chain:
-        return _python_package_top(target_path)
+        return python_package_top(target_path)
     return None
 
 

@@ -11,7 +11,10 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from ...utils.path_utils import EVIDENCE, _walk_code_files, is_test_path, is_unsafe_scan_root
+from ...utils.path_utils import (
+    EVIDENCE, _walk_code_files, is_test_path, is_unsafe_scan_root, python_package_top,
+    resolve_project_root,
+)
 from ...utils.pyparse import parse_python
 
 logger = logging.getLogger(__name__)
@@ -64,66 +67,39 @@ def _resolve_relative_import(
         return None
 
 
-def _package_boundary(path: Path) -> tuple:
-    """Return (boundary_parent, dotted_name) derived from the __init__.py chain.
+def _import_name(path: Path) -> Optional[str]:
+    """The dotted name real importers write, from the ``__init__.py`` chain.
 
-    BACK-1259: this is the name real importers actually write -- the path
-    relative to the directory that would sit on sys.path -- as opposed to
-    _get_module_name's package_root-relative name, which gains a bogus prefix
-    on a src/ layout ('src.mypkg.worker' where every importer writes
-    'mypkg.worker') and loses one when no project marker is found at all.
+    BACK-1259: this is the path relative to the directory that would sit on
+    sys.path, as opposed to _get_module_name's project-root-relative name, which
+    gains a prefix on a src/ layout ('src.mypkg.worker' where every importer
+    writes 'mypkg.worker'). None when the file isn't inside a package.
     """
-    parts = []
-    current = path.parent
-    for _ in range(20):
-        if not (current / '__init__.py').exists():
-            break
-        parts.append(current.name)
-        parent = current.parent
-        if parent == current:
-            break
-        current = parent
-    if not parts:
-        return None, None
-    parts = list(reversed(parts))
-    if path.stem != '__init__':
-        parts.append(path.stem)
-    return current, '.'.join(parts)
+    top = python_package_top(path)
+    if top is None:
+        return None
+    parts = list(path.relative_to(top.parent).with_suffix('').parts)
+    if parts[-1] == '__init__':
+        parts.pop()
+    return '.'.join(parts)
 
 
-def _project_scan_root(boundary_parent: Path) -> Optional[Path]:
-    """Widen the import scan upward to the project root, or None if there
-    isn't a safe one.
+def _project_root(path: Path) -> Optional[Path]:
+    """The project whose Python files are this module's possible importers.
 
-    BACK-1259: importers frequently live outside the package directory --
-    tests/, sibling packages, scripts/ -- and _collect_all_imports only walks
-    package_root, so those importers are invisible and their target reads as
-    orphaned. Measured on home-assistant/core: 30 M102 hits on components/mqtt,
-    3 of them real; the other 27 were imported from tests/.
-
-    Returns None rather than a bare directory when no project marker is found,
-    because the widened scan is an unbounded rglob: a package sitting directly
-    in $HOME or /tmp would otherwise make this parse every Python file under
-    it. Same guard find_project_root and the I002 scan already use.
+    BACK-1372: the shared ceiling-bounded resolver (BACK-612) -- ``.reveal.yaml
+    root:true``, then a package marker, then the VCS root, then the top of the
+    ``__init__.py`` chain -- instead of M102's own two climbs. Those disagreed:
+    the module-name root stopped at any ``setup.py`` (home-assistant's
+    ``homeassistant/setup.py`` is a module) while the BACK-1259 importer scan
+    climbed past it, so every file paid for two scans, one of them the whole
+    project (BACK-1429: ~46% of an overview's runtime). The resolver skips a
+    marker inside a package dir, so one root answers both. None when nothing
+    safe is found: the scan is an unbounded walk, and a package sitting
+    directly in $HOME or /tmp must not make it read every file under that.
     """
-    current = boundary_parent
-    for _ in range(6):
-        if is_unsafe_scan_root(current):
-            # Stop widening here, but still fall back to boundary_parent below
-            # -- that directory is the one holding the top-level package, so
-            # scanning it is bounded even when there is no marker above it.
-            break
-        if (
-            (current / 'pyproject.toml').exists()
-            or (current / 'setup.py').exists()
-            or (current / '.git').exists()
-        ):
-            return current
-        parent = current.parent
-        if parent == current:
-            break
-        current = parent
-    return None if is_unsafe_scan_root(boundary_parent) else boundary_parent
+    root = resolve_project_root(path, python_init_chain=True)
+    return None if root is None or is_unsafe_scan_root(root) else root
 
 
 def _add_module_and_parents(imports: Set[str], module: str) -> None:
@@ -253,8 +229,8 @@ class M102(BaseRule):
         if self._is_test_file(path):
             return detections
 
-        # Find the package root (directory with __init__.py or pyproject.toml)
-        package_root = self._find_package_root(path)
+        # The project whose files are the possible importers (BACK-1372)
+        package_root = _project_root(path)
         if not package_root:
             return detections
 
@@ -310,36 +286,6 @@ class M102(BaseRule):
         file on a Ruby codebase was treated as regular source and could be
         flagged as orphaned."""
         return is_test_path(Path(*(p.lower() for p in path.parts)))
-
-    def _find_package_root(self, path: Path) -> Optional[Path]:
-        """Find the root of the Python package.
-
-        Prefers project-level markers (pyproject.toml, setup.py) over
-        __init__.py boundaries to correctly resolve module names for packages
-        that live inside a project directory (e.g. httpie/ inside httpie-cli/).
-        """
-        current = path.parent
-
-        # Pass 1: walk up looking for project-level markers
-        sentinel = current
-        for _ in range(10):
-            if (current / 'pyproject.toml').exists() or (current / 'setup.py').exists():
-                return current
-            parent = current.parent
-            if parent == current:  # filesystem root
-                break
-            current = parent
-
-        # Pass 2: fall back to topmost __init__.py boundary
-        current = sentinel
-        for _ in range(10):
-            if (current / '__init__.py').exists():
-                parent = current.parent
-                if not (parent / '__init__.py').exists():
-                    return current
-            current = current.parent
-
-        return None
 
     def _get_module_name(self, path: Path, package_root: Path) -> Optional[str]:
         """Get the importable module name for a file."""
@@ -423,30 +369,16 @@ class M102(BaseRule):
             except (OSError, UnicodeDecodeError):
                 pass
 
-        # BACK-1259: package_root inference can produce a dotted name whose
-        # prefix differs from the one real importers write (a src/ layout, a
-        # stray nested setup.py that is a module rather than a build script, or
-        # no project marker at all), and the scan above never leaves
-        # package_root, so importers under tests/ or a sibling package are
-        # invisible. Retry with the sys.path-relative name over a project-wide
-        # scan. Strictly detection-reducing: this can only clear a false
-        # positive, never create a hit.
-        boundary_parent, qualified = _package_boundary(path)
-        if qualified:
-            scan_root = _project_scan_root(boundary_parent)
-            # Skip the retry when it cannot change the answer -- same name and
-            # same scan root means the first pass already covered it. This is
-            # the common, correctly-configured case (reveal's own tree), so the
-            # widened scan costs nothing there.
-            if scan_root is not None and (
-                qualified != module_name or scan_root != package_root
-            ):
-                wide_imports = self._collect_all_imports(scan_root)
-                for candidate in {qualified, module_name}:
-                    if candidate in wide_imports:
-                        return True
-                    if any(imp.startswith(candidate + '.') for imp in wide_imports):
-                        return True
+        # BACK-1259: importers write the sys.path-relative name, which differs
+        # from the root-relative one on a src/ layout. The scan above already
+        # covers the whole project (tests/, sibling packages), so look the
+        # other spelling up in it. Strictly detection-reducing.
+        qualified = _import_name(path)
+        if qualified and qualified != module_name:
+            if qualified in all_imports:
+                return True
+            if any(imp.startswith(qualified + '.') for imp in all_imports):
+                return True
 
         return False
 
