@@ -836,7 +836,7 @@ class TestRunOverview(unittest.TestCase):
                     patch('reveal.adapters.overview._resolve_git_root', return_value=enclosing_root):
                 out = _capture(run_overview, _args(path=tmp))
                 self.assertIn('enclosing repo', out)
-                self.assertIn(str(enclosing_root), out)
+                self.assertIn(enclosing_root.as_posix(), out)  # '/' on every OS (BACK-1366)
 
     def test_matching_git_root_no_disclosure(self):
         """Target dir IS its own repo root: no false-positive warning."""
@@ -877,7 +877,7 @@ class TestRunOverview(unittest.TestCase):
                 with patch('sys.stdout', buf):
                     run_overview(_args(path=tmp, format='json'))
                 data = json.loads(buf.getvalue())
-                self.assertEqual(data['git_foreign_root'], str(enclosing_root))
+                self.assertEqual(data['git_foreign_root'], enclosing_root.as_posix())  # '/' on every OS (BACK-1366)
 
     def test_no_git_log_skips_root_resolution(self):
         """Empty git_log (e.g. no_git or no history) shouldn't trigger a root lookup."""
