@@ -221,6 +221,51 @@ NODE_BUILTINS: FrozenSet[str] = frozenset({
 })
 
 
+# C and C++ system headers: the C standard library, POSIX (plus the common
+# Linux/BSD sys/ headers), and the C++ standard library (BACK-1427). An
+# `#include <stdio.h>` read as a third-party package put libc at the top of
+# every C repo's "unresolved packages" with "0 stdlib packages" beside it.
+C_STDLIB_HEADERS: FrozenSet[str] = frozenset({
+    # C11/C17/C23
+    'assert', 'complex', 'ctype', 'errno', 'fenv', 'float', 'inttypes', 'iso646',
+    'limits', 'locale', 'math', 'setjmp', 'signal', 'stdalign', 'stdarg',
+    'stdatomic', 'stdbit', 'stdbool', 'stdckdint', 'stddef', 'stdint', 'stdio',
+    'stdlib', 'stdnoreturn', 'string', 'tgmath', 'threads', 'time', 'uchar',
+    'wchar', 'wctype',
+    # POSIX
+    'aio', 'arpa/inet', 'cpio', 'dirent', 'dlfcn', 'fcntl', 'fmtmsg', 'fnmatch',
+    'ftw', 'glob', 'grp', 'iconv', 'langinfo', 'libgen', 'monetary', 'mqueue',
+    'ndbm', 'net/if', 'netdb', 'netinet/in', 'netinet/tcp', 'nl_types', 'poll',
+    'pthread', 'pwd', 'regex', 'sched', 'search', 'semaphore', 'spawn',
+    'strings', 'sys/ipc', 'sys/mman', 'sys/msg', 'sys/resource', 'sys/select',
+    'sys/sem', 'sys/shm', 'sys/socket', 'sys/stat', 'sys/statvfs', 'sys/time',
+    'sys/times', 'sys/types', 'sys/uio', 'sys/un', 'sys/utsname', 'sys/wait',
+    'syslog', 'tar', 'termios', 'ulimit', 'unistd', 'utime', 'utmpx', 'wordexp',
+    # common non-POSIX system headers
+    'sys/ioctl', 'sys/param', 'sys/file', 'sys/epoll', 'sys/event', 'sys/sysctl',
+    'sys/prctl', 'sys/syscall', 'sys/eventfd', 'sys/timerfd', 'sys/inotify',
+    'sys/queue', 'malloc', 'alloca', 'endian', 'execinfo', 'features', 'getopt',
+    'err', 'sysexits', 'ifaddrs', 'netinet/ip', 'netinet/udp', 'linux/limits',
+    # C++ standard library
+    'algorithm', 'any', 'array', 'atomic', 'barrier', 'bit', 'bitset', 'cassert',
+    'cctype', 'cerrno', 'cfenv', 'cfloat', 'charconv', 'chrono', 'cinttypes',
+    'climits', 'clocale', 'cmath', 'codecvt', 'compare', 'complex', 'concepts',
+    'condition_variable', 'coroutine', 'csetjmp', 'csignal', 'cstdarg', 'cstddef',
+    'cstdint', 'cstdio', 'cstdlib', 'cstring', 'ctime', 'cuchar', 'cwchar',
+    'cwctype', 'deque', 'exception', 'execution', 'expected', 'filesystem',
+    'format', 'forward_list', 'fstream', 'functional', 'future',
+    'initializer_list', 'iomanip', 'ios', 'iosfwd', 'iostream', 'istream',
+    'iterator', 'latch', 'list', 'map', 'memory', 'memory_resource', 'mutex',
+    'new', 'numbers', 'numeric', 'optional', 'ostream', 'print', 'queue',
+    'random', 'ranges', 'ratio', 'scoped_allocator', 'set', 'shared_mutex',
+    'source_location', 'span', 'spanstream', 'sstream', 'stack', 'stacktrace',
+    'stdexcept', 'stop_token', 'streambuf', 'string_view', 'syncstream',
+    'system_error', 'thread', 'tuple', 'type_traits', 'typeindex', 'typeinfo',
+    'unordered_map', 'unordered_set', 'utility', 'valarray', 'variant', 'vector',
+    'version',
+})
+
+
 def _python_stdlib_key(module: str) -> Optional[str]:
     top = module.split('.')[0]
     return top if top in PYTHON_STDLIB else None
@@ -241,6 +286,11 @@ def _prefix_stdlib_key(*roots: str) -> Callable[[str], Optional[str]]:
         top = module.split('.')[0]
         return top if top in roots else None
     return key
+
+
+def _c_stdlib_key(module: str) -> Optional[str]:
+    name = module[:-2] if module.endswith('.h') else module
+    return name if name in C_STDLIB_HEADERS else None
 
 
 def _node_stdlib_key(module: str) -> Optional[str]:
@@ -358,6 +408,7 @@ _CONVENTIONS: Dict[str, LanguageConventions] = {
         LanguageConventions(
             family='c',
             entry_point_files=frozenset({'main.c', 'main.cpp', 'main.cc'}),
+            stdlib_key=_c_stdlib_key,
             # Any extension: the family is already chosen by extension via the
             # registry, and a re-listed set here missed .h++ (BACK-1255).
             test_file_patterns=(re.compile(r'^(.+)_tests\.[^.]+$'),),

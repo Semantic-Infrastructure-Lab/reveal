@@ -190,6 +190,14 @@ class TestStdlibKey:
         assert self._classify('System.Collections.Generic', 'csharp')[0] == 'stdlib'
         assert self._classify('Newtonsoft.Json', 'csharp')[0] == 'external'
 
+    def test_c_and_cpp_system_headers(self):
+        # BACK-1427: libc/POSIX/C++ headers topped Redis's "third-party" list.
+        assert self._classify('stdio.h', 'c') == ('stdlib', 'stdio')
+        assert self._classify('sys/types.h', 'c') == ('stdlib', 'sys/types')
+        assert self._classify('vector', 'c') == ('stdlib', 'vector')
+        assert self._classify('openssl/ssl.h', 'c') == ('external', 'openssl/ssl')
+        assert self._classify('hiredis.h', 'c') == ('external', 'hiredis')
+
     def test_python_stdlib_not_applied_to_other_languages(self):
         # BACK-1193: `json`/`socket` in Ruby must not read as Python stdlib.
         assert self._classify('json', 'ruby')[0] == 'external'
