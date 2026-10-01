@@ -19,7 +19,7 @@
   "reveal/adapters/xlsx.py::XlsxAdapter._parse_xmla_tables": 25,
   "reveal/analyzers/_js_function_values.py::JSFunctionValueMixin._iter_function_values": 25,
   "reveal/analyzers/imports/javascript.py::_get_tsconfig_aliases": 25,
-  "reveal/cli/file_checker.py::_check_files_text": 32,
+  "reveal/cli/file_checker.py::_check_files_text": 31,
   "reveal/cli/handlers/introspection.py::build_discover_payload": 22,
   "reveal/core/callees/generic.py::callee_name_from_node": 22,
   "reveal/rules/bugs/B006.py::B006._has_deferred_visible_signal": 22

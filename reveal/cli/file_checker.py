@@ -325,7 +325,7 @@ def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore):
 
 def _print_grouped_detections(
     detections: list,
-    relative: Path,
+    relative: str,
     no_group: bool = False,
     shown_guidance: Optional[set] = None,
     no_snippets: bool = False,
@@ -396,6 +396,17 @@ def _print_grouped_detections(
             total = len(by_rule[d.rule_code])
             _emit(d, icon)
             print(f"  ↳ +{total - 1} more {d.rule_code} occurrences hidden — use --no-group to expand")
+
+
+def _cwd_relative(file_path: Path, directory: Path, cwd: Optional[Path] = None) -> str:
+    """The path check prints for a file: relative to the cwd, so an editor's "click to
+    jump" works wherever the target points (ruff/mypy/flake8 do the same), else relative
+    to the checked directory. '/' on every OS (BACK-1586): the text, grep and JSON
+    renders all print this one spelling."""
+    try:
+        return to_posix(file_path.relative_to(cwd or Path.cwd()))
+    except ValueError:
+        return to_posix(file_path.relative_to(directory))
 
 
 def should_skip_file(relative_path: Path, gitignore_patterns: List[str]) -> bool:
@@ -570,13 +581,7 @@ def check_and_report_file(
         if not detections:
             return 0
 
-        # Always use CWD-relative paths so editor "click to jump" works regardless
-        # of where the target argument points (matches ruff/mypy/flake8 behavior).
-        cwd = Path.cwd()
-        try:
-            relative = file_path.relative_to(cwd)
-        except ValueError:
-            relative = file_path.relative_to(directory)
+        relative = _cwd_relative(file_path, directory)
         issue_count = len(detections)
         print(f"\n{relative}: Found {issue_count} issue{'s' if issue_count != 1 else ''}\n")
         _print_grouped_detections(detections, relative, no_group=no_group)
@@ -759,7 +764,7 @@ def check_exit_code(
 
 
 def _build_file_entry(
-    rel_path: Path,
+    rel_path: str,
     issue_count: int,
     rendered: list,
     status: dict,
@@ -773,7 +778,7 @@ def _build_file_entry(
     artifact drifting from what --format json emits.
     """
     entry = {
-        "file": to_posix(rel_path),
+        "file": rel_path,
         "issues": issue_count,
         "detections": [
             {
@@ -866,10 +871,7 @@ def _check_files_json(
             total_issues += issue_count
             files_with_issues += 1
         if issue_count > 0 or st != "ok":
-            try:
-                rel_path = file_path.relative_to(cwd)
-            except ValueError:
-                rel_path = file_path.relative_to(directory)
+            rel_path = _cwd_relative(file_path, directory, cwd)
 
             rendered = detections
             if remaining_budget is not None:
@@ -1001,10 +1003,7 @@ def _check_files_text(
         elif st == "warning":
             files_degraded += 1
 
-        try:
-            relative = file_path.relative_to(cwd)
-        except ValueError:
-            relative = file_path.relative_to(directory)
+        relative = _cwd_relative(file_path, directory, cwd)
 
         if st == "error":
             print(f"\n{relative}: ⚠️  could not be checked — {status.get('detail', 'error')}")

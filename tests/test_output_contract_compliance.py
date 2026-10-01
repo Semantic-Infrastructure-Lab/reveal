@@ -60,13 +60,17 @@ proves nothing about the adapter's normal output. Invariants:
    and called only get_structure(), so ast:// found nothing on any path, env://HOME listed
    the whole environment, and a failed query counted as successful with exit 0 (BACK-1554).
    ``test_the_batch_invariant_bites`` checks that every status is compared.
+10. ``posix_path``: no string in a result spells a fixture path with Windows separators
+   (``proj\\app.py``, ``pkg\\util.py``); paths are written with ``/`` on every OS (BACK-1586).
+   Only Windows CI can produce a violation, so this invariant has no strict-xfail list: on
+   Linux an entry would XPASS. ``test_the_posix_path_invariant_bites`` checks the needles.
 
 Violations that exist today are listed in ``KNOWN_VIOLATIONS`` as strict xfails, each
 naming its task. A fix makes its case XPASS, which fails the run until the entry is
 deleted. The list can only shrink.
 
 Not covered yet (BACK-1513 follow-ups): caps with no knob (a hard-coded ``[:20]``, which
-invariant 7 can't vary), consumed flags (BACK-1514), and POSIX separators on Windows.
+invariant 7 can't vary) and consumed flags (BACK-1514).
 """
 
 import json
@@ -581,10 +585,27 @@ def test_no_absolute_fixture_path_in_result(harness, scheme):
 
 
 def _path_leaks(harness, payload):
-    """Strings naming the fixture by its absolute path (BACK-1366). Native Windows
-    separators are BACK-1586: ast:// still prints them, which only Windows CI shows."""
+    """Strings naming the fixture by its absolute path (BACK-1366)."""
     return [(where, value) for where, value in _strings(payload)
             if any(needle in value for needle in harness.needles)]
+
+
+def _windows_spellings(root):
+    """Every multi-part relative path in the fixture, spelled with '\\' -- 'proj\\app.py',
+    and the same file below each of its directories ('pkg\\util.py')."""
+    spellings = set()
+    for path in root.rglob('*'):
+        parts = path.relative_to(root).parts
+        spellings.update('\\'.join(parts[i:]) for i in range(len(parts) - 1))
+    return spellings
+
+
+def _native_separators(harness, payload):
+    """Strings spelling a fixture path with Windows separators (BACK-1586)."""
+    if not hasattr(harness, 'windows_spellings'):
+        harness.windows_spellings = _windows_spellings(harness.root)
+    return [(where, value) for where, value in _strings(payload)
+            if '\\' in value and any(needle in value for needle in harness.windows_spellings)]
 
 
 @pytest.mark.parametrize('name', _cases('subcommand_abs_path', sorted(SUBCOMMAND_ARGV)))
@@ -592,6 +613,27 @@ def test_no_absolute_fixture_path_in_subcommand_result(harness, name):
     _, out, _, _ = harness.run_subcommand(name, *SUBCOMMAND_ARGV[name], '--format', 'json')
     leaks = _path_leaks(harness, json.loads(out))
     assert not leaks, f'reveal {name}: absolute path in a result for a relative input: {leaks[:3]}'
+
+
+@pytest.mark.parametrize('scheme', sorted(s for s, uri in FIXTURE_URIS.items() if '://proj' in uri))
+def test_paths_use_posix_separators(harness, scheme):
+    _, payload, _ = harness.run_fixture(scheme)
+    native = _native_separators(harness, payload)
+    assert not native, f'{scheme}: a path written with Windows separators: {native[:3]}'
+
+
+@pytest.mark.parametrize('name', sorted(SUBCOMMAND_ARGV))
+def test_subcommand_paths_use_posix_separators(harness, name):
+    _, out, _, _ = harness.run_subcommand(name, *SUBCOMMAND_ARGV[name], '--format', 'json')
+    native = _native_separators(harness, json.loads(out))
+    assert not native, f'reveal {name}: a path written with Windows separators: {native[:3]}'
+
+
+def test_the_posix_path_invariant_bites(harness):
+    """Positive control: the needles are the fixture's own files spelled the Windows way, so
+    a clean run on Linux is not a needle set that never matches. A regex escape is not one."""
+    payload = {'results': [{'file': 'proj\\app.py'}], 'pattern': r'\d+\.py'}
+    assert [w for w, _ in _native_separators(harness, payload)] == ['.results[0].file']
 
 
 def test_the_abs_path_invariant_bites(harness):

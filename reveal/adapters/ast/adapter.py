@@ -350,10 +350,13 @@ class AstAdapter(ResourceAdapter):
 
         # BACK-1258: tag each result test/vendor/minified, the same field
         # hotspots:// and overview:// already carry (read by _unfiltered_ranking_warning).
-        from ...utils.path_utils import provenance_for_display_path
+        from ...utils.path_utils import provenance_for_display_path, to_posix
         base = Path(self.path)
         for elem in controlled:
             elem['provenance'] = provenance_for_display_path(elem.get('file'), base)
+            # '/' on every OS, as the envelope's source is (BACK-1586)
+            if elem.get('file'):
+                elem['file'] = to_posix(elem['file'])
 
     def _dict_analysis_result(self) -> Dict[str, Any]:
         """show=dict-heatmap / show=dict-schemas: Python untyped-dict analysis."""

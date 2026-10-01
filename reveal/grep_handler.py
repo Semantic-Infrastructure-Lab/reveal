@@ -312,7 +312,7 @@ def _collect_dir_results(
     ``--exclude`` or REVEAL_IGNORE, tallied as the directory view does. A search of a
     gitignored directory said "No matches found" as if it had looked (BACK-1546).
     """
-    from .utils.path_utils import DISPLAY, walk_tree
+    from .utils.path_utils import DISPLAY, to_posix, walk_tree
     hidden: Counter = Counter()
 
     def tally(_path: Path, _is_dir: bool, cause: str) -> None:
@@ -343,7 +343,7 @@ def _collect_dir_results(
             total_hits += len(hit_lines)
             elements = _get_structural_elements(str(fpath))
             groups = _group_by_element(hit_lines, elements)
-            file_results.append({'path': str(fpath), 'hits': hit_lines, 'groups': groups})
+            file_results.append({'path': to_posix(fpath), 'hits': hit_lines, 'groups': groups})
     return file_results, total_hits, {'files_searched': searched, 'hidden': dict(hidden)}
 
 
@@ -373,7 +373,7 @@ def _render_dir_text(
     print(f"{total_hits} {hit_word} across {len(file_results)} {file_word}")
     print()
     for result in file_results:
-        rel = Path(result['path']).relative_to(dir_path)
+        rel = Path(result['path']).relative_to(dir_path).as_posix()
         print(f"File: {rel}")
         for group in result['groups']:
             name = group['name']

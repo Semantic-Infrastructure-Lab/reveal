@@ -32,7 +32,7 @@ def pkg(tmp_path, monkeypatch):
 
 def _m102(*args):
     result = _run_reveal_direct('check', '.', '--select', 'M102', *args)
-    return result.stdout.replace('\\', '/')  # native separators on Windows (BACK-1586)
+    return result.stdout
 
 
 def test_m102_exclude_narrows_the_report_not_the_importers(pkg):

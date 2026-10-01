@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Generator, List, Optional, Tuple
 from .registry import get_analyzer
 from .utils import format_size
-from .utils.path_utils import DISPLAY, WalkPurpose, _walk_code_files, list_dir, walk_filter
+from .utils.path_utils import DISPLAY, WalkPurpose, _walk_code_files, list_dir, to_posix, walk_filter
 
 Hidden = Callable[[Path, bool], Optional[str]]
 
@@ -190,7 +190,7 @@ def show_file_list_json(path: str, show_hidden: bool = False,
         except ValueError:
             rel = fpath
         entries.append({
-            'path': str(rel),
+            'path': to_posix(rel),  # '/' on every OS (BACK-1586)
             'modified': datetime.datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
             'size': stat.st_size,
         })
