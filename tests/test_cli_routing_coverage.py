@@ -1102,7 +1102,11 @@ class TestRenderElement:
         args = _args()
 
         _render_element(mock_adapter, mock_renderer, 'foo', None, args)
-        mock_renderer.render_element.assert_called_once_with({'name': 'foo', 'body': 'x = 1'}, 'text')
+        mock_renderer.render_element.assert_called_once()
+        passed, fmt = mock_renderer.render_element.call_args[0]
+        # The adapter's fields, inside the Output Contract envelope (BACK-1591).
+        assert fmt == 'text' and passed['contract_version'] and passed['type']
+        assert {k: passed[k] for k in ('name', 'body')} == {'name': 'foo', 'body': 'x = 1'}
 
     # BACK-355 — --head/--tail applied to text-body content field
 
@@ -1170,7 +1174,8 @@ class TestRenderElement:
         args = _args(head=1)
         _render_element(mock_adapter, mock_renderer, 'x', None, args)
         passed = mock_renderer.render_element.call_args[0][0]
-        assert passed == original
+        # --head leaves a result with no text field as it was, inside its envelope (BACK-1591).
+        assert {k: passed[k] for k in original} == original
 
     # BACK-356 — --outline renders heading hierarchy from text-body content
 
