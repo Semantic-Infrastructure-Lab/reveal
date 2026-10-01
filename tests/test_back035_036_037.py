@@ -144,9 +144,10 @@ class TestSinceToday:
             {'session': 'new', 'modified': f'{today}T12:00:00', 'size_kb': 1},
         ]
         result = self._make_result(sessions)
-        args = SimpleNamespace(name=None, since='today', all=True, head=None)
+        args = SimpleNamespace(name=None, all=True, head=None)
+        query = {'since': 'today'}
         with patch.object(ClaudeAdapter, '_read_session_title', return_value=None):
-            ClaudeAdapter._post_process_session_list(result, args)
+            ClaudeAdapter._post_process_session_list(result, args, query)
         names = [s['session'] for s in result['recent_sessions']]
         assert 'new' in names
         assert 'old' not in names
@@ -158,9 +159,10 @@ class TestSinceToday:
             {'session': 'evening', 'modified': f'{today}T22:00:00', 'size_kb': 1},
         ]
         result = self._make_result(sessions)
-        args = SimpleNamespace(name=None, since='today', all=True, head=None)
+        args = SimpleNamespace(name=None, all=True, head=None)
+        query = {'since': 'today'}
         with patch.object(ClaudeAdapter, '_read_session_title', return_value=None):
-            ClaudeAdapter._post_process_session_list(result, args)
+            ClaudeAdapter._post_process_session_list(result, args, query)
         assert len(result['recent_sessions']) == 2
 
     def test_since_date_string_works(self):
@@ -169,9 +171,10 @@ class TestSinceToday:
             {'session': 'after', 'modified': '2026-03-14T10:00:00', 'size_kb': 1},
         ]
         result = self._make_result(sessions)
-        args = SimpleNamespace(name=None, since='2026-03-14', all=True, head=None)
+        args = SimpleNamespace(name=None, all=True, head=None)
+        query = {'since': '2026-03-14'}
         with patch.object(ClaudeAdapter, '_read_session_title', return_value=None):
-            ClaudeAdapter._post_process_session_list(result, args)
+            ClaudeAdapter._post_process_session_list(result, args, query)
         names = [s['session'] for s in result['recent_sessions']]
         assert 'after' in names
         assert 'before' not in names
@@ -182,9 +185,10 @@ class TestSinceToday:
             {'session': 'new', 'modified': '2026-03-14T00:00:00', 'size_kb': 1},
         ]
         result = self._make_result(sessions)
-        args = SimpleNamespace(name=None, since=None, all=True, head=None)
+        args = SimpleNamespace(name=None, all=True, head=None)
+        query = {}
         with patch.object(ClaudeAdapter, '_read_session_title', return_value=None):
-            ClaudeAdapter._post_process_session_list(result, args)
+            ClaudeAdapter._post_process_session_list(result, args, query)
         assert len(result['recent_sessions']) == 2
 
 

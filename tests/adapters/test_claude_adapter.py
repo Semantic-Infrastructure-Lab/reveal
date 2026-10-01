@@ -591,8 +591,6 @@ class TestSessionListing:
         """?until=DATE excludes sessions modified after that date."""
         class _MockArgs:
             name = None
-            since = None
-            until = '2026-03-20'
             all = False
             head = None
 
@@ -605,7 +603,7 @@ class TestSessionListing:
                 {'session': 'new-session', 'modified': '2026-06-01T08:00:00', 'path': ''},
             ],
         }
-        ClaudeAdapter._post_process_session_list(result, _MockArgs())
+        ClaudeAdapter._post_process_session_list(result, _MockArgs(), {'until': '2026-03-20'})
 
         names = [s['session'] for s in result['recent_sessions']]
         assert 'new-session' not in names

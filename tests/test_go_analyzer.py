@@ -420,7 +420,8 @@ class TestGoAnonymousTypeExpressions:
         assert go_anon.extract_element('struct', 'Generic')['source'] == 'type Generic[T any] struct{ v T }'
 
     def test_grouped_declaration_extracts_just_its_own_spec(self, go_anon):
-        assert go_anon.extract_element('struct', 'A')['source'] == 'A struct{ x int }'
+        # The spec keeps its indentation inside type ( ... ) (BACK-1597).
+        assert go_anon.extract_element('struct', 'A')['source'] == '\tA struct{ x int }'
 
     def test_by_name_display_path_matches(self, go_anon, capsys):
         from reveal.display.element import extract_element

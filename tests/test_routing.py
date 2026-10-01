@@ -1731,8 +1731,12 @@ class TestAlsoJson(unittest.TestCase):
         with redirect_stdout(buf):
             _render_element(OkAdapter(), MockRenderer, 'foo', 'foo', args)
 
+        # The router wraps the adapter's fields in the envelope (BACK-1591).
         with open(self.out_path) as f:
-            self.assertEqual(json.load(f), {'type': 'element', 'name': 'foo'})
+            written = json.load(f)
+        self.assertEqual(written['type'], 'element')
+        self.assertEqual(written['name'], 'foo')
+        self.assertIn('contract_version', written)
 
     def test_handle_check_mode_writes_also_json(self):
         class OkAdapter:
