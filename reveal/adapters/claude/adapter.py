@@ -371,6 +371,10 @@ class ClaudeAdapter(ResourceAdapter):
     """
     HELP_CLUSTER = 'Sessions & Docs'
     QUICK_RANK = 3
+    # --since/--until reach every claude:// view as ?since=/?until= (BACK-1549). The
+    # session list and history read them in post_process from args, which nothing
+    # declared, so the router also printed "--since has no effect on claude://".
+    CLI_QUERY_FLAGS = {'since': 'since={value}', 'until': 'until={value}'}
 
     STABILITY = Stability.PROJECT
     BUDGET_LIST_FIELD = 'results'
@@ -945,7 +949,7 @@ class ClaudeAdapter(ResourceAdapter):
         if result_type == 'claude_workflow':
             _post_process_workflow(result, args)
         elif result_type == 'claude_session_list':
-            _post_process_session_list(result, args)
+            _post_process_session_list(result, args, self.query_params)
         elif result_type == 'claude_messages':
             _post_process_messages(result, args)
         elif result_type == 'claude_message_range':
@@ -953,7 +957,7 @@ class ClaudeAdapter(ResourceAdapter):
         elif result_type == 'claude_cross_session_search':
             _post_process_search_results(result, args)
         elif result_type == 'claude_history':
-            _post_process_history(result, args)
+            _post_process_history(result, args, self.query_params)
 
         return result
 

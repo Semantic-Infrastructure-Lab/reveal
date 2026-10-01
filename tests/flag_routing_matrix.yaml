@@ -125,10 +125,10 @@ adapters:
       via: []
     since:
       via:
-      - adapter-reads-args
+      - declared
     until:
       via:
-      - adapter-reads-args
+      - declared
     verbose:
       via:
       - adapter-reads-args

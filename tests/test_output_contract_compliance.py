@@ -227,7 +227,12 @@ def _build_tree(root: Path) -> None:
     proj = root / 'proj'
     (proj / 'tests').mkdir(parents=True)
     (root / 'home').mkdir()
-    (root / 'home' / '.claude' / 'projects').mkdir(parents=True)
+    # One recorded session, so a filter on claude://sessions (--since/--until) has
+    # something to filter (BACK-1549).
+    (root / 'home' / '.claude' / 'projects' / '-proj').mkdir(parents=True)
+    (root / 'home' / '.claude' / 'projects' / '-proj' / 'fixture-session.jsonl').write_text(
+        '{"type": "user", "sessionId": "fixture-session", "timestamp": "2026-01-01T00:00:00Z", '
+        '"message": {"role": "user", "content": "hello"}}\n', encoding='utf-8')
     (root / 'home' / '.codex').mkdir()
     conn = sqlite3.connect(str(root / 'home' / '.codex' / 'state_5.sqlite'))
     conn.execute(

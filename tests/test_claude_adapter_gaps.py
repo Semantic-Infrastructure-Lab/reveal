@@ -747,25 +747,30 @@ class TestPostProcessSessionList:
         defaults.update(kwargs)
         return Namespace(**defaults)
 
+    def _process(self, result, **kwargs) -> None:
+        """--since/--until reach the list as ?since=/?until= (BACK-1549)."""
+        query = {k: kwargs.pop(k) for k in ('since', 'until') if kwargs.get(k)}
+        ClaudeAdapter._post_process_session_list(result, self._args(**kwargs), query)
+
     def _sessions(self, names):
         return [{'session': n, 'modified': '2026-03-14T10:00:00', 'path': None} for n in names]
 
     def test_default_limits_to_20(self):
         sessions = self._sessions([f'sess-{i}' for i in range(30)])
         result = {'type': 'claude_session_list', 'recent_sessions': sessions}
-        ClaudeAdapter._post_process_session_list(result, self._args())
+        self._process(result)
         assert len(result['recent_sessions']) == 20
 
     def test_all_flag_shows_all(self):
         sessions = self._sessions([f'sess-{i}' for i in range(30)])
         result = {'type': 'claude_session_list', 'recent_sessions': sessions}
-        ClaudeAdapter._post_process_session_list(result, self._args(all=True))
+        self._process(result, all=True)
         assert len(result['recent_sessions']) == 30
 
     def test_search_filters_by_session_name(self):
         sessions = self._sessions(['alpha-session', 'beta-session', 'alpha-two'])
         result = {'type': 'claude_session_list', 'recent_sessions': sessions}
-        ClaudeAdapter._post_process_session_list(result, self._args(name='alpha', all=True))
+        self._process(result, name='alpha', all=True)
         assert all('alpha' in s['session'] for s in result['recent_sessions'])
 
     def test_since_filters_by_modified_date(self):
@@ -774,30 +779,30 @@ class TestPostProcessSessionList:
             {'session': 'new', 'modified': '2026-03-14T00:00:00', 'path': None},
         ]
         result = {'type': 'claude_session_list', 'recent_sessions': sessions}
-        ClaudeAdapter._post_process_session_list(result, self._args(since='2026-01-01', all=True))
+        self._process(result, since='2026-01-01', all=True)
         assert all(s['modified'] >= '2026-01-01' for s in result['recent_sessions'])
 
     def test_since_today_normalised(self):
         sessions = []
         result = {'type': 'claude_session_list', 'recent_sessions': sessions}
-        ClaudeAdapter._post_process_session_list(result, self._args(since='today', all=True))
+        self._process(result, since='today', all=True)
         assert result['recent_sessions'] == []
 
     def test_head_arg_limits(self):
         sessions = self._sessions([f'sess-{i}' for i in range(10)])
         result = {'type': 'claude_session_list', 'recent_sessions': sessions}
-        ClaudeAdapter._post_process_session_list(result, self._args(head=3))
+        self._process(result, head=3)
         assert len(result['recent_sessions']) == 3
 
     def test_displayed_count_added(self):
         sessions = self._sessions(['s1', 's2'])
         result = {'type': 'claude_session_list', 'recent_sessions': sessions}
-        ClaudeAdapter._post_process_session_list(result, self._args())
+        self._process(result)
         assert 'displayed_count' in result
 
     def test_none_sessions_returns_early(self):
         result = {'type': 'claude_session_list', 'recent_sessions': None}
-        ClaudeAdapter._post_process_session_list(result, self._args())
+        self._process(result)
         assert result['recent_sessions'] is None
 
     def test_until_filters_by_modified_date(self):
@@ -806,7 +811,7 @@ class TestPostProcessSessionList:
             {'session': 'new', 'modified': '2026-06-18T10:00:00', 'path': None},
         ]
         result = {'type': 'claude_session_list', 'recent_sessions': sessions}
-        ClaudeAdapter._post_process_session_list(result, self._args(until='2026-01-01', all=True))
+        self._process(result, until='2026-01-01', all=True)
         names = [s['session'] for s in result['recent_sessions']]
         assert names == ['old']
 
@@ -816,7 +821,7 @@ class TestPostProcessSessionList:
             {'session': 'next-day', 'modified': '2026-01-02T00:00:00', 'path': None},
         ]
         result = {'type': 'claude_session_list', 'recent_sessions': sessions}
-        ClaudeAdapter._post_process_session_list(result, self._args(until='2026-01-01', all=True))
+        self._process(result, until='2026-01-01', all=True)
         names = [s['session'] for s in result['recent_sessions']]
         assert names == ['boundary']
 
@@ -827,7 +832,7 @@ class TestPostProcessSessionList:
             {'session': 'future', 'modified': '2099-12-31T00:00:00', 'path': None},
         ]
         result = {'type': 'claude_session_list', 'recent_sessions': sessions}
-        ClaudeAdapter._post_process_session_list(result, self._args(until='today', all=True))
+        self._process(result, until='today', all=True)
         names = [s['session'] for s in result['recent_sessions']]
         assert names == ['today-sess']
 
@@ -838,12 +843,27 @@ class TestPostProcessSessionList:
             {'session': 'after', 'modified': '2026-06-18T00:00:00', 'path': None},
         ]
         result = {'type': 'claude_session_list', 'recent_sessions': sessions}
-        ClaudeAdapter._post_process_session_list(
-            result, self._args(since='2026-01-01', until='2026-03-01', all=True)
-        )
+        self._process(result, since='2026-01-01', until='2026-03-01', all=True)
         names = [s['session'] for s in result['recent_sessions']]
         assert names == ['in-range']
 
+
+    def test_total_counts_the_filtered_set(self):
+        """BACK-1549: 'claude:// --since X' said '7546 total' -- every session."""
+        sessions = [
+            {'session': 'old', 'modified': '2025-01-01T00:00:00', 'path': None},
+            {'session': 'new', 'modified': '2026-03-14T00:00:00', 'path': None},
+        ]
+        result = {'type': 'claude_session_list', 'session_count': 2, 'recent_sessions': sessions}
+        self._process(result, since='2026-01-01', all=True)
+        assert result['session_count'] == 1
+
+    def test_history_match_count_counts_the_filtered_set(self):
+        from reveal.adapters.claude.handlers.post_process import _post_process_history
+        entries = [{'prompt': 'a', 'timestamp': '2025-01-01'}, {'prompt': 'b', 'timestamp': '2026-03-01'}]
+        result = {'type': 'claude_history', 'match_count': 2, 'entries': entries}
+        _post_process_history(result, self._args(all=True), {'since': '2026-01-01'})
+        assert result['match_count'] == 1
 
 # ─── BACK-348 --with-stats ────────────────────────────────────────────────────
 
@@ -913,12 +933,15 @@ class TestPostProcessSessionListWithStats:
         defaults.update(kwargs)
         return Namespace(**defaults)
 
+    def _process(self, result, **kwargs) -> None:
+        ClaudeAdapter._post_process_session_list(result, self._args(**kwargs), {})
+
     def test_with_stats_false_no_stats_fields(self, tmp_path):
         f = tmp_path / 'sess.jsonl'
         f.write_text(json.dumps({'type': 'user', 'timestamp': '2026-06-18T10:00:00Z'}) + '\n')
         sessions = [{'session': 's1', 'modified': '2026-06-18T10:00:00', 'path': str(f)}]
         result = {'type': 'claude_session_list', 'recent_sessions': sessions}
-        ClaudeAdapter._post_process_session_list(result, self._args(with_stats=False))
+        self._process(result, with_stats=False)
         assert 'message_count' not in result['recent_sessions'][0]
         assert 'with_stats' not in result
 
@@ -930,7 +953,7 @@ class TestPostProcessSessionListWithStats:
         )
         sessions = [{'session': 's1', 'modified': '2026-06-18T10:00:00', 'path': str(f)}]
         result = {'type': 'claude_session_list', 'recent_sessions': sessions}
-        ClaudeAdapter._post_process_session_list(result, self._args(with_stats=True))
+        self._process(result, with_stats=True)
         s = result['recent_sessions'][0]
         assert s['message_count'] == 2
         assert s['duration'] == '30m'
@@ -939,7 +962,7 @@ class TestPostProcessSessionListWithStats:
     def test_with_stats_none_path_skipped(self):
         sessions = [{'session': 's1', 'modified': '2026-06-18T10:00:00', 'path': None}]
         result = {'type': 'claude_session_list', 'recent_sessions': sessions}
-        ClaudeAdapter._post_process_session_list(result, self._args(with_stats=True))
+        self._process(result, with_stats=True)
         assert 'message_count' not in result['recent_sessions'][0]
 
 

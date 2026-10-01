@@ -63,8 +63,8 @@ def _post_process_search_results(result: Dict[str, Any], args: Any) -> None:
     result['displayed_count'] = len(matches)
 
 
-def _post_process_history(result: Dict[str, Any], args: Any) -> None:
-    """Apply --name/--search, --since, --head/--all filters to claude_history results."""
+def _post_process_history(result: Dict[str, Any], args: Any, query_params: Dict[str, Any]) -> None:
+    """Apply --name/--search, ?since= (--since), --head/--all filters to claude_history results."""
     entries = result.get('entries')
     if entries is None:
         return
@@ -74,12 +74,14 @@ def _post_process_history(result: Dict[str, Any], args: Any) -> None:
         lower = search_term.lower()
         entries = [e for e in entries if lower in e.get('prompt', '').lower()]
 
-    since = getattr(args, 'since', None)
+    since = query_params.get('since')
     if since:
-        if since == 'today':
-            since = date.today().isoformat()
+        since = _normalize_date(str(since))
         entries = [e for e in entries if e.get('timestamp', '') >= since]
 
+    # The count the header reports is of the filtered set; it was taken before
+    # --name/--since ran, so a filter changed the list but not its total (BACK-1549).
+    result['match_count'] = len(entries)
     if not getattr(args, 'all', False):
         head = getattr(args, 'head', None)
         entries = entries[:head if head else 50]
@@ -92,8 +94,9 @@ def _normalize_date(val: str) -> str:
     return date.today().isoformat() if val == 'today' else val
 
 
-def _post_process_session_list(result: Dict[str, Any], args: Any) -> None:
-    """Apply --name/--search, --since, --head/--all filters to claude_session_list results."""
+def _post_process_session_list(result: Dict[str, Any], args: Any, query_params: Dict[str, Any]) -> None:
+    """Apply --name/--search, ?since=/?until= (--since/--until), --head/--all filters to
+    claude_session_list results."""
     sessions = result.get('recent_sessions')
     if sessions is None:
         return
@@ -103,16 +106,17 @@ def _post_process_session_list(result: Dict[str, Any], args: Any) -> None:
         lower = search_term.lower()
         sessions = [s for s in sessions if lower in s.get('session', '').lower()]
 
-    since = getattr(args, 'since', None)
+    since = query_params.get('since')
     if since:
-        since = _normalize_date(since)
+        since = _normalize_date(str(since))
         sessions = [s for s in sessions if s.get('modified', '') >= since]
 
-    until = getattr(args, 'until', None)
+    until = query_params.get('until')
     if until:
-        until = _normalize_date(until)
+        until = _normalize_date(str(until))
         sessions = [s for s in sessions if s.get('modified', '') <= until + 'T23:59:59.999999']
 
+    result['session_count'] = len(sessions)  # of the filtered set (BACK-1549)
     if not getattr(args, 'all', False):
         head = getattr(args, 'head', None)
         sessions = sessions[:head if head else 20]
