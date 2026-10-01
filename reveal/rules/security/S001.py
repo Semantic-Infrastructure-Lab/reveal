@@ -11,6 +11,7 @@ from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
+from ...utils.secrets import KNOWN_SECRET_PREFIXES
 
 logger = logging.getLogger(__name__)
 
@@ -21,17 +22,8 @@ _SECRET_NAME_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Value prefixes that are unambiguously real secrets
-_KNOWN_SECRET_PREFIXES = (
-    'sk-proj-', 'sk-ant-', 'sk-',   # Anthropic / OpenAI
-    'ghp_', 'ghs_', 'gho_',          # GitHub tokens
-    'AKIA', 'ASIA',                   # AWS access keys
-    'xoxb-', 'xoxp-', 'xoxa-',       # Slack tokens
-    'eyJ',                            # JWT (base64 header)
-    'glpat-',                         # GitLab PAT
-    'npm_',                           # npm tokens
-    'ya29.',                          # Google OAuth
-)
+# Value prefixes that are unambiguously real secrets (one list, shared with redaction)
+_KNOWN_SECRET_PREFIXES = KNOWN_SECRET_PREFIXES
 
 # Values that are clearly not real secrets
 _SAFE_VALUE_RE = re.compile(

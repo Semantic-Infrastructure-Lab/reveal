@@ -1550,3 +1550,178 @@ def test_token_readers_survive_null_info():
     assert [t.get('input_tokens') for t in turns] == [None, 10]
     assert len(get_timeline([_NULL_INFO, _REAL_INFO])) == 2
 
+
+
+# ---------------------------------------------------------------------------
+# Rollout fidelity, validated against all 138 real sessions (kinetic-nightmare-1001):
+# shell commands in rollouts without exec_command_end, web/tool searches as tool calls,
+# rolled-back turns, quoted search terms, config secrets, the memories pipeline DB.
+# ---------------------------------------------------------------------------
+
+from reveal.adapters.codex.analysis.normalize import mark_rolled_back, normalize_record  # noqa: E402
+from reveal.adapters.codex.analysis.tools import (  # noqa: E402
+    get_shell_commands, unrecorded_exec_scripts)
+from reveal.adapters.codex.analysis.overview import get_overview  # noqa: E402
+from reveal.adapters.codex.analysis.messages import get_exchanges, extract_messages  # noqa: E402
+
+
+def _ri(ts, payload):
+    return normalize_record({'timestamp': ts, 'type': 'response_item', 'payload': payload})
+
+
+def _ev(ts, payload):
+    return normalize_record({'timestamp': ts, 'type': 'event_msg', 'payload': payload})
+
+
+def _call(ts, cid, name, args):
+    return _ri(ts, {'type': 'function_call', 'call_id': cid, 'name': name, 'arguments': json.dumps(args)})
+
+
+def _out(ts, cid, text):
+    return _ri(ts, {'type': 'function_call_output', 'call_id': cid, 'output': text})
+
+
+# A rollout that never wrote exec_command_end (78 of 138 real ones)
+_NO_END = [
+    _call('t1', 'c1', 'exec_command', {'cmd': 'false', 'workdir': '/w'}),
+    _out('t1', 'c1', 'Chunk ID: a\nWall time: 0.5000 seconds\nProcess exited with code 2\n'
+                     'Original token count: 1\nOutput:\nboom'),
+    _call('t2', 'c2', 'exec_command', {'cmd': 'sleep 9'}),
+    _out('t2', 'c2', 'Chunk ID: b\nWall time: 1.0000 seconds\nProcess running with session ID 77\nOutput:\n'),
+    _call('t3', 'c3', 'write_stdin', {'session_id': 77, 'chars': ''}),
+    _out('t3', 'c3', 'Chunk ID: c\nWall time: 8.0 seconds\nProcess exited with code 0\nOutput:\n'),
+    _call('t4', 'c4', 'exec_command', {'cmd': 'tia search'}),
+    _out('t4', 'c4', 'aborted by user after 3.0s'),
+    _ri('t5', {'type': 'custom_tool_call', 'call_id': 'c5', 'name': 'exec', 'input': 'await tools.exec_command({})'}),
+    _ri('t5', {'type': 'custom_tool_call_output', 'call_id': 'c5', 'output': 'Script completed'}),
+]
+
+
+class TestShellCommandsWithoutEndEvents:
+    def test_rebuilt_from_exec_command_calls(self):
+        cmds = get_shell_commands(_NO_END)
+        assert [c['command'][2] for c in cmds] == ['false', 'sleep 9', 'tia search']
+        assert [c['exit_code'] for c in cmds] == [2, 0, None]  # 0 from the write_stdin poll
+        assert [c['status'] for c in cmds] == ['completed', 'completed', 'aborted']
+        assert cmds[0]['duration'] == {'secs': 0, 'nanos': 500000000}
+        assert cmds[0]['aggregated_output'] == 'boom'
+        assert cmds[0]['cwd'] == '/w'
+
+    def test_exec_scripts_are_counted_as_unrecorded(self):
+        assert unrecorded_exec_scripts(_NO_END) == 1
+
+    def test_recorded_end_events_win(self):
+        recs = _NO_END + [_ev('t9', {'type': 'exec_command_end', 'call_id': 'e1', 'command': ['ls'], 'exit_code': 0})]
+        assert [c['call_id'] for c in get_shell_commands(recs)] == ['e1']
+        assert unrecorded_exec_scripts(recs) == 0
+
+    def test_overview_counts_match_the_lists(self):
+        ov = get_overview(_NO_END, {})
+        assert ov['shell_calls'] == 3
+        assert ov['tool_calls'] == 5  # exec_command x3, write_stdin, exec
+
+
+class TestSearchesAreToolCalls:
+    def test_web_and_tool_search(self):
+        from reveal.adapters.codex.analysis.tools import get_tool_pairs
+        recs = [
+            _ri('t1', {'type': 'web_search_call', 'status': 'completed',
+                       'action': {'type': 'search', 'query': 'codex rollout format'}}),
+            _ri('t2', {'type': 'tool_search_call', 'call_id': 's1', 'arguments': {'query': 'x'}}),
+            _ri('t2', {'type': 'tool_search_output', 'call_id': 's1', 'tools': []}),
+        ]
+        pairs = get_tool_pairs(recs)
+        assert [p['call']['name'] for p in pairs] == ['web_search', 'tool_search']
+        assert 'codex rollout format' in pairs[0]['call']['arguments']
+        assert pairs[0]['output']['output'] == 'status: completed'
+        assert pairs[1]['output'] is not None
+        assert get_overview(recs, {})['tool_calls'] == 2
+
+
+def test_rolled_back_turns_are_marked():
+    recs = mark_rolled_back([
+        _ev('t1', {'type': 'task_started'}), _ev('t1', {'type': 'user_message', 'message': 'a'}),
+        _ev('t2', {'type': 'agent_message', 'message': 'A'}), _ev('t2', {'type': 'task_complete'}),
+        _ev('t3', {'type': 'task_started'}), _ev('t3', {'type': 'user_message', 'message': 'b'}),
+        _ev('t4', {'type': 'turn_aborted'}), _ev('t4', {'type': 'thread_rolled_back', 'num_turns': 1}),
+        _ev('t5', {'type': 'task_started'}), _ev('t5', {'type': 'user_message', 'message': 'c'}),
+    ])
+    assert [(e['prompt'], e.get('rolled_back', False)) for e in get_exchanges(recs)] == \
+        [('a', False), ('b', True), ('c', False)]
+    assert [m.get('rolled_back', False) for m in extract_messages(recs)] == [False, False, True, False]
+
+
+def test_search_finds_a_term_containing_a_quote(tmp_path):
+    """The raw line stores '"' as '\\"'; matching the plain term on it found nothing."""
+    from reveal.adapters.codex.handlers.sessions import search_sessions
+    rollout = tmp_path / 'r.jsonl'
+    rollout.write_text(json.dumps({'timestamp': 't', 'type': 'event_msg', 'payload': {
+        'type': 'user_message', 'message': 'name it "awkwardly" named'}}) + '\n', encoding='utf-8')
+    db = _make_sqlite_db(tmp_path, rollout)
+    assert search_sessions(db, 'awkwardly" named')['total'] == 1
+    assert search_sessions(db, 'awkwardly')['total'] == 1
+
+
+_FAKE_CONFIG = '''
+model = "gpt-5.5"
+openai_api_key = "sk-FAKESECRET-toplevel-111111"
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "server-github", "--token", "ghp_FAKESECRET_in_args_222222", "--api-key=sk-FAKESECRET-inline-333333"]
+[mcp_servers.github.env]
+GITHUB_PERSONAL_ACCESS_TOKEN = "ghp_FAKESECRET_env_444444"
+ANTHROPIC_KEY = "sk-ant-FAKESECRET-555555"
+DATABASE_URL = "postgres://admin:FAKESECRETpw666666@db.example:5432/app"
+[mcp_servers.remote]
+url = "https://mcp.example/sse"
+http_headers = { Authorization = "Bearer FAKESECRET-header-777777", "X-Api-Key" = "FAKESECRET-xapikey-888888" }
+'''
+
+
+class TestConfigSecrets:
+    def test_no_secret_survives_anywhere_in_the_config(self, tmp_path):
+        """Masking by key name alone printed 4 of these 8 in full."""
+        from reveal.adapters.codex.handlers.system import get_config
+        (tmp_path / 'config.toml').write_text(_FAKE_CONFIG, encoding='utf-8')
+        out = json.dumps(get_config(tmp_path))
+        assert out.count('FAKESECRET') == 0, out
+        cfg = get_config(tmp_path)['config']
+        assert cfg['model'] == 'gpt-5.5'
+        assert cfg['mcp_servers']['github']['args'][:3] == ['-y', 'server-github', '--token']
+        assert cfg['mcp_servers']['github']['env']['DATABASE_URL'] == 'postgres://admin:***@db.example:5432/app'
+        assert cfg['mcp_servers']['remote']['url'] == 'https://mcp.example/sse'
+
+    def test_key_drilldown_is_masked_too(self, tmp_path):
+        from reveal.adapters.codex.handlers.system import get_config
+        (tmp_path / 'config.toml').write_text(_FAKE_CONFIG, encoding='utf-8')
+        assert 'FAKESECRET' not in json.dumps(get_config(tmp_path, {'key': 'mcp_servers.github.args'}))
+
+    @pytest.mark.parametrize('obj', [
+        {'keyboard_layout': 'us-intl-alt'}, {'note': 'see task-list-items'},
+        {'url': 'https://example.com/path'}, {'args': ['--verbose', 'value-after-plain-flag']},
+    ])
+    def test_ordinary_values_are_left_alone(self, obj):
+        from reveal.utils.secrets import redact_secrets
+        assert redact_secrets(obj) == obj
+
+
+def test_memories_pipeline_reads_memories_db(tmp_path):
+    """Current Codex keeps stage1_outputs in memories_1.sqlite; the state DB has no such table."""
+    conn = sqlite3.connect(str(tmp_path / 'memories_1.sqlite'))
+    conn.execute('CREATE TABLE stage1_outputs (thread_id TEXT, source_updated_at INTEGER, rollout_slug TEXT, '
+                 'generated_at INTEGER, selected_for_phase2 INTEGER, usage_count INTEGER, last_usage INTEGER)')
+    conn.execute("INSERT INTO stage1_outputs VALUES ('t1', 1, 'slug', 1, 1, 0, NULL)")
+    conn.commit()
+    conn.close()
+    adapter = _make_adapter('memories/pipeline', tmp_path, _write_fixture_jsonl(tmp_path))
+    result = adapter.get_structure()
+    assert 'error' not in result
+    assert result['stage1_total'] == 1
+
+
+def test_text_view_prints_meta_warnings(capsys):
+    from reveal.adapters.codex.renderer import CodexRenderer
+    CodexRenderer._render_text({'type': 'codex_shell', 'shell_calls': [], 'total': 0,
+                                'meta': {'warnings': [{'type': 'unrecorded_commands', 'count': 2,
+                                                       'message': '2 exec script call(s) ran shell commands'}]}})
+    assert '2 exec script call(s) ran shell commands' in capsys.readouterr().out

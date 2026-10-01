@@ -21,18 +21,23 @@ def extract_messages(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         ptype = _payload_type(rec)
         payload = rec.get('payload', {})
         if ptype == 'user_message':
-            turns.append({
+            turn = {
                 'timestamp': rec.get('timestamp'),
                 'role': 'user',
                 'message': payload.get('message', ''),
-            })
+            }
         elif ptype == 'agent_message':
-            turns.append({
+            turn = {
                 'timestamp': rec.get('timestamp'),
                 'role': 'agent',
                 'message': payload.get('message', ''),
                 'phase': payload.get('phase'),
-            })
+            }
+        else:
+            continue
+        if rec.get('_rolled_back'):
+            turn['rolled_back'] = True  # the user undid this turn (normalize.mark_rolled_back)
+        turns.append(turn)
     return turns
 
 
@@ -142,6 +147,8 @@ def get_exchanges(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 'answer': None,
                 'answer_timestamp': None,
             }
+            if turn.get('rolled_back'):
+                pending['rolled_back'] = True
         elif turn['role'] == 'agent' and pending is not None:
             pending['answer'] = turn['message']
             pending['answer_timestamp'] = turn['timestamp']

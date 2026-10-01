@@ -195,6 +195,11 @@ def search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3,
         ]
 
     term = query.lower()
+    # The prefilters read raw JSON lines, where a quote, backslash or (in some rollouts)
+    # non-ASCII character is escaped: 'awkwardly" name' is stored as 'awkwardly\\" name', so
+    # matching the plain term alone found 0 of 1 sessions. _message_snippet then matches the
+    # decoded text, so an encoded form only widens the prefilter.
+    raw_forms = {term, json.dumps(term, ensure_ascii=False)[1:-1], json.dumps(term)[1:-1]}
     matched: List[Dict[str, Any]] = []
 
     for row in rows:
@@ -210,7 +215,8 @@ def search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3,
         except OSError:
             continue
 
-        if term not in content.lower():
+        lowered = content.lower()
+        if not any(form in lowered for form in raw_forms):
             continue
 
         # Parse lines and collect matching message snippets
@@ -218,7 +224,8 @@ def search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3,
         for line in content.splitlines():
             if len(snippets) >= max_matches_per_session:
                 break
-            if term not in line.lower():
+            line_lower = line.lower()
+            if not any(form in line_lower for form in raw_forms):
                 continue
             snippet = _message_snippet(line, term)
             if snippet:

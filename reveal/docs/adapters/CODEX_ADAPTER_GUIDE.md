@@ -237,7 +237,7 @@ Fields:
 
 ## Shell Commands
 
-Codex tracks native shell execution via `exec_command_end` events (no separate begin event — the end event contains everything: command list, exit code, output, duration):
+`/shell` lists every shell command a session ran, with exit code, duration and output. Codex records them in one of three ways, and `/shell` (and the overview's "shell commands run") reads whichever the rollout has: `exec_command_end` events, `CommandExecution` items in current rollouts, or, in rollouts with neither, the `exec_command` tool calls themselves — the exit code and wall time are parsed from each call's output (`Process exited with code N`), and a command still running when the call returned takes the exit code of its later `write_stdin` poll. A command that never reported one shows "no exit code reported" or "aborted, no exit code".
 
 ```bash
 reveal 'codex://019d9da3/shell'
@@ -252,7 +252,7 @@ reveal 'codex://019d9da3/shell'
 #     /home/user/projects/billing-service/README.md
 ```
 
-See also: `exec_command` tool calls appear in `/tools` and `/workflow`. In recent Codex sessions most shell execution goes through the `exec_command` function_call tool rather than native `exec_command_end` events.
+An `exec` tool call is a script that can run several commands. Rollouts without per-command records don't list those one by one, so the result says how many `exec` scripts it could not break down (`unrecorded_commands` warning) and the shell count is a floor; the scripts and their combined output are in `/tools`.
 
 ---
 
@@ -292,7 +292,7 @@ reveal 'codex://memories/pipeline'
 #     [ ] 019d9dd4  other-session-slug    uses=0
 ```
 
-`[✓]` marks entries selected for Stage 2 consolidation. `uses` counts how many times the memory was cited in a session. `memories/pipeline` reads from `state_5.sqlite`'s `stage1_outputs` table — the same DB as the session index.
+`[✓]` marks entries selected for Stage 2 consolidation. `uses` counts how many times the memory was cited in a session. `memories/pipeline` reads the `stage1_outputs` table from `memories_1.sqlite`, where current Codex keeps it, or from `state_5.sqlite` (the session index) on installs that predate that file.
 
 ---
 

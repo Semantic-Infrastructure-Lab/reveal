@@ -31,8 +31,8 @@ from .analysis.messages import (
     extract_messages, get_last_agent_message, get_token_turns, get_grand_total_tokens,
     get_exchanges as _analysis_get_exchanges, get_message_by_index as _analysis_get_message_by_index,
 )
-from .analysis.normalize import normalize_record
-from .analysis.tools import get_tool_pairs, get_shell_commands
+from .analysis.normalize import mark_rolled_back, normalize_record
+from .analysis.tools import get_tool_pairs, get_shell_commands, unrecorded_exec_scripts
 from .analysis.errors import get_errors as _analysis_get_errors
 from .analysis.overview import get_overview as _analysis_get_overview
 from .analysis.workflow import get_workflow as _analysis_get_workflow
@@ -47,6 +47,19 @@ _UUID_RE = re.compile(
 )
 
 _USER_FILTER = "(thread_source IS NULL OR thread_source = 'user') AND archived = 0"
+
+
+def _disclose_unrecorded_exec_scripts(result: Dict[str, Any], records: List[Dict[str, Any]]) -> None:
+    """Say when ``exec`` scripts ran commands this rollout doesn't list, so the shell count
+    reads as a floor rather than the whole."""
+    scripts = unrecorded_exec_scripts(records)
+    if scripts:
+        result.setdefault('meta', {}).setdefault('warnings', []).append({
+            'type': 'unrecorded_commands', 'count': scripts,
+            'message': (f"{scripts} exec script call(s) ran shell commands this rollout does not "
+                        f"record one by one; the shell count omits them (scripts and their output "
+                        f"are in /tools)."),
+        })
 
 
 def _resolve_codex_home() -> Path:
@@ -188,7 +201,7 @@ class CodexAdapter(ResourceAdapter):
                         records.append({'timestamp': None, 'type': 'unknown', 'payload': obj})
         except OSError:
             pass
-        return records
+        return mark_rolled_back(records)
 
     def _find_jsonl_for_session(self, session_row: Dict[str, Any]) -> Optional[Path]:
         """Resolve the JSONL file path from the session row's rollout_path."""
@@ -324,6 +337,7 @@ class CodexAdapter(ResourceAdapter):
         b = self._base('codex_session_overview', session_row)
         metrics = _analysis_get_overview(records, session_row)
         b.update(metrics)
+        _disclose_unrecorded_exec_scripts(b, records)
         return b
 
     def _result_last(self, records: List[Dict[str, Any]], session_row: Dict[str, Any]) -> Dict[str, Any]:
@@ -368,6 +382,7 @@ class CodexAdapter(ResourceAdapter):
         commands = get_shell_commands(records)
         b['shell_calls'] = commands
         b['total'] = len(commands)
+        _disclose_unrecorded_exec_scripts(b, records)
         return b
 
     def _result_tokens(self, records: List[Dict[str, Any]], session_row: Dict[str, Any]) -> Dict[str, Any]:
@@ -468,7 +483,10 @@ class CodexAdapter(ResourceAdapter):
         return _h_get_plugins(self.CODEX_HOME, self.resource)
 
     def _get_memories_pipeline(self) -> Dict[str, Any]:
-        return _h_get_memories_pipeline(self.CODEX_DB)
+        # Current Codex keeps the pipeline (stage1_outputs, jobs) in memories_1.sqlite; reading
+        # the state DB answered "no such table: stage1_outputs". Older installs keep it there.
+        memories_db = self.CODEX_HOME / 'memories_1.sqlite'
+        return _h_get_memories_pipeline(memories_db if memories_db.exists() else self.CODEX_DB)
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
@@ -487,7 +505,7 @@ class CodexAdapter(ResourceAdapter):
                 {'type': 'codex_memories_pipeline', 'description': 'Stage1/Stage2 memory pipeline status'},
                 {'type': 'codex_rules', 'description': '~/.codex/rules/*.rules'},
                 {'type': 'codex_messages', 'description': 'User + agent turns in order'},
-                {'type': 'codex_tools', 'description': 'Paired function_call + output events with success rates'},
+                {'type': 'codex_tools', 'description': 'Each tool call paired with its output'},
                 {'type': 'codex_errors', 'description': 'Error/warning events'},
                 {'type': 'codex_shell', 'description': 'Shell commands with exit codes and output'},
                 {'type': 'codex_tokens', 'description': 'Per-turn token breakdown'},
@@ -518,8 +536,8 @@ class CodexAdapter(ResourceAdapter):
                 {'uri': 'codex://sessions/?search=authentication', 'description': 'Full-text search across all session JSONL files', 'output_type': 'codex_content_search'},
                 {'uri': 'codex://sessions/?search=authentication&since=2026-07-01', 'description': 'Full-text search scoped to sessions updated since a date', 'output_type': 'codex_content_search'},
                 {'uri': 'codex://019e5cc5', 'description': 'Session overview: turns, tool calls, tokens, duration', 'output_type': 'codex_session_overview'},
-                {'uri': 'codex://019e5cc5?last', 'description': 'Last agent message only — fast recovery pattern', 'output_type': 'codex_session_overview'},
-                {'uri': 'codex://019e5cc5/tools', 'description': 'Paired function_call + output events with success rates', 'output_type': 'codex_tools'},
+                {'uri': 'codex://019e5cc5?last', 'description': 'Last agent message only — fast recovery pattern', 'output_type': 'codex_messages'},
+                {'uri': 'codex://019e5cc5/tools', 'description': 'Each tool call paired with its output', 'output_type': 'codex_tools'},
                 {'uri': 'codex://019e5cc5/digest', 'description': 'Composed readable view: overview + prompts + agent narrative — start here for "what happened in this session"', 'output_type': 'codex_digest'},
                 {'uri': 'codex://019e5cc5/exchanges', 'description': "Each user prompt paired with the agent's next reply", 'output_type': 'codex_exchanges'},
                 {'uri': 'codex://019e5cc5/message/-1', 'description': 'Last raw JSONL record (negative index)', 'output_type': 'codex_message'},
@@ -553,7 +571,7 @@ class CodexAdapter(ResourceAdapter):
                 'codex://<UUID>?tokens                              # per-turn token breakdown\n'
                 'codex://<UUID>?goal                                # thread goal (goals_1.sqlite)\n'
                 'codex://<UUID>/messages                            # user + agent turns\n'
-                'codex://<UUID>/tools                               # function_call pairs + success rates\n'
+                'codex://<UUID>/tools                               # tool calls paired with their outputs\n'
                 'codex://<UUID>/shell                               # shell commands + exit codes\n'
                 'codex://<UUID>/errors                              # error/warning events\n'
                 'codex://<UUID>/workflow                            # tools + shell interleaved chronologically\n'

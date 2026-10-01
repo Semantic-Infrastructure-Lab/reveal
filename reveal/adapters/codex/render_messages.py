@@ -12,7 +12,8 @@ def _render_codex_messages(result: dict) -> None:
         role = msg.get('role', '?').upper()
         ts = (msg.get('timestamp') or '')[:19]
         phase = msg.get('phase')
-        header = f"[{role}]" + (f" phase={phase}" if phase else '') + (f"  {ts}" if ts else '')
+        header = f"[{role}]" + (f" phase={phase}" if phase else '') + (f"  {ts}" if ts else '') \
+            + ('  [rolled back]' if msg.get('rolled_back') else '')
         print(header)
         text = msg.get('message', '')
         if text:
@@ -75,7 +76,7 @@ def _render_codex_exchanges(result: dict) -> None:
     for ex in result.get('exchanges', []):
         ts = (ex.get('prompt_timestamp') or '')[:19].replace('T', ' ')
         prompt = (ex.get('prompt') or '').strip()
-        print(f"[{ts}]")
+        print(f"[{ts}]" + ('  [rolled back -- the user undid this turn]' if ex.get('rolled_back') else ''))
         print(f"Q: {prompt[:300]}{'...' if len(prompt) > 300 else ''}")
 
         answer = ex.get('answer')

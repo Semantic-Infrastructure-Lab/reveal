@@ -3,6 +3,7 @@
 from typing import Any, Dict, List, Optional
 
 from .messages import cumulative_total_tokens
+from .tools import get_shell_commands, get_tool_pairs
 
 
 def _payload_type(rec: Dict[str, Any]) -> str:
@@ -20,8 +21,6 @@ def get_overview(records: List[Dict[str, Any]], session_row: Dict[str, Any]) -> 
     """
     user_turns = 0
     agent_turns = 0
-    tool_calls = 0
-    shell_begins = 0
     total_tokens: Optional[int] = None
     duration_ms: Optional[int] = None
     reasoning_blocks = 0
@@ -44,8 +43,6 @@ def get_overview(records: List[Dict[str, Any]], session_row: Dict[str, Any]) -> 
                 user_turns += 1
             elif ptype == 'agent_message':
                 agent_turns += 1
-            elif ptype == 'exec_command_end':
-                shell_begins += 1
             elif ptype == 'task_complete':
                 # One per task; a session runs several, so the session's time is
                 # their sum, not the last one's (BACK-1566: 14.7s for a 250s session).
@@ -57,9 +54,7 @@ def get_overview(records: List[Dict[str, Any]], session_row: Dict[str, Any]) -> 
                 if tt is not None:
                     total_tokens = tt
         elif rtype == 'response_item':
-            if ptype == 'function_call':
-                tool_calls += 1
-            elif ptype == 'reasoning':
+            if ptype == 'reasoning':
                 reasoning_blocks += 1
 
     return {
@@ -74,8 +69,10 @@ def get_overview(records: List[Dict[str, Any]], session_row: Dict[str, Any]) -> 
         'git_branch': session_row.get('git_branch'),
         'user_turns': user_turns,
         'agent_turns': agent_turns,
-        'tool_calls': tool_calls,
-        'shell_calls': shell_begins,
+        'tool_calls': len(get_tool_pairs(records)),  # the list /tools shows
+        # The same list /shell shows, so the two can't disagree (78 of 138 rollouts have no
+        # exec_command_end and read 0 here while /shell was also empty).
+        'shell_calls': len(get_shell_commands(records)),
         'reasoning_blocks': reasoning_blocks,
         'duration_ms': duration_ms,
         'first_timestamp': first_ts,

@@ -15,6 +15,7 @@ tool readers already pair by ``call_id``; the original kind stays under
 ``payload['original_type']``.
 """
 
+import json
 from typing import Any, Dict, List
 
 
@@ -59,8 +60,53 @@ def normalize_record(record: Dict[str, Any]) -> Dict[str, Any]:
         return {**record, 'payload': {**payload, 'type': 'function_call',
                                       'arguments': payload.get('input', ''),
                                       'original_type': ptype}}
+    if rtype == 'response_item' and ptype == 'web_search_call':
+        # A tool call too (113 across 15 sessions); without this /tools, /workflow and the
+        # overview's tool count left every web search out. No call_id and no output record:
+        # the action carries the query and the payload its status.
+        action = payload.get('action') if isinstance(payload.get('action'), dict) else {}
+        return {**record, 'payload': {**payload, 'type': 'function_call', 'name': 'web_search',
+                                      'arguments': json.dumps(action),
+                                      'call_id': payload.get('id') or f"web_search@{record.get('timestamp')}",
+                                      'original_type': ptype}}
+    if rtype == 'response_item' and ptype == 'tool_search_call':
+        return {**record, 'payload': {**payload, 'type': 'function_call', 'name': 'tool_search',
+                                      'arguments': json.dumps(payload.get('arguments') or {}),
+                                      'original_type': ptype}}
+    if rtype == 'response_item' and ptype == 'tool_search_output':
+        return {**record, 'payload': {**payload, 'type': 'function_call_output',
+                                      'output': json.dumps(payload.get('tools') or []),
+                                      'original_type': ptype}}
     if rtype == 'response_item' and ptype == 'custom_tool_call_output':
         return {**record, 'payload': {**payload, 'type': 'function_call_output',
                                       'output': text_of(payload.get('output')) or payload.get('output'),
                                       'original_type': ptype}}
     return record
+
+
+def mark_rolled_back(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Flag the records of turns a ``thread_rolled_back`` event undid (``_rolled_back``).
+
+    Codex leaves an undone turn in the rollout and appends ``thread_rolled_back
+    {num_turns: N}``; the last N turns (each opened by ``task_started``) before it are no
+    longer part of the conversation. Readers kept them as live prompts and answers (4 of 5
+    measured rollbacks undid a real prompt the session then continued past).
+    """
+    for i, rec in enumerate(records):
+        payload = rec.get('payload')
+        if rec.get('type') != 'event_msg' or not isinstance(payload, dict) \
+                or payload.get('type') != 'thread_rolled_back':
+            continue
+        remaining = int(payload.get('num_turns') or 1)
+        start = i
+        for j in range(i - 1, -1, -1):
+            p = records[j].get('payload')
+            if isinstance(p, dict) and p.get('type') == 'task_started':
+                start = j
+                remaining -= 1
+                if remaining == 0:
+                    break
+        for j in range(start, i):
+            records[j]['_rolled_back'] = True
+    return records
+

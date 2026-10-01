@@ -1,5 +1,7 @@
 """Analytics renderers for the Codex adapter — tools, errors, shell, tokens."""
 
+from .analysis.normalize import text_of
+
 
 def _render_codex_tools(result: dict) -> None:
     tools = result.get('tools', [])
@@ -16,8 +18,13 @@ def _render_codex_tools(result: dict) -> None:
         if args_preview:
             print(f"    args: {args_preview}")
         if output:
-            out_preview = str(output.get('output', ''))[:120]
-            print(f"    output: {out_preview}")
+            # An exec script's output is a list of content blocks; a shell call's is text
+            # with newlines. Show the first lines, indented, not a repr cut mid-line.
+            lines = text_of(output.get('output')).strip().splitlines()
+            for i, line in enumerate(lines[:3]):
+                print(f"    {'output: ' if i == 0 else '        '}{line[:110]}")
+            if len(lines) > 3:
+                print(f"            ... ({len(lines) - 3} more lines)")
         print()
 
 
@@ -56,7 +63,12 @@ def _render_codex_shell(result: dict) -> None:
         secs = dur_obj.get('secs', 0) if isinstance(dur_obj, dict) else 0
         nanos = dur_obj.get('nanos', 0) if isinstance(dur_obj, dict) else 0
         dur_ms = secs * 1000 + nanos // 1_000_000
-        status = f"exit={exit_code}" if exit_code is not None else ''
+        if exit_code is not None:
+            status = f"exit={exit_code}"
+        elif cmd_rec.get('status') in ('aborted', 'running'):
+            status = 'aborted, no exit code' if cmd_rec['status'] == 'aborted' else 'no exit code reported'
+        else:
+            status = ''
         if dur_ms:
             status += f"  {dur_ms}ms"
         if status:

@@ -1,6 +1,7 @@
 """Codex adapter renderer — dispatches by result['type']."""
 
 from ...rendering import TypeDispatchRenderer
+from ...utils.warning_render import render_meta_warnings
 
 from .render_sessions import (
     _render_codex_session_list,
@@ -41,6 +42,13 @@ class CodexRenderer(TypeDispatchRenderer):
 
     TypeDispatchRenderer automatically routes result['type'] → _render_{type}().
     """
+
+    @classmethod
+    def _render_text(cls, result: dict) -> None:
+        # Every codex view prints its meta.warnings (e.g. unrecorded exec-script commands);
+        # no per-view renderer did, so the caveat lived only in --format json.
+        super()._render_text(result)
+        render_meta_warnings(result)
 
     # Session renderers
     _render_codex_session_list = staticmethod(_render_codex_session_list)
