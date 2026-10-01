@@ -258,5 +258,33 @@ class TestIsDevCheckout(unittest.TestCase):
             self.assertFalse(result)
 
 
+
+@pytest.mark.parametrize('code, reader', [
+    ('V003', '_get_analyzers_with_types'),
+    ('V005', '_get_static_help'),
+    ('V006', '_check_analyzer_file'),
+])
+def test_validation_rules_agree_on_the_root(code, reader, tmp_path, monkeypatch):
+    """BACK-1372: V003/V005/V006 had their own root finder that always returned
+    the running package, so from a second checkout (a git worktree) they
+    validated a different tree than the other V-rules in the same report."""
+    import importlib
+    root = tmp_path / 'reveal'
+    (root / 'analyzers').mkdir(parents=True)
+    (root / 'rules').mkdir()
+    (root / 'analyzers' / 'demo.py').write_text('class DemoAnalyzer:\n    pass\n', encoding='utf-8')
+    monkeypatch.setenv('REVEAL_DEV_ROOT', str(root))
+    cls = getattr(importlib.import_module(f'reveal.rules.validation.{code}'), code)
+    seen = []
+
+    def spy(self, *args):
+        seen.extend(a for a in args if isinstance(a, Path) and a.name == 'reveal')
+        return [] if reader == '_check_analyzer_file' else {}
+
+    monkeypatch.setattr(cls, reader, spy)
+    cls().check('reveal://', None, '')
+    assert seen and set(seen) == {find_reveal_root()} == {root}
+
+
 if __name__ == '__main__':
     unittest.main()

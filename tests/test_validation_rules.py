@@ -509,7 +509,7 @@ class TestV005StaticHelpSync(unittest.TestCase):
         STATIC_HELP and resolves docs/ against the real checkout rather than
         early-returning with zero detections.
         """
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         self.assertIsNotNone(root, "V005 could not resolve reveal root")
         static_help = self.rule._get_static_help(root)
         self.assertTrue(static_help, "V005 parsed no STATIC_HELP entries -> check() is a no-op")

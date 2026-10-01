@@ -25,7 +25,7 @@ class TestV006NoRevealRoot(unittest.TestCase):
 
     def test_no_reveal_root_returns_empty(self):
         """Test that no detections are returned when reveal root not found."""
-        with mock.patch.object(self.rule, '_find_reveal_root', return_value=None):
+        with mock.patch('reveal.rules.validation.V006.find_reveal_root', return_value=None):
             detections = self.rule.check(
                 file_path="reveal://test",
                 structure=None,
@@ -45,7 +45,7 @@ class TestV006NoAnalyzersDirectory(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             reveal_root = Path(tmpdir)
             # Don't create analyzers directory
-            with mock.patch.object(self.rule, '_find_reveal_root', return_value=reveal_root):
+            with mock.patch('reveal.rules.validation.V006.find_reveal_root', return_value=reveal_root):
                 detections = self.rule.check(
                     file_path="reveal://test",
                     structure=None,
@@ -77,7 +77,7 @@ class CustomAnalyzer:
         pass
 """, encoding='utf-8')
 
-        with mock.patch.object(self.rule, '_find_reveal_root', return_value=self.reveal_root):
+        with mock.patch('reveal.rules.validation.V006.find_reveal_root', return_value=self.reveal_root):
             detections = self.rule.check(
                 file_path="reveal://test",
                 structure=None,
@@ -97,7 +97,7 @@ class CustomAnalyzer:
         return {}
 """, encoding='utf-8')
 
-        with mock.patch.object(self.rule, '_find_reveal_root', return_value=self.reveal_root):
+        with mock.patch('reveal.rules.validation.V006.find_reveal_root', return_value=self.reveal_root):
             detections = self.rule.check(
                 file_path="reveal://test",
                 structure=None,
@@ -114,7 +114,7 @@ class CustomAnalyzer(TreeSitterAnalyzer):
     pass
 """, encoding='utf-8')
 
-        with mock.patch.object(self.rule, '_find_reveal_root', return_value=self.reveal_root):
+        with mock.patch('reveal.rules.validation.V006.find_reveal_root', return_value=self.reveal_root):
             detections = self.rule.check(
                 file_path="reveal://test",
                 structure=None,
@@ -131,7 +131,7 @@ class CustomAnalyzer(FileAnalyzer):
     pass
 """, encoding='utf-8')
 
-        with mock.patch.object(self.rule, '_find_reveal_root', return_value=self.reveal_root):
+        with mock.patch('reveal.rules.validation.V006.find_reveal_root', return_value=self.reveal_root):
             detections = self.rule.check(
                 file_path="reveal://test",
                 structure=None,
@@ -163,7 +163,7 @@ class CustomAnalyzer:
         return {}
 """, encoding='utf-8')
 
-        with mock.patch.object(self.rule, '_find_reveal_root', return_value=self.reveal_root):
+        with mock.patch('reveal.rules.validation.V006.find_reveal_root', return_value=self.reveal_root):
             detections = self.rule.check(
                 file_path="reveal://test",
                 structure=None,
@@ -183,7 +183,7 @@ class CustomAnalyzer:
         return {}
 """, encoding='utf-8')
 
-        with mock.patch.object(self.rule, '_find_reveal_root', return_value=self.reveal_root):
+        with mock.patch('reveal.rules.validation.V006.find_reveal_root', return_value=self.reveal_root):
             detections = self.rule.check(
                 file_path="reveal://test",
                 structure=None,
@@ -201,7 +201,7 @@ class CustomAnalyzer:
         return {}
 """, encoding='utf-8')
 
-        with mock.patch.object(self.rule, '_find_reveal_root', return_value=self.reveal_root):
+        with mock.patch('reveal.rules.validation.V006.find_reveal_root', return_value=self.reveal_root):
             detections = self.rule.check(
                 file_path="reveal://test",
                 structure=None,
@@ -232,7 +232,7 @@ class PrivateAnalyzer:
     pass
 """, encoding='utf-8')
 
-        with mock.patch.object(self.rule, '_find_reveal_root', return_value=self.reveal_root):
+        with mock.patch('reveal.rules.validation.V006.find_reveal_root', return_value=self.reveal_root):
             detections = self.rule.check(
                 file_path="reveal://test",
                 structure=None,
@@ -249,7 +249,7 @@ class BaseAnalyzer:
     pass
 """, encoding='utf-8')
 
-        with mock.patch.object(self.rule, '_find_reveal_root', return_value=self.reveal_root):
+        with mock.patch('reveal.rules.validation.V006.find_reveal_root', return_value=self.reveal_root):
             detections = self.rule.check(
                 file_path="reveal://test",
                 structure=None,
@@ -269,7 +269,7 @@ class CustomAnalyzer:
         analyzer_file.chmod(0o000)
 
         try:
-            with mock.patch.object(self.rule, '_find_reveal_root', return_value=self.reveal_root):
+            with mock.patch('reveal.rules.validation.V006.find_reveal_root', return_value=self.reveal_root):
                 detections = self.rule.check(
                     file_path="reveal://test",
                     structure=None,
@@ -280,38 +280,3 @@ class CustomAnalyzer:
         finally:
             # Restore permissions for cleanup
             analyzer_file.chmod(0o644)
-
-
-class TestV006FindRevealRoot(unittest.TestCase):
-    """Test _find_reveal_root helper method."""
-
-    def setUp(self):
-        self.rule = V006()
-
-    def test_find_reveal_root_direct(self):
-        """Test finding reveal root from rule location (direct parent)."""
-        # This tests the actual implementation which looks at parent.parent.parent
-        reveal_root = self.rule._find_reveal_root()
-        # Should find a path or None
-        self.assertTrue(reveal_root is None or isinstance(reveal_root, Path))
-
-    def test_find_reveal_root_not_found(self):
-        """Test when reveal root cannot be found."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            empty_dir = Path(tmpdir) / 'empty'
-            empty_dir.mkdir()
-
-            with mock.patch('reveal.rules.validation.V006.Path') as mock_path:
-                # Make Path(__file__).parent.parent.parent point to empty dir
-                mock_current = empty_dir
-                mock_path.return_value.parent.parent.parent = mock_current
-
-                # Mock the exists checks to return False
-                with mock.patch.object(Path, 'exists', return_value=False):
-                    result = self.rule._find_reveal_root()
-                    # May return None or the actual reveal root depending on environment
-                    self.assertTrue(result is None or isinstance(result, Path))
-
-
-if __name__ == '__main__':
-    unittest.main()

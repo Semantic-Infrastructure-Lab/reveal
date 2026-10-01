@@ -3,16 +3,7 @@
 from pathlib import Path
 from typing import Optional
 
-
-def _find_reveal_root() -> Path:
-    """Find reveal project root directory."""
-    current = Path(__file__).parent
-    while current != current.parent:
-        if (current / 'reveal' / '__init__.py').exists():
-            return current
-        current = current.parent
-    # Fallback: assume we're in reveal/ already
-    return Path(__file__).parent.parent.parent
+from ...rules.validation.utils import NOT_IN_CHECKOUT, find_reveal_checkout
 
 
 def _get_rule_prefix_and_severity(code: str):
@@ -48,9 +39,11 @@ def _get_category_value(prefix: str) -> str:
 
 
 def _determine_dirs(output_dir: Optional[Path], category: str):
-    """Return (rules_dir, tests_dir, docs_dir) for given output_dir."""
+    """Return (rules_dir, tests_dir, docs_dir) for given output_dir, or None outside a reveal checkout."""
     if output_dir is None:
-        root = _find_reveal_root()
+        root = find_reveal_checkout()
+        if root is None:
+            return None
         return (
             root / 'reveal' / 'rules' / category,
             root / 'tests',
@@ -111,7 +104,10 @@ def scaffold_rule(
     prefix, severity = _get_rule_prefix_and_severity(code)
     category_value = _get_category_value(prefix)
 
-    rules_dir, tests_dir, docs_dir = _determine_dirs(output_dir, category)
+    dirs = _determine_dirs(output_dir, category)
+    if dirs is None:
+        return {'error': NOT_IN_CHECKOUT}
+    rules_dir, tests_dir, docs_dir = dirs
     rule_file = rules_dir / f'{code}.py'
     test_file = tests_dir / f'test_{code.lower()}_rule.py'
     doc_file = docs_dir / f'{code}.md'

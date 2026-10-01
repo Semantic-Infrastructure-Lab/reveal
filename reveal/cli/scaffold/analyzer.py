@@ -3,16 +3,7 @@
 from pathlib import Path
 from typing import Optional
 
-
-def _find_reveal_root() -> Path:
-    """Find reveal project root directory."""
-    current = Path(__file__).parent
-    while current != current.parent:
-        if (current / 'reveal' / '__init__.py').exists():
-            return current
-        current = current.parent
-    # Fallback: assume we're in reveal/ already
-    return Path(__file__).parent.parent.parent
+from ...rules.validation.utils import NOT_IN_CHECKOUT, find_reveal_checkout
 
 
 def _to_class_name(name: str) -> str:
@@ -26,9 +17,11 @@ def _to_module_name(name: str) -> str:
 
 
 def _determine_analyzer_dirs(output_dir: Optional[Path]):
-    """Return (analyzers_dir, tests_dir, docs_dir)."""
+    """Return (analyzers_dir, tests_dir, docs_dir), or None outside a reveal checkout."""
     if output_dir is None:
-        root = _find_reveal_root()
+        root = find_reveal_checkout()
+        if root is None:
+            return None
         return root / 'reveal' / 'analyzers', root / 'tests', root / 'reveal' / 'docs'
     return output_dir / 'analyzers', output_dir / 'tests', output_dir / 'docs'
 
@@ -66,7 +59,10 @@ def scaffold_analyzer(
     display_name = name.replace('_', ' ').replace('-', ' ').title()
     language = module_name
 
-    analyzers_dir, tests_dir, docs_dir = _determine_analyzer_dirs(output_dir)
+    dirs = _determine_analyzer_dirs(output_dir)
+    if dirs is None:
+        return {'error': NOT_IN_CHECKOUT}
+    analyzers_dir, tests_dir, docs_dir = dirs
     analyzer_file = analyzers_dir / f'{module_name}.py'
     test_file = tests_dir / f'test_{module_name}_analyzer.py'
     doc_file = docs_dir / f'{module_name.upper()}_ANALYZER_GUIDE.md'

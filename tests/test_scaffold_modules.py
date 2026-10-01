@@ -5,6 +5,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
+from reveal.rules.validation.utils import NOT_IN_CHECKOUT
+
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
 pytestmark = pytest.mark.component
 
@@ -146,7 +148,7 @@ class TestAdapterScaffold:
             result = scaffold_adapter('test', 'test://', output_dir=output_dir, force=False)
 
             assert 'error' in result
-            assert result['error'] == 'Files exist'
+            assert result['error'] == 'Files already exist (use --force to overwrite)'
             assert 'existing_files' in result
             assert len(result['existing_files']) > 0
 
@@ -179,12 +181,10 @@ class TestAdapterScaffold:
         """Test scaffolding fails when not in reveal project and no output_dir."""
         from reveal.cli.scaffold.adapter import scaffold_adapter
 
-        # Mock _find_reveal_root to return None
-        with patch('reveal.cli.scaffold.adapter._find_reveal_root', return_value=None):
+        with patch('reveal.cli.scaffold.adapter.find_reveal_checkout', return_value=None):
             result = scaffold_adapter('test', 'test://')
 
-            assert 'error' in result
-            assert result['error'] == 'Not in reveal project'
+            assert result['error'] == NOT_IN_CHECKOUT
 
     def test_scaffold_adapter_creates_directories(self):
         """Test scaffolding creates parent directories if they don't exist."""
@@ -200,32 +200,6 @@ class TestAdapterScaffold:
             assert Path(result['adapter_file']).exists()
             assert Path(result['test_file']).exists()
             assert Path(result['doc_file']).exists()
-
-    def test_find_reveal_root_found(self):
-        """Test _find_reveal_root finds reveal project root."""
-        from reveal.cli.scaffold.adapter import _find_reveal_root
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            root = Path(tmpdir)
-            (root / 'reveal' / 'adapters').mkdir(parents=True)
-
-            # Create a subdirectory and change to it
-            subdir = root / 'some' / 'nested' / 'dir'
-            subdir.mkdir(parents=True)
-
-            with patch('pathlib.Path.cwd', return_value=subdir):
-                found_root = _find_reveal_root()
-                assert found_root == root
-
-    def test_find_reveal_root_not_found(self):
-        """Test _find_reveal_root returns None when not in project."""
-        from reveal.cli.scaffold.adapter import _find_reveal_root
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch('pathlib.Path.cwd', return_value=Path(tmpdir)):
-                found_root = _find_reveal_root()
-                assert found_root is None
-
 
 # ============================================================================
 # Test analyzer.py
@@ -349,7 +323,7 @@ class TestAnalyzerScaffold:
             assert "# Modified" not in content
 
     def test_scaffold_analyzer_no_output_dir(self):
-        """Test scaffolding uses _find_reveal_root when no output_dir."""
+        """Test scaffolding uses the checkout when no output_dir."""
         from reveal.cli.scaffold.analyzer import scaffold_analyzer
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -358,7 +332,7 @@ class TestAnalyzerScaffold:
             (root / 'reveal' / '__init__.py').touch()
             (root / 'reveal' / 'analyzers').mkdir(parents=True)
 
-            with patch('reveal.cli.scaffold.analyzer._find_reveal_root', return_value=root):
+            with patch('reveal.cli.scaffold.analyzer.find_reveal_checkout', return_value=root):
                 result = scaffold_analyzer('test', '.test')
 
                 assert 'error' not in result
@@ -381,16 +355,6 @@ class TestAnalyzerScaffold:
         assert _to_module_name('my-module') == 'my_module'
         assert _to_module_name('my module') == 'my_module'
         assert _to_module_name('MY_MODULE') == 'my_module'
-
-    def test_find_reveal_root_analyzer(self):
-        """Test _find_reveal_root finds reveal root via __init__.py."""
-        from reveal.cli.scaffold.analyzer import _find_reveal_root
-
-        # This tests the fallback behavior - returns parent.parent.parent of __file__
-        root = _find_reveal_root()
-        assert root is not None
-        assert isinstance(root, Path)
-
 
 # ============================================================================
 # Test rule.py
@@ -481,7 +445,7 @@ class TestRuleScaffold:
             assert "# Modified" not in content
 
     def test_scaffold_rule_no_output_dir(self):
-        """Test scaffolding uses _find_reveal_root when no output_dir."""
+        """Test scaffolding uses the checkout when no output_dir."""
         from reveal.cli.scaffold.rule import scaffold_rule
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -489,7 +453,7 @@ class TestRuleScaffold:
             (root / 'reveal').mkdir(parents=True)
             (root / 'reveal' / '__init__.py').touch()
 
-            with patch('reveal.cli.scaffold.rule._find_reveal_root', return_value=root):
+            with patch('reveal.cli.scaffold.rule.find_reveal_checkout', return_value=root):
                 result = scaffold_rule('C999', 'test')
 
                 assert 'error' not in result
@@ -573,15 +537,40 @@ class TestRuleScaffold:
             assert '"X"' in content
             assert 'RulePrefix.X' not in content
 
-    def test_find_reveal_root_rule(self):
-        """Test _find_reveal_root finds reveal root via __init__.py."""
-        from reveal.cli.scaffold.rule import _find_reveal_root
-
-        # This tests the fallback behavior - returns parent.parent.parent of __file__
-        root = _find_reveal_root()
-        assert root is not None
-        assert isinstance(root, Path)
-
-
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+
+
+@pytest.mark.parametrize('component', ['adapter', 'analyzer', 'rule'])
+class TestScaffoldWritesIntoTheCheckout:
+    """BACK-1372: all three scaffolders take their target from the checkout the
+    user is in. rule/analyzer used to climb from their own __file__, so a pip
+    install wrote into site-packages and a second checkout wrote into the first."""
+
+    @staticmethod
+    def _scaffold(component):
+        from reveal.cli.scaffold import scaffold_adapter, scaffold_analyzer, scaffold_rule
+        if component == 'adapter':
+            return scaffold_adapter('demo', 'demo://')
+        if component == 'analyzer':
+            return scaffold_analyzer('demo', '.demo')
+        return scaffold_rule('X901', 'demo')
+
+    def test_writes_under_the_checkout_found_from_cwd(self, component, tmp_path, monkeypatch):
+        (tmp_path / 'pyproject.toml').write_text('', encoding='utf-8')
+        (tmp_path / 'reveal' / 'analyzers').mkdir(parents=True)
+        (tmp_path / 'reveal' / 'rules').mkdir()
+        nested = tmp_path / 'docs' / 'deep'
+        nested.mkdir(parents=True)
+        monkeypatch.delenv('REVEAL_DEV_ROOT', raising=False)
+        monkeypatch.chdir(nested)
+        result = self._scaffold(component)
+        assert 'error' not in result
+        written = [Path(v) for k, v in result.items() if k.endswith('_file')]
+        assert written and all(f.is_relative_to(tmp_path) and f.exists() for f in written)
+
+    def test_refuses_outside_a_checkout(self, component, tmp_path, monkeypatch):
+        monkeypatch.delenv('REVEAL_DEV_ROOT', raising=False)
+        monkeypatch.chdir(tmp_path)
+        assert self._scaffold(component) == {'error': NOT_IN_CHECKOUT}
+        assert list(tmp_path.iterdir()) == []

@@ -16,6 +16,7 @@ from typing import List, Dict, Any, Optional
 import re
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from .utils import find_reveal_root
 
 
 @dataclass
@@ -76,7 +77,7 @@ class V003(BaseRule):
         detections: List[Detection] = []
 
         # Find reveal root
-        reveal_root = self._find_reveal_root()
+        reveal_root = find_reveal_root()
         if not reveal_root:
             return detections
 
@@ -211,19 +212,3 @@ class V003(BaseRule):
             if re.match(r'^class\s+\w+', line):
                 return i
         return 1
-
-    def _find_reveal_root(self) -> Optional[Path]:
-        """Find reveal's root directory."""
-        current = Path(__file__).parent.parent.parent
-
-        if (current / 'analyzers').exists() and (current / 'rules').exists():
-            return current
-
-        for _ in range(5):
-            if (current / 'reveal' / 'analyzers').exists():
-                return current / 'reveal'
-            current = current.parent
-            if current == current.parent:
-                break
-
-        return None

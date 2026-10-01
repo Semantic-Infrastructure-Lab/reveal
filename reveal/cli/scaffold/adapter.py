@@ -1,8 +1,8 @@
 """Scaffold new adapter files."""
 
-import sys
 from pathlib import Path
 from typing import Optional
+from ...rules.validation.utils import NOT_IN_CHECKOUT, find_reveal_checkout
 from ...templates.adapter_template import (
     ADAPTER_TEMPLATE,
     RENDERER_TEMPLATE,
@@ -38,10 +38,9 @@ def scaffold_adapter(
         /path/to/reveal/adapters/github/adapter.py
     """
     if output_dir is None:
-        output_dir = _find_reveal_root()
+        output_dir = find_reveal_checkout()
         if output_dir is None:
-            print("Error: Not in a reveal project. Specify output_dir explicitly.", file=sys.stderr)
-            return {'error': 'Not in reveal project'}
+            return {'error': NOT_IN_CHECKOUT}
 
     # Normalize names
     adapter_name = name.lower().replace('-', '_')
@@ -62,9 +61,7 @@ def scaffold_adapter(
     # Check for existing files
     existing = [str(p) for key, p in paths.items() if key != 'adapter_dir' and p.exists()]
     if existing and not force:
-        print(f"Error: Files already exist: {', '.join(existing)}", file=sys.stderr)
-        print("Use --force to overwrite", file=sys.stderr)
-        return {'error': 'Files exist', 'existing_files': existing}
+        return {'error': 'Files already exist (use --force to overwrite)', 'existing_files': existing}
 
     names = {
         'adapter_name': adapter_name, 'class_name': class_name,
@@ -120,12 +117,3 @@ def _write_scaffold_files(names: dict, paths: dict) -> None:
         f"# {names['class_name']} Adapter\n\nTODO: Document {names['uri_scheme']} adapter usage.\n",
         encoding='utf-8',
     )
-
-
-def _find_reveal_root() -> Optional[Path]:
-    """Find reveal project root by looking for reveal/adapters/."""
-    current = Path.cwd()
-    for parent in [current] + list(current.parents):
-        if (parent / 'reveal' / 'adapters').is_dir():
-            return parent
-    return None

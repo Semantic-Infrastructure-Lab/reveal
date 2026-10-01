@@ -21,7 +21,7 @@ class TestV005NoRevealRoot(unittest.TestCase):
 
     def test_no_reveal_root_returns_empty(self):
         """Test that check returns empty when reveal root not found."""
-        with mock.patch.object(self.rule, '_find_reveal_root', return_value=None):
+        with mock.patch('reveal.rules.validation.V005.find_reveal_root', return_value=None):
             detections = self.rule.check(
                 file_path="reveal://",
                 structure=None,
@@ -50,7 +50,7 @@ class TestV005StaticHelpParsing(unittest.TestCase):
             # Create docs dir (empty)
             (root / 'docs').mkdir()
 
-            with mock.patch.object(self.rule, '_find_reveal_root', return_value=root):
+            with mock.patch('reveal.rules.validation.V005.find_reveal_root', return_value=root):
                 detections = self.rule.check(
                     file_path="reveal://",
                     structure=None,
@@ -131,7 +131,7 @@ STATIC_HELP = {
             docs_dir = root / 'docs'
             docs_dir.mkdir()
 
-            with mock.patch.object(self.rule, '_find_reveal_root', return_value=root):
+            with mock.patch('reveal.rules.validation.V005.find_reveal_root', return_value=root):
                 detections = self.rule.check(
                     file_path="reveal://",
                     structure=None,
@@ -164,7 +164,7 @@ STATIC_HELP = {
             docs_dir.mkdir()
             (docs_dir / 'TEST_GUIDE.md').write_text("# Test")
 
-            with mock.patch.object(self.rule, '_find_reveal_root', return_value=root):
+            with mock.patch('reveal.rules.validation.V005.find_reveal_root', return_value=root):
                 detections = self.rule.check(
                     file_path="reveal://",
                     structure=None,
@@ -263,7 +263,7 @@ STATIC_HELP = {
 }
 """)
 
-            with mock.patch.object(self.rule, '_find_reveal_root', return_value=root):
+            with mock.patch('reveal.rules.validation.V005.find_reveal_root', return_value=root):
                 detections = self.rule.check(
                     file_path="reveal://",
                     structure=None,
@@ -297,7 +297,7 @@ STATIC_HELP = {
             # so we use a non-standard name to test unregistered detection
             (docs_dir / 'MY_SPECIAL_HELP.md').write_text("# Help")  # Unregistered (doesn't match auto-discovery patterns)
 
-            with mock.patch.object(self.rule, '_find_reveal_root', return_value=root):
+            with mock.patch('reveal.rules.validation.V005.find_reveal_root', return_value=root):
                 detections = self.rule.check(
                     file_path="reveal://",
                     structure=None,
@@ -335,7 +335,7 @@ STATIC_HELP = {
             (docs_dir / 'GIT_ADAPTER_GUIDE.md').write_text("# Git")  # Auto-discovered
             (docs_dir / 'QUERY_SYNTAX_GUIDE.md').write_text("# Query")  # Auto-discovered
 
-            with mock.patch.object(self.rule, '_find_reveal_root', return_value=root):
+            with mock.patch('reveal.rules.validation.V005.find_reveal_root', return_value=root):
                 detections = self.rule.check(
                     file_path="reveal://",
                     structure=None,
@@ -373,7 +373,7 @@ STATIC_HELP = {
             docs_dir.mkdir()
             (docs_dir / 'AWESOME_GUIDE.md').write_text("# Guide")
 
-            with mock.patch.object(self.rule, '_find_reveal_root', return_value=root):
+            with mock.patch('reveal.rules.validation.V005.find_reveal_root', return_value=root):
                 detections = self.rule.check(
                     file_path="reveal://",
                     structure=None,
@@ -411,7 +411,7 @@ STATIC_HELP = {
             test_dir.mkdir()
             (test_dir / 'TEST_GUIDE.md').write_text("# Test")  # Should be skipped
 
-            with mock.patch.object(self.rule, '_find_reveal_root', return_value=root):
+            with mock.patch('reveal.rules.validation.V005.find_reveal_root', return_value=root):
                 detections = self.rule.check(
                     file_path="reveal://",
                     structure=None,
@@ -422,62 +422,3 @@ STATIC_HELP = {
                 unregistered = [d for d in detections if 'not registered' in d.message]
                 # The path is 'guides/test/TEST_GUIDE.md' which contains '/test'
                 self.assertEqual(len(unregistered), 0)
-
-
-class TestV005FindRevealRoot(unittest.TestCase):
-    """Test V005 _find_reveal_root method."""
-
-    def setUp(self):
-        self.rule = V005()
-
-    def test_find_reveal_root_from_rule_location(self):
-        """Test _find_reveal_root finds root from rule file location."""
-        # This uses the actual reveal installation
-        root = self.rule._find_reveal_root()
-
-        self.assertIsNotNone(root)
-        self.assertTrue((root / 'analyzers').exists())
-        self.assertTrue((root / 'rules').exists())
-
-    def test_find_reveal_root_alternative_search(self):
-        """Test _find_reveal_root searches parent directories."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            root = Path(tmpdir)
-
-            # Create nested structure: tmpdir/reveal/analyzers
-            reveal_dir = root / 'reveal'
-            reveal_dir.mkdir()
-            (reveal_dir / 'analyzers').mkdir()
-            (reveal_dir / 'rules').mkdir()
-
-            # Create nested directory to search from
-            nested = reveal_dir / 'rules' / 'validation'
-            nested.mkdir(parents=True)
-
-            # Mock __file__ to point to nested location
-            with mock.patch('reveal.rules.validation.V005.__file__', str(nested / 'V005.py')):
-                # Create new rule instance to use mocked __file__
-                rule = V005()
-                found_root = rule._find_reveal_root()
-
-                self.assertIsNotNone(found_root)
-                self.assertEqual(found_root.name, 'reveal')
-
-    def test_find_reveal_root_not_found(self):
-        """Test _find_reveal_root returns None when not found."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            root = Path(tmpdir)
-
-            # Mock __file__ to point to temp location with no reveal
-            fake_file = root / 'fake' / 'location' / 'file.py'
-            fake_file.parent.mkdir(parents=True)
-
-            with mock.patch('reveal.rules.validation.V005.__file__', str(fake_file)):
-                rule = V005()
-                found_root = rule._find_reveal_root()
-
-                self.assertIsNone(found_root)
-
-
-if __name__ == '__main__':
-    unittest.main()

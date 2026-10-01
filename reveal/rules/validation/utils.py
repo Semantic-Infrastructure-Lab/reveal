@@ -123,6 +123,23 @@ def find_reveal_root(dev_only: bool = False) -> Optional[Path]:
     return None
 
 
+NOT_IN_CHECKOUT = (
+    'Not in a reveal checkout: run from one (a directory holding pyproject.toml and '
+    'reveal/) or set REVEAL_DEV_ROOT'
+)
+
+
+def find_reveal_checkout() -> Optional[Path]:
+    """The dev checkout to write new files into: the directory holding
+    pyproject.toml and the reveal/ package, from REVEAL_DEV_ROOT or the CWD.
+
+    Never the installed package (BACK-1372): scaffolding a rule into
+    site-packages is never what the user meant. Returns None outside a checkout.
+    """
+    root = find_reveal_root(dev_only=True)
+    return root.parent if root is not None else None
+
+
 def is_dev_checkout(reveal_root: Optional[Path]) -> bool:
     """Check if a reveal root path is a development checkout.
 
