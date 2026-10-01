@@ -92,10 +92,13 @@ def create_element_dict(
     Returns:
         Element dict with standardized fields
     """
+    # Format analyzers (TOML, ...) key their first line 'line_start'; reading only
+    # 'line' put every TOML section at line 0 (BACK-1416).
+    line = item.get('line') or item.get('line_start') or 0
     # Calculate line_count - functions have it, classes need computation
     line_count = item.get('line_count')
     if not line_count and item.get('line_end'):
-        line_count = item.get('line_end', 0) - item.get('line', 0) + 1
+        line_count = item.get('line_end', 0) - line + 1
     else:
         line_count = line_count or 0
 
@@ -108,7 +111,7 @@ def create_element_dict(
         'file': file_path,
         'category': category,
         'name': name,
-        'line': item.get('line', 0),
+        'line': line,
         'line_count': line_count,
         'signature': item.get('signature', ''),
         'decorators': item.get('decorators', []),

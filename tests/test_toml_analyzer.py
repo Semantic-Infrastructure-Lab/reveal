@@ -200,5 +200,15 @@ version = "1.0.0"
             os.unlink(path)
 
 
+def test_ast_query_reports_toml_section_lines(tmp_path):
+    """BACK-1416: ast:// read only 'line', so every TOML section (keyed
+    'line_start') came back at line 0 while the outline said 1 and 4."""
+    from reveal.adapters.ast import AstAdapter
+    f = tmp_path / 'c.toml'
+    f.write_text('[server]\nport = 1\n\n[db]\nhost = "x"\n', encoding='utf-8')
+    results = AstAdapter(str(f), '').get_structure()['results']
+    assert [(r['name'], r['line']) for r in results] == [('server', 1), ('db', 4)]
+
+
 if __name__ == '__main__':
     unittest.main()

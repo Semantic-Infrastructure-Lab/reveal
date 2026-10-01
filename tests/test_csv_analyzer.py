@@ -274,5 +274,17 @@ grape,purple"""
         self.assertGreater(len(color_schema['sample_values']), 0)
 
 
+def test_header_only_csv_says_so_in_text(tmp_path):
+    """BACK-1416: a header-only CSV printed nothing; its explanation was dropped."""
+    import subprocess
+    import sys
+    f = tmp_path / 'one.csv'
+    f.write_text('a,b,c\n', encoding='utf-8')
+    out = subprocess.run([sys.executable, '-m', 'reveal', str(f)],
+                         capture_output=True, text=True, encoding='utf-8', timeout=120).stdout
+    assert 'Columns (3): a, b, c' in out
+    assert 'Empty CSV file (header only)' in out
+
+
 if __name__ == '__main__':
     unittest.main()

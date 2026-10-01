@@ -597,6 +597,12 @@ def _render_text_categories(structure: Dict[str, List[Dict[str, Any]]],
     summary = cast(Dict[str, Any], structure)
     if summary.get('type') == 'html' and 'document' in summary:
         _format_html_overview(summary, path)
+    if summary.get('type') == 'csv_structure' and summary.get('message'):
+        # A header-only or empty CSV has no schema rows to list; its explanation
+        # was dropped, so the file printed nothing (BACK-1416).
+        if summary.get('columns'):
+            print(f"Columns ({len(summary['columns'])}): {', '.join(map(str, summary['columns']))}")
+        print(f"{summary['message']}\n")
     for category, items in structure.items():
         if _should_skip_category(category, items):
             continue
