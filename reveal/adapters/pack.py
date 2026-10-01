@@ -419,7 +419,7 @@ def _collect_candidates(
         provenance = classify_path_provenance(rel.parts[:-1], rel.name)
 
         candidates.append({
-            'path': str(f),
+            'path': to_posix(f),  # '/' on every OS (BACK-1586)
             'relative': to_posix(rel),
             'priority': priority,
             'tokens_approx': tokens_approx,
@@ -1041,7 +1041,7 @@ class PackAdapter(ResourceAdapter):
             meta['relevance_warning'] = self.relevance_warning
 
         report: Dict[str, Any] = {
-            'path': str(path),
+            'path': to_posix(path),
             'budget': budget_str,
             'since': since,
             'meta': meta,

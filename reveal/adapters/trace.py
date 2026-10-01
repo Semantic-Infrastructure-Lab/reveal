@@ -21,6 +21,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils import print_json_result
 from ..utils.query import parse_query_params
+from ..utils.path_utils import to_posix
 from ..utils.results import ResultBuilder
 
 
@@ -193,7 +194,7 @@ def _definition_index(structures: List[Dict[str, Any]]) -> Dict[str, List[Dict[s
                 continue
             calls = elem.get('calls', [])
             record = {
-                'file': file_path,
+                'file': to_posix(file_path),  # '/' on every OS (BACK-1586)
                 'line': elem.get('line', 0),
                 'params': _params_from_signature(elem.get('signature', ''), name),
                 'effects': _effects_from_calls(calls, classify_call, language),

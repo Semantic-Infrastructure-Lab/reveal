@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 from reveal.adapters.base import ResourceAdapter, register_adapter, register_renderer
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.testability.patches import group_patches, scan_patches
+from reveal.utils.path_utils import to_posix
 from reveal.utils.query import parse_query_params
 from reveal.utils.results import ResultBuilder, note_truncation
 from reveal.utils.validation import require_path_exists
@@ -27,7 +28,7 @@ class PatchesAdapter(ResourceAdapter):
 
     def __init__(self, resource: str, query: Optional[str] = None):
         path, query_string = resource, query
-        self.path = str(Path(path).expanduser())
+        self.path = to_posix(Path(path).expanduser())  # '/' on every OS (BACK-1586)
         self.query_params = parse_query_params(query_string or '', coerce=True)
         self._warn_unknown_query_params(self.query_params)  # BACK-507
 

@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ...utils.results import ResultBuilder
+from ...utils.path_utils import to_posix
 
 
 def get_type_str(value: Any) -> str:
@@ -139,11 +140,11 @@ def get_schema_result(value: Any, file_path: Path, json_path: List[str | int], m
     schema = infer_schema(value, max_depth)
     return ResultBuilder.create(
         result_type='json_schema',
-        source=str(file_path),
+        source=to_posix(file_path),
         source_type='file',
         contract_version=CONTRACT_VERSION,
         data={
-            'file': str(file_path),
+            'file': to_posix(file_path),
             'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
             'schema': schema,
         }
@@ -168,11 +169,11 @@ def get_flatten_result(
     lines = flatten_value(value, 'json')
     result = ResultBuilder.create(
         result_type='json_flatten',
-        source=str(file_path),
+        source=to_posix(file_path),
         source_type='file',
         contract_version=CONTRACT_VERSION,
         data={
-            'file': str(file_path),
+            'file': to_posix(file_path),
             'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
             'lines': lines,
             'line_count': len(lines),
@@ -196,11 +197,11 @@ def get_type_info_result(value: Any, file_path: Path, json_path: List[str | int]
     """
     return ResultBuilder.create(
         result_type='json_type',
-        source=str(file_path),
+        source=to_posix(file_path),
         source_type='file',
         contract_version=CONTRACT_VERSION,
         data={
-            'file': str(file_path),
+            'file': to_posix(file_path),
             'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
             'value_type': get_type_str(value),
             'is_container': isinstance(value, (dict, list)),
@@ -223,11 +224,11 @@ def get_keys_result(value: Any, file_path: Path, json_path: List[str | int]) -> 
     if isinstance(value, dict):
         return ResultBuilder.create(
             result_type='json_keys',
-            source=str(file_path),
+            source=to_posix(file_path),
             source_type='file',
             contract_version=CONTRACT_VERSION,
             data={
-                'file': str(file_path),
+                'file': to_posix(file_path),
                 'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
                 'keys': list(value.keys()),
                 'count': len(value),
@@ -236,11 +237,11 @@ def get_keys_result(value: Any, file_path: Path, json_path: List[str | int]) -> 
     elif isinstance(value, list):
         return ResultBuilder.create(
             result_type='json_keys',
-            source=str(file_path),
+            source=to_posix(file_path),
             source_type='file',
             contract_version=CONTRACT_VERSION,
             data={
-                'file': str(file_path),
+                'file': to_posix(file_path),
                 'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
                 'indices': list(range(len(value))),
                 'count': len(value),
@@ -249,7 +250,7 @@ def get_keys_result(value: Any, file_path: Path, json_path: List[str | int]) -> 
     else:
         return ResultBuilder.create_error(
             result_type='json_error',
-            source=str(file_path),
+            source=to_posix(file_path),
             error=f'Cannot get keys from {type(value).__name__}',
             contract_version=CONTRACT_VERSION,
         )
@@ -269,11 +270,11 @@ def get_length_result(value: Any, file_path: Path, json_path: List[str | int]) -
     if isinstance(value, (dict, list, str)):
         return ResultBuilder.create(
             result_type='json_length',
-            source=str(file_path),
+            source=to_posix(file_path),
             source_type='file',
             contract_version=CONTRACT_VERSION,
             data={
-                'file': str(file_path),
+                'file': to_posix(file_path),
                 'path': '/'.join(str(p) for p in json_path) if json_path else '(root)',
                 'length': len(value),
                 'value_type': get_type_str(value),
@@ -282,7 +283,7 @@ def get_length_result(value: Any, file_path: Path, json_path: List[str | int]) -
     else:
         return ResultBuilder.create_error(
             result_type='json_error',
-            source=str(file_path),
+            source=to_posix(file_path),
             error=f'Cannot get length of {type(value).__name__}',
             contract_version=CONTRACT_VERSION,
         )

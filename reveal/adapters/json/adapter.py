@@ -5,6 +5,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...utils.results import ResultBuilder, note_truncation
+from ...utils.path_utils import to_posix
 from ...utils.query_parser import note_query_parsed
 from ...utils.query import (
     parse_query_filters,
@@ -149,7 +150,7 @@ class JsonAdapter(ResourceAdapter):
             Dict with file metadata
         """
         return {
-            'file': str(self.file_path),
+            'file': to_posix(self.file_path),
             'exists': self.file_path.exists(),
             'size': self.file_path.stat().st_size if self.file_path.exists() else 0,
             'root_type': get_type_str(self.data)
@@ -168,10 +169,10 @@ class JsonAdapter(ResourceAdapter):
         """
         return ResultBuilder.create_error(
             result_type='json_error',
-            source=str(self.file_path),
+            source=to_posix(self.file_path),
             error=error_msg,
             contract_version=CONTRACT_VERSION,
-            file=str(self.file_path),
+            file=to_posix(self.file_path),
             path='/'.join(str(p) for p in self.json_path),
         )
 
@@ -187,11 +188,11 @@ class JsonAdapter(ResourceAdapter):
         """
         result = ResultBuilder.create(
             result_type='json_value',
-            source=str(self.file_path),
+            source=to_posix(self.file_path),
             source_type='file',
             contract_version=CONTRACT_VERSION,
             data={
-                'file': str(self.file_path),
+                'file': to_posix(self.file_path),
                 'path': '/'.join(str(p) for p in self.json_path) if self.json_path else '(root)',
                 'value_type': get_type_str(value),
                 'value': value,
@@ -239,10 +240,10 @@ class JsonAdapter(ResourceAdapter):
             legacy_modes = {'schema', 'flatten', 'gron', 'type', 'keys', 'length'}
             return ResultBuilder.create_error(
                 result_type='json_error',
-                source=str(self.file_path),
+                source=to_posix(self.file_path),
                 error=f"Unknown query: {self.query_string}",
                 contract_version=CONTRACT_VERSION,
-                file=str(self.file_path),
+                file=to_posix(self.file_path),
                 valid_queries=list(legacy_modes) + ['field=value', 'field>value', 'sort=field', 'limit=N'],
             )
 

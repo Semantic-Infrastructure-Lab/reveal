@@ -10,7 +10,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-from ..utils.path_utils import _walk_code_files, is_test_basename_for_language
+from ..utils.path_utils import _walk_code_files, is_test_basename_for_language, to_posix
 from ..utils.pyparse import parse_python
 from ..core.treesitter_compat import _zero_arg, suppress_treesitter_warnings, tree_root
 from ..core.treesitter_parse import get_tree
@@ -274,7 +274,7 @@ def _scan_file_ts(file_path: Path) -> List[PatchUse]:
             if callee_key is not None:
                 patch_kind = _TS_CALLEE_KINDS.get(callee_key)
                 if patch_kind is not None:
-                    use = _ts_build_patch_use(node, patch_kind, src_bytes, str(file_path))
+                    use = _ts_build_patch_use(node, patch_kind, src_bytes, to_posix(file_path))
                     if use is not None:
                         uses.append(use)
         # Push children in reverse order to maintain document order
@@ -423,7 +423,7 @@ def _scan_file(file_path: Path) -> List[PatchUse]:
         for target_raw, kind, confidence in _patch_call_targets(node):
             target_module, target_symbol, qualname = _split_target(target_raw)
             uses.append(PatchUse(
-                test_file=str(file_path),
+                test_file=to_posix(file_path),  # '/' on every OS (BACK-1586)
                 test_name=_enclosing_test_name(node, parents),
                 line=getattr(node, 'lineno', 0),
                 patch_kind=kind,

@@ -275,7 +275,7 @@ class TestDirectoryTreeJson(unittest.TestCase):
         self.assertIsInstance(result, dict)
         paths = {e['path'] for e in result['entries']}
         self.assertIn('file1.py', paths)
-        self.assertIn(str(Path('subdir1') / 'nested.py'), paths)
+        self.assertIn('subdir1/nested.py', paths)  # '/' on every OS (BACK-1586)
 
     def test_file_list_json_serializable(self):
         import json

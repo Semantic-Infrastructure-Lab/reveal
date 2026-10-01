@@ -21,7 +21,7 @@ from ..ast.call_graph import build_alias_map, build_symbol_map, resolve_callees 
 from ...conventions import conventions_for, family_for_path, is_builtin_anywhere
 from ...defaults import TEST_FRAMEWORK_CALLEE_NAMES
 from ...utils.gitignore import gitignore_enabled
-from ...utils.path_utils import _walk_code_files, is_unsafe_scan_root
+from ...utils.path_utils import _walk_code_files, is_unsafe_scan_root, to_posix
 from ...core.definition_names import lookup_keys, name_matches
 
 # Module-level LRU cache: directory → (cache_key, index)
@@ -662,7 +662,10 @@ def find_callers(
     for level in range(depth):
         level_records, next_targets = _bfs_level(index, current_targets, visited_callers)
         if level_records:
-            levels.append({'level': level + 1, 'callers': level_records})
+            # '/' on every OS (BACK-1586); copies, so the cached index keeps its own records.
+            levels.append({'level': level + 1,
+                           'callers': [{**r, 'file': to_posix(r['file'])} if r.get('file') else r
+                                       for r in level_records]})
         if not next_targets:
             break
         current_targets = next_targets
