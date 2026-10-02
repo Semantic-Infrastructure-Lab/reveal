@@ -14,3 +14,8 @@ class JsonRenderer:
         """
         from ...rendering import render_json_result
         render_json_result(result, format)
+        if format == 'text':
+            # json:// keeps its disclosures at the top level (unknown_filter_field,
+            # sort_failed); the text view shows them too, not only --format json.
+            for warning in result.get('warnings') or []:
+                print(f"  \u26a0 {warning.get('message', warning.get('type', ''))}")

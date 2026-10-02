@@ -17,8 +17,9 @@ def build_symbol_map(file_path: str) -> Dict[str, Optional[str]]:
     """Build a symbol → resolved-file-path map from a file's imports.
 
     Uses the language extractor registry so only languages with a registered
-    extractor (Python, JS, Go, Rust) participate in resolution.  Falls back
-    silently to an empty map for unsupported languages or on any parse error.
+    extractor (Python, JS, Go, Rust) participate in resolution.  An empty map
+    for unsupported languages or an unreadable file; an extractor bug propagates,
+    as it does in imports:// (BACK-1614).
 
     Args:
         file_path: Absolute or relative path to the source file.
@@ -35,7 +36,7 @@ def build_symbol_map(file_path: str) -> Dict[str, Optional[str]]:
 
     try:
         imports = extractor.extract_imports(path)
-    except Exception:  # noqa: BLE001
+    except OSError:
         return {}
 
     base_path = path.parent
@@ -44,7 +45,7 @@ def build_symbol_map(file_path: str) -> Dict[str, Optional[str]]:
     for stmt in imports:
         try:
             resolved = extractor.resolve_import(stmt, base_path)
-        except Exception:  # noqa: BLE001
+        except (OSError, ValueError):  # a target path that can't be stat'd or made relative
             resolved = None
 
         resolved_str = str(resolved) if resolved else None
@@ -88,8 +89,8 @@ def build_alias_map(file_path: str) -> Dict[str, str]:
         file_path: Absolute or relative path to the source file.
 
     Returns:
-        Dict mapping alias → original_name.  Empty dict on any failure or
-        unsupported language.
+        Dict mapping alias → original_name.  Empty dict for an unsupported
+        language or an unreadable file.
     """
     path = Path(file_path)
     try:
@@ -97,7 +98,7 @@ def build_alias_map(file_path: str) -> Dict[str, str]:
         if not extractor:
             return {}
         imports = extractor.extract_imports(path)
-    except Exception:  # noqa: BLE001
+    except OSError:
         return {}
 
     alias_map: Dict[str, str] = {}

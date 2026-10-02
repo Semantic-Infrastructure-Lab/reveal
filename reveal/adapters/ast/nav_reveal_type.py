@@ -64,7 +64,7 @@ def _scan_file(file_path: str, var_name: str, evidence: List[Dict[str, Any]]) ->
         get_text: Callable = analyzer._get_node_text
         root = tree_root(analyzer.tree)
         _walk(root, var_name, get_text, file_path, evidence, func_stack=[])
-    except Exception:  # noqa: BLE001
+    except OSError:  # an unreadable file contributes no evidence; a walker bug propagates
         pass
 
 

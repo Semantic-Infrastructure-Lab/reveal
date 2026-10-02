@@ -171,9 +171,13 @@ def apply_result_control(
                 return (0, value)
 
             controlled = sorted(controlled, key=sort_key, reverse=reverse)
-        except Exception:
-            # If sorting fails, continue without sorting
-            pass
+        except TypeError as e:
+            # Values of types that don't compare (a number and a string): the array
+            # stays in source order, and the result says it is not sorted (BACK-1614).
+            metadata['warnings'] = [{
+                'type': 'sort_failed',
+                'message': f"Not sorted by '{result_control.sort_field}': {e}",
+            }]
 
     # Offset
     if result_control.offset is not None and result_control.offset > 0:

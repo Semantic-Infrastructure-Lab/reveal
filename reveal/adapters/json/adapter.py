@@ -26,14 +26,13 @@ from .queries import (
     navigate_to_path
 )
 def _parse_filters_safe(filter_query: str) -> list:
-    """Parse query filters, returning empty list on failure. A key counts as used only when
-    ``_process_value`` applies the filters (an array), not when parsed (BACK-1542)."""
+    """Parse query filters. A key counts as used only when ``_process_value`` applies
+    the filters (an array), not when parsed (BACK-1542). A filter that doesn't parse
+    raises, as in every other adapter, rather than being dropped so the whole array
+    reads as the filtered answer (BACK-1614)."""
     if not filter_query:
         return []
-    try:
-        return parse_query_filters(filter_query, record=False)
-    except Exception:
-        return []
+    return parse_query_filters(filter_query, record=False)
 
 
 from .introspection import (
@@ -132,15 +131,12 @@ class JsonAdapter(ResourceAdapter):
         Returns:
             Dict with element info or None if not found
         """
-        try:
-            if isinstance(self.data, dict) and element_name in self.data:
-                return {
-                    'name': element_name,
-                    'value': self.data[element_name],
-                    'type': get_type_str(self.data[element_name])
-                }
-        except Exception:
-            pass  # unexpected data shape; key lookup falls back to None
+        if isinstance(self.data, dict) and element_name in self.data:
+            return {
+                'name': element_name,
+                'value': self.data[element_name],
+                'type': get_type_str(self.data[element_name])
+            }
         return None
 
     def get_metadata(self) -> Dict[str, Any]:
@@ -331,7 +327,10 @@ class JsonAdapter(ResourceAdapter):
         # Apply result control (sort, limit, offset)
         if has_result_control:
             value, rc_metadata = apply_result_control(value, self.result_control, get_field_value)
+            warnings = metadata.get('warnings', []) + rc_metadata.pop('warnings', [])
             metadata.update(rc_metadata)
+            if warnings:
+                metadata['warnings'] = warnings
 
         return value, metadata
 
