@@ -337,7 +337,7 @@ def get_help() -> Dict[str, Any]:
     """Get help documentation for markdown:// adapter."""
     return {
         'name': 'markdown',
-        'description': 'Query markdown files by front matter fields',
+        'description': 'Query markdown files by front matter and body text; backlinks, link graph, front-matter lint',
         'syntax': 'markdown://[path/]?[field=value][&field2=value2]',
         'examples': _HELP_EXAMPLES,
         'features': [

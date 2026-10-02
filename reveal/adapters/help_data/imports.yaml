@@ -7,41 +7,41 @@ syntax: 'imports://<path>[?<query>]'
 
 examples:
   # Basic import inspection
-  - uri: 'reveal imports://src'
+  - uri: "imports://src"
     description: 'List all imports in src directory with import graph'
 
-  - uri: 'reveal imports://src/main.py'
+  - uri: "imports://src/main.py"
     description: 'Show imports for single file'
 
   # Quality checks
-  - uri: "reveal 'imports://src?unused'"
+  - uri: "imports://src?unused"
     description: 'Find unused imports (imports that are never referenced in code)'
 
-  - uri: "reveal 'imports://src?circular'"
+  - uri: "imports://src?circular"
     description: 'Detect circular dependencies (module A imports B, B imports A)'
 
-  - uri: "reveal 'imports://src?violations'"
+  - uri: "imports://src?violations"
     description: 'Check layer violations based on .reveal.yaml architecture rules'
 
   # Architectural analysis
-  - uri: "reveal 'imports://src?rank=fan-in'"
+  - uri: "imports://src?rank=fan-in"
     description: 'Rank files by fan-in — how many files import each file (high = core abstraction; zero = entry point or dead code)'
 
-  - uri: "reveal 'imports://src?rank=fan-in&top=10'"
+  - uri: "imports://src?rank=fan-in&top=10"
     description: 'Top 10 most-imported files — find the load-bearing modules before refactoring'
 
-  - uri: "reveal 'imports://src?entrypoints'"
+  - uri: "imports://src?entrypoints"
     description: 'List files nothing imports (fan-in=0) — entry points, CLIs, scripts, or dead code; sorted by fan-out'
 
-  - uri: "reveal 'imports://src?components'"
+  - uri: "imports://src?components"
     description: 'Score each directory as a component — cohesion (how self-contained), coupling (incoming/outgoing), top bridge file'
 
   # Verbose output
-  - uri: "reveal imports://src --verbose"
+  - uri: "imports://src --verbose"
     description: 'Show detailed import information including file paths and line numbers'
 
   # JSON output for tooling
-  - uri: "reveal imports://src?unused --format json"
+  - uri: "imports://src?unused --format json"
     description: 'Machine-readable output for CI/CD integration'
 
 elements:

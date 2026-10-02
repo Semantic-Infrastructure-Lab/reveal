@@ -931,7 +931,7 @@ These violate reveal's mission ("reveal reveals, doesn't modify") or fail the [S
 | Vendor-specific `surface` sub-categories (`ai-provider`, `agent-framework`, etc.) | A curated vendor list names the *vendor identity*, not the *coupling type* — breaking the pattern of every other category (`network`, `db`, `sdk`, `env`). The data is already in `surface --type sdk`; the list would be stale the week a new framework ships. Use `reveal surface . --type sdk \| grep -E 'openai\|anthropic\|litellm'`. Decision: poxinuku-0629 (BACK-381/382). |
 | `--no-fail` / `--exit-zero` | `\|\| true` is the Unix idiom. The flag conflates "checking" with "what to do about findings" — callers decide that, not the tool. Documented in AGENT_HELP under "Exit code 2 is breaking my pipeline." |
 | `semantic://` embedding search | Requires ML infrastructure; over-engineered |
-| `trace://` execution traces | Wrong domain (debugging tools) |
+| Runtime execution traces (recorded runs) | Wrong domain (debugging tools). The shipped `trace://` is a static call-graph narrative, not a runtime trace. |
 | `live://` real-time monitoring | Wrong domain (observability tools) |
 | `ssh://user@host/adapter://` meta-adapter (SSH proxy mode) | Wrong layer. Filesystem adapters (`cpanel://`, `autossl://`, `letsencrypt://`) read local files — SSH is a transport workaround, not a native protocol like TLS or TCP. Solve it at the SSH config layer: `ProxyJump` in `~/.ssh/config` eliminates the double-hop quoting hell in 3 lines without touching Reveal. Decision: cataclysmic-eagle-0410. |
 | Parquet/Arrow | Binary formats, not human-readable. Use pandas. |

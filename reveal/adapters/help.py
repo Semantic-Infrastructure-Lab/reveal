@@ -1536,7 +1536,7 @@ class HelpAdapter(ResourceAdapter):
             'decision_tree': self._CURATED_DECISION_TREE + self._decision_tree_coverage_gaps(),
             'next_steps': [
                 'reveal help://adapters          # full adapter list',
-                'reveal help://ast               # Python/JS/Go AST queries',
+                'reveal help://ast               # AST queries (every tree-sitter language)',
                 'reveal help://ssl               # TLS cert adapter guide',
                 'reveal help://examples          # browse all task-based query recipes',
                 'reveal help://examples/security # security query recipes',

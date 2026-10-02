@@ -43,7 +43,7 @@ def create_hotspots_parser() -> argparse.ArgumentParser:
             "Examples:\n"
             "  reveal hotspots ./src              # Hotspots in a directory\n"
             "  reveal hotspots .                  # Entire project\n"
-            "  reveal hotspots ./src --top 20     # Show top 20 files\n"
+            "  reveal hotspots ./src --top 20     # Top 20 files and top 20 functions\n"
             "  reveal hotspots . --format json    # Machine-readable output\n"
             "  reveal hotspots . --functions-only # Only show complex functions\n"
         )

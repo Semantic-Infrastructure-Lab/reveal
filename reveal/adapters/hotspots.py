@@ -331,7 +331,7 @@ class HotspotsAdapter(ResourceAdapter):
                 {'uri': 'hotspots://src', 'description': 'Hotspots in a directory'},
                 {'uri': 'hotspots://.?top=20', 'description': 'Top 20 hotspot files'},
                 {'uri': 'hotspots://.?functions_only=true', 'description': 'Only complex functions'},
-                {'uri': 'reveal hotspots://. --all', 'description': 'Lift the default top-10 cap on both rankings'},
+                {'uri': 'hotspots://. --all', 'description': 'Lift the default top-10 cap on both rankings'},
             ],
             'features': [
                 'File-level hotspots via StatsAdapter (quality score, complexity, issues)',
