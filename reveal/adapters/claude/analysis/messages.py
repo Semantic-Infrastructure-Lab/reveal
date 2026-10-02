@@ -21,11 +21,10 @@ def _extract_text(content) -> str:
         return ''
     parts = []
     for block in content:
-        try:
-            if isinstance(block, dict) and block.get('type') == 'text':
-                parts.append(block.get('text', ''))
-        except Exception:
-            continue
+        if isinstance(block, dict) and block.get('type') == 'text':
+            text = block.get('text')
+            if isinstance(text, str):
+                parts.append(text)
     return '\n'.join(parts)
 
 
@@ -228,18 +227,17 @@ def get_message(messages: List[Dict], msg_id: int, session_name: str,
 def _iter_thinking_blocks(content: list, msg_index: int, timestamp: Any):
     """Yield thinking block dicts from one message's content list."""
     for block in content:
-        try:
-            if isinstance(block, dict) and block.get('type') == 'thinking':
-                thinking = block.get('thinking', '')
-                yield {
-                    'message_index': msg_index,
-                    'content': thinking,
-                    'char_count': len(thinking),
-                    'token_estimate': len(thinking) // 4,
-                    'timestamp': timestamp,
-                }
-        except Exception:
-            continue
+        if isinstance(block, dict) and block.get('type') == 'thinking':
+            thinking = block.get('thinking')
+            if not isinstance(thinking, str):
+                continue
+            yield {
+                'message_index': msg_index,
+                'content': thinking,
+                'char_count': len(thinking),
+                'token_estimate': len(thinking) // 4,
+                'timestamp': timestamp,
+            }
 
 
 def get_thinking_blocks(messages: List[Dict], session_name: str,
@@ -346,8 +344,8 @@ def _collect_block_matches(
                                   whole_word=whole_word, window_chars=window_chars)
             if match:
                 matches.append(match)
-        except Exception:
-            continue
+        except (AttributeError, TypeError):
+            continue  # a block whose fields aren't the shape Claude Code writes; skip it
     return matches
 
 

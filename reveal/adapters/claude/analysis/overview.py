@@ -244,7 +244,7 @@ def _check_readme_present(conversation_path: str) -> bool:
         from pathlib import Path as _Path
         session_dir = _Path(conversation_path).parent
         return any(session_dir.glob('README*.md'))
-    except Exception:
+    except OSError:
         return False
 
 

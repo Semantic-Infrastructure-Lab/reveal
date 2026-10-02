@@ -17,8 +17,8 @@ def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = Fa
     Parses every valid JSON line to maintain an accurate ``message_index`` that
     matches what ``reveal claude://session/NAME/message/N`` expects.  Returns a
     dict with ``excerpt``, ``role``, ``timestamp``, and ``message_index``.
-    Falls back to empty strings / ``None`` on any error so a missing snippet
-    never breaks the search result.
+    Falls back to empty strings / ``None`` when the file can't be read, so a
+    missing snippet never breaks the search result; malformed lines are skipped.
 
     Args:
         jsonl_path: Path to the session ``.jsonl`` file.
@@ -42,9 +42,12 @@ def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = Fa
                     msg = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if not isinstance(msg, dict):
+                    continue
                 role = msg.get('type', '')
-                if role in ('user', 'assistant') and lower in line.lower():
-                    content = msg.get('message', {}).get('content', [])
+                message = msg.get('message')
+                if role in ('user', 'assistant') and lower in line.lower() and isinstance(message, dict):
+                    content = message.get('content', [])
                     blocks = _content_to_blocks(content)
                     ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
                     matches = _collect_block_matches(blocks, lower, term, message_index, role, ts,
@@ -57,7 +60,7 @@ def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = Fa
                             'message_index': message_index,
                         }
                 message_index += 1
-    except Exception:  # noqa: BLE001 — file read errors must never surface in search results
+    except OSError:  # the file vanished or can't be read: no snippet, the hit still stands
         pass
     return {'excerpt': '', 'role': '', 'timestamp': '', 'message_index': None}
 

@@ -35,12 +35,13 @@ def _parse_jsonl_line_for_title(line: str) -> Optional[str]:
     """
     try:
         rec = json.loads(line)
-    except Exception:
+    except ValueError:
         # Malformed/truncated JSONL line — skip it, keep scanning for a title.
         return None
-    if rec.get('type') != 'user':
+    if not isinstance(rec, dict) or rec.get('type') != 'user':
         return None
-    content = rec.get('message', {}).get('content', '')
+    message = rec.get('message')
+    content = message.get('content', '') if isinstance(message, dict) else ''
     text = _extract_text_from_content(content)
     if not text:
         return None
@@ -77,22 +78,26 @@ def _scan_jsonl_for_title(jsonl_path: Path) -> Optional[str]:
                     break
                 try:
                     rec = json.loads(line)
-                except Exception:
+                except ValueError:
                     continue  # malformed/truncated JSONL line — skip, keep scanning
+                if not isinstance(rec, dict):
+                    continue
                 rec_type = rec.get('type')
-                if rec_type == 'assistant':
-                    for block in rec.get('message', {}).get('content', []):
+                message = rec.get('message')
+                if rec_type == 'assistant' and isinstance(message, dict):
+                    for block in message.get('content') or []:
                         if isinstance(block, dict) and block.get('type') == 'tool_use' and block.get('name') == 'Bash':
-                            m = _BADGE_RE.search(block.get('input', {}).get('command', ''))
+                            command = (block.get('input') or {}).get('command')
+                            m = _BADGE_RE.search(command) if isinstance(command, str) else None
                             if m:
                                 return m.group(1)
                 elif rec_type == 'user' and text_fallback is None:
                     title = _parse_jsonl_line_for_title(line)
                     if title is not None:
                         text_fallback = title
-    except Exception:
-        # Session file may be missing, truncated mid-write, or contain
-        # non-UTF8 bytes — best-effort title lookup, no title beats a crash.
+    except OSError:
+        # Session file may be missing or unreadable (non-UTF8 bytes are replaced,
+        # malformed lines skipped above) — best-effort title lookup.
         pass
     return text_fallback
 
@@ -102,12 +107,7 @@ def _read_session_title(jsonl_path: Path) -> Optional[str]:
 
     Reads only the first 30 lines to avoid loading entire file.
     """
-    try:
-        return _scan_jsonl_for_title(jsonl_path)
-    except Exception:
-        # Belt-and-suspenders: _scan_jsonl_for_title already catches its own
-        # failures internally and returns None, so this should be unreachable.
-        return None
+    return _scan_jsonl_for_title(jsonl_path)
 
 
 def _read_session_stats(jsonl_path: Path) -> Dict[str, Any]:
@@ -133,9 +133,10 @@ def _read_session_stats(jsonl_path: Path) -> Dict[str, Any]:
                 h, rem = divmod(secs, 3600)
                 m = rem // 60
                 stats['duration'] = f"{h}h{m:02d}m" if h else f"{m}m"
-    except Exception:
-        # Malformed/partial JSONL or unparsable timestamps — stats are
-        # decorative sidebar info, partial/empty stats beat a crash.
+    # Unreadable file, malformed JSONL, a line that isn't an object, or a timestamp
+    # that isn't an ISO string: stats are decorative sidebar info, partial stats
+    # beat a crash. Anything else is a bug and propagates.
+    except (OSError, ValueError, AttributeError, TypeError):
         pass
     return stats
 
@@ -200,9 +201,9 @@ def _parse_readme_frontmatter(readme_path: Path) -> Dict[str, Any]:
         if text.startswith('---'):
             end = text.find('\n---', 3)
             if end != -1:
-                frontmatter_text = text[3:end].strip()
-                return yaml.safe_load(frontmatter_text) or {}
-    except Exception:  # noqa: BLE001 — README may be absent, unreadable, or malformed
+                loaded = yaml.safe_load(text[3:end].strip())
+                return loaded if isinstance(loaded, dict) else {}
+    except (OSError, ValueError, yaml.YAMLError):  # absent, not UTF-8, or malformed YAML
         pass
     return {}
 
