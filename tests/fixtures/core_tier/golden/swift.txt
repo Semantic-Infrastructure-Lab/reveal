@@ -92,6 +92,9 @@ $ reveal swift/sample.swift --grep result
 Text search: swift/sample.swift  —  pattern: result
 4 hits in 1 element
 
-  processOrder()                                        lines 13, 14, 19, 20
-
+  processOrder()
+    13: var result = try validate(order)
+    14: try? result.write(toFile: "/tmp/orders.log", atomically: true, encoding: .utf8)
+    19: result = result.uppercased()
+    20: return result
 [exit 0]

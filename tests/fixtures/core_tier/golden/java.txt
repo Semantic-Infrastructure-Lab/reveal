@@ -92,6 +92,9 @@ $ reveal java/sample.java --grep result
 Text search: java/sample.java  —  pattern: result
 4 hits in 1 element
 
-  processOrder()                                        lines 18, 20, 24, 25
-
+  processOrder()
+    18: int result = validate(order);
+    20: Files.write(Paths.get("/tmp/orders.log"), String.valueOf(result).getBytes());
+    24: result = result * 2;
+    25: return result;
 [exit 0]

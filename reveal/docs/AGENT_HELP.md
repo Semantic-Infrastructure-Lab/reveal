@@ -461,10 +461,10 @@ reveal file.py --grep LIVE_SIGNALS        # ← finds every line containing the 
 **`--grep`: text search with structural context**
 
 ```bash
-# Find text in a file — results grouped by enclosing element
+# Find text in a file — each hit's line, grouped by enclosing element
 reveal doc.md --grep 'EX-12h'       # hits grouped by heading (table cells, body text, anywhere)
 reveal file.py --grep 'escape'       # hits grouped by function/class
-reveal file.txt --grep 'error'       # bare line numbers (no structure)
+reveal file.txt --grep 'error'       # hits only (no structure to group by)
 
 # Case-insensitive
 reveal doc.md --grep 'config' -i
@@ -474,14 +474,22 @@ reveal file.py --grep 'def .*_handler'
 
 # Across a directory
 reveal src/ --grep 'TODO'            # grouped by file, then by element
+reveal docs/ --grep 'TODO' --ext md  # only the files `reveal docs/ --ext md` lists
 ```
+
+Each hit is printed as `LINE: text` (the line stripped, cut to 120 characters around
+the match) under the function, class or heading it falls in, so the matched text needs
+no second call. The text view shows the first 100 hits and ends with
+`⚠ Truncated hits: showing 100 of N`; `--all` shows every hit, `--max-items N` sets the
+cap, and `--head/--tail/--range` pick hits. `--format json` gives every group's `hits`
+(`[{line, text}]`) and is not capped unless you pass `--max-items`.
 
 **`--name` vs `--grep`:**
 
 | Flag | Finds | Output |
 |------|-------|--------|
 | `--name pattern` | Named elements whose **name** matches (functions, headings, classes) | Element list with line/complexity |
-| `--grep pattern` | Every **line** matching the text, grouped by enclosing element | Hits by section/function |
+| `--grep pattern` | Every **line** matching the text, grouped by enclosing element | Each hit's line text, by section/function |
 
 **When to use URI syntax instead:**
 - Multiple conditions: `?complexity>10&lines>50`
@@ -4567,7 +4575,7 @@ Use that guidance - it tells you exactly what to do next!
 ### Mistake 5: Shelling out to grep for cross-file text search
 ```bash
 ❌ grep -rn "API_TIMEOUT" src/       # flat lines, no code context, often several scoped calls
-✅ reveal src/ --grep 'API_TIMEOUT'  # groups hits by enclosing function/section, one call
+✅ reveal src/ --grep 'API_TIMEOUT'  # each hit's line, grouped by enclosing function/section
 ```
 Use `--grep` for any text or identifier that isn't a named element `ast://` can filter on
 (constants, string literals, config keys). For a *definition* by name, use `ast://?name=X`

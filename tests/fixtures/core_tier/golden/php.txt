@@ -90,6 +90,8 @@ $ reveal php/sample.php --grep result
 Text search: php/sample.php  —  pattern: result
 3 hits in 1 element
 
-  processOrder()                                        lines 14, 16, 20
-
+  processOrder()
+    14: $result = validate($order);
+    16: file_put_contents("/tmp/orders.log", $result);
+    20: return strtoupper($result);
 [exit 0]

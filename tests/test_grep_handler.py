@@ -17,7 +17,7 @@ pytestmark = pytest.mark.cli
 def run_reveal(*args):
     return subprocess.run(
         [sys.executable, '-m', 'reveal.main'] + list(args),
-        capture_output=True, text=True, encoding='utf-8',
+        capture_output=True, text=True, encoding='utf-8', timeout=120,
     )
 
 
@@ -133,8 +133,8 @@ class TestGrepFlatFile(unittest.TestCase):
     def test_flat_file_shows_line_numbers(self):
         r = run_reveal(self.f.name, '--grep', 'foo')
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn('line 2', r.stdout)
-        self.assertIn('line 4', r.stdout)
+        self.assertIn('2: foo here', r.stdout)
+        self.assertIn('4: foo again', r.stdout)
 
 
 class TestGrepBackslashI(unittest.TestCase):
@@ -272,3 +272,120 @@ class TestGrepBreAlternationMistake(unittest.TestCase):
     def test_json_without_mistake_has_no_hint(self):
         r = run_reveal(self.f.name, '--grep', r'zzz-nope', '--format', 'json')
         self.assertNotIn('hint', json.loads(r.stdout))
+
+
+# --- BACK-1602 / BACK-1633: matched text, one cut disclosed, --ext, errors as results -------
+
+def _big_tree(tmp_path, n_files=3, hits_per_file=50):
+    for i in range(n_files):
+        body = ''.join(f'def f{j}():\n    return "needle {i}-{j}"\n' for j in range(hits_per_file))
+        (tmp_path / f'm{i}.py').write_text(body, encoding='utf-8')
+    (tmp_path / 'notes.md').write_text('# Notes\n\nneedle in a doc\n', encoding='utf-8')
+    return tmp_path
+
+
+def test_hit_text_shown_under_its_element(tmp_path):
+    f = tmp_path / 'a.py'
+    f.write_text('def parse():\n    x = 1\n    return escape(x)\n', encoding='utf-8')
+    r = run_reveal(str(f), '--grep', 'escape')
+    assert r.returncode == 0, r.stderr
+    lines = r.stdout.splitlines()
+    assert '  parse()' in lines
+    assert '    3: return escape(x)' in lines
+
+
+def test_json_hits_carry_text_and_keep_lines(tmp_path):
+    f = tmp_path / 'a.py'
+    f.write_text('def parse():\n    return escape(1)\n', encoding='utf-8')
+    data = json.loads(run_reveal(str(f), '--grep', 'escape', '--format', 'json').stdout)
+    group = data['groups'][0]
+    assert group['lines'] == [2]
+    assert group['hits'] == [{'line': 2, 'text': 'return escape(1)'}]
+
+
+def test_long_line_cut_around_the_match():
+    import re
+    from reveal.defaults import DisplayDefaults
+    from reveal.grep_handler import _hit_text
+    line = 'x' * 500 + ' needle ' + 'y' * 500
+    text = _hit_text(line, re.compile('needle'))
+    assert len(text) == DisplayDefaults.GREP_LINE_CHARS
+    assert 'needle' in text and text.startswith('…') and text.endswith('…')
+    assert _hit_text('  short needle  ', re.compile('needle')) == 'short needle'
+
+
+def test_text_view_caps_hits_by_default_and_says_so(tmp_path):
+    from reveal.defaults import DisplayDefaults
+    _big_tree(tmp_path)
+    r = run_reveal(str(tmp_path), '--grep', 'needle')
+    assert r.returncode == 0, r.stderr
+    assert '151 hits across 4 files' in r.stdout
+    shown = [l for l in r.stdout.splitlines() if 'return "needle' in l]
+    assert len(shown) == DisplayDefaults.GREP_MAX_HITS
+    assert f'⚠ Truncated hits: showing {DisplayDefaults.GREP_MAX_HITS} of 151' in r.stdout
+
+
+def test_all_lifts_the_cap_and_max_items_sets_it(tmp_path):
+    _big_tree(tmp_path)
+    full = run_reveal(str(tmp_path), '--grep', 'needle', '--all').stdout
+    assert full.count('return "needle') == 150 and 'needle in a doc' in full
+    assert 'Truncated' not in full
+    r = run_reveal(str(tmp_path), '--grep', 'needle', '--max-items', '3')
+    assert r.stdout.count('return "needle') == 3
+    assert 'showing 3 of 151 — raise --max-items' in r.stdout
+    assert '--max-entries' not in r.stderr  # the directory-listing note is not for a search
+
+
+def test_head_slices_hits_and_json_is_not_capped_implicitly(tmp_path):
+    _big_tree(tmp_path)
+    r = run_reveal(str(tmp_path / 'm0.py'), '--grep', 'needle', '--head', '2')
+    assert r.stdout.count('return "needle') == 2
+    assert 'showing 2 of 50' in r.stdout
+    data = json.loads(run_reveal(str(tmp_path), '--grep', 'needle', '--format', 'json').stdout)
+    assert sum(f['hits'] for f in data['files']) == data['total_hits'] == 151
+    assert 'meta' not in data
+    capped = json.loads(run_reveal(str(tmp_path), '--grep', 'needle', '--format', 'json',
+                                   '--max-items', '5').stdout)
+    assert sum(f['hits'] for f in capped['files']) == 5
+    assert capped['meta']['warnings'][0]['total'] == 151
+
+
+def test_cap_reads_structure_only_for_files_shown(tmp_path, monkeypatch):
+    from argparse import Namespace
+    from reveal import grep_handler
+    _big_tree(tmp_path)
+    parsed = []
+    real = grep_handler._get_structural_elements
+    monkeypatch.setattr(grep_handler, '_get_structural_elements',
+                        lambda p: parsed.append(p) or real(p))
+    result = grep_handler.grep_directory(str(tmp_path), 'needle', Namespace(format='text', max_items=10))
+    assert result['total_hits'] == 151
+    assert len(parsed) == 1  # the 10 hits shown all sit in the first file
+
+
+def test_invalid_pattern_is_a_failed_result_in_json_too(tmp_path):
+    (tmp_path / 'a.py').write_text('print(1)\n', encoding='utf-8')
+    for target in (str(tmp_path), str(tmp_path / 'a.py')):
+        r = run_reveal(target, '--grep', 'print(', '--format', 'json')
+        assert r.returncode == 1
+        assert 'invalid pattern' in json.loads(r.stdout)['error']
+        assert 'invalid pattern' in r.stderr
+
+
+def test_ext_limits_a_directory_search(tmp_path):
+    _big_tree(tmp_path)
+    data = json.loads(run_reveal(str(tmp_path), '--grep', 'needle', '--ext', 'md',
+                                 '--format', 'json').stdout)
+    assert [Path(f['path']).name for f in data['files']] == ['notes.md']
+    assert data['files_searched'] == 1 and data['total_hits'] == 1
+
+
+def test_all_lifts_the_cap_on_one_file(tmp_path):
+    f = tmp_path / 'many.txt'
+    f.write_text('hit\n' * 150, encoding='utf-8')
+    import re
+    rows = lambda out: len(re.findall(r'^ +\d+: hit$', out, re.M))
+    capped = run_reveal(str(f), '--grep', 'hit').stdout
+    assert rows(capped) == 100 and 'showing 100 of 150' in capped
+    full = run_reveal(str(f), '--grep', 'hit', '--all').stdout
+    assert rows(full) == 150 and 'Truncated' not in full

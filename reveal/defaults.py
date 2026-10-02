@@ -204,6 +204,11 @@ class DisplayDefaults:
     # --max-items lifts/overrides it. A minified/bundled file gets the small one.
     FILE_MAX_ITEMS = 500
     MINIFIED_FILE_MAX_ITEMS = 50
+    # --grep text view (BACK-1602): hits shown when neither --all nor --max-items is given.
+    # Over 30 days of real searches the median was 7 hits and p95 77; 100 cuts 3.6%.
+    GREP_MAX_HITS = 100
+    # Each hit's line text is cut to this many characters, around the match.
+    GREP_LINE_CHARS = 120
     # Content-based minified test: a file this large whose lines average this long is
     # a build artifact whatever its name (a 5 MB one-line `bundle.js`).
     MINIFIED_MIN_BYTES = 10_000

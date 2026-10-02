@@ -66,7 +66,7 @@ def test_grep_finds_non_ascii_pattern(tmp_path):
     r = _run("""
         import sys
         from argparse import Namespace
-        from reveal.grep_handler import handle_grep
+        from reveal.cli.routing.grep import handle_grep
         handle_grep(sys.argv[1] + '/a.py', '\\u2764', Namespace(format='json'))
     """, str(tmp_path))
     assert '"total_hits": 1' in r.stdout, r.stdout + r.stderr

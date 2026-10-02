@@ -104,6 +104,11 @@ $ reveal cpp/sample.cpp --grep result
 Text search: cpp/sample.cpp  —  pattern: result
 6 hits in 1 element
 
-  process_order()                                       lines 16, 17 … 28 (6 hits)
-
+  process_order()
+    16: int result = validate(order);
+    17: if (result < 0) {
+    20: CHECK_OR_RETURN(result < 1000, -1);
+    25: fprintf(f, "%d", result);
+    27: result = result * 2;
+    28: return result;
 [exit 0]

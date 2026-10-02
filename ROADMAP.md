@@ -262,7 +262,8 @@ Their bar is `tests/test_core_tier_golden.py`:
 - The text output is pinned byte for byte across the 13 tier-1 languages and markdown,
   in three views: the default (breadcrumbs off, as an agent's piped call gets it), a first
   run with breadcrumbs on, and a later run once the show-once hints are spent.
-- Each operation's `--format json` must carry the same items as its text view.
+- Each operation's `--format json` must carry the same items as its text view (for
+  `--grep`, each hit's line number and text).
 
 A golden diff is a change agents will see. Accept an intended one with
 `REVEAL_UPDATE_GOLDEN=1 pytest tests/test_core_tier_golden.py -n0` and review the diff like

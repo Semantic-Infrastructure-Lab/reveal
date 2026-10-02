@@ -90,6 +90,8 @@ $ reveal kotlin/sample.kt --grep result
 Text search: kotlin/sample.kt  —  pattern: result
 3 hits in 1 element
 
-  processOrder()                                        lines 12, 15, 19
-
+  processOrder()
+    12: val result = validate(order)
+    15: File("/tmp/orders.log").appendText(result)
+    19: return result.uppercase()
 [exit 0]

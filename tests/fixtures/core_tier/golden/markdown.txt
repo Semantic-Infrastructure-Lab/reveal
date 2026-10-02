@@ -176,11 +176,14 @@ $ reveal guide.md --grep order
 Text search: guide.md  —  pattern: order
 4 hits in 4 sections
 
-  # Order Service Guide                                 line 8
-  ### Configuration                                     line 26
-  ## Usage                                              line 31
-  ### Fixed                                             line 41
-
+  # Order Service Guide
+     8: The order service validates, logs and batches orders.
+  ### Configuration
+    26: export ORDER_LOG=/var/log/orders.log
+  ## Usage
+    31: Call `process_order(order)` for each order.
+  ### Fixed
+    41: - Empty orders no longer raise.
 [exit 0]
 
 $ reveal guide.md 'Order Service Guide' --head 5

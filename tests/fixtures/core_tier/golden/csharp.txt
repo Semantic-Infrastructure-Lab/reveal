@@ -100,6 +100,9 @@ $ reveal csharp/sample.cs --grep result
 Text search: csharp/sample.cs  —  pattern: result
 4 hits in 1 element
 
-  ProcessOrder()                                        lines 21, 24, 30, 31
-
+  ProcessOrder()
+    21: int result = Validate(order);
+    24: File.AppendAllText("/tmp/orders.log", result.ToString());
+    30: result = result * 2;
+    31: return result;
 [exit 0]

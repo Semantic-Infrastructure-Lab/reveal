@@ -65,6 +65,8 @@ PROBES = {
     ('dir_files', 'respect_gitignore'): (['--files'], False),
     ('dir_meta', 'respect_gitignore'): (['--meta'], False),
     ('dir_grep', 'respect_gitignore'): (['--grep', 'return 2'], False),
+    # many.txt holds more hits than the text view's default cap (BACK-1602).
+    ('dir_grep', 'all'): (['--grep', 'hit'], True),
 }
 
 
@@ -112,9 +114,10 @@ def probe_tree(tmp_path_factory):
     (root / 'a.py').write_text('def a():\n    return 1\n', encoding='utf-8')
     (root / 'ignored.py').write_text('def b():\n    return 2\n', encoding='utf-8')
     (root / '.gitignore').write_text('ignored.py\n', encoding='utf-8')
+    (root / 'many.txt').write_text('hit\n' * 101, encoding='utf-8')
     git = ['git', '-C', str(root), '-c', 'user.name=t', '-c', 'user.email=t@t']
     subprocess.run([*git, 'init', '-q'], check=True)
-    subprocess.run([*git, 'add', 'a.py', '.gitignore'], check=True)
+    subprocess.run([*git, 'add', 'a.py', '.gitignore', 'many.txt'], check=True)
     subprocess.run([*git, 'commit', '-q', '-m', 'init'], check=True)
     return root
 

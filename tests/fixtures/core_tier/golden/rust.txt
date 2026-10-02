@@ -90,6 +90,9 @@ $ reveal rust/sample.rs --grep result
 Text search: rust/sample.rs  —  pattern: result
 4 hits in 1 element
 
-  process_order()                                       lines 14, 15, 18, 19
-
+  process_order()
+    14: let mut result = validate(order)?;
+    15: if let Err(e) = fs::write("/tmp/orders.log", result.to_string()) {
+    18: result = result * 2;
+    19: Ok(result)
 [exit 0]

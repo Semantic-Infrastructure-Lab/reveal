@@ -8,7 +8,6 @@
   "reveal/checks.py": 2,
   "reveal/display/element.py": 1,
   "reveal/file_handler.py": 6,
-  "reveal/grep_handler.py": 3,
   "reveal/logging_setup.py": 1,
   "reveal/nav_handlers.py": 2
  },
@@ -34,7 +33,6 @@
   "reveal/config.py": 2,
   "reveal/diff/architecture_diff.py": 19,
   "reveal/file_handler.py": 7,
-  "reveal/grep_handler.py": 24,
   "reveal/mcp_server.py": 1,
   "reveal/nav_handlers.py": 25,
   "reveal/utils/breadcrumbs.py": 4,

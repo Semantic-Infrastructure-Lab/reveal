@@ -104,6 +104,9 @@ $ reveal go/sample.go --grep result
 Text search: go/sample.go  —  pattern: result
 4 hits in 1 element
 
-  processOrder()                                        lines 20, 29, 30, 31
-
+  processOrder()
+    20: result, err := validate(order)
+    29: fmt.Fprintf(f, "%s", result)
+    30: result = strings.ToUpper(result)
+    31: return result, nil
 [exit 0]

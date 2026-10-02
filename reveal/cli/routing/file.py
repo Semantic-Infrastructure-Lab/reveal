@@ -21,7 +21,7 @@ from .formats import (  # noqa: E402
     DEFAULT_OUTPUT_FORMATS, reject_unhonored_also_json, require_supported_format,
 )
 from ...file_handler import handle_file  # noqa: E402
-from ...grep_handler import handle_grep  # noqa: E402
+from .grep import handle_grep, handle_grep_directory  # noqa: E402
 from ...registry import get_markdown_extensions  # noqa: E402
 
 
@@ -274,6 +274,15 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
     if getattr(args, 'meta', False):
         _show_directory_meta(path, args)
         return
+    # A search's hit list is a flat result list: --max-items caps it (BACK-1633), so the
+    # directory-listing note below is not for --grep, and --ext keeps the files the
+    # listing would (it was dropped, and every file type was searched).
+    if getattr(args, 'grep', None):
+        if getattr(args, 'name', None):
+            print("Note: --name ignored when --grep is used (--grep searches all text, --name filters structural output)", file=sys.stderr)
+        reject_unhonored_also_json(args, '--grep')
+        handle_grep_directory(str(path), args.grep, args, _parse_ext_arg(getattr(args, 'ext', None)))
+        return
     # BACK-1203: --max-items/--max-snippet-chars have no analog on a bare
     # directory listing (a recursive tree, not a flat result list) — the
     # equivalent flag here is --max-entries. Hint instead of silently
@@ -284,13 +293,6 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
             "(use --max-entries to bound the number of entries shown)",
             file=sys.stderr,
         )
-    if getattr(args, 'grep', None):
-        if getattr(args, 'name', None):
-            print("Note: --name ignored when --grep is used (--grep searches all text, --name filters structural output)", file=sys.stderr)
-        reject_unhonored_also_json(args, '--grep')
-        from ...grep_handler import handle_grep_directory
-        handle_grep_directory(str(path), args.grep, args)
-        return
     # --type on a directory without --name can mean two different things:
     #   1. File-type filter (--type markdown, --type python) — user wants to
     #      filter the directory listing to files of that language/format.

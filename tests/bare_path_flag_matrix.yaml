@@ -62,11 +62,10 @@ shapes:
   dir_grep:
     verbose:
       review: not-applicable
-      reason: directory --grep results are never truncated at all currently (no cap exists to
-        lift) -- unlike the tree/files views, there's no "use --max-entries 0" analog either.
+      reason: the text view's hit cap (BACK-1602) is lifted by --all and set by --max-items, which
+        its "Truncated hits" line names; --verbose adds no detail to a hit list.
     all:
-      review: not-applicable
-      reason: same as verbose.
+      review: honored
     since:
       review: not-applicable
       reason: text search has no per-item date dimension.
@@ -96,10 +95,11 @@ shapes:
   file_grep:
     verbose:
       review: not-applicable
-      reason: single-file grep results are never truncated (no cap exists to lift).
+      reason: same as dir_grep -- --all and --max-items are the hit cap's knobs.
     all:
-      review: not-applicable
-      reason: same as verbose.
+      # Honored: lifts the text view's hit cap. PROBES always target the probe directory, so
+      # this cell is proven by tests/test_grep_handler.py::test_all_lifts_the_cap_on_one_file.
+      review: honored
     since:
       review: not-applicable
       reason: text search has no per-item date dimension.

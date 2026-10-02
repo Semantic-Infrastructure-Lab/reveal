@@ -230,7 +230,7 @@ _OUTLINE_LINE_RE = re.compile(r"\((?:[^():]+:|line )(\d+)[,)]")
 _EXTRACT_HEADER_RE = re.compile(r"^(.+):(\d+)-(\d+) \| (.+)$")
 _EXTRACT_BODY_RE = re.compile(r"^ *(\d+)(?:  (.*))?$")
 # "  name()      lines 13, 14 … 24 (5 hits)"; a hit outside any element is "  line 4".
-_GREP_ROW_RE = re.compile(r"^  (?:(\S.*?)\s{2,})?lines? ([\d, …]+?)(?: \((\d+) hits\))?$")
+_GREP_HIT_RE = re.compile(r"^ {2,}(\d+): (.*)$")
 
 
 def _text(runner, cwd, argv) -> str:
@@ -288,35 +288,27 @@ def _assert_cut_parity(text: str, data: dict):
 
 
 def _assert_grep_groups(rows: list, groups: list):
-    """Text rows and JSON groups name the same elements with the same hit lines.
-
-    Text elides the middle of a long hit list ("13, 14 … 24 (5 hits)"), so the
-    lines it shows must be the JSON list's head and tail, and the count its length.
-    """
+    """Text rows and JSON groups name the same elements with the same hits: line and text."""
     assert len(rows) == len(groups), (rows, groups)
-    for (label, shown, count), group in zip(rows, groups):
+    for (label, hits), group in zip(rows, groups):
         assert (group["name"] or "") in label, (label, group)
-        lines = group["lines"]
-        if count is None:
-            assert shown == lines, (label, group)
-        else:
-            assert count == len(lines), (label, group)
-            assert shown == lines[:len(shown) - 1] + lines[-1:], (label, group)
+        assert hits == [(h["line"], h["text"]) for h in group["hits"]], (label, group)
+        assert group["lines"] == [h["line"] for h in group["hits"]], group
 
 
 def _grep_rows(block: str) -> list:
-    """(label, shown lines, hit count or None) per text row; bare 'line N' rows merge."""
-    rows = []
+    """(label, [(line, text)]) per group: a 2-space label, then its "N: text" hit rows.
+
+    A flat file has no labels: its hit rows form one unlabelled group.
+    """
+    rows: list = []
     for line in block.splitlines():
-        if not (m := _GREP_ROW_RE.match(line)):
-            continue
-        label = (m.group(1) or "").strip()
-        shown = [int(n) for n in re.findall(r"\d+", m.group(2))]
-        count = int(m.group(3)) if m.group(3) else None
-        if not label and rows and not rows[-1][0]:
-            rows[-1][1].extend(shown)
-        else:
-            rows.append((label, shown, count))
+        if m := _GREP_HIT_RE.match(line):
+            if not rows:
+                rows.append(("", []))
+            rows[-1][1].append((int(m.group(1)), m.group(2)))
+        elif line.startswith("  ") and not line.startswith("   "):
+            rows.append((line.strip(), []))
     return rows
 
 

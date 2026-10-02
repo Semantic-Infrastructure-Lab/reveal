@@ -309,7 +309,7 @@ reveal_query("help://quick")   # compact intent router, ~1,600 tokens
 | `reveal_element(file, fn)` | 100–300 | 20–50× less than cat |
 | `reveal_pack(dir, budget=8000)` | ~8,000 | One call instead of N calls |
 | `reveal_query("calls://...?uncalled")` | 200–500 | 33× less than manual cross-ref |
-| `reveal_grep(dir, pattern)` | 100–500 | grouped by function vs raw grep output |
+| `reveal_grep(dir, pattern)` | 100–500 | each hit's line, grouped by function, vs raw grep output |
 | `reveal_trace(dir, entry_point)` | 300–1000 | one call vs manual multi-file call chasing |
 
 ## Debugging

@@ -688,9 +688,10 @@ def reveal_review(target: str, select: str = 'B,S,I,C,M') -> str:
 def reveal_grep(path: str, pattern: str, ignore_case: bool = False) -> str:
     """Search text or an identifier across a file or directory, grouped by enclosing function.
 
-    Structural cross-file search: matches are grouped under the function/class
-    they fall in, not just raw line numbers — prefer this over shell grep for
-    finding a symbol's usages or a string across a codebase.
+    Structural cross-file search: each matching line (number and text) is
+    listed under the function/class/heading it falls in — prefer this over
+    shell grep for finding a symbol's usages or a string across a codebase.
+    Shows the first 100 hits and says how many it left out.
 
     Args:
         path: File or directory to search
@@ -698,7 +699,7 @@ def reveal_grep(path: str, pattern: str, ignore_case: bool = False) -> str:
         ignore_case: Case-insensitive match (default False)
     """
     from pathlib import Path
-    from .grep_handler import handle_grep, handle_grep_directory
+    from .cli.routing.grep import handle_grep, handle_grep_directory
 
     p = Path(path)
     if not p.exists():

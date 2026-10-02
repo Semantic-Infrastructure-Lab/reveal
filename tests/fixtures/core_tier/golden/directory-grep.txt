@@ -3,38 +3,48 @@ Text search: .  —  pattern: = validate
 11 hits across 11 files
 
 File: c/sample.c
-  process_order()                                       line 13
+  process_order()
+    13: int result = validate(order);
 
 File: cpp/sample.cpp
-  process_order()                                       line 16
+  process_order()
+    16: int result = validate(order);
 
 File: go/sample.go
-  processOrder()                                        line 20
+  processOrder()
+    20: result, err := validate(order)
 
 File: java/sample.java
-  processOrder()                                        line 18
+  processOrder()
+    18: int result = validate(order);
 
 File: javascript/sample.js
-  processOrder()                                        line 14
+  processOrder()
+    14: let result = validate(order);
 
 File: kotlin/sample.kt
-  processOrder()                                        line 12
+  processOrder()
+    12: val result = validate(order)
 
 File: php/sample.php
-  processOrder()                                        line 14
+  processOrder()
+    14: $result = validate($order);
 
 File: python/sample.py
-  process_order()                                       line 13
+  process_order()
+    13: result = validate(order)
 
 File: ruby/sample.rb
-  process_order()                                       line 10
+  process_order()
+    10: result = validate(order)
 
 File: rust/sample.rs
-  process_order()                                       line 14
+  process_order()
+    14: let mut result = validate(order)?;
 
 File: typescript/sample.ts
-  processOrder()                                        line 14
-
+  processOrder()
+    14: let result = validate(order);
 [exit 0]
 
 $ reveal python --grep result
@@ -42,6 +52,9 @@ Text search: python  —  pattern: result
 4 hits across 1 file
 
 File: sample.py
-  process_order()                                       lines 13, 17, 20, 21
-
+  process_order()
+    13: result = validate(order)
+    17: f.write(str(result))
+    20: result = result.upper()
+    21: return result
 [exit 0]

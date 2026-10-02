@@ -90,6 +90,10 @@ $ reveal c/sample.c --grep result
 Text search: c/sample.c  —  pattern: result
 5 hits in 1 element
 
-  process_order()                                       lines 13, 14 … 24 (5 hits)
-
+  process_order()
+    13: int result = validate(order);
+    14: if (result < 0) {
+    21: fprintf(f, "%d", result);
+    23: result = result * 2;
+    24: return result;
 [exit 0]

@@ -102,6 +102,8 @@ $ reveal ruby/sample.rb --grep result
 Text search: ruby/sample.rb  —  pattern: result
 3 hits in 1 element
 
-  process_order()                                       lines 10, 13, 17
-
+  process_order()
+    10: result = validate(order)
+    13: File.open("/tmp/orders.log", "a") { |f| f.write(result) }
+    17: return result.upcase
 [exit 0]

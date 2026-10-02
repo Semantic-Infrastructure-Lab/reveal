@@ -93,6 +93,9 @@ $ reveal typescript/sample.ts --grep result
 Text search: typescript/sample.ts  —  pattern: result
 4 hits in 1 element
 
-  processOrder()                                        lines 14, 16, 20, 21
-
+  processOrder()
+    14: let result = validate(order);
+    16: fs.writeFileSync(path.join('/tmp', 'orders.log'), result);
+    20: result = result.toUpperCase();
+    21: return result;
 [exit 0]
