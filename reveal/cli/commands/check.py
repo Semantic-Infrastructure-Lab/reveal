@@ -165,7 +165,7 @@ def run_check(args: Namespace) -> None:
     if getattr(args, 'rules', False):
         from reveal.cli.handlers import handle_rules_list
         from reveal import __version__
-        handle_rules_list(__version__)
+        handle_rules_list(__version__, getattr(args, 'all', False), args.format)
         return
 
     if getattr(args, 'explain', None):

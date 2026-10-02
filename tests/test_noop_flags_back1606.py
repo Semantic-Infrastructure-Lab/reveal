@@ -18,7 +18,7 @@ from reveal.cli.routing.uri import _render_structure_top_kwargs
 
 
 def _cli(*argv, cwd):
-    env = dict(os.environ, PYTHONIOENCODING='utf-8')
+    env = dict(os.environ, PYTHONIOENCODING='utf-8', REVEAL_NO_UPDATE_CHECK='1')
     return subprocess.run([sys.executable, '-m', 'reveal', *argv], cwd=cwd, env=env,
                           capture_output=True, text=True, encoding='utf-8', timeout=120)
 
@@ -87,3 +87,54 @@ def test_check_still_accepts_them_and_names_them(pkg):
     run = _cli('check', 'pkg/a.py', '--only-failures', '--advanced', cwd=pkg)
     assert run.returncode != 2, run.stderr
     assert "--only-failures, --advanced has no effect on 'reveal check'" in run.stderr
+
+
+# --- (5) --rules / --languages / --adapters --format json, and the other special modes ----
+
+def _json_of(*argv, cwd):
+    import json
+    run = _cli(*argv, cwd=cwd)
+    assert run.returncode == 0, run.stderr
+    assert 'no effect' not in run.stderr
+    return json.loads(run.stdout)
+
+
+def test_rules_format_json_is_json(tmp_path):
+    payload = _json_of('--rules', '--format', 'json', cwd=tmp_path)
+    assert payload['rule_count'] == len(payload['rules']) > 0
+    assert {'code', 'category', 'severity', 'enabled'} <= set(payload['rules'][0])
+
+
+def test_rules_all_includes_internal_rules_in_json(tmp_path):
+    shown = _json_of('--rules', '--format', 'json', cwd=tmp_path)['rule_count']
+    assert _json_of('--rules', '--all', '--format', 'json', cwd=tmp_path)['rule_count'] > shown
+
+
+def test_check_rules_format_json_is_json(tmp_path):
+    assert _json_of('check', '--rules', '--format', 'json', cwd=tmp_path)['rules']
+
+
+def test_languages_format_json_is_the_help_catalog(tmp_path):
+    from reveal.cli.languages import build_languages_payload
+    assert _json_of('--languages', '--format', 'json', cwd=tmp_path) == build_languages_payload()
+
+
+def test_adapters_format_json_matches_discover(tmp_path):
+    assert (_json_of('--adapters', '--format', 'json', cwd=tmp_path)
+            == _json_of('--discover', cwd=tmp_path))
+
+
+def test_discover_format_json_gets_no_note(tmp_path):
+    _json_of('--discover', '--format', 'json', cwd=tmp_path)
+
+
+def test_a_special_mode_names_a_flag_it_does_not_read(tmp_path):
+    run = _cli('--profiles', '--format', 'json', cwd=tmp_path)
+    assert run.returncode == 0
+    assert 'Note: --format has no effect on --profiles' in run.stderr
+
+
+def test_the_rules_hint_names_a_command_that_takes_all(tmp_path):
+    out = _cli('check', '--rules', cwd=tmp_path).stdout
+    assert "'reveal --rules --all' includes them" in out
+    assert _cli('--rules', '--all', cwd=tmp_path).returncode == 0

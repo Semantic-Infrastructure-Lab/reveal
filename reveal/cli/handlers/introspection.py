@@ -30,18 +30,27 @@ def handle_list_supported(list_supported_types_func):
     sys.exit(0)
 
 
-def handle_languages():
+def _print_json(payload: Any) -> None:
+    import json
+    print(json.dumps(payload, indent=2))
+
+
+def handle_languages(fmt: str = 'text'):
     """Handle --languages flag.
 
     Shows all supported languages with distinction between explicit
-    analyzers (full featured) and tree-sitter fallback (basic).
+    analyzers (full featured) and tree-sitter fallback (basic). ``--format json``
+    prints the catalog help://languages renders (it printed the text view, BACK-1606).
     """
-    from ..languages import list_supported_languages
-    print(list_supported_languages())
+    from ..languages import build_languages_payload, list_supported_languages
+    if fmt == 'json':
+        _print_json(build_languages_payload())
+    else:
+        print(list_supported_languages())
     sys.exit(0)
 
 
-def handle_adapters(show_all: bool = False):
+def handle_adapters(show_all: bool = False, fmt: str = 'text'):
     """Handle --adapters flag.
 
     Shows all URI adapters with their syntax and purpose.
@@ -50,8 +59,14 @@ def handle_adapters(show_all: bool = False):
         show_all: When True (--all), also include adapters that only inspect
             reveal's own source tree (adapter_class.internal is True), never a
             user's own resources. Excluded by default.
+        fmt: ``json`` prints the --discover registry for the same adapter set (it
+            printed the text view, BACK-1606).
     """
     from ...adapters.base import _ADAPTER_REGISTRY
+
+    if fmt == 'json':
+        _print_json(build_discover_payload(show_all))
+        sys.exit(0)
 
     schemes = [
         scheme for scheme in _ADAPTER_REGISTRY
@@ -258,7 +273,7 @@ Status: Beta 🟡 (v1.0 in development)
 """
 
 
-def handle_rules_list(version: str, show_all: bool = False):
+def handle_rules_list(version: str, show_all: bool = False, fmt: str = 'text'):
     """Handle --rules flag to list all pattern detection rules.
 
     Args:
@@ -266,9 +281,16 @@ def handle_rules_list(version: str, show_all: bool = False):
         show_all: When True (--all), also include reveal's internal self-check
             rules (rule_class.internal is True) that can never fire against an
             external user's codebase. Excluded by default.
+        fmt: ``json`` prints the rule list as data (it printed the text view, BACK-1606).
     """
     from ...rules import RuleRegistry
     rules = RuleRegistry.list_rules(include_internal=show_all)
+
+    if fmt == 'json':
+        _print_json({'reveal_version': version, 'rule_count': len(rules),
+                     'enabled_count': sum(1 for r in rules if r['enabled']),
+                     'rules': sorted(rules, key=lambda r: r['code'])})
+        sys.exit(0)
 
     if not rules:
         print("No rules discovered")
@@ -315,7 +337,7 @@ def handle_rules_list(version: str, show_all: bool = False):
     print("Verified = correctness-checked on these languages/formats (BACK-432 matrix); "
           "rules still run beyond them as best-effort.")
     if not show_all:
-        print("(reveal's internal self-check rules are hidden — pass --all to include them)")
+        print("(reveal's internal self-check rules are hidden — 'reveal --rules --all' includes them)")
     print("\nUsage: reveal <file> --check --select B,S --ignore E501")
     sys.exit(0)
 
@@ -495,9 +517,7 @@ def handle_discover(show_all: bool = False):
     Dumps the full adapter registry as a single JSON document (see
     build_discover_payload for what it contains).
     """
-    import json
-
-    print(json.dumps(build_discover_payload(show_all), indent=2))
+    _print_json(build_discover_payload(show_all))
     sys.exit(0)
 
 

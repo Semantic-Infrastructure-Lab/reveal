@@ -267,6 +267,55 @@ def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None]]:
     return sub_args, lambda: dispatch_subcommand(name, sub_parser, runner, sub_args)
 
 
+# Special modes that answer and exit: (dest, handler run on the tracked args). Each runs
+# under the flag ledger, so a flag it never reads is named instead of dropped
+# (`reveal --rules --format json` printed text with no note, BACK-1606). A handler reads
+# its options from the args it is handed, which is what counts them as used.
+_SPECIAL_MODES: List[Tuple[str, Callable[[Any], Any]]] = [
+    ('list_supported', lambda a: handle_list_supported(list_supported_types)),
+    ('languages', lambda a: handle_languages(a.format)),
+    ('adapters', lambda a: handle_adapters(getattr(a, 'all', False), a.format)),
+    ('language_info', lambda a: handle_language_info(a.language_info)),
+    ('explain_file', lambda a: handle_explain_file(a.path, a.verbose)),
+    ('capabilities', lambda a: handle_capabilities(a.path)),
+    ('show_ast', lambda a: handle_show_ast(a.path)),
+    ('agent_help', lambda a: handle_agent_help()),
+    ('rules', lambda a: handle_rules_list(__version__, getattr(a, 'all', False), a.format)),
+    ('profiles', lambda a: handle_profiles_list()),
+    ('schema', lambda a: handle_schema()),
+    ('explain', lambda a: handle_explain_rule(a.explain)),
+    ('list_schemas', lambda a: handle_list_schemas()),
+    ('discover', lambda a: handle_discover(getattr(a, 'all', False))),
+    ('decorator_stats', lambda a: handle_decorator_stats(a.path)),
+    ('stdin', lambda a: handle_stdin_mode(a, handle_file)),  # its routes keep their own ledgers
+    ('disable_breadcrumbs', lambda a: disable_breadcrumbs_permanently()),
+]
+# Always-JSON modes: --format json asks for what they print anyway, so it is honoured.
+_JSON_ONLY_MODES = frozenset({'discover', 'capabilities'})
+
+
+def _run_special_mode(dest: str, handler: Callable[[Any], Any], args: Any) -> None:
+    from .cli.routing.ledger import FlagLedger, mark, peek
+    if not isinstance(args, Namespace):  # a test's Mock: nothing to track
+        handler(args)
+        return
+    ledger = FlagLedger(args, view=f"--{dest.replace('_', '-')}")
+    tracked = ledger.track(args)
+    mark(tracked, dest)
+    if dest in _JSON_ONLY_MODES and peek(tracked, 'format') == 'json':
+        mark(tracked, 'format')
+    try:
+        with ledger.dispatching(''):
+            handler(tracked)
+        ledger.complete = True
+    except SystemExit as exc:
+        ledger.complete = not exc.code  # an error exit reports nothing, as elsewhere
+        raise
+    finally:
+        if ledger.complete:
+            ledger.report()
+
+
 def _handle_special_modes(args: Any) -> bool:
     """Handle special CLI modes that exit early.
 
@@ -276,32 +325,14 @@ def _handle_special_modes(args: Any) -> bool:
     Returns:
         bool: True if a special mode was handled (caller should exit)
     """
-    # Special mode handlers (flag -> (handler, *handler_args))
-    special_modes: List[Tuple[Any, Callable[..., Any], List[Any]]] = [
-        (args.list_supported, handle_list_supported, [list_supported_types]),
-        (getattr(args, 'languages', False), handle_languages, []),
-        (getattr(args, 'adapters', False), handle_adapters, [getattr(args, 'all', False)]),
-        (getattr(args, 'language_info', None), handle_language_info, [args.language_info]),
-        (getattr(args, 'explain_file', False), handle_explain_file, [args.path, args.verbose]),
-        (getattr(args, 'capabilities', False), handle_capabilities, [args.path]),
-        (getattr(args, 'show_ast', False), handle_show_ast, [args.path]),
-        (args.agent_help, handle_agent_help, []),
-        (args.rules, handle_rules_list, [__version__, getattr(args, 'all', False)]),
-        (getattr(args, 'profiles', False), handle_profiles_list, []),
-        (getattr(args, 'schema', False), handle_schema, []),
-        (args.explain, handle_explain_rule, [args.explain]),
-        (getattr(args, 'list_schemas', False), handle_list_schemas, []),
-        (getattr(args, 'discover', False), handle_discover, [getattr(args, 'all', False)]),
-        (getattr(args, 'decorator_stats', False), handle_decorator_stats, [args.path]),
-        (args.stdin, handle_stdin_mode, [args, handle_file]),
-        (getattr(args, 'disable_breadcrumbs', False), disable_breadcrumbs_permanently, []),
-    ]
-
-    for condition, handler, handler_args in special_modes:
-        if condition:
-            handler(*handler_args)
-            return True
-
+    for dest, handler in _SPECIAL_MODES:
+        if not getattr(args, dest, None):
+            continue
+        if dest == 'stdin':  # each piped path or URI is answered by its own route
+            handler(args)
+        else:
+            _run_special_mode(dest, handler, args)
+        return True
     return False
 
 
