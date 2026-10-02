@@ -33,7 +33,7 @@ class CommandSpec(NamedTuple):
     parser_factory: str
     runner: str
     # --format values the runner renders when no same-named adapter declares them.
-    # None: the same-named adapter's declaration applies (or, for check, every format).
+    # None: the same-named adapter's declaration applies.
     formats: Optional[Tuple[str, ...]] = None
 
     def load(self) -> Tuple[ArgumentParser, Callable[[Namespace], None]]:
@@ -50,7 +50,7 @@ def _spec(name: str, formats: Optional[Tuple[str, ...]] = None) -> CommandSpec:
 # runners render only these formats (measured: grep/typed output matched text byte for byte).
 COMMANDS: Dict[str, CommandSpec] = {
     'architecture': _spec('architecture'),
-    'check':        _spec('check'),
+    'check':        _spec('check', ('text', 'json', 'grep')),  # typed: text on a file, exit 2 on a dir
     'contracts':    _spec('contracts'),
     'deps':         _spec('deps'),
     'dev':          _spec('dev'),

@@ -138,3 +138,28 @@ def test_the_rules_hint_names_a_command_that_takes_all(tmp_path):
     out = _cli('check', '--rules', cwd=tmp_path).stdout
     assert "'reveal --rules --all' includes them" in out
     assert _cli('--rules', '--all', cwd=tmp_path).returncode == 0
+
+
+# --- (6) a subcommand's usage line lists the formats it renders ----------------------------
+
+def _subcommands_with_format():
+    from reveal.cli.invocation import COMMANDS
+    return [name for name in sorted(COMMANDS)
+            if any('--format' in a.option_strings for a in COMMANDS[name].load()[0]._actions)]
+
+
+@pytest.mark.parametrize('name', _subcommands_with_format())
+def test_usage_lists_only_formats_the_subcommand_accepts(tmp_path, name):
+    import re
+    usage = _cli(name, '--help', cwd=tmp_path).stdout
+    listed = re.search(r'--format \{([^}]*)\}', usage).group(1).split(',')
+    for fmt in ('text', 'json', 'typed', 'grep'):
+        err = _cli(name, str(tmp_path), '--format', fmt, cwd=tmp_path).stderr
+        rejected = 'is not supported by' in err or "invalid choice: '%s'" % fmt in err
+        assert (fmt in listed) != rejected, (name, fmt, listed)
+
+
+def test_check_typed_is_rejected_not_printed_as_text(pkg):
+    run = _cli('check', 'pkg/a.py', '--format', 'typed', cwd=pkg)
+    assert run.returncode == 2
+    assert 'not supported by reveal check (supported: text, json, grep)' in run.stderr

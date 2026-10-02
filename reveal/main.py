@@ -131,17 +131,37 @@ def _warn_if_subcommand_shadows_path(name: str) -> None:
     )
 
 
-def _require_subcommand_format(name: str, args: Any) -> None:
-    """A subcommand renders what its adapter (or its COMMANDS entry) declares;
-    any other --format is rejected, not printed as text (BACK-1425)."""
+def _subcommand_formats(name: str) -> Optional[Tuple[str, ...]]:
+    """The --format values ``reveal <name>`` renders: its same-named adapter's declaration,
+    else its COMMANDS entry. None: nothing to enforce."""
     from . import adapters as _adapters  # noqa: F401 -- registers every adapter
     from .adapters.base import get_adapter_class
-    from .cli.routing.formats import (
-        declared_output_formats, reject_unhonored_also_json, require_supported_format,
-    )
+    from .cli.routing.formats import declared_output_formats
     adapter_class = get_adapter_class(name)
-    supported = (declared_output_formats(adapter_class) if adapter_class is not None
-                 else COMMANDS[name].formats)
+    return (declared_output_formats(adapter_class) if adapter_class is not None
+            else COMMANDS[name].formats)
+
+
+def _show_subcommand_formats(parser: Any, formats: Optional[Tuple[str, ...]]) -> None:
+    """Usage and --help list the formats the subcommand renders, from the same source the
+    check below enforces. Every subcommand inherited the global {text,json,typed,grep}, so
+    10 usage lines advertised two values that exit 2 (BACK-1606). The choices stay wide so
+    an unsupported value gets the error that names the supported list."""
+    if formats is None:
+        return
+    for action in parser._actions:
+        if '--format' in action.option_strings:
+            action.metavar = '{' + ','.join(formats) + '}'
+            action.help = (f"Output format: {', '.join(formats)}. Another value exits 2. "
+                           "Defaults to $REVEAL_FORMAT if set.")
+
+
+def _require_subcommand_format(name: str, args: Any,
+                               formats: Optional[Tuple[str, ...]] = None) -> None:
+    """A subcommand renders what its adapter (or its COMMANDS entry) declares;
+    any other --format is rejected, not printed as text (BACK-1425)."""
+    from .cli.routing.formats import reject_unhonored_also_json, require_supported_format
+    supported = formats if formats is not None else _subcommand_formats(name)
     require_supported_format(args, supported, f"reveal {name}")
     if name != 'check':
         reject_unhonored_also_json(args, f"reveal {name}")
@@ -260,8 +280,10 @@ def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None]]:
 
     _warn_if_subcommand_shadows_path(name)
     sub_parser, runner = COMMANDS[name].load()
+    formats = _subcommand_formats(name)
+    _show_subcommand_formats(sub_parser, formats)
     sub_args = sub_parser.parse_args(invocation.command_argv)
-    _require_subcommand_format(name, sub_args)
+    _require_subcommand_format(name, sub_args, formats)
     # BACK-1539: the flag ledger and the REVEAL_IGNORE/--exclude walk scope, once for all.
     from .cli.routing.subcommand import dispatch_subcommand
     return sub_args, lambda: dispatch_subcommand(name, sub_parser, runner, sub_args)
