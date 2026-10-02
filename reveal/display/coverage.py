@@ -10,6 +10,7 @@ indexed declaration, so renderers can say "partial" instead of looking complete
 
 from typing import Any, Dict, List, Optional, Set
 
+from reveal.utils.path_utils import to_posix
 from reveal.utils.results import truncations_of
 
 # Categories that describe code declarations. A structure with any other key
@@ -85,6 +86,6 @@ def format_coverage_warning(cov: Dict[str, Any], path: Any) -> List[str]:
         f"⚠️  Partial outline: {cov['uncovered_lines']} of {cov['code_lines']} code lines "
         f"({pct}%) are top-level code outside any listed function/class "
         f"(first at line {cov['first_uncovered_line']}).",
-        f"   Read it with: reveal \"{path}\" :{cov['first_uncovered_line']}-<end>  |  "
-        f"reveal \"{path}\" --grep 'pattern'",
+        f"   Read it with: reveal \"{to_posix(path)}\" :{cov['first_uncovered_line']}-<end>  |  "
+        f"reveal \"{to_posix(path)}\" --grep 'pattern'",
     ]

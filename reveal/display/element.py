@@ -13,6 +13,7 @@ from reveal.element_resolve import (
 )
 from reveal.treesitter import ELEMENT_TYPE_MAP, ALL_ELEMENT_NODE_TYPES
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
+from reveal.utils.path_utils import to_posix
 from reveal.utils.results import note_truncation, slice_items, truncations_of
 
 if TYPE_CHECKING:
@@ -416,9 +417,9 @@ def _handle_extraction_error(analyzer, element: str, syntax: dict):
         element_type = syntax['element_type']
         ordinal = syntax['ordinal']
         if element_type:
-            print(f"Error: No {element_type} #{ordinal} found in {analyzer.path}", file=sys.stderr)
+            print(f"Error: No {element_type} #{ordinal} found in {to_posix(analyzer.path)}", file=sys.stderr)
         else:
-            print(f"Error: No element #{ordinal} found in {analyzer.path}", file=sys.stderr)
+            print(f"Error: No element #{ordinal} found in {to_posix(analyzer.path)}", file=sys.stderr)
 
     elif syntax_type == 'line':
         target_line = syntax['start_line']
@@ -426,36 +427,36 @@ def _handle_extraction_error(analyzer, element: str, syntax: dict):
         total = _count_lines(analyzer.path)
         span = f"{target_line}-{end_line}" if end_line else str(target_line)
         if total is not None and target_line > total:
-            print(f"Error: Line {span} is past the end of {analyzer.path} ({total} lines)", file=sys.stderr)
+            print(f"Error: Line {span} is past the end of {to_posix(analyzer.path)} ({total} lines)", file=sys.stderr)
         elif end_line:
-            print(f"Error: Invalid line range {span} in {analyzer.path}", file=sys.stderr)
+            print(f"Error: Invalid line range {span} in {to_posix(analyzer.path)}", file=sys.stderr)
         else:
-            print(f"Error: No element found at line {target_line} in {analyzer.path}", file=sys.stderr)
+            print(f"Error: No element found at line {target_line} in {to_posix(analyzer.path)}", file=sys.stderr)
 
     elif syntax_type == 'hierarchical':
         parent, child = element.rsplit('.', 1)
-        print(f"Error: Element '{element}' not found in {analyzer.path}", file=sys.stderr)
+        print(f"Error: Element '{element}' not found in {to_posix(analyzer.path)}", file=sys.stderr)
         print(f"Hint: Looking for '{child}' within '{parent}'", file=sys.stderr)
 
     else:
-        print(f"Error: Element '{element}' not found in {analyzer.path}", file=sys.stderr)
+        print(f"Error: Element '{element}' not found in {to_posix(analyzer.path)}", file=sys.stderr)
         if '|' in element:
             print(
                 "Hint: '|' pattern matches headings only. "
-                f"For table or body content, use: reveal {analyzer.path} --grep '{element.split('|')[0].strip()}'",
+                f"For table or body content, use: reveal {to_posix(analyzer.path)} --grep '{element.split('|')[0].strip()}'",
                 file=sys.stderr
             )
         elif _is_markdown(analyzer):
             print(
                 "Hint: a section name matches a heading exactly or as a substring, ignoring case. "
-                f"List the headings: reveal {analyzer.path}   "
-                f"Search the text: reveal {analyzer.path} --grep '{element}'",
+                f"List the headings: reveal {to_posix(analyzer.path)}   "
+                f"Search the text: reveal {to_posix(analyzer.path)} --grep '{element}'",
                 file=sys.stderr
             )
         else:
             print(
                 f"Hint: Code extraction matches exact names. "
-                f"For content search, use: reveal {analyzer.path} --grep '{element}'",
+                f"For content search, use: reveal {to_posix(analyzer.path)} --grep '{element}'",
                 file=sys.stderr
             )
         _print_did_you_mean(analyzer, element)
@@ -551,11 +552,11 @@ def _output_section_outline(analyzer, result, element: str, output_format: str,
         print(safe_json_dumps(result))
         return
     spans = ', '.join(f"{s['line_start']}-{s['line_end']}" for s in result.get('sections', [result]))
-    print(f"{analyzer.path}:{spans} | {element}\n")
+    print(f"{to_posix(analyzer.path)}:{spans} | {element}\n")
     print(f"Headings ({len(result['headings'])}):")
     _format_markdown_headings(result['headings'], Path(analyzer.path), output_format,
                               depth_override=depth)
-    print(f"\n      reveal {analyzer.path} {shlex.quote(element)}  # Extract the full section")
+    print(f"\n      reveal {to_posix(analyzer.path)} {shlex.quote(element)}  # Extract the full section")
 
 
 def _extract_hierarchical_element(analyzer, element: str):
@@ -698,7 +699,7 @@ def _extract_line_range(analyzer, start_line: int, end_line: int):
             'source': source,
         }
     except Exception as e:
-        print(f"Warning: could not extract lines {start_line}-{end_line} from {analyzer.path}: {e}",
+        print(f"Warning: could not extract lines {start_line}-{end_line} from {to_posix(analyzer.path)}: {e}",
               file=sys.stderr)
         return None
 
@@ -865,7 +866,7 @@ def _read_lines(path, start_line, end_line):
             return None
         return ''.join(lines[start_line - 1:end_line]).rstrip('\n')
     except Exception as e:
-        print(f"Warning: could not read lines {start_line}-{end_line} from {path}: {e}", file=sys.stderr)
+        print(f"Warning: could not read lines {start_line}-{end_line} from {to_posix(path)}: {e}", file=sys.stderr)
         return None
 
 
@@ -901,11 +902,11 @@ def _output_sections(analyzer, path, name: str, sections, output_format: str, co
         start, end, source = section['line_start'], section['line_end'], section['source']
         if output_format == 'grep':
             for offset, line in enumerate(source.split('\n')):
-                print(f"{path}:{start + offset}:{line}")
+                print(f"{to_posix(path)}:{start + offset}:{line}")
             continue
         if i:
             print()
-        print(f"{path}:{start}-{end} | {section.get('heading') or name}\n")
+        print(f"{to_posix(path)}:{start}-{end} | {section.get('heading') or name}\n")
         print(analyzer.format_with_lines(source, start))
     if output_format != 'grep':
         line_count = sum(s['line_end'] - s['line_start'] + 1 for s in sections)
@@ -937,7 +938,7 @@ def _output_result(analyzer, result, element: str, output_format: str, config=No
     if 'source' not in result and 'data' in result:
         row_number = result.get('row_number')
         label = f"row {row_number}" if row_number is not None else element
-        print(f"{path} | {label}\n")
+        print(f"{to_posix(path)} | {label}\n")
         for key, value in result['data'].items():
             print(f"  {key}: {value}")
         return
@@ -967,7 +968,7 @@ def _output_result(analyzer, result, element: str, output_format: str, config=No
         return
 
     # Header
-    print(f"{path}:{line_start}-{line_end} | {name}\n")
+    print(f"{to_posix(path)}:{line_start}-{line_end} | {name}\n")
     _print_element_body(analyzer, result, name, output_format, config)
 
 
@@ -988,7 +989,7 @@ def _print_element_body(analyzer, result, name: str, output_format: str, config=
     if output_format == 'grep':
         for i, line in enumerate(source.split('\n')):
             line_num = line_start + i
-            print(f"{path}:{line_num}:{line}")
+            print(f"{to_posix(path)}:{line_num}:{line}")
         return
     formatted = analyzer.format_with_lines(source, line_start)
     print(formatted)

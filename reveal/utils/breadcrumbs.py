@@ -3,6 +3,8 @@ import contextvars
 import json
 import re
 
+from .path_utils import to_posix
+
 # File type groupings for consistent suggestions
 _CODE_TYPES = frozenset([
     'python', 'javascript', 'typescript', 'rust', 'go', 'bash', 'gdscript',
@@ -644,7 +646,8 @@ def print_breadcrumbs(context, path, file_type=None, config=None, **kwargs):
     block: list = []
     token = _block.set(block)
     try:
-        handler(path, file_type, **kwargs)
+        # A suggested command names the file with '/' on every OS (str(Path) is '\\' on Windows).
+        handler(to_posix(path) if path is not None else path, file_type, **kwargs)
     finally:
         _block.reset(token)
     if any(line.strip() for line in block):

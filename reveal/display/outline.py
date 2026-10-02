@@ -3,6 +3,8 @@
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+from reveal.utils.path_utils import to_posix
+
 
 def build_hierarchy(structure: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
     """Build hierarchical tree from flat structure.
@@ -168,7 +170,7 @@ def _print_outline_item(item: Dict[str, Any], path: Path,
 
     if is_root:
         # Root items - no tree chars, show full path
-        print(f"{display} ({path}:{line}{size_str})")
+        print(f"{display} ({to_posix(path)}:{line}{size_str})")
     else:
         # Child items - use tree chars
         tree_char = '└─ ' if is_last_item else '├─ '

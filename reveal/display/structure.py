@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, cast
 from reveal.base import FileAnalyzer
 from reveal.defaults import DisplayDefaults
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
-from reveal.utils.path_utils import is_minified_content, is_minified_filename
+from reveal.utils.path_utils import is_minified_content, is_minified_filename, to_posix
 from reveal.utils.results import note_truncation, outcome_of, truncations_of
 
 from .coverage import format_coverage_warning, outline_coverage
@@ -287,7 +287,7 @@ def _render_typed_structure_output(
 
     if not typed.elements:
         print("No structure available")
-        print(f"  Hint: reveal \"{file_path}\" --grep 'pattern'  |  reveal \"{file_path}\" --show-ast")
+        print(f"  Hint: reveal \"{to_posix(file_path)}\" --grep 'pattern'  |  reveal \"{to_posix(file_path)}\" --show-ast")
         return
 
     # Apply category filter if specified
@@ -363,7 +363,7 @@ def _build_extraction_examples(extractable: Dict[str, List[str]], file_path: str
             # Quote names with spaces or special characters
             if ' ' in name or '"' in name or "'" in name:
                 name = f'"{name}"'
-            examples.append(f"reveal {file_path} {name}")
+            examples.append(f"reveal {to_posix(file_path)} {name}")
             break
 
     return examples
@@ -694,7 +694,7 @@ def _handle_outline_mode(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[
             print(analyzer.format_with_lines(analyzer.content, 1))
         else:
             print(f"No structure available for this file type ({line_count} lines)")
-            print(f"  Hint: reveal \"{path}\" --grep 'pattern'  |  reveal \"{path}\" --show-ast")
+            print(f"  Hint: reveal \"{to_posix(path)}\" --grep 'pattern'  |  reveal \"{to_posix(path)}\" --show-ast")
         return
 
     hierarchy = _build_outline_hierarchy(structure)
@@ -757,7 +757,7 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
             print(analyzer.format_with_lines(analyzer.content, 1))
         else:
             print(f"No structure available for this file type ({line_count} lines)")
-            print(f"  Hint: reveal \"{path}\" --grep 'pattern'  |  reveal \"{path}\" --show-ast")
+            print(f"  Hint: reveal \"{to_posix(path)}\" --grep 'pattern'  |  reveal \"{to_posix(path)}\" --show-ast")
         return
 
     # Text output: show header, categories, and navigation hints

@@ -22,6 +22,7 @@ from .formats import (  # noqa: E402
 )
 from ...file_handler import handle_file  # noqa: E402
 from .grep import handle_grep, handle_grep_directory  # noqa: E402
+from ...utils.path_utils import to_posix  # noqa: E402
 from ...registry import get_markdown_extensions  # noqa: E402
 
 
@@ -281,7 +282,7 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
         if getattr(args, 'name', None):
             print("Note: --name ignored when --grep is used (--grep searches all text, --name filters structural output)", file=sys.stderr)
         reject_unhonored_also_json(args, '--grep')
-        handle_grep_directory(str(path), args.grep, args, _parse_ext_arg(getattr(args, 'ext', None)))
+        handle_grep_directory(to_posix(path), args.grep, args, _parse_ext_arg(getattr(args, 'ext', None)))
         return
     # BACK-1203: --max-items/--max-snippet-chars have no analog on a bare
     # directory listing (a recursive tree, not a flat result list) — the
@@ -377,7 +378,7 @@ def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Names
         if getattr(args, 'name', None):
             print(f"Note: --name '{args.name}' ignored when --grep is used (--grep searches all text, --name filters structural output)", file=sys.stderr)
         reject_unhonored_also_json(args, '--grep')
-        handle_grep(str(path), args.grep, args)
+        handle_grep(to_posix(path), args.grep, args)
         return
     if getattr(args, 'name', None) or getattr(args, 'sort', None) or getattr(args, 'type', None):
         handle_uri(_build_ast_query_from_flags(path, args), args.element, args)

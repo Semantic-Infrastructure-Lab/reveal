@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from reveal.base import FileAnalyzer
+from reveal.utils.path_utils import to_posix
 from reveal.utils.results import truncations_of
 
 
@@ -240,7 +241,7 @@ def _format_single_link(
     broken = item.get('broken', False)
 
     if output_format == 'grep':
-        print(f"{path}:{line}:{url}")
+        print(f"{to_posix(path)}:{line}:{url}")
         return
 
     if broken:
@@ -296,7 +297,7 @@ def _format_fenced_block(
 
     if output_format == 'grep':
         first_line = source.split('\n')[0] if source else ''
-        print(f"{path}:{line_start}:{first_line}")
+        print(f"{to_posix(path)}:{line_start}:{first_line}")
         return
 
     print(f"    Lines {line_start}-{line_end} ({line_count} lines)")
@@ -324,7 +325,7 @@ def _format_inline_code_items(
         source = item.get('source', '')
 
         if output_format == 'grep':
-            print(f"{path}:{line}:{source}")
+            print(f"{to_posix(path)}:{line}:{source}")
         else:
             print(f"    Line {line:<4} `{source}`")
 
@@ -384,7 +385,7 @@ def _format_related_item(
     else:
         status = "✓"
 
-    print(f"{indent}{path} {status}")
+    print(f"{indent}{to_posix(path)} {status}")
 
     # Show headings if available
     if headings and exists and not error:
@@ -480,7 +481,7 @@ def _format_related(
         for item in items:
             rel_path = item.get('path', '?')
             exists = "EXISTS" if item.get('exists', False) else "MISSING"
-            print(f"{path}:related:{rel_path}:{exists}")
+            print(f"{to_posix(path)}:related:{rel_path}:{exists}")
         return
 
     # Show summary header for deep traversals
@@ -689,17 +690,17 @@ def _print_item_line(line, name: str, signature: str, content: str,
     """Print a single item in the appropriate output format."""
     if signature and name:
         if output_format == 'grep':
-            print(f"{path}:{line}:{name}{signature}")
+            print(f"{to_posix(path)}:{line}:{name}{signature}")
         else:
             print(f"  :{line:<6} {name}{signature}{metrics}")
     elif name:
         if output_format == 'grep':
-            print(f"{path}:{line}:{name}{target_suffix.replace(' → ', ':')}")
+            print(f"{to_posix(path)}:{line}:{name}{target_suffix.replace(' → ', ':')}")
         else:
             print(f"  :{line:<6} {name}{target_suffix}{metrics}")
     elif content:
         if output_format == 'grep':
-            print(f"{path}:{line}:{content}")
+            print(f"{to_posix(path)}:{line}:{content}")
         else:
             print(f"  :{line:<6} {content}")
 
@@ -742,7 +743,7 @@ def _print_heading_line(item: Dict[str, Any], indent: str, suffix: str, path: Pa
     line = item.get('line', '?')
     name = item.get('name', '')
     if output_format == 'grep':
-        print(f"{path}:{line}:{name}{suffix}")
+        print(f"{to_posix(path)}:{line}:{name}{suffix}")
     else:
         print(f"  {indent}:{line:<6} {name}{suffix}")
 
