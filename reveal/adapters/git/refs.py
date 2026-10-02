@@ -148,15 +148,17 @@ def _get_branch_info(repo, branch_name) -> 'Dict[str, Any] | None':
 
 
 def list_branches(repo: 'pygit2.Repository') -> List[Dict[str, Any]]:
-    """List repository branches, newest first. The caller cuts (BACK-1551)."""
+    """List repository branches, newest first. The caller cuts (BACK-1551).
+
+    A branch that can't be read is skipped by _get_branch_info; failing to list the
+    branches at all propagates, rather than returning a partial list as if whole
+    (BACK-1614).
+    """
     branches = []
-    try:
-        for branch_name in repo.branches.local:
-            info = _get_branch_info(repo, branch_name)
-            if info:
-                branches.append(info)
-    except Exception:  # pygit2 errors vary — return partial results collected so far
-        pass
+    for branch_name in repo.branches.local:
+        info = _get_branch_info(repo, branch_name)
+        if info:
+            branches.append(info)
     return sorted(branches, key=lambda b: cast(int, b.get('timestamp', 0)), reverse=True)
 
 
@@ -186,15 +188,16 @@ def _get_tag_info(repo, ref_name) -> 'Dict[str, Any] | None':
 
 
 def list_tags(repo: 'pygit2.Repository') -> List[Dict[str, Any]]:
-    """List repository tags, newest first. The caller cuts (BACK-1551)."""
+    """List repository tags, newest first. The caller cuts (BACK-1551).
+
+    Same contract as list_branches: one unreadable tag is skipped, a failure to
+    list them propagates (BACK-1614).
+    """
     tags = []
-    try:
-        for ref_name in repo.references:
-            if not ref_name.startswith('refs/tags/'):
-                continue
-            info = _get_tag_info(repo, ref_name)
-            if info:
-                tags.append(info)
-    except Exception:  # pygit2 errors vary — return partial results collected so far
-        pass
+    for ref_name in repo.references:
+        if not ref_name.startswith('refs/tags/'):
+            continue
+        info = _get_tag_info(repo, ref_name)
+        if info:
+            tags.append(info)
     return sorted(tags, key=lambda t: cast(int, t.get('timestamp', 0)), reverse=True)

@@ -696,8 +696,8 @@ class GitAdapter(ResourceAdapter):
             try:
                 result = files.get_file_at_ref(repo, self.ref, self.subpath)
                 return result
-            except Exception:
-                pass  # not a valid file path at this ref; fall through to return None
+            except ValueError:
+                pass  # get_file_at_ref's "no such file at this ref"; fall through to return None
             finally:
                 self.subpath = old_subpath
 

@@ -1007,9 +1007,7 @@ def _churn_fingerprint(
     """
     try:
         workdir = repo.workdir or str(repo.path)
-    except Exception:
-        # Intentional: caller treats None as "skip caching", not an error —
-        # the walk itself still runs, just uncached (see docstring).
+    except Exception:  # boundary-ok: silent-except -- None means "walk uncached", the same answer
         return None
     hasher = hashlib.sha256()
     hasher.update(str(workdir).encode("utf-8", "replace"))
