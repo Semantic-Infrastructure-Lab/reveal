@@ -451,22 +451,23 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
         found = exact or partial
         return found[0] if found else None
 
-    def sheet_rows(self, name: str) -> Optional[Dict[str, Any]]:
+    def sheet_rows(self, name: str, formulas: bool = False) -> Optional[Dict[str, Any]]:
         """The sheet called *name*: its ``_analyze_sheet`` facts plus every row, or None.
 
         The xlsx:// sheet view and its CSV export read this (BACK-1608). They used to parse
         extract_element's text preview back into cells, which cut every sheet to its first
         20 rows and stripped a leading number off each row as if it were a line number.
+        *formulas*: a formula cell holds its formula (``=A1+B1``), not its cached value.
         """
         sheet_ref = self._find_sheet(name)
         if sheet_ref is None:
             return None
         _, sheet_name, sheet_path = sheet_ref
         sheet = self._analyze_sheet(sheet_path, sheet_name)
-        sheet['rows_data'] = self._sheet_grid(sheet_path)
+        sheet['rows_data'] = self._sheet_grid(sheet_path, formulas)
         return sheet
 
-    def _sheet_grid(self, sheet_path: str) -> List[List[str]]:
+    def _sheet_grid(self, sheet_path: str, formulas: bool = False) -> List[List[str]]:
         """Every row of the sheet, row N at index N-1.
 
         Excel writes no element for an empty row, so a blank separator row leaves a gap;
@@ -482,7 +483,7 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
             number = row.get('r', '')
             if number.isdigit():
                 grid.extend([] for _ in range(int(number) - 1 - len(grid)))
-            grid.append(self._row_cells(row))
+            grid.append(self._row_cells(row, formulas))
         return grid
 
     def _get_sheet_preview(self, sheet_path: str, max_rows: int = 10) -> List[List[str]]:
@@ -501,12 +502,12 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
 
         return preview
 
-    def _row_cells(self, row: ET.Element) -> List[str]:
+    def _row_cells(self, row: ET.Element, formulas: bool = False) -> List[str]:
         """A row's values, each in its own column.
 
         Excel stores only non-empty cells, each with its reference (``C1``); a cell
         skipped in the file leaves ``''`` in its column, so ``A1, C1`` is three cells,
-        not two shifted left (BACK-1608).
+        not two shifted left (BACK-1608). *formulas*: see ``_cell_formula``.
         """
         xl = self.NAMESPACES['xl']
         cells: List[str] = []
@@ -514,8 +515,23 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
             col = re.match(r'[A-Za-z]+', cell.get('r', ''))
             if col:
                 cells.extend([''] * (self._col_letter_to_index(col.group(0)) - 1 - len(cells)))
-            cells.append(self._get_cell_value(cell))
+            formula = self._cell_formula(cell) if formulas else None
+            cells.append(formula if formula is not None else self._get_cell_value(cell))
         return cells
+
+    def _cell_formula(self, cell: ET.Element) -> Optional[str]:
+        """The cell's formula as ``=...``, or None for a plain value.
+
+        A cell that reuses a shared formula stores only the group's id; its formula is
+        the group's first cell's with shifted references, which this does not compute,
+        so it reads ``=<shared formula N>`` rather than passing for a value.
+        """
+        f = cell.find(f'{{{self.NAMESPACES["xl"]}}}f')
+        if f is None:
+            return None
+        if f.text:
+            return '=' + f.text
+        return f"=<shared formula {f.get('si', '?')}>"
 
     def _get_cell_value(self, cell: ET.Element) -> str:
         """Get cell value, handling shared strings, inline strings, and numbers."""

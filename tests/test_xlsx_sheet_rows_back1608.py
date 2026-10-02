@@ -130,3 +130,14 @@ def test_unparsed_range_is_an_error_not_the_whole_sheet(workbook, cell_range):
 def test_blank_rows_keep_later_rows_at_their_numbers(workbook):
     assert _sheet(workbook, "sheet=Gaps&format=csv")['rows'] == [['top'], [], [], ['after two blank rows']]
     assert _sheet(workbook, "sheet=Gaps&range=A4")['rows'] == [['after two blank rows']]
+
+
+def test_formulas_param_shows_the_formula(tmp_path):
+    """?formulas=true was documented and ignored: a formula cell read as its cached value."""
+    wb = openpyxl.Workbook()
+    wb.active.append([1, 2, "=A1+B1"])
+    path = tmp_path / "f.xlsx"
+    wb.save(path)
+    assert _sheet(path, "sheet=0&formulas=true")['rows'] == [['1', '2', '=A1+B1']]
+    assert _sheet(path, "sheet=0&formulas")['rows'] == [['1', '2', '=A1+B1']]
+    assert _sheet(path, "sheet=0")['rows'] == [['1', '2', '']]

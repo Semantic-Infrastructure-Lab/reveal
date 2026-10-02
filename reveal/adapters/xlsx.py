@@ -847,7 +847,8 @@ class XlsxAdapter(ResourceAdapter):
         if self.analyzer is None:
             raise ValueError("Analyzer not initialized")
         sheet_name = self._resolve_sheet_name(sheet_identifier)
-        sheet = self.analyzer.sheet_rows(sheet_name)
+        formulas = str(self.query_params.get('formulas', False)).lower() in ('true', '1', 'yes')
+        sheet = self.analyzer.sheet_rows(sheet_name, formulas=formulas)
         if sheet is None:
             raise ValueError(f"Failed to extract sheet: {sheet_name}")
         if sheet.get('too_large'):
