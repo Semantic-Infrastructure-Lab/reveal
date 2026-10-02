@@ -180,7 +180,7 @@ def _build_ast_query_from_flags(path: Path, args: 'Namespace') -> str:
         query_params.append(f"sort={sort_field}")
 
     query_string = '&'.join(query_params)
-    return f"ast://{path}?{query_string}"
+    return f"ast://{to_posix(path)}?{query_string}"
 
 
 def _guard_hotspots_flag(args: 'Namespace', path_str: str) -> None:
@@ -392,8 +392,8 @@ def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Names
             print("❌ Error: --section only works with markdown files (.md, .markdown)", file=sys.stderr)
             print(file=sys.stderr)
             print("Examples:", file=sys.stderr)
-            print(f"  reveal {path}.md --section 'Heading Name'   # markdown section extraction", file=sys.stderr)
-            print(f"  reveal {path} \"element_name\"                # for non-markdown, use element syntax", file=sys.stderr)
+            print(f"  reveal {to_posix(path)}.md --section 'Heading Name'   # markdown section extraction", file=sys.stderr)
+            print(f"  reveal {to_posix(path)} \"element_name\"                # for non-markdown, use element syntax", file=sys.stderr)
             print(file=sys.stderr)
             print("Learn more: reveal help://ux", file=sys.stderr)
             sys.exit(1)

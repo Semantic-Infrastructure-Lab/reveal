@@ -105,6 +105,29 @@ def test_print_flagged(src):
     assert set(_hits(src)) == {'print'}
 
 
+DISPLAY = 'reveal/display/outline.py'
+
+
+@pytest.mark.parametrize('src', [
+    "def f(path):\n    return f'File: {path}'",
+    "def f(analyzer):\n    return f'({analyzer.path}:2)'",
+    "def f(file_path):\n    return f'{file_path}:{1}'",
+])
+def test_display_path_flagged(src):
+    assert set(_hits(src, DISPLAY)) == {'display-path'}
+
+
+@pytest.mark.parametrize('src, rel', [
+    ("def f(path):\n    return f'File: {to_posix(path)}'", DISPLAY),
+    ("def f(path):\n    return f'File: {path.name}'", DISPLAY),
+    ("def f(name):\n    return f'File: {name}'", DISPLAY),
+    ("def f(path):\n    return f'File: {path}'", PLAIN),
+    ("def f(path):\n    # boundary-ok: display-path -- already a URI\n    return f'{path}'", DISPLAY),
+])
+def test_display_path_not_flagged(src, rel):
+    assert 'display-path' not in _hits(src, rel)
+
+
 @pytest.mark.parametrize('src', [
     "import sys\nname = sys.argv[1]",
     "import sys\nif '--copy' in sys.argv:\n    pass",

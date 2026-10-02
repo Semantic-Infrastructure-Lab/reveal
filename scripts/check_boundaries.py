@@ -47,6 +47,17 @@ Rules (home = where the concern is allowed to live):
     result's outcome (a failed result exits 1, a cut list is printed). A runner that built
     its own envelope never did, which is how ``reveal overview`` lost its cut line.
 
+``display-path`` (BACK-1635)
+    An f-string field in the rendering layer whose expression is a bare path
+    (``{path}``, ``{file_path}``, ``{x.path}``). ``str(Path)`` prints ``\\`` on Windows, and
+    ``--matrix`` is Linux-only, so nothing else catches it. Scope: ``reveal/display/`` and
+    ``reveal/cli/routing/``, the file views that print a ``Path`` they were handed. Adapter
+    renderers print a ``path`` out of a result dict, which the router already spells with ``/``
+    (BACK-1530 path pass), so they are out of scope. Write the path
+    with ``to_posix()``/``as_spelled()`` (``reveal/utils/path_utils.py``); a field that is
+    already a ``/`` string (a URI, a relative name built with ``as_posix()``) takes
+    ``# boundary-ok: display-path -- <why>``.
+
 Code under ``if __name__ == '__main__':`` is exempt from ``exit`` and ``print``.
 Suppress one deliberate site with ``# boundary-ok: <rule> -- <why>`` on any line of the
 call, or on a comment line directly above it.
@@ -103,6 +114,13 @@ RULES: Dict[str, Dict[str, Any]] = {
         'fix': 'print the result through reveal.cli.routing.subcommand.emit_subcommand_result',
         'home': (('func', 'reveal/cli/routing/subcommand.py', 'emit_subcommand_result'),),
     },
+    'display-path': {
+        'task': 'BACK-1635',
+        'fix': 'write the path with to_posix()/as_spelled() (reveal.utils.path_utils); '
+               'str(Path) prints backslashes on Windows',
+        'home': (),
+        'scope': (('prefix', 'reveal/display/'), ('prefix', 'reveal/cli/routing/')),
+    },
     'print': {
         'task': 'BACK-1368 (removal: BACK-916)',
         'fix': 'return data and print it from a renderer (reveal/rendering, reveal/display, '
@@ -127,6 +145,24 @@ def _is_home(rule: str, rel: str, funcs: List[str], classes: List[str]) -> bool:
         if kind == 'class' and any(fnmatch(c, spec[0]) for c in classes):
             return True
     return False
+
+
+def _in_scope(rule: str, rel: str) -> bool:
+    scope = RULES[rule].get('scope')
+    if scope is None:
+        return True
+    return any((kind == 'prefix' and rel.startswith(spec[0]))
+               or (kind == 'basename' and fnmatch(rel.rsplit('/', 1)[-1], spec[0]))
+               for kind, *spec in scope)
+
+
+_PATH_NAMES = frozenset({'path', 'file_path', 'filepath', 'target_path'})
+
+
+def _is_bare_path(node: ast.AST) -> bool:
+    if isinstance(node, ast.Name):
+        return node.id in _PATH_NAMES
+    return isinstance(node, ast.Attribute) and node.attr in _PATH_NAMES
 
 
 def _dotted(node: ast.AST) -> str:
@@ -180,6 +216,8 @@ class _Scanner(ast.NodeVisitor):
     # -- bookkeeping --------------------------------------------------------
     def _add(self, rule: str, node: Any) -> None:
         if rule in ('exit', 'print') and self.main_guard:
+            return
+        if not _in_scope(rule, self.rel):
             return
         if _is_home(rule, self.rel, self.func_stack, self.class_stack):
             return
@@ -246,6 +284,11 @@ class _Scanner(ast.NodeVisitor):
     def visit_Attribute(self, node: ast.Attribute) -> None:
         if _dotted(node) == 'sys.argv':
             self._add('argv', node)
+        self.generic_visit(node)
+
+    def visit_FormattedValue(self, node: ast.FormattedValue) -> None:
+        if _is_bare_path(node.value):
+            self._add('display-path', node)
         self.generic_visit(node)
 
     def visit_Raise(self, node: ast.Raise) -> None:

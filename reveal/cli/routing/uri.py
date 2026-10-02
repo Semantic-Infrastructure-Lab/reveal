@@ -433,6 +433,7 @@ def _reject_missing_path(adapter_class: type, scheme: str, resource: str) -> Non
         path = resolve(path)
     if not path or os.path.exists(path):
         return
+    # boundary-ok: display-path -- a str the user typed in the URI, never a Path
     _fail(scheme, resource, f"Path not found: {path}", adapter_class=adapter_class)
 
 
