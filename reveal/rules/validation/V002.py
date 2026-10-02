@@ -9,6 +9,7 @@ Example violation:
     - Result: File type won't be recognized
 """
 
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import re
@@ -16,6 +17,8 @@ import re
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
 from ...utils.path_utils import to_posix
+
+logger = logging.getLogger(__name__)
 
 
 class V002(BaseRule):
@@ -70,8 +73,9 @@ class V002(BaseRule):
         """
         try:
             content = analyzer_file.read_text(encoding='utf-8')
-        except Exception:
+        except Exception as e:
             # Skip files we can't read
+            logger.debug("V002.py: skipped after %s: %s", type(e).__name__, e)
             return None
 
         # Check if file has @register decorator

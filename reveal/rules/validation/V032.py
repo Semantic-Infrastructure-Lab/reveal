@@ -107,7 +107,8 @@ class V032(BaseRule):
             )
             with urllib.request.urlopen(req, timeout=_PYPI_TIMEOUT_SECONDS) as response:
                 return json.loads(response.read().decode('utf-8'))['info']['version']
-        except Exception:
+        except Exception as e:
+            logger.debug("V032.py: skipped after %s: %s", type(e).__name__, e)
             return None
 
     def _oldest_unreleased_commit(self, project_root, published_version):

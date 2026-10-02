@@ -18,6 +18,7 @@ Background:
     don't use these parameters, to maintain interface compatibility.
 """
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -26,6 +27,8 @@ import ast
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
 from ...utils.pyparse import parse_python
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -82,8 +85,9 @@ class V008(BaseRule):
             content = analyzer_path.read_text(encoding='utf-8')
             tree = parse_python(content, str(analyzer_path))
             return self._find_get_structure_violations(tree, analyzer_path)
-        except Exception:
+        except Exception as e:
             # Don't fail the check if we can't parse the file
+            logger.debug("V008.py: skipped after %s: %s", type(e).__name__, e)
             return []
 
     def _find_get_structure_violations(

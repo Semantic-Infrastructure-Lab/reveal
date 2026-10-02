@@ -10,6 +10,7 @@ Example violation:
     - Suggestion: Create file or update link
 """
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -17,6 +18,8 @@ from typing import List, Dict, Any, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
+
+logger = logging.getLogger(__name__)
 
 
 class V009(BaseRule):
@@ -255,5 +258,6 @@ class V009(BaseRule):
                 # Path is outside project root
                 return None
 
-        except Exception:
+        except Exception as e:
+            logger.debug("V009.py: skipped after %s: %s", type(e).__name__, e)
             return None

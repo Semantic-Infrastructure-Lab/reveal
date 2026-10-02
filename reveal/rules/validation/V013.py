@@ -57,8 +57,6 @@ class V013(BaseRule):
         project_root = reveal_root.parent
 
         actual_count = self._count_production_adapters()
-        if actual_count is None:
-            return detections
 
         for rel_path, doc_path in iter_current_claim_docs(project_root):
             seen: set = set()
@@ -79,13 +77,10 @@ class V013(BaseRule):
 
         return detections
 
-    def _count_production_adapters(self) -> Optional[int]:
+    def _count_production_adapters(self) -> int:
         """Count production URI adapters, excluding test/demo scaffold schemes."""
-        try:
-            from reveal.adapters.base import list_supported_schemes
-            schemes = set(list_supported_schemes())
-            schemes.discard('test')
-            schemes.discard('demo')
-            return len(schemes)
-        except Exception:
-            return None
+        from reveal.adapters.base import list_supported_schemes
+        schemes = set(list_supported_schemes())
+        schemes.discard('test')
+        schemes.discard('demo')
+        return len(schemes)

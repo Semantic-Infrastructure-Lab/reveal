@@ -50,8 +50,6 @@ class V025(BaseRule):
             return []
 
         mapped = self._get_mapped_adapters()
-        if mapped is None:
-            return []
 
         detections = []
         for scheme in sorted(schemes):
@@ -76,19 +74,13 @@ class V025(BaseRule):
 
         return detections
 
-    def _get_public_schemes(self) -> Optional[List[str]]:
-        try:
-            from reveal.adapters.base import list_supported_schemes
-            return list_supported_schemes()
-        except Exception:
-            return None
+    def _get_public_schemes(self) -> List[str]:
+        from reveal.adapters.base import list_supported_schemes
+        return list_supported_schemes()
 
-    def _get_mapped_adapters(self) -> Optional[set]:
-        try:
-            from reveal.adapters.help import HelpAdapter
-            adapter = HelpAdapter('relationships')
-            data = adapter.get_element('relationships')
-            clusters = data.get('clusters', [])
-            return {a for cluster in clusters for a in cluster.get('adapters', [])}
-        except Exception:
-            return None
+    def _get_mapped_adapters(self) -> set:
+        from reveal.adapters.help import HelpAdapter
+        adapter = HelpAdapter('relationships')
+        data = adapter.get_element('relationships')
+        clusters = data.get('clusters', [])
+        return {a for cluster in clusters for a in cluster.get('adapters', [])}

@@ -200,11 +200,13 @@ class V020(BaseRule):
             return adapter_class()
         except TypeError:
             pass
-        except (ValueError, ImportError, Exception):  # noqa: BLE001
+        except (ValueError, ImportError, Exception) as e:  # noqa: BLE001
+            logger.debug("V020.py: skipped after %s: %s", type(e).__name__, e)
             return None
         try:
             return adapter_class('.')
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
+            logger.debug("V020.py: skipped after %s: %s", type(e).__name__, e)
             return None
 
     def _find_line_matching(self, file_path: Path, pattern: str) -> int:

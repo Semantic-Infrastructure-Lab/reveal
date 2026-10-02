@@ -9,6 +9,7 @@ Example violation:
     - Result: `reveal help://markdown` fails
 """
 
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import re
@@ -16,6 +17,8 @@ import re
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
 from ...utils.path_utils import to_posix
+
+logger = logging.getLogger(__name__)
 
 
 class V005(BaseRule):
@@ -108,7 +111,8 @@ class V005(BaseRule):
 
             return static_help
 
-        except Exception:
+        except Exception as e:
+            logger.debug("V005.py: skipped after %s: %s", type(e).__name__, e)
             return {}
 
     def _find_line_in_static_help(self, reveal_root: Path, topic: str) -> int:
@@ -122,8 +126,8 @@ class V005(BaseRule):
             for i, line in enumerate(lines, 1):
                 if f"'{topic}':" in line:
                     return i
-        except Exception:  # noqa: BLE001 - read_text can raise encoding errors, etc.
-            pass
+        except Exception as e:  # noqa: BLE001 - read_text can raise encoding errors, etc.
+            logger.debug("V005.py: skipped after %s: %s", type(e).__name__, e)
 
         return 1
 

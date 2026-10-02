@@ -29,12 +29,15 @@ See also:
     internal-docs/research/OUTPUT_CONTRACT_ANALYSIS.md - Design rationale
 """
 
+import logging
 import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .adapter_utils import get_adapter_class
+
+logger = logging.getLogger(__name__)
 
 
 class V023(BaseRule):
@@ -163,9 +166,9 @@ class V023(BaseRule):
                 file_path, content, 'get_structure'
             ))
 
-        except Exception:
+        except Exception as e:
             # If we can't import/test, skip runtime checks
-            pass
+            logger.debug("V023.py: skipped after %s: %s", type(e).__name__, e)
 
         return detections
 

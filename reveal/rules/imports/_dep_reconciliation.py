@@ -29,12 +29,16 @@ adding one is the same shape as Python/Rust's existing inventory functions.
 
 from __future__ import annotations
 
+import logging
+
 from functools import lru_cache
 from pathlib import Path
 from typing import Callable, FrozenSet, Set
 
 from ...analyzers.imports.base import get_extractor
 from ...utils.path_utils import EVIDENCE, _walk_code_files
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Python: known PyPI distribution-name <-> top-level-import-name mismatches.
@@ -105,7 +109,8 @@ def _scan_project_imports(
             continue
         try:
             imports = extractor.extract_imports(file_path)
-        except Exception:
+        except Exception as e:
+            logger.debug("_dep_reconciliation.py: skipped after %s: %s", type(e).__name__, e)
             continue
         if getattr(extractor, 'parse_failed', False):
             continue

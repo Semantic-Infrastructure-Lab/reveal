@@ -71,12 +71,9 @@ class V024(BaseRule):
 
         return detections
 
-    def _get_public_schemes(self) -> Optional[List[str]]:
-        try:
-            from reveal.adapters.base import list_supported_schemes
-            return list_supported_schemes()
-        except Exception:
-            return None
+    def _get_public_schemes(self) -> List[str]:
+        from reveal.adapters.base import list_supported_schemes
+        return list_supported_schemes()
 
     def _get_existing_guide_names(self, reveal_root: Path) -> List[str]:
         guides_dir = reveal_root / 'docs' / 'adapters'

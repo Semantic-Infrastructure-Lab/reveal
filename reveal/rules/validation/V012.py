@@ -86,10 +86,7 @@ class V012(BaseRule):
         Reads the "Total: N languages supported" line from
         list_supported_languages() — explicit analyzers + curated fallbacks.
         """
-        try:
-            from reveal.cli.languages import list_supported_languages
-            listing = list_supported_languages()
-            match = re.search(r'Total:\s*(\d+)\s+languages?\s+supported', listing)
-            return int(match.group(1)) if match else None
-        except Exception:
-            return None
+        from reveal.cli.languages import list_supported_languages
+        listing = list_supported_languages()
+        match = re.search(r'Total:\s*(\d+)\s+languages?\s+supported', listing)
+        return int(match.group(1)) if match else None

@@ -211,7 +211,7 @@ def _tree_fingerprint(directory: Path) -> Optional[str]:
             hasher.update(path_str.encode("utf-8", "replace"))
             hasher.update(f"\x02{mtime_ns}\x03{size}\x04".encode("ascii"))
         return hasher.hexdigest()
-    except Exception:
+    except Exception:  # boundary-ok: silent-except -- None means "skip the cache, build directly", not a lost result
         # Intentional silence: None means "skip the cache, build directly" --
         # not a lost result. See the docstring above.
         return None

@@ -112,7 +112,7 @@ class N007(BaseRule):
                 # The OID for id-ad-ocsp is 1.3.6.1.5.5.7.48.1
                 # encoded as \x30\x25\x30\x23\x06\x08\x2b... but a string scan is reliable enough
                 return 'present' if b'http' in cert and b'ocsp' in cert.lower() else 'missing'
-        except Exception:
+        except Exception:  # boundary-ok: silent-except -- returns the 'unreadable' marker the rule reports
             return 'unreadable'
 
     def _find_directive_line(self, block: str, block_start: int, directive: str) -> int:

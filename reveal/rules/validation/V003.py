@@ -10,6 +10,7 @@ Example violation:
     - Result: Inconsistent UX across file types (Issue #3)
 """
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -17,6 +18,8 @@ import re
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -111,8 +114,8 @@ class V003(BaseRule):
             if is_structured and not self._check_hierarchy_support(content):
                 line_num = self._find_class_line(content)
                 results.append(self._create_missing_outline_detection(ctx, line_num))
-        except Exception:  # skip unanalyzable files (import errors, syntax errors, etc.)
-            pass
+        except Exception as e:  # skip unanalyzable files (import errors, syntax errors, etc.)
+            logger.debug("V003.py: skipped after %s: %s", type(e).__name__, e)
         return results
 
     def _create_missing_structure_detection(

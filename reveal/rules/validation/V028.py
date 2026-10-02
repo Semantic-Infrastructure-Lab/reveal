@@ -72,8 +72,9 @@ class V028(BaseRule):
         for yaml_path in sorted(help_data_dir.glob('*.yaml')):
             try:
                 data = yaml.safe_load(yaml_path.read_text(encoding='utf-8'))
-            except Exception:
+            except Exception as e:
                 # A malformed yaml is a different rule's problem, not ours.
+                logger.debug("V028.py: skipped after %s: %s", type(e).__name__, e)
                 continue
             if not isinstance(data, dict):
                 continue

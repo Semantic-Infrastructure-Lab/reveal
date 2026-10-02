@@ -37,6 +37,7 @@ trustworthy claims, so a cache must NEVER serve a stale/wrong answer):
 import functools
 import hashlib
 import importlib.util
+import logging
 import os
 import pickle
 import shutil
@@ -45,6 +46,8 @@ from pathlib import Path
 from typing import Any, Optional
 
 from ..version import __version__
+
+logger = logging.getLogger(__name__)
 
 # Bump when the *framework* of a cached artifact changes in a way that the
 # per-artifact key can't capture (e.g. the pickle protocol strategy). Code and
@@ -126,9 +129,10 @@ def build_fingerprint() -> Optional[str]:
             for rel, st in _package_files(package, recursive):
                 hasher.update(f"{rel}\0{st.st_mtime_ns}\0{st.st_size}\0".encode("utf-8", "replace"))
         return hasher.hexdigest()[:12]
-    except Exception:
+    except Exception as e:
         # Fail open: an unstat-able package means no trustworthy key, so this
         # process runs uncached (correct, slower) rather than risk a stale hit.
+        logger.debug("disk cache disabled for this process, build fingerprint failed: %s", e)
         return None
 
 
@@ -159,9 +163,10 @@ def get(namespace: str, key: str) -> Optional[Any]:
             return None
         with open(path, "rb") as fh:
             return pickle.load(fh)
-    except Exception:
+    except Exception as e:
         # Corrupt/truncated/incompatible entry, or unreadable dir — treat as a
         # miss. Never let a bad cache surface as an error or a wrong answer.
+        logger.debug("disk cache read of %s/%s treated as a miss: %s", namespace, key, e)
         return None
 
 
@@ -199,8 +204,9 @@ def put(namespace: str, key: str, value: Any, max_entries: Optional[int] = None)
                 pass
             raise
         _prune(ns_dir, max_entries if max_entries is not None else _MAX_ENTRIES_PER_NAMESPACE)
-    except Exception:
-        # Read-only home, disk full, race — degrade silently to no caching.
+    except Exception as e:
+        # Read-only home, disk full, race — degrade to no caching.
+        logger.debug("disk cache write of %s/%s skipped: %s", namespace, key, e)
         return
 
 
@@ -237,7 +243,8 @@ def _prune(ns_dir: Path, max_entries: int) -> None:
                 stale.unlink()
             except OSError:
                 pass
-    except Exception:
+    except Exception as e:
+        logger.debug("disk cache prune of %s skipped: %s", ns_dir, e)
         return
 
 
@@ -266,6 +273,7 @@ def _prune_builds(current: Path) -> None:
         siblings.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         for stale in siblings[_MAX_BUILDS - 1:]:
             shutil.rmtree(stale, ignore_errors=True)
-    except Exception:
+    except Exception as e:
         # Best-effort housekeeping: an unpruned dir costs disk, never correctness.
+        logger.debug("disk cache build-dir prune skipped: %s", e)
         return

@@ -60,11 +60,8 @@ def get_adapter_schemes() -> List[str]:
         >>> print(len(schemes))  # 13
         >>> print('git' in schemes)  # True
     """
-    try:
-        from ...adapters.base import list_supported_schemes
-        return sorted(list_supported_schemes())
-    except Exception:
-        return []
+    from ...adapters.base import list_supported_schemes
+    return sorted(list_supported_schemes())
 
 
 def get_adapter_class(scheme: str):
@@ -80,11 +77,8 @@ def get_adapter_class(scheme: str):
         >>> adapter_class = get_adapter_class('git')
         >>> print(adapter_class.__name__)  # GitAdapter
     """
-    try:
-        from ...adapters.base import get_adapter_class as _get_adapter_class
-        return _get_adapter_class(scheme)
-    except Exception:
-        return None
+    from ...adapters.base import get_adapter_class as _get_adapter_class
+    return _get_adapter_class(scheme)
 
 
 def get_renderer_class(scheme: str):
@@ -100,11 +94,8 @@ def get_renderer_class(scheme: str):
         >>> renderer = get_renderer_class('git')
         >>> print(hasattr(renderer, 'render_structure'))  # True
     """
-    try:
-        from ...adapters.base import get_renderer_class as _get_renderer_class
-        return _get_renderer_class(scheme)
-    except Exception:
-        return None
+    from ...adapters.base import get_renderer_class as _get_renderer_class
+    return _get_renderer_class(scheme)
 
 
 def get_adapter_and_renderer(scheme: str) -> Tuple[Optional[type], Optional[type]]:

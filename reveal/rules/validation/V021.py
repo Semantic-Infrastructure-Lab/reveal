@@ -40,6 +40,7 @@ Migration is easy:
             language = 'gdscript'
 """
 
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import ast
@@ -47,6 +48,8 @@ import ast
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
 from ...utils.pyparse import parse_python
+
+logger = logging.getLogger(__name__)
 
 
 class V021(BaseRule):
@@ -103,7 +106,8 @@ class V021(BaseRule):
             return None
         try:
             file_content = analyzer_file.read_text(encoding='utf-8')
-        except Exception:
+        except Exception as e:
+            logger.debug("V021.py: skipped after %s: %s", type(e).__name__, e)
             return None
         if not self._imports_re_module(file_content):
             return None

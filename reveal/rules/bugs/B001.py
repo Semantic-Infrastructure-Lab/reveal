@@ -12,6 +12,7 @@ visible signal) — B001 fires on the catch's *type shape* regardless of body
 content, exactly as it does in Python. See BACK-1011 note #1.
 """
 
+import logging
 import ast
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -20,6 +21,8 @@ from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin, TreeSitterParsingMixin
 from ...core import node_children, _zero_arg
 from ...registry import extensions_for_languages, language_for_extension
+
+logger = logging.getLogger(__name__)
 
 
 class B001(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
@@ -42,7 +45,8 @@ class B001(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         try:
             src = ast.get_source_segment(content, node)
             return src.split('\n')[0] if src else None
-        except Exception:
+        except Exception as e:
+            logger.debug("B001.py: skipped after %s: %s", type(e).__name__, e)
             return None
 
     def check(self,

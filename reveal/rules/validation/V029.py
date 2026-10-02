@@ -64,8 +64,6 @@ class V029(BaseRule):
         project_root = reveal_root.parent
 
         actual_count = self._count_enabled_rules()
-        if actual_count is None:
-            return detections
 
         for rel_path, doc_path in iter_current_claim_docs(project_root):
             for line_num, claimed in scan_doc_for_counts(doc_path, self._RULE_COUNT_PATTERNS):
@@ -83,10 +81,7 @@ class V029(BaseRule):
 
         return detections
 
-    def _count_enabled_rules(self) -> Optional[int]:
+    def _count_enabled_rules(self) -> int:
         """Count enabled rules, including internal V-series self-checks."""
-        try:
-            rules = RuleRegistry.list_rules(include_internal=True)
-            return sum(1 for r in rules if r['enabled'])
-        except Exception:
-            return None
+        rules = RuleRegistry.list_rules(include_internal=True)
+        return sum(1 for r in rules if r['enabled'])

@@ -10,12 +10,15 @@ Examples:
     reveal path/to/adapters/ --check --select V016  # Check custom adapters
 """
 
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root, is_dev_checkout
 from ...utils.path_utils import to_posix
+
+logger = logging.getLogger(__name__)
 
 
 class V016(BaseRule):
@@ -207,7 +210,8 @@ class V016(BaseRule):
                     continue
                 analyzer = analyzer_class(file_path_str)
                 structure = analyzer.get_structure()
-            except Exception:
+            except Exception as e:
+                logger.debug("V016.py: skipped after %s: %s", type(e).__name__, e)
                 continue
 
             if not self._is_adapter_file(structure, content):
