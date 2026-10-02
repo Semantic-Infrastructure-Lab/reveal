@@ -13,9 +13,10 @@ Functions (7):
   :52     add(x) [4 lines, depth:0]
   :62     summarize [3 lines, depth:0]
 
-Classes (3):
+Classes (4):
   :31     Batch
   :51     Accumulator
+  :61     Summarizable
   :67     Reporter
 
 [exit 0]
@@ -32,7 +33,8 @@ Batch (ruby/sample.rb:31)
 classify(mode) [7 lines, depth:0] (ruby/sample.rb:43)
 Accumulator (ruby/sample.rb:51)
   └─ add(x) [4 lines, depth:0] (line 52)
-summarize [3 lines, depth:0] (ruby/sample.rb:62)
+Summarizable (ruby/sample.rb:61)
+  └─ summarize [3 lines, depth:0] (line 62)
 Reporter (ruby/sample.rb:67)
 
 [exit 0]

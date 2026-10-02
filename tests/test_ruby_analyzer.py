@@ -144,9 +144,8 @@ end
             analyzer = RubyAnalyzer(temp_path)
             structure = analyzer.get_structure()
 
-            # Note: Ruby modules are currently not extracted by tree-sitter analyzer
-            # This test verifies the analyzer doesn't crash on module syntax
-            self.assertIsInstance(structure, dict)
+            # BACK-1629: a module is listed with the classes, and owns its methods
+            self.assertEqual([c['name'] for c in structure['classes']], ['Math', 'Utils'])
 
         finally:
             os.unlink(temp_path)
@@ -813,3 +812,19 @@ def test_standalone_and_merged_walkers_agree(tmp_path, suffix, src):
     # standalone walker over the whole file == merged walk over the single function
     complexity, depth = calculate_complexity_and_depth(root)
     assert (complexity, depth) == (fn['complexity'], fn['depth'])
+
+
+def test_ruby_module_is_outlined_and_extractable_by_name(tmp_path):
+    """BACK-1629: `module` was in no class table -- invisible to the outline and to
+    `reveal f.rb Outer`, its methods listed as top-level functions."""
+    f = tmp_path / 'mod.rb'
+    f.write_text('module Outer\n  class Inner\n    def run\n      2\n    end\n  end\n\n'
+                 '  def shared\n    3\n  end\nend\n', encoding='utf-8')
+    analyzer = RubyAnalyzer(str(f))
+    assert [c['name'] for c in analyzer.get_structure()['classes']] == ['Outer', 'Inner']
+    import subprocess
+    import sys
+    for target, first in (('Outer', 'module Outer'), ('Outer.shared', 'def shared')):
+        run = subprocess.run([sys.executable, '-m', 'reveal', str(f), target],
+                             capture_output=True, text=True, encoding='utf-8', timeout=60)
+        assert run.returncode == 0 and first in run.stdout, run.stderr

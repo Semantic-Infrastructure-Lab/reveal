@@ -17,6 +17,12 @@ class RubyAnalyzer(TreeSitterAnalyzer):
     language = 'ruby'
     IMPORTS_VIA_EXTRACTOR = True  # BACK-1089
 
+    def _get_class_node_types(self) -> List[str]:
+        # BACK-1629: `module Foo ... end` is its own node kind, `module`, and was in no class
+        # table: the outline and `reveal f.rb Foo` never saw it and its methods listed as
+        # top-level functions. Ruby-scoped here because Python's root node is also `module`.
+        return list(super()._get_class_node_types()) + ['module']
+
     # ── Class bases (BACK-645) ──────────────────────────────────────────────
     # `class Foo < Bar` / `class Foo < ActiveSupport::Logger::SimpleFormatter`
     # previously fell through to the base class's Python-shaped
