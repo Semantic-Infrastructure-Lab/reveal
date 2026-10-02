@@ -58,6 +58,17 @@ Rules (home = where the concern is allowed to live):
     already a ``/`` string (a URI, a relative name built with ``as_posix()``) takes
     ``# boundary-ok: display-path -- <why>``.
 
+``silent-except`` (BACK-1614 -> BACK-1059)
+    A broad handler (``except Exception``, ``except BaseException``, a tuple holding one, or a
+    bare ``except:``) whose body only does ``pass``/``continue``/``break``/``return`` of a
+    constant or empty literal, with the exception unused. It turns a failure into a clean
+    default with no trace: a rule that crashes reports "0 issues", a cache read that fails
+    reads as a miss. Log it (``logger.debug`` is enough for a deliberate miss), attach a result
+    marker, narrow the type, or mark a deliberate site ``# boundary-ok: silent-except -- <why>``.
+    A handler that logs and then returns a default is NOT counted (the user still sees a clean
+    zero), and a handler whose ``try`` body is only imports is exempt (an optional-dependency
+    probe). Handlers that do other work before falling back are not counted either.
+
 Code under ``if __name__ == '__main__':`` is exempt from ``exit`` and ``print``.
 Suppress one deliberate site with ``# boundary-ok: <rule> -- <why>`` on any line of the
 call, or on a comment line directly above it.
@@ -121,6 +132,12 @@ RULES: Dict[str, Dict[str, Any]] = {
         'home': (),
         'scope': (('prefix', 'reveal/display/'), ('prefix', 'reveal/cli/routing/')),
     },
+    'silent-except': {
+        'task': 'BACK-1614 (removal: BACK-1059)',
+        'fix': 'log it (logger.debug), narrow the exception type, or return a result marker -- '
+               'a swallowed failure reads as a clean empty result',
+        'home': (),
+    },
     'print': {
         'task': 'BACK-1368 (removal: BACK-916)',
         'fix': 'return data and print it from a renderer (reveal/rendering, reveal/display, '
@@ -163,6 +180,37 @@ def _is_bare_path(node: ast.AST) -> bool:
     if isinstance(node, ast.Name):
         return node.id in _PATH_NAMES
     return isinstance(node, ast.Attribute) and node.attr in _PATH_NAMES
+
+
+_BROAD = ('Exception', 'BaseException')
+_EMPTY = (ast.List, ast.Tuple, ast.Dict, ast.Set)
+
+
+def _is_broad(handler: ast.ExceptHandler) -> bool:
+    t = handler.type
+    if t is None:
+        return True
+    kinds = t.elts if isinstance(t, ast.Tuple) else [t]
+    return any(_dotted(k).rsplit('.', 1)[-1] in _BROAD for k in kinds)
+
+
+def _is_inert(stmt: ast.stmt) -> bool:
+    if isinstance(stmt, (ast.Pass, ast.Continue, ast.Break)):
+        return True
+    if isinstance(stmt, ast.Return):
+        v = stmt.value
+        return v is None or isinstance(v, ast.Constant) or (
+            isinstance(v, _EMPTY) and not (getattr(v, 'elts', None) or getattr(v, 'keys', None)))
+    return False
+
+
+def _is_silent(handler: ast.ExceptHandler) -> bool:
+    """Broad, does nothing but fall back to a constant, and never looks at the exception."""
+    if not _is_broad(handler) or not all(_is_inert(s) for s in handler.body):
+        return False
+    return not handler.name or not any(
+        isinstance(n, ast.Name) and n.id == handler.name
+        for s in handler.body for n in ast.walk(s))
 
 
 def _dotted(node: ast.AST) -> str:
@@ -285,6 +333,15 @@ class _Scanner(ast.NodeVisitor):
         if _dotted(node) == 'sys.argv':
             self._add('argv', node)
         self.generic_visit(node)
+
+    def visit_Try(self, node: ast.Try) -> None:
+        probe = all(isinstance(s, (ast.Import, ast.ImportFrom)) for s in node.body)
+        for handler in node.handlers:
+            if not probe and _is_silent(handler):
+                self._add('silent-except', handler)
+        self.generic_visit(node)
+
+    visit_TryStar = visit_Try
 
     def visit_FormattedValue(self, node: ast.FormattedValue) -> None:
         if _is_bare_path(node.value):

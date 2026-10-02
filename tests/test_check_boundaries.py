@@ -129,6 +129,35 @@ def test_display_path_not_flagged(src, rel):
 
 
 @pytest.mark.parametrize('src', [
+    "try:\n    f()\nexcept Exception:\n    pass",
+    "def g():\n    try:\n        f()\n    except Exception:\n        return None",
+    "def g():\n    try:\n        f()\n    except Exception:\n        return []",
+    "for x in y:\n    try:\n        f()\n    except (OSError, Exception):\n        continue",
+    "try:\n    f()\nexcept BaseException:\n    pass",
+    "try:\n    f()\nexcept:\n    pass",
+    "def g():\n    try:\n        f()\n    except Exception as e:\n        return False",
+])
+def test_silent_except_flagged(src):
+    assert set(_hits(src)) == {'silent-except'}
+
+
+@pytest.mark.parametrize('src', [
+    "try:\n    f()\nexcept OSError:\n    pass",
+    "try:\n    f()\nexcept Exception as e:\n    log.debug('x', e)",
+    "def g():\n    try:\n        f()\n    except Exception as e:\n        return str(e)",
+    "def g():\n    try:\n        f()\n    except Exception as e:\n        pass\n        return e",
+    "try:\n    f()\nexcept Exception:\n    raise",
+    "def g():\n    try:\n        f()\n    except Exception:\n        return [1]",
+    "def g():\n    try:\n        f()\n    except Exception:\n        x = 1\n        return x",
+    "try:\n    import yaml\nexcept Exception:\n    yaml = None",
+    "try:\n    import yaml\nexcept Exception:\n    pass",
+    "try:\n    f()\nexcept Exception:  # boundary-ok: silent-except -- a cache miss\n    pass",
+])
+def test_silent_except_not_flagged(src):
+    assert 'silent-except' not in _hits(src)
+
+
+@pytest.mark.parametrize('src', [
     "import sys\nname = sys.argv[1]",
     "import sys\nif '--copy' in sys.argv:\n    pass",
     "import sys\nsys.argv.remove('--perf')",
