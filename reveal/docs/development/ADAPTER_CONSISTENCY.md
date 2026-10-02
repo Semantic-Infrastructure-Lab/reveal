@@ -211,7 +211,7 @@ Display flags filter **the view** of the same resource:
 
 ```bash
 --only-failures      # Hide successful checks
---fields FIELDS      # Show specific output fields only (e.g. --fields domain,expiry)
+--fields FIELDS      # Keep only these fields of the JSON result (e.g. --fields host,days_until_expiry)
 --max-items N        # Stop after N results
 --head N / --tail N  # Semantic slicing
 ```
@@ -321,17 +321,19 @@ Use `--batch` for explicit batch mode with aggregation across multiple URIs.
 Select specific fields to reduce output size:
 
 ```bash
-# SSL - only show domain and expiry
-reveal ssl://example.com --fields domain,expiry,days_until_expiry
+# SSL - only show host and expiry
+reveal ssl://example.com --fields host,valid_until,days_until_expiry --format json
 
-# Stats - only show path and quality score
-reveal stats://src --fields path,quality_score,hotspot_score
+# Stats - each file's name and quality score
+reveal stats://src --fields file,quality.score --format json
 
-# Git - only show commit info
-reveal git://repo/file.py --fields hash,author,date,message
+# Git - one file's commits
+reveal 'git://src/app.py?type=history' --fields hash,author,date,message --format json
 ```
 
-**Benefit**: 5-10x token reduction for AI agents and scripting.
+One rule for every adapter: a name is a top-level key first, else a key of each item in
+the result's lists; a name that matches nothing gets a note listing the fields that exist.
+It applies to `--format json` (help://fields).
 
 > **Note**: `--fields` selects output columns. `--select` is different — it selects quality rule *categories* (e.g. `--select B,S` runs only Bug and Security rules).
 
@@ -398,8 +400,8 @@ reveal stats://src --format=json | jq '.files[] | select(.quality_score < 7)'
 ### 4. Use --fields for Efficiency
 ```bash
 # Reduce tokens when you know what you need
-reveal ssl://example.com --fields domain,expiry
-reveal stats://src --fields path,quality_score
+reveal ssl://example.com --fields host,days_until_expiry --format json
+reveal stats://src --fields file,quality.score --format json
 ```
 
 ### 5. Batch Process with stdin

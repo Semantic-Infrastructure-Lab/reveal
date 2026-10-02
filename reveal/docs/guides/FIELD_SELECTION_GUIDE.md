@@ -30,6 +30,9 @@ reveal 'json://logs.json?level=error' --max-snippet-chars=200 --format=json
 reveal 'ast://src?type=function' --fields=name,line,complexity --max-items=20 --format=json
 ```
 
+Field selection applies to a URI adapter's JSON result (`--format json`). In text output
+the flag is not applied and a note says so: text renderers need the whole result.
+
 ---
 
 ## Table of Contents
@@ -55,22 +58,28 @@ The `--fields` flag allows you to select specific fields from adapter output, dr
 reveal <uri> --fields=field1,field2,field3 --format=json
 ```
 
-### Features
+### What a field name selects
 
-- **Flat fields**: `--fields=name,type,status`
-- **Nested fields**: `--fields=certificate.expiry,meta.confidence`
-- **Comma-separated**: Multiple fields in single flag
-- **JSON output**: Works with `--format=json` (field selection on text output has limited benefit)
+One rule, the same for every adapter. Each name is looked up at the top level of the
+result first, then in the items of the result's lists:
 
-### Token Reduction
+| Name | Selects |
+|------|---------|
+| `total_results` | that top-level key |
+| `summary.total_files` | a nested key (dot notation) |
+| `results` | that whole list |
+| `results.name` | `name` in each item of `results` |
+| `name` (not a top-level key) | `name` in the items of every list whose items have it |
 
-| Adapter | Full Output | Selected Fields | Reduction |
-|---------|-------------|-----------------|-----------|
-| SSL | ~400 lines | ~10 lines | 40x |
-| AST | ~500 lines | ~50 lines | 10x |
-| Stats | ~500 lines | ~50 lines | 10x |
-| Git | ~200 lines | ~30 lines | 7x |
-| JSON | Variable | Variable | 5-10x |
+- The Output Contract envelope (`contract_version`, `type`, `source`, `source_type`,
+  `meta`) is always kept, so truncation warnings and the result type survive a selection.
+- Top-level keys you didn't name are dropped. A list is kept when you name it, or when a
+  name selects keys in its items.
+- A name that matches nothing is reported: a `fields_unmatched` entry in `meta.warnings`
+  and a note on stderr that lists the fields the result does have.
+- A failed result (one with a top-level `error`) is left whole.
+- `--fields` works on URI adapters. On a plain file (`reveal file.py`) it is not applied,
+  and a note says so; use `ast://file.py` instead.
 
 ---
 
@@ -160,8 +169,12 @@ reveal ssl://example.com --fields=host,days_until_expiry,health_status,common_na
 Output:
 ```json
 {
+  "contract_version": "1.1",
+  "type": "ssl_certificate",
+  "source": "ssl://example.com",
+  "source_type": "network",
   "host": "example.com",
-  "days_until_expiry": 35,
+  "days_until_expiry": 84,
   "health_status": "HEALTHY",
   "common_name": "example.com"
 }
@@ -172,7 +185,7 @@ Output:
 reveal ssl://example.com --fields=host,verification.chain_valid,verification.hostname_match --format=json
 ```
 
-Output:
+Output (envelope omitted):
 ```json
 {
   "host": "example.com",
@@ -192,15 +205,22 @@ Output:
 reveal 'ast://src?type=function' --max-items=10 --format=json
 ```
 
-**Field selection + budget**:
+**Field selection + budget** (the total, plus three keys of each function):
 ```bash
-reveal 'ast://src?type=function' --fields=type,total_results,results --max-items=5 --format=json
+reveal 'ast://src?type=function' --fields=total_results,results.name,results.line,results.complexity --max-items=5 --format=json
 ```
 
-Output:
+Output (`source`, `source_type` and `meta.budget` omitted):
 ```json
 {
+  "contract_version": "1.1",
   "type": "ast_query",
+  "meta": {
+    "warnings": [
+      {"type": "truncated", "field": "results", "shown": 5, "total": 150, "exact": true,
+       "cause": "max_items", "message": "results: showing 5 of 150 — raise --max-items"}
+    ]
+  },
   "total_results": 150,
   "results": [
     {"name": "parse_query", "line": 42, "complexity": 8},
@@ -208,18 +228,12 @@ Output:
     {"name": "coerce_value", "line": 12, "complexity": 3},
     {"name": "format_output", "line": 156, "complexity": 11},
     {"name": "validate_args", "line": 201, "complexity": 7}
-  ],
-  "meta": {
-    "budget": {
-      "truncated": true,
-      "reason": "max_items_exceeded",
-      "total_available": 150,
-      "returned": 5,
-      "next_cursor": "offset=5"
-    }
-  }
+  ]
 }
 ```
+
+`--fields=name,line,complexity` alone returns the same `results` without `total_results`:
+those names aren't top-level keys, so they select in the items.
 
 ---
 
@@ -230,28 +244,33 @@ Output:
 reveal stats://src --format=json
 ```
 
-**Selected fields** (~50 lines, 10x reduction):
+**Selected fields** (each file's name, code lines and quality score):
 ```bash
-reveal stats://src --fields=path,quality_score,hotspot_score,lines --format=json
+reveal stats://src --fields=file,lines.code,quality.score --format=json
 ```
 
-**Top-N hotspots** (budget mode):
+**Most complex files** (budget mode):
 ```bash
-reveal 'stats://src?sort=-hotspot_score' --max-items=10 --format=json
+reveal 'stats://src?sort=-complexity' --max-items=10 --fields=file,complexity --format=json
 ```
 
 ---
 
 ### Git Adapter
 
-**Recent commits** (budget limited):
+**Recent commits** (`?limit=` sets how many):
 ```bash
-reveal 'git://repo?sort=-date' --max-items=20 --format=json
+reveal 'git://.?type=log&limit=20' --format=json
 ```
 
-**Field selection for commit list**:
+**Field selection for the commit list** (the log's `history` items):
 ```bash
-reveal 'git://repo?sort=-date' --fields=hash,author,date,message --max-items=50 --format=json
+reveal 'git://.?type=log&limit=50' --fields=hash,author,date,message --format=json
+```
+
+**One file's history** (its `commits` items):
+```bash
+reveal 'git://src/app.py?type=history' --fields=hash,date,message --format=json
 ```
 
 ---
@@ -263,7 +282,7 @@ reveal 'git://repo?sort=-date' --fields=hash,author,date,message --max-items=50 
 reveal 'json://data.json?status=active' --max-items=100 --format=json
 ```
 
-**Field projection + filtering**:
+**Field projection + filtering** (keys of each object in the array):
 ```bash
 reveal 'json://users.json?role=admin' --fields=id,name,email --format=json
 ```
@@ -299,9 +318,6 @@ if data['meta']['budget']['truncated']:
 ```bash
 # SSL certificate monitoring
 reveal ssl://example.com --fields=host,days_until_expiry,health_status --format=json
-
-# Database health check
-reveal 'mysql://localhost/mydb' --fields=status,replication_lag,connections --format=json
 ```
 
 ---
@@ -339,6 +355,13 @@ reveal ssl://example.com --format=json | jq 'keys'
 reveal ssl://example.com --fields=host,days_until_expiry --format=json
 ```
 
+A name that isn't there gets a note listing the fields that are, so a wrong guess
+tells you what to ask for:
+
+```
+Note: --fields: expiry matched no field of this ssl:// result. Fields: common_name, issuer, ...
+```
+
 ---
 
 ### 5. String Truncation for Large Content
@@ -358,14 +381,15 @@ reveal 'json://logs.json?level=error' --max-snippet-chars=200 --format=json
 
 ### 1. **Always use --format=json with field selection**
 
-Field selection is designed for JSON output. Text rendering may not benefit as much:
+Field selection applies to the JSON result. In text output it is not applied, and a note
+says so:
 
 ```bash
-# ✅ Good: JSON output with field selection
+# ✅ Selects the fields
 reveal ssl://example.com --fields=host,days_until_expiry --format=json
 
-# ❌ Limited benefit: text output with field selection
-reveal ssl://example.com --fields=host,days_until_expiry --format=text
+# ❌ Prints the whole text view, plus "Note: --fields selects fields of the JSON result"
+reveal ssl://example.com --fields=host,days_until_expiry
 ```
 
 ---
@@ -387,7 +411,7 @@ Phase 3 query operators + Phase 4 field selection = powerful combination:
 
 ```bash
 # Filter, sort, limit, then select fields
-reveal 'stats://src?lines>100&sort=-complexity' --max-items=20 --fields=path,complexity,lines --format=json
+reveal 'stats://src?lines>100&sort=-complexity' --max-items=20 --fields=file,complexity,lines --format=json
 ```
 
 ---
@@ -424,8 +448,8 @@ Access nested fields with dot notation:
 # Access nested certificate data
 reveal ssl://example.com --fields=host,verification.chain_valid,verification.hostname_match --format=json
 
-# Access nested meta information
-reveal 'ast://src?type=function' --fields=type,results,meta.confidence --format=json
+# Access nested keys of each list item
+reveal stats://src --fields=file,quality.score,complexity.max --format=json
 ```
 
 ---
@@ -438,10 +462,10 @@ reveal 'ast://src?type=function' --fields=type,results,meta.confidence --format=
 
 ```bash
 # Level 1: Overview (minimal fields)
-reveal 'stats://src' --fields=path,quality_score --max-items=100 --format=json
+reveal 'stats://src' --fields=file,quality.score --max-items=100 --format=json
 
 # Level 2: Identify hotspots
-reveal 'stats://src?quality_score<60&sort=-hotspot_score' --max-items=20 --format=json
+reveal 'stats://src?hotspots=true' --fields=summary,hotspots --format=json
 
 # Level 3: Deep dive on specific file
 reveal 'ast://src/problematic_file.py' --format=json
@@ -529,35 +553,40 @@ Common fields:
 #### AST Adapter
 
 Common fields (top-level):
-- `type`, `source`, `source_type`
-- `total_files`, `total_results`, `displayed_results`
+- `total_files`, `total_results`, `displayed_results`, `query`
 - `results` (list)
-- `meta.parse_mode`, `meta.confidence`
+- the envelope (`type`, `source`, `source_type`, `meta`) is always kept
 
 Common fields (result items):
 - `file`, `category`, `name`, `line`, `line_count`
 - `signature`, `complexity`, `depth`
-- `decorators`, `class_name`
+- `decorators`, `bases`, `calls`, `called_by`
 
 #### Stats Adapter
 
-Common fields:
-- `path`, `lines`, `code_lines`, `comment_lines`
-- `quality_score`, `hotspot_score`
-- `functions`, `classes`, `complexity`
-- `todo_count`, `fixme_count`
+Top-level (directory): `summary` (`summary.total_files`, `summary.avg_quality_score`, ...),
+`files` (list), and `hotspots` with `?hotspots=true`.
+
+Items of `files`:
+- `file`
+- `lines.total`, `lines.code`, `lines.empty`, `lines.comments`
+- `elements.functions`, `elements.classes`, `elements.imports`
+- `complexity.average`, `complexity.max`, `complexity.min`
+- `quality.score`, `quality.long_functions`, `quality.deep_nesting`
+- `issues`
 
 #### Git Adapter
 
-Common fields (commits):
-- `hash`, `short_hash`
-- `author`, `author_email`, `date`
-- `message`, `subject`, `body`
-- `files_changed`, `insertions`, `deletions`
+Items of `history` (`git://.?type=log`) and `commits` (`git://file?type=history`):
+- `hash`, `author`, `email`, `date`, `timestamp`, `message`
+
+The log view's top-level `commit` holds the ref's own commit, with `full_hash`,
+`full_message`, `parents` and `committer` as well.
 
 #### JSON Adapter
 
-Fields depend on your data structure. Use `jq 'keys'` to explore.
+Fields depend on your data structure. For an array of objects, a name selects that key
+of each object (the result's `value` list). Use `jq 'keys'` to explore.
 
 ---
 
@@ -592,7 +621,7 @@ Fields depend on your data structure. Use `jq 'keys'` to explore.
 
 **Example**:
 ```bash
-reveal 'stats://src?quality_score<60&sort=-hotspot_score&limit=20'
+reveal 'stats://src?lines>100&sort=-complexity'
 ```
 
 ### Phase 4: Field Selection + Budget
@@ -603,7 +632,7 @@ reveal 'stats://src?quality_score<60&sort=-hotspot_score&limit=20'
 
 **Example**:
 ```bash
-reveal 'stats://src?quality_score<60&sort=-hotspot_score' --max-items=20 --fields=path,quality_score --format=json
+reveal 'stats://src?lines>100&sort=-complexity' --max-items=20 --fields=file,quality.score --format=json
 ```
 
 ### Combining Both
@@ -627,13 +656,11 @@ reveal 'ast://src?type=function&complexity>10&sort=-complexity' \
 
 **Problem**: Selected field doesn't exist in output
 
-**Solution**: Check available fields first:
+**What you see**: a note on stderr naming the field and listing the fields the result
+has (top level, and the keys of each list's items), and a `fields_unmatched` entry in
+`meta.warnings`. Pick a name from that list:
 
 ```bash
-# See all fields
-reveal <uri> --format=json | jq 'keys'
-
-# Then select existing fields
 reveal <uri> --fields=<existing-field> --format=json
 ```
 
@@ -645,7 +672,9 @@ reveal <uri> --fields=<existing-field> --format=json
 
 **Cause**: Adapter returns single object, not a list
 
-**Solution**: Budget constraints work on list results (`items`, `results`, `checks`, `commits`, `files`). For single objects, use `--fields` instead.
+**Solution**: Budget constraints work on the lists an adapter declares (ast:// `results`,
+stats:// `files`, git:// `commits`, ...); when there is nothing to cut, a note says the
+flag had no effect. For single objects, use `--fields` instead.
 
 ---
 

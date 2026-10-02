@@ -199,6 +199,58 @@ def test_schema_example_runs_as_written(harness, example):
     _assert_runs_as_written(harness, _schema_query(example['uri']), example.get('output_type'))
 
 
+# -- third source: help://fields examples (FIELD_SELECTION_GUIDE.md, BACK-1607) -------------
+# The guide's --fields examples answered `{}` (git://) and `results: [{}, ...]` (ast://), and
+# named stats:// fields that don't exist; nothing ran them. Each one-line `--format=json`
+# example runs here and must select something: no `matched no field` note (stderr), no
+# empty answer, no list of empty objects.
+
+# A syntax template, content the fixture doesn't have, or a shell variable set in a loop.
+GUIDE_UNRUNNABLE = ('<uri>', 'users.json', '$')
+
+
+def _guide_field_examples():
+    from pathlib import Path
+
+    import reveal
+    guide = Path(reveal.__file__).parent / 'docs' / 'guides' / 'FIELD_SELECTION_GUIDE.md'
+    commands = []
+    for block in re.findall(r'```bash\n(.*?)```', guide.read_text(encoding='utf-8'), re.S):
+        for line in block.replace('\\\n', ' ').splitlines():
+            line = ' '.join(line.split())
+            if line.startswith('reveal ') and '--fields' in line and '--format=json' in line:
+                commands.append(line)
+    params = []
+    for command in dict.fromkeys(commands):
+        marks = []
+        if any(scheme in command for scheme in NEEDS_HOST):
+            marks.append(pytest.mark.skip(reason='needs a live host'))
+        elif any(token in command for token in GUIDE_UNRUNNABLE):
+            marks.append(pytest.mark.skip(reason='names content the fixture does not have'))
+        params.append(pytest.param(command, marks=marks, id=command))
+    return params
+
+
+@pytest.mark.parametrize('command', _guide_field_examples())
+def test_guide_field_example_selects_something(harness, command):
+    query = _schema_query(command)
+    _assert_runs_as_written(harness, query, None)
+    argv = _argv(query)
+    _, out, _, _ = harness.run_subcommand(argv[0], *argv[1:], '--format', 'json')
+    envelope = {'contract_version', 'type', 'source', 'source_type', 'meta'}
+    payload = {k: v for k, v in json.loads(out).items() if k not in envelope}
+    assert payload, f"{command}: selected nothing"
+    for key, value in payload.items():
+        assert not (isinstance(value, list) and value and all(item == {} for item in value)), (
+            f"{command}: {key} is a list of empty objects")
+
+
+def test_guide_field_examples_are_enumerated_and_mostly_run():
+    params = _guide_field_examples()
+    runnable = [p for p in params if not any(m.name == 'skip' for m in p.marks)]
+    assert len(params) >= 12 and len(runnable) >= 8, (len(params), len(runnable))
+
+
 def test_the_recipe_gate_bites(harness):
     """Positive control: each check sees the drift it is for, so a clean run is not a check
     that can't fail -- a flag the adapter ignores (stderr), a key it doesn't have

@@ -59,7 +59,7 @@ reveal 'cpanel://USERNAME/ssl'     # cPanel filesystem introspection
 ```bash
 reveal ssl://host --check          # Health check
 reveal ast://src --format json     # JSON output
-reveal file.py --fields name,lines # Select output fields
+reveal ast://src --format json --fields name,line  # Select output fields
 reveal file.py --head 10           # First 10 results
 ```
 
