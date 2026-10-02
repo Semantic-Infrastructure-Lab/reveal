@@ -3,6 +3,7 @@ import contextvars
 import json
 import re
 
+from .formatting import lines_label
 from .path_utils import to_posix
 
 # File type groupings for consistent suggestions
@@ -529,7 +530,7 @@ def _handle_element(path, file_type, **kwargs):
 
     info = f"Extracted {element_name}"
     if line_count:
-        info += f" ({line_count} lines)"
+        info += f" ({lines_label(line_count)})"
 
     _emit(info)
     _show_hint_once('element_back_to_structure', [

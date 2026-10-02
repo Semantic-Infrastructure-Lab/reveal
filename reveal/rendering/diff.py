@@ -4,6 +4,8 @@ import difflib
 import json
 from typing import Dict, Any
 
+from reveal.utils.formatting import lines_label
+
 
 def render_diff(diff_result: Dict[str, Any], format: str = 'text',
                 is_element: bool = False) -> None:
@@ -135,7 +137,7 @@ def _render_function_change(func: Dict[str, Any]) -> None:
         _render_function_metadata(func)
         line_count = func.get('line_count', '?')
         complexity = func.get('complexity', '?')
-        print(f"      [NEW - {line_count} lines, complexity {complexity}]")
+        print(f"      [NEW - {lines_label(line_count)}, complexity {complexity}]")
         print()
 
     elif change_type == 'removed':

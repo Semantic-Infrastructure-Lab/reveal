@@ -12,7 +12,7 @@ Functions (5):
   :17     processOrder(int order) [10 lines, depth:2]
   :28     run(int order) [3 lines, depth:0]
   :39     run(java.util.List<Integer> items) [6 lines, depth:2]
-  :51     summarize() [1 lines, depth:0]
+  :51     summarize() [1 line, depth:0]
 
 Classes (3):
   :9      OrderProcessor
@@ -35,7 +35,7 @@ OrderProcessor (java/sample.java:9)
 Batch (java/sample.java:36)
   └─ run(java.util.List<Integer> items) [6 lines, depth:2] (line 39)
 Reporter (java/sample.java:49)
-  └─ summarize() [1 lines, depth:0] (line 51)
+  └─ summarize() [1 line, depth:0] (line 51)
 
 [exit 0]
 

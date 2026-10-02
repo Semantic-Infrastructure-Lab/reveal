@@ -11,7 +11,7 @@ Functions (5):
   :19     ProcessOrder(int order) [14 lines, depth:2]
   :34     Run(int order) [4 lines, depth:0]
   :47     Run(System.Collections.Generic.List<int> items) [8 lines, depth:1]
-  :62     Summarize() [1 lines, depth:0]
+  :62     Summarize() [1 line, depth:0]
 
 Classes (3):
   :8      OrderProcessor
@@ -33,7 +33,7 @@ OrderProcessor (csharp/sample.cs:8)
 Batch (csharp/sample.cs:43)
   └─ Run(System.Collections.Generic.List<int> items) [8 lines, depth:1] (line 47)
 Reporter (csharp/sample.cs:59)
-  └─ Summarize() [1 lines, depth:0] (line 62)
+  └─ Summarize() [1 line, depth:0] (line 62)
 
 [exit 0]
 

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from reveal.base import FileAnalyzer
+from reveal.utils.formatting import lines_label
 from reveal.utils.path_utils import to_posix
 from reveal.utils.results import truncations_of
 
@@ -293,7 +294,7 @@ def _format_fenced_block(
         print(f"{to_posix(path)}:{line_start}:{first_line}")
         return
 
-    print(f"    Lines {line_start}-{line_end} ({line_count} lines)")
+    print(f"    Lines {line_start}-{line_end} ({lines_label(line_count)})")
     preview_lines = source.split('\n')[:3]
     for preview_line in preview_lines:
         print(f"      {preview_line}")
@@ -672,7 +673,7 @@ def _build_item_metrics(item: Dict[str, Any]) -> str:
     """Build the metrics display string for an item (line_count, depth)."""
     parts = []
     if 'line_count' in item:
-        parts.append(f"{item['line_count']} lines")
+        parts.append(lines_label(item['line_count']))
     if 'depth' in item:
         parts.append(f"depth:{item['depth']}")
     return f" [{', '.join(parts)}]" if parts else ''

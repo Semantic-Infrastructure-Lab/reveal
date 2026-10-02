@@ -3,7 +3,10 @@
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+from reveal.utils.formatting import lines_label
 from reveal.utils.path_utils import to_posix
+
+from .formatting import _build_item_metrics
 
 
 def build_hierarchy(structure: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
@@ -117,18 +120,7 @@ def _build_metrics_display(item: Dict[str, Any]) -> str:
     Returns:
         Formatted metrics string (e.g., " [10 lines, depth:3]") or empty string
     """
-    if not ('line_count' in item or 'depth' in item):
-        return ''
-
-    parts = []
-    if 'line_count' in item:
-        parts.append(f"{item['line_count']} lines")
-    if 'depth' in item:
-        parts.append(f"depth:{item['depth']}")
-
-    if parts:
-        return f" [{', '.join(parts)}]"
-    return ''
+    return _build_item_metrics(item)
 
 
 def _build_item_display(item: Dict[str, Any]) -> str:
@@ -166,7 +158,7 @@ def _print_outline_item(item: Dict[str, Any], path: Path,
     line = item.get('line_start', item.get('line', '?'))
     display = _build_item_display(item)
     size = item.get('size')
-    size_str = f", {size} lines" if size is not None else ""
+    size_str = f", {lines_label(size)}" if size is not None else ""
 
     if is_root:
         # Root items - no tree chars, show full path

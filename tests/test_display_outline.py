@@ -171,6 +171,10 @@ class TestBuildMetricsDisplay:
         result = _build_metrics_display({'line_count': 10})
         assert result == ' [10 lines]'
 
+    def test_one_line_is_singular(self):
+        """BACK-1631: a one-line element read '[1 lines, depth:0]'."""
+        assert _build_metrics_display({'line_count': 1, 'depth': 0}) == ' [1 line, depth:0]'
+
     def test_depth_only(self):
         result = _build_metrics_display({'depth': 3})
         assert result == ' [depth:3]'

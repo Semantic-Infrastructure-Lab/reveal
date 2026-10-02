@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, cast
 from reveal.base import FileAnalyzer
 from reveal.defaults import DisplayDefaults
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
+from reveal.utils.formatting import lines_label
 from reveal.utils.path_utils import is_minified_content, is_minified_filename, to_posix
 from reveal.utils.results import note_truncation, outcome_of, truncations_of
 
@@ -693,7 +694,7 @@ def _handle_outline_mode(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[
             print()
             print(analyzer.format_with_lines(analyzer.content, 1))
         else:
-            print(f"No structure available for this file type ({line_count} lines)")
+            print(f"No structure available for this file type ({lines_label(line_count)})")
             print(f"  Hint: reveal \"{to_posix(path)}\" --grep 'pattern'  |  reveal \"{to_posix(path)}\" --show-ast")
         return
 
@@ -751,12 +752,12 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
             return
         line_count = len(analyzer.lines)
         if no_raw_fallback:
-            print(f"(no extractable structure — {line_count} lines)")
+            print(f"(no extractable structure — {lines_label(line_count)})")
         elif line_count <= 50:
             print()
             print(analyzer.format_with_lines(analyzer.content, 1))
         else:
-            print(f"No structure available for this file type ({line_count} lines)")
+            print(f"No structure available for this file type ({lines_label(line_count)})")
             print(f"  Hint: reveal \"{to_posix(path)}\" --grep 'pattern'  |  reveal \"{to_posix(path)}\" --show-ast")
         return
 

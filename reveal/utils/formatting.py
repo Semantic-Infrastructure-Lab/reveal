@@ -3,6 +3,16 @@
 import os
 import re
 import shlex
+from typing import Any
+
+
+def lines_label(count: Any, grouped: bool = False) -> str:
+    """'1 line', '12 lines' -- a line count with its noun (BACK-1631).
+
+    grouped=True writes thousands separators ('1,204 lines').
+    """
+    shown = f"{count:,}" if grouped and isinstance(count, int) else count
+    return f"{shown} line" if count == 1 else f"{shown} lines"
 
 
 def format_size(size: int) -> str:

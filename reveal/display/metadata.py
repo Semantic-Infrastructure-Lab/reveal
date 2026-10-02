@@ -5,6 +5,7 @@ from typing import Optional
 
 from reveal.base import FileAnalyzer
 from reveal.utils import safe_json_dumps, print_breadcrumbs
+from reveal.utils.formatting import lines_label
 
 
 def _format_display_key(key: str) -> str:
@@ -62,7 +63,7 @@ def _print_file_header(path: Path, is_fallback: bool = False, fallback_lang: Opt
         try:
             with open(path, 'rb') as f:
                 line_count = sum(1 for _ in f)
-            header += f" ({size_str}, {line_count:,} lines)"
+            header += f" ({size_str}, {lines_label(line_count, grouped=True)})"
         except (OSError, UnicodeDecodeError):
             # If we can't read the file, just show size
             header += f" ({size_str})"

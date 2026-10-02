@@ -7,6 +7,7 @@ from typing import Any, Dict, List, cast
 
 from reveal.reveal_types import ASTElement
 from reveal.utils import print_json_result
+from reveal.utils.formatting import lines_label
 
 # Maps bare shorthand names users commonly try to the correct filter syntax
 _FILTER_SHORTHANDS = {
@@ -128,9 +129,9 @@ def _render_ast_element(elem: ASTElement) -> None:
     line_count = elem.get('line_count', 0)
     complexity = elem.get('complexity')
     if complexity:
-        print(f"  :{line:>4}  {name} [{line_count} lines, complexity: {complexity}]")
+        print(f"  :{line:>4}  {name} [{lines_label(line_count)}, complexity: {complexity}]")
     else:
-        print(f"  :{line:>4}  {name} [{line_count} lines]")
+        print(f"  :{line:>4}  {name} [{lines_label(line_count)}]")
 
     calls = elem.get('calls', [])
     called_by = elem.get('called_by', [])

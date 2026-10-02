@@ -1,6 +1,7 @@
 """Git repository rendering for text and JSON output."""
 
 from ...utils import print_json_result
+from ...utils.formatting import lines_label
 
 
 class GitRenderer:
@@ -104,7 +105,7 @@ class GitRenderer:
         """Render file contents."""
         print(f"File: {result['path']} @ {result['ref']}")
         print(f"Commit: {result['commit']}")
-        print(f"Size: {result['size']} bytes, {result['lines']} lines")
+        print(f"Size: {result['size']} bytes, {lines_label(result['lines'])}")
         print()
         print(result['content'])
 
@@ -301,14 +302,14 @@ class GitRenderer:
             print(f"Classes ({len(classes)}):")
             for cls in classes:
                 line_count = cls.get('line_end', cls['line']) - cls['line'] + 1
-                print(f"  :{cls['line']:<6} {cls['name']} [{line_count} lines]")
+                print(f"  :{cls['line']:<6} {cls['name']} [{lines_label(line_count)}]")
             print()
 
         if functions:
             print(f"Functions ({len(functions)}):")
             for fn in functions:
                 line_count = fn.get('line_end', fn['line']) - fn['line'] + 1
-                print(f"  :{fn['line']:<6} {fn['name']} [{line_count} lines]")
+                print(f"  :{fn['line']:<6} {fn['name']} [{lines_label(line_count)}]")
             print()
 
         if imports:

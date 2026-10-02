@@ -11,7 +11,7 @@ Functions (5):
   :15     process_order(int order) [15 lines, depth:2]
   :31     run(int order) [3 lines, depth:0]
   :41     run(std::vector<int>& items) [6 lines, depth:1]
-  :54     summarize() [1 lines, depth:0]
+  :54     summarize() [1 line, depth:0]
 
 Classes (1):
   :38     Batch
@@ -33,7 +33,7 @@ run(int order) [3 lines, depth:0] (cpp/sample.cpp:31)
 Batch (cpp/sample.cpp:38)
   └─ run(std::vector<int>& items) [6 lines, depth:1] (line 41)
 Reporter (cpp/sample.cpp:53)
-  └─ summarize() [1 lines, depth:0] (line 54)
+  └─ summarize() [1 line, depth:0] (line 54)
 
 [exit 0]
 

@@ -9,7 +9,7 @@ Functions (5):
   :11     processOrder(order: String?): String? [13 lines, depth:2]
   :25     run(order: String?): String? [3 lines, depth:0]
   :35     run(items: List<Int>) [6 lines, depth:2]
-  :47     summarize(): Int [1 lines, depth:0]
+  :47     summarize(): Int [1 line, depth:0]
 
 Classes (2):
   :32     Batch
@@ -27,7 +27,7 @@ run(order: String?): String? [3 lines, depth:0] (kotlin/sample.kt:25)
 Batch (kotlin/sample.kt:32)
   └─ run(items: List<Int>) [6 lines, depth:2] (line 35)
 Reporter (kotlin/sample.kt:45)
-  └─ summarize(): Int [1 lines, depth:0] (line 47)
+  └─ summarize(): Int [1 line, depth:0] (line 47)
 
 [exit 0]
 

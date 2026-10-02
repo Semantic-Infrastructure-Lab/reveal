@@ -11,8 +11,8 @@ Functions (7):
   :13     processOrder(order: string) [10 lines, depth:2]
   :24     run(order: string) [3 lines, depth:0]
   :33     run(items: number[]) [7 lines, depth:2]
-  :46     Component(target: any) [1 lines, depth:0]
-  :47     Input() [1 lines, depth:0]
+  :46     Component(target: any) [1 line, depth:0]
+  :47     Input() [1 line, depth:0]
   :52     summarize() [3 lines, depth:0]
 
 Classes (2):
@@ -32,8 +32,8 @@ processOrder(order: string) [10 lines, depth:2] (typescript/sample.ts:13)
 run(order: string) [3 lines, depth:0] (typescript/sample.ts:24)
 Batch (typescript/sample.ts:31)
   └─ run(items: number[]) [7 lines, depth:2] (line 33)
-Component(target: any) [1 lines, depth:0] (typescript/sample.ts:46)
-Input() [1 lines, depth:0] (typescript/sample.ts:47)
+Component(target: any) [1 line, depth:0] (typescript/sample.ts:46)
+Input() [1 line, depth:0] (typescript/sample.ts:47)
 Reporter (typescript/sample.ts:49)
   └─ summarize() [3 lines, depth:0] (line 52)
 

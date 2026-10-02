@@ -9,7 +9,7 @@ Functions (5):
   :11     processOrder(_ order: String?) -> String? [14 lines, depth:3]
   :26     run(_ order: String?) -> String? [3 lines, depth:0]
   :36     run(_ items: [Int]) [6 lines, depth:2]
-  :48     summarize() -> Int [1 lines, depth:0]
+  :48     summarize() -> Int [1 line, depth:0]
 
 Classes (2):
   :33     Batch
@@ -27,7 +27,7 @@ run(_ order: String?) -> String? [3 lines, depth:0] (swift/sample.swift:26)
 Batch (swift/sample.swift:33)
   └─ run(_ items: [Int]) [6 lines, depth:2] (line 36)
 Reporter (swift/sample.swift:46)
-  └─ summarize() -> Int [1 lines, depth:0] (line 48)
+  └─ summarize() -> Int [1 line, depth:0] (line 48)
 
 [exit 0]
 

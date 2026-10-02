@@ -13,6 +13,7 @@ from reveal.element_resolve import (
 )
 from reveal.treesitter import ELEMENT_TYPE_MAP, ALL_ELEMENT_NODE_TYPES
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
+from reveal.utils.formatting import lines_label
 from reveal.utils.path_utils import to_posix
 from reveal.utils.results import note_truncation, slice_items, truncations_of
 
@@ -998,7 +999,7 @@ def _print_element_body(analyzer, result, name: str, output_format: str, config=
     line_count = line_end - line_start + 1
     next_section = result.get('next_section')
     if next_section and result.get('label_only') and output_format not in ('json', 'grep'):
-        print(f"\n⚠ Short result ({line_count} lines) — this section is a label only.",
+        print(f"\n⚠ Short result ({lines_label(line_count)}) — this section is a label only.",
               file=sys.stderr)
         print(f"   Next section: {next_section['name']} (line {next_section['line']})",
               file=sys.stderr)
