@@ -302,7 +302,8 @@ a check that counts violations and lets the count only fall. Then the cause is r
 **Next, in priority order**
 
 1. **The ratchets are in place (2026-09-30).** Most landed on 2026-09-26:
-   - the walker, parser-import, print/exit and complexity ratchets
+   - the walker, parser-import, print/exit, display-path, silent-except
+     (BACK-1614: 123 -> 88; `rules/` and `core/disk_cache.py` are at 0) and complexity ratchets
      (`scripts/check_boundaries.py`, `scripts/check_complexity.py`);
    - the grammar-coverage test (`tests/test_grammar_coverage.py`);
    - the registry-driven contract harness (`tests/test_output_contract_compliance.py`).
@@ -345,7 +346,7 @@ a check that counts violations and lets the count only fall. Then the cause is r
    says when its parse was recovered (CHANGELOG `[Unreleased]`). Since 2026-10-01 element
    results and the directory view carry the envelope too (the router wraps each element
    result), and a partial parse is one `partial_parse` meta warning in the result, not a
-   stderr line per file (CHANGELOG `[Unreleased]`). Still open: the broad `except`s.
+   stderr line per file (CHANGELOG `[Unreleased]`). Still open: the broad `except`s (88 silent ones left, mostly in `adapters/`; BACK-1614).
 4. **One seam per concern:** BACK-1054 (import resolution). The parser seam landed
    2026-09-30: every tree-sitter parser comes from `reveal/core/treesitter_parse.py`, a missing
    grammar raises `GrammarUnavailable` instead of reading as an empty result, and the
