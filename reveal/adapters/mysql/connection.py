@@ -338,6 +338,6 @@ class MySQLConnection:
         if self._connection:
             try:
                 self._connection.close()
-            except Exception:
+            except (pymysql.err.Error, OSError):
                 pass  # best-effort close; ignore already-closed or broken socket
             self._connection = None

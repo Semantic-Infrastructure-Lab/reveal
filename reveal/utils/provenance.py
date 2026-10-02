@@ -39,18 +39,20 @@ def _git_state(cwd: Path) -> Optional[Dict[str, Any]]:
             'commit': commit.stdout.strip()[:12],
             'dirty': bool(status.stdout.strip()) if status.returncode == 0 else None,
         }
-    except Exception:
+    except (OSError, subprocess.SubprocessError):  # no git binary, or it timed out
         return None
 
 
 def _config_digest(cwd: Path) -> Optional[str]:
-    """Short digest of the active merged .reveal.yaml config, if any."""
-    try:
-        from reveal.config import RevealConfig
-        config = RevealConfig.get(cwd)
-        return hashlib.sha256(config.dump().encode('utf-8')).hexdigest()[:12]
-    except Exception:
-        return None
+    """Short digest of the active merged .reveal.yaml config.
+
+    No try/except: RevealConfig.get already reports and skips a config file it
+    can't load, and a None here would record "no config" in a chain-of-custody
+    record when the digest step itself failed (BACK-1614).
+    """
+    from reveal.config import RevealConfig
+    config = RevealConfig.get(cwd)
+    return hashlib.sha256(config.dump().encode('utf-8')).hexdigest()[:12]
 
 
 def _command_line() -> str:

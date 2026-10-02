@@ -44,15 +44,15 @@ def _resolve_version() -> str:
             dist = PathDistribution(path)
             if dist.metadata.get('Name') == 'reveal-cli':
                 return dist.version
-    except Exception:
+    except OSError:  # an unreadable install root: the name-based lookup below answers instead
         pass
 
     # No physical match -- fall back to the old name-based lookup so a
     # working install is never turned into a hard failure.
+    from importlib.metadata import PackageNotFoundError, version
     try:
-        from importlib.metadata import version
         return version("reveal-cli")
-    except Exception:
+    except PackageNotFoundError:
         # Fallback for development/editable installs
         return "0.42.0-dev"
 

@@ -86,7 +86,7 @@ def _log_mcp_access(tool_name: str, kwargs: dict) -> None:
         _MCP_ACCESS_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(_MCP_ACCESS_LOG_PATH, 'a', encoding='utf-8') as f:
             f.write(json.dumps(record, default=str) + '\n')
-    except Exception:
+    except (OSError, ValueError):  # unwritable log dir, or a circular kwarg json.dumps rejects
         pass
 
 mcp = MCPServer(

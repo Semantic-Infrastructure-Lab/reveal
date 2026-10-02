@@ -51,7 +51,6 @@
   "reveal/adapters/markdown/files.py": 1,
   "reveal/adapters/markdown/operations.py": 1,
   "reveal/adapters/mysql/adapter.py": 1,
-  "reveal/adapters/mysql/connection.py": 1,
   "reveal/adapters/nginx/adapter.py": 1,
   "reveal/adapters/overview.py": 1,
   "reveal/adapters/python/doctor.py": 4,
@@ -69,12 +68,7 @@
   "reveal/cli/routing/formats.py": 1,
   "reveal/diff/architecture_diff.py": 2,
   "reveal/grep_handler.py": 1,
-  "reveal/main.py": 1,
-  "reveal/mcp_server.py": 1,
-  "reveal/tree_view.py": 1,
-  "reveal/utils/provenance.py": 2,
-  "reveal/utils/updates.py": 2,
-  "reveal/version.py": 2
+  "reveal/tree_view.py": 1
  },
  "subcommand-output": {
   "reveal/checks.py": 1,

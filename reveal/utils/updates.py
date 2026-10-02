@@ -42,12 +42,13 @@ def _update_check_disabled_in_config() -> bool:
     Resolving the user config path can raise (e.g. Path.home() with no
     HOME/USERPROFILE set — observed on Windows CI with a cleared
     environment) — check_for_updates() must never fail the caller over
-    this, so any error here just means "not disabled."
+    this, so a config that can't be located or isn't a mapping means "not
+    disabled." (_read_user_config already handles unreadable/malformed YAML.)
     """
+    from ..config import _read_user_config
     try:
-        from ..config import _read_user_config
         return bool(_read_user_config().get('network', {}).get('no_update_check'))
-    except Exception:
+    except (RuntimeError, KeyError, OSError, AttributeError):
         return False
 
 
@@ -87,5 +88,5 @@ def check_for_updates():
         cache_file.write_text(datetime.now().isoformat(), encoding='utf-8')
         _print_update_notice(latest_version, __version__)
 
-    except Exception:  # best effort — network or parse error; never block the user
+    except Exception:  # boundary-ok: silent-except -- runs on every command for every user; a failed check means no notice, never a failed command
         pass
