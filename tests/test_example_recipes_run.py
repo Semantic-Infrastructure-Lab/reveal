@@ -101,21 +101,107 @@ def harness(tmp_path_factory):
     return _Harness(root)
 
 
-@pytest.mark.parametrize('recipe', _recipes())
-def test_recipe_runs_as_written(harness, recipe):
-    argv = _argv(recipe['query'])
+def _assert_runs_as_written(harness, query, output_type):
+    argv = _argv(query)
     code, out, err, _ = harness.run_subcommand(argv[0], *argv[1:], '--format', 'json')
     problems = [line for line in err.splitlines()
                 if PROBLEM_LINE.search(line) and not any(n in line for n in ENVIRONMENT_NOISE)]
-    assert not problems, f"{recipe['query']}: stderr {problems[:3]}"
-    assert code in FINDINGS_EXITS.get(argv[0], {0}), f"{recipe['query']}: exit {code}"
+    assert not problems, f"{query}: stderr {problems[:3]}"
+    assert code in FINDINGS_EXITS.get(argv[0], {0}), f"{query}: exit {code}"
     payload = json.loads(out)
     warnings = [w for w in (payload.get('meta') or {}).get('warnings') or []
                 if isinstance(w, dict) and DRIFT_WARNING.match(str(w.get('type', '')))]
-    assert not warnings, f"{recipe['query']}: meta.warnings {warnings[:2]}"
-    if recipe.get('output_type'):
-        assert payload.get('type') == recipe['output_type'], (
-            f"{recipe['query']}: type {payload.get('type')!r}, the recipe says {recipe['output_type']!r}")
+    assert not warnings, f"{query}: meta.warnings {warnings[:2]}"
+    if output_type:
+        assert payload.get('type') == output_type, (
+            f"{query}: type {payload.get('type')!r}, the recipe says {output_type!r}")
+
+
+@pytest.mark.parametrize('recipe', _recipes())
+def test_recipe_runs_as_written(harness, recipe):
+    _assert_runs_as_written(harness, recipe['query'], recipe.get('output_type'))
+
+
+# -- second source: every adapter's get_schema()['example_queries'] (BACK-1599) -------------
+# Nothing executed these (~200): reveal://adapters/reveal.py get_element had been dead since it
+# was written (BACK-1565). They are written in their own dialect, so the placeholders differ.
+
+SCHEMA_PLACEHOLDERS = (
+    ('/path/to/app.db', 'proj/app.db'),
+    ('/path/to/file.xlsx', 'proj/data.xlsx'),
+    ('/path/to/data.xlsx', 'proj/data.xlsx'),
+    ('sqlite://./relative/path/data.db', 'sqlite://proj/app.db'),
+    ('project/src/main.c', 'proj/app.py'),
+    ('root=project', 'root=proj'),
+    ('src/utils.py', 'proj/app.py'),
+    ('src/main.py', 'proj/app.py'),
+    ('src/core.py', 'proj/app.py'),
+    ('src/app.py', 'proj/app.py'),
+    ('src/models/', 'proj/tests/'),
+    ('main.py', 'proj/app.py'),
+    ('package.json', 'proj/data.json'),
+    ('data.json', 'proj/data.json'),
+    ('config.json', 'proj/data.json'),
+    ('diff://app.py:backup/app.py', 'diff://proj/app.py:proj/app_old.py'),
+    ('diff://app.py:git://app.py@HEAD~1', 'diff://proj/app.py:git://proj/app.py@HEAD~1'),
+    ('diff://app.py:old.py/handle_request', 'diff://proj/app.py:proj/app_old.py/main'),
+    ('markdown://sessions/', 'markdown://proj/'),
+    ('patches://tests', 'patches://proj/tests'),
+    ('./src', 'proj'),
+    ('docs/', 'proj/'),
+)
+_PLACEHOLDER_RE = re.compile('|'.join(re.escape(p) for p, _ in SCHEMA_PLACEHOLDERS))
+_PLACEHOLDER_MAP = dict(SCHEMA_PLACEHOLDERS)
+
+# Examples that name content no shared fixture has (a host, a ref, a sheet, an env var, a JSON
+# key). Their syntax is not checked here; a fixture that grew the content would be.
+SCHEMA_UNRUNNABLE = (
+    'diff://mysql://', 'diff://git://app.py@main', 'git://.@abc1234', 'git://.@main',
+    'git://src/app.py@v1.0', 'element=load_config', 'sheet=Sales', 'env://DATABASE_URL',
+    'json://data.json/users', 'json://package.json/', 'format=dot',
+)
+# Also needs a live host / package / session beyond the recipe list's schemes.
+SCHEMA_SKIP_SCHEMES = NEEDS_HOST + NEEDS_SESSION
+
+# uri -> task naming why it fails today. Strict xfail: fixing one fails the run until deleted.
+SCHEMA_KNOWN_VIOLATIONS: dict = {
+    'imports://src': 'BACK-1637',
+    'imports://src/main.py': 'BACK-1637',
+    'diff://app.py:old.py/handle_request': 'BACK-1637',
+    'sqlite:///path/to/app.db --check': 'BACK-1637',
+    'reveal:// --check': 'BACK-1637',
+    'reveal:// --check --select V001,V002': 'BACK-1637',
+}
+
+
+def _schema_examples():
+    from reveal.adapters.base import get_adapter_class, list_supported_schemes
+    params = []
+    for scheme in sorted(list_supported_schemes()):
+        schema = get_adapter_class(scheme).get_schema() or {}
+        for example in schema.get('example_queries', []):
+            uri = example['uri']
+            marks = []
+            if any(uri.startswith(s) for s in SCHEMA_SKIP_SCHEMES):
+                marks.append(pytest.mark.skip(reason='needs a live host or recorded session'))
+            elif any(u in uri for u in SCHEMA_UNRUNNABLE):
+                marks.append(pytest.mark.skip(reason='names content the fixture does not have'))
+            elif uri in SCHEMA_KNOWN_VIOLATIONS:
+                marks.append(pytest.mark.xfail(
+                    strict=True, reason=f'{SCHEMA_KNOWN_VIOLATIONS[uri]}: known violation'))
+            params.append(pytest.param(example, marks=marks, id=f'{scheme}:{uri}'))
+    return params
+
+
+def _schema_query(uri):
+    """One pass, so a replacement is never itself replaced (data.json -> proj/data.json)."""
+    uri = _PLACEHOLDER_RE.sub(lambda m: _PLACEHOLDER_MAP[m.group(0)], uri)
+    return uri.replace('://src', '://proj')
+
+
+@pytest.mark.parametrize('example', _schema_examples())
+def test_schema_example_runs_as_written(harness, example):
+    _assert_runs_as_written(harness, _schema_query(example['uri']), example.get('output_type'))
 
 
 def test_the_recipe_gate_bites(harness):
@@ -137,3 +223,10 @@ def test_every_task_has_a_recipe_that_runs():
                 if not any(s in r['query'] for s in NEEDS_HOST + NEEDS_SESSION)}
     skipped_whole = set(_EXAMPLE_RECIPES) - runnable
     assert skipped_whole <= {'infrastructure', 'sessions', 'history'}, skipped_whole
+
+
+def test_schema_examples_are_enumerated_and_mostly_run():
+    """A positive control for the second source: an empty enumeration would pass vacuously."""
+    params = _schema_examples()
+    runnable = [p for p in params if not any(m.name == 'skip' for m in p.marks)]
+    assert len(params) > 150 and len(runnable) > 100, (len(params), len(runnable))
