@@ -4,7 +4,6 @@ category: reference
 help_topic: tricks
 help_description: Cool tricks and hidden features
 help_category: best_practices
-help_token_estimate: "~3,500"
 ---
 # Reveal Recipes
 
@@ -1415,8 +1414,8 @@ reveal app.py --outline
 # Level 3: Specific extraction (~50 tokens)
 reveal app.py process_data
 
-# Compare: cat app.py (~7,500 tokens for 300 lines)
-# Savings: 50-150x
+# Compare: cat app.py (every line, every time)
+# Measured savings: typically 3.9-15x (reveal help://benchmarks)
 ```
 
 ### Token efficiency

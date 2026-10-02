@@ -5,7 +5,8 @@ import re
 from dataclasses import dataclass, asdict, replace
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from .base import ResourceAdapter, Stability, register_adapter, register_renderer, _ADAPTER_REGISTRY
+from .base import ResourceAdapter, Stability, register_adapter, register_renderer, _ADAPTER_REGISTRY, list_public_schemes
+from .registry import _SCAFFOLD_SCHEMES, is_internal_scheme
 from ..utils.formatting import shell_command
 from ..utils.results import ResultBuilder, note_truncation
 from reveal.reveal_types import CONTRACT_VERSION
@@ -38,7 +39,10 @@ def _read_help_frontmatter(path: Path) -> Dict[str, str]:
         help_description  One-line description shown in the help index.
         help_category     One of VALID_HELP_CATEGORIES; absent or empty hides
                           the topic from the index but keeps direct access.
-        help_token_estimate  Rough token cost of the full guide, e.g. "~3,000".
+
+    A guide's token cost is not read from here: _guide_token_estimate measures
+    the file (BACK-1610 -- the typed help_token_estimate values had drifted, e.g.
+    tricks ~3,500 for a ~12,900-token guide).
     """
     # Lazy import — yaml isn't needed unless the help adapter is instantiated,
     # and we want to keep this helper testable in isolation from the markdown
@@ -47,9 +51,18 @@ def _read_help_frontmatter(path: Path) -> Dict[str, str]:
     fm = extract_frontmatter(path) or {}
     return {
         k: str(fm[k])
-        for k in ('help_topic', 'help_description', 'help_category', 'help_token_estimate')
+        for k in ('help_topic', 'help_description', 'help_category')
         if k in fm and fm[k] is not None
     }
+
+
+def _guide_token_estimate(path: Path) -> str:
+    """'~N' tokens for a guide's body (chars / 4, frontmatter stripped), the
+    estimate V014 and the progressive-disclosure footer use. Rounded to 50, or
+    to 1,000 from 10,000 up, so the index doesn't churn on every small edit."""
+    tokens = len(_strip_frontmatter(path.read_text(encoding='utf-8'))) // 4
+    step = 1000 if tokens >= 10_000 else 50
+    return f"~{max(step, round(tokens / step) * step):,}"
 
 
 def _strip_frontmatter(content: str) -> str:
@@ -498,12 +511,12 @@ class HelpAdapter(ResourceAdapter):
                     'when they implement get_help()'
                 ),
                 (
-                    'For agents: --agent-help dumps the full reference '
-                    '(~40K tokens, task-pattern recipes)'
+                    'For agents: --agent-help is the orientation (first sections); '
+                    'help://agent/full is the whole reference (~50K tokens, task-pattern recipes)'
                 )
             ],
             'see_also': [
-                'reveal --agent-help - Comprehensive agent reference (~40K tokens)',
+                'reveal --agent-help - Agent orientation; help://agent/full for the whole reference (~50K tokens)',
                 'reveal --help - Raw flag and subcommand listing',
                 'reveal --list-supported - Supported file types'
             ]
@@ -546,7 +559,8 @@ class HelpAdapter(ResourceAdapter):
             # boundary-ok: walker -- reveal's bundled docs
             for md in docs_dir.rglob('*.md'):
                 rel = md.relative_to(docs_dir).as_posix()
-                metadata_by_file[rel] = _read_help_frontmatter(md)
+                metadata_by_file[rel] = {**_read_help_frontmatter(md),
+                                         'token_estimate': _guide_token_estimate(md)}
 
         def _build(topic: str, file: str) -> GuideEntry:
             fm = metadata_by_file.get(file, {})
@@ -562,7 +576,7 @@ class HelpAdapter(ResourceAdapter):
                 file=file,
                 description=fm.get('help_description', ''),
                 category=category,
-                token_estimate=fm.get('help_token_estimate', ''),
+                token_estimate=fm.get('token_estimate', ''),
             )
 
         # Phase 2: auto-discover canonical topics from *_GUIDE.md / *GUIDE.md.
@@ -653,6 +667,10 @@ class HelpAdapter(ResourceAdapter):
             data={
                 'available_topics': self._list_topics(),
                 'adapters': self._list_adapters(),
+                # Registered but not advertised (reveal://): reachable by name,
+                # named here so the count above is not read as the whole registry.
+                'internal_adapters': [s for s in list_public_schemes(include_internal=True)
+                                      if is_internal_scheme(s) and s not in _SCAFFOLD_SCHEMES],
                 # Each entry: {topic, file, description, category, token_estimate}.
                 # The renderer reads category/description/token_estimate from here;
                 # there is no parallel dict in the renderer module. Deduped to
@@ -1138,9 +1156,8 @@ class HelpAdapter(ResourceAdapter):
     def _list_adapters(self) -> List[Dict[str, Any]]:
         """List all registered adapters with basic info."""
         adapters = []
-        for scheme, adapter_class in _ADAPTER_REGISTRY.items():
-            if scheme in self._INTERNAL_ADAPTERS:
-                continue
+        for scheme in list_public_schemes():
+            adapter_class = _ADAPTER_REGISTRY[scheme]
             has_help = (
                 hasattr(adapter_class, 'get_help') and
                 callable(getattr(adapter_class, 'get_help'))
@@ -1298,9 +1315,12 @@ class HelpAdapter(ResourceAdapter):
     def _cluster_membership() -> Dict[str, List[str]]:
         """cluster name -> sorted schemes whose HELP_CLUSTER names it."""
         membership: Dict[str, List[str]] = {}
-        for scheme, adapter_class in _ADAPTER_REGISTRY.items():
-            if scheme in HelpAdapter._INTERNAL_ADAPTERS:
+        # Every shipped adapter, reveal:// included: the map shows how they
+        # combine, not what --adapters advertises.
+        for scheme in list_public_schemes(include_internal=True):
+            if scheme in _SCAFFOLD_SCHEMES:
                 continue
+            adapter_class = _ADAPTER_REGISTRY[scheme]
             clusters = getattr(adapter_class, 'HELP_CLUSTER', None)
             if clusters is None:
                 continue
@@ -1332,8 +1352,9 @@ class HelpAdapter(ResourceAdapter):
         ]
 
         candidates = []
-        for scheme, adapter_class in _ADAPTER_REGISTRY.items():
-            if scheme in self._INTERNAL_ADAPTERS or scheme == 'help':
+        for scheme in list_public_schemes():
+            adapter_class = _ADAPTER_REGISTRY[scheme]
+            if scheme == 'help':
                 continue
             rank = getattr(adapter_class, 'QUICK_RANK', None)
             if rank is None:
@@ -1461,7 +1482,7 @@ class HelpAdapter(ResourceAdapter):
                 'reveal help://examples/security # security query recipes',
                 'reveal help://agent             # AI agent usage guide',
                 'reveal help://schemas/index     # thin index of every adapter schema (~1K tokens)',
-                'reveal help://schemas/all       # full machine-readable schema for every adapter (~10K tokens)',
+                'reveal help://schemas/all       # full machine-readable schema for every adapter (~3K tokens)',
                 'reveal help://rules             # pattern-detection rule catalog',
                 'reveal help://languages         # supported languages + analyzer depth',
                 'reveal help://output-diagnostics # --format vs meta trust envelope vs --provenance vs --perf',
@@ -1623,12 +1644,9 @@ class HelpAdapter(ResourceAdapter):
             ],
         }
 
-    # Internal/scaffold adapters excluded from public listings
-    _INTERNAL_ADAPTERS = {'demo', 'test'}
-
     def _get_all_adapter_help(self) -> Dict[str, Any]:
         """Get help for all adapters."""
-        public_schemes = [s for s in _ADAPTER_REGISTRY.keys() if s not in self._INTERNAL_ADAPTERS]
+        public_schemes = list_public_schemes()
         all_help: Dict[str, Any] = {
             'type': 'adapter_summary',
             'count': len(public_schemes),
@@ -1880,9 +1898,8 @@ class HelpAdapter(ResourceAdapter):
         never land on a meta-adapter (e.g. help://) that has no schema (N1).
         """
         schemes: List[str] = []
-        for scheme, cls in _ADAPTER_REGISTRY.items():
-            if scheme in self._INTERNAL_ADAPTERS:
-                continue
+        for scheme in list_public_schemes():
+            cls = _ADAPTER_REGISTRY[scheme]
             try:
                 if cls.get_schema():
                     schemes.append(scheme)

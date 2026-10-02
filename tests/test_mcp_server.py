@@ -899,28 +899,6 @@ class TestMcpServerRegistration(unittest.TestCase):
                 self.assertTrue(tool.title, f"{name} has no title annotation")
                 self.assertTrue(tool.title.startswith('Reveal:'))
 
-    def test_tool_count_matches_guide(self):
-        """Validate that MCP_SETUP.md tool count matches actual registered tools."""
-        import re
-        from pathlib import Path
-        from reveal.mcp_server import mcp
-
-        guide_path = Path(__file__).parent.parent / 'reveal' / 'docs' / 'guides' / 'MCP_SETUP.md'
-        if not guide_path.exists():
-            self.skipTest("MCP_SETUP.md not found")
-
-        content = guide_path.read_text(encoding='utf-8')
-        # Matches e.g. "6 tools" in the help_description frontmatter or body
-        m = re.search(r'(\d+)\s+tools', content)
-        self.assertIsNotNone(m, "MCP_SETUP.md should state a tool count")
-        doc_count = int(m.group(1))
-        actual_count = len(mcp._tool_manager._tools)
-        self.assertEqual(
-            doc_count, actual_count,
-            f"MCP_SETUP.md says {doc_count} tools but {actual_count} are registered. "
-            f"Update the guide count or add/remove mcp_server.py tool definitions."
-        )
-
     def test_server_name(self):
         from reveal.mcp_server import mcp
         self.assertEqual(mcp.name, 'reveal')

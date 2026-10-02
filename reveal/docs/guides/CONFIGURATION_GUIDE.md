@@ -4,7 +4,6 @@ category: guide
 help_topic: configuration
 help_description: "Configuration system (rules, env vars, precedence)"
 help_category: feature_guides
-help_token_estimate: "~3,500"
 ---
 # Reveal Configuration Guide
 

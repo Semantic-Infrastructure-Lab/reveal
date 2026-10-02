@@ -4,7 +4,6 @@ category: guide
 help_topic: help
 help_description: How the help system works (meta!)
 help_category: dev_guides
-help_token_estimate: "~2,500"
 ---
 # The Reveal Help System
 
@@ -265,9 +264,10 @@ title: My Guide
 help_topic: my-guide          # optional: canonical topic if the filename-derived one isn't right
 help_description: One-line description shown in the help:// index
 help_category: feature_guides # one of VALID_HELP_CATEGORIES (reveal/adapters/help.py); omit to keep it reachable but out of the index
-help_token_estimate: "~2,000" # rough token cost of the full guide
 ---
 ```
+
+   The index's token cost is measured from the file (`_guide_token_estimate`), not typed.
 
 2. Name it `MY_FEATURE_GUIDE.md` (or `*GUIDE.md`) and it's **auto-discovered** —
    no code change needed. The topic name is derived from the filename
@@ -295,10 +295,10 @@ Start broad, drill down as needed. Don't force users to load everything.
 
 **Good:**
 ```bash
-reveal help://examples/quality  # A task recipe (~160 tokens)
+reveal help://examples/quality  # A task's recipes (~350 tokens)
 reveal help://quick             # Intent router (~1,600 tokens) — cheapest orientation
 reveal --agent-help             # Agent orientation (~1,200 tokens)
-reveal help://schemas/ast       # One adapter's query syntax (~2,400 tokens)
+reveal help://schemas/ast       # One adapter's query syntax (~1,800 tokens)
 ```
 
 **Bad:**
@@ -419,7 +419,7 @@ A: Check `reveal/rendering/adapters/help.py` - may need to update `_render_help_
 
 **Q: Token costs seem off**
 
-A: Update the `help_token_estimate` field in the guide's own YAML frontmatter (read by `_read_help_frontmatter()` in `reveal/adapters/help.py`)
+A: A guide's cost in the help:// index is measured from the file (`_guide_token_estimate()` in `reveal/adapters/help.py`). A size typed in prose next to a `help://` or `--agent-help` reference is checked by `tests/test_help_token_claims_back1610.py`; re-measure it with `reveal <ref> | wc -c` (chars / 4).
 
 ---
 

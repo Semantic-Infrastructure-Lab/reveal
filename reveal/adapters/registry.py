@@ -133,6 +133,31 @@ def list_supported_schemes() -> list:
     return sorted(_ADAPTER_REGISTRY.keys())
 
 
+# Registered only by the scaffold template (demo://) or by a test run (test://),
+# never by a shipped adapter.
+_SCAFFOLD_SCHEMES = frozenset({'demo', 'test'})
+
+
+def is_internal_scheme(scheme: str) -> bool:
+    """True for a scheme reveal does not advertise: an adapter whose class sets
+    ``internal`` (it only inspects reveal's own source, e.g. reveal://) or a
+    scaffold/test scheme. Still reachable by name."""
+    cls = _ADAPTER_REGISTRY.get(scheme)
+    return scheme in _SCAFFOLD_SCHEMES or bool(getattr(cls, 'internal', False))
+
+
+def list_public_schemes(include_internal: bool = False) -> list:
+    """The adapters reveal advertises, sorted.
+
+    One definition for every listing and count: --adapters, --discover,
+    help://, help://schemas and the adapter count the docs state (BACK-1610).
+    They used two predicates (the class's ``internal`` flag, and a hand-typed
+    {'demo', 'test'} set in help://), so --adapters said 34 and help:// 35.
+    """
+    return sorted(s for s in _ADAPTER_REGISTRY
+                  if include_internal or not is_internal_scheme(s))
+
+
 def register_renderer(renderer_class):
     """Decorator to register a renderer for an adapter.
 

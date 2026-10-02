@@ -4,7 +4,6 @@ category: guide
 help_topic: fields
 help_description: "Field selection and token-budget constraints"
 help_category: feature_guides
-help_token_estimate: "~3,750"
 ---
 # Field Selection & Budget Constraints Guide
 

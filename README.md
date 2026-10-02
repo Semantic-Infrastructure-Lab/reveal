@@ -2,7 +2,7 @@
 
 **Reveal is how AI agents understand codebases without wasting tokens.**
 
-A local-first, adapter-driven semantic inspection layer — progressive disclosure enforced by design. One CLI, 35 URI adapters, 51 languages and file formats. Structure before content, always. Engineers and AI systems use the same tool, the same syntax, the same progressive drill-down.
+A local-first, adapter-driven semantic inspection layer — progressive disclosure enforced by design. One CLI, 34 URI adapters, 51 languages and file formats. Structure before content, always. Engineers and AI systems use the same tool, the same syntax, the same progressive drill-down.
 
 ```bash
 reveal src/auth.py validate_token           # What does this function do?
@@ -78,7 +78,8 @@ reveal @domains.txt --check
 # Install once, works in Claude Code, Cursor, Windsurf, any MCP-compatible agent
 pip install reveal-cli
 reveal-mcp  # starts the server
-# Six tools: reveal_structure, reveal_element, reveal_nav, reveal_query, reveal_pack, reveal_check
+# 10 tools: reveal_structure, reveal_element, reveal_nav, reveal_query, reveal_pack, reveal_check,
+#   reveal_grep, reveal_trace, reveal_health, reveal_review
 # Agents get progressive disclosure, deep-dive nav, and call-graph analysis — no subprocess overhead
 ```
 

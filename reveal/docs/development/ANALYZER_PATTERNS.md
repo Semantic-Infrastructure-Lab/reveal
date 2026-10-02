@@ -4,7 +4,6 @@ category: reference
 help_topic: analyzer-patterns
 help_description: "Best practices for writing new language analyzers"
 help_category: dev_guides
-help_token_estimate: "~5,800"
 ---
 # Analyzer Development Patterns
 

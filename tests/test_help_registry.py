@@ -423,7 +423,8 @@ class TestAllAdaptersInExampleRecipes(unittest.TestCase):
 
     def test_all_adapters_referenced_in_some_recipe_query(self):
         from reveal.adapters.base import _ADAPTER_REGISTRY
-        all_registered = set(_ADAPTER_REGISTRY.keys()) - HelpAdapter._INTERNAL_ADAPTERS - {'help'}
+        from reveal.adapters.registry import _SCAFFOLD_SCHEMES
+        all_registered = set(_ADAPTER_REGISTRY.keys()) - _SCAFFOLD_SCHEMES - {'help'}
 
         referenced = set()
         for task_data in _EXAMPLE_RECIPES.values():

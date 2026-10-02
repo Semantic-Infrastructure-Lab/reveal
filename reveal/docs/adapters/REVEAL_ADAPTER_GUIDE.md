@@ -4,7 +4,6 @@ category: guide
 help_topic: reveal-guide
 help_description: "reveal:// adapter reference"
 help_category: feature_guides
-help_token_estimate: "~3,000"
 ---
 # reveal:// Adapter - Reference Implementation
 

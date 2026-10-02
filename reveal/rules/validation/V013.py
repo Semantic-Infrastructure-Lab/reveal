@@ -9,9 +9,10 @@ Example violation:
     - Result: Documentation out of sync
 
 Counting:
-    - Production adapters only — list_supported_schemes() minus the 'test' and
-      'demo' scaffold schemes that leak in during test runs. Strict equality:
-      both overclaims and stale underclaims are drift and are flagged.
+    - The adapters reveal advertises: list_public_schemes(), the same set
+      `reveal --adapters`, --discover and help:// list (no internal reveal://,
+      no test/demo scaffold schemes; BACK-1610). Strict equality: both
+      overclaims and stale underclaims are drift and are flagged.
 
 Scope:
     - Checks every current-claim doc (README, ARCHITECTURE, QUICK_START,
@@ -72,15 +73,12 @@ class V013(BaseRule):
                         line=line_num,
                         message=f"Adapter count mismatch: claims {claimed}, actual {actual_count}",
                         suggestion=f"Update {rel_path} line {line_num} to '{actual_count} adapters' (see `reveal --adapters`)",
-                        context=f"Claimed: {claimed}, Actual: {actual_count} registered URI adapters"
+                        context=f"Claimed: {claimed}, Actual: {actual_count} URI adapters listed by reveal --adapters"
                     ))
 
         return detections
 
     def _count_production_adapters(self) -> int:
-        """Count production URI adapters, excluding test/demo scaffold schemes."""
-        from reveal.adapters.base import list_supported_schemes
-        schemes = set(list_supported_schemes())
-        schemes.discard('test')
-        schemes.discard('demo')
-        return len(schemes)
+        """Count the advertised URI adapters (what `reveal --adapters` lists)."""
+        from reveal.adapters.base import list_public_schemes
+        return len(list_public_schemes())

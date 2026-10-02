@@ -93,8 +93,8 @@ mcp = MCPServer(
     "reveal",
     instructions=(
         "Reveal is a progressive disclosure tool for exploring codebases, "
-        "infrastructure, and data sources. This is 3-33x more token-efficient "
-        "than reading files directly — always prefer the narrowest tool below "
+        "infrastructure, and data sources. On measured tasks it takes typically "
+        "3.9-15x fewer tokens than reading files directly — always prefer the narrowest tool below "
         "over reading a whole file or dumping a whole repo.\n\n"
         "Param convention: `path` = local filesystem path only. `uri` = a "
         "reveal URI (scheme://...) only. `target` = either, tool-dependent "
@@ -104,7 +104,7 @@ mcp = MCPServer(
         "codebase first: quality score, ranked hotspots, git activity, one "
         "screen. This is reveal's own best answer to \"what is this repo\" — "
         "start here before structure/element/nav on unfamiliar code.\n"
-        "1. reveal_structure(dir) — understand what's in a directory (50-200 tokens)\n"
+        "1. reveal_structure(dir) — understand what's in a directory (~100-3,000 tokens, by size)\n"
         "2. reveal_structure(file) — see all functions/classes (200-500 tokens)\n"
         "3. reveal_element(file, fn) — read one function's implementation (100-300 tokens)\n"
         "4. reveal_nav(file, fn, flag) — deep-dive analysis without reading source:\n"

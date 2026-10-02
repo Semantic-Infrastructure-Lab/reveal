@@ -4,7 +4,6 @@ type: guide
 help_topic: ci
 help_description: "CI/CD integration recipes (GitHub Actions, GitLab CI, quality gates)"
 help_category: feature_guides
-help_token_estimate: "~2,050"
 beth_topics:
   - reveal
   - ci-cd

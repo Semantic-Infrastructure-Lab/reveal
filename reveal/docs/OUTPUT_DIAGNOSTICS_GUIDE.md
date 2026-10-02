@@ -4,7 +4,6 @@ type: guide
 help_topic: output-diagnostics
 help_description: "The four ways to get extra context out of a reveal call: --format, meta.warnings/errors/confidence, --provenance, --perf — what each is for and when to reach for it"
 help_category: feature_guides
-help_token_estimate: "~1,100"
 ---
 
 # Output & Diagnostics Guide

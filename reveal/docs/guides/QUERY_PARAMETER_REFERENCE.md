@@ -5,7 +5,6 @@ date: 2026-02-07
 help_topic: query-params
 help_description: "Query parameter reference across all adapters"
 help_category: feature_guides
-help_token_estimate: "~6,200"
 ---
 
 # Query Parameter Reference

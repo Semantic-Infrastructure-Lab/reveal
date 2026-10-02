@@ -4,7 +4,6 @@ type: guide
 help_topic: subcommands
 help_description: "High-level workflow subcommands (dev, health, pack, review, ...)"
 help_category: feature_guides
-help_token_estimate: "~5,900"
 ---
 
 # reveal Subcommands

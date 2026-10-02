@@ -4,7 +4,6 @@ category: guide
 help_topic: rule-authoring
 help_description: "Write your own quality rules — user-global and project-local, auto-discovered"
 help_category: dev_guides
-help_token_estimate: "~1,600"
 ---
 # Reveal Custom Rule Authoring Guide
 

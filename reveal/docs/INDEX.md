@@ -30,7 +30,7 @@ category: reference
 | [QUICK_START.md](QUICK_START.md) | 374 | 5-minute introduction for new users |
 | [WHAT_IS_REVEAL_GOOD_FOR.md](guides/WHAT_IS_REVEAL_GOOD_FOR.md) | — | Organized jobs-to-be-done guide: where Reveal is strongest |
 | [BENCHMARKS.md](BENCHMARKS.md) | — | Measured 3.9–33x token reduction — 5 real scenarios with exact numbers |
-| [MCP_SETUP.md](guides/MCP_SETUP.md) | — | MCP server setup for Claude Code, Cursor, Windsurf — 5 tools, stdio/SSE transports |
+| [MCP_SETUP.md](guides/MCP_SETUP.md) | — | MCP server setup for Claude Code, Cursor, Windsurf — 10 tools, stdio/SSE transports |
 | [CI_RECIPES.md](guides/CI_RECIPES.md) | — | GitHub Actions and GitLab CI ready-to-paste YAML: PR review, complexity gate, hotspot tracking, SSL checks |
 | [RECIPES.md](guides/RECIPES.md) | — | Task-based workflows, multi-adapter patterns, and real-world scenarios |
 | [TESTABILITY_GUIDE.md](guides/TESTABILITY_GUIDE.md) | — | Test patch pressure joined with production boundary fan-out (`reveal testability`) |

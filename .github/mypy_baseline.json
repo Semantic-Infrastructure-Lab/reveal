@@ -223,7 +223,6 @@
  "reveal/cli/handlers/batch.py::has-type": 2,
  "reveal/cli/handlers/batch.py::misc": 1,
  "reveal/cli/handlers/introspection.py::assignment": 1,
- "reveal/cli/handlers/introspection.py::attr-defined": 2,
  "reveal/cli/handlers/introspection.py::no-any-return": 1,
  "reveal/cli/handlers/introspection.py::var-annotated": 1,
  "reveal/cli/parser.py::arg-type": 13,

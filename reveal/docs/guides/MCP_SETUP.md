@@ -9,7 +9,6 @@ beth_topics:
 help_topic: mcp
 help_description: "MCP server setup — 10 tools for Claude Code, Cursor, Windsurf"
 help_category: ai_guides
-help_token_estimate: "~2,000"
 ---
 
 # Reveal MCP Server
@@ -247,7 +246,7 @@ a tool call every time an agent needs to check valid syntax. All four mirror
 reveal_query("overview://src/")             # quality score, hotspots, git activity, one screen
 
 # 1. Understand the shape of a codebase area
-reveal_structure("src/")                    # 50-200 tokens: what files exist
+reveal_structure("src/")                    # ~100-3,000 tokens by size: what files exist
 
 # 2. Understand a specific file
 reveal_structure("src/auth.py")             # 200-500 tokens: all functions

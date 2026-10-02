@@ -4,7 +4,6 @@ category: guide
 help_topic: elements
 help_description: "Discovering queryable elements within a resource"
 help_category: feature_guides
-help_token_estimate: "~4,050"
 ---
 # Element Discovery Guide
 

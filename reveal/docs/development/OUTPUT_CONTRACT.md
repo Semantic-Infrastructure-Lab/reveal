@@ -4,7 +4,6 @@ category: reference
 help_topic: output
 help_description: "Output contract specification for adapter authors"
 help_category: dev_guides
-help_token_estimate: "~4,100"
 ---
 # Output Contract Specification
 

@@ -360,8 +360,9 @@ class TestDocumentationAccuracy(unittest.TestCase):
 
         This is what V013 validation rule checks, but as a test it runs in CI.
         """
-        # Count production adapters only (excludes test-only adapters)
-        actual_count = len(TestAdapterRegistryIntegrity._get_production_adapters())
+        # The advertised set, as --adapters lists it (BACK-1610)
+        from reveal.adapters.registry import list_public_schemes
+        actual_count = len(list_public_schemes())
 
         # Read README
         readme_file = Path(__file__).parent.parent / 'README.md'

@@ -21,6 +21,7 @@ from reveal.rendering.adapters.help import (
 )
 
 import pytest
+from reveal.adapters.registry import _SCAFFOLD_SCHEMES
 
 # BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
 pytestmark = pytest.mark.component
@@ -129,7 +130,7 @@ class TestRenderHelpListMode(unittest.TestCase):
         }
         output = capture_stdout(_render_help_list_mode, data)
         self.assertIn('DYNAMIC CONTENT', output)
-        self.assertIn('URI Adapters (2 registered)', output)
+        self.assertIn('URI Adapters (2)', output)
         self.assertIn('ast://', output)
         self.assertIn('AST queries', output)
         self.assertIn('python://', output)
@@ -144,7 +145,7 @@ class TestRenderHelpListMode(unittest.TestCase):
             ]
         }
         output = capture_stdout(_render_help_list_mode, data)
-        self.assertIn('URI Adapters (1 registered)', output)
+        self.assertIn('URI Adapters (1)', output)
         self.assertIn('ast://', output)
         self.assertNotIn('other://', output)
 
@@ -1088,7 +1089,7 @@ class TestDecisionTreeClusterCoverage(unittest.TestCase):
         reachable = self._reachable_schemes()
         missing = [
             scheme for scheme in _ADAPTER_REGISTRY
-            if scheme not in HelpAdapter._INTERNAL_ADAPTERS
+            if scheme not in _SCAFFOLD_SCHEMES
             and scheme not in reachable
             and scheme != 'help'  # the page being viewed; always implicitly reachable
         ]
@@ -1212,7 +1213,7 @@ class TestRenderHelpRelationships(unittest.TestCase):
             a for cluster in result['clusters']
             for a in cluster['adapters']
         }
-        all_registered = set(_ADAPTER_REGISTRY.keys()) - HelpAdapter._INTERNAL_ADAPTERS
+        all_registered = set(_ADAPTER_REGISTRY.keys()) - _SCAFFOLD_SCHEMES
         missing = all_registered - adapters_in_clusters
         self.assertEqual(missing, set(), f"Registered adapters missing from relationship clusters: {missing}")
 
@@ -1244,7 +1245,7 @@ class TestRenderHelpRelationships(unittest.TestCase):
         from reveal.adapters.base import _ADAPTER_REGISTRY
         adapter = HelpAdapter()
         topics = set(adapter._list_topics())
-        public_schemes = set(_ADAPTER_REGISTRY.keys()) - HelpAdapter._INTERNAL_ADAPTERS
+        public_schemes = set(_ADAPTER_REGISTRY.keys()) - _SCAFFOLD_SCHEMES
         for scheme in sorted(public_schemes):
             related = adapter._related_adapters(scheme)
             self.assertTrue(related, f"help://{scheme} has no related-adapter 'next' pointer")

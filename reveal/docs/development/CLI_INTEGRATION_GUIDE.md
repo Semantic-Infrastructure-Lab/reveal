@@ -4,7 +4,6 @@ category: guide
 help_topic: cli-integration
 help_description: "Adding a new top-level subcommand to reveal's CLI"
 help_category: dev_guides
-help_token_estimate: "~2,000"
 ---
 # CLI Integration Guide
 

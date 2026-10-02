@@ -5,7 +5,6 @@ category: best-practices
 help_topic: ux
 help_description: "CLI flags vs URI query params — when to use each, progressive escalation, flag-to-param translation"
 help_category: best_practices
-help_token_estimate: "~3,000"
 ---
 
 # Reveal UX Guide: CLI Flags vs URI Query Parameters

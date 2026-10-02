@@ -4,7 +4,6 @@ category: guide
 help_topic: testability
 help_description: "Test patch pressure joined with production boundary fan-out (reveal testability)"
 help_category: feature_guides
-help_token_estimate: "~2,000"
 ---
 
 # Testability Pressure Guide

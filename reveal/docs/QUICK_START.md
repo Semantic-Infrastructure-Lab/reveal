@@ -4,7 +4,6 @@ category: reference
 help_topic: intro
 help_description: 5-minute introduction to reveal
 help_category: getting_started
-help_token_estimate: "~2,000"
 ---
 # Reveal Quick Start (5 Minutes)
 
@@ -28,11 +27,14 @@ pip install reveal-cli
 
 Reveal works in three modes based on what you pass it:
 
-| Input | Output | Token Savings |
-|-------|--------|---------------|
-| **Directory** | Tree view (what files exist) | 10-20x vs `ls -R` |
-| **File** | Structure (functions, classes) | 50-100x vs `cat` |
-| **File:Element** | Extracted code (specific function) | 20-50x vs `grep` |
+| Input | Output |
+|-------|--------|
+| **Directory** | Tree view (what files exist) |
+| **File** | Structure (functions, classes) |
+| **File:Element** | Extracted code (specific function) |
+
+Measured on real tasks, this takes typically 3.9–15x fewer tokens than reading the files
+([BENCHMARKS.md](BENCHMARKS.md)).
 
 ---
 
@@ -246,7 +248,7 @@ reveal review main..feature
 # Or just the structural diff:
 reveal diff://git://main/.:git://feature/.
 
-# Token cost: ~500 tokens (1000x reduction)
+# Token cost: the changed functions only, not the whole diff
 # Time: 30 seconds
 ```
 
@@ -306,7 +308,7 @@ reveal 'ast://./src?complexity>10'
 
 ## Advanced: URI Adapters
 
-Reveal has **35 URI adapters** for specialized queries:
+Reveal has **34 URI adapters** for specialized queries:
 
 ```bash
 # Query code structure
@@ -371,7 +373,7 @@ reveal help://anti-patterns      # What NOT to do
 
 1. **Structure before content** - See what exists before reading code
 2. **Progressive disclosure** - Directory → File → Element
-3. **Token efficiency** - 10-150x fewer tokens than cat/grep
+3. **Token efficiency** - typically 3.9–15x fewer tokens than cat/grep ([measured](BENCHMARKS.md))
 4. **Line numbers** - All output is `file:line` format (vim compatible)
 5. **Zero config** - Works out of the box on 51 languages and file formats
 

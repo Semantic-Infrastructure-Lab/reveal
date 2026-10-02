@@ -62,22 +62,19 @@ def handle_adapters(show_all: bool = False, fmt: str = 'text'):
         fmt: ``json`` prints the --discover registry for the same adapter set (it
             printed the text view, BACK-1606).
     """
-    from ...adapters.base import _ADAPTER_REGISTRY
+    from ...adapters.base import _ADAPTER_REGISTRY, list_public_schemes
 
     if fmt == 'json':
         _print_json(build_discover_payload(show_all))
         sys.exit(0)
 
-    schemes = [
-        scheme for scheme in _ADAPTER_REGISTRY
-        if show_all or not _ADAPTER_REGISTRY[scheme].internal
-    ]
+    schemes = list_public_schemes(include_internal=show_all)
 
     lines = ["URI Adapters\n", "=" * 70]
     lines.append(f"\n📡 Registered Adapters ({len(schemes)})")
     lines.append("-" * 70)
     lines.append("Query resources beyond files using URI schemes\n")
-    if not show_all and len(schemes) < len(_ADAPTER_REGISTRY):
+    if not show_all and len(schemes) < len(list_public_schemes(include_internal=True)):
         lines.append("(reveal's internal self-inspection adapters are hidden — pass --all to include them)\n")
 
     # Sort adapters by name
@@ -434,12 +431,9 @@ def build_discover_payload(show_all: bool = False) -> dict:
             by default so external users/agents see only adapters that apply
             to their own resources.
     """
-    from ...adapters.base import _ADAPTER_REGISTRY
+    from ...adapters.base import _ADAPTER_REGISTRY, list_public_schemes
 
-    schemes = [
-        scheme for scheme in _ADAPTER_REGISTRY
-        if show_all or not _ADAPTER_REGISTRY[scheme].internal
-    ]
+    schemes = list_public_schemes(include_internal=show_all)
 
     adapters = {}
     for scheme in sorted(schemes):

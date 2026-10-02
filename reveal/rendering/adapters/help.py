@@ -1,7 +1,7 @@
 """Renderer for help:// documentation adapter."""
 
 import sys
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from reveal.registry import FALLBACK_SUPPORT_NOTE
 from reveal.utils import print_json_result
@@ -67,11 +67,13 @@ def _render_help_header() -> None:
     print()
 
 
-def _render_dynamic_adapters_section(adapters: list) -> None:
+def _render_dynamic_adapters_section(adapters: list, internal: Optional[list] = None) -> None:
     """Render dynamic adapters section.
 
     Args:
         adapters: List of adapter dicts with 'scheme' and 'description'
+        internal: Registered schemes left out of the listing (reveal://), named
+            so the count is not read as the whole registry
     """
     print("## 📦 DYNAMIC CONTENT (Runtime Discovery)")
     print()
@@ -79,7 +81,7 @@ def _render_dynamic_adapters_section(adapters: list) -> None:
     if not adapters:
         return
 
-    print("### URI Adapters ({} registered)".format(len(adapters)))
+    print("### URI Adapters ({})".format(len(adapters)))
     print("Source: Live adapter registry")
     print("Updates: Automatic when new adapters added")
     print("Legend: 🟢 Stable | 🟡 Beta | 🎓 Project Adapters | 🔴 Experimental")
@@ -90,6 +92,9 @@ def _render_dynamic_adapters_section(adapters: list) -> None:
         badge = _get_stability_badge(scheme)
         print(f"  {badge} {scheme}://      - {desc}")
         print(f"                 Details: reveal help://{scheme}")
+    if internal:
+        names = ', '.join(f"{s}://" for s in internal)
+        print(f"  Not listed: {names} (inspects reveal's own source) — reveal help://{internal[0]}")
     print()
 
 
@@ -141,11 +146,11 @@ def _render_special_topics_section() -> None:
     print()
     print("  adapters         - Summary of all URI adapters")
     print("                     Type: Generated")
-    print("                     Token cost: ~1,400 tokens")
+    print("                     Token cost: ~2,300 tokens")
     print()
     print("  relationships    - Adapter ecosystem map: clusters, power pairs, cross-adapter workflows")
     print("                     Type: Generated")
-    print("                     Token cost: ~850 tokens")
+    print("                     Token cost: ~1,300 tokens")
     print()
 
 
@@ -225,7 +230,7 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
     adapters = [a for a in data.get('adapters', []) if a.get('has_help')]
     static = data.get('static_guides', [])
 
-    _render_dynamic_adapters_section(adapters)
+    _render_dynamic_adapters_section(adapters, data.get('internal_adapters'))
 
     if static:
         _render_static_guides_header()

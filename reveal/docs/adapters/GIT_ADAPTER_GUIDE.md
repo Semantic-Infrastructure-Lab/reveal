@@ -79,7 +79,7 @@ reveal 'git://.?type=history&message~=bug'
 ```
 
 **Why use git://?**
-- **Token efficient**: ~200 tokens for repository overview vs 10000+ for `git log` output
+- **Token efficient**: under ~1,000 tokens for a repository overview vs 10000+ for `git log` output
 - **Progressive disclosure**: Repository → Branch → Commit → File → History/Blame
 - **Semantic blame**: Answer "who wrote this function?" not just "who wrote line 42?"
 - **Commit filtering**: Query by author, email, message, date range
@@ -189,7 +189,7 @@ reveal git://.
 reveal git://path/to/repo
 ```
 
-**Returns** (~200 tokens):
+**Returns** (under ~1,000 tokens; the overview lists branches, tags and recent commits):
 
 ```
 Repository: /home/user/projects/myproject
@@ -1632,7 +1632,7 @@ git:// is optimized for AI agent consumption:
 
 | Operation | git log Output | reveal Output | Savings |
 |-----------|---------------|---------------|---------|
-| Repository overview | ~10000 tokens | ~200 tokens | **98%** |
+| Repository overview | ~10000 tokens | ~900 tokens | **91%** |
 | Branch history (20) | ~5000 tokens | ~300 tokens | **94%** |
 | File history (50) | ~8000 tokens | ~800 tokens | **90%** |
 | Blame summary | ~3000 tokens | ~500 tokens | **83%** |

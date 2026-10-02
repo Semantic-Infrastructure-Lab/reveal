@@ -4,7 +4,6 @@ type: reference
 help_topic: benchmarks
 help_description: "Measured token-reduction numbers vs reading files directly"
 help_category: getting_started
-help_token_estimate: "~2,000"
 beth_topics:
   - reveal
   - benchmarks

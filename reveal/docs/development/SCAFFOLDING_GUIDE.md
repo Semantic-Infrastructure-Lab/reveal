@@ -4,7 +4,6 @@ category: guide
 help_topic: scaffolding
 help_description: "Generate production-ready adapters/analyzers/rules via reveal scaffold"
 help_category: dev_guides
-help_token_estimate: "~2,650"
 ---
 # Reveal Scaffolding System
 

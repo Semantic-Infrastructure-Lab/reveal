@@ -4,7 +4,6 @@ category: guide
 help_topic: schema
 help_description: "Schema validation for markdown front matter (v0.29.0+)"
 help_category: feature_guides
-help_token_estimate: "~4,500"
 ---
 # Schema Validation for Markdown Front Matter
 

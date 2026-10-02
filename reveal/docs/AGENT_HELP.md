@@ -4,7 +4,6 @@ category: guide
 help_topic: agent
 help_description: Complete agent guide (task-based patterns, all adapters, troubleshooting)
 help_category: ai_guides
-help_token_estimate: "~49,000"
 ---
 # Reveal - AI Agent Reference
 **Version:** 0.129.0
@@ -208,15 +207,14 @@ reveal help://examples/security --format=json        # Security analysis recipes
 
 **Always use reveal instead of cat/grep/find for code files.**
 
-❌ DON'T: `cat file.py` (wastes 7,500 tokens)
-✅ DO: `reveal file.py` (uses 100 tokens, shows structure)
+❌ DON'T: `cat file.py` (every line, whether you need it or not)
+✅ DO: `reveal file.py` (its structure), then `reveal file.py func` (the part you need)
 
-**Token savings:** 10-150x reduction
+**Token savings:** typically 3.9–15x on measured tasks ([BENCHMARKS.md](BENCHMARKS.md), the only source for this number)
 
-**Why this matters:**
-- Reading a 500-line Python file: ~7,500 tokens
-- Reveal structure: ~50 tokens (150x reduction)
-- Extract specific function: ~20 tokens (375x reduction)
+**Why this matters (measured on reveal's own code):**
+- Reading a 637-line Python file with `cat`: ~5,900 tokens; its structure plus the one function needed: ~1,500 (3.9x)
+- A focused module's structure instead of `cat`: ~275 tokens instead of ~4,100 (15x)
 
 **The progressive disclosure pattern:**
 1. **Broad** - `reveal src/` (directory structure)
@@ -4366,7 +4364,7 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
 1. **Structure before content** - Always `reveal` before `Read`
    - See what exists before reading
    - Extract only what you need
-   - 10-150x token savings
+   - Typically 3.9–15x fewer tokens (BENCHMARKS.md)
 
 2. **Progressive disclosure** - Start broad, drill down as needed
    - Directory → File → Function

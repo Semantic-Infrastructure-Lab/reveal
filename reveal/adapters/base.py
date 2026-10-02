@@ -39,6 +39,8 @@ from .registry import (  # noqa: F401
     register_adapter,
     get_adapter_class,
     list_supported_schemes,
+    list_public_schemes,
+    is_internal_scheme,
     register_renderer,
     get_renderer_class,
     list_renderer_schemes,

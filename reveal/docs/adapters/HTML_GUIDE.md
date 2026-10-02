@@ -4,7 +4,6 @@ category: guide
 help_topic: html
 help_description: HTML feature guide
 help_category: feature_guides
-help_token_estimate: "~2,000"
 ---
 # HTML Analysis with Reveal
 

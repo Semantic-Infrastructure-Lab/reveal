@@ -4,7 +4,6 @@ category: guide
 help_topic: elixir
 help_description: "Elixir analyzer internals (see BACK-480: known-broken structure extraction)"
 help_category: dev_guides
-help_token_estimate: "~400"
 ---
 # Elixir Analyzer Guide
 
