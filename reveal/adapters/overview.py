@@ -128,7 +128,7 @@ def _resolve_git_root(path: Path) -> Optional[Path]:
         metadata = GitAdapter(path=str(path)).get_metadata()
         root = metadata.get('path')
         return Path(root).resolve() if root else None
-    except Exception:
+    except (ImportError, OSError, ValueError):  # no pygit2, or a path git can't open
         return None
 
 

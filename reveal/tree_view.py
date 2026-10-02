@@ -581,8 +581,8 @@ def _file_entry_json(path: Path, fast: bool) -> dict:
             entry['language'] = analyzer.type_name
         else:
             entry['size'] = os.stat(path).st_size
-    except Exception:
-        pass
+    except Exception as e:  # the entry says why it has no lines/size, rather than omitting them
+        entry['error'] = f'{type(e).__name__}: {e}'
     return entry
 
 

@@ -14,6 +14,7 @@ from ..core import disk_cache
 from ..structure_options import StructureOptions
 from ..core import node_children as _children
 from ..core import get_tree, tree_root
+from ..core.treesitter_parse import GrammarUnavailable
 from ..core.treesitter_compat import _zero_arg
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
@@ -109,8 +110,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             self._inline_tree = get_tree('markdown_inline', self.content)
             if cache_key is not None:
                 _inline_parse_cache[cache_key] = self._inline_tree
-        except Exception:
-            # Inline parsing failed - fall back to regex for links/code
+        except GrammarUnavailable:
+            # No markdown_inline grammar: fall back to regex for links/code
             pass
         return self._inline_tree
 
@@ -644,7 +645,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         try:
             target_analyzer = MarkdownAnalyzer(str(target))
             target_headings = target_analyzer._extract_headings()
-        except Exception:
+        except OSError:  # the target can't be read: its anchor can't be verified, so not flagged
             return False
 
         for heading in target_headings:

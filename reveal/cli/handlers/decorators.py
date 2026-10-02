@@ -4,9 +4,12 @@ Implements --decorator-stats: scans Python files and reports
 decorator usage across a file or directory.
 """
 
+import logging
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -47,8 +50,9 @@ def _extract_decorators_from_file(file_path: str):
         decorators_found = _collect_decorator_counts(structure)
         return (decorators_found, len(decorators_found) > 0)
 
-    except Exception:
-        return None  # Skip files we can't analyze
+    except Exception as e:  # one file must not stop the scan; it is named, not dropped unseen
+        logger.warning("decorator stats: %s skipped (%s: %s)", file_path, type(e).__name__, e)
+        return None
 
 
 def _categorize_decorators(sorted_decorators, decorator_files):

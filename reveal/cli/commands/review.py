@@ -208,8 +208,8 @@ def _run_diff(git_range: str) -> Dict[str, Any]:
         adapter = DiffAdapter(resource)
         data = adapter.get_structure()
         return {'status': 'ok', 'data': data}
-    except Exception:
-        pass
+    except Exception as e:  # any diff failure falls back to the file list, and says why
+        structural_error = f'{type(e).__name__}: {e}'
 
     # Fallback: git for changed file list
     try:
@@ -222,7 +222,8 @@ def _run_diff(git_range: str) -> Dict[str, Any]:
             capture_output=True, text=True, timeout=10, encoding='utf-8', errors='replace'
         )
         files = [f for f in result.stdout.splitlines() if f.strip()]
-        return {'status': 'ok', 'changed_files': files, 'count': len(files)}
+        return {'status': 'ok', 'changed_files': files, 'count': len(files),
+                'structural_diff_error': structural_error}
     except Exception:
         return {'status': 'unavailable'}
 

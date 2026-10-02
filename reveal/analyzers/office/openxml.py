@@ -329,14 +329,10 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
         """Parse dimension ref like 'A1:P11' and return column count."""
         if ':' not in dim_ref:
             return 0
-        try:
-            import re as _re
-            parts = dim_ref.split(':')
-            end_col = _re.match(r'([A-Za-z]+)', parts[1])
-            if end_col:
-                return XlsxAnalyzer._col_letter_to_index(end_col.group(1))
-        except Exception:  # noqa: BLE001 — dimension parsing is best-effort
-            pass
+        import re as _re
+        end_col = _re.match(r'([A-Za-z]+)', dim_ref.split(':')[1])
+        if end_col:
+            return XlsxAnalyzer._col_letter_to_index(end_col.group(1))
         return 0
 
     def _analyze_sheet(self, sheet_path: str, sheet_name: str) -> Dict[str, Any]:

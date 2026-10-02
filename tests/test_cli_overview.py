@@ -411,10 +411,17 @@ class TestResolveGitRoot(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch('reveal.adapters.overview.GitAdapter')
-    def test_exception_returns_none(self, MockAdapter):
-        MockAdapter.return_value.get_metadata.side_effect = Exception('fail')
+    def test_unopenable_repo_returns_none(self, MockAdapter):
+        MockAdapter.return_value.get_metadata.side_effect = OSError('fail')
         result = _resolve_git_root(Path('/whatever'))
         self.assertIsNone(result)
+
+    @patch('reveal.adapters.overview.GitAdapter')
+    def test_unexpected_error_propagates(self, MockAdapter):
+        # BACK-1614: a bug is not read as "not inside a repo"
+        MockAdapter.return_value.get_metadata.side_effect = RuntimeError('bug')
+        with self.assertRaises(RuntimeError):
+            _resolve_git_root(Path('/whatever'))
 
 
 class TestRunComplexFunctions(unittest.TestCase):

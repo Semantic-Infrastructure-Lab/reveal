@@ -13,6 +13,7 @@ recorded with ``note_truncation``. Text and structure are read only for the hits
 a capped search of a large tree parses only the files it shows.
 """
 
+import logging
 import re
 from collections import Counter
 from pathlib import Path
@@ -21,6 +22,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .defaults import DisplayDefaults
 from .utils.results import note_truncation, slice_items
+
+logger = logging.getLogger(__name__)
 
 _BINARY_EXTENSIONS = frozenset({
     '.pyc', '.pyo', '.pyd', '.so', '.dylib', '.dll', '.exe', '.bin', '.o', '.a',
@@ -129,7 +132,9 @@ def _get_structural_elements(path: str) -> List[Dict[str, Any]]:
         if analyzer_class is None:
             return []
         structure = analyzer_class(path).get_outline()
-    except Exception:
+    except Exception as e:  # one file's analyzer failure must not stop a grep; its hits stay, ungrouped
+        logger.warning("--grep: %s hits shown without their enclosing element (%s: %s)",
+                       path, type(e).__name__, e)
         return []
 
     elements: List[Dict[str, Any]] = []

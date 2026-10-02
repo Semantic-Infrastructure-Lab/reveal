@@ -37,17 +37,15 @@ def get_config(reveal_root: Path) -> Dict[str, Any]:
             env_vars[var] = value
 
     # Discover config files
+    # No try/except: this view exists to show the config in effect, and an empty
+    # list here would claim no project config when discovery failed (BACK-1614).
     project_configs = []
-    try:
-        discovered = RevealConfig._discover_project_configs(Path.cwd())
-        for cfg in discovered:
-            if 'path' in cfg:
-                project_configs.append({
-                    'path': str(cfg['path']),
-                    'root': cfg.get('root', False)
-                })
-    except Exception:
-        pass  # config discovery is best-effort; proceed with empty project_configs
+    for cfg in RevealConfig._discover_project_configs(Path.cwd()):
+        if 'path' in cfg:
+            project_configs.append({
+                'path': str(cfg['path']),
+                'root': cfg.get('root', False)
+            })
 
     # Check user and system configs
     user_config_path = RevealConfig._get_user_config_path()

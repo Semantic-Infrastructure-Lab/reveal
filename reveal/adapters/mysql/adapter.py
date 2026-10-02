@@ -261,8 +261,8 @@ class MySQLAdapter(ResourceAdapter):
                 host = getattr(conn, 'host', None) or self.host or 'localhost'
                 port = getattr(conn, 'port', None) or self.port or 3306
                 return f"{host}:{port}"
-            except Exception:
-                pass  # live connection attrs unavailable; fall back to config values
+            except AttributeError:
+                pass  # no live connection object; fall back to config values
         # Fallback to parsed values or defaults
         host = self.host or 'localhost'
         port = self.port or 3306

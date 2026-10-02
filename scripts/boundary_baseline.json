@@ -42,22 +42,7 @@
   "reveal/utils/updates.py": 2,
   "reveal/utils/warning_render.py": 2
  },
- "silent-except": {
-  "reveal/adapters/markdown/files.py": 1,
-  "reveal/adapters/markdown/operations.py": 1,
-  "reveal/adapters/mysql/adapter.py": 1,
-  "reveal/adapters/overview.py": 1,
-  "reveal/adapters/reveal/config.py": 1,
-  "reveal/analyzers/markdown.py": 2,
-  "reveal/analyzers/office/openxml.py": 1,
-  "reveal/cli/commands/health.py": 1,
-  "reveal/cli/commands/review.py": 1,
-  "reveal/cli/handlers/decorators.py": 1,
-  "reveal/cli/routing/formats.py": 1,
-  "reveal/diff/architecture_diff.py": 2,
-  "reveal/grep_handler.py": 1,
-  "reveal/tree_view.py": 1
- },
+ "silent-except": {},
  "subcommand-output": {
   "reveal/checks.py": 1,
   "reveal/cli/commands/review.py": 1,

@@ -209,7 +209,7 @@ def _link_graph_fingerprint(base_path: Path, all_files: List[Path]) -> Optional[
             hasher.update(rel.encode("utf-8", "replace"))
             hasher.update(f"\x00{mtime_ns}\x01{size}\x02".encode("ascii"))
         return hasher.hexdigest()
-    except Exception:
+    except OSError:
         return None
 
 

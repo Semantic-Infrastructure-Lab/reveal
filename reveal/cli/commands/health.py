@@ -1,5 +1,6 @@
 """reveal health — unified health check across resources."""
 
+import logging
 import argparse
 import sys
 from argparse import Namespace
@@ -8,6 +9,8 @@ from typing import List
 from ..global_flags import add_gitignore_arguments, rule_patterns
 from ..routing.ledger import complete
 from ..routing.subcommand import emit_subcommand_result
+
+logger = logging.getLogger(__name__)
 
 
 def create_health_parser() -> argparse.ArgumentParser:
@@ -64,15 +67,14 @@ def _detect_targets() -> List[str]:
     3. Current directory (fallback)
     """
     # 1. Check .reveal.yaml for configured targets under `health.targets`
+    from reveal.config import get_config
+    raw: dict = get_config(Path('.'))._config  # get_config reports a file it can't load
     try:
-        from reveal.config import get_config
-        config = get_config(Path('.'))
-        raw: dict = config._config
         health_targets = raw.get('health', {}).get('targets', [])
         if health_targets:
             return [str(t) for t in health_targets]
-    except Exception:  # config unavailable or malformed — fall through to defaults
-        pass
+    except (AttributeError, TypeError) as e:  # `health:` or its `targets:` has the wrong shape
+        logger.warning(".reveal.yaml health.targets ignored (%s); detecting targets instead", e)
 
     # 2. Look for common source directories
     _SOURCE_DIRS = ['src', 'lib', 'app']

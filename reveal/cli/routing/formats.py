@@ -8,9 +8,12 @@ sign of it. Only overview said so (BACK-1035). An adapter's get_help()
 seams (URI rendering, adapter-backed subcommands, the directory view).
 """
 
+import logging
 import os
 import sys
 from typing import Any, Optional, Sequence, Tuple
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_OUTPUT_FORMATS: Tuple[str, ...] = ('text', 'json')
 
@@ -24,7 +27,9 @@ def declared_output_formats(adapter_class: Any) -> Optional[Tuple[str, ...]]:
         return DEFAULT_OUTPUT_FORMATS
     try:
         help_data = get_help()
-    except Exception:  # noqa: BLE001 -- a broken help dict must not block output
+    except Exception as e:  # a broken help dict must not block output; it is a bug, so say so
+        logger.warning("%s.get_help() failed (%s); output format not checked",
+                       getattr(adapter_class, '__name__', adapter_class), e)
         return None
     if not isinstance(help_data, dict):
         return None

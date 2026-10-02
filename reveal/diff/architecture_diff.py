@@ -256,9 +256,10 @@ def _fast_exit_possible(repo, base_commit, subpath: str) -> bool:
     against an arbitrary dirty working tree would require hashing every
     file, defeating the purpose.
     """
+    import pygit2
     try:
         head_commit = repo.head.peel()
-    except Exception:
+    except (pygit2.GitError, KeyError):  # unborn or detached-and-missing HEAD: run the full diff
         return False
 
     base_oid = _subtree_oid(base_commit.tree, subpath)
@@ -268,7 +269,7 @@ def _fast_exit_possible(repo, base_commit, subpath: str) -> bool:
 
     try:
         status = repo.status()
-    except Exception:
+    except pygit2.GitError:
         return False
 
     prefix = '' if subpath in ('', '.') else subpath.rstrip('/') + '/'

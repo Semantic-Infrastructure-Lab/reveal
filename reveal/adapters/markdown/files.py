@@ -108,7 +108,7 @@ def extract_internal_links(path: Path, base_path: Path) -> List[str]:
         # Resolve relative to the source file's directory
         try:
             resolved = (path.parent / url_file).resolve()
-        except Exception:
+        except (OSError, RuntimeError, ValueError):  # unresolvable: a symlink loop, a NUL in the URL
             continue
 
         # Must exist and live under base_path
