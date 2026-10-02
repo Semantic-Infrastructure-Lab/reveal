@@ -2,7 +2,7 @@
 
 import glob
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from ..base import AdapterFlag, ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
 from .certificate import SSLFetcher, CertificateInfo, check_ssl_health, load_certificate_from_file
@@ -353,18 +353,10 @@ class SSLAdapter(ResourceAdapter):
                 }
             )
 
-        # Handle glob patterns
-        paths = glob.glob(self._nginx_path) if '*' in self._nginx_path else [self._nginx_path]
-
-        for path in paths:
-            try:
-                analyzer = NginxAnalyzer(path)
-                domains = analyzer.extract_ssl_domains()
-                all_domains.update(domains)
-                files_processed.append(path)
-            except Exception:
-                # Skip files that can't be parsed
-                pass
+        scanned, skipped = self._scan_nginx_files(lambda a: a.extract_ssl_domains())
+        for path, domains in scanned:
+            all_domains.update(domains)
+            files_processed.append(path)
 
         return ResultBuilder.create(
             result_type='ssl_nginx_domains',
@@ -375,6 +367,7 @@ class SSLAdapter(ResourceAdapter):
                 'files_processed': len(files_processed),
                 'domains': sorted(all_domains),
                 'domain_count': len(all_domains),
+                **({'files_skipped': skipped} if skipped else {}),
             }
         )
 
@@ -728,17 +721,30 @@ class SSLAdapter(ResourceAdapter):
             source=self._nginx_path, severity=severity
         )
 
-    def _collect_cert_entries(self) -> List[Dict[str, Any]]:
-        """Glob nginx path and collect ssl_certificate entries across all matching files."""
-        entries: List[Dict[str, Any]] = []
-        paths = glob.glob(self._nginx_path) if '*' in self._nginx_path else [self._nginx_path]
+    def _scan_nginx_files(
+            self, extract: Callable[[NginxAnalyzer], Any]
+    ) -> Tuple[List[Tuple[str, Any]], List[Dict[str, str]]]:
+        """Run ``extract`` over each nginx config the path (or glob) names.
+
+        Returns ``(scanned, skipped)``: ``(path, extract result)`` per file read, and
+        ``{file, error}`` per file that could not be read or parsed, so a skipped
+        config is reported instead of shrinking the answer unseen (BACK-1614).
+        """
+        nginx_path = self._nginx_path or ''
+        paths = glob.glob(nginx_path) if '*' in nginx_path else [nginx_path]
+        scanned: List[Tuple[str, Any]] = []
+        skipped: List[Dict[str, str]] = []
         for path in paths:
             try:
-                analyzer = NginxAnalyzer(path)
-                entries.extend(analyzer.extract_ssl_cert_paths())
-            except Exception:  # skip unparseable or unreadable config files
-                pass
-        return entries
+                scanned.append((path, extract(NginxAnalyzer(path))))
+            except Exception as e:  # one bad config must not hide the others' results
+                skipped.append({'file': path, 'error': f'{type(e).__name__}: {e}'})
+        return scanned, skipped
+
+    def _collect_cert_entries(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, str]]]:
+        """ssl_certificate entries across all matching files, and the files skipped."""
+        scanned, skipped = self._scan_nginx_files(lambda a: a.extract_ssl_cert_paths())
+        return [entry for _, found in scanned for entry in found], skipped
 
     @staticmethod
     def _build_cert_validation_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -762,14 +768,17 @@ class SSLAdapter(ResourceAdapter):
             self, warn_days: int = 30, critical_days: int = 7
     ) -> Dict[str, Any]:
         """Validate SSL cert files referenced in nginx config (local, no network)."""
-        all_entries = self._collect_cert_entries()
+        all_entries, skipped = self._collect_cert_entries()
         if not all_entries:
+            unread = '; '.join(f"{s['file']}: {s['error']}" for s in skipped)
             return {
                 'type': 'ssl_cert_file_validation',
                 'source': self._nginx_path,
-                'error': 'No ssl_certificate directives found in nginx config',
+                'error': (f'No nginx config could be read ({unread})' if skipped else
+                          'No ssl_certificate directives found in nginx config'),
                 'certs_checked': 0,
                 'exit_code': 1,
+                **({'files_skipped': skipped} if skipped else {}),
             }
 
         seen: set = set()
@@ -789,6 +798,7 @@ class SSLAdapter(ResourceAdapter):
             'summary': {k: v for k, v in summary.items() if k != 'overall'},
             'results': results,
             'exit_code': 0 if summary['failures'] == 0 else 2,
+            **({'files_skipped': skipped} if skipped else {}),
         }
 
     def _validate_cert_file(

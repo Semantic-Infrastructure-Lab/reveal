@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 
 from cryptography import x509
+from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.backends import default_backend
 
 from ...utils.severity import filter_by_severity
@@ -96,7 +97,7 @@ class SSLFetcher:
                     if sig_hash:
                         cert['signatureAlgorithm'] = sig_hash.name.upper()
                     cert['ocspUrl'] = self._extract_ocsp_url(binary_cert)
-                except Exception:  # noqa: BLE001 — X.509 augmentation is best-effort
+                except (ValueError, UnsupportedAlgorithm):  # undecodable DER or an unknown hash: augmentation is optional
                     pass
             return cert
         if binary_cert:
@@ -248,7 +249,7 @@ class SSLFetcher:
             for desc in aia.value:  # type: ignore[attr-defined]
                 if desc.access_method == x509.oid.AuthorityInformationAccessOID.OCSP:
                     return desc.access_location.value
-        except (x509.ExtensionNotFound, Exception):  # noqa: BLE001 — OCSP URL is optional
+        except (x509.ExtensionNotFound, ValueError):  # no AIA extension (common), or undecodable DER
             pass
         return None
 
@@ -291,7 +292,7 @@ class SSLFetcher:
                 sig_hash = cert.signature_hash_algorithm
                 if sig_hash:
                     sig_algo = sig_hash.name.upper()
-            except Exception:  # noqa: BLE001 — sig algorithm is best-effort
+            except UnsupportedAlgorithm:  # a hash cryptography doesn't know: leave it unset
                 pass
 
             result = {

@@ -63,7 +63,7 @@ def _parse_duration(run_start: str, run_end: str) -> str:
         if secs < 60:
             return f"{secs}s"
         return f"{secs // 60}m {secs % 60}s"
-    except Exception:
+    except (ValueError, TypeError):  # missing or non-ISO timestamp: no duration shown
         return ''
 
 

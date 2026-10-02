@@ -48,7 +48,7 @@ def _check_nobody_access(path: str) -> Dict[str, Any]:
             if not can_traverse:
                 acl_grants = _acl_grants_nobody(str(check), 'x')
                 if not acl_grants:
-                    acl_note = 'getfacl not installed, ACL check skipped' if acl_grants is None else 'no ACL entry'
+                    acl_note = 'getfacl unavailable or failed, ACL check skipped' if acl_grants is None else 'no ACL entry'
                     return {
                         'status': 'denied',
                         'message': (
@@ -67,7 +67,7 @@ def _check_nobody_access(path: str) -> Dict[str, Any]:
     if not can_read:
         acl_grants = _acl_grants_nobody(str(p), 'r')
         if not acl_grants:
-            acl_note = 'getfacl not installed, ACL check skipped' if acl_grants is None else 'no ACL entry'
+            acl_note = 'getfacl unavailable or failed, ACL check skipped' if acl_grants is None else 'no ACL entry'
             return {
                 'status': 'denied',
                 'message': (
@@ -84,8 +84,9 @@ def _acl_grants_nobody(path: str, perm: str) -> Optional[bool]:
     """Return True if getfacl shows nobody or other has the given permission.
 
     perm: 'r', 'w', or 'x'
-    Returns None if getfacl is not installed (ACL check skipped, not "checked, clean").
-    Returns False if getfacl ran but found no matching grant, or raised any error.
+    Returns None if getfacl is not installed or could not be run (ACL check
+    skipped, not "checked, clean"). Returns False if getfacl ran but found no
+    matching grant (BACK-1614: a timeout used to return False).
     """
     if shutil.which('getfacl') is None:
         return None
@@ -100,8 +101,8 @@ def _acl_grants_nobody(path: str, perm: str) -> Optional[bool]:
             # Lines like: user:nobody:r-x  or  other::r-x
             if line.startswith(('user:nobody:', 'other::')) and perm in line.split(':', 2)[-1]:
                 return True
-    except Exception:
-        pass
+    except (OSError, subprocess.SubprocessError):  # couldn't run, or timed out: not checked
+        return None
     return False
 
 

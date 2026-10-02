@@ -343,6 +343,9 @@ class NginxUriRenderer(TypeDispatchRenderer):
         has_gaps = result.get('has_gaps', False)
 
         NginxUriRenderer._print_fleet_header(site_count, date, nginx_conf)
+        if result.get('nginx_conf_error'):
+            print(f"  \u26a0 nginx.conf not audited ({result['nginx_conf_error']}): "
+                  "global directives are not checked")
 
         if not matrix:
             print("  No site configs found.")

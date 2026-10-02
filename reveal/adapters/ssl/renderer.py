@@ -163,11 +163,18 @@ class SSLRenderer(TypeDispatchRenderer):
         print(f"Expired: {'Yes' if result['is_expired'] else 'No'}")
 
     @staticmethod
+    def _render_files_skipped(result: dict) -> None:
+        """Name the nginx configs that could not be read: the answer leaves them out."""
+        for skipped in result.get('files_skipped') or []:
+            print(f"\u26a0 Skipped {skipped['file']}: {skipped['error']}")
+
+    @staticmethod
     def _render_ssl_nginx_domains(result: dict) -> None:
         """Render SSL domains extracted from nginx config."""
         print("SSL Domains from Nginx Config")
         print(f"Source: {result['source']}")
         print(f"Files Processed: {result['files_processed']}")
+        SSLRenderer._render_files_skipped(result)
         print(f"Domains Found: {result['domain_count']}")
         print()
 
@@ -785,6 +792,7 @@ class SSLRenderer(TypeDispatchRenderer):
         warnings = summary.get('warnings', 0)
         failures = summary.get('failures', 0)
         print(f"Certs checked: {total}  ({passed} passed, {warnings} warnings, {failures} failed)")
+        SSLRenderer._render_files_skipped(result)
         print()
 
         all_results = result.get('results', [])

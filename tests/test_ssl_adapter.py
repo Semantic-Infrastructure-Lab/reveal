@@ -227,7 +227,10 @@ class TestSSLFetcher(unittest.TestCase):
         """fetch_certificate should return parsed certificate."""
         # Setup mock
         mock_ssock = MagicMock()
-        mock_ssock.getpeercert.return_value = self._mock_cert_dict()
+        # getpeercert(binary_form=True) returns DER bytes, never the dict; None here
+        # skips the X.509 augmentation, which BACK-1614 no longer lets swallow a TypeError
+        cert_dict = self._mock_cert_dict()
+        mock_ssock.getpeercert.side_effect = lambda binary_form=False: None if binary_form else cert_dict
         mock_sock = MagicMock()
         mock_socket.return_value.__enter__.return_value = mock_sock
 
@@ -246,7 +249,10 @@ class TestSSLFetcher(unittest.TestCase):
     def test_fetch_certificate_with_verification(self, mock_socket):
         """fetch_certificate_with_verification should return verification status."""
         mock_ssock = MagicMock()
-        mock_ssock.getpeercert.return_value = self._mock_cert_dict()
+        # getpeercert(binary_form=True) returns DER bytes, never the dict; None here
+        # skips the X.509 augmentation, which BACK-1614 no longer lets swallow a TypeError
+        cert_dict = self._mock_cert_dict()
+        mock_ssock.getpeercert.side_effect = lambda binary_form=False: None if binary_form else cert_dict
         mock_sock = MagicMock()
         mock_socket.return_value.__enter__.return_value = mock_sock
 

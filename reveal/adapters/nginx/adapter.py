@@ -704,19 +704,24 @@ def _collect_site_records(search_dirs: List[str]) -> List[Dict]:
     return site_records
 
 
-def _read_global_directives(main_configs: List[str]) -> Tuple[Optional[str], Dict[str, bool]]:
-    """Find nginx.conf and audit its global directives, if readable."""
+def _read_global_directives(
+        main_configs: List[str]) -> Tuple[Optional[str], Dict[str, bool], Optional[str]]:
+    """Find nginx.conf and audit its global directives, if readable.
+
+    Returns (path, checks, error): ``error`` says why a found nginx.conf was not
+    audited, so its global checks read as "not checked", not as absent (BACK-1614).
+    """
     nginx_conf_path = _find_nginx_conf(main_configs)
     global_checks: Dict[str, bool] = {}
     if nginx_conf_path:
+        from ...analyzers.nginx import NginxAnalyzer
         try:
-            from ...analyzers.nginx import NginxAnalyzer
             analyzer = NginxAnalyzer(nginx_conf_path)
             for finding in analyzer.audit_global_directives():
                 global_checks[finding['id']] = finding['present']
-        except Exception:  # noqa: BLE001 — nginx.conf may be unreadable; skip global checks
-            pass
-    return nginx_conf_path, global_checks
+        except OSError as e:  # nginx.conf found but unreadable (permissions, as non-root)
+            return nginx_conf_path, {}, f'{type(e).__name__}: {e}'
+    return nginx_conf_path, global_checks, None
 
 
 def _fleet_site_label(r: Dict) -> str:
@@ -788,7 +793,7 @@ def _run_fleet_audit(
     site_records = _collect_site_records(search_dirs)
     site_count = len(site_records)
 
-    nginx_conf_path, global_checks = _read_global_directives(main_configs)
+    nginx_conf_path, global_checks, nginx_conf_error = _read_global_directives(main_configs)
 
     matrix = _build_fleet_matrix(site_records, site_count, global_checks)
 
@@ -799,6 +804,7 @@ def _run_fleet_audit(
         contract_version=CONTRACT_VERSION,
         data={
             'nginx_conf': nginx_conf_path,
+            **({'nginx_conf_error': nginx_conf_error} if nginx_conf_error else {}),
             'site_count': site_count,
             'date': _date.today().isoformat(),
             'matrix': matrix,
