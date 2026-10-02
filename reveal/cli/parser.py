@@ -502,7 +502,7 @@ def _add_code_analysis_options(parser: argparse.ArgumentParser) -> None:
                         help='Two modes: without element → file-level hierarchical outline '
                              '(classes with methods, nested structures); '
                              'with element → control-flow skeleton of that function '
-                             '(branches, loops, returns). '
+                             '(branches, loops, returns); on a markdown section, the headings inside it. '
                              'Example: `reveal file.py --outline` vs `reveal file.py myfunc --outline`')
     parser.add_argument('--scope', action='store_true',
                         help='Show ancestor scope chain for a line (use with :LINE syntax, e.g., reveal file.py :123 --scope)')

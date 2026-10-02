@@ -208,6 +208,13 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
     """
     from .treesitter import TreeSitterAnalyzer  # noqa: I006
 
+    # A markdown section has no control flow; its outline is its headings.
+    from .display.element import _is_markdown, extract_element  # noqa: I006
+    if getattr(args, 'outline', False) and _is_markdown(analyzer):
+        extract_element(analyzer, element, output_format, section_outline=True,
+                        depth=getattr(args, 'depth', None))
+        return
+
     if not isinstance(analyzer, TreeSitterAnalyzer) or not analyzer.tree:
         print(
             'Error: nav flags require tree-sitter analysis.\n'

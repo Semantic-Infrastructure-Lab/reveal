@@ -1753,10 +1753,13 @@ class TestMarkdownSectionOrPattern(unittest.TestCase):
         self.assertEqual(spans, [(1, 3), (10, 12)])
         self.assertTrue(result['sections'][1]['source'].startswith('# Notes'))
 
-    def test_single_substring_multi_match_keeps_spans(self):
-        """The single-term substring path (several headings contain 'Bug 11') too."""
+    def test_single_substring_nested_match_not_repeated(self):
+        """'Bug 11' is in '# Bug 11 Analysis' and in its own '## Bug 11 Details':
+        the child is part of the parent's section, so it is returned once."""
         result = self.analyzer.extract_element('section', 'Bug 11')
-        self.assertEqual([s['line_start'] for s in result['sections']], [13, 16])
+        self.assertNotIn('sections', result)
+        self.assertEqual((result['line_start'], result['line_end']), (13, 17))
+        self.assertEqual(result['source'].count('detailed bug content'), 1)
 
     def test_line_end_is_last_match(self):
         """line_end reflects the end of the latest matched section."""

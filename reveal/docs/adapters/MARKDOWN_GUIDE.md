@@ -180,10 +180,12 @@ $ reveal doc.md "Open Issues | Action Items"
 
 Each `|`-separated term follows the same matching rules as single-term extraction:
 exact match first (case-insensitive), falling back to substring match.  A term that
-matches multiple headings via substring includes all of them.
+matches multiple headings via substring includes all of them, but a section inside
+another returned section is not repeated.
 
 ```bash
-# 'Bug 11' is a substring of '# Bug 11 Analysis' AND '## Bug 11 Details' — both included
+# 'Bug 11' is in '# Bug 11 Analysis' and in its own '## Bug 11 Details':
+# the Analysis section is returned once, with Details inside it
 $ reveal doc.md "Background|Bug 11"
 ```
 
@@ -783,22 +785,47 @@ Visit [our site](https://example.com).      ✅ Extracted
 Section extraction is **case-insensitive**.  Matching applies the following
 priority rules, in order:
 
-1. **Exact match** (case-insensitive) — returns that section immediately.
+1. **Exact match** (case-insensitive) — returns that section.  A heading that
+   occurs more than once (every release's `### Fixed` in a changelog) returns
+   its first copy, and a note on stderr gives a `:N-M` address for each copy.
 2. **Substring match** — if the query appears inside exactly one heading,
    that section is returned.  If it appears in multiple headings, all are
-   returned concatenated.
+   returned, each with its own line numbers; a section nested inside another
+   matched section is not repeated.
+
+Headings are compared on their visible text: inline formatting (`` ` `` `*` `_`),
+link syntax (`[text](url)` matches as `text`), HTML entities, a trailing `{#id}`
+and a closing `##` are ignored.  A leading `#` marker in the query is dropped, so
+`reveal doc.md "## Install"` works.  A heading that looks like a line number or
+an ordinal (`## 2026`, `## Phase:1`) is found by name; an explicit `:N` is always
+a line.
 
 ```bash
 reveal doc.md "installation"   # ✅ Matches "## Installation" (case-insensitive)
 reveal doc.md "Install"        # ✅ Substring match → "## Installation"
-reveal doc.md "Bug"            # ✅ Substring match → all "## Bug *" sections concatenated
+reveal doc.md "Bug"            # ✅ Substring match → every "## Bug *" section
 ```
 
-When multiple sections match, a count prefix is shown before the content:
+When multiple sections match, a count prefix is shown, and each block is labelled
+with the heading it matched:
 
 ```
 # 3 sections matched "Bug" — showing all
-doc.md:45-212 | Bug
+
+doc.md:45-80 | Bug 9: retries
+...
+```
+
+A name that matches nothing exits 1 with a "Did you mean" from the file's
+headings and the first few heading names.
+
+**Survey a section before reading it**: `--outline` with a section name lists the
+headings inside that section instead of its text (`--depth N` collapses deeper
+levels, `--format json` gives the heading list):
+
+```bash
+reveal CURRENT_FOCUS.md "Current Focus" --outline   # its table of contents
+reveal CURRENT_FOCUS.md "Current Focus"             # then the full text, or a subsection
 ```
 
 **OR-alternation with `|`**: use pipe-separated terms to pull multiple named
@@ -812,9 +839,9 @@ reveal doc.md "Bug 11\|social_repost_log\|Action"  # grep-style \| also accepted
 Each term is resolved independently; results are deduplicated and returned in
 document order.
 
-**Short-result hint**: when a section returns 5 lines or fewer and a next heading
-follows immediately, reveal warns to stderr that it may be a label-only section
-and suggests the next section by name.
+**Label-only hint**: when a section has no body of its own (its heading is
+followed directly by the next heading at its level), reveal says so on stderr and
+names the next section.
 
 ## Output Formats
 

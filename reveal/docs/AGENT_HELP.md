@@ -2403,6 +2403,7 @@ reveal doc.md
 reveal doc.md "Installation"
 reveal doc.md "install"          # substring match → "## Installation"
 reveal doc.md --section "Installation"   # flag form (same behavior, useful in scripts)
+reveal doc.md "Installation" --outline   # the headings inside a big section, before reading it
 
 # OR-alternation: extract multiple named sections in one call
 reveal doc.md "Open Issues|Action Items"
@@ -2463,9 +2464,11 @@ reveal doc.md --related-all --related-limit 50
 ```
 
 **Section matching rules** (single term or each OR term):
-1. Exact match (case-insensitive) — returns that section only
-2. Substring match — returns all headings containing the term, concatenated in document order
+1. Exact match (case-insensitive) — returns that section only; a repeated heading returns its first copy and lists a `:N-M` address for each copy on stderr
+2. Substring match — returns all headings containing the term in document order, each with its own line numbers; a section inside another match is not repeated
 3. OR (`|`) — resolves each term independently; deduplicates; returns all in document order
+4. Compared on visible text: formatting, `[link](url)` syntax, entities, `{#id}` and a leading `## ` in the query are ignored; `## 2026` / `## Phase:1` headings are found by name (`:N` is always a line)
+5. No match → exit 1 with "Did you mean" from the file's headings
 
 **OR-pattern tips for agents:**
 - Use `|` to fetch multiple unrelated sections in one round-trip

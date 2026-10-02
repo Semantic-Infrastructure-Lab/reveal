@@ -1,5 +1,6 @@
 """Markdown file analyzer with rich entity extraction using tree-sitter."""
 
+import html
 import re
 import yaml
 import logging
@@ -24,6 +25,16 @@ _inline_parse_cache: Dict[Tuple[str, int], Any] = {}
 
 # BACK-1562: _heading_index()'s tree-derived result, per file, in the disk cache.
 _HEADINGS_CACHE_NAMESPACE = "markdown-headings"
+
+# An ATX heading's optional closing sequence (`## Title ##`); it needs a space
+# before it, so `## C#` keeps its '#'.
+_ATX_CLOSING_RE = re.compile(r'(?:^|[ \t]+)#+[ \t]*$')
+# A query written the way the heading looks in the file: `"## Install"`.
+_QUERY_MARKER_RE = re.compile(r'^#{1,6}[ \t]+')
+# Inline link or image in a heading: matched on its visible text.
+_INLINE_LINK_RE = re.compile(r'!?\[([^\]]*)\]\([^)]*\)')
+# Trailing `{#custom-id}` attribute.
+_HEADING_ID_RE = re.compile(r'[ \t]*\{#[^}]*\}[ \t]*$')
 
 
 @dataclass
@@ -278,7 +289,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 if kind.startswith('atx_h') and kind.endswith('_marker'):
                     level = int(kind[5])  # atx_h2_marker -> 2
                 elif kind == 'inline':
-                    title = self._get_node_text(child).strip()
+                    title = _ATX_CLOSING_RE.sub('', self._get_node_text(child)).strip()
             if level and title:
                 index.append((_zero_arg(node, 'start_position').row + 1, level, title))
         for node in self._find_nodes_by_type('setext_heading'):
@@ -306,8 +317,9 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 in_fence = not in_fence
                 continue
             match = None if in_fence else re.match(r'^(#{1,6})\s+(.+)$', line)
-            if match:
-                index.append((i, len(match.group(1)), match.group(2).strip()))
+            title = _ATX_CLOSING_RE.sub('', match.group(2)).strip() if match else ''
+            if match and title:
+                index.append((i, len(match.group(1)), title))
         return index
 
     def _extract_links(self, link_type: Optional[str] = None,
@@ -1177,75 +1189,31 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         """
         return re.sub(r'[`*_]', '', text)
 
-    def _collect_section_spans(self, patterns: List[str]) -> List[tuple]:
-        """Return (start_line, end_line, heading_level) spans for headings that
-        match *any* of the given patterns.
+    @classmethod
+    def _heading_key(cls, text: str) -> str:
+        """The form a heading and a query are compared in: entities decoded,
+        links reduced to their text, a trailing ``{#id}`` dropped, inline
+        formatting stripped, whitespace collapsed, lowercased."""
+        text = _INLINE_LINK_RE.sub(r'\1', html.unescape(text))
+        text = _HEADING_ID_RE.sub('', text)
+        return ' '.join(cls._strip_inline_formatting(text).split()).lower()
 
-        Matching rules per pattern (applied in priority order):
-          1. Exact match (case-insensitive) — stops scanning immediately.
-          2. Substring match — collects all headings where the pattern appears.
+    @staticmethod
+    def _query_terms(name: str) -> List[str]:
+        """The heading terms in a section query: grep-style ``\\|`` normalised to
+        ``|``, split on ``|``, and a leading ``#`` marker (``"## Install"``) dropped."""
+        terms = (_QUERY_MARKER_RE.sub('', t.strip()) for t in name.replace('\\|', '|').split('|'))
+        return [t for t in terms if t.strip()]
 
-        Results are de-duplicated and sorted by document order.
-        """
-        seen_starts: set = set()
-        spans: List[tuple] = []
-
-        for pattern in patterns:
-            pat_lower = pattern.lower()
-            pat_normalized = self._strip_inline_formatting(pat_lower)
-            exact_start = None
-            exact_level = None
-            sub_matches = []
-
-            for i, level, title in self._heading_index():
-                title_normalized = self._strip_inline_formatting(title.lower())
-                if title_normalized == pat_normalized:
-                    exact_start = i
-                    exact_level = level
-                    break
-                if pat_normalized in title_normalized:
-                    sub_matches.append((i, level))
-
-            if exact_start is not None and exact_level is not None:
-                candidates = [(exact_start, exact_level)]
-            else:
-                candidates = sub_matches
-
-            for sl, hl in candidates:
-                if sl not in seen_starts:
-                    seen_starts.add(sl)
-                    el = self._section_end(sl, hl)
-                    spans.append((sl, el, hl))
-
-        # Sort by document order
-        spans.sort(key=lambda t: t[0])
-        return spans
-
-    def _sections_result(self, name: str, spans: List[tuple]) -> Dict[str, Any]:
-        """Result for one or more (start_line, end_line) section spans.
-
-        Several matched sections are rarely contiguous, so each keeps its own
-        span in ``sections``; ``source`` is their concatenation and
-        ``line_start``/``line_end`` bound the whole match.  A renderer that
-        numbered ``source`` from ``line_start`` would give every section after
-        the first the wrong line numbers."""
-        sections = [
-            {'line_start': sl, 'line_end': el, 'source': '\n'.join(self.lines[sl - 1:el])}
-            for sl, el in spans
-        ]
-        result: Dict[str, Any] = {
-            'name': name,
-            'line_start': spans[0][0],
-            'line_end': spans[-1][1],
-            'source': '\n\n'.join(s['source'] for s in sections),
-        }
-        if len(sections) > 1:
-            result['match_count'] = len(sections)
-            result['sections'] = sections
-        return result
+    def has_heading_named(self, name: str) -> bool:
+        """True when some heading equals *name* exactly. Lets a heading such as
+        ``## 2026`` or ``## Phase:1`` win over the line / ordinal reading of the
+        same text."""
+        return bool(self._find_heading_match(name)[0])
 
     def _find_heading_match(self, pattern: str):
-        """Search headings for an exact or substring match of *pattern*.
+        """The one heading matcher: every heading equal to *pattern*, or else every
+        heading containing it.
 
         Returns:
             ``(exact_matches, substring_matches)``: ``(line, level)`` of every
@@ -1253,36 +1221,107 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             heading containing it. Substring matches only count when there is
             no exact one.
         """
-        pat_normalized = self._strip_inline_formatting(pattern.lower())
-        exact_matches = []
-        substring_matches = []
+        key = self._heading_key(_QUERY_MARKER_RE.sub('', pattern.strip()))
+        exact_matches: List[Tuple[int, int]] = []
+        substring_matches: List[Tuple[int, int, str]] = []
+        if not key:
+            return exact_matches, substring_matches
 
         for i, level, title in self._heading_index():
-            title_normalized = self._strip_inline_formatting(title.lower())
-            if title_normalized == pat_normalized:
+            title_key = self._heading_key(title)
+            if title_key == key:
                 exact_matches.append((i, level))
-            elif pat_normalized in title_normalized:
+            elif key in title_key:
                 substring_matches.append((i, level, title))
 
         return exact_matches, [] if exact_matches else substring_matches
+
+    def _heading_title(self, line: int) -> str:
+        """Display text of the heading on *line* (formatting stripped)."""
+        for i, _, title in self._heading_index():
+            if i == line:
+                return self._strip_inline_formatting(title)
+        return ''
+
+    def _section(self, start_line: int, heading_level: int) -> Dict[str, Any]:
+        """One section: the heading on *start_line* through the line before the
+        next heading at its level or above."""
+        end_line = self._section_end(start_line, heading_level)
+        return {'heading': self._heading_title(start_line), 'line_start': start_line,
+                'line_end': end_line, 'source': '\n'.join(self.lines[start_line - 1:end_line])}
+
+    def _is_label_only(self, start_line: int, end_line: int) -> bool:
+        """True when the section has no body: nothing but blank lines (or a
+        setext underline) after its heading line."""
+        return not any(line.strip() and not re.fullmatch(r'\s*(=+|-+)\s*', line)
+                       for line in self.lines[start_line:end_line])
+
+    def _duplicate_candidates(self, name: str, exact_matches: List[tuple],
+                              selected: int) -> List[Dict[str, Any]]:
+        """A repeated exact heading (every release's '### Fixed' in a changelog):
+        each copy with its `:N-M` address, so the ones not returned stay reachable
+        (BACK-1400)."""
+        return [
+            {'name': name, 'line_start': sl, 'line_end': (el := self._section_end(sl, hl)),
+             'address': f':{sl}-{el}', 'selected': sl == selected}
+            for sl, hl in exact_matches
+        ]
+
+    def _sections_result(self, name: str, sections: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Result for one or more sections, each with its own span.
+
+        A section nested inside another one already returned is dropped: its
+        lines are part of the parent (a substring hit on both ``# Bug 11
+        Analysis`` and its ``## Bug 11 Details`` used to print the child twice).
+        Several matched sections are rarely contiguous, so each keeps its own
+        span in ``sections``; ``source`` is their concatenation and
+        ``line_start``/``line_end`` bound the whole match.  A renderer that
+        numbered ``source`` from ``line_start`` would give every section after
+        the first the wrong line numbers."""
+        kept: List[Dict[str, Any]] = []
+        for section in sorted(sections, key=lambda s: s['line_start']):
+            if kept and section['line_start'] <= kept[-1]['line_end']:
+                continue
+            kept.append(section)
+        result: Dict[str, Any] = {
+            'name': name,
+            'line_start': kept[0]['line_start'],
+            'line_end': kept[-1]['line_end'],
+            'source': '\n\n'.join(s['source'] for s in kept),
+        }
+        if len(kept) > 1:
+            result['match_count'] = len(kept)
+            result['sections'] = kept
+        else:
+            result['heading'] = kept[0]['heading']
+        return result
+
+    def _term_sections(self, term: str) -> Tuple[List[Dict[str, Any]], List[tuple]]:
+        """Sections one query term selects: the first exact match, or every
+        substring match. Also returns all exact matches, for disclosure."""
+        exact_matches, substring_matches = self._find_heading_match(term)
+        if exact_matches:
+            return [self._section(*exact_matches[0])], exact_matches
+        return [self._section(sl, hl) for sl, hl, _ in substring_matches], []
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract one or more markdown sections by heading name.
 
         *name* supports ``|``-separated alternation: each ``|``-delimited
         term is matched independently and all matching sections are returned
-        concatenated in document order.  Backslash-escaped pipes (``\\|``,
-        as produced by grep-style alternation) are normalised to bare ``|``
-        before splitting.
+        in document order.  Backslash-escaped pipes (``\\|``, as produced by
+        grep-style alternation) are normalised to bare ``|`` before splitting,
+        and a leading ``#`` marker (``"## Install"``) is ignored.
 
         Within each term, matching follows priority order:
 
-        1. **Exact match** (case-insensitive) — returns that section only.
+        1. **Exact match** (case-insensitive, inline formatting, link syntax and
+           entities ignored) — returns that section. A heading that occurs more
+           than once returns its first copy and lists every copy in
+           ``candidates`` (``term_candidates`` per term for an alternation).
         2. **Substring match** — returns all headings that contain the term.
 
-        When multiple sections are found (via alternation or ambiguous
-        substring), they are concatenated with a blank line separator and
-        returned as a single result.
+        A section inside another returned section is not repeated.
 
         Args:
             element_type: ``'section'`` or ``'heading'`` (both handled identically)
@@ -1294,77 +1333,64 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         Examples::
 
-            # Single section (unchanged behaviour)
             analyzer.extract_element('section', 'Installation')
-
-            # OR-alternation: return "Open Issues" OR "Action Items"
             analyzer.extract_element('section', 'Open Issues|Action Items')
-
-            # grep-style escaped pipes work too
             analyzer.extract_element('section', 'Bug 11\\|social_repost_log\\|Action')
         """
-        # Normalise grep-style \| to bare |, then split into patterns
-        normalised = name.replace('\\|', '|')
-        patterns = [p.strip() for p in normalised.split('|') if p.strip()]
+        patterns = self._query_terms(name)
 
         # An empty / whitespace-only / pipe-only request must match nothing.
-        # `_find_heading_match('')` would substring-match every heading
-        # (`'' in title` is always True), so a mis-wired caller passing an
-        # empty name could dump the whole file as "all sections matched" —
-        # match-all is never the intent for a named-section request.
+        # An empty term would substring-match every heading, so a mis-wired
+        # caller passing an empty name could dump the whole file as "all
+        # sections matched" — match-all is never the intent for a named-section
+        # request.
         if not patterns:
             return None
 
-        if len(patterns) > 1:
-            # Multi-pattern OR path
-            spans = self._collect_section_spans(patterns)
-            if not spans:
+        sections: List[Dict[str, Any]] = []
+        duplicates: Dict[str, List[Dict[str, Any]]] = {}
+        for term in patterns:
+            term_sections, exact_matches = self._term_sections(term)
+            sections.extend(term_sections)
+            if len(exact_matches) > 1:
+                duplicates[term] = self._duplicate_candidates(
+                    term, exact_matches, term_sections[0]['line_start'])
+
+        if not sections:
+            if len(patterns) > 1:
                 return None
-            return self._sections_result(name, [(sl, el) for sl, el, _ in spans])
+            return super().extract_element(element_type, name)
 
-        # Single-pattern path (original behaviour preserved)
-        pattern = patterns[0]
-        exact_matches, substring_matches = self._find_heading_match(pattern)
-        start_line, heading_level = exact_matches[0] if exact_matches else (None, None)
+        result = self._sections_result(name, sections)
+        if len(patterns) == 1 and duplicates:
+            result['candidates'] = next(iter(duplicates.values()))
+        elif duplicates:
+            result['term_candidates'] = duplicates
 
-        if not start_line or heading_level is None:
-            if len(substring_matches) == 1:
-                start_line, heading_level, _ = substring_matches[0]
-            elif len(substring_matches) > 1:
-                # Multiple partial matches — extract and concatenate all of them
-                spans = [(sl, self._section_end(sl, hl)) for sl, hl, _ in substring_matches]
-                return self._sections_result(name, spans)
-            else:
-                return super().extract_element(element_type, name)
+        if 'sections' not in result:
+            start_line, end_line = result['line_start'], result['line_end']
+            if self._is_label_only(start_line, end_line):
+                result['label_only'] = True
+            level = next(lvl for i, lvl, _ in self._heading_index() if i == start_line)
+            # Detect the next heading for short-result hints
+            following = self._next_heading(start_line, level)
+            if following:
+                result['next_section'] = {
+                    'name': self._strip_inline_formatting(following[2]), 'line': following[0],
+                }
 
-        # Find the end of this section (next heading of same or higher level)
-        end_line = self._section_end(start_line, heading_level)
+        return result
 
-        # Extract the section
-        source = '\n'.join(self.lines[start_line-1:end_line])
-
-        result = {
-            'name': name,
-            'line_start': start_line,
-            'line_end': end_line,
-            'source': source,
-        }
-
-        # Same heading more than once (every release's '### Fixed' in a
-        # changelog): keep the first, disclose the rest like any ambiguous
-        # name (BACK-1400) -- each later one was unreachable by name.
-        if len(exact_matches) > 1:
-            result['candidates'] = [
-                {'name': name, 'line_start': sl, 'line_end': (el := self._section_end(sl, hl)),
-                 'address': f':{sl}-{el}', 'selected': sl == start_line}
-                for sl, hl in exact_matches
-            ]
-
-        # Detect the next heading for short-result hints
-        following = self._next_heading(start_line, heading_level)
-        if following:
-            result['next_section'] = {
-                'name': self._strip_inline_formatting(following[2]), 'line': following[0],
-            }
-
+    def section_headings(self, name: str) -> Optional[Dict[str, Any]]:
+        """The headings inside the section(s) *name* selects, for
+        ``reveal doc.md "Section" --outline``: the section's own table of
+        contents instead of its full text. None when nothing matches."""
+        result = self.extract_element('section', name)
+        if result is None:
+            return None
+        spans = [(s['line_start'], s['line_end']) for s in result.get('sections', [result])]
+        result['headings'] = [
+            h for h in self._extract_headings()
+            if any(start <= h['line'] <= end for start, end in spans)
+        ]
         return result

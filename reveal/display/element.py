@@ -2,8 +2,10 @@
 
 from ..reveal_types import StructureItem
 import difflib
+import shlex
 import sys
-from typing import Optional, cast
+from pathlib import Path
+from typing import TYPE_CHECKING, Optional, cast
 
 from reveal.base import FileAnalyzer
 from reveal.element_resolve import (
@@ -11,6 +13,9 @@ from reveal.element_resolve import (
 )
 from reveal.treesitter import ELEMENT_TYPE_MAP, ALL_ELEMENT_NODE_TYPES
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
+
+if TYPE_CHECKING:
+    from reveal.analyzers.markdown import MarkdownAnalyzer
 
 # Dominant category priority by file type
 _DOMINANT_CATEGORY_PRIORITY = [
@@ -125,6 +130,11 @@ def _parse_element_syntax(element: str):
     return {'type': 'name'}
 
 
+def _is_markdown(analyzer) -> bool:
+    from ..analyzers.markdown import MarkdownAnalyzer  # noqa: I006 — circular avoidance
+    return isinstance(analyzer, MarkdownAnalyzer)
+
+
 def _extract_by_syntax(analyzer, element: str, syntax: dict):
     """Extract element based on parsed syntax.
 
@@ -137,6 +147,13 @@ def _extract_by_syntax(analyzer, element: str, syntax: dict):
         Element dict or None if not found
     """
     syntax_type = syntax['type']
+
+    # A markdown heading such as `## 2026` or `## Phase:1` reads as a line
+    # number or an ordinal; an exact heading of that name wins (an explicit
+    # `:N` is always a line).
+    if (syntax_type == 'ordinal' or (syntax_type == 'line' and not element.startswith(':'))) \
+            and _is_markdown(analyzer) and analyzer.has_heading_named(element):
+        return analyzer.extract_element('section', element)
 
     if syntax_type == 'ordinal':
         return _extract_ordinal_element(analyzer, syntax['ordinal'], syntax['element_type'])
@@ -338,7 +355,7 @@ def _available_names(analyzer) -> list:
     if not structure or not isinstance(structure, dict):
         return []
     names: list = []
-    for category in ('functions', 'classes', 'methods'):
+    for category in ('functions', 'classes', 'methods', 'headings'):
         items = structure.get(category, [])
         if not isinstance(items, list):
             continue
@@ -427,6 +444,13 @@ def _handle_extraction_error(analyzer, element: str, syntax: dict):
                 f"For table or body content, use: reveal {analyzer.path} --grep '{element.split('|')[0].strip()}'",
                 file=sys.stderr
             )
+        elif _is_markdown(analyzer):
+            print(
+                "Hint: a section name matches a heading exactly or as a substring, ignoring case. "
+                f"List the headings: reveal {analyzer.path}   "
+                f"Search the text: reveal {analyzer.path} --grep '{element}'",
+                file=sys.stderr
+            )
         else:
             print(
                 f"Hint: Code extraction matches exact names. "
@@ -437,7 +461,8 @@ def _handle_extraction_error(analyzer, element: str, syntax: dict):
         _print_available_names(analyzer)
 
 
-def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, config=None):
+def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, config=None,
+                    section_outline: bool = False, depth: Optional[int] = None):
     """Extract a specific element.
 
     Args:
@@ -445,12 +470,18 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
         element: Element name to extract (supports "Class.method" hierarchy, ":LINE" syntax)
         output_format: Output format
         config: Optional RevealConfig instance
+        section_outline: Markdown only (`--outline`): list the headings inside
+            the section instead of its text (BACK-1625)
+        depth: Heading depth for section_outline (`--depth`)
     """
     # Parse element syntax to determine extraction strategy
     syntax = _parse_element_syntax(element)
 
     # Route to appropriate extraction handler
-    result = _extract_by_syntax(analyzer, element, syntax)
+    if section_outline:
+        result = cast('MarkdownAnalyzer', analyzer).section_headings(element)
+    else:
+        result = _extract_by_syntax(analyzer, element, syntax)
 
     # Handle extraction failure
     if not result:
@@ -458,7 +489,28 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
         sys.exit(1)
 
     # Output result in requested format
-    _output_result(analyzer, result, element, output_format, config)
+    if section_outline:
+        _output_section_outline(analyzer, result, element, output_format, depth)
+    else:
+        _output_result(analyzer, result, element, output_format, config)
+
+
+def _output_section_outline(analyzer, result, element: str, output_format: str,
+                            depth: Optional[int]) -> None:
+    """`reveal doc.md "Section" --outline`: the headings inside that section, the
+    way `reveal doc.md` lists the whole file's, so a large section can be
+    surveyed before its text is read."""
+    from .formatting import _format_markdown_headings  # noqa: I006 — circular avoidance
+
+    if output_format == 'json':
+        print(safe_json_dumps(result))
+        return
+    spans = ', '.join(f"{s['line_start']}-{s['line_end']}" for s in result.get('sections', [result]))
+    print(f"{analyzer.path}:{spans} | {element}\n")
+    print(f"Headings ({len(result['headings'])}):")
+    _format_markdown_headings(result['headings'], Path(analyzer.path), output_format,
+                              depth_override=depth)
+    print(f"\n      reveal {analyzer.path} {shlex.quote(element)}  # Extract the full section")
 
 
 def _extract_hierarchical_element(analyzer, element: str):
@@ -540,7 +592,8 @@ def _extract_markdown_section_at_line(analyzer, target_line: int):
         for line, level, title in analyzer._heading_index()
     ]
 
-    if not headings:
+    # A line past the end is not "in" the last section (BACK-1625).
+    if not headings or target_line > len(analyzer.lines):
         return None
 
     # Find the heading that contains the target line
@@ -555,15 +608,8 @@ def _extract_markdown_section_at_line(analyzer, target_line: int):
     if not containing_heading:
         return None
 
-    # Find the end of this section (next heading of same or higher level)
     start_line = cast(int, containing_heading['line'])
-    heading_level = cast(int, containing_heading['level'])
-    end_line = len(analyzer.lines)
-
-    for h in headings:
-        if cast(int, h['line']) > start_line and cast(int, h['level']) <= heading_level:
-            end_line = cast(int, h['line']) - 1
-            break
+    end_line = analyzer._section_end(start_line, cast(int, containing_heading['level']))
 
     # Extract the section content
     source = '\n'.join(analyzer.lines[start_line-1:end_line])
@@ -814,7 +860,7 @@ def _output_sections(analyzer, path, name: str, sections, output_format: str, co
             continue
         if i:
             print()
-        print(f"{path}:{start}-{end} | {name}\n")
+        print(f"{path}:{start}-{end} | {section.get('heading') or name}\n")
         print(analyzer.format_with_lines(source, start))
     if output_format != 'grep':
         line_count = sum(s['line_end'] - s['line_start'] + 1 for s in sections)
@@ -862,6 +908,9 @@ def _output_result(analyzer, result, element: str, output_format: str, config=No
     if result.get('candidates'):
         for line in ambiguity_note(path, element, result['candidates']):
             print(line, file=sys.stderr)
+    for term, candidates in result.get('term_candidates', {}).items():
+        for line in ambiguity_note(path, term, candidates):
+            print(line, file=sys.stderr)
 
     # Match count prefix for multi-section results
     if match_count and match_count > 1 and output_format not in ('json', 'grep'):
@@ -884,11 +933,11 @@ def _output_result(analyzer, result, element: str, output_format: str, config=No
         formatted = analyzer.format_with_lines(source, line_start)
         print(formatted)
 
-        # Short-result hint for single-section extractions that look like label-only sections
+        # A heading with no body of its own: point at where the content is
         line_count = line_end - line_start + 1
         next_section = result.get('next_section')
-        if next_section and line_count <= 5 and output_format not in ('json', 'grep'):
-            print(f"\n⚠ Short result ({line_count} lines) — this section may be a label only.",
+        if next_section and result.get('label_only') and output_format not in ('json', 'grep'):
+            print(f"\n⚠ Short result ({line_count} lines) — this section is a label only.",
                   file=sys.stderr)
             print(f"   Next section: {next_section['name']} (line {next_section['line']})",
                   file=sys.stderr)
