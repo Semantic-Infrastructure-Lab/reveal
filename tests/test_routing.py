@@ -1040,7 +1040,11 @@ class TestHandleFileOrDirectory(unittest.TestCase):
 
             with patch('reveal.cli.commands.check.run_check') as mock_run:
                 handle_file_or_directory(temp_dir, mock_args)
-                mock_run.assert_called_once_with(mock_args)
+                # run_check gets the same args, wrapped by the flag ledger (BACK-1606)
+                mock_run.assert_called_once()
+                passed = mock_run.call_args[0][0]
+                for key, value in vars(mock_args).items():
+                    self.assertEqual(getattr(passed, key), value)
 
     def test_file_calls_handle_file(self):
         """Verify file path calls handle_file."""
@@ -1094,7 +1098,7 @@ class TestHandleFileOrDirectory(unittest.TestCase):
 
             with patch('reveal.cli.commands.check.run_check') as mock_run:
                 handle_file_or_directory(tmpdir, mock_args)
-                mock_run.assert_called_once_with(mock_args)
+                mock_run.assert_called_once()
                 # Verify args with json format were passed through
                 self.assertEqual(mock_run.call_args[0][0].format, 'json')
 
