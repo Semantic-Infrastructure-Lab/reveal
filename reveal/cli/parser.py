@@ -13,6 +13,7 @@ from typing import Optional
 # an unexpected site-packages path instead of silently resolving.
 _PACKAGE_DIR = Path(__file__).resolve().parent.parent
 from .global_flags import add_exclude_argument, add_gitignore_arguments, rule_patterns
+from ..rules.base import category_legend
 
 
 def _build_core_examples() -> str:
@@ -413,7 +414,7 @@ def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--config', type=str, metavar='FILE',
                         help='Configuration file to use (.reveal.yaml or pyproject.toml)')
     parser.add_argument('--select', type=rule_patterns, metavar='RULES',
-                        help='Select specific rules or categories (e.g., "B,S,T" or "B001,S701"). Categories: B=Bugs, C=Complexity, I=Imports, M=Maintainability, R=Refactoring, S=Security, T=Types')
+                        help=f'Select specific rules or categories (e.g., "B,S,T" or "B001,S701"). Categories: {category_legend()}')
     parser.add_argument('--ignore', type=rule_patterns, metavar='RULES',
                         help='Ignore specific rules or categories (e.g., "E501" or "C")')
     parser.add_argument('--no-group', action='store_true', dest='no_group',
@@ -425,7 +426,7 @@ def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--profiles', action='store_true',
                         help='List all available rule profiles (built-in and project-defined)')
     parser.add_argument('--schema', action='store_true',
-                        help='Show Output Contract v1.0 specification for stable JSON output')
+                        help='Show the Output Contract specification (the fields every JSON result carries)')
     parser.add_argument('--explain', type=str, metavar='CODE',
                         help='Explain a specific rule (e.g., "B001")')
     parser.add_argument('--severity', type=str, metavar='LEVEL',

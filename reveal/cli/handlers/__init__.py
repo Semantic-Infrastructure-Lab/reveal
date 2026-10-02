@@ -19,7 +19,7 @@ from .introspection import (
     handle_language_info,
     handle_agent_help,
     handle_schema,
-    _get_schema_v1,
+    _get_schema,
     handle_rules_list,
     handle_profiles_list,
     handle_explain_rule,
@@ -66,7 +66,7 @@ _handle_decorator_stats = handle_decorator_stats
 
 __all__ = [
     # Introspection
-    '_get_schema_v1',
+    '_get_schema',
     '_normalize_patterns',
     'handle_list_supported',
     'handle_languages',

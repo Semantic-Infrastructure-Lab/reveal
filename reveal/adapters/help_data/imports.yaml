@@ -139,7 +139,7 @@ see_also:
   - 'reveal help://calls - Function-level call graph and dead code'
   - 'reveal help://stats - Codebase metrics and hotspots'
   - 'reveal help://configuration - Layer violation config (.reveal.yaml)'
-  - 'reveal file.py --check - Import quality rules (I001-I004)'
+  - 'reveal file.py --check --select I - Import quality rules (every I rule: reveal --rules)'
 
 output_formats:
   - text

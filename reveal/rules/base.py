@@ -164,6 +164,24 @@ class RulePrefix(Enum):
     # T004: Implicit Optional (PEP 484 violation)
 
 
+# Display names for the categories that have a shipped rule, in the order
+# `--rules` lists them. Help text is built from this (category_legend), not
+# typed per flag: check --help named 7 of 14 (BACK-1610).
+# tests/test_rule_categories_back1610.py checks it against the registry both
+# ways, so a category with no rule (PERF today) is not advertised.
+CATEGORY_TITLES = {
+    'B': 'Bugs', 'C': 'Complexity', 'D': 'Duplicates', 'E': 'Errors',
+    'F': 'Frontmatter', 'I': 'Imports', 'L': 'Links', 'M': 'Maintainability',
+    'N': 'Nginx', 'R': 'Refactoring', 'S': 'Security', 'T': 'Types',
+    'U': 'URLs', 'V': 'Validation',
+}
+
+
+def category_legend() -> str:
+    """'B=Bugs, C=Complexity, ...' for help text."""
+    return ', '.join(f'{prefix}={title}' for prefix, title in CATEGORY_TITLES.items())
+
+
 @dataclass
 class Detection:
     """

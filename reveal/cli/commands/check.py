@@ -12,9 +12,11 @@ Usage:
 
 import sys
 import argparse
+import textwrap
 from pathlib import Path
 from argparse import Namespace
 from ..global_flags import add_exclude_argument, add_gitignore_arguments, rule_patterns
+from ...rules.base import category_legend
 from ..routing.ledger import complete
 
 
@@ -43,8 +45,8 @@ def create_check_parser() -> argparse.ArgumentParser:
             '  reveal check ./src --select B,S     # bugs and security only\n'
             '  reveal check ./src --format json    # machine-readable output\n'
             '\n'
-            'Rule categories: B=Bugs, C=Complexity, I=Imports, M=Maintainability,\n'
-            '                 R=Refactoring, S=Security, T=Types\n'
+            + textwrap.fill(f'Rule categories: {category_legend()}', width=78,
+                            subsequent_indent=' ' * 17) + '\n'
             '\n'
             'See also: reveal check --rules   (list all rules)\n'
             '          reveal check --explain B001'
@@ -60,8 +62,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '--select', type=rule_patterns, metavar='RULES',
         help='Select specific rules or categories (e.g., "B,S,T" or "B001,S701"). '
-             'Categories: B=Bugs, C=Complexity, I=Imports, M=Maintainability, '
-             'R=Refactoring, S=Security, T=Types',
+             f'Categories: {category_legend()}',
     )
     parser.add_argument(
         '--ignore', type=rule_patterns, metavar='RULES',

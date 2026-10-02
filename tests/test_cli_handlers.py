@@ -27,7 +27,7 @@ from reveal.cli.handlers import (
     handle_language_info,
     handle_agent_help,
     handle_schema,
-    _get_schema_v1,
+    _get_schema,
     _aggregate_batch_stats,
     _group_results_by_scheme,
     _filter_batch_display_results,
@@ -586,23 +586,27 @@ class TestHandleSchema(unittest.TestCase):
     @patch('sys.exit')
     @patch('sys.stdout', new_callable=StringIO)
     def test_handle_schema_default_version(self, mock_stdout, mock_exit):
-        """Test --schema with default version (1.0)."""
+        """--schema prints the contract results carry (BACK-1610: it said v1.0 under 1.1)."""
+        from reveal.reveal_types import CONTRACT_VERSION
         handle_schema()
 
         output = mock_stdout.getvalue()
-        self.assertIn('Output Contract v1.0', output)
+        self.assertIn(f'Output Contract v{CONTRACT_VERSION}', output)
+        self.assertIn(f"contract_version: '{CONTRACT_VERSION}'", output)
+        self.assertIn('meta:', output)
         self.assertIn('contract_version', output)
         self.assertIn('source_type', output)
         mock_exit.assert_called_once_with(0)
 
     @patch('sys.exit')
     @patch('sys.stdout', new_callable=StringIO)
-    def test_handle_schema_explicit_v1(self, mock_stdout, mock_exit):
-        """Test --schema with explicit v1.0."""
-        handle_schema(version='1.0')
+    def test_handle_schema_explicit_current(self, mock_stdout, mock_exit):
+        """Test --schema with the current version named explicitly."""
+        from reveal.reveal_types import CONTRACT_VERSION
+        handle_schema(version=CONTRACT_VERSION)
 
         output = mock_stdout.getvalue()
-        self.assertIn('Output Contract v1.0', output)
+        self.assertIn(f'Output Contract v{CONTRACT_VERSION}', output)
         mock_exit.assert_called_once_with(0)
 
     @patch('sys.stderr', new_callable=StringIO)
@@ -613,28 +617,28 @@ class TestHandleSchema(unittest.TestCase):
 
         error = mock_stderr.getvalue()
         self.assertIn("Unknown contract version '2.0'", error)
-        self.assertIn('Available versions: 1.0', error)
+        self.assertIn('Available versions: 1.1', error)
         self.assertEqual(cm.exception.code, 1)
 
 
 class TestGetSchemaV1(unittest.TestCase):
-    """Tests for _get_schema_v1 internal function."""
+    """Tests for _get_schema internal function."""
 
-    def test_get_schema_v1_content(self):
-        """Test _get_schema_v1 returns v1.0 schema content."""
-        schema = _get_schema_v1()
+    def test_get_schema_content(self):
+        """Test _get_schema returns the current schema content."""
+        schema = _get_schema()
 
         # Should contain key sections
-        self.assertIn('Output Contract v1.0', schema)
+        self.assertIn('Output Contract v1.1', schema)
         self.assertIn('Required Fields:', schema)
         self.assertIn('contract_version', schema)
         self.assertIn('type:', schema)
         self.assertIn('source:', schema)
         self.assertIn('source_type:', schema)
 
-    def test_get_schema_v1_source_types(self):
-        """Test _get_schema_v1 documents valid source_type values."""
-        schema = _get_schema_v1()
+    def test_get_schema_source_types(self):
+        """Test _get_schema documents valid source_type values."""
+        schema = _get_schema()
 
         # Should list all valid source types
         self.assertIn('file', schema)
@@ -643,9 +647,9 @@ class TestGetSchemaV1(unittest.TestCase):
         self.assertIn('runtime', schema)
         self.assertIn('network', schema)
 
-    def test_get_schema_v1_type_rules(self):
-        """Test _get_schema_v1 documents type field rules."""
-        schema = _get_schema_v1()
+    def test_get_schema_type_rules(self):
+        """Test _get_schema documents type field rules."""
+        schema = _get_schema()
 
         # Should explain snake_case requirement
         self.assertIn('snake_case', schema)

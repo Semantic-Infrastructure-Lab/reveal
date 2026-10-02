@@ -843,7 +843,7 @@ def _render_help_languages(data: Dict[str, Any]) -> None:
         level = entry.get('conformance_level')
         tag = f" [{level}]" if level else ""
         marker = " *" if entry.get('content_dependent') else ""
-        print(f"  {entry.get('name', ''):20} ({entry.get('extension', '')}){tag}{marker}")
+        print(f"  {entry.get('name', ''):20} ({', '.join(entry.get('extensions', []))}){tag}{marker}")
     print()
     print(f"## Tree-sitter Fallback ({len(fallback)})")
     print(FALLBACK_SUPPORT_NOTE)

@@ -2,7 +2,7 @@
 title: Elixir Analyzer Guide
 category: guide
 help_topic: elixir
-help_description: "Elixir analyzer internals (see BACK-480: known-broken structure extraction)"
+help_description: "Elixir analyzer internals: how def/defmodule macro calls become functions and modules"
 help_category: dev_guides
 ---
 # Elixir Analyzer Guide

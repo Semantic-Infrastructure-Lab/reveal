@@ -190,32 +190,35 @@ def handle_agent_help():
 
 
 def handle_schema(version: Optional[str] = None):
-    """Handle --schema flag to show Output Contract specification.
+    """Handle --schema flag to show the Output Contract specification.
 
-    Displays the v1.0 Output Contract schema that all adapters/analyzers
-    should conform to for stable JSON output.
+    Prints the current contract (CONTRACT_VERSION, which results carry). It
+    printed v1.0 while every result said 1.1 (BACK-1610).
 
     Args:
-        version: Contract version to display (defaults to '1.0')
+        version: Contract version to display (defaults to the current one)
     """
-    if version is None or version == '1.0':
-        print(_get_schema_v1())
+    from ...reveal_types import CONTRACT_VERSION
+    if version is None or version == CONTRACT_VERSION:
+        print(_get_schema())
     else:
         print(f"Error: Unknown contract version '{version}'", file=sys.stderr)
-        print("Available versions: 1.0", file=sys.stderr)
+        print(f"Available versions: {CONTRACT_VERSION}", file=sys.stderr)
         sys.exit(1)
     sys.exit(0)
 
 
-def _get_schema_v1() -> str:
-    """Get Output Contract v1.0 specification."""
-    return """Output Contract v1.0
+def _get_schema() -> str:
+    """The current Output Contract specification (summary of OUTPUT_CONTRACT.md)."""
+    from ...reveal_types import CONTRACT_VERSION
+    v = CONTRACT_VERSION
+    return f"""Output Contract v{v}
 ======================
 
-All adapter/analyzer outputs MUST include these 4 required fields:
+Every adapter/analyzer result includes these 4 required fields:
 
 Required Fields:
-  contract_version: '1.0'          # Contract version (semver)
+  contract_version: '{v}'          # Contract version (semver)
   type:             str            # Output type (snake_case)
   source:           str            # Data source identifier
   source_type:      str            # Source category
@@ -233,6 +236,19 @@ Type Field Rules:
   - Examples: 'ast_query', 'mysql_server', 'environment'
   - ✗ Invalid: 'ast-query' (hyphens), 'AstQuery' (camelCase)
 
+Trust metadata (added in v1.1, optional):
+  meta:
+    parse_mode:   str        # tree_sitter_full | tree_sitter_partial | fallback | regex | heuristic
+    confidence:   float      # 0.0-1.0
+    warnings:     list       # Non-fatal issues; a cut list is a {{'type': 'truncated', ...}} entry
+    errors:       list       # Fatal issues (with fallback info)
+
+Outcomes (exit code from the router):
+  failed          a non-empty top-level 'error' string        exit 1
+  not applicable  'applicable': false plus a 'reason'         exit 0
+  truncated       a meta.warnings entry of type 'truncated'   exit 0
+  ok              none of these (an empty answer is still ok) exit 0
+
 Recommended Optional Fields:
   metadata:     dict     # Generic counts, timestamps, metrics
   query:        dict     # Applied filters or search parameters
@@ -246,27 +262,21 @@ Line Number Fields:
     line_end:   int      # Last line (1-indexed, inclusive)
 
 Example Compliant Output:
-  {
-    'contract_version': '1.0',
+  {{
+    'contract_version': '{v}',
     'type': 'ast_query',
     'source': 'src/main.py',
     'source_type': 'file',
-    'metadata': {
-      'total_results': 42,
-      'timestamp': '2026-01-17T14:30:00Z'
-    },
+    'meta': {{'parse_mode': 'tree_sitter_full', 'warnings': []}},
     'results': [...]
-  }
+  }}
 
 Validation:
   Run V023 validation rule to check compliance:
-    reveal --check reveal/adapters/myadapter.py --select V023
+    reveal reveal/adapters/myadapter.py --check --select V023
 
 Documentation:
-  Full specification: docs/OUTPUT_CONTRACT.md
-  Design rationale:   internal-docs/research/OUTPUT_CONTRACT_ANALYSIS.md
-
-Status: Beta 🟡 (v1.0 in development)
+  Full specification: reveal help://output  (reveal/docs/development/OUTPUT_CONTRACT.md)
 """
 
 
