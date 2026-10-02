@@ -23,12 +23,12 @@ pip install reveal-cli
 
 ## What Makes It Different
 
-**Progressive disclosure — the only way in.** `dir → file → element` isn't optional; it's the architecture. You cannot accidentally dump 7,000 tokens of raw code.
+**Progressive disclosure is the default.** `dir → file → element`: a directory shows its tree, a file its outline, an element its code. Raw source comes back only when you name an element or a line range.
 
 ```bash
-reveal src/                          # tree structure (~50-200 tokens)
-reveal src/auth.py                   # imports, functions, classes (~200-500 tokens)
-reveal src/auth.py validate_token    # exact code (~100-300 tokens)
+reveal src/                          # tree structure (~100-3,000 tokens, by size)
+reveal src/auth.py                   # imports, functions, classes (~150-750 tokens)
+reveal src/auth.py validate_token    # exact code (~100-600 tokens)
 ```
 
 **Local-first.** No backend, no API keys, no data leaving the machine. Runs in CI/CD pipelines, air-gapped environments, and anywhere you'd use a Unix tool.

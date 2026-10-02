@@ -6,6 +6,8 @@
 - help://languages printed "()" for every explicit analyzer's extensions.
 """
 
+import pytest
+
 from reveal.rules import RuleRegistry
 from reveal.rules.base import CATEGORY_TITLES, RulePrefix, category_legend
 
@@ -46,3 +48,15 @@ def test_help_languages_lists_each_analyzers_extensions():
     assert '()' not in text
     for entry in build_languages_payload()['explicit']:
         assert f"({', '.join(entry['extensions'])})" in text, entry['name']
+
+
+def test_mcp_check_doc_names_every_category():
+    """BACK-1612: reveal_check's description called B/F/N/V 'style violations'
+    and left the other series out; its series list must cover every category."""
+    import re
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_check
+    doc = ' '.join((reveal_check.__doc__ or '').split())
+    legend = doc.split('Rule series:', 1)[1].split('(full list', 1)[0]
+    named = set(re.findall(r'(?:^|, )([A-Z]) ', legend.strip()))
+    assert named == set(CATEGORY_TITLES), legend

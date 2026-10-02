@@ -162,7 +162,7 @@ Tokens are not the only measure. **Signal density** — how much of what the age
 
 `grep -r 'handle_file'` returns 560 tokens but ~30% is noise (imports, string matches, repeated filename prefixes). `calls://?target=handle_file` returns 84 tokens, all signal.
 
-Reveal's progressive disclosure enforces a useful property: **you can't accidentally dump 7,000 tokens of raw code**. The architecture makes the efficient path the default path.
+Reveal's progressive disclosure makes the efficient path the default: **raw code comes back only for an element or a line range you name**; a directory or file answers with its tree or outline.
 
 ---
 

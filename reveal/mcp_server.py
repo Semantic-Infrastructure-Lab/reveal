@@ -105,8 +105,8 @@ mcp = MCPServer(
         "screen. This is reveal's own best answer to \"what is this repo\" — "
         "start here before structure/element/nav on unfamiliar code.\n"
         "1. reveal_structure(dir) — understand what's in a directory (~100-3,000 tokens, by size)\n"
-        "2. reveal_structure(file) — see all functions/classes (200-500 tokens)\n"
-        "3. reveal_element(file, fn) — read one function's implementation (100-300 tokens)\n"
+        "2. reveal_structure(file) — see all functions/classes (~150-750 tokens; ~1,300 for a 1,000-line module)\n"
+        "3. reveal_element(file, fn) — read one function's implementation (~100-600 tokens)\n"
         "4. reveal_nav(file, fn, flag) — deep-dive analysis without reading source:\n"
         "   boundary    — INPUTS + ENVIRONMENT + EFFECTS in one report\n"
         "   deps        — variables flowing into the function\n"
@@ -258,8 +258,8 @@ def reveal_structure(path: str, depth: int = 3, ext: str = '', exclude: str = ''
     For **files**: returns imports, functions, and classes with their signatures.
 
     This is the first step of progressive disclosure — understand the shape
-    before drilling into implementation. Costs 50-500 tokens vs thousands for
-    reading files directly.
+    before drilling into implementation. A file costs ~150-750 tokens, a
+    directory ~100-3,000 by size, vs thousands for reading files directly.
 
     Args:
         path: File or directory path to inspect (absolute or relative to cwd)
@@ -447,8 +447,8 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
 
     Use for anything outside the file/nav workflow: call graphs, dead-code
     detection, import health, git history, SSL/domain checks, database/Excel
-    inspection, doc search, and more — same operators and output shape across
-    every adapter.
+    inspection, doc search, and more — one URI syntax for every adapter; the
+    query keys each adapter accepts are its own (see below).
 
     Lost, or need an adapter you don't know the name of? Start with
     reveal_query('help://quick') — a map of every adapter and common task.
@@ -570,12 +570,14 @@ def reveal_pack(
 def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = '') -> str:
     """Run quality checks on a file or directory.
 
-    Detects: cyclomatic complexity hotspots, maintainability issues, style
-    violations (B-series, F-series, N-series, V-series rules), broken links,
-    missing documentation, and security patterns.
+    Rule series: B bugs, C complexity, D duplicates, E style (line length),
+    F front matter, I imports, L links, M maintainability, N nginx,
+    R refactoring, S security, T types, U URLs, V reveal self-validation
+    (full list: reveal_query('help://rules')).
 
-    Returns issues grouped by severity. Exit behavior mirrors the CLI:
-    clean output means no issues found.
+    Returns issues grouped by file, one line each (line, rule code, message,
+    severity), then the total; or "No issues found." Notes come first for
+    rules skipped on a language and files that errored or didn't parse cleanly.
 
     Args:
         path: File or directory to check (recurses into directories)

@@ -249,10 +249,10 @@ reveal_query("overview://src/")             # quality score, hotspots, git activ
 reveal_structure("src/")                    # ~100-3,000 tokens by size: what files exist
 
 # 2. Understand a specific file
-reveal_structure("src/auth.py")             # 200-500 tokens: all functions
+reveal_structure("src/auth.py")             # ~150-750 tokens: all functions
 
 # 3. Read only what you need
-reveal_element("src/auth.py", "validate_token")  # 100-300 tokens: one function
+reveal_element("src/auth.py", "validate_token")  # ~100-600 tokens: one function
 
 # 4. PR review context in one call
 reveal_pack("src/", since="main", budget=8000, content=True)
