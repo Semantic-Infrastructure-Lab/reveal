@@ -982,7 +982,12 @@ def print_truncations(result: dict, output_format: str) -> None:
     answer. Renderers leave ``truncated`` warnings to this. JSON already carries them in
     ``meta.warnings``; text gets them after the body, on stdout with it; any other format
     (grep) gets them on stderr, so its lines stay parseable.
+
+    A result that chose its own format (xlsx ``?format=csv``, ``preferred_format``) is
+    rendered in it whatever ``--format`` says, so it decides the stream: a CSV export's
+    cut goes to stderr, not into the CSV (BACK-1608).
     """
+    output_format = result.get('preferred_format') or output_format
     if output_format == 'json':
         return
     stream = sys.stdout if output_format == 'text' else sys.stderr

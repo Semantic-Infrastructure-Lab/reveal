@@ -8,10 +8,12 @@ Supports:
 All are ZIP archives containing XML files following the ECMA-376 standard.
 """
 
+import re
 import xml.etree.ElementTree as ET
 from typing import Dict, Any, List, Optional
 from ...registry import register
 from ...utils import format_size
+from ...utils.path_utils import to_posix
 from ...utils.results import ResultBuilder
 from .base import ZipXMLAnalyzer
 from reveal.reveal_types import CONTRACT_VERSION
@@ -231,6 +233,7 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
 
     CONTENT_PATH = 'xl/workbook.xml'
     NAMESPACES = OPENXML_NS
+    PREVIEW_ROWS = 20  # rows a sheet element (reveal file.xlsx Sheet) shows
 
     def __init__(self, path: str):
         super().__init__(path)
@@ -329,8 +332,7 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
         """Parse dimension ref like 'A1:P11' and return column count."""
         if ':' not in dim_ref:
             return 0
-        import re as _re
-        end_col = _re.match(r'([A-Za-z]+)', dim_ref.split(':')[1])
+        end_col = re.match(r'([A-Za-z]+)', dim_ref.split(':')[1])
         if end_col:
             return XlsxAnalyzer._col_letter_to_index(end_col.group(1))
         return 0
@@ -386,49 +388,86 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
         }
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
-        """Extract a sheet by name."""
-        if self.content_tree is None:
+        """Extract a sheet by name: a text preview of its first rows."""
+        sheet_ref = self._find_sheet(name)
+        if sheet_ref is None:
             return None
+        idx, sheet_name, sheet_path = sheet_ref
+        sheet_info = self._analyze_sheet(sheet_path, sheet_name)
 
+        # Get preview of data and format as text
+        preview = self._get_sheet_preview(sheet_path, max_rows=self.PREVIEW_ROWS)
+        lines = []
+        for row in preview:
+            lines.append(' | '.join(str(cell) for cell in row))
+
+        dim = sheet_info.get('dimension', '')
+        header = f"Sheet: {sheet_name}"
+        if dim:
+            header += f" ({dim})"
+        header += f"\nRows: {sheet_info.get('rows', 0)}, Cols: {sheet_info.get('cols', 0)}"
+        if sheet_info.get('formulas'):
+            header += f", Formulas: {sheet_info['formulas']}"
+
+        source = header + "\n\n" + '\n'.join(lines)
+        # BACK-1608: the preview showed 20 rows of a 119-row sheet and said nothing.
+        hidden = sheet_info.get('rows', 0) - self.PREVIEW_ROWS
+        if hidden > 0:
+            source += (f"\n\n... {hidden} more rows not shown -- "
+                       f"reveal 'xlsx://{to_posix(self.path)}?sheet={sheet_name}&format=csv' for every row")
+
+        return {
+            'name': sheet_name,
+            'line_start': idx + 1,
+            'line_end': idx + 1 + len(lines),
+            'source': source,
+        }
+
+    def _sheets(self) -> List[tuple]:
+        """``(index, name, part path)`` for each sheet, in workbook order."""
+        if self.content_tree is None:
+            return []
         xl = self.NAMESPACES['xl']
         sheets_elem = self.content_tree.find(f'{{{xl}}}sheets')
         if sheets_elem is None:
+            return []
+        return [(idx, sheet.get('name', ''), f'xl/worksheets/sheet{idx + 1}.xml')
+                for idx, sheet in enumerate(sheets_elem.findall(f'{{{xl}}}sheet'))]
+
+    def sheet_names(self) -> List[str]:
+        """The sheet names, in workbook order (xlsx:// ``?sheet=0`` is the first)."""
+        return [name for _, name, _ in self._sheets()]
+
+    def _find_sheet(self, name: str) -> Optional[tuple]:
+        """``(index, name, part path)`` of the sheet called *name*, else None.
+
+        An exact (case-insensitive) name wins over a partial one, so ``Sales`` opens
+        ``Sales`` even when ``Sales Archive`` comes first in the workbook.
+        """
+        sheets = self._sheets()
+        wanted = name.lower()
+        exact = [s for s in sheets if s[1].lower() == wanted]
+        partial = [s for s in sheets if wanted in s[1].lower()]
+        found = exact or partial
+        return found[0] if found else None
+
+    def sheet_rows(self, name: str) -> Optional[Dict[str, Any]]:
+        """The sheet called *name*: its ``_analyze_sheet`` facts plus every row, or None.
+
+        The xlsx:// sheet view and its CSV export read this (BACK-1608). They used to parse
+        extract_element's text preview back into cells, which cut every sheet to its first
+        20 rows and stripped a leading number off each row as if it were a line number.
+        """
+        sheet_ref = self._find_sheet(name)
+        if sheet_ref is None:
             return None
+        _, sheet_name, sheet_path = sheet_ref
+        sheet = self._analyze_sheet(sheet_path, sheet_name)
+        sheet['rows_data'] = self._get_sheet_preview(sheet_path, max_rows=None)
+        return sheet
 
-        # Find matching sheet
-        for idx, sheet in enumerate(sheets_elem.findall(f'{{{xl}}}sheet')):
-            sheet_name = sheet.get('name', '')
-            if name.lower() in sheet_name.lower():
-                sheet_path = f'xl/worksheets/sheet{idx + 1}.xml'
-                sheet_info = self._analyze_sheet(sheet_path, sheet_name)
-
-                # Get preview of data and format as text
-                preview = self._get_sheet_preview(sheet_path, max_rows=20)
-                lines = []
-                for row in preview:
-                    lines.append(' | '.join(str(cell) for cell in row))
-
-                dim = sheet_info.get('dimension', '')
-                header = f"Sheet: {sheet_name}"
-                if dim:
-                    header += f" ({dim})"
-                header += f"\nRows: {sheet_info.get('rows', 0)}, Cols: {sheet_info.get('cols', 0)}"
-                if sheet_info.get('formulas'):
-                    header += f", Formulas: {sheet_info['formulas']}"
-
-                source = header + "\n\n" + '\n'.join(lines)
-
-                return {
-                    'name': sheet_name,
-                    'line_start': idx + 1,
-                    'line_end': idx + 1 + len(lines),
-                    'source': source,
-                }
-
-        return None
-
-    def _get_sheet_preview(self, sheet_path: str, max_rows: int = 10) -> List[List[str]]:
-        """Get preview of sheet data."""
+    def _get_sheet_preview(self, sheet_path: str, max_rows: Optional[int] = 10) -> List[List[str]]:
+        """The sheet's first *max_rows* non-empty rows (all of them when None)."""
         sheet_tree = self._read_xml(sheet_path)
         if sheet_tree is None:
             return []
@@ -436,15 +475,29 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
         xl = self.NAMESPACES['xl']
         preview = []
 
-        for row in list(sheet_tree.iter(f'{{{xl}}}row'))[:max_rows]:
-            row_data = []
-            for cell in row.iter(f'{{{xl}}}c'):
-                value = self._get_cell_value(cell)
-                row_data.append(value)
+        rows = list(sheet_tree.iter(f'{{{xl}}}row'))
+        for row in rows if max_rows is None else rows[:max_rows]:
+            row_data = self._row_cells(row)
             if row_data:
                 preview.append(row_data)
 
         return preview
+
+    def _row_cells(self, row: ET.Element) -> List[str]:
+        """A row's values, each in its own column.
+
+        Excel stores only non-empty cells, each with its reference (``C1``); a cell
+        skipped in the file leaves ``''`` in its column, so ``A1, C1`` is three cells,
+        not two shifted left (BACK-1608).
+        """
+        xl = self.NAMESPACES['xl']
+        cells: List[str] = []
+        for cell in row.iter(f'{{{xl}}}c'):
+            col = re.match(r'[A-Za-z]+', cell.get('r', ''))
+            if col:
+                cells.extend([''] * (self._col_letter_to_index(col.group(0)) - 1 - len(cells)))
+            cells.append(self._get_cell_value(cell))
+        return cells
 
     def _get_cell_value(self, cell: ET.Element) -> str:
         """Get cell value, handling shared strings, inline strings, and numbers."""
@@ -506,7 +559,7 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
 
             for row_elem in sheet_tree.iter(f'{{{xl}}}row'):
                 row_num = int(row_elem.get('r', 0))
-                cells = [self._get_cell_value(c) for c in row_elem.iter(f'{{{xl}}}c')]
+                cells = self._row_cells(row_elem)
                 if any(pattern_lower in cell.lower() for cell in cells):
                     results.append({
                         'sheet_name': sheet_name,

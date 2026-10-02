@@ -23,6 +23,9 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 logger = logging.getLogger(__name__)
 
+# Rows the sheet view shows when ?limit= is not set; ?format=csv exports every row (BACK-1608).
+DEFAULT_SHEET_ROWS = 100
+
 # What reading one part of the workbook zip can raise: a corrupt or truncated member
 # (BadZipFile, zlib.error, EOFError), malformed XML (ParseError), an encrypted or
 # unsupported-compression member (RuntimeError, NotImplementedError) and I/O (OSError).
@@ -79,9 +82,11 @@ class XlsxRenderer:
             print("No sheets found")
             return
 
-        print(f"Sheets ({len(sheets)}):")
-        for i, sheet in enumerate(sheets, 1):
-            name = sheet.get('name', f'Sheet{i}')
+        # Numbered as ?sheet= counts them, from 0 (BACK-1608: listed from 1, so ?sheet=1
+        # opened the sheet shown as 2).
+        print(f"Sheets ({len(sheets)}) -- open one with ?sheet=<name> or ?sheet=<index>:")
+        for i, sheet in enumerate(sheets):
+            name = sheet.get('name', f'Sheet{i + 1}')
             dim = sheet.get('dimension', '')
             rows = sheet.get('rows', 0)
             cols = sheet.get('cols', 0)
@@ -90,9 +95,9 @@ class XlsxRenderer:
             dim_str = f" ({dim})" if dim else ""
             formula_str = f", {formulas} formulas" if formulas > 0 else ""
             if 'rows' in sheet:
-                print(f"  :{i:2}   {name}{dim_str} - {rows} rows, {cols} cols{formula_str}")
+                print(f"  [{i}]  {name}{dim_str} - {rows} rows, {cols} cols{formula_str}")
             else:
-                print(f"  :{i:2}   {name}")
+                print(f"  [{i}]  {name}")
 
         banner = result.get('powerpivot_banner')
         if banner:
@@ -839,22 +844,17 @@ class XlsxAdapter(ResourceAdapter):
         Returns:
             Dict with sheet data
         """
-        # Get sheet name
-        sheet_name = self._resolve_sheet_name(sheet_identifier)
-        if not sheet_name:
-            raise ValueError(f"Sheet not found: {sheet_identifier}")
-
-        # Extract sheet using analyzer
         if self.analyzer is None:
             raise ValueError("Analyzer not initialized")
-        sheet_result = self.analyzer.extract_element('sheet', sheet_name)
-        if not sheet_result:
+        sheet_name = self._resolve_sheet_name(sheet_identifier)
+        sheet = self.analyzer.sheet_rows(sheet_name)
+        if sheet is None:
             raise ValueError(f"Failed to extract sheet: {sheet_name}")
-
-        # Parse the sheet data
-        source_text = sheet_result.get('source', '')
-        lines = source_text.split('\n') if source_text else []
-        rows_data = self._parse_sheet_lines(lines)
+        if sheet.get('too_large'):
+            raise ValueError(f"Sheet '{sheet_name}' is too large to read ({sheet['size_mb']} MB)")
+        if sheet.get('parse_failed'):
+            raise ValueError(f"Sheet '{sheet_name}' could not be parsed (corrupt or malformed XML)")
+        rows_data = sheet['rows_data']
 
         # Apply cell range if specified
         range_param = self.query_params.get('range')
@@ -862,24 +862,26 @@ class XlsxAdapter(ResourceAdapter):
             rows_data = self._apply_cell_range(rows_data, range_param)
 
         all_rows = rows_data
-        limit = self._limit_param()
+        format_param = self.query_params.get('format')
+        limit, cause, hint = self._limit_param(), 'limit', 'raise ?limit=N'
+        if not limit and format_param != 'csv':
+            # BACK-1608: the view showed 20 rows of any sheet and said nothing; a CSV
+            # export is every row, and the table view caps at a disclosed default.
+            limit, cause = DEFAULT_SHEET_ROWS, 'auto_cap'
+            hint = 'set ?limit=N, or ?format=csv for every row'
         if limit > 0:
             rows_data = rows_data[:limit]
-
-        # Get sheet metadata
-        sheet_info = self._get_sheet_info(sheet_name)
 
         # Build result data
         result_data = {
             'sheet_name': sheet_name,
             'rows': rows_data,
-            'dimension': sheet_info.get('dimension', ''),
-            'rows_count': sheet_info.get('rows', len(rows_data)),
-            'cols_count': sheet_info.get('cols', len(rows_data[0]) if rows_data else 0)
+            'dimension': sheet.get('dimension', ''),
+            'rows_count': sheet.get('rows', len(all_rows)),
+            'cols_count': sheet.get('cols', len(rows_data[0]) if rows_data else 0)
         }
 
         # Add preferred format if specified in query params
-        format_param = self.query_params.get('format')
         if format_param:
             result_data['preferred_format'] = format_param
 
@@ -890,7 +892,7 @@ class XlsxAdapter(ResourceAdapter):
             data=result_data
         )
         # BACK-1543: '?sheet=S&limit=3' listed 3 of 701 rows; rows_count said 701 in JSON only.
-        note_truncation(result, 'rows', len(rows_data), len(all_rows), 'limit', hint='raise ?limit=N')
+        note_truncation(result, 'rows', len(rows_data), len(all_rows), cause, hint=hint)
         return result
 
     def _limit_param(self) -> int:
@@ -900,95 +902,28 @@ class XlsxAdapter(ResourceAdapter):
         except (TypeError, ValueError):
             return 0
 
-    def _resolve_sheet_name(self, identifier: str) -> Optional[str]:
-        """Resolve sheet identifier to sheet name.
+    def _resolve_sheet_name(self, identifier: str) -> str:
+        """The sheet ``?sheet=`` names: an exact name, a 0-based index, then a unique part of a name.
 
-        Args:
-            identifier: Sheet name or index (e.g., "Sales" or "0")
-
-        Returns:
-            Sheet name, or None if not found
+        Raises ValueError naming the sheets and their indexes when nothing matches, or
+        listing the candidates when a partial name matches more than one (BACK-1608: the
+        first partial match won, so ``?sheet=Sales`` could open ``Sales Archive``).
         """
-        if self.analyzer is None:
-            return None
-        structure = self.analyzer.get_structure()
-        sheets = structure.get('sheets', [])
-
-        # Try as index first
-        try:
-            index = int(identifier)
-            if 0 <= index < len(sheets):
-                name = sheets[index].get('name', '')
-                # Extract just the sheet name (before dimension)
-                match = re.match(r'([^(]+)', name)
-                return match.group(1).strip() if match else name
-        except ValueError:
-            pass
-
-        # Try as name - case insensitive search
-        identifier_lower = identifier.lower()
-        for sheet in sheets:
-            name = sheet.get('name', '')
-            match = re.match(r'([^(]+)', name)
-            if match:
-                sheet_name = match.group(1).strip()
-                if sheet_name.lower() == identifier_lower or identifier_lower in sheet_name.lower():
-                    return sheet_name
-
-        return None
-
-    def _get_sheet_info(self, sheet_name: str) -> Dict[str, Any]:
-        """Get metadata for a specific sheet.
-
-        Args:
-            sheet_name: Sheet name
-
-        Returns:
-            Dict with sheet metadata
-        """
-        if self.analyzer is None:
-            return {'name': sheet_name}
-        structure = self.analyzer.get_structure()
-        sheets = structure.get('sheets', [])
-
-        for sheet in sheets:
-            name = sheet.get('name', '')
-            if sheet_name in name:
-                match = re.match(r'([^(]+?)(?:\s*\(([^)]+)\))?\s*-\s*(\d+)\s*rows,\s*(\d+)\s*cols', name)
-                if match:
-                    return {
-                        'name': match.group(1).strip(),
-                        'dimension': match.group(2) or '',
-                        'rows': int(match.group(3)),
-                        'cols': int(match.group(4))
-                    }
-
-        return {'name': sheet_name}
-
-    def _parse_sheet_lines(self, lines: List[str]) -> List[List[Any]]:
-        """Parse sheet lines into row data.
-
-        Args:
-            lines: List of text lines from sheet extraction
-
-        Returns:
-            List of rows (each row is a list of cell values)
-        """
-        rows = []
-        for line in lines:
-            # Skip header lines and empty lines
-            line = line.strip()
-            if not line or line.startswith('Sheet:') or line.startswith('Rows:'):
-                continue
-
-            # Remove line number prefix if present (e.g., "  1  data|data|data")
-            line = re.sub(r'^\s*\d+\s+', '', line)
-
-            # Split by pipe delimiter
-            cells = [cell.strip() for cell in line.split('|')]
-            rows.append(cells)
-
-        return rows
+        names = self.analyzer.sheet_names() if self.analyzer else []
+        wanted = identifier.lower()
+        exact = [n for n in names if n.lower() == wanted]
+        if exact:
+            return exact[0]
+        if re.fullmatch(r'\d+', identifier) and int(identifier) < len(names):
+            return names[int(identifier)]
+        partial = [n for n in names if wanted in n.lower()]
+        if len(partial) == 1:
+            return partial[0]
+        if partial:
+            raise ValueError(f"Sheet '{identifier}' is ambiguous: matches {', '.join(partial)}")
+        listing = ', '.join(f'{i}={n}' for i, n in enumerate(names))
+        raise ValueError(
+            f"Sheet not found: {identifier}. ?sheet= takes a name or a 0-based index: {listing}")
 
     def _apply_cell_range(self, rows: List[List[Any]], cell_range: str) -> List[List[Any]]:
         """Apply cell range filter to rows.
