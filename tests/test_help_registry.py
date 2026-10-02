@@ -552,6 +552,21 @@ class TestSchemasAggregateView(unittest.TestCase):
             set(ast_entry.keys()), {'scheme', 'uri_syntax', 'description'}
         )
 
+    def test_every_indexed_adapter_has_a_schema(self):
+        """BACK-1643: help://schemas/index listed 'help', but help://schemas/help
+        failed with 'No schema available'. Every scheme the index or the bare
+        menu lists must answer help://schemas/<scheme> without an error."""
+        adapter = HelpAdapter()
+        indexed = set(adapter.get_element('schemas/index')['adapters'])
+        menu = set(adapter.get_element('schemas')['available_adapters'])
+        self.assertIn('help', indexed)
+        self.assertEqual(indexed, menu)
+        for scheme in sorted(indexed):
+            with self.subTest(scheme=scheme):
+                result = adapter.get_element(f'schemas/{scheme}')
+                self.assertNotIn('error', result, result.get('message'))
+                self.assertEqual(result['adapter'], scheme)
+
     def test_schemas_bare_menu_points_at_index_and_all(self):
         adapter = HelpAdapter()
         result = adapter.get_element('schemas')

@@ -118,7 +118,7 @@ reveal help://schemas                               # listing: ast, ssl, git, ..
 # List all available task recipe categories
 reveal help://examples                             # listing: quality, security, ...
 
-# Discover adapter schemas (supported by most adapters; meta-adapters like help:// return none)
+# Discover adapter schemas (every adapter in help://schemas/index has one)
 reveal 'help://schemas/<adapter>' --format=json
 
 # File & Analysis Adapters

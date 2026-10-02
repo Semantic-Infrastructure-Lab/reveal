@@ -473,7 +473,7 @@ def build_discover_payload(show_all: bool = False) -> dict:
             notes = schema.get('notes', [])
             entry['notes'] = notes if isinstance(notes, list) else [notes]
         else:
-            # Schema-less meta-adapter (e.g. help://): no machine-readable query
+            # Schema-less adapter (get_schema() returns None): no machine-readable query
             # schema by design, but it's still a real, advertised adapter — so
             # describe it honestly from get_help() rather than dumping a
             # "Schema not available" entry that reads as broken to a

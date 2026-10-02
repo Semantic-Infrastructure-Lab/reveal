@@ -239,16 +239,10 @@ class TestAdapterContracts(unittest.TestCase):
         """Verify all 21 adapters implement get_schema() for AI agent discoverability.
 
         get_schema() provides machine-readable schema for each adapter, enabling
-        AI agents to understand what queries are possible.
-
-        Exception: help:// is a meta-adapter that provides schemas for all other
-        adapters but can't self-describe (circular). It intentionally returns None
-        from the base default.
+        AI agents to understand what queries are possible. help:// included: it
+        is listed in help://schemas/index like the rest (BACK-1643).
         """
-        # help:// is a meta-adapter that provides schemas for others — exempt from self-schema
-        schema_exempt = {'help'}
-
-        for scheme in self.expected_schemes - schema_exempt:
+        for scheme in self.expected_schemes:
             with self.subTest(scheme=scheme):
                 adapter_class = get_adapter_class(scheme)
                 self.assertIsNotNone(
@@ -404,7 +398,7 @@ class TestHelpSystemContracts(unittest.TestCase):
         from reveal.adapters.base import _ADAPTER_REGISTRY
         h = HelpAdapter()
         defined = set()
-        schema_exempt = {'help', 'demo'}
+        schema_exempt = {'demo'}  # demo is internal; help has a schema since BACK-1643
         for scheme in _ADAPTER_REGISTRY:
             if scheme in schema_exempt:
                 continue
@@ -467,7 +461,7 @@ class TestHelpSystemContracts(unittest.TestCase):
         from reveal.adapters.base import _ADAPTER_REGISTRY
         from reveal.rendering.adapters.help import render_help
         h = HelpAdapter()
-        schema_exempt = {'help', 'demo'}
+        schema_exempt = {'demo'}  # demo is internal; help has a schema since BACK-1643
         for scheme in sorted(_ADAPTER_REGISTRY):
             if scheme in schema_exempt:
                 continue

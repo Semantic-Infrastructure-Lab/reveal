@@ -52,9 +52,7 @@ ALL_PUBLIC_ADAPTERS = tuple(sorted(
     if not getattr(cls, "internal", False)
 ))
 
-# The query adapters an agent builds URIs against. `help` is excluded: it is a
-# discovery meta-adapter that lists other adapters' schemas, so it correctly
-# advertises no example queries of its own scheme.
+# The query adapters an agent builds URIs against.
 QUERY_ADAPTERS = ("ast", "calls", "imports", "stats", "git", "diff")
 
 
@@ -224,13 +222,7 @@ def test_every_public_adapter_schema_is_valid_and_names_itself(adapter):
     )
 
 
-# help:// is a discovery meta-adapter listing other adapters' schemas — it
-# correctly advertises no example_queries of its own scheme (see QUERY_ADAPTERS
-# comment above).
-_ADAPTERS_WITH_EXAMPLES = tuple(a for a in ALL_PUBLIC_ADAPTERS if a != "help")
-
-
-@pytest.mark.parametrize("adapter", _ADAPTERS_WITH_EXAMPLES)
+@pytest.mark.parametrize("adapter", ALL_PUBLIC_ADAPTERS)
 def test_every_public_adapter_example_queries_are_well_formed(adapter):
     """Same contract as test_schema_example_queries_are_well_formed, for every
     registered public adapter. Catches the class of bug found in autossl/cpanel/

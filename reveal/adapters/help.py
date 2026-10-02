@@ -492,7 +492,7 @@ class HelpAdapter(ResourceAdapter):
                 },
                 {
                     'uri': 'help://agent',
-                    'description': 'Comprehensive agent reference (~40K tokens, task-pattern recipes)'
+                    'description': 'Agent reference: orientation first; help://agent/full is the whole reference (~50K tokens)'
                 },
                 {
                     'uri': 'help://tricks',
@@ -520,6 +520,66 @@ class HelpAdapter(ResourceAdapter):
                 'reveal --help - Raw flag and subcommand listing',
                 'reveal --list-supported - Supported file types'
             ]
+        }
+
+    @staticmethod
+    def get_schema() -> Dict[str, Any]:
+        """Machine-readable schema for help:// itself (BACK-1643).
+
+        help:// is listed in help://schemas/index and --discover like every
+        other public adapter, so help://schemas/help answers too. Description,
+        syntax and notes come from get_help() so the two cannot drift.
+        """
+        help_data = HelpAdapter.get_help()
+
+        def _type(name: str, description: str) -> Dict[str, Any]:
+            return {'type': name, 'description': description}
+
+        return {
+            'adapter': 'help',
+            'description': help_data['description'],
+            'uri_syntax': help_data['syntax'],
+            'query_params': {
+                'search': {
+                    'type': 'string',
+                    'description': 'help://search?search=<term>: full-text search over guides, adapters and recipes',
+                },
+            },
+            'elements': {},
+            'cli_flags': [],
+            'supports_batch': False,
+            'supports_advanced': False,
+            'output_types': [
+                _type('help', 'help:// with no topic: index of adapters, guides and topics'),
+                _type('static_guide', 'A markdown guide, e.g. help://ast or help://agent'),
+                _type('help_section', 'One section of an adapter guide, e.g. help://ast/workflows'),
+                _type('adapter_summary', 'help://adapters: every adapter with its description'),
+                _type('help_quick', 'help://quick: which adapter or flag fits a task'),
+                _type('help_search', 'help://search?search=<term>: matching guides, adapters and recipes'),
+                _type('adapter_schema_index', 'help://schemas: adapters that provide a schema'),
+                _type('adapter_schema_all', 'help://schemas/index (thin) or help://schemas/all (full)'),
+                _type('adapter_schema', "help://schemas/<adapter>: one adapter's machine-readable schema"),
+                _type('query_recipes_index', 'help://examples: recipe categories'),
+                _type('query_recipes', 'help://examples/<task>: runnable recipes for one task'),
+                _type('help_rules', 'help://rules: the quality-rule catalog'),
+                _type('help_languages', 'help://languages: supported languages and file types'),
+                _type('help_relationships', 'help://relationships: which adapters work together'),
+            ],
+            'example_queries': [
+                {'uri': 'help://', 'description': 'List all help topics', 'output_type': 'help'},
+                {'uri': 'help://quick', 'description': 'Find the adapter or flag for a task',
+                 'output_type': 'help_quick'},
+                {'uri': 'help://ast', 'description': 'Read the ast:// guide', 'output_type': 'static_guide'},
+                {'uri': 'help://ast/workflows', 'description': 'One section of a guide',
+                 'output_type': 'help_section'},
+                {'uri': 'help://search?search=callers', 'description': 'Search the help corpus',
+                 'output_type': 'help_search'},
+                {'uri': 'help://schemas/ast', 'description': "An adapter's machine-readable schema",
+                 'output_type': 'adapter_schema'},
+                {'uri': 'help://examples/security', 'description': 'Recipes for one task',
+                 'output_type': 'query_recipes'},
+            ],
+            'notes': list(help_data['notes']),
         }
 
     def __init__(self, resource: str = '', query: Optional[str] = None, **kwargs: Any):
@@ -707,7 +767,7 @@ class HelpAdapter(ResourceAdapter):
         # Bare 'schemas/' lists available adapters
         if topic == 'schemas' or topic == 'schemas/':
             # Only list adapters that actually provide a schema — listing a
-            # meta-adapter (e.g. help://) that returns None would walk an agent
+            # schema-less adapter (get_schema() returns None) would walk an agent
             # straight into a "no schema available" error from its own menu (N1).
             # A navigational index, not a failure: its own success type with no
             # 'error' key, as BACK-998 did for help://examples (BACK-1059).
@@ -1895,7 +1955,7 @@ class HelpAdapter(ResourceAdapter):
 
         The bare `help://schemas` menu and the "did you mean" list are built from
         this rather than the raw registry, so an agent following the menu can
-        never land on a meta-adapter (e.g. help://) that has no schema (N1).
+        never land on an adapter that has no schema (N1).
         """
         schemes: List[str] = []
         for scheme in list_public_schemes():
@@ -2157,14 +2217,13 @@ class HelpAdapter(ResourceAdapter):
         try:
             schema_data = adapter_class.get_schema()
             if not schema_data:
-                # Adapter has get_schema() but returns None (e.g., help:// meta-adapter)
+                # Adapter has get_schema() but returns None
                 return {
                     'type': 'adapter_schema',
                     'adapter': adapter_name,
                     'error': 'No schema available',
                     'message': (
-                        f'{adapter_class.__name__} does not provide a machine-readable schema. '
-                        f'This is expected for meta-adapters like help://'
+                        f'{adapter_class.__name__} does not provide a machine-readable schema.'
                     ),
                     'next': [f'reveal help://{adapter_name}'],
                 }
