@@ -71,9 +71,9 @@ class TestSectionExtractionCLI:
         """The `path:START-END` header must bound the one section, not the file."""
         result = _run_reveal_direct(str(doc), "--section", "Alpha")
         # Alpha is at file lines 3-4; its span ends before the next `##` (line 6).
-        assert f"{doc}:3-5" in result.stdout
+        assert f"{doc.as_posix()}:3-5" in result.stdout
         # A full-file dump would have spanned to the last line (11).
-        assert f"{doc}:1-11" not in result.stdout
+        assert f"{doc.as_posix()}:1-11" not in result.stdout
 
     def test_section_middle_section(self, doc):
         """Guard the non-first case too — Beta, not Alpha or Gamma."""
@@ -88,10 +88,10 @@ class TestSectionExtractionCLI:
         not continue Alpha's numbering (6, 7, ...) under a 3-11 header."""
         result = _run_reveal_direct(str(doc), "--section", "Alpha|Gamma")
         assert result.returncode == 0, result.stderr
-        assert f"{doc}:3-5" in result.stdout
-        assert f"{doc}:9-10" in result.stdout
+        assert f"{doc.as_posix()}:3-5" in result.stdout
+        assert f"{doc.as_posix()}:9-10" in result.stdout
         assert "     9  ## Gamma" in result.stdout
-        assert f"{doc}:3-10" not in result.stdout
+        assert f"{doc.as_posix()}:3-10" not in result.stdout
 
     def test_nonexistent_section_errors_not_dumps(self, doc):
         """A missing section must fail, not silently dump the whole file."""
@@ -119,7 +119,7 @@ class TestSectionCliMatchesPythonApi:
         assert api_result["line_end"] == 5
 
         cli = _run_reveal_direct(str(doc), "--section", "Alpha")
-        assert f"{doc}:{api_result['line_start']}-{api_result['line_end']}" in cli.stdout
+        assert f"{doc.as_posix()}:{api_result['line_start']}-{api_result['line_end']}" in cli.stdout
 
 
 class TestHtmlSelectorStillWorks:

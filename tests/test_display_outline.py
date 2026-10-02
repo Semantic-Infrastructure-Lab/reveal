@@ -243,7 +243,7 @@ class TestRenderOutline:
         render_outline(items, p)
         captured = capsys.readouterr()
         assert 'foo' in captured.out
-        assert f'{p}:1' in captured.out
+        assert f'{p.as_posix()}:1' in captured.out  # '/' on every OS, as the user typed it
 
     def test_nested_child_uses_tree_chars(self, capsys):
         child = {'name': 'bar', 'line': 5, 'line_start': 5, 'children': []}
