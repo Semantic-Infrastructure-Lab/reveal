@@ -13,6 +13,7 @@ from reveal.element_resolve import (
 )
 from reveal.treesitter import ELEMENT_TYPE_MAP, ALL_ELEMENT_NODE_TYPES
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
+from reveal.utils.results import note_truncation, slice_items, truncations_of
 
 if TYPE_CHECKING:
     from reveal.analyzers.markdown import MarkdownAnalyzer
@@ -462,7 +463,8 @@ def _handle_extraction_error(analyzer, element: str, syntax: dict):
 
 
 def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, config=None,
-                    section_outline: bool = False, depth: Optional[int] = None):
+                    section_outline: bool = False, depth: Optional[int] = None,
+                    cut: Optional[tuple] = None):
     """Extract a specific element.
 
     Args:
@@ -473,6 +475,8 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
         section_outline: Markdown only (`--outline`): list the headings inside
             the section instead of its text (BACK-1625)
         depth: Heading depth for section_outline (`--depth`)
+        cut: (head, tail, range_) from --head/--tail/--range, applied to the
+            extracted source lines (see cut_element)
     """
     # Parse element syntax to determine extraction strategy
     syntax = _parse_element_syntax(element)
@@ -492,7 +496,48 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
     if section_outline:
         _output_section_outline(analyzer, result, element, output_format, depth)
     else:
+        cut_element(result, *(cut or (None, None, None)))
         _output_result(analyzer, result, element, output_format, config)
+        if truncations_of(result):
+            from .formatting import print_truncations  # noqa: I006 — circular avoidance
+            print_truncations(result, output_format)
+
+
+def cut_element(result: dict, head: Optional[int] = None, tail: Optional[int] = None,
+                range_: Optional[tuple] = None) -> None:
+    """Cut an extracted element's source for --head/--tail/--range, in place (BACK-1626).
+
+    The flags were accepted and dropped here, so `reveal doc.md "Title" --head 30`
+    printed the whole document. An element's lines are the list the flags count, as a
+    file's functions are for its outline: `--head 30` is its first 30 lines, `--range
+    10-20` its 10th to 20th. A multi-section result is cut as one run of lines. The cut
+    is disclosed with the one truncation marker, on the `source` field. A range past the
+    end keeps the element's span and shows 0 of its lines, as a file's lists do.
+    """
+    if not (head or tail or range_):
+        return
+    cause = 'head' if head else 'tail' if tail else 'range'
+    parts = result.get('sections') or ([result] if 'source' in result else [])
+    lines = [(i, part['line_start'] + n, text)
+             for i, part in enumerate(parts) for n, text in enumerate(part['source'].split('\n'))]
+    if not lines:
+        return
+    kept = slice_items(lines, head, tail, range_)
+    if kept:
+        owners = sorted({owner for owner, _, _ in kept})
+        for i in owners:
+            mine = [(number, text) for owner, number, text in kept if owner == i]
+            parts[i].update(line_start=mine[0][0], line_end=mine[-1][0],
+                            source='\n'.join(text for _, text in mine))
+        if result.get('sections'):
+            result['sections'] = [parts[i] for i in owners]
+            result['line_start'] = parts[owners[0]]['line_start']
+            result['line_end'] = parts[owners[-1]]['line_end']
+    else:
+        for part in parts:
+            part['source'] = ''
+    note_truncation(result, 'source', len(kept), len(lines), cause,
+                    hint=f'counted in lines; drop --{cause} for the whole element')
 
 
 def _output_section_outline(analyzer, result, element: str, output_format: str,
@@ -899,7 +944,6 @@ def _output_result(analyzer, result, element: str, output_format: str, config=No
 
     line_start = result.get('line_start', 1)
     line_end = result.get('line_end', line_start)
-    source = result.get('source', '')
     name = result.get('name', element)
     match_count = result.get('match_count')
 
@@ -914,7 +958,8 @@ def _output_result(analyzer, result, element: str, output_format: str, config=No
 
     # Match count prefix for multi-section results
     if match_count and match_count > 1 and output_format not in ('json', 'grep'):
-        print(f"# {match_count} sections matched \"{name}\" — showing all\n")
+        shown = 'cut below' if truncations_of(result) else 'showing all'
+        print(f"# {match_count} sections matched \"{name}\" — {shown}\n")
 
     sections = result.get('sections')
     if sections:
@@ -923,27 +968,42 @@ def _output_result(analyzer, result, element: str, output_format: str, config=No
 
     # Header
     print(f"{path}:{line_start}-{line_end} | {name}\n")
+    _print_element_body(analyzer, result, name, output_format, config)
+
+
+def _print_element_body(analyzer, result, name: str, output_format: str, config=None):
+    """The extracted source with line numbers, then its label-only note and breadcrumbs.
+
+    A --range past the element's end leaves no lines (BACK-1626): nothing is printed
+    under the header, and the truncation note says 0 of N.
+    """
+    path = analyzer.path
+    line_start = result.get('line_start', 1)
+    line_end = result.get('line_end', line_start)
+    source = result.get('source', '')
+    if not source and truncations_of(result):
+        return
 
     # Source with line numbers
     if output_format == 'grep':
         for i, line in enumerate(source.split('\n')):
             line_num = line_start + i
             print(f"{path}:{line_num}:{line}")
-    else:
-        formatted = analyzer.format_with_lines(source, line_start)
-        print(formatted)
+        return
+    formatted = analyzer.format_with_lines(source, line_start)
+    print(formatted)
 
-        # A heading with no body of its own: point at where the content is
-        line_count = line_end - line_start + 1
-        next_section = result.get('next_section')
-        if next_section and result.get('label_only') and output_format not in ('json', 'grep'):
-            print(f"\n⚠ Short result ({line_count} lines) — this section is a label only.",
-                  file=sys.stderr)
-            print(f"   Next section: {next_section['name']} (line {next_section['line']})",
-                  file=sys.stderr)
+    # A heading with no body of its own: point at where the content is
+    line_count = line_end - line_start + 1
+    next_section = result.get('next_section')
+    if next_section and result.get('label_only') and output_format not in ('json', 'grep'):
+        print(f"\n⚠ Short result ({line_count} lines) — this section is a label only.",
+              file=sys.stderr)
+        print(f"   Next section: {next_section['name']} (line {next_section['line']})",
+              file=sys.stderr)
 
-        # Navigation hints
-        file_type = get_file_type_from_analyzer(analyzer)
-        print_breadcrumbs('element', path, file_type=file_type, config=config,
-                         element_name=name, line_count=line_count, line_start=line_start,
-                         next_line=_next_element_line(analyzer, line_end))
+    # Navigation hints
+    file_type = get_file_type_from_analyzer(analyzer)
+    print_breadcrumbs('element', path, file_type=file_type, config=config,
+                     element_name=name, line_count=line_count, line_start=line_start,
+                     next_line=_next_element_line(analyzer, line_end))

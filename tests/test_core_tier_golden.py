@@ -26,6 +26,7 @@ import difflib
 import json
 import os
 import re
+import shlex
 from pathlib import Path
 
 import pytest
@@ -81,6 +82,11 @@ def _doc_commands() -> list:
         [DOC, "--section", "Usage"],
         [DOC, ":9-13"],
         [DOC, "--grep", "order"],
+        # --head/--tail/--range count an extracted section's lines (BACK-1626)
+        [DOC, "Order Service Guide", "--head", "5"],
+        [DOC, "Setup", "--tail", "4"],
+        [DOC, "Requirements|Batching", "--head", "6"],
+        [DOC, "Usage", "--range", "50-60"],
     ]
 
 
@@ -162,7 +168,7 @@ def _transcript(runner: _Runner, cwd: Path, commands: list, view: str) -> str:
 
 
 def _quote(arg: str) -> str:
-    return f"'{arg}'" if (" " in arg or not arg) else arg
+    return shlex.quote(arg)
 
 
 def _check_golden(name: str, actual: str):
@@ -190,7 +196,9 @@ def test_markdown_golden(runner):
 
 def test_outline_order_golden(runner):
     """Decorated and plain members list in line order in both outline views."""
-    commands = [["ordering.py"], ["ordering.py", "--outline"]]
+    commands = [["ordering.py"], ["ordering.py", "--outline"],
+                ["ordering.py", "Account", "--head", "4"], ["ordering.py", "Account", "--range", "2-3"],
+                ["ordering.py", "Account", "--tail", "2", "--format", "grep"]]
     _check_golden("ordering", _transcript(runner, CORE_DIR, commands, "plain"))
 
 
@@ -271,6 +279,14 @@ def _assert_extract_parity(text: str, data: dict):
     assert text_source == [line.rstrip() if not line.strip() else line for line in json_source]
 
 
+def _assert_cut_parity(text: str, data: dict):
+    """A cut element: same lines as JSON, and the text footer is JSON's truncation message."""
+    _assert_extract_parity(text, data)
+    (warning,) = [w for w in data["meta"]["warnings"] if w["type"] == "truncated"]
+    assert f"⚠ Truncated {warning['message']}" in text.splitlines()
+    assert warning["shown"] == data["line_end"] - data["line_start"] + 1
+
+
 def _assert_grep_groups(rows: list, groups: list):
     """Text rows and JSON groups name the same elements with the same hit lines.
 
@@ -347,6 +363,9 @@ def test_language_text_json_parity(runner, lang):
     ([DOC, "--grep", "order"], _assert_file_grep_parity),
     (["ordering.py"], _assert_structure_parity),
     (["ordering.py", "--outline"], _assert_outline_parity),
+    ([DOC, "Order Service Guide", "--head", "5"], _assert_cut_parity),
+    (["ordering.py", "Account", "--range", "2-3"], _assert_cut_parity),
+    (["ordering.py", "Account", "--tail", "3"], _assert_cut_parity),
 ], ids=lambda v: " ".join(v) if isinstance(v, list) else None)
 def test_core_dir_text_json_parity(runner, argv, check):
     check(_text(runner, CORE_DIR, argv), runner.json(CORE_DIR, argv))

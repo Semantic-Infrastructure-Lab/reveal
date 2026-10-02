@@ -599,6 +599,10 @@ reveal README.md --links --head 10
 reveal README.md --code --tail 5
 ```
 
+On an extracted section the flags count its lines instead:
+`reveal README.md "Installation" --head 20` prints the section's first 20 lines and
+says how many it left out (`⚠ Truncated source: showing 20 of 85`).
+
 **Note**: Slicing applies to each category independently. With `--head 5`:
 - Shows first 5 headings
 - AND first 5 links (if --links specified)

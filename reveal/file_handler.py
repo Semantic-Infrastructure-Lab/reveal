@@ -390,7 +390,8 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         if args and _has_nav_flag(args):
             _dispatch_nav(analyzer, element, output_format, args)
             return
-        extract_element(analyzer, element, output_format, config=config)
+        cut = tuple(getattr(args, flag, None) if args else None for flag in ('head', 'tail', 'range'))
+        extract_element(analyzer, element, output_format, config=config, cut=cut)
         return
 
     # An analyzer whose own parser failed (XML, CSV, a notebook) returns a failed result:

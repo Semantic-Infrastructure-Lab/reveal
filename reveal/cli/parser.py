@@ -454,12 +454,13 @@ def _strip_path_quotes(value: str) -> str:
 def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     """Add general navigation options (browsing, filtering, sorting)."""
     parser.add_argument('--head', type=int, metavar='N',
-                        help='Show first N semantic units (records, functions, sections); on a URI result, '
-                             'every list it returns is sliced (a note says so when there is none)')
+                        help='Show first N semantic units (records, functions, sections); on an extracted '
+                             'element or section, its first N lines; on a URI result, every list it returns '
+                             'is sliced (a note says so when there is none)')
     parser.add_argument('--tail', type=int, metavar='N',
-                        help='Show last N semantic units (records, functions, sections)')
+                        help='Show last N semantic units (records, functions, sections; lines of an extracted element)')
     parser.add_argument('--range', type=str, metavar='START-END',
-                        help='Show semantic units in range (e.g., 10-20, 1-indexed)')
+                        help='Show semantic units in range (e.g., 10-20, 1-indexed; lines of an extracted element)')
     parser.add_argument('--name', '--search', dest='name', type=str, metavar='PATTERN',
                         help='Filter structural output to named elements (functions, classes, headings) whose name matches PATTERN (regex). Does NOT search text content — use --grep for that. (--search is a deprecated alias)')
     parser.add_argument('--grep', type=str, metavar='PATTERN',

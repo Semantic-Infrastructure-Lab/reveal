@@ -30,3 +30,33 @@ rate() [3 lines, depth:0] (ordering.py:21)
 convert(amount) [2 lines, depth:0] (ordering.py:26)
 
 [exit 0]
+
+$ reveal ordering.py Account --head 4
+ordering.py:5-8 | Account
+
+      5  class Account:
+      6      @property
+      7      def balance(self):
+      8          return self._balance
+
+⚠ Truncated source: showing 4 of 14 — counted in lines; drop --head for the whole element
+[exit 0]
+
+$ reveal ordering.py Account --range 2-3
+ordering.py:6-7 | Account
+
+      6      @property
+      7      def balance(self):
+
+⚠ Truncated source: showing 2 of 14 — counted in lines; drop --range for the whole element
+[exit 0]
+
+$ reveal ordering.py Account --tail 2 --format grep
+ordering.py:17-18 | Account
+
+ordering.py:17:    def close(self):
+ordering.py:18:        self._balance = 0
+[stderr]
+
+⚠ Truncated source: showing 2 of 14 — counted in lines; drop --tail for the whole element
+[exit 0]

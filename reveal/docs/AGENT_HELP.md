@@ -2404,6 +2404,7 @@ reveal doc.md "Installation"
 reveal doc.md "install"          # substring match → "## Installation"
 reveal doc.md --section "Installation"   # flag form (same behavior, useful in scripts)
 reveal doc.md "Installation" --outline   # the headings inside a big section, before reading it
+reveal doc.md "Installation" --head 40   # its first 40 lines; a note says how many were cut
 
 # OR-alternation: extract multiple named sections in one call
 reveal doc.md "Open Issues|Action Items"
@@ -3540,6 +3541,9 @@ reveal huge_file.py
    ```bash
    # Don't dump entire file
    reveal huge_file.py target_function
+
+   # A long element: its first 40 lines (--tail/--range work too, counted in lines)
+   reveal huge_file.py target_function --head 40
    ```
 
 3. **Use JSON + jq filtering**

@@ -182,3 +182,51 @@ Text search: guide.md  —  pattern: order
   ### Fixed                                             line 41
 
 [exit 0]
+
+$ reveal guide.md 'Order Service Guide' --head 5
+guide.md:6-10 | Order Service Guide
+
+      6  # Order Service Guide
+      7  
+      8  The order service validates, logs and batches orders.
+      9  This intro sits above the first second-level heading.
+     10  
+
+⚠ Truncated source: showing 5 of 52 — counted in lines; drop --head for the whole element
+[exit 0]
+
+$ reveal guide.md Setup --tail 4
+guide.md:25-28 | Setup
+
+     25  # not a heading: a shell comment inside a fence
+     26  export ORDER_LOG=/var/log/orders.log
+     27  ```
+     28  
+
+⚠ Truncated source: showing 4 of 18 — counted in lines; drop --tail for the whole element
+[exit 0]
+
+$ reveal guide.md 'Requirements|Batching' --head 6
+# 2 sections matched "Requirements|Batching" — cut below
+
+guide.md:15-19 | Requirements
+
+     15  ### Requirements
+     16  
+     17  - Python 3.10 or newer
+     18  - A writable log directory
+     19  
+
+guide.md:33-33 | Batching
+
+     33  ### Batching
+
+⚠ Truncated source: showing 6 of 9 — counted in lines; drop --head for the whole element
+[exit 0]
+
+$ reveal guide.md Usage --range 50-60
+guide.md:29-36 | Usage
+
+
+⚠ Truncated source: showing 0 of 8 — counted in lines; drop --range for the whole element
+[exit 0]
