@@ -5,13 +5,8 @@ from pathlib import Path
 from unittest.mock import Mock
 from reveal.display.formatting import (
     set_nested,
-    _find_list_field,
     _extract_nested_value,
     _filter_single_item_fields,
-    _preserve_metadata,
-    _filter_list_items,
-    _filter_toplevel_structure,
-    filter_fields,
     _format_standard_items,
 )
 
@@ -43,30 +38,6 @@ class TestSetNested:
         d = {'a': {'existing': 'value'}}
         set_nested(d, ['a', 'b'], 'new')
         assert d == {'a': {'existing': 'value', 'b': 'new'}}
-
-
-class TestFindListField:
-    """Test _find_list_field utility function."""
-
-    def test_finds_results(self):
-        """Test finding 'results' field."""
-        structure = {'results': [1, 2, 3]}
-        assert _find_list_field(structure) == 'results'
-
-    def test_finds_items(self):
-        """Test finding 'items' field."""
-        structure = {'items': [1, 2, 3]}
-        assert _find_list_field(structure) == 'items'
-
-    def test_returns_none_when_not_list(self):
-        """Test returns None when field is not a list."""
-        structure = {'results': 'not_a_list'}
-        assert _find_list_field(structure) is None
-
-    def test_returns_none_when_no_list_field(self):
-        """Test returns None when no list field exists."""
-        structure = {'other': [1, 2, 3]}
-        assert _find_list_field(structure) is None
 
 
 class TestExtractNestedValue:
@@ -128,104 +99,6 @@ class TestFilterSingleItemFields:
         item = {'name': 'test'}
         result = _filter_single_item_fields(item, ['name', 'missing', 'also.missing'])
         assert result == {'name': 'test'}
-
-
-class TestPreserveMetadata:
-    """Test _preserve_metadata utility function."""
-
-    def test_preserves_contract_version(self):
-        """Test preserves contract_version field."""
-        result = {}
-        structure = {'contract_version': '1.0'}
-        _preserve_metadata(result, structure)
-        assert result == {'contract_version': '1.0'}
-
-    def test_preserves_type(self):
-        """Test preserves type field."""
-        result = {}
-        structure = {'type': 'document'}
-        _preserve_metadata(result, structure)
-        assert result == {'type': 'document'}
-
-    def test_preserves_multiple_metadata(self):
-        """Test preserves multiple metadata fields."""
-        result = {}
-        structure = {
-            'contract_version': '1.0',
-            'type': 'document',
-            'meta': {'key': 'value'}
-        }
-        _preserve_metadata(result, structure)
-        assert result == {
-            'contract_version': '1.0',
-            'type': 'document',
-            'meta': {'key': 'value'}
-        }
-
-    def test_skips_missing_metadata(self):
-        """Test skips missing metadata fields."""
-        result = {}
-        structure = {'data': 'value'}
-        _preserve_metadata(result, structure)
-        assert result == {}
-
-
-# ============================================================================
-# Test filter_fields function (lines 159-186)
-# ============================================================================
-
-class TestFilterFields:
-    """Test filter_fields main function."""
-
-    def test_filter_list_items(self):
-        """Test filtering items in a list field."""
-        structure = {
-            'contract_version': '1.0',
-            'results': [
-                {'name': 'item1', 'value': 1, 'extra': 'ignore'},
-                {'name': 'item2', 'value': 2, 'extra': 'ignore'},
-            ]
-        }
-        result = filter_fields(structure, ['name', 'value'])
-
-        assert result['contract_version'] == '1.0'
-        assert len(result['results']) == 2
-        assert result['results'][0] == {'name': 'item1', 'value': 1}
-        assert result['results'][1] == {'name': 'item2', 'value': 2}
-
-    def test_filter_toplevel_structure(self):
-        """Test filtering when no list field present."""
-        structure = {
-            'contract_version': '1.0',
-            'name': 'test',
-            'value': 42,
-            'extra': 'ignore'
-        }
-        result = filter_fields(structure, ['name', 'value'])
-
-        # Toplevel filtering doesn't preserve metadata
-        assert result['name'] == 'test'
-        assert result['value'] == 42
-        assert 'extra' not in result
-        assert 'contract_version' not in result
-
-    def test_preserves_metadata_in_list_case(self):
-        """Test metadata is preserved when filtering list items."""
-        # List case - metadata IS preserved
-        structure1 = {
-            'type': 'list',
-            'items': [{'field': 'value'}]
-        }
-        result1 = filter_fields(structure1, ['field'])
-        assert result1['type'] == 'list'
-
-        # Toplevel case - metadata is NOT preserved
-        structure2 = {
-            'type': 'toplevel',
-            'field': 'value'
-        }
-        result2 = filter_fields(structure2, ['field'])
-        assert result2 == {'field': 'value'}
 
 
 class TestFormatFrontmatter:
@@ -1026,32 +899,6 @@ class TestKwargsBuilders:
 # ============================================================================
 # Previously uncovered lines — added to bring formatting.py to 95%+
 # ============================================================================
-
-class TestFilterFieldsNested:
-    """Cover lines 150-152 (_filter_toplevel_structure nested) and 177 (filter_fields empty)."""
-
-    def test_filter_toplevel_nested_field(self):
-        """Line 149-152: dotted field in _filter_toplevel_structure."""
-        from reveal.display.formatting import _filter_toplevel_structure
-        structure = {'name': 'test', 'meta': {'created': '2026-01-01', 'author': 'Alice'}}
-        result = _filter_toplevel_structure(structure, ['name', 'meta.created'])
-        assert result['name'] == 'test'
-        assert result['meta']['created'] == '2026-01-01'
-        assert 'author' not in result.get('meta', {})
-
-    def test_filter_toplevel_nested_field_missing_value(self):
-        """Line 150-152: nested field returns None → not set."""
-        from reveal.display.formatting import _filter_toplevel_structure
-        structure = {'name': 'test'}
-        result = _filter_toplevel_structure(structure, ['name', 'missing.nested'])
-        assert result == {'name': 'test'}
-
-    def test_filter_fields_empty_list_returns_original(self):
-        """Line 177: empty fields list returns original structure unchanged."""
-        structure = {'name': 'test', 'value': 42}
-        result = filter_fields(structure, [])
-        assert result is structure
-
 
 class TestFormatLinksSkip:
     """Cover line 268: continue when link_type not present in grouped items."""

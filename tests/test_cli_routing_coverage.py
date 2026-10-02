@@ -466,14 +466,11 @@ class TestBuildAdapterKwargs:
 
 class TestApplyFieldSelection:
     def test_fields_arg_filters_result(self):
-        """Cover lines 322-324: --fields filters result dict."""
+        """--fields keeps the named top-level key (BACK-1607: tests/test_fields_back1607.py)."""
         result = {'functions': [{'name': 'foo'}], 'imports': [], 'classes': []}
-        args = _args(fields='functions')
-
-        with patch('reveal.display.formatting.filter_fields', return_value={'functions': [{'name': 'foo'}]}) as mock_ff:
-            out = _apply_field_selection(result, args)
-        mock_ff.assert_called_once()
-        assert 'functions' in out
+        args = _args(fields='functions', format='json')
+        out = _apply_field_selection(result, args)
+        assert out == {'functions': [{'name': 'foo'}]}
 
 
 # ─── _apply_budget_constraints ────────────────────────────────────────────────

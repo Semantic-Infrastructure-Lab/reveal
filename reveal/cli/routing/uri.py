@@ -907,13 +907,38 @@ def _build_adapter_kwargs(adapter, args: 'Namespace', scheme: Optional[str] = No
     return kwargs
 
 
-def _apply_field_selection(result: dict, args: 'Namespace') -> dict:
-    """Apply field selection if --fields specified."""
-    if hasattr(args, 'fields') and args.fields:
-        from reveal.display.formatting import filter_fields
-        fields = [f.strip() for f in args.fields.split(',')]
-        return filter_fields(result, fields)
-    return result
+def _apply_field_selection(result: dict, args: 'Namespace', scheme: Optional[str] = None) -> dict:
+    """Apply --fields: one rule for every adapter (display.formatting.select_fields).
+
+    A name that matches nothing is disclosed, in the result (a ``fields_unmatched`` meta
+    warning) and on stderr with the names that do exist, instead of leaving an empty
+    object or list of empty objects in silence (BACK-1607). It selects from the JSON
+    result: a text renderer is written for the whole result, and given a selection it
+    rendered nothing (stats://), zeros (ast://) or crashed (git:// file history), so in
+    any other format the flag is left unapplied and a note says so. A failed or
+    not-applicable result is left whole: its ``error``/``applicable`` is the answer.
+    """
+    if not (getattr(args, 'fields', None) and isinstance(result, dict)):
+        return result
+    if outcome_of(result) in ('failed', 'not_applicable'):
+        return result
+    if getattr(args, 'format', 'text') != 'json':
+        print("Note: --fields selects fields of the JSON result -- add --format json.",
+              file=sys.stderr)
+        return result
+    from reveal.display.formatting import available_fields, select_fields
+    fields = [f.strip() for f in args.fields.split(',') if f.strip()]
+    selected, unmatched = select_fields(result, fields)
+    if unmatched:
+        names = ', '.join(unmatched)
+        message = (f"--fields: {names} matched no field of this {scheme or 'adapter'}:// result. "
+                   f"Fields: {available_fields(result)}")
+        meta = selected['meta'] if isinstance(selected.get('meta'), dict) else selected.setdefault('meta', {})
+        if not isinstance(meta.get('warnings'), list):
+            meta['warnings'] = []
+        meta['warnings'].append({'type': 'fields_unmatched', 'fields': unmatched, 'message': message})
+        print(f"Note: {message}", file=sys.stderr)
+    return selected
 
 
 def _budget_list_fields(result: dict, adapter=None) -> list[str]:
@@ -1064,7 +1089,6 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
                            scheme_name, source, type(adapter))
 
     # Apply post-processing
-    result = _apply_field_selection(result, args)
     result = _apply_head_tail_range(result, args, adapter, scheme)
     result = _apply_budget_constraints(result, args, adapter, scheme)
     post_process = getattr(type(adapter), 'post_process', None)
@@ -1081,6 +1105,8 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
         if available_elements:
             result['available_elements'] = available_elements
 
+    # Last, so it selects from the result the user would otherwise see (BACK-1607).
+    result = _apply_field_selection(result, args, scheme)
     return Answer(result, 'structure',
                   lambda: _emit_result(result, args, scheme, renderer_class.render_structure,
                                        **_render_structure_top_kwargs(renderer_class, args, adapter)))

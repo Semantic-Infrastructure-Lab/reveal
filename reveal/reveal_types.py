@@ -36,6 +36,8 @@ class WarningEntry(TypedDict, total=False):
     # and the first few, relative to the target.
     count: int
     files: List[str]
+    # The --fields names that matched nothing ('fields_unmatched', BACK-1607).
+    fields: List[str]
 
 
 class RevealMeta(TypedDict, total=False):

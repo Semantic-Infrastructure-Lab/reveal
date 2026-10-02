@@ -2,16 +2,15 @@
 
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from reveal.base import FileAnalyzer
 from reveal.utils.path_utils import to_posix
 from reveal.utils.results import truncations_of
 
 
-# Constants for field filtering
-LIST_FIELD_NAMES = ['results', 'items', 'checks', 'commits', 'files', 'records']
-METADATA_FIELD_NAMES = ['contract_version', 'type', 'meta', 'source', 'source_type']
+# The Output Contract envelope: kept whatever --fields names (BACK-1607).
+ENVELOPE_FIELD_NAMES = ('contract_version', 'type', 'meta', 'source', 'source_type')
 
 # BACK-387: above this many headings, the flat text outline auto-collapses
 HEADING_COLLAPSE_THRESHOLD = 25
@@ -38,22 +37,7 @@ def set_nested(d: Dict[str, Any], keys: List[str], value: Any) -> None:
     d[keys[-1]] = value
 
 
-# Helper functions for field filtering
-
-def _find_list_field(structure: Dict[str, Any]) -> Optional[str]:
-    """Find which list field exists in the structure.
-
-    Args:
-        structure: Structure dictionary to search
-
-    Returns:
-        Name of the list field, or None if not found
-    """
-    for list_field in LIST_FIELD_NAMES:
-        if list_field in structure and isinstance(structure.get(list_field), list):
-            return list_field
-    return None
-
+# Helper functions for field selection
 
 def _extract_nested_value(obj: Dict[str, Any], field_path: str) -> Optional[Any]:
     """Extract nested field value using dot notation.
@@ -101,95 +85,104 @@ def _filter_single_item_fields(
     return filtered_item
 
 
-def _preserve_metadata(
-    result: Dict[str, Any], structure: Dict[str, Any]
-) -> None:
-    """Preserve important metadata fields in result.
-
-    Args:
-        result: Result dictionary to update
-        structure: Original structure with metadata
-    """
-    for meta_field in METADATA_FIELD_NAMES:
-        if meta_field in structure:
-            result[meta_field] = structure[meta_field]
+def _item_lists(structure: Dict[str, Any]) -> Dict[str, list]:
+    """The result's top-level lists of objects -- the lists whose items --fields can select in."""
+    return {key: value for key, value in structure.items()
+            if key not in ENVELOPE_FIELD_NAMES and not key.startswith('_')
+            and isinstance(value, list) and any(isinstance(item, dict) for item in value)}
 
 
-def _filter_list_items(
-    structure: Dict[str, Any], list_field: str, fields: List[str]
-) -> Dict[str, Any]:
-    """Filter all items in a list field.
-
-    Args:
-        structure: Full structure with list field
-        list_field: Name of the list field
-        fields: Fields to include in each item
-
-    Returns:
-        Filtered structure with list and metadata
-    """
-    filtered_items = [
-        _filter_single_item_fields(item, fields)
-        for item in structure[list_field]
-    ]
-
-    result = {list_field: filtered_items}
-    _preserve_metadata(result, structure)
-    return result
+def _has_path(obj: Any, field_path: str) -> bool:
+    """Whether ``obj`` has the dotted key path, even one whose value is None."""
+    for part in field_path.split('.'):
+        if not isinstance(obj, dict) or part not in obj:
+            return False
+        obj = obj[part]
+    return True
 
 
-def _filter_toplevel_structure(
-    structure: Dict[str, Any], fields: List[str]
-) -> Dict[str, Any]:
-    """Filter top-level structure fields.
-
-    Args:
-        structure: Structure to filter
-        fields: Fields to include (supports nested: "parent.child")
-
-    Returns:
-        Filtered structure
-    """
-    filtered: Dict[str, Any] = {}
-    for field in fields:
-        if '.' in field:  # Nested field
-            value = _extract_nested_value(structure, field)
-            if value is not None:
-                set_nested(filtered, field.split('.'), value)
-        else:  # Flat field
-            if field in structure:
-                filtered[field] = structure[field]
-    return filtered
+def _in_items(items: list, field: str) -> bool:
+    return any(_has_path(item, field) for item in items)
 
 
-def filter_fields(structure: Dict[str, Any], fields: List[str]) -> Dict[str, Any]:
-    """Filter structure to only include selected fields.
+def _trim_items(items: list, fields: List[str]) -> list:
+    return [_filter_single_item_fields(item, fields) if isinstance(item, dict) else item
+            for item in items]
 
-    Args:
-        structure: Full structure dictionary
-        fields: List of field names to include (supports nested: "parent.child")
 
-    Returns:
-        Filtered dictionary with only requested fields
+def _locate_field(structure: Dict[str, Any], lists: Dict[str, list],
+                  field: str) -> Optional[List[Tuple[str, str]]]:
+    """Where one --fields name points: ``[]`` a top-level key, ``[(list, item key), ...]``
+    keys of list items, None nothing."""
+    head, _, rest = field.partition('.')
+    if head in lists and rest and _in_items(lists[head], rest):
+        return [(head, rest)]  # results.name: a key of each item of that list
+    if not (head in lists and rest) and _has_path(structure, field):
+        return []
+    return [(name, field) for name, items in lists.items() if _in_items(items, field)] or None
+
+
+def select_fields(structure: Dict[str, Any], fields: List[str]) -> Tuple[Dict[str, Any], List[str]]:
+    """Keep only the named fields of a result: the one rule ``--fields`` uses (BACK-1607).
+
+    Each name is looked up at the top level first, then in the items of the result's
+    lists of objects:
+
+    - ``total_results``, ``summary.total_files``: that top-level key;
+    - ``results``: that whole list; ``results.name``: ``name`` in each item of ``results``;
+    - ``name`` (not a top-level key): ``name`` in the items of every list whose items have it.
+
+    The Output Contract envelope (``contract_version``, ``type``, ``source``,
+    ``source_type``, ``meta``) and ``_``-prefixed renderer hints are always kept. Returns
+    the selection and the names that matched nothing, which the caller discloses. An
+    empty list has no items to check a name against: when the result has no list with
+    items, a name that is not a top-level key keeps the empty lists and is not reported
+    (``?lines>1000`` matching no file is not a misspelt ``--fields``).
+
+    Before, the level depended on the adapter: a result holding one of six hand-listed
+    list names had only its items filtered (so ``--fields=type,total_results,results`` on
+    ast:// gave ``results: [{}, ...]``); any other result had only its top level filtered
+    (so ``--fields=hash,author`` on git:// gave ``{}``); and a name that matched nothing was
+    dropped in silence.
 
     Examples:
-        >>> structure = {'name': 'test', 'value': 42, 'meta': {'created': '2026-01-01'}}
-        >>> filter_fields(structure, ['name', 'value'])
-        {'name': 'test', 'value': 42}
-        >>> filter_fields(structure, ['name', 'meta.created'])
-        {'name': 'test', 'meta': {'created': '2026-01-01'}}
+        >>> select_fields({'type': 't', 'n': 1, 'x': 2}, ['n'])
+        ({'type': 't', 'n': 1}, [])
+        >>> select_fields({'type': 't', 'results': [{'a': 1, 'b': 2}]}, ['a', 'zz'])
+        ({'type': 't', 'results': [{'a': 1}]}, ['zz'])
     """
-    if not fields:
-        return structure
+    selected: Dict[str, Any] = {key: value for key, value in structure.items()
+                                if key in ENVELOPE_FIELD_NAMES or key.startswith('_')}
+    lists = _item_lists(structure)
+    empty = [key for key, value in structure.items()
+             if value == [] and key not in ENVELOPE_FIELD_NAMES and not key.startswith('_')]
+    item_fields: Dict[str, List[str]] = {}
+    unmatched: List[str] = []
+    for field in fields:
+        where = _locate_field(structure, lists, field)
+        if where == []:
+            if field.partition('.')[0] not in ENVELOPE_FIELD_NAMES:
+                set_nested(selected, field.split('.'), _extract_nested_value(structure, field))
+        elif where:
+            for name, key in where:
+                item_fields.setdefault(name, []).append(key)
+        elif empty and not lists:  # nothing to check the name against
+            selected.update((key, []) for key in empty)
+        else:
+            unmatched.append(field)
+    for name, names in item_fields.items():
+        selected[name] = _trim_items(lists[name], names)
+    return selected, unmatched
 
-    # Check if structure has a list field that needs filtering
-    list_field = _find_list_field(structure)
 
-    # Filter list items if found, otherwise filter top-level
-    if list_field:
-        return _filter_list_items(structure, list_field, fields)
-    else:
-        return _filter_toplevel_structure(structure, fields)
+def available_fields(structure: Dict[str, Any]) -> str:
+    """The names ``--fields`` can select in this result, for a note about one that matched nothing."""
+    top = [key for key in structure if key not in ENVELOPE_FIELD_NAMES and not key.startswith('_')]
+    parts = [', '.join(top) or '(none)']
+    for name, items in _item_lists(structure).items():
+        keys = sorted({key for item in items if isinstance(item, dict) for key in item})
+        parts.append(f"items of {name}: {', '.join(keys)}")
+    return '; '.join(parts)
 
 
 def _format_frontmatter(fm: Optional[Dict[str, Any]]) -> None:

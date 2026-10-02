@@ -652,7 +652,9 @@ def _add_universal_filter_flags(parser: argparse.ArgumentParser) -> None:
     """
     # Field selection
     parser.add_argument('--fields', type=str, metavar='FIELDS',
-                        help='Select specific fields (comma-separated, supports nested: field.subfield)')
+                        help='Keep only these fields of a URI adapter\'s JSON result (with --format json; '
+                             'comma-separated; top-level keys, list.key, or a key of each list item; '
+                             'nested: field.subfield). See help://fields')
 
     # Budget constraints
     parser.add_argument('--max-items', type=int, metavar='N',
