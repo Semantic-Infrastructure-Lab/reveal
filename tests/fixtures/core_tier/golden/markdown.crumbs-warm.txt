@@ -1,0 +1,65 @@
+$ reveal guide.md
+File: guide.md (812B, 57 lines)
+
+Headings (13):
+  :6      Order Service Guide
+    :11     Setup
+      :15     Requirements
+      :20     Configuration
+    :29     Usage
+      :33     Batching
+    :37     Release 1.1
+      :39     Fixed
+    :43     Release 1.0
+      :45     Fixed
+    :49     See [the API](api.md) &amp; notes
+    :53     Known gaps
+    :55     2026
+
+
+Next: reveal guide.md --section 'Order Service Guide'  # Extract this section
+[exit 0]
+
+$ reveal guide.md --outline
+File: guide.md (812B, 57 lines)
+
+Order Service Guide (guide.md:6, 52 lines)
+  ├─ Setup (line 11, 18 lines)
+  │  ├─ Requirements (line 15, 5 lines)
+  │  └─ Configuration (line 20, 9 lines)
+  ├─ Usage (line 29, 8 lines)
+  │  └─ Batching (line 33, 4 lines)
+  ├─ Release 1.1 (line 37, 6 lines)
+  │  └─ Fixed (line 39, 4 lines)
+  ├─ Release 1.0 (line 43, 6 lines)
+  │  └─ Fixed (line 45, 4 lines)
+  ├─ See [the API](api.md) &amp; notes (line 49, 4 lines)
+  ├─ Known gaps (line 53, 2 lines)
+  └─ 2026 (line 55, 3 lines)
+
+[exit 0]
+
+$ reveal guide.md Setup
+guide.md:11-28 | Setup
+
+     11  ## Setup
+     12  
+     13  Install the service and point it at a log directory.
+     14  
+     15  ### Requirements
+     16  
+     17  - Python 3.10 or newer
+     18  - A writable log directory
+     19  
+     20  ### Configuration
+     21  
+     22  Set `ORDER_LOG` to the log path.
+     23  
+     24  ```bash
+     25  # not a heading: a shell comment inside a fence
+     26  export ORDER_LOG=/var/log/orders.log
+     27  ```
+     28  
+
+Extracted Setup (18 lines)
+[exit 0]

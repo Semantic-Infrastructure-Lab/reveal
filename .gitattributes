@@ -1,0 +1,5 @@
+# Core-tier golden tests (tests/test_core_tier_golden.py) pin output that includes
+# each input file's byte size, so their inputs must check out byte-identical on
+# every OS: no CRLF conversion on Windows runners (core.autocrlf=true).
+tests/fixtures/conformance/** text eol=lf
+tests/fixtures/core_tier/** text eol=lf

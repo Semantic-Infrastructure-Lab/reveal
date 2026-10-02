@@ -1,0 +1,95 @@
+$ reveal php/sample.php
+File: sample.php (1.3KB, 51 lines)
+
+Imports (1):
+  :3      require_once 'unused_lib.php'
+
+Functions (5):
+  :5      validate($order) [6 lines, depth:2]
+  :12     processOrder($order) [13 lines, depth:3]
+  :26     run($order) [3 lines, depth:0]
+  :36     run($items) [6 lines, depth:1]
+  :48     summarize() [3 lines, depth:0]
+
+Classes (2):
+  :33     Batch
+  :46     Reporter
+
+[exit 0]
+
+$ reveal php/sample.php --outline
+File: sample.php (1.3KB, 51 lines)
+
+require_once 'unused_lib.php' (php/sample.php:3)
+validate($order) [6 lines, depth:2] (php/sample.php:5)
+processOrder($order) [13 lines, depth:3] (php/sample.php:12)
+run($order) [3 lines, depth:0] (php/sample.php:26)
+Batch (php/sample.php:33)
+  └─ run($items) [6 lines, depth:1] (line 36)
+Reporter (php/sample.php:46)
+  └─ summarize() [3 lines, depth:0] (line 48)
+
+[exit 0]
+
+$ reveal php/sample.php processOrder
+php/sample.php:12-24 | processOrder
+
+     12  function processOrder($order) {
+     13      try {
+     14          $result = validate($order);
+     15          $count = 0;
+     16          file_put_contents("/tmp/orders.log", $result);
+     17          while ($count < 3) {
+     18              $count++;
+     19          }
+     20          return strtoupper($result);
+     21      } catch (Exception $e) {
+     22          return null;
+     23      }
+     24  }
+[exit 0]
+
+$ reveal php/sample.php Batch.run
+php/sample.php:36-41 | Batch.run
+
+     36      public function run($items) {
+     37          foreach ($items as $item) {
+     38              $this->total = $this->total + $item;
+     39              $cache->set($item);
+     40          }
+     41      }
+[exit 0]
+
+$ reveal php/sample.php :12-14
+php/sample.php:12-14 | lines:12-14
+
+     12  function processOrder($order) {
+     13      try {
+     14          $result = validate($order);
+[exit 0]
+
+$ reveal php/sample.php :12
+php/sample.php:12-24 | processOrder
+
+     12  function processOrder($order) {
+     13      try {
+     14          $result = validate($order);
+     15          $count = 0;
+     16          file_put_contents("/tmp/orders.log", $result);
+     17          while ($count < 3) {
+     18              $count++;
+     19          }
+     20          return strtoupper($result);
+     21      } catch (Exception $e) {
+     22          return null;
+     23      }
+     24  }
+[exit 0]
+
+$ reveal php/sample.php --grep result
+Text search: php/sample.php  —  pattern: result
+3 hits in 1 element
+
+  processOrder()                                        lines 14, 16, 20
+
+[exit 0]

@@ -1,0 +1,109 @@
+$ reveal go/sample.go
+File: sample.go (1.4KB, 66 lines)
+
+Imports (5):
+  :5      "errors"
+  :6      "fmt"
+  :7      "os"
+  :8      "strconv" // unused on purpose -- must still be flagged by imports://
+  :9      "strings"
+
+Functions (5):
+  :12     validate(order string) [6 lines, depth:2]
+  :19     processOrder(order string) [14 lines, depth:2]
+  :34     Run(order string) [3 lines, depth:0]
+  :45     Run(items []int) [6 lines, depth:2]
+  :64     Summarize() [3 lines, depth:0]
+
+Structs (2):
+  :41     Batch
+  :60     Reporter
+
+Interfaces (1):
+  :56     Summarizer [3 lines]
+
+[exit 0]
+
+$ reveal go/sample.go --outline
+File: sample.go (1.4KB, 66 lines)
+
+"errors" (go/sample.go:5)
+"fmt" (go/sample.go:6)
+"os" (go/sample.go:7)
+"strconv" // unused on purpose -- must still be flagged by imports:// (go/sample.go:8)
+"strings" (go/sample.go:9)
+validate(order string) [6 lines, depth:2] (go/sample.go:12)
+processOrder(order string) [14 lines, depth:2] (go/sample.go:19)
+Run(order string) [3 lines, depth:0] (go/sample.go:34)
+Batch (go/sample.go:41)
+Run(items []int) [6 lines, depth:2] (go/sample.go:45)
+Summarizer [3 lines] (go/sample.go:56)
+Reporter (go/sample.go:60)
+Summarize() [3 lines, depth:0] (go/sample.go:64)
+
+[exit 0]
+
+$ reveal go/sample.go processOrder
+go/sample.go:19-32 | processOrder
+
+     19  func processOrder(order string) (string, error) {
+     20  	result, err := validate(order)
+     21  	if err != nil {
+     22  		return "", err
+     23  	}
+     24  	f, err := os.OpenFile("/tmp/orders.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+     25  	if err != nil {
+     26  		return "", err
+     27  	}
+     28  	defer f.Close()
+     29  	fmt.Fprintf(f, "%s", result)
+     30  	result = strings.ToUpper(result)
+     31  	return result, nil
+     32  }
+[exit 0]
+
+$ reveal go/sample.go Batch.Run
+go/sample.go:45-50 | Batch.Run
+
+     45  func (b *Batch) Run(items []int) {
+     46  	for _, item := range items {
+     47  		b.Total = b.Total + item
+     48  		cache.Set(item)
+     49  	}
+     50  }
+[exit 0]
+
+$ reveal go/sample.go :19-21
+go/sample.go:19-21 | lines:19-21
+
+     19  func processOrder(order string) (string, error) {
+     20  	result, err := validate(order)
+     21  	if err != nil {
+[exit 0]
+
+$ reveal go/sample.go :19
+go/sample.go:19-32 | processOrder
+
+     19  func processOrder(order string) (string, error) {
+     20  	result, err := validate(order)
+     21  	if err != nil {
+     22  		return "", err
+     23  	}
+     24  	f, err := os.OpenFile("/tmp/orders.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+     25  	if err != nil {
+     26  		return "", err
+     27  	}
+     28  	defer f.Close()
+     29  	fmt.Fprintf(f, "%s", result)
+     30  	result = strings.ToUpper(result)
+     31  	return result, nil
+     32  }
+[exit 0]
+
+$ reveal go/sample.go --grep result
+Text search: go/sample.go  —  pattern: result
+4 hits in 1 element
+
+  processOrder()                                        lines 20, 29, 30, 31
+
+[exit 0]

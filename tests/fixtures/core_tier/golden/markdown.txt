@@ -1,0 +1,184 @@
+$ reveal guide.md
+File: guide.md (812B, 57 lines)
+
+Headings (13):
+  :6      Order Service Guide
+    :11     Setup
+      :15     Requirements
+      :20     Configuration
+    :29     Usage
+      :33     Batching
+    :37     Release 1.1
+      :39     Fixed
+    :43     Release 1.0
+      :45     Fixed
+    :49     See [the API](api.md) &amp; notes
+    :53     Known gaps
+    :55     2026
+
+[exit 0]
+
+$ reveal guide.md --outline
+File: guide.md (812B, 57 lines)
+
+Order Service Guide (guide.md:6, 52 lines)
+  ├─ Setup (line 11, 18 lines)
+  │  ├─ Requirements (line 15, 5 lines)
+  │  └─ Configuration (line 20, 9 lines)
+  ├─ Usage (line 29, 8 lines)
+  │  └─ Batching (line 33, 4 lines)
+  ├─ Release 1.1 (line 37, 6 lines)
+  │  └─ Fixed (line 39, 4 lines)
+  ├─ Release 1.0 (line 43, 6 lines)
+  │  └─ Fixed (line 45, 4 lines)
+  ├─ See [the API](api.md) &amp; notes (line 49, 4 lines)
+  ├─ Known gaps (line 53, 2 lines)
+  └─ 2026 (line 55, 3 lines)
+
+[exit 0]
+
+$ reveal guide.md Setup
+guide.md:11-28 | Setup
+
+     11  ## Setup
+     12  
+     13  Install the service and point it at a log directory.
+     14  
+     15  ### Requirements
+     16  
+     17  - Python 3.10 or newer
+     18  - A writable log directory
+     19  
+     20  ### Configuration
+     21  
+     22  Set `ORDER_LOG` to the log path.
+     23  
+     24  ```bash
+     25  # not a heading: a shell comment inside a fence
+     26  export ORDER_LOG=/var/log/orders.log
+     27  ```
+     28  
+[exit 0]
+
+$ reveal guide.md Fixed
+guide.md:39-42 | Fixed
+
+     39  ### Fixed
+     40  
+     41  - Empty orders no longer raise.
+     42  
+[stderr]
+Note: 'Fixed' matches 2 definitions; showing Fixed (line 39). To pick one:
+  reveal guide.md :39-42   # Fixed, line 39
+  reveal guide.md :45-48   # Fixed, line 45
+[exit 0]
+
+$ reveal guide.md 2026
+guide.md:55-57 | 2026
+
+     55  ## 2026
+     56  
+     57  Plans for the year.
+[exit 0]
+
+$ reveal guide.md 'Known gaps'
+guide.md:53-54 | Known gaps
+
+     53  ## Known gaps
+     54  
+[stderr]
+
+⚠ Short result (2 lines) — this section is a label only.
+   Next section: 2026 (line 55)
+[exit 0]
+
+$ reveal guide.md 'Order Service Guide'
+guide.md:6-57 | Order Service Guide
+
+      6  # Order Service Guide
+      7  
+      8  The order service validates, logs and batches orders.
+      9  This intro sits above the first second-level heading.
+     10  
+     11  ## Setup
+     12  
+     13  Install the service and point it at a log directory.
+     14  
+     15  ### Requirements
+     16  
+     17  - Python 3.10 or newer
+     18  - A writable log directory
+     19  
+     20  ### Configuration
+     21  
+     22  Set `ORDER_LOG` to the log path.
+     23  
+     24  ```bash
+     25  # not a heading: a shell comment inside a fence
+     26  export ORDER_LOG=/var/log/orders.log
+     27  ```
+     28  
+     29  ## Usage
+     30  
+     31  Call `process_order(order)` for each order.
+     32  
+     33  ### Batching
+     34  
+     35  `Batch.run(items)` totals a list and caches each item.
+     36  
+     37  ## Release 1.1
+     38  
+     39  ### Fixed
+     40  
+     41  - Empty orders no longer raise.
+     42  
+     43  ## Release 1.0
+     44  
+     45  ### Fixed
+     46  
+     47  - First release.
+     48  
+     49  ## See [the API](api.md) &amp; notes ##
+     50  
+     51  Cross-references live here.
+     52  
+     53  ## Known gaps
+     54  
+     55  ## 2026
+     56  
+     57  Plans for the year.
+[exit 0]
+
+$ reveal guide.md --section Usage
+guide.md:29-36 | Usage
+
+     29  ## Usage
+     30  
+     31  Call `process_order(order)` for each order.
+     32  
+     33  ### Batching
+     34  
+     35  `Batch.run(items)` totals a list and caches each item.
+     36  
+[exit 0]
+
+$ reveal guide.md :9-13
+guide.md:9-13 | lines:9-13
+
+      9  This intro sits above the first second-level heading.
+     10  
+     11  ## Setup
+     12  
+     13  Install the service and point it at a log directory.
+[exit 0]
+
+$ reveal guide.md --grep order
+Text search: guide.md  —  pattern: order
+4 hits in 4 sections
+
+  # Order Service Guide                                 line 8
+  ### Configuration                                     line 26
+  ## Usage                                              line 31
+  ### Fixed                                             line 41
+
+[exit 0]

@@ -1,0 +1,98 @@
+$ reveal typescript/sample.ts
+File: sample.ts (1.6KB, 57 lines)
+
+Imports (3):
+  :2      import * as fs from 'fs';
+  :3      import * as path from 'path';
+  :4      import * as util from 'util';
+
+Functions (7):
+  :6      validate(order: string) [6 lines, depth:2]
+  :13     processOrder(order: string) [10 lines, depth:2]
+  :24     run(order: string) [3 lines, depth:0]
+  :33     run(items: number[]) [7 lines, depth:2]
+  :46     Component(target: any) [1 lines, depth:0]
+  :47     Input() [1 lines, depth:0]
+  :52     summarize() [3 lines, depth:0]
+
+Classes (2):
+  :31     Batch
+  :49     Reporter
+
+[exit 0]
+
+$ reveal typescript/sample.ts --outline
+File: sample.ts (1.6KB, 57 lines)
+
+import * as fs from 'fs'; (typescript/sample.ts:2)
+import * as path from 'path'; (typescript/sample.ts:3)
+import * as util from 'util'; (typescript/sample.ts:4)
+validate(order: string) [6 lines, depth:2] (typescript/sample.ts:6)
+processOrder(order: string) [10 lines, depth:2] (typescript/sample.ts:13)
+run(order: string) [3 lines, depth:0] (typescript/sample.ts:24)
+Batch (typescript/sample.ts:31)
+  └─ run(items: number[]) [7 lines, depth:2] (line 33)
+Component(target: any) [1 lines, depth:0] (typescript/sample.ts:46)
+Input() [1 lines, depth:0] (typescript/sample.ts:47)
+Reporter (typescript/sample.ts:49)
+  └─ summarize() [3 lines, depth:0] (line 52)
+
+[exit 0]
+
+$ reveal typescript/sample.ts processOrder
+typescript/sample.ts:13-22 | processOrder
+
+     13  function processOrder(order: string): string | null {
+     14      let result = validate(order);
+     15      try {
+     16          fs.writeFileSync(path.join('/tmp', 'orders.log'), result);
+     17      } catch (err) {
+     18          return null;
+     19      }
+     20      result = result.toUpperCase();
+     21      return result;
+     22  }
+[exit 0]
+
+$ reveal typescript/sample.ts Batch.run
+typescript/sample.ts:33-39 | Batch.run
+
+     33      run(items: number[]): number {
+     34          for (const item of items) {
+     35              this.total = this.total + item;
+     36              cache.set(item);
+     37          }
+     38          return this.total;
+     39      }
+[exit 0]
+
+$ reveal typescript/sample.ts :13-15
+typescript/sample.ts:13-15 | lines:13-15
+
+     13  function processOrder(order: string): string | null {
+     14      let result = validate(order);
+     15      try {
+[exit 0]
+
+$ reveal typescript/sample.ts :13
+typescript/sample.ts:13-22 | processOrder
+
+     13  function processOrder(order: string): string | null {
+     14      let result = validate(order);
+     15      try {
+     16          fs.writeFileSync(path.join('/tmp', 'orders.log'), result);
+     17      } catch (err) {
+     18          return null;
+     19      }
+     20      result = result.toUpperCase();
+     21      return result;
+     22  }
+[exit 0]
+
+$ reveal typescript/sample.ts --grep result
+Text search: typescript/sample.ts  —  pattern: result
+4 hits in 1 element
+
+  processOrder()                                        lines 14, 16, 20, 21
+
+[exit 0]

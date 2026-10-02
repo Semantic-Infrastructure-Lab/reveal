@@ -1,0 +1,32 @@
+$ reveal ordering.py
+File: ordering.py (457B, 27 lines)
+
+Imports (1):
+  :2      import functools
+
+Functions (6):
+  :6      balance(self) [3 lines, depth:0]
+  :10     deposit(self, amount) [2 lines, depth:0]
+  :13     currency() [3 lines, depth:0]
+  :17     close(self) [2 lines, depth:0]
+  :21     rate() [3 lines, depth:0]
+  :26     convert(amount) [2 lines, depth:0]
+
+Classes (1):
+  :5      Account
+
+[exit 0]
+
+$ reveal ordering.py --outline
+File: ordering.py (457B, 27 lines)
+
+import functools (ordering.py:2)
+Account (ordering.py:5)
+  ├─ balance(self) [3 lines, depth:0] (line 6)
+  ├─ deposit(self, amount) [2 lines, depth:0] (line 10)
+  ├─ currency() [3 lines, depth:0] (line 13)
+  └─ close(self) [2 lines, depth:0] (line 17)
+rate() [3 lines, depth:0] (ordering.py:21)
+convert(amount) [2 lines, depth:0] (ordering.py:26)
+
+[exit 0]

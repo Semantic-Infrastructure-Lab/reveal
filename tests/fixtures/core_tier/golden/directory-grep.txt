@@ -1,0 +1,47 @@
+$ reveal . --grep '= validate'
+Text search: .  —  pattern: = validate
+11 hits across 11 files
+
+File: c/sample.c
+  process_order()                                       line 13
+
+File: cpp/sample.cpp
+  process_order()                                       line 16
+
+File: go/sample.go
+  processOrder()                                        line 20
+
+File: java/sample.java
+  processOrder()                                        line 18
+
+File: javascript/sample.js
+  processOrder()                                        line 14
+
+File: kotlin/sample.kt
+  processOrder()                                        line 12
+
+File: php/sample.php
+  processOrder()                                        line 14
+
+File: python/sample.py
+  process_order()                                       line 13
+
+File: ruby/sample.rb
+  process_order()                                       line 10
+
+File: rust/sample.rs
+  process_order()                                       line 14
+
+File: typescript/sample.ts
+  processOrder()                                        line 14
+
+[exit 0]
+
+$ reveal python --grep result
+Text search: python  —  pattern: result
+4 hits across 1 file
+
+File: sample.py
+  process_order()                                       lines 13, 17, 20, 21
+
+[exit 0]

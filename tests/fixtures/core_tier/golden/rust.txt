@@ -1,0 +1,95 @@
+$ reveal rust/sample.rs
+File: sample.rs (1.8KB, 75 lines)
+
+Imports (3):
+  :2      use std::fs;
+  :3      use std::io;
+  :4      use std::collections::HashMap;
+
+Functions (6):
+  :6      validate(order: i32) [6 lines, depth:2]
+  :13     process_order(order: i32) [8 lines, depth:2]
+  :22     run(order: i32) [3 lines, depth:0]
+  :30     count_down(mut n: i32) [13 lines, depth:2]
+  :52     run(&mut self, items: &[i32]) [6 lines, depth:2]
+  :72     summarize(&self) [3 lines, depth:0]
+
+Structs (2):
+  :47     Batch
+  :63     Reporter
+
+Interfaces (1):
+  :67     Summary [3 lines]
+
+[exit 0]
+
+$ reveal rust/sample.rs --outline
+File: sample.rs (1.8KB, 75 lines)
+
+use std::fs; (rust/sample.rs:2)
+use std::io; (rust/sample.rs:3)
+use std::collections::HashMap; (rust/sample.rs:4)
+validate(order: i32) [6 lines, depth:2] (rust/sample.rs:6)
+process_order(order: i32) [8 lines, depth:2] (rust/sample.rs:13)
+run(order: i32) [3 lines, depth:0] (rust/sample.rs:22)
+count_down(mut n: i32) [13 lines, depth:2] (rust/sample.rs:30)
+Batch (rust/sample.rs:47)
+run(&mut self, items: &[i32]) [6 lines, depth:2] (rust/sample.rs:52)
+Reporter (rust/sample.rs:63)
+Summary [3 lines] (rust/sample.rs:67)
+summarize(&self) [3 lines, depth:0] (rust/sample.rs:72)
+
+[exit 0]
+
+$ reveal rust/sample.rs process_order
+rust/sample.rs:13-20 | process_order
+
+     13  fn process_order(order: i32) -> Result<i32, io::Error> {
+     14      let mut result = validate(order)?;
+     15      if let Err(e) = fs::write("/tmp/orders.log", result.to_string()) {
+     16          return Err(e);
+     17      }
+     18      result = result * 2;
+     19      Ok(result)
+     20  }
+[exit 0]
+
+$ reveal rust/sample.rs Batch.run
+rust/sample.rs:52-57 | Batch.run
+
+     52      fn run(&mut self, items: &[i32]) {
+     53          for item in items {
+     54              self.total = self.total + item;
+     55              cache.set(*item);
+     56          }
+     57      }
+[exit 0]
+
+$ reveal rust/sample.rs :13-15
+rust/sample.rs:13-15 | lines:13-15
+
+     13  fn process_order(order: i32) -> Result<i32, io::Error> {
+     14      let mut result = validate(order)?;
+     15      if let Err(e) = fs::write("/tmp/orders.log", result.to_string()) {
+[exit 0]
+
+$ reveal rust/sample.rs :13
+rust/sample.rs:13-20 | process_order
+
+     13  fn process_order(order: i32) -> Result<i32, io::Error> {
+     14      let mut result = validate(order)?;
+     15      if let Err(e) = fs::write("/tmp/orders.log", result.to_string()) {
+     16          return Err(e);
+     17      }
+     18      result = result * 2;
+     19      Ok(result)
+     20  }
+[exit 0]
+
+$ reveal rust/sample.rs --grep result
+Text search: rust/sample.rs  —  pattern: result
+4 hits in 1 element
+
+  process_order()                                       lines 14, 15, 18, 19
+
+[exit 0]

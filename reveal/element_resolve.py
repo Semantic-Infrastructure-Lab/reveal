@@ -138,7 +138,7 @@ def resolve_bare_name(analyzer, name: str,
     """
     per_tier = [
         _in_tree_order(
-            node for kind in kinds for node in analyzer._find_nodes_by_type(kind)
+            node for kind in kinds for node in analyzer._find_definitions(kind)
             if name_matches(analyzer._get_node_name(node), name)
         )
         for kinds in tiers
@@ -280,7 +280,7 @@ def resolve_member(analyzer, parent_name: str, child_name: str) -> Optional[Reso
     out-of-line definitions and Go receiver methods.
     """
     containers = [
-        node for kind in MEMBER_CONTAINER_NODES for node in analyzer._find_nodes_by_type(kind)
+        node for kind in MEMBER_CONTAINER_NODES for node in analyzer._find_definitions(kind)
         if parent_name in container_names(analyzer, node)
     ]
     members: List[Any] = []

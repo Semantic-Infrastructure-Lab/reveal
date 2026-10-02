@@ -1,0 +1,95 @@
+$ reveal kotlin/sample.kt
+File: sample.kt (1.2KB, 48 lines)
+
+Imports (1):
+  :2      import java.io.File
+
+Functions (5):
+  :4      validate(order: String?): String [6 lines, depth:2]
+  :11     processOrder(order: String?): String? [13 lines, depth:2]
+  :25     run(order: String?): String? [3 lines, depth:0]
+  :35     run(items: List<Int>) [6 lines, depth:2]
+  :47     summarize(): Int [1 lines, depth:0]
+
+Classes (2):
+  :32     Batch
+  :45     Reporter
+
+[exit 0]
+
+$ reveal kotlin/sample.kt --outline
+File: sample.kt (1.2KB, 48 lines)
+
+import java.io.File (kotlin/sample.kt:2)
+validate(order: String?): String [6 lines, depth:2] (kotlin/sample.kt:4)
+processOrder(order: String?): String? [13 lines, depth:2] (kotlin/sample.kt:11)
+run(order: String?): String? [3 lines, depth:0] (kotlin/sample.kt:25)
+Batch (kotlin/sample.kt:32)
+  └─ run(items: List<Int>) [6 lines, depth:2] (line 35)
+Reporter (kotlin/sample.kt:45)
+  └─ summarize(): Int [1 lines, depth:0] (line 47)
+
+[exit 0]
+
+$ reveal kotlin/sample.kt processOrder
+kotlin/sample.kt:11-23 | processOrder
+
+     11  fun processOrder(order: String?): String? {
+     12      val result = validate(order)
+     13      var count = 0
+     14      try {
+     15          File("/tmp/orders.log").appendText(result)
+     16          while (count < 3) {
+     17              count += 1
+     18          }
+     19          return result.uppercase()
+     20      } catch (e: Exception) {
+     21          return null
+     22      }
+     23  }
+[exit 0]
+
+$ reveal kotlin/sample.kt Batch.run
+kotlin/sample.kt:35-40 | Batch.run
+
+     35      fun run(items: List<Int>) {
+     36          for (item in items) {
+     37              this.total = this.total + item
+     38              cache.set(item)
+     39          }
+     40      }
+[exit 0]
+
+$ reveal kotlin/sample.kt :11-13
+kotlin/sample.kt:11-13 | lines:11-13
+
+     11  fun processOrder(order: String?): String? {
+     12      val result = validate(order)
+     13      var count = 0
+[exit 0]
+
+$ reveal kotlin/sample.kt :11
+kotlin/sample.kt:11-23 | processOrder
+
+     11  fun processOrder(order: String?): String? {
+     12      val result = validate(order)
+     13      var count = 0
+     14      try {
+     15          File("/tmp/orders.log").appendText(result)
+     16          while (count < 3) {
+     17              count += 1
+     18          }
+     19          return result.uppercase()
+     20      } catch (e: Exception) {
+     21          return null
+     22      }
+     23  }
+[exit 0]
+
+$ reveal kotlin/sample.kt --grep result
+Text search: kotlin/sample.kt  —  pattern: result
+3 hits in 1 element
+
+  processOrder()                                        lines 12, 15, 19
+
+[exit 0]

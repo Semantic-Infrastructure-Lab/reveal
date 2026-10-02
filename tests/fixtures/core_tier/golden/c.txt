@@ -1,0 +1,95 @@
+$ reveal c/sample.c
+File: sample.c (1.2KB, 47 lines)
+
+Imports (2):
+  :2      #include <stdio.h>
+  :3      #include <string.h>  /* unused on purpose -- must still be flagged by imports:// */
+
+Functions (4):
+  :5      validate(int order) [6 lines, depth:2]
+  :12     process_order(int order) [14 lines, depth:2]
+  :27     run(int order) [3 lines, depth:0]
+  :38     batch_run(struct Batch *b, int *items, int n) [6 lines, depth:2]
+
+Structs (1):
+  :34     Batch
+
+[exit 0]
+
+$ reveal c/sample.c --outline
+File: sample.c (1.2KB, 47 lines)
+
+#include <stdio.h> (c/sample.c:2)
+#include <string.h>  /* unused on purpose -- must still be flagged by imports:// */ (c/sample.c:3)
+validate(int order) [6 lines, depth:2] (c/sample.c:5)
+process_order(int order) [14 lines, depth:2] (c/sample.c:12)
+run(int order) [3 lines, depth:0] (c/sample.c:27)
+Batch (c/sample.c:34)
+batch_run(struct Batch *b, int *items, int n) [6 lines, depth:2] (c/sample.c:38)
+
+[exit 0]
+
+$ reveal c/sample.c process_order
+c/sample.c:12-25 | process_order
+
+     12  int process_order(int order) {
+     13      int result = validate(order);
+     14      if (result < 0) {
+     15          return -1;
+     16      }
+     17      FILE *f = fopen("/tmp/orders.log", "a");
+     18      if (f == NULL) {
+     19          return -1;
+     20      }
+     21      fprintf(f, "%d", result);
+     22      fclose(f);
+     23      result = result * 2;
+     24      return result;
+     25  }
+[exit 0]
+
+$ reveal c/sample.c batch_run
+c/sample.c:38-43 | batch_run
+
+     38  void batch_run(struct Batch *b, int *items, int n) {
+     39      for (int i = 0; i < n; i++) {
+     40          b->total = b->total + items[i];
+     41          cache.set(items[i]);
+     42      }
+     43  }
+[exit 0]
+
+$ reveal c/sample.c :12-14
+c/sample.c:12-14 | lines:12-14
+
+     12  int process_order(int order) {
+     13      int result = validate(order);
+     14      if (result < 0) {
+[exit 0]
+
+$ reveal c/sample.c :12
+c/sample.c:12-25 | process_order
+
+     12  int process_order(int order) {
+     13      int result = validate(order);
+     14      if (result < 0) {
+     15          return -1;
+     16      }
+     17      FILE *f = fopen("/tmp/orders.log", "a");
+     18      if (f == NULL) {
+     19          return -1;
+     20      }
+     21      fprintf(f, "%d", result);
+     22      fclose(f);
+     23      result = result * 2;
+     24      return result;
+     25  }
+[exit 0]
+
+$ reveal c/sample.c --grep result
+Text search: c/sample.c  —  pattern: result
+5 hits in 1 element
+
+  process_order()                                       lines 13, 14 … 24 (5 hits)
+
+[exit 0]

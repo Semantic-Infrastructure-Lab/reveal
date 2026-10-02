@@ -251,6 +251,23 @@ Earlier releases (v0.33–v0.91) and full per-item notes: [CHANGELOG.md](CHANGEL
 
 ## Current Focus: Path to v1.0
 
+### Core tier — the five operations agents use
+
+About 90% of real use is five operations: extract an element (`reveal FILE NAME`), extract
+a markdown section (`reveal DOC.md "Heading"`), `--grep`, outline a file (`reveal FILE`,
+`--outline`), and read a line range (`reveal FILE :N-M`). A bug in one of them outranks
+adapter work and new surface.
+
+Their bar is `tests/test_core_tier_golden.py`:
+- The text output is pinned byte for byte across the 13 tier-1 languages and markdown,
+  in three views: the default (breadcrumbs off, as an agent's piped call gets it), a first
+  run with breadcrumbs on, and a later run once the show-once hints are spent.
+- Each operation's `--format json` must carry the same items as its text view.
+
+A golden diff is a change agents will see. Accept an intended one with
+`REVEAL_UPDATE_GOLDEN=1 pytest tests/test_core_tier_golden.py -n0` and review the diff like
+code.
+
 ### Reliability program — the priority track (BACK-1512)
 
 This is the first priority until its step 1 lands. It ranks above new adapters and new

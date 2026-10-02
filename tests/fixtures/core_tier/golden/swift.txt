@@ -1,0 +1,97 @@
+$ reveal swift/sample.swift
+File: sample.swift (1.2KB, 49 lines)
+
+Imports (1):
+  :2      import Foundation
+
+Functions (5):
+  :4      validate(_ order: String?) throws -> String [6 lines, depth:0]
+  :11     processOrder(_ order: String?) -> String? [14 lines, depth:3]
+  :26     run(_ order: String?) -> String? [3 lines, depth:0]
+  :36     run(_ items: [Int]) [6 lines, depth:2]
+  :48     summarize() -> Int [1 lines, depth:0]
+
+Classes (2):
+  :33     Batch
+  :46     Reporter
+
+[exit 0]
+
+$ reveal swift/sample.swift --outline
+File: sample.swift (1.2KB, 49 lines)
+
+import Foundation (swift/sample.swift:2)
+validate(_ order: String?) throws -> String [6 lines, depth:0] (swift/sample.swift:4)
+processOrder(_ order: String?) -> String? [14 lines, depth:3] (swift/sample.swift:11)
+run(_ order: String?) -> String? [3 lines, depth:0] (swift/sample.swift:26)
+Batch (swift/sample.swift:33)
+  └─ run(_ items: [Int]) [6 lines, depth:2] (line 36)
+Reporter (swift/sample.swift:46)
+  └─ summarize() -> Int [1 lines, depth:0] (line 48)
+
+[exit 0]
+
+$ reveal swift/sample.swift processOrder
+swift/sample.swift:11-24 | processOrder
+
+     11  func processOrder(_ order: String?) -> String? {
+     12      do {
+     13          var result = try validate(order)
+     14          try? result.write(toFile: "/tmp/orders.log", atomically: true, encoding: .utf8)
+     15          var count = 0
+     16          while count < 3 {
+     17              count += 1
+     18          }
+     19          result = result.uppercased()
+     20          return result
+     21      } catch {
+     22          return nil
+     23      }
+     24  }
+[exit 0]
+
+$ reveal swift/sample.swift Batch.run
+swift/sample.swift:36-41 | Batch.run
+
+     36      func run(_ items: [Int]) {
+     37          for item in items {
+     38              self.total = self.total + item
+     39              cache.set(item)
+     40          }
+     41      }
+[exit 0]
+
+$ reveal swift/sample.swift :11-13
+swift/sample.swift:11-13 | lines:11-13
+
+     11  func processOrder(_ order: String?) -> String? {
+     12      do {
+     13          var result = try validate(order)
+[exit 0]
+
+$ reveal swift/sample.swift :11
+swift/sample.swift:11-24 | processOrder
+
+     11  func processOrder(_ order: String?) -> String? {
+     12      do {
+     13          var result = try validate(order)
+     14          try? result.write(toFile: "/tmp/orders.log", atomically: true, encoding: .utf8)
+     15          var count = 0
+     16          while count < 3 {
+     17              count += 1
+     18          }
+     19          result = result.uppercased()
+     20          return result
+     21      } catch {
+     22          return nil
+     23      }
+     24  }
+[exit 0]
+
+$ reveal swift/sample.swift --grep result
+Text search: swift/sample.swift  —  pattern: result
+4 hits in 1 element
+
+  processOrder()                                        lines 13, 14, 19, 20
+
+[exit 0]

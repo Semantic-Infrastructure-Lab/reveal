@@ -1,0 +1,107 @@
+$ reveal ruby/sample.rb
+File: sample.rb (1.6KB, 69 lines)
+
+Imports (1):
+  :2      require "json"
+
+Functions (7):
+  :4      validate(order) [4 lines, depth:1]
+  :9      process_order(order) [13 lines, depth:2]
+  :23     run(order) [3 lines, depth:0]
+  :32     run(items) [6 lines, depth:0]
+  :43     classify(mode) [7 lines, depth:0]
+  :52     add(x) [4 lines, depth:0]
+  :62     summarize [3 lines, depth:0]
+
+Classes (3):
+  :31     Batch
+  :51     Accumulator
+  :67     Reporter
+
+[exit 0]
+
+$ reveal ruby/sample.rb --outline
+File: sample.rb (1.6KB, 69 lines)
+
+require "json" (ruby/sample.rb:2)
+validate(order) [4 lines, depth:1] (ruby/sample.rb:4)
+process_order(order) [13 lines, depth:2] (ruby/sample.rb:9)
+run(order) [3 lines, depth:0] (ruby/sample.rb:23)
+Batch (ruby/sample.rb:31)
+  └─ run(items) [6 lines, depth:0] (line 32)
+classify(mode) [7 lines, depth:0] (ruby/sample.rb:43)
+Accumulator (ruby/sample.rb:51)
+  └─ add(x) [4 lines, depth:0] (line 52)
+summarize [3 lines, depth:0] (ruby/sample.rb:62)
+Reporter (ruby/sample.rb:67)
+
+[exit 0]
+
+$ reveal ruby/sample.rb process_order
+ruby/sample.rb:9-21 | process_order
+
+      9  def process_order(order)
+     10    result = validate(order)
+     11    count = 0
+     12    begin
+     13      File.open("/tmp/orders.log", "a") { |f| f.write(result) }
+     14      while count < 3
+     15        count += 1
+     16      end
+     17      return result.upcase
+     18    rescue StandardError
+     19      return nil
+     20    end
+     21  end
+[exit 0]
+
+$ reveal ruby/sample.rb Batch.run
+ruby/sample.rb:32-37 | Batch.run
+
+     32    def self.run(items)
+     33      items.each do |item|
+     34        @total = @total + item
+     35        cache.set(item)
+     36      end
+     37    end
+[exit 0]
+
+$ reveal ruby/sample.rb :9-11
+ruby/sample.rb:9-11 | lines:9-11
+
+      9  def process_order(order)
+     10    result = validate(order)
+     11    count = 0
+[exit 0]
+
+$ reveal ruby/sample.rb :9
+ruby/sample.rb:1-19 | lines:1-19
+
+      1  # Conformance fixture (BACK-422 Tier 1) — Ruby
+      2  require "json" # unused on purpose -- documented gap, no unused-import detection
+      3  
+      4  def validate(order)
+      5    raise ArgumentError, "empty order" if order.nil?
+      6    order
+      7  end
+      8  
+      9  def process_order(order)
+     10    result = validate(order)
+     11    count = 0
+     12    begin
+     13      File.open("/tmp/orders.log", "a") { |f| f.write(result) }
+     14      while count < 3
+     15        count += 1
+     16      end
+     17      return result.upcase
+     18    rescue StandardError
+     19      return nil
+[exit 0]
+
+$ reveal ruby/sample.rb --grep result
+Text search: ruby/sample.rb  —  pattern: result
+3 hits in 1 element
+
+  process_order()                                       lines 10, 13, 17
+
+[exit 0]

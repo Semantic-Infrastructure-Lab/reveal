@@ -27,6 +27,7 @@ from .core.node_taxonomy import (
     CLASS_NODES as _CLASS_NODES,
     STRUCT_NODES as _STRUCT_NODES,
     IMPORT_NODES as _IMPORT_NODES,
+    BODY_DEFINED_NODES as _BODY_DEFINED_NODES,
 )
 
 # Suppress tree-sitter deprecation warnings (centralized in core module)
@@ -712,12 +713,14 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return self._imports_from_extractor()
         imports = []
 
+        # Content is rstripped: a C/C++ preproc_include node spans its line's
+        # newline, which printed as a blank line in the outline (BACK-1323).
         for import_type in IMPORT_NODE_TYPES:
             nodes = self._find_nodes_by_type(import_type)
             for node in nodes:
                 imports.append({
                     'line': _zero_arg(node, 'start_position').row + 1,
-                    'content': self._get_node_text(node),
+                    'content': self._get_node_text(node).rstrip(),
                 })
 
         # Dart wraps both `import` and `export` under one node kind
@@ -727,7 +730,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             if any(_zero_arg(child, 'kind') == 'library_import' for child in _children(node)):
                 imports.append({
                     'line': _zero_arg(node, 'start_position').row + 1,
-                    'content': self._get_node_text(node),
+                    'content': self._get_node_text(node).rstrip(),
                 })
 
         # IMPORT_NODE_TYPES is a set: without this the order (and so the outline
@@ -1102,7 +1105,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         classes = []
 
         for class_type in class_types:
-            nodes = self._find_nodes_by_type(class_type)
+            nodes = self._find_definitions(class_type)
             for node in nodes:
                 name = self._get_node_name(node)
                 if not name:
@@ -1233,7 +1236,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         structs: List[StructureItem] = []
 
         for struct_type in STRUCT_NODE_TYPES:
-            nodes = self._find_nodes_by_type(struct_type)
+            nodes = self._find_definitions(struct_type)
             for node in nodes:
                 name = self._get_node_name(node)
                 if name:
@@ -1278,7 +1281,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         # Find matching node
         for node_type in node_types:
-            nodes = self._find_nodes_by_type(node_type)
+            nodes = self._find_definitions(node_type)
             for node in nodes:
                 node_name = self._get_node_name(node)
                 if node_name == name:
@@ -1322,6 +1325,17 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 parse_cache.move_to_end(self._cache_key)  # refresh LRU position
 
         return (self._node_cache or {}).get(node_type, [])
+
+    def _find_definitions(self, node_type: str) -> List[Any]:
+        """Nodes of `node_type` that define something, not ones that only mention a type.
+
+        Differs from _find_nodes_by_type only for BODY_DEFINED_NODES, where a node
+        without a body is a reference (`struct Batch *b`) or a forward declaration.
+        """
+        nodes = self._find_nodes_by_type(node_type)
+        if node_type not in _BODY_DEFINED_NODES:
+            return nodes
+        return [n for n in nodes if n.child_by_field_name('body') is not None]
 
     def has_parse_errors(self) -> bool:
         """True if the parsed tree contains any ERROR node.

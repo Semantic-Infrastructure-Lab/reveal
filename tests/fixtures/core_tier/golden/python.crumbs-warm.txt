@@ -1,0 +1,76 @@
+$ reveal python/sample.py
+File: sample.py (1.3KB, 49 lines)
+
+Imports (2):
+  :2      import os
+  :3      import sys
+
+Functions (6):
+  :6      validate(order) [4 lines, depth:2]
+  :12     process_order(order) [10 lines, depth:3]
+  :24     run(order) [2 lines, depth:0]
+  :33     __init__(self) [2 lines, depth:0]
+  :36     run(self, items) [5 lines, depth:2]
+  :47     summarize() [3 lines, depth:0]
+
+Classes (2):
+  :28     Batch
+  :46     Reporter
+
+
+Next: reveal python/sample.py Batch.method  # Hierarchical extraction
+      reveal python/sample.py validate       # Extract this function by name
+[exit 0]
+
+$ reveal python/sample.py --outline
+File: sample.py (1.3KB, 49 lines)
+
+import os (python/sample.py:2)
+import sys (python/sample.py:3)
+validate(order) [4 lines, depth:2] (python/sample.py:6)
+process_order(order) [10 lines, depth:3] (python/sample.py:12)
+run(order) [2 lines, depth:0] (python/sample.py:24)
+Batch (python/sample.py:28)
+  ├─ __init__(self) [2 lines, depth:0] (line 33)
+  └─ run(self, items) [5 lines, depth:2] (line 36)
+Reporter (python/sample.py:46)
+  └─ summarize() [3 lines, depth:0] (line 47)
+
+[exit 0]
+
+$ reveal python/sample.py process_order
+python/sample.py:12-21 | process_order
+
+     12  def process_order(order):
+     13      result = validate(order)
+     14      try:
+     15          log_path = os.path.join("/tmp", "orders.log")
+     16          with open(log_path, "a") as f:
+     17              f.write(str(result))
+     18      except OSError:
+     19          return None
+     20      result = result.upper()
+     21      return result
+
+Extracted process_order (10 lines)
+  → Nearby: reveal python/sample.py :24  # Next element
+[exit 0]
+
+$ reveal python/sample.py :12-14
+python/sample.py:12-14 | lines:12-14
+
+     12  def process_order(order):
+     13      result = validate(order)
+     14      try:
+
+Extracted lines:12-14 (3 lines)
+  → Nearby: reveal python/sample.py :24  # Next element
+[exit 0]
+
+$ reveal python/sample.py --grep result
+Text search: python/sample.py  —  pattern: result
+4 hits in 1 element
+
+  process_order()                                       lines 13, 17, 20, 21
+
+[exit 0]

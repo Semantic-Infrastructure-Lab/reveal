@@ -1,4 +1,5 @@
 """Breadcrumb system for agent-friendly navigation hints."""
+import contextvars
 import json
 import re
 
@@ -165,6 +166,35 @@ def _show_breadcrumb_hint_once() -> None:
     )
 
 
+# A breadcrumb block is built, then printed whole by print_breadcrumbs. The block
+# owns its "Next:" lead and the blank line before it: when a show-once hint that
+# used to carry "Next:" was suppressed, the lines after it printed with no lead,
+# and a block whose hints were all suppressed still printed two blank lines
+# (BACK-1601: found by the warm-install golden).
+_CONTINUATION = "      "
+_LEAD = "Next: "
+_block: contextvars.ContextVar = contextvars.ContextVar('breadcrumb_block', default=None)
+
+
+def _emit(line: str) -> None:
+    """Add a line to the open breadcrumb block, or print it when none is open."""
+    block = _block.get()
+    if block is None:
+        print(line)
+    else:
+        block.append(line)
+
+
+def _with_lead(lines: list) -> list:
+    """Give the block's first continuation line the "Next:" lead."""
+    for i, line in enumerate(lines):
+        if line.startswith(_LEAD):
+            return lines
+        if line.startswith(_CONTINUATION) and not line[len(_CONTINUATION):].startswith(' '):
+            return lines[:i] + [_LEAD + line[len(_CONTINUATION):]] + lines[i + 1:]
+    return lines
+
+
 def _seen_hints_file():
     from reveal.config import get_data_path
     return get_data_path('seen_hints.json')
@@ -189,7 +219,7 @@ def _save_seen_hints(seen: set) -> None:
 
 
 def _show_hint_once(hint_id: str, lines: list) -> bool:
-    """Print `lines` the first time `hint_id` is seen, ever; silent after.
+    """Emit `lines` the first time `hint_id` is seen, ever; silent after.
 
     Generalizes _show_breadcrumb_hint_once's marker-file pattern (one
     hardcoded hint) to any number of boilerplate hint_ids, backed by one
@@ -197,8 +227,8 @@ def _show_hint_once(hint_id: str, lines: list) -> bool:
     one marker file per hint. Reserved for lines that repeat the same
     lesson regardless of file content (e.g. "you can extract by name") —
     lines that vary with what's actually in the file (a real class/heading
-    name, a computed line number) should stay unconditional `print()` calls
-    instead. See BREADCRUMB_HINT_THROTTLING_2026-08-02.md for the full
+    name, a computed line number) should stay unconditional `_emit()` calls
+    instead. Neither carries the "Next:" lead; the block adds it. See BREADCRUMB_HINT_THROTTLING_2026-08-02.md for the full
     classification.
 
     Returns:
@@ -213,7 +243,7 @@ def _show_hint_once(hint_id: str, lines: list) -> bool:
     seen.add(hint_id)
     _save_seen_hints(seen)
     for line in lines:
-        print(line)
+        _emit(line)
     return True
 
 
@@ -308,7 +338,7 @@ def _print_typed_hints(path, file_type):
 def _handle_metadata(path, file_type, **kwargs):
     """Handle 'metadata' context breadcrumbs."""
     _show_hint_once('metadata_see_structure', [
-        f"Next: reveal {path}              # See structure",
+        f"      reveal {path}              # See structure",
         f"      reveal {path} --check      # Quality check",
     ])
 
@@ -317,7 +347,7 @@ def _handle_structure(path, file_type, **kwargs):
     """Handle 'structure' context breadcrumbs."""
     element_placeholder = get_element_placeholder(file_type)
     _show_hint_once('structure_extract_by_name', [
-        f"Next: reveal {path} {element_placeholder}   # Extract by name",
+        f"      reveal {path} {element_placeholder}   # Extract by name",
     ])
 
     if file_type == 'markdown':
@@ -363,7 +393,7 @@ def _suggest_hierarchical_extraction(path, file_type, structure):
     for cls in classes:
         cls_name = cls.get('name', '') if isinstance(cls, dict) else str(cls)
         if cls_name:
-            print(f"      reveal {path} {cls_name}.method  # Hierarchical extraction")
+            _emit(f"      reveal {path} {cls_name}.method  # Hierarchical extraction")
             return 1
 
     return 0
@@ -389,7 +419,7 @@ def _suggest_doc_section_extraction(path, file_type, structure):
     first = headings[0]
     name = first.get('name', '') if isinstance(first, dict) else str(first)
     if name:
-        print(f"      reveal {path} --section '{name}'  # Extract this section")
+        _emit(f"      reveal {path} --section '{name}'  # Extract this section")
         return 1
 
     return 0
@@ -415,11 +445,11 @@ def _suggest_line_extraction(path, file_type, structure, hints_shown):
     # (BACK-1508), so an agent reading outlines never learned it.
     name = first_func.get('name')
     if name and name.isidentifier():
-        print(f"      reveal {path} {name}       # Extract this function by name")
+        _emit(f"      reveal {path} {name}       # Extract this function by name")
         return 1
     line = first_func.get('line', 0)
     if line:
-        print(f"      reveal {path} :{line}       # Extract at line number")
+        _emit(f"      reveal {path} :{line}       # Extract at line number")
         return 1
 
     return 0
@@ -453,7 +483,7 @@ def _suggest_imports_analysis(path, file_type, structure):
 
     import_count = len(structure.get('imports', []))
     if import_count > 5 and file_type in ('python', 'javascript', 'typescript'):
-        print(f"      reveal 'imports://{path}'   # ({import_count} imports)")
+        _emit(f"      reveal 'imports://{path}'   # ({import_count} imports)")
 
 
 def _suggest_ast_queries_for_large_file(path, file_type, structure):
@@ -483,7 +513,7 @@ def _handle_typed(path, file_type, **kwargs):
     """Handle 'typed' (outline) context breadcrumbs."""
     element_placeholder = get_element_placeholder(file_type)
     _show_hint_once('typed_extract_element', [
-        f"Next: reveal {path} {element_placeholder}   # Extract specific element",
+        f"      reveal {path} {element_placeholder}   # Extract specific element",
         f"      reveal {path}              # See flat structure",
     ])
     _print_typed_hints(path, file_type)
@@ -499,7 +529,7 @@ def _handle_element(path, file_type, **kwargs):
     if line_count:
         info += f" ({line_count} lines)"
 
-    print(info)
+    _emit(info)
     _show_hint_once('element_back_to_structure', [
         f"  → Back: reveal {path}          # See full structure",
     ])
@@ -507,7 +537,7 @@ def _handle_element(path, file_type, **kwargs):
     # Point at the outline's next element; the last element has no neighbour to suggest.
     next_line = kwargs.get('next_line')
     if line_start and file_type in _CODE_TYPES and next_line:
-        print(f"  → Nearby: reveal {path} :{next_line}  # Next element")
+        _emit(f"  → Nearby: reveal {path} :{next_line}  # Next element")
     else:
         _show_hint_once('element_check_fallback', [
             f"  → Check: reveal {path} --check # Quality analysis",
@@ -520,7 +550,7 @@ def _handle_quality_check(path, file_type, **kwargs):
 
     if not detections:
         _show_hint_once('quality_check_clean', [
-            f"Next: reveal {path}              # See structure",
+            f"      reveal {path}              # See structure",
             f"      reveal {path} --outline    # Nested hierarchy",
         ])
         return
@@ -529,10 +559,10 @@ def _handle_quality_check(path, file_type, **kwargs):
     complex_elements = _extract_complex_elements(detections)
 
     if complex_elements:
-        print(f"Next: reveal {path} {complex_elements[0]}   # View complex function")
+        _emit(f"      reveal {path} {complex_elements[0]}   # View complex function")
     else:
         _show_hint_once('quality_check_see_structure', [
-            f"Next: reveal {path}              # See structure",
+            f"      reveal {path}              # See structure",
         ])
 
     _show_hint_once('quality_check_trailer', [
@@ -560,7 +590,7 @@ def _handle_directory_check(path, file_type, **kwargs):
     total_issues = kwargs.get('total_issues', 0)
     files_checked = kwargs.get('files_checked', 0)
 
-    print()
+    _emit("")
 
     if total_issues > 0:
         _show_hint_once('directory_check_workflow_issues', [
@@ -607,8 +637,17 @@ def print_breadcrumbs(context, path, file_type=None, config=None, **kwargs):
         return
 
     _show_breadcrumb_hint_once()
-    print()  # Blank line before breadcrumbs
 
     handler = _CONTEXT_HANDLERS.get(context)
-    if handler:
+    if not handler:
+        return
+    block: list = []
+    token = _block.set(block)
+    try:
         handler(path, file_type, **kwargs)
+    finally:
+        _block.reset(token)
+    if any(line.strip() for line in block):
+        print()  # Blank line before breadcrumbs
+        for line in _with_lead(block):
+            print(line)

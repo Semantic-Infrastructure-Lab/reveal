@@ -37,7 +37,7 @@
   "reveal/grep_handler.py": 24,
   "reveal/mcp_server.py": 1,
   "reveal/nav_handlers.py": 25,
-  "reveal/utils/breadcrumbs.py": 12,
+  "reveal/utils/breadcrumbs.py": 4,
   "reveal/utils/json_utils.py": 1,
   "reveal/utils/query_parser.py": 1,
   "reveal/utils/updates.py": 2,

@@ -1,0 +1,105 @@
+$ reveal csharp/sample.cs
+File: sample.cs (1.6KB, 64 lines)
+
+Imports (3):
+  :2      using System;
+  :3      using System.IO;
+  :4      using System.Text;
+
+Functions (5):
+  :10     Validate(int order) [8 lines, depth:2]
+  :19     ProcessOrder(int order) [14 lines, depth:2]
+  :34     Run(int order) [4 lines, depth:0]
+  :47     Run(System.Collections.Generic.List<int> items) [8 lines, depth:1]
+  :62     Summarize() [1 lines, depth:0]
+
+Classes (3):
+  :8      OrderProcessor
+  :43     Batch
+  :59     Reporter
+
+[exit 0]
+
+$ reveal csharp/sample.cs --outline
+File: sample.cs (1.6KB, 64 lines)
+
+using System; (csharp/sample.cs:2)
+using System.IO; (csharp/sample.cs:3)
+using System.Text; (csharp/sample.cs:4)
+OrderProcessor (csharp/sample.cs:8)
+  ├─ Validate(int order) [8 lines, depth:2] (line 10)
+  ├─ ProcessOrder(int order) [14 lines, depth:2] (line 19)
+  └─ Run(int order) [4 lines, depth:0] (line 34)
+Batch (csharp/sample.cs:43)
+  └─ Run(System.Collections.Generic.List<int> items) [8 lines, depth:1] (line 47)
+Reporter (csharp/sample.cs:59)
+  └─ Summarize() [1 lines, depth:0] (line 62)
+
+[exit 0]
+
+$ reveal csharp/sample.cs ProcessOrder
+csharp/sample.cs:19-32 | ProcessOrder
+
+     19          public static int ProcessOrder(int order)
+     20          {
+     21              int result = Validate(order);
+     22              try
+     23              {
+     24                  File.AppendAllText("/tmp/orders.log", result.ToString());
+     25              }
+     26              catch (IOException)
+     27              {
+     28                  return -1;
+     29              }
+     30              result = result * 2;
+     31              return result;
+     32          }
+[exit 0]
+
+$ reveal csharp/sample.cs Batch.Run
+csharp/sample.cs:47-54 | Batch.Run
+
+     47          public void Run(System.Collections.Generic.List<int> items)
+     48          {
+     49              foreach (var item in items)
+     50              {
+     51                  this.Total = this.Total + item;
+     52                  cache.Set(item);
+     53              }
+     54          }
+[exit 0]
+
+$ reveal csharp/sample.cs :19-21
+csharp/sample.cs:19-21 | lines:19-21
+
+     19          public static int ProcessOrder(int order)
+     20          {
+     21              int result = Validate(order);
+[exit 0]
+
+$ reveal csharp/sample.cs :19
+csharp/sample.cs:19-32 | ProcessOrder
+
+     19          public static int ProcessOrder(int order)
+     20          {
+     21              int result = Validate(order);
+     22              try
+     23              {
+     24                  File.AppendAllText("/tmp/orders.log", result.ToString());
+     25              }
+     26              catch (IOException)
+     27              {
+     28                  return -1;
+     29              }
+     30              result = result * 2;
+     31              return result;
+     32          }
+[exit 0]
+
+$ reveal csharp/sample.cs --grep result
+Text search: csharp/sample.cs  —  pattern: result
+4 hits in 1 element
+
+  ProcessOrder()                                        lines 21, 24, 30, 31
+
+[exit 0]

@@ -1,0 +1,96 @@
+$ reveal javascript/sample.js
+File: sample.js (1.4KB, 53 lines)
+
+Imports (3):
+  :2      const fs = require('fs');
+  :3      const path = require('path');
+  :4      const util = require('util');  // unused on purpose -- must still be flagged by imports://
+
+Functions (6):
+  :6      validate(order) [6 lines, depth:2]
+  :13     processOrder(order) [10 lines, depth:2]
+  :24     run(order) [3 lines, depth:0]
+  :32     constructor() [3 lines, depth:0]
+  :35     run(items) [7 lines, depth:2]
+  :48     summarize() [3 lines, depth:0]
+
+Classes (2):
+  :31     Batch
+  :47     Reporter
+
+[exit 0]
+
+$ reveal javascript/sample.js --outline
+File: sample.js (1.4KB, 53 lines)
+
+const fs = require('fs'); (javascript/sample.js:2)
+const path = require('path'); (javascript/sample.js:3)
+const util = require('util');  // unused on purpose -- must still be flagged by imports:// (javascript/sample.js:4)
+validate(order) [6 lines, depth:2] (javascript/sample.js:6)
+processOrder(order) [10 lines, depth:2] (javascript/sample.js:13)
+run(order) [3 lines, depth:0] (javascript/sample.js:24)
+Batch (javascript/sample.js:31)
+  ├─ constructor() [3 lines, depth:0] (line 32)
+  └─ run(items) [7 lines, depth:2] (line 35)
+Reporter (javascript/sample.js:47)
+  └─ summarize() [3 lines, depth:0] (line 48)
+
+[exit 0]
+
+$ reveal javascript/sample.js processOrder
+javascript/sample.js:13-22 | processOrder
+
+     13  function processOrder(order) {
+     14      let result = validate(order);
+     15      try {
+     16          fs.writeFileSync(path.join('/tmp', 'orders.log'), String(result));
+     17      } catch (err) {
+     18          return null;
+     19      }
+     20      result = result.toUpperCase();
+     21      return result;
+     22  }
+[exit 0]
+
+$ reveal javascript/sample.js Batch.run
+javascript/sample.js:35-41 | Batch.run
+
+     35      run(items) {
+     36          for (const item of items) {
+     37              this.total = this.total + item;
+     38              cache.set(item);
+     39          }
+     40          return this.total;
+     41      }
+[exit 0]
+
+$ reveal javascript/sample.js :13-15
+javascript/sample.js:13-15 | lines:13-15
+
+     13  function processOrder(order) {
+     14      let result = validate(order);
+     15      try {
+[exit 0]
+
+$ reveal javascript/sample.js :13
+javascript/sample.js:13-22 | processOrder
+
+     13  function processOrder(order) {
+     14      let result = validate(order);
+     15      try {
+     16          fs.writeFileSync(path.join('/tmp', 'orders.log'), String(result));
+     17      } catch (err) {
+     18          return null;
+     19      }
+     20      result = result.toUpperCase();
+     21      return result;
+     22  }
+[exit 0]
+
+$ reveal javascript/sample.js --grep result
+Text search: javascript/sample.js  —  pattern: result
+4 hits in 1 element
+
+  processOrder()                                        lines 14, 16, 20, 21
+
+[exit 0]

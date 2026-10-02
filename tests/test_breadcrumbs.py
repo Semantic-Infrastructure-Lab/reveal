@@ -1414,8 +1414,8 @@ class TestPrintBreadcrumbsDirectoryCheck:
             total_issues=9, files_with_issues=3, files_checked=20,
         )
 
-        # print_breadcrumbs always emits its own leading blank line first.
-        assert second.strip() == ''
+        # A block whose hints were all suppressed prints nothing, not even its blank line.
+        assert second == ''
 
     def test_clean_and_issues_workflows_are_independent_hints(self):
         """Seeing the 'issues found' workflow doesn't suppress the 'all
@@ -1434,3 +1434,54 @@ class TestPrintBreadcrumbsDirectoryCheck:
 
         assert '✅ All 20 files clean' in second
 
+
+
+# ==============================================================================
+# The block owns its "Next:" lead (BACK-1601)
+# ==============================================================================
+
+class TestBlockLead:
+    """A warm install suppresses the show-once line that used to carry "Next:".
+
+    The lines after it then printed with a bare continuation indent, and a
+    block with every hint suppressed still printed blank lines. The lead and
+    the separator now belong to the block, whatever survives the throttle.
+    """
+
+    @staticmethod
+    def _config():
+        config = Mock()
+        config.is_breadcrumbs_enabled.return_value = True
+        return config
+
+    def _twice(self, context, path, file_type, **kwargs):
+        capture_breadcrumbs(context, path, file_type, config=self._config(), **kwargs)
+        return capture_breadcrumbs(context, path, file_type, config=self._config(), **kwargs)
+
+    def test_warm_structure_leads_with_next(self):
+        structure = {'classes': [{'name': 'Batch'}], 'functions': [{'name': 'validate', 'line': 6}]}
+        out = self._twice('structure', 'a.py', 'python', structure=structure)
+        lines = out.splitlines()
+        assert lines[0] == ''
+        assert lines[1] == 'Next: reveal a.py Batch.method  # Hierarchical extraction'
+        assert all(line.startswith('      reveal ') for line in lines[2:])
+
+    def test_one_lead_per_block(self):
+        out = capture_breadcrumbs('typed', 'a.py', 'python', config=self._config())
+        assert out.count('Next: ') == 1
+        assert out.splitlines()[1].startswith('Next: reveal a.py ')
+
+    def test_warm_typed_block_prints_nothing(self):
+        assert self._twice('typed', 'a.py', 'python') == ''
+
+    def test_warm_quality_check_trailer_keeps_a_lead(self, _isolated_hint_store):
+        _isolated_hint_store.add('quality_check_see_structure')
+        out = capture_breadcrumbs('quality-check', 'a.py', 'python', config=self._config(),
+                                  detections=[Mock(rule_code='E501', context='')])
+        assert out.splitlines()[1] == 'Next: reveal stats://a.py      # Analyze complexity trends'
+
+    def test_element_block_has_no_lead(self):
+        out = self._twice('element', 'a.py', 'python', element_name='f', line_count=3,
+                          line_start=1, next_line=5)
+        assert 'Next: ' not in out
+        assert out.splitlines()[1:] == ['Extracted f (3 lines)', '  → Nearby: reveal a.py :5  # Next element']

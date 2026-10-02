@@ -351,6 +351,15 @@ STRUCT_NODES: frozenset = frozenset({
     'struct_declaration',  # C#
     'struct_type',         # Go
 })
+# C/C++ use one node kind for a type's definition and for every mention of it:
+# `struct Batch { ... }` and the `struct Batch` in `void f(struct Batch *b)`,
+# `struct Batch b;` or the forward declaration `struct Batch;` are all
+# struct_specifier. Only the one with a body defines the type; the rest listed
+# as phantom definitions (a struct per parameter) and made a name lookup
+# report "matches N definitions" (BACK-1601).
+BODY_DEFINED_NODES: frozenset = frozenset({
+    'struct_specifier', 'union_specifier', 'enum_specifier', 'class_specifier',
+})
 # Rust methods live in `impl Foo { }` blocks, not in `struct Foo { }` itself
 # (Rust structs have no nested methods) — the --scope gap there is impl_item
 # missing, not struct_item, confirmed live (a Rust method's enclosing impl
