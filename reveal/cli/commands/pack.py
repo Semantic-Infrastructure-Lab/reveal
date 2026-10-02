@@ -67,12 +67,18 @@ def create_pack_parser() -> argparse.ArgumentParser:
             "  reveal pack ./src --format json        # Structured output for tooling\n"
             "  reveal pack ./src --architecture       # Boost core abstractions; show architecture brief\n"
             "\n"
-            "Prioritization order (with --since):\n"
-            "  1. Changed files (git diff vs ref)\n"
-            "  2. Entry points (main.py, index.js, etc.)\n"
-            "  3. High-complexity files\n"
-            "  4. Recently modified files\n"
-            "  5. Other files (fills remaining budget)\n"
+            "Prioritization order:\n"
+            "  1. Changed files (with --since; git diff vs ref)\n"
+            "  2. Entry points and root config (main.py, index.js, package.json, etc.)\n"
+            "  3. Files matching --focus, and files tied to them by imports\n"
+            "  4. Key directories (api/, core/, models/, auth/, ...) and, with\n"
+            "     --architecture, widely imported files\n"
+            "  5. Other files (fills remaining budget); tests, vendor and docs last\n"
+            "  Ties go to the most recently modified file.\n"
+            "\n"
+            "--budget counts the raw size of the files selected, not the output.\n"
+            "With --content: changed files are shown raw (first 500 lines), key files\n"
+            "as structure, and the remaining selected files by name only.\n"
         )
     )
     parser.add_argument(
@@ -100,7 +106,7 @@ def create_pack_parser() -> argparse.ArgumentParser:
         '--content',
         action='store_true',
         default=False,
-        help='Emit reveal structure output for each selected file (agent-ready context, not just file list).'
+        help='Emit content for the selected files: changed files raw (first 500 lines), key files as structure, the rest by name only.'
     )
     parser.add_argument(
         '--architecture',

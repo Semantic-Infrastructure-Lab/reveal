@@ -132,11 +132,14 @@ mcp = MCPServer(
         "supports select/ignore to target specific rule codes\n"
         "  reveal_review(target)  — pre-merge assessment; pass a git range "
         "(e.g. 'main..feature') to scope to changed files only\n\n"
-        "reveal_pack(path) — token-budgeted context snapshot, DEFAULTS TO "
-        "~8000 TOKENS OF RAW FILE CONTENT. Use only for breadth (PR review "
-        "via `since`, unfamiliar-repo handoff, one-shot context dump) — never "
-        "to answer a question about one file or function, that's "
-        "reveal_structure + reveal_element at a fraction of the cost."
+        "reveal_pack(path) — picks the most important files that fit a token "
+        "budget (default 8000, counted on the files' raw size) and returns "
+        "their names plus the structure of the key ones, not raw file "
+        "content: a few hundred to a few thousand tokens. With `since`, "
+        "changed files come first and are shown raw (up to 500 lines each). "
+        "Use it for breadth (PR review via `since`, an unfamiliar repo, a "
+        "one-shot handoff); for one file or function, reveal_structure + "
+        "reveal_element answer directly."
     ),
 )
 
@@ -505,24 +508,26 @@ def reveal_pack(
     """Get a token-budgeted context snapshot of a codebase — ideal for PR review.
 
     Use for breadth: PR review (via ``since``), an unfamiliar repo, a one-shot
-    handoff. Do NOT use to answer a question about a specific file or
-    function — that's reveal_structure + reveal_element at a fraction of the
-    cost (this defaults to ~8000 tokens of raw content with content=True).
+    handoff. For a question about a specific file or function,
+    reveal_structure + reveal_element answer directly. ``budget`` bounds the
+    raw size of the files selected, not the size of the answer: the answer is
+    names plus structure, typically a few hundred to a few thousand tokens,
+    with raw content only for changed files (``since``, first 500 lines each).
 
     Selects the most important files within the token budget, prioritizing:
     1. Changed files (when ``since`` is set)
     2. Entry points (main.py, app.py, index.js, etc.)
     3. Key architectural modules (api/, models/, auth/, core/)
-    4. Recently modified files
+    4. Ties broken by most recently modified
 
     With ``content=True`` (default), includes tiered structure output:
-    - Changed files → full raw content (see exactly what changed)
+    - Changed files → raw content, first 500 lines (see exactly what changed)
     - Key files → reveal structure (function signatures, imports)
     - Low-priority files → names only
 
     Args:
         path: Directory to pack
-        budget: Token budget in approximate tokens (default 8000)
+        budget: Budget in approximate tokens of the selected files' raw size (default 8000)
         since: Git ref for PR review mode, e.g. 'main' or 'HEAD~3' (prioritizes changed files)
         content: Include file structure in output (default True)
         focus: Emphasize files matching this name pattern (e.g., 'auth', 'api')

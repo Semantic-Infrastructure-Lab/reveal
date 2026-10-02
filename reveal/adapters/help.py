@@ -1707,6 +1707,8 @@ class HelpAdapter(ResourceAdapter):
                         ),
                         'next': [f'reveal help://{topic}/full'],
                     }
+            elif not full and (own := self._own_section(entry, lines)) is not None:
+                content = own
             elif (not full and topic not in self._FULL_ONLY_TOPICS
                     and len(lines) > self._PROGRESSIVE_DISCLOSURE_THRESHOLD):
                 content = self._truncate_to_first_section(topic, lines)
@@ -1776,6 +1778,33 @@ class HelpAdapter(ResourceAdapter):
                 'message': str(e),
                 'next': ['reveal help://'],
             }
+
+    def _own_section(self, entry: GuideEntry, lines: list[str]) -> Optional[str]:
+        """The section an alias topic names in a shared guide, with a footer.
+
+        help://pack, help://health, help://review and help://dev are aliases of
+        SUBCOMMANDS_GUIDE.md. The generic first-screen cut showed whichever
+        sections come first (dev and review), so help://pack never showed pack
+        (BACK-1609). An alias whose guide has a level-2 heading ``reveal <topic>``
+        opens on that section instead. None when the topic is canonical or the
+        guide has no such heading.
+        """
+        if not entry.is_alias:
+            return None
+        prefix = f'reveal {entry.topic}'.lower()
+        headings = _markdown_headings(lines)
+        match = next((h for h in headings if h[1] == 2 and (
+            h[2].lower() == prefix or h[2].lower().startswith(prefix + ' '))), None)
+        if match is None:
+            return None
+        start, level, text = match
+        end = next((i for i, lvl, _ in headings if i > start and lvl <= level), len(lines))
+        body = '\n'.join(lines[start:end]).rstrip().rstrip('-').rstrip()
+        canonical = next((t for t, e in self.help_topics.items()
+                          if e.file == entry.file and not e.is_alias), None)
+        others = f'reveal help://{canonical}' if canonical else f'reveal help://{entry.topic}/full'
+        return (f"{body}\n\n── Section '{text}' of {entry.file}. "
+                f"Other sections: {others} · Full guide: reveal help://{entry.topic}/full")
 
     def _extract_markdown_section(self, lines: list[str], section: str, topic: str) -> Optional[str]:
         """Extract a heading and its body from markdown lines.
