@@ -386,22 +386,31 @@ pytest tests/test_your_analyzer.py -v
 pytest tests/
 ```
 
-**Before you push, run what CI runs:**
+**Before each commit, run the fast gates; GitHub CI is the full test gate:**
+
+```bash
+scripts/ci-local.sh --no-tests     # seconds: ratchets, lints, V-series, mypy (CI does not run mypy)
+pytest tests/test_<what_you_touched>.py tests/test_flag_ledger.py tests/test_output_contract_compliance.py
+```
+
+Push to master and read the run: `test.yml` runs every Python version on Linux, macOS and
+Windows plus the language-pack compat legs (`gh run list --workflow test.yml`). A red master is
+fixed forward; releases are cut from a tag only after CI is green (RELEASING.md). The local matrix
+duplicates CI's Linux legs, so it is a tool to reproduce a CI failure or work offline, not a push gate:
 
 ```bash
 scripts/ci-local.sh                # Python 3.12, latest deps: pytest + the CI-only steps
-scripts/ci-local.sh --matrix       # 3.10, 3.12, 3.14, then 3.12 @ the language-pack 1.8.1 floor (~8 min; use tmux)
-scripts/ci-local.sh --matrix --changed              # per commit (~1 min): only the test files you added/edited
-scripts/ci-local.sh --matrix -- tests/test_foo.py   # quick: only these tests, per leg
+scripts/ci-local.sh --matrix       # 3.10, 3.12, 3.14, then 3.12 @ the language-pack 1.8.1 floor (~20 min; use tmux)
+scripts/ci-local.sh --matrix -- tests/test_foo.py   # only these tests, per leg
 scripts/ci-local.sh --lp 1.12.5    # force a tree-sitter-language-pack version (CI compat-matrix)
 ```
 
-A 3.12-only run is not enough: 3.10 rejects PEP 701 f-strings (a nested same-type quote), and 3.14
-tokenizes t-strings natively, and both reached GitHub CI from a green local run. Nor is a run on the
-latest language-pack: on the 1.8.1 floor `node.start_byte` is a bound method, not a value, so a bare
-read passes everywhere but CI's compat leg -- read Node accessors with `_zero_arg(node, 'start_byte')`
-(`scripts/check_treesitter_accessors.py` fails a bare read in seconds). The script's
-header also lists the Windows-only pitfalls worth checking by hand before you push.
+Classes that pass a 3.12 run and fail elsewhere: 3.10 rejects PEP 701 f-strings (a nested
+same-type quote), and 3.14 tokenizes t-strings natively. On the language-pack 1.8.1 floor
+`node.start_byte` is a bound method, not a value, so a bare read passes everywhere but CI's compat
+leg -- read Node accessors with `_zero_arg(node, 'start_byte')` (`scripts/check_treesitter_accessors.py`,
+part of `--no-tests`, fails a bare read in seconds). The script's header also lists the Windows-only
+pitfalls worth checking by hand.
 
 Your dev environment drifts from CI (dependency versions, Python version, stale bytecode),
 so a plain local `pytest` can pass while every CI job fails -- that is exactly how a
