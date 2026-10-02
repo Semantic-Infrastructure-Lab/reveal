@@ -213,14 +213,10 @@ def _get_file_raw_content(file_path: str, max_lines: int = 500) -> str:
     """Return raw file content, truncated to max_lines if needed.
 
     Used for changed files in ``--content`` mode — raw content lets the agent
-    see exactly what changed, not just the structural outline.
+    see exactly what changed, not just the structural outline. Raises OSError
+    when the file can't be read; _tiered_content records it.
     """
-    try:
-        text = Path(file_path).read_text(encoding='utf-8', errors='replace')
-    except Exception:
-        # The text-mode caller renders '' as '[unreadable]' — visible to the
-        # reader, just not at this call site.
-        return ''
+    text = Path(file_path).read_text(encoding='utf-8', errors='replace')
     lines = text.splitlines(keepends=True)
     if len(lines) > max_lines:
         truncated = ''.join(lines[:max_lines])
@@ -233,19 +229,17 @@ def _get_file_structure(file_path: str) -> str:
     """Return reveal structure output for a file as a string.
 
     Uses reveal's own progressive-disclosure analysis — same output as `reveal file.py`.
-    Returns empty string if no analyzer is available or analysis fails.
+    Returns an empty string if no analyzer handles the file; an analysis failure
+    raises, and _tiered_content records it.
     """
     from types import SimpleNamespace  # noqa: I006 — avoid circular import at module level
     from reveal.registry import get_analyzer  # noqa: I006
     from reveal.display.structure import show_structure  # noqa: I006
 
-    try:
-        analyzer_class = get_analyzer(file_path, allow_fallback=True)
-        if not analyzer_class:
-            return ''
-        analyzer = analyzer_class(file_path)
-    except Exception:
+    analyzer_class = get_analyzer(file_path, allow_fallback=True)
+    if not analyzer_class:
         return ''
+    analyzer = analyzer_class(file_path)
 
     buffer = io.StringIO()
     old_stdout = sys.stdout
@@ -259,13 +253,34 @@ def _get_file_structure(file_path: str) -> str:
         # DD pack.
         # all=True: pack budgets its own output; the interactive per-file item cap must not apply.
         show_structure(analyzer, 'text', args=SimpleNamespace(no_raw_fallback=True, all=True))
-    except Exception:
-        # The text-mode caller renders '' as '[no structure analysis available]'.
-        return ''
     finally:
         sys.stdout = old_stdout
 
     return buffer.getvalue()
+
+
+_STRUCTURE_THRESHOLD = 2.0
+
+
+def _tiered_content(file_info: Dict[str, Any]) -> Tuple[str, str, Optional[str]]:
+    """(content_type, content, error) for one selected file, by tier.
+
+    ``error`` names why the content is missing, so an unreadable file or a crashed
+    analysis is never shown as an empty one (BACK-1614). Analysis catches anything:
+    one file's analyzer bug must not abort the whole pack.
+    """
+    path = file_info['path']
+    if file_info.get('changed', False):
+        try:
+            return 'full', _get_file_raw_content(path), None
+        except OSError as e:
+            return 'full', '', f'unreadable: {e}'
+    if file_info.get('priority', _STRUCTURE_THRESHOLD) >= _STRUCTURE_THRESHOLD:
+        try:
+            return 'structure', _get_file_structure(path), None
+        except Exception as e:
+            return 'structure', '', f'structure analysis failed: {type(e).__name__}: {e}'
+    return 'name_only', '', None
 
 
 def _emit_content_section(selected: List[Dict[str, Any]]) -> None:
@@ -276,8 +291,6 @@ def _emit_content_section(selected: List[Dict[str, Any]]) -> None:
     - **Non-changed, priority >= 2** → reveal structure (function signatures, imports)
     - **Non-changed, priority < 2** → name-only listing (preserve token budget)
     """
-    _STRUCTURE_THRESHOLD = 2.0
-
     print()
     print('━' * 70)
     print('CONTENT  (changed=full · key files=structure · low priority=names)')
@@ -287,29 +300,19 @@ def _emit_content_section(selected: List[Dict[str, Any]]) -> None:
 
     for file_info in selected:
         rel = file_info['relative']
-        file_path = file_info['path']
-        is_changed = file_info.get('changed', False)
-        priority = file_info.get('priority', _STRUCTURE_THRESHOLD)
-
-        if is_changed:
-            # Tier 0: full raw content — agent needs to see what actually changed
-            content = _get_file_raw_content(file_path)
-            print(f'\n── {rel}  ◀ CHANGED (full content) ──')
-            if content.strip():
-                print(content, end='' if content.endswith('\n') else '\n')
-            else:
-                print('[unreadable]')
-        elif priority >= _STRUCTURE_THRESHOLD:
-            # Tier 1/2: reveal structure — function signatures, class defs, imports
-            content = _get_file_structure(file_path)
-            print(f'\n── {rel} ──')
-            if content.strip():
-                print(content, end='' if content.endswith('\n') else '\n')
-            else:
-                print('[no structure analysis available]')
-        else:
+        content_type, content, error = _tiered_content(file_info)
+        if content_type == 'name_only':
             # Tier 3: name only — deferred to summary to save tokens
             name_only.append(file_info)
+            continue
+        # Tier 0 (changed): full raw content. Tier 1/2: reveal structure.
+        print(f'\n── {rel}  ◀ CHANGED (full content) ──' if content_type == 'full' else f'\n── {rel} ──')
+        if error:
+            print(f'[{error}]')
+        elif content.strip():
+            print(content, end='' if content.endswith('\n') else '\n')
+        else:
+            print('[empty]' if content_type == 'full' else '[no structure analysis available]')
 
     if name_only:
         print('\n── Low-priority files (selected, structure omitted) ──')
@@ -321,30 +324,21 @@ def _collect_file_contents(selected: List[Dict[str, Any]]) -> List[Dict[str, Any
     """Return tiered content for each selected file as a list of dicts (JSON mode).
 
     Each entry includes ``content_type``: ``'full'`` (changed files), ``'structure'``
-    (key files), or ``'name_only'`` (low-priority files).
+    (key files), or ``'name_only'`` (low-priority files), and ``error`` when the
+    file could not be read or analyzed.
     """
-    _STRUCTURE_THRESHOLD = 2.0
     result = []
     for file_info in selected:
-        is_changed = file_info.get('changed', False)
-        priority = file_info.get('priority', _STRUCTURE_THRESHOLD)
-
-        if is_changed:
-            content = _get_file_raw_content(file_info['path'])
-            content_type = 'full'
-        elif priority >= _STRUCTURE_THRESHOLD:
-            content = _get_file_structure(file_info['path'])
-            content_type = 'structure'
-        else:
-            content = ''
-            content_type = 'name_only'
-
-        result.append({
+        content_type, content, error = _tiered_content(file_info)
+        entry = {
             'file': file_info['relative'],
-            'changed': is_changed,
+            'changed': file_info.get('changed', False),
             'content_type': content_type,
             'content': content,
-        })
+        }
+        if error:
+            entry['error'] = error
+        result.append(entry)
     return result
 
 
@@ -642,9 +636,9 @@ def _count_lines(path: Path) -> int:
     """Count lines in a file."""
     try:
         return path.read_text(encoding='utf-8', errors='ignore').count('\n')
-    except Exception:
+    except OSError:
         # Line count feeds priority scoring only; an unreadable file just
-        # sorts as if it were empty rather than blocking the pack.
+        # sorts as if it were empty, and its content entry says unreadable.
         return 0
 
 
@@ -824,7 +818,11 @@ def _format_pack_content(selected: List[Dict[str, Any]]) -> List[str]:
             continue
         marker = "  ◀ CHANGED (full content)" if entry['content_type'] == 'full' else ""
         lines.append(f"\n── {entry['file']}{marker} ──")
-        lines.append(entry['content'].rstrip() if entry['content'].strip() else "[unreadable]")
+        if entry.get('error'):
+            lines.append(f"[{entry['error']}]")
+        else:
+            empty = "[empty]" if entry['content_type'] == 'full' else "[no structure analysis available]"
+            lines.append(entry['content'].rstrip() if entry['content'].strip() else empty)
     if name_only:
         lines.append("\n── Low-priority files (selected, structure omitted) ──")
         lines.extend(f"  {f}" for f in name_only)

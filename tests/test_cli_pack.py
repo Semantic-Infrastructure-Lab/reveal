@@ -1275,9 +1275,10 @@ class TestGetFileRawContent(unittest.TestCase):
         self.assertIn('def hello', result)
         self.assertIn('return 42', result)
 
-    def test_missing_file_returns_empty(self):
-        result = _get_file_raw_content('/nonexistent/path/file.py')
-        self.assertEqual(result, '')
+    def test_missing_file_raises(self):
+        # _tiered_content turns this into an 'unreadable' error entry (BACK-1614)
+        with self.assertRaises(OSError):
+            _get_file_raw_content('/nonexistent/path/file.py')
 
     def test_truncates_at_max_lines(self):
         lines = [f"line {i}\n" for i in range(600)]
@@ -1412,6 +1413,28 @@ class TestEmitContentSection(unittest.TestCase):
 
 
 class TestCollectFileContents(unittest.TestCase):
+
+    def test_unreadable_changed_file_carries_error(self):
+        # BACK-1614: was content '' -- the same as an empty file
+        infos = [{'path': '/nonexistent/gone.py', 'relative': 'gone.py', 'changed': True}]
+        item, = _collect_file_contents(infos)
+        self.assertEqual(item['content'], '')
+        self.assertTrue(item['error'].startswith('unreadable: '))
+
+    def test_failed_structure_analysis_carries_error(self):
+        from unittest import mock
+        infos = [{'path': 'x.py', 'relative': 'x.py', 'changed': False, 'priority': 2.0}]
+        with mock.patch('reveal.adapters.pack._get_file_structure',
+                        side_effect=RuntimeError('analyzer bug')):
+            item, = _collect_file_contents(infos)
+        self.assertEqual(item['error'], 'structure analysis failed: RuntimeError: analyzer bug')
+
+    def test_readable_file_has_no_error_key(self):
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("x = 1\n")
+            fpath = f.name
+        item, = _collect_file_contents([{'path': fpath, 'relative': 'x.py', 'changed': True}])
+        self.assertNotIn('error', item)
 
     def test_returns_list_of_dicts(self):
         with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
