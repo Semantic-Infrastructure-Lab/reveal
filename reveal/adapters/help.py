@@ -1,5 +1,6 @@
 """Help adapter (help://) - Meta-adapter for exploring reveal's capabilities."""
 
+import logging
 import re
 from dataclasses import dataclass, asdict, replace
 from pathlib import Path
@@ -8,6 +9,8 @@ from .base import ResourceAdapter, Stability, register_adapter, register_rendere
 from ..utils.formatting import shell_command
 from ..utils.results import ResultBuilder, note_truncation
 from reveal.reveal_types import CONTRACT_VERSION
+
+logger = logging.getLogger(__name__)
 
 # Valid help_category values for the help:// index listing.
 # Guides without help_category (or with an unknown value) are accessible by
@@ -1123,16 +1126,14 @@ class HelpAdapter(ResourceAdapter):
             adapter_class: Adapter class
 
         Returns:
-            Description string or empty string if unavailable
+            Description string; empty if the adapter has none, a "(help
+            unavailable: ...)" note if its get_help() raised
         """
         try:
             help_data = adapter_class.get_help()
-            if help_data:
-                return str(help_data.get('description', ''))
-        except Exception:
-            # If get_help() fails, return empty
-            pass
-        return ''
+        except Exception as e:  # one broken adapter must not take down the listing; name it
+            return f"(help unavailable: {type(e).__name__}: {e})"
+        return str(help_data.get('description', '')) if help_data else ''
 
     def _list_adapters(self) -> List[Dict[str, Any]]:
         """List all registered adapters with basic info."""
@@ -1277,7 +1278,9 @@ class HelpAdapter(ResourceAdapter):
             return
         try:
             adapter_help = adapter_class.get_help()
-        except Exception:
+        except Exception as e:  # the guide still renders; say what is missing from it
+            logger.warning("help://%s: see_also not shown, %s.get_help() failed: %s",
+                           topic, adapter_class.__name__, e)
             return
         see_also = adapter_help.get('see_also') if adapter_help else None
         if see_also:
@@ -1584,11 +1587,10 @@ class HelpAdapter(ResourceAdapter):
         Returns a bounded, focused result rather than the full 4K-line guide.
         Use help://agent for the complete guide.
         """
+        # A packaged file: failing to read it is a broken install, reported as an error
+        # (the router's failed-result path), not as "no such topic".
         help_path = Path(__file__).parent.parent / 'docs' / 'AGENT_HELP.md'
-        try:
-            lines = help_path.read_text(encoding='utf-8').splitlines()
-        except Exception:
-            return None
+        lines = help_path.read_text(encoding='utf-8').splitlines()
 
         # Find the section and extract until the next ## heading
         start = None
@@ -1855,9 +1857,9 @@ class HelpAdapter(ResourceAdapter):
             try:
                 if cls.get_schema():
                     schemes.append(scheme)
-            except Exception:
-                # A schema that errors on generation isn't a usable menu entry.
-                continue
+            except Exception as e:  # not a usable menu entry, but not a silent omission either
+                logger.warning("%s:// left out of the schema menu: get_schema() failed: %s",
+                               scheme, e)
         return sorted(schemes)
 
     def _get_rules_catalog(self) -> Dict[str, Any]:

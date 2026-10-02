@@ -53,7 +53,6 @@
   "reveal/adapters/git/adapter.py": 1,
   "reveal/adapters/git/files.py": 1,
   "reveal/adapters/git/refs.py": 2,
-  "reveal/adapters/help.py": 4,
   "reveal/adapters/json/adapter.py": 2,
   "reveal/adapters/json/queries.py": 1,
   "reveal/adapters/markdown/files.py": 1,
