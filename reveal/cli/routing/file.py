@@ -21,7 +21,7 @@ from .formats import (  # noqa: E402
 )
 from ...file_handler import handle_file  # noqa: E402
 from .grep import handle_grep, handle_grep_directory
-from .ledger import FlagLedger, ledger_of, peek  # noqa: E402
+from .ledger import FlagLedger, ledger_of, mark, peek  # noqa: E402
 from ...utils.path_utils import to_posix  # noqa: E402
 from ...registry import get_markdown_extensions  # noqa: E402
 
@@ -401,6 +401,29 @@ def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Names
     handle_file(str(path), element, args.meta, args.format, args)
 
 
+def _run_check_with_ledger(args: 'Namespace') -> None:
+    """``reveal PATH --check``: run check under the flag ledger, as ``reveal check PATH`` is.
+
+    This route called run_check with no ledger, so a flag check never reads was dropped
+    without a note: ``reveal f.py --outline --check`` printed exactly what ``--check``
+    alone prints, and ``--help`` taught it as "Outline with quality checks" (BACK-1606).
+    """
+    from ...cli.commands.check import run_check
+    if ledger_of(args) is not None or not isinstance(args, Namespace):
+        run_check(args)
+        return
+    ledger = FlagLedger(args, view='--check')
+    args = ledger.track(args)
+    mark(args, 'check')  # the flag that chose this route
+    try:
+        with ledger.dispatching(''):
+            run_check(args)
+        ledger.complete = True
+    finally:
+        if ledger.complete:
+            ledger.report()
+
+
 def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     """Handle regular file or directory path.
 
@@ -409,8 +432,7 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
         args: Parsed arguments
     """
     if getattr(args, 'check', False):
-        from ...cli.commands.check import run_check
-        run_check(args)
+        _run_check_with_ledger(args)
         return
 
     _guard_hotspots_flag(args, path_str)

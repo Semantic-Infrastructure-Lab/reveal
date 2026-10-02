@@ -38,7 +38,6 @@ Examples:
 
   # Hierarchical outline (see structure as a tree!)
   reveal app.py --outline        # Classes with methods, nested structures
-  reveal app.py --outline --check    # Outline with quality checks
 
   # Element extraction
   reveal app.py load_config      # Extract specific function
