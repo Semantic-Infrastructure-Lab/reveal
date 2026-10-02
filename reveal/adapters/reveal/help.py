@@ -31,8 +31,6 @@ _SCHEMA_OUTPUT_TYPES = [
                 'source': {'type': 'string'},
                 'source_type': {'type': 'string'},
                 'detections': {'type': 'array'},
-                'passed': {'type': 'integer'},
-                'failed': {'type': 'integer'},
                 'total': {'type': 'integer'}
             }
         }

@@ -280,20 +280,6 @@ _SCHEMA_OUTPUT_TYPES = [
                 'source': {'type': 'string'},
                 'source_type': {'type': 'string'},
                 'files': {'type': 'object'},
-                'metadata': {'type': 'object'}
-            }
-        }
-    },
-    {
-        'type': 'import_summary',
-        'description': 'Overview of all imports in codebase',
-        'schema': {
-            'type': 'object',
-            'properties': {
-                'contract_version': {'type': 'string'},
-                'type': {'type': 'string', 'const': 'import_summary'},
-                'source': {'type': 'string'},
-                'source_type': {'type': 'string'},
                 'metadata': {
                     'type': 'object',
                     'properties': {
@@ -460,7 +446,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {
         'uri': 'imports://src',
         'description': 'Analyze all imports in src directory',
-        'output_type': 'import_summary'
+        'output_type': 'imports'
     },
     {
         'uri': 'imports://src?unused',
@@ -483,7 +469,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {
         'uri': 'imports://src/main.py',
         'description': 'Analyze imports for a single file (no cycle detection)',
-        'output_type': 'import_summary'
+        'output_type': 'imports'
     },
     {
         'uri': 'imports://src?rank=fan-in',

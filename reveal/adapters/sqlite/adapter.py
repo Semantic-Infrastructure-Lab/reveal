@@ -7,7 +7,7 @@ from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
 from ...utils.results import ResultBuilder
 from .renderer import SqliteRenderer
-from reveal.reveal_types import CONTRACT_VERSION
+from reveal.reveal_types import CONTRACT_VERSION, RevealResult
 
 _SCHEMA_OUTPUT_TYPES = [
     {
@@ -68,7 +68,10 @@ _SCHEMA_OUTPUT_TYPES = [
                 'source_type': {'type': 'string', 'const': 'database'},
                 'integrity': {'type': 'boolean'},
                 'corruption': {'type': 'boolean'},
-                'detections': {'type': 'array'}
+                'foreign_key_violations': {'type': 'integer'},
+                'detections': {'type': 'array'},
+                'status': {'type': 'string', 'enum': ['pass', 'warning', 'failure']},
+                'exit_code': {'type': 'integer', 'description': '0 clean, 1 foreign-key violations, 2 integrity failure'}
             }
         }
     }
@@ -509,6 +512,47 @@ class SQLiteAdapter(ResourceAdapter):
                     f"reveal sqlite://{self.db_path} --check     # Run integrity check",
                 ]
             }
+        )
+
+    def check(self, **kwargs) -> RevealResult:
+        """Run SQLite integrity checks: ``PRAGMA integrity_check`` and ``foreign_key_check``.
+
+        The schema, ``--check`` help and the overview's next step all promised this and the
+        adapter had no ``check()``, so the flag was dropped with a "no effect" note.
+
+        Exit codes (EXIT_CODE_CONTRACT): 0 clean, 1 foreign-key violations only (a warning),
+        2 the integrity check failed (corruption).
+        """
+        self._get_connection()
+        if not self.db_path:
+            raise ValueError("No database path available after connection")
+
+        detections: List[Dict[str, Any]] = []
+        messages = [row['integrity_check'] for row in self._execute_query("PRAGMA integrity_check")]
+        integrity = messages == ['ok']
+        if not integrity:
+            detections.extend({'rule': 'integrity_check', 'severity': 'high', 'message': m}
+                              for m in messages)
+        violations = self._execute_query("PRAGMA foreign_key_check")
+        for v in violations:
+            detections.append({
+                'rule': 'foreign_key_check', 'severity': 'medium',
+                'message': (f"{v['table']} row {v['rowid']} references a missing row in "
+                            f"{v['parent']} (foreign key {v['fkid']})"),
+            })
+        return ResultBuilder.create(
+            result_type='sqlite_health',
+            source=self.db_path,
+            source_type='database',
+            contract_version=CONTRACT_VERSION,
+            data={
+                'integrity': integrity,
+                'corruption': not integrity,
+                'foreign_key_violations': len(violations),
+                'detections': detections,
+                'status': 'failure' if not integrity else ('warning' if violations else 'pass'),
+                'exit_code': 2 if not integrity else (1 if violations else 0),
+            },
         )
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:

@@ -887,3 +887,40 @@ class TestSQLiteAdapterEdgeCases(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# -- check(): the --check the schema, help and overview next-step always promised ------------
+
+def _db(tmp_path, fk_violation=False):
+    path = tmp_path / 'check.db'
+    conn = sqlite3.connect(str(path))
+    conn.execute('CREATE TABLE p (id INTEGER PRIMARY KEY)')
+    conn.execute('CREATE TABLE c (id INTEGER, pid INTEGER REFERENCES p(id))')
+    conn.execute('INSERT INTO p VALUES (1)')
+    conn.execute('INSERT INTO c VALUES (1, ?)', (99 if fk_violation else 1,))
+    conn.commit()
+    conn.close()
+    return path
+
+
+def test_check_clean_database_passes(tmp_path):
+    result = SQLiteAdapter(f'sqlite://{_db(tmp_path)}').check()
+    assert result['type'] == 'sqlite_health'
+    assert result['integrity'] is True and result['corruption'] is False
+    assert (result['status'], result['exit_code'], result['detections']) == ('pass', 0, [])
+
+
+def test_check_reports_a_foreign_key_violation_as_a_warning(tmp_path):
+    result = SQLiteAdapter(f'sqlite://{_db(tmp_path, fk_violation=True)}').check()
+    assert (result['status'], result['exit_code']) == ('warning', 1)
+    assert result['foreign_key_violations'] == 1
+    assert 'references a missing row in p' in result['detections'][0]['message']
+
+
+def test_check_cli_exit_code_and_flag_is_not_dropped(tmp_path):
+    import subprocess
+    run = subprocess.run([sys.executable, '-m', 'reveal', f'sqlite://{_db(tmp_path, True)}',
+                          '--check'], capture_output=True, text=True, encoding='utf-8', timeout=60)
+    assert run.returncode == 1, run.stderr
+    assert 'no effect' not in run.stderr
+    assert 'foreign_key_check' in run.stdout

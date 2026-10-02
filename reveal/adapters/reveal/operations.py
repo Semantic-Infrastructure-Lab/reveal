@@ -13,12 +13,18 @@ def check(select: Optional[List[str]] = None, ignore: Optional[List[str]] = None
     Returns:
         Dict with detections and metadata
     """
+    from reveal.reveal_types import CONTRACT_VERSION
+
     from ...rules import RuleRegistry
 
     # V-series rules inspect reveal source directly
     detections = RuleRegistry.check_file("reveal://", None, "", select=select, ignore=ignore)
 
     return {
+        'contract_version': CONTRACT_VERSION,
+        'type': 'reveal_check',
+        'source': 'reveal://',
+        'source_type': 'runtime',
         'file': 'reveal://',
         'detections': detections,  # Keep as Detection objects for render_check
         'total': len(detections)

@@ -102,3 +102,20 @@ class SqliteRenderer(TypeDispatchRenderer):
             print("Next Steps:")
             for step in result['next_steps']:
                 print(f"  {step}")
+
+    @staticmethod
+    def render_check(result: dict, format: str = 'text', **kwargs) -> None:
+        """Render ``--check``: the integrity verdict and each finding."""
+        from reveal.utils import print_json_result
+
+        if format == 'json':
+            print_json_result(result)
+            return
+        detections = result.get('detections', [])
+        print(f"{result['source']}: integrity {'ok' if result['integrity'] else 'FAILED'}")
+        if not detections:
+            print("✅ No issues found")
+            return
+        print(f"Found {len(detections)} issue(s)\n")
+        for d in detections:
+            print(f"  [{d['severity']}] {d['rule']}: {d['message']}")

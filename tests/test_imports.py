@@ -1596,7 +1596,8 @@ class TestImportsAdapterSchema:
 
         # Should have import output types
         output_types = [ot['type'] for ot in schema['output_types']]
-        assert 'import_summary' in output_types
+        assert 'imports' in output_types
+        assert 'import_summary' not in output_types  # nothing emits it
         assert 'unused_imports' in output_types
 
     def test_schema_examples(self):

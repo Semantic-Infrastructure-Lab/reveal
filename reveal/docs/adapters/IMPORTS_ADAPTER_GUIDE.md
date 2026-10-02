@@ -686,17 +686,18 @@ reveal 'imports://src?unused' | grep "api/"
 
 ## Output Types
 
-### 1. import_summary
+### 1. imports
 
-**Use case**: Repository import overview
+**Use case**: Repository import overview (the default result)
 
 **Schema**:
 ```json
 {
   "contract_version": "1.0",
-  "type": "import_summary",
+  "type": "imports",
   "source": "src",
   "source_type": "directory",
+  "files": {"src/app.py": [{"module": "os", "line": 1}]},
   "metadata": {
     "total_files": 45,
     "total_imports": 238,
