@@ -72,7 +72,7 @@ class TestTypedKeysAreStrippedWithAWarning:
         assert proc.returncode == 0, proc.stderr
         assert "Help Search: 'ast'" in proc.stdout
         assert "Unknown query param 'limit' for help:// — ignored." in proc.stderr
-        assert 'Valid params' not in proc.stderr  # help:// has no schema to list
+        assert 'Valid params: search' in proc.stderr  # from help://'s schema (BACK-1643)
 
 
 class TestStripHelper:
