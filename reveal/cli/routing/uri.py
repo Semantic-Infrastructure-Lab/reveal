@@ -1083,7 +1083,7 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
 
     return Answer(result, 'structure',
                   lambda: _emit_result(result, args, scheme, renderer_class.render_structure,
-                                       **_render_structure_top_kwargs(renderer_class, args)))
+                                       **_render_structure_top_kwargs(renderer_class, args, adapter)))
 
 
 def _echo_source(result: Any, adapter_class: type, resource: Optional[str]) -> None:
@@ -1133,20 +1133,22 @@ def conclude_outcome(result: Any, outcome: Outcome, output_format: str) -> None:
         sys.exit(1)
 
 
-def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace') -> dict:
-    """Forward --all/--verbose to render_structure() for overview:// only (BACK-1226).
+def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace', adapter: Any = None) -> dict:
+    """Forward --all/--verbose, or the adapter's own ``?top=N``, to render_structure() (BACK-1226, BACK-1606).
 
     render_structure(result, args.format) never passed args.top/all/verbose through
     for ANY URI-invoked renderer, so overview://'s per-section caps (Components,
     Entry points, Language, Hotspots) were unreachable via --all/--verbose and even
     via a working ?top=N query string (the resolved top never left get_structure()).
+    The same held for deps:// and architecture://: their help documents ``?top=N``
+    ("items per section") and the text view still cut every section at the
+    renderer's default (BACK-1606).
 
-    Scoped to renderers that declare ACCEPTS_TOP (only OverviewRenderer) rather than fixed generically: sibling
-    renderers declare differently-typed/shaped 'top' params (hotspots.py top:int=10,
-    deps.py top:int=10, architecture.py top:int=5 plus a second no_imports param,
-    contracts.py/trace.py have no top param at all) that were never designed to
-    receive a value from here, and forwarding blind would either crash them or
-    silently change behavior nobody asked this ticket to touch.
+    Scoped to renderers that declare ACCEPTS_TOP (overview, deps, architecture) rather than fixed generically:
+    sibling renderers declare differently-typed/shaped 'top' params or none at all
+    (hotspots.py, contracts.py, trace.py) that were never designed to receive a value
+    from here, and forwarding blind would either crash them or silently change
+    behavior nobody asked this ticket to touch.
     """
     if getattr(renderer_class, 'ACCEPTS_TOP', False) is not True:
         return {}
@@ -1154,6 +1156,9 @@ def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace') -> dic
         mark(args, 'all', 'verbose')
         from ...adapters.overview import UNLIMITED_TOP
         return {'top': UNLIMITED_TOP}
+    params = getattr(adapter, 'query_params', None)
+    if isinstance(params, dict) and params.get('top') is not None:
+        return {'top': adapter.int_param('top', 0)}
     return {}
 
 def handle_adapter(adapter_class: type, scheme: str, resource: str,

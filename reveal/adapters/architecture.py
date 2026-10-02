@@ -453,7 +453,7 @@ def _relativize_risks(risks: List[Dict[str, Any]], base_path: Path) -> None:
 class ArchitectureRenderer:
     """Renderer for architecture:// results."""
 
-    ACCEPTS_TOP = True  # render_structure(top=) is fed by handle_uri (--all/--verbose, BACK-1379)
+    ACCEPTS_TOP = True  # render_structure(top=) is fed by handle_uri (--all/--verbose BACK-1379, ?top=N BACK-1606)
 
     @staticmethod
     def render_structure(result: Dict[str, Any], format: str = 'text',

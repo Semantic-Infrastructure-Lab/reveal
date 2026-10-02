@@ -552,7 +552,7 @@ def _render_overview(report: Dict[str, Any], top: int) -> None:
 class OverviewRenderer:
     """Renderer for overview:// results."""
 
-    ACCEPTS_TOP = True  # render_structure(top=) is fed by handle_uri (--all/--verbose)
+    ACCEPTS_TOP = True  # render_structure(top=) is fed by handle_uri (--all/--verbose, ?top=N BACK-1606)
 
     @staticmethod
     def render_structure(result: Dict[str, Any], format: str = 'text', top: int = 5) -> None:
