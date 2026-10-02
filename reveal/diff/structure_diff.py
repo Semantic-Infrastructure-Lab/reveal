@@ -74,25 +74,30 @@ def compute_element_diff(left_elem: Optional[Dict[str, Any]],
         element_name: Name of the element
 
     Returns:
-        Detailed diff for the element
+        Detailed diff for the element: ``type`` is always ``diff_element`` (the
+        result type), ``change`` is the verdict (not_found, added, removed,
+        unchanged, modified).
     """
     if left_elem is None and right_elem is None:
         return {
-            'type': 'not_found',
+            'type': 'diff_element',
+            'change': 'not_found',
             'name': element_name,
             'message': f"Element '{element_name}' not found in either resource"
         }
 
     if left_elem is None:
         return {
-            'type': 'added',
+            'type': 'diff_element',
+            'change': 'added',
             'name': element_name,
             'element': right_elem
         }
 
     if right_elem is None:
         return {
-            'type': 'removed',
+            'type': 'diff_element',
+            'change': 'removed',
             'name': element_name,
             'element': left_elem
         }
@@ -102,13 +107,15 @@ def compute_element_diff(left_elem: Optional[Dict[str, Any]],
 
     if not changes:
         return {
-            'type': 'unchanged',
+            'type': 'diff_element',
+            'change': 'unchanged',
             'name': element_name,
             'message': f"Element '{element_name}' is identical in both resources"
         }
 
     return {
-        'type': 'modified',
+        'type': 'diff_element',
+            'change': 'modified',
         'name': element_name,
         'changes': changes,
         'left': left_elem,

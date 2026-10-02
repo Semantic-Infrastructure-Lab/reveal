@@ -286,7 +286,7 @@ def render_element_diff_text(diff_result: Dict[str, Any]) -> None:
     Args:
         diff_result: Element diff result
     """
-    diff_type = diff_result.get('type')
+    diff_type = diff_result.get('change')
     name = diff_result.get('name')
 
     print()

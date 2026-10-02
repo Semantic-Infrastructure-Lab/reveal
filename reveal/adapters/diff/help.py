@@ -46,6 +46,36 @@ _SCHEMA_OUTPUT_TYPES = [
             'right': {'uri': 'backup/app.py', 'type': 'file'},
             'summary': {'added': 5, 'removed': 3, 'modified': 2, 'unchanged': 100}
         }
+    },
+    {
+        'type': 'diff_element',
+        'description': 'One element compared across two resources; change is the verdict',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'diff_element'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string', 'const': 'runtime'},
+                'name': {'type': 'string'},
+                'change': {'type': 'string',
+                           'enum': ['added', 'removed', 'modified', 'unchanged', 'not_found']},
+                'changes': {'type': 'object'},
+                'element': {'type': 'object'},
+                'left': {'type': 'object'},
+                'right': {'type': 'object'},
+                'message': {'type': 'string'}
+            }
+        },
+        'example': {
+            'contract_version': CONTRACT_VERSION,
+            'type': 'diff_element',
+            'source': 'diff://app.py:old.py/handle_request',
+            'source_type': 'runtime',
+            'name': 'handle_request',
+            'change': 'modified',
+            'changes': {'line_count': {'old': 12, 'new': 15}}
+        }
     }
 ]
 
@@ -64,7 +94,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'uri': 'diff://app.py:old.py/handle_request',
         'description': 'Compare specific function across versions',
         'element': 'handle_request',
-        'output_type': 'diff_comparison'
+        'output_type': 'diff_element'
     }
 ]
 

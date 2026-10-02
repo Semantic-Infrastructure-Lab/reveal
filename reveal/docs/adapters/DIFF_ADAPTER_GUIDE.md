@@ -1062,6 +1062,24 @@ reveal diff://app.py:old.py --format json
 }
 ```
 
+An **element diff** (`reveal diff://app.py:old.py/process --format json`) has `type`
+`diff_element`; the verdict is `change` (`added`, `removed`, `modified`, `unchanged` or
+`not_found`). `modified` carries `changes` (`{field: {old, new}}`, including `body` when
+only the source text differs) plus `left`/`right`; `added`/`removed` carry `element`:
+```json
+{
+  "contract_version": "1.1",
+  "type": "diff_element",
+  "source": "diff://app.py:old.py/process",
+  "source_type": "runtime",
+  "change": "modified",
+  "name": "process",
+  "changes": {"complexity": {"old": 8, "new": 4}},
+  "left": {"name": "process", "line": 10, "complexity": 8},
+  "right": {"name": "process", "line": 10, "complexity": 4}
+}
+```
+
 **Note on the examples below**: several `jq` snippets in this guide (Detailed Workflows, Integration Examples) predate this schema and reference a flat `.changes[]` array with `.element`, `.old`/`.new`, `.delta.complexity`, and `.improvement` fields. Translate them as: `.changes[]` → `(.diff.functions + .diff.classes + .diff.imports)[]`, `.element` → `.name`, `.delta.complexity` → `.complexity_delta` (already correct in most places), and `.improvement == true` → `.complexity_delta < 0`. There is no `.improvement` field in the live output.
 
 ---

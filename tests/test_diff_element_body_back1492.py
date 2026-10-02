@@ -35,26 +35,26 @@ def run_reveal(cwd, *args):
 class TestBodyComparison:
     def test_body_only_change_is_modified(self, files):
         result = DiffAdapter(f"{files}/a.py:{files}/b.py").get_element("foo")
-        assert result['type'] == 'modified'
+        assert result['change'] == 'modified'
         assert result['changes']['body'] == {
             'old': "def foo():\n    return 1", 'new': "def foo():\n    return 10"}
 
     def test_identical_bodies_stay_unchanged(self, files):
         result = DiffAdapter(f"{files}/a.py:{files}/same.py").get_element("foo")
-        assert result['type'] == 'unchanged'
+        assert result['change'] == 'unchanged'
         assert 'identical' in result['message']
 
     def test_structural_change_keeps_body_change_too(self, files):
         (files / "c.py").write_text("def foo(x):\n    return x\n", encoding='utf-8')
         result = DiffAdapter(f"{files}/a.py:{files}/c.py").get_element("foo")
-        assert result['type'] == 'modified'
+        assert result['change'] == 'modified'
         assert {'signature', 'body'} <= set(result['changes'])
 
     def test_unreadable_source_does_not_claim_identical(self, files, monkeypatch):
         monkeypatch.setattr('reveal.adapters.diff.adapter.read_element_source',
                             lambda uri, elem: None)
         result = DiffAdapter(f"{files}/a.py:{files}/same.py").get_element("foo")
-        assert result['type'] == 'unchanged'
+        assert result['change'] == 'unchanged'
         assert 'body not compared' in result['message']
         assert 'identical' not in result['message']
 

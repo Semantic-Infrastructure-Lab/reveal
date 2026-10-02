@@ -292,7 +292,7 @@ def bar():
         result = adapter.get_element('foo')
 
         # Verify element diff
-        self.assertEqual(result['type'], 'modified')
+        self.assertEqual(result['change'], 'modified')
         self.assertEqual(result['name'], 'foo')
         self.assertIn('signature', result['changes'])
 
@@ -313,7 +313,7 @@ def bar():
         result = adapter.get_element('baz')
 
         # Verify not found
-        self.assertEqual(result['type'], 'not_found')
+        self.assertEqual(result['change'], 'not_found')
         self.assertEqual(result['name'], 'baz')
 
     def test_element_added(self):
@@ -336,7 +336,7 @@ def bar():
         result = adapter.get_element('bar')
 
         # Verify added
-        self.assertEqual(result['type'], 'added')
+        self.assertEqual(result['change'], 'added')
         self.assertEqual(result['name'], 'bar')
 
     def test_element_removed(self):
@@ -359,7 +359,7 @@ def foo():
         result = adapter.get_element('bar')
 
         # Verify removed
-        self.assertEqual(result['type'], 'removed')
+        self.assertEqual(result['change'], 'removed')
         self.assertEqual(result['name'], 'bar')
 
     def test_element_search_in_class_methods(self):
@@ -381,7 +381,7 @@ class MyClass:
         result = adapter.get_element('method_one')
 
         # Verify found and modified
-        self.assertEqual(result['type'], 'modified')
+        self.assertEqual(result['change'], 'modified')
         self.assertEqual(result['name'], 'method_one')
         self.assertIn('signature', result['changes'])
 

@@ -33,6 +33,8 @@ class DiffAdapter(ResourceAdapter):
     right_structure: Optional[Dict[str, Any]]
     embedded_element: Optional[str] = None  # from diff://a.py:b.py/element; read by the CLI router
 
+    ELEMENT_RESULT_TYPE = 'diff_element'  # verdict lives in 'change' (BACK-1637)
+
     LEGACY_INIT = False
     HONORS_RESULT_CONTROL = False  # no sort=/limit=/offset= handling (BACK-1385)
     CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # directory diffs walk (BACK-1386)
@@ -196,14 +198,14 @@ class DiffAdapter(ResourceAdapter):
         old = read_element_source(self.left_uri, left_elem)
         new = read_element_source(self.right_uri, right_elem)
         if old is None or new is None:
-            if result['type'] == 'unchanged':
+            if result['change'] == 'unchanged':
                 result['message'] = (f"Element '{result['name']}': signature and shape "
                                      "unchanged; body not compared (source unavailable)")
             return
         if old == new:
             return
-        if result['type'] == 'unchanged':
-            result.update(type='modified', changes={}, left=left_elem, right=right_elem)
+        if result['change'] == 'unchanged':
+            result.update(change='modified', changes={}, left=left_elem, right=right_elem)
             result.pop('message', None)
         result['changes']['body'] = {'old': old, 'new': new}
 

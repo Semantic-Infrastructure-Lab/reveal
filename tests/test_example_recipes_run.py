@@ -166,10 +166,7 @@ SCHEMA_UNRUNNABLE = (
 SCHEMA_SKIP_SCHEMES = NEEDS_HOST + NEEDS_SESSION
 
 # uri -> task naming why it fails today. Strict xfail: fixing one fails the run until deleted.
-SCHEMA_KNOWN_VIOLATIONS: dict = {
-    # An element diff's `type` is its verdict (added/removed/modified/unchanged), not a result type.
-    'diff://app.py:old.py/handle_request': 'BACK-1637',
-}
+SCHEMA_KNOWN_VIOLATIONS: dict = {}
 
 
 def _schema_examples():
