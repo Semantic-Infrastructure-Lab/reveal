@@ -18,9 +18,16 @@ from ..utils import print_json_result
 from ..utils.query import parse_query_params
 from ..utils.path_utils import to_posix
 from ..utils.results import ResultBuilder, note_truncation
+from ..utils.warning_render import render_meta_warnings
 from reveal.reveal_types import CONTRACT_VERSION
 
 logger = logging.getLogger(__name__)
+
+# What reading one part of the workbook zip can raise: a corrupt or truncated member
+# (BadZipFile, zlib.error, EOFError), malformed XML (ParseError), an encrypted or
+# unsupported-compression member (RuntimeError, NotImplementedError) and I/O (OSError).
+# Anything else is a bug in this module and propagates (BACK-1614).
+_PART_ERRORS = (zipfile.BadZipFile, _zlib.error, EOFError, ET.ParseError, RuntimeError, OSError)
 
 
 class XlsxRenderer:
@@ -58,6 +65,8 @@ class XlsxRenderer:
             XlsxRenderer._render_connections(result, preferred_format)
         else:
             XlsxRenderer._render_workbook(result, preferred_format)
+        if preferred_format != 'csv':
+            render_meta_warnings(result)
 
     @staticmethod
     def _render_workbook(result: dict, format: str) -> None:
@@ -813,15 +822,12 @@ class XlsxAdapter(ResourceAdapter):
         if banner:
             result_data['powerpivot_banner'] = banner
 
-        meta = self.composed_meta()
         return ResultBuilder.create(
             contract_version=CONTRACT_VERSION,
             result_type='xlsx_workbook',
             source=self.file_path or Path('unknown'),
             data=result_data,
-            warnings=meta.get('warnings') if meta else None,
-            errors=meta.get('errors') if meta else None,
-            confidence=meta.get('confidence') if meta else None,
+            **self._meta_fields(),
         )
 
     def _get_sheet_data(self, sheet_identifier: str) -> Dict[str, Any]:
@@ -1086,6 +1092,23 @@ class XlsxAdapter(ResourceAdapter):
         """Strip XML namespace from an ElementTree tag."""
         return tag.split('}')[-1] if '}' in tag else tag
 
+    def _meta_fields(self) -> Dict[str, Any]:
+        """The composed warnings/errors/confidence as ResultBuilder.create kwargs."""
+        meta = self.composed_meta() or {}
+        return {'warnings': meta.get('warnings'), 'errors': meta.get('errors'),
+                'confidence': meta.get('confidence')}
+
+    def _note_unreadable_part(self, part: str, exc: Exception) -> None:
+        """Disclose a workbook part that was skipped, so a corrupt part can't read as absent."""
+        recorded = self.__dict__.get('_composed_warnings', [])
+        if any(w.get('type') == 'part_unreadable' and w.get('file') == part for w in recorded):
+            return
+        self.fold_meta({'warnings': [{
+            'type': 'part_unreadable',
+            'file': part,
+            'message': f"{part} could not be read ({type(exc).__name__}: {exc}); skipped",
+        }]})
+
     def _detect_powerpivot(self, zf: zipfile.ZipFile) -> Optional[str]:
         """Return the model data path if this workbook contains a Power Pivot model.
 
@@ -1107,8 +1130,8 @@ class XlsxAdapter(ResourceAdapter):
                 for el in root.iter():
                     if self._local(el.tag) == 'cacheHierarchies':
                         return 'xl/pivotCache/'
-            except Exception:  # noqa: BLE001 — defensive XML/zip parsing fallback
-                pass
+            except _PART_ERRORS as e:
+                self._note_unreadable_part(name, e)
         return None
 
     def _find_xmla_item(self, zf: zipfile.ZipFile) -> Optional[str]:
@@ -1122,8 +1145,8 @@ class XlsxAdapter(ResourceAdapter):
                     text = raw.decode('utf-16', errors='replace')
                     if 'MetadataRecoveryInformation' in text:
                         return name
-            except Exception:  # noqa: BLE001 — defensive XML/zip parsing fallback
-                pass
+            except _PART_ERRORS as e:
+                self._note_unreadable_part(name, e)
         return None
 
     def _find_datamashup_item(self, zf: zipfile.ZipFile) -> Optional[str]:
@@ -1144,8 +1167,8 @@ class XlsxAdapter(ResourceAdapter):
                     text = raw.decode('utf-8', errors='replace')
                 if 'DataMashup' in text and 'MetadataRecoveryInformation' not in text:
                     return name
-            except Exception:  # noqa: BLE001 — defensive XML/zip parsing fallback
-                pass
+            except _PART_ERRORS as e:
+                self._note_unreadable_part(name, e)
         return None
 
     def _parse_powerquery_stdlib(self, zf: zipfile.ZipFile, item_path: str) -> Dict[str, Any]:
@@ -1195,13 +1218,15 @@ class XlsxAdapter(ResourceAdapter):
                 fname = data[offset + 30:offset + 30 + name_len].decode('utf-8', 'replace')
                 data_start = offset + 30 + name_len + extra_len
                 raw_data = data[data_start:data_start + comp_sz]
+                offset = data_start + comp_sz
                 if method == 8 and comp_sz > 0:  # DEFLATE
                     try:
                         raw_data = _zlib.decompress(raw_data, -15)
-                    except Exception:  # noqa: BLE001 — defensive XML/zip parsing fallback
-                        pass
+                    except _zlib.error as e:
+                        # The compressed bytes would decode as garbage M code: skip, say so.
+                        self._note_unreadable_part(f'{item_path}:{fname}', e)
+                        continue
                 files[fname] = raw_data
-                offset = data_start + comp_sz
             return files
 
         inner_files = _scan_local_headers(binary)
@@ -1256,7 +1281,9 @@ class XlsxAdapter(ResourceAdapter):
 
         Used when xl/model/item.data exists but no XMLA envelope is present
         (modern Power BI export format).  Returns None when pbixray is not
-        installed or extraction fails, allowing Tier 3 fallback.
+        installed, allowing Tier 3 fallback.  An extraction failure raises:
+        the caller falls back too, and says pbixray failed rather than that
+        it is missing.
         """
         if not self.file_path:
             return None
@@ -1330,9 +1357,6 @@ class XlsxAdapter(ResourceAdapter):
             }
         except ImportError:
             # pbixray not installed — caller falls back to Tier 3 (pivot cache)
-            return None
-        except Exception:
-            # extraction failed on this file — caller falls back to Tier 3
             return None
 
     @staticmethod
@@ -1487,8 +1511,8 @@ class XlsxAdapter(ResourceAdapter):
                         m = re.match(r'\[([^\]]+)\]', h.get('uniqueName', ''))
                         if m and m.group(1) != 'Measures':
                             table_names.add(m.group(1))
-            except Exception:  # noqa: BLE001 — defensive XML/zip parsing fallback
-                pass
+            except _PART_ERRORS as e:
+                self._note_unreadable_part(name, e)
         return {
             'has_model': True,
             'xmla_available': False,
@@ -1532,8 +1556,8 @@ class XlsxAdapter(ResourceAdapter):
                         count = sum(1 for el in root.iter() if self._local(el.tag) == 'connection')
                         if count:
                             result['connection_count'] = count
-                    except Exception:  # noqa: BLE001 — defensive XML/zip parsing fallback
-                        pass
+                    except _PART_ERRORS as e:
+                        self._note_unreadable_part('xl/connections.xml', e)
 
                 # Named ranges count (from workbook.xml definedNames)
                 if 'xl/workbook.xml' in names_set:
@@ -1542,8 +1566,8 @@ class XlsxAdapter(ResourceAdapter):
                         count = sum(1 for el in root.iter() if self._local(el.tag) == 'definedName')
                         if count:
                             result['named_range_count'] = count
-                    except Exception:  # noqa: BLE001 — defensive XML/zip parsing fallback
-                        pass
+                    except _PART_ERRORS as e:
+                        self._note_unreadable_part('xl/workbook.xml', e)
 
                 return result if result else None
         except Exception as e:
@@ -1581,6 +1605,7 @@ class XlsxAdapter(ResourceAdapter):
                             'has_powerquery': False,
                             'queries': [],
                         },
+                        **self._meta_fields(),
                     )
                 data = self._parse_powerquery_stdlib(zf, pq_item)
                 data['file'] = str(self.file_path)
@@ -1590,6 +1615,7 @@ class XlsxAdapter(ResourceAdapter):
                     result_type='xlsx_powerquery',
                     source=self.file_path,
                     data=data,
+                    **self._meta_fields(),
                 )
         except Exception as e:
             return ResultBuilder.create_error(
@@ -1731,6 +1757,7 @@ class XlsxAdapter(ResourceAdapter):
                         result_type='xlsx_powerpivot',
                         source=self.file_path,
                         data={'file': self.file_display, 'has_model': False, 'mode': mode},
+                        **self._meta_fields(),
                     )
 
                 xmla_item = self._find_xmla_item(zf)
@@ -1739,12 +1766,22 @@ class XlsxAdapter(ResourceAdapter):
                     data = self._parse_xmla(zf, xmla_item)
                 else:
                     # Tier 2: try pbixray for modern files (Power BI export, no XMLA)
-                    data = self._parse_pbixray()
-                    if data is None:
+                    pbixray_error: Optional[Exception] = None
+                    try:
+                        tier2 = self._parse_pbixray()
+                    except Exception as e:  # pbixray is third-party: any failure falls back, disclosed
+                        tier2, pbixray_error = None, e
+                        self._note_unreadable_part(model_path, e)
+                    if tier2 is not None:
+                        data = tier2
+                    else:
                         # Tier 3: pivot cache fallback (table names only)
                         data = self._parse_pivot_cache(zf)
                         if mode in ('measures', 'dax'):
                             data['message'] = (
+                                'DAX measures not available — XMLA schema absent and pbixray could not '
+                                f'read the model ({type(pbixray_error).__name__}: {pbixray_error}).'
+                                if pbixray_error else
                                 'DAX measures not available — XMLA schema absent (modern Power BI export). '
                                 'Install pbixray (pip install pbixray) for full extraction.'
                             )
@@ -1758,6 +1795,7 @@ class XlsxAdapter(ResourceAdapter):
                     result_type='xlsx_powerpivot',
                     source=self.file_path,
                     data=data,
+                    **self._meta_fields(),
                 )
         except Exception as e:
             return ResultBuilder.create_error(

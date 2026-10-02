@@ -166,7 +166,7 @@
  "reveal/adapters/testability.py::override": 1,
  "reveal/adapters/trace.py::override": 1,
  "reveal/adapters/trace.py::return-value": 1,
- "reveal/adapters/xlsx.py::assignment": 2,
+ "reveal/adapters/xlsx.py::assignment": 1,
  "reveal/adapters/xlsx.py::import-untyped": 1,
  "reveal/adapters/xlsx.py::override": 2,
  "reveal/adapters/xlsx.py::return-value": 20,

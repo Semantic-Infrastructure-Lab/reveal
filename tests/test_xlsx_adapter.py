@@ -1957,5 +1957,85 @@ class TestHelpContentCoverage:
         assert len(help_doc['workflows']) >= 4  # added two new workflows
 
 
+def _streaming_zip_member(name: str, deflated: bytes) -> bytes:
+    """One local-file-header entry, method 8, as a DataMashup blob holds them."""
+    import struct
+    header = struct.pack('<HHHHHIIIHH', 20, 0, 8, 0, 0, 0, len(deflated), 0,
+                         len(name), 0)
+    return b'PK\x03\x04' + header + name.encode('utf-8') + deflated
+
+
+def _datamashup_item(inner: bytes) -> bytes:
+    import base64
+    blob = base64.b64encode(inner + b'\x00' * 100).decode('ascii')
+    return f'<?xml version="1.0" encoding="utf-8"?><DataMashup>{blob}</DataMashup>'.encode('utf-8')
+
+
+@pytest.mark.component
+class TestUnreadablePartsDisclosed:
+    """BACK-1614: a workbook part that can't be read is skipped and said so, not
+    read as absent; anything that isn't a read failure propagates."""
+
+    def _warnings(self, result):
+        return [w for w in (result.get('meta') or {}).get('warnings', [])
+                if w.get('type') == 'part_unreadable']
+
+    def test_malformed_pivot_cache_is_disclosed(self, tmp_path, capsys):
+        p = _make_minimal_xlsx(tmp_path, {
+            'xl/model/item.data': b'',
+            'xl/pivotCache/pivotCacheDefinition1.xml': _make_pivot_cache_bytes(['Sales']),
+            'xl/pivotCache/pivotCacheDefinition2.xml': b'<pivotCacheDefinition><unclosed>',
+        })
+        result = XlsxAdapter(f"xlsx://{p}?powerpivot=tables").get_structure()
+        assert {t['name'] for t in result['tables']} == {'Sales'}
+        files = {w['file'] for w in self._warnings(result)}
+        assert files == {'xl/pivotCache/pivotCacheDefinition2.xml'}
+        XlsxRenderer.render_structure(result, 'text')
+        assert '⚠ xl/pivotCache/pivotCacheDefinition2.xml could not be read' in capsys.readouterr().out
+
+    def test_malformed_connections_part_reaches_overview(self, tmp_path, capsys):
+        p = _make_minimal_xlsx(tmp_path, {'xl/connections.xml': b'<connections><bad>'})
+        result = XlsxAdapter(f"xlsx://{p}").get_structure()
+        assert [w['file'] for w in self._warnings(result)] == ['xl/connections.xml']
+        XlsxRenderer.render_structure(result, 'text')
+        assert '⚠ xl/connections.xml could not be read' in capsys.readouterr().out
+
+    def test_pbixray_failure_is_not_reported_as_missing(self, tmp_path, monkeypatch):
+        def _boom(self):
+            raise ValueError('unsupported VertiPaq page')
+        monkeypatch.setattr(XlsxAdapter, '_parse_pbixray', _boom)
+        p = _make_minimal_xlsx(tmp_path, {
+            'xl/model/item.data': b'',
+            'xl/pivotCache/pivotCacheDefinition1.xml': _make_pivot_cache_bytes(['Sales']),
+        })
+        result = XlsxAdapter(f"xlsx://{p}?powerpivot=measures").get_structure()
+        assert 'pbixray could not read the model' in result['message']
+        assert 'pip install' not in result['message']
+        assert [w['file'] for w in self._warnings(result)] == ['xl/model/item.data']
+
+    def test_undeflatable_query_is_skipped_not_shown_as_garbage(self, tmp_path):
+        import zlib
+        good = zlib.compressobj(wbits=-15)
+        good_bytes = good.compress(b'let\n    Source = 1\nin\n    Source') + good.flush()
+        inner = (_streaming_zip_member('Formulas/Good.m', good_bytes)
+                 + _streaming_zip_member('Formulas/Bad.m', b'\xff' * 20))
+        p = _make_minimal_xlsx(tmp_path, {'customXml/item1.xml': _datamashup_item(inner)})
+        result = XlsxAdapter(f"xlsx://{p}?powerquery=list").get_structure()
+        assert [q['name'] for q in result['queries']] == ['Good']
+        assert [w['file'] for w in self._warnings(result)] == ['customXml/item1.xml:Formulas/Bad.m']
+
+    def test_a_bug_is_not_swallowed_as_an_unreadable_part(self, tmp_path, monkeypatch):
+        import zipfile
+        p = _make_minimal_xlsx(tmp_path, {
+            'xl/pivotCache/pivotCacheDefinition1.xml': _make_pivot_cache_bytes(['Sales']),
+        })
+        def _broken(tag):
+            raise TypeError('bug in tag handling')
+        adapter = XlsxAdapter(f"xlsx://{p}")
+        monkeypatch.setattr(adapter, '_local', _broken)
+        with zipfile.ZipFile(p) as zf, pytest.raises(TypeError):
+            adapter._parse_pivot_cache(zf)
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

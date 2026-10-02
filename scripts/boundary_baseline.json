@@ -72,7 +72,6 @@
   "reveal/adapters/stats/adapter.py": 2,
   "reveal/adapters/stats/analysis.py": 1,
   "reveal/adapters/stats/queries.py": 1,
-  "reveal/adapters/xlsx.py": 8,
   "reveal/analyzers/markdown.py": 2,
   "reveal/analyzers/nginx.py": 1,
   "reveal/analyzers/office/openxml.py": 1,
