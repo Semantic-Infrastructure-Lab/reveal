@@ -103,16 +103,20 @@ checks` group):
 --select / --ignore / --severity / --limit / --config / --explain / --rules
                                # Scoped to --check on a file/directory target
 ```
-`--max-items` and `--max-snippet-chars` are **not** part of this group —
-`reveal check <file> --max-snippet-chars 50` fails with `unrecognized
-arguments` (confirmed live). Don't assume a flag that works with `--check` on
-one target works with `--check` everywhere; see the next group.
+`--max-items` and `--max-snippet-chars` are **not** part of this group:
+`reveal check` declares its own (BACK-1181), with check's meaning. Don't assume
+a flag that works with `--check` on one target works with `--check` everywhere;
+see the next group.
 
-**Universal adapter options** — work with any URI adapter (`ssl://`,
-`git://`, `ast://`, ...), not with bare file/subcommand targets:
+**Adapter options** — shared by name across URI adapters (`ssl://`, `git://`,
+`ast://`, ...), not bare file/subcommand targets. They are **not** universal:
+each adapter reads the ones it supports, and on any other adapter the flag
+ledger prints `Note: --X has no effect on <scheme>:// queries` (BACK-1606 —
+the `--help-all` group was titled "work with any URI adapter", while most
+adapters ignore `--advanced`, `--only-failures` and `--max-items`):
 ```bash
---advanced           # Advanced mode (requires --check)
---only-failures      # Show only failures (requires --check)
+--advanced           # With --check: an adapter's deeper check tier, where it has one
+--only-failures      # Hide passing health checks, on adapters that report them
 --batch              # Batch mode (process multiple URIs from stdin)
 --fields FIELDS      # Select specific output fields (token efficiency)
 --max-items N        # Budget: stop after N results

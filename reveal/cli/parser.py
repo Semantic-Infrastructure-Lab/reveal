@@ -629,24 +629,26 @@ def _add_schema_validation_options(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_universal_operation_flags(parser: argparse.ArgumentParser) -> None:
-    """Add universal operation flags that work across all adapters.
+    """Add the operation flags URI adapters share by name.
 
-    These flags provide consistent behavior for health checks, filtering,
-    and batch processing across all adapters.
+    Each adapter reads the ones it supports; on any other target the flag ledger
+    names the flag as having no effect (BACK-1606: the group was titled "work with
+    any URI adapter", and most adapters ignore --advanced and --only-failures).
     """
     parser.add_argument('--advanced', action='store_true',
-                        help='Run advanced checks with --check (enables deeper validation)')
+                        help='With --check, on an adapter that has a deeper check tier: run it')
     parser.add_argument('--only-failures', action='store_true',
-                        help='Only show failed/warning checks (hide healthy results)')
+                        help='On an adapter that reports health checks: hide the passing ones')
     parser.add_argument('--batch', action='store_true',
                         help='Batch mode: process multiple URIs from stdin with aggregated results')
 
 
 def _add_universal_filter_flags(parser: argparse.ArgumentParser) -> None:
-    """Add universal filtering flags for field selection and budget constraints.
+    """Add filtering flags for field selection and budget constraints.
 
     These flags enable token reduction through field selection and explicit
-    budget constraints for AI agent loops.
+    budget constraints for AI agent loops. Not every adapter reads them; one
+    that does not prints a note (BACK-1606).
     """
     # Field selection
     parser.add_argument('--fields', type=str, metavar='FIELDS',
@@ -818,10 +820,12 @@ def create_argument_parser(
     g_quality = parser.add_argument_group('Quality checks  [--check universal; rules/config are file-specific]')
     _add_pattern_detection_options(g_quality)
 
-    # ── Universal adapter options ─────────────────────────────────────────────
-    # These work across all URI adapters (ssl://, domain://, mysql://, etc.)
+    # ── Shared adapter options ────────────────────────────────────────────────
+    # Shared by name across URI adapters; each adapter reads the ones it supports,
+    # and the flag ledger names one it ignores (BACK-1606).
     g_universal = parser.add_argument_group(
-        'Universal adapter options  [work with any URI adapter]'
+        'Adapter options  [shared by name; each adapter reads the ones it supports, '
+        'and names one it ignores]'
     )
     _add_universal_operation_flags(g_universal)
     _add_universal_filter_flags(g_universal)

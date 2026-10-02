@@ -163,3 +163,16 @@ def test_check_typed_is_rejected_not_printed_as_text(pkg):
     run = _cli('check', 'pkg/a.py', '--format', 'typed', cwd=pkg)
     assert run.returncode == 2
     assert 'not supported by reveal check (supported: text, json, grep)' in run.stderr
+
+
+# --- (7) --help-all does not call adapter options universal -------------------------------
+
+def test_help_all_does_not_claim_adapter_options_work_everywhere(tmp_path):
+    out = _cli('--help-all', cwd=tmp_path).stdout
+    assert 'work with any URI adapter' not in out
+    assert 'each adapter reads the ones it supports' in out
+
+
+def test_an_adapter_that_ignores_only_failures_names_it(tmp_path):
+    assert 'Note: --only-failures has no effect on env://' in _cli(
+        'env://', '--only-failures', cwd=tmp_path).stderr

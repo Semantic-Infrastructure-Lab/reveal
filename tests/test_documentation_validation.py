@@ -242,7 +242,8 @@ class TestDocumentationConsistency:
                 for option in action.option_strings:
                     flag_to_group[option] = group.title or ""
 
-        universal_adapter_title = "Universal adapter options  [work with any URI adapter]"
+        universal_adapter_title = ("Adapter options  [shared by name; each adapter reads the ones it "
+                                   "supports, and names one it ignores]")
         quality_checks_title = "Quality checks  [--check universal; rules/config are file-specific]"
         global_titles = {
             "Output  [global — formats vary by target]",
