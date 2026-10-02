@@ -4,7 +4,9 @@ The sheet view and ``?format=csv`` "export" parsed the analyzer's 20-row text pr
 back into cells: every sheet stopped at 20 rows with no marker, a leading number in a
 row was stripped as if it were a line number, and a skipped cell shifted the rest left.
 The overview numbered sheets from 1 while ``?sheet=`` counts from 0, and a partial name
-opened the first sheet that contained it.
+opened the first sheet that contained it. An unparsed ``?range=`` (including the
+documented ``B:B`` and ``5:5``) returned the whole sheet, and a blank row (which Excel
+does not store) moved every later row up, so ``A10:C20`` was not Excel's rows 10-20.
 """
 
 import pytest
@@ -32,6 +34,9 @@ def workbook(tmp_path):
     sparse = wb.create_sheet("Sparse")
     sparse["A1"] = "a"
     sparse["C1"] = "c"
+    gaps = wb.create_sheet("Gaps")
+    gaps["A1"] = "top"
+    gaps["A4"] = "after two blank rows"
     path = tmp_path / "book.xlsx"
     wb.save(path)
     return path
@@ -85,8 +90,8 @@ def test_index_counts_from_zero_like_the_overview(workbook, capsys):
 
 
 def test_out_of_range_index_names_the_valid_ones(workbook):
-    with pytest.raises(ValueError, match=r"0-based index: 0=Sales Archive, 1=Sales, 2=Sparse"):
-        _sheet(workbook, "sheet=3")
+    with pytest.raises(ValueError, match=r"0-based index: 0=Sales Archive, 1=Sales, 2=Sparse, 3=Gaps"):
+        _sheet(workbook, "sheet=4")
 
 
 def test_csv_cut_goes_to_stderr_not_into_the_csv(workbook, capsys):
@@ -100,3 +105,28 @@ def test_csv_cut_goes_to_stderr_not_into_the_csv(workbook, capsys):
 def test_file_element_preview_says_what_it_left_out(workbook):
     source = XlsxAnalyzer(str(workbook)).extract_element('sheet', 'Sales')['source']
     assert f"{ROWS + 1 - XlsxAnalyzer.PREVIEW_ROWS} more rows not shown" in source
+
+
+@pytest.mark.parametrize('cell_range, expected', [
+    ('A2:B3', [['2000', 'R0'], ['2001', 'R1']]),
+    ('B2', [['R0']]),
+    ('5:5', [['2003', 'R3', '3']]),
+])
+def test_documented_range_forms(workbook, cell_range, expected):
+    assert _sheet(workbook, f"sheet=Sales&range={cell_range}")['rows'] == expected
+
+
+def test_whole_column_range(workbook):
+    rows = _sheet(workbook, "sheet=Sales&range=B:B&format=csv")['rows']
+    assert rows[:2] == [['Region'], ['R0']] and len(rows) == ROWS + 1
+
+
+@pytest.mark.parametrize('cell_range', ['junk', 'A:C5', '0:3'])
+def test_unparsed_range_is_an_error_not_the_whole_sheet(workbook, cell_range):
+    with pytest.raises(ValueError, match="Invalid range"):
+        _sheet(workbook, f"sheet=Sales&range={cell_range}")
+
+
+def test_blank_rows_keep_later_rows_at_their_numbers(workbook):
+    assert _sheet(workbook, "sheet=Gaps&format=csv")['rows'] == [['top'], [], [], ['after two blank rows']]
+    assert _sheet(workbook, "sheet=Gaps&range=A4")['rows'] == [['after two blank rows']]

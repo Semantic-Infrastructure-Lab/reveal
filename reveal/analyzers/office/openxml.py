@@ -463,11 +463,30 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
             return None
         _, sheet_name, sheet_path = sheet_ref
         sheet = self._analyze_sheet(sheet_path, sheet_name)
-        sheet['rows_data'] = self._get_sheet_preview(sheet_path, max_rows=None)
+        sheet['rows_data'] = self._sheet_grid(sheet_path)
         return sheet
 
-    def _get_sheet_preview(self, sheet_path: str, max_rows: Optional[int] = 10) -> List[List[str]]:
-        """The sheet's first *max_rows* non-empty rows (all of them when None)."""
+    def _sheet_grid(self, sheet_path: str) -> List[List[str]]:
+        """Every row of the sheet, row N at index N-1.
+
+        Excel writes no element for an empty row, so a blank separator row leaves a gap;
+        it becomes ``[]`` here, so a CSV export keeps the sheet's row numbers and
+        ``?range=A10:C20`` means Excel's rows 10-20 (BACK-1608).
+        """
+        sheet_tree = self._read_xml(sheet_path)
+        if sheet_tree is None:
+            return []
+        xl = self.NAMESPACES['xl']
+        grid: List[List[str]] = []
+        for row in sheet_tree.iter(f'{{{xl}}}row'):
+            number = row.get('r', '')
+            if number.isdigit():
+                grid.extend([] for _ in range(int(number) - 1 - len(grid)))
+            grid.append(self._row_cells(row))
+        return grid
+
+    def _get_sheet_preview(self, sheet_path: str, max_rows: int = 10) -> List[List[str]]:
+        """The sheet's first *max_rows* non-empty rows."""
         sheet_tree = self._read_xml(sheet_path)
         if sheet_tree is None:
             return []
@@ -475,8 +494,7 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
         xl = self.NAMESPACES['xl']
         preview = []
 
-        rows = list(sheet_tree.iter(f'{{{xl}}}row'))
-        for row in rows if max_rows is None else rows[:max_rows]:
+        for row in list(sheet_tree.iter(f'{{{xl}}}row'))[:max_rows]:
             row_data = self._row_cells(row)
             if row_data:
                 preview.append(row_data)

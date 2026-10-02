@@ -926,37 +926,25 @@ class XlsxAdapter(ResourceAdapter):
             f"Sheet not found: {identifier}. ?sheet= takes a name or a 0-based index: {listing}")
 
     def _apply_cell_range(self, rows: List[List[Any]], cell_range: str) -> List[List[Any]]:
-        """Apply cell range filter to rows.
+        """The cells of *cell_range*: ``A1:C10``, whole columns ``B:D``, whole rows ``5:7``, or one cell ``B2``.
 
-        Args:
-            rows: Full sheet data
-            cell_range: A1 notation range (e.g., "A1:C10", "B5:D20")
-
-        Returns:
-            Filtered rows
+        Raises ValueError on anything else (BACK-1608: an unparsed range, including the
+        documented ``B:B`` and ``5:5``, returned the whole sheet as if it were the range).
         """
-        # Parse A1 notation
-        match = re.match(r'([A-Z]+)(\d+):([A-Z]+)(\d+)', cell_range, re.IGNORECASE)
-        if not match:
-            return rows  # Invalid range, return all rows
-
-        start_col, start_row, end_col, end_row = match.groups()
-
-        # Convert column letters to indices (A=0, B=1, etc.)
-        start_col_idx = self._col_letter_to_index(start_col)
-        end_col_idx = self._col_letter_to_index(end_col)
-        start_row_idx = int(start_row) - 1  # 1-based to 0-based
-        end_row_idx = int(end_row) - 1
-
-        # Filter rows and columns
-        filtered = []
-        for i in range(start_row_idx, min(end_row_idx + 1, len(rows))):
-            if i < len(rows):
-                row = rows[i]
-                filtered_row = row[start_col_idx:end_col_idx + 1]
-                filtered.append(filtered_row)
-
-        return filtered
+        spec = cell_range if ':' in cell_range else f'{cell_range}:{cell_range}'
+        # Excel's last column is XFD: a column is at most three letters.
+        match = re.fullmatch(r'([A-Z]{0,3})(\d*):([A-Z]{0,3})(\d*)', spec.strip(), re.IGNORECASE)
+        start_col, start_row, end_col, end_row = match.groups() if match else ('', '', '', '')
+        has_cols, has_rows = bool(start_col and end_col), bool(start_row and end_row)
+        if (not (has_cols or has_rows) or bool(start_col) != bool(end_col)
+                or bool(start_row) != bool(end_row) or (has_rows and int(start_row) < 1)):
+            raise ValueError(
+                f"Invalid range: {cell_range} -- use A1:C10, B:D (columns), 5:7 (rows) or B2 (one cell)")
+        first_row, last_row = (int(start_row) - 1, int(end_row)) if has_rows else (0, len(rows))
+        if has_cols:
+            first_col, last_col = self._col_letter_to_index(start_col), self._col_letter_to_index(end_col) + 1
+            return [row[first_col:last_col] for row in rows[first_row:last_row]]
+        return [list(row) for row in rows[first_row:last_row]]
 
     def _col_letter_to_index(self, col: str) -> int:
         """Convert column letter to 0-based index.
