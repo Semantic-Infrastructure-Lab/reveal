@@ -1,5 +1,6 @@
 """Statistics adapter (stats://) for codebase metrics and hotspots."""
 
+import logging
 import os
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -14,12 +15,13 @@ from ...utils.query import (
 )
 from ...utils.query_parser import split_exclude_param
 from ...utils.gitignore import respect_gitignore_param
-from ...utils.results import note_truncation
+from ...utils.path_utils import to_relative_display
+from ...utils.results import ResultBuilder, note_truncation
 from ...utils.validation import require_path_exists
 
 # Import modular functions
 from .renderer import StatsRenderer
-from .analysis import find_analyzable_files, analyze_file, get_file_display_path
+from .analysis import find_analyzable_files, analyze_file, get_file_display_path, is_failure
 from .metrics import calculate_file_stats
 from .queries import get_quality_config, field_value, compare, matches_filters
 from .aggregation import aggregate_stats, identify_hotspots
@@ -72,6 +74,9 @@ def _i002_preload(directory: Path, files: Optional[list] = None) -> dict:
         I002()._build_import_graph(root)   # populates _graph_cache in main process
         return dict(_graph_cache)          # plain dict is picklable
     except Exception:
+        # Documented fallback (see docstring), logged like cli/file_checker.py's.
+        logging.warning("stats: shared-index preload failed; workers will build it "
+                        "themselves", exc_info=True)
         return {}
 
 
@@ -82,11 +87,8 @@ def _i002_init_worker(graph_cache: dict) -> None:
     """
     if not graph_cache:
         return
-    try:
-        from reveal.rules.imports.I002 import _graph_cache
-        _graph_cache.update(graph_cache)
-    except Exception:  # I002 module unavailable in some configs; worker continues without cache
-        pass
+    from reveal.rules.imports.I002 import _graph_cache
+    _graph_cache.update(graph_cache)
 
 
 _SCHEMA_QUERY_PARAMS = {
@@ -262,6 +264,7 @@ class StatsAdapter(ResourceAdapter):
             skip_filter_keys=True,
             extra_known_keys={'sort', 'limit', 'offset', 'exclude', 'respect_gitignore'},
         )
+        self._analysis_failures: list = []
 
     def _merge_query_params(self, hotspots, code_only, min_lines, max_lines,
                            min_complexity, max_complexity, min_functions,
@@ -327,9 +330,10 @@ class StatsAdapter(ResourceAdapter):
         else:
             all_stats = [_analyze_file_worker(a) for a in args]
 
+        self._analysis_failures = [s for s in all_stats if is_failure(s)]
         return [
             s for s in all_stats
-            if s and matches_filters(
+            if s and not is_failure(s) and matches_filters(
                 s, min_lines, max_lines, min_complexity, max_complexity, min_functions,
                 self.query_filters, field_value, compare
             )
@@ -373,6 +377,23 @@ class StatsAdapter(ResourceAdapter):
         shown = ranked[:top] if top > 0 else ranked
         note_truncation(result, 'hotspots', len(shown), len(ranked), 'limit', hint='raise ?top=N')
         return shown
+
+    def _disclose_failures(self, result: dict) -> None:
+        """One meta warning naming the files whose analysis raised: they are not in the
+        totals, and without this the totals read as the whole tree (BACK-1614)."""
+        failed = sorted(f['path'] for f in self._analysis_failures)
+        if not failed:
+            return
+        shown = [to_relative_display(f, self.path) for f in failed[:5]]
+        more = f" and {len(failed) - len(shown)} more" if len(failed) > len(shown) else ''
+        meta = result.setdefault('meta', {})
+        meta.setdefault('warnings', []).append({
+            'type': 'analysis_failed',
+            'count': len(failed),
+            'files': shown,
+            'message': (f"{len(failed)} file(s) failed analysis and are not counted: "
+                        f"{', '.join(shown)}{more}"),
+        })
 
     def _add_truncation_metadata(self, result: dict, displayed: int, total: int) -> None:
         """Record a ?limit/?offset cut of the files list (note_truncation, BACK-1059)."""
@@ -498,6 +519,10 @@ class StatsAdapter(ResourceAdapter):
                     lambda p: get_file_display_path(p, self.path)
                 )
             )
+            if is_failure(file_stats):
+                return dict(ResultBuilder.create_error(
+                    result_type='stats_file', source=self.path,
+                    error=f"analysis failed: {file_stats['analysis_failed']}"))  # type: ignore[index]
             result = aggregate_stats([file_stats] if file_stats else [], self.path)
             result.update(
                 contract_version=CONTRACT_VERSION,
@@ -522,6 +547,7 @@ class StatsAdapter(ResourceAdapter):
         # Aggregate and build result
         result = aggregate_stats(controlled_stats, self.path)
         self._add_truncation_metadata(result, len(controlled_stats), total_filtered)
+        self._disclose_failures(result)
 
         # Add hotspots if requested
         if hotspots:
@@ -560,13 +586,16 @@ class StatsAdapter(ResourceAdapter):
         if not target_path.exists() or not target_path.is_file():
             return None
 
-        return analyze_file(
+        file_stats = analyze_file(
             target_path,
             lambda fp, structure, content: calculate_file_stats(
                 fp, structure, content, self._quality_config,
                 lambda p: get_file_display_path(p, self.path)
             )
         )
+        if is_failure(file_stats):
+            return {'error': f"{element_name}: analysis failed: {file_stats['analysis_failed']}"}  # type: ignore[index]
+        return file_stats
 
     def get_metadata(self) -> Dict[str, Any]:
         """Get metadata about analyzed path.

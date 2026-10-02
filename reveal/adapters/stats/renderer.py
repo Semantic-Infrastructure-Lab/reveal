@@ -1,6 +1,7 @@
 """Renderer for statistics adapter results."""
 
 from ...utils import print_json_result
+from ...utils.warning_render import render_meta_warnings
 
 
 class StatsRenderer:
@@ -64,6 +65,7 @@ class StatsRenderer:
                     print(f"\n{i}. {h['file']}")
                     print(f"   Quality: {h['quality_score']:.1f}/100 | Score: {h['hotspot_score']:.1f}")
                     print(f"   Issues: {', '.join(h['issues'])}")
+            render_meta_warnings(result)
 
     @staticmethod
     def render_element(result: dict, format: str = 'text') -> None:

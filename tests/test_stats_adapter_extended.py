@@ -93,11 +93,11 @@ class TestI002GraphCachePreload:
         # Should not raise
         _i002_init_worker({})
 
-    def test_init_worker_survives_import_error(self):
-        """_i002_init_worker silently ignores import errors."""
-        with patch("reveal.adapters.stats.adapter._i002_init_worker", wraps=_i002_init_worker):
-            with patch.dict("sys.modules", {"reveal.rules.imports.I002": None}):
-                _i002_init_worker({"x": "y"})  # must not raise
+    def test_init_worker_import_error_propagates(self):
+        """I002 is reveal's own module: an import failure is a broken install (BACK-1614)."""
+        with patch.dict("sys.modules", {"reveal.rules.imports.I002": None}):
+            with pytest.raises(ImportError):
+                _i002_init_worker({"x": "y"})
 
     def test_preload_survives_missing_module(self, tmp_path):
         """_i002_preload returns {} instead of raising if I002 can't be imported."""

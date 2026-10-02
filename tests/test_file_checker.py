@@ -611,10 +611,12 @@ class TestI002Preload:
         _i002_init_worker({})
         assert dict(_graph_cache) == before
 
-    def test_init_worker_survives_import_error(self):
-        """_i002_init_worker silently ignores import errors."""
+    def test_init_worker_import_error_propagates(self):
+        """I002 is reveal's own module: failing to import it is a broken install,
+        not a config to work around silently (BACK-1614)."""
         with patch.dict("sys.modules", {"reveal.rules.imports.I002": None}):
-            _i002_init_worker({"some_key": "some_value"})  # must not raise
+            with pytest.raises(ImportError):
+                _i002_init_worker({"some_key": "some_value"})
 
     def test_run_parallel_streaming_yields_all_results(self, tmp_path):
         """_run_parallel_streaming yields one result per file (BACK-092).

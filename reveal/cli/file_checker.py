@@ -115,11 +115,8 @@ def _i002_init_worker(graph_cache: dict) -> None:
     """
     if not graph_cache:
         return
-    try:
-        from reveal.rules.imports.I002 import _graph_cache
-        _graph_cache.update(graph_cache)
-    except Exception:  # I002 module unavailable in some configs; worker continues without cache
-        pass
+    from reveal.rules.imports.I002 import _graph_cache
+    _graph_cache.update(graph_cache)
 
 
 def _d005_will_run(select, ignore) -> bool:
@@ -167,11 +164,8 @@ def _d005_init_worker(project_index: dict) -> None:
     Mirrors _i002_init_worker."""
     if not project_index:
         return
-    try:
-        from reveal.rules.duplicates.D005 import _project_index
-        _project_index.update(project_index)
-    except Exception:  # D005 module unavailable in some configs; worker continues without cache
-        pass
+    from reveal.rules.duplicates.D005 import _project_index
+    _project_index.update(project_index)
 
 
 def _t006_preload(directory: Path, select, ignore, files: Optional[List[Path]] = None) -> dict:
@@ -189,6 +183,8 @@ def _t006_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
         return dict(_project_index)
     except Exception:
         # Same documented fallback as _d005_preload: workers build their own.
+        logging.warning("check: shared-index preload failed; workers will build it "
+                        "themselves", exc_info=True)
         return {}
 
 
@@ -196,11 +192,8 @@ def _t006_init_worker(project_index: dict) -> None:
     """ProcessPoolExecutor initializer: seed each worker's T006 index cache."""
     if not project_index:
         return
-    try:
-        from reveal.rules.types.T006 import _project_index
-        _project_index.update(project_index)
-    except Exception:  # T006 module unavailable in some configs; worker continues without cache
-        pass
+    from reveal.rules.types.T006 import _project_index
+    _project_index.update(project_index)
 
 
 def _preload_scan_caches(files: List[Path], directory: Path, select, ignore) -> dict:
@@ -233,23 +226,12 @@ def _get_scan_disclosures() -> List[str]:
     hit, not just a serial in-process one. Returns [] when nothing was
     capped, which callers must treat as "confirmed complete", not "unknown".
     """
-    disclosures: List[str] = []
-    try:
-        from reveal.rules.imports.I002 import get_scan_disclosures as i002_disclosures
-        disclosures.extend(i002_disclosures())
-    except Exception:
-        pass
-    try:
-        from reveal.rules.duplicates.D005 import get_scan_disclosures as d005_disclosures
-        disclosures.extend(d005_disclosures())
-    except Exception:
-        pass
-    try:
-        from reveal.rules.types.T006 import get_scan_disclosures as t006_disclosures
-        disclosures.extend(t006_disclosures())
-    except Exception:
-        pass
-    return disclosures
+    # No try/except: [] is read as "confirmed complete", so a failure to collect
+    # must not return it (BACK-1614).
+    from reveal.rules.imports.I002 import get_scan_disclosures as i002_disclosures
+    from reveal.rules.duplicates.D005 import get_scan_disclosures as d005_disclosures
+    from reveal.rules.types.T006 import get_scan_disclosures as t006_disclosures
+    return [*i002_disclosures(), *d005_disclosures(), *t006_disclosures()]
 
 
 def _run_parallel(files: List[Path], directory: Path, select, ignore) -> list:

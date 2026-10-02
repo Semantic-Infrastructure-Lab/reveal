@@ -1,10 +1,13 @@
 """Query and filtering functions for stats adapter."""
 
 import copy
+import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, cast
 
 from ...utils.query import compare_values
+
+logger = logging.getLogger(__name__)
 
 
 # Quality scoring defaults - configurable via .reveal/stats-quality.yaml
@@ -90,12 +93,16 @@ def get_quality_config(path: Path) -> Dict[str, Any]:
         Path.home() / '.config' / 'reveal' / 'stats-quality.yaml',
     ]
 
-    try:
-        for config_path in config_paths:
+    import yaml
+    for config_path in config_paths:
+        try:
             if _apply_yaml_config_file(config_path, config):
                 break
-    except (ImportError, Exception):
-        pass  # yaml not available or config error, use defaults
+        # Unreadable, not YAML, or a section of the wrong shape: the user's file
+        # is ignored, which changes every score, so say which file and why.
+        except (OSError, yaml.YAMLError, TypeError, ValueError, AttributeError) as e:
+            logger.warning("%s ignored, quality scores use the defaults: %s", config_path, e)
+            return copy.deepcopy(QUALITY_DEFAULTS)
 
     return config
 

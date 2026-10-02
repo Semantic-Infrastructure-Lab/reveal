@@ -1356,8 +1356,8 @@ class TestStatsAnalysisFunctions:
         result = analyze_file(unsupported, mock_calculate)
         assert result is None
 
-    def test_analyze_file_returns_none_on_exception(self, tmp_path):
-        """Test that analyze_file returns None when analysis raises exception."""
+    def test_analyze_file_returns_failure_record_on_exception(self, tmp_path):
+        """A crash is a failure record, not the None an unsupported file gets (BACK-1614)."""
         from reveal.adapters.stats.analysis import analyze_file
 
         # Create valid Python file
@@ -1369,7 +1369,7 @@ class TestStatsAnalysisFunctions:
             raise ValueError("Calculation failed")
 
         result = analyze_file(test_file, failing_calculate)
-        assert result is None
+        assert result == {'analysis_failed': 'ValueError: Calculation failed', 'path': str(test_file)}
 
     def test_get_file_display_path_single_file(self, tmp_path):
         """Test display path when base_path is a file (shows just filename)."""

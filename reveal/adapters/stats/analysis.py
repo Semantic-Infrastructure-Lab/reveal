@@ -85,7 +85,9 @@ def analyze_file(file_path: Path, calculate_file_stats_func) -> Optional[Dict[st
         calculate_file_stats_func: Function to calculate file statistics
 
     Returns:
-        Dict with file statistics or None if analysis fails
+        Dict with file statistics; None when no analyzer handles the file; a
+        failure record (``analysis_failed`` + ``path``) when analysis raised, so a
+        crash is never counted as an unsupported file (BACK-1614)
     """
     try:
         # Get analyzer for this file
@@ -111,9 +113,13 @@ def analyze_file(file_path: Path, calculate_file_stats_func) -> Optional[Dict[st
 
         return cast(Dict[str, Any], stats)
 
-    except Exception:
-        # Silently skip files that can't be analyzed
-        return None
+    except Exception as e:  # any analyzer, any file: one failure must not stop a repo-wide scan
+        return {'analysis_failed': f"{type(e).__name__}: {e}", 'path': str(file_path)}
+
+
+def is_failure(file_stats: Optional[Dict[str, Any]]) -> bool:
+    """True for analyze_file's failure record."""
+    return bool(file_stats) and 'analysis_failed' in file_stats  # type: ignore[operator]
 
 
 def get_file_display_path(file_path: Path, base_path: Path) -> str:
