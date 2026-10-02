@@ -159,6 +159,8 @@ SCHEMA_UNRUNNABLE = (
     'diff://mysql://', 'diff://git://app.py@main', 'git://.@abc1234', 'git://.@main',
     'git://src/app.py@v1.0', 'element=load_config', 'sheet=Sales', 'env://DATABASE_URL',
     'json://data.json/users', 'json://package.json/', 'format=dot',
+    # Depend on the interpreter running the suite: a venv, an installed `requests`.
+    'python://venv', 'python://packages/requests',
 )
 # Also needs a live host / package / session beyond the recipe list's schemes.
 SCHEMA_SKIP_SCHEMES = NEEDS_HOST + NEEDS_SESSION

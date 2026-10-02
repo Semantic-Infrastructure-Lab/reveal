@@ -144,13 +144,13 @@ class TestGetAdapterSchemes(unittest.TestCase):
         mock_list_schemes.assert_called_once()
 
     @patch('reveal.adapters.base.list_supported_schemes')
-    def test_exception_returns_empty(self, mock_list_schemes):
-        """Should return empty list on exception."""
+    def test_exception_propagates(self, mock_list_schemes):
+        """A failing adapter registry raises: an empty list read as "no adapters" and let
+        the rules that use it report nothing (BACK-1614)."""
         mock_list_schemes.side_effect = Exception('Import failed')
 
-        result = get_adapter_schemes()
-
-        self.assertEqual(result, [])
+        with self.assertRaises(Exception):
+            get_adapter_schemes()
 
     @patch('reveal.adapters.base.list_supported_schemes')
     def test_empty_schemes(self, mock_list_schemes):
@@ -178,22 +178,20 @@ class TestGetAdapterClass(unittest.TestCase):
         mock_get_adapter.assert_called_once_with('git')
 
     @patch('reveal.adapters.base.get_adapter_class')
-    def test_exception_returns_none(self, mock_get_adapter):
-        """Should return None on exception."""
+    def test_exception_propagates(self, mock_get_adapter):
+        """A lookup that fails raises; None is for "no such scheme" (BACK-1614)."""
         mock_get_adapter.side_effect = Exception('Adapter not found')
 
-        result = get_adapter_class('nonexistent')
-
-        self.assertIsNone(result)
+        with self.assertRaises(Exception):
+            get_adapter_class('nonexistent')
 
     @patch('reveal.adapters.base.get_adapter_class')
     def test_none_scheme(self, mock_get_adapter):
-        """Should handle None scheme gracefully."""
+        """A None scheme the registry rejects raises, as any failed lookup does."""
         mock_get_adapter.side_effect = Exception('Invalid scheme')
 
-        result = get_adapter_class(None)
-
-        self.assertIsNone(result)
+        with self.assertRaises(Exception):
+            get_adapter_class(None)
 
 
 class TestGetRendererClass(unittest.TestCase):
@@ -212,22 +210,20 @@ class TestGetRendererClass(unittest.TestCase):
         mock_get_renderer.assert_called_once_with('git')
 
     @patch('reveal.adapters.base.get_renderer_class')
-    def test_exception_returns_none(self, mock_get_renderer):
-        """Should return None on exception."""
+    def test_exception_propagates(self, mock_get_renderer):
+        """A lookup that fails raises; None is for "no such scheme" (BACK-1614)."""
         mock_get_renderer.side_effect = Exception('Renderer not found')
 
-        result = get_renderer_class('nonexistent')
-
-        self.assertIsNone(result)
+        with self.assertRaises(Exception):
+            get_renderer_class('nonexistent')
 
     @patch('reveal.adapters.base.get_renderer_class')
     def test_none_scheme(self, mock_get_renderer):
-        """Should handle None scheme gracefully."""
+        """A None scheme the registry rejects raises, as any failed lookup does."""
         mock_get_renderer.side_effect = Exception('Invalid scheme')
 
-        result = get_renderer_class(None)
-
-        self.assertIsNone(result)
+        with self.assertRaises(Exception):
+            get_renderer_class(None)
 
 
 class TestGetAdapterAndRenderer(unittest.TestCase):
