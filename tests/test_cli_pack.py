@@ -1430,7 +1430,7 @@ class TestCollectFileContents(unittest.TestCase):
         self.assertEqual(item['error'], 'structure analysis failed: RuntimeError: analyzer bug')
 
     def test_readable_file_has_no_error_key(self):
-        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', encoding='utf-8', delete=False) as f:
             f.write("x = 1\n")
             fpath = f.name
         item, = _collect_file_contents([{'path': fpath, 'relative': 'x.py', 'changed': True}])
