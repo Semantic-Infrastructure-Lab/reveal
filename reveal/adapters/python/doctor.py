@@ -117,34 +117,31 @@ def check_package_dir_shadowing() -> Tuple[List[Dict[str, Any]], List[Dict[str, 
     issues: List[Dict[str, Any]] = []
     recommendations: List[Dict[str, Any]] = []
 
-    try:
-        import importlib.metadata as im
+    import importlib.metadata as im
 
-        pkg_to_dist = im.packages_distributions()
-        path_dirs = _resolved_syspath_dirs()
+    pkg_to_dist = im.packages_distributions()
+    path_dirs = _resolved_syspath_dirs()
 
-        seen: set = set()
-        for d_idx, d in enumerate(path_dirs):
-            try:
-                entries = list(d.iterdir())
-            except OSError:
+    seen: set = set()
+    for d_idx, d in enumerate(path_dirs):
+        try:
+            entries = list(d.iterdir())
+        except OSError:
+            continue
+        for pkg in entries:
+            if pkg.name in seen:
                 continue
-            for pkg in entries:
-                if pkg.name in seen:
-                    continue
-                if not (pkg.is_dir() and (pkg / "__init__.py").is_file()):
-                    continue
-                conflict = _find_package_dir_version_conflict(
-                    pkg, d_idx, pkg_to_dist, path_dirs, im,
-                )
-                if conflict is None:
-                    continue
-                seen.add(pkg.name)
-                issue, recommendation = _package_shadowing_finding(pkg, *conflict)
-                issues.append(issue)
-                recommendations.append(recommendation)
-    except Exception:  # noqa: BLE001 — diagnostics must never crash the doctor
-        pass
+            if not (pkg.is_dir() and (pkg / "__init__.py").is_file()):
+                continue
+            conflict = _find_package_dir_version_conflict(
+                pkg, d_idx, pkg_to_dist, path_dirs, im,
+            )
+            if conflict is None:
+                continue
+            seen.add(pkg.name)
+            issue, recommendation = _package_shadowing_finding(pkg, *conflict)
+            issues.append(issue)
+            recommendations.append(recommendation)
 
     return issues, recommendations
 
@@ -162,7 +159,7 @@ def _resolved_syspath_dirs() -> List[Path]:
 def _install_dir(im, dist_name: str) -> Optional[Path]:
     try:
         return Path(str(im.distribution(dist_name).locate_file(""))).resolve()
-    except Exception:  # noqa: BLE001 — best-effort metadata probe
+    except (im.PackageNotFoundError, OSError):  # not installed, or its location can't be resolved
         return None
 
 
@@ -190,7 +187,7 @@ def _find_package_dir_version_conflict(
             continue
         try:
             installed_ver = im.version(dist)
-        except Exception:  # noqa: BLE001
+        except im.PackageNotFoundError:
             continue
         if installed_ver and installed_ver != local_ver:
             return local_ver, dist, installed_ver
@@ -276,29 +273,26 @@ def check_python_version() -> List[Dict[str, Any]]:
 
 def check_editable_installs() -> List[Dict[str, Any]]:
     """Check for editable package installations."""
+    import importlib.metadata
+
     info = []
 
-    try:
-        import importlib.metadata
+    def _is_editable(dist) -> bool:
+        try:
+            return bool(dist.read_text("direct_url.json"))
+        except (FileNotFoundError, TypeError):
+            return False
 
-        def _is_editable(dist) -> bool:
-            try:
-                return bool(dist.read_text("direct_url.json"))
-            except (FileNotFoundError, TypeError):
-                return False
+    editable_count = sum(1 for dist in importlib.metadata.distributions() if _is_editable(dist))
 
-        editable_count = sum(1 for dist in importlib.metadata.distributions() if _is_editable(dist))
-
-        if editable_count > 0:
-            info.append(
-                {
-                    "category": "development",
-                    "message": f"Found {editable_count} editable package(s) installed",
-                    "impact": "Editable installs are for development, not production",
-                }
-            )
-    except Exception:
-        pass  # package introspection is best-effort; return whatever was collected
+    if editable_count > 0:
+        info.append(
+            {
+                "category": "development",
+                "message": f"Found {editable_count} editable package(s) installed",
+                "impact": "Editable installs are for development, not production",
+            }
+        )
 
     return info
 
@@ -438,35 +432,36 @@ def run_doctor(detect_venv_func) -> Dict[str, Any]:
     Returns:
         Dict with detected issues, warnings, and recommendations
     """
-    issues = []
-    warnings = []
-    info = []
-    recommendations = []
-
-    # Run all diagnostic checks
-    w, r = check_venv(detect_venv_func)
-    warnings.extend(w)
-    recommendations.extend(r)
-
-    w, r = check_cwd_shadowing()
-    warnings.extend(w)
-    recommendations.extend(r)
-
-    i, r = check_package_dir_shadowing()
-    issues.extend(i)
-    recommendations.extend(r)
-
-    i, r = check_stale_bytecode()
-    issues.extend(i)
-    recommendations.extend(r)
-
-    warnings.extend(check_python_version())
-    info.extend(check_editable_installs())
-
-    i, w, r = check_editable_conflicts()
-    issues.extend(i)
-    warnings.extend(w)
-    recommendations.extend(r)
+    found: Dict[str, List[Dict[str, Any]]] = {
+        'issues': [], 'warnings': [], 'info': [], 'recommendations': []}
+    # (name, check, what its return tuple holds, in order)
+    checks = [
+        ("virtual_environment", lambda: check_venv(detect_venv_func), ('warnings', 'recommendations')),
+        ("cwd_shadowing", check_cwd_shadowing, ('warnings', 'recommendations')),
+        ("package_dir_shadowing", check_package_dir_shadowing, ('issues', 'recommendations')),
+        ("stale_bytecode", check_stale_bytecode, ('issues', 'recommendations')),
+        ("python_version", lambda: (check_python_version(),), ('warnings',)),
+        ("editable_installs", lambda: (check_editable_installs(),), ('info',)),
+        ("editable_conflicts", check_editable_conflicts, ('issues', 'warnings', 'recommendations')),
+    ]
+    performed: List[str] = []
+    failed: List[str] = []
+    for name, check, kinds in checks:
+        try:
+            results = check()
+        except Exception as e:  # one broken check must not stop the rest, and must not read as clean
+            failed.append(name)
+            found['warnings'].append({
+                "category": "doctor",
+                "message": f"The {name} check could not run ({type(e).__name__}: {e})",
+                "impact": "Problems that check looks for are not covered by this report",
+            })
+            continue
+        performed.append(name)
+        for kind, items in zip(kinds, results):
+            found[kind].extend(items)
+    issues, warnings = found['issues'], found['warnings']
+    info, recommendations = found['info'], found['recommendations']
 
     # Calculate health score
     health_score, status = calculate_health_score(issues, warnings)
@@ -484,13 +479,6 @@ def run_doctor(detect_venv_func) -> Dict[str, Any]:
             "total_info": len(info),
             "total_recommendations": len(recommendations),
         },
-        "checks_performed": [
-            "virtual_environment",
-            "cwd_shadowing",
-            "package_dir_shadowing",
-            "stale_bytecode",
-            "python_version",
-            "editable_installs",
-            "editable_conflicts",
-        ],
+        "checks_performed": performed,
+        **({"checks_failed": failed} if failed else {}),
     }

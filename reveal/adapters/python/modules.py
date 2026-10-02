@@ -42,34 +42,34 @@ def _annotate_editable(dist_path, pip_package: dict) -> None:
         editable = direct_url.get("dir_info", {}).get("editable", False)
         pip_package["editable"] = editable
         pip_package["install_type"] = "editable" if editable else "normal"
-    except Exception:
-        pass  # install_type already set to "normal"
+    except (OSError, ValueError, AttributeError):
+        pass  # unreadable, not JSON, or not an object: install_type stays "normal"
 
 
 def get_pip_package_metadata(module_name: str) -> Optional[Dict[str, Any]]:
     """Get pip package metadata including editable install detection."""
+    import importlib.metadata
+
     try:
-        import importlib.metadata
-
         dist = importlib.metadata.distribution(module_name)
+    except importlib.metadata.PackageNotFoundError:
+        return None  # not a pip-installed distribution
 
-        # Get _path safely using getattr (it's a private attribute)
-        dist_path = getattr(dist, "_path", None)
+    # Get _path safely using getattr (it's a private attribute)
+    dist_path = getattr(dist, "_path", None)
 
-        pip_package = {
-            "name": dist.name,
-            "version": dist.version,
-            "location": str(dist_path.parent) if dist_path else "unknown",
-            "install_type": "normal",
-        }
+    pip_package = {
+        "name": dist.name,
+        "version": dist.version,
+        "location": str(dist_path.parent) if dist_path else "unknown",
+        "install_type": "normal",
+    }
 
-        # Check for editable install
-        if dist_path:
-            _annotate_editable(dist_path, pip_package)
+    # Check for editable install
+    if dist_path:
+        _annotate_editable(dist_path, pip_package)
 
-        return pip_package
-    except Exception:
-        return None
+    return pip_package
 
 
 def detect_pip_import_conflicts(

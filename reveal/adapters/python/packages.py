@@ -34,6 +34,7 @@ def get_packages_list() -> Dict[str, Any]:
         Dict with package count and list of packages
     """
     packages = []
+    unreadable = 0
 
     for dist in get_packages():
         try:
@@ -42,24 +43,28 @@ def get_packages_list() -> Dict[str, Any]:
                 {"name": dist.project_name, "version": dist.version, "location": dist.location}
             )
         except AttributeError:
-            # importlib.metadata API
-            try:
-                packages.append(
-                    {
-                        "name": dist.name,
-                        "version": dist.version,
-                        "location": str(dist._path.parent)
-                        if hasattr(dist, "_path")
-                        else "unknown",
-                    }
-                )
-            except Exception:
+            # importlib.metadata API. A distribution whose metadata has no name
+            # (a broken dist-info) is counted, not listed and not silently dropped.
+            if not dist.name:
+                unreadable += 1
                 continue
+            packages.append(
+                {
+                    "name": dist.name,
+                    "version": dist.version,
+                    "location": str(dist._path.parent)
+                    if hasattr(dist, "_path")
+                    else "unknown",
+                }
+            )
 
-    return {
+    result: Dict[str, Any] = {
         "count": len(packages),
         "packages": sorted(packages, key=lambda p: p["name"].lower()),
     }
+    if unreadable:
+        result["unreadable_distributions"] = unreadable
+    return result
 
 
 def get_package_details(package_name: str) -> Dict[str, Any]:
