@@ -310,11 +310,10 @@ def bar():
         path2 = self.create_file(v2, "v2.py")
 
         adapter = DiffAdapter(path1, path2)
-        result = adapter.get_element('baz')
 
-        # Verify not found
-        self.assertEqual(result['change'], 'not_found')
-        self.assertEqual(result['name'], 'baz')
+        # Neither side has it: a failed lookup the router reports (BACK-1639)
+        self.assertIsNone(adapter.get_element('baz'))
+        self.assertEqual(adapter.list_elements(), ['foo', 'bar'])
 
     def test_element_added(self):
         """Test element-specific diff when element was added."""

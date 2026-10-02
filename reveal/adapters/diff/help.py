@@ -59,7 +59,7 @@ _SCHEMA_OUTPUT_TYPES = [
                 'source_type': {'type': 'string', 'const': 'runtime'},
                 'name': {'type': 'string'},
                 'change': {'type': 'string',
-                           'enum': ['added', 'removed', 'modified', 'unchanged', 'not_found']},
+                           'enum': ['added', 'removed', 'modified', 'unchanged']},
                 'changes': {'type': 'object'},
                 'element': {'type': 'object'},
                 'left': {'type': 'object'},

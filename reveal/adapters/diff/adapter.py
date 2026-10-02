@@ -4,7 +4,8 @@ from typing import Dict, Any, Optional, Tuple, cast
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .parsing import parse_diff_uris, split_trailing_element
-from .resolution import resolve_uri, extract_metadata, find_element, read_element_source
+from .resolution import (resolve_uri, extract_metadata, find_element, element_names,
+                         read_element_source)
 from .help import get_schema as _get_schema, get_help as _get_help
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import DiffRenderer
@@ -170,7 +171,9 @@ class DiffAdapter(ResourceAdapter):
             element_name: Name of element to compare (e.g., 'handle_request')
 
         Returns:
-            Detailed diff for that specific element
+            Detailed diff for that specific element, or None when neither side has it:
+            the router fails the lookup (exit 1) and lists ``list_elements()``, as for any
+            other element that does not exist (BACK-1639).
         """
         from ...diff import compute_element_diff
 
@@ -179,11 +182,19 @@ class DiffAdapter(ResourceAdapter):
 
         left_elem = find_element(left_struct, element_name)
         right_elem = find_element(right_struct, element_name)
+        if left_elem is None and right_elem is None:
+            return None
 
         result = compute_element_diff(left_elem, right_elem, element_name)
         if left_elem is not None and right_elem is not None:
             self._compare_bodies(result, left_elem, right_elem)
         return result
+
+    def list_elements(self) -> list:
+        """Element names on either side, left first: what a not-found lookup offers instead."""
+        left = element_names(resolve_uri(self.left_uri))
+        right = element_names(resolve_uri(self.right_uri))
+        return list(dict.fromkeys(left + right))
 
     def _compare_bodies(self, result: Dict[str, Any], left_elem: Dict[str, Any],
                         right_elem: Dict[str, Any]) -> None:

@@ -295,11 +295,6 @@ def render_element_diff_text(diff_result: Dict[str, Any]) -> None:
     print("=" * 70)
     print()
 
-    if diff_type == 'not_found':
-        print(f"❌ Element '{name}' not found in either resource")
-        print()
-        return
-
     if diff_type == 'added':
         print(f"✅ Element '{name}' was ADDED")
         print()

@@ -1063,8 +1063,9 @@ reveal diff://app.py:old.py --format json
 ```
 
 An **element diff** (`reveal diff://app.py:old.py/process --format json`) has `type`
-`diff_element`; the verdict is `change` (`added`, `removed`, `modified`, `unchanged` or
-`not_found`). `modified` carries `changes` (`{field: {old, new}}`, including `body` when
+`diff_element`; the verdict is `change` (`added`, `removed`, `modified` or `unchanged`). An
+element on neither side is a failed lookup: an `error` with `available_elements`, exit 1.
+`modified` carries `changes` (`{field: {old, new}}`, including `body` when
 only the source text differs) plus `left`/`right`; `added`/`removed` carry `element`:
 ```json
 {

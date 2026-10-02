@@ -217,6 +217,18 @@ def extract_metadata(structure: Dict[str, Any], uri: str) -> Dict[str, str]:
     }
 
 
+def _iter_elements(structure: Dict[str, Any]) -> Iterator[Dict[str, Any]]:
+    """Yield every element a diff can address: functions, classes and class methods.
+
+    Handles both the nested (``{'structure': {...}}``) and flat structure formats.
+    """
+    struct = structure.get('structure', structure)
+    yield from struct.get('functions', [])
+    for cls in struct.get('classes', []):
+        yield cls
+        yield from cls.get('methods', [])
+
+
 def find_element(structure: Dict[str, Any], element_name: str) -> Optional[Dict[str, Any]]:
     """Find a specific element within a structure.
 
@@ -227,25 +239,15 @@ def find_element(structure: Dict[str, Any], element_name: str) -> Optional[Dict[
     Returns:
         Element dict or None if not found
     """
-    # Handle both nested and flat structure formats
-    struct = structure.get('structure', structure)
-
-    # Search in functions
-    for func in struct.get('functions', []):
-        if func.get('name') == element_name:
-            return cast(Dict[str, Any], func)
-
-    # Search in classes
-    for cls in struct.get('classes', []):
-        if cls.get('name') == element_name:
-            return cast(Dict[str, Any], cls)
-
-        # Search in class methods
-        for method in cls.get('methods', []):
-            if method.get('name') == element_name:
-                return cast(Dict[str, Any], method)
-
+    for element in _iter_elements(structure):
+        if element.get('name') == element_name:
+            return element
     return None
+
+
+def element_names(structure: Dict[str, Any]) -> list:
+    """Names of the elements ``find_element`` can find in a structure, in order, once each."""
+    return list(dict.fromkeys(e['name'] for e in _iter_elements(structure) if e.get('name')))
 
 
 def read_element_source(uri: str, element: Dict[str, Any]) -> Optional[str]:

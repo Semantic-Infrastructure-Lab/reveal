@@ -75,16 +75,14 @@ def compute_element_diff(left_elem: Optional[Dict[str, Any]],
 
     Returns:
         Detailed diff for the element: ``type`` is always ``diff_element`` (the
-        result type), ``change`` is the verdict (not_found, added, removed,
-        unchanged, modified).
+        result type), ``change`` is the verdict (added, removed, unchanged, modified).
+
+    Raises:
+        ValueError: neither side has the element. That is a failed lookup, not a
+            verdict; the diff adapter answers it before calling this (BACK-1639).
     """
     if left_elem is None and right_elem is None:
-        return {
-            'type': 'diff_element',
-            'change': 'not_found',
-            'name': element_name,
-            'message': f"Element '{element_name}' not found in either resource"
-        }
+        raise ValueError(f"Element '{element_name}' not found in either resource")
 
     if left_elem is None:
         return {
