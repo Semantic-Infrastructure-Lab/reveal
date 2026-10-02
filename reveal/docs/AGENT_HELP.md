@@ -1718,7 +1718,7 @@ reveal dev inspect-config                      # Show effective .reveal.yaml res
 reveal env://                              # All env vars, auto-categorized (System / Python / Node / Application / Custom)
 reveal env://PATH                          # Get a specific variable
 reveal env:// --format=json                # Machine-readable, for scripts
-reveal env:// --format=grep                # Pipeable KEY=VALUE
+reveal env:// --format=grep                # Pipeable: one env://NAME:value line per variable
 ```
 
 **What's auto-categorized:** System (PATH, HOME, SHELL, USER), Python (PYTHON*, VIRTUAL*, PYTHONPATH), Node (NODE*, NPM*, NVM*), Application (APP_*, DATABASE_*, REDIS_*, API_*), Custom (everything else). Sensitive values (passwords, tokens, API keys) are auto-redacted.
@@ -1748,15 +1748,18 @@ reveal contracts src/services/             # Scope to a subsystem
 
 **Pattern:**
 ```bash
-# MySQL — connection from env or DSN
-reveal mysql://localhost/mydb              # Schema overview: tables, columns, row counts
-reveal mysql://localhost/mydb --check      # Health: missing PKs, oversized tables, no indexes
-reveal 'mysql://localhost/mydb?table=users'  # Single-table detail
+# MySQL — a server: connection from env, ~/.my.cnf or DSN
+reveal mysql://localhost                   # Server health: connections, InnoDB, replication, storage
+reveal mysql://localhost/databases         # The path names a section (databases, tables, indexes,
+reveal mysql://localhost/slow-queries      #   slow-queries, ...), not a database
+reveal mysql://localhost --check           # Pass/warn/fail health thresholds (connections, buffer pool, ...)
 
-# SQLite — file-based
-reveal sqlite:///path/to/app.db            # Schema overview
-reveal 'sqlite:///path/to/app.db?table=trades&limit=10'  # Sample rows
+# SQLite — file-based, schema only
+reveal sqlite:///path/to/app.db            # Schema overview: tables, row counts, indexes
+reveal sqlite:///path/to/app.db/trades     # One table: columns, indexes, foreign keys, row count
 ```
+
+Neither adapter returns row data; for rows, query the database directly (`sqlite3`, `mysql`).
 
 **Discovery:** `reveal help://schemas/mysql --format=json` and `reveal help://schemas/sqlite --format=json` enumerate query params, table-detail modes, and check rules.
 

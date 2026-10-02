@@ -212,7 +212,7 @@ resource (`ssl://`, `mysql://`, `domain://`) — a quicker go/no-go read than
 ```
 reveal_health("src/")
 reveal_health("ssl://api.example.com")
-reveal_health("mysql://prod/mydb")
+reveal_health("mysql://prod")
 ```
 
 ### `reveal_review(target, select)`

@@ -25,7 +25,7 @@ def create_health_parser() -> argparse.ArgumentParser:
             "Examples:\n"
             "  reveal health ./src                  # Code quality health\n"
             "  reveal health ssl://example.com      # SSL certificate health\n"
-            "  reveal health mysql://prod/mydb      # Database health\n"
+            "  reveal health mysql://prod           # MySQL server health\n"
             "  reveal health domain://example.com   # DNS + registration health\n"
             "  reveal health ./src ssl://example.com  # Multiple resources\n"
             "\n"
@@ -40,7 +40,7 @@ def create_health_parser() -> argparse.ArgumentParser:
         'targets',
         nargs='*',
         metavar='TARGET',
-        help='Paths or URIs to check (e.g., ./src, ssl://example.com, mysql://host/db)'
+        help='Paths or URIs to check (e.g., ./src, ssl://example.com, mysql://host)'
     )
     parser.add_argument(
         '--select',
@@ -268,5 +268,5 @@ def _print_usage_and_exit() -> None:
     print("Examples:", file=sys.stderr)
     print("  reveal health ./src", file=sys.stderr)
     print("  reveal health ssl://example.com", file=sys.stderr)
-    print("  reveal health mysql://host/db", file=sys.stderr)
+    print("  reveal health mysql://host", file=sys.stderr)
     sys.exit(1)

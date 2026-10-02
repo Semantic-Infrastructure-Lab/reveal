@@ -37,22 +37,24 @@ reveal 'xlsx://file.xlsx?search=revenue'
 
 **View all sheets in a workbook:**
 ```bash
-reveal file.xlsx
+reveal 'xlsx://sales_report.xlsx'
 ```
 
 **Output:**
 ```
-Workbook: sales_report.xlsx (45.3 KB)
+File: sales_report.xlsx
 
-Sheets (3):
-  Sheet1       500 rows × 12 columns    (A1:L500)
-  Sales        1,234 rows × 8 columns   (A1:H1234)
-  Summary      25 rows × 5 columns      (A1:E25)
-
-Created: 2024-01-15
-Modified: 2024-02-13
-Author: Finance Team
+Sheets (3) -- open one with ?sheet=<name> or ?sheet=<index>:
+  [0]  Sheet1 (A1:L500) - 500 rows, 12 cols
+  [1]  Sales (A1:H1234) - 1234 rows, 8 cols, 12 formulas
+  [2]  Summary (A1:E25) - 25 rows, 5 cols
 ```
+
+Sheets are numbered as `?sheet=` counts them, from 0. Workbook properties (author,
+created/modified dates) are not shown. A detected Power Pivot model, Power Query,
+external connections or named ranges add a line each with the query that opens them.
+`reveal sales_report.xlsx` (the file view) lists the same sheets numbered from 1, as
+element lines.
 
 ### Sheet Extraction
 
@@ -69,10 +71,11 @@ reveal 'xlsx://file.xlsx?sheet=1'         # Second sheet
 ```
 
 **Output shows:**
-- Sheet name and dimensions
-- Column headers (first row)
-- Sample data rows (configurable limit)
-- Data types detected per column
+- Sheet name, dimension and its row and column counts
+- The sheet's rows, numbered from 1 as in Excel (the first row is whatever the sheet
+  holds there; reveal does not detect a header row or column types)
+- The first 100 rows by default, with a `Truncated rows: showing 100 of N` line when
+  the sheet is longer; `?limit=N` changes the cap and `?format=csv` returns every row
 
 ### Cell Range Extraction
 
@@ -81,24 +84,29 @@ reveal 'xlsx://file.xlsx?sheet=1'         # Second sheet
 # Simple range
 reveal 'xlsx://file.xlsx?sheet=Sales&range=A1:C10'
 
-# Single column
+# Whole columns
 reveal 'xlsx://file.xlsx?sheet=Sales&range=B:B'
 
-# Single row
+# Whole rows
 reveal 'xlsx://file.xlsx?sheet=Sales&range=5:5'
+
+# One cell
+reveal 'xlsx://file.xlsx?sheet=Sales&range=B2'
 
 # Large ranges (AA-ZZ columns supported)
 reveal 'xlsx://file.xlsx?sheet=Data&range=A1:ZZ1000'
 ```
 
 **What you get:**
-- Exact cell values in specified range
-- Preserves empty cells (shown as `null` in JSON, empty in text)
-- Column headers if range includes row 1
+- The cell values in the range, by Excel's own row and column numbers (a blank row
+  in the sheet is an empty row in the result, so later rows keep their numbers)
+- Empty cells as `""` in JSON and blank in text
+- Any other range form is an error naming the forms above, not the whole sheet
 
 ### CSV Export
 
-**Export any sheet to CSV format:**
+**Export any sheet to CSV format.** A CSV export has every row of the sheet (or of the
+range); a `?limit=N` cut is reported on stderr, so the CSV on stdout stays clean.
 ```bash
 # Full sheet
 reveal 'xlsx://file.xlsx?sheet=Sales&format=csv'
@@ -126,18 +134,16 @@ reveal 'xlsx://file.xlsx?search=revenue'
 # Multiple matches show sheet + cell location
 ```
 
-**Output:**
+**Output** (each matching row, by sheet, with its Excel row number):
 ```
-Search results for "revenue" in sales_report.xlsx:
+3 matches for "revenue" across 2 sheets:
 
-Sales sheet:
-  A1: Revenue
-  C15: Total Revenue: $1,234,567
-  H99: Revenue Growth
+  [Sales] — 2 matches
+    row    1:  Date | Product | Revenue
+    row   15:  Total Revenue | | 1234567
 
-Summary sheet:
-  B3: Q1 Revenue
-  B4: Q2 Revenue
+  [Summary] — 1 match
+    row    3:  Q1 Revenue | 250000
 ```
 
 ---
@@ -146,11 +152,11 @@ Summary sheet:
 
 | Parameter | Type | Description | Example |
 |-----------|------|-------------|---------|
-| `sheet` | string\|int | Sheet name (case-insensitive) or 0-based index | `?sheet=Sales` or `?sheet=0` |
-| `range` | string | Excel range in A1 notation | `?range=A1:C10` |
+| `sheet` | string\|int | Sheet name (case-insensitive; an exact name wins, then a unique part of one) or 0-based index | `?sheet=Sales` or `?sheet=0` |
+| `range` | string | `A1:C10`, whole columns `B:D`, whole rows `5:7`, or one cell `B2` | `?range=A1:C10` |
 | `format` | string | Output format: `text` (default), `json`, `csv` | `?format=csv` |
 | `search` | string | Search term (case-insensitive) | `?search=revenue` |
-| `limit` | int | Max rows to display (default: 25) | `?limit=100` |
+| `limit` | int | Max rows to return (default: 100 in the sheet view; a CSV export has every row) | `?limit=500` |
 | `powerpivot` | string | Power Pivot data model mode (see below) | `?powerpivot=schema` |
 | `powerquery` | string | Power Query M code mode: `list`, `show`, or query name | `?powerquery=list` |
 | `names` | string | Show named ranges / defined names | `?names=list` |
@@ -187,11 +193,9 @@ reveal 'xlsx://file.xlsx?sheet=Sales'
 ```
 
 Output includes:
-- Sheet metadata (name, dimensions, range)
-- Column headers
-- Formatted table with borders
-- Row numbers
-- Data type hints
+- Sheet metadata (name, dimension, row and column counts)
+- One line per row: its number, then its cells separated by ` | `
+- A `Truncated rows` line when not every row is shown
 
 ### JSON Format
 
@@ -203,29 +207,29 @@ reveal 'xlsx://file.xlsx?sheet=Sales' --format json
 **JSON structure:**
 ```json
 {
-  "adapter": "xlsx",
-  "file_path": "/path/to/file.xlsx",
+  "contract_version": "1.1",
+  "type": "xlsx_sheet",
+  "source": "file.xlsx",
+  "source_type": "file",
   "sheet_name": "Sales",
-  "dimensions": {
-    "rows": 1234,
-    "columns": 8,
-    "range": "A1:H1234"
-  },
-  "columns": [
-    "Date", "Product", "Quantity", "Price", "Total", "Region", "Salesperson", "Notes"
-  ],
   "rows": [
-    ["2024-01-01", "Widget A", 150, 29.99, 4498.5, "North", "John", "Rush order"],
-    ["2024-01-02", "Widget B", 75, 39.99, 2999.25, "South", "Jane", ""]
+    ["Date", "Product", "Quantity"],
+    ["2024-01-01", "Widget A", "150"]
   ],
-  "data_types": {
-    "Date": "date",
-    "Quantity": "int",
-    "Price": "float",
-    "Total": "float"
+  "dimension": "A1:H1234",
+  "rows_count": 1234,
+  "cols_count": 8,
+  "meta": {
+    "warnings": [
+      {"type": "truncated", "field": "rows", "shown": 100, "total": 1234,
+       "message": "rows: showing 100 of 1234 — set ?limit=N, or ?format=csv for every row"}
+    ]
   }
 }
 ```
+
+Cell values are strings as stored in the workbook (numbers unformatted, dates as
+Excel serial numbers); no column types are inferred.
 
 ### CSV Format
 
@@ -235,7 +239,7 @@ reveal 'xlsx://file.xlsx?sheet=Sales&format=csv'
 ```
 
 Output characteristics:
-- First row = column headers
+- Every row of the sheet, in order (the first row is the sheet's first row)
 - Quoted fields (handles commas, quotes, newlines)
 - UTF-8 encoding
 - CRLF line endings
@@ -527,7 +531,8 @@ reveal file.xlsx Sales
 reveal file.xlsx sales
 ```
 
-**Equivalent to:**
+This shows the sheet's first 20 rows and says how many it left out. For every row, or
+`?range=`/`?limit=`, use the URI form:
 ```bash
 reveal 'xlsx://file.xlsx?sheet=Sheet1'
 ```
@@ -545,9 +550,9 @@ reveal 'xlsx://file.xlsx?sheet=Sheet1'
 reveal report.xlsx
 
 # Output shows:
-#   Sales       1,234 rows × 8 columns
-#   Returns     89 rows × 6 columns
-#   Summary     25 rows × 5 columns
+#   :1      Sales (A1:H1234) - 1234 rows, 8 cols
+#   :2      Returns (A1:F89) - 89 rows, 6 cols
+#   :3      Summary (A1:E25) - 25 rows, 5 cols
 
 # Step 2: Inspect specific sheet
 reveal report.xlsx Sales

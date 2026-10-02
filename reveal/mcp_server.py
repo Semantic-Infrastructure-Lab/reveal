@@ -655,7 +655,7 @@ def reveal_health(target: str, select: str = '') -> str:
     reveal_check (a file/dir) or reveal_review (pre-merge, git-range aware).
 
     Args:
-        target: Path or URI to check (e.g. './src', 'ssl://example.com', 'mysql://host/db')
+        target: Path or URI to check (e.g. './src', 'ssl://example.com', 'mysql://host')
         select: Rule categories to check for code targets (e.g. 'B,S,I,C')
     """
     from .cli.commands.health import run_health

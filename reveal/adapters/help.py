@@ -230,9 +230,9 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'description': 'Database and structured data inspection — SQLite, MySQL, Excel',
         'recipes': [
             {'goal': 'List database tables', 'query': 'reveal sqlite:///path/to/app.db', 'description': 'Schema overview with row counts', 'output_type': 'sqlite_database'},
-            {'goal': 'Inspect a table', 'query': 'reveal sqlite:///path/to/app.db/users', 'description': 'Column types, constraints, sample rows', 'output_type': 'sqlite_table'},
-            {'goal': 'MySQL database overview', 'query': 'reveal mysql://user:pass@host/dbname', 'description': 'Tables, row counts, schema summary', 'output_type': 'mysql_health'},
-            {'goal': 'Inspect an Excel workbook', 'query': 'reveal xlsx:///path/to/data.xlsx', 'description': 'Sheet names, dimensions, header rows (the .xlsx extension auto-routes here too — reveal data.xlsx works the same)', 'output_type': 'xlsx_workbook'},
+            {'goal': 'Inspect a table', 'query': 'reveal sqlite:///path/to/app.db/users', 'description': 'Columns and types, indexes, foreign keys, row count, CREATE statement (schema only: sqlite:// returns no row data)', 'output_type': 'sqlite_table'},
+            {'goal': 'MySQL server overview', 'query': 'reveal mysql://user:pass@host', 'description': 'Server health: connections, InnoDB, replication, storage (the path names a section, e.g. mysql://host/databases, not a database)', 'output_type': 'mysql_health'},
+            {'goal': 'Inspect an Excel workbook', 'query': 'reveal xlsx:///path/to/data.xlsx', 'description': 'Sheet names numbered for ?sheet=N, dimensions, row and column counts (reveal data.xlsx is the file view of the same sheets)', 'output_type': 'xlsx_workbook'},
             {'goal': 'Query a JSON file by path', 'query': 'json://config.json?flatten', 'description': 'Flatten to grep-able dotted-path format (also: ?schema for type structure, ?gron as an alias for ?flatten)', 'output_type': 'json_flatten'},
         ]
     },
@@ -241,8 +241,8 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'task': 'runtime',
         'description': 'Runtime environment — env vars, Python packages, reveal install state',
         'recipes': [
-            {'goal': 'All environment variables', 'query': 'reveal env://', 'description': 'Full env dump grouped by prefix', 'output_type': 'environment'},
-            {'goal': 'Filter env by prefix', 'query': "reveal env:// | grep '^DB'", 'description': 'Show only DB_* variables (env:// takes no query params)', 'output_type': 'environment'},
+            {'goal': 'All environment variables', 'query': 'reveal env://', 'description': 'Full env dump grouped by category (System, Python, Node, Application, Custom); sensitive values redacted', 'output_type': 'environment'},
+            {'goal': 'Filter env by prefix', 'query': "reveal env:// --format=grep | grep '^env://DB_'", 'description': 'Show only DB_* variables, one env://NAME:value line each (env:// takes no query params)', 'output_type': 'environment'},
             {'goal': 'Python package versions', 'query': 'reveal python://packages', 'description': 'Installed packages with versions', 'output_type': 'python_packages'},
             {'goal': 'Reveal install info', 'query': 'reveal reveal://', 'description': 'Registered analyzers, adapters, rules', 'output_type': 'reveal_structure'},
         ]
@@ -1525,7 +1525,7 @@ class HelpAdapter(ResourceAdapter):
                     'name': 'Data & Config',
                     'adapters': self._cluster_membership().get('Data & Config', []),
                     'pairs': [
-                        ('sqlite', 'mysql', 'same query API, two database backends'),
+                        ('sqlite', 'mysql', 'two databases: a SQLite file\'s schema, a MySQL server\'s health'),
                         ('json', 'sqlite', 'inspect app state: exported JSON or live DB'),
                         ('env', 'python', 'runtime environment + live module introspection'),
                         ('xlsx', 'sqlite', 'tabular data inspection across formats'),
@@ -1570,8 +1570,8 @@ class HelpAdapter(ResourceAdapter):
                 },
                 {
                     'adapters': ['sqlite', 'mysql'],
-                    'description': 'Portable DB inspection: same syntax, two backends',
-                    'example': "reveal sqlite:///dev.db/users  →  reveal mysql://prod/users",
+                    'description': 'Database inspection: a SQLite file\'s schema, a MySQL server\'s health',
+                    'example': "reveal sqlite:///dev.db/users  &&  reveal mysql://prod/databases",
                 },
                 {
                     'adapters': ['claude', 'git'],

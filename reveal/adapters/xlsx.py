@@ -443,10 +443,10 @@ class XlsxRenderer:
 
 _SCHEMA_QUERY_PARAMS = {
     'sheet': {'type': 'string|integer', 'description': 'Sheet to extract (name or 0-based index)', 'examples': ['sheet=Sales', 'sheet=0']},
-    'range': {'type': 'string', 'description': 'Cell range in A1 notation (e.g., A1:C10)', 'examples': ['range=A1:C10', 'range=B5:D20']},
+    'range': {'type': 'string', 'description': 'Cells A1:C10, whole columns B:D, whole rows 5:7, or one cell B2', 'examples': ['range=A1:C10', 'range=B:D', 'range=5:7']},
     'search': {'type': 'string', 'description': 'Search for text across all sheets', 'examples': ['search=revenue', 'search=total']},
     'format': {'type': 'string', 'description': 'Output format (text, json, csv)', 'examples': ['format=csv', 'format=json']},
-    'limit': {'type': 'integer', 'description': 'Maximum number of rows to return', 'examples': ['limit=100', 'limit=50']},
+    'limit': {'type': 'integer', 'description': 'Maximum number of rows to return (sheet view default 100; format=csv returns every row)', 'examples': ['limit=500', 'limit=50']},
     'formulas': {'type': 'boolean', 'description': 'Show formulas instead of values', 'examples': ['formulas=true']},
     'powerpivot': {'type': 'string', 'description': 'Extract Power Pivot model (tables|schema|measures|dax)', 'examples': ['powerpivot=schema', 'powerpivot=dax', 'powerpivot=tables', 'powerpivot=measures']},
     'powerquery': {'type': 'string', 'description': 'Extract Power Query M code (list|show|<name>)', 'examples': ['powerquery=list', 'powerquery=show', 'powerquery=SalesData']},
@@ -507,7 +507,7 @@ _SCHEMA_NOTES = [
     '?range=A1:C10 uses standard A1 notation; omit to get the entire sheet',
     '?search=term is case-insensitive and searches all sheets simultaneously',
     '?formulas=true shows raw formulas instead of computed cell values',
-    '?format=csv exports the sheet as CSV — pipe to other tools or save to file',
+    '?format=csv exports every row of the sheet as CSV — pipe to other tools or save to file',
     '?powerpivot=schema shows Power Pivot tables and columns (Excel 2010/2013 XMLA format)',
     '?powerpivot=dax shows DAX measure expressions (requires Excel 2010/2013 XMLA; modern Power BI exports not supported without reveal-cli[powerpivot])',
 ]

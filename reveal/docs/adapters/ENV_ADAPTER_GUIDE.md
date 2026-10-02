@@ -44,7 +44,7 @@ The **env adapter** (`env://`) provides secure environment variable inspection w
 
 - ✅ **Auto-categorization** - Intelligent grouping by System/Python/Node/Application/Custom
 - ✅ **Sensitive redaction** - Pattern-based detection (PASSWORD, TOKEN, KEY, SECRET, etc.)
-- ✅ **Secure by default** - Sensitive values shown as `***` unless explicitly requested
+- ✅ **Secure by default** - Sensitive values are always shown as `***`; reveal has no option to print them (use `printenv NAME` when you need the value)
 - ✅ **Metadata** - Variable category, length, sensitivity flag
 - ✅ **JSON output** - Machine-readable format for scripting
 - ✅ **Zero configuration** - Works out of the box, no setup required

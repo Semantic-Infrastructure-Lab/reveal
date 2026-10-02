@@ -16,6 +16,14 @@ def render_env_structure(data: Dict[str, Any], output_format: str) -> None:
         print_json_result(data)
         return
 
+    if output_format == 'grep':
+        # One env://NAME:value line per variable and nothing else, so `| grep '^env://DB_'`
+        # selects variables (BACK-1608: the text headings were printed here too).
+        for variables in data['categories'].values():
+            for var in variables:
+                print(f"env://{var['name']}:{var['value']}")
+        return
+
     # Text format
     print(f"Environment Variables ({data['total_count']})")
     print()
@@ -27,12 +35,7 @@ def render_env_structure(data: Dict[str, Any], output_format: str) -> None:
         print(f"{category} ({len(variables)}):")
         for var in variables:
             sensitive_marker = " (sensitive)" if var['sensitive'] else ""
-            if output_format == 'grep':
-                # grep format: env://VAR_NAME:value
-                print(f"env://{var['name']}:{var['value']}")
-            else:
-                # text format
-                print(f"  {var['name']:<30s} {var['value']}{sensitive_marker}")
+            print(f"  {var['name']:<30s} {var['value']}{sensitive_marker}")
         print()
 
 
