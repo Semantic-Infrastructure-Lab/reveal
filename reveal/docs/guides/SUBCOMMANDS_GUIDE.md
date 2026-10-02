@@ -684,7 +684,6 @@ reveal check [path] [flags]
 reveal check src/                          # check all files recursively
 reveal check file.py                       # single file
 reveal check src/ --select B,S            # bugs and security only
-reveal check src/ --only-failures         # show violations only
 reveal check src/ --format json           # machine-readable
 reveal check src/ --severity high         # high/critical issues only
 reveal check --rules                      # list active rules

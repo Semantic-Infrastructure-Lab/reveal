@@ -42,7 +42,6 @@ def create_check_parser() -> argparse.ArgumentParser:
             '  reveal check file.py                # check single file\n'
             '  reveal check ./src --select B,S     # bugs and security only\n'
             '  reveal check ./src --format json    # machine-readable output\n'
-            '  reveal check ./src --only-failures  # hide passing checks\n'
             '\n'
             'Rule categories: B=Bugs, C=Complexity, I=Imports, M=Maintainability,\n'
             '                 R=Refactoring, S=Security, T=Types\n'
@@ -73,18 +72,16 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help='Apply a named rule preset (e.g., maintenance, security, ci-strict). '
              'Use reveal --profiles to list available profiles.',
     )
-    parser.add_argument(
-        '--only-failures', action='store_true',
-        help='Only show failed/warning checks (hide healthy results)',
-    )
+    # --only-failures and --advanced are accepted, so an existing script keeps working,
+    # but not advertised: check prints only violations (there are no passing checks to
+    # hide) and has no advanced rule tier, so both always printed "has no effect"
+    # (BACK-1606). The flag ledger still notes them when set.
+    parser.add_argument('--only-failures', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument(
         '--recursive', '-r', action='store_true',
         help='Process directory recursively (default: on for directories)',
     )
-    parser.add_argument(
-        '--advanced', action='store_true',
-        help='Run advanced checks (enables deeper validation)',
-    )
+    parser.add_argument('--advanced', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument(
         '--config', type=str, metavar='FILE',
         help='Config file (.reveal.yaml or pyproject.toml)',
