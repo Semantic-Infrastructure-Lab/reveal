@@ -9,10 +9,9 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from argparse import Namespace
+from argparse import Namespace
+from contextlib import nullcontext
+from typing import Optional
 
 # Module-level imports so callers can mock reveal.cli.routing.file.handle_uri
 # and reveal.cli.routing.file.handle_file in tests.
@@ -21,7 +20,8 @@ from .formats import (  # noqa: E402
     DEFAULT_OUTPUT_FORMATS, reject_unhonored_also_json, require_supported_format,
 )
 from ...file_handler import handle_file  # noqa: E402
-from .grep import handle_grep, handle_grep_directory  # noqa: E402
+from .grep import handle_grep, handle_grep_directory
+from .ledger import FlagLedger, ledger_of, peek  # noqa: E402
 from ...utils.path_utils import to_posix  # noqa: E402
 from ...registry import get_markdown_extensions  # noqa: E402
 
@@ -424,14 +424,29 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     path, element_from_path = _parse_file_line_syntax(path_str)
     _validate_path_exists(path, path_str)
 
-    if path.is_dir():
-        # The walk scope every entry point publishes (BACK-1581): --exclude plus
-        # REVEAL_IGNORE, relative to this directory, as for a URI or a subcommand.
-        from ...utils.exclusions import dispatch_scope, exclusion_scope
-        with exclusion_scope(*dispatch_scope(str(path), getattr(args, 'exclude', None))):
-            _handle_directory_path(path, args)
-    elif path.is_file():
-        _handle_file_path(path, element_from_path, args)
-    else:
+    if not path.is_dir() and not path.is_file():
         print(f"Error: {path_str} is neither file nor directory", file=sys.stderr)
         sys.exit(1)
+
+    # BACK-1634: a flag the file or directory view never reads gets one note, as on the URI
+    # form. The guards above run on the untracked args: they only reject a flag that belongs
+    # to another route, and reading it there must not count as applying it.
+    ledger = None
+    if ledger_of(args) is None and isinstance(args, Namespace):
+        ledger = FlagLedger(args, view='a directory listing' if path.is_dir() else 'the file view')
+        args = ledger.track(args)
+    try:
+        with ledger.dispatching('') if ledger is not None else nullcontext():
+            if path.is_dir():
+                # The walk scope every entry point publishes (BACK-1581): --exclude plus
+                # REVEAL_IGNORE, relative to this directory, as for a URI or a subcommand.
+                from ...utils.exclusions import dispatch_scope, exclusion_scope
+                with exclusion_scope(*dispatch_scope(str(path), peek(args, 'exclude'))):
+                    _handle_directory_path(path, args)
+            else:
+                _handle_file_path(path, element_from_path, args)
+        if ledger is not None:
+            ledger.complete = True
+    finally:
+        if ledger is not None and ledger.complete:
+            ledger.report()

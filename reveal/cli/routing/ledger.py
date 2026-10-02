@@ -66,9 +66,10 @@ class FlagLedger:
     """Flags and query keys the user set for one dispatch, and which of them were used."""
 
     def __init__(self, args: Namespace, parser: Optional[ArgumentParser] = None,
-                 subcommand: Optional[str] = None):
+                 subcommand: Optional[str] = None, view: Optional[str] = None):
         """``parser`` and ``subcommand`` for a ``reveal <subcommand>`` dispatch: flags are
-        judged against that parser's defaults, and the note names the subcommand."""
+        judged against that parser's defaults, and the note names the subcommand. ``view``
+        names a bare-path view (``the file view``) for the same note without a URI scheme."""
         from ..defaults import _parser_defaults, option_defaults_of
         from ..global_flags import PROCESS_GLOBAL_FLAGS
         from ..parser import _format_default
@@ -80,6 +81,7 @@ class FlagLedger:
             defaults = option_defaults_of(parser)
         self.parser = parser
         self.subcommand = subcommand
+        self.view = view
         self.set_flags: Dict[str, Any] = {
             dest: getattr(args, dest) for dest, default in defaults.items()
             if dest not in _NOT_FLAGS and dest not in PROCESS_GLOBAL_FLAGS
@@ -140,6 +142,9 @@ class FlagLedger:
         if flags and self.subcommand:
             print(f"Note: {spelled} has no effect on 'reveal {self.subcommand}' -- this "
                   f"subcommand does not use it.", file=out)
+        elif flags and self.view:
+            print(f"Note: {spelled} has no effect on {self.view} -- this view does not use it.",
+                  file=out)
         elif flags:
             parsed = [d for d in flags if self.delegated.get(d) in self.seen_keys]
             self._report_flags([d for d in flags if d not in parsed], names, scheme, out)

@@ -1066,13 +1066,12 @@ class TestHandleFileOrDirectory(unittest.TestCase):
                 handle_file_or_directory(temp_path, mock_args)
 
                 # Verify handle_file was called
-                mock_handle.assert_called_once_with(
-                    temp_path,
-                    None,  # element
-                    False,  # meta
-                    'text',  # format
-                    mock_args
-                )
+                mock_handle.assert_called_once()
+                call_args = mock_handle.call_args.args
+                assert call_args[:4] == (temp_path, None, False, 'text')
+                # The view runs on a copy that records which flags it reads (BACK-1634).
+                for name, value in vars(mock_args).items():
+                    assert getattr(call_args[4], name) == value
         finally:
             os.unlink(temp_path)
 

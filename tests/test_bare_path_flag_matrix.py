@@ -95,17 +95,21 @@ def test_probes_only_target_honored_cells():
             f'{shape}/{flag} has a probe but is not marked honored')
 
 
-def _run_bare(argv):
+def _run_bare_streams(argv):
     from reveal.cli.parser import create_argument_parser
     from reveal.cli.routing.file import handle_file_or_directory
     args = create_argument_parser('test').parse_args(argv)
-    out = io.StringIO()
-    with redirect_stdout(out), redirect_stderr(io.StringIO()):
+    out, err = io.StringIO(), io.StringIO()
+    with redirect_stdout(out), redirect_stderr(err):
         try:
             handle_file_or_directory(args.path, args)
         except SystemExit:
             pass
-    return out.getvalue()
+    return out.getvalue(), err.getvalue()
+
+
+def _run_bare(argv):
+    return _run_bare_streams(argv)[0]
 
 
 @pytest.fixture(scope='module')
@@ -176,6 +180,57 @@ def test_not_applicable_cell_output_is_identical(shape, flag, probe_tree):
     assert baseline == changed, (
         f'bare-path {shape} marks --{flag} not-applicable but output changed -- '
         f'reclassify as honored (with a PROBES entry) or investigate the regression')
+
+
+# BACK-1634: a flag the branch never uses is named on stderr (the flag ledger on the bare-path
+# route, as on the URI form). These cells read the flag without letting it change output, which
+# the ledger cannot see (BACK-1538); every other not-applicable cell must be named.
+_READ_BUT_INERT = {('file_default', 'all')}
+
+
+@pytest.mark.parametrize('shape,flag', sorted(_not_applicable_cases()))
+def test_not_applicable_cell_is_named_on_stderr(shape, flag, probe_tree):
+    from reveal.cli.global_flags import PROCESS_GLOBAL_FLAGS
+    if flag in PROCESS_GLOBAL_FLAGS or (shape, flag) in _READ_BUT_INERT:
+        pytest.skip('process-global or read-but-inert: the ledger stays quiet')
+    template = _NOT_APPLICABLE_ARGV[shape]
+    if shape.startswith('dir_'):
+        argv = [str(probe_tree), *template]
+    else:
+        argv = [a.replace('{file}', str(probe_tree / 'a.py')) for a in template]
+    argv += [_FLAG_TO_CLI[flag]] if flag not in ('since', 'until') else \
+        [_FLAG_TO_CLI[flag], '2099-01-01']
+    _, err = _run_bare_streams(argv)
+    assert f'{_FLAG_TO_CLI[flag]} has no effect on' in err, (
+        f'bare-path {shape} ignores --{flag} without saying so (BACK-1634)')
+
+
+@pytest.mark.parametrize('argv,flag', [
+    (['{file}', '--dir-limit', '3'], '--dir-limit'),
+    (['{file}', '--grep', 'return', '--limit', '2', '--max-entries', '3'], '--max-entries'),
+    (['{tree}', '--grep', 'return', '--dir-limit', '3'], '--dir-limit'),
+])
+def test_a_flag_the_view_ignores_is_named(argv, flag, probe_tree):
+    argv = [a.replace('{file}', str(probe_tree / 'a.py')).replace('{tree}', str(probe_tree))
+            for a in argv]
+    _, err = _run_bare_streams(argv)
+    note = next((l for l in err.splitlines() if 'has no effect on' in l), '')
+    assert flag in note, err
+
+
+@pytest.mark.parametrize('argv', [
+    ['{tree}', '--files', '--max-entries', '4', '--asc'],
+    ['{tree}', '--grep', 'return', '--ext', 'py', '--max-items', '3'],
+    ['{tree}', '--dir-limit', '3', '--depth', '2'],
+    ['{file}', '--format', 'json', '--head', '3'],
+    ['{file}', '--grep', 'return', '--max-items', '1'],
+    ['{file}', '--name', 'a'],
+])
+def test_an_applied_flag_gets_no_note(argv, probe_tree):
+    argv = [a.replace('{file}', str(probe_tree / 'a.py')).replace('{tree}', str(probe_tree))
+            for a in argv]
+    _, err = _run_bare_streams(argv)
+    assert 'has no effect' not in err, err
 
 
 if __name__ == '__main__':
