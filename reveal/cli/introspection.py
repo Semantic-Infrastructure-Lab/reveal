@@ -16,7 +16,10 @@ from ..registry import (
 from ..core import node_children as _children
 from ..core import tree_root
 from ..core.treesitter_compat import _zero_arg
-from ..capabilities import get_capability
+from ..capabilities import (
+    CONFORMANCE_SMOKE_TESTED, CONFORMANCE_STRUCTURE_ONLY, CONFORMANCE_TIER1_VERIFIED,
+    CONFORMANCE_UNTESTED, get_capability,
+)
 
 _CAPABILITY_METHODS = [
     ('get_functions', 'Functions'),
@@ -404,6 +407,21 @@ def _build_fallback_info(info: Dict[str, Any]) -> List[str]:
     ]
 
 
+# Every explicit analyzer was headed "✅ Full Language Support", above its own
+# "Conformance level: smoke-tested" or "untested" line (BACK-1421). The headline
+# says the level, in the words --languages tags each analyzer with.
+_SUPPORT_HEADLINES = {
+    CONFORMANCE_TIER1_VERIFIED: "✅ Explicit analyzer, tier1-verified",
+    CONFORMANCE_SMOKE_TESTED: "🟡 Explicit analyzer, smoke-tested (not tier1-verified)",
+    CONFORMANCE_STRUCTURE_ONLY: "🟡 Explicit analyzer, structure only",
+    CONFORMANCE_UNTESTED: "⚪ Explicit analyzer, untested",
+}
+
+
+def _support_headline(conformance_level: Optional[str]) -> str:
+    return _SUPPORT_HEADLINES.get(conformance_level or '', "✅ Explicit analyzer")
+
+
 def _build_full_support_info(info: Dict[str, Any]) -> List[str]:
     """Build full language support information.
 
@@ -413,8 +431,9 @@ def _build_full_support_info(info: Dict[str, Any]) -> List[str]:
     Returns:
         List of information lines
     """
+    profile = get_capability(info['class'])
     lines = [
-        "✅ Full Language Support",
+        _support_headline(profile.conformance_level if profile is not None else None),
         "",
         "📊 Capabilities:",
     ]
@@ -425,7 +444,6 @@ def _build_full_support_info(info: Dict[str, Any]) -> List[str]:
 
     # BACK-444: language capability profile — how trustworthy is --varflow /
     # unused-import detection for this language, and what's the evidence?
-    profile = get_capability(info['class'])
     if profile is not None:
         lines.append("")
         lines.append(f"🎯 Conformance level: {profile.conformance_level}")
