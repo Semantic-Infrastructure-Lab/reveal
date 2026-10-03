@@ -62,25 +62,32 @@ for file in V007 V009 V011; do
     fi
 done
 
-# 3. Test Suite
+# 3. Test Suite -- one run measures coverage too. Steps 3 and 4 read its output, so a
+# failing test is reported once, as a test failure, not again as "coverage below 70%".
 check_step "Test Suite (All Tests)" 3 12
 
-if pytest tests/ -v; then
-    echo -e "${GREEN}✓ All tests passed${NC}"
-else
-    echo -e "${RED}✗ Tests FAILED${NC}"
+TEST_LOG=$(mktemp)
+pytest tests/ -v --cov=reveal --cov-report=term-missing --cov-fail-under=70 2>&1 | tee "$TEST_LOG"
+TEST_STATUS=${PIPESTATUS[0]}
+TEST_SUMMARY=$(grep -E '^=+ .* in [0-9.]+s' "$TEST_LOG" | tail -1)
+
+if [ "$TEST_STATUS" -ne 0 ] && { echo "$TEST_SUMMARY" | grep -qE '[0-9]+ (failed|errors?)\b' || [ -z "$TEST_SUMMARY" ]; }; then
+    echo -e "${RED}✗ Tests FAILED: ${TEST_SUMMARY:-no pytest summary (collection or startup error)}${NC}"
     FAILURES=$((FAILURES + 1))
+else
+    echo -e "${GREEN}✓ All tests passed${NC}"
 fi
 
-# 4. Test Coverage
+# 4. Test Coverage (from step 3's run)
 check_step "Test Coverage (≥70%)" 4 12
 
-if pytest tests/ --cov=reveal --cov-report=term-missing --cov-fail-under=70; then
-    echo -e "${GREEN}✓ Coverage requirement met${NC}"
+if grep -q 'Required test coverage of .* reached' "$TEST_LOG"; then
+    echo -e "${GREEN}✓ Coverage requirement met: $(grep -o 'Total coverage: [0-9.]*%' "$TEST_LOG")${NC}"
 else
-    echo -e "${RED}✗ Coverage below 70%${NC}"
+    echo -e "${RED}✗ Coverage below 70%, or not measured (see step 3)${NC}"
     FAILURES=$((FAILURES + 1))
 fi
+rm -f "$TEST_LOG"
 
 # 5. Documentation Validation
 check_step "Documentation Links (No Broken Links)" 5 12
