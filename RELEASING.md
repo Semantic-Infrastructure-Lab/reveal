@@ -86,8 +86,9 @@ Fix any errors before proceeding.
 
 `./scripts/pre-release-check.sh` runs the full gate set (its last step, CI parity, runs
 `scripts/ci-local.sh --matrix`: a CI-equivalent venv per Python 3.10/3.12/3.14, the 3.12 @ language-pack 1.8.1 floor, plus the CI-only
-steps -- see CONTRIBUTING.md "Testing";
-`SKIP_CI_PARITY=1` skips it), including two
+steps -- see CONTRIBUTING.md "Testing". It skips that run when GitHub's Tests run is already
+green for HEAD, which covers every `--matrix` leg plus macOS and Windows (BACK-1646);
+`SKIP_CI_PARITY=1` skips it regardless), including two
 regression-only ratchets that need the maintainer environment:
 - **mypy** (`scripts/check_mypy_baseline.py`) fails if any (file, error-code) count rose
   vs `.github/mypy_baseline.json`; after fixing errors, run it with `--update` to lock

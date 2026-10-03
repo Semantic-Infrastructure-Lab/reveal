@@ -66,6 +66,23 @@ and requires:
 A **version bump is also required** if the *meaning* of a field changes
 (e.g. `source` going from absolute to relative path).
 
+`contract_version` versions the envelope (`contract_version`, `type`, `source`,
+`source_type`, `meta`) for every adapter at once. Two kinds of change do not bump it:
+
+- **A conformance fix.** An adapter whose field broke the envelope's own definition is
+  corrected to match it. The contract's meaning is unchanged; the adapter had been
+  violating it. Example: an element diff answered `"type": "modified"`, a verdict in the
+  field that names the result type; it now answers `"type": "diff_element"` with the
+  verdict in `change` (BACK-1637). Bumping would tell every consumer of every adapter
+  that the envelope changed when it did not.
+- **An adapter's own payload.** Fields beside the envelope (`change`, `results`, `hits`)
+  are described by that adapter's schema (`reveal 'help://schemas/<adapter>'`), not by
+  `contract_version`.
+
+Both still change what a script sees. Record them under **Changed** in CHANGELOG.md with
+the old shape, the new one and what a script should read instead, and update the
+adapter's schema in the same commit.
+
 ---
 
 ## `meta` field reference
