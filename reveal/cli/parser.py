@@ -431,13 +431,6 @@ def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
                         help='Explain a specific rule (e.g., "B001")')
     parser.add_argument('--severity', type=str, metavar='LEVEL',
                         help='Minimum severity level to report: low, medium, high, critical. Default: show all')
-    parser.add_argument('--limit', type=int, metavar='N', default=None,
-                        help='Cap text output to the first N files with issues, then print a "+N more files" '
-                             'summary footer instead of continuing (BACK-539; a large monorepo can otherwise '
-                             'print 100K+ lines). Default 50 for check; set to 0 to disable the cap. '
-                             'For check, ignored with --format json. On URI targets it becomes ?limit=N on '
-                             'ast/markdown/json/git/stats, ?top=N on hotspots/calls/depends/testability; '
-                             'elsewhere a note says it has no effect.')
 
 
 def _strip_path_quotes(value: str) -> str:
@@ -482,6 +475,14 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
                              '500-per-category outline cap); '
                              'with --rules/--adapters/--discover, also include reveal-internal '
                              'self-check entries hidden by default')
+    # Navigation, not Quality checks: that group collapses in --help, which hid the one
+    # cap flag shared by URI adapters and --check.
+    parser.add_argument('--limit', type=int, metavar='N', default=None,
+                        help='Cap results at N. On URI targets it becomes ?limit=N on '
+                             'ast/markdown/json/git/stats and ?top=N on hotspots/calls/depends/testability; '
+                             'elsewhere a note says it has no effect. With --check, caps text output at the '
+                             'first N files with issues and prints a "+N more files" footer (default 50, '
+                             '0 disables; ignored with --format json).')
     parser.add_argument('--since', type=str, metavar='DATE',
                         help='Filter results since date (YYYY-MM-DD, e.g., reveal claude:// --since 2026-02-27)')
     parser.add_argument('--until', type=str, metavar='DATE',

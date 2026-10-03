@@ -82,6 +82,7 @@ table mirrors those groups; verified live against reveal-cli 0.129.0.
 --no-breadcrumbs                   # Scripting mode
 --head N / --tail N / --range      # Semantic slicing
 --sort FIELD / --desc / --asc      # Sort results
+--limit N / --all                  # Cap results / lift caps (--limit is also --check's file cap)
 --since DATE / --until DATE        # Date filter
 --depth / --max-entries / --dir-limit / --fast   # Tree layout & perf
 --respect-gitignore / --no-gitignore
@@ -99,7 +100,7 @@ table mirrors those groups; verified live against reveal-cli 0.129.0.
 checks` group):
 ```bash
 --check / --lint              # Universal — run pattern detectors on any file/dir
---select / --ignore / --severity / --limit / --config / --explain / --rules
+--select / --ignore / --severity / --config / --explain / --rules
                                # Scoped to --check on a file/directory target
 ```
 `--max-items` and `--max-snippet-chars` are **not** part of this group:

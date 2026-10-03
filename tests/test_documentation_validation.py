@@ -283,6 +283,18 @@ class TestDocumentationConsistency:
             "normal documented behavior (BACK-1200)."
         )
 
+    def test_result_cap_flags_are_listed_in_default_help(self):
+        """--limit sat in the Quality checks group, which `reveal --help` collapses
+        to a digest, so the cap flag the URI adapters share never appeared in
+        --help (BACK-1613). The cap and slice flags must print in full there."""
+        from reveal.cli.parser import create_argument_parser
+
+        help_text = create_argument_parser(version="0.0.0-test").format_help()
+        for flag in ("--limit N", "--all", "--head N", "--tail N", "--range START-END"):
+            assert re.search(rf"^  {re.escape(flag)}\b", help_text, re.MULTILINE), (
+                f"{flag} has no row of its own in `reveal --help`"
+            )
+
 
 class TestDocumentationCompleteness:
     """Test that documentation covers all major features."""

@@ -204,7 +204,7 @@ def test_note_names_every_unused_flag_and_the_bare_path_hint():
     err = StringIO()
     ledger.report('sqlite', stream=err)
     assert err.getvalue() == (
-        "Note: --depth, --limit has no effect on sqlite:// queries -- not supported by this "
+        "Note: --limit, --depth has no effect on sqlite:// queries -- not supported by this "
         "adapter. Use a bare path scan (reveal <path> --depth) instead.\n")
 
 
