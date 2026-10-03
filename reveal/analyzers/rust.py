@@ -22,6 +22,7 @@ class RustAnalyzer(TreeSitterAnalyzer):
         'interfaces': ('trait_item',),
         'enums': ('enum_item',),
         'types': ('type_item',),
+        'modules': ('mod_item',),  # `mod m { }` (BACK-1636)
     }
 
     def _extract_class_bases(self, node) -> List[str]:

@@ -20,6 +20,7 @@ class PhpAnalyzer(TreeSitterAnalyzer):
         'interfaces': ('interface_declaration',),
         'traits': ('trait_declaration',),
         'enums': ('enum_declaration',),
+        'namespaces': ('namespace_definition',),  # BACK-1636
     }
     IMPORTS_VIA_EXTRACTOR = True  # BACK-1089
 

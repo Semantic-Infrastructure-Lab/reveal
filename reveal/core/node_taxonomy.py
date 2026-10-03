@@ -388,6 +388,10 @@ TYPE_DECL_NODES: frozenset = frozenset({
     'mixin_declaration',      # Dart
     'extension_declaration',  # Dart
     'internal_module',        # TypeScript `namespace NS {}`
+    'mod_item',               # Rust `mod m {}` (BACK-1636)
+    'namespace_definition',   # PHP `namespace App;` / `namespace App { }`
+    'namespace_declaration',  # C# `namespace App { }`
+    'file_scoped_namespace_declaration',  # C# 10 `namespace App;`
 })
 # Every node kind that can be the `Parent` of `Parent.member` extraction.
 # 'module' is Ruby's module (Python's root is also 'module', but it has no

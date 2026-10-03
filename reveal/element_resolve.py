@@ -213,6 +213,9 @@ def _member_nodes(analyzer, container, child_name: str, direct: bool) -> List[An
     not `Outer.Inner.m`. direct=False is the old whole-subtree search, kept as
     the fallback so Ruby `Module.method` (method inside a class inside the
     module) and methods of nested classes still resolve when nothing direct does.
+
+    A nested container is a member too: `Outer.Inner`, `App.K` for a class in a
+    namespace or module (BACK-1636). An impl block is not; it has no name of its own.
     """
     found: List[Any] = []
     stack = list(reversed(_children(container)))
@@ -223,8 +226,12 @@ def _member_nodes(analyzer, container, child_name: str, direct: bool) -> List[An
             if analyzer._get_node_name(node) == child_name:
                 found.append(node)
                 continue
-        if direct and kind in MEMBER_CONTAINER_NODES:
-            continue
+        if kind in MEMBER_CONTAINER_NODES:
+            if kind != 'impl_item' and analyzer._get_node_name(node) == child_name:
+                found.append(node)
+                continue
+            if direct:
+                continue
         stack.extend(reversed(_children(node)))
     return found
 

@@ -22,6 +22,7 @@ class CSharpAnalyzer(TreeSitterAnalyzer):
         'enums': ('enum_declaration',),
         'delegates': ('delegate_declaration',),
         'properties': ('property_declaration', 'indexer_declaration'),
+        'namespaces': ('namespace_declaration', 'file_scoped_namespace_declaration'),  # BACK-1636
     }
 
     # ── Interfaces (BACK-403 pt 2) ──────────────────────────────────────────

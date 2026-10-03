@@ -18,6 +18,9 @@ Classes (3):
   :43     Batch
   :59     Reporter
 
+Namespaces (1):
+  :6      Sample [59 lines]
+
 [exit 0]
 
 $ reveal csharp/sample.cs --outline
@@ -26,14 +29,15 @@ File: sample.cs (1.6KB, 64 lines)
 using System; (csharp/sample.cs:2)
 using System.IO; (csharp/sample.cs:3)
 using System.Text; (csharp/sample.cs:4)
-OrderProcessor (csharp/sample.cs:8)
-  ├─ Validate(int order) [8 lines, depth:2] (line 10)
-  ├─ ProcessOrder(int order) [14 lines, depth:2] (line 19)
-  └─ Run(int order) [4 lines, depth:0] (line 34)
-Batch (csharp/sample.cs:43)
-  └─ Run(System.Collections.Generic.List<int> items) [8 lines, depth:1] (line 47)
-Reporter (csharp/sample.cs:59)
-  └─ Summarize() [1 line, depth:0] (line 62)
+Sample [59 lines] (csharp/sample.cs:6)
+  ├─ OrderProcessor (line 8)
+  │  ├─ Validate(int order) [8 lines, depth:2] (line 10)
+  │  ├─ ProcessOrder(int order) [14 lines, depth:2] (line 19)
+  │  └─ Run(int order) [4 lines, depth:0] (line 34)
+  ├─ Batch (line 43)
+  │  └─ Run(System.Collections.Generic.List<int> items) [8 lines, depth:1] (line 47)
+  └─ Reporter (line 59)
+     └─ Summarize() [1 line, depth:0] (line 62)
 
 [exit 0]
 

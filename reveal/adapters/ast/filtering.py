@@ -212,6 +212,8 @@ def normalize_type_condition(condition: Dict[str, Any]) -> Dict[str, Any]:
         'import': 'imports',
         'interface': 'interfaces',
         'trait': 'interfaces',  # Rust traits are stored as interfaces (BACK-1088)
+        'module': 'modules',  # Rust mod (BACK-1636)
+        'namespace': 'namespaces',  # PHP, C#, TypeScript
         'test': 'tests',
     }
 

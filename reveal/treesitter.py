@@ -400,6 +400,13 @@ _SIGNATURE_END_KINDS = (
     'field_initializer_list',
 )
 
+# Namespace declarations named by a `name` field that may be a qualified name (BACK-1636).
+_NAMESPACE_KINDS = frozenset({
+    'namespace_definition',                # PHP
+    'namespace_declaration', 'file_scoped_namespace_declaration',  # C#
+})
+
+
 class TreeSitterAnalyzer(FileAnalyzer):
     """Base class for tree-sitter based analyzers.
 
@@ -1761,6 +1768,11 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return self._constructor_definition_name(node)
         if _zero_arg(node, 'kind') == 'init_declaration':
             return 'init'
+        if _zero_arg(node, 'kind') in _NAMESPACE_KINDS:
+            # The name is a qualified name node (PHP `App\Models`, C# `App.Models`), which
+            # no strategy below reads whole; PHP's global `namespace { }` has none (BACK-1636).
+            name_node = node.child_by_field_name('name')
+            return self._get_node_text(name_node) if name_node is not None else None
         if _zero_arg(node, 'kind') == 'deinit_declaration':
             return 'deinit'
         if _zero_arg(node, 'kind') in (
