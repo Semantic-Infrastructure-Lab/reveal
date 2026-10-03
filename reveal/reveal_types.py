@@ -134,6 +134,7 @@ class StructureItem(TypedDict, total=False):
     visibility: str  # Zig `pub`
     members: List[str]  # Zig struct/enum/union member names
     type: str  # PowerShell class entries
+    owner: str  # dotted name of the enclosing definition, from the tree (BACK-1632)
 
 
 class VarFlowEvent(TypedDict, total=False):

@@ -348,6 +348,31 @@ def _qualifies(qualname: str, dotted: str) -> bool:
 _FUNCTION_LITERALS = frozenset({'arrow_function', 'function_expression', 'generator_function'})
 
 
+def owner_path(analyzer, node) -> Optional[str]:
+    """Dotted name of the definition `node` is a member of (`Outer.Inner`), or None.
+
+    The tree decides, not line ranges: a Go method's owner is its receiver type,
+    a Rust impl method's is the impl's Self type, and a class on the same line as
+    its namespace is still inside it. The outline nests by this (BACK-1632).
+    """
+    if _zero_arg(node, 'kind') == 'method_declaration' and getattr(analyzer, 'language', None) == 'go':
+        return go_receiver_type_name(analyzer, node)
+    parts: List[str] = []
+    parent = _zero_arg(node, 'parent')
+    while parent is not None:
+        if _zero_arg(parent, 'kind') in MEMBER_CONTAINER_NODES:
+            names = container_names(analyzer, parent)
+            if names:
+                parts.insert(0, names[0])
+        parent = _zero_arg(parent, 'parent')
+    owner_of = getattr(analyzer, '_function_value_owner', None)
+    if not parts and owner_of is not None:
+        owner = owner_of(node)
+        if owner:
+            parts.append(owner)
+    return '.'.join(parts) or None
+
+
 def qualified_name(analyzer, node, fallback: str = '?') -> str:
     """Human label for a definition: `A.pop`, `heapData.Pop`, `FileAccess::get`.
     `fallback` names a node whose kind carries no name (a JS function value)."""
@@ -357,23 +382,8 @@ def qualified_name(analyzer, node, fallback: str = '?') -> str:
         name = analyzer._get_node_name(node) or fallback
     if '::' in name:
         return name
-    if _zero_arg(node, 'kind') == 'method_declaration' and getattr(analyzer, 'language', None) == 'go':
-        receiver = go_receiver_type_name(analyzer, node)
-        return f'{receiver}.{name}' if receiver else name
-    parts = [name]
-    parent = _zero_arg(node, 'parent')
-    while parent is not None:
-        if _zero_arg(parent, 'kind') in MEMBER_CONTAINER_NODES:
-            names = container_names(analyzer, parent)
-            if names:
-                parts.insert(0, names[0])
-        parent = _zero_arg(parent, 'parent')
-    owner_of = getattr(analyzer, '_function_value_owner', None)
-    if len(parts) == 1 and owner_of is not None:
-        owner = owner_of(node)
-        if owner:
-            parts.insert(0, owner)
-    return '.'.join(parts)
+    owner = owner_path(analyzer, node)
+    return f'{owner}.{name}' if owner else name
 
 
 def _resolves_uniquely_to(analyzer, address: str, node, tiers) -> bool:

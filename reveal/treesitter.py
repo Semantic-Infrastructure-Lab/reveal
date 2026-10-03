@@ -911,7 +911,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
         end_node = self._function_end_node(bounds_node)
         line_end = _zero_arg(end_node, 'end_position').row + 1
         if self._outline_only:  # BACK-1560: get_outline() locates, it doesn't measure
-            return {'line': line_start, 'line_end': line_end, 'name': name, 'decorators': decorators}
+            located: StructureItem = {'line': line_start, 'line_end': line_end, 'name': name,
+                                      'decorators': decorators}
+            return self._with_owner(located, node)
         # For Dart, end_node is the sibling function_body — walk that for
         # complexity/calls too, or both metrics silently see an empty body
         # (same blindness _function_end_node's docstring describes).
@@ -959,7 +961,18 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # never by its own name.
         if self._is_trait_impl_method(node):
             result['trait_impl'] = True
-        return result
+        return self._with_owner(result, node)
+
+    def _with_owner(self, item: StructureItem, node) -> StructureItem:
+        """Record the definition `node` is a member of as `owner` (`Outer.Inner`),
+        so --outline nests by the tree, not by line ranges: a Go receiver method or
+        a Rust impl method sits outside its type's lines (BACK-1632), and a class on
+        its namespace's line can't be told inside it by line (BACK-1649)."""
+        from .element_resolve import owner_path  # element_resolve imports this module
+        owner = owner_path(self, node)
+        if owner:
+            item['owner'] = owner
+        return item
 
     def _is_trait_impl_method(self, node) -> bool:
         """True if *node* is a method implementing a trait (Rust `impl Trait for T`)."""
@@ -1185,7 +1198,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 return self._get_node_text(gchild).strip() or None
         return None
 
-    def _extract_declarations(self, node_kind: str) -> List[Dict[str, Any]]:
+    def _extract_declarations(self, node_kind: str) -> List[StructureItem]:
         """Extract one DECLARATION_CATEGORIES node kind as a standalone list
         (name, line range, bases).
 
@@ -1194,21 +1207,22 @@ class TreeSitterAnalyzer(FileAnalyzer):
         heritage-clause shape). Generalized from interfaces (BACK-403 pt 2) to
         every declaration category (BACK-1409).
         """
-        entries: List[Dict[str, Any]] = []
+        entries: List[StructureItem] = []
         for node in self._find_definitions(node_kind):  # not C's `enum E e;` mentions
             name = self._get_node_name(node)
             if not name:
                 continue
             line_start = _zero_arg(node, 'start_position').row + 1
             line_end = _zero_arg(node, 'end_position').row + 1
-            entries.append({
+            entry: StructureItem = {
                 'line': line_start,
                 'line_end': line_end,
                 'name': name,
                 'line_count': line_end - line_start + 1,
                 'decorators': [],
                 'bases': self._extract_class_bases(node),
-            })
+            }
+            entries.append(self._with_owner(entry, node))
         return entries
 
     def _build_class_dict(self, node, name: str, decorators: List[str],
@@ -1239,7 +1253,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # abstractness via a modifier keyword instead — see _is_abstract_class_node.
         if _zero_arg(node, 'kind') == 'abstract_class_declaration' or self._is_abstract_class_node(node):
             result['is_abstract'] = True
-        return result
+        return self._with_owner(result, node)
 
     def _is_abstract_class_node(self, node) -> bool:
         """Per-language hook: does this class node carry an 'abstract' modifier?
@@ -1261,7 +1275,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 if name:
                     line_start = _zero_arg(node, 'start_position').row + 1
                     line_end = _zero_arg(node, 'end_position').row + 1
-                    structs.append({
+                    struct: StructureItem = {
                         'line': line_start,
                         'line_end': line_end,
                         'name': name,
@@ -1279,7 +1293,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
                         # BACK-1088: same polymorphic hook as classes -- Go
                         # struct embedding, Rust `impl Trait for T`.
                         'bases': self._extract_class_bases(node),
-                    })
+                    }
+                    structs.append(self._with_owner(struct, node))
 
         return structs
 

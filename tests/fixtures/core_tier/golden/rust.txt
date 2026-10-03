@@ -34,10 +34,10 @@ process_order(order: i32) [8 lines, depth:2] (rust/sample.rs:13)
 run(order: i32) [3 lines, depth:0] (rust/sample.rs:22)
 count_down(mut n: i32) [13 lines, depth:2] (rust/sample.rs:30)
 Batch (rust/sample.rs:47)
-run(&mut self, items: &[i32]) [6 lines, depth:2] (rust/sample.rs:52)
+  └─ run(&mut self, items: &[i32]) [6 lines, depth:2] (line 52)
 Reporter (rust/sample.rs:63)
+  └─ summarize(&self) [3 lines, depth:0] (line 72)
 Summary [3 lines] (rust/sample.rs:67)
-summarize(&self) [3 lines, depth:0] (rust/sample.rs:72)
 
 [exit 0]
 

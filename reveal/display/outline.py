@@ -1,7 +1,7 @@
 """Outline and hierarchy building for file structure display."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from reveal.utils.formatting import lines_label
 from reveal.utils.path_utils import to_posix
@@ -34,27 +34,10 @@ def build_hierarchy(structure: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str
 
     # Sort by line number
     all_items.sort(key=lambda x: x.get('line', 0))
+    by_path = _items_by_path(all_items)
 
-    # Build parent-child relationships based on line ranges
-    # An item is a child if it's within another item's line range
     for i, item in enumerate(all_items):
-        item_start = item.get('line_start', item.get('line', 0))
-        item_end = item.get('line_end', item_start)
-
-        # Find potential parent (previous item that contains this one)
-        parent = None
-        for j in range(i - 1, -1, -1):
-            candidate = all_items[j]
-            candidate_start = candidate.get('line_start', candidate.get('line', 0))
-            candidate_end = candidate.get('line_end', candidate_start)
-
-            # Check if candidate contains this item
-            if candidate_start < item_start and candidate_end >= item_end:
-                # Found a containing item - use most recent (closest parent)
-                parent = candidate
-                break
-
-        # Add to parent's children or mark as root
+        parent = _choose_parent(_line_parent(all_items, i), by_path.get(item.get('owner', '')), item)
         if parent:
             parent['children'].append(item)
             item['is_child'] = True
@@ -63,6 +46,48 @@ def build_hierarchy(structure: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str
 
     # Return only root-level items
     return [item for item in all_items if not item.get('is_child', False)]
+
+
+def _span(item: Dict[str, Any]) -> Tuple[int, int]:
+    start = item.get('line_start', item.get('line', 0))
+    return start, item.get('line_end', start)
+
+
+def _items_by_path(items: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """Each item under its dotted path (`owner.name`), first in source order wins."""
+    by_path: Dict[str, Dict[str, Any]] = {}
+    for item in items:
+        name = item.get('name')
+        if name:
+            owner = item.get('owner')
+            by_path.setdefault(f'{owner}.{name}' if owner else name, item)
+    return by_path
+
+
+def _line_parent(items: List[Dict[str, Any]], i: int) -> Optional[Dict[str, Any]]:
+    """The closest earlier item whose line range contains items[i]."""
+    start, end = _span(items[i])
+    for j in range(i - 1, -1, -1):
+        candidate_start, candidate_end = _span(items[j])
+        if candidate_start < start and candidate_end >= end:
+            return items[j]
+    return None
+
+
+def _choose_parent(line_parent: Optional[Dict[str, Any]], owner: Optional[Dict[str, Any]],
+                   item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The owner the tree names (BACK-1632, BACK-1649), unless the line parent sits
+    inside that owner: a function nested in a method keeps the method as parent,
+    though the tree's owner is the method's class."""
+    if owner is None or owner is item:
+        return line_parent
+    if line_parent is None or line_parent is owner:
+        return owner
+    owner_start, owner_end = _span(owner)
+    parent_start, parent_end = _span(line_parent)
+    if owner_start <= parent_start and parent_end <= owner_end:
+        return line_parent
+    return owner
 
 
 def build_heading_hierarchy(headings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
