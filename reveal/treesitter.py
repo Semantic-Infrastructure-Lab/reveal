@@ -4,6 +4,7 @@ import functools
 import hashlib
 import logging
 import os
+import re
 import threading
 from collections import OrderedDict
 from typing import Dict, List, Any, Optional, Set, Tuple
@@ -399,6 +400,9 @@ _SIGNATURE_END_KINDS = (
     'function_body', 'block', 'compound_statement', 'statement_block', 'code_block',
     'field_initializer_list',
 )
+
+# A `;` closing a definition's last line, then only blanks to the line's end (BACK-1630).
+_TRAILING_SEMICOLON = re.compile(rb'[ \t]*(;)[ \t]*(?:\r?\n|$)')
 
 # Namespace declarations named by a `name` field that may be a qualified name (BACK-1636).
 _NAMESPACE_KINDS = frozenset({
@@ -1430,6 +1434,10 @@ class TreeSitterAnalyzer(FileAnalyzer):
         indentation precedes the node, so a method's first line keeps its
         indentation like every line after it; otherwise (`export function f`,
         two definitions on one line) it starts at the node.
+
+        The end mirrors that: a `;` that is the rest of the last line belongs to the
+        definition (C/C++ `struct S { ... };` ends at its `}` node and printed `}`,
+        BACK-1630); anything else after the node on that line is left out.
         """
         node = self._extraction_node(node)
         end_node = self._function_end_node(node)
@@ -1438,10 +1446,14 @@ class TreeSitterAnalyzer(FileAnalyzer):
         line_begin = start - _zero_arg(node, 'start_position').column
         if not content[line_begin:start].strip():
             start = line_begin
+        end = _zero_arg(end_node, 'end_byte')
+        trailing = _TRAILING_SEMICOLON.match(content, end)
+        if trailing:
+            end = trailing.end(1)
         return {
             'line_start': _zero_arg(node, 'start_position').row + 1,
             'line_end': _zero_arg(end_node, 'end_position').row + 1,
-            'source': content[start:_zero_arg(end_node, 'end_byte')].decode('utf-8'),
+            'source': content[start:end].decode('utf-8'),
         }
 
     def _extraction_node(self, node):
