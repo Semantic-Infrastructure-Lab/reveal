@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-09-26 (Reliability program set as the priority track, BACK-1512)
+> **Last updated**: 2026-10-02 (v0.130.0 release: reliability seams, one failed/cut outcome, core-path goldens, namespaces and nesting, help accuracy)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,15 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.130.0 — Reliability seams, one failed and one cut outcome, core-path goldens, namespaces and nesting, help accuracy
+
+- ✅ An error from any URI adapter exits 1 and is reported once, and a cut list says so with one marker, printed once (BACK-1059, 1543, 1547); the silent-except ratchet went from 123 to 0 (BACK-1614), and an unknown `?sort=` field is reported on every sorting adapter (BACK-1644).
+- ✅ Shared seams replaced copies: one walker with gitignore-syntax `--exclude`/`REVEAL_IGNORE` everywhere (BACK-1223, 1576), one parser source with `GrammarUnavailable` (BACK-1045), paths spelled as the user typed them and with `/` on Windows (BACK-1366), one root finder (BACK-1372), and one parsed Invocation behind a flag ledger (BACK-1058, 1539).
+- ✅ The five core operations have golden text tests and text/JSON parity (BACK-1601); `--grep` shows each hit's line and is 3-8x faster over a directory (BACK-1602, 1558-1563).
+- ✅ Rust `mod`, PHP/C#/C++ namespaces and C/C++ enums and unions are listed and extract by name, `Parent.Child` resolves in every language, and `--outline` nests Go receiver and Rust impl methods under their type (BACK-1636, 1648, 1632, 1649); GraphQL operations and fragments are listed (BACK-1416).
+- ✅ Help says what ships: guides open on a runnable command, `--language-info` states each analyzer's conformance level, MCP tool descriptions match behaviour, and data-adapter help promises only what returns (BACK-1613, 1421, 1612, 1608).
+- ⚠️ JSON shape changes for scripts: an element diff's verdict moved from `type` to `change` (BACK-1637), `--fields` selects by one rule on every adapter (BACK-1607), and `--grep` groups carry `hits` (BACK-1602) — see CHANGELOG "Changed".
 
 ### v0.129.0 — Result-control flags honored or rejected, .gitignore correctness, member/route resolution, cache keyed on code
 
@@ -315,7 +324,7 @@ a check that counts violations and lets the count only fall. Then the cause is r
    disclosed, and runs every subcommand through the same result handling (all but `check`,
    BACK-1545). Since 2026-09-29 it also runs each adapter's own cap knob (`?top`, `?limit`) at
    1 and uncapped: a list that got shorter must be disclosed, must be the uncapped list's
-   first N, and must state the real total (CHANGELOG `[Unreleased]`).
+   first N, and must state the real total (CHANGELOG `[0.130.0]`).
 2. **The largest class** (flags dropped between invocation forms) is retired at its cause.
    Landed 2026-09-26: the flag ledger, where a flag or query key the user sets is used, or a
    note names it (`reveal/cli/routing/ledger.py`, ratchet `tests/test_flag_ledger.py`). The
@@ -343,23 +352,23 @@ a check that counts violations and lets the count only fall. Then the cause is r
    cut with the same marker. Since 2026-09-30 the file view acts on a failed result too: a
    file whose own parser failed (XML, a notebook) reports its error and exits 1, and every
    tree-sitter analyzer, including those that build their own result (JSON, YAML, TOML, ...),
-   says when its parse was recovered (CHANGELOG `[Unreleased]`). Since 2026-10-01 element
+   says when its parse was recovered (CHANGELOG `[0.130.0]`). Since 2026-10-01 element
    results and the directory view carry the envelope too (the router wraps each element
    result), and a partial parse is one `partial_parse` meta warning in the result, not a
-   stderr line per file (CHANGELOG `[Unreleased]`). Since 2026-10-02 the `silent-except` ratchet is at 0: each handler it counted now catches what its input can raise or reports what it skipped (CHANGELOG `[Unreleased]`). Since 2026-10-02 a `?sort=` field no result has is recorded and printed at the same seam on every sorting adapter, not only ast:// (`unknown_sort_field`, BACK-1644). Still open: B006 counts 39 broad handlers whose fallback is computed (`return frozenset()`, `count = 0`), a shape that rule does not see (BACK-1638).
+   stderr line per file (CHANGELOG `[0.130.0]`). Since 2026-10-02 the `silent-except` ratchet is at 0: each handler it counted now catches what its input can raise or reports what it skipped (CHANGELOG `[0.130.0]`). Since 2026-10-02 a `?sort=` field no result has is recorded and printed at the same seam on every sorting adapter, not only ast:// (`unknown_sort_field`, CHANGELOG `[0.130.0]`). Still open: B006 counts 39 broad handlers whose fallback is computed (`return frozenset()`, `count = 0`), a shape that rule does not see (BACK-1638).
 4. **One seam per concern:** BACK-1054 (import resolution). The parser seam landed
    2026-09-30: every tree-sitter parser comes from `reveal/core/treesitter_parse.py`, a missing
    grammar raises `GrammarUnavailable` instead of reading as an empty result, and the
-   `tree-sitter-import` ratchet is at 0 (CHANGELOG `[Unreleased]`). The
+   `tree-sitter-import` ratchet is at 0 (CHANGELOG `[0.130.0]`). The
    path pass landed 2026-09-30: results spell paths as the user named the target, set once
    for `source` by the router, `compose` and the subcommand envelope, and the subcommands
-   hand adapters the path as typed (CHANGELOG `[Unreleased]`). The root finders landed 2026-09-30: M102, B005, the V-rules and
-   `reveal scaffold` each use the shared finder (CHANGELOG `[Unreleased]`). The walker seam
+   hand adapters the path as typed (CHANGELOG `[0.130.0]`). The root finders landed 2026-09-30: M102, B005, the V-rules and
+   `reveal scaffold` each use the shared finder (CHANGELOG `[0.130.0]`). The walker seam
    landed 2026-09-30: every walk over the user's target goes through one predicate chosen by
    the walk's purpose (analysis, evidence, resolution, display, docs), `--exclude` and
    `REVEAL_IGNORE` are gitignore syntax everywhere, the walker ratchet is at 0, and a
    cross-walker agreement test keeps ten commands on the same file sets (CHANGELOG
-   `[Unreleased]`).
+   `[0.130.0]`).
 
 These gates run continuously alongside the steps above:
 - BACK-1365: executable docs.
