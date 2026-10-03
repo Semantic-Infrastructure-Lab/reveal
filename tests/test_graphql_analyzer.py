@@ -466,8 +466,29 @@ fragment UserFields on User {
             analyzer = GraphQLAnalyzer(temp_path)
             structure = analyzer.get_structure()
 
-            self.assertIsInstance(structure, dict)
+            # BACK-1416: only schema root fields were read, so a document of operations
+            # listed nothing
+            self.assertEqual([(q['name'], q['signature']) for q in structure['queries']],
+                             [('GetUser', '($id: ID!)'), ('GetUsers', '($limit: Int, $offset: Int)')])
+            self.assertEqual([m['name'] for m in structure['mutations']], ['CreateUser'])
+            self.assertEqual([(f['name'], f['signature']) for f in structure['fragments']],
+                             [('UserFields', ' on User')])
 
+        finally:
+            os.unlink(temp_path)
+
+    def test_root_field_signature_does_not_repeat_its_name(self):
+        """BACK-1416: the outline prints name + signature; the signature began with the
+        name too, so `user(id: ID!): User` read `useruser(id: ID!): User`."""
+        schema = 'type Query {\n  user(id: ID!): User\n  count: Int\n}\n{ count }\n'
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.graphql', delete=False, encoding='utf-8') as f:
+            f.write(schema)
+            temp_path = f.name
+        try:
+            queries = GraphQLAnalyzer(temp_path).get_structure()['queries']
+            self.assertEqual([(q['name'], q['signature']) for q in queries],
+                             [('user', '(id: ID!): User'), ('count', ': Int'),
+                              ('(anonymous query)', '')])
         finally:
             os.unlink(temp_path)
 

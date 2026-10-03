@@ -29,6 +29,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
         structure['queries'] = self._extract_operations('Query')
         structure['mutations'] = self._extract_operations('Mutation')
         structure['subscriptions'] = self._extract_operations('Subscription')
+        structure['fragments'] = self._extract_fragments()
         structure['enums'] = self._extract_enums()
         structure['interfaces'] = self._extract_interfaces()
         structure['unions'] = self._extract_unions()
@@ -190,13 +191,64 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
         return types
 
     @staticmethod
-    def _build_field_signature(field_name: str, args: List[str], return_type: Optional[str]) -> str:
-        """Build a field/operation signature string."""
-        sig = f"{field_name}({', '.join(args)})" if args else field_name
+    def _build_field_signature(args: List[str], return_type: Optional[str]) -> str:
+        """A field's signature after its name, as a function's is: `(id: ID!): User`.
+
+        It began with the name, which the outline prints before the signature, so
+        every root field read `useruser(id: ID!): User` (BACK-1416).
+        """
+        sig = f"({', '.join(args)})" if args else ''
         return f"{sig}: {return_type}" if return_type else sig
 
     def _extract_operations(self, operation_type: str) -> List[Dict[str, Any]]:
-        """Extract Query, Mutation, or Subscription operations."""
+        """The fields of the schema's `type Query` (Mutation, Subscription) and the
+        document's own `query Q { }` operations of that type, in source order.
+
+        Only the schema fields were read, so a client document of operations listed
+        nothing (BACK-1416).
+        """
+        operations = self._extract_root_fields(operation_type)
+        operations.extend(self._extract_executable_operations(operation_type.lower()))
+        operations.sort(key=lambda op: op['line'])
+        return operations
+
+    def _extract_executable_operations(self, keyword: str) -> List[Dict[str, Any]]:
+        """`query Q($id: ID!) { ... }` operations whose type is ``keyword``. A bare
+        `{ ... }` selection set is an anonymous query."""
+        operations = []
+        for op in self._find_nodes_by_type('operation_definition'):
+            kind_node = self._find_child_by_types(op, ['operation_type'])
+            kind = self._get_node_text(kind_node).strip() if kind_node else 'query'
+            if kind != keyword:
+                continue
+            variables = self._find_child_by_types(op, ['variable_definitions'])
+            operations.append({
+                'line': _zero_arg(op, 'start_position').row + 1,
+                'line_end': _zero_arg(op, 'end_position').row + 1,
+                'name': self._get_name_from_node(op) or f'(anonymous {keyword})',
+                'signature': self._get_node_text(variables) if variables else '',
+            })
+        return operations
+
+    def _extract_fragments(self) -> List[Dict[str, Any]]:
+        """`fragment F on User { ... }` definitions."""
+        fragments = []
+        for frag in self._find_nodes_by_type('fragment_definition'):
+            name_node = self._find_child_by_types(frag, ['fragment_name'])
+            name = self._get_name_from_node(name_node) if name_node else None
+            if not name:
+                continue
+            condition = self._find_child_by_types(frag, ['type_condition'])
+            fragments.append({
+                'line': _zero_arg(frag, 'start_position').row + 1,
+                'line_end': _zero_arg(frag, 'end_position').row + 1,
+                'name': name,
+                'signature': f" {self._get_node_text(condition)}" if condition else '',
+            })
+        return fragments
+
+    def _extract_root_fields(self, operation_type: str) -> List[Dict[str, Any]]:
+        """The fields of the schema's `type Query` / `Mutation` / `Subscription`."""
         operations = []
         for type_def in self._find_nodes_by_type('object_type_definition'):
             if self._get_name_from_node(type_def) != operation_type:
@@ -213,7 +265,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
                         'line': _zero_arg(field_child, 'start_position').row + 1,
                         'line_end': _zero_arg(field_child, 'end_position').row + 1,
                         'name': field_name,
-                        'signature': self._build_field_signature(field_name, args, return_type),
+                        'signature': self._build_field_signature(args, return_type),
                     })
         return operations
 
