@@ -1980,7 +1980,10 @@ class TestUnreadablePartsDisclosed:
         return [w for w in (result.get('meta') or {}).get('warnings', [])
                 if w.get('type') == 'part_unreadable']
 
-    def test_malformed_pivot_cache_is_disclosed(self, tmp_path, capsys):
+    def test_malformed_pivot_cache_is_disclosed(self, tmp_path, capsys, monkeypatch):
+        # pbixray absent (None), as on CI: with it installed, the empty item.data is
+        # (rightly) a second unreadable part, and this test is about the pivot cache.
+        monkeypatch.setattr(XlsxAdapter, '_parse_pbixray', lambda self: None)
         p = _make_minimal_xlsx(tmp_path, {
             'xl/model/item.data': b'',
             'xl/pivotCache/pivotCacheDefinition1.xml': _make_pivot_cache_bytes(['Sales']),
