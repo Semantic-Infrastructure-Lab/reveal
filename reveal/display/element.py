@@ -352,13 +352,23 @@ def _try_grep_extraction(analyzer, element: str):
     return None
 
 
+def _addressable_categories(analyzer) -> list:
+    """The structure categories whose names extract: functions, classes, structs, and each
+    declaration category whose kinds resolve by name. A fixed list left out structs, enums
+    and namespaces, so a C file's hint named its functions only (BACK-1648)."""
+    from reveal.core.node_taxonomy import TYPE_DECL_NODES
+    declared = [category for category, kinds in getattr(type(analyzer), 'DECLARATION_CATEGORIES', {}).items()
+                if all(kind in TYPE_DECL_NODES for kind in kinds)]
+    return ['functions', 'classes', 'methods', 'structs', *declared, 'headings']
+
+
 def _available_names(analyzer) -> list:
     """Distinct element names from the analyzer's structure, in outline order."""
     structure = analyzer.get_structure()
     if not structure or not isinstance(structure, dict):
         return []
     names: list = []
-    for category in ('functions', 'classes', 'methods', 'headings'):
+    for category in _addressable_categories(analyzer):
         items = structure.get(category, [])
         if not isinstance(items, list):
             continue

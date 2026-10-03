@@ -23,6 +23,14 @@ class CppAnalyzer(TreeSitterAnalyzer):
     """
     language = 'cpp'
 
+    # Enums (`enum E`, `enum class F`), unions and namespaces were in no category:
+    # invisible to the outline and to extraction by name (BACK-1648).
+    DECLARATION_CATEGORIES = {
+        'enums': ('enum_specifier',),
+        'unions': ('union_specifier',),
+        'namespaces': ('namespace_definition',),
+    }
+
     # ── Class bases (BACK-645) ──────────────────────────────────────────────
     # `class Foo final : public Bar, private ns::Baz { ... }` previously fell
     # through to the base class's Python/TS-shaped _extract_class_bases

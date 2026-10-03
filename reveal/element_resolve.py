@@ -31,7 +31,7 @@ from .core.node_taxonomy import (
     CLASS_NODES, MEMBER_CONTAINER_NODES, TYPE_DECL_NODES,
 )
 from .core.treesitter_compat import _zero_arg
-from .treesitter import CHILD_NODE_TYPES, FUNCTION_NODE_TYPES
+from .treesitter import CHILD_NODE_TYPES, FUNCTION_NODE_TYPES, is_definition
 
 # Bare-name tier for type declarations. Kept ahead of functions (display's
 # long-standing order) so `reveal A.java Foo` is the class, not its
@@ -227,7 +227,8 @@ def _member_nodes(analyzer, container, child_name: str, direct: bool) -> List[An
                 found.append(node)
                 continue
         if kind in MEMBER_CONTAINER_NODES:
-            if kind != 'impl_item' and analyzer._get_node_name(node) == child_name:
+            if (kind != 'impl_item' and is_definition(node)
+                    and analyzer._get_node_name(node) == child_name):
                 found.append(node)
                 continue
             if direct:

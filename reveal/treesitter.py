@@ -401,12 +401,20 @@ _SIGNATURE_END_KINDS = (
     'field_initializer_list',
 )
 
+def is_definition(node) -> bool:
+    """Whether `node` defines what it names. Only a BODY_DEFINED_NODES kind can fail: a
+    C/C++ struct, union, enum or class without a body is a mention (`struct Batch *b`,
+    `enum Color c`) or a forward declaration (BACK-1627)."""
+    return (_zero_arg(node, 'kind') not in _BODY_DEFINED_NODES
+            or node.child_by_field_name('body') is not None)
+
+
 # A `;` closing a definition's last line, then only blanks to the line's end (BACK-1630).
 _TRAILING_SEMICOLON = re.compile(rb'[ \t]*(;)[ \t]*(?:\r?\n|$)')
 
 # Namespace declarations named by a `name` field that may be a qualified name (BACK-1636).
 _NAMESPACE_KINDS = frozenset({
-    'namespace_definition',                # PHP
+    'namespace_definition',                # PHP, C++
     'namespace_declaration', 'file_scoped_namespace_declaration',  # C#
 })
 
@@ -1187,7 +1195,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         every declaration category (BACK-1409).
         """
         entries: List[Dict[str, Any]] = []
-        for node in self._find_nodes_by_type(node_kind):
+        for node in self._find_definitions(node_kind):  # not C's `enum E e;` mentions
             name = self._get_node_name(node)
             if not name:
                 continue
@@ -1343,10 +1351,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         Differs from _find_nodes_by_type only for BODY_DEFINED_NODES, where a node
         without a body is a reference (`struct Batch *b`) or a forward declaration.
         """
-        nodes = self._find_nodes_by_type(node_type)
-        if node_type not in _BODY_DEFINED_NODES:
-            return nodes
-        return [n for n in nodes if n.child_by_field_name('body') is not None]
+        return [n for n in self._find_nodes_by_type(node_type) if is_definition(n)]
 
     def has_parse_errors(self) -> bool:
         """True if the parsed tree contains any ERROR node.

@@ -389,7 +389,9 @@ TYPE_DECL_NODES: frozenset = frozenset({
     'extension_declaration',  # Dart
     'internal_module',        # TypeScript `namespace NS {}`
     'mod_item',               # Rust `mod m {}` (BACK-1636)
-    'namespace_definition',   # PHP `namespace App;` / `namespace App { }`
+    'namespace_definition',   # PHP `namespace App;` / `namespace App { }`, C++ `namespace app { }`
+    'enum_specifier',         # C/C++ `enum E { }` (BACK-1648; definitions only, BACK-1627)
+    'union_specifier',        # C/C++ `union U { }`
     'namespace_declaration',  # C# `namespace App { }`
     'file_scoped_namespace_declaration',  # C# 10 `namespace App;`
 })
