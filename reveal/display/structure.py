@@ -668,6 +668,33 @@ def _print_coverage_warning(analyzer: FileAnalyzer, structure: Dict[str, List[Di
             print(line)
 
 
+def _print_structureless_body(analyzer: FileAnalyzer, path: Path,
+                              no_raw_fallback: bool = False) -> None:
+    """The body of the default and outline views for a file with no structure.
+
+    A parse or grammar-fetch failure says so instead of dumping the file (BACK-979); an
+    empty file says it is empty (formatting no lines numbered a line 1 under a "0 lines"
+    header, BACK-1416); a short file is shown, a long one gets a hint. no_raw_fallback:
+    see _handle_standard_output.
+    """
+    parse_error = getattr(analyzer, 'parse_error', None)
+    if parse_error:
+        print(f"⚠️  Parse failed: {parse_error}")
+        print("   See INSTALL.md#network-requirements")
+        return
+    line_count = len(analyzer.lines)
+    if not line_count:
+        print("(empty file)")
+    elif no_raw_fallback:
+        print(f"(no extractable structure — {lines_label(line_count)})")
+    elif line_count <= 50:
+        print()
+        print(analyzer.format_with_lines(analyzer.content, 1))
+    else:
+        print(f"No structure available for this file type ({lines_label(line_count)})")
+        print(f"  Hint: reveal \"{to_posix(path)}\" --grep 'pattern'  |  reveal \"{to_posix(path)}\" --show-ast")
+
+
 def _handle_outline_mode(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]],
                          path: Path, is_fallback: bool, fallback_lang: str, config=None) -> None:
     """Handle outline mode rendering.
@@ -682,20 +709,7 @@ def _handle_outline_mode(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[
     _print_file_header(path, is_fallback, fallback_lang)
 
     if not structure:
-        parse_error = getattr(analyzer, 'parse_error', None)
-        if parse_error:
-            # BACK-979: same infra-failure-vs-empty-file distinction as
-            # _handle_standard_output.
-            print(f"⚠️  Parse failed: {parse_error}")
-            print("   See INSTALL.md#network-requirements")
-            return
-        line_count = len(analyzer.lines)
-        if line_count <= 50:
-            print()
-            print(analyzer.format_with_lines(analyzer.content, 1))
-        else:
-            print(f"No structure available for this file type ({lines_label(line_count)})")
-            print(f"  Hint: reveal \"{to_posix(path)}\" --grep 'pattern'  |  reveal \"{to_posix(path)}\" --show-ast")
+        _print_structureless_body(analyzer, path)
         return
 
     hierarchy = _build_outline_hierarchy(structure)
@@ -742,23 +756,7 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
     # Handle empty structure
     if not structure:
         _print_file_header(path, is_fallback, fallback_lang)
-        parse_error = getattr(analyzer, 'parse_error', None)
-        if parse_error:
-            # BACK-979: don't silently fall through to a raw file dump when
-            # the empty structure is actually a tree-sitter parse/fetch
-            # failure, not a genuinely structure-less file.
-            print(f"⚠️  Parse failed: {parse_error}")
-            print("   See INSTALL.md#network-requirements")
-            return
-        line_count = len(analyzer.lines)
-        if no_raw_fallback:
-            print(f"(no extractable structure — {lines_label(line_count)})")
-        elif line_count <= 50:
-            print()
-            print(analyzer.format_with_lines(analyzer.content, 1))
-        else:
-            print(f"No structure available for this file type ({lines_label(line_count)})")
-            print(f"  Hint: reveal \"{to_posix(path)}\" --grep 'pattern'  |  reveal \"{to_posix(path)}\" --show-ast")
+        _print_structureless_body(analyzer, path, no_raw_fallback)
         return
 
     # Text output: show header, categories, and navigation hints
