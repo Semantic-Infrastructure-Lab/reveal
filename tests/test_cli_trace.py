@@ -649,3 +649,22 @@ class TestRunTrace(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestTraceSelfDescription:
+    """help://trace said depth-first while the schema, INDEX.md and the class
+    docstring still said BFS, the walk BACK-1399 replaced (BACK-1613)."""
+
+    def test_no_self_description_calls_the_walk_breadth_first(self):
+        from reveal.adapters.trace import TraceAdapter
+
+        docs = Path(__file__).resolve().parent.parent / 'reveal' / 'docs'
+        texts = {
+            'get_help': json.dumps(TraceAdapter.get_help()),
+            'get_schema': json.dumps(TraceAdapter.get_schema()),
+            'docstring': TraceAdapter.__doc__ or '',
+            'TRACE_ADAPTER_GUIDE.md': (docs / 'adapters' / 'TRACE_ADAPTER_GUIDE.md').read_text(encoding='utf-8'),
+        }
+        for source, text in texts.items():
+            assert 'BFS' not in text and 'breadth' not in text.lower(), source
+        assert 'depth-first' in texts['get_schema']

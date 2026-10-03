@@ -69,7 +69,7 @@ Complete guides for all URI protocol adapters.
 | [SSL_ADAPTER_GUIDE.md](adapters/SSL_ADAPTER_GUIDE.md) | 1488 | SSL/TLS certificate analysis and validation |
 | [STATS_ADAPTER_GUIDE.md](adapters/STATS_ADAPTER_GUIDE.md) | 1874 | Codebase statistics and metrics collection |
 | [SURFACE_ADAPTER_GUIDE.md](adapters/SURFACE_ADAPTER_GUIDE.md) | 89 | External boundary map: CLI args, HTTP routes, env vars, exported symbols |
-| [TRACE_ADAPTER_GUIDE.md](adapters/TRACE_ADAPTER_GUIDE.md) | 59 | Execution narrative: BFS call-graph walk from a named entry point |
+| [TRACE_ADAPTER_GUIDE.md](adapters/TRACE_ADAPTER_GUIDE.md) | 59 | Execution narrative: depth-first call-graph walk from a named entry point |
 | [XLSX_ADAPTER_GUIDE.md](adapters/XLSX_ADAPTER_GUIDE.md) | 651 | Excel/XLSX file analysis and data extraction |
 | [PATCHES_ADAPTER_GUIDE.md](adapters/PATCHES_ADAPTER_GUIDE.md) | — | Test patch pressure: repeated mocks, private patches, patch-heavy tests |
 

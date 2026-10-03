@@ -360,7 +360,8 @@ class TraceRenderer:
 @register_renderer(TraceRenderer)
 class TraceAdapter(ResourceAdapter):
     """Adapter walking the call graph from a named entry point and building
-    a depth-indented execution narrative (BFS via calls:// machinery)."""
+    a depth-indented execution narrative (a depth-first walk that resolves callees
+    with the calls:// machinery)."""
     HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
@@ -404,7 +405,7 @@ class TraceAdapter(ResourceAdapter):
     def get_schema() -> Dict[str, Any]:
         return {
             'adapter': 'trace',
-            'description': 'Execution narrative: BFS call-graph walk from a named entry point',
+            'description': 'Execution narrative: depth-first call-graph walk from a named entry point',
             'uri_syntax': 'trace://<path>?from=<FUNC>&depth=2',
             'query_params': {
                 'from': {'type': 'string', 'description': 'Entry-point function to start the trace from (required); `<file>:<name>` picks one of several same-named definitions', 'examples': ['from=main', 'from=src/app.py:run']},
