@@ -298,6 +298,24 @@ _FENCE_RE = re.compile(r'^\s*(```|~~~)')
 _HEADING_RE = re.compile(r'^(#{1,6})\s+(.*)')
 
 
+_COMMAND_LINE = re.compile(r'(?:^|`)\s*reveal \S')
+
+
+def _shows_command(lines: List[str]) -> bool:
+    """Whether ``lines`` hold a fenced block or a ``reveal ...`` command a reader can run."""
+    return any(line.lstrip().startswith('```') or _COMMAND_LINE.search(line) for line in lines)
+
+
+def _without_contents_section(lines: List[str]) -> List[str]:
+    """``lines`` without a level-2 "Table of Contents" / "Contents" section."""
+    headings = [(i, text) for i, level, text in _markdown_headings(lines) if level == 2]
+    for n, (start, text) in enumerate(headings):
+        if text.strip().lower() in ('table of contents', 'contents'):
+            end = headings[n + 1][0] if n + 1 < len(headings) else len(lines)
+            return lines[:start] + lines[end:]
+    return lines
+
+
 def _markdown_headings(lines: List[str]) -> List[tuple]:
     """(index, level, text) for every ATX heading outside fenced code blocks."""
     headings = []
@@ -1909,19 +1927,24 @@ class HelpAdapter(ResourceAdapter):
 
         Shows enough content to be useful: at least 2 sections or 60 lines of body,
         whichever cuts later — avoids the case where the first section is a skimpy
-        1-paragraph intro (e.g. quick-start's "Installation" section).
+        1-paragraph intro (e.g. quick-start's "Installation" section) — and, when the
+        guide has a reveal command, at least one. A "Table of Contents" section is left out:
+        the footer lists the sections. help://diff's first screen was its 17-entry
+        contents and an overview, with no command to run (BACK-1613).
         """
+        names = [text for _, level, text in _markdown_headings(lines) if level == 2]
+        lines = _without_contents_section(lines)
         # Level-2 headings outside fenced code (a sample doc's `## Section One`
         # inside a fence was listed as a section of the guide, BACK-1507).
-        level2 = [(i, text) for i, level, text in _markdown_headings(lines) if level == 2]
-        section_indices = [i for i, _ in level2]
-        section_names = [text for _, text in level2]
+        section_indices = [i for i, level, _ in _markdown_headings(lines) if level == 2]
+        section_names = names
 
         if section_indices:
-            # Walk sections until we have at least 60 lines of body content
+            # Walk sections until there are 60 lines of body and a command, if the guide has one
+            has_command = _shows_command(lines)
             cut_at = section_indices[1] if len(section_indices) >= 2 else len(lines)
-            for i, idx in enumerate(section_indices[2:], start=2):
-                if cut_at >= 60:
+            for idx in section_indices[2:]:
+                if cut_at >= 60 and (_shows_command(lines[:cut_at]) or not has_command):
                     break
                 cut_at = idx
             preview = '\n'.join(lines[:cut_at]).rstrip()
