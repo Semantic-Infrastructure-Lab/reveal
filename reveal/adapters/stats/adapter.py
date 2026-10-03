@@ -12,18 +12,19 @@ from ...utils.query import (
     parse_query_params,
     parse_query_filters,
     parse_result_control,
+    unknown_sort_field_warning,
 )
 from ...utils.query_parser import split_exclude_param
 from ...utils.gitignore import respect_gitignore_param
 from ...utils.path_utils import to_relative_display
-from ...utils.results import ResultBuilder, note_truncation
+from ...utils.results import ResultBuilder, note_truncation, note_warning
 from ...utils.validation import require_path_exists
 
 # Import modular functions
 from .renderer import StatsRenderer
 from .analysis import find_analyzable_files, analyze_file, get_file_display_path, is_failure
 from .metrics import calculate_file_stats
-from .queries import get_quality_config, field_value, compare, matches_filters
+from .queries import SORT_FIELDS, get_quality_config, field_value, compare, matches_filters
 from .aggregation import aggregate_stats, identify_hotspots
 
 
@@ -547,6 +548,8 @@ class StatsAdapter(ResourceAdapter):
         # Aggregate and build result
         result = aggregate_stats(controlled_stats, self.path)
         self._add_truncation_metadata(result, len(controlled_stats), total_filtered)
+        note_warning(result, unknown_sort_field_warning(
+            self.result_control.sort_field, dir_file_stats, field_value, SORT_FIELDS))
         self._disclose_failures(result)
 
         # Add hotspots if requested

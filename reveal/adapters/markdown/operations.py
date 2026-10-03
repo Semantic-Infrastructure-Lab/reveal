@@ -9,6 +9,8 @@ from typing import Dict, Any, List, Optional
 from . import files, filtering, results
 from ...core import disk_cache
 from ...utils.parallel import grep_files
+from ...utils.query import unknown_sort_field_warning
+from ...utils.results import note_warning
 
 _LINK_GRAPH_CACHE_NAMESPACE = "markdown_link_graph"
 
@@ -106,6 +108,7 @@ def get_structure(
     # Add truncation warning if needed
     displayed = len(controlled_results)
     results.add_truncation_warning(response, displayed, total_matches)
+    note_warning(response, unknown_sort_field_warning(result_control.sort_field, matched_results))
 
     # Add hint when filter matches very few files (likely front matter mismatch)
     results.add_low_match_rate_hint(response, len(all_files), total_matches, filters)

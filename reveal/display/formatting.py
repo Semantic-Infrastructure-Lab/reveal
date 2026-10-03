@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from reveal.base import FileAnalyzer
 from reveal.utils.formatting import lines_label
 from reveal.utils.path_utils import to_posix
-from reveal.utils.results import truncations_of
+from reveal.utils.results import result_control_notes_of
 
 
 # The Output Contract envelope: kept whatever --fields names (BACK-1607).
@@ -965,26 +965,31 @@ def _build_analyzer_kwargs(analyzer: FileAnalyzer, args) -> Dict[str, Any]:
     return kwargs
 
 
-def print_truncations(result: dict, output_format: str) -> None:
-    """Say, once, which lists the rendered answer shows only part of (BACK-1059).
+def print_result_control_notes(result: dict, output_format: str) -> None:
+    """Say, once, which lists the rendered answer shows only part of (BACK-1059), and which
+    ``?sort=`` field it could not sort by (BACK-1644).
 
     Shared with the subcommand seam (subcommand.emit_subcommand_result), so ``reveal
     overview`` and ``overview://`` disclose a cut the same way (BACK-1544).
 
     Truncation was disclosed by whichever renderer knew the adapter's spelling of it, so
     ``stats://?limit=2`` and ``markdown://?limit=2`` printed a cut list as the whole
-    answer. Renderers leave ``truncated`` warnings to this. JSON already carries them in
-    ``meta.warnings``; text gets them after the body, on stdout with it; any other format
-    (grep) gets them on stderr, so its lines stay parseable.
+    answer. An unknown sort field was disclosed only by ast://'s renderer, so
+    ``stats://?sort=typo`` printed files in walk order as if sorted. Renderers leave both
+    to this. JSON already carries them in ``meta.warnings``; text gets them after the body,
+    on stdout with it; any other format (grep) gets them on stderr, so its lines stay
+    parseable.
 
     A result that chose its own format (xlsx ``?format=csv``, ``preferred_format``) is
     rendered in it whatever ``--format`` says, so it decides the stream: a CSV export's
     cut goes to stderr, not into the CSV (BACK-1608).
     """
+    notes = result_control_notes_of(result)
     output_format = result.get('preferred_format') or output_format
-    if output_format == 'json':
+    if not notes or output_format == 'json':
         return
     stream = sys.stdout if output_format == 'text' else sys.stderr
     print(file=stream)
-    for entry in truncations_of(result):
-        print(f"⚠ Truncated {entry['message']}", file=stream)
+    for entry in notes:
+        prefix = 'Truncated ' if entry['type'] == 'truncated' else ''
+        print(f"⚠ {prefix}{entry['message']}", file=stream)

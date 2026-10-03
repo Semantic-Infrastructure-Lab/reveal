@@ -10,7 +10,7 @@ Every hit is shown with its line's text, under the element it falls in (BACK-160
 
 A hit outside any element is listed under "(top level)"; a flat file's hits have no label. The header counts every
 hit; when the hits shown were cut, the router prints the ``⚠ Truncated hits: ...`` line after
-this (``print_truncations``), so no renderer here says it.
+this (``print_result_control_notes``), so no renderer here says it.
 """
 
 from pathlib import Path

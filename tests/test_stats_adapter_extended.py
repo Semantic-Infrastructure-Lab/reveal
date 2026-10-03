@@ -52,15 +52,16 @@ class TestStatsAdapterExceptionHandling:
             assert 'files' in result
 
     def test_sorting_key_error_fallback(self):
-        """Sorting KeyError should fall back to unsorted list."""
+        """Values that don't compare leave the list unsorted instead of raising."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Create test file
-            test_file = Path(tmpdir) / "test.py"
-            test_file.write_text("def foo():\n    pass\n")
+            for name in ("a.py", "b.py"):
+                (Path(tmpdir) / name).write_text("def foo():\n    pass\n")
 
-            # Mock field_value to raise KeyError
-            with patch('reveal.adapters.stats.adapter.field_value') as mock_field:
-                mock_field.side_effect = KeyError("Field not found")
+            # field_value returns None for a missing field (BACK-1644 warns about that);
+            # a str and an int under one field is what makes the sort itself fail.
+            values = iter(["x", 1, "x", 1])
+            with patch('reveal.adapters.stats.adapter.field_value',
+                       side_effect=lambda stats, field: next(values, 1)):
 
                 adapter = StatsAdapter(tmpdir, query="sort=lines")
 

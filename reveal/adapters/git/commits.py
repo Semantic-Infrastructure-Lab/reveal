@@ -5,8 +5,8 @@ from datetime import datetime
 from typing import Callable, Dict, Any, List, Optional, TYPE_CHECKING
 from reveal.reveal_types import CONTRACT_VERSION
 
-from ...utils.query import ResultControl, apply_result_control
-from ...utils.results import ResultBuilder, note_truncation
+from ...utils.query import ResultControl, apply_result_control, unknown_sort_field_warning
+from ...utils.results import ResultBuilder, note_truncation, note_warning
 
 if TYPE_CHECKING:
     import pygit2
@@ -33,11 +33,14 @@ class HistoryWalk:
     commits: List[Dict[str, Any]]
     total: int
     exact: bool
+    unsorted: Optional[Dict[str, Any]] = None  # ?sort= named no commit field (BACK-1644)
 
     def disclose(self, result: Any, field: str, hint: Optional[str] = None) -> None:
-        """Record the page as a cut of ``result[field]`` if it is one."""
+        """Record the page as a cut of ``result[field]`` if it is one, and a ``?sort=``
+        field that sorted nothing."""
         note_truncation(result, field, len(self.commits), self.total, 'limit',
                         hint=hint, exact=self.exact)
+        note_warning(result, self.unsorted)
 
 
 def walk_history(
@@ -83,7 +86,8 @@ def walk_history(
     page = apply_result_control(matched, control)
     if limit is not None:
         page = page[:limit]
-    return HistoryWalk(page, len(matched), stop_at is None or len(matched) < stop_at)
+    return HistoryWalk(page, len(matched), stop_at is None or len(matched) < stop_at,
+                       unknown_sort_field_warning(control.sort_field, matched))
 
 
 def commit_filter(

@@ -16,7 +16,7 @@ from typing import Any, Callable, Iterable, Iterator, List, NoReturn, Optional, 
 from ...errors import NotApplicableError
 from ...reveal_types import CONTRACT_VERSION, RevealResult
 from ...utils import print_json_result, write_also_json
-from ...display.formatting import print_truncations
+from ...display.formatting import print_result_control_notes
 from ...utils.results import (Outcome, ResultBuilder, echo_source, note_truncation, outcome_of,
                              slice_items, truncations_of)
 from .flag_specs import exclude_fragment, inject_query_flags, strip_result_control_keys
@@ -1133,7 +1133,7 @@ def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render, 
     The error line comes before the render, so renderers add only detail (an example, the
     valid names) and never print the error themselves. The exit comes after it, so
     --format json still prints the whole error envelope. A truncated result exits 0; what
-    it left out is printed after the render (print_truncations).
+    it left out is printed after the render (print_result_control_notes).
     """
     outcome = announce_outcome(result, f"{scheme or 'unknown'}://")
     write_also_json(result, args)
@@ -1152,9 +1152,9 @@ def announce_outcome(result: Any, label: str) -> Outcome:
 
 
 def conclude_outcome(result: Any, outcome: Outcome, output_format: str) -> None:
-    """After the render: print what a truncated result left out; exit 1 on a failed one."""
-    if outcome == 'truncated':
-        print_truncations(result, output_format)
+    """After the render: print what a cut list left out and a sort field that sorted nothing;
+    exit 1 on a failed result."""
+    print_result_control_notes(result, output_format)
     if outcome == 'failed':
         sys.exit(1)
 

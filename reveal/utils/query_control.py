@@ -1,7 +1,7 @@
 """Result control: sorting, pagination, budget limits — ResultControl dataclass."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from .query_parser import query_key_recorder
 
@@ -102,6 +102,37 @@ def parse_result_control(query: str) -> Tuple[str, ResultControl]:
 
     vars(control)['_reads'] = query_key_recorder(*applied)  # set last: parsing is not reading
     return '&'.join(remaining_parts), control
+
+
+def unknown_sort_field_warning(field: Optional[str], items: List[Any],
+                               get: Optional[Callable[[Any, str], Any]] = None,
+                               sortable: Optional[Iterable[str]] = None) -> Optional[Dict[str, Any]]:
+    """The warning for a ``?sort=`` field that no item carries, or None.
+
+    Sorting by a missing field leaves every key equal, so the list comes back in its
+    original order and reads as sorted (ast:// BACK-1423; stats://, git://, markdown://
+    and json:// until BACK-1644). Every adapter that sorts asks this one question.
+
+    ``get(item, field)`` reads a field the way the adapter's sort does (dotted paths,
+    aliases); by default a field is a key of the item. ``sortable`` names the fields to
+    suggest; by default, the scalar keys of the items.
+    """
+    if not field or not items:
+        return None
+    if get is None:
+        if any(isinstance(item, dict) and field in item for item in items):
+            return None
+    elif any(get(item, field) is not None for item in items):
+        return None
+    if sortable is None:
+        sortable = {k for item in items[:200] if isinstance(item, dict) for k, v in item.items()
+                    if isinstance(v, (int, float, str)) and not k.startswith('_')}
+    return {
+        'type': 'unknown_sort_field',
+        'field': field,
+        'message': (f"sort field '{field}' is not a field of any result, so results are "
+                    f"unsorted. Sortable: {', '.join(sorted(sortable))}"),
+    }
 
 
 def _safe_numeric(v):

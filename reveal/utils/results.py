@@ -220,12 +220,41 @@ def echo_source(result: Any, spelling: Union[str, Path, None]) -> None:
         result['source'] = as_spelled(source, spelling)
 
 
-def truncations_of(result: Any) -> List[Dict[str, Any]]:
-    """The lists a result says were cut: its ``truncated`` meta warnings (``note_truncation``)."""
+def note_warning(result: Any, entry: Optional[Dict[str, Any]]) -> None:
+    """Add ``entry`` to ``result``'s ``meta.warnings``; None adds nothing, a repeat of the
+    same ``type`` and ``field`` adds nothing."""
+    if not entry or not isinstance(result, dict):
+        return
+    meta = result.get('meta')
+    if not isinstance(meta, dict):
+        meta = result['meta'] = {}
+    if not isinstance(meta.get('warnings'), list):
+        meta['warnings'] = []
+    key = (entry.get('type'), entry.get('field'))
+    if not any(isinstance(w, dict) and (w.get('type'), w.get('field')) == key
+               for w in meta['warnings']):
+        meta['warnings'].append(entry)
+
+
+def _meta_warnings_of(result: Any, kinds: frozenset) -> List[Dict[str, Any]]:
     meta = result.get('meta') if isinstance(result, dict) else None
     warnings = meta.get('warnings') if isinstance(meta, dict) else None
-    return [w for w in warnings or []
-            if isinstance(w, dict) and w.get('type') == 'truncated']
+    return [w for w in warnings or [] if isinstance(w, dict) and w.get('type') in kinds]
+
+
+def truncations_of(result: Any) -> List[Dict[str, Any]]:
+    """The lists a result says were cut: its ``truncated`` meta warnings (``note_truncation``)."""
+    return _meta_warnings_of(result, frozenset({'truncated'}))
+
+
+# What ?sort=/?limit= did to the answer that the answer itself can't show. The output
+# seam prints these once after the render; renderers leave them alone (warning_render).
+RESULT_CONTROL_WARNINGS = frozenset({'truncated', 'unknown_sort_field'})
+
+
+def result_control_notes_of(result: Any) -> List[Dict[str, Any]]:
+    """A result's cut lists and ignored sort fields, in the order they were recorded."""
+    return _meta_warnings_of(result, RESULT_CONTROL_WARNINGS)
 
 
 class ResultBuilder:

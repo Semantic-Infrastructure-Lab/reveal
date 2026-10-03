@@ -2,7 +2,7 @@
 
 from typing import Any, List, Dict, Set
 
-from ...utils.query import compare_values, ResultControl
+from ...utils.query import compare_values, ResultControl, unknown_sort_field_warning
 
 
 def get_field_value(obj: Any, field: str) -> Any:
@@ -156,8 +156,11 @@ def apply_result_control(
     total_matches = len(arr)
     controlled = arr
 
-    # Sort
-    if result_control.sort_field:
+    # Sort. A field no item has sorts nothing, and the array reads as sorted (BACK-1644).
+    unknown = unknown_sort_field_warning(result_control.sort_field, arr, get_field_value_func)
+    if unknown:
+        metadata['warnings'] = [unknown]
+    elif result_control.sort_field:
         try:
             field = result_control.sort_field
             reverse = result_control.sort_descending

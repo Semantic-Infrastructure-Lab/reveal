@@ -21,6 +21,8 @@ complete. This makes it one call.
 
 from typing import Any, Dict, List, Optional
 
+from reveal.utils.results import RESULT_CONTROL_WARNINGS
+
 
 def collect_meta_warnings(result: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Return meta.warnings from *result*, tolerating either nesting.
@@ -54,9 +56,10 @@ def render_meta_warnings(
             twice rather than silently dropping the whole block.
     """
     # 'truncated' is printed once, after the render, by the seam every result leaves
-    # through (display/formatting.print_truncations: the URI router's _emit_result, file
+    # through (display/formatting.print_result_control_notes: the URI router's _emit_result, file
     # mode's show_structure and the subcommands' emit_subcommand_result, BACK-1059/1544/1548).
-    skip = {'truncated'} | set(skip_types or ())
+    # So is 'unknown_sort_field' (BACK-1644): both are RESULT_CONTROL_WARNINGS.
+    skip = set(RESULT_CONTROL_WARNINGS) | set(skip_types or ())
     warnings = [w for w in collect_meta_warnings(result) if w.get('type') not in skip]
     if not warnings:
         return

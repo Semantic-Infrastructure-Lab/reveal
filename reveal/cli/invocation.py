@@ -50,7 +50,7 @@ def _spec(name: str, formats: Optional[Tuple[str, ...]] = None) -> CommandSpec:
 # runners render only these formats (measured: grep/typed output matched text byte for byte).
 COMMANDS: Dict[str, CommandSpec] = {
     'architecture': _spec('architecture'),
-    'check':        _spec('check', ('text', 'json', 'grep')),  # typed: text on a file, exit 2 on a dir
+    'check':        _spec('check', ('text', 'json', 'grep')),  # also PATH --check (BACK-1644)
     'contracts':    _spec('contracts'),
     'deps':         _spec('deps'),
     'dev':          _spec('dev'),

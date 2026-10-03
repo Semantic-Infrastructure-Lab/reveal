@@ -24,6 +24,7 @@ from ...registry import get_code_extensions
 from ...utils.query import (
     parse_result_control,
     apply_result_control,
+    unknown_sort_field_warning,
     ResultControl
 )
 from ...utils.results import ResultBuilder, note_truncation
@@ -74,22 +75,6 @@ def _degraded_conformance_warning(elements: List[Dict[str, Any]]) -> Optional[Di
             f"Results include language(s) below tier1-verified conformance: "
             f"{languages}. Structure extraction may be incomplete for these "
             f"files — see reveal --language-info <ext> for details."
-        ),
-    }
-
-
-def _unknown_sort_field_warning(control: ResultControl,
-                                filtered: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """A sort field no result carries leaves the results unsorted (BACK-1423)."""
-    if not control.sort_field or not filtered or any(control.sort_field in e for e in filtered):
-        return None
-    sortable = sorted({k for e in filtered[:200] for k, v in e.items()
-                       if isinstance(v, (int, float, str)) and not k.startswith('_')})
-    return {
-        'type': 'unknown_sort_field',
-        'message': (
-            f"sort field '{control.sort_field}' is not a field of any result, so "
-            f"results are unsorted. Sortable: {', '.join(sortable)}"
         ),
     }
 
@@ -158,7 +143,7 @@ def _query_warnings(structures: List[Dict[str, Any]], filtered: List[Dict[str, A
     result records it with note_truncation, and the router prints it (BACK-1059)."""
     warnings = [
         _degraded_conformance_warning(controlled),
-        _unknown_sort_field_warning(control, filtered),
+        unknown_sort_field_warning(control.sort_field, filtered),  # BACK-1423
         _unknown_filter_key_warning(structures, filtered, query),
         _unfiltered_ranking_warning(controlled),
         dict(_COMPLEXITY_IS_UNWEIGHTED) if 'complexity' in query else None,

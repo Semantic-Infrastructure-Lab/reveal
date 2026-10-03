@@ -43,6 +43,7 @@ from .query_control import (  # noqa: F401
     _apply_sorting,
     _apply_offset_and_limit,
     apply_result_control,
+    unknown_sort_field_warning,
     apply_budget_limits,
     _truncate_string_values,
     _truncate_dict_strings,

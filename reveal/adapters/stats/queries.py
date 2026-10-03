@@ -107,6 +107,22 @@ def get_quality_config(path: Path) -> Dict[str, Any]:
     return config
 
 
+# Short names for nested fields, in ?sort= and the filters.
+_FIELD_ALIASES = {
+    'lines': 'lines.total',
+    'code_lines': 'lines.code',
+    'comment_lines': 'lines.comments',
+    'complexity': 'complexity.average',
+    'max_complexity': 'complexity.max',
+    'functions': 'elements.functions',
+    'classes': 'elements.classes',
+    'quality': 'quality.score',
+}
+
+# What an unknown ?sort= field suggests instead (BACK-1644).
+SORT_FIELDS = ('file', *_FIELD_ALIASES)
+
+
 def field_value(stats: Dict[str, Any], field: str) -> Any:
     """Extract field value from stats dict.
 
@@ -119,20 +135,7 @@ def field_value(stats: Dict[str, Any], field: str) -> Any:
     Returns:
         Field value or None if not found
     """
-    # Map common field names to nested paths
-    field_map = {
-        'lines': 'lines.total',
-        'code_lines': 'lines.code',
-        'comment_lines': 'lines.comments',
-        'complexity': 'complexity.average',
-        'max_complexity': 'complexity.max',
-        'functions': 'elements.functions',
-        'classes': 'elements.classes',
-        'quality': 'quality.score',
-    }
-
-    # Use mapped field if available
-    field_path = field_map.get(field, field)
+    field_path = _FIELD_ALIASES.get(field, field)
 
     # Navigate nested structure
     value = stats

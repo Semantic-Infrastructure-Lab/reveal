@@ -500,9 +500,8 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
     else:
         cut_element(result, *(cut or (None, None, None)))
         _output_result(analyzer, result, element, output_format, config)
-        if truncations_of(result):
-            from .formatting import print_truncations  # noqa: I006 — circular avoidance
-            print_truncations(result, output_format)
+        from .formatting import print_result_control_notes  # noqa: I006 — circular avoidance
+        print_result_control_notes(result, output_format)
 
 
 def cut_element(result: dict, head: Optional[int] = None, tail: Optional[int] = None,

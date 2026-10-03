@@ -29,7 +29,7 @@ from .formatting import (
     _format_xml_children,
     _format_markdown_headings,
     _build_analyzer_kwargs,
-    print_truncations,
+    print_result_control_notes,
 )
 
 
@@ -894,8 +894,7 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
         return structure
 
     _render_structure_view(analyzer, structure, output_format, args, config)
-    if truncations_of(structure):
-        print_truncations(structure, output_format)
+    print_result_control_notes(structure, output_format)
     return structure
 
 

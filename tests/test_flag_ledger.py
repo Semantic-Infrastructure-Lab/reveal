@@ -321,7 +321,6 @@ _NOT_VISIBLE = 'BACK-1538'  # read, but the fixture cannot show an effect
 
 KNOWN_SILENT = {
     ('codex', 'since'): _NOT_VISIBLE,
-    ('stats', 'sort'): _NOT_VISIBLE,
     ('depends', 'limit'): _NOT_VISIBLE,
     ('hotspots', 'limit'): _NOT_VISIBLE,
     ('testability', 'limit'): _NOT_VISIBLE,

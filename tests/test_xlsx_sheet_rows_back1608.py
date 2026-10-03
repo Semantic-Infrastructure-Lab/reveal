@@ -13,7 +13,7 @@ import pytest
 
 from reveal.adapters.xlsx import DEFAULT_SHEET_ROWS, XlsxAdapter, XlsxRenderer
 from reveal.analyzers.office.openxml import XlsxAnalyzer
-from reveal.display.formatting import print_truncations
+from reveal.display.formatting import print_result_control_notes
 from reveal.utils.results import truncations_of
 
 openpyxl = pytest.importorskip("openpyxl", reason="openpyxl builds the fixture workbooks")
@@ -96,7 +96,7 @@ def test_out_of_range_index_names_the_valid_ones(workbook):
 
 def test_csv_cut_goes_to_stderr_not_into_the_csv(workbook, capsys):
     result = _sheet(workbook, "sheet=Sales&format=csv&limit=2")
-    print_truncations(result, 'text')
+    print_result_control_notes(result, 'text')
     captured = capsys.readouterr()
     assert captured.out == ''
     assert 'showing 2 of' in captured.err

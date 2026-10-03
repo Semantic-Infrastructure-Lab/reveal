@@ -407,8 +407,11 @@ def _run_check_with_ledger(args: 'Namespace') -> None:
     This route called run_check with no ledger, so a flag check never reads was dropped
     without a note: ``reveal f.py --outline --check`` printed exactly what ``--check``
     alone prints, and ``--help`` taught it as "Outline with quality checks" (BACK-1606).
+    It takes the formats ``reveal check`` takes: ``--format typed`` printed text (BACK-1644).
     """
     from ...cli.commands.check import run_check
+    from ..invocation import COMMANDS
+    require_supported_format(args, COMMANDS['check'].formats, 'reveal --check')
     if ledger_of(args) is not None or not isinstance(args, Namespace):
         run_check(args)
         return
