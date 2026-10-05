@@ -303,6 +303,13 @@ something that is not the user's target (reveal's own docs, a cache) takes
 `rules/validation/utils.find_reveal_root`. Each of M102, B005 and three V-rules once climbed
 on its own, and they disagreed (BACK-1372).
 
+**Executable documentation:** `tests/test_example_recipes_run.py` runs offline
+help recipes in JSON and their written text format. It preserves supported pipelines
+and uses positive fixtures for claimed findings. The same harness inventories
+AGENT_HELP and guide commands; discovery commands run now, while examples requiring
+named target/session/host fixtures remain explicit skips. A successful empty query
+is not evidence for a recipe that promises a match.
+
 **Text rendering:** put new renderer implementations in `reveal/rendering/`. Extend
 `BaseRenderer` and return a text body from `_render_text`; URI emission calls
 `emit_rendered`, which prints returned bodies and their diagnostics exactly once. Keep

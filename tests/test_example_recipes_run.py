@@ -14,14 +14,18 @@ and fails when one
 
 Placeholders (``<repo>``, ``src``, ``/path/to/app.db``) are mapped onto the fixture. Recipes
 that need a live host, a server's config or a recorded session are skipped with the reason;
-the other help surfaces (AGENT_HELP.md, guides) are later slices of BACK-1365. Violations
+AGENT_HELP.md and guides are inventoried, with discovery commands executed;
+target-specific commands remain explicit named-fixture skips. Violations
 that exist today are strict xfails naming their task, so a fix fails the run until its entry
-is deleted.
+is deleted. Text recipes run too, with positive matches for nine result families;
+registered grep pipelines run without a shell, and multiline doc arguments stay intact.
 """
 
 import json
 import re
 import shlex
+import shutil
+import subprocess
 
 import pytest
 
@@ -84,7 +88,7 @@ def _recipes():
 
 def _argv(query):
     """The recipe as the argv `reveal` gets, placeholders mapped onto the fixture."""
-    query = query.split(' | ')[0]  # `reveal env:// | grep '^DB'`: the reveal half
+    query = query.split(' | ')[0]  # first stage; _assert_text_as_written executes the remaining stages
     for placeholder, path in PLACEHOLDERS:
         query = query.replace(placeholder, path)
     argv = shlex.split(query)
@@ -98,7 +102,66 @@ def _argv(query):
 def harness(tmp_path_factory):
     root = tmp_path_factory.mktemp('recipe_harness')
     _build_tree(root)
-    return _Harness(root)
+    _enrich_recipe_tree(root)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv('DB_RECIPE_FIXTURE', 'fixture-db')
+        yield _Harness(root)
+
+
+def _enrich_recipe_tree(root):
+    """Positive matches for documented claims, separate from the base contract fixture."""
+    branches = ''.join(f'    if x == {i}:\n        return {i}\n' for i in range(30))
+    padding = ''.join(f'    x += {i}\n' for i in range(110))
+    (root / 'proj' / 'claims.py').write_text(
+        'import requests\nfrom abc import ABC, abstractmethod\n'
+        'class Boundary(ABC):\n    @abstractmethod\n    def run(self):\n        pass\n'
+        'def auth_gate(x):\n    return x\n'
+        'def error_handler(x):\n    return x\n'
+        f'def query_complex(x):\n{branches}    return -1\n'
+        f'def large_function(x):\n{padding}    return x\n'
+        'def external_boundary():\n    return requests.get("https://example.invalid")\n',
+        encoding='utf-8')
+    (root / 'proj' / 'cycle_a.py').write_text('import cycle_b\n', encoding='utf-8')
+    (root / 'proj' / 'cycle_b.py').write_text('import cycle_a\n', encoding='utf-8')
+    (root / 'proj' / 'README.md').write_text(
+        '---\ntitle: Fixture\ntype: guide\n---\n# Proj\n'
+        'nginx deploy auth token\n\nSee [auth](auth.md) and [app](app.py).\n', encoding='utf-8')
+    (root / 'proj' / 'auth.md').write_text('# Auth\nAuthentication token guide.\n', encoding='utf-8')
+
+
+def _pipeline(query):
+    """Split shell pipes without splitting quoted URI operators; never invoke a shell."""
+    lexer = shlex.shlex(query, posix=True, punctuation_chars='|')
+    lexer.whitespace_split = True
+    stages = [[]]
+    for token in lexer:
+        if token == '|':
+            stages.append([])
+        else:
+            stages[-1].append(token)
+    assert all(stages), f'Empty pipeline stage: {query}'
+    return stages
+
+
+def _assert_text_as_written(harness, query):
+    stages = _pipeline(query)
+    argv = _argv(query)
+    code, out, err, _ = harness.run_subcommand(argv[0], *argv[1:])
+    problems = [line for line in err.splitlines()
+                if PROBLEM_LINE.search(line) and not any(n in line for n in ENVIRONMENT_NOISE)]
+    assert not problems, f"{query}: text stderr {problems[:3]}"
+    assert code in FINDINGS_EXITS.get(argv[0], {0}), f"{query}: text exit {code}"
+    assert out.strip(), f"{query}: text renderer printed nothing"
+    for stage in stages[1:]:
+        assert stage[0] == 'grep', f'Pipeline stage needs an explicit fixture: {stage}'
+        if not shutil.which('grep'):
+            pytest.skip('grep is unavailable on this CI platform; pipeline requires it')
+        filtered = subprocess.run(stage, input=out, capture_output=True, text=True,
+                                  encoding='utf-8', timeout=30)
+        assert filtered.returncode == 0 and filtered.stdout.strip(), (
+            f"{query}: pipeline matched nothing: {filtered.stderr}")
+        out = filtered.stdout
+    return out
 
 
 def _assert_runs_as_written(harness, query, output_type):
@@ -116,10 +179,25 @@ def _assert_runs_as_written(harness, query, output_type):
         assert payload.get('type') == output_type, (
             f"{query}: type {payload.get('type')!r}, the recipe says {output_type!r}")
 
+    return payload
+
+
+def _assert_positive_claim(query, payload):
+    fields = {'ast_query': 'results', 'markdown_query': 'results',
+              'circular_dependencies': 'cycles', 'contracts': 'abcs',
+              'markdown_backlinks': 'linked_by', 'markdown_link_graph': 'nodes',
+              'patches_scan': 'groups', 'calls_uncalled': 'entries',
+              'hotspots_scan': 'function_hotspots'}
+    field = fields.get(payload.get('type'))
+    if field:
+        assert payload.get(field), f'{query}: positive fixture matched nothing in {field}'
+
 
 @pytest.mark.parametrize('recipe', _recipes())
 def test_recipe_runs_as_written(harness, recipe):
-    _assert_runs_as_written(harness, recipe['query'], recipe.get('output_type'))
+    payload = _assert_runs_as_written(harness, recipe['query'], recipe.get('output_type'))
+    _assert_positive_claim(recipe['query'], payload)
+    _assert_text_as_written(harness, recipe['query'])
 
 
 # -- second source: every adapter's get_schema()['example_queries'] (BACK-1599) -------------
@@ -277,3 +355,80 @@ def test_schema_examples_are_enumerated_and_mostly_run():
     params = _schema_examples()
     runnable = [p for p in params if not any(m.name == 'skip' for m in p.marks)]
     assert len(params) > 150 and len(runnable) > 100, (len(params), len(runnable))
+
+
+def test_pipeline_and_positive_claim_guards_bite(harness):
+    assert _pipeline("reveal 'ast://src?complexity>10' | grep query") == [
+        ['reveal', 'ast://src?complexity>10'], ['grep', 'query']]
+    with pytest.raises(AssertionError, match='pipeline matched nothing'):
+        _assert_text_as_written(harness, "reveal env:// --format=grep | grep '^ENV_RECIPE_IMPOSSIBLE'" )
+    with pytest.raises(AssertionError, match='positive fixture matched nothing'):
+        _assert_positive_claim('negative control', {'type': 'ast_query', 'results': []})
+
+
+# Fourth source: enumerate AGENT_HELP and guides, beginning with discovery commands.
+# Target-specific commands remain visible skips until their named fixtures are added.
+def _shell_reveal_commands(block):
+    """Keep backslash continuations and quoted multiline arguments together."""
+    pending = ''
+    for line in block.replace('\\\n', ' ').splitlines():
+        if not pending and not line.strip().startswith('reveal '):
+            continue
+        pending = pending + '\n' + line if pending else line.strip()
+        try:
+            tokens = shlex.split(pending, comments=True)
+        except ValueError:
+            continue  # an open quote can legally continue onto the next line
+        yield pending, tokens
+        pending = ''
+    assert not pending, f'Unterminated documented command: {pending}'
+
+
+def _documentation_commands():
+    from pathlib import Path
+    import reveal
+    docs = Path(reveal.__file__).parent / 'docs'
+    sources = [docs / 'AGENT_HELP.md', *sorted((docs / 'guides').glob('*.md'))]
+    params = []
+    discovery_flags = {'--adapters', '--languages', '--discover', '--agent-help',
+                       '--help', '--help-all', '--profiles', '--language-info',
+                       '--capabilities', '--explain-file'}
+    for source in sources:
+        for block in re.findall(r'```(?:bash|sh|shell)\n(.*?)```', source.read_text(encoding='utf-8'), re.S):
+            for line, tokens in _shell_reveal_commands(block):
+                if not tokens:
+                    continue
+                query = shlex.join(tokens)
+                marks = []
+                target = tokens[1]
+                if target.startswith('help://') or target in discovery_flags:
+                    for key, value in (('<topic>', 'ast'), ('<adapter>', 'ast'),
+                                       ('<task>', 'codebase'), ('<lang>', 'python'),
+                                       ('<file>', 'proj/app.py')):
+                        query = query.replace(key, value)
+                    if any(token in query for token in ('<', '$', '|')):
+                        marks.append(pytest.mark.skip(reason='discovery template needs explicit shell/content fixture'))
+                else:
+                    marks.append(pytest.mark.skip(reason='target-specific documentation command needs named fixture (BACK-1365)'))
+                params.append(pytest.param(query, marks=marks,
+                    id=f'{source.name}:{len(params)}:{line.strip()}'))
+    return params
+
+
+@pytest.mark.parametrize('command', _documentation_commands())
+def test_documentation_discovery_runs_as_written(harness, command):
+    _assert_text_as_written(harness, command)
+
+
+def test_documentation_command_inventory_is_not_vacuous():
+    params = _documentation_commands()
+    runnable = [p for p in params if not any(m.name == 'skip' for m in p.marks)]
+    assert len(params) > 200 and len(runnable) > 40
+
+
+def test_multiline_documentation_collector():
+    commands = list(_shell_reveal_commands("reveal 'ast://src' | jq '[.results[] |\n {name}]'\n"))
+    assert len(commands) == 1
+    assert commands[0][1][-1] == '[.results[] |\n {name}]'
+    with pytest.raises(AssertionError, match='Unterminated'):
+        list(_shell_reveal_commands("reveal 'ast://unterminated"))
