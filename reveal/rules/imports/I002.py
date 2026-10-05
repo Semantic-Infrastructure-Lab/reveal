@@ -96,9 +96,9 @@ def _extract_imports_for_file(fp_str: str) -> tuple:
     _collect_raw_imports's serial per-file try/except so the parallel and
     serial paths produce identical results. ``failed`` is True when the
     extractor's language IS supported but tree-sitter could not parse the
-    file (``extractor.parse_failed``, BACK-982) — such a file is silently
-    absent from the graph, so a cycle running through it becomes invisible;
-    the caller surfaces this rather than treating an empty result as clean.
+    file (``extractor.parse_failed``, BACK-982). Recovered imports remain in the
+    graph, but missing edges can hide a cycle. Consumers disclose incomplete
+    coverage rather than treating an empty cycle list as confirmed clean.
     """
     fp = Path(fp_str)
     extractor = get_extractor(fp)
@@ -392,9 +392,8 @@ class I002(BaseRule):
 
         Returns ``(all_imports, failed_files, skipped_reason)`` -- ``failed_files``
         (BACK-982) are source files whose language IS supported but that
-        tree-sitter could not parse, so they contribute no edges to the graph at
-        all; a real cycle running through one becomes structurally invisible to
-        find_cycles(). Empty in the two early-abort paths below (the scan never
+        tree-sitter parsed with errors. Recovered edges are retained; missing
+        edges can still hide a cycle. Empty in the two early-abort paths below (the scan never
         reached Pass B, so failure status is simply unknown, not "none failed").
         ``skipped_reason`` (BACK-1051) is None when the scan ran to completion,
         or a one-line human-readable string naming which ceiling tripped --

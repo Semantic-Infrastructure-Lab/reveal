@@ -1742,6 +1742,15 @@ can hide a systemic callee-, caller-, or grammar-level bug.
 
 ## Re-running this yourself
 
+Before corpus measurements, `pytest tests/test_import_precision_invariants.py` runs
+fast import invariants without external tools or corpora. Fixtures cover all 17
+registered extractor classes plus TypeScript: appending unrelated syntax errors or
+comments and copying files preserve recovered imports, citations match source, and
+AST parse state agrees with extraction, adapter assembly and I002. Symbol recovery
+is checked where symbol-usage extraction is supported. A renamed Python project
+preserves its cycle count. These are regression guards, not recall measurements.
+
+
 The per-loop harnesses are **not part of this repository**. Each loop's harness is a
 plain script pair — `build_oracle.*` (produces the independent ground truth) and a diff
 script that compares it against a live reveal run — kept, with its findings, in the
