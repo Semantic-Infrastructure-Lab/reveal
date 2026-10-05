@@ -492,6 +492,30 @@ reveal --check reveal/adapters/myadapter.py
 
 **Implementation**: See `reveal/rules/validation/V023.py`
 
+For shared adapter seams, run:
+
+```bash
+reveal reveal:// --check --select V023,V033,V034,V035
+reveal reveal:// --check --format json
+```
+
+V023 also probes the live builder: payloads cannot replace envelope fields, and
+supplied diagnostics must survive. `ResultBuilder.create()` accepts explicit
+`scope=` and `meta=` fields; `data=` is reserved for the adapter payload. Trust
+metadata arguments upgrade a legacy 1.0 result to the current contract so they
+are preserved. An explicit `meta=` block cannot be combined with those arguments.
+V033 checks returned/raised composition failures, confidence and consumption;
+V034 rejects invalid/negative pagination controls and verifies zero/boundaries;
+V035 checks text/JSON diagnostics, truncation disclosure and failure exits using
+a recorded offline stats fixture plus the shared URI outcome seam.
+
+Check results include rule execution coverage (`run`, `skipped`, `failed`, and
+reasons). A rule crash or no applicable checks makes the run incomplete. Findings
+and incomplete runs exit 1; a clean completed run exits 0. Coverage reports rule
+execution, not exhaustive adapter fixture coverage: legacy rules can skip internal
+prerequisites, and V035 is a bounded renderer canary.
+
+
 ---
 
 ## Versioning Strategy

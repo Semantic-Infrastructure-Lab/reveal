@@ -3,6 +3,13 @@
 from typing import Dict, Any
 
 
+_BEHAVIOR_RULES = {
+    'V023': 'Output envelope integrity and preservation of supplied diagnostics',
+    'V033': 'Composition failures, confidence and diagnostic consumption',
+    'V034': 'Pagination validation and zero/boundary behavior',
+    'V035': 'Recorded stats renderer diagnostics and URI outcome behavior',
+}
+
 _SCHEMA_OUTPUT_TYPES = [
     {
         'type': 'reveal_structure',
@@ -31,7 +38,9 @@ _SCHEMA_OUTPUT_TYPES = [
                 'source': {'type': 'string'},
                 'source_type': {'type': 'string'},
                 'detections': {'type': 'array'},
-                'total': {'type': 'integer'}
+                'total': {'type': 'integer'},
+                'coverage': {'type': 'object', 'description': 'Rule execution statuses and scope; not exhaustive fixture coverage'},
+                'errors': {'type': 'array', 'description': 'Rule execution failures'}
             }
         }
     },
@@ -189,7 +198,7 @@ def get_schema() -> Dict[str, Any]:
             'V004': 'Test coverage gaps',
             'V005': 'Static help file sync',
             'V006': 'Output format support',
-            'V016': 'Output Contract compliance'
+            **_BEHAVIOR_RULES
         },
         'output_types': _SCHEMA_OUTPUT_TYPES,
         'example_queries': _SCHEMA_EXAMPLE_QUERIES,
@@ -224,7 +233,8 @@ def get_help() -> Dict[str, Any]:
             'V003': 'Feature matrix coverage',
             'V004': 'Test coverage gaps',
             'V005': 'Static help file sync',
-            'V006': 'Output format support'
+            'V006': 'Output format support',
+            **_BEHAVIOR_RULES
         },
         'try_now': [
             "reveal reveal://",

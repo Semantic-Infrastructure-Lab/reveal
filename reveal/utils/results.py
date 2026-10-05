@@ -271,6 +271,8 @@ class ResultBuilder:
         confidence: Optional[float] = None,
         warnings: Optional[List[WarningEntry]] = None,
         errors: Optional[List[WarningEntry]] = None,
+        scope: Optional[Dict[str, Any]] = None,
+        meta: Optional[Dict[str, Any]] = None,
         **extra_fields
     ) -> RevealResult:
         """Build standard Output Contract v1.x result dictionary.
@@ -278,8 +280,9 @@ class ResultBuilder:
         Args:
             result_type: Type identifier (e.g., 'stats_summary', 'ast_query')
             source: Source path (file or directory)
-            data: Adapter-specific data fields to include
-            contract_version: Contract version ('1.0' or '1.1')
+            data: Adapter-specific data fields; envelope field collisions raise ValueError.
+            contract_version: Contract version ('1.0' or '1.1'). Supplying trust metadata
+                upgrades '1.0' to the current contract instead of silently dropping it.
             source_type: Explicit source-type override. When ``None`` (default)
                 it is auto-detected as ``'directory'`` / ``'file'`` from whether
                 ``source`` is a real directory. Adapters whose ``source`` is not
@@ -290,6 +293,8 @@ class ResultBuilder:
             confidence: Confidence score 0.0-1.0 for v1.1 meta
             warnings: Warning list for v1.1 meta
             errors: Error list for v1.1 meta
+            scope: Explicit scope envelope field.
+            meta: Existing metadata block; cannot be combined with trust metadata arguments.
             **extra_fields: Additional fields to include in result
 
         Returns:
@@ -307,6 +312,11 @@ class ResultBuilder:
             >>> result['type']
             'stats_summary'
         """
+        if data and _CONTRACT_FIELDS & data.keys():
+            raise ValueError(f'data collides with contract fields: {sorted(_CONTRACT_FIELDS & data.keys())}')
+        # Supplying trust metadata opts into the contract that can carry it.
+        if contract_version == '1.0' and any([parse_mode, confidence is not None, warnings, errors]):
+            contract_version = CONTRACT_VERSION
         source_path = Path(source) if isinstance(source, str) else source
 
         # Explicit override wins; otherwise auto-detect directory vs file.
@@ -324,6 +334,13 @@ class ResultBuilder:
             'source': str(source),
             'source_type': resolved_source_type,
         }
+
+        if scope is not None:
+            result['scope'] = scope
+        if meta is not None:
+            if any([parse_mode, confidence is not None, warnings, errors]):
+                raise ValueError('meta cannot be combined with trust metadata arguments')
+            result['meta'] = dict(meta)
 
         # Add v1.1 meta if metadata provided
         if contract_version == CONTRACT_VERSION and any([parse_mode, confidence is not None, warnings, errors]):

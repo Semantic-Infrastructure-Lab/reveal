@@ -212,18 +212,7 @@ if [[ $PRIMARY -eq 1 ]]; then
     [[ ${PIPESTATUS[0]} -eq 0 ]] || fail "complexity ratchet (see scripts/check_complexity.py)"
 
     step "Reveal self-validation (V-series)"
-    "$PY" - >>"$LOG" 2>&1 <<'EOF' || fail "V-series self-validation"
-from reveal.adapters.reveal import RevealAdapter
-from reveal.rules import RuleRegistry
-
-structure = RevealAdapter().get_structure()
-detections = RuleRegistry.check_file(file_path='reveal://', structure=structure, content='', select=['V'])
-if detections:
-    for d in detections:
-        print(f'  [{d.severity.value.upper()}] {d.rule_code}: {d.message}')
-    raise SystemExit(1)
-print('V-series self-validation passed')
-EOF
+    "$VENV/bin/reveal" reveal:// --check --select V >>"$LOG" 2>&1 || fail "V-series self-validation"
 
     # The baseline is keyed to the maintainer mypy (system python3, as
     # pre-release-check.sh runs it) -- not the venv's eagerly-upgraded one, whose

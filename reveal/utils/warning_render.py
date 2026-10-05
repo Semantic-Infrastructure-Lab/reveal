@@ -61,6 +61,9 @@ def render_meta_warnings(
     # So is 'unknown_sort_field' (BACK-1644): both are RESULT_CONTROL_WARNINGS.
     skip = set(RESULT_CONTROL_WARNINGS) | set(skip_types or ())
     warnings = [w for w in collect_meta_warnings(result) if w.get('type') not in skip]
+    # A partial scan's errors are as material as its warnings.
+    meta = result.get('meta') or {}
+    warnings.extend(e for e in meta.get('errors', []) if isinstance(e, dict))
     if not warnings:
         return
     if heading:

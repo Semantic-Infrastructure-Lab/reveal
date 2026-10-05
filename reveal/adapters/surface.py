@@ -612,5 +612,6 @@ class SurfaceAdapter(ResourceAdapter):
             confidence=0.6,
             warnings=warnings,
             errors=[],
+            scope=report.pop('scope'),
             data=report,
         )

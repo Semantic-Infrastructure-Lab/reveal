@@ -364,6 +364,8 @@ class ResourceAdapter(ABC):
             if cut_as:
                 relabel_truncations(result, *cut_as)
             self.fold_meta(result.get('meta'))
+            if result.get('error'):
+                self.record_composed_error(child_name, resource, ValueError(str(result['error'])))
 
         return result
 
@@ -399,6 +401,7 @@ class ResourceAdapter(ABC):
             'message': f"{source_name}({resource!r}) failed: {exc}",
             'file': str(resource),
         })
+        self.__dict__.setdefault('_composed_confidences', []).append(0.0)
         logger.warning("%s(%r) failed during composition: %s", source_name, resource, exc)
 
     def composed_meta(self) -> Optional[RevealMeta]:

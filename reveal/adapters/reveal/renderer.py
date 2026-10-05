@@ -56,8 +56,17 @@ class RevealRenderer:
             return
 
         # Text format
+        coverage = result.get("coverage", {})
+        if coverage:
+            print(f"Checks: {coverage['run']} run, {coverage['skipped']} skipped, {coverage['failed']} failed")
+            print(coverage["scope"])
+        if result.get("error"):
+            print(f"{uri}: Self-check incomplete")
+            for error in result.get("errors", []):
+                print(f"  {error['rule']}: {error['error']}")
         if not detections:
-            print(f"{uri}: ✅ No issues found")
+            if not result.get("error"):
+                print(f"{uri}: ✅ No issues found in completed checks")
             return
 
         print(f"{uri}: Found {len(detections)} issues\n")

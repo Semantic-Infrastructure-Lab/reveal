@@ -145,19 +145,13 @@ class TestResultBuilderCreate:
         assert result['custom_field'] == 'custom_value'
         assert result['another_field'] == 42
 
-    def test_scope_is_a_reserved_contract_field(self, tmp_path):
-        """BACK-884 design doc finding #5: 'scope' is reserved so a future
-        ResultBuilder-based adapter migration can't have **extra_fields
-        silently clobber the BACK-884 scope census."""
-        test_file = tmp_path / "test.py"
-        test_file.write_text("# test")
+    def test_scope_is_a_reserved_contract_field(self):
+        """Scope is provided explicitly; data cannot overwrite the envelope."""
+        scope = {'languages': ['python']}
+        assert ResultBuilder.create('probe', 'probe', scope=scope)['scope'] == scope
+        with pytest.raises(ValueError, match='contract fields'):
+            ResultBuilder.create('probe', 'probe', data={'scope': scope})
 
-        with pytest.raises(ValueError, match="scope"):
-            ResultBuilder.create(
-                result_type='custom',
-                source=test_file,
-                scope='not the real census',
-            )
 
     def test_v11_no_meta_if_no_metadata(self, tmp_path):
         """Don't add meta dict in v1.1 if no metadata provided."""
@@ -425,23 +419,10 @@ class TestEdgeCases:
         # Nonexistent paths default to file type
         assert result['source_type'] == 'file'
 
-    def test_data_overwrites_core_fields(self, tmp_path):
-        """Data dict can overwrite core fields (by design)."""
-        test_file = tmp_path / "test.py"
-        test_file.write_text("# test")
-
-        result = ResultBuilder.create(
-            result_type='query',
-            source=test_file,
-            data={
-                'type': 'different_type',  # Overwrites core field
-                'custom': 'value'
-            }
-        )
-
-        # Data overwrites happen in update()
-        assert result['type'] == 'different_type'
-        assert result['custom'] == 'value'
+    def test_data_cannot_overwrite_core_fields(self, tmp_path):
+        """Data and extra_fields share the same envelope protection."""
+        with pytest.raises(ValueError, match='data collides with contract fields'):
+            ResultBuilder.create('query', tmp_path / 'test.py', data={'type': 'different_type'})
 
     def test_extra_fields_overwrite_data(self, tmp_path):
         """Extra fields can overwrite data fields."""
@@ -462,11 +443,9 @@ class TestEdgeCases:
         """extra_fields cannot overwrite contract fields — raises ValueError."""
         test_file = tmp_path / "test.py"
         test_file.write_text("# test")
-        # Only 'type' and 'meta' can land in **extra_fields; 'source',
-        # 'source_type', and 'contract_version' are named parameters
-        # (source_type became one so adapters with synthetic sources —
-        # git's path@ref / 'repository' — can set it explicitly).
-        for field in ('type', 'meta'):
+        # Envelope fields other than 'type' have explicit named parameters;
+        # 'type' cannot be injected through **extra_fields.
+        for field in ('type',):
             with pytest.raises(ValueError, match="contract fields"):
                 ResultBuilder.create(
                     result_type='query',

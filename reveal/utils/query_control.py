@@ -61,16 +61,15 @@ def _apply_control_param(control: ResultControl, part: str) -> bool:
     """Apply one query control parameter to control object. Returns True if consumed."""
     if part.startswith('sort='):
         _apply_sort_param(control, part[5:])
-    elif part.startswith('limit='):
+    elif part.startswith(('limit=', 'offset=')):
+        key, raw = part.split('=', 1)
         try:
-            control.limit = int(part[6:])
-        except ValueError:
-            pass
-    elif part.startswith('offset='):
-        try:
-            control.offset = int(part[7:])
-        except ValueError:
-            pass
+            value = int(raw)
+        except ValueError as exc:
+            raise ValueError(f'{key} must be a non-negative integer: {raw!r}') from exc
+        if value < 0:
+            raise ValueError(f'{key} must be a non-negative integer: {raw!r}')
+        setattr(control, key, value)
     else:
         return False
     return True

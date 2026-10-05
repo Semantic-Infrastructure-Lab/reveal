@@ -697,7 +697,7 @@ class OverviewAdapter(ResourceAdapter):
         _relativize_paths(complex_fns, architecture, path)
         _annotate_provenance(complex_fns, architecture)
 
-        report = {
+        report: Dict[str, Any] = {
             'path': str(path),
             'stats': stats,
             'git_log': git_log,
@@ -712,6 +712,7 @@ class OverviewAdapter(ResourceAdapter):
             result_type='overview',
             source=self.path,
             contract_version=CONTRACT_VERSION,
+            scope=report.pop('scope'),
             data=report,
             warnings=meta.get('warnings') if meta else None,
             errors=meta.get('errors') if meta else None,

@@ -65,6 +65,7 @@ class V023(BaseRule):
     category = RulePrefix.V
     severity = Severity.HIGH
     file_patterns = ['.py']
+    uri_patterns = ['^reveal://.*']
     version = "1.0.0"
     # internal stays False (default): validates any adapter/analyzer file under
     # an /adapters/ or /analyzers/ directory, including a user's own custom
@@ -90,6 +91,10 @@ class V023(BaseRule):
         Returns:
             List of detections for contract violations
         """
+        if file_path.startswith('reveal://'):
+            from .behavioral_contracts import builder_violations
+            return [self.create_detection(file_path, 1, message=message)
+                    for message in builder_violations()]
         detections: List[Detection] = []
 
         # Only check Python files in adapters/ or analyzers/ directories

@@ -155,14 +155,14 @@ class TestResultControlInvalidInput:
         assert control.limit == 5
 
     def test_invalid_limit_value(self):
-        """Invalid limit value should be ignored."""
-        query, control = parse_result_control('sort=name&limit=invalid')
-        assert control.limit is None
+        """Invalid limit value must be rejected."""
+        with pytest.raises(ValueError, match='limit must be'):
+            parse_result_control('sort=name&limit=invalid')
 
     def test_invalid_offset_value(self):
-        """Invalid offset value should be ignored."""
-        query, control = parse_result_control('sort=name&offset=notanumber')
-        assert control.offset == 0  # Default
+        """Invalid offset value must be rejected."""
+        with pytest.raises(ValueError, match='offset must be'):
+            parse_result_control('sort=name&offset=notanumber')
 
 
 class TestSortingMixedTypes:

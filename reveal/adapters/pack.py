@@ -1042,7 +1042,6 @@ class PackAdapter(ResourceAdapter):
             'path': to_posix(path),
             'budget': budget_str,
             'since': since,
-            'meta': meta,
             'files': selected,
         }
         if emit_content:
@@ -1056,5 +1055,6 @@ class PackAdapter(ResourceAdapter):
             result_type='pack',
             source=self.path,
             contract_version=CONTRACT_VERSION,
+            meta=meta,
             data=report,
         )

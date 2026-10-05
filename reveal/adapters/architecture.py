@@ -592,6 +592,7 @@ class ArchitectureAdapter(ResourceAdapter):
             result_type='architecture',
             source=self.path,
             contract_version=CONTRACT_VERSION,
+            scope=report.pop('scope'),
             data=report,
             warnings=meta.get('warnings') if meta else None,
             errors=meta.get('errors') if meta else None,

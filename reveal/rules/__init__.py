@@ -640,7 +640,8 @@ class RuleRegistry:
                    select: Optional[List[str]] = None,
                    ignore: Optional[List[str]] = None,
                    profile: Optional[Dict[str, float]] = None,
-                   errors: Optional[List[Dict[str, str]]] = None) -> List[Detection]:
+                   errors: Optional[List[Dict[str, str]]] = None,
+                   coverage: Optional[List[Dict[str, str]]] = None) -> List[Detection]:
         """
         Run all applicable rules against a file.
 
@@ -656,6 +657,8 @@ class RuleRegistry:
                 (e.g. I002 gets charged for building its import graph on the
                 file that first triggers it), so there is no cross-run cache
                 state to contaminate the comparison.
+            coverage: Optional execution ledger with run/skipped/failed and reasons.
+                This reports rule execution, not completeness of internal fixture coverage.
             errors: When given, a rule that raises during check() appends
                 {"rule": code, "error": "..."} here instead of the crash being
                 visible only in the stderr log (BACK-1083) — callers that want
@@ -683,10 +686,12 @@ class RuleRegistry:
         for rule_class in rules:
             # Check if rule applies to this file (classmethod — no instantiation)
             if not rule_class.matches_target(file_path):
+                _record_coverage(coverage, rule_class.code, "skipped", "target does not match")
                 continue
 
             # Check if rule is enabled by config (unless CLI select overrides)
             if not select and not file_config.is_rule_enabled(rule_class.code):
+                _record_coverage(coverage, rule_class.code, "skipped", "disabled by config")
                 logger.debug(
                     f"Rule {rule_class.code} disabled by config for {file_path}"
                 )
@@ -704,11 +709,13 @@ class RuleRegistry:
                     if detection.file_path == file_path:
                         detection.file_path = spelled
                 detections.extend(rule_detections)
+                _record_coverage(coverage, rule_class.code, "run", "")
                 num_issues = len(rule_detections)
                 logger.debug(
                     f"Rule {rule_class.code} found {num_issues} issues in {file_path}"
                 )
             except Exception as e:
+                _record_coverage(coverage, rule_class.code, "failed", f"{type(e).__name__}: {e}")
                 logger.error(
                     f"Rule {rule_class.code} failed on {file_path}: {e}",
                     exc_info=True
@@ -741,3 +748,9 @@ def parse_rule_patterns(value: str) -> List[str]:
         raise ValueError(f"unknown rule code or prefix: {', '.join(unknown)} "
                          "(reveal --rules lists them)")
     return patterns
+
+
+def _record_coverage(coverage, code, status, reason):
+    """Optional execution ledger; a completed rule may have narrower internal scope."""
+    if coverage is not None:
+        coverage.append({"rule": code, "status": status, "reason": reason})

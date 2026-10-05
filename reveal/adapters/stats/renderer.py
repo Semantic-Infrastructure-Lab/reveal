@@ -44,6 +44,7 @@ class StatsRenderer:
                     print(f"  Long functions: {len(long_funcs)}")
                 if deep_nesting:
                     print(f"  Deep nesting: {len(deep_nesting)}")
+            render_meta_warnings(result)
             return
 
         # Text format - directory stats
