@@ -73,6 +73,12 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         run: python scripts/check_doc_hygiene.py --baseline .github/doc_hygiene_baseline.txt
 
+      - name: Lint workflow files (an invalid one fails at 0s on every push, BACK-1675)
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        run: |
+          python -m pip install 'actionlint-py==1.7.12.25'
+          actionlint .github/workflows/*.yml
+
       - name: Test CLI basics
         shell: bash
         run: |

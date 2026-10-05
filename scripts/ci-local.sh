@@ -169,6 +169,7 @@ step "Install dependencies (CI: pip install -e .[dev]${LP_VERSION:+, then langua
 "$PY" -m pip install -q --upgrade pip >>"$LOG" 2>&1
 "$PY" -m pip install -q --upgrade --upgrade-strategy eager -e ".[dev]" >>"$LOG" 2>&1 || fail "pip install"
 "$PY" -m pip install -q --upgrade build pytest-xdist >>"$LOG" 2>&1 || fail "pip install build"
+"$PY" -m pip install -q 'actionlint-py==1.7.12.25' >>"$LOG" 2>&1 || fail "pip install actionlint-py"
 if [[ -n "$LP_VERSION" ]]; then
     "$PY" -m pip install -q "tree-sitter-language-pack==$LP_VERSION" >>"$LOG" 2>&1 || fail "language-pack pin"
 fi
@@ -231,6 +232,13 @@ if [[ $PRIMARY -eq 1 ]]; then
     step "Doc hygiene ratchet"
     "$PY" scripts/check_doc_hygiene.py --baseline .github/doc_hygiene_baseline.txt >>"$LOG" 2>&1 \
         || { tail -12 "$LOG"; fail "doc hygiene regressed vs .github/doc_hygiene_baseline.txt"; }
+
+    # recall.yml sat invalid for 7 pushes (runner.temp in job env); GitHub only shows a
+    # 0s "workflow file issue" run nobody reads (BACK-1675). Required, not skipped: a
+    # silent skip is the failure being guarded.
+    step "Workflow lint (actionlint)"
+    "$VENV/bin/actionlint" .github/workflows/*.yml >>"$LOG" 2>&1 \
+        || { tail -12 "$LOG"; fail "workflow lint (actionlint)"; }
 
     step "B006 ratchet"
     BASELINE=$(cat .github/b006_baseline.txt)

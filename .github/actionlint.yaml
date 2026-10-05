@@ -1,0 +1,5 @@
+# actionlint config (BACK-1675). Labels GitHub serves that the pinned actionlint
+# release does not know yet; remove an entry once actionlint lists it itself.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
