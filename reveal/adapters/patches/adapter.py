@@ -10,10 +10,21 @@ from reveal.reveal_types import CONTRACT_VERSION
 from reveal.testability.patches import group_patches, scan_patches
 from reveal.utils.path_utils import to_posix
 from reveal.utils.query import parse_query_params
+from reveal.utils.query_parser import ParamSpec, param_schema, param_cli_flags
 from reveal.utils.results import ResultBuilder, note_truncation
 from reveal.utils.validation import require_path_exists
 
 from ...rendering.adapters.patches import PatchesRenderer
+
+
+# Start with the two numeric controls; other fields retain their existing policy.
+_NUMERIC_PARAMS = (
+    ParamSpec('limit', 'integer', 'Maximum groups to return', 20, int,
+              ('limit=20',), zero_policy='all', cli_flags=(('all', '1000000'),)),
+    ParamSpec('min', 'integer', 'Minimum patch count for a group', 1, int,
+              ('min=3',), zero_policy='no minimum'),
+)
+_LIMIT, _MIN = _NUMERIC_PARAMS
 
 
 @register_adapter('patches')
@@ -24,7 +35,7 @@ class PatchesAdapter(ResourceAdapter):
 
     BUDGET_LIST_FIELD = 'groups'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
-    CLI_QUERY_FLAGS = {'all': 'limit=1000000', 'respect_gitignore': 'respect_gitignore=false'}  # lifts the limit=20 group default (BACK-1379)
+    CLI_QUERY_FLAGS = {**param_cli_flags(_NUMERIC_PARAMS), 'respect_gitignore': 'respect_gitignore=false'}  # lifts the limit=20 group default (BACK-1379)
 
     def __init__(self, resource: str, query: Optional[str] = None):
         path, query_string = resource, query
@@ -73,8 +84,7 @@ class PatchesAdapter(ResourceAdapter):
             'uri_syntax': 'patches://<tests-path>?group=target&limit=20',
             'query_params': {
                 'group': {'type': 'string', 'description': 'Grouping mode: target, test, or file', 'examples': ['group=target']},
-                'limit': {'type': 'integer', 'description': 'Maximum groups to return', 'examples': ['limit=20']},
-                'min': {'type': 'integer', 'description': 'Minimum patch count for a group', 'examples': ['min=3']},
+                **param_schema(_NUMERIC_PARAMS),
                 'target': {'type': 'string', 'description': 'Filter by target substring or glob', 'examples': ['target=ssl']},
                 'private': {'type': 'boolean', 'description': 'Only include private/internal patch targets', 'examples': ['private=true']},
                 'suppress': {'type': 'boolean', 'description': 'Hide stdlib I/O noise (sys.stdout/stderr, builtins) from grouped output. Default: true. Raw totals always include them.', 'examples': ['suppress=false']},
@@ -126,8 +136,8 @@ class PatchesAdapter(ResourceAdapter):
         group_by = str(self.query_params.get('group') or 'target')
         if group_by not in {'target', 'test', 'file'}:
             group_by = 'target'
-        limit = self.int_param('limit', 20)
-        min_count = self.int_param('min', 1)
+        limit = _LIMIT.read(self.query_params)
+        min_count = _MIN.read(self.query_params)
         target_filter = str(self.query_params.get('target') or '')
         private_only = bool(self.query_params.get('private') or False)
         _suppress_raw = self.query_params.get('suppress')

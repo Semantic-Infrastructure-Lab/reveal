@@ -5,7 +5,7 @@ import sys
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, TextIO, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Set, TextIO, Tuple, Union
 
 # Characters that only appear in a *filter* key (e.g. `complexity>10`, `msg~=x`),
 # never in a fixed param key. Used to distinguish the two in adapters that parse
@@ -145,6 +145,48 @@ def mark_query_keys(params: Dict[str, Any], *keys: str) -> None:
     """Count ``keys`` of a parsed query as used (a no-op for a plain dict)."""
     if isinstance(params, QueryParams):
         params.mark(*keys)
+
+
+@dataclass(frozen=True)
+class ParamSpec:
+    """One declared query parameter; read explicitly where its value is applied.
+
+    The converter owns legacy parsing policy; bounds and zero semantics are
+    explicit rather than guessed from a parameter's name.
+    """
+    name: str
+    type: str
+    description: str
+    default: Any
+    convert: Callable[[Any], Any]
+    examples: Tuple[str, ...] = ()
+    minimum: Optional[int] = None
+    zero_policy: Optional[str] = None
+    cli_flags: Tuple[Tuple[str, str], ...] = ()
+
+    def read(self, params: Dict[str, Any]) -> Any:
+        raw = params.get(self.name)
+        value = self.default if raw is None else self.convert(raw)
+        if self.minimum is not None and value < self.minimum:
+            raise ValueError(f'{self.name} must be >= {self.minimum}')
+        return value
+
+    def schema(self) -> Dict[str, Any]:
+        result = {'type': self.type, 'description': self.description,
+                  'examples': list(self.examples), 'default': self.default}
+        if self.minimum is not None:
+            result['minimum'] = self.minimum
+        if self.zero_policy is not None:
+            result['zero_policy'] = self.zero_policy
+        return result
+
+
+def param_schema(specs: Iterable[ParamSpec]) -> Dict[str, Any]:
+    return {spec.name: spec.schema() for spec in specs}
+
+
+def param_cli_flags(specs: Iterable[ParamSpec]) -> Dict[str, str]:
+    return {flag: f'{spec.name}={value}' for spec in specs for flag, value in spec.cli_flags}
 
 
 def coerce_value(value: str) -> Union[bool, int, float, str]:

@@ -538,3 +538,12 @@ patch groups, and test files that contribute real edges. Its strict `KNOWN_SILEN
 list shrinks when these controls expose an effect. Read a query key only in the view
 that applies it: the ledger can then name a bound such as `codex:// --since` that the
 bare session-list view does not use.
+
+The first `ParamSpec` pilot lives in `utils/query_parser.py` and patches' `limit`/`min`
+controls. Frozen records derive numeric parsing, schema/default/zero-policy details
+and CLI query fragments; call `read()` where the value is applied so schema discovery
+never claims it as used. This pilot preserves legacy values, including negative
+values; strict new bounds require a separate behavior change. Other fields still
+use their established parser until migrated. `BudgetAccounting` in `query_control.py`
+labels a count as scan, match, page or text. The existing page and text helpers use
+it without changing their output; common scan-cap policy is a later migration.

@@ -1,9 +1,26 @@
 """Result control: sorting, pagination, budget limits — ResultControl dataclass."""
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple
 
 from .query_parser import query_key_recorder
+
+@dataclass(frozen=True)
+class BudgetAccounting:
+    """A count for one stage, never conflating scan, matching, pages or text."""
+    scope: Literal['scan', 'match', 'page', 'text']
+    total: int
+    returned: int
+    exact: bool = True
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.returned <= self.total:
+            raise ValueError('Budget counts require 0 <= returned <= total')
+
+    @property
+    def remaining(self) -> int:
+        return self.total - self.returned
+
 
 # The query key behind each field, for the flag ledger (BACK-1537).
 _FIELD_KEYS = {'sort_field': 'sort', 'sort_descending': 'sort', 'limit': 'limit', 'offset': 'offset'}
@@ -229,11 +246,12 @@ def apply_budget_limits(
     if truncate_strings is not None:
         result_items = _truncate_string_values(result_items, truncate_strings)
 
+    accounting = BudgetAccounting('page', total_available, len(result_items))
     meta = {
         'truncated': truncated,
         'reason': truncation_reason,
-        'total_available': total_available,
-        'returned': len(result_items)
+        'total_available': accounting.total,
+        'returned': accounting.returned
     }
 
     if truncated:

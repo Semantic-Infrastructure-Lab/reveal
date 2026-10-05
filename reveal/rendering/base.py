@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, TypeVar
 
 from reveal.utils.json_utils import print_json_result
 from reveal.utils.results import outcome_of
+from reveal.utils.query_control import BudgetAccounting
 from reveal.utils.warning_render import render_meta_warnings
 
 
@@ -28,8 +29,9 @@ def capped_section(items: Sequence[_Item], limit: Optional[int], format_item: Ca
         raise ValueError("Display limit must be nonnegative")
     shown = items if limit is None else items[:limit]
     lines = [format_item(item) for item in shown]
-    if len(shown) < len(items):
-        lines.append(f"    ... and {len(items) - len(shown)} more")
+    accounting = BudgetAccounting("text", len(items), len(shown))
+    if accounting.remaining:
+        lines.append(f"    ... and {accounting.remaining} more")
     return lines
 
 
