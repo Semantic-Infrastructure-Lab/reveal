@@ -182,3 +182,37 @@ def test_corpus_ids_do_not_collide_and_language_selects_pair(tmp_path, monkeypat
     monkeypatch.setattr(fetch_corpus, '_status_for', lambda dest, pin: (inspected.append(dest) or 'x', 'ok'))
     assert fetch_corpus.main(['--list']) == 0
     assert inspected == [tmp_path / 'c', tmp_path / 'c-second']
+
+
+@pytest.mark.parametrize('dry', [False, True])
+@pytest.mark.parametrize('shape', ['wrong_sha', 'not_a_repo'])
+def test_mismatched_existing_directory_is_preserved_not_deleted(tmp_path, shape, dry):
+    dest = tmp_path / 'c'
+    if shape == 'wrong_sha':
+        _init_repo(dest, {'a.c': 'int a;'})
+    else:
+        dest.mkdir()
+    sentinel = dest / 'user-notes.txt'
+    sentinel.write_text('untracked work', encoding='utf-8')
+    entry = {'language': 'c', 'repo': 'unused', 'sha': 'f' * 40}
+    with pytest.raises(fetch_corpus.CorpusRefused):
+        fetch_corpus.fetch_one(entry, tmp_path, dry=dry)
+    assert sentinel.read_text(encoding='utf-8') == 'untracked work'
+
+
+def test_empty_existing_directory_is_still_filled(tmp_path, monkeypatch):
+    (tmp_path / 'c').mkdir()
+    ran = []
+    monkeypatch.setattr(fetch_corpus, '_run', lambda cmd, cwd=None, dry=False: ran.append(cmd))
+    fetch_corpus.fetch_one({'language': 'c', 'repo': 'r', 'sha': 'a' * 40}, tmp_path)
+    assert ran and ran[0][:2] == ['git', 'clone']
+
+
+def test_main_reports_refusal_with_nonzero_exit(tmp_path, monkeypatch, capsys):
+    (tmp_path / 'c').mkdir()
+    (tmp_path / 'c' / 'x').write_text('x', encoding='utf-8')
+    monkeypatch.setattr(fetch_corpus, '_load_manifest',
+                        lambda: {'corpora': [{'language': 'c', 'repo': 'r', 'sha': 'a' * 40}]})
+    monkeypatch.setenv('REVEAL_CORPUS_DIR', str(tmp_path))
+    assert fetch_corpus.main([]) == 1
+    assert 'refusing to delete' in capsys.readouterr().err

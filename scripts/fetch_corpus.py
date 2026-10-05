@@ -13,6 +13,8 @@ Design goals this script exists to satisfy:
     history — a fraction of a hand-clone's size, and no .git bloat to speak of.
   - Idempotent: an already-materialized corpus at the right commit is left
     alone; re-running is a fast no-op.
+  - Non-destructive: a directory at the wrong commit, or not a repo, is never
+    deleted; the fetch refuses and says what to move (BACK-1670).
   - Shared: materializes into $REVEAL_CORPUS_DIR (or ~/.cache/reveal-corpus),
     so it is reused across git worktrees rather than re-cloned per checkout.
 
@@ -106,6 +108,10 @@ def _stray_entries(dest: Path) -> list[str]:
     return sorted(on_disk - tracked - {".git"})
 
 
+class CorpusRefused(RuntimeError):
+    """An existing directory blocks the fetch and is never deleted automatically."""
+
+
 def fetch_one(entry: dict, root: Path, dry: bool = False) -> None:
     lang = entry.get("id", entry["language"])
     repo = entry["repo"]
@@ -126,10 +132,16 @@ def fetch_one(entry: dict, root: Path, dry: bool = False) -> None:
               f"delete {dest} to re-fetch")
         return
 
+    if dest.exists() and any(dest.iterdir()):
+        # Wrong commit, partial checkout or unrelated files. Never delete it:
+        # it may hold untracked user work (BACK-1670). Dry-run reports the same.
+        raise CorpusRefused(
+            f"[{lang}] {dest} exists and is not at the pinned commit "
+            f"({current[:12] if current else 'not a git repo'}"
+            f"{' vs ' + sha[:12] if sha else ''}); refusing to delete it. "
+            f"Move or remove it yourself, then re-run.")
+
     print(f"[{lang}] fetching {repo}" + (f" @ {sha[:12]}" if sha else " @ HEAD (unpinned)"))
-    if dest.exists() and not dry:
-        # Wrong commit or partial checkout — start clean.
-        _run(["rm", "-rf", str(dest)], dry=dry)
 
     root.mkdir(parents=True, exist_ok=True)
 
@@ -223,6 +235,9 @@ def main(argv: list[str] | None = None) -> int:
     for entry in entries:
         try:
             fetch_one(entry, root, dry=args.dry_run)
+        except CorpusRefused as exc:
+            print(exc, file=sys.stderr)
+            return 1
         except subprocess.CalledProcessError as exc:
             print(f"[{entry['language']}] FAILED: {exc}", file=sys.stderr)
             return 1
