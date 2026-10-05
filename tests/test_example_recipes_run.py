@@ -30,6 +30,7 @@ import subprocess
 import pytest
 
 from reveal.adapters.help import _EXAMPLE_RECIPES
+from claude_session_fixture import build_claude_home
 from test_output_contract_compliance import _Harness, _build_tree
 
 pytestmark = pytest.mark.contract
@@ -37,8 +38,9 @@ pytestmark = pytest.mark.contract
 # Schemes whose recipes need a network host, a server's own files or credentials.
 NEEDS_HOST = ('ssl://', 'nginx://', 'domain://', 'autossl://', 'cpanel://', 'letsencrypt://',
               'mysql://')
-# Schemes whose recipes name a recorded session the fixture doesn't have (BACK-1594).
-NEEDS_SESSION = ('claude://', 'codex://')
+# Schemes whose recipes name a recorded session the fixture doesn't have (BACK-1594;
+# claude:// has one: tests/claude_session_fixture.py).
+NEEDS_SESSION = ('codex://',)
 
 # Placeholder -> fixture path, longest first; `src` is mapped separately below.
 PLACEHOLDERS = (
@@ -103,6 +105,7 @@ def harness(tmp_path_factory):
     root = tmp_path_factory.mktemp('recipe_harness')
     _build_tree(root)
     _enrich_recipe_tree(root)
+    build_claude_home(root / 'home')
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv('DB_RECIPE_FIXTURE', 'fixture-db')
         yield _Harness(root)
