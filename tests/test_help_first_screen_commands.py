@@ -34,3 +34,18 @@ def test_diff_first_screen_skips_its_contents_and_reaches_quick_start():
 def test_contents_section_is_dropped_only_at_level_two():
     lines = ['# G', '## Table of Contents', '1. [A](#a)', '## A', 'body', '### Contents', 'x']
     assert _without_contents_section(lines) == ['# G', '## A', 'body', '### Contents', 'x']
+
+
+def _scheme_topics():
+    from reveal.adapters.base import list_supported_schemes
+    return sorted(list_supported_schemes())
+
+
+@pytest.mark.parametrize('scheme', _scheme_topics())
+def test_help_topic_for_a_scheme_is_about_that_scheme(scheme):
+    """BACK-1611 item 5: help://<scheme> opens on its own scheme, not a neighbour's or an error."""
+    import json
+    result = _ADAPTER.get_element(scheme)
+    assert result and 'error' not in result, result
+    opening = json.dumps(result, default=str)[:3000].lower()
+    assert scheme.lower() in opening, f'help://{scheme} opens on something else: {opening[:200]}'
