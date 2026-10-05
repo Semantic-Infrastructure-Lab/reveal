@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Iterator, List, NoReturn, Optional, Tuple
 
 from ...errors import NotApplicableError
+from ...rendering.base import emit_rendered
 from ...reveal_types import CONTRACT_VERSION, RevealResult
 from ...utils import print_json_result, write_also_json
 from ...display.formatting import print_result_control_notes
@@ -1137,7 +1138,7 @@ def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render, 
     """
     outcome = announce_outcome(result, f"{scheme or 'unknown'}://")
     write_also_json(result, args)
-    render(result, args.format, **render_kwargs)
+    emit_rendered(render, result, args.format, **render_kwargs)
     conclude_outcome(result, outcome, args.format)
 
 

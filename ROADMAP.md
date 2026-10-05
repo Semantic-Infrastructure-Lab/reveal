@@ -332,7 +332,7 @@ a check that counts violations and lets the count only fall. Then the cause is r
    command line is parsed once into one Invocation, so `sys.argv` is read only in `main()`
    (ratchet: `check_boundaries.py` `argv`). Open follow-up: BACK-1538 (flag/adapter pairs that
    are read but have no visible effect on the fixture).
-3. **The result contract:** BACK-1059 (typed outcomes), BACK-1491 (cache whole results),
+3. **The result contract:** BACK-1059 (typed outcomes),
    BACK-916 (one rendering layer) and BACK-1052 (a shared scan budget). BACK-1059's first
    slice landed on 2026-09-28: one definition of a failed result (`outcome_of`, a top-level
    `error`), which the URI router reports and turns into exit 1 for every adapter
@@ -356,6 +356,8 @@ a check that counts violations and lets the count only fall. Then the cause is r
    results and the directory view carry the envelope too (the router wraps each element
    result), and a partial parse is one `partial_parse` meta warning in the result, not a
    stderr line per file (CHANGELOG `[0.130.0]`). Since 2026-10-02 the `silent-except` ratchet is at 0: each handler it counted now catches what its input can raise or reports what it skipped (CHANGELOG `[0.130.0]`). Since 2026-10-02 a `?sort=` field no result has is recorded and printed at the same seam on every sorting adapter, not only ast:// (`unknown_sort_field`, CHANGELOG `[0.130.0]`). Since 2026-10-05 B006 and the boundary gate share one silent-handler policy; computed fallbacks are covered and both gates are at zero.
+   Since 2026-10-05 import extraction and adapter graph caches store complete analysis
+   artifacts; nested diagnostics and I002 partial-analysis disclosures survive warm reads.
 4. **One seam per concern:** BACK-1054 (import resolution). The parser seam landed
    2026-09-30: every tree-sitter parser comes from `reveal/core/treesitter_parse.py`, a missing
    grammar raises `GrammarUnavailable` instead of reading as an empty result, and the

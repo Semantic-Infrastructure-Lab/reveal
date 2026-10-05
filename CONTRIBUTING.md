@@ -303,6 +303,13 @@ something that is not the user's target (reveal's own docs, a cache) takes
 `rules/validation/utils.find_reveal_root`. Each of M102, B005 and three V-rules once climbed
 on its own, and they disagreed (BACK-1372).
 
+**Text rendering:** put new renderer implementations in `reveal/rendering/`. Extend
+`BaseRenderer` and return a text body from `_render_text`; URI emission calls
+`emit_rendered`, which prints returned bodies and their diagnostics exactly once. Keep
+JSON at the shared format boundary. Legacy print renderers remain compatible during
+migration. Use immutable `RenderOptions` and `capped_section` for bounded sections so
+omitted rows have a remainder. Do not print a failed result as an empty success.
+
 **Cached analysis:** store the complete analysis artifact, including diagnostic state,
 before request-specific formatting. Import extraction uses `ImportExtraction`; graph builds
 use `ImportAnalysis`. Do not cache a selected tuple of fields or report failures only during

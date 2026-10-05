@@ -5,10 +5,42 @@ Provides common functionality for adapter renderers to reduce duplication.
 
 import sys
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional, Sequence, TypeVar
 
 from reveal.utils.json_utils import print_json_result
 from reveal.utils.results import outcome_of
+from reveal.utils.warning_render import render_meta_warnings
+
+
+@dataclass(frozen=True)
+class RenderOptions:
+    """Immutable presentation controls for text bodies."""
+    max_examples: Optional[int] = 3
+
+
+_Item = TypeVar("_Item")
+
+
+def capped_section(items: Sequence[_Item], limit: Optional[int], format_item: Callable[[_Item], str]) -> List[str]:
+    """Render a bounded section with its exact remainder; None shows everything."""
+    if limit is not None and limit < 0:
+        raise ValueError("Display limit must be nonnegative")
+    shown = items if limit is None else items[:limit]
+    lines = [format_item(item) for item in shown]
+    if len(shown) < len(items):
+        lines.append(f"    ... and {len(items) - len(shown)} more")
+    return lines
+
+
+def emit_rendered(render, result: dict, format: str = "text", **kwargs) -> None:
+    """Emit a returned text body and diagnostics; legacy print renderers still work."""
+    body = render(result, format, **kwargs)
+    if isinstance(body, str):
+        if body:
+            print(body, end="" if body.endswith("\n") else "\n")
+        if format != "json" and outcome_of(result) != "failed":
+            render_meta_warnings(result)
 
 
 class RendererMixin:
@@ -131,9 +163,8 @@ class BaseRenderer(ABC, RendererMixin):
     Example:
         class MyRenderer(BaseRenderer):
             @classmethod
-            def _render_text(cls, result: dict) -> None:
-                # Custom text rendering
-                print(f"Name: {result['name']}")
+            def _render_text(cls, result: dict) -> str:
+                return f"Name: {result['name']}\n"
 
             @classmethod
             def _get_result_type(cls, result: dict) -> str:
@@ -141,7 +172,7 @@ class BaseRenderer(ABC, RendererMixin):
     """
 
     @classmethod
-    def render_structure(cls, result: dict, format: str = 'text') -> None:
+    def render_structure(cls, result: dict, format: str = 'text') -> Optional[str]:
         """Render adapter structure results.
 
         Args:
@@ -150,14 +181,19 @@ class BaseRenderer(ABC, RendererMixin):
         """
         if cls.should_render_json(format):
             cls.render_json(result)
-            return
+            return None
 
-        cls._render_text(result)
+        if outcome_of(result) == 'failed':
+            detail = result.get('message')
+            if detail and detail != result.get('error'):
+                print(detail, file=sys.stderr)
+            return None
+        return cls._render_text(result)
 
     @classmethod
     @abstractmethod
-    def _render_text(cls, result: dict) -> None:
-        """Render result as text output.
+    def _render_text(cls, result: dict) -> Optional[str]:
+        """Return a text body (legacy implementations may print and return None).
 
         Override this method to implement custom text rendering.
 
@@ -167,7 +203,7 @@ class BaseRenderer(ABC, RendererMixin):
         pass
 
     @classmethod
-    def render_check(cls, result: dict, format: str = 'text') -> None:
+    def render_check(cls, result: dict, format: str = 'text') -> Optional[str]:
         """Render health check results.
 
         Default implementation delegates to render_structure.
@@ -177,7 +213,7 @@ class BaseRenderer(ABC, RendererMixin):
             result: Check result dictionary
             format: Output format ('text' or 'json')
         """
-        cls.render_structure(result, format)
+        return cls.render_structure(result, format)
 
 
 class TypeDispatchRenderer(BaseRenderer):

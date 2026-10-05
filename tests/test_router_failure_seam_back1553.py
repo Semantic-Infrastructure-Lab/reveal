@@ -200,3 +200,36 @@ def test_no_renderer_reports_errors_itself():
 
     stale = [s for s in production_schemes() if hasattr(get_renderer_class(s), 'render_error')]
     assert not stale, f'renderers defining render_error, which nothing calls: {stale}'
+
+
+@pytest.mark.parametrize('element', [None, 'san', 'chain', 'issuer', 'subject', 'dates', 'full'])
+def test_offline_ssl_actual_failed_views_are_quiet(element, monkeypatch, capsys):
+    """BACK-1555: actual returned shapes, including views the URI harness cannot run."""
+    from reveal.adapters.ssl import SSLAdapter, SSLRenderer
+    adapter = SSLAdapter('offline.invalid')
+    monkeypatch.setattr(adapter, '_fetch_certificate', lambda: None)
+    result = adapter.get_element(element) if element else adapter.get_structure()
+    assert result['error']
+    SSLRenderer.render_structure(result, 'text')
+    assert capsys.readouterr() == ('', '')
+    out = io.StringIO()
+    with redirect_stdout(out):
+        SSLRenderer.render_structure(result, 'json')
+    assert json.loads(out.getvalue()) == result
+
+
+def test_offline_mysql_actual_slow_log_failure_is_quiet(monkeypatch, capsys):
+    from reveal.adapters.mysql import MySQLAdapter
+    from reveal.adapters.mysql.renderer import MySQLRenderer
+    adapter = object.__new__(MySQLAdapter)
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError('recorded inaccessible slow log')
+
+    monkeypatch.setattr(adapter, '_execute_query', unavailable)
+    result = adapter._get_slow_queries()
+    assert result['error'] == 'recorded inaccessible slow log'
+    MySQLRenderer.render_structure(result, 'text')
+    output = capsys.readouterr()
+    assert not output.out and result['error'] not in output.err
+    assert output.err.count(result['message']) == 1
