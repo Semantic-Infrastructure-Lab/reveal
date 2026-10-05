@@ -2136,6 +2136,13 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
                         sub = (child / basename).resolve()
                         if sub.is_file():
                             return sub
+                # BACK-1669: a header nested deeper (deps/hiredis/hiredis.h, which
+                # -Ideps/hiredis resolves) is claimed only when it is the one file of
+                # that name under the root. Two candidates would be a guess, so no edge.
+                index = file_index if file_index is not None else basename_index([root])
+                nested = {c.resolve() for c in index.get(basename, ())}
+                if len(nested) == 1:
+                    return next(iter(nested))
                 continue
             # BACK-404: match the candidate's full trailing path against every
             # directory component of the quoted target (e.g. "jemalloc/internal/

@@ -673,6 +673,36 @@ class TestResolution:
         includer.write_text('#include "util.h"\n', encoding='utf-8')
         assert self._resolve_one(includer, tmp_path) == (tmp_path / 'aa' / 'util.h').resolve()
 
+    def test_c_bare_include_resolves_to_a_nested_vendor_header(self, tmp_path):
+        """BACK-1669: src/main.c "nested.h" with the only nested.h at deps/library/nested.h
+        (what -Ideps/library resolves) is an edge; the one-level scan used to stop short."""
+        (tmp_path / 'src').mkdir()
+        (tmp_path / 'deps' / 'library').mkdir(parents=True)
+        (tmp_path / 'deps' / 'library' / 'nested.h').write_text('int n;\n', encoding='utf-8')
+        includer = tmp_path / 'src' / 'main.c'
+        includer.write_text('#include "nested.h"\n', encoding='utf-8')
+        assert self._resolve_one(includer, tmp_path) == (
+            tmp_path / 'deps' / 'library' / 'nested.h').resolve()
+
+    def test_c_bare_include_with_two_nested_candidates_claims_no_edge(self, tmp_path):
+        """BACK-1669: two deeper nested.h files are ambiguous without the build's -I list."""
+        for lib in ('one', 'two'):
+            (tmp_path / 'deps' / lib).mkdir(parents=True)
+            (tmp_path / 'deps' / lib / 'nested.h').write_text('int n;\n', encoding='utf-8')
+        (tmp_path / 'src').mkdir()
+        includer = tmp_path / 'src' / 'main.c'
+        includer.write_text('#include "nested.h"\n', encoding='utf-8')
+        assert self._resolve_one(includer, tmp_path) is None
+
+    def test_c_bare_include_one_level_hit_still_beats_a_nested_one(self, tmp_path):
+        (tmp_path / 'lib').mkdir()
+        (tmp_path / 'lib' / 'nested.h').write_text('int shallow;\n', encoding='utf-8')
+        (tmp_path / 'deps' / 'a' / 'b').mkdir(parents=True)
+        (tmp_path / 'deps' / 'a' / 'b' / 'nested.h').write_text('int deep;\n', encoding='utf-8')
+        includer = tmp_path / 'main.c'
+        includer.write_text('#include "nested.h"\n', encoding='utf-8')
+        assert self._resolve_one(includer, tmp_path) == (tmp_path / 'lib' / 'nested.h').resolve()
+
     def test_c_qualified_include_prefers_includer_ancestor(self, tmp_path):
         """BACK-1469: "curl/curl.h" from proj/src/a.c resolves via the ancestor
         walk to proj/include/curl/curl.h, not a vendored copy elsewhere that the

@@ -3,9 +3,9 @@
     "sha": "5b22a09918743ba72952e35e431db23eb3d19605",
     "targets": 101,
     "oracle_edges": 603,
-    "hit_edges": 584,
+    "hit_edges": 603,
     "extra_edges": 0,
-    "recall": 0.9684908789386402,
+    "recall": 1.0,
     "precision": 1.0,
     "coverage": {
       "files": 275,
@@ -14,69 +14,7 @@
       "gcc_probes": 112
     },
     "partial_files": 300,
-    "differences": [
-      {
-        "target": "deps/fpconv/fpconv_dtoa.h",
-        "missed": [
-          "src/debug.c",
-          "src/networking.c",
-          "src/rdb.c",
-          "src/rio.c",
-          "src/script_lua.c",
-          "src/util.c"
-        ],
-        "extra": []
-      },
-      {
-        "target": "deps/hdr_histogram/hdr_histogram.h",
-        "missed": [
-          "src/latency.c",
-          "src/module.c",
-          "src/redis-benchmark.c",
-          "src/redis-cli.c",
-          "src/server.c"
-        ],
-        "extra": []
-      },
-      {
-        "target": "deps/hiredis/async.h",
-        "missed": [
-          "src/sentinel.c"
-        ],
-        "extra": []
-      },
-      {
-        "target": "deps/hiredis/hiredis.h",
-        "missed": [
-          "src/sentinel.c"
-        ],
-        "extra": []
-      },
-      {
-        "target": "deps/hiredis/hiredis_ssl.h",
-        "missed": [
-          "src/sentinel.c"
-        ],
-        "extra": []
-      },
-      {
-        "target": "deps/linenoise/linenoise.h",
-        "missed": [
-          "src/redis-cli.c"
-        ],
-        "extra": []
-      },
-      {
-        "target": "deps/xxhash/xxhash.h",
-        "missed": [
-          "src/chk.c",
-          "src/stream.h",
-          "src/t_stream.c",
-          "src/t_string.c"
-        ],
-        "extra": []
-      }
-    ]
+    "differences": []
   },
   "c-curl": {
     "sha": "1128177a6f725d1f8c4cba4f7ff6532969109e7a",
