@@ -27,9 +27,9 @@ def _isolate_cache(tmp_path, monkeypatch):
     """Point the disk cache at a throwaway dir and start every test cold."""
     monkeypatch.setenv("REVEAL_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.delenv("REVEAL_DISK_CACHE", raising=False)
-    py_imports_mod._extract_imports_cache.clear()
+    py_imports_mod._IMPORTS_CACHE.clear()
     yield
-    py_imports_mod._extract_imports_cache.clear()
+    py_imports_mod._IMPORTS_CACHE.clear()
 
 
 def _write_module(path):
@@ -61,7 +61,7 @@ def test_second_extraction_served_from_disk(tmp_path, monkeypatch):
 
     # Simulate a fresh process: clear the in-process cache. If disk caching
     # works, the tree-sitter parse never re-runs.
-    py_imports_mod._extract_imports_cache.clear()
+    py_imports_mod._IMPORTS_CACHE.clear()
 
     def _boom(*a, **k):
         raise AssertionError("disk cache miss: _get_tree_analyzer was re-run")
@@ -78,8 +78,8 @@ def test_disk_result_equals_fresh_scan(tmp_path):
 
     path_str = os.path.abspath(str(src))
     mtime_ns = os.stat(path_str).st_mtime_ns
-    fp = py_imports_mod._imports_fingerprint(path_str, mtime_ns)
-    from_disk = disk_cache.get(py_imports_mod._IMPORTS_CACHE_NAMESPACE, fp)
+    fp = py_imports_mod._IMPORTS_CACHE.fingerprint(path_str, mtime_ns)
+    from_disk = disk_cache.get(py_imports_mod._IMPORTS_CACHE.namespace, fp)
     assert from_disk is not None
     # BACK-1266 follow-up (2026-09-02): stored value is (imports,
     # parse_failed), not bare imports -- see extract_imports().
@@ -103,7 +103,7 @@ def test_parse_failure_survives_disk_cache_hit(tmp_path, monkeypatch):
     # Simulate a fresh process: clear the in-process cache and swap in a
     # fresh extractor instance (parse_failed starts False), forcing the
     # disk-cache-hit path to be the only source of the flag.
-    py_imports_mod._extract_imports_cache.clear()
+    py_imports_mod._IMPORTS_CACHE.clear()
     extractor2 = py_imports_mod.PythonExtractor()
     assert not extractor2.parse_failed
 
@@ -120,7 +120,7 @@ def test_edit_invalidates_cache(tmp_path):
     before = extractor.extract_imports(src)
     assert {imp.module_name for imp in before} == {"os", "sys"}
 
-    py_imports_mod._extract_imports_cache.clear()
+    py_imports_mod._IMPORTS_CACHE.clear()
     _rewrite(src, "import json\n\ndef only_one():\n    return 42\n")
 
     after = extractor.extract_imports(src)
@@ -135,8 +135,8 @@ def test_kill_switch_writes_nothing(tmp_path, monkeypatch):
 
     path_str = os.path.abspath(str(src))
     mtime_ns = os.stat(path_str).st_mtime_ns
-    fp = py_imports_mod._imports_fingerprint(path_str, mtime_ns)
-    assert disk_cache.get(py_imports_mod._IMPORTS_CACHE_NAMESPACE, fp) is None
+    fp = py_imports_mod._IMPORTS_CACHE.fingerprint(path_str, mtime_ns)
+    assert disk_cache.get(py_imports_mod._IMPORTS_CACHE.namespace, fp) is None
 
 
 def test_cache_hit_restamps_to_query_path(tmp_path, monkeypatch):
@@ -169,8 +169,8 @@ def test_cache_hit_restamps_to_query_path(tmp_path, monkeypatch):
 
 def test_max_files_env_override(monkeypatch):
     monkeypatch.setenv("REVEAL_IMPORTS_CACHE_MAX_FILES", "5")
-    assert py_imports_mod._imports_cache_max_files() == 5
+    assert py_imports_mod._IMPORTS_CACHE.max_files() == 5
     monkeypatch.setenv("REVEAL_IMPORTS_CACHE_MAX_FILES", "not-a-number")
-    assert py_imports_mod._imports_cache_max_files() == py_imports_mod._DEFAULT_IMPORTS_CACHE_MAX_FILES
+    assert py_imports_mod._IMPORTS_CACHE.max_files() == py_imports_mod._IMPORTS_CACHE._default_max_files
     monkeypatch.delenv("REVEAL_IMPORTS_CACHE_MAX_FILES")
-    assert py_imports_mod._imports_cache_max_files() == py_imports_mod._DEFAULT_IMPORTS_CACHE_MAX_FILES
+    assert py_imports_mod._IMPORTS_CACHE.max_files() == py_imports_mod._IMPORTS_CACHE._default_max_files

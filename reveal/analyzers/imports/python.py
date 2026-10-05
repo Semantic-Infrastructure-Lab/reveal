@@ -19,13 +19,13 @@ import re
 from functools import lru_cache
 from pathlib import Path
 from typing import FrozenSet, List, Set, Optional, Dict, Tuple
-from ...core import disk_cache, node_children as _children, node_prev_sibling as _prev_sibling
+from ...core import node_children as _children, node_prev_sibling as _prev_sibling
 from ...core.treesitter_compat import _zero_arg
 
 logger = logging.getLogger(__name__)
 
-from .types import ImportStatement, restamp_file_path
-from .base import LanguageExtractor, register_extractor
+from .types import ImportStatement
+from .base import ImportsDiskCache, LanguageExtractor, register_extractor
 from .resolver import resolve_python_import, resolve_python_from_import_submodules
 from ...rules.imports import STDLIB_MODULES
 from ...utils.path_utils import resolve_project_root
@@ -35,53 +35,7 @@ try:
 except ImportError:
     import tomli as tomllib  # type: ignore  # Python < 3.11 fallback
 
-# Module-level cache for extract_imports results keyed by (file_path_str, mtime_ns).
-# I002 builds an import graph by calling extract_imports on every file in a directory,
-# often visiting the same files multiple times across different graph builds.
-# I001 also calls extract_imports for each checked file independently.
-# Caching avoids redundant parses + file reads across both rules and repeated builds.
-# BACK-1266 follow-up (2026-09-02): value is (imports, parse_failed), not
-# just imports -- see extract_imports().
-_extract_imports_cache: Dict[Tuple[str, int], Tuple[List[ImportStatement], bool]] = {}
-
-# Cross-invocation disk cache (BACK-625): extract_imports parses+walks the
-# tree independently of TreeSitterAnalyzer.get_structure()'s own structure
-# cache (BACK-535) -- a warm structure cache does NOT make this free, so
-# `calls://`'s build_symbol_map (used by overview/hotspots' complex-functions
-# pass) re-pays a full parse per file on every fresh CLI invocation. Found
-# profiling BACK-618 on a real 9,474-file Python corpus: 32.6s of a 401s
-# `overview` run was extract_imports's independent parse, unrelated to
-# StatsAdapter's already-cached path. Per-file entry, same shape as BACK-535's
-# structure cache, so it needs the same large prune-cap override.
-_IMPORTS_CACHE_NAMESPACE = "python_imports"
-_DEFAULT_IMPORTS_CACHE_MAX_FILES = 100_000
-
-
-def _imports_cache_max_files() -> int:
-    """Read the imports-cache entry cap, honoring REVEAL_IMPORTS_CACHE_MAX_FILES."""
-    raw = os.environ.get('REVEAL_IMPORTS_CACHE_MAX_FILES')
-    if raw is None:
-        return _DEFAULT_IMPORTS_CACHE_MAX_FILES
-    try:
-        return int(raw)
-    except ValueError:
-        logger.debug("Invalid REVEAL_IMPORTS_CACHE_MAX_FILES=%r, using default", raw)
-        return _DEFAULT_IMPORTS_CACHE_MAX_FILES
-
-
-def _imports_fingerprint(path_str: str, mtime_ns: int) -> Optional[str]:
-    """Disk-cache key for one file's extracted imports, or None to skip caching."""
-    try:
-        size = os.path.getsize(path_str)
-    except OSError:
-        return None
-    hasher = hashlib.sha256()
-    hasher.update(path_str.encode("utf-8", "replace"))
-    hasher.update(b"\x00")
-    hasher.update(str(mtime_ns).encode("ascii"))
-    hasher.update(b"\x00")
-    hasher.update(str(size).encode("ascii"))
-    return hasher.hexdigest()
+_IMPORTS_CACHE = ImportsDiskCache("python_imports")
 
 
 @register_extractor
@@ -115,38 +69,16 @@ class PythonExtractor(LanguageExtractor):
         Returns:
             List of ImportStatement objects
         """
-        path_str = os.path.abspath(str(file_path))
-        try:
-            mtime_ns = os.stat(path_str).st_mtime_ns
-        except OSError:
-            mtime_ns = 0
-        cache_key = (path_str, mtime_ns)
-        if cache_key in _extract_imports_cache:
-            imports, self.parse_failed = _extract_imports_cache[cache_key]
-            return restamp_file_path(imports, file_path)
+        return _IMPORTS_CACHE.get_or_compute(
+            file_path, lambda: self._extract_imports_uncached(file_path),
+            get_parse_failed=lambda: self.parse_failed,
+            restore_parse_failed=lambda value: setattr(self, 'parse_failed', value),
+        )
 
-        fingerprint = _imports_fingerprint(path_str, mtime_ns)
-        if fingerprint is not None:
-            cached = disk_cache.get(_IMPORTS_CACHE_NAMESPACE, fingerprint)
-            if isinstance(cached, tuple) and len(cached) == 2:
-                _extract_imports_cache[cache_key] = cached
-                imports, self.parse_failed = cached
-                return restamp_file_path(imports, file_path)
-
-        # BACK-1266 follow-up (2026-09-02): self.parse_failed must be cached
-        # alongside imports, not just imports -- a cache hit above skips this
-        # whole block (including _get_tree_analyzer's `self.parse_failed =
-        # True` side effect), so without it, any file that ever failed to
-        # parse silently read as clean again on every subsequent warm run.
-        # I001/I002/the imports:// adapter all rely on this flag to avoid
-        # confidently acting (e.g. suggesting an unused import be deleted) on
-        # an incomplete parse (BACK-982).
-        analyzer = self._get_tree_analyzer(path_str)
+    def _extract_imports_uncached(self, file_path: Path) -> List[ImportStatement]:
+        """Build imports once; the shared cache owns persistence and diagnostics."""
+        analyzer = self._get_tree_analyzer(file_path)
         if not analyzer:
-            _extract_imports_cache[cache_key] = ([], self.parse_failed)
-            if fingerprint is not None:
-                disk_cache.put(_IMPORTS_CACHE_NAMESPACE, fingerprint, ([], self.parse_failed),
-                                max_entries=_imports_cache_max_files())
             return []
 
         # Read source lines for noqa comment detection
@@ -162,10 +94,6 @@ class PythonExtractor(LanguageExtractor):
         for node in analyzer._find_nodes_by_type('import_from_statement'):
             imports.extend(self._parse_from_import(node, file_path, analyzer, source_lines))
 
-        _extract_imports_cache[cache_key] = (imports, self.parse_failed)
-        if fingerprint is not None:
-            disk_cache.put(_IMPORTS_CACHE_NAMESPACE, fingerprint, (imports, self.parse_failed),
-                            max_entries=_imports_cache_max_files())
         return imports
 
     def _is_inside_type_checking(self, node, analyzer=None) -> bool:
