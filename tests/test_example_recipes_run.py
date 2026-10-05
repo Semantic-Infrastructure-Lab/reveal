@@ -438,3 +438,52 @@ def test_multiline_documentation_collector():
     assert commands[0][1][-1] == '[.results[] |\n {name}]'
     with pytest.raises(AssertionError, match='Unterminated'):
         list(_shell_reveal_commands("reveal 'ast://unterminated"))
+
+
+# A next-step block header; the commands follow on the next lines (BACK-1611 item 8).
+_HINT_HEADER = re.compile(r'\s*(Next [Ss]teps|Next Commands|Next:|💡 Try:)')
+_HINT_COMMAND = re.compile(r'^(?:Next:|💡 Try:)?\s*(reveal\s+\S.*?)(?:\s{2,}#.*)?$')
+
+
+def _hint_commands(text):
+    """`reveal ...` commands printed under next-step headers, comments and templates dropped."""
+    lines = text.splitlines()
+    found = []
+    for i, line in enumerate(lines):
+        if _HINT_HEADER.match(line):
+            for candidate in lines[i:i + 6]:
+                match = _HINT_COMMAND.match(candidate.strip())
+                if match and '<' not in match.group(1):  # <table> and friends are templates
+                    found.append(match.group(1))
+    return list(dict.fromkeys(found))
+
+
+def test_hint_extraction_keeps_commands_and_drops_templates_and_comments():
+    text = ("Next steps\n  reveal check proj                  # Run quality rules\n"
+            "  reveal 'imports://proj?circular'\n  reveal sqlite://x/<table>\nNext: reveal stats://p  # c\n")
+    assert _hint_commands(text) == ["reveal check proj", "reveal 'imports://proj?circular'",
+                                    'reveal stats://p']
+
+
+def test_next_step_hints_in_recipe_output_run(harness):
+    """The commands reveal itself suggests after a recipe's output run: no error line, no
+    no-effect note, no crash. Exit 1 is a findings exit (check, deps, hotspots)."""
+    hints = {}
+    for param in _recipes() + _schema_examples():
+        if param.marks:
+            continue
+        query = param.values[0].get('query') or _schema_query(param.values[0]['uri'])
+        argv = _argv(query)
+        _, out, _, _ = harness.run_subcommand(argv[0], *argv[1:])
+        for command in _hint_commands(out):
+            hints.setdefault(command, query)
+    assert len(hints) >= 8, f'the inventory went vacuous: {sorted(hints)}'
+    failures = []
+    for command, source in sorted(hints.items()):
+        argv = shlex.split(command)[1:]
+        code, _, err, _ = harness.run_subcommand(argv[0], *argv[1:])
+        problems = [line for line in err.splitlines()
+                    if PROBLEM_LINE.search(line) and not any(n in line for n in ENVIRONMENT_NOISE)]
+        if code not in (0, 1) or problems:
+            failures.append(f'{command} (hinted after {source}): exit {code} {problems[:1]}')
+    assert not failures, failures
