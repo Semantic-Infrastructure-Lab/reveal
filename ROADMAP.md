@@ -355,7 +355,7 @@ a check that counts violations and lets the count only fall. Then the cause is r
    says when its parse was recovered (CHANGELOG `[0.130.0]`). Since 2026-10-01 element
    results and the directory view carry the envelope too (the router wraps each element
    result), and a partial parse is one `partial_parse` meta warning in the result, not a
-   stderr line per file (CHANGELOG `[0.130.0]`). Since 2026-10-02 the `silent-except` ratchet is at 0: each handler it counted now catches what its input can raise or reports what it skipped (CHANGELOG `[0.130.0]`). Since 2026-10-02 a `?sort=` field no result has is recorded and printed at the same seam on every sorting adapter, not only ast:// (`unknown_sort_field`, CHANGELOG `[0.130.0]`). Still open: B006 counts 39 broad handlers whose fallback is computed (`return frozenset()`, `count = 0`), a shape that rule does not see (BACK-1638).
+   stderr line per file (CHANGELOG `[0.130.0]`). Since 2026-10-02 the `silent-except` ratchet is at 0: each handler it counted now catches what its input can raise or reports what it skipped (CHANGELOG `[0.130.0]`). Since 2026-10-02 a `?sort=` field no result has is recorded and printed at the same seam on every sorting adapter, not only ast:// (`unknown_sort_field`, CHANGELOG `[0.130.0]`). Since 2026-10-05 B006 and the boundary gate share one silent-handler policy; computed fallbacks are covered and both gates are at zero.
 4. **One seam per concern:** BACK-1054 (import resolution). The parser seam landed
    2026-09-30: every tree-sitter parser comes from `reveal/core/treesitter_parse.py`, a missing
    grammar raises `GrammarUnavailable` instead of reading as an empty result, and the

@@ -9,6 +9,7 @@ from cli/commands/pack.py, so the MCP tool is untouched by this refactor.
 """
 
 import io
+import logging
 import subprocess
 import sys
 from pathlib import Path
@@ -24,6 +25,8 @@ from ..utils.path_utils import DISPLAY, _walk_code_files, classify_path_provenan
 from ..utils.query import parse_query_params
 from ..utils.query_parser import split_exclude_param
 from ..utils.results import ResultBuilder
+
+logger = logging.getLogger(__name__)
 
 # Entry point filename patterns (highest priority) live per language in
 # conventions.LanguageConventions.entry_point_files (BACK-1287).
@@ -129,7 +132,7 @@ def _build_pack_import_graph(path: Path) -> Tuple[Optional[Any], Set[Path]]:
         from reveal.adapters.imports import ImportsAdapter  # noqa: I006
         adapter = ImportsAdapter(resource=str(path))
         adapter._build_graph(adapter._target_path)
-        return adapter._graph, adapter._scanned_files
+        return adapter.analysis.graph, adapter.analysis.scanned_files
     except Exception:
         # Documented fallback: fan-in/relevance are additive scoring signals,
         # not required for a pack to succeed — callers treat a missing graph as 0.
@@ -278,7 +281,8 @@ def _tiered_content(file_info: Dict[str, Any]) -> Tuple[str, str, Optional[str]]
     if file_info.get('priority', _STRUCTURE_THRESHOLD) >= _STRUCTURE_THRESHOLD:
         try:
             return 'structure', _get_file_structure(path), None
-        except (OSError, ValueError) as e:
+        except Exception as e:
+            logger.warning('Structure analysis failed for %s: %s', path, e)
             return 'structure', '', f'structure analysis failed: {type(e).__name__}: {e}'
     return 'name_only', '', None
 

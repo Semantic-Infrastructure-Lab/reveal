@@ -63,7 +63,7 @@ def test_second_build_served_from_disk(tmp_path, monkeypatch):
     _write_tree(tmp_path)
     adapter = ImportsAdapter(resource=str(tmp_path))
     adapter._build_graph(adapter._target_path)
-    fresh_fan_in = {f.name: len(deps) for f, deps in adapter._graph.reverse_deps.items()}
+    fresh_fan_in = {f.name: len(deps) for f, deps in adapter.analysis.graph.reverse_deps.items()}
 
     adapter2 = ImportsAdapter(resource=str(tmp_path))
 
@@ -73,7 +73,7 @@ def test_second_build_served_from_disk(tmp_path, monkeypatch):
     monkeypatch.setattr(adapter2, "_process_extracted_files", _boom)
     adapter2._build_graph(adapter2._target_path)
 
-    cached_fan_in = {f.name: len(deps) for f, deps in adapter2._graph.reverse_deps.items()}
+    cached_fan_in = {f.name: len(deps) for f, deps in adapter2.analysis.graph.reverse_deps.items()}
     assert cached_fan_in == fresh_fan_in
 
 
@@ -81,16 +81,16 @@ def test_cache_hit_restores_all_needed_state(tmp_path):
     _write_tree(tmp_path)
     adapter = ImportsAdapter(resource=str(tmp_path))
     adapter._build_graph(adapter._target_path)
-    scanned_before = {f.name for f in adapter._scanned_files}
-    unsupported_before = dict(adapter._unsupported_extensions)
-    symbols_before = {f.name for f in adapter._symbols_by_file}
+    scanned_before = {f.name for f in adapter.analysis.scanned_files}
+    unsupported_before = dict(adapter.analysis.unsupported_extensions)
+    symbols_before = {f.name for f in adapter.analysis.symbols_by_file}
 
     adapter2 = ImportsAdapter(resource=str(tmp_path))
     adapter2._build_graph(adapter2._target_path)
-    assert {f.name for f in adapter2._scanned_files} == scanned_before
-    assert dict(adapter2._unsupported_extensions) == unsupported_before
+    assert {f.name for f in adapter2.analysis.scanned_files} == scanned_before
+    assert dict(adapter2.analysis.unsupported_extensions) == unsupported_before
     # get_metadata() / unused-import detection depend on _symbols_by_file.
-    assert {f.name for f in adapter2._symbols_by_file} == symbols_before
+    assert {f.name for f in adapter2.analysis.symbols_by_file} == symbols_before
 
 
 def test_cache_hit_restores_files_failed(tmp_path):
@@ -102,27 +102,27 @@ def test_cache_hit_restores_files_failed(tmp_path):
     (tmp_path / "broken.py").write_text("def f(\n    x = ( ( (\n")
     adapter = ImportsAdapter(resource=str(tmp_path))
     adapter._build_graph(adapter._target_path)
-    assert adapter._files_failed, "fixture should trip a parse failure"
-    failed_before = {f.name for f in adapter._files_failed}
+    assert adapter.analysis.files_failed, "fixture should trip a parse failure"
+    failed_before = {f.name for f in adapter.analysis.files_failed}
 
     adapter2 = ImportsAdapter(resource=str(tmp_path))
     adapter2._build_graph(adapter2._target_path)
-    assert {f.name for f in adapter2._files_failed} == failed_before
+    assert {f.name for f in adapter2.analysis.files_failed} == failed_before
 
 
 def test_adding_a_file_invalidates_cache(tmp_path):
     _write_tree(tmp_path)
     adapter = ImportsAdapter(resource=str(tmp_path))
     adapter._build_graph(adapter._target_path)
-    a_path = next(f for f in adapter._graph.reverse_deps if f.name == "a.py")
-    assert len(adapter._graph.reverse_deps[a_path]) == 1
+    a_path = next(f for f in adapter.analysis.graph.reverse_deps if f.name == "a.py")
+    assert len(adapter.analysis.graph.reverse_deps[a_path]) == 1
 
     (tmp_path / "c.py").write_text("import a\n")
 
     adapter2 = ImportsAdapter(resource=str(tmp_path))
     adapter2._build_graph(adapter2._target_path)
-    a_path2 = next(f for f in adapter2._graph.reverse_deps if f.name == "a.py")
-    assert len(adapter2._graph.reverse_deps[a_path2]) == 2
+    a_path2 = next(f for f in adapter2.analysis.graph.reverse_deps if f.name == "a.py")
+    assert len(adapter2.analysis.graph.reverse_deps[a_path2]) == 2
 
 
 def test_editing_a_file_invalidates_cache(tmp_path):
@@ -138,7 +138,7 @@ def test_editing_a_file_invalidates_cache(tmp_path):
     adapter2._build_graph(adapter2._target_path)
     # a.py now has zero incoming edges — it won't appear as a reverse_deps key
     # at all (add_dependency only ever adds keys with >=1 edge).
-    assert not any(f.name == "a.py" for f in adapter2._graph.reverse_deps)
+    assert not any(f.name == "a.py" for f in adapter2.analysis.graph.reverse_deps)
 
 
 def test_collect_structures_bypasses_cache(tmp_path):
@@ -171,3 +171,32 @@ def test_kill_switch_writes_nothing(tmp_path, monkeypatch):
     adapter = ImportsAdapter(resource=str(tmp_path))
     adapter._build_graph(adapter._target_path)
     assert _cache_entry_for(tmp_path) is None
+
+
+def test_complete_artifact_preserves_nested_diagnostics(tmp_path, monkeypatch):
+    from reveal.adapters import imports as mod
+    original = mod.get_extractor
+
+    def diagnostic_extractor(path):
+        extractor = original(path)
+        if extractor is not None:
+            extract = extractor.extract_symbols
+
+            def symbols(fp):
+                value = extract(fp)
+                extractor.analysis.diagnostics['future_detail'] = {'warnings': ['negative control']}
+                return value
+
+            extractor.extract_symbols = symbols
+        return extractor
+
+    _write_tree(tmp_path)
+    monkeypatch.setattr(mod, 'get_extractor', diagnostic_extractor)
+    cold = ImportsAdapter(resource=str(tmp_path))
+    cold._build_graph(cold._target_path)
+    expected = cold.get_metadata()['extraction_diagnostics']
+    assert expected and all(d['future_detail']['warnings'] for d in expected.values())
+    monkeypatch.setattr(mod, 'get_extractor', lambda path: pytest.fail('warm build extracted again'))
+    warm = ImportsAdapter(resource=str(tmp_path))
+    warm._build_graph(warm._target_path)
+    assert warm.get_metadata()['extraction_diagnostics'] == expected

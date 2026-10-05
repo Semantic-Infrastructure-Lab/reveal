@@ -250,11 +250,16 @@ def get_scan_disclosures() -> List[str]:
     scan present its empty cycle list as a clean "no circular dependencies
     found" -- the exact silent-skip symptom that motivated this ticket.
     """
-    return [
-        graph.scan_skipped_reason
-        for graph in _graph_cache.values()
-        if graph.scan_skipped_reason
-    ]
+    disclosures = []
+    for directory, graph in _graph_cache.items():
+        if graph.scan_skipped_reason:
+            disclosures.append(graph.scan_skipped_reason)
+        if graph.failed_files:
+            disclosures.append(
+                f"I002: {len(graph.failed_files)} file(s) under {directory} parsed with errors; "
+                "circular-dependency results may be incomplete"
+            )
+    return disclosures
 
 
 # Initialize file patterns from all registered extractors at module load time
@@ -376,17 +381,6 @@ class I002(BaseRule):
         graph.failed_files = failed_files
         graph.scan_skipped_reason = skipped_reason
         self._resolve_graph_dependencies(graph)
-
-        if failed_files:
-            logger.warning(
-                "I002: %d file(s) under %s failed to parse and are excluded "
-                "from the import graph -- circular-dependency results may be "
-                "incomplete (a cycle running through one of them would be "
-                "invisible): %s",
-                len(failed_files), directory,
-                ", ".join(str(f) for f in failed_files[:10])
-                + (f", ... and {len(failed_files) - 10} more" if len(failed_files) > 10 else ""),
-            )
 
         _graph_cache[directory] = graph
         if fingerprint is not None:

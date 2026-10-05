@@ -71,8 +71,7 @@ class PythonExtractor(LanguageExtractor):
         """
         return _IMPORTS_CACHE.get_or_compute(
             file_path, lambda: self._extract_imports_uncached(file_path),
-            get_parse_failed=lambda: self.parse_failed,
-            restore_parse_failed=lambda value: setattr(self, 'parse_failed', value),
+            owner=self,
         )
 
     def _extract_imports_uncached(self, file_path: Path) -> List[ImportStatement]:

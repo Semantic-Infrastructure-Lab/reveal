@@ -1100,7 +1100,7 @@ class TestBuildProjectNamespaces:
         simply a leaf class that imports nothing) must still show up as a
         fan-in target when another file's `using` names its namespace.
         Previously `_build_namespace_index` was built only from
-        `self._graph.files` (files that themselves emitted >=1 import
+        `self.analysis.graph.files` (files that themselves emitted >=1 import
         statement) — a zero-import file never became a key there, so its own
         `namespace X.Y` declaration was invisible to the fan-out index
         entirely, making it structurally unreachable via namespace `using`
@@ -1175,7 +1175,7 @@ class TestBuildProjectNamespaces:
         adapter = ImportsAdapter(str(tmp_path))
         adapter._build_graph(tmp_path)
 
-        assert len(adapter._scanned_files) == 2
+        assert len(adapter.analysis.scanned_files) == 2
 
     def test_unused_query_param(self, tmp_path):
         """Test ?unused query parameter."""
@@ -1334,7 +1334,7 @@ class TestStdlibShadowing:
         adapter.get_structure()
 
         # Get the internal graph
-        graph = adapter._graph
+        graph = adapter.analysis.graph
         logging_file = tmp_path / "logging.py"
 
         # The dependency graph should NOT have logging.py depending on itself

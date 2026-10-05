@@ -25,6 +25,7 @@ from ..core import disk_cache
 from ..utils.formatting import cwd_path
 from ..utils import print_json_result
 from ..analyzers.imports import ImportGraph, ImportStatement
+from ..analyzers.imports.types import ImportAnalysis
 from ..analyzers.imports.classify import classify_import, local_package_names
 from ..conventions import family_for_path
 from ..analyzers.imports.base import build_project_namespaces
@@ -889,12 +890,12 @@ def _extract_one_file(fp_str: str, want_structure: bool):
 
     Module-level and picklable so it runs unchanged under a
     `ProcessPoolExecutor` (fork *or* spawn). Returns
-    `(fp_str, imports_or_None, symbols_or_None, structure_or_None, failed)`:
+    `(fp_str, imports_or_None, symbols_or_None, structure_or_None, extraction)`:
     `imports`/`symbols` are None when the file has no import extractor (mirrors
     the serial path only populating them for extractable files); `structure`
     is None when not requested or when analysis raised (mirrors the serial
     `collect_structure`'s try/except-to-None). Import extraction errors are NOT
-    swallowed here — the serial path lets them propagate too. `failed` is True
+    swallowed here — the serial path lets them propagate too. `extraction.parse_failed` is True
     when the extractor had one (i.e. the file's language IS supported) but
     tree-sitter could not parse it (`extractor.parse_failed`, BACK-982) — such
     a file's `imports`/`symbols` are an empty/partial result, not a confirmed-
@@ -903,14 +904,14 @@ def _extract_one_file(fp_str: str, want_structure: bool):
     """
     fp = Path(fp_str)
     imports = symbols = structure = None
-    failed = False
+    extraction = None
     extractor = get_extractor(fp)
     if extractor is not None:
         imports = extractor.extract_imports(fp)
         symbols = extractor.extract_symbols(fp)
         if hasattr(extractor, 'extract_exports'):
             symbols = symbols | extractor.extract_exports(fp)
-        failed = extractor.parse_failed
+        extraction = extractor.analysis
     if want_structure:
         try:
             from .ast.analysis import analyze_file
@@ -921,7 +922,7 @@ def _extract_one_file(fp_str: str, want_structure: bool):
             # imports/symbols above, its failure doesn't affect this file's
             # unused-import/cycle results, so it degrades to None quietly.
             structure = None
-    return fp_str, imports, symbols, structure, failed
+    return fp_str, imports, symbols, structure, extraction
 
 
 def _relativize_imports_paths(result: Dict[str, Any], base_path: Path) -> None:
@@ -992,14 +993,7 @@ class ImportsAdapter(ResourceAdapter):
             query: Query string portion (e.g., 'unused', 'circular=true')
         """
         path = resource
-        self._graph: Optional[ImportGraph] = None
-        self._symbols_by_file: Dict[Path, set] = {}
-        self._scanned_files: set = set()
-        self._unsupported_extensions: Dict[str, int] = {}
-        # Files whose language IS supported but tree-sitter could not parse
-        # (BACK-982) -- their imports/symbols are an incomplete result, not a
-        # confirmed-clean one, so they're surfaced separately from scanned_files.
-        self._files_failed: List[Path] = []
+        self.analysis = ImportAnalysis()
         # Populated only when _build_graph is called with collect_structures=True
         # (reveal architecture) — per-file AST structures from the shared walk.
         self._structures: List[Dict[str, Any]] = []
@@ -1062,11 +1056,11 @@ class ImportsAdapter(ResourceAdapter):
         Returns:
             Dictionary with imports for that file
         """
-        if not self._graph:
+        if not self.analysis.graph:
             return None
 
         # Find matching file
-        for file_path, imports in self._graph.files.items():
+        for file_path, imports in self.analysis.graph.files.items():
             if file_path.name == element_name:
                 return {
                     'file': str(file_path),
@@ -1079,16 +1073,16 @@ class ImportsAdapter(ResourceAdapter):
     def partial_parse_warning(self, base: Optional[Path] = None) -> Optional[WarningEntry]:
         """This graph's parse_failure_warning, for the commands that build it
         through _build_graph rather than get_structure (overview, architecture)."""
-        return parse_failure_warning([str(fp) for fp in self._files_failed], base)
+        return parse_failure_warning([str(fp) for fp in self.analysis.files_failed], base)
 
     def get_metadata(self) -> Dict[str, Any]:
         """Get metadata about import analysis."""
-        if not self._graph:
+        if not self.analysis.graph:
             return {'status': 'not_analyzed'}
 
         return {
-            'total_imports': self._graph.get_import_count(),
-            'total_files': self._graph.get_file_count(),
+            'total_imports': self.analysis.graph.get_import_count(),
+            'total_files': self.analysis.graph.get_file_count(),
             # Files actually scanned with a working extractor — distinct from
             # total_files (files that happen to have >=1 import statement).
             # A file with a supported language but zero imports (common in
@@ -1096,21 +1090,25 @@ class ImportsAdapter(ResourceAdapter):
             # during the BACK-431 feature-breadth pass) legitimately has
             # total_files == 0 despite being fully, correctly analyzed; the
             # text renderer needs this count to tell "clean" from "unchecked."
-            'scanned_files': len(self._scanned_files),
-            'has_cycles': len(self._graph.find_cycle_groups()) > 0,
+            'scanned_files': len(self.analysis.scanned_files),
+            'has_cycles': len(self.analysis.graph.find_cycle_groups()) > 0,
             'analyzer': 'imports',
             # Recognized code files whose language has no import extractor yet.
-            'unsupported_extensions': dict(sorted(self._unsupported_extensions.items())),
+            'unsupported_extensions': dict(sorted(self.analysis.unsupported_extensions.items())),
             # BACK-1398: scanned files whose language has an import extractor but
             # no unused-import detection -- their 0 unused is "not checked".
-            'unused_not_checked_extensions': _unused_not_checked(self._scanned_files),
+            'unused_not_checked_extensions': _unused_not_checked(self.analysis.scanned_files),
             # Files with a supported language that tree-sitter could not parse
             # (BACK-982) -- included in scanned_files but their imports/symbols
             # are incomplete, not confirmed-empty; has_cycles can under-report
             # when a cycle runs through one of these. Sorted+capped for stable,
             # bounded JSON/text output; the count alone (below) is exact.
-            'files_failed_count': len(self._files_failed),
-            'files_failed': sorted(str(fp) for fp in self._files_failed)[:50],
+            'extraction_diagnostics': {
+                to_relative_display(fp, self._target_path): artifact.diagnostics
+                for fp, artifact in self.analysis.extractions.items() if artifact.diagnostics
+            },
+            'files_failed_count': len(self.analysis.files_failed),
+            'files_failed': sorted(str(fp) for fp in self.analysis.files_failed)[:50],
             # BACK-1245: None on every corpus except a detected convention-
             # autoloading framework (Rails/Django/Laravel) -- see
             # detect_autoload_regime()/autoload_regime_warning() above.
@@ -1161,7 +1159,7 @@ class ImportsAdapter(ResourceAdapter):
         return imports, symbols
 
     def _extract_files(self, candidates: List[Path], want_structure: bool):
-        """Yield ``(Path, imports_or_None, symbols_or_None, structure_or_None, failed)``
+        """Yield ``(Path, imports_or_None, symbols_or_None, structure_or_None, extraction)``
         per candidate file, in candidate order.
 
         Fans the independent per-file extraction out across processes when the
@@ -1173,8 +1171,8 @@ class ImportsAdapter(ResourceAdapter):
         workers = _parallel_worker_count(len(candidates))
         if workers <= 1:
             for fp in candidates:
-                fp_str, imports, symbols, structure, failed = _extract_one_file(str(fp), want_structure)
-                yield fp, imports, symbols, structure, failed
+                fp_str, imports, symbols, structure, extraction = _extract_one_file(str(fp), want_structure)
+                yield fp, imports, symbols, structure, extraction
             return
 
         from concurrent.futures import ProcessPoolExecutor
@@ -1188,10 +1186,10 @@ class ImportsAdapter(ResourceAdapter):
         with ProcessPoolExecutor(
             max_workers=workers, initializer=worker_bootstrap,
         ) as executor:
-            for fp_str, imports, symbols, structure, failed in executor.map(
+            for fp_str, imports, symbols, structure, extraction in executor.map(
                 _extract_one_file, paths, repeat(want_structure), chunksize=chunksize
             ):
-                yield Path(fp_str), imports, symbols, structure, failed
+                yield Path(fp_str), imports, symbols, structure, extraction
 
     @staticmethod
     def _discover_candidate_files(
@@ -1226,7 +1224,7 @@ class ImportsAdapter(ResourceAdapter):
     ) -> List[ImportStatement]:
         """Run per-file extraction (parallel on large repos, else serial),
         consumed in candidate order so assembly is deterministic. Populates
-        self._symbols_by_file/_scanned_files/_unsupported_extensions/_structures/
+        self.analysis.symbols_by_file/_scanned_files/_unsupported_extensions/_structures/
         _files_failed and returns the collected import statements.
         """
         files: List[Path] = []
@@ -1235,14 +1233,16 @@ class ImportsAdapter(ResourceAdapter):
         unextractable: Dict[str, int] = {}
         failed_files: List[Path] = []
 
-        for fp, imports, symbols, structure, failed in self._extract_files(candidates, collect_structures):
+        for fp, imports, symbols, structure, extraction in self._extract_files(candidates, collect_structures):
             if fp.suffix in supported_exts:
                 files.append(fp)
                 if imports is not None:
-                    self._symbols_by_file[fp] = symbols
+                    self.analysis.symbols_by_file[fp] = symbols
                     all_imports.extend(imports)
-                if failed:
-                    failed_files.append(fp)
+                if extraction is not None:
+                    self.analysis.extractions[fp] = extraction
+                    if extraction.parse_failed:
+                        failed_files.append(fp)
             else:
                 ext = fp.suffix.lower()
                 if ext in code_exts:
@@ -1252,10 +1252,10 @@ class ImportsAdapter(ResourceAdapter):
             if on_file_processed:
                 on_file_processed(fp)
 
-        self._scanned_files = set(files)
-        self._unsupported_extensions = unextractable
+        self.analysis.scanned_files = set(files)
+        self.analysis.unsupported_extensions = unextractable
         self._structures = structures
-        self._files_failed = failed_files
+        self.analysis.files_failed = failed_files
         return all_imports
 
     @staticmethod
@@ -1280,28 +1280,28 @@ class ImportsAdapter(ResourceAdapter):
     def _resolve_dependencies(self, target_path: Path, file_index: Dict[str, List[Path]]) -> None:
         """Resolve each file's imports to dependency edges (language-specific)."""
         # BACK-554: the namespace index (below) must be built from every
-        # scanned file (`self._scanned_files`), not just `self._graph.files`
+        # scanned file (`self.analysis.scanned_files`), not just `self.analysis.graph.files`
         # (files that themselves emitted >=1 import statement). A C# leaf
         # file with zero local `using` directives — the common shape for a
         # file that relies purely on a project-wide C# 10 `global using`, or
         # simply a class that imports nothing — never appears in
-        # `self._graph.files` (ImportGraph.from_imports only registers files
+        # `self.analysis.graph.files` (ImportGraph.from_imports only registers files
         # present in the imports list), so its own `namespace X.Y` was
         # silently invisible to the namespace fan-out that resolves edges
         # *to* it: every C# file with no local usings was structurally
         # unreachable via `using`-of-a-namespace, regardless of how many
         # other files declared `using X.Y;`.
         files_and_extractors = [
-            (fp, get_extractor(fp)) for fp in self._scanned_files
+            (fp, get_extractor(fp)) for fp in self.analysis.scanned_files
         ]
         namespace_index = self._build_namespace_index(files_and_extractors)
 
         for file_path, extractor in files_and_extractors:
             # BACK-554: file_path may be a zero-import file (present now that
-            # files_and_extractors is sourced from self._scanned_files, not
-            # self._graph.files) — nothing to resolve *from*, but it still
+            # files_and_extractors is sourced from self.analysis.scanned_files, not
+            # self.analysis.graph.files) — nothing to resolve *from*, but it still
             # needed to enter the namespace_index above so edges *to* it work.
-            imports = self._graph.files.get(file_path, [])
+            imports = self.analysis.graph.files.get(file_path, [])
             if not extractor:
                 continue
 
@@ -1345,8 +1345,8 @@ class ImportsAdapter(ResourceAdapter):
                 # Skip self-references (e.g., logging.py importing stdlib logging
                 # should not create logging.py → logging.py dependency)
                 if resolved and resolved != file_path:
-                    self._graph.add_dependency(file_path, resolved)
-                    self._graph.resolved_paths[stmt.module_name] = resolved
+                    self.analysis.graph.add_dependency(file_path, resolved)
+                    self.analysis.graph.resolved_paths[stmt.module_name] = resolved
                     # BACK-1193: carry the resolution onto the statement itself
                     # (not just the module-name-keyed graph index) so per-import
                     # consumers like deps:// can classify on resolution truth
@@ -1362,7 +1362,7 @@ class ImportsAdapter(ResourceAdapter):
                 if namespace_index and getattr(getattr(extractor, 'spec', None), 'resolve_namespaces', False):
                     for target in extractor.resolve_namespace_targets(stmt, namespace_index):
                         if target != file_path:
-                            self._graph.add_dependency(file_path, target)
+                            self.analysis.graph.add_dependency(file_path, target)
                             stmt.resolved_path = target  # BACK-1193: any in-tree target proves intra-project
 
     def _build_graph(
@@ -1423,30 +1423,20 @@ class ImportsAdapter(ResourceAdapter):
         fingerprint = _candidate_set_fingerprint(candidates) if cacheable else None
         if fingerprint is not None:
             cached = disk_cache.get(_ADAPTER_IMPORT_GRAPH_NAMESPACE, fingerprint)
-            if isinstance(cached, tuple) and len(cached) == 5:
-                (self._graph, self._symbols_by_file, self._scanned_files,
-                 self._unsupported_extensions, self._files_failed) = cached
+            if isinstance(cached, ImportAnalysis):
+                self.analysis = cached
                 return
 
+        self.analysis = ImportAnalysis()
         all_imports = self._process_extracted_files(
             candidates, collect_structures, on_file_processed, supported_exts, code_exts)
 
-        self._graph = ImportGraph.from_imports(all_imports)
+        self.analysis.graph = ImportGraph.from_imports(all_imports)
         self._resolve_dependencies(target_path, file_index)
 
         if fingerprint is not None:
-            # BACK-1266 follow-up (2026-09-02): self._files_failed must be
-            # part of this cache entry, not just the 4 fields above -- a
-            # cache hit used to leave it at its __init__ default ([]), so
-            # get_metadata()'s files_failed_count silently read 0 on every
-            # warm run for a directory that genuinely has unparseable files.
-            # Same failure mode as the per-file extract_imports() caches
-            # (get_or_compute), one layer up.
-            disk_cache.put(
-                _ADAPTER_IMPORT_GRAPH_NAMESPACE, fingerprint,
-                (self._graph, self._symbols_by_file, self._scanned_files,
-                 self._unsupported_extensions, self._files_failed),
-            )
+            disk_cache.put(_ADAPTER_IMPORT_GRAPH_NAMESPACE, fingerprint, self.analysis)
+
 
     def _build_response(self, response_type: str, **data_fields) -> Dict[str, Any]:
         """Build standardized adapter response with common structure.
@@ -1476,12 +1466,12 @@ class ImportsAdapter(ResourceAdapter):
 
     def _format_all(self) -> Dict[str, Any]:
         """Format all imports (default view)."""
-        if not self._graph:
+        if not self.analysis.graph:
             return {'imports': []}
 
         imports_by_file = {
             str(file_path): [self._format_import(stmt) for stmt in imports]
-            for file_path, imports in self._graph.files.items()
+            for file_path, imports in self.analysis.graph.files.items()
         }
 
         return self._build_response('imports', files=imports_by_file)
@@ -1492,20 +1482,20 @@ class ImportsAdapter(ResourceAdapter):
         High fan-in = core abstractions (base classes, shared utils).
         Zero fan-in = entry points or dead code.
         """
-        if not self._graph:
+        if not self.analysis.graph:
             return self._build_response('fan_in_ranking', entries=[], total=0)
 
         top_param = self._query_params.get('top')
         top = int(top_param) if top_param else None
 
         # Union: all scanned files + files that appear as import targets (may live outside scan root)
-        all_files = self._scanned_files | set(self._graph.files.keys()) | set(self._graph.reverse_deps.keys())
+        all_files = self.analysis.scanned_files | set(self.analysis.graph.files.keys()) | set(self.analysis.graph.reverse_deps.keys())
         entries = sorted(
             [
                 {
                     'file': str(f),
-                    'fan_in': len(self._graph.reverse_deps.get(f, set())),
-                    'fan_out': len(self._graph.dependencies.get(f, set())),
+                    'fan_in': len(self.analysis.graph.reverse_deps.get(f, set())),
+                    'fan_out': len(self.analysis.graph.dependencies.get(f, set())),
                 }
                 for f in all_files
             ],
@@ -1538,7 +1528,7 @@ class ImportsAdapter(ResourceAdapter):
         3 of the 4 reported were test files. A test importing a module is
         evidence that module is *testable*, not that something calls it.
         """
-        if not self._graph:
+        if not self.analysis.graph:
             return self._build_response('entrypoints', entries=[], total_scanned=0)
 
         from ..utils.path_utils import is_test_path
@@ -1548,23 +1538,23 @@ class ImportsAdapter(ResourceAdapter):
 
         def _non_test_fan_in(f) -> int:
             return sum(
-                1 for importer in self._graph.reverse_deps.get(f, set())
+                1 for importer in self.analysis.graph.reverse_deps.get(f, set())
                 if not _is_test_file(importer)
             )
 
-        all_files = self._scanned_files | set(self._graph.files.keys()) | set(self._graph.reverse_deps.keys())
+        all_files = self.analysis.scanned_files | set(self.analysis.graph.files.keys()) | set(self.analysis.graph.reverse_deps.keys())
         candidates = [f for f in all_files if _non_test_fan_in(f) == 0]
         entries = sorted(
             [
                 {
                     'file': str(f),
-                    'fan_out': len(self._graph.dependencies.get(f, set())),
+                    'fan_out': len(self.analysis.graph.dependencies.get(f, set())),
                     # Kept visible rather than filtered out: a test file with
                     # no importers genuinely has fan-in 0, and dropping it
                     # silently would trade one wrong answer for another.
                     'is_test': _is_test_file(f),
                     'test_only_importers': len(
-                        self._graph.reverse_deps.get(f, set())
+                        self.analysis.graph.reverse_deps.get(f, set())
                     ),
                 }
                 for f in candidates
@@ -1606,12 +1596,12 @@ class ImportsAdapter(ResourceAdapter):
         """
         from collections import defaultdict
 
-        if not self._graph:
+        if not self.analysis.graph:
             return self._build_response('components', components=[], total=0)
 
         # Group scanned files by immediate parent — only analyze files within the scan root
         dir_files: dict = defaultdict(set)
-        for f in self._scanned_files:
+        for f in self.analysis.scanned_files:
             dir_files[f.parent].add(f)
 
         components = []
@@ -1633,13 +1623,13 @@ class ImportsAdapter(ResourceAdapter):
             bridge_counts: dict = defaultdict(int)
 
             for f in file_set:
-                for dep in self._graph.dependencies.get(f, set()):
+                for dep in self.analysis.graph.dependencies.get(f, set()):
                     if dep.resolve() in resolved_file_set:
                         internal += 1
                     else:
                         outgoing += 1
                         bridge_counts[f] += 1
-                for src in self._graph.reverse_deps.get(f, set()):
+                for src in self.analysis.graph.reverse_deps.get(f, set()):
                     if src.resolve() not in resolved_file_set:
                         incoming += 1
 
@@ -1673,10 +1663,10 @@ class ImportsAdapter(ResourceAdapter):
 
     def _format_unused(self) -> Dict[str, Any]:
         """Format unused imports."""
-        if not self._graph:
+        if not self.analysis.graph:
             return {'unused': []}
 
-        unused = self._graph.find_unused_imports(self._symbols_by_file)
+        unused = self.analysis.graph.find_unused_imports(self.analysis.symbols_by_file)
 
         # `unused_names` narrows a partly-used `from x import a, b` to the names
         # actually unused (BACK-1066); `count` is statements, like `unused`.
@@ -1688,12 +1678,12 @@ class ImportsAdapter(ResourceAdapter):
 
     def _format_circular(self) -> Dict[str, Any]:
         """Format circular dependency groups (one entry per SCC, not per simple path)."""
-        if not self._graph:
+        if not self.analysis.graph:
             return {'cycles': []}
 
-        groups = self._graph.find_cycle_groups()
+        groups = self.analysis.graph.find_cycle_groups()
         cycle_paths = [
-            [str(p) for p in self._graph.find_cycle_path(group)]
+            [str(p) for p in self.analysis.graph.find_cycle_path(group)]
             for group in groups
         ]
 
@@ -1719,7 +1709,7 @@ class ImportsAdapter(ResourceAdapter):
         project_root = self._target_path if self._target_path.is_dir() else self._target_path.parent
         violations = []
 
-        for from_file, to_files in self._graph.dependencies.items():
+        for from_file, to_files in self.analysis.graph.dependencies.items():
             for to_file in to_files:
                 result = layer_config.check_import(from_file, to_file, project_root)
                 if result is not None:
@@ -1749,7 +1739,7 @@ class ImportsAdapter(ResourceAdapter):
         each file's ``is_intra_project_import`` for languages that need it
         (C#/Java/Kotlin/PHP); ignored by extractors that don't."""
         if self._project_namespaces_cache is None:
-            self._project_namespaces_cache = build_project_namespaces(list(self._scanned_files))
+            self._project_namespaces_cache = build_project_namespaces(list(self.analysis.scanned_files))
         return self._project_namespaces_cache
 
     def _format_import(self, stmt: ImportStatement) -> Dict[str, Any]:

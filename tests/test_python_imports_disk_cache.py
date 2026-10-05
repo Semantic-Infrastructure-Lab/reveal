@@ -83,7 +83,7 @@ def test_disk_result_equals_fresh_scan(tmp_path):
     assert from_disk is not None
     # BACK-1266 follow-up (2026-09-02): stored value is (imports,
     # parse_failed), not bare imports -- see extract_imports().
-    imports_from_disk, parse_failed_from_disk = from_disk
+    imports_from_disk, parse_failed_from_disk = from_disk.imports, from_disk.parse_failed
     assert imports_from_disk == scanned
     assert parse_failed_from_disk is False
 

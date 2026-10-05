@@ -10,6 +10,7 @@ New languages can be added by creating a class that inherits from
 LanguageExtractor and decorating it with @register_extractor.
 """
 
+from copy import deepcopy
 import hashlib
 import logging
 import os
@@ -17,7 +18,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Callable, List, Set, ClassVar, Optional, Tuple, Type, Dict
 
-from .types import ImportStatement, restamp_file_path
+from .types import ImportExtraction, ImportStatement, restamp_file_path
 from ...core import disk_cache
 from ...registry import get_analyzer
 from ...utils.path_utils import search_parents_within_ceiling
@@ -51,9 +52,8 @@ class ImportsDiskCache:
         self.namespace = namespace
         self._env_var = env_var
         self._default_max_files = default_max_files
-        # BACK-1266 follow-up (2026-09-02): cached value is (imports,
-        # parse_failed), not just imports -- see get_or_compute.
-        self._mem_cache: Dict[Tuple[str, int], Tuple[List[ImportStatement], bool]] = {}
+        # Persist the complete artifact, including future diagnostic fields.
+        self._mem_cache: Dict[Tuple[str, int, int], ImportExtraction] = {}
 
     def max_files(self) -> int:
         """Read the entry cap, honoring this cache's env var override."""
@@ -81,63 +81,39 @@ class ImportsDiskCache:
         return hasher.hexdigest()
 
     def get_or_compute(
-        self,
-        file_path: Path,
-        compute: Callable[[], List[ImportStatement]],
-        get_parse_failed: Optional[Callable[[], bool]] = None,
-        restore_parse_failed: Optional[Callable[[bool], None]] = None,
+        self, file_path: Path, compute: Callable[[], List[ImportStatement]],
+        *, owner: 'LanguageExtractor',
     ) -> List[ImportStatement]:
-        """Return cached imports for *file_path*, computing (and caching) on a miss.
+        """Cache the complete analysis artifact; callers receive an isolated copy.
 
-        BACK-1266 follow-up (2026-09-02): a file that fails to parse sets the
-        calling extractor's ``parse_failed`` flag as a side effect of
-        *compute* (BACK-982) -- I001/I002/the imports:// adapter all read it
-        immediately after extract_imports() to tell "confirmed empty" apart
-        from "analysis could not run", specifically so a partial/error-
-        recovered parse never reads as a clean result an unused-import rule
-        could act on. That side effect only fires when *compute* actually
-        runs -- on a cache hit (mem or disk) it never does, so on any warm
-        run every file that ever failed to parse silently reported as clean
-        again, the exact failure mode ``parse_failed`` exists to prevent.
-        *get_parse_failed*/*restore_parse_failed* close the loop: the flag is
-        captured alongside the cached imports on a miss, and restored on a
-        hit. Both optional and independent -- a caller that doesn't pass them
-        gets the pre-fix behavior (imports-only caching), same as before this
-        parameter existed; an entry cached before this fix (no stored flag)
-        restores False, i.e. "assume clean" until that entry is next
-        invalidated, not "reject the whole cache".
+        Legacy tuple entries are misses, never assumed to have clean diagnostics.
+        Input freshness belongs in the key; request path spelling is applied on read.
         """
         path_str = os.path.abspath(str(file_path))
         try:
-            mtime_ns = os.stat(path_str).st_mtime_ns
+            stat = os.stat(path_str)
         except OSError:
-            mtime_ns = 0
-        cache_key = (path_str, mtime_ns)
-        if cache_key in self._mem_cache:
-            imports, parse_failed = self._mem_cache[cache_key]
-            if restore_parse_failed is not None:
-                restore_parse_failed(parse_failed)
-            return restamp_file_path(imports, file_path)
-
-        fingerprint = self.fingerprint(path_str, mtime_ns)
+            owner.analysis = ImportExtraction()
+            owner.analysis.imports = compute()
+            return owner.analysis.imports
+        cache_key = (path_str, stat.st_mtime_ns, stat.st_size)
+        fingerprint = self.fingerprint(path_str, stat.st_mtime_ns)
+        cached = self._mem_cache.get(cache_key)
+        if cached is None and fingerprint is not None:
+            candidate = disk_cache.get(self.namespace, fingerprint)
+            if isinstance(candidate, ImportExtraction):
+                cached = candidate
+                self._mem_cache[cache_key] = candidate
+        if cached is not None:
+            owner.analysis = deepcopy(cached)
+            owner.analysis.imports = restamp_file_path(owner.analysis.imports, file_path)
+            return owner.analysis.imports
+        owner.analysis = ImportExtraction()
+        owner.analysis.imports = compute()
+        self._mem_cache[cache_key] = deepcopy(owner.analysis)
         if fingerprint is not None:
-            cached = disk_cache.get(self.namespace, fingerprint)
-            if isinstance(cached, tuple) and len(cached) == 2:
-                imports, parse_failed = cached
-                self._mem_cache[cache_key] = (imports, parse_failed)
-                if restore_parse_failed is not None:
-                    restore_parse_failed(parse_failed)
-                return restamp_file_path(imports, file_path)
-
-        imports = compute()
-        parse_failed = get_parse_failed() if get_parse_failed is not None else False
-        self._mem_cache[cache_key] = (imports, parse_failed)
-        if fingerprint is not None:
-            disk_cache.put(
-                self.namespace, fingerprint, (imports, parse_failed),
-                max_entries=self.max_files(),
-            )
-        return imports
+            disk_cache.put(self.namespace, fingerprint, owner.analysis, max_entries=self.max_files())
+        return owner.analysis.imports
 
     def clear(self) -> None:
         """Drop the in-process layer (tests only; disk entries are untouched)."""
@@ -308,7 +284,16 @@ class LanguageExtractor(ABC):
         # check this after calling extract_imports()/extract_symbols() to tell
         # "confirmed empty" apart from "analysis could not run", instead of
         # treating both as a clean/empty result (BACK-982).
-        self.parse_failed: bool = False
+        self.analysis = ImportExtraction()
+
+    @property
+    def parse_failed(self) -> bool:
+        """Compatibility view of the diagnostic carried by the complete artifact."""
+        return self.analysis.parse_failed
+
+    @parse_failed.setter
+    def parse_failed(self, value: bool) -> None:
+        self.analysis.parse_failed = value
 
     def _get_tree_analyzer(self, file_path):
         """Get a tree-sitter analyzer instance for *file_path*, or None.
@@ -332,7 +317,8 @@ class LanguageExtractor(ABC):
             analyzer = analyzer_class(path_str)
             if not analyzer.tree:
                 self.parse_failed = True
-                logger.warning(
+                self.analysis.diagnostics['parse'] = {'status': 'unavailable', 'reason': 'tree-sitter returned no tree'}
+                logger.debug(
                     "Parse failed for %s -- tree-sitter returned no tree; "
                     "imports/symbols for this file are incomplete, not confirmed empty",
                     path_str,
@@ -356,6 +342,7 @@ class LanguageExtractor(ABC):
             # imports tree-sitter did recover.
             if hasattr(analyzer, 'has_parse_errors') and analyzer.has_parse_errors():
                 self.parse_failed = True
+                self.analysis.diagnostics['parse'] = {'status': 'partial', 'reason': 'tree-sitter recovered with ERROR nodes'}
                 # BACK-1598: debug, not warning. parse_failed is the disclosure;
                 # each command that builds a graph states the failed set once
                 # (adapters/imports.parse_failure_warning, deps, I002). A warning
@@ -371,7 +358,8 @@ class LanguageExtractor(ABC):
             return analyzer
         except Exception as e:
             self.parse_failed = True
-            logger.warning(
+            self.analysis.diagnostics['parse'] = {'status': 'unavailable', 'reason': str(e)}
+            logger.debug(
                 "Parse failed for %s: %s -- imports/symbols for this file "
                 "are incomplete, not confirmed empty",
                 path_str, e,

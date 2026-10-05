@@ -303,6 +303,12 @@ something that is not the user's target (reveal's own docs, a cache) takes
 `rules/validation/utils.find_reveal_root`. Each of M102, B005 and three V-rules once climbed
 on its own, and they disagreed (BACK-1372).
 
+**Cached analysis:** store the complete analysis artifact, including diagnostic state,
+before request-specific formatting. Import extraction uses `ImportExtraction`; graph builds
+use `ImportAnalysis`. Do not cache a selected tuple of fields or report failures only during
+a cold build. Compare cold, memory-hit and disk-hit diagnostics, and keep cached mutable
+state isolated from callers. Old incomplete cache shapes must be treated as misses.
+
 **Flags and query keys (use them, or let the ledger say so):** a URI adapter is told about
 every flag and query key the user sets that its run never used
 (`reveal/cli/routing/ledger.py`). An adapter needs no declaration for this. Two rules keep

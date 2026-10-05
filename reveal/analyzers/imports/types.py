@@ -6,7 +6,7 @@ Extracted to a separate module to avoid circular imports.
 
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 from collections import defaultdict, deque
 
 from .unused import unused_entries
@@ -39,6 +39,26 @@ class ImportStatement:
                                # this statement. None means "did not resolve" — may
                                # still be a real external/stdlib package, never a
                                # positive local-file claim (BACK-1193).
+
+
+@dataclass
+class ImportExtraction:
+    """Complete per-file analysis artifact, persisted without selecting diagnostic fields."""
+    imports: List[ImportStatement] = field(default_factory=list)
+    parse_failed: bool = False
+    diagnostics: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ImportAnalysis:
+    """Complete graph build artifact, before request-specific presentation."""
+    graph: Optional['ImportGraph'] = None
+    symbols_by_file: Dict[Path, Set[str]] = field(default_factory=dict)
+    scanned_files: Set[Path] = field(default_factory=set)
+    unsupported_extensions: Dict[str, int] = field(default_factory=dict)
+    files_failed: List[Path] = field(default_factory=list)
+    diagnostics: Dict[str, Any] = field(default_factory=dict)
+    extractions: Dict[Path, ImportExtraction] = field(default_factory=dict)
 
 
 def restamp_file_path(imports: List['ImportStatement'], file_path: Path) -> List['ImportStatement']:
@@ -280,4 +300,4 @@ class ImportGraph:
         return len(self.files)
 
 
-__all__ = ['ImportStatement', 'ImportGraph']
+__all__ = ['ImportStatement', 'ImportExtraction', 'ImportAnalysis', 'ImportGraph']
