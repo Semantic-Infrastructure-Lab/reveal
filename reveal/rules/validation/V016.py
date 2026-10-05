@@ -191,7 +191,7 @@ class V016(BaseRule):
 
         adapters_dir = reveal_root / 'adapters'
         if not adapters_dir.exists():
-            return []
+            return self.unavailable("required source or documentation missing", adapters_dir.as_posix())
 
         detections: List[Detection] = []
 

@@ -43,7 +43,7 @@ class V025(BaseRule):
 
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return []
+            return self.unavailable("reveal source root unavailable")
 
         schemes = self._get_public_schemes()
         if not schemes:

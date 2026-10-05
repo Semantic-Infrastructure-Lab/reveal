@@ -43,12 +43,12 @@ class V006(BaseRule):
         # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return detections
+            return self.unavailable("reveal source root unavailable")
 
         # Get all analyzer files
         analyzers_dir = reveal_root / 'analyzers'
         if not analyzers_dir.exists():
-            return detections
+            return self.unavailable("required source or documentation missing", analyzers_dir.as_posix())
 
         for analyzer_file in analyzers_dir.glob('*.py'):
             # Skip special files

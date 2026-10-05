@@ -71,12 +71,12 @@ class V014(BaseRule):
 
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return detections
+            return self.unavailable("reveal source root unavailable")
         project_root = reveal_root.parent
 
         agent_help_path = project_root / self._AGENT_HELP_REL_PATH
         if not agent_help_path.exists():
-            return detections
+            return self.unavailable("required source or documentation missing", agent_help_path.as_posix())
 
         actual = self._estimate_tokens(agent_help_path)
         if actual is None:
@@ -103,6 +103,7 @@ class V014(BaseRule):
             return len(body) // self._CHARS_PER_TOKEN
         except Exception as e:
             logger.warning(f"V014: failed to read/strip {agent_help_path}: {e}")
+            self.unavailable(f"required input unavailable: {type(e).__name__}: {e}")
             return None
 
     def _check_frontmatter(self, agent_help_path: Path, actual: int,
@@ -112,7 +113,7 @@ class V014(BaseRule):
             fm = extract_frontmatter(agent_help_path) or {}
         except Exception as e:
             logger.warning(f"V014: failed to extract frontmatter from {agent_help_path}: {e}")
-            return []
+            return self.unavailable(f"prerequisite failed: {type(e).__name__}: {e}")
         raw = fm.get('help_token_estimate')
         if raw is None:
             return []
@@ -134,7 +135,7 @@ class V014(BaseRule):
             lines = agent_help_path.read_text(encoding='utf-8').split('\n')
         except Exception as e:
             logger.warning(f"V014: failed to read {agent_help_path}: {e}")
-            return []
+            return self.unavailable(f"prerequisite failed: {type(e).__name__}: {e}")
         for i, line in enumerate(lines, 1):
             match = self._BODY_TOKEN_COST_PATTERN.search(line)
             if not match:
@@ -158,7 +159,7 @@ class V014(BaseRule):
             lines = help_py_path.read_text(encoding='utf-8').split('\n')
         except Exception as e:
             logger.warning(f"V014: failed to read {help_py_path}: {e}")
-            return []
+            return self.unavailable(f"prerequisite failed: {type(e).__name__}: {e}")
         for i, line in enumerate(lines, 1):
             stripped = line.strip()
             if stripped.startswith('#'):

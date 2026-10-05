@@ -54,7 +54,7 @@ class V013(BaseRule):
 
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return detections
+            return self.unavailable("reveal source root unavailable")
         project_root = reveal_root.parent
 
         actual_count = self._count_production_adapters()

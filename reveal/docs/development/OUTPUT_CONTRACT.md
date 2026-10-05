@@ -509,11 +509,15 @@ V034 rejects invalid/negative pagination controls and verifies zero/boundaries;
 V035 checks text/JSON diagnostics, truncation disclosure and failure exits using
 a recorded offline stats fixture plus the shared URI outcome seam.
 
-Check results include rule execution coverage (`run`, `skipped`, `failed`, and
-reasons). A rule crash or no applicable checks makes the run incomplete. Findings
-and incomplete runs exit 1; a clean completed run exits 0. Coverage reports rule
-execution, not exhaustive adapter fixture coverage: legacy rules can skip internal
-prerequisites, and V035 is a bounded renderer canary.
+Check results include rule execution coverage (`run`, `skipped`, `unavailable`,
+`failed`, and reasons). Rules retain their detection-list interface and report
+prerequisite outcomes through `BaseRule.unavailable()` or scope exclusions through
+`not_applicable()`. Multi-subject probes record `completed(subject)` and preserve
+subject details under one ledger entry per rule. An unavailable prerequisite, rule
+crash or no applicable checks makes the run incomplete. Findings and incomplete
+runs exit 1; a clean completed run exits 0. Ordinary target/config exclusions are
+skips, not unavailable checks. V035 remains a bounded renderer canary.
+
 
 
 ---

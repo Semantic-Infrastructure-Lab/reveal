@@ -43,11 +43,11 @@ class V011(BaseRule):
         # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return detections
+            return self.unavailable("reveal source root unavailable")
 
         # Release readiness checks only make sense for dev checkouts
         if not is_dev_checkout(reveal_root):
-            return detections
+            return self.not_applicable("requires a development checkout")
 
         project_root = reveal_root.parent
 

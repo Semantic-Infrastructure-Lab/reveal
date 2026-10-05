@@ -90,26 +90,25 @@ class V031(BaseRule):
 
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return []
+            return self.unavailable("reveal source root unavailable")
         project_root = reveal_root.parent
 
         doc_path = project_root / self._VALIDATION_MD_REL_PATH
         if not doc_path.exists():
-            return []
+            return self.unavailable("required source or documentation missing", doc_path.as_posix())
 
         try:
             doc_lines = doc_path.read_text(encoding='utf-8').split('\n')
         except Exception as e:
-            logger.warning(f"V031: failed to read {doc_path}: {e}")
-            return []
+            return self.unavailable(f"V031: failed to read {doc_path}: {e}")
 
         doc_cells_by_language = self._parse_table(doc_lines)
         if not doc_cells_by_language:
-            return []
+            return self.unavailable("validation table contains no measurable rows")
 
         registry_by_language = self._load_registry()
         if registry_by_language is None:
-            return []
+            return self.unavailable("capability registry unavailable")
 
         detections: List[Detection] = []
         for language, signals in registry_by_language.items():
@@ -184,6 +183,7 @@ class V031(BaseRule):
             from reveal.capabilities import get_all_capabilities
         except Exception as e:
             logger.warning(f"V031: failed to import capabilities registry: {e}")
+            self.unavailable(f"required input unavailable: {type(e).__name__}: {e}")
             return None
 
         registry: Dict[str, Dict[str, set]] = {}

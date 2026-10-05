@@ -46,7 +46,7 @@ class V022(BaseRule):
 
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return []
+            return self.unavailable("reveal source root unavailable")
 
         project_root = reveal_root.parent
         detections: List[Detection] = []

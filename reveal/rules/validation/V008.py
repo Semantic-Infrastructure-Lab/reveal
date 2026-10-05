@@ -67,7 +67,7 @@ class V008(BaseRule):
         # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return detections
+            return self.unavailable("reveal source root unavailable")
 
         # Get all analyzer files
         analyzers = self._get_analyzer_files(reveal_root)
@@ -88,7 +88,7 @@ class V008(BaseRule):
         except Exception as e:
             # Don't fail the check if we can't parse the file
             logger.debug("V008.py: skipped after %s: %s", type(e).__name__, e)
-            return []
+            return self.unavailable(f"prerequisite failed: {type(e).__name__}: {e}")
 
     def _find_get_structure_violations(
         self, tree: ast.AST, analyzer_path: Path
@@ -196,6 +196,7 @@ class V008(BaseRule):
         """
         analyzers_dir = reveal_root / 'analyzers'
         if not analyzers_dir.exists():
+            self.unavailable('required source or documentation missing', analyzers_dir.as_posix())
             return []
 
         analyzer_files = []

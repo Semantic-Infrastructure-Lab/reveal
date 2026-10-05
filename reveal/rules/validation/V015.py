@@ -47,13 +47,13 @@ class V015(BaseRule):
         # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return detections
+            return self.unavailable("reveal source root unavailable")
 
         project_root = reveal_root.parent
         readme_file = project_root / 'README.md'
 
         if not readme_file.exists():
-            return detections
+            return self.unavailable("required source or documentation missing", readme_file.as_posix())
 
         # Count actual registered rules
         actual_count = self._count_registered_rules()
@@ -116,6 +116,7 @@ class V015(BaseRule):
             return count
         except Exception as e:
             logger.warning(f"V015: failed to count registered rules: {e}")
+            self.unavailable(f"required input unavailable: {type(e).__name__}: {e}")
             return None
 
     def _extract_rules_count_from_readme(self, readme_file: Path) -> List[Tuple[int, int, bool]]:
@@ -143,4 +144,5 @@ class V015(BaseRule):
             return claims
         except Exception as e:
             logger.warning(f"V015: failed to read {readme_file}: {e}")
+            self.unavailable(f'prerequisite failed: {type(e).__name__}: {e}')
             return []

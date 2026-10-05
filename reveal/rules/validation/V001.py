@@ -49,7 +49,7 @@ class V001(BaseRule):
         # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return []
+            return self.unavailable("reveal source root unavailable")
 
         # Get all analyzers and static help
         analyzers = self._get_analyzers(reveal_root)

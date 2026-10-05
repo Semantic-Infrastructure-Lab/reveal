@@ -300,6 +300,21 @@ class BaseRule(ABC):
 
     def __init__(self) -> None:
         self._config: Optional[Any] = None  # Lazy-loaded per-instance
+        self.outcomes: List[Dict[str, str]] = []
+
+    def unavailable(self, reason: str, subject: str = "") -> List[Detection]:
+        """Record an uninspected prerequisite while preserving detection-list callers."""
+        self.outcomes.append({"status": "unavailable", "reason": reason, "subject": subject})
+        return []
+
+    def not_applicable(self, reason: str, subject: str = "") -> List[Detection]:
+        """Record a deliberate scope exclusion, distinct from unavailable evidence."""
+        self.outcomes.append({"status": "skipped", "reason": reason, "subject": subject})
+        return []
+
+    def completed(self, subject: str) -> None:
+        """Record a completed portion of a rule with multiple evidence subjects."""
+        self.outcomes.append({"status": "run", "reason": "", "subject": subject})
 
     def get_config(self):
         """The config this rule reads its settings from (``get_threshold``).

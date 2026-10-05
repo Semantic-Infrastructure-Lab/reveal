@@ -156,3 +156,88 @@ def test_explicit_metadata_and_scope_are_supported_without_payload_collisions():
     assert result['scope'] == {'files': 3}
     with pytest.raises(ValueError, match='meta cannot be combined'):
         ResultBuilder.create('probe', 'probe', meta={}, confidence=1.0)
+
+
+@pytest.mark.parametrize('code', ['V001', 'V002', 'V003', 'V004', 'V005', 'V006', 'V007',
+    'V008', 'V011', 'V012', 'V013', 'V014', 'V015', 'V017', 'V018', 'V019', 'V020',
+    'V021', 'V022', 'V024', 'V025', 'V027', 'V028', 'V029', 'V030', 'V031', 'V032'])
+def test_missing_root_is_unavailable_not_clean(monkeypatch, code):
+    import importlib
+    module = importlib.import_module('reveal.rules.validation.' + code)
+    monkeypatch.setattr(module, 'find_reveal_root', lambda: None)
+    result = check(select=[code])
+    assert result['coverage']['unavailable'] == 1
+    assert result['coverage']['run'] == 0
+    assert result['exit_code'] == 1
+    assert result['coverage']['rules'][0]['reason']
+
+
+def test_missing_docs_and_mixed_completed_checks(monkeypatch, tmp_path, capsys):
+    import importlib
+    module = importlib.import_module('reveal.rules.validation.V031')
+    monkeypatch.setattr(module, 'find_reveal_root', lambda: tmp_path / 'reveal')
+    result = check(select=['V031', 'V034'])
+    assert result['coverage']['run'] == 1
+    assert result['coverage']['unavailable'] == 1
+    assert result['exit_code'] == 1
+    RevealRenderer.render_check(result)
+    text = capsys.readouterr().out
+    assert 'V031 unavailable' in text
+    assert 'No issues' not in text
+
+
+@pytest.mark.parametrize('format', ['text', 'json'])
+def test_unavailable_root_exits_nonzero_in_cli(monkeypatch, format):
+    import importlib
+    import json
+    from conftest import _run_reveal_direct
+    module = importlib.import_module('reveal.rules.validation.V020')
+    monkeypatch.setattr(module, 'find_reveal_root', lambda: None)
+    result = _run_reveal_direct('reveal://', '--check', '--select', 'V020', '--format', format)
+    assert result.returncode == 1
+    if format == 'json':
+        assert json.loads(result.stdout)['coverage']['unavailable'] == 1
+    else:
+        assert 'V020 unavailable' in result.stdout
+        assert 'No issues' not in result.stdout
+
+
+def test_missing_registry_import_is_unavailable(monkeypatch):
+    import builtins
+    original = builtins.__import__
+    def unavailable(name, *args, **kwargs):
+        if name == 'adapters.base':
+            raise ImportError('recorded missing registry')
+        return original(name, *args, **kwargs)
+    RuleRegistry.discover()
+    monkeypatch.setattr(builtins, '__import__', unavailable)
+    result = check(select=['V020'])
+    assert result['coverage']['unavailable'] == 1
+    assert 'recorded missing registry' in result['coverage']['rules'][0]['reason']
+
+
+def test_partial_subject_coverage_counts_rule_once():
+    result = check(select=['V020'])
+    entry = result['coverage']['rules'][0]
+    assert result['coverage']['run'] == 1
+    assert entry['subjects']
+    assert any(item['status'] == 'run' for item in entry['subjects'])
+
+
+def test_unavailable_release_endpoint_is_incomplete(monkeypatch):
+    from reveal.rules.validation.V032 import V032
+    monkeypatch.setattr(V032, '_latest_pypi_version', lambda self: None)
+    result = check(select=['V032', 'V034'])
+    assert result['coverage']['unavailable'] == 1
+    assert result['exit_code'] == 1
+
+
+def test_unexpected_adapter_initialization_is_not_a_scope_skip():
+    from reveal.rules.validation.V020 import V020
+    class BrokenAdapter:
+        def __init__(self):
+            raise RuntimeError('recorded constructor failure')
+    rule = V020()
+    assert rule._try_instantiate(BrokenAdapter) is None
+    assert rule.outcomes[0]['status'] == 'unavailable'
+    assert 'recorded constructor failure' in rule.outcomes[0]['reason']

@@ -56,17 +56,16 @@ class V028(BaseRule):
         try:
             import yaml
         except Exception as e:
-            logger.warning(f"V028: failed to import yaml: {e}")
-            return []
+            return self.unavailable(f"V028: failed to import yaml: {e}")
 
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return []
+            return self.unavailable("reveal source root unavailable")
         # find_reveal_root() returns the package dir; help_data lives at
         # adapters/help_data directly under it.
         help_data_dir = reveal_root / 'adapters' / 'help_data'
         if not help_data_dir.exists():
-            return []
+            return self.unavailable("required source or documentation missing", help_data_dir.as_posix())
 
         detections: List[Detection] = []
         for yaml_path in sorted(help_data_dir.glob('*.yaml')):

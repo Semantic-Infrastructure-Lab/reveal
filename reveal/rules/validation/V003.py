@@ -82,7 +82,7 @@ class V003(BaseRule):
         # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return detections
+            return self.unavailable("reveal source root unavailable")
 
         # Get all analyzers
         analyzers = self._get_analyzers_with_types(reveal_root)

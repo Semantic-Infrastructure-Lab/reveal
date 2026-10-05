@@ -19,7 +19,7 @@ def check(select: Optional[List[str]] = None, ignore: Optional[List[str]] = None
 
     # V-series rules inspect reveal source directly
     errors: List[Dict[str, str]] = []
-    coverage: List[Dict[str, str]] = []
+    coverage: List[Dict[str, Any]] = []
     detections = RuleRegistry.check_file("reveal://", None, "", select=select, ignore=ignore,
                                          errors=errors, coverage=coverage)
 
@@ -32,17 +32,18 @@ def check(select: Optional[List[str]] = None, ignore: Optional[List[str]] = None
         'detections': detections,  # Keep as Detection objects for render_check
         'total': len(detections),
         'coverage': {
-            'scope': 'Rule execution only; legacy rules may skip internal prerequisites. '
+            'scope': 'Rule execution and reported prerequisite coverage. '
                      'V035 uses a recorded stats fixture, not all adapter renderers.',
             'rules': coverage,
             'run': sum(entry['status'] == 'run' for entry in coverage),
             'skipped': sum(entry['status'] == 'skipped' for entry in coverage),
             'failed': len(errors),
+            'unavailable': sum(entry['status'] == 'unavailable' for entry in coverage),
         },
         'errors': errors
     }
 
-    if errors or not result['coverage']['run']:
-        result['error'] = 'Self-check incomplete: rules failed or no applicable rules ran'
+    if errors or result['coverage']['unavailable'] or not result['coverage']['run']:
+        result['error'] = 'Self-check incomplete: rules failed, prerequisites unavailable or no applicable rules ran'
     result['exit_code'] = 1 if detections or result.get('error') else 0
     return result

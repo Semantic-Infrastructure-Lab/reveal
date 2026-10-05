@@ -101,8 +101,7 @@ class V027(BaseRule):
         try:
             from reveal.adapters.base import _ADAPTER_REGISTRY
         except Exception as e:
-            logger.warning(f"V027: failed to import parser/adapter registry: {e}")
-            return []
+            return self.unavailable(f"V027: failed to import parser/adapter registry: {e}")
 
         # find_reveal_root() returns the reveal *package* dir (the one holding
         # analyzers/ and rules/), so the guides live directly under it at
@@ -112,10 +111,10 @@ class V027(BaseRule):
         # test_live_registry_actually_ran regression test).
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return []
+            return self.unavailable("reveal source root unavailable")
         guides_dir = reveal_root / 'docs' / 'adapters'
         if not guides_dir.exists():
-            return []
+            return self.unavailable("required source or documentation missing", guides_dir.as_posix())
 
         parser = get_parser('markdown')
         detections: List[Detection] = []

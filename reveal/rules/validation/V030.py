@@ -63,18 +63,17 @@ class V030(BaseRule):
 
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return []
+            return self.unavailable("reveal source root unavailable")
         project_root = reveal_root.parent
 
         agent_help_path = project_root / self._AGENT_HELP_REL_PATH
         if not agent_help_path.exists():
-            return []
+            return self.unavailable("required source or documentation missing", agent_help_path.as_posix())
 
         try:
             lines = agent_help_path.read_text(encoding='utf-8').split('\n')
         except Exception as e:
-            logger.warning(f"V030: failed to read {agent_help_path}: {e}")
-            return []
+            return self.unavailable(f"V030: failed to read {agent_help_path}: {e}")
 
         actual_counts = {'languages': self._count_supported_languages()}
 
@@ -111,4 +110,5 @@ class V030(BaseRule):
             return int(match.group(1)) if match else None
         except Exception as e:
             logger.warning(f"V030: failed to count supported languages: {e}")
+            self.unavailable(f"required input unavailable: {type(e).__name__}: {e}")
             return None

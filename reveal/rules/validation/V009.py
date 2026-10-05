@@ -256,8 +256,10 @@ class V009(BaseRule):
                 return resolved
             except ValueError:
                 # Path is outside project root
+                self.unavailable("required input unavailable")
                 return None
 
         except Exception as e:
             logger.debug("V009.py: skipped after %s: %s", type(e).__name__, e)
+            self.unavailable(f"required input unavailable: {type(e).__name__}: {e}")
             return None

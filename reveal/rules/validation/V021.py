@@ -108,6 +108,7 @@ class V021(BaseRule):
             file_content = analyzer_file.read_text(encoding='utf-8')
         except Exception as e:
             logger.debug("V021.py: skipped after %s: %s", type(e).__name__, e)
+            self.unavailable(f"required input unavailable: {type(e).__name__}: {e}")
             return None
         if not self._imports_re_module(file_content):
             return None
@@ -128,11 +129,11 @@ class V021(BaseRule):
 
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return []
+            return self.unavailable("reveal source root unavailable")
 
         analyzers_dir = reveal_root / 'analyzers'
         if not analyzers_dir.exists():
-            return []
+            return self.unavailable("required source or documentation missing", analyzers_dir.as_posix())
 
         detections = []
         # boundary-ok: walker -- V-series: reveal's own source

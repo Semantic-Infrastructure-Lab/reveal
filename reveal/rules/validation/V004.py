@@ -75,12 +75,12 @@ class V004(BaseRule):
         # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return detections
+            return self.unavailable("reveal source root unavailable")
 
         # Test coverage checks only make sense for dev checkouts
         # (installed packages don't have tests/ directory)
         if not is_dev_checkout(reveal_root):
-            return detections
+            return self.not_applicable("requires a development checkout")
 
         # Find project root (parent of reveal/)
         project_root = reveal_root.parent
@@ -100,7 +100,7 @@ class V004(BaseRule):
         # Get all analyzer files
         analyzers_dir = reveal_root / 'analyzers'
         if not analyzers_dir.exists():
-            return detections
+            return self.unavailable("required source or documentation missing", analyzers_dir.as_posix())
 
         for analyzer_file in analyzers_dir.glob('*.py'):
             detection = self._check_analyzer_test_coverage(analyzer_file, tests_dir, reveal_root)

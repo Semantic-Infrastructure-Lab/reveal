@@ -154,7 +154,7 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     # would risk exempting a genuinely silent handler that happens to call a
     # no-op method with an error-sounding name (BACK-992).
     _VISIBLE_HELPER_CALLS = frozenset({
-        'record_composed_error', 'create_error', 'create_error_result',
+        'record_composed_error', 'create_error', 'create_error_result', 'unavailable',
     })
 
     # Dict-key / attribute names that, when assigned to inside an except

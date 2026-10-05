@@ -641,7 +641,7 @@ class RuleRegistry:
                    ignore: Optional[List[str]] = None,
                    profile: Optional[Dict[str, float]] = None,
                    errors: Optional[List[Dict[str, str]]] = None,
-                   coverage: Optional[List[Dict[str, str]]] = None) -> List[Detection]:
+                   coverage: Optional[List[Dict[str, Any]]] = None) -> List[Detection]:
         """
         Run all applicable rules against a file.
 
@@ -709,7 +709,7 @@ class RuleRegistry:
                     if detection.file_path == file_path:
                         detection.file_path = spelled
                 detections.extend(rule_detections)
-                _record_coverage(coverage, rule_class.code, "run", "")
+                _record_rule_outcome(coverage, rule_class.code, rule.outcomes)
                 num_issues = len(rule_detections)
                 logger.debug(
                     f"Rule {rule_class.code} found {num_issues} issues in {file_path}"
@@ -750,7 +750,19 @@ def parse_rule_patterns(value: str) -> List[str]:
     return patterns
 
 
-def _record_coverage(coverage, code, status, reason):
+def _record_coverage(coverage, code, status, reason, subject=""):
     """Optional execution ledger; a completed rule may have narrower internal scope."""
     if coverage is not None:
-        coverage.append({"rule": code, "status": status, "reason": reason})
+        coverage.append({"rule": code, "status": status, "reason": reason, **({"subject": subject} if subject else {})})
+
+
+def _record_rule_outcome(coverage, code, outcomes):
+    """One ledger entry per rule; preserve partial subject coverage underneath it."""
+    if not outcomes:
+        _record_coverage(coverage, code, "run", "")
+        return
+    status = next((state for state in ("unavailable", "run", "skipped")
+                   if any(item["status"] == state for item in outcomes)), "run")
+    reasons = "; ".join(dict.fromkeys(item["reason"] for item in outcomes if item["status"] == status))
+    if coverage is not None:
+        coverage.append({"rule": code, "status": status, "reason": reasons, "subjects": outcomes})

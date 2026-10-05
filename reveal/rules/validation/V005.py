@@ -45,7 +45,7 @@ class V005(BaseRule):
         # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return detections
+            return self.unavailable("reveal source root unavailable")
 
         # Get STATIC_HELP dict from help.py
         static_help = self._get_static_help(reveal_root)

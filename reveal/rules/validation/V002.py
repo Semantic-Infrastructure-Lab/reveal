@@ -45,12 +45,12 @@ class V002(BaseRule):
         # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return detections
+            return self.unavailable("reveal source root unavailable")
 
         # Get all analyzer files
         analyzers_dir = reveal_root / 'analyzers'
         if not analyzers_dir.exists():
-            return detections
+            return self.unavailable("required source or documentation missing", analyzers_dir.as_posix())
 
         for analyzer_file in analyzers_dir.glob('*.py'):
             # Skip special files
@@ -76,6 +76,7 @@ class V002(BaseRule):
         except Exception as e:
             # Skip files we can't read
             logger.debug("V002.py: skipped after %s: %s", type(e).__name__, e)
+            self.unavailable(f"required input unavailable: {type(e).__name__}: {e}")
             return None
 
         # Check if file has @register decorator

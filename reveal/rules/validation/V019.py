@@ -53,14 +53,13 @@ class V019(BaseRule):
         # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return []
+            return self.unavailable("reveal source root unavailable")
 
         # Get all registered adapters
         try:
             from ...adapters.base import list_supported_schemes, get_adapter_class
         except Exception as e:
-            logger.warning(f"V019: failed to import adapter registry: {e}")
-            return []
+            return self.unavailable(f"V019: failed to import adapter registry: {e}")
 
         detections: List[Detection] = []
         schemes = list(sorted(list_supported_schemes()))

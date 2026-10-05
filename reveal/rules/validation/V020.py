@@ -61,7 +61,7 @@ class V020(BaseRule):
         # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return []
+            return self.unavailable("reveal source root unavailable")
 
         # Get all registered adapters and renderers
         try:
@@ -71,17 +71,18 @@ class V020(BaseRule):
                 get_renderer_class
             )
         except Exception as e:
-            logger.warning(f"V020: failed to import adapter/renderer registries: {e}")
-            return []
+            return self.unavailable(f"V020: failed to import adapter/renderer registries: {e}")
 
         detections: List[Detection] = []
         for scheme in sorted(list_supported_schemes()):
             adapter_class = get_adapter_class(scheme)
             renderer_class = get_renderer_class(scheme)
             if not adapter_class or not renderer_class:
+                self.unavailable("adapter or renderer registry entry unavailable", scheme)
                 continue
             adapter_file = self._find_adapter_file(reveal_root, scheme)
             if not adapter_file:
+                self.unavailable("adapter source unavailable", scheme)
                 continue
             detections.extend(
                 self._check_scheme(scheme, adapter_class, renderer_class, adapter_file)
@@ -152,6 +153,7 @@ class V020(BaseRule):
             if detection:
                 detections.append(detection)
 
+        self.completed(scheme + ": interface")
         return detections
 
     def _test_get_element_error_handling(self, scheme: str, adapter_class: type,
@@ -159,6 +161,7 @@ class V020(BaseRule):
         """Test that get_element returns None for missing elements (doesn't crash)."""
         adapter = self._try_instantiate(adapter_class)
         if adapter is None:
+            self.not_applicable("element probe requires configured resources", scheme + ": element")
             return None
 
         test_element = "_nonexistent_test_element_xyz_"
@@ -168,6 +171,7 @@ class V020(BaseRule):
             # If result is not None the adapter found something — can't judge without
             # knowing its elements, so skip.
             _ = result
+            self.completed(scheme + ": element")
             return None
         except Exception as e:
             exception_type = type(e).__name__
@@ -193,20 +197,23 @@ class V020(BaseRule):
                 context=f"get_element crashes with {exception_type} instead of returning None",
             )
 
-    @staticmethod
-    def _try_instantiate(adapter_class: type) -> Optional[Any]:
+    def _try_instantiate(self, adapter_class: type) -> Optional[Any]:
         """Attempt to instantiate adapter with minimal arguments; return None if impossible."""
         try:
             return adapter_class()
         except TypeError:
             pass
-        except (ValueError, ImportError, Exception) as e:  # noqa: BLE001
-            logger.debug("V020.py: skipped after %s: %s", type(e).__name__, e)
+        except ValueError:
+            return None
+        except Exception as e:
+            self.unavailable(f"adapter initialization failed: {type(e).__name__}: {e}", getattr(adapter_class, "__name__", type(adapter_class).__name__))
             return None
         try:
             return adapter_class('.')
-        except Exception as e:  # noqa: BLE001
-            logger.debug("V020.py: skipped after %s: %s", type(e).__name__, e)
+        except (TypeError, ValueError):
+            return None
+        except Exception as e:
+            self.unavailable(f"adapter initialization failed: {type(e).__name__}: {e}", getattr(adapter_class, "__name__", type(adapter_class).__name__))
             return None
 
     def _find_line_matching(self, file_path: Path, pattern: str) -> int:

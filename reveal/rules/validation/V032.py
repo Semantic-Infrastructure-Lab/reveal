@@ -62,12 +62,12 @@ class V032(BaseRule):
 
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return []
+            return self.unavailable("reveal source root unavailable")
         project_root = reveal_root.parent
 
         latest_published = self._latest_pypi_version()
         if not latest_published:
-            return []
+            return self.unavailable("PyPI release endpoint unavailable")
 
         commit, gap_days = self._oldest_unreleased_commit(project_root, latest_published)
         if commit is None:
@@ -109,6 +109,7 @@ class V032(BaseRule):
                 return json.loads(response.read().decode('utf-8'))['info']['version']
         except Exception as e:
             logger.debug("V032.py: skipped after %s: %s", type(e).__name__, e)
+            self.unavailable(f"required input unavailable: {type(e).__name__}: {e}")
             return None
 
     def _oldest_unreleased_commit(self, project_root, published_version):

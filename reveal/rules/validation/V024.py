@@ -45,7 +45,7 @@ class V024(BaseRule):
 
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return []
+            return self.unavailable("reveal source root unavailable")
 
         schemes = self._get_public_schemes()
         if not schemes:
@@ -78,6 +78,7 @@ class V024(BaseRule):
     def _get_existing_guide_names(self, reveal_root: Path) -> List[str]:
         guides_dir = reveal_root / 'docs' / 'adapters'
         if not guides_dir.exists():
+            self.unavailable('required source or documentation missing', guides_dir.as_posix())
             return []
         return [f.name.upper() for f in guides_dir.glob('*.md')]
 

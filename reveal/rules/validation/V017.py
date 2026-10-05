@@ -89,7 +89,7 @@ class V017(BaseRule):
         if file_path.startswith('reveal://'):
             reveal_root = find_reveal_root()
             if not reveal_root:
-                return []
+                return self.unavailable("reveal source root unavailable")
             # BACK-911 moved DEF_NODES/CLASS_NODES to core/node_taxonomy.py,
             # leaving a back-compat shim (no frozenset literals) at the old
             # adapters/ast/ path — read from the new location first, same
@@ -99,7 +99,7 @@ class V017(BaseRule):
                 taxonomy_path = reveal_root / 'adapters' / 'ast' / 'node_taxonomy.py'
             treesitter_path = reveal_root / 'treesitter.py'
             if not taxonomy_path.exists():
-                return []
+                return self.unavailable("required source or documentation missing", taxonomy_path.as_posix())
             try:
                 content = taxonomy_path.read_text(encoding='utf-8')
                 identifier_content = (
@@ -107,7 +107,7 @@ class V017(BaseRule):
                     if treesitter_path.exists() else content
                 )
             except OSError:
-                return []
+                return self.unavailable("required input could not be inspected")
             file_path = str(taxonomy_path)
         elif Path(file_path).name not in ('node_taxonomy.py', 'treesitter.py'):
             # BACK-852 (dogfooding find, same class as V016/V023): the old

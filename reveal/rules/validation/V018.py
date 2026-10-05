@@ -44,7 +44,7 @@ class V018(BaseRule):
         # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return []
+            return self.unavailable("reveal source root unavailable")
 
         # Get registered adapters and renderers
         try:
@@ -52,8 +52,7 @@ class V018(BaseRule):
             adapters = set(list_supported_schemes())
             renderers = set(list_renderer_schemes())
         except Exception as e:
-            logger.warning(f"V018: failed to import adapter/renderer registries: {e}")
-            return []
+            return self.unavailable(f"V018: failed to import adapter/renderer registries: {e}")
 
         # Check for adapters without renderers
         detections: List[Detection] = []

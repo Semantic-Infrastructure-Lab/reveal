@@ -58,8 +58,15 @@ class RevealRenderer:
         # Text format
         coverage = result.get("coverage", {})
         if coverage:
-            print(f"Checks: {coverage['run']} run, {coverage['skipped']} skipped, {coverage['failed']} failed")
+            print(f"Checks: {coverage['run']} run, {coverage['skipped']} skipped, {coverage['failed']} failed, "
+                  f"{coverage.get('unavailable', 0)} unavailable")
             print(coverage["scope"])
+            for entry in coverage.get("rules", []):
+                if entry["status"] == "unavailable":
+                    print(f"  {entry['rule']} unavailable: {entry['reason']}")
+                for subject in entry.get("subjects", []):
+                    if subject["status"] != "run" and subject["subject"]:
+                        print(f"    {subject['subject']} {subject['status']}: {subject['reason']}")
         if result.get("error"):
             print(f"{uri}: Self-check incomplete")
             for error in result.get("errors", []):
