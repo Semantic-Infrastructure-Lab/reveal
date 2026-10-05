@@ -320,21 +320,9 @@ PROBES = {
 _NOT_VISIBLE = 'BACK-1538'  # read, but the fixture cannot show an effect
 
 KNOWN_SILENT = {
-    ('codex', 'since'): _NOT_VISIBLE,
-    ('depends', 'limit'): _NOT_VISIBLE,
-    ('hotspots', 'limit'): _NOT_VISIBLE,
     ('testability', 'limit'): _NOT_VISIBLE,
-    ('calls', 'head'): _NOT_VISIBLE,
-    ('calls', 'max_items'): _NOT_VISIBLE,
-    ('depends', 'head'): _NOT_VISIBLE,
-    ('depends', 'max_items'): _NOT_VISIBLE,
-    ('patches', 'head'): _NOT_VISIBLE,
-    ('patches', 'max_items'): _NOT_VISIBLE,
-    ('calls', 'exclude'): _NOT_VISIBLE,
     ('hotspots', 'exclude'): _NOT_VISIBLE,
     ('trace', 'exclude'): _NOT_VISIBLE,
-    # The target is proj/tests, so --exclude tests (relative to it) matches nothing there.
-    ('patches', 'exclude'): _NOT_VISIBLE,
     ('architecture', 'all'): _NOT_VISIBLE,
     ('ast', 'all'): _NOT_VISIBLE,
     ('calls', 'all'): _NOT_VISIBLE,
@@ -359,6 +347,18 @@ def _enrich(root):
                                                 encoding='utf-8')
     (proj / 'README.md').write_text('# Proj\n\nSee [app](app.py).\n\n## Usage\n\ntext\n\n'
                                     '## More\n\n[lib](lib.py)\n', encoding='utf-8')
+    # Positive pressure: several dependency targets, patch groups, callers and
+    # complex functions. Tests must matter when --exclude tests is applied.
+    (proj / 'tests' / 'test_pressure.py').write_text(
+        'from unittest import mock\nimport lib\nimport app\n\n'
+        'def test_pressure():\n    app.helper()\n    lib.zeta()\n'
+        '    with mock.patch("lib.zeta"), mock.patch("app.alpha"):\n        pass\n',
+        encoding='utf-8')
+    branches = ''.join(f'    if x == {i}:\n        return {i}\n' for i in range(12))
+    (proj / 'pressure.py').write_text(
+        'import app\nimport lib\n\n' + ''.join(
+            f'def pressure_{i}(x):\n{branches}    return app.helper()\n\n' for i in range(4)),
+        encoding='utf-8')
     (proj / 'GUIDE.md').write_text('---\ntitle: Guide\n---\n# Guide\n\n## One\n', encoding='utf-8')
     (proj / 'data.json').write_text(
         '[{"name": "b", "n": 2}, {"name": "a", "n": 1}, {"name": "c", "n": 3}]', encoding='utf-8')
@@ -389,7 +389,9 @@ class _FlagHarness(harness_module._Harness):
             out, err, code = StringIO(), StringIO(), 0
             with self._hermetic(), redirect_stdout(out), redirect_stderr(err):
                 try:
-                    handle_uri(harness_module.FIXTURE_URIS[scheme], None,
+                    uri = {'calls': 'calls://proj?rank=callers',
+                           'patches': 'patches://proj'}.get(scheme, harness_module.FIXTURE_URIS[scheme])
+                    handle_uri(uri, None,
                                _default_args(format='json', **flags))
                 except SystemExit as exc:
                     code = exc.code if isinstance(exc.code, int) else 1

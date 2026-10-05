@@ -531,3 +531,10 @@ By contributing, you agree that your contributions will be licensed under the MI
 ---
 
 **Questions?** Open an issue or discussion. PRs welcome!
+
+Flag-ledger fixtures must contain enough matching data to exercise a cut or exclusion.
+`tests/test_flag_ledger.py` uses ranking-mode calls, several dependency targets and
+patch groups, and test files that contribute real edges. Its strict `KNOWN_SILENT`
+list shrinks when these controls expose an effect. Read a query key only in the view
+that applies it: the ledger can then name a bound such as `codex:// --since` that the
+bare session-list view does not use.

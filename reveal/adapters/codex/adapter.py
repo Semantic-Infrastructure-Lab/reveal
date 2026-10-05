@@ -240,12 +240,15 @@ class CodexAdapter(ResourceAdapter):
         """Route codex:// resource to the appropriate handler."""
         # Bare or sessions/ → list, search, or content search
         if self._is_session_list_resource():
-            since = self.query_params.get('since', '')
-            until = self.query_params.get('until', '')
             search = self.query_params.get('search')
+            filter_term = self.query_params.get('filter')
+            # Date bounds belong to filtered/search views. Reading them in the
+            # bare list view hid the unapplied flags from the shared ledger.
+            if search or filter_term:
+                since = self.query_params.get('since', '')
+                until = self.query_params.get('until', '')
             if search:
                 return _h_search_sessions(self.CODEX_DB, search, since=since, until=until)
-            filter_term = self.query_params.get('filter')
             if filter_term:
                 return _h_filter_sessions(self.CODEX_DB, filter_term, since=since, until=until)
             return _h_list_sessions(self.CODEX_DB)
