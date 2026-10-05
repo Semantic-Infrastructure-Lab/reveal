@@ -215,7 +215,7 @@ def show_ast(path: str, max_depth: Optional[int] = None) -> str:
 
         return "\n".join(lines)
 
-    except Exception as e:
+    except (OSError, ValueError, TypeError) as e:
         return f"❌ Error analyzing file: {e}"
 
 

@@ -42,7 +42,7 @@ def _format_ts(unix_sec: Optional[int]) -> str:
         return ''
     try:
         return datetime.utcfromtimestamp(unix_sec).strftime('%Y-%m-%dT%H:%M:%SZ')
-    except Exception:
+    except (ValueError, OverflowError, OSError):
         return str(unix_sec)
 
 

@@ -278,7 +278,7 @@ def _tiered_content(file_info: Dict[str, Any]) -> Tuple[str, str, Optional[str]]
     if file_info.get('priority', _STRUCTURE_THRESHOLD) >= _STRUCTURE_THRESHOLD:
         try:
             return 'structure', _get_file_structure(path), None
-        except Exception as e:
+        except (OSError, ValueError) as e:
             return 'structure', '', f'structure analysis failed: {type(e).__name__}: {e}'
     return 'name_only', '', None
 

@@ -136,6 +136,13 @@ def test_display_path_not_flagged(src, rel):
     "try:\n    f()\nexcept BaseException:\n    pass",
     "try:\n    f()\nexcept:\n    pass",
     "def g():\n    try:\n        f()\n    except Exception as e:\n        return False",
+    "try:\n    f()\nexcept Exception as e:\n    log.debug('x', e)",
+    "def g():\n    try:\n        f()\n    except Exception as e:\n        return str(e)",
+    "def g():\n    try:\n        f()\n    except Exception as e:\n        pass\n        return e",
+    "def g():\n    try:\n        f()\n    except Exception:\n        return [1]",
+    "def g():\n    try:\n        f()\n    except Exception:\n        x = 1\n        return x",
+    "def g():\n    try:\n        f()\n    except Exception:\n        return frozenset()",
+    "try:\n    f()\nexcept Exception:\n    count = 0",
 ])
 def test_silent_except_flagged(src):
     assert set(_hits(src)) == {'silent-except'}
@@ -143,12 +150,7 @@ def test_silent_except_flagged(src):
 
 @pytest.mark.parametrize('src', [
     "try:\n    f()\nexcept OSError:\n    pass",
-    "try:\n    f()\nexcept Exception as e:\n    log.debug('x', e)",
-    "def g():\n    try:\n        f()\n    except Exception as e:\n        return str(e)",
-    "def g():\n    try:\n        f()\n    except Exception as e:\n        pass\n        return e",
     "try:\n    f()\nexcept Exception:\n    raise",
-    "def g():\n    try:\n        f()\n    except Exception:\n        return [1]",
-    "def g():\n    try:\n        f()\n    except Exception:\n        x = 1\n        return x",
     "try:\n    import yaml\nexcept Exception:\n    yaml = None",
     "try:\n    import yaml\nexcept Exception:\n    pass",
     "try:\n    f()\nexcept Exception:  # boundary-ok: silent-except -- a cache miss\n    pass",
@@ -278,3 +280,15 @@ def test_update_baseline_refuses_to_raise_counts(ratchet):
     base = {'walker': {'a.py': 1}}
     assert ratchet({'walker': {'a.py': [1, 2]}}, base, ['--update-baseline']) == 1
     assert json.loads(ratchet.baseline.read_text(encoding='utf-8')) == base
+
+
+def test_boundary_uses_product_handler_policy(monkeypatch):
+    from reveal.rules.bugs.B006 import B006
+    monkeypatch.setattr(B006, 'is_silent_handler', lambda *args: True)
+    assert _hits('try:\n    f()\nexcept OSError:\n    pass')['silent-except'] == [3]
+
+
+@pytest.mark.parametrize('signal', ["self.unavailable(str(e))", "self.create_detection('x', 1)",
+    "return {'error': str(e)}", "logger.warning('failed: %s', e)"])
+def test_shared_gate_accepts_explicit_failure_signal(signal):
+    assert 'silent-except' not in _hits('try:\n    f()\nexcept Exception as e:\n    ' + signal)

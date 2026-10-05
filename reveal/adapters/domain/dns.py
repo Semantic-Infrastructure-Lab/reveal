@@ -1,5 +1,6 @@
 """DNS resolution and validation utilities."""
 
+import logging
 import socket
 from typing import Dict, List, Any
 
@@ -10,6 +11,8 @@ try:
 except ImportError:
     HAS_DNSPYTHON = False
 
+
+logger = logging.getLogger(__name__)
 
 def get_dns_records(domain: str) -> Dict[str, List[str]]:
     """Fetch DNS records for domain (A, AAAA, MX, TXT, NS, CNAME).
@@ -464,6 +467,7 @@ def check_dns_propagation(domain: str) -> Dict[str, Any]:
                 answers = resolver.resolve(domain, 'A')
                 a_record_responses[nameserver] = sorted([str(rdata) for rdata in answers])
             except Exception as e:
+                logger.warning("DNS propagation check failed for %s: %s", nameserver, e)
                 a_record_responses[nameserver] = f"Error: {e}"
 
         # Check if all agree

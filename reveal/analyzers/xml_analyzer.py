@@ -351,6 +351,6 @@ class XmlAnalyzer(FileAnalyzer):
 
         except ET.ParseError:
             return None
-        except Exception as e:
+        except (OSError, ValueError, TypeError) as e:
             logger.debug(f"Error extracting element {element_name} from {self.path}: {e}")
             return None

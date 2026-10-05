@@ -811,7 +811,7 @@ class GitAdapter(ResourceAdapter):
                 'path': repo.workdir or repo.path,
                 'adapter': 'git',
             }
-        except Exception:
+        except (OSError, ValueError, pygit2.GitError):
             return {
                 'type': 'git_repository',
                 'adapter': 'git',

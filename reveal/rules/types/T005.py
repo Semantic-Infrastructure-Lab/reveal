@@ -85,7 +85,7 @@ class T005(BaseRule, ASTParsingMixin):
                 context = context.split('\n')[0]
                 if not context.endswith(':'):
                     context += '...'
-        except Exception:
+        except (IndexError, TypeError, ValueError):
             context = None
 
         summary = ', '.join(parts)

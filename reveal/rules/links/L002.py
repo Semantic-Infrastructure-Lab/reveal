@@ -88,7 +88,7 @@ class L002(BaseRule):
                 text, url, line_num = future_to_link[future]
                 try:
                     is_broken, reason, status = future.result()
-                except Exception:
+                except (OSError, ValueError):
                     is_broken, reason, status = True, "validation_error", None
 
                 if is_broken:
@@ -144,7 +144,7 @@ class L002(BaseRule):
             if isinstance(e.reason, socket.timeout):
                 return (True, "timeout", None)
             return (True, "connection_error", None)
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.debug(f"Error checking {url}: {e}")
             return (True, "validation_error", None)
 
@@ -170,7 +170,7 @@ class L002(BaseRule):
 
         except HTTPError as e:
             return (True, "http_error", e.code)
-        except Exception:
+        except (OSError, ValueError):
             return (True, "validation_error", None)
 
     def _get_http_error_suggestion(self, status: int) -> str:

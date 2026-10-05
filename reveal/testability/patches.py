@@ -599,7 +599,7 @@ def _call_name(node: ast.AST) -> str:
 def _unparse(node: ast.AST) -> str:
     try:
         return ast.unparse(node)
-    except Exception:
+    except (ValueError, TypeError, RecursionError):
         if isinstance(node, ast.Name):
             return node.id
         if isinstance(node, ast.Attribute):

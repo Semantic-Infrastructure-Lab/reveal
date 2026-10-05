@@ -122,7 +122,7 @@ class L003(BaseRule):
                 content = py_file.read_text(encoding='utf-8')
                 if 'fasthtml' in content.lower():
                     return True
-            except Exception as e:
+            except (OSError, UnicodeError) as e:
                 logger.debug("L003.py: skipped after %s: %s", type(e).__name__, e)
                 continue
 
@@ -168,7 +168,7 @@ class L003(BaseRule):
                 content = py_file.read_text(encoding='utf-8')
                 if 'from flask import' in content or 'Flask(__name__)' in content:
                     return True
-            except Exception as e:
+            except (OSError, UnicodeError) as e:
                 logger.debug("L003.py: skipped after %s: %s", type(e).__name__, e)
                 continue
 

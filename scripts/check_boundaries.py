@@ -58,16 +58,14 @@ Rules (home = where the concern is allowed to live):
     already a ``/`` string (a URI, a relative name built with ``as_posix()``) takes
     ``# boundary-ok: display-path -- <why>``.
 
-``silent-except`` (BACK-1614 -> BACK-1059)
-    A broad handler (``except Exception``, ``except BaseException``, a tuple holding one, or a
-    bare ``except:``) whose body only does ``pass``/``continue``/``break``/``return`` of a
-    constant or empty literal, with the exception unused. It turns a failure into a clean
-    default with no trace: a rule that crashes reports "0 issues", a cache read that fails
-    reads as a miss. Log it (``logger.debug`` is enough for a deliberate miss), attach a result
-    marker, narrow the type, or mark a deliberate site ``# boundary-ok: silent-except -- <why>``.
-    A handler that logs and then returns a default is NOT counted (the user still sees a clean
-    zero), and a handler whose ``try`` body is only imports is exempt (an optional-dependency
-    probe). Handlers that do other work before falling back are not counted either.
+``silent-except`` (BACK-1638 -> BACK-1059)
+    Uses B006's Python handler policy for broad catches, including computed fallbacks,
+    assignments and debug-only logs. Required failures must be re-raised, returned as
+    explicit diagnostics, or logged at WARNING or above. Narrow expected exceptions.
+    Documented intentional fallbacks and deferred visible signals follow the same
+    B006 policy. Bare catches and optional-import probes retain boundary-specific
+    handling; boundary-ok markers require a concrete reason.
+
 
 Code under ``if __name__ == '__main__':`` is exempt from ``exit`` and ``print``.
 Suppress one deliberate site with ``# boundary-ok: <rule> -- <why>`` on any line of the
@@ -87,6 +85,8 @@ import sys
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
+
+from reveal.rules.bugs.B006 import B006
 
 ROOT = Path(__file__).resolve().parent.parent
 BASELINE = ROOT / 'scripts' / 'boundary_baseline.json'
@@ -182,37 +182,6 @@ def _is_bare_path(node: ast.AST) -> bool:
     return isinstance(node, ast.Attribute) and node.attr in _PATH_NAMES
 
 
-_BROAD = ('Exception', 'BaseException')
-_EMPTY = (ast.List, ast.Tuple, ast.Dict, ast.Set)
-
-
-def _is_broad(handler: ast.ExceptHandler) -> bool:
-    t = handler.type
-    if t is None:
-        return True
-    kinds = t.elts if isinstance(t, ast.Tuple) else [t]
-    return any(_dotted(k).rsplit('.', 1)[-1] in _BROAD for k in kinds)
-
-
-def _is_inert(stmt: ast.stmt) -> bool:
-    if isinstance(stmt, (ast.Pass, ast.Continue, ast.Break)):
-        return True
-    if isinstance(stmt, ast.Return):
-        v = stmt.value
-        return v is None or isinstance(v, ast.Constant) or (
-            isinstance(v, _EMPTY) and not (getattr(v, 'elts', None) or getattr(v, 'keys', None)))
-    return False
-
-
-def _is_silent(handler: ast.ExceptHandler) -> bool:
-    """Broad, does nothing but fall back to a constant, and never looks at the exception."""
-    if not _is_broad(handler) or not all(_is_inert(s) for s in handler.body):
-        return False
-    return not handler.name or not any(
-        isinstance(n, ast.Name) and n.id == handler.name
-        for s in handler.body for n in ast.walk(s))
-
-
 def _dotted(node: ast.AST) -> str:
     """'os.walk' for os.walk, 'sys.stdout.write' for sys.stdout.write, '' otherwise."""
     parts = []
@@ -260,6 +229,8 @@ class _Scanner(ast.NodeVisitor):
         self.from_os: Dict[str, str] = {}
         self.from_sys: Dict[str, str] = {}
         self.walk_listings: Set[int] = set()
+        self.parent_map: Dict[ast.AST, ast.AST] = {}
+        self.silent_rule = B006()
 
     # -- bookkeeping --------------------------------------------------------
     def _add(self, rule: str, node: Any) -> None:
@@ -337,7 +308,8 @@ class _Scanner(ast.NodeVisitor):
     def visit_Try(self, node: ast.Try) -> None:
         probe = all(isinstance(s, (ast.Import, ast.ImportFrom)) for s in node.body)
         for handler in node.handlers:
-            if not probe and _is_silent(handler):
+            if not probe and (handler.type is None or
+                              self.silent_rule.is_silent_handler(handler, self.lines, self.parent_map)):
                 self._add('silent-except', handler)
         self.generic_visit(node)
 
@@ -442,6 +414,7 @@ def find_sites(source: str, rel: str) -> Sites:
     scanner = _Scanner(rel, source.splitlines())
     tree = ast.parse(source)
     scanner.walk_listings = _walk_listings(tree)
+    scanner.parent_map = {child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
     scanner.visit(tree)
     return {rule: sorted(lines) for rule, lines in scanner.sites.items()}
 

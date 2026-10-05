@@ -164,7 +164,7 @@ def _fetch_acme_ssl_data(rows: list, check_ssl_health) -> list:
                             'ssl_not_after': leaf.get('not_after', '')})
         except Exception as exc:
             results.append({**r, 'ssl_status': 'error', 'ssl_days': None,
-                            'ssl_not_after': str(exc)[:60]})
+                            'ssl_not_after': str(exc)[:60], 'error': str(exc)})
     return results
 
 

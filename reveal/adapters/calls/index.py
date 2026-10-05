@@ -923,13 +923,10 @@ def _project_entry_point_decorators(directory: Path) -> FrozenSet[str]:
     step nobody knows to take.
     """
     from ...config import get_config
-    try:
-        config = get_config(start_path=directory)
-        entry_points = config.get_adapter_config('calls', 'entry_points')
-        decorators = entry_points.get('decorators', []) if isinstance(entry_points, dict) else []
-        return frozenset(str(d) for d in decorators)
-    except Exception:
-        return frozenset()
+    config = get_config(start_path=directory)
+    entry_points = config.get_adapter_config('calls', 'entry_points')
+    decorators = entry_points.get('decorators', []) if isinstance(entry_points, dict) else []
+    return frozenset(str(d) for d in decorators)
 
 
 def _drop_referenced(entries: List[Dict[str, Any]],

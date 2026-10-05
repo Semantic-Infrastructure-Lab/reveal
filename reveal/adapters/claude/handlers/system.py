@@ -15,8 +15,9 @@ def _path_info(p: Path) -> Dict[str, Any]:
     if p.is_dir():
         try:
             count = sum(1 for _ in p.iterdir())
-        except Exception:
-            count = 0
+        except OSError as exc:
+            return {'path': str(p), 'exists': True, 'kind': 'dir', 'count': None,
+                    'error': f'directory unreadable: {exc}'}
         return {'path': str(p), 'exists': True, 'kind': 'dir', 'count': count}
     stat = p.stat()
     return {'path': str(p), 'exists': True, 'kind': 'file', 'size_bytes': stat.st_size}

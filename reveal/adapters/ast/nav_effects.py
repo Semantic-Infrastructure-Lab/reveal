@@ -1939,10 +1939,7 @@ def _resolve_definition_node(file_path: str, name: str, analyzer_cache: Dict[str
         if analyzer_class is None:
             analyzer_cache[file_path] = False
         else:
-            try:
-                analyzer = analyzer_class(file_path)
-            except Exception:
-                analyzer = False
+            analyzer = analyzer_class(file_path)
             analyzer_cache[file_path] = analyzer
     if not analyzer or not isinstance(analyzer, TreeSitterAnalyzer) or not analyzer.tree:
         return None

@@ -321,7 +321,7 @@ def _get_live_cert_status(domain: str) -> Dict[str, Any]:
             'live_serial': cert.get('serial_number'),
         }
     except Exception as exc:
-        return {'live_status': 'error', 'live_error': str(exc)[:80]}
+        return {'live_status': 'error', 'live_error': str(exc)[:80], 'error': str(exc)[:80]}
 
 
 def _check_docroot_acl(docroot: str) -> Dict[str, Any]:

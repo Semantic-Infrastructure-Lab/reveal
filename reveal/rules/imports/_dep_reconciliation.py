@@ -110,7 +110,7 @@ def _scan_project_imports(
         try:
             imports = extractor.extract_imports(file_path)
         except Exception as e:
-            logger.debug("_dep_reconciliation.py: skipped after %s: %s", type(e).__name__, e)
+            logger.warning("_dep_reconciliation.py: skipped after %s: %s", type(e).__name__, e)
             continue
         if getattr(extractor, 'parse_failed', False):
             continue

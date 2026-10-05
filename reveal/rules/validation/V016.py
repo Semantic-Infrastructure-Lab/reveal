@@ -211,7 +211,7 @@ class V016(BaseRule):
                 analyzer = analyzer_class(file_path_str)
                 structure = analyzer.get_structure()
             except Exception as e:
-                logger.debug("V016.py: skipped after %s: %s", type(e).__name__, e)
+                logger.warning("V016.py: skipped after %s: %s", type(e).__name__, e)
                 continue
 
             if not self._is_adapter_file(structure, content):

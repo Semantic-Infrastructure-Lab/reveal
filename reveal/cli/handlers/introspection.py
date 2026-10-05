@@ -482,8 +482,8 @@ def build_discover_payload(show_all: bool = False) -> dict:
             help_data = {}
             try:
                 help_data = adapter_class.get_help() or {}  # type: ignore[attr-defined]
-            except Exception:
-                help_data = {}
+            except Exception as exc:
+                help_data = {'description': f'Help unavailable: {type(exc).__name__}: {exc}'}
             entry['description'] = help_data.get('description', '') or 'Schema not available'
             entry['uri_syntax'] = help_data.get('syntax', f'{scheme}://<target>')
             entry['output_types'] = []

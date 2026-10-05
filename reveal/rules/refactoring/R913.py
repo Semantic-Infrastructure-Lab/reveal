@@ -29,7 +29,7 @@ class R913(BaseRule, ASTParsingMixin):
         try:
             src = ast.get_source_segment(content, node)
             return src.split('\n')[0] if src else f"def {node.name}(...)"
-        except Exception:
+        except (IndexError, TypeError, ValueError):
             return f"def {node.name}(...)"
 
     def check(self,

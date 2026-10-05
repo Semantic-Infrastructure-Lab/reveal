@@ -179,7 +179,7 @@ class U502(BaseRule):
                     urls.add(url)
 
         except Exception as e:
-            logger.debug(f"Error reading pyproject.toml: {e}")
+            logger.warning(f"Error reading pyproject.toml: {e}")
 
         _canonical_url_cache[pyproject_path] = urls
         return urls

@@ -145,7 +145,7 @@ class V001(BaseRule):
             return self._parse_dict_entries(dict_content)
 
         except Exception as e:
-            logger.debug("V001.py: skipped after %s: %s", type(e).__name__, e)
+            logger.warning("V001.py: skipped after %s: %s", type(e).__name__, e)
             return {}
 
     def _find_static_help_dict(self, content: str) -> Optional[str]:

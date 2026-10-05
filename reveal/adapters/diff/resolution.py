@@ -180,7 +180,7 @@ def instantiate_adapter(adapter_class: type, scheme: str, resource: str):
         # Fallback: try with resource, then without
         try:
             return adapter_class(resource)
-        except Exception:
+        except TypeError:
             return adapter_class()
 
 

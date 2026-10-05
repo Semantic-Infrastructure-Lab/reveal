@@ -117,7 +117,7 @@ class T004(BaseRule, ASTParsingMixin):
                 context = context.split('\n')[0]
                 if not context.endswith(':'):
                     context += '...'
-        except Exception:
+        except (IndexError, TypeError, ValueError):
             context = None
 
         detections.append(self.create_detection(

@@ -45,7 +45,7 @@ class B001(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         try:
             src = ast.get_source_segment(content, node)
             return src.split('\n')[0] if src else None
-        except Exception as e:
+        except (IndexError, TypeError, ValueError) as e:
             logger.debug("B001.py: skipped after %s: %s", type(e).__name__, e)
             return None
 

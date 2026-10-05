@@ -177,7 +177,7 @@ class L001(BaseRule):
             analyzer = analyzer_class(str(file_path))
             headings = analyzer._extract_headings()
         except Exception as e:
-            logger.debug(f"Failed to extract headings from {file_path}: {e}")
+            logger.warning(f"Failed to extract headings from {file_path}: {e}")
             return []
 
         anchors = self._headings_to_anchors(headings)

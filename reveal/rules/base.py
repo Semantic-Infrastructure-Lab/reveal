@@ -524,7 +524,7 @@ class BaseRule(ABC):
                 return False
             category = getattr(analyzer, 'CATEGORY', 'code')
             return category in effective_skip
-        except Exception as e:
+        except (OSError, ValueError, ImportError) as e:
             logger.debug(f"Category lookup failed for {target}: {e}")
             return False
 

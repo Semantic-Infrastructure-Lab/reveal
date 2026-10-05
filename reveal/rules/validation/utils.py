@@ -64,7 +64,7 @@ def scan_doc_for_counts(doc_path: Path,
     try:
         lines = doc_path.read_text(encoding='utf-8').split('\n')
     except Exception as e:
-        logger.debug("utils.py: skipped after %s: %s", type(e).__name__, e)
+        logger.warning("utils.py: skipped after %s: %s", type(e).__name__, e)
         return []
     compiled = [re.compile(p, re.IGNORECASE) for p in patterns]
     claims: List[Tuple[int, int]] = []

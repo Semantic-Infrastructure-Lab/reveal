@@ -112,7 +112,7 @@ class V005(BaseRule):
             return static_help
 
         except Exception as e:
-            logger.debug("V005.py: skipped after %s: %s", type(e).__name__, e)
+            logger.warning("V005.py: skipped after %s: %s", type(e).__name__, e)
             return {}
 
     def _find_line_in_static_help(self, reveal_root: Path, topic: str) -> int:
@@ -127,7 +127,7 @@ class V005(BaseRule):
                 if f"'{topic}':" in line:
                     return i
         except Exception as e:  # noqa: BLE001 - read_text can raise encoding errors, etc.
-            logger.debug("V005.py: skipped after %s: %s", type(e).__name__, e)
+            logger.warning("V005.py: skipped after %s: %s", type(e).__name__, e)
 
         return 1
 

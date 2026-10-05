@@ -182,11 +182,8 @@ def run_check(args: Namespace) -> None:
 
         # Load project profiles from .reveal.yaml (if any) before resolving
         path_for_config = getattr(args, 'path', None) or '.'
-        try:
-            cfg = RevealConfig.get(start_path=Path(path_for_config))
-            project_profiles = cfg._config.get('profiles') or None
-        except Exception:
-            project_profiles = None
+        cfg = RevealConfig.get(start_path=Path(path_for_config))
+        project_profiles = cfg._config.get('profiles') or None
 
         try:
             resolved = resolve_profile(profile_name, user_profiles=project_profiles)

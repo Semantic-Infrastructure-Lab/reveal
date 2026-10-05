@@ -558,7 +558,7 @@ def _extract_kwarg(node: ast.expr, key: str) -> Optional[str]:
 def _unparse_expr(node: ast.expr) -> str:
     try:
         return ast.unparse(node)
-    except Exception:
+    except (ValueError, TypeError, RecursionError):
         if isinstance(node, ast.Name):
             return node.id
         if isinstance(node, ast.Attribute):
