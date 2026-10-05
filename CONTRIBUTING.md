@@ -547,3 +547,12 @@ values; strict new bounds require a separate behavior change. Other fields still
 use their established parser until migrated. `BudgetAccounting` in `query_control.py`
 labels a count as scan, match, page or text. The existing page and text helpers use
 it without changing their output; common scan-cap policy is a later migration.
+
+Import graph discovery/resolution now has a public analysis-layer service in
+`analyzers/imports/service.py`. Its frozen `ScanScope`, `ImportFileSet` and
+`ResolutionContext` carry scan policy and resolution inputs explicitly. `discover`
+uses the existing file-index walker; `resolve_graph` updates the complete
+`ImportAnalysis` artifact. `resolve_primary` preserves imports' startup-cycle policy;
+`resolve_targets` preserves depends' multi-target Python imports. Both use the same
+extractor dispatch. Keep depends' namespace/member/module fallback policies explicit;
+this first migration does not merge its full indexing engine or I002.

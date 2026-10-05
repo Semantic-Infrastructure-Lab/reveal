@@ -21,7 +21,8 @@ from ..analyzers._capability_table import depends_intra_project_classification_s
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages
 from ..analyzers.imports.generic import CImportExtractor, CppImportExtractor
-from ..analyzers.imports.file_index import discover_import_files, load_path_manifests
+from ..analyzers.imports.file_index import load_path_manifests
+from ..analyzers.imports import service as import_analysis
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder, note_truncation
 from ..utils.path_utils import (
@@ -693,15 +694,9 @@ class DependsAdapter(ResourceAdapter):
 
         Sets ``self._scan_capped`` as a side effect (the file-count cap).
         """
-        if scan_root.is_file():
-            return ([scan_root] if scan_root.suffix in supported_exts else []), {}
-        # BACK-1580: the walk imports:// uses, so the two cannot drift again -- depends://
-        # lacked REVEAL_IGNORE, file-level --exclude and the declaration-only skip.
-        files, file_index, capped = discover_import_files(
-            scan_root, lambda fp: fp.suffix in supported_exts, cap=self._SCAN_FILE_CAP)
-        if capped:
-            self._scan_capped = True
-        return files, file_index
+        files = import_analysis.discover(import_analysis.ScanScope(scan_root, supported_exts, cap=self._SCAN_FILE_CAP))
+        self._scan_capped = files.capped
+        return list(files.candidates), files.index
 
     def _build_resolution_indices(self, files: List[Path], scan_root: Path) -> '_ResolutionIndices':
         """Parse every file in `files` once into the resolution indices.
@@ -1041,26 +1036,23 @@ class DependsAdapter(ResourceAdapter):
             spec = getattr(extractor, 'spec', None)
             if getattr(spec, 'load_path_manifest_glob', None) and indices.load_path_roots:
                 extra_paths = extra_paths + indices.load_path_roots
-            # Mirrors ImportsAdapter._build_graph's gating (BACK-491): only
-            # generic (spec-based) extractors accept file_index.
-            uses_file_index = spec is not None
             for stmt in imports:
                 if stmt.is_type_checking:
                     continue
                 self._resolve_statement_edges(
                     stmt, file_path, extractor, base_path, extra_paths,
-                    uses_file_index, file_index, indices)
+                    file_index, indices)
 
     def _resolve_statement_edges(
         self, stmt: 'ImportStatement', file_path: Path, extractor,
-        base_path: Path, extra_paths: List[Path], uses_file_index: bool,
+        base_path: Path, extra_paths: List[Path],
         file_index: Dict[str, List[Path]], indices: '_ResolutionIndices',
     ) -> None:
         """Resolve a single import statement, walking the fallback cascade:
         direct resolution → namespace index (BACK-554) → member index
         (BACK-547/557) → honest-decline classification (BACK-547)."""
         added = self._add_direct_edges(
-            stmt, file_path, extractor, base_path, extra_paths, uses_file_index, file_index)
+            stmt, file_path, extractor, base_path, extra_paths, file_index)
         spec = getattr(extractor, 'spec', None)
         if not added and indices.namespace_index and getattr(spec, 'resolve_namespaces', False):
             added = self._add_namespace_edges(stmt, file_path, extractor, indices) or added
@@ -1077,24 +1069,12 @@ class DependsAdapter(ResourceAdapter):
 
     def _add_direct_edges(
         self, stmt: 'ImportStatement', file_path: Path, extractor,
-        base_path: Path, extra_paths: List[Path], uses_file_index: bool,
+        base_path: Path, extra_paths: List[Path],
         file_index: Dict[str, List[Path]],
     ) -> bool:
         """Stage 1: direct dotted-name resolution."""
-        if uses_file_index:
-            # Generic extractors' resolve_import needs the file_index
-            # kwarg the base resolve_import_targets can't pass, and
-            # don't have the `from pkg import submodule` idiom — single
-            # resolution is correct for them.
-            resolved = extractor.resolve_import(
-                stmt, base_path, search_paths=extra_paths, file_index=file_index)
-            targets = [resolved] if resolved else []
-        else:
-            # BACK-542: one statement can pull in several files
-            # (`from pkg import a, b` where a/b are submodules), so
-            # resolve to the full target set, not just the primary.
-            targets = extractor.resolve_import_targets(
-                stmt, base_path, search_paths=extra_paths)
+        targets = import_analysis.resolve_targets(
+            stmt, extractor, import_analysis.ResolutionContext(base_path, tuple(extra_paths), file_index))
         added = False
         for resolved in targets:
             if resolved and resolved != file_path:

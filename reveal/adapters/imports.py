@@ -31,7 +31,7 @@ from ..conventions import family_for_path
 from ..analyzers.imports.base import build_project_namespaces
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
-from ..analyzers.imports.file_index import discover_import_files
+from ..analyzers.imports import service as import_analysis
 from ..registry import get_code_extensions
 from ..utils.path_utils import to_posix, to_relative_display
 from ..utils.results import ResultBuilder, note_truncation
@@ -1204,15 +1204,8 @@ class ImportsAdapter(ResourceAdapter):
         the index as targets but are not graph nodes (BACK-1386, BACK-1495); REVEAL_IGNORE
         drops a file from both (BACK-1362); declaration-only stubs are not nodes (BACK-1467).
         """
-        if target_path.is_file():
-            ext = target_path.suffix.lower()
-            if target_path.suffix in supported_exts or ext in code_exts:
-                return [target_path], {}
-            return [], {}
-        candidates, file_index, _ = discover_import_files(
-            target_path,
-            lambda fp: fp.suffix in supported_exts or fp.suffix.lower() in code_exts)
-        return candidates, file_index
+        files = import_analysis.discover(import_analysis.ScanScope(target_path, supported_exts, code_exts))
+        return list(files.candidates), files.index
 
     def _process_extracted_files(
         self,
@@ -1258,112 +1251,10 @@ class ImportsAdapter(ResourceAdapter):
         self.analysis.files_failed = failed_files
         return all_imports
 
-    @staticmethod
-    def _build_namespace_index(
-        files_and_extractors: List[Tuple[Path, Any]]
-    ) -> Dict[str, List[Path]]:
-        """namespace -> [declaring files], for languages where a qualified
-        import names a namespace rather than one type (C#, BACK-544).
-
-        Built only from extractors whose spec opts in
-        (``resolve_namespaces``), so this is a no-op scan for trees with no
-        such language present.
-        """
-        namespace_index: Dict[str, List[Path]] = {}
-        for file_path, extractor in files_and_extractors:
-            if not getattr(getattr(extractor, 'spec', None), 'resolve_namespaces', False):
-                continue
-            for ns in extractor.extract_namespaces(file_path):
-                namespace_index.setdefault(ns, []).append(file_path)
-        return namespace_index
-
     def _resolve_dependencies(self, target_path: Path, file_index: Dict[str, List[Path]]) -> None:
-        """Resolve each file's imports to dependency edges (language-specific)."""
-        # BACK-554: the namespace index (below) must be built from every
-        # scanned file (`self.analysis.scanned_files`), not just `self.analysis.graph.files`
-        # (files that themselves emitted >=1 import statement). A C# leaf
-        # file with zero local `using` directives — the common shape for a
-        # file that relies purely on a project-wide C# 10 `global using`, or
-        # simply a class that imports nothing — never appears in
-        # `self.analysis.graph.files` (ImportGraph.from_imports only registers files
-        # present in the imports list), so its own `namespace X.Y` was
-        # silently invisible to the namespace fan-out that resolves edges
-        # *to* it: every C# file with no local usings was structurally
-        # unreachable via `using`-of-a-namespace, regardless of how many
-        # other files declared `using X.Y;`.
-        files_and_extractors = [
-            (fp, get_extractor(fp)) for fp in self.analysis.scanned_files
-        ]
-        namespace_index = self._build_namespace_index(files_and_extractors)
-
-        for file_path, extractor in files_and_extractors:
-            # BACK-554: file_path may be a zero-import file (present now that
-            # files_and_extractors is sourced from self.analysis.scanned_files, not
-            # self.analysis.graph.files) — nothing to resolve *from*, but it still
-            # needed to enter the namespace_index above so edges *to* it work.
-            imports = self.analysis.graph.files.get(file_path, [])
-            if not extractor:
-                continue
-
-            base_path = file_path.parent
-            # Pass project root as an extra search path so absolute intra-project
-            # imports resolve (e.g., `from db.session import X` from `api/routes.py`
-            # finds `db/session.py` under the project root, not just under `api/`).
-            # BACK-621: always include target_path even when it equals base_path
-            # — GDScript's `project_relative_prefix` (`res://`) resolver never
-            # falls back to base_path (project-root-relative, not file-relative),
-            # so skipping target_path here left a root-level importer's `res://`
-            # imports unresolvable with no search path at all. Harmless duplicate
-            # root for every other resolver, which already tries base_path first.
-            extra_paths = [target_path] if target_path.is_dir() else []
-            # BACK-491/487/488: every generic (spec-based) extractor shares the
-            # `resolve_import(..., file_index=...)` signature and benefits from the
-            # prebuilt basename index — C/C++ include full-suffix matching and the
-            # Java/PHP/Ruby/Swift/Kotlin dotted-name lookup alike. Bespoke
-            # extractors (python/js/go/rust) have no `spec` and keep the 3-arg
-            # signature, so gate the index-passing on spec presence.
-            uses_file_index = getattr(extractor, 'spec', None) is not None
-            for stmt in imports:
-                # BACK-445: skip imports that can't cause a circular ImportError
-                # at startup — matching the I002 circular-import rule's definition
-                # (rules/imports/I002.py:_resolve_graph_dependencies):
-                #   - TYPE_CHECKING imports never run at runtime
-                #   - function-body (deferred/lazy) imports run only after all
-                #     top-level code has finished importing — they are the
-                #     standard pattern used to *break* cycles, so counting them
-                #     as cycle edges reports phantom cycles (e.g. registry.py's
-                #     lazy `from .analyzers.nginx import ...`, whose own comment
-                #     says it exists "to avoid circular import").
-                if stmt.is_type_checking or stmt.is_in_function:
-                    continue
-
-                if uses_file_index:
-                    resolved = extractor.resolve_import(
-                        stmt, base_path, search_paths=extra_paths, file_index=file_index)
-                else:
-                    resolved = extractor.resolve_import(stmt, base_path, search_paths=extra_paths)
-                # Skip self-references (e.g., logging.py importing stdlib logging
-                # should not create logging.py → logging.py dependency)
-                if resolved and resolved != file_path:
-                    self.analysis.graph.add_dependency(file_path, resolved)
-                    self.analysis.graph.resolved_paths[stmt.module_name] = resolved
-                    # BACK-1193: carry the resolution onto the statement itself
-                    # (not just the module-name-keyed graph index) so per-import
-                    # consumers like deps:// can classify on resolution truth
-                    # instead of re-guessing from the raw module string.
-                    stmt.resolved_path = resolved
-                    continue
-
-                # BACK-544: the single-file dotted match above only catches a
-                # namespace that coincidentally names one matching file. The
-                # common case — a namespace declared across several files —
-                # needs the namespace index instead, fanning out to every
-                # declaring file (skipping the importing file itself).
-                if namespace_index and getattr(getattr(extractor, 'spec', None), 'resolve_namespaces', False):
-                    for target in extractor.resolve_namespace_targets(stmt, namespace_index):
-                        if target != file_path:
-                            self.analysis.graph.add_dependency(file_path, target)
-                            stmt.resolved_path = target  # BACK-1193: any in-tree target proves intra-project
+        import_analysis.resolve_graph(
+            import_analysis.ScanScope(target_path, frozenset(get_all_extensions())),
+            import_analysis.ImportFileSet(tuple(self.analysis.scanned_files), file_index), self.analysis)
 
     def _build_graph(
         self,
