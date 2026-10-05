@@ -224,15 +224,7 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         parent_map: Optional[Dict[ast.AST, ast.AST]] = None,
     ) -> Optional[Detection]:
         """Check a single exception handler for silent broad exception swallowing."""
-        if not self._is_broad_exception(node):
-            return None
-        if not self._is_silent(node):
-            return None
-        if self._has_explanatory_comment(node, lines):
-            return None
-        if parent_map and self._is_intentional_fallback(node, parent_map):
-            return None
-        if parent_map and self._has_deferred_visible_signal(node, parent_map):
+        if not self.is_silent_handler(node, lines, parent_map):
             return None
 
         context = None
@@ -257,6 +249,13 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             ),
             context=context
         )
+
+    def is_silent_handler(self, node, lines, parent_map=None) -> bool:
+        """Shared Python handler policy used by the product rule and CI boundary gate."""
+        return (self._is_broad_exception(node) and self._is_silent(node)
+                and not self._has_explanatory_comment(node, lines)
+                and not (parent_map and self._is_intentional_fallback(node, parent_map))
+                and not (parent_map and self._has_deferred_visible_signal(node, parent_map)))
 
     def _is_broad_exception(self, node: ast.ExceptHandler) -> bool:
         """Check if exception handler catches Exception (broad catch).
