@@ -1,6 +1,6 @@
 """patches:// adapter."""
 
 from .adapter import PatchesAdapter
-from .renderer import PatchesRenderer
+from ...rendering.adapters.patches import PatchesRenderer
 
 __all__ = ['PatchesAdapter', 'PatchesRenderer']

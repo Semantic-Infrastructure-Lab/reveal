@@ -13,7 +13,7 @@ from reveal.utils.query import parse_query_params
 from reveal.utils.results import ResultBuilder, note_truncation
 from reveal.utils.validation import require_path_exists
 
-from .renderer import PatchesRenderer
+from ...rendering.adapters.patches import PatchesRenderer
 
 
 @register_adapter('patches')
