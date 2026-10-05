@@ -1761,6 +1761,10 @@ python scripts/fetch_corpus.py c
 python scripts/recall_gate.py --corpus-root ~/.cache/reveal-corpus --output recall-report.json
 ```
 
+The compiler probe is currently qualified on POSIX hosts. Windows GCC probes
+timed out in CI and remain unavailable pending qualification; deterministic gate
+controls still run there, while the two real-compiler tests disclose their skip.
+
 The [scheduled workflow](.github/workflows/recall.yml) runs weekly and can be
 started manually. It verifies exact corpus commits, compares recall/precision with
 [the baseline](tests/corpus/recall_baseline.json), and preserves a timestamped

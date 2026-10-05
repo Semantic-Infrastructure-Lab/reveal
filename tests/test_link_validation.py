@@ -757,7 +757,9 @@ class TestL002Extended(unittest.TestCase):
         links = [{'text': 'Bad', 'url': 'https://example.com/bad', 'line': 1}]
         structure = {'links': links}
         path = os.path.join(self.temp_dir, "doc.md")
-        detections = self.rule.check(path, structure, "")
+        with self.assertLogs('reveal.rules.links.L002', level='WARNING') as logs:
+            detections = self.rule.check(path, structure, "")
+        self.assertIn('unexpected', logs.output[0])
         self.assertEqual(len(detections), 1)
 
     @patch('urllib.request.urlopen')
@@ -815,7 +817,9 @@ class TestL002Extended(unittest.TestCase):
     def test_get_request_generic_exception(self, mock_urlopen):
         """GET request generic exception (lines 159-160)."""
         mock_urlopen.side_effect = Exception("broken")
-        result = self.rule._try_get_request('https://example.com')
+        with self.assertLogs('reveal.rules.links.L002', level='WARNING') as logs:
+            result = self.rule._try_get_request('https://example.com')
+        self.assertIn('broken', logs.output[0])
         is_broken, reason, status = result
         self.assertTrue(is_broken)
         self.assertEqual(reason, "validation_error")

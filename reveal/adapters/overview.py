@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from reveal.capabilities import scope_dict_for_path
+from reveal.errors import NotApplicableError
 from reveal.registry import display_name_for_extension
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -128,7 +129,7 @@ def _resolve_git_root(path: Path) -> Optional[Path]:
         metadata = GitAdapter(path=str(path)).get_metadata()
         root = metadata.get('path')
         return Path(root).resolve() if root else None
-    except (ImportError, OSError, ValueError):  # no pygit2, or a path git can't open
+    except (ImportError, OSError, ValueError, NotApplicableError):  # absent/unavailable git
         return None
 
 

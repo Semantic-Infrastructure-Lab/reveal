@@ -30,7 +30,8 @@ def corpus(tmp_path):
     return tmp_path, {'sha': sha, 'recall': {'importer_dirs': ['src'], 'include_dirs': ['src']}}
 
 
-@pytest.mark.skipif(not shutil.which('gcc'), reason='optional GCC oracle prerequisite unavailable')
+@pytest.mark.skipif(sys.platform == 'win32' or not shutil.which('gcc'),
+                    reason='optional GCC oracle requires a qualified POSIX compiler host')
 def test_independent_oracle_sees_partial_source_and_measurement(corpus):
     root, entry = corpus
     oracle, coverage = gate.build_c_oracle(root, entry['recall'])
@@ -41,7 +42,8 @@ def test_independent_oracle_sees_partial_source_and_measurement(corpus):
     assert measured['partial_files'] == 1
 
 
-@pytest.mark.skipif(not shutil.which('gcc'), reason='optional GCC oracle prerequisite unavailable')
+@pytest.mark.skipif(sys.platform == 'win32' or not shutil.which('gcc'),
+                    reason='optional GCC oracle requires a qualified POSIX compiler host')
 def test_population_and_metric_regressions_bite(corpus):
     root, entry = corpus
     baseline = gate.measure(entry, root)
@@ -70,6 +72,13 @@ def test_gcc_unavailable_is_not_an_empty_oracle(corpus, monkeypatch):
     root, entry = corpus
     monkeypatch.setattr(gate.shutil, 'which', lambda name: None)
     with pytest.raises(RuntimeError, match='prerequisite unavailable'):
+        gate.build_c_oracle(root, entry['recall'])
+
+
+def test_unqualified_windows_probe_is_not_an_empty_oracle(corpus, monkeypatch):
+    root, entry = corpus
+    monkeypatch.setattr(gate.sys, 'platform', 'win32')
+    with pytest.raises(RuntimeError, match='Windows probe not qualified'):
         gate.build_c_oracle(root, entry['recall'])
 
 

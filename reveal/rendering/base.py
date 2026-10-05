@@ -189,6 +189,10 @@ class BaseRenderer(ABC, RendererMixin):
             detail = result.get('message')
             if detail and detail != result.get('error'):
                 print(detail, file=sys.stderr)
+            if result.get('next_steps'):
+                print("Next Steps:", file=sys.stderr)
+                for step in result['next_steps']:
+                    print(f"  • {step}", file=sys.stderr)
             return None
         return cls._render_text(result)
 

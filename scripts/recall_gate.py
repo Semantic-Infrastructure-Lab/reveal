@@ -4,6 +4,7 @@
 Each literal quoted include is resolved in an isolated GCC translation unit;
 Reveal's extractor/resolver never builds the oracle. Only configured importer
 roots and in-corpus targets are measured. Unresolved directives are disclosed.
+The compiler probe is qualified on POSIX hosts; Windows is not yet supported.
 """
 from __future__ import annotations
 
@@ -54,6 +55,8 @@ def resolve_c_include(root: Path, importer: Path, target: str, include_dirs: lis
 
 
 def build_c_oracle(root: Path, config: dict) -> tuple[dict[str, list[str]], dict]:
+    if sys.platform == 'win32':
+        raise RuntimeError('GCC oracle prerequisite unavailable: Windows probe not qualified')
     if not shutil.which('gcc'):
         raise RuntimeError('GCC prerequisite unavailable')
     files = tracked_importers(root, config['importer_dirs'])

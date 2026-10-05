@@ -802,18 +802,25 @@ class TestDomainWhoisRenderer(unittest.TestCase):
         self.assertIn('unsigned', output)
 
     def test_render_whois_error(self):
-        """Renderer shows error message when WHOIS lookup failed."""
+        """The failure seam reports WHOIS error and installation guidance once."""
         from reveal.adapters.domain.renderer import DomainRenderer
+        from reveal.cli.defaults import _default_args
+        from reveal.cli.routing.uri import _emit_result
+        from contextlib import redirect_stderr, redirect_stdout
+        import io
         result = {
             'type': 'domain_whois',
             'domain': 'example.com',
             'error': 'python-whois not installed',
             'next_steps': ['pip install python-whois'],
         }
-        output = self._capture(DomainRenderer.render_structure, result, format='text')
-
-        self.assertIn('python-whois not installed', output)
-        self.assertIn('pip install python-whois', output)
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err), self.assertRaises(SystemExit) as exit_info:
+            _emit_result(result, _default_args(), 'domain', DomainRenderer.render_structure)
+        self.assertEqual(exit_info.exception.code, 1)
+        self.assertEqual(out.getvalue(), '')
+        self.assertEqual(err.getvalue().count('python-whois not installed'), 1)
+        self.assertEqual(err.getvalue().count('pip install python-whois'), 1)
 
     def test_render_overview_shows_whois_section(self):
         """Domain overview renderer shows Registration section with WHOIS."""

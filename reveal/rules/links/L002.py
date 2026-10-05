@@ -88,7 +88,8 @@ class L002(BaseRule):
                 text, url, line_num = future_to_link[future]
                 try:
                     is_broken, reason, status = future.result()
-                except (OSError, ValueError):
+                except Exception as exc:
+                    logger.warning("Link validation worker failed for %s: %s", url, exc)
                     is_broken, reason, status = True, "validation_error", None
 
                 if is_broken:
@@ -170,7 +171,8 @@ class L002(BaseRule):
 
         except HTTPError as e:
             return (True, "http_error", e.code)
-        except (OSError, ValueError):
+        except Exception as exc:
+            logger.warning("GET link validation failed for %s: %s", url, exc)
             return (True, "validation_error", None)
 
     def _get_http_error_suggestion(self, status: int) -> str:

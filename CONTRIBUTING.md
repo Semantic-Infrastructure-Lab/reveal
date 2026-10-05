@@ -316,6 +316,8 @@ is not evidence for a recipe that promises a match.
 JSON at the shared format boundary. Legacy print renderers remain compatible during
 migration. Use immutable `RenderOptions` and `capped_section` for bounded sections so
 omitted rows have a remainder. Do not print a failed result as an empty success.
+The shared failure guard retains distinct `message` details and `next_steps` on
+stderr; the URI boundary owns the error line and exit code.
 
 **Cached analysis:** store the complete analysis artifact, including diagnostic state,
 before request-specific formatting. Import extraction uses `ImportExtraction`; graph builds
