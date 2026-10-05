@@ -165,3 +165,20 @@ class TestStatusFor(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_corpus_ids_do_not_collide_and_language_selects_pair(tmp_path, monkeypatch, capsys):
+    entries = [{'language': 'c', 'repo': 'first', 'sha': 'a'},
+               {'language': 'c', 'id': 'c-second', 'repo': 'second', 'sha': 'b'}]
+    monkeypatch.setattr(fetch_corpus, '_load_manifest', lambda: {'corpora': entries})
+    monkeypatch.setenv('REVEAL_CORPUS_DIR', str(tmp_path))
+    fetched = []
+    monkeypatch.setattr(fetch_corpus, 'fetch_one', lambda entry, root, dry=False: fetched.append(entry))
+    assert fetch_corpus.main(['c']) == 0 and fetched == entries
+    fetched.clear()
+    assert fetch_corpus.main(['c-second']) == 0 and fetched == entries[1:]
+    assert fetch_corpus.main(['absent']) == 2
+    inspected = []
+    monkeypatch.setattr(fetch_corpus, '_status_for', lambda dest, pin: (inspected.append(dest) or 'x', 'ok'))
+    assert fetch_corpus.main(['--list']) == 0
+    assert inspected == [tmp_path / 'c', tmp_path / 'c-second']

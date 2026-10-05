@@ -2,7 +2,7 @@
 """Materialize the real-corpus dogfood repos from tests/corpus/manifest.yaml.
 
 The corpus is the set of large open-source repos used for exploratory,
-real-world validation of reveal's analyzers (NOT for deterministic CI tests —
+real-world validation of reveal's analyzers (optional scheduled recall jobs; NOT for normal CI tests —
 those use tiny hand-written fixtures under tests/fixtures/). See the manifest's
 header for the full rationale.
 
@@ -42,7 +42,7 @@ MANIFEST = Path(__file__).resolve().parent.parent / "tests" / "corpus" / "manife
 
 
 def _load_manifest() -> dict:
-    return yaml.safe_load(MANIFEST.read_text())
+    return yaml.safe_load(MANIFEST.read_text(encoding='utf-8'))
 
 
 def cache_root(manifest: dict) -> Path:
@@ -107,7 +107,7 @@ def _stray_entries(dest: Path) -> list[str]:
 
 
 def fetch_one(entry: dict, root: Path, dry: bool = False) -> None:
-    lang = entry["language"]
+    lang = entry.get("id", entry["language"])
     repo = entry["repo"]
     sha = entry.get("sha")
     dest = root / lang
@@ -189,7 +189,7 @@ def cmd_list(manifest: dict, root: Path) -> None:
     print(f"{'language':<12} {'pinned sha':<14} {'on-disk':<14} {'status':<24} repo")
     print("-" * 100)
     for e in manifest["corpora"]:
-        lang = e["language"]
+        lang = e.get("id", e["language"])
         pinned = e.get("sha")
         sha_display = (pinned or "—")[:12]
         disk, status = _status_for(root / lang, pinned)
@@ -199,7 +199,7 @@ def cmd_list(manifest: dict, root: Path) -> None:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("languages", nargs="*", help="only fetch these (default: all)")
+    ap.add_argument("languages", nargs="*", help="language or corpus ID (default: all)")
     ap.add_argument("--list", action="store_true", help="show manifest + cache state, do nothing")
     ap.add_argument("--dry-run", action="store_true", help="print commands without running them")
     args = ap.parse_args(argv)
@@ -214,8 +214,8 @@ def main(argv: list[str] | None = None) -> int:
     entries = manifest["corpora"]
     if args.languages:
         wanted = set(args.languages)
-        entries = [e for e in entries if e["language"] in wanted]
-        missing = wanted - {e["language"] for e in entries}
+        entries = [e for e in entries if e["language"] in wanted or e.get("id") in wanted]
+        missing = wanted - {key for e in entries for key in (e["language"], e.get("id", e["language"]))}
         if missing:
             print(f"unknown language(s): {', '.join(sorted(missing))}", file=sys.stderr)
             return 2

@@ -14,6 +14,8 @@
 # reads it and materializes each repo (blobless, single-commit, no history) into
 # a shared cache at $REVEAL_CORPUS_DIR or ~/.cache/reveal-corpus/<language>/.
 #
+# OPTIONAL CORPORA: never runtime dependencies or services. The scheduled
+# recall workflow fetches only entries carrying a recall configuration.
 # TWO KINDS OF TESTING, DELIBERATELY SEPARATED
 #   - Deterministic regression tests (CI, tests/test_conformance_matrix.py,
 #     tests/test_smoke_tier.py) use tiny HAND-WRITTEN fixtures under
@@ -46,6 +48,20 @@ corpora:
     sha: 5b22a09918743ba72952e35e431db23eb3d19605
     license: AGPLv3/SSPLv1/RSALv2 (post-2024 relicense) — restrictive, do not extract
     role: Real application (database server), dense idiomatic C
+    recall:
+      importer_dirs: [src, modules, tests/modules, utils]
+      include_dirs: [src, src/commands, deps/hiredis, deps/lua/src, deps/xxhash,
+                     deps/hdr_histogram, deps/jemalloc/include, deps/fpconv,
+                     deps/linenoise, deps/tre/lib, .]
+  - id: c-curl
+    language: c
+    repo: https://github.com/curl/curl.git
+    sha: 1128177a6f725d1f8c4cba4f7ff6532969109e7a
+    license: curl (MIT/X derivative)
+    role: Second C corpus; client library with cross-directory includes
+    recall:
+      importer_dirs: [lib, src]
+      include_dirs: [lib, src, include, .]
   - language: cpp
     repo: https://github.com/godotengine/godot.git
     sha: efce2b1017111f75480ff160117f52a1b3a720d0

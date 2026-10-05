@@ -1751,15 +1751,27 @@ is checked where symbol-usage extraction is supported. A renamed Python project
 preserves its cycle count. These are regression guards, not recall measurements.
 
 
-The per-loop harnesses are **not part of this repository**. Each loop's harness is a
-plain script pair — `build_oracle.*` (produces the independent ground truth) and a diff
-script that compares it against a live reveal run — kept, with its findings, in the
-maintainers' workspace (`internal-docs/`), which is not published. Pointing you at those
-paths would send you to files you cannot open, so this section says what *is* public.
+The first public scheduled gate is [scripts/recall_gate.py](scripts/recall_gate.py),
+with an independent GCC oracle for literal quoted C includes on pinned Redis and
+curl source trees. These are optional test inputs, never runtime dependencies or
+services. Normal installation and the normal test suite do not fetch either repo.
+
+```bash
+python scripts/fetch_corpus.py c
+python scripts/recall_gate.py --corpus-root ~/.cache/reveal-corpus --output recall-report.json
+```
+
+The [scheduled workflow](.github/workflows/recall.yml) runs weekly and can be
+started manually. It verifies exact corpus commits, compares recall/precision with
+[the baseline](tests/corpus/recall_baseline.json), and preserves a timestamped
+report with missed/extra edges, partial parses and unresolved directives. Missing
+GCC, missing corpora, changed populations, zero measurements or metric drops fail
+loudly. `--write-baseline` is for reviewed local remeasurement only. Other languages'
+per-loop harnesses remain maintainer-internal script pairs; promotion is incremental.
 
 What you can reproduce today:
 
-- **The corpora.** Every real-world repo measured above is pinned to an exact commit in
+- **The corpora.** The available pinned real-world repos are listed in
   `tests/corpus/manifest.yaml`; `python scripts/fetch_corpus.py` materializes them
   (`--list` shows the manifest and cache state).
 - **The method.** Each row of the tables above names the oracle mechanism (a from-scratch
