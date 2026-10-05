@@ -280,8 +280,7 @@ code.
 
 ### Reliability program — the priority track (BACK-1512)
 
-This is the first priority until its step 1 lands. It ranks above new adapters and new
-language breadth.
+This is the first priority. It ranks above new adapters and new language breadth.
 
 Recent releases have been mostly fixes: 0.122.0–0.129.0 shipped 155 "Fixed" entries and 31
 "Added". Those fixes fall into about 15 recurring bug classes, which come from five
@@ -310,75 +309,27 @@ a check that counts violations and lets the count only fall. Then the cause is r
 
 **Next, in priority order**
 
-1. **The ratchets are in place (2026-09-30).** Most landed on 2026-09-26:
-   - the walker, parser-import, print/exit, display-path, silent-except
-     (123 -> 0 on 2026-10-02) and complexity ratchets
-     (`scripts/check_boundaries.py`, `scripts/check_complexity.py`);
-   - the grammar-coverage test (`tests/test_grammar_coverage.py`);
-   - the registry-driven contract harness (`tests/test_output_contract_compliance.py`).
+Steps 1 and 2 are done except for one follow-up each; steps 3 and 4 hold the open work.
+What landed, and when, is in CHANGELOG `[0.130.0]` and `internal-docs/RESOLVED_LEDGER.md`.
 
-   Since 2026-09-30 every path in a result is written with `/` on every OS too, and the
-   harness checks it on the Windows CI legs. Since 2026-09-30 no adapter or
-   subcommand answers a relative path with an absolute one. Caps with no knob,
-   which invariant 7 can't vary, now list everything or record their cut (2026-09-30). Since 2026-09-28 the harness checks that a list the router cuts is
-   disclosed, and runs every subcommand through the same result handling (all but `check`,
-   BACK-1545). Since 2026-09-29 it also runs each adapter's own cap knob (`?top`, `?limit`) at
-   1 and uncapped: a list that got shorter must be disclosed, must be the uncapped list's
-   first N, and must state the real total (CHANGELOG `[0.130.0]`).
-2. **The largest class** (flags dropped between invocation forms) is retired at its cause.
-   Landed 2026-09-26: the flag ledger, where a flag or query key the user sets is used, or a
-   note names it (`reveal/cli/routing/ledger.py`, ratchet `tests/test_flag_ledger.py`). The
-   subcommands share the URI form's walk scope (`reveal/cli/routing/subcommand.py`), and the
-   command line is parsed once into one Invocation, so `sys.argv` is read only in `main()`
-   (ratchet: `check_boundaries.py` `argv`). Open follow-up: BACK-1538 (flag/adapter pairs that
-   are read but have no visible effect on the fixture). The 2026-10-05 fixture/mode pass
-   removed ten such rows; Codex bare-list date bounds now get an unapplied-flag note.
-   Thirteen explicit cases remain.
-3. **The result contract:** BACK-1059 (typed outcomes),
-   BACK-916 (one rendering layer) and BACK-1052 (a shared scan budget). BACK-1059's first
-   slice landed on 2026-09-28: one definition of a failed result (`outcome_of`, a top-level
-   `error`), which the URI router reports and turns into exit 1 for every adapter
-   (`cli/routing/uri._emit_result`); renderers no longer print or exit on it. Its second
-   slice, the same day, made a cut list an outcome: one marker (`note_truncation`, a
-   `truncated` meta warning, replacing six spellings), which the router prints once after
-   the render. Since 2026-09-29 the subcommands print through the same handling
-   (`cli/routing/subcommand.emit_subcommand_result`), except `check` (BACK-1545); an
-   adapter's own `?top`/`?limit` cut is recorded the same way; and a read that stops early
-   records a lower bound (`showing 50 of 51+`), with git:// walking history once for every
-   view. An adapter that raises fails through the same handling as one that returns an
-   error (`cli/routing/uri._call_adapter`), and a URI piped to `--stdin --batch` gets the
-   answer `reveal <uri>` gives, resolved by the router without printing
-   (`cli/routing/uri.resolve_uri`). A file's `--head`/`--tail`/`--range` is cut once, in
-   the display layer, and disclosed with the same marker; analyzers never see the flags
-   (`FileAnalyzer.cut_structure`), and its `--max-items` and default text cap record their
-   cut with the same marker. Since 2026-09-30 the file view acts on a failed result too: a
-   file whose own parser failed (XML, a notebook) reports its error and exits 1, and every
-   tree-sitter analyzer, including those that build their own result (JSON, YAML, TOML, ...),
-   says when its parse was recovered (CHANGELOG `[0.130.0]`). Since 2026-10-01 element
-   results and the directory view carry the envelope too (the router wraps each element
-   result), and a partial parse is one `partial_parse` meta warning in the result, not a
-   stderr line per file (CHANGELOG `[0.130.0]`). Since 2026-10-02 the `silent-except` ratchet is at 0: each handler it counted now catches what its input can raise or reports what it skipped (CHANGELOG `[0.130.0]`). Since 2026-10-02 a `?sort=` field no result has is recorded and printed at the same seam on every sorting adapter, not only ast:// (`unknown_sort_field`, CHANGELOG `[0.130.0]`). Since 2026-10-05 B006 and the boundary gate share one silent-handler policy; computed fallbacks are covered and both gates are at zero.
-   Since 2026-10-05 import extraction and adapter graph caches store complete analysis
-   artifacts; nested diagnostics and I002 partial-analysis disclosures survive warm reads.
-   The first pure text renderer (patches) now returns a body through the shared emitter,
-   with an explicit example remainder; failed BaseRenderer shapes are guarded.
-   Frozen numeric declarations and stage-specific budget counts have a bounded pilot;
-   wider renderer and scan-cap migrations remain open.
-4. **One seam per concern:** BACK-1054 (import resolution). The parser seam landed
-   2026-09-30: every tree-sitter parser comes from `reveal/core/treesitter_parse.py`, a missing
-   grammar raises `GrammarUnavailable` instead of reading as an empty result, and the
-   `tree-sitter-import` ratchet is at 0 (CHANGELOG `[0.130.0]`). The
-   path pass landed 2026-09-30: results spell paths as the user named the target, set once
-   for `source` by the router, `compose` and the subcommand envelope, and the subcommands
-   hand adapters the path as typed (CHANGELOG `[0.130.0]`). The root finders landed 2026-09-30: M102, B005, the V-rules and
-   `reveal scaffold` each use the shared finder (CHANGELOG `[0.130.0]`). The walker seam
-   landed 2026-09-30: every walk over the user's target goes through one predicate chosen by
-   the walk's purpose (analysis, evidence, resolution, display, docs), `--exclude` and
-   `REVEAL_IGNORE` are gitignore syntax everywhere, the walker ratchet is at 0, and a
-   cross-walker agreement test keeps ten commands on the same file sets (CHANGELOG
-   `[0.130.0]`). Since 2026-10-05 imports and depends share analysis-layer scope/file-set
-   discovery and resolution dispatch; imports graph assembly moved to that service.
-   Full depends indexing and I002 consolidation remain open.
+1. **The ratchets are in place (2026-09-30).** The walker, parser-import, print/exit,
+   display-path, silent-except (0 since 2026-10-02), argv and complexity ratchets live in
+   `scripts/check_boundaries.py` and `scripts/check_complexity.py`; the grammar-coverage test
+   and the registry-driven contract harness (`tests/test_output_contract_compliance.py`) check
+   every adapter and subcommand's envelope, path spelling and disclosed cuts. Counts only fall.
+2. **The largest class (flags dropped between invocation forms) is retired at its cause.**
+   The flag ledger (`reveal/cli/routing/ledger.py`) and one parsed `Invocation` replaced the
+   seven forwarding mechanisms. Open follow-up: BACK-1538 (flag/adapter pairs read with no
+   visible effect on the fixture; 13 explicit cases remain).
+3. **The result contract.** One failed result and one cut marker are in place for the URI
+   router, the subcommands and the file view. Open: BACK-1059 (typed outcomes at adapter and
+   analyzer boundaries; broad handlers now disclose or narrow, both silent-handler gates at
+   0), BACK-1545 (`reveal check` still has its own cut marker and output path), BACK-916 (one
+   rendering layer: patches is migrated; the rest still print; the 10-01 review proposes
+   starting at `adapters/nginx/handlers.py`, pending a maintainer decision) and BACK-1052 (one scan budget; patches pilot only).
+4. **One seam per concern.** The parser, path, root-finder and walker seams are done. Open:
+   BACK-1054 (import resolution: imports and depends share scope and dispatch; depends'
+   indexing, I002 and the extraction cache still consolidate separately).
 
 These gates run continuously alongside the steps above:
 - BACK-1365: executable docs. The first gate runs offline recipes as text and JSON,
