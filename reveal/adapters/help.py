@@ -161,7 +161,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Find error handlers', 'query': 'ast://src?name~=error&type=function', 'description': 'Locate error handling code', 'output_type': 'ast_query'},
             {'goal': 'Check recent changes', 'query': 'git://.?type=history', 'description': 'Review recent commit history', 'output_type': 'git_ref'},
             {'goal': 'Find large functions', 'query': 'ast://src?lines>100&type=function', 'description': 'Locate potentially problematic large functions', 'output_type': 'ast_query'},
-            {'goal': 'Walk the call chain from an entry point', 'query': 'trace://src?from=main', 'description': 'Depth-indented execution narrative built on calls:// BFS — see the actual path a bug report walks', 'output_type': 'trace'},
+            {'goal': 'Walk the call chain from an entry point', 'query': 'trace://src?from=main', 'description': 'Depth-indented execution narrative built on the calls:// index, followed depth-first — see the actual path a bug report walks', 'output_type': 'trace'},
         ]
     },
     'quality': {
@@ -215,9 +215,9 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'task': 'sessions',
         'description': 'Claude Code session analysis — tool usage, files, errors, workflows',
         'recipes': [
-            {'goal': 'Session overview', 'query': 'reveal claude://session/my-session', 'description': 'Message count, tool calls, duration, tool summary', 'output_type': 'claude_overview'},
+            {'goal': 'Session overview', 'query': 'reveal claude://session/my-session', 'description': 'Message count, tool calls, duration, tool summary', 'output_type': 'claude_session_overview'},
             {'goal': 'Search across all sessions', 'query': "reveal 'claude://sessions/?search=validate_token'", 'description': 'Cross-session content search', 'output_type': 'claude_cross_session_search'},
-            {'goal': 'Session tool usage', 'query': 'reveal claude://session/my-session/tools', 'description': 'Tool call counts and success rates', 'output_type': 'claude_tools'},
+            {'goal': 'Session tool usage', 'query': 'reveal claude://session/my-session/tools', 'description': 'Tool call counts and success rates', 'output_type': 'claude_tool_summary'},
             {'goal': 'Files touched in a session', 'query': 'reveal claude://session/my-session/files', 'description': 'All Read/Write/Edit operations', 'output_type': 'claude_files'},
             {'goal': 'Session errors', 'query': "reveal 'claude://session/my-session?errors'", 'description': 'All errors with context', 'output_type': 'claude_errors'},
             {'goal': 'Prompt/answer pairs for a session', 'query': 'reveal claude://session/my-session/exchanges', 'description': 'Each human prompt paired with the assistant\'s final answer, skipping thinking-only and tool-only turns in between', 'output_type': 'claude_exchanges'},
@@ -1586,7 +1586,7 @@ class HelpAdapter(ResourceAdapter):
                         ('patches', 'ast', 'test churn pressure on specific functions'),
                         ('patches', 'calls', 'highest-churn tests + call-graph identifies blast radius'),
                         ('imports', 'depends', 'forward imports + reverse dependency graph'),
-                        ('stats', 'git', 'quality score over commit history'),
+                        ('stats', 'git', 'quality metrics for a tree, and its commit history from git:// (two queries; stats has no time axis)'),
                         ('git', 'diff', 'git history drives structural diff views'),
                         ('surface', 'imports', 'external boundaries + what imports reach them'),
                         ('surface', 'stats', 'attack-surface map + quality score for the same tree'),
@@ -1602,7 +1602,7 @@ class HelpAdapter(ResourceAdapter):
                         ('overview', 'stats', 'dashboard hotspots/quality pulse draw on the same quality score'),
                         ('overview', 'git', 'recent-activity section is a git:// log query'),
                         ('testability', 'patches', 'testability joins the same patch scan against production boundary fan-out'),
-                        ('trace', 'calls', 'trace narrative is built on calls:// BFS machinery'),
+                        ('trace', 'calls', 'trace narrative is built on the calls:// index'),
                         ('pack', 'imports', '--architecture/--focus ranking is built on the same import/dependency graph'),
                     ],
                 },

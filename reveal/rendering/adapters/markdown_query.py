@@ -238,6 +238,13 @@ def _render_result_row(result: Dict[str, Any]) -> None:
 
     print("  " + " ".join(parts))
 
+    explain = result.get('relevance_explain')
+    if explain:
+        counts = ', '.join(f"{t} x{n}" for t, n in explain.get('term_counts', {}).items())
+        heads = ', '.join(f"{t} x{n}" for t, n in explain.get('heading_hits', {}).items())
+        line = f"      relevance: {result.get('relevance_score', '?')} (matches: {counts or 'none'}"
+        print(line + (f"; in headings: {heads})" if heads else ")"))
+
     for field in ['tags', 'topics']:
         if field in result and field not in extra_fields:
             values = result[field]

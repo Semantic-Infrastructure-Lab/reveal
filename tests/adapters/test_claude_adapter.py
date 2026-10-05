@@ -1333,10 +1333,10 @@ class TestClaudeAdapterSchema:
 
         # Should have claude output types
         output_types = [ot['type'] for ot in schema['output_types']]
-        assert 'claude_overview' in output_types
+        assert 'claude_session_overview' in output_types
         assert 'claude_workflow' in output_types
         assert 'claude_files' in output_types
-        assert 'claude_tools' in output_types
+        assert 'claude_tool_summary' in output_types
         assert 'claude_errors' in output_types
 
     def test_schema_examples(self):

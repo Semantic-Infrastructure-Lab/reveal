@@ -603,6 +603,18 @@ Nothing about the topic here.
         assert heavy['relevance_explain']['term_counts']['authentication'] == 5
         assert heavy['relevance_explain']['heading_hits']['authentication'] == 1
 
+    def test_explain_breakdown_is_shown_in_text_output(self, ranked_docs, capsys):
+        """The text view prints the breakdown JSON carries; without ?explain it prints none."""
+        from reveal.rendering.adapters.markdown_query import render_markdown_query
+        for query, expected in (('body-contains=authentication&explain', True),
+                                ('body-contains=authentication', False)):
+            result = MarkdownQueryAdapter(str(ranked_docs), query=query).get_structure()
+            render_markdown_query(result, 'text')
+            out = capsys.readouterr().out
+            assert ('relevance:' in out) is expected
+            if expected:
+                assert 'authentication x5' in out and 'in headings: authentication x1' in out
+
     def test_explicit_sort_overrides_relevance_ranking(self, ranked_docs):
         """An explicit sort= still wins over the default relevance ordering."""
         adapter = MarkdownQueryAdapter(str(ranked_docs), query='body-contains=authentication&sort=title')

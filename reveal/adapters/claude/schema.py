@@ -135,14 +135,21 @@ def _make_output_type(type_name: str, description: str, extra_props: dict) -> di
 
 
 _SCHEMA_OUTPUT_TYPES = [
-    _make_output_type('claude_overview', 'Session overview with message counts and tool usage', {
+    _make_output_type('claude_session_overview', 'Session overview with message counts and tool usage', {
         'message_count': {'type': 'integer'}, 'tool_calls': {'type': 'integer'},
         'duration': {'type': 'string'}, 'tool_summary': {'type': 'array'}
     }),
     _make_output_type('claude_workflow', 'Chronological tool operation sequence', {'operations': {'type': 'array'}}),
     _make_output_type('claude_files', 'Files touched during session', {'files': {'type': 'array'}}),
-    _make_output_type('claude_tools', 'Tool usage statistics', {
+    _make_output_type('claude_tool_summary', 'Tool usage statistics', {
         'tools': {'type': 'array'}, 'success_rate': {'type': 'number'}
+    }),
+    _make_output_type('claude_tool_calls', 'Every call of one tool (?tools=NAME)', {
+        'tool_name': {'type': 'string'}, 'call_count': {'type': 'integer'}, 'calls': {'type': 'array'}
+    }),
+    _make_output_type('claude_analytics', 'Session analytics summary (?summary)', {
+        'message_count': {'type': 'integer'}, 'tools_used': {'type': 'object'},
+        'tool_success_rate': {'type': 'object'}, 'files_touched': {'type': 'array'}
     }),
     _make_output_type('claude_errors', 'All errors and exceptions in session', {
         'errors': {'type': 'array'}, 'count': {'type': 'integer'}
@@ -238,14 +245,14 @@ _SCHEMA_OUTPUT_TYPES = [
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [
-    {'uri': 'claude://session/2627362f-6f72-45e1-b7bb-d5a61519a388', 'description': 'Session overview (messages, tools, duration) — session name is the UUID directory name, or a friendly name if using a session-naming layer', 'output_type': 'claude_overview'},
+    {'uri': 'claude://session/2627362f-6f72-45e1-b7bb-d5a61519a388', 'description': 'Session overview (messages, tools, duration) — session name is the UUID directory name, or a friendly name if using a session-naming layer', 'output_type': 'claude_session_overview'},
     {'uri': 'claude://session/infernal-earth-0118/workflow', 'description': 'Chronological sequence of tool operations', 'element': 'workflow', 'output_type': 'claude_workflow'},
     {'uri': 'claude://session/infernal-earth-0118/files', 'description': 'All files read, written, or edited', 'element': 'files', 'output_type': 'claude_files'},
-    {'uri': 'claude://session/infernal-earth-0118/tools', 'description': 'All tool usage with success rates', 'element': 'tools', 'output_type': 'claude_tools'},
+    {'uri': 'claude://session/infernal-earth-0118/tools', 'description': 'All tool usage with success rates', 'element': 'tools', 'output_type': 'claude_tool_summary'},
     {'uri': 'claude://session/infernal-earth-0118/errors', 'description': 'All errors and exceptions', 'element': 'errors', 'output_type': 'claude_errors'},
-    {'uri': 'claude://session/infernal-earth-0118?tools=Bash', 'description': 'Filter for Bash tool usage', 'query_param': '?tools=Bash', 'output_type': 'claude_overview'},
-    {'uri': 'claude://session/infernal-earth-0118?errors', 'description': 'Filter for error messages', 'query_param': '?errors', 'output_type': 'claude_overview'},
-    {'uri': 'claude://session/infernal-earth-0118?summary', 'description': 'Session summary with key events', 'query_param': '?summary', 'output_type': 'claude_overview'},
+    {'uri': 'claude://session/infernal-earth-0118?tools=Bash', 'description': 'Filter for Bash tool usage', 'query_param': '?tools=Bash', 'output_type': 'claude_tool_calls'},
+    {'uri': 'claude://session/infernal-earth-0118?errors', 'description': 'Filter for error messages', 'query_param': '?errors', 'output_type': 'claude_errors'},
+    {'uri': 'claude://session/infernal-earth-0118?summary', 'description': 'Session summary with key events', 'query_param': '?summary', 'output_type': 'claude_analytics'},
     {'uri': 'claude://session/infernal-earth-0118/digest', 'description': 'Composed readable view: overview + human prompts + assistant narrative in one call — start here for "what happened in this session"', 'element': 'digest', 'output_type': 'claude_digest'},
     {'uri': 'claude://session/infernal-earth-0118/exchanges', 'description': 'Each human prompt paired with the assistant\'s final answer to it — use when you need "what was asked, what did it finally say" per turn, not a whole-session dump', 'element': 'exchanges', 'output_type': 'claude_exchanges'},
     {'uri': 'claude://session/infernal-earth-0118/messages', 'description': 'All assistant narrative turns (text only) — best resource for reading what was said', 'element': 'messages', 'output_type': 'claude_messages'},
