@@ -285,6 +285,8 @@ class VarFlowWalker:
             self._walk_with(n, c)
         elif ntype == 'func_literal':
             self._walk_func_literal(n, c)
+        elif ntype == 'instanceof_expression' and n.child_by_field_name('name') is not None:
+            self._walk_instanceof(n, c)
         elif ntype in IF_WHILE_NODES:
             # Rust's `if`/`if let`/`while` produce `if_expression`/
             # `while_expression`, not `if_statement`/`while_statement`
@@ -617,6 +619,16 @@ class VarFlowWalker:
                     for part in _children(decl):
                         if _start_pos(part) not in param_names:
                             self.walk(part, c)
+            else:
+                self.walk(child, c)
+
+    def _walk_instanceof(self, n: Any, c: str) -> None:
+        """Java `x instanceof T name`: `name` is a pattern binding (a WRITE at that
+        site), not a read of an outer variable (BACK-1408)."""
+        binding = n.child_by_field_name('name')
+        for child in _children(n):
+            if _start_pos(child) == _start_pos(binding):
+                self.walk(child, 'WRITE')
             else:
                 self.walk(child, c)
 
