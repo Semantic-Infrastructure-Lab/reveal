@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,8 @@ import pytest
 GUARD = Path(__file__).resolve().parent.parent / "scripts" / "ci_editable_guard.sh"
 CI_LOCAL = GUARD.with_name("ci-local.sh")
 
-pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
+pytestmark = pytest.mark.skipif(sys.platform == "win32" or shutil.which("bash") is None,
+                                reason="POSIX shell script for the POSIX-only ci-local.sh")
 
 
 def _fake_venv(root: Path, target: Path | None, editable: bool = True) -> Path:
@@ -35,7 +37,7 @@ def _guard(venv: Path, top: Path, **env):
         full.pop("REVEAL_CI_ALLOW_REPOINT", None)
     return subprocess.run(
         ["bash", "-c", f'source "{GUARD.as_posix()}"; ci_editable_guard "$1" "$2"', "_", str(venv), str(top)],
-        capture_output=True, text=True, timeout=30, env=full,
+        capture_output=True, text=True, encoding='utf-8', timeout=30, env=full,
     )
 
 
