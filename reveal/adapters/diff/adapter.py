@@ -22,9 +22,11 @@ class DiffAdapter(ResourceAdapter):
 
     Examples:
         diff://app.py:backup/app.py               # File comparison
-        diff://env://:env://production            # Environment comparison
-        diff://mysql://prod/db:mysql://staging/db # Database schema drift
         diff://app.py:old.py/handle_request       # Element-specific diff
+
+    Compares functions, classes and imports. A resource whose structure has none
+    (env://, sqlite://, mysql://, JSON/YAML files) always reports no changes, so it is
+    not a schema- or config-drift check (BACK-1642).
     """
     HELP_CLUSTER = 'Code Analysis'
 

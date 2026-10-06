@@ -874,7 +874,9 @@ class TestDiffAdapterSchema(unittest.TestCase):
         schema = DiffAdapter.get_schema()
 
         self.assertIn('example_queries', schema)
-        self.assertTrue(len(schema['example_queries']) >= 5)
+        # BACK-1642: the env:// and mysql:// examples were removed (diff:// compares code
+        # structure only), leaving four examples that each work as written.
+        self.assertTrue(len(schema['example_queries']) >= 4)
 
         # Examples should have required fields
         for example in schema['example_queries']:

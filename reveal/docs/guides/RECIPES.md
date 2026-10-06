@@ -963,13 +963,13 @@ reveal mysql://localhost/innodb
 
 ### Schema drift detection
 
-```bash
-# Compare database schemas
-reveal diff://mysql://localhost/users:mysql://staging/users
-
-# Compare SQLite schemas
-reveal diff://sqlite://./dev.db:sqlite://./prod.db
-```
+`diff://` compares functions, classes and imports, so it cannot report schema drift:
+`diff://sqlite://a.db:sqlite://b.db` prints "No structural changes detected" even when the tables
+differ (checked with two databases that had different tables and columns). For SQLite, compare each
+database's own output with the shell's `diff` (see `reveal help://sqlite`, "With diff (Schema
+Comparison)"). `mysql://` needs a live MySQL connection, its default view is a server health
+overview rather than a schema, and `diff://mysql://...` goes through the same compare step, so no
+MySQL recipe is offered here.
 
 ---
 

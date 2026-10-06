@@ -513,7 +513,7 @@ These are good fits, but less central than the top-tier workflows above:
 - quick inspection of JSON, env files, SQLite, and MySQL resources
 - documentation quality audits and link validation
 - architecture diagrams via GraphViz output from `calls://` or `depends://`
-- release validation and schema drift checks with `diff://`
+- release validation with `diff://` (structural changes in code: functions, classes, imports)
 - budget-constrained adapter output using `--fields`, `--max-items`, and `--max-snippet-chars`
 
 These matter because they extend the same model into more domains, even if they are not the first reason most users will adopt Reveal.

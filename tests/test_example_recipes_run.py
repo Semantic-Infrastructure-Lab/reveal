@@ -339,7 +339,7 @@ _PLACEHOLDER_MAP = dict(SCHEMA_PLACEHOLDERS)
 # Examples that name content no shared fixture has (a host, a ref, a sheet, an env var, a JSON
 # key). Their syntax is not checked here; a fixture that grew the content would be.
 SCHEMA_UNRUNNABLE = (
-    'diff://mysql://', 'diff://git://app.py@main', 'git://.@abc1234', 'git://.@main',
+    'diff://git://app.py@main', 'git://.@abc1234', 'git://.@main',
     'git://src/app.py@v1.0', 'element=load_config', 'sheet=Sales',
     'json://data.json/users', 'json://package.json/', 'format=dot',
     # Depend on the interpreter running the suite: a venv, an installed `requests`.

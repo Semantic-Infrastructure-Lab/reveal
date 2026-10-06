@@ -34,14 +34,12 @@ category: guide
 
 ## Overview
 
-The **diff://** adapter provides semantic structural comparison between two reveal-compatible resources. Unlike traditional line-level diff tools (like `diff` or `git diff`), it compares structure and semantics, making it ideal for understanding functional changes, schema drift, and configuration differences.
+The **diff://** adapter provides semantic structural comparison between two reveal-compatible resources. Unlike traditional line-level diff tools (like `diff` or `git diff`), it compares structure and semantics, making it ideal for understanding functional changes in code: which functions, classes and imports were added, removed or modified. It compares code structure only; see [What diff:// does not compare](#what-diff-does-not-compare).
 
 **Primary Use Cases**:
 - Pre-commit validation (check uncommitted changes)
 - Code review workflow (compare branches, commits)
 - Refactoring validation (verify complexity improvements)
-- Schema drift detection (database changes)
-- Configuration comparison (environment variables, files)
 - Migration validation (ensure no functionality lost)
 - Merge impact assessment (compare branches before merge)
 
@@ -50,8 +48,6 @@ The **diff://** adapter provides semantic structural comparison between two reve
 - File-to-file comparison
 - Directory comparison (aggregates all files)
 - Git integration (compare commits, branches, working tree)
-- Environment variable comparison
-- Database schema drift detection
 - Element-specific diff (functions, classes, methods)
 - Complexity delta tracking (detect complexity changes)
 - Line count delta tracking
@@ -107,23 +103,7 @@ reveal diff://app.py:old.py/handle_request
 
 **Returns**: Changes to specific function across versions
 
-### 6. Compare Environment Variables
-
-```bash
-reveal diff://env://:env://production
-```
-
-**Returns**: Environment variable differences (local vs production)
-
-### 7. Detect Database Schema Drift
-
-```bash
-reveal diff://mysql://localhost/mydb:mysql://staging/mydb
-```
-
-**Returns**: Schema differences (tables, columns, indexes)
-
-### 8. Compare Git Branches (Full)
+### 6. Compare Git Branches (Full)
 
 ```bash
 reveal diff://git://main/.:git://feature/.
@@ -165,7 +145,7 @@ function: foo
 
 ### 2. Adapter-Agnostic Comparison
 
-Works with any reveal-compatible resource:
+Works with any resource whose structure has functions, classes or imports (see [What diff:// does not compare](#what-diff-does-not-compare)):
 
 | Left Resource | Right Resource | Use Case |
 |---------------|----------------|----------|
@@ -173,8 +153,6 @@ Works with any reveal-compatible resource:
 | `src/` | `backup/src/` | Directory comparison |
 | `git://HEAD~1/app.py` | `app.py` | Pre-commit validation |
 | `git://main/.` | `git://feature/.` | Branch comparison |
-| `env://` | `env://production` | Config comparison |
-| `mysql://local/db` | `mysql://prod/db` | Schema drift |
 
 **Pattern**: `diff://<left-resource>:<right-resource>`
 
@@ -419,16 +397,9 @@ reveal diff://git://abc123/file.py:file.py
 
 #### Adapter URIs
 
-```bash
-# Environment variables
-reveal diff://env://:env://production
-
-# Database schemas
-reveal diff://mysql://localhost/mydb:mysql://staging/mydb
-
-# SQLite databases
-reveal diff://sqlite://local.db:sqlite://backup.db
-```
+`diff://` accepts any registered adapter URI on either side, but only code structure is compared.
+`env://`, `sqlite://` and `mysql://` URIs parse and resolve and then compare equal; see
+[What diff:// does not compare](#what-diff-does-not-compare).
 
 ---
 
@@ -553,50 +524,22 @@ reveal diff://git://HEAD/.:./
 
 ---
 
-### 5. Environment Comparison
+### What diff:// does not compare
 
-**Syntax**:
-```bash
-reveal 'diff://env://[name]:env://[name]'
-```
+`diff://` compares **code structure**: the functions, classes and imports an analyzer extracts. A
+resource whose structure has none of those compares as identical, so these report no drift even when
+the content differs:
 
-**Use cases**:
-- Compare local vs production config
-- Validate environment setup
-- Detect config drift
+| Resource | Checked | Result |
+|----------|---------|--------|
+| `sqlite://a.db` vs `sqlite://b.db` (different tables and columns) | run with two real databases | `No structural changes detected` |
+| `env://` vs `env://HOME` | run | `No structural changes detected` |
+| two JSON or YAML files with different keys and values | run with `.json` and `.yaml` pairs | `No structural changes detected` |
+| `mysql://host1/db` vs `mysql://host2/db` | URI parsing and the compare step only; running it requires a live MySQL connection | not run here. `mysql://` returns a server health overview (a path segment that is not a known element, such as a database name, falls back to that overview) or the data of a known element such as `/tables`; neither has functions, classes or imports, so no schema drift is reported |
 
-**Example**:
-```bash
-# Local vs production
-reveal diff://env://:env://production
-
-# Staging vs production
-reveal diff://env://staging:env://production
-```
-
----
-
-### 6. Database Schema Drift
-
-**Syntax**:
-```bash
-reveal diff://mysql://host1/db:mysql://host2/db
-reveal diff://sqlite://db1.db:sqlite://db2.db
-```
-
-**Use cases**:
-- Detect schema drift
-- Validate migrations
-- Compare staging vs production schemas
-
-**Example**:
-```bash
-# MySQL schema drift
-reveal diff://mysql://localhost/mydb:mysql://staging/mydb
-
-# SQLite comparison
-reveal diff://sqlite://local.db:sqlite://backup.db
-```
+To compare databases, environments or config files, diff each side's own output with the shell
+instead, for example `diff <(reveal sqlite:///db1.db --format json) <(reveal sqlite:///db2.db --format json)`
+(see `reveal help://sqlite`, "With diff (Schema Comparison)"). Expect path and size lines to differ too.
 
 ---
 
@@ -1273,38 +1216,6 @@ reveal diff://git://v1.0.0/.:git://v1.1.0/. --format json | \
 
 ---
 
-### Workflow 6: Schema Drift Detection
-
-**Scenario**: Detect database schema differences between environments
-
-**Steps**:
-
-```bash
-# Step 1: Compare staging to production
-reveal diff://mysql://staging/mydb:mysql://production/mydb
-
-# Step 2: Check specific tables
-reveal diff://mysql://staging/mydb:mysql://production/mydb/users
-
-# Step 3: Generate drift report
-{
-  echo "# Schema Drift Report"
-  echo "## Staging vs Production"
-  reveal diff://mysql://staging/mydb:mysql://production/mydb
-} > schema-drift.md
-
-# Step 4: Alert if drift detected
-DRIFT=$(reveal diff://mysql://staging/mydb:mysql://production/mydb --format json | \
-  jq '.summary | .added + .removed + .modified')
-
-if [ "$DRIFT" -gt 0 ]; then
-  echo "⚠️  Schema drift detected: $DRIFT changes"
-  # Send alert to monitoring system
-fi
-```
-
----
-
 ## Performance Considerations
 
 ### Operation Timing
@@ -1316,7 +1227,6 @@ fi
 | Directory (small) | 0.5-2s | Moderate (10-20 files) |
 | Directory (large) | 2-10s | Slower (50-100 files) |
 | Git comparison | 0.5-3s | Moderate (git checkout overhead) |
-| Database schema | 1-5s | Moderate (schema query overhead) |
 
 ---
 
@@ -1408,10 +1318,12 @@ cat "$CACHE_FILE"
    - **Impact**: Can't see exact line changes
    - **Workaround**: Use `git diff` or `diff` for line-level diffs
 
-6. **Database adapter dependency**
-   - **Limitation**: Database schema diffs require adapter support
-   - **Currently supported**: MySQL, SQLite
-   - **Not supported**: PostgreSQL, MongoDB (yet)
+6. **Only code structure is compared**
+   - **Limitation**: resources without functions, classes or imports (`env://`, `sqlite://`,
+     `mysql://`, JSON/YAML files) always compare equal
+   - **Impact**: `No structural changes detected` is not evidence that databases or environments match
+   - **Workaround**: diff each side's own output with the shell `diff`; see
+     [What diff:// does not compare](#what-diff-does-not-compare)
 
 ---
 
@@ -1487,7 +1399,7 @@ reveal old.py/handle_request
 **Meaning**: Resource type doesn't support structural comparison
 
 **Solutions**:
-- Use supported resource types (files, git, env, mysql, sqlite)
+- Use supported resource types (files, directories, git refs)
 - For unsupported types, use traditional diff tools
 - Check adapter documentation for comparison support
 
@@ -1582,19 +1494,15 @@ reveal diff://git://main/.:git://feature/.
 
 ---
 
-### 7. Schema Drift Monitoring
+### 7. Do Not Use diff:// as a Drift Alarm for Databases or Environments
 
 ```bash
-# ✅ Continuous monitoring
-reveal diff://mysql://staging/db:mysql://prod/db --format json | \
-  jq -e '.summary | .added + .removed + .modified > 0'
-
-if [ $? -eq 0 ]; then
-  echo "⚠️  Schema drift detected"
-fi
+# ✅ Diff each side's own output (diff:// on the two databases prints "No structural changes detected")
+diff <(reveal sqlite:///a.db --format json) <(reveal sqlite:///b.db --format json)
 ```
 
-**Why**: Catch schema divergence early
+**Why**: a monitor built on `diff://` for `sqlite://`, `mysql://` or `env://` reports no drift forever
+(see [What diff:// does not compare](#what-diff-does-not-compare)).
 
 ---
 
@@ -1623,16 +1531,13 @@ reveal diff://before.py:after.py/critical_function
 
 ---
 
-### 10. Compare Environment Configs
+### 10. Compare Environments Outside diff://
 
-```bash
-# ✅ Detect config drift
-reveal diff://env://:env://production
+`env://` compares equal under `diff://`; export each environment's variables and use the shell `diff`
+on the two listings.
 
-# Flag if critical vars missing
-```
-
-**Why**: Prevent deployment issues from config mismatches
+**Why**: config mismatches between environments are a common deployment failure, and a comparison
+that always reports "no changes" hides them
 
 ---
 

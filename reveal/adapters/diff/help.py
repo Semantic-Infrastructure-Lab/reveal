@@ -6,9 +6,8 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 _SCHEMA_COMPARISON_TYPES = [
     'File to file comparison',
-    'Environment to environment comparison',
-    'Database schema drift detection',
-    'Configuration comparison',
+    'Directory comparison',
+    'Git ref comparison',
     'Element-specific diff (functions, classes, etc.)'
 ]
 
@@ -88,8 +87,6 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'note': 'Git URIs use path@ref format, not ref:path'
     },
     {'uri': 'diff://git://app.py@main:git://app.py@develop', 'description': 'Compare file across two git branches', 'output_type': 'diff_comparison'},
-    {'uri': 'diff://env://:env://production', 'description': 'Compare local environment to production', 'output_type': 'diff_comparison'},
-    {'uri': 'diff://mysql://prod/db:mysql://staging/db', 'description': 'Database schema drift detection', 'output_type': 'diff_comparison'},
     {
         'uri': 'diff://app.py:old.py/handle_request',
         'description': 'Compare specific function across versions',
@@ -102,7 +99,7 @@ _SCHEMA_NOTES = [
     'Supports any two reveal URIs that resolve to comparable structures',
     'Automatically detects resource types and adapts comparison strategy',
     'Element-specific diffs extract and compare individual functions/classes',
-    'Works with files, databases, environments, and other adapters',
+    'Compares functions, classes and imports. A resource whose structure has none of them (env://, sqlite://, mysql://, JSON/YAML files) reports "No structural changes detected" even when its content differs; compare those with the shell diff of each adapter\'s own output',
     'Git URIs use path@ref format: git://file.py@HEAD~1 (not git://HEAD~1:file.py)',
     'Git ref format matches git adapter syntax, not git CLI show command'
 ]
@@ -115,7 +112,7 @@ def get_schema() -> Dict[str, Any]:
     """
     return {
         'adapter': 'diff',
-        'description': 'Compare two reveal-compatible resources to detect changes, schema drift, or configuration differences',
+        'description': 'Compare two reveal-compatible resources to detect structural changes (functions, classes, imports)',
         'uri_syntax': 'diff://<left-uri>:<right-uri>[/element]',
         'query_params': {},
         'elements': {},
