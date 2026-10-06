@@ -169,6 +169,15 @@ jobs:
           pip install "tree-sitter-language-pack==${{ matrix.lp-version }}"
           pip install build  # tests/test_packaging_manifest.py shells out to `python -m build`
 
+      - name: Pre-download every tree-sitter grammar (BACK-1476)
+        # 1.8.1 fetches a grammar into the shared cache on first get_parser(). Two xdist workers
+        # doing that for the same language at once crashed with SIGBUS (one dlopen()s the shared
+        # object while the other is still writing it). Fetching up front, single-process, leaves
+        # the workers read-only. Newer packs did not show it, so only the floor leg pays the
+        # download.
+        if: matrix.lp-version == '1.8.1'
+        run: python -c "from reveal.core import treesitter_parse; print('grammars fetched:', treesitter_parse.download_all())"
+
       - name: Run tests
         env:
           PYTHONIOENCODING: utf-8
