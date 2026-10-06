@@ -4,11 +4,17 @@ This module provides common functionality used across multiple V-series rules,
 particularly for finding and working with reveal's installation directory.
 """
 
+import ast
 import logging
 import os
 import re
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
+
+from ...utils.path_utils import to_posix
+
+if TYPE_CHECKING:
+    from ..base import BaseRule
 
 logger = logging.getLogger(__name__)
 
@@ -159,3 +165,51 @@ def is_dev_checkout(reveal_root: Optional[Path]) -> bool:
         return False
     project_root = reveal_root.parent
     return (project_root / 'pyproject.toml').exists()
+
+
+def load_test_suite(rule: 'BaseRule') -> List[Tuple[str, str]]:
+    """(display path, source) for each test module of the dev checkout's ``tests/``
+    (``test_*.py`` and ``conftest.py``): what the test-suite rules scan.
+
+    Records on *rule* why there is nothing to scan (no reveal root: unavailable; an
+    installed package or no tests/: not applicable) and each module that cannot be read
+    (unavailable, with the module as subject) rather than skipping it silently. Rules
+    pre-filter the source cheaply and parse only candidates (``parse_test_module``).
+    """
+    reveal_root = find_reveal_root()
+    if not reveal_root:
+        rule.unavailable("reveal source root unavailable")
+        return []
+    if not is_dev_checkout(reveal_root):
+        rule.not_applicable("requires a development checkout")
+        return []
+    project_root = reveal_root.parent
+    tests_dir = project_root / 'tests'
+    if not tests_dir.is_dir():
+        rule.not_applicable("no tests/ directory")
+        return []
+    modules: List[Tuple[str, str]] = []
+    # boundary-ok: walker -- V-series: reveal's own test suite
+    for path in sorted(tests_dir.rglob('*.py')):
+        if not (path.name.startswith('test_') or path.name == 'conftest.py'):
+            continue
+        display = to_posix(path.relative_to(project_root))
+        try:
+            modules.append((display, path.read_text(encoding='utf-8')))
+        except (OSError, UnicodeDecodeError) as e:
+            rule.unavailable(f"{type(e).__name__}: {e}", display)
+    return modules
+
+
+def parse_test_module(rule: 'BaseRule', display: str, source: str) -> Optional[ast.Module]:
+    """The module's AST, or None after recording on *rule* that it does not parse."""
+    try:
+        return ast.parse(source, filename=display)
+    except (SyntaxError, ValueError) as e:
+        rule.unavailable(f"{type(e).__name__}: {e}", display)
+        return None
+
+
+def has_noqa(line: str, code: str) -> bool:
+    """True if *line* carries ``# noqa: <code>`` (a justification may follow)."""
+    return re.search(r'#\s*noqa:[^#]*\b' + re.escape(code) + r'\b', line) is not None
