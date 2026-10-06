@@ -36,6 +36,7 @@ jobs:
       - name: Check measurement controls
         run: pytest tests/test_recall_gate.py tests/test_fetch_corpus.py -q
       - name: Fetch pinned recall corpora
+        # Budget (2026-10-06, 8 corpora): cold fetch 506 s / 1.7 GB on a home link, measuring ~70 s.
         run: python scripts/fetch_corpus.py --recall
       - name: Compare with reviewed baseline
         run: python scripts/recall_gate.py --corpus-root "$REVEAL_CORPUS_DIR" --output recall-report.json

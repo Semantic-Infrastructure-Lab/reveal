@@ -1433,6 +1433,15 @@ every sample matched the published target and edge counts.
     open it, but the sole-basename fallback (BACK-1669) resolves it to
     `code/AssetLib/Step/STEPFile.h`. The published 50 extra edges came from importers
     outside the oracle's scope (`test/`, `tools/`, `contrib/`), which the gate excludes.
+
+  The same gate also measures two primary corpora at their existing pins, over the full
+  population rather than the published samples: Rust/Meilisearch (702 files, 305
+  targets, 1,491/1,491 edges, 0 extra, matching the published edge count) and
+  Java/Elasticsearch `server/src/main/java` (4,837 files, 3,382 targets, 32,590/32,590
+  edges, 25 extra, precision 99.92%). The 25 extras are one class: an import of an
+  external type whose simple name matches an in-tree class in another package (for
+  example `org.apache.lucene.geo.GeoUtils` claimed as
+  `org/elasticsearch/common/geo/GeoUtils.java`, and log4j's `Plugin` in 13 files).
 - **Cannot be re-run (BACK-1461):**
   - Corpus clone not preserved: Go/client_golang, Ruby/solidus,
     Kotlin/kotlinx.coroutines, Scala/cats-effect, C#/Newtonsoft.Json, PHP/osCommerce,
@@ -1776,8 +1785,8 @@ manifest entry with a `recall:` block names an independent oracle from
 | `gcc-c` | GCC opens each literal quoted include in an isolated probe | Redis, curl |
 | `gcc-cpp` | The same probe as C++ | assimp |
 | `python-ast` | `ast.parse` plus filesystem module resolution; `TYPE_CHECKING` imports skipped | celery |
-| `rust-use` | Deepest real module file for `crate::`/`super::`/`self::` use paths | ripgrep |
-| `java-jls` | A public top-level type `C` of package `a.b` is `a/b/C.java` | guava |
+| `rust-use` | Deepest real module file for `crate::`/`super::`/`self::` use paths | Meilisearch, ripgrep |
+| `java-jls` | A public top-level type `C` of package `a.b` is `a/b/C.java` | Elasticsearch `server/src/main/java`, guava |
 
 The corpora are optional test inputs, never runtime dependencies or services. Normal
 installation and the normal test suite do not fetch them.

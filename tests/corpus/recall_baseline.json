@@ -113,5 +113,126 @@
         ]
       }
     ]
+  },
+  "java": {
+    "oracle": "java-jls",
+    "sha": "a6141b9dbec012eb147c8280ccc65f847b2956fa",
+    "targets": 3382,
+    "oracle_edges": 32590,
+    "hit_edges": 32590,
+    "extra_edges": 25,
+    "recall": 1.0,
+    "precision": 0.9992334815269048,
+    "coverage": {
+      "files": 4837,
+      "indexed_types": 4837,
+      "import_statements": 62604,
+      "resolved_statements": 33803
+    },
+    "partial_files": 0,
+    "differences": [
+      {
+        "target": "server/src/main/java/org/elasticsearch/common/geo/GeoUtils.java",
+        "missed": [],
+        "extra": [
+          "server/src/main/java/org/elasticsearch/search/runtime/GeoPointScriptFieldDistanceFeatureQuery.java"
+        ]
+      },
+      {
+        "target": "server/src/main/java/org/elasticsearch/common/lucene/search/function/FunctionScoreQuery.java",
+        "missed": [],
+        "extra": [
+          "server/src/main/java/org/elasticsearch/index/query/BoostingQueryBuilder.java",
+          "server/src/main/java/org/elasticsearch/search/vectors/RescoreKnnVectorQuery.java"
+        ]
+      },
+      {
+        "target": "server/src/main/java/org/elasticsearch/common/util/BytesRefHash.java",
+        "missed": [],
+        "extra": [
+          "server/src/main/java/org/elasticsearch/search/fetch/subphase/highlight/PlainHighlighter.java"
+        ]
+      },
+      {
+        "target": "server/src/main/java/org/elasticsearch/index/IndexNotFoundException.java",
+        "missed": [],
+        "extra": [
+          "server/src/main/java/org/elasticsearch/gateway/PersistedClusterStateService.java",
+          "server/src/main/java/org/elasticsearch/index/store/Store.java",
+          "server/src/main/java/org/elasticsearch/indices/store/TransportNodesListShardStoreMetadata.java"
+        ]
+      },
+      {
+        "target": "server/src/main/java/org/elasticsearch/index/analysis/AnalysisMode.java",
+        "missed": [],
+        "extra": [
+          "server/src/main/java/org/elasticsearch/indices/analysis/wrappers/StableApiWrappers.java"
+        ]
+      },
+      {
+        "target": "server/src/main/java/org/elasticsearch/index/analysis/CharFilterFactory.java",
+        "missed": [],
+        "extra": [
+          "server/src/main/java/org/elasticsearch/indices/analysis/wrappers/StableApiWrappers.java"
+        ]
+      },
+      {
+        "target": "server/src/main/java/org/elasticsearch/index/analysis/TokenFilterFactory.java",
+        "missed": [],
+        "extra": [
+          "server/src/main/java/org/elasticsearch/indices/analysis/wrappers/StableApiWrappers.java"
+        ]
+      },
+      {
+        "target": "server/src/main/java/org/elasticsearch/index/analysis/TokenizerFactory.java",
+        "missed": [],
+        "extra": [
+          "server/src/main/java/org/elasticsearch/indices/analysis/wrappers/StableApiWrappers.java"
+        ]
+      },
+      {
+        "target": "server/src/main/java/org/elasticsearch/injection/guice/internal/Strings.java",
+        "missed": [],
+        "extra": [
+          "server/src/main/java/org/elasticsearch/common/blobstore/support/TenaciousRetryBlobContainer.java"
+        ]
+      },
+      {
+        "target": "server/src/main/java/org/elasticsearch/plugins/Plugin.java",
+        "missed": [],
+        "extra": [
+          "server/src/main/java/org/elasticsearch/common/logging/ClusterIdConverter.java",
+          "server/src/main/java/org/elasticsearch/common/logging/ClusterNamePatternConverter.java",
+          "server/src/main/java/org/elasticsearch/common/logging/ConsoleThrowablePatternConverter.java",
+          "server/src/main/java/org/elasticsearch/common/logging/CustomMapFieldsConverter.java",
+          "server/src/main/java/org/elasticsearch/common/logging/ECSJsonLayout.java",
+          "server/src/main/java/org/elasticsearch/common/logging/ESJsonLayout.java",
+          "server/src/main/java/org/elasticsearch/common/logging/HeaderWarningAppender.java",
+          "server/src/main/java/org/elasticsearch/common/logging/JsonThrowablePatternConverter.java",
+          "server/src/main/java/org/elasticsearch/common/logging/NodeAndClusterIdConverter.java",
+          "server/src/main/java/org/elasticsearch/common/logging/NodeIdConverter.java",
+          "server/src/main/java/org/elasticsearch/common/logging/NodeNamePatternConverter.java",
+          "server/src/main/java/org/elasticsearch/common/logging/RateLimitingFilter.java",
+          "server/src/main/java/org/elasticsearch/common/logging/TraceIdConverter.java"
+        ]
+      }
+    ]
+  },
+  "rust": {
+    "oracle": "rust-use",
+    "sha": "17758dce3fcc21d8e2415176c29d1106e905de00",
+    "targets": 305,
+    "oracle_edges": 1491,
+    "hit_edges": 1491,
+    "extra_edges": 0,
+    "recall": 1.0,
+    "precision": 1.0,
+    "coverage": {
+      "files": 702,
+      "use_statements": 6215,
+      "local_paths": 4443
+    },
+    "partial_files": 0,
+    "differences": []
   }
 }
