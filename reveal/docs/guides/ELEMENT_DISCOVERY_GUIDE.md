@@ -556,14 +556,14 @@ if 'dates' in [e['name'] for e in overview.get('available_elements', [])]:
 
 **❌ Don't** (get all data then filter):
 ```bash
-# Get all packages, filter in shell
-reveal python://packages | grep django
+# Get every function, filter in shell
+reveal 'ast://src' | grep auth
 ```
 
 **✅ Do** (filter at adapter level when possible):
 ```bash
 # Use query operators for efficiency
-reveal 'python://packages?filter=django'
+reveal 'ast://src?name=*auth*'
 ```
 
 ### 5. Document Expected Elements
