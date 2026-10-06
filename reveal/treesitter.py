@@ -401,6 +401,18 @@ _SIGNATURE_END_KINDS = (
     'field_initializer_list',
 )
 
+
+def _one_line_signature(text: str) -> str:
+    """A parameter list that spans lines, on one line: the outline and the default
+    view print `name` + signature on a single row, and a Rust `fn search(\n a,\n)`
+    left only its closing `)` beside the line count (BACK-1655). A single-line
+    signature is returned untouched."""
+    if '\n' not in text:
+        return text
+    text = ' '.join(text.split())
+    return re.sub(r',?\s*([)\]])', r'\1', re.sub(r'([(\[])\s+', r'\1', text))
+
+
 def is_definition(node) -> bool:
     """Whether `node` defines what it names. Only a BODY_DEFINED_NODES kind can fail: a
     C/C++ struct, union, enum or class without a body is a mention (`struct Batch *b`,
@@ -1976,7 +1988,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 return_type = ' -> ' + self._get_node_text(child).strip(': ')
 
         if params_text:
-            return params_text + return_type
+            return _one_line_signature(params_text + return_type)
 
         # Fallback: the declaration text up to its body, whitespace-collapsed --
         # not the node's first line, which leaks a same-line body (`) {`,
