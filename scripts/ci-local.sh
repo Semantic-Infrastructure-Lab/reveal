@@ -148,6 +148,13 @@ PRIMARY=0  # CI runs its extra steps only on ubuntu-latest/3.12, never in the co
 [[ "$PY_VERSION" == "3.12" && -z "$LP_VERSION" ]] && PRIMARY=1
 
 VENV="${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/py${PY_VERSION}${LP_VERSION:+-lp$LP_VERSION}"
+# One run per venv at a time: the install step points the venv's editable install at THIS
+# checkout, so a concurrent run from another checkout would repoint it mid-test (BACK-1640).
+if command -v flock >/dev/null 2>&1; then
+    mkdir -p "$(dirname "$VENV")"
+    exec 9>"$VENV.lock"
+    flock -n 9 || { echo "another ci-local run is using $VENV; waiting for it..." >&2; flock 9; }
+fi
 LOG_DIR="${REVEAL_CI_LOG_DIR:-$(dirname "$VENV")/logs}"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/ci-local-py${PY_VERSION}${LP_VERSION:+-lp$LP_VERSION}-$(date +%Y%m%d-%H%M%S).log"
