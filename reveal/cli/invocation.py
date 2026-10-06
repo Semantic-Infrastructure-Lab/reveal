@@ -39,15 +39,22 @@ class CommandSpec(NamedTuple):
     # listing in `--help-all`; AGENT_HELP.md's table is checked against it (BACK-1055).
     usage: str = ''
     summary: str = ''
+    # The reveal/docs guide help://<name> opens, when that is not the same-named
+    # adapter's guide. '' leaves help://<name> to the adapter guide, if any (BACK-1055).
+    help_guide: str = ''
 
     def load(self) -> Tuple[ArgumentParser, Callable[[Namespace], None]]:
         mod = importlib.import_module(self.module)
         return getattr(mod, self.parser_factory)(), getattr(mod, self.runner)
 
 
-def _spec(name: str, usage: str, summary: str, formats: Optional[Tuple[str, ...]] = None) -> CommandSpec:
+def _spec(name: str, usage: str, summary: str, formats: Optional[Tuple[str, ...]] = None,
+          help_guide: str = '') -> CommandSpec:
     return CommandSpec(f'reveal.cli.commands.{name}', f'create_{name}_parser', f'run_{name}',
-                       formats, usage, summary)
+                       formats, usage, summary, help_guide)
+
+
+_SUBCOMMANDS_GUIDE = 'guides/SUBCOMMANDS_GUIDE.md'
 
 
 # Every subcommand. help://schemas/<name> also reads this table to tell a CLI-only command
@@ -69,11 +76,12 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'Dependency health: external packages, circular deps, unused imports'),
     'dev':          _spec('dev',
                      'reveal dev <command>',
-                     'Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config'),
+                     'Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config',
+                     help_guide=_SUBCOMMANDS_GUIDE),
     'health':       _spec('health',
                      'reveal health [path]',
                      'Unified health: code rules + SSL + databases + DNS',
-                     ('text', 'json')),
+                     ('text', 'json'), help_guide=_SUBCOMMANDS_GUIDE),
     'hotspots':     _spec('hotspots',
                      'reveal hotspots [path]',
                      'High-complexity files and functions that need attention'),
@@ -85,11 +93,12 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'One-glance dashboard: languages, quality, hotspots, recent git'),
     'pack':         _spec('pack',
                      'reveal pack <path>',
-                     'Token-budgeted context snapshot for LLM consumption'),
+                     'Token-budgeted context snapshot for LLM consumption',
+                     help_guide=_SUBCOMMANDS_GUIDE),  # pack:// guide is a pointer stub
     'review':       _spec('review',
                      'reveal review <path>',
                      'Assess quality + structural changes before a PR merge',
-                     ('text', 'json')),
+                     ('text', 'json'), help_guide=_SUBCOMMANDS_GUIDE),
     'scaffold':     _spec('scaffold',
                      'reveal scaffold <kind>',
                      'Older alias of `reveal dev new-*` — prefer `reveal dev`'),
@@ -98,7 +107,8 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls'),
     'testability':  _spec('testability',
                      'reveal testability [path]',
-                     'Test patch pressure joined with production boundary fan-out'),
+                     'Test patch pressure joined with production boundary fan-out',
+                     help_guide='guides/TESTABILITY_GUIDE.md'),  # testability:// guide is a stub
     'trace':        _spec('trace',
                      'reveal trace --from FUNC',
                      'Walk call graph from a named entry point; depth-indented narrative with side-effect classification'),
@@ -109,6 +119,11 @@ COMMANDS: Dict[str, CommandSpec] = {
 EPILOG_ORDER = ('overview', 'architecture', 'deps', 'hotspots', 'contracts', 'surface',
                 'testability', 'trace', 'check', 'review', 'health', 'pack', 'dev',
                 'scaffold', 'offline')
+
+
+def subcommand_help_guides() -> Dict[str, str]:
+    """help:// topic -> reveal/docs guide for each subcommand that declares its own guide."""
+    return {name: spec.help_guide for name, spec in COMMANDS.items() if spec.help_guide}
 
 
 def render_subcommand_lines() -> str:

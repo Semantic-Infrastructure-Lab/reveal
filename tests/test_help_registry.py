@@ -31,11 +31,11 @@ _INTENTIONALLY_EXCLUDED = {
     'development/WINDOWS_SIGNING.md': 'internal signing cert workflow, not a user guide',
     'adapters/TESTABILITY_ADAPTER_GUIDE.md': (
         "V024 pointer stub only — canonical content is guides/TESTABILITY_GUIDE.md, "
-        "already reachable via STATIC_HELP['testability']; not a second help:// route"
+        "already reachable via COMMANDS['testability'].help_guide; not a second help:// route"
     ),
     'adapters/PACK_ADAPTER_GUIDE.md': (
         "V024 pointer stub only — canonical content is guides/SUBCOMMANDS_GUIDE.md's "
-        "'reveal pack' section, already reachable via STATIC_HELP['pack']; not a "
+        "'reveal pack' section, already reachable via COMMANDS['pack'].help_guide; not a "
         "second help:// route"
     ),
 }
@@ -44,15 +44,15 @@ _DOCS_ROOT = Path(__file__).parent.parent / 'reveal' / 'docs'
 
 
 class TestHelpRegistry(unittest.TestCase):
-    """Validate HelpAdapter.STATIC_HELP registration."""
+    """Validate explicit help:// registration: STATIC_HELP plus COMMANDS' help_guide."""
 
     def _registered_files(self) -> set:
-        return set(HelpAdapter.STATIC_HELP.values())
+        return set(HelpAdapter.static_help_map().values())
 
     def test_no_dead_links(self):
-        """Every path in STATIC_HELP must exist on disk."""
+        """Every path in STATIC_HELP (or a subcommand's help_guide) must exist on disk."""
         dead = []
-        for topic, rel_path in HelpAdapter.STATIC_HELP.items():
+        for topic, rel_path in HelpAdapter.static_help_map().items():
             full = _DOCS_ROOT / rel_path
             if not full.exists():
                 dead.append(f'  help://{topic} → {rel_path} (missing)')

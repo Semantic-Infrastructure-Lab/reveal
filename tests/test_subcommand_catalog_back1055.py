@@ -1,18 +1,24 @@
-"""One home for the subcommand listing (BACK-1055 first slice).
+"""One home for the subcommand listing (BACK-1055 slices 1-2).
 
 `COMMANDS` (reveal/cli/invocation.py) owns each subcommand's usage and one-line summary.
 The `--help-all` listing is generated from it; AGENT_HELP.md's table is hand-written, so it
 is checked against it here instead of being allowed to drift.
+
+Slice 2: a subcommand whose help:// topic is not its same-named adapter's guide declares
+it as `help_guide` on its COMMANDS entry; help.py merges those in (static_help_map) instead
+of keeping its own alias rows.
 """
 import re
 from pathlib import Path
 
 import pytest
 
-from reveal.cli.invocation import COMMANDS, EPILOG_ORDER, render_subcommand_lines
+from reveal.adapters.help import HelpAdapter
+from reveal.cli.invocation import COMMANDS, EPILOG_ORDER, render_subcommand_lines, subcommand_help_guides
 from reveal.cli.parser import build_help_epilog
 
-AGENT_HELP = Path(__file__).resolve().parent.parent / 'reveal' / 'docs' / 'AGENT_HELP.md'
+DOCS = Path(__file__).resolve().parent.parent / 'reveal' / 'docs'
+AGENT_HELP = DOCS / 'AGENT_HELP.md'
 ROW = re.compile(r'^\| `(reveal [^`]+)` \| (.+?) \| `reveal \w+ --help` \|$', re.MULTILINE)
 
 
@@ -64,3 +70,31 @@ def test_catalog_gate_bites():
     assert any('one-liner' in p for p in _catalog_problems(COMMANDS, EPILOG_ORDER, drifted))
     blank = {**COMMANDS, 'deps': COMMANDS['deps']._replace(summary='')}
     assert any('no usage/summary' in p for p in _catalog_problems(blank, EPILOG_ORDER, rows))
+
+
+def _help_guide_problems(commands, static_help):
+    problems = []
+    for name, spec in commands.items():
+        if not spec.help_guide:
+            continue
+        if name in static_help:
+            problems.append(f'{name}: help topic in both COMMANDS.help_guide and STATIC_HELP')
+        if not (DOCS / spec.help_guide).is_file():
+            problems.append(f'{name}: help_guide {spec.help_guide} does not exist')
+    return problems
+
+
+def test_subcommand_help_guides_come_from_commands():
+    assert not _help_guide_problems(COMMANDS, HelpAdapter.STATIC_HELP)
+    merged = HelpAdapter.static_help_map()
+    for name, guide in subcommand_help_guides().items():
+        assert merged[name] == guide
+        assert HelpAdapter().help_topics[name].file == guide
+
+
+def test_help_guide_gate_bites():
+    """Negative control: a guide also kept in STATIC_HELP, and a missing file, are reported."""
+    dup = {**HelpAdapter.STATIC_HELP, 'dev': 'guides/SUBCOMMANDS_GUIDE.md'}
+    assert any('both' in p for p in _help_guide_problems(COMMANDS, dup))
+    gone = {**COMMANDS, 'dev': COMMANDS['dev']._replace(help_guide='guides/NO_SUCH_GUIDE.md')}
+    assert any('does not exist' in p for p in _help_guide_problems(gone, HelpAdapter.STATIC_HELP))

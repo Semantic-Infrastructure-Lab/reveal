@@ -283,6 +283,12 @@ STATIC_HELP = {
 }
 ```
 
+   A subcommand's topic is not added here: when `help://<subcommand>` should open
+   something other than the same-named adapter's guide, set `help_guide=` on its
+   `COMMANDS` entry in `reveal/cli/invocation.py` (`HelpAdapter.static_help_map()`
+   merges both). A shared guide such as `SUBCOMMANDS_GUIDE.md` opens on the
+   `## reveal <name>` section.
+
 4. **Done!** `help://my-guide` now works, and shows up in the `help://` index
    if `help_category` is set.
 

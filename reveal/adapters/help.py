@@ -430,27 +430,24 @@ class HelpAdapter(ResourceAdapter):
         'codebase-review': 'guides/RECIPES.md',  # CODEBASE_REVIEW.md archived; content merged into RECIPES.md
         'config': 'guides/CONFIGURATION_GUIDE.md',
         'configuration': 'guides/CONFIGURATION_GUIDE.md',
-        'dev': 'guides/SUBCOMMANDS_GUIDE.md',
         'duplicate-detection': 'guides/DUPLICATE_DETECTION_GUIDE.md',
         'duplicates': 'guides/DUPLICATE_DETECTION_GUIDE.md',
         'elements': 'guides/ELEMENT_DISCOVERY_GUIDE.md',
         'fields': 'guides/FIELD_SELECTION_GUIDE.md',
-        'health': 'guides/SUBCOMMANDS_GUIDE.md',
         'mcp': 'guides/MCP_SETUP.md',
         'mcp-setup': 'guides/MCP_SETUP.md',
         'nav': 'guides/NAV_GUIDE.md',
         'navigation': 'guides/NAV_GUIDE.md',
-        'pack': 'guides/SUBCOMMANDS_GUIDE.md',
         'query': 'guides/QUERY_SYNTAX_GUIDE.md',
         'query-params': 'guides/QUERY_PARAMETER_REFERENCE.md',
         'recipes': 'guides/RECIPES.md',  # alias only — see 'tricks' below for canonical
-        'review': 'guides/SUBCOMMANDS_GUIDE.md',
         'schema': 'guides/SCHEMA_VALIDATION_HELP.md',
-        'subcommands': 'guides/SUBCOMMANDS_GUIDE.md',  # canonical; dev/health/pack/review are aliases
+        # canonical; dev/health/pack/review (and testability's own guide) come from
+        # COMMANDS' help_guide -- see static_help_map() (BACK-1055).
+        'subcommands': 'guides/SUBCOMMANDS_GUIDE.md',
         # Note: 'schemas' is intentionally NOT in STATIC_HELP — the dynamic handler
         # at render_element intercepts help://schemas to list adapter schemas (machine-readable).
         # Use help://schema (singular) to reach SCHEMA_VALIDATION_HELP.md.
-        'testability': 'guides/TESTABILITY_GUIDE.md',
         # 'tricks' (not 'recipes', despite the file being titled/named "Reveal
         # Recipes") is the canonical topic — kept deliberately per
         # BACK-479 review: 'tricks' is the established public name, referenced
@@ -474,6 +471,13 @@ class HelpAdapter(ResourceAdapter):
         'rule-authoring': 'development/RULE_AUTHORING_GUIDE.md',
         'scaffolding': 'development/SCAFFOLDING_GUIDE.md',
     }
+
+    @classmethod
+    def static_help_map(cls) -> Dict[str, str]:
+        """Every explicitly registered topic -> reveal/docs file: STATIC_HELP plus the
+        guide each subcommand declares in COMMANDS (BACK-1055). Keys are disjoint."""
+        from ..cli.invocation import subcommand_help_guides
+        return {**cls.STATIC_HELP, **subcommand_help_guides()}
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -679,12 +683,13 @@ class HelpAdapter(ResourceAdapter):
                 if topic:
                     discovered[topic] = _build(topic, rel)
 
-        # Phase 3: merge STATIC_HELP. STATIC_HELP takes precedence — it provides
+        # Phase 3: merge STATIC_HELP (plus each subcommand's help_guide from
+        # COMMANDS, see static_help_map). These take precedence — they provide
         # friendly topic names (e.g. 'ast' overrides discovered 'ast-adapter'),
-        # explicit aliases ('config' → CONFIGURATION_GUIDE.md), and registers
+        # explicit aliases ('config' → CONFIGURATION_GUIDE.md), and register
         # non-*GUIDE.md docs (QUICK_START.md, AGENT_HELP.md, etc.).
         merged = dict(discovered)
-        for topic, file in self.STATIC_HELP.items():
+        for topic, file in self.static_help_map().items():
             merged[topic] = _build(topic, file)
 
         # Phase 4 (BACK-931): mark every topic but one canonical per file as an
