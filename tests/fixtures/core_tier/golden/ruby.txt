@@ -8,10 +8,10 @@ Functions (7):
   :4      validate(order) [4 lines, depth:1]
   :9      process_order(order) [13 lines, depth:2]
   :23     run(order) [3 lines, depth:0]
-  :32     run(items) [6 lines, depth:0]
+  :32     Batch.run(items) [6 lines, depth:0]
   :43     classify(mode) [7 lines, depth:0]
-  :52     add(x) [4 lines, depth:0]
-  :62     summarize [3 lines, depth:0]
+  :52     Accumulator.add(x) [4 lines, depth:0]
+  :62     Summarizable.summarize [3 lines, depth:0]
 
 Classes (4):
   :31     Batch

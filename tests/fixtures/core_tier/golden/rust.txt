@@ -11,8 +11,8 @@ Functions (6):
   :13     process_order(order: i32) [8 lines, depth:2]
   :22     run(order: i32) [3 lines, depth:0]
   :30     count_down(mut n: i32) [13 lines, depth:2]
-  :52     run(&mut self, items: &[i32]) [6 lines, depth:2]
-  :72     summarize(&self) [3 lines, depth:0]
+  :52     Batch.run(&mut self, items: &[i32]) [6 lines, depth:2]
+  :72     Reporter.summarize(&self) [3 lines, depth:0]
 
 Structs (2):
   :47     Batch

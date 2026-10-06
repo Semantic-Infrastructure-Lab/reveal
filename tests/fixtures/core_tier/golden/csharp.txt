@@ -7,16 +7,16 @@ Imports (3):
   :4      using System.Text;
 
 Functions (5):
-  :10     Validate(int order) [8 lines, depth:2]
-  :19     ProcessOrder(int order) [14 lines, depth:2]
-  :34     Run(int order) [4 lines, depth:0]
-  :47     Run(System.Collections.Generic.List<int> items) [8 lines, depth:1]
-  :62     Summarize() [1 line, depth:0]
+  :10     Sample.OrderProcessor.Validate(int order) [8 lines, depth:2]
+  :19     Sample.OrderProcessor.ProcessOrder(int order) [14 lines, depth:2]
+  :34     Sample.OrderProcessor.Run(int order) [4 lines, depth:0]
+  :47     Sample.Batch.Run(System.Collections.Generic.List<int> items) [8 lines, depth:1]
+  :62     Sample.Reporter.Summarize() [1 line, depth:0]
 
 Classes (3):
-  :8      OrderProcessor
-  :43     Batch
-  :59     Reporter
+  :8      Sample.OrderProcessor
+  :43     Sample.Batch
+  :59     Sample.Reporter
 
 Namespaces (1):
   :6      Sample [59 lines]

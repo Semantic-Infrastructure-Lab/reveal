@@ -5,10 +5,10 @@ Imports (1):
   :2      import functools
 
 Functions (6):
-  :6      balance(self) [3 lines, depth:0]
-  :10     deposit(self, amount) [2 lines, depth:0]
-  :13     currency() [3 lines, depth:0]
-  :17     close(self) [2 lines, depth:0]
+  :6      Account.balance(self) [3 lines, depth:0]
+  :10     Account.deposit(self, amount) [2 lines, depth:0]
+  :13     Account.currency() [3 lines, depth:0]
+  :17     Account.close(self) [2 lines, depth:0]
   :21     rate() [3 lines, depth:0]
   :26     convert(amount) [2 lines, depth:0]
 

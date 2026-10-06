@@ -10,9 +10,9 @@ Functions (6):
   :6      validate(order) [6 lines, depth:2]
   :13     processOrder(order) [10 lines, depth:2]
   :24     run(order) [3 lines, depth:0]
-  :32     constructor() [3 lines, depth:0]
-  :35     run(items) [7 lines, depth:2]
-  :48     summarize() [3 lines, depth:0]
+  :32     Batch.constructor() [3 lines, depth:0]
+  :35     Batch.run(items) [7 lines, depth:2]
+  :48     Reporter.summarize() [3 lines, depth:0]
 
 Classes (2):
   :31     Batch

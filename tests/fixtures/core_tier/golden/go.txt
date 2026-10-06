@@ -12,8 +12,8 @@ Functions (5):
   :12     validate(order string) [6 lines, depth:2]
   :19     processOrder(order string) [14 lines, depth:2]
   :34     Run(order string) [3 lines, depth:0]
-  :45     Run(items []int) [6 lines, depth:2]
-  :64     Summarize() [3 lines, depth:0]
+  :45     Batch.Run(items []int) [6 lines, depth:2]
+  :64     Reporter.Summarize() [3 lines, depth:0]
 
 Structs (2):
   :41     Batch

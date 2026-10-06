@@ -8,8 +8,8 @@ Functions (5):
   :4      validate(_ order: String?) throws -> String [6 lines, depth:0]
   :11     processOrder(_ order: String?) -> String? [14 lines, depth:3]
   :26     run(_ order: String?) -> String? [3 lines, depth:0]
-  :36     run(_ items: [Int]) [6 lines, depth:2]
-  :48     summarize() -> Int [1 line, depth:0]
+  :36     Batch.run(_ items: [Int]) [6 lines, depth:2]
+  :48     Reporter.summarize() -> Int [1 line, depth:0]
 
 Classes (2):
   :33     Batch

@@ -702,11 +702,17 @@ def _print_item_line(line, name: str, signature: str, content: str,
 def _format_standard_items(
     items: List[Dict[str, Any]], path: Path, output_format: str
 ) -> None:
-    """Format and display standard items (functions, classes, etc.)."""
+    """Format and display standard items (functions, classes, etc.).
+
+    A member row is labelled with its owner (`Batch.Run`, the address `reveal f Batch.Run`
+    resolves), so two `Run` rows tell the type's method from the free function (BACK-1652).
+    The JSON items already carry `owner`; only the text label is new.
+    """
     for item in items:
+        name = item.get('name', '')
         _print_item_line(
             line=item.get('line', item.get('line_start', '?')),
-            name=item.get('name', ''),
+            name=f"{item['owner']}.{name}" if item.get('owner') and name else name,
             signature=item.get('signature', ''),
             content=item.get('content', ''),
             target_suffix=f" → {item['target']}" if item.get('target') else '',

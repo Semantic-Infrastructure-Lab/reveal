@@ -8,8 +8,8 @@ Functions (5):
   :5      validate($order) [6 lines, depth:2]
   :12     processOrder($order) [13 lines, depth:3]
   :26     run($order) [3 lines, depth:0]
-  :36     run($items) [6 lines, depth:1]
-  :48     summarize() [3 lines, depth:0]
+  :36     Batch.run($items) [6 lines, depth:1]
+  :48     Reporter.summarize() [3 lines, depth:0]
 
 Classes (2):
   :33     Batch

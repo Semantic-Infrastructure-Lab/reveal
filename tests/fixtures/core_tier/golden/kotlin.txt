@@ -8,8 +8,8 @@ Functions (5):
   :4      validate(order: String?): String [6 lines, depth:2]
   :11     processOrder(order: String?): String? [13 lines, depth:2]
   :25     run(order: String?): String? [3 lines, depth:0]
-  :35     run(items: List<Int>) [6 lines, depth:2]
-  :47     summarize(): Int [1 line, depth:0]
+  :35     Batch.run(items: List<Int>) [6 lines, depth:2]
+  :47     Reporter.summarize(): Int [1 line, depth:0]
 
 Classes (2):
   :32     Batch

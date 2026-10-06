@@ -8,11 +8,11 @@ Imports (4):
   :7      import java.util.List;
 
 Functions (5):
-  :10     validate(int order) [6 lines, depth:2]
-  :17     processOrder(int order) [10 lines, depth:2]
-  :28     run(int order) [3 lines, depth:0]
-  :39     run(java.util.List<Integer> items) [6 lines, depth:2]
-  :51     summarize() [1 line, depth:0]
+  :10     OrderProcessor.validate(int order) [6 lines, depth:2]
+  :17     OrderProcessor.processOrder(int order) [10 lines, depth:2]
+  :28     OrderProcessor.run(int order) [3 lines, depth:0]
+  :39     Batch.run(java.util.List<Integer> items) [6 lines, depth:2]
+  :51     Reporter.summarize() [1 line, depth:0]
 
 Classes (3):
   :9      OrderProcessor

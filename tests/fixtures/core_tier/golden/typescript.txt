@@ -10,10 +10,10 @@ Functions (7):
   :6      validate(order: string) [6 lines, depth:2]
   :13     processOrder(order: string) [10 lines, depth:2]
   :24     run(order: string) [3 lines, depth:0]
-  :33     run(items: number[]) [7 lines, depth:2]
+  :33     Batch.run(items: number[]) [7 lines, depth:2]
   :46     Component(target: any) [1 line, depth:0]
   :47     Input() [1 line, depth:0]
-  :52     summarize() [3 lines, depth:0]
+  :52     Reporter.summarize() [3 lines, depth:0]
 
 Classes (2):
   :31     Batch
