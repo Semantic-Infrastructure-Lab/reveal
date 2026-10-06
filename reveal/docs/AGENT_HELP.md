@@ -2479,6 +2479,7 @@ reveal doc.md --related-all --related-limit 50
 3. OR (`|`) — resolves each term independently; deduplicates; returns all in document order
 4. Compared on visible text: formatting, `[link](url)` syntax, entities, `{#id}` and a leading `## ` in the query are ignored; `## 2026` / `## Phase:1` headings are found by name (`:N` is always a line)
 5. No match → exit 1 with "Did you mean" from the file's headings
+6. A section of 150+ lines that has subsections (typically an H1 = the whole doc) returns the text under its own heading, then a `Subsections` outline with line numbers; a heading with no text of its own shows the outline alone. The `⚠ Truncated source` note gives the `:N-M` line range that returns everything; `--head`/`--tail`/`--range` and a `:N-M` request skip the collapse
 
 **OR-pattern tips for agents:**
 - Use `|` to fetch multiple unrelated sections in one round-trip

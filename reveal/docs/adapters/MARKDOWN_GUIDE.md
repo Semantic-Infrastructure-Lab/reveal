@@ -602,6 +602,12 @@ On an extracted section the flags count its lines instead:
 `reveal README.md "Installation" --head 20` prints the section's first 20 lines and
 says how many it left out (`⚠ Truncated source: showing 20 of 85`).
 
+A long section that has subsections (150+ lines, typically an H1 that is the whole
+document) is shown as the text under its own heading plus a `Subsections` outline with
+line numbers, so one call can't dump the document. A heading with no text of its own
+shows the outline alone. The truncation note gives the `:N-M` line range that returns
+the whole section; `--head`, `--tail`, `--range` and `:N-M` requests are never collapsed.
+
 **Note**: Slicing applies to each category independently. With `--head 5`:
 - Shows first 5 headings
 - AND first 5 links (if --links specified)

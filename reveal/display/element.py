@@ -508,10 +508,51 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
     if section_outline:
         _output_section_outline(analyzer, result, element, output_format, depth)
     else:
-        cut_element(result, *(cut or (None, None, None)))
+        cut = cut or (None, None, None)
+        if any(cut):
+            cut_element(result, *cut)
+        elif _is_markdown(analyzer) and syntax['type'] in ('name', 'hierarchical'):
+            collapse_large_section(analyzer, result)
         _output_result(analyzer, result, element, output_format, config)
         from .formatting import print_result_control_notes  # noqa: I006 — circular avoidance
         print_result_control_notes(result, output_format)
+
+
+# A markdown section this long that has subsections is shown as its own body plus the
+# subsection outline. Sections are short (median 20 lines, p90 52 in the 2026-10-01
+# census); the ones past this are an H1 that is the whole document.
+COLLAPSE_MIN_LINES = 150
+
+
+def collapse_large_section(analyzer, result: dict) -> None:
+    """A large section with subsections: its own body, then its subsection outline (BACK-1626).
+
+    `reveal doc.md "Title"` on an H1 returned the whole document (60-132 KB, which Claude
+    Code saved to a file and previewed at 2 KB). The text under the heading itself is the
+    part that is the section; the subsections are navigated. A heading with no text of its
+    own shows the outline alone. The cut is disclosed as the one truncation on `source`
+    with the line range that returns everything; an explicit --head/--tail/--range skips
+    this, since the caller already chose the lines, and so does a `:N-M` line request. A multi-section result is not collapsed.
+    """
+    if 'sections' in result:
+        return
+    start, end = result['line_start'], result['line_end']
+    if end - start + 1 < COLLAPSE_MIN_LINES:
+        return
+    headings = [h for h in analyzer._extract_headings() if start < h['line'] <= end]
+    if not headings:
+        return
+    lines = result['source'].split('\n')
+    body = lines[:headings[0]['line'] - start]
+    while body and not body[-1].strip():
+        body.pop()
+    if len(body) == 1:
+        body = []   # the heading line alone: the outline below is the answer
+    result.update(source='\n'.join(body), headings=headings, collapsed=True,
+                  line_end=start + max(len(body), 1) - 1)
+    note_truncation(result, 'source', len(body), len(lines), 'collapse',
+                    hint=f'own body and subsection outline; whole section: '
+                         f'reveal {to_posix(analyzer.path)} :{start}-{end}')
 
 
 def cut_element(result: dict, head: Optional[int] = None, tail: Optional[int] = None,
@@ -982,6 +1023,22 @@ def _output_result(analyzer, result, element: str, output_format: str, config=No
     _print_element_body(analyzer, result, name, output_format, config)
 
 
+def _print_collapsed_body(analyzer, result, source: str, line_start: int, output_format: str) -> None:
+    """A collapsed section (collapse_large_section): its own body, then the subsection outline."""
+    from .formatting import _format_markdown_headings  # noqa: I006 — circular avoidance
+
+    path = analyzer.path
+    if output_format == 'grep':
+        for i, line in enumerate(source.split('\n') if source else []):
+            print(f"{to_posix(path)}:{line_start + i}:{line}")
+        return
+    if source:
+        print(analyzer.format_with_lines(source, line_start))
+        print()
+    print(f"Subsections ({len(result['headings'])}):")
+    _format_markdown_headings(result['headings'], Path(path), output_format)
+
+
 def _print_element_body(analyzer, result, name: str, output_format: str, config=None):
     """The extracted source with line numbers, then its label-only note and breadcrumbs.
 
@@ -992,6 +1049,9 @@ def _print_element_body(analyzer, result, name: str, output_format: str, config=
     line_start = result.get('line_start', 1)
     line_end = result.get('line_end', line_start)
     source = result.get('source', '')
+    if result.get('collapsed'):
+        _print_collapsed_body(analyzer, result, source, line_start, output_format)
+        return
     if not source and truncations_of(result):
         return
 
