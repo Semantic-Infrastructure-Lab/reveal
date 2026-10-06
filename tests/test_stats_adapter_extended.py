@@ -10,7 +10,7 @@ import pytest
 import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from reveal.adapters.stats.adapter import StatsAdapter, _i002_preload, _i002_init_worker
+from reveal.adapters.stats.adapter import StatsAdapter
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
 pytestmark = pytest.mark.component
@@ -73,38 +73,11 @@ class TestStatsAdapterExceptionHandling:
 class TestI002GraphCachePreload:
     """BACK-531: I002's per-worker cold cache made `overview`/`stats://` log the
     BACK-338 root-mis-detection warning once per ProcessPoolExecutor worker (up
-    to 8x for one command). _i002_preload/_i002_init_worker mirror
-    cli/file_checker.py's pattern: build the graph once in the main process and
-    seed it into every worker via the pool initializer.
+    to 8x for one command). stats' pool now uses the rules' shared preload table
+    (reveal/rules/scan_caches.py, BACK-1429): built once in the main process and
+    seeded into every worker. The table's unit tests live in test_file_checker.py
+    (TestI002Preload and siblings); this is the end-to-end stats check.
     """
-
-    def test_init_worker_populates_cache(self, tmp_path):
-        """_i002_init_worker seeds the I002 module-level cache."""
-        from reveal.rules.imports.I002 import _graph_cache
-        fake_root = tmp_path
-        fake_graph = object()
-        try:
-            _i002_init_worker({fake_root: fake_graph})
-            assert _graph_cache.get(fake_root) is fake_graph
-        finally:
-            _graph_cache.pop(fake_root, None)
-
-    def test_init_worker_noop_on_empty_cache(self):
-        """_i002_init_worker does nothing when called with empty dict."""
-        # Should not raise
-        _i002_init_worker({})
-
-    def test_init_worker_import_error_propagates(self):
-        """I002 is reveal's own module: an import failure is a broken install (BACK-1614)."""
-        with patch.dict("sys.modules", {"reveal.rules.imports.I002": None}):
-            with pytest.raises(ImportError):
-                _i002_init_worker({"x": "y"})
-
-    def test_preload_survives_missing_module(self, tmp_path):
-        """_i002_preload returns {} instead of raising if I002 can't be imported."""
-        with patch.dict("sys.modules", {"reveal.rules.imports.I002": None}):
-            result = _i002_preload(tmp_path)
-            assert result == {}
 
     @pytest.mark.real_worker_pool
     def test_root_mis_detection_warning_logged_once_across_workers(self, tmp_path, monkeypatch, caplog):
@@ -146,33 +119,6 @@ class TestI002GraphCachePreload:
         assert occurrences == 1, (
             f"expected exactly 1 ceiling warning, got {occurrences}"
         )
-
-    def test_preload_resolves_from_sample_file_not_bare_directory(self, tmp_path):
-        """BACK-1041: `overview`/`hotspots` resolved a *different*, larger
-        project root than `check` for the same target directory, because this
-        preload passed the bare scan directory to `_find_project_root` (which
-        only climbs upward) instead of a real file inside it. A directory
-        sitting above a package boundary — its `package.json`/`.git` one
-        level *inside* it — never sees that marker from the directory alone,
-        while `check`'s per-file resolution (starting from an actual file
-        path) finds it correctly. That caused `overview`/`hotspots` to
-        over-climb to a much larger, unrelated root and needlessly trip the
-        BACK-338 ceiling warning even though `check`'s equivalent scan
-        succeeded. Resolving from `files[0]` keeps this preload's guess
-        consistent with what every worker actually resolves to.
-        """
-        outer = tmp_path / "outer"
-        pkg = outer / "pkg"
-        pkg.mkdir(parents=True)
-        (pkg / "package.json").write_text("{}")
-        (pkg / "a.py").write_text("import os\n")
-
-        files = [pkg / "a.py"]
-        result = _i002_preload(outer, files=files)
-
-        assert isinstance(result, dict)
-        assert pkg in result
-        assert outer not in result
 
 
 class TestStatsAdapterWorkerOverride:

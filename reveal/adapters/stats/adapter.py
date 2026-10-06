@@ -1,6 +1,5 @@
 """Statistics adapter (stats://) for codebase metrics and hotspots."""
 
-import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 from reveal.reveal_types import CONTRACT_VERSION
@@ -19,6 +18,7 @@ from ...utils.path_utils import to_relative_display
 from ...utils.results import ResultBuilder, note_truncation, note_warning
 from ...utils.validation import require_path_exists
 from ...utils.parallel import pool_worker_count
+from ...rules.scan_caches import init_scan_caches, preload_scan_caches
 
 # Import modular functions
 from .renderer import StatsRenderer
@@ -46,50 +46,6 @@ def _analyze_file_worker(args: tuple):
         _fp,
         lambda fp, s, c: _calc_stats(fp, s, c, quality_config, lambda p: _get_display(p, _bp))
     )
-
-
-def _i002_preload(directory: Path, files: Optional[list] = None) -> dict:
-    """Build the I002 import graph once in the main process before spawning workers.
-
-    Without this, each ProcessPoolExecutor worker below hits a cold I002
-    `_graph_cache` and independently re-runs (and, on a mis-detected root,
-    independently re-logs the BACK-338 ceiling warning) — up to one copy per
-    worker (BACK-531). Mirrors cli/file_checker.py's `_i002_preload`/
-    `_i002_init_worker` pair used by the `check` command. Returns {} on any
-    error so callers degrade gracefully to the old per-worker build behavior.
-
-    BACK-1041: resolve from a real file under `directory` (`files[0]`) when
-    available, not `directory` itself — `_find_project_root` only climbs
-    upward, so a bare `directory` sitting above a package boundary (its
-    `package.json`/`.git` one level *inside* it) never sees that marker and
-    over-climbs to a larger, unrelated root, while each worker's own per-file
-    resolution correctly finds the nearer marker. Preloading from a directory
-    in that situation both wastes the preload and logs a misleading
-    "project-root mis-detection" warning for a scan that, per file, actually
-    succeeds.
-    """
-    try:
-        from reveal.rules.imports.I002 import I002, _find_project_root, _graph_cache
-        sample = files[0] if files else directory
-        root = _find_project_root(sample.resolve())
-        I002()._build_import_graph(root)   # populates _graph_cache in main process
-        return dict(_graph_cache)          # plain dict is picklable
-    except Exception:
-        # Documented fallback (see docstring), logged like cli/file_checker.py's.
-        logging.warning("stats: shared-index preload failed; workers will build it "
-                        "themselves", exc_info=True)
-        return {}
-
-
-def _i002_init_worker(graph_cache: dict) -> None:
-    """ProcessPoolExecutor initializer: seed each worker's I002 cache.
-
-    Runs once per worker process, before any files are analyzed.
-    """
-    if not graph_cache:
-        return
-    from reveal.rules.imports.I002 import _graph_cache
-    _graph_cache.update(graph_cache)
 
 
 _SCHEMA_QUERY_PARAMS = {
@@ -314,11 +270,15 @@ class StatsAdapter(ResourceAdapter):
         # though each is fast in isolation.
         workers = pool_worker_count(min(8, max(1, len(files) // 10)))
         if workers > 1:
-            graph_cache = _i002_preload(self.path, files)
+            # The rules' project-wide indexes (I002, D005, T006, M102) are built
+            # once here and seeded into every worker, instead of once per worker
+            # (BACK-531, BACK-1429): the same table check's pool uses. stats runs
+            # the default rule set, hence no select/ignore.
+            caches = preload_scan_caches(files, self.path, None, None)
             with ProcessPoolExecutor(
                 max_workers=workers,
                 initializer=worker_bootstrap,
-                initargs=(_i002_init_worker, (graph_cache,)),
+                initargs=(init_scan_caches, (caches,)),
             ) as executor:
                 all_stats = list(executor.map(_analyze_file_worker, args))
         else:
