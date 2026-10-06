@@ -92,6 +92,8 @@ def test_missing_baseline_leaves_a_failure_report(tmp_path, monkeypatch):
     assert report['failures'] and report['measured_at']
 
 
+@pytest.mark.skipif(sys.platform == 'win32',
+                    reason='build_c_oracle refuses before probing on Windows (BACK-1674)')
 def test_slow_probe_gets_the_larger_budget_and_a_timeout_is_a_disclosed_failure(corpus, monkeypatch):
     # BACK-1678: a cold macOS runner blew the old 15 s budget on a one-line probe. The budget is now
     # a named 60 s constant, and a probe that still times out is a named measurement failure, not a
