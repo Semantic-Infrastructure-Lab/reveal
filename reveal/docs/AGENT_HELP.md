@@ -116,7 +116,7 @@ reveal help://schemas/claude/full                   # every schema body at once
 reveal help://schemas                               # listing: ast, ssl, git, ...
 
 # List all available task recipe categories
-reveal help://examples                             # listing: quality, security, ...
+reveal help://examples                             # listing: the task names below
 
 # Discover adapter schemas (every adapter in help://schemas/index has one)
 reveal 'help://schemas/<adapter>' --format=json
@@ -150,13 +150,18 @@ reveal help://schemas/letsencrypt --format=json # Let's Encrypt cert inventory
 # Meta Adapters
 reveal help://schemas/reveal --format=json     # Self-inspection
 
-# Get canonical query recipes for common tasks
-reveal help://examples/codebase --format=json        # Codebase exploration recipes
-reveal help://examples/debugging --format=json       # Debugging recipes
-reveal help://examples/documentation --format=json   # Markdown/doc search recipes
-reveal help://examples/infrastructure --format=json  # nginx, SSL, domain recipes
-reveal help://examples/quality --format=json         # Code quality recipes
-reveal help://examples/security --format=json        # Security analysis recipes
+# Get canonical query recipes for common tasks (every task help://examples lists)
+reveal help://examples/codebase --format=json        # Codebase exploration and understanding
+reveal help://examples/data --format=json            # Database and structured data inspection — SQLite, MySQL, Excel, JSON
+reveal help://examples/debugging --format=json       # Debugging and error investigation
+reveal help://examples/documentation --format=json   # Documentation search and analysis — markdown, front matter
+reveal help://examples/due-diligence --format=json   # Technical due-diligence workflow — orient, find risk, quantify coupling, blast-radius, dead code, test honesty (run in order)
+reveal help://examples/history --format=json         # Prompt history and session discovery across all projects
+reveal help://examples/infrastructure --format=json  # Server infrastructure inspection — nginx, SSL, domains, cPanel, AutoSSL, Let's Encrypt
+reveal help://examples/quality --format=json         # Code quality and hotspot analysis
+reveal help://examples/runtime --format=json         # Runtime environment — env vars, Python packages, reveal install state
+reveal help://examples/security --format=json        # Security review — auth code, complex query construction, certificate expiry, the external attack surface
+reveal help://examples/sessions --format=json        # Claude Code and Codex CLI session analysis — tool usage, files, errors, prompt/answer pairs, search
 ```
 
 **What you get:**
