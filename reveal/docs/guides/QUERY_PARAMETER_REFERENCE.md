@@ -77,9 +77,10 @@ Every adapter that walks a directory also takes `respect_gitignore=false` (the s
   ```
   Without `verbose`, circular output lists the files in each SCC. With `verbose`, shows the full edge sequence tracing one representative cycle per group.
 
-**Combining Parameters**:
+**Combining Parameters**: `unused`, `circular` and `violations` are separate views --
+run one per call (with several, the first in that order wins and the others draw a
+no-effect note). `verbose` combines with `circular`:
 ```bash
-reveal 'imports://src?unused&circular'
 reveal 'imports://src?circular&verbose'   # Cycle paths
 ```
 
@@ -683,7 +684,7 @@ Multiple query parameters are combined with `&`:
 ```bash
 reveal 'git://.?type=history&author~=john&message~=fix'
 reveal 'markdown://docs/?status=draft&priority=high'
-reveal 'imports://.?unused&circular'
+reveal 'imports://.?circular&verbose'
 ```
 
 **Behavior**:
