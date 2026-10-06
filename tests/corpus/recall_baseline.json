@@ -1,5 +1,6 @@
 {
   "c": {
+    "oracle": "gcc-c",
     "sha": "5b22a09918743ba72952e35e431db23eb3d19605",
     "targets": 101,
     "oracle_edges": 603,
@@ -13,10 +14,11 @@
       "unresolved_directives": 7,
       "gcc_probes": 112
     },
-    "partial_files": 300,
+    "partial_files": 304,
     "differences": []
   },
   "c-curl": {
+    "oracle": "gcc-c",
     "sha": "1128177a6f725d1f8c4cba4f7ff6532969109e7a",
     "targets": 232,
     "oracle_edges": 2331,

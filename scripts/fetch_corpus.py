@@ -21,6 +21,7 @@ Design goals this script exists to satisfy:
 Usage:
     python scripts/fetch_corpus.py                 # fetch all
     python scripts/fetch_corpus.py go rust         # fetch only these languages
+    python scripts/fetch_corpus.py --recall        # only the corpora scripts/recall_gate.py measures
     python scripts/fetch_corpus.py --list          # show manifest + cache state
     python scripts/fetch_corpus.py --dry-run       # print what would run
     REVEAL_CORPUS_DIR=/data/corpus python scripts/fetch_corpus.py
@@ -214,6 +215,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("languages", nargs="*", help="language or corpus ID (default: all)")
     ap.add_argument("--list", action="store_true", help="show manifest + cache state, do nothing")
     ap.add_argument("--dry-run", action="store_true", help="print commands without running them")
+    ap.add_argument("--recall", action="store_true",
+                    help="only entries with a recall configuration (the recall gate's corpora)")
     args = ap.parse_args(argv)
 
     manifest = _load_manifest()
@@ -223,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
         cmd_list(manifest, root)
         return 0
 
-    entries = manifest["corpora"]
+    entries = [e for e in manifest["corpora"] if "recall" in e or not args.recall]
     if args.languages:
         wanted = set(args.languages)
         entries = [e for e in entries if e["language"] in wanted or e.get("id") in wanted]

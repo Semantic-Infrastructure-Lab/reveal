@@ -15,7 +15,12 @@
 # a shared cache at $REVEAL_CORPUS_DIR or ~/.cache/reveal-corpus/<language>/.
 #
 # OPTIONAL CORPORA: never runtime dependencies or services. The scheduled
-# recall workflow fetches only entries carrying a recall configuration.
+# recall workflow fetches only entries carrying a recall configuration
+# (`fetch_corpus.py --recall`). A `recall:` block names an `oracle` from
+# scripts/recall_oracles.py, the `importer_dirs` whose files form the measured
+# population, an optional `scan_root` (default: the corpus root) that both the
+# oracle and depends:// treat as the project, and oracle-specific keys
+# (`include_dirs` for the GCC oracles). Baseline: tests/corpus/recall_baseline.json.
 # TWO KINDS OF TESTING, DELIBERATELY SEPARATED
 #   - Deterministic regression tests (CI, tests/test_conformance_matrix.py,
 #     tests/test_smoke_tier.py) use tiny HAND-WRITTEN fixtures under
@@ -49,6 +54,7 @@ corpora:
     license: AGPLv3/SSPLv1/RSALv2 (post-2024 relicense) — restrictive, do not extract
     role: Real application (database server), dense idiomatic C
     recall:
+      oracle: gcc-c
       importer_dirs: [src, modules, tests/modules, utils]
       include_dirs: [src, src/commands, deps/hiredis, deps/lua/src, deps/xxhash,
                      deps/hdr_histogram, deps/jemalloc/include, deps/fpconv,
@@ -60,6 +66,7 @@ corpora:
     license: curl (MIT/X derivative)
     role: Second C corpus; client library with cross-directory includes
     recall:
+      oracle: gcc-c
       importer_dirs: [lib, src]
       include_dirs: [lib, src, include, .]
   - language: cpp

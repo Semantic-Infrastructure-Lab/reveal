@@ -184,6 +184,22 @@ def test_corpus_ids_do_not_collide_and_language_selects_pair(tmp_path, monkeypat
     assert inspected == [tmp_path / 'c', tmp_path / 'c-second']
 
 
+def test_recall_selects_only_gated_corpora(tmp_path, monkeypatch):
+    # The scheduled recall job must not fetch an ungated multi-GB corpus that shares a language.
+    entries = [{'language': 'python', 'repo': 'huge', 'sha': 'a'},
+               {'language': 'python', 'id': 'python-small', 'repo': 'small', 'sha': 'b', 'recall': {}},
+               {'language': 'c', 'repo': 'c', 'sha': 'c', 'recall': {}}]
+    monkeypatch.setattr(fetch_corpus, '_load_manifest', lambda: {'corpora': entries})
+    monkeypatch.setenv('REVEAL_CORPUS_DIR', str(tmp_path))
+    fetched = []
+    monkeypatch.setattr(fetch_corpus, 'fetch_one', lambda entry, root, dry=False: fetched.append(entry['repo']))
+    assert fetch_corpus.main(['--recall']) == 0 and fetched == ['small', 'c']
+    fetched.clear()
+    assert fetch_corpus.main(['--recall', 'python']) == 0 and fetched == ['small']
+    fetched.clear()
+    assert fetch_corpus.main(['python']) == 0 and fetched == ['huge', 'small']
+
+
 @pytest.mark.parametrize('dry', [False, True])
 @pytest.mark.parametrize('shape', ['wrong_sha', 'not_a_repo'])
 def test_mismatched_existing_directory_is_preserved_not_deleted(tmp_path, shape, dry):
