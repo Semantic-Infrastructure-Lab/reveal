@@ -13,6 +13,7 @@ import time
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from ..logging_setup import worker_bootstrap
+from ..utils.parallel import pool_worker_count
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, List, Dict, TYPE_CHECKING
@@ -234,6 +235,24 @@ def _get_scan_disclosures() -> List[str]:
     return [*i002_disclosures(), *d005_disclosures(), *t006_disclosures()]
 
 
+def _pool_size(n_files: int) -> int:
+    """Workers for check's pool over *n_files*: REVEAL_MAX_WORKERS when set
+    (BACK-1436, the reader stats:// and imports:// use), else up to 4 -- a
+    benchmark showed 4 workers capture ~74% of the max speedup (vs 12 workers at
+    100%); beyond 4 the marginal gain is <0.5s while fork overhead and IPC
+    pressure grow. Never more workers than files."""
+    return min(pool_worker_count(min(4, os.cpu_count() or 4)), n_files)
+
+
+def _check_worker_count(n_files: int) -> int:
+    """1 = check the files serially in this process, without a pool: below
+    _PARALLEL_THRESHOLD pool startup costs more than it saves, and
+    REVEAL_MAX_WORKERS=1 asks for the serial path."""
+    if n_files < _PARALLEL_THRESHOLD:
+        return 1
+    return _pool_size(n_files)
+
+
 def _run_parallel(files: List[Path], directory: Path, select, ignore) -> list:
     """Run file checks in parallel, preserving input order in results.
 
@@ -251,10 +270,7 @@ def _run_parallel(files: List[Path], directory: Path, select, ignore) -> list:
     Returns:
         List of (file_path, issue_count, detections, status) in same order as input
     """
-    # Benchmark shows 4 workers captures ~74% of max speedup (vs 12 workers at
-    # 100%). Beyond 4, marginal gain is <0.5s while fork overhead grows.
-    # Capping at 4 leaves remaining cores free and reduces IPC pressure.
-    workers = min(4, os.cpu_count() or 4, len(files))
+    workers = _pool_size(len(files))
     args_iter = [(f, directory, select, ignore) for f in files]
     caches = _preload_scan_caches(files, directory, select, ignore)
     with ProcessPoolExecutor(
@@ -288,7 +304,7 @@ def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore):
         (file_path, issue_count, detections, status) tuples as futures complete
     """
     from concurrent.futures import as_completed
-    workers = min(4, os.cpu_count() or 4, len(files))
+    workers = _pool_size(len(files))
     args_list = [(f, directory, select, ignore) for f in files]
     caches = _preload_scan_caches(files, directory, select, ignore)
     with ProcessPoolExecutor(
@@ -923,7 +939,7 @@ def _check_files_json(
     """
     sorted_files = sorted(files)
 
-    if len(sorted_files) >= _PARALLEL_THRESHOLD:
+    if _check_worker_count(len(sorted_files)) > 1:
         try:
             results = _run_parallel(sorted_files, directory, select, ignore)
         except Exception:
@@ -954,7 +970,7 @@ def _results_in_sorted_order(sorted_files: List[Path], directory: Path, select, 
     byte-identical input. A file whose worker raised is absent (already logged by
     _run_parallel_streaming).
     """
-    if len(sorted_files) >= _PARALLEL_THRESHOLD:
+    if _check_worker_count(len(sorted_files)) > 1:
         try:
             result_iter = _run_parallel_streaming(sorted_files, directory, select, ignore)
         except Exception:

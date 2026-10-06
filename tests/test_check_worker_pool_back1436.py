@@ -134,6 +134,29 @@ class TestSerialEqualsParallel:
         assert serial[0] > 0
         assert serial == parallel
 
+    def test_scan_disclosures_identical(self, tmp_path, monkeypatch):
+        """A capped scan's disclosure survives the pool (BACK-1051's preload) the
+        same as the serial path. conftest now runs check serially suite-wide, so
+        this is what keeps the parallel side of that contract covered."""
+        from reveal.rules.duplicates.D005 import _clear_index as clear_d005
+        from reveal.rules.imports.I002 import _graph_cache
+        from reveal.rules.types.T006 import _clear_index as clear_t006
+
+        files = _tree(tmp_path, n=8)
+        monkeypatch.setenv("REVEAL_T006_MAX_FILES", "1")
+
+        def cold_run(workers):
+            _graph_cache.clear()
+            clear_d005()
+            clear_t006()
+            monkeypatch.setenv("REVEAL_MAX_WORKERS", workers)
+            return _run_json(files, tmp_path), file_checker._get_scan_disclosures()
+
+        serial = cold_run("1")
+        parallel = cold_run("3")
+        assert any("REVEAL_T006_MAX_FILES" in d for d in serial[1])
+        assert serial == parallel
+
     def test_text_output_identical(self, tmp_path, monkeypatch, capsys):
         files = _tree(tmp_path, n=8)
         monkeypatch.setenv("REVEAL_MAX_WORKERS", "1")
