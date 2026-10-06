@@ -117,7 +117,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
     'security': {
         'type': 'query_recipes',
         'task': 'security',
-        'description': 'Security analysis and vulnerability detection',
+        'description': 'Security review — auth code, complex query construction, certificate expiry, the external attack surface',
         'recipes': [
             {'goal': 'Find authentication functions', 'query': 'ast://src?name~=auth&type=function', 'description': 'Locate authentication-related code', 'output_type': 'ast_query'},
             {'goal': 'Check SSL certificate expiry', 'query': 'ssl://example.com --expiring-within=30', 'description': 'Find certificates expiring soon', 'output_type': 'ssl_check'},
@@ -182,7 +182,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
     'infrastructure': {
         'type': 'query_recipes',
         'task': 'infrastructure',
-        'description': 'Server infrastructure inspection — nginx, SSL, domains',
+        'description': 'Server infrastructure inspection — nginx, SSL, domains, cPanel, AutoSSL, Let\'s Encrypt',
         'recipes': [
             {'goal': 'Inspect nginx vhost', 'query': 'nginx://example.com', 'description': 'Ports, upstreams, auth, locations for a domain', 'output_type': 'nginx_vhost_summary'},
             {'goal': 'List all nginx vhosts', 'query': 'nginx://', 'description': 'Overview of all enabled nginx sites', 'output_type': 'nginx_sites_overview'},
@@ -215,7 +215,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
     'sessions': {
         'type': 'query_recipes',
         'task': 'sessions',
-        'description': 'Claude Code session analysis — tool usage, files, errors, workflows',
+        'description': 'Claude Code and Codex CLI session analysis — tool usage, files, errors, prompt/answer pairs, search',
         'recipes': [
             {'goal': 'Session overview', 'query': 'reveal claude://session/my-session', 'description': 'Message count, tool calls, duration, tool summary', 'output_type': 'claude_session_overview'},
             {'goal': 'Search across all sessions', 'query': "reveal 'claude://sessions/?search=validate_token'", 'description': 'Cross-session content search', 'output_type': 'claude_cross_session_search'},
@@ -242,7 +242,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
     'data': {
         'type': 'query_recipes',
         'task': 'data',
-        'description': 'Database and structured data inspection — SQLite, MySQL, Excel',
+        'description': 'Database and structured data inspection — SQLite, MySQL, Excel, JSON',
         'recipes': [
             {'goal': 'List database tables', 'query': 'reveal sqlite:///path/to/app.db', 'description': 'Schema overview with row counts', 'output_type': 'sqlite_database'},
             {'goal': 'Inspect a table', 'query': 'reveal sqlite:///path/to/app.db/users', 'description': 'Columns and types, indexes, foreign keys, row count, CREATE statement (schema only: sqlite:// returns no row data)', 'output_type': 'sqlite_table'},
