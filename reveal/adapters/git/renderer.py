@@ -262,7 +262,10 @@ class GitRenderer:
 
         label = result['source_type'].capitalize()
         print(f"Ownership ({label}): {result['path']} @ {result['ref']}")
-        print(f"Commits: {result['total_commits']}  ·  Contributors: {result['contributor_count']}  ·  Last touch: {result['last_touch'] or '—'}")
+        window = (result.get('scope') or {}).get('history_window')
+        in_window = (f" (window: newest {window['commits_counted']} commits only)"
+                     if window and not window['complete'] else '')
+        print(f"Commits: {result['total_commits']}{in_window}  ·  Contributors: {result['contributor_count']}  ·  Last touch: {result['last_touch'] or '—'}")
         print()
 
         authors = result['authors']

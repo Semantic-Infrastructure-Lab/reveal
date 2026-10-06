@@ -10,7 +10,7 @@ from typing import Dict, Any, List, Optional, cast, TYPE_CHECKING
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ...core import disk_cache
-from ...utils.results import ResultBuilder
+from ...utils.results import ResultBuilder, note_truncation
 from .commits import commit_filter, disclose_timeline_cut, timeline_fields, walk_history
 
 logger = logging.getLogger(__name__)
@@ -689,22 +689,26 @@ def _aggregate_commit_authors(
 ) -> tuple:
     """Walk history from start_commit, attributing touching commits to authors.
 
-    Returns (author_list, total) where author_list is sorted by commit count
+    Returns (author_list, total, window). author_list is sorted by commit count
     descending and each entry carries name, email, commits, share, last_touch.
+    ``limit`` is a window of commits to look at, touching or not; ``window`` says how many
+    were counted and whether the walk stopped with older commits unread (BACK-1552).
     """
     import pygit2
 
     authors: Dict[tuple, Dict[str, Any]] = {}
     total = 0
     walked = 0
+    complete = True
 
     walker = repo.walk(start_commit.id, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
     for c in walker:
         if not include_merges and len(c.parents) > 1:
             continue
-        walked += 1
-        if limit and walked > limit:
+        if limit and walked >= limit:
+            complete = False  # a commit past the window proves older history exists
             break
+        walked += 1
         if not commit_touches_path(repo, c, git_subpath):
             continue
         total += 1
@@ -727,7 +731,7 @@ def _aggregate_commit_authors(
         a['share'] = round(a['commits'] / total, 4) if total else 0.0
         a['last_touch'] = datetime.fromtimestamp(a.pop('_ts')).strftime('%Y-%m-%d')
 
-    return author_list, total
+    return author_list, total, {'limit': limit, 'commits_counted': walked, 'complete': complete}
 
 
 def get_ownership(
@@ -769,7 +773,7 @@ def get_ownership(
     include_merges = query.get('merges') in ('1', 'true', 'yes')
     limit = getattr(result_control, 'limit', None) if result_control else None
 
-    author_list, total = _aggregate_commit_authors(
+    author_list, total, window = _aggregate_commit_authors(
         repo, commit, git_subpath, include_merges, limit
     )
 
@@ -778,6 +782,7 @@ def get_ownership(
         source=f"{git_subpath or '.'}@{ref}",
         source_type=source_type,
         contract_version=CONTRACT_VERSION,
+        scope={'history_window': window} if limit else None,
         path=git_subpath or '.',
         ref=ref,
         total_commits=total,
@@ -795,6 +800,13 @@ def get_ownership(
             ],
         },
     )
+
+    if not window['complete']:
+        note_truncation(
+            result, 'commits', window['commits_counted'], window['commits_counted'] + 1,
+            'limit', exact=False,
+            hint=f"raise ?limit=N; shares and total_commits count only the newest "
+                 f"{window['commits_counted']} commits")
 
     if getattr(repo, 'is_shallow', False):
         result['shallow_clone'] = True
