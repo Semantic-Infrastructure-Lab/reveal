@@ -1,4 +1,4 @@
-"""Tests for git/files.py:get_churn_counts (BACK-483)."""
+"""Tests for git/churn.py:get_churn_counts (BACK-483)."""
 
 import pytest
 
@@ -52,14 +52,14 @@ def churn_repo(tmp_path):
 
 class TestGetChurnCounts:
     def test_tallies_touches_per_file(self, churn_repo):
-        from reveal.adapters.git.files import get_churn_counts
+        from reveal.adapters.git.churn import get_churn_counts
 
         repo_dir, repo = churn_repo
         counts = get_churn_counts(repo, 'HEAD', None)
         assert counts == {'a.py': 4, 'b.py': 2}
 
     def test_scope_limits_to_given_paths(self, churn_repo):
-        from reveal.adapters.git.files import get_churn_counts
+        from reveal.adapters.git.churn import get_churn_counts
 
         repo_dir, repo = churn_repo
         counts = get_churn_counts(repo, 'HEAD', {'a.py'})
@@ -67,7 +67,7 @@ class TestGetChurnCounts:
         assert 'b.py' not in counts
 
     def test_no_merges_excludes_multi_parent_commits(self, churn_repo):
-        from reveal.adapters.git.files import get_churn_counts
+        from reveal.adapters.git.churn import get_churn_counts
 
         repo_dir, repo = churn_repo
         counts = get_churn_counts(repo, 'HEAD', None, no_merges=True)
@@ -75,7 +75,7 @@ class TestGetChurnCounts:
 
     def test_since_excludes_older_commits(self, churn_repo):
         from datetime import datetime, timedelta
-        from reveal.adapters.git.files import get_churn_counts
+        from reveal.adapters.git.churn import get_churn_counts
 
         repo_dir, repo = churn_repo
         # Bound to "the future" -> nothing should be tallied.
@@ -91,7 +91,7 @@ class TestGetChurnCounts:
     def test_matches_git_log_oneline_count(self, churn_repo):
         """Cross-check against `git log --oneline -- <file> | wc -l` semantics."""
         import subprocess
-        from reveal.adapters.git.files import get_churn_counts
+        from reveal.adapters.git.churn import get_churn_counts
 
         repo_dir, repo = churn_repo
         counts = get_churn_counts(repo, 'HEAD', None)

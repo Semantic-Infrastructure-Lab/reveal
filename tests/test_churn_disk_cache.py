@@ -55,7 +55,7 @@ def churn_repo(tmp_path):
 
 class TestChurnDiskCache:
     def test_cache_hit_matches_fresh_walk(self, churn_repo):
-        from reveal.adapters.git.files import get_churn_counts
+        from reveal.adapters.git.churn import get_churn_counts
 
         repo_dir, repo = churn_repo
         fresh = get_churn_counts(repo, 'HEAD', None)
@@ -71,7 +71,7 @@ class TestChurnDiskCache:
 
     def test_scope_paths_is_a_post_filter_not_a_cache_key(self, churn_repo):
         """Two different scope_paths on the same HEAD must share one cache entry."""
-        from reveal.adapters.git.files import get_churn_counts
+        from reveal.adapters.git.churn import get_churn_counts
 
         repo_dir, repo = churn_repo
         full = get_churn_counts(repo, 'HEAD', None)
@@ -89,7 +89,7 @@ class TestChurnDiskCache:
         assert get_churn_counts(repo, 'HEAD', {'nonexistent.py'}) == {}
 
     def test_new_commit_invalidates_cache(self, churn_repo):
-        from reveal.adapters.git.files import get_churn_counts
+        from reveal.adapters.git.churn import get_churn_counts
 
         repo_dir, repo = churn_repo
         before = get_churn_counts(repo, 'HEAD', None)
@@ -111,7 +111,7 @@ class TestChurnDiskCache:
     def test_since_and_no_merges_are_part_of_the_cache_key(self, churn_repo):
         """Different since/no_merges on the same HEAD must not share an entry."""
         from datetime import datetime, timedelta
-        from reveal.adapters.git.files import get_churn_counts
+        from reveal.adapters.git.churn import get_churn_counts
 
         repo_dir, repo = churn_repo
         unbounded = get_churn_counts(repo, 'HEAD', None)
@@ -124,7 +124,7 @@ class TestChurnDiskCache:
         assert no_merges == {'a.py': 2, 'b.py': 1}
 
     def test_kill_switch_falls_back_to_uncached_walk(self, churn_repo, monkeypatch):
-        from reveal.adapters.git.files import get_churn_counts
+        from reveal.adapters.git.churn import get_churn_counts
 
         repo_dir, repo = churn_repo
         monkeypatch.setenv("REVEAL_DISK_CACHE", "0")
@@ -135,7 +135,7 @@ class TestChurnDiskCache:
         assert disk_cache.get("churn", "anything") is None
 
     def test_corrupt_cache_entry_is_a_miss_not_a_crash(self, churn_repo):
-        from reveal.adapters.git.files import get_churn_counts, _churn_fingerprint
+        from reveal.adapters.git.churn import get_churn_counts, _churn_fingerprint
 
         repo_dir, repo = churn_repo
         obj = repo.revparse_single('HEAD')

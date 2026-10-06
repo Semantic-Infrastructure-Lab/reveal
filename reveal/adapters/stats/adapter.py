@@ -408,8 +408,8 @@ class StatsAdapter(ResourceAdapter):
             if not display_to_repo_rel:
                 return None
 
-            from ..git import files as git_files  # deferred: avoid stats<->git import cycle at module load
-            counts_by_repo_rel = git_files.get_churn_counts(
+            from ..git import churn as git_churn  # deferred: avoid stats<->git import cycle at module load
+            counts_by_repo_rel = git_churn.get_churn_counts(
                 repo, 'HEAD', set(display_to_repo_rel.values()),
                 since=since, no_merges=no_merges,
             )
