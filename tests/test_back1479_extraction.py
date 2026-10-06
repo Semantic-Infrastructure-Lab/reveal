@@ -70,3 +70,25 @@ def test_proto_nested_message_negative_controls(tmp_path):
     assert _extract(f, "Nope.Address") is None
     # Geo lives under User.Address, not directly under User or Company
     assert _extract(f, "Company.Address.Geo") is None
+
+
+def test_csv_name_miss_says_rows_extract_by_number(tmp_path, capsys):
+    from reveal.display.element import _handle_extraction_error
+    f = tmp_path / "a.csv"
+    f.write_text("id,name\n1,bob\n2,al\n", encoding="utf-8")
+    analyzer = get_analyzer(str(f))(str(f))
+    assert _extract_by_syntax(analyzer, "name", _parse_element_syntax("name")) is None
+    _handle_extraction_error(analyzer, "name", _parse_element_syntax("name"))
+    err = capsys.readouterr().err
+    assert "rows by number" in err and "Code extraction matches exact names" not in err
+    # positive control: a row number does extract
+    assert _extract(f, "2")["data"] == {"id": "2", "name": "al"}
+
+
+def test_non_csv_keeps_generic_name_hint(tmp_path, capsys):
+    from reveal.display.element import _handle_extraction_error
+    f = tmp_path / "a.proto"
+    f.write_text(_PROTO, encoding="utf-8")
+    analyzer = get_analyzer(str(f))(str(f))
+    _handle_extraction_error(analyzer, "Nope", _parse_element_syntax("Nope"))
+    assert "Code extraction matches exact names" in capsys.readouterr().err

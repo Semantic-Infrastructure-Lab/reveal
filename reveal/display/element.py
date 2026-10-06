@@ -482,6 +482,12 @@ def _handle_extraction_error(analyzer, element: str, syntax: dict):
                 f"Search the text: reveal {to_posix(analyzer.path)} --grep '{element}'",
                 file=sys.stderr
             )
+        elif isinstance(getattr(analyzer, 'EXTRACT_BY_NAME_HINT', None), str):
+            print(
+                f"{analyzer.EXTRACT_BY_NAME_HINT} "
+                f"For content search, use: reveal {to_posix(analyzer.path)} --grep '{element}'",
+                file=sys.stderr
+            )
         else:
             print(
                 f"Hint: Code extraction matches exact names. "

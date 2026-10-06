@@ -35,6 +35,12 @@ class CsvAnalyzer(FileAnalyzer):
 
     SLICE_FIELDS = ('sample_rows',)  # --head picks rows; columns and schema are the whole file's
     DEFAULT_HEAD = 5
+    # The outline lists column names and sample rows, but only a row NUMBER
+    # extracts; shown instead of the generic "exact names" hint (BACK-1479).
+    EXTRACT_BY_NAME_HINT = (
+        "Hint: a CSV extracts rows by number (1 = first data row), not by column or value. "
+        "Columns and sample rows in the outline are descriptions, not addresses."
+    )
 
     def _infer_type(self, values: List[str]) -> str:
         """Infer data type from sample values.
