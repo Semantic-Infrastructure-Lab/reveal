@@ -59,7 +59,7 @@ ignore:
 
 ```bash
 # Check what config is loaded
-reveal check file.py --verbose
+reveal reveal://config
 
 # Test with environment variable
 export REVEAL_RULES_DISABLE="C901,E501"
@@ -549,7 +549,7 @@ reveal --check src/
 1. Check file is in project root or parent directory
 2. Verify YAML syntax: `python -c "import yaml; yaml.safe_load(open('.reveal.yaml'))"`
 3. Check for `root: true` in parent directory stopping discovery
-4. Use `reveal --check file.py --verbose` to see loaded config
+4. Use `reveal reveal://config` to see loaded config
 
 ### Rule Still Running After Disable
 
