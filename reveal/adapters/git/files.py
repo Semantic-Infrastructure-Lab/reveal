@@ -11,7 +11,8 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ...core import disk_cache
 from ...utils.results import ResultBuilder, note_truncation
-from .commits import commit_filter, disclose_timeline_cut, timeline_fields, walk_history
+from .commits import (commit_filter, disclose_timeline_cut, history_sort, timeline_fields,
+                      walk_history)
 
 logger = logging.getLogger(__name__)
 
@@ -694,14 +695,12 @@ def _aggregate_commit_authors(
     ``limit`` is a window of commits to look at, touching or not; ``window`` says how many
     were counted and whether the walk stopped with older commits unread (BACK-1552).
     """
-    import pygit2
-
     authors: Dict[tuple, Dict[str, Any]] = {}
     total = 0
     walked = 0
     complete = True
 
-    walker = repo.walk(start_commit.id, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
+    walker = repo.walk(start_commit.id, history_sort())  # type: ignore[arg-type]
     for c in walker:
         if not include_merges and len(c.parents) > 1:
             continue
