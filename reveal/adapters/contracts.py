@@ -7,6 +7,7 @@ capability follows (BACK-901). Same treatment as surface.py (BACK-904).
 
 from __future__ import annotations
 
+from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
@@ -24,6 +25,7 @@ from ..utils.path_utils import (
     to_posix,
 )
 from ..utils.query import parse_query_params
+from ..utils.query_parser import ParamSpec, param_schema, whole_number
 from ..utils.results import ResultBuilder
 
 _CONTRACT_PATH_HINTS: frozenset = frozenset({
@@ -797,33 +799,39 @@ _LANGUAGE_LABELS: Dict[str, str] = {
 # Fixed render order for the polyglot (`by_language`) case — arbitrary but stable.
 _LANGUAGE_RENDER_ORDER: List[str] = ['python', 'ts', 'ruby', 'go', 'rust', 'cpp']
 
+# Implementers listed under each contract in the text view; JSON always carries
+# them all. 0 lists every one (BACK-1384).
+_IMPLS = ParamSpec('impls', 'integer', 'Implementers listed per contract in the text view (0 = all; JSON always has all)',
+                   5, whole_number, ('impls=20', 'impls=0'), minimum=0, zero_policy='all')
 
-def _render_contract_groups(mode: str, report: Dict[str, Any]) -> None:
+
+def _render_contract_groups(mode: str, report: Dict[str, Any], impls_cap: int = 5) -> None:
     """Render one language's contract groups under its own labels/groupings."""
+    group = partial(_render_group, impls_cap=impls_cap)
     if mode == 'ts':
-        _render_group("Abstract Classes", report['abcs'], show_methods=False, show_impls=True)
-        _render_group("Interfaces", report['protocols'], show_methods=False, show_impls=True)
-        _render_group("Type Aliases", report['typeddicts'], show_methods=False, show_impls=False)
-        _render_group("Implementing Classes", report['dataclasses'], show_methods=False, show_impls=False)
+        group("Abstract Classes", report['abcs'], show_methods=False, show_impls=True)
+        group("Interfaces", report['protocols'], show_methods=False, show_impls=True)
+        group("Type Aliases", report['typeddicts'], show_methods=False, show_impls=False)
+        group("Implementing Classes", report['dataclasses'], show_methods=False, show_impls=False)
     elif mode == 'ruby':
-        _render_group("Mixins (Modules)", report['protocols'], show_methods=False, show_impls=True)
-        _render_group("Including Classes", report['dataclasses'], show_methods=False, show_impls=False)
+        group("Mixins (Modules)", report['protocols'], show_methods=False, show_impls=True)
+        group("Including Classes", report['dataclasses'], show_methods=False, show_impls=False)
     elif mode == 'go':
-        _render_group("Interfaces", report['protocols'], show_methods=False, show_impls=True)
-        _render_group("Implementing Types (structural)", report['dataclasses'], show_methods=False, show_impls=False)
+        group("Interfaces", report['protocols'], show_methods=False, show_impls=True)
+        group("Implementing Types (structural)", report['dataclasses'], show_methods=False, show_impls=False)
     elif mode == 'rust':
-        _render_group("Traits", report['protocols'], show_methods=False, show_impls=True)
-        _render_group("Implementing Types", report['dataclasses'], show_methods=False, show_impls=False)
+        group("Traits", report['protocols'], show_methods=False, show_impls=True)
+        group("Implementing Types", report['dataclasses'], show_methods=False, show_impls=False)
     elif mode == 'cpp':
-        _render_group("Abstract Classes (interfaces)", report['protocols'], show_methods=False, show_impls=True)
-        _render_group("Subclasses", report['dataclasses'], show_methods=False, show_impls=False)
+        group("Abstract Classes (interfaces)", report['protocols'], show_methods=False, show_impls=True)
+        group("Subclasses", report['dataclasses'], show_methods=False, show_impls=False)
     else:
-        _render_group("Abstract Base Classes", report['abcs'], show_methods=True, show_impls=True)
-        _render_group("Protocols", report['protocols'], show_methods=True, show_impls=True)
-        _render_group("TypedDicts", report['typeddicts'], show_methods=False, show_impls=False)
-        _render_group("Dataclasses", report['dataclasses'], show_methods=False, show_impls=False)
-        _render_group("Pydantic BaseModels", report['basemodels'], show_methods=False, show_impls=False)
-        _render_group("Path-heuristic bases", report['path_heuristic'], show_methods=True, show_impls=True)
+        group("Abstract Base Classes", report['abcs'], show_methods=True, show_impls=True)
+        group("Protocols", report['protocols'], show_methods=True, show_impls=True)
+        group("TypedDicts", report['typeddicts'], show_methods=False, show_impls=False)
+        group("Dataclasses", report['dataclasses'], show_methods=False, show_impls=False)
+        group("Pydantic BaseModels", report['basemodels'], show_methods=False, show_impls=False)
+        group("Path-heuristic bases", report['path_heuristic'], show_methods=True, show_impls=True)
 
 
 def _no_contracts_hint(mode: str) -> str:
@@ -840,7 +848,7 @@ def _no_contracts_hint(mode: str) -> str:
     return "  Try widening the path or checking imports for ABC/Protocol usage."
 
 
-def _render_report(report: Dict[str, Any]) -> None:
+def _render_report(report: Dict[str, Any], impls_cap: int = 5) -> None:
     path = report['path']
     total = report['total_contracts']
 
@@ -877,7 +885,7 @@ def _render_report(report: Dict[str, Any]) -> None:
                 continue
             print(f"── {_LANGUAGE_LABELS[name]} ──")
             print()
-            _render_contract_groups(name, group)
+            _render_contract_groups(name, group, impls_cap)
         return
 
     ts_mode = report.get('_ts_mode', False)
@@ -900,7 +908,7 @@ def _render_report(report: Dict[str, Any]) -> None:
             print()
         return
 
-    _render_contract_groups(mode, report)
+    _render_contract_groups(mode, report, impls_cap)
 
 
 def _render_group(
@@ -908,6 +916,7 @@ def _render_group(
     entries: List[Dict[str, Any]],
     show_methods: bool,
     show_impls: bool,
+    impls_cap: int = 5,
 ) -> None:
     if not entries:
         return
@@ -924,10 +933,11 @@ def _render_group(
             print(f"    → abstract: {methods}")
         if show_impls and cls.get('implementations'):
             impls = cls['implementations']
-            impl_strs = [f"{i['name']} ({i['file']}:{i['line']})" for i in impls[:5]]
+            shown = impls[:impls_cap] if impls_cap > 0 else impls
+            impl_strs = [f"{i['name']} ({i['file']}:{i['line']})" for i in shown]
             print(f"    ← implements: {', '.join(impl_strs)}")
-            if len(impls) > 5:
-                print(f"    ← … and {len(impls) - 5} more")
+            if len(impls) > len(shown):
+                print(f"    ← … and {len(impls) - len(shown)} more (?impls=0 lists all, ?impls=N widens)")
     print()
 
 
@@ -939,7 +949,7 @@ class ContractsRenderer:
         if format == 'json':
             print_json_result(result)
             return
-        _render_report(result)
+        _render_report(result, result.get('impls_cap', 5))
 
 
 @register_adapter('contracts')
@@ -993,6 +1003,7 @@ class ContractsAdapter(ResourceAdapter):
             'query_params': {
                 'abstract_only': {'type': 'boolean', 'description': 'Show only ABCs and Protocols (skip TypedDicts, dataclasses, path-heuristic)', 'examples': ['abstract_only=true']},
                 'implementations': {'type': 'boolean', 'description': 'Show which classes implement each contract. Default: true.', 'examples': ['implementations=false']},
+                **param_schema([_IMPLS]),
             },
             'elements': {},
             'supports_batch': False,
@@ -1025,7 +1036,10 @@ class ContractsAdapter(ResourceAdapter):
         _impl_raw = self.query_params.get('implementations')
         show_implementations = str(_impl_raw).lower() != 'false' if _impl_raw is not None else True
 
+        impls_cap = _IMPLS.read(self.query_params)
+
         report = _scan_contracts(Path(self.path), abstract_only=abstract_only, show_implementations=show_implementations)
+        report['impls_cap'] = impls_cap  # the text view's per-contract cap; the lists themselves are whole
 
         warnings = []
         coverage_warning = report.get('coverage', {}).get('warning', '')

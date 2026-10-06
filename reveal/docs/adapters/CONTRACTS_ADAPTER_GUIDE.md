@@ -30,6 +30,7 @@ reveal 'contracts://.?implementations=false'
 |-----------|--------|---------|
 | `abstract_only` | `true`, `false` (default) | Show only ABCs/Protocols/interfaces/traits — skip TypedDicts, dataclasses, path-heuristic bases. |
 | `implementations` | `true` (default), `false` | Show which classes/types implement each contract. |
+| `impls` | whole number >= 0, default `5` | Implementers listed per contract in text output; `0` lists all. JSON always carries every implementer. |
 
 ## Per-Language Contract Shapes
 
@@ -57,7 +58,7 @@ docstrings in `reveal/adapters/contracts.py` for exactly which field each
 language's contract/implementer pair maps to).
 
 Each entry carries `implementations` (when `implementations=true`) — the
-concrete types satisfying that contract, capped at 5 in text output with a
+concrete types satisfying that contract, capped at 5 in text output (`?impls=N` widens it, `?impls=0` lists all) with a
 "… and N more" tail.
 
 `path_heuristic` (Python only) catches classes in files named like
