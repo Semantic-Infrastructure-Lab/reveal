@@ -283,6 +283,8 @@ class VarFlowWalker:
             self._walk_for(n, c, 'declarator', 'right')
         elif ntype == 'with_statement':
             self._walk_with(n, c)
+        elif ntype == 'func_literal':
+            self._walk_func_literal(n, c)
         elif ntype in IF_WHILE_NODES:
             # Rust's `if`/`if let`/`while` produce `if_expression`/
             # `while_expression`, not `if_statement`/`while_statement`
@@ -594,6 +596,28 @@ class VarFlowWalker:
             self.walk(body, 'READ')
         for child in _children(n):
             if (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) not in processed:
+                self.walk(child, c)
+
+    def _walk_func_literal(self, n: Any, c: str) -> None:
+        """Go `func(x string, y int) error { ... }`: the literal's parameters are
+        bindings inside it, so their declaration sites are WRITEs, not reads of an
+        outer variable (BACK-1408: `rv`/`eventReceivedBesidesAdded` read as
+        undefined INPUTS of the enclosing function)."""
+        params = n.child_by_field_name('parameters')
+        param_names = set()
+        if params is not None:
+            for decl in _children(params):
+                for name in _children(decl):
+                    if _zero_arg(name, 'kind') == 'identifier':
+                        param_names.add(_start_pos(name))
+                        self.walk(name, 'WRITE')
+        for child in _children(n):
+            if params is not None and _start_pos(child) == _start_pos(params):
+                for decl in _children(params):
+                    for part in _children(decl):
+                        if _start_pos(part) not in param_names:
+                            self.walk(part, c)
+            else:
                 self.walk(child, c)
 
     def _walk_with(self, n: Any, c: str) -> None:
@@ -920,6 +944,58 @@ def _declared_name_node(scope_node: Any) -> Optional[Any]:
     return None
 
 
+_GO_STRUCT_TYPE_KINDS = frozenset({'type_identifier', 'qualified_type', 'generic_type'})
+
+
+def _go_names_non_struct_type(literal_type: Any, get_text: Callable) -> bool:
+    """True when a Go literal's type is a same-file named type that is not a
+    struct (`type Names map[string]int`), whose keys are value expressions."""
+    if _zero_arg(literal_type, 'kind') != 'type_identifier':
+        return False
+    name = get_text(literal_type)
+    root = literal_type
+    while _zero_arg(root, 'parent') is not None:
+        root = _zero_arg(root, 'parent')
+    for decl in _children(root):
+        if _zero_arg(decl, 'kind') != 'type_declaration':
+            continue
+        for spec in _children(decl):
+            spec_name = spec.child_by_field_name('name')
+            spec_type = spec.child_by_field_name('type')
+            if (spec_name is not None and spec_type is not None and get_text(spec_name) == name):
+                return _zero_arg(spec_type, 'kind') != 'struct_type'
+    return False
+
+
+def _go_struct_literal_key_node(node: Any, get_text: Callable) -> Optional[Any]:
+    """Return the key of a Go struct-literal element (`Opts{ResourceVersion: rv}`),
+    which names a field, not a variable (BACK-1408).
+
+    Only for a literal with an explicit named type that is not a same-file
+    non-struct type: a map or slice literal's key is a value expression
+    (`map[string]int{k: 1}` reads k), and a literal with an elided type
+    (`{k: 1}` inside another literal) cannot be told apart without type
+    information, so both keep their keys as reads."""
+    if _zero_arg(node, 'kind') != 'keyed_element':
+        return None
+    key = node.child_by_field_name('key')
+    if key is None or _zero_arg(key, 'kind') != 'literal_element':
+        return None
+    parts = _children(key)
+    if len(parts) != 1 or _zero_arg(parts[0], 'kind') != 'identifier':
+        return None
+    body = _zero_arg(node, 'parent')
+    literal = _zero_arg(body, 'parent') if body is not None else None
+    if literal is None or _zero_arg(literal, 'kind') != 'composite_literal':
+        return None
+    literal_type = literal.child_by_field_name('type')
+    if literal_type is None or _zero_arg(literal_type, 'kind') not in _GO_STRUCT_TYPE_KINDS:
+        return None
+    if _go_names_non_struct_type(literal_type, get_text):
+        return None
+    return key
+
+
 def _start_pos(node: Any) -> tuple:
     point = _zero_arg(node, 'start_position')
     return (point.row, point.column)
@@ -927,11 +1003,13 @@ def _start_pos(node: Any) -> tuple:
 
 def _non_variable_children(node: Any, get_text: Callable) -> List[Any]:
     """Children of `node` that look like identifiers but are not variables: a
-    lowercase JSX tag name and a Java annotation's type name. The one table both
+    lowercase JSX tag name, a Java annotation's type name and a Go struct-literal
+    field key. The one table both
     the candidate-name pass and the --varflow walker consult."""
     skipped = []
     for found in (_jsx_lowercase_tag_name_node(node, get_text),
-                  _java_annotation_name_node(node)):
+                  _java_annotation_name_node(node),
+                  _go_struct_literal_key_node(node, get_text)):
         if found is not None:
             skipped.append(found)
     return skipped
