@@ -14,6 +14,7 @@ from unittest.mock import patch
 import pytest
 
 from reveal.cli import file_checker
+from reveal.rules.scan_caches import get_scan_disclosures
 from reveal.utils.parallel import pool_worker_count
 
 
@@ -150,7 +151,7 @@ class TestSerialEqualsParallel:
             clear_d005()
             clear_t006()
             monkeypatch.setenv("REVEAL_MAX_WORKERS", workers)
-            return _run_json(files, tmp_path), file_checker._get_scan_disclosures()
+            return _run_json(files, tmp_path), get_scan_disclosures()
 
         serial = cold_run("1")
         parallel = cold_run("3")

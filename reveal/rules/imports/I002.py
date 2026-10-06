@@ -62,7 +62,7 @@ _DEFAULT_CYCLE_DETECTION_MAX_FILES = 2000
 # parse per source file under the project root). Per-file extraction is
 # independent, so fan it out across processes, reusing BACK-489 P1's pattern and
 # its REVEAL_MAX_WORKERS override. The graph is built in the main process (see
-# file_checker._i002_preload) before the check worker pool spawns, so this pool
+# rules/scan_caches._i002_preload) before the check worker pool spawns, so this pool
 # never nests inside another; ProcessPoolExecutor.map preserves order, so the
 # assembled graph is identical to the serial path.
 _GRAPH_PARALLEL_MIN_FILES = 200   # below this, pool startup/IPC outweighs the win
@@ -239,7 +239,7 @@ def _find_project_root(path: Path) -> Path:
 def get_scan_disclosures() -> List[str]:
     """BACK-1051: one-line skip reasons for every capped/truncated graph
     currently in ``_graph_cache`` (the same process-local cache
-    ``_build_import_graph`` populates and ``file_checker._i002_preload``
+    ``_build_import_graph`` populates and ``scan_caches._i002_preload``
     fills in the main process before workers spawn). A directory-level
     ``check``/``review`` run must surface these instead of letting a capped
     scan present its empty cycle list as a clean "no circular dependencies

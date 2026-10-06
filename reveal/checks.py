@@ -39,25 +39,13 @@ def _is_generated_file(content: str) -> bool:
     return any(p.search(head) for p in _GENERATED_PATTERNS)
 
 
-def _rule_will_run(code: str, select, ignore) -> bool:
-    """Return True if rule *code* is in the effective rule set for the filters.
-
-    Delegates to the same RuleRegistry resolution the per-file check uses, so
-    a preload decision can never drift from what actually runs. In particular
-    this honors --select: ``check <dir> --select C901`` must not trigger an
-    expensive project-wide index build (BACK-338).
-    """
-    from .rules import RuleRegistry
-    rules = RuleRegistry.get_rules(select=select, ignore=ignore)
-    return any(r.code == code for r in rules)
-
-
 def _python_only_rule_disclosures(files, select, ignore) -> List[str]:
     """BACK-1283: a Python-only rule (T006) is skipped by file pattern on other
     languages, which reads as "checked, clean". Say so when it was in the
     effective rule set and the run held non-Python source."""
     from .capabilities import python_only_rule_disclosure
-    if not _rule_will_run("T006", select, ignore):
+    from .rules.scan_caches import rule_will_run
+    if not rule_will_run("T006", select, ignore):
         return []
     note = python_only_rule_disclosure(files, "T006")
     return [note] if note else []
@@ -66,7 +54,8 @@ def _python_only_rule_disclosures(files, select, ignore) -> List[str]:
 def _i001_not_checked_disclosures(files, select, ignore) -> List[str]:
     """BACK-1398: I001 runs on every language with an import extractor but only
     judges the ones with unused-import detection; say so for the rest."""
-    if not _rule_will_run("I001", select, ignore):
+    from .rules.scan_caches import rule_will_run
+    if not rule_will_run("I001", select, ignore):
         return []
     from .adapters.imports import _unused_not_checked
     from .analyzers.imports.base import get_all_extensions

@@ -1659,7 +1659,7 @@ class TestI002ProjectRootBACK338(unittest.TestCase):
     def test_scan_disclosures_reports_capped_graph(self):
         """BACK-1051: get_scan_disclosures() surfaces the skip reason for any
         graph in _graph_cache whose scan was capped -- the aggregation point
-        file_checker._get_scan_disclosures() relies on."""
+        rules.scan_caches.get_scan_disclosures() relies on."""
         import os
         from unittest import mock
         from reveal.rules.imports.I002 import I002, _graph_cache, get_scan_disclosures

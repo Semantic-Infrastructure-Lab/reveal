@@ -9,14 +9,17 @@ from reveal.cli.file_checker import (
     should_skip_file,
     collect_files_to_check,
     check_and_report_file,
+    _apply_severity_filter,
+)
+# The preload/broadcast table check's pool uses lives with the rules (BACK-1437).
+from reveal.rules.scan_caches import (
     _i002_preload,
     _i002_init_worker,
     _d005_preload,
     _d005_init_worker,
     _t006_preload,
     _t006_init_worker,
-    _get_scan_disclosures,
-    _apply_severity_filter,
+    get_scan_disclosures as _get_scan_disclosures,
 )
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
@@ -585,7 +588,7 @@ class TestI002Preload:
 
     def test_preload_survives_import_error(self, tmp_path):
         """_i002_preload returns empty dict if I002 module cannot be imported."""
-        with patch("reveal.cli.file_checker._i002_preload", wraps=_i002_preload):
+        with patch("reveal.rules.scan_caches._i002_preload", wraps=_i002_preload):
             with patch.dict("sys.modules", {"reveal.rules.imports.I002": None}):
                 result = _i002_preload(tmp_path, select=None, ignore=None)
         assert isinstance(result, dict)
@@ -651,7 +654,7 @@ class TestI002Preload:
             preload_calls.append((directory, select, ignore, files))
             return {}
 
-        with patch("reveal.cli.file_checker._i002_preload", side_effect=fake_preload):
+        with patch("reveal.rules.scan_caches._i002_preload", side_effect=fake_preload):
             _run_parallel(files, tmp_path, select=None, ignore=None)
 
         assert len(preload_calls) == 1

@@ -110,8 +110,8 @@ def run_review(args: Namespace) -> None:
     # propagate a capped-scan disclosure (I002/D005) rather than swallowing
     # it, the concrete symptom that motivated this ticket ("reveal review ."
     # on 20,000+ files produced a silent I002 skip").
-    from reveal.cli.file_checker import _get_scan_disclosures
-    scan_disclosures = _get_scan_disclosures()
+    from reveal.rules.scan_caches import get_scan_disclosures
+    scan_disclosures = get_scan_disclosures()
     if scan_disclosures:
         report['scan_disclosures'] = scan_disclosures
 
