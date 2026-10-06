@@ -6,13 +6,13 @@ report: files_errored 0, exit 1 instead of 3. A lost file now arrives as a ``sta
 result, so the report counts it, the exit is 3, and the disclosure is the report's own line.
 """
 
-import multiprocessing
 import os
 import sys
 from pathlib import Path
 
 import pytest
 
+from conftest import needs_forked_workers
 from reveal.cli import file_checker
 from reveal.cli.defaults import _default_args
 from reveal.cli.file_checker import handle_recursive_check
@@ -20,11 +20,7 @@ from reveal.cli.file_checker import handle_recursive_check
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX pool semantics")
 
 # The dying worker is injected by patching the module the pool's workers inherit, which only
-# a forked worker does. Python 3.14 (Linux: forkserver) and macOS (spawn) do not default to fork.
-needs_forked_workers = pytest.mark.skipif(
-    multiprocessing.get_context().get_start_method() != "fork",
-    reason="the default pool does not fork, so the patched worker never reaches it",
-)
+# a forked worker does; tests/test_pool_start_methods_back1704.py covers every start method.
 
 DYING = "m2.py"
 

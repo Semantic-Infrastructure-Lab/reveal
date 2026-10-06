@@ -4,6 +4,7 @@ This module provides common fixtures for test isolation, temporary files,
 and adapter registry management to prevent test pollution and reduce duplication.
 """
 
+import multiprocessing
 import os
 import pytest
 import sys
@@ -74,6 +75,16 @@ def native(posix_path: str) -> str:
         assert native('src/main.py') in structure['path']
     """
     return str(Path(posix_path))
+
+
+# A patch made in the test process (a dying worker, a call counter) reaches a pool worker
+# only when the worker is forked from it. Python 3.14 on Linux (forkserver) and macOS and
+# Windows (spawn) do not fork by default, so such a test fails there, or passes without
+# seeing the workers at all (991424a3; reveal:// rule V036 finds them).
+needs_forked_workers = pytest.mark.skipif(
+    multiprocessing.get_context().get_start_method() != "fork",
+    reason="the default pool does not fork, so a patch in this process never reaches its workers",
+)
 
 
 # Adapters that only tests register, never `import reveal.adapters`: a mock 'test'
