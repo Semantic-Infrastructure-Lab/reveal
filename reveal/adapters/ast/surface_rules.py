@@ -236,6 +236,8 @@ def scan_category(category: str, lang: str, facts: List[Fact],
             entry: Dict[str, Any] = {'type': rule.entry_type or category, 'name': name}
             if rule.entry_expr:
                 entry['expr'] = rule.entry_expr.format(**fields)
+            if getattr(fact, 'declaration_shaped', False):
+                entry['declaration_shaped'] = True      # may be a variable, not a call (BACK-1320)
             entry.update(file=file_path, line=fact.line)
             entries.append(entry)
     return entries

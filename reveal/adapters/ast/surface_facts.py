@@ -55,6 +55,10 @@ class Call:
     # True when the call is made on the RESULT of another call (`a.b().exec()`): `receiver`
     # is then '' although the call is not bare, so rules must not read '' as "no receiver".
     chained: bool = False
+    # True when the tree has no call node here: the site is a declaration of the callee's name
+    # with a non-macro type (`Type name(args);` inside a block). Rules still match it, and the
+    # entry is tagged, because it may be a variable. Not part of equality.
+    declaration_shaped: bool = field(default=False, compare=False)
 
     @property
     def path(self) -> str:
@@ -268,6 +272,10 @@ class _Lang:
     new_kinds: frozenset = frozenset()
     subshell_kinds: frozenset = frozenset()
     check_misparse: bool = False        # C++ only: `call_expression` also parses some declarations
+    # Kinds that a call can hide in: C++ reads `MACRO\n  f(x);` as the declaration `MACRO f(x);`
+    # (no `call_expression` exists, BACK-1320). Only a block-level declaration with a call-shaped
+    # declarator is read as a call.
+    declaration_call_kinds: frozenset = frozenset()
     # Imports spelled as calls (Ruby `require 'x'`): node -> Import facts, run on every call node.
     call_imports: Optional[Callable[[Any, Callable], List[Import]]] = None
 
@@ -297,7 +305,8 @@ _LANGS: Dict[str, _Lang] = {
                     {'using_directive': _dotted_import(('qualified_name', 'identifier'))},
                     new_kinds=frozenset({'object_creation_expression'})),
     'cpp': _Lang('cpp', frozenset({'call_expression'}), {'preproc_include': _cpp_include},
-                 new_kinds=frozenset({'new_expression'}), check_misparse=True),
+                 new_kinds=frozenset({'new_expression'}), check_misparse=True,
+                 declaration_call_kinds=frozenset({'declaration'})),
     'php': _Lang('php', frozenset({'function_call_expression', 'member_call_expression',
                                    'scoped_call_expression'}),
                  {'namespace_use_declaration': _dotted_import(('qualified_name', 'name'))},
@@ -381,6 +390,53 @@ def _new_fact(node: Any, get_text: Callable, call_kinds: frozenset,
     return New(type_name, _args_of(node, get_text), _line(node))
 
 
+_MACRO_LIKE = re.compile(r'[A-Z][A-Z0-9_]*$|[A-Z][A-Za-z0-9]*_\w+$')   # FOO_BAR, Py_BEGIN_ALLOW_THREADS
+_CALLEE_KINDS = ('identifier', 'qualified_identifier')
+
+
+def _declarator_callee(decl: Any) -> Optional[Any]:
+    """The callee name node when a declarator is spelled like a call: `name(args)` read as an
+    `init_declarator` (string/expression arguments) or a `function_declarator` (arguments that
+    could be parameters, `argv[0]`)."""
+    kind = _zero_arg(decl, 'kind')
+    if kind == 'init_declarator':
+        callee, args = decl.child_by_field_name('declarator'), decl.child_by_field_name('value')
+        if args is None or _zero_arg(args, 'kind') != 'argument_list':
+            return None
+    elif kind == 'function_declarator':
+        callee, args = decl.child_by_field_name('declarator'), decl.child_by_field_name('parameters')
+    else:
+        return None
+    if callee is None or args is None or _zero_arg(callee, 'kind') not in _CALLEE_KINDS:
+        return None
+    return callee
+
+
+def _declaration_call_fact(node: Any, get_text: Callable, want: Optional[CallFilter]) -> Optional[Call]:
+    """C++ `CLEAN_PIPES\n  execvp("ls", nullptr);`: tree-sitter reads the bare macro line as a
+    type, so the call is a declaration `<macro> execvp(...)` (BACK-1320). Block-level only: at
+    file or class scope the same shape is a prototype or a global, which a macro never prefixes.
+    The callee must pass the rule filter, so a plain `Foo x("a")` costs one name test."""
+    parent = _zero_arg(node, 'parent')
+    if parent is None or _zero_arg(parent, 'kind') != 'compound_statement':
+        return None
+    type_node = node.child_by_field_name('type')
+    if type_node is None or _zero_arg(type_node, 'kind') != 'type_identifier':
+        return None
+    for child in _children(node):
+        callee = _declarator_callee(child)
+        if callee is None:
+            continue
+        receiver, short, sep = _split_path(get_text(callee))
+        if want is not None and not want(receiver, short):
+            return None
+        args = _args_of(child, get_text)
+        text = re.sub(r'\s+', '', get_text(callee))
+        return Call(receiver, short, args, _line(child), sep, text,
+                    declaration_shaped=not _MACRO_LIKE.match(get_text(type_node)))
+    return None
+
+
 class FactCollector:
     """Collects facts one node at a time, so a scanner can feed it from the tree walk it
     already does instead of paying for a second one.
@@ -413,7 +469,9 @@ class FactCollector:
         for kinds, handler in ((spec.subshell_kinds, self._visit_subshell),
                                (spec.new_kinds if can_match else (), self._visit_new),
                                (spec.import_kinds, self._visit_import),
-                               (spec.call_kinds if can_match or spec.call_imports else (), self._visit_call)):
+                               (spec.call_kinds if can_match or spec.call_imports else (), self._visit_call),
+                               (spec.declaration_call_kinds if can_match else (),
+                                self._visit_declaration)):
             for k in kinds:
                 self._dispatch[k] = handler
 
@@ -437,6 +495,11 @@ class FactCollector:
                 return
         fact = _call_fact(node, self._get_text, self._spec.call_kinds, self._want_call,
                           self._spec.check_misparse)
+        if fact:
+            self._facts.append(fact)
+
+    def _visit_declaration(self, node: Any, kind: str) -> None:
+        fact = _declaration_call_fact(node, self._get_text, self._want_call)
         if fact:
             self._facts.append(fact)
 

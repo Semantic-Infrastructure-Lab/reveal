@@ -36,8 +36,8 @@ def test_macro_prefixed_call_shapes(body, name, tmp_path):
 
 
 def test_a_declaration_shaped_site_with_a_real_type_is_found_but_tagged(tmp_path):
-    entries = _entries('void f() {\n  Executor execute(cfg);\n}\n', tmp_path)
-    assert [(e['name'], e.get('declaration_shaped')) for e in entries] == [('execute', True)]
+    entries = _entries('void f() {\n  Runner system(cfg);\n}\n', tmp_path)
+    assert [(e['name'], e.get('declaration_shaped')) for e in entries] == [('system', True)]
 
 
 @pytest.mark.parametrize('code', [

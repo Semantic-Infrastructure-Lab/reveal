@@ -421,6 +421,8 @@ def _render_entry(surface_type: str, entry: Dict[str, Any]) -> None:
     loc = f"  {file_path}:{line}" if file_path else ''
     if entry.get('in_error_region'):
         loc += '  [parse-recovered]'
+    if entry.get('declaration_shaped'):
+        loc += '  [declaration-shaped: may be a variable]'
 
     if surface_type == 'cli':
         kind = entry.get('type', '')
