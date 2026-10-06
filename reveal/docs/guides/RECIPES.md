@@ -1230,17 +1230,17 @@ reveal 'claude://files/operations.py?since=today'
 # Overview (badge, files touched, tools used)
 reveal claude://my-session-name
 
-# Timeline (message sequence)
-reveal 'claude://my-session-name?timeline'
+# Message sequence
+reveal claude://session/my-session-name/messages
 
 # Files touched (Read/Write/Edit breakdown)
-reveal 'claude://my-session-name?files'
+reveal claude://session/my-session-name/files
 
 # Errors encountered
 reveal 'claude://my-session-name?errors'
 
 # Workflow (tool call sequence, collapsed duplicates)
-reveal 'claude://my-session-name?workflow'
+reveal claude://session/my-session-name/workflow
 ```
 
 ### Session tail / recovery
