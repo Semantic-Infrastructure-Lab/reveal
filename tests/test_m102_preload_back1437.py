@@ -137,3 +137,64 @@ class TestM102PreloadUnit:
         before = dict(m102_module._import_cache)
         _m102_init_worker({})
         assert m102_module._import_cache == before
+
+
+@pytest.fixture
+def count_t006_builds(tmp_path, monkeypatch):
+    """Same counter for T006's project index (its ceiling warning is logged per build)."""
+    from reveal.rules.types import T006 as t006_module
+    log = tmp_path / "t006_builds.log"
+    real = t006_module._build_index
+
+    def counting(project_root):
+        with open(log, "a", encoding="utf-8") as f:
+            f.write(f"{os.getpid()}\n")
+        return real(project_root)
+
+    monkeypatch.setattr(t006_module, "_build_index", counting)
+    return lambda: log.read_text(encoding="utf-8").split() if log.exists() else []
+
+
+def _stats_project(tmp_path, n=25):
+    """Enough files that stats:// takes its pool (workers = files // 10)."""
+    _project(tmp_path)
+    for i in range(n):
+        (tmp_path / "pkg" / f"extra{i}.py").write_text(f"def g{i}():\n    return {i}\n", encoding="utf-8")
+
+
+def _run_stats(tmp_path):
+    from reveal.adapters.stats.adapter import StatsAdapter
+    return StatsAdapter(str(tmp_path)).get_structure()
+
+
+class TestStatsPoolPreloads:
+    """BACK-1429: stats:// (overview, hotspots) runs every rule in its own pool and
+    preloaded I002 only; M102 and T006 were built once per worker (and T006's
+    ceiling warning printed once per worker)."""
+
+    def test_pool_builds_each_index_once_in_the_parent(
+            self, tmp_path, monkeypatch, count_m102_builds, count_t006_builds):
+        _stats_project(tmp_path)
+        monkeypatch.setenv("REVEAL_MAX_WORKERS", "3")
+        _run_stats(tmp_path)
+        parent = [str(os.getpid())]
+        assert count_m102_builds() == parent
+        assert count_t006_builds() == parent
+
+    def test_serial_builds_each_index_once(self, tmp_path, monkeypatch, count_m102_builds, count_t006_builds):
+        """Negative control: the serial path was already one build per process."""
+        _stats_project(tmp_path)
+        monkeypatch.setenv("REVEAL_MAX_WORKERS", "1")
+        _run_stats(tmp_path)
+        assert count_m102_builds() == [str(os.getpid())]
+        assert count_t006_builds() == [str(os.getpid())]
+
+    def test_pool_and_serial_results_identical(self, tmp_path, monkeypatch):
+        _stats_project(tmp_path)
+        monkeypatch.setenv("REVEAL_MAX_WORKERS", "1")
+        serial = _run_stats(tmp_path)
+        m102_module._import_cache.clear()
+        monkeypatch.setenv("REVEAL_MAX_WORKERS", "3")
+        parallel = _run_stats(tmp_path)
+        assert serial["files"] == parallel["files"]
+        assert serial["summary"] == parallel["summary"]
