@@ -4,7 +4,7 @@ import pytest
 from reveal.adapters.patches.adapter import PatchesAdapter
 from reveal.rendering.base import capped_section
 from reveal.utils.query_control import BudgetAccounting, apply_budget_limits
-from reveal.utils.query_parser import ParamSpec, collect_query_keys, parse_query_params
+from reveal.utils.query_parser import ParamSpec, collect_query_keys, parse_query_params, whole_number
 
 pytestmark = pytest.mark.component
 
@@ -33,6 +33,36 @@ def test_patches_numeric_declaration_matches_runtime_and_cli(patches):
     assert len(PatchesAdapter(str(patches), fragment).get_structure()['groups']) == 3
     with pytest.raises(ValueError):
         PatchesAdapter(str(patches), 'limit=oops').get_structure()
+
+
+@pytest.mark.parametrize('query, message', [
+    ('limit=-1', 'limit must be >= 0'),
+    ('min=-1', 'min must be >= 0'),
+    ('limit=1.5', "limit must be a whole number, got 1.5"),
+    ('min=2.5', "min must be a whole number, got 2.5"),
+    ('limit=abc', "limit must be a whole number, got 'abc'"),
+])
+def test_patches_rejects_values_that_changed_meaning_silently(patches, query, message):
+    """BACK-1671: -1 meant "all"/"no minimum" and 1.5 meant 1; each is now an error."""
+    with pytest.raises(ValueError, match=message):
+        PatchesAdapter(str(patches), query).get_structure()
+
+
+def test_patches_zero_and_integral_floats_still_work(patches):
+    assert len(PatchesAdapter(str(patches), 'limit=0').get_structure()['groups']) == 3
+    assert len(PatchesAdapter(str(patches), 'limit=2.0').get_structure()['groups']) == 2
+    assert PatchesAdapter(str(patches), 'min=0').get_structure()['query']['min'] == 0
+
+
+def test_patches_schema_declares_the_bounds():
+    params = PatchesAdapter.get_schema()['query_params']
+    assert params['limit']['minimum'] == params['min']['minimum'] == 0
+
+
+def test_whole_number_converter():
+    assert (whole_number(3), whole_number('3'), whole_number(3.0)) == (3, 3, 3)
+    with pytest.raises(ValueError):
+        whole_number(1.5)
 
 
 def test_declaration_validation_does_not_claim_an_unread_key():

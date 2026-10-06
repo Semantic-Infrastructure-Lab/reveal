@@ -147,6 +147,13 @@ def mark_query_keys(params: Dict[str, Any], *keys: str) -> None:
         params.mark(*keys)
 
 
+def whole_number(value: Any) -> int:
+    """An integer control's value: 3, '3' and 3.0 are accepted; 1.5 is not (int() would cut it to 1)."""
+    if isinstance(value, float) and not value.is_integer():
+        raise ValueError(f'{value} is not a whole number')
+    return int(value)
+
+
 @dataclass(frozen=True)
 class ParamSpec:
     """One declared query parameter; read explicitly where its value is applied.
@@ -166,7 +173,14 @@ class ParamSpec:
 
     def read(self, params: Dict[str, Any]) -> Any:
         raw = params.get(self.name)
-        value = self.default if raw is None else self.convert(raw)
+        if raw is None:
+            value = self.default
+        else:
+            try:
+                value = self.convert(raw)
+            except (TypeError, ValueError):
+                what = 'a whole number' if self.type == 'integer' else f'a valid {self.type}'
+                raise ValueError(f'{self.name} must be {what}, got {raw!r}') from None
         if self.minimum is not None and value < self.minimum:
             raise ValueError(f'{self.name} must be >= {self.minimum}')
         return value

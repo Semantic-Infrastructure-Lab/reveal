@@ -10,7 +10,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 from reveal.testability.patches import group_patches, scan_patches
 from reveal.utils.path_utils import to_posix
 from reveal.utils.query import parse_query_params
-from reveal.utils.query_parser import ParamSpec, param_schema, param_cli_flags
+from reveal.utils.query_parser import ParamSpec, param_schema, param_cli_flags, whole_number
 from reveal.utils.results import ResultBuilder, note_truncation
 from reveal.utils.validation import require_path_exists
 
@@ -19,10 +19,10 @@ from ...rendering.adapters.patches import PatchesRenderer
 
 # Start with the two numeric controls; other fields retain their existing policy.
 _NUMERIC_PARAMS = (
-    ParamSpec('limit', 'integer', 'Maximum groups to return', 20, int,
-              ('limit=20',), zero_policy='all', cli_flags=(('all', '1000000'),)),
-    ParamSpec('min', 'integer', 'Minimum patch count for a group', 1, int,
-              ('min=3',), zero_policy='no minimum'),
+    ParamSpec('limit', 'integer', 'Maximum groups to return', 20, whole_number,
+              ('limit=20',), minimum=0, zero_policy='all', cli_flags=(('all', '1000000'),)),
+    ParamSpec('min', 'integer', 'Minimum patch count for a group', 1, whole_number,
+              ('min=3',), minimum=0, zero_policy='no minimum'),
 )
 _LIMIT, _MIN = _NUMERIC_PARAMS
 
