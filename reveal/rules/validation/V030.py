@@ -19,9 +19,12 @@ Scope:
     - reveal/docs/AGENT_HELP.md only, content above the "## What Changed in
       This Guide" heading. Everything at or past that heading is skipped —
       see BACK-686's corrected scope note.
-    - Currently only one main-body pattern carries a total-count claim:
-      "Programming Languages (N total ...)". Extend `_TOTAL_PATTERNS` if an
-      equivalent adapters/rules total-count claim is ever added to the body.
+    - Currently only one main-body pattern carries a total-count claim: the
+      "Programming Languages (N ...)" heading, whose first number is the total.
+      It once required "(N total" and silently matched nothing once 2eaf0d31
+      reworded the heading to "(N languages and file formats in total" (BACK-1441).
+      Extend `_TOTAL_PATTERNS` if an equivalent adapters/rules total-count claim
+      is ever added to the body.
 """
 
 import logging
@@ -49,7 +52,7 @@ class V030(BaseRule):
     _CHANGELOG_HEADING = re.compile(r'^##\s+What Changed in This Guide', re.IGNORECASE)
 
     _TOTAL_PATTERNS = [
-        (re.compile(r'Programming Languages\s*\((\d+)\+?\s*total\b', re.IGNORECASE),
+        (re.compile(r'Programming Languages\s*\((\d+)\b', re.IGNORECASE),
          'languages'),
     ]
 
