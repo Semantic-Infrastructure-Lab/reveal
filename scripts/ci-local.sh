@@ -155,6 +155,10 @@ if command -v flock >/dev/null 2>&1; then
     exec 9>"$VENV.lock"
     flock -n 9 || { echo "another ci-local run is using $VENV; waiting for it..." >&2; flock 9; }
 fi
+# Refuse before --fresh or the install touch a venv that another checkout owns (BACK-1680).
+# shellcheck source=scripts/ci_editable_guard.sh
+source "$SCRIPT_DIR/ci_editable_guard.sh"
+ci_editable_guard "$VENV" "$(pwd -P)" || exit 2
 LOG_DIR="${REVEAL_CI_LOG_DIR:-$(dirname "$VENV")/logs}"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/ci-local-py${PY_VERSION}${LP_VERSION:+-lp$LP_VERSION}-$(date +%Y%m%d-%H%M%S).log"
