@@ -691,18 +691,20 @@ reveal 'depends://src?format=dot' | dot -Tsvg > deps.svg
 
 ### Validate markdown frontmatter
 
+One file per call: given several paths, `--validate-schema` checks only the first.
+
 ```bash
 # Session READMEs
-reveal sessions/*/README.md --validate-schema session
+for f in sessions/*/README.md; do reveal "$f" --validate-schema session; done
 
 # Hugo blog posts
-reveal content/posts/*.md --validate-schema hugo
+for f in content/posts/*.md; do reveal "$f" --validate-schema hugo; done
 
 # Jekyll/GitHub Pages
-reveal _posts/*.md --validate-schema jekyll
+for f in _posts/*.md; do reveal "$f" --validate-schema jekyll; done
 
-# MkDocs
-reveal docs/**/*.md --validate-schema mkdocs
+# MkDocs (recursive)
+find docs -name '*.md' -exec reveal {} --validate-schema mkdocs \;
 ```
 
 ### Find docs by metadata
