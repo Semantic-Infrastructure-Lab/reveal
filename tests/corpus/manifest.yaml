@@ -38,10 +38,11 @@
 # (GPL/AGPL/SSPL) write a minimal hand-authored reproduction instead — your own
 # code, deterministic, no license question.
 #
-# RE-PINNING: entries with `sha: null` were snapshotted on 2026-07-02 before
-# this manifest existed and their local .git was already removed, so the exact
-# commit is unrecoverable. fetch_corpus.py clones the default branch HEAD for
-# them and prints the resolved SHA — paste it back here to pin.
+# RE-PINNING: every entry is pinned. A new entry may start as `sha: null`;
+# fetch_corpus.py then clones the default branch HEAD and prints the resolved
+# SHA — paste it back here to pin. A re-pin is a new corpus: figures measured on
+# the old tree do not carry over (lua/zig/gdscript/tsx were re-pinned 2026-10-06
+# because their 2026-07-02 snapshot commits were lost).
 
 version: 1
 cache_dir_default: "~/.cache/reveal-corpus"
@@ -185,7 +186,7 @@ corpora:
       importer_dirs: [code, include]
       include_dirs: [., code, include]
 
-  # ---- Tier B additions: .git already removed on disk, sha unrecoverable ----
+  # ---- Tier B additions: snapshot commits were unrecoverable; re-pinned to a fresh HEAD ----
   - language: dart
     repo: https://github.com/AppFlowy-IO/AppFlowy.git
     sha: 5cf3a365dec0d59f64bad1ee4bb1050471a39b93  # re-pinned 2026-08-07 via fetch_corpus.py (BACK-1002)
@@ -193,21 +194,21 @@ corpora:
     role: Real product (notes/knowledge app), Flutter frontend
   - language: lua
     repo: https://github.com/Kong/kong.git
-    sha: null  # snapshot 2026-07-02; re-pin via fetch_corpus.py
+    sha: 8927af6d5efa3e58a59101943ba61e0c1997e96b  # re-pinned 2026-10-06 (BACK-1461); the 2026-07-02 snapshot's commit is lost
     license: Apache-2.0
     role: Real production API gateway on OpenResty/Lua
   - language: zig
     repo: https://github.com/ghostty-org/ghostty.git
-    sha: null  # snapshot 2026-07-02; re-pin via fetch_corpus.py
+    sha: c3203ea4b169a18eb2ccfe92847e426d8afea858  # re-pinned 2026-10-06 (BACK-1461); the 2026-07-02 snapshot's commit is lost
     license: MIT
     role: Real product (terminal emulator)
   - language: gdscript
     repo: https://github.com/godotengine/godot-demo-projects.git
-    sha: null  # snapshot 2026-07-02; re-pin via fetch_corpus.py
+    sha: 3e08537616661a5883831628decab4c526260289  # re-pinned 2026-10-06 (BACK-1461); the 2026-07-02 snapshot's commit is lost
     license: MIT
     role: Official Godot demo corpus — broad idiomatic GDScript
   - language: tsx
     repo: https://github.com/excalidraw/excalidraw.git
-    sha: null  # snapshot 2026-07-02; re-pin via fetch_corpus.py
+    sha: 53973c3a423fbd75a4ce68107786b4fcb90e4968  # re-pinned 2026-10-06 (BACK-1461); the 2026-07-02 snapshot's commit is lost
     license: MIT
     role: Real product (drawing app), heavy TSX

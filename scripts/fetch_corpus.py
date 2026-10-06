@@ -26,7 +26,7 @@ Usage:
     python scripts/fetch_corpus.py --dry-run       # print what would run
     REVEAL_CORPUS_DIR=/data/corpus python scripts/fetch_corpus.py
 
-Entries with `sha: null` (snapshots whose commit was lost) are fetched at the
+Entries with `sha: null` (a new entry not yet pinned) are fetched at the
 default-branch HEAD; the resolved SHA is printed so it can be pinned back into
 the manifest.
 """
