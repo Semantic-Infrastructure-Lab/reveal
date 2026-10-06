@@ -4,6 +4,7 @@ import unittest
 import pytest
 
 from reveal.rules.duplicates.D002 import D002
+from reveal.rules.duplicates._bodies import extract_function_body
 
 # BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -192,19 +193,19 @@ class TestD002ExtractFunctionBody(unittest.TestCase):
         """Should extract function body."""
         content = "def foo():\n    x = 1\n    return x\n"
         func = {"name": "foo", "line": 1, "line_end": 3}
-        body = self.rule._extract_function_body(func, content)
+        body = extract_function_body(func, content)
         self.assertIn("x = 1", body)
 
     def test_extract_body_zero_line(self):
         """Zero line should return empty."""
         func = {"name": "foo", "line": 0, "line_end": 3}
-        body = self.rule._extract_function_body(func, "content")
+        body = extract_function_body(func, "content")
         self.assertEqual(body, "")
 
     def test_extract_body_out_of_bounds(self):
         """Out of bounds should return empty."""
         func = {"name": "foo", "line": 100, "line_end": 105}
-        body = self.rule._extract_function_body(func, "short")
+        body = extract_function_body(func, "short")
         self.assertEqual(body, "")
 
 

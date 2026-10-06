@@ -17,6 +17,7 @@ from hashlib import sha256
 import re
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from ._bodies import extract_function_body
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ class D001(BaseRule):
 
         scope_hashes: Dict[str, Dict[str, list]] = defaultdict(lambda: defaultdict(list))
         for func in functions:
-            func_body = self._extract_function_body(func, content)
+            func_body = extract_function_body(func, content)
             if not func_body or len(func_body.strip()) < 10:
                 continue
             normalized = self._normalize(func_body)
@@ -102,40 +103,6 @@ class D001(BaseRule):
                         context=f"{duplicate[2]} chars, hash {func_hash}"
                     ))
         return detections
-
-    def _extract_function_body(self, func: Dict, content: str) -> str:
-        """
-        Extract function body from content using line numbers.
-
-        Skips the function definition line (def/func/function) to focus on body only.
-        This allows detecting duplicates even when parameter names differ.
-
-        Args:
-            func: Function metadata from structure
-            content: File content
-
-        Returns:
-            Function body as string (without signature line)
-        """
-        start = func.get('line', 0)
-        end = func.get('line_end', start)  # Note: field is 'line_end' not 'end_line'
-
-        if start == 0 or end == 0:
-            return ""
-
-        lines = content.splitlines()
-        if start > len(lines) or end > len(lines):
-            return ""
-
-        # Extract function body, skipping the signature line
-        # This makes duplicates detectable even with different parameter names
-        # start+1 because line numbers are 1-indexed, and we want to skip def/func line
-        body_lines = lines[start:end]  # Skip first line (signature)
-
-        if not body_lines:
-            return ""
-
-        return '\n'.join(body_lines)
 
     def _normalize(self, code: str) -> str:
         """

@@ -13,6 +13,7 @@ sys.path.insert(0, '/home/scottsen/src/projects/reveal/external-git')
 import numpy as np
 from pathlib import Path
 from reveal.rules.duplicates.D002 import D002
+from reveal.rules.duplicates._bodies import extract_function_body
 from reveal.analyzers.python import PythonAnalyzer
 import matplotlib
 matplotlib.use('Agg')  # Non-interactive backend
@@ -40,7 +41,7 @@ def analyze_similarity_distribution(test_files):
         # Extract all pairwise similarities
         func_vectors = []
         for func in functions:
-            func_body = rule._extract_function_body(func, content)
+            func_body = extract_function_body(func, content)
             if func_body and len(func_body.strip()) >= 20:
                 vector = rule._vectorize(func_body)
                 func_vectors.append((func['name'], vector))

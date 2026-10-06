@@ -4,6 +4,7 @@ import unittest
 import pytest
 
 from reveal.rules.duplicates.D001 import D001
+from reveal.rules.duplicates._bodies import extract_function_body
 
 # BACK-1149: component-layer test -- single rule/module in isolation, no subprocess/CLI/MCP
 pytestmark = pytest.mark.component
@@ -135,33 +136,33 @@ class TestD001ExtractFunctionBody(unittest.TestCase):
         """Should extract function body."""
         content = "def foo():\n    return 1\n    return 2\n"
         func = {"name": "foo", "line": 1, "line_end": 3}
-        body = self.rule._extract_function_body(func, content)
+        body = extract_function_body(func, content)
         self.assertIn("return 1", body)
         self.assertIn("return 2", body)
 
     def test_extract_with_zero_line(self):
         """Zero line should return empty."""
         func = {"name": "foo", "line": 0, "line_end": 3}
-        body = self.rule._extract_function_body(func, "content")
+        body = extract_function_body(func, "content")
         self.assertEqual(body, "")
 
     def test_extract_with_zero_end_line(self):
         """Zero end line should return empty."""
         func = {"name": "foo", "line": 1, "line_end": 0}
-        body = self.rule._extract_function_body(func, "content")
+        body = extract_function_body(func, "content")
         self.assertEqual(body, "")
 
     def test_extract_out_of_bounds(self):
         """Line beyond content should return empty."""
         func = {"name": "foo", "line": 100, "line_end": 105}
-        body = self.rule._extract_function_body(func, "short\ncontent\n")
+        body = extract_function_body(func, "short\ncontent\n")
         self.assertEqual(body, "")
 
     def test_extract_empty_body(self):
         """Empty body range returns empty."""
         content = "def foo():\n    pass\n"
         func = {"name": "foo", "line": 2, "line_end": 1}  # Invalid range
-        body = self.rule._extract_function_body(func, content)
+        body = extract_function_body(func, content)
         self.assertEqual(body, "")
 
 

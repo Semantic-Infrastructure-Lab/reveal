@@ -19,6 +19,7 @@ import math
 import re
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from ._bodies import extract_function_body
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ class D002(BaseRule):
         # Extract vectors for all functions
         func_vectors = []
         for func in functions:
-            func_body = self._extract_function_body(func, content)
+            func_body = extract_function_body(func, content)
 
             if not func_body or len(func_body.strip()) < 20:
                 continue
@@ -118,22 +119,6 @@ class D002(BaseRule):
             ))
 
         return detections
-
-    def _extract_function_body(self, func: Dict, content: str) -> str:
-        """Extract function body (without signature)."""
-        start = func.get('line', 0)
-        end = func.get('line_end', start)
-
-        if start == 0 or end == 0:
-            return ""
-
-        lines = content.splitlines()
-        if start > len(lines) or end > len(lines):
-            return ""
-
-        # Skip signature line
-        body_lines = lines[start:end]
-        return '\n'.join(body_lines) if body_lines else ""
 
     def _vectorize(self, code: str) -> Dict[str, float]:
         """
