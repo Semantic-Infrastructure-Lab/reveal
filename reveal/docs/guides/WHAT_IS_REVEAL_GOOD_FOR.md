@@ -366,8 +366,8 @@ Reveal is a good fit when you need lightweight inspection across structured reso
 ```bash
 reveal 'mysql://prod/?type=replication'
 reveal sqlite:///tmp/app.db
-reveal 'json://config.json?path=services.api'
-reveal env://.env
+reveal json://config.json/services/api
+reveal env://DATABASE_URL
 reveal 'xlsx:///data/report.xlsx?powerpivot=relationships'
 reveal 'xlsx:///data/report.xlsx?powerquery=list'
 reveal 'xlsx:///data/report.xlsx?connections=show'
