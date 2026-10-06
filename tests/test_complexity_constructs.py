@@ -166,6 +166,14 @@ CASES = [
     ('lua', 'do ... end block', 'function f(x)\n  do\n    if x then g() end\n  end\nend\n', 2, None),
     ('ps1', 'do-while', 'function f {\n  do { $x++ } while ($x -lt 3)\n}\n', 2, None),
     ('ps1', 'do-until', 'function f {\n  do { $x-- } until ($x -lt 0)\n}\n', 2, None),
+    # BACK-1285 (decision): an iterator-method loop is a call that takes a block, not a
+    # loop node, and counting block-taking calls would be a heuristic with false
+    # positives, so it scores 1 (a for-loop scores 2). Documented gap, pinned here so
+    # changing it is deliberate; see AST_ADAPTER_GUIDE.md "Current Implementation Limitations".
+    ('rb', 'each block (not counted)', 'def f(a)\n  a.each do |x|\n    x\n  end\nend\n', 1, None),
+    ('js', 'forEach (not counted)', 'function f(a){ a.forEach(x => x) }\n', 1, None),
+    ('rs', 'for_each (not counted)', 'fn f(a: Vec<i32>) { a.iter().for_each(|x| drop(x)); }\n', 1, None),
+    ('kt', 'forEach (not counted)', 'fun f(a: List<Int>) { a.forEach { println(it) } }\n', 1, None),
 ]
 
 def _param(row):

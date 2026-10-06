@@ -20,6 +20,9 @@ from .core.treesitter_compat import _zero_arg
 # were all missing here. The tie is enforced by
 # tests/adapters/test_node_taxonomy.py::TestComplexityCoversFamilies, which
 # fails if node_taxonomy grows a loop/conditional/match kind this file omits.
+# Iterator-method loops (Ruby `.each`, JS/Kotlin `forEach`, Rust `.for_each`) are
+# deliberately NOT decisions: they are block-taking calls, and counting those would
+# also count map/tap/File.open (BACK-1285; documented in AST_ADAPTER_GUIDE.md).
 _DECISION_TYPES = frozenset({
     # Conditionals
     'if_statement', 'if_expression', 'if', 'IfStatement',

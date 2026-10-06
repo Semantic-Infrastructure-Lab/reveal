@@ -914,6 +914,8 @@ AST can't understand code meaning:
 
 **Complexity calculation**: Tree-sitter-based McCabe cyclomatic complexity for supported languages; heuristic (line count proxy) for others. Check `reveal --languages` to see what your target language supports.
 
+**Complexity of iterator-method loops**: a loop written as a block-taking method call (Ruby `items.each do ... end`, JS/TS/Kotlin `forEach`, Rust `.iter().for_each(...)`, Scala `foreach`) is a call, not a loop node, so it adds nothing to complexity: such a function scores 1 where the equivalent `for` loop in Python, Go or Java scores 2. This is deliberate (BACK-1285): treating every block-taking call as a decision point would also count `map`, `tap`, `File.open { }` and similar non-loops. Complexity is therefore a lower bound for code written mostly in iterator style. Swift `guard` and `for`/`while` forms are counted like any other branch.
+
 **Language support**: Structure extraction covers every language `reveal --languages` lists, but complexity/decorator extraction may be Python-specific. Check language support:
 
 ```bash
