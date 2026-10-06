@@ -141,6 +141,15 @@ its totals sum to the flat `total`.
   reported. Those five languages share one rule table (`reveal/adapters/ast/surface_rules_env.py`);
   Python, TypeScript/JavaScript, Ruby, PHP, Swift and C++ detect it in their own scanners
   (subscript and property forms such as `ENV['X']` and `process.env.X` are not table-expressible yet).
+  The scanners read `process.env.X` / `process.env['X']` and Vite's `import.meta.env.X` (an exact
+  allowlist of objects: a local named `env` is not the environment), Swift's `getenv("X")` and
+  `ProcessInfo.processInfo.environment["X"]`.
+- Names that the language does not distinguish by case match without it: PHP function and
+  class names (`CURL_INIT()`, `new pdo()`) are found in any case; every other language stays exact.
+- C++ reads a call after a bare macro line (`CLEAN_PIPES` then `execvp(..);`, which tree-sitter parses
+  as the declaration `CLEAN_PIPES execvp(..)`) from the declaration, inside a block. A macro-looking
+  type (`CLEAN_PIPES`, `Py_BEGIN_ALLOW_THREADS`) gives a plain entry; any other type
+  (`Runner system(cfg);`) gives an entry tagged `declaration_shaped`, because it may be a variable.
 - Confidence is `medium` — treat results as a map to review, not a
   compliance-grade inventory.
 

@@ -688,6 +688,12 @@ def _process_call(
         return
 
 
+# Objects whose properties are environment variables: Node's `process.env` and Vite's
+# `import.meta.env`. An explicit allowlist, matched on the object's exact text, so a local
+# named `env` or `meta.env` is never read as the environment (BACK-1349).
+_ENV_BASES = frozenset({'process.env', 'import.meta.env'})
+
+
 def _is_callee(node: Any) -> bool:
     """`process.env.hasOwnProperty` in `process.env.hasOwnProperty(k)`: a
     method of the env object, not a variable -- env values are strings, never
@@ -706,7 +712,7 @@ def _process_member(
     content_bytes: bytes,
     surfaces: Dict[str, List[Dict[str, Any]]],
 ) -> None:
-    """Detect process.env.VAR_NAME and process.env['VAR_NAME'] accesses."""
+    """Detect `<env base>.VAR_NAME` and `<env base>['VAR_NAME']` accesses (see _ENV_BASES)."""
     line = _get_line(node)
 
     if _zero_arg(node, 'kind') == 'member_expression':
@@ -717,21 +723,21 @@ def _process_member(
             prop_node = children[-1]
             if _zero_arg(obj_node, 'kind') == 'member_expression':
                 obj_text = _get_text(obj_node, content_bytes)
-                if obj_text == 'process.env' and not _is_callee(node):
+                if obj_text in _ENV_BASES and not _is_callee(node):
                     var_name = _get_text(prop_node, content_bytes)
                     _add_once(surfaces['env'], {
                         'type': 'env_var', 'name': var_name,
-                        'expr': 'process.env', 'file': file_path, 'line': line,
+                        'expr': obj_text, 'file': file_path, 'line': line,
                     })
 
     elif _zero_arg(node, 'kind') == 'subscript_expression':
-        # process.env['VAR_NAME']
+        # process.env['VAR_NAME'], import.meta.env['VAR_NAME']
         children = _children(node)
         if len(children) >= 2:
             obj_node = children[0]
             if _zero_arg(obj_node, 'kind') == 'member_expression':
                 obj_text = _get_text(obj_node, content_bytes)
-                if obj_text == 'process.env':
+                if obj_text in _ENV_BASES:
                     # find string child
                     for ch in children[1:]:
                         if _zero_arg(ch, 'kind') == 'string':
@@ -740,6 +746,6 @@ def _process_member(
                                     var_name = _get_text(sch, content_bytes)
                                     _add_once(surfaces['env'], {
                                         'type': 'env_var', 'name': var_name,
-                                        'expr': 'process.env', 'file': file_path, 'line': line,
+                                        'expr': obj_text, 'file': file_path, 'line': line,
                                     })
                                     return

@@ -10,7 +10,7 @@ shape but walks Swift's grammar:
   discriminator that separates a route registration from an ordinary ``.get``
   member call, and multiple string path segments are joined with ``/``.
 - **CLI entrypoint**: the ``@main`` attribute on a type declaration.
-- **env**: Vapor's ``Environment.get("KEY")`` and
+- **env**: Vapor's ``Environment.get("KEY")``, Foundation's ``getenv("KEY")`` and
   ``ProcessInfo.processInfo.environment["KEY"]``.
 - **network/db/sdk**: ``import`` modules, matched by the ``Import`` rule tables in
   ``surface_rules_imports.py`` (BACK-1334 b). ``Foundation`` (which contains
@@ -133,9 +133,27 @@ def _is_subscript(value_arguments_node: Any) -> bool:
     return False
 
 
+def _process_bare_call(node: Any, callee: Any, file_path: str, content_bytes: bytes,
+                       surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
+    """env: Foundation's `getenv("KEY")` (a bare call, not a method; a variable key is no read)."""
+    if _get_text(callee, content_bytes) != 'getenv':
+        return
+    suffix = _call_suffix(node)
+    vargs = _value_arguments(suffix) if suffix is not None else None
+    keys = _arg_string_texts(vargs, content_bytes) if vargs is not None else []
+    if keys:
+        surfaces['env'].append({
+            'type': 'env_var', 'name': keys[0], 'expr': 'getenv',
+            'file': file_path, 'line': _get_line(node),
+        })
+
+
 def _process_call(node: Any, file_path: str, content_bytes: bytes,
                   surfaces: Dict[str, List[Dict[str, Any]]]) -> None:
     children = _children(node)
+    if children and _zero_arg(children[0], 'kind') == 'simple_identifier':
+        _process_bare_call(node, children[0], file_path, content_bytes, surfaces)
+        return
     if not children or _zero_arg(children[0], 'kind') != 'navigation_expression':
         return
     receiver, method = _navigation_receiver_and_method(children[0], content_bytes)
