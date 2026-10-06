@@ -21,7 +21,7 @@ False-positive suppression:
 
 Run:
     python scripts/check_windows_compat.py          # exits 1 on findings
-    python scripts/check_windows_compat.py --warn   # exits 0 (non-blocking)
+    python scripts/check_windows_compat.py --warn   # exits 0 (non-blocking; not used by CI since BACK-1470)
     python scripts/check_windows_compat.py --strict # same as default
 """
 

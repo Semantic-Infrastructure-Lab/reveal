@@ -205,7 +205,7 @@ step "CLI basics"
 
 if [[ $PRIMARY -eq 1 ]]; then
     step "Windows compatibility checks"
-    "$PY" scripts/check_windows_compat.py --warn >>"$LOG" 2>&1 || fail "windows compat"
+    "$PY" scripts/check_windows_compat.py >>"$LOG" 2>&1 || fail "windows compat"
     "$PY" scripts/check_text_encoding.py >>"$LOG" 2>&1 || { tail -8 "$LOG"; fail "text encoding (bare read_text/open breaks on Windows)"; }
     "$PY" scripts/check_treesitter_accessors.py >>"$LOG" 2>&1 || { tail -8 "$LOG"; fail "bare tree-sitter accessor (a method on language-pack 1.8.1; use _zero_arg)"; }
 

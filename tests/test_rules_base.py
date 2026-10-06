@@ -418,7 +418,7 @@ class TestSkipCategories:
     def test_e501_skips_yaml_but_checks_python(self):
         from reveal.rules.errors.E501 import E501
 
-        assert not E501.matches_target("/home/scottsen/.tia/projects/scooter-bot.yaml")
+        assert not E501.matches_target("/home/scottsen/.tia/projects/scooter-bot.yaml")  # noqa: win-path (matches_target takes a str)
         assert E501.matches_target("main.py")
 
     def test_reveal_yaml_can_override_skip_categories(self):

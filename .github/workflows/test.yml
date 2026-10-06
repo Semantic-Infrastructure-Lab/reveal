@@ -51,10 +51,7 @@ jobs:
 
       - name: Test Windows compatibility checks
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        run: |
-          if [ -f scripts/check_windows_compat.py ]; then
-            python scripts/check_windows_compat.py --warn
-          fi
+        run: python scripts/check_windows_compat.py
 
       - name: Text-encoding ratchet (Windows cp1252 guard)
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'

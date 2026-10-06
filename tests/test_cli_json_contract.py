@@ -114,10 +114,10 @@ class TestAddCliContractFields(unittest.TestCase):
         )
         self.assertEqual(enveloped['contract_version'], '1.0')
         self.assertEqual(enveloped['type'], 'architecture')
-        self.assertEqual(enveloped['source'], '/tmp/x')
+        self.assertEqual(enveloped['source'], '/tmp/x')  # noqa: win-path (envelope field is a plain string)
         self.assertEqual(enveloped['source_type'], 'directory')
         # Original keys survive untouched.
-        self.assertEqual(enveloped['path'], '/tmp/x')
+        self.assertEqual(enveloped['path'], '/tmp/x')  # noqa: win-path (envelope field is a plain string)
         self.assertEqual(enveloped['risks'], ['a'])
         # Original dict is not mutated.
         self.assertNotIn('contract_version', report)

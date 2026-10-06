@@ -437,7 +437,7 @@ class TestScanSurface(unittest.TestCase):
         fs = report['surfaces']['fs']
         self.assertEqual(len(fs), 1)
         self.assertEqual(fs[0]['name'], 'open')
-        self.assertEqual(fs[0]['target'], '/tmp/real.txt')
+        self.assertEqual(fs[0]['target'], '/tmp/real.txt')  # noqa: win-path (target string, never a Path)
 
     def test_type_filter(self):
         _write(self.tmp, 'app.py', '''\

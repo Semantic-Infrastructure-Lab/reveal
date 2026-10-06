@@ -100,7 +100,7 @@ def test_provenance_names_the_invocation_not_the_host_process(monkeypatch):
     with invocation_scope(Invocation.parse(['reveal', 'ast://.', '--provenance'])):
         assert build_execution_provenance()['command'] == 'reveal ast://. --provenance'
     # Outside any invocation (a library call) the host's command line is all there is.
-    assert build_execution_provenance()['command'] == '/usr/bin/some-host'
+    assert build_execution_provenance()['command'] == '/usr/bin/some-host'  # noqa: win-path (argv[0] string)
 
 
 def test_mcp_provenance_names_the_equivalent_cli_command(monkeypatch, tmp_path):

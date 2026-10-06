@@ -1507,7 +1507,7 @@ class TestBasePathQuoteStripping(unittest.TestCase):
     def test_strip_path_quotes_unquoted_path_unchanged(self):
         """Unquoted paths pass through unchanged."""
         from reveal.cli.parser import _strip_path_quotes
-        assert _strip_path_quotes('/home/user/.claude/projects') == '/home/user/.claude/projects'
+        assert _strip_path_quotes('/home/user/.claude/projects') == '/home/user/.claude/projects'  # noqa: win-path (argv string, never a Path)
 
     def test_base_path_arg_strips_quotes_via_parser(self):
         """Parser strips surrounding quotes from --base-path value."""
@@ -1521,7 +1521,7 @@ class TestBasePathQuoteStripping(unittest.TestCase):
         from reveal.cli.parser import create_argument_parser
         parser = create_argument_parser('0.0.0')
         args = parser.parse_args(['claude://', '--base-path', '/home/user/.claude/projects'])
-        assert args.base_path == '/home/user/.claude/projects'
+        assert args.base_path == '/home/user/.claude/projects'  # noqa: win-path (argv string, never a Path)
 
 
 class TestRoutingEdgeCases(unittest.TestCase):
