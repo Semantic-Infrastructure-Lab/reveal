@@ -23,7 +23,7 @@ reveal ssl://example.com --fields=host,days_until_expiry,health_status --format=
 reveal 'ast://src?type=function' --max-items=10 --format=json
 
 # Truncate long string values
-reveal 'json://logs.json?level=error' --max-snippet-chars=200 --format=json
+reveal 'markdown://docs/?type=guide' --max-snippet-chars=200 --format=json
 
 # Combine field selection + budget
 reveal 'ast://src?type=function' --fields=name,line,complexity --max-items=20 --format=json
@@ -276,9 +276,10 @@ reveal 'git://src/app.py?type=history' --fields=hash,date,message --format=json
 
 ### JSON Adapter
 
-**Large dataset filtering**:
+**Large dataset filtering** (json:// pages with `limit`/`offset`; `--max-items` and
+`--max-snippet-chars` apply to list results, not to a JSON value):
 ```bash
-reveal 'json://data.json?status=active' --max-items=100 --format=json
+reveal 'json://data.json?status=active&limit=100' --format=json
 ```
 
 **Field projection + filtering** (keys of each object in the array):
@@ -371,7 +372,7 @@ Note: --fields: expiry matched no field of this ssl:// result. Fields: common_na
 
 ```bash
 # Truncate long string values to 200 chars
-reveal 'json://logs.json?level=error' --max-snippet-chars=200 --format=json
+reveal 'markdown://docs/?type=guide' --max-snippet-chars=200 --format=json
 ```
 
 ---
