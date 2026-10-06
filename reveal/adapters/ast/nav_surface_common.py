@@ -353,3 +353,28 @@ def normalize_cpp_macro_class_modifiers(source: str) -> str:
                 if out[p] != '\n':
                     out[p] = ' '
     return source if out is None else ''.join(out)
+
+
+# Swift strings and comments, which the unit-value rewrite must not touch: line and block
+# comments, multi-line and raw strings, ordinary strings.
+_SWIFT_SKIP = (r'//[^\n]*|(?s:/\*.*?\*/)|#*"""(?s:.*?)"""#*|#+"[^\n]*?"#+|"(?:\\.|[^"\\\n])*"')
+# `()` as a VALUE: after `(` `,` `:` `=` `[` `{`, or `in` / `return`. Not a call (`f()`), a
+# function type (`() -> Void`), or a closure's empty parameter list (`{ () in`).
+_SWIFT_UNIT_VALUE = (r'(?P<pre>[(,:=\[{]\s*|\b(?:in|return)[ \t]+)\(\)'
+                     r'(?!\s*(?:->|throws\b|async\b|rethrows\b|in\b))')
+_SWIFT_UNIT_RE = re.compile(f'(?P<skip>{_SWIFT_SKIP})|{_SWIFT_UNIT_VALUE}')
+
+
+def normalize_swift_unit_values(source: str) -> str:
+    """Read Swift's empty-tuple VALUE `()` (`MutableProperty(())`, `send(value: ())`,
+    `{ _ in () }`, `let a = ()`) as a two-character identifier.
+
+    tree-sitter-swift has no rule for `()` in expression position: it recovers by inserting
+    a MISSING `!`, so the whole file is reported `parse-recovered` (BACK-1484: the Swift
+    corpus went from 158 recovered files of 2,051 to 27 with this rewrite). The identifier has the
+    same width, so every offset and line stays valid, and a value is a value for every
+    surface rule (it was never a string argument). Strings and comments are skipped.
+    """
+    if '()' not in source:
+        return source
+    return _SWIFT_UNIT_RE.sub(lambda m: m.group(0) if m.group('skip') else m.group('pre') + 'vv', source)

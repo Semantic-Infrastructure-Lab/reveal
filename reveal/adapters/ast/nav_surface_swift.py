@@ -20,7 +20,9 @@ shape but walks Swift's grammar:
 """
 
 from typing import Any, Dict, List, Optional
-from .nav_surface_common import scan_file_with_grammar, _get_text, _get_line
+from .nav_surface_common import (
+    scan_file_with_grammar, _get_text, _get_line, normalize_swift_unit_values,
+)
 from .surface_rules import RuleScan
 
 
@@ -41,7 +43,8 @@ _EMPTY_KEYS = ('cli', 'http', 'env', 'network', 'db', 'sdk', 'fs', 'subprocess')
 
 def scan_file_surface_swift(file_path: str) -> Dict[str, List[Dict[str, Any]]]:
     """Parse one Swift file and return categorised surface entries."""
-    return scan_file_with_grammar(file_path, 'swift', 'Swift', _scan_tree, _EMPTY_KEYS)
+    return scan_file_with_grammar(file_path, 'swift', 'Swift', _scan_tree, _EMPTY_KEYS,
+                                  prepare=normalize_swift_unit_values)
 
 
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Dict[str, Any]]]:

@@ -2,8 +2,7 @@
 
 tree-sitter-swift cannot read `()` as a value (`MutableProperty(())`, `send(value: ())`,
 `{ _ in () }`, `let a = ()`): it recovers by inserting a MISSING token, so a clean file was
-reported as `parse-recovered` (158 of 2,051 files of the Swift corpus, 130 of them for this
-alone). The surface scan now reads such a value as a placeholder identifier of the same width.
+reported as `parse-recovered` (158 of 2,051 files of the Swift corpus; 27 once rewritten). The surface scan now reads such a value as a placeholder identifier of the same width.
 """
 
 from reveal.adapters.ast.nav_surface_swift import scan_file_surface_swift
