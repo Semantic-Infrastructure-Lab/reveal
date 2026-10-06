@@ -44,8 +44,10 @@ Rules (home = where the concern is allowed to live):
 ``subcommand-output`` (BACK-1544 -> BACK-1059)
     ``add_cli_contract_fields()``: a ``reveal <name>`` result's JSON envelope. Home:
     ``reveal/cli/routing/subcommand.py::emit_subcommand_result``, which also acts on the
-    result's outcome (a failed result exits 1, a cut list is printed). A runner that built
-    its own envelope never did, which is how ``reveal overview`` lost its cut line.
+    result's outcome (a failed result exits 1, a cut list is printed), and the envelope
+    builder it prints, ``subcommand_json`` (also what check's ``--also-json`` writes). A
+    runner that built its own envelope never acted on the outcome, which is how ``reveal
+    overview`` lost its cut line.
 
 ``display-path`` (BACK-1635)
     An f-string field in the rendering layer whose expression is a bare path
@@ -123,7 +125,8 @@ RULES: Dict[str, Dict[str, Any]] = {
     'subcommand-output': {
         'task': 'BACK-1544 (removal: BACK-1545 for check)',
         'fix': 'print the result through reveal.cli.routing.subcommand.emit_subcommand_result',
-        'home': (('func', 'reveal/cli/routing/subcommand.py', 'emit_subcommand_result'),),
+        'home': (('func', 'reveal/cli/routing/subcommand.py', 'emit_subcommand_result'),
+                 ('func', 'reveal/cli/routing/subcommand.py', 'subcommand_json')),
     },
     'display-path': {
         'task': 'BACK-1635',

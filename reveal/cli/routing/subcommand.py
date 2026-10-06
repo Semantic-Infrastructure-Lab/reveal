@@ -62,6 +62,25 @@ def dispatch_subcommand(name: str, parser: ArgumentParser,
             ledger.report()
 
 
+def subcommand_json(result: Dict[str, Any], *, name: str, source: Union[str, Path],
+                    source_type: str = 'directory') -> str:
+    """The JSON document ``reveal <name> --format json`` prints for *result*.
+
+    The result under the subcommand's own envelope (``type`` = *name*, ``source`` = *source*
+    as the user named it, POSIX -- BACK-1366), keeping the adapter's ``contract_version``
+    and ``meta``, where a cut is already recorded. A runner that also writes its report to
+    a file beside a text render (check's ``--also-json``, BACK-1248) writes this, so the
+    artifact is the document ``--format json`` prints.
+    """
+    report = {k: v for k, v in result.items() if k not in _ADAPTER_IDENTITY_KEYS}
+    return json.dumps(
+        attach_provenance(add_cli_contract_fields(
+            report, result_type=name, source=to_posix(source), source_type=source_type,
+        )),
+        indent=2, default=str,
+    )
+
+
 def emit_subcommand_result(result: Dict[str, Any], args: Namespace, *, name: str,
                            source: Union[str, Path], render: Callable[[Dict[str, Any]], None],
                            source_type: str = 'directory') -> None:
@@ -72,9 +91,7 @@ def emit_subcommand_result(result: Dict[str, Any], args: Namespace, *, name: str
     the router, ``reveal overview`` stopped saying its complex-function list was cut, and
     ``reveal hotspots`` never had said so, while their URI forms did (BACK-1544).
 
-    - JSON: the result under the subcommand's own envelope (``type`` = *name*, ``source``
-      = *source* as the user named it, POSIX -- BACK-1366), keeping the adapter's
-      ``contract_version`` and ``meta``, where a cut is already recorded.
+    - JSON: ``subcommand_json(result)``, the result under the subcommand's own envelope.
     - Other formats: ``render(result)``, then each cut list and ignored sort field once
       (``print_result_control_notes``).
     - A failed result (top-level ``error``) is reported on stderr and exits 1, after the
@@ -87,13 +104,7 @@ def emit_subcommand_result(result: Dict[str, Any], args: Namespace, *, name: str
     if outcome == 'failed':
         print(f"Error (reveal {name}): {result['error']}", file=sys.stderr)
     if args.format == 'json':
-        report = {k: v for k, v in result.items() if k not in _ADAPTER_IDENTITY_KEYS}
-        print(json.dumps(
-            attach_provenance(add_cli_contract_fields(
-                report, result_type=name, source=to_posix(source), source_type=source_type,
-            )),
-            indent=2, default=str,
-        ))
+        print(subcommand_json(result, name=name, source=source, source_type=source_type))
     else:
         render(result)
         print_result_control_notes(result, args.format)
