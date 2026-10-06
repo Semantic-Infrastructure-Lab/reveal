@@ -991,11 +991,28 @@ def _apply_budget_constraints(result: dict, args: 'Namespace', adapter=None,
         if budget_result['meta']['truncated']:
             _record_cut(result, field, total, 'max_items', sole=len(fields) == 1)
             if len(fields) == 1:
-                result['meta']['budget'] = budget_result['meta']
+                result['meta']['budget'] = _budget_meta_of_cut(
+                    budget_result['meta'], result, field)
     if len(fields) > 1 and max_items is not None:
         print(f"Note: --max-items applied to each of {', '.join(fields)} -- "
               f"{scheme or 'this'}:// returns several lists.", file=sys.stderr)
     return result
+
+
+def _budget_meta_of_cut(budget: dict, result: dict, field: str) -> dict:
+    """``meta.budget`` states the total the cut disclosure states (BACK-1645).
+
+    ``apply_budget_limits`` counts the list it was handed, which is already the adapter's
+    own page when ast:// capped it at 200 of 247 or git:// stopped one commit past
+    ``?limit``. The disclosure merged both cuts into the real total, so the budget block
+    takes it from there instead of counting a second time; a lower bound says so.
+    """
+    entry = next((w for w in truncations_of(result) if w['field'] == field), None)
+    if entry is not None:
+        budget['total_available'] = entry['total']
+        if not entry.get('exact', True):
+            budget['total_available_exact'] = False
+    return budget
 
 
 def _record_cut(result: dict, field: str, total: int, cause: str, sole: bool) -> None:

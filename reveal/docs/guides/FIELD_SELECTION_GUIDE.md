@@ -145,7 +145,7 @@ Nested under `meta.budget`:
 
 - `truncated`: Boolean indicating truncation
 - `reason`: Why truncation occurred (`max_items_exceeded`)
-- `total_available`: Total results available
+- `total_available`: Total results available: the same total the `truncated` warning states, including what an adapter's own cap already cut (ast caps at 200, so `--max-items 5` on 247 matches says 247, not 200). `total_available_exact: false` is added when it is a lower bound (git history)
 - `returned`: Number of results returned
 - `next_cursor`: Pagination hint for next request
 
