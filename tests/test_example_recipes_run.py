@@ -487,3 +487,59 @@ def test_next_step_hints_in_recipe_output_run(harness):
         if code not in (0, 1) or problems:
             failures.append(f'{command} (hinted after {source}): exit {code} {problems[:1]}')
     assert not failures, failures
+
+
+FORMAT_CHOICES = re.compile(r'--format\s*\{([^}]*)\}')
+FORMAT_REJECTED = re.compile(r'not supported by reveal|invalid choice')
+
+
+def _subcommands(listing):
+    """Subcommand names from the 'Subcommands' block that `reveal --help-all` prints."""
+    block = listing.split('Subcommands (reveal <subcommand> --help for details):', 1)[1]
+    block = block.split('\n\n', 1)[0]
+    return re.findall(r'^\s+reveal (\w+)\b', block, re.MULTILINE)
+
+
+def _rejected_format_choices(harness, name, target):
+    """Format values subcommand `name`'s usage line advertises but the command rejects."""
+    _, help_text, _, _ = harness.run_subcommand(name, '--help')
+    match = FORMAT_CHOICES.search(help_text)
+    if not match:
+        return None
+    rejected = []
+    for choice in match.group(1).split(','):
+        extra = ['--from', 'main'] if name == 'trace' else [target]
+        _, _, err, _ = harness.run_subcommand(name, *extra, '--format', choice.strip())
+        if FORMAT_REJECTED.search(err):
+            rejected.append(choice.strip())
+    return rejected
+
+
+def test_usage_line_format_choices_are_accepted(harness):
+    """`--format {a,b}` in a subcommand's usage line is a claim: every listed value runs
+    (BACK-1611 item 6; the 10-01 audit found `typed,grep` listed on 10 subcommands that
+    rejected them)."""
+    from reveal.main import main
+    from contextlib import redirect_stdout
+    from io import StringIO
+    out = StringIO()
+    with redirect_stdout(out), pytest.raises(SystemExit):
+        main(['reveal', '--help-all'])
+    names = _subcommands(out.getvalue())
+    assert len(names) >= 10, f'the subcommand inventory went vacuous: {names}'
+    target = str(harness.root)
+    checked = {n: _rejected_format_choices(harness, n, target) for n in names}
+    assert sum(1 for v in checked.values() if v is not None) >= 10, checked
+    assert not {n: v for n, v in checked.items() if v}, checked
+
+
+def test_usage_line_format_gate_bites(harness):
+    """Negative control: a usage line advertising a format the command rejects is caught."""
+    class Lying:
+        def run_subcommand(self, name, *argv):
+            if argv == ('--help',):
+                return 0, 'usage: reveal deps [--format {text,json,grep}]', '', []
+            return harness.run_subcommand(name, *argv)
+
+    assert _rejected_format_choices(Lying(), 'deps', str(harness.root)) == ['grep']
+    assert _rejected_format_choices(harness, 'deps', str(harness.root)) == []
