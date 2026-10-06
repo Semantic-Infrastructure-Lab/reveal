@@ -442,7 +442,7 @@ class HelpAdapter(ResourceAdapter):
         'query-params': 'guides/QUERY_PARAMETER_REFERENCE.md',
         'recipes': 'guides/RECIPES.md',  # alias only — see 'tricks' below for canonical
         'schema': 'guides/SCHEMA_VALIDATION_HELP.md',
-        # canonical; dev/health/pack/review (and testability's own guide) come from
+        # canonical; the per-subcommand aliases (help://check, help://pack, ...) are
         # COMMANDS' help_guide -- see static_help_map() (BACK-1055).
         'subcommands': 'guides/SUBCOMMANDS_GUIDE.md',
         # Note: 'schemas' is intentionally NOT in STATIC_HELP — the dynamic handler

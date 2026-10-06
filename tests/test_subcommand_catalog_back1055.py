@@ -98,3 +98,34 @@ def test_help_guide_gate_bites():
     assert any('both' in p for p in _help_guide_problems(COMMANDS, dup))
     gone = {**COMMANDS, 'dev': COMMANDS['dev']._replace(help_guide='guides/NO_SUCH_GUIDE.md')}
     assert any('does not exist' in p for p in _help_guide_problems(gone, HelpAdapter.STATIC_HELP))
+
+
+GUIDE_SECTION = re.compile(r'^## reveal (\w+)\b', re.MULTILINE)
+
+
+def _unreachable_subcommand_sections(commands, guide_text, open_topic):
+    """Subcommands SUBCOMMANDS_GUIDE.md has a `## reveal <name>` section for whose
+    help://<name> does not open."""
+    missing = []
+    for name in sorted(set(GUIDE_SECTION.findall(guide_text)) & set(commands)):
+        result = open_topic(name)
+        if not isinstance(result, dict) or 'error' in result:
+            missing.append(name)
+    return missing
+
+
+def test_every_documented_subcommand_has_a_help_topic():
+    guide = (DOCS / 'guides' / 'SUBCOMMANDS_GUIDE.md').read_text(encoding='utf-8')
+    adapter = HelpAdapter()
+    assert not _unreachable_subcommand_sections(COMMANDS, guide, adapter.get_element)
+    # A subcommand pointed at the shared guide opens on its own section.
+    for name, guide_file in subcommand_help_guides().items():
+        if guide_file.endswith('SUBCOMMANDS_GUIDE.md'):
+            content = adapter.get_element(name)['content']
+            assert content.lstrip().lower().startswith(f'## reveal {name}'), name
+
+
+def test_documented_subcommand_gate_bites():
+    """Negative control: a documented subcommand whose topic does not open is reported."""
+    guide = '## reveal deps — Dependency Health\n'
+    assert _unreachable_subcommand_sections(COMMANDS, guide, lambda name: None) == ['deps']

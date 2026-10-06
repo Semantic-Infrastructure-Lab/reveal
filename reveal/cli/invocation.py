@@ -67,7 +67,8 @@ COMMANDS: Dict[str, CommandSpec] = {
     'check':        _spec('check',
                      'reveal check <path>',
                      'Run quality rules on a file or directory',
-                     ('text', 'json', 'grep')),  # also PATH --check (BACK-1644)
+                     ('text', 'json', 'grep'),  # also PATH --check (BACK-1644)
+                     help_guide=_SUBCOMMANDS_GUIDE),
     'contracts':    _spec('contracts',
                      'reveal contracts [path]',
                      'Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses'),
@@ -101,7 +102,8 @@ COMMANDS: Dict[str, CommandSpec] = {
                      ('text', 'json'), help_guide=_SUBCOMMANDS_GUIDE),
     'scaffold':     _spec('scaffold',
                      'reveal scaffold <kind>',
-                     'Older alias of `reveal dev new-*` — prefer `reveal dev`'),
+                     'Older alias of `reveal dev new-*` — prefer `reveal dev`',
+                     help_guide=_SUBCOMMANDS_GUIDE),
     'surface':      _spec('surface',
                      'reveal surface [path]',
                      'External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls'),
