@@ -161,9 +161,10 @@ JAVA = {
     'lib/pom.xml': '<project/>\n',
     'lib/src/com/ex/A.java': ('package com.ex;\nimport com.ex.util.B;\nimport static com.ex.util.C.helper;\n'
                               'import com.ex.util.C.Inner;\npublic class A {}\n'),
+    'lib/src/com/ex/E.java': 'package com.ex;\nimport com.ex.util.C.Inner.Deep;\npublic class E {}\n',
     'lib/src/com/ex/util/B.java': 'package com.ex.util;\nimport com.ex.A;\npublic class B {}\n',
-    'lib/src/com/ex/util/C.java': ('package com.ex.util;\npublic class C {\n'
-                                   '  public static void helper() {}\n  public static class Inner {}\n}\n'),
+    'lib/src/com/ex/util/C.java': ('package com.ex.util;\npublic class C {\n  public static void helper() {}\n'
+                                   '  public static class Inner { public static class Deep {} }\n}\n'),
 }
 
 
@@ -173,7 +174,7 @@ def test_java_oracle_handles_static_nested_and_wildcard_imports(tmp_path):
     assert _build(root, entry)[0] == {
         'lib/src/com/ex/A.java': ['lib/src/com/ex/util/B.java'],
         'lib/src/com/ex/util/B.java': ['lib/src/com/ex/A.java'],
-        'lib/src/com/ex/util/C.java': ['lib/src/com/ex/A.java'],
+        'lib/src/com/ex/util/C.java': ['lib/src/com/ex/A.java', 'lib/src/com/ex/E.java'],  # E: two nesting levels
     }
     measured = gate.measure(entry, root)  # the mirror outside scan_root is invisible to both sides
     assert measured['recall'] == measured['precision'] == 1
