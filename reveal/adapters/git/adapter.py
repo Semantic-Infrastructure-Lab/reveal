@@ -19,6 +19,7 @@ from ...utils.query import (
 from ...utils.query_parser import QueryParams, mark_query_keys, peek_query_items, query_key
 
 # Import modular components
+from ...utils.path_utils import to_posix
 from .renderer import GitRenderer
 from . import refs, commits, files, queries
 
@@ -517,14 +518,33 @@ class GitAdapter(ResourceAdapter):
 
         if self.repo is None:
             try:
-                # Discover repository from path
-                repo_path = pygit2.discover_repository(self.path)
+                # Discover the repository from the target, not the cwd (BACK-1654)
+                start = self._discovery_start()
+                repo_path = pygit2.discover_repository(start)
                 if not repo_path:
-                    raise NotApplicableError(f"Not a git repository: {self.path}")
+                    target = to_posix(os.path.normpath(os.path.join(self.path, self.subpath or '')))
+                    raise NotApplicableError(f"Not a git repository: {target}")
                 self.repo = pygit2.Repository(repo_path)
             except (pygit2.GitError, KeyError) as e:
                 raise ValueError(f"Failed to open repository: {self.path}") from e
         return self.repo
+
+    def _discovery_start(self) -> str:
+        """Where repository discovery begins: the target's nearest existing directory.
+
+        A relative target parses as ``path='.'`` plus a cwd-relative ``subpath``
+        (``repo/src`` from the repo's parent), so discovering from ``self.path`` alone
+        looked at the cwd and missed the repo the target is in (BACK-1654). A subpath
+        that no longer exists on disk (a deleted file read at a ref) climbs to the
+        nearest directory that does.
+        """
+        candidate = os.path.abspath(os.path.join(self.path, self.subpath or ''))
+        while not os.path.isdir(candidate):
+            parent = os.path.dirname(candidate)
+            if parent == candidate:
+                break
+            candidate = parent
+        return candidate
 
     def _repo_relative_subpath(self, repo: 'pygit2.Repository') -> str:
         """Convert self.subpath (CWD-relative) to a repo-root-relative path.
