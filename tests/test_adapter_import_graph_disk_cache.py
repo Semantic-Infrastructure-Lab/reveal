@@ -26,14 +26,13 @@ from reveal.core import disk_cache
 from reveal.registry import get_code_extensions
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.disk_cache]
 
 
 @pytest.fixture(autouse=True)
 def _isolate_cache(tmp_path, monkeypatch):
     """Point the disk cache at a throwaway dir and start every test cold."""
     monkeypatch.setenv("REVEAL_CACHE_DIR", str(tmp_path / "cache"))
-    monkeypatch.delenv("REVEAL_DISK_CACHE", raising=False)
 
 
 def _write_tree(root):

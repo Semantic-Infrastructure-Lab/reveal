@@ -17,14 +17,13 @@ from reveal.analyzers.python import PythonAnalyzer
 from conftest import sliced_structure
 
 # BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.disk_cache]
 
 
 @pytest.fixture(autouse=True)
 def _isolate_cache(tmp_path, monkeypatch):
     """Point the disk cache at a throwaway dir and start every test cold."""
     monkeypatch.setenv("REVEAL_CACHE_DIR", str(tmp_path / "cache"))
-    monkeypatch.delenv("REVEAL_DISK_CACHE", raising=False)
     ts_mod._get_parse_cache().clear()
     yield
     ts_mod._get_parse_cache().clear()

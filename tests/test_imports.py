@@ -1186,6 +1186,7 @@ class TestBuildProjectNamespaces:
         assert result['type'] == 'unused_imports'
         assert isinstance(result.get('unused'), list)
 
+    @pytest.mark.disk_cache
     def test_unused_no_false_positive_after_relative_path_cache_seed(self, tmp_path, monkeypatch):
         """A prior extract_imports() call keyed by a relative Path (e.g. from
         `reveal file.py --check`, which does not resolve to absolute) must not

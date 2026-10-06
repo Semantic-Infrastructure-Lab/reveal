@@ -13,7 +13,7 @@ from reveal.analyzers.markdown import MarkdownAnalyzer
 from reveal.core import disk_cache
 
 # BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.disk_cache]
 
 DOC = "# Title\n\nIntro with a [link](other.md).\n\n## Setup\n\nRun `make`.\n\nSetext\n------\n\nend\n"
 
@@ -21,7 +21,6 @@ DOC = "# Title\n\nIntro with a [link](other.md).\n\n## Setup\n\nRun `make`.\n\nS
 @pytest.fixture(autouse=True)
 def _isolate_cache(tmp_path, monkeypatch):
     monkeypatch.setenv("REVEAL_CACHE_DIR", str(tmp_path / "cache"))
-    monkeypatch.delenv("REVEAL_DISK_CACHE", raising=False)
     ts_mod._get_parse_cache().clear()
     md_mod._inline_parse_cache.clear()
     yield

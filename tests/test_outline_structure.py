@@ -16,7 +16,7 @@ from reveal.grep_handler import _get_structural_elements
 from reveal.registry import get_analyzer
 
 # BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.disk_cache]
 
 CONFORMANCE = sorted((Path(__file__).parent / "fixtures" / "conformance").glob("*/sample.*"))
 
@@ -24,7 +24,6 @@ CONFORMANCE = sorted((Path(__file__).parent / "fixtures" / "conformance").glob("
 @pytest.fixture(autouse=True)
 def _isolate_cache(tmp_path, monkeypatch):
     monkeypatch.setenv("REVEAL_CACHE_DIR", str(tmp_path / "cache"))
-    monkeypatch.delenv("REVEAL_DISK_CACHE", raising=False)
     ts_mod._get_parse_cache().clear()
     yield
     ts_mod._get_parse_cache().clear()

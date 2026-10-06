@@ -12,7 +12,7 @@ import pytest
 
 from reveal.core import disk_cache
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.disk_cache]
 
 
 @pytest.fixture
@@ -27,7 +27,6 @@ def fake_build(tmp_path, monkeypatch):
     monkeypatch.syspath_prepend(str(site))
     monkeypatch.setattr(disk_cache, '_BUILD_PACKAGES', (('fakereveal', True), ('fakepack', False)))
     monkeypatch.setenv('REVEAL_CACHE_DIR', str(tmp_path / 'cache'))
-    monkeypatch.delenv('REVEAL_DISK_CACHE', raising=False)
     monkeypatch.setattr(disk_cache, '_used_build_dirs', set())
     disk_cache.build_fingerprint.cache_clear()
     yield site

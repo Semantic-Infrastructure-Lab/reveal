@@ -24,14 +24,13 @@ from reveal.analyzers.imports import zig as zig_mod
 from reveal.analyzers.imports import generic as generic_mod
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.disk_cache]
 
 
 @pytest.fixture(autouse=True)
 def _isolate_cache(tmp_path, monkeypatch):
     """Point the disk cache at a throwaway dir and start every test cold."""
     monkeypatch.setenv("REVEAL_CACHE_DIR", str(tmp_path / "cache"))
-    monkeypatch.delenv("REVEAL_DISK_CACHE", raising=False)
     for mod in (js_mod, go_mod, rust_mod, zig_mod, generic_mod):
         mod._IMPORTS_CACHE.clear()
     yield

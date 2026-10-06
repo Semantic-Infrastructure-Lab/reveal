@@ -6,7 +6,7 @@ from reveal.analyzers.imports.base import _EXTRACTOR_REGISTRY, get_extractor
 from reveal.registry import get_analyzer
 from reveal.rules.imports.I002 import I002, _extract_imports_for_file, _graph_cache
 
-pytestmark = pytest.mark.component
+pytestmark = [pytest.mark.component, pytest.mark.disk_cache]
 
 # At least one real syntax fixture for every registered extractor class, plus TS.
 CASES = {

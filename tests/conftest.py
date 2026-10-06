@@ -339,6 +339,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "slow: tests taking > 1s each")
     config.addinivalue_line("markers", "real_worker_pool: needs reveal's own ProcessPoolExecutor "
                             "(clears the suite-wide REVEAL_MAX_WORKERS=1)")
+    config.addinivalue_line("markers", "disk_cache: reads reveal's disk cache back; the test runs with "
+                            "REVEAL_DISK_CACHE unset whatever the ambient env says (BACK-1677)")
     # xdist already saturates the cores; reveal's internal pools on top only add contention
     # (flag-matrix tests: 178s -> 103s). Explicit developer overrides win.
     os.environ.setdefault("REVEAL_MAX_WORKERS", "1")
@@ -348,6 +350,17 @@ def pytest_configure(config):
 def _serial_workers_unless_pool_test(request, monkeypatch):
     if request.node.get_closest_marker("real_worker_pool"):
         monkeypatch.delenv("REVEAL_MAX_WORKERS", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _disk_cache_marker(request, monkeypatch):
+    """``@pytest.mark.disk_cache`` (BACK-1677): the test reads the disk cache back, so it needs
+    the cache ON. ci-local.sh and wt-check.sh export REVEAL_DISK_CACHE=0 for the whole run, which
+    made such tests fail only there. The marker removes the ambient switch; tests that exercise
+    the switch itself still setenv it explicitly. tests/test_disk_cache_marker_guard.py fails a
+    test file that points the cache at a dir without marking itself or naming the switch."""
+    if request.node.get_closest_marker("disk_cache"):
+        monkeypatch.delenv("REVEAL_DISK_CACHE", raising=False)
 
 
 @pytest.fixture(autouse=True)

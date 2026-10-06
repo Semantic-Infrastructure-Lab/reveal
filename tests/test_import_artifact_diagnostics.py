@@ -6,14 +6,7 @@ from reveal.analyzers.imports.types import ImportStatement
 from reveal.analyzers.imports.python import PythonExtractor
 import importlib
 
-pytestmark = pytest.mark.component
-
-
-@pytest.fixture(autouse=True)
-def _disk_cache_on(monkeypatch):
-    """These tests read back from the disk cache. scripts/ci-local.sh exports
-    REVEAL_DISK_CACHE=0 for the whole run, so they enable it themselves."""
-    monkeypatch.delenv("REVEAL_DISK_CACHE", raising=False)
+pytestmark = [pytest.mark.component, pytest.mark.disk_cache]
 
 
 def test_nested_diagnostics_and_caller_mutation(tmp_path, monkeypatch):
