@@ -715,14 +715,14 @@ reveal 'imports://.?circular&verbose'
 To see what query parameters an adapter supports:
 
 ```bash
-reveal 'adapter://?help'           # Show adapter help
+reveal help://schemas/imports      # One adapter's query parameters (any scheme)
 reveal --agent-help                # Full query reference
 ```
 
 Or programmatically:
 
 ```bash
-reveal 'adapter://' --format json | jq '.query_params'
+reveal help://schemas/imports --format json | jq '.query_params'
 ```
 
 ---
@@ -748,7 +748,7 @@ reveal 'adapter://' --format json | jq '.query_params'
 
 4. **Check adapter schema** for available params
    ```bash
-   reveal 'adapter://' --format json | jq '.query_params'
+   reveal help://schemas/imports --format json | jq '.query_params'
    ```
 
 ---
