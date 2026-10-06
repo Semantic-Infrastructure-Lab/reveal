@@ -90,7 +90,7 @@ def test_multiline_signature_is_one_line_with_its_name(tmp_path, name, source, e
 def test_rust_outline_row_is_one_line_starting_with_the_name(tmp_path):
     from reveal.display.outline import _build_item_display
     analyzer = _analyzer(tmp_path, 's.rs', _RUST)
-    structure = {k: v for k, v in analyzer.get_outline().items() if k != 'imports'}
+    structure = {k: v for k, v in analyzer.get_structure().items() if k != 'imports'}
     row = _build_item_display(build_hierarchy(structure)[0])
     assert '\n' not in row
     assert row.startswith('search(')
