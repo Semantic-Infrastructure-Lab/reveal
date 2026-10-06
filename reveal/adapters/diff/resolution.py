@@ -6,11 +6,43 @@ from typing import Dict, Any, Optional, Iterator, cast
 
 from .git import resolve_git_ref, resolve_git_adapter, read_git_text
 from ..base import get_adapter_class
+from ...errors import NotApplicableError
 from ...registry import get_analyzer
 from ...utils.path_utils import _walk_code_files
 
 
+_CODE_KEYS = ('functions', 'classes', 'imports')
+
+
+def require_comparable(structure: Dict[str, Any], uri: str) -> Dict[str, Any]:
+    """Return ``structure`` if diff:// can compare it, else decline (BACK-1689).
+
+    diff:// compares functions, classes and imports. A code analyzer's structure is
+    untyped (an empty file has no keys at all) or carries those keys, flat or under
+    ``structure``; a directory aggregate is typed 'directory'/'git_directory'. Anything
+    else (sqlite, env, JSON, YAML, Markdown, TOML ...) has none of them and would
+    compare as "No structural changes detected" whatever differs: a false clean.
+    """
+    struct = structure.get('structure', structure)
+    kind = structure.get('type')
+    if kind in (None, 'directory', 'git_directory') or any(k in struct for k in _CODE_KEYS):
+        return structure
+    raise NotApplicableError(
+        f"diff:// compares functions, classes and imports; {uri} ({kind}) has none, "
+        f"so a structural diff would not show what differs. "
+        f"Diff each side's own output with the shell diff instead.")
+
+
 def resolve_uri(uri: str, **kwargs) -> Dict[str, Any]:
+    """Resolve a URI to its structure, declining what diff:// cannot compare.
+
+    Raises NotApplicableError for a resource with no functions, classes or imports
+    (see ``require_comparable``).
+    """
+    return require_comparable(_resolve_structure(uri, **kwargs), uri)
+
+
+def _resolve_structure(uri: str, **kwargs) -> Dict[str, Any]:
     """Resolve a URI to its structure using existing adapters.
 
     This is the key composition point - we delegate to existing

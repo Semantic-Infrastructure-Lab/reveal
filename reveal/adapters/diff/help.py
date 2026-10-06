@@ -99,7 +99,7 @@ _SCHEMA_NOTES = [
     'Supports any two reveal URIs that resolve to comparable structures',
     'Automatically detects resource types and adapts comparison strategy',
     'Element-specific diffs extract and compare individual functions/classes',
-    'Compares functions, classes and imports. A resource whose structure has none of them (env://, sqlite://, mysql://, JSON/YAML files) reports "No structural changes detected" even when its content differs; compare those with the shell diff of each adapter\'s own output',
+    'Compares functions, classes and imports. A resource whose structure has none of them (env://, sqlite://, mysql://, JSON/YAML files) is declined as not applicable (exit 0, applicable=false); compare those with the shell diff of each adapter\'s own output',
     'Git URIs use path@ref format: git://file.py@HEAD~1 (not git://HEAD~1:file.py)',
     'Git ref format matches git adapter syntax, not git CLI show command'
 ]

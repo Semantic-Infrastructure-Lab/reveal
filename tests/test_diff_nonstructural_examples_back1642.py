@@ -2,10 +2,10 @@
 
 `diff://` compares code structure (functions, classes, imports; see
 reveal/diff.py::compute_structure_diff). A resource whose structure has none of those --
-sqlite://, env://, JSON/YAML files, and mysql:// by the same code path -- always compares equal, so a
-'schema drift' example silently reports "no drift". The first group below pins that
-behavior (so the docs' limitation statement stays true); the second pins that no help
-text or guide still presents such a comparison as an example.
+sqlite://, env://, JSON/YAML files, and mysql:// by the same code path -- cannot be compared:
+the compare step would call it equal, so the adapter declines it (BACK-1689, tests/
+test_diff_not_applicable_back1689.py). The first group below pins both halves; the second pins
+that no help text or guide still presents such a comparison as an example.
 
 mysql:// itself needs a live server, so only its URI parsing and the shared compare step
 are exercised here; nothing below claims MySQL output.
@@ -22,6 +22,7 @@ from reveal.adapters.diff.help import get_schema
 from reveal.adapters.diff.parsing import parse_diff_uris
 from reveal.adapters.help_data import load_help_data
 from reveal.diff import compute_structure_diff
+from reveal.errors import NotApplicableError
 
 pytestmark = pytest.mark.component
 
@@ -35,7 +36,7 @@ def _summary_counts(structure_diff):
     return sum(sum(bucket.values()) for bucket in structure_diff['summary'].values())
 
 
-def test_sqlite_databases_with_different_schemas_compare_equal(tmp_path):
+def test_sqlite_databases_with_different_schemas_are_declined(tmp_path):
     left, right = tmp_path / 'a.db', tmp_path / 'b.db'
     with sqlite3.connect(left) as conn:
         conn.execute('create table t(id integer)')
@@ -43,19 +44,19 @@ def test_sqlite_databases_with_different_schemas_compare_equal(tmp_path):
         conn.execute('create table t(id integer, extra text)')
         conn.execute('create table u(x integer)')
     uri = f'sqlite://{left.as_posix()}:sqlite://{right.as_posix()}'
-    result = DiffAdapter(uri).get_structure()
-    assert sum(sum(bucket.values()) for bucket in result['summary'].values()) == 0
+    with pytest.raises(NotApplicableError):
+        DiffAdapter(uri).get_structure()
 
 
-def test_json_files_with_different_content_compare_equal(tmp_path):
+def test_json_files_with_different_content_are_declined(tmp_path):
     left, right = tmp_path / 'a.json', tmp_path / 'b.json'
     left.write_text('{"a": 1}\n', encoding='utf-8')
     right.write_text('{"a": 2, "b": 3}\n', encoding='utf-8')
-    result = DiffAdapter(f'{left.as_posix()}:{right.as_posix()}').get_structure()
-    assert sum(sum(bucket.values()) for bucket in result['summary'].values()) == 0
+    with pytest.raises(NotApplicableError):
+        DiffAdapter(f'{left.as_posix()}:{right.as_posix()}').get_structure()
 
 
-def test_mysql_server_shaped_structures_compare_equal():
+def test_mysql_server_shaped_structures_compare_equal_in_the_compare_step():
     """Keys are those MySQLAdapter.get_structure() returns; the compare step reads none of them."""
     prod = {'type': 'mysql_server', 'server': 'prod:3306', 'version': '8.0.35',
             'health_status': 'healthy', 'storage': {'databases': 3}}
@@ -104,5 +105,5 @@ def test_guides_have_no_runnable_non_structural_diff_command(path):
 
 def test_diff_guide_states_the_limitation():
     text = DIFF_GUIDE.read_text(encoding='utf-8')
-    assert 'No structural changes detected' in text
+    assert 'not applicable' in text
     assert 'requires a live MySQL connection' in text

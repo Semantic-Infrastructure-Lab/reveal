@@ -527,14 +527,15 @@ reveal diff://git://HEAD/.:./
 ### What diff:// does not compare
 
 `diff://` compares **code structure**: the functions, classes and imports an analyzer extracts. A
-resource whose structure has none of those compares as identical, so these report no drift even when
-the content differs:
+resource whose structure has none of those is declined: diff:// answers "not applicable" (exit 0,
+`applicable: false` in JSON, with the reason) instead of comparing, so it never reports a clean
+result it did not compute. This covers:
 
 | Resource | Checked | Result |
 |----------|---------|--------|
-| `sqlite://a.db` vs `sqlite://b.db` (different tables and columns) | run with two real databases | `No structural changes detected` |
-| `env://` vs `env://HOME` | run | `No structural changes detected` |
-| two JSON or YAML files with different keys and values | run with `.json` and `.yaml` pairs | `No structural changes detected` |
+| `sqlite://a.db` vs `sqlite://b.db` (different tables and columns) | run with two real databases | `not applicable: diff:// compares functions, classes and imports; ...` |
+| `env://` vs `env://HOME` | run | `not applicable` |
+| two JSON, YAML or Markdown files | run with `.json`, `.yaml` and `.md` pairs | `not applicable` |
 | `mysql://host1/db` vs `mysql://host2/db` | URI parsing and the compare step only; running it requires a live MySQL connection | not run here. `mysql://` returns a server health overview (a path segment that is not a known element, such as a database name, falls back to that overview) or the data of a known element such as `/tables`; neither has functions, classes or imports, so no schema drift is reported |
 
 To compare databases, environments or config files, diff each side's own output with the shell
@@ -1320,8 +1321,9 @@ cat "$CACHE_FILE"
 
 6. **Only code structure is compared**
    - **Limitation**: resources without functions, classes or imports (`env://`, `sqlite://`,
-     `mysql://`, JSON/YAML files) always compare equal
-   - **Impact**: `No structural changes detected` is not evidence that databases or environments match
+     `mysql://`, JSON/YAML files) are declined as
+     not applicable
+   - **Impact**: the result is `applicable: false`, not a comparison; nothing was diffed
    - **Workaround**: diff each side's own output with the shell `diff`; see
      [What diff:// does not compare](#what-diff-does-not-compare)
 
@@ -1497,11 +1499,11 @@ reveal diff://git://main/.:git://feature/.
 ### 7. Do Not Use diff:// as a Drift Alarm for Databases or Environments
 
 ```bash
-# ✅ Diff each side's own output (diff:// on the two databases prints "No structural changes detected")
+# ✅ Diff each side's own output (diff:// on the two databases answers "not applicable")
 diff <(reveal sqlite:///a.db --format json) <(reveal sqlite:///b.db --format json)
 ```
 
-**Why**: a monitor built on `diff://` for `sqlite://`, `mysql://` or `env://` reports no drift forever
+**Why**: a monitor built on `diff://` for `sqlite://`, `mysql://` or `env://` never compares anything: it gets "not applicable" every run
 (see [What diff:// does not compare](#what-diff-does-not-compare)).
 
 ---

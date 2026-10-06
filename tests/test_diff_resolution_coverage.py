@@ -76,10 +76,10 @@ class TestResolveUri:
     def test_git_at_format_calls_resolve_git_adapter(self):
         """Line 41 — git:// with @ routes to resolve_git_adapter."""
         with mock.patch('reveal.adapters.diff.resolution.resolve_git_adapter') as mock_ga:
-            mock_ga.return_value = {'type': 'file'}
+            mock_ga.return_value = {'type': 'file', 'functions': []}
             result = resolve_uri('git://reveal/main.py@HEAD~1')
             mock_ga.assert_called_once_with('reveal/main.py@HEAD~1')
-            assert result == {'type': 'file'}
+            assert result == {'type': 'file', 'functions': []}
 
     def test_git_colon_slash_format_raises_value_error(self):
         """Lines 45–46 — git://REF:path raises ValueError with hint."""
@@ -101,20 +101,20 @@ class TestResolveUri:
     def test_git_bare_resource_calls_resolve_git_adapter(self):
         """Line 59 — git:// with no @ and no / calls resolve_git_adapter."""
         with mock.patch('reveal.adapters.diff.resolution.resolve_git_adapter') as mock_ga:
-            mock_ga.return_value = {'type': 'repo'}
+            mock_ga.return_value = {'type': 'repo', 'functions': []}
             result = resolve_uri('git://main')
             mock_ga.assert_called_once_with('main')
 
     def test_valid_non_file_adapter_scheme(self):
         """Lines 82–83 — non-git/non-file scheme uses registered adapter."""
         mock_adapter = mock.Mock()
-        mock_adapter.get_structure.return_value = {'type': 'env'}
+        mock_adapter.get_structure.return_value = {'type': 'env', 'functions': []}
         mock_class = mock.Mock(return_value=mock_adapter)
 
         with mock.patch('reveal.adapters.diff.resolution.get_adapter_class', return_value=mock_class):
             with mock.patch('reveal.adapters.diff.resolution.instantiate_adapter', return_value=mock_adapter):
                 result = resolve_uri('env://')
-                assert result == {'type': 'env'}
+                assert result == {'type': 'env', 'functions': []}
 
 
 class TestResolveDirectory:

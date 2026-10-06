@@ -61,7 +61,7 @@ output_format:
 
 notes:
   - 'Complements git diff (semantic vs line-level)'
-  - 'Resources whose structure has no functions, classes or imports (env://, sqlite://, mysql://, JSON/YAML files) report "No structural changes detected" even when they differ -- diff their own output with the shell diff instead'
+  - 'Resources whose structure has no functions, classes or imports (env://, sqlite://, mysql://, JSON/YAML files) are declined as not applicable (exit 0, applicable=false) -- diff their own output with the shell diff instead'
   - 'Git URI format: git://REF/path (e.g., git://HEAD~1/file.py, git://main/src/)'
   - 'Note: diff git:// format differs from git:// adapter (uses git CLI directly)'
   - 'Directory diffs aggregate all analyzable files (skips .git, node_modules, etc.)'
