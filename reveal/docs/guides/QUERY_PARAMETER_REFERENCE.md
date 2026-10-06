@@ -454,9 +454,10 @@ reveal 'stats://.?hotspots&code_only'
   reveal 'claude://my-session?contains=reveal'
   ```
 
-- **`role=<role>`** (string) - Filter by message role (`user` or `assistant`)
+- **User messages only** - there is no `role=` filter; the `prompts` view lists the
+  user's prompts
   ```bash
-  reveal 'claude://my-session?role=user'
+  reveal claude://session/my-session/prompts
   ```
 
 - **`search=<term>`** (string) - Search all message content (text, thinking, tool inputs), case-insensitive
