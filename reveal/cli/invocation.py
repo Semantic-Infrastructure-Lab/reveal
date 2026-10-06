@@ -35,36 +35,85 @@ class CommandSpec(NamedTuple):
     # --format values the runner renders when no same-named adapter declares them.
     # None: the same-named adapter's declaration applies.
     formats: Optional[Tuple[str, ...]] = None
+    # How the command is invoked and what it is for: the one home for the subcommand
+    # listing in `--help-all`; AGENT_HELP.md's table is checked against it (BACK-1055).
+    usage: str = ''
+    summary: str = ''
 
     def load(self) -> Tuple[ArgumentParser, Callable[[Namespace], None]]:
         mod = importlib.import_module(self.module)
         return getattr(mod, self.parser_factory)(), getattr(mod, self.runner)
 
 
-def _spec(name: str, formats: Optional[Tuple[str, ...]] = None) -> CommandSpec:
-    return CommandSpec(f'reveal.cli.commands.{name}', f'create_{name}_parser', f'run_{name}', formats)
+def _spec(name: str, usage: str, summary: str, formats: Optional[Tuple[str, ...]] = None) -> CommandSpec:
+    return CommandSpec(f'reveal.cli.commands.{name}', f'create_{name}_parser', f'run_{name}',
+                       formats, usage, summary)
 
 
 # Every subcommand. help://schemas/<name> also reads this table to tell a CLI-only command
 # from an unknown name (BACK-1028). health and review have no same-named adapter, and their
 # runners render only these formats (measured: grep/typed output matched text byte for byte).
 COMMANDS: Dict[str, CommandSpec] = {
-    'architecture': _spec('architecture'),
-    'check':        _spec('check', ('text', 'json', 'grep')),  # also PATH --check (BACK-1644)
-    'contracts':    _spec('contracts'),
-    'deps':         _spec('deps'),
-    'dev':          _spec('dev'),
-    'health':       _spec('health', ('text', 'json')),
-    'hotspots':     _spec('hotspots'),
-    'offline':      _spec('offline'),
-    'overview':     _spec('overview'),
-    'pack':         _spec('pack'),
-    'review':       _spec('review', ('text', 'json')),
-    'scaffold':     _spec('scaffold'),
-    'surface':      _spec('surface'),
-    'testability':  _spec('testability'),
-    'trace':        _spec('trace'),
+    'architecture': _spec('architecture',
+                     'reveal architecture [path]',
+                     'Architectural brief: entry points, core abstractions, risks'),
+    'check':        _spec('check',
+                     'reveal check <path>',
+                     'Run quality rules on a file or directory',
+                     ('text', 'json', 'grep')),  # also PATH --check (BACK-1644)
+    'contracts':    _spec('contracts',
+                     'reveal contracts [path]',
+                     'Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses'),
+    'deps':         _spec('deps',
+                     'reveal deps [path]',
+                     'Dependency health: external packages, circular deps, unused imports'),
+    'dev':          _spec('dev',
+                     'reveal dev <command>',
+                     'Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config'),
+    'health':       _spec('health',
+                     'reveal health [path]',
+                     'Unified health: code rules + SSL + databases + DNS',
+                     ('text', 'json')),
+    'hotspots':     _spec('hotspots',
+                     'reveal hotspots [path]',
+                     'High-complexity files and functions that need attention'),
+    'offline':      _spec('offline',
+                     'reveal offline',
+                     'Pre-download tree-sitter grammars for offline/air-gapped use'),
+    'overview':     _spec('overview',
+                     'reveal overview [path]',
+                     'One-glance dashboard: languages, quality, hotspots, recent git'),
+    'pack':         _spec('pack',
+                     'reveal pack <path>',
+                     'Token-budgeted context snapshot for LLM consumption'),
+    'review':       _spec('review',
+                     'reveal review <path>',
+                     'Assess quality + structural changes before a PR merge',
+                     ('text', 'json')),
+    'scaffold':     _spec('scaffold',
+                     'reveal scaffold <kind>',
+                     'Older alias of `reveal dev new-*` — prefer `reveal dev`'),
+    'surface':      _spec('surface',
+                     'reveal surface [path]',
+                     'External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls'),
+    'testability':  _spec('testability',
+                     'reveal testability [path]',
+                     'Test patch pressure joined with production boundary fan-out'),
+    'trace':        _spec('trace',
+                     'reveal trace --from FUNC',
+                     'Walk call graph from a named entry point; depth-indented narrative with side-effect classification'),
 }
+
+
+# Order of the `--help-all` subcommand listing: task entry points first, tooling last.
+EPILOG_ORDER = ('overview', 'architecture', 'deps', 'hotspots', 'contracts', 'surface',
+                'testability', 'trace', 'check', 'review', 'health', 'pack', 'dev',
+                'scaffold', 'offline')
+
+
+def render_subcommand_lines() -> str:
+    """The `--help-all` subcommand rows, generated from COMMANDS."""
+    return '\n'.join(f'  {COMMANDS[n].usage:<26}  {COMMANDS[n].summary}' for n in EPILOG_ORDER)
 
 
 _DESC_SORT = re.compile(r'^-[a-zA-Z_][a-zA-Z0-9_]*$')

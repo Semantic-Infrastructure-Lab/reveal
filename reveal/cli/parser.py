@@ -141,23 +141,10 @@ stdin: Reads file paths from stdin (one per line) - works with find, git, ls, et
 
 def _build_subcommands_section() -> str:
     """Build the subcommands reference section."""
-    return '''
+    from .invocation import render_subcommand_lines
+    return f'''
 Subcommands (reveal <subcommand> --help for details):
-  reveal overview [path]      One-glance dashboard: languages, quality, hotspots, recent git
-  reveal architecture [path]  Architectural brief: entry points, core abstractions, risks
-  reveal deps [path]          Dependency health: external packages, circular deps, unused imports
-  reveal hotspots [path]      High-complexity files and functions that need attention
-  reveal contracts [path]     Architectural seams: ABCs, Protocols, TypedDicts, dataclasses
-  reveal surface [path]       External surfaces: CLI, HTTP routes, env vars, network, FS writes
-  reveal testability [path]   Test patch pressure joined with production boundary fan-out
-  reveal trace --from FUNC    Walk call graph from a named entry; depth-indented narrative
-  reveal check <path>         Run quality rules on a file or directory
-  reveal review <path>        Assess quality + structural changes before a PR merge
-  reveal health [path]        Unified health: code rules + SSL + databases + DNS
-  reveal pack <path>          Token-budgeted context snapshot for LLM consumption
-  reveal dev <command>        Scaffold adapters/analyzers/rules; inspect .reveal.yaml
-  reveal scaffold <kind>      (alias of `reveal dev new-*` — prefer `reveal dev`)
-  reveal offline              Pre-download tree-sitter grammars for offline/air-gapped use
+{render_subcommand_lines()}
 
 Discovery (find what reveal can do):
   reveal --adapters           List all URI adapters (env://, ast://, git://, claude://, ...)
