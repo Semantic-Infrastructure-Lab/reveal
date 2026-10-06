@@ -71,3 +71,21 @@ def test_no_limit_has_no_window(repo):
     data = json.loads(run(repo, 'git://.?type=ownership', 'json').stdout)
     assert cuts(data) == []
     assert 'scope' not in data
+
+
+def test_window_holds_the_newest_commits_among_same_second_ones(tmp_path):
+    """BACK-1426 applied to the window: which commits fall inside it follows `git log`
+    order, not an arbitrary order among commits made in one second."""
+    n = 8
+    for i in range(1, n + 1):
+        env = {**os.environ, 'GIT_AUTHOR_NAME': f"a{i}", 'GIT_AUTHOR_EMAIL': f"a{i}@t",
+               'GIT_COMMITTER_NAME': 't', 'GIT_COMMITTER_EMAIL': 't@t',
+               'GIT_AUTHOR_DATE': '2026-01-01T00:00:00', 'GIT_COMMITTER_DATE': '2026-01-01T00:00:00'}
+        if i == 1:
+            subprocess.run(['git', 'init', '-q'], cwd=tmp_path, check=True, env=env, timeout=60)
+        (tmp_path / 'f.txt').write_text(f"{i}\n", encoding='utf-8')
+        subprocess.run(['git', 'add', 'f.txt'], cwd=tmp_path, check=True, env=env, timeout=60)
+        subprocess.run(['git', 'commit', '-qm', f"c{i}"], cwd=tmp_path, check=True,
+                       capture_output=True, env=env, timeout=60)
+    data = json.loads(run(tmp_path, 'git://.?type=ownership&limit=3', 'json').stdout)
+    assert sorted(a['name'] for a in data['authors']) == ['a6', 'a7', 'a8']
