@@ -149,9 +149,7 @@ MISSING_URIS = {
     'trace': 'trace://nonexistent_zz_1513?from=main',
 }
 
-KNOWN_VIOLATIONS = {
-    ('subcommand', 'check'): 'BACK-1545',
-}
+KNOWN_VIOLATIONS: dict = {}
 
 # How to run each `reveal <name>` against the fixture (invariant 6). Every COMMANDS entry
 # needs a row here or a NOT_A_QUERY reason.
@@ -179,6 +177,7 @@ NOT_A_QUERY = {
 # Flags that make the small fixture cut a list, so the text-disclosure half of invariant 6
 # is not vacuously green.
 SUBCOMMAND_CUT_ARGV = {
+    'check': ['--max-items', '1'],
     'hotspots': ['--top', '1', '--min-complexity', '1'],
 }
 
