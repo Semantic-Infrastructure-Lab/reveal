@@ -12,6 +12,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import CodexRenderer
 from ...utils.query import parse_query_params
+from ...utils.query_parser import ParamSpec, param_schema, whole_number
 from .handlers.sessions import (
     list_sessions as _h_list_sessions,
     filter_sessions as _h_filter_sessions,
@@ -45,6 +46,10 @@ _UUID_RE = re.compile(
     r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     r'|^[0-9a-f]{7,}$'
 )
+
+# Snippets kept per session by ?search=; the cut is disclosed with this knob's name (BACK-1384).
+_MATCHES = ParamSpec('matches', 'integer', 'Snippets kept per session by ?search= (0 = all)',
+                     3, whole_number, ('matches=10', 'matches=0'), minimum=0, zero_policy='all')
 
 _USER_FILTER = "(thread_source IS NULL OR thread_source = 'user') AND archived = 0"
 
@@ -248,7 +253,8 @@ class CodexAdapter(ResourceAdapter):
                 since = self.query_params.get('since', '')
                 until = self.query_params.get('until', '')
             if search:
-                return _h_search_sessions(self.CODEX_DB, search, since=since, until=until)
+                return _h_search_sessions(self.CODEX_DB, search, _MATCHES.read(self.query_params),
+                                          since=since, until=until)
             if filter_term:
                 return _h_filter_sessions(self.CODEX_DB, filter_term, since=since, until=until)
             return _h_list_sessions(self.CODEX_DB)
@@ -526,6 +532,7 @@ class CodexAdapter(ResourceAdapter):
             'query_params': {
                 'filter': 'Metadata filter across sessions by title/first-message substring (SQLite index, no JSONL scan) — codex://sessions/?filter=<term>. Renamed from ?search= (BACK-947) to match claude://\'s filter/search split.',
                 'search': 'Full-text search across all session JSONL files — codex://sessions/?search=<term>. Renamed from ?content= (BACK-947) to match claude://\'s ?search= meaning content search.',
+                **param_schema([_MATCHES]),
                 'since': 'Lower-bound date filter (ISO 8601 or "today") on session updated_at — codex://sessions/?filter=<term>&since=<date> or ?search=<term>&since=<date>',
                 'until': 'Upper-bound date filter (ISO 8601) on session updated_at, pairs with ?since= — codex://sessions/?filter=<term>&since=<date>&until=<date>',
                 'last': 'Last agent message only, for fast session recovery — codex://<UUID>?last',

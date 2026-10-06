@@ -110,6 +110,7 @@ reveal 'codex://memories/pipeline'
 | `codex://sessions/?search=<term>` | Full-text JSONL search across all sessions |
 | `codex://sessions/?search=<term>&since=<date>` | Full-text search scoped to sessions updated on/after `<date>` (ISO 8601 or `today`) |
 | `codex://sessions/?search=<term>&since=<date>&until=<date>` | Full-text search scoped to a date range |
+| `codex://sessions/?search=<term>&matches=<n>` | Snippets kept per session (default 3, `0` keeps all); a cut is reported as a truncation naming `?matches=N` |
 | `codex://sessions/?filter=<term>&since=<date>&until=<date>` | Metadata filter, same date scoping |
 
 > **Renamed (BACK-947)**: `?search=` used to mean the SQLite metadata match and `?content=` the full-text scan. They're now `?filter=` (metadata) and `?search=` (content) — matching `claude://`'s established meaning, where `?search=` always means "search the content." The old names are not aliased; using them surfaces via reveal's unknown-query-param warning.

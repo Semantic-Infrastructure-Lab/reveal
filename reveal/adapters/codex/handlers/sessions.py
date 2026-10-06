@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
-from ....utils.results import ResultBuilder
+from ....utils.results import ResultBuilder, note_truncation
 from ..analysis.normalize import normalize_record
 
 _USER_FILTER = "(thread_source IS NULL OR thread_source = 'user') AND archived = 0"
@@ -149,6 +149,22 @@ def _message_snippet(line: str, term: str) -> Optional[Dict[str, Any]]:
     }
 
 
+def _collect_snippets(content: str, raw_forms: set, term: str, cap: int) -> tuple:
+    """(kept snippets, every match found) in one rollout; cap <= 0 keeps them all."""
+    snippets: List[Dict[str, Any]] = []
+    found = 0
+    for line in content.splitlines():
+        line_lower = line.lower()
+        if not any(form in line_lower for form in raw_forms):
+            continue
+        snippet = _message_snippet(line, term)
+        if snippet:
+            found += 1
+            if cap <= 0 or len(snippets) < cap:
+                snippets.append(snippet)
+    return snippets, found
+
+
 def search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3,
                      since: str = '', until: str = '') -> Dict[str, Any]:
     """Full-text search across session JSONL content.
@@ -159,7 +175,8 @@ def search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3,
     before scanning JSONL — BACK-945.
 
     Scans agent_message and user_message payloads in each session's rollout file.
-    Returns matched sessions with up to max_matches_per_session snippets each.
+    Returns matched sessions with up to max_matches_per_session snippets each
+    (0 keeps every snippet); a cut is disclosed through note_truncation (BACK-1384).
     """
     since = _resolve_date_bound(since)
     until = _resolve_date_bound(until)
@@ -201,6 +218,7 @@ def search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3,
     # decoded text, so an encoded form only widens the prefilter.
     raw_forms = {term, json.dumps(term, ensure_ascii=False)[1:-1], json.dumps(term)[1:-1]}
     matched: List[Dict[str, Any]] = []
+    found_total = 0
 
     for row in rows:
         d = _row_to_dict(row)
@@ -219,19 +237,10 @@ def search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3,
         if not any(form in lowered for form in raw_forms):
             continue
 
-        # Parse lines and collect matching message snippets
-        snippets: List[Dict[str, Any]] = []
-        for line in content.splitlines():
-            if len(snippets) >= max_matches_per_session:
-                break
-            line_lower = line.lower()
-            if not any(form in line_lower for form in raw_forms):
-                continue
-            snippet = _message_snippet(line, term)
-            if snippet:
-                snippets.append(snippet)
+        snippets, found = _collect_snippets(content, raw_forms, term, max_matches_per_session)
 
         if snippets:
+            found_total += found
             matched.append({
                 'id': d['id'],
                 'title': d.get('title', ''),
@@ -241,4 +250,7 @@ def search_sessions(db_path: Path, query: str, max_matches_per_session: int = 3,
                 'match_count': len(snippets),
             })
 
-    return {**base, 'sessions': matched, 'total': len(matched)}
+    result = {**base, 'sessions': matched, 'total': len(matched)}
+    note_truncation(result, 'matches', sum(len(m['matches']) for m in matched), found_total,
+                    'matches_per_session', hint='raise ?matches=N (0 keeps every match)')
+    return result
