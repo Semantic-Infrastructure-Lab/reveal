@@ -63,10 +63,12 @@ def _write_jsonl(path: Path, records: list) -> None:
     path.write_text(''.join(json.dumps(r) + '\n' for r in records), encoding='utf-8')
 
 
-def build_claude_home(home: Path) -> Path:
-    """Create ``home/.claude`` and ``home/.claude.json``; return the ``.claude`` directory."""
+def build_claude_home(home: Path, extra_sessions: tuple = ()) -> Path:
+    """Create ``home/.claude`` and ``home/.claude.json``; return the ``.claude`` directory.
+
+    ``extra_sessions`` are more recorded sessions, under the names other docs use."""
     claude = home / '.claude'
-    for name in SESSION_NAMES:
+    for name in SESSION_NAMES + tuple(extra_sessions):
         _write_jsonl(claude / 'projects' / PROJECT_DIR / f'{name}.jsonl', _session_records(name))
     _write_jsonl(claude / 'history.jsonl', [
         {'display': 'fix validate_token', 'timestamp': 1774692000000, 'project': '/home/user/frono',

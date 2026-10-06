@@ -14,8 +14,10 @@ and fails when one
 
 Placeholders (``<repo>``, ``src``, ``/path/to/app.db``) are mapped onto the fixture. Recipes
 that need a live host, a server's config or a recorded session are skipped with the reason;
-AGENT_HELP.md and guides are inventoried, with discovery commands executed;
-target-specific commands remain explicit named-fixture skips. Violations
+AGENT_HELP.md and guides are inventoried, with discovery commands executed; target-specific
+commands run literally in ``tests/doc_command_fixture.py``, a tree built under the names the
+docs use, and the ones it can't hold (a host, a jq pipeline, a fake commit hash, a path it
+lacks) stay skips that name what they need -- this is not complete coverage. Violations
 that exist today are strict xfails naming their task, so a fix fails the run until its entry
 is deleted. Text recipes run too, with positive matches for nine result families;
 registered grep pipelines run without a shell, and multiline doc arguments stay intact.
@@ -59,14 +61,29 @@ PLACEHOLDERS = (
     ('config.json', 'proj/data.json'),
 )
 
-# A subcommand's own findings exit (its --help states it); anything else must exit 0.
-FINDINGS_EXITS = {'review': {0, 1}}
+# A subcommand's own findings exit (its --help states it); anything else must exit 0. review's
+# 2 is also "invalid target", which prints an Error line the stderr check catches.
+FINDINGS_EXITS = {'review': {0, 1, 2}, 'check': {0, 1}, 'hotspots': {0, 1}, 'deps': {0, 1},
+                  'health': {0, 1, 2}}
+# Flag forms with the same findings exit: --check is `reveal check` (1 = issues found);
+# --validate-schema documents 1 = validation failures (SCHEMA_VALIDATION_HELP.md "Exit Codes").
+FINDINGS_FLAGS = {'--check': {0, 1}, '--validate-schema': {0, 1}}
+
+
+def _findings_exits(argv):
+    exits = set(FINDINGS_EXITS.get(argv[0], {0}))
+    for flag, codes in FINDINGS_FLAGS.items():
+        if flag in argv:
+            exits |= codes
+    return exits
 
 # A stderr line that reports a problem. Progress lines (review's "Scanning complexity…")
 # are not one.
 PROBLEM_LINE = re.compile(r'(?i)\b(error|warning|note|no effect|unknown|not recognized|ignored)\b')
-# stderr lines that are the test environment talking, not the recipe.
-ENVIRONMENT_NOISE = ('not yet downloaded',)
+# stderr lines that are the test environment talking, not the recipe -- or a standing
+# disclosure true of every run of that command (pack without --architecture/--focus, BACK-1006).
+ENVIRONMENT_NOISE = ('not yet downloaded',
+                     'fan-in and graph-relevance signals were not computed (pass --architecture')
 # meta.warnings that mean the query itself drifted. The standing disclosures (W-CALLS-1
 # "dynamic dispatch is not resolved", complexity_is_unweighted) are true of every run.
 DRIFT_WARNING = re.compile(r'^unknown_')
@@ -149,14 +166,15 @@ def _pipeline(query):
     return stages
 
 
-def _assert_text_as_written(harness, query):
+def _assert_text_as_written(harness, query, literal=False):
+    """``literal``: run the words as written (the named fixture has the names), no placeholder map."""
     stages = _pipeline(query)
-    argv = _argv(query)
+    argv = stages[0][1:] if literal else _argv(query)
     code, out, err, _ = harness.run_subcommand(argv[0], *argv[1:])
     problems = [line for line in err.splitlines()
                 if PROBLEM_LINE.search(line) and not any(n in line for n in ENVIRONMENT_NOISE)]
     assert not problems, f"{query}: text stderr {problems[:3]}"
-    assert code in FINDINGS_EXITS.get(argv[0], {0}), f"{query}: text exit {code}"
+    assert code in _findings_exits(argv), f"{query}: text exit {code}"
     assert out.strip(), f"{query}: text renderer printed nothing"
     for stage in stages[1:]:
         assert stage[0] == 'grep', f'Pipeline stage needs an explicit fixture: {stage}'
@@ -176,7 +194,7 @@ def _assert_runs_as_written(harness, query, output_type):
     problems = [line for line in err.splitlines()
                 if PROBLEM_LINE.search(line) and not any(n in line for n in ENVIRONMENT_NOISE)]
     assert not problems, f"{query}: stderr {problems[:3]}"
-    assert code in FINDINGS_EXITS.get(argv[0], {0}), f"{query}: exit {code}"
+    assert code in _findings_exits(argv), f"{query}: exit {code}"
     payload = json.loads(out)
     warnings = [w for w in (payload.get('meta') or {}).get('warnings') or []
                 if isinstance(w, dict) and DRIFT_WARNING.match(str(w.get('type', '')))]
@@ -390,34 +408,45 @@ def _shell_reveal_commands(block):
     assert not pending, f'Unterminated documented command: {pending}'
 
 
-def _documentation_commands():
+DISCOVERY_FLAGS = {'--adapters', '--languages', '--discover', '--agent-help', '--help',
+                   '--help-all', '--profiles', '--language-info', '--capabilities', '--explain-file'}
+
+
+# A command the doc itself shows failing: `# not valid` beside it, or its `# Error:` output below.
+_DOCUMENTED_FAILURE = re.compile(r'#.*\b(not valid|invalid)\b|^\s*# Error\b', re.IGNORECASE)
+
+
+def _documented_commands(docs=None):
+    """(source file name, line as written, shell-split tokens, shown failing) per documented command."""
     from pathlib import Path
     import reveal
-    docs = Path(reveal.__file__).parent / 'docs'
-    sources = [docs / 'AGENT_HELP.md', *sorted((docs / 'guides').glob('*.md'))]
-    params = []
-    discovery_flags = {'--adapters', '--languages', '--discover', '--agent-help',
-                       '--help', '--help-all', '--profiles', '--language-info',
-                       '--capabilities', '--explain-file'}
-    for source in sources:
+    docs = docs or Path(reveal.__file__).parent / 'docs'
+    for source in [docs / 'AGENT_HELP.md', *sorted((docs / 'guides').glob('*.md'))]:
         for block in re.findall(r'```(?:bash|sh|shell)\n(.*?)```', source.read_text(encoding='utf-8'), re.S):
             for line, tokens in _shell_reveal_commands(block):
-                if not tokens:
-                    continue
-                query = shlex.join(tokens)
-                marks = []
-                target = tokens[1]
-                if target.startswith('help://') or target in discovery_flags:
-                    for key, value in (('<topic>', 'ast'), ('<adapter>', 'ast'),
-                                       ('<task>', 'codebase'), ('<lang>', 'python'),
-                                       ('<file>', 'proj/app.py')):
-                        query = query.replace(key, value)
-                    if any(token in query for token in ('<', '$', '|')):
-                        marks.append(pytest.mark.skip(reason='discovery template needs explicit shell/content fixture'))
-                else:
-                    marks.append(pytest.mark.skip(reason='target-specific documentation command needs named fixture (BACK-1365)'))
-                params.append(pytest.param(query, marks=marks,
-                    id=f'{source.name}:{len(params)}:{line.strip()}'))
+                if tokens:
+                    after = block.split(line, 1)[-1].lstrip('\n').split('\n', 1)[0]
+                    failing = bool(_DOCUMENTED_FAILURE.search(line) or _DOCUMENTED_FAILURE.match(after))
+                    yield source.name, line, tokens, failing
+
+
+def _is_discovery(tokens):
+    return tokens[1].startswith('help://') or tokens[1] in DISCOVERY_FLAGS
+
+
+def _documentation_commands():
+    params = []
+    for source, line, tokens, _ in _documented_commands():
+        if not _is_discovery(tokens):
+            continue
+        query = shlex.join(tokens)
+        marks = []
+        for key, value in (('<topic>', 'ast'), ('<adapter>', 'ast'), ('<task>', 'codebase'),
+                           ('<lang>', 'python'), ('<file>', 'proj/app.py')):
+            query = query.replace(key, value)
+        if any(token in query for token in ('<', '$', '|')):
+            marks.append(pytest.mark.skip(reason='discovery template needs explicit shell/content fixture'))
+        params.append(pytest.param(query, marks=marks, id=f'{source}:{len(params)}:{line.strip()}'))
     return params
 
 
@@ -429,7 +458,209 @@ def test_documentation_discovery_runs_as_written(harness, command):
 def test_documentation_command_inventory_is_not_vacuous():
     params = _documentation_commands()
     runnable = [p for p in params if not any(m.name == 'skip' for m in p.marks)]
-    assert len(params) > 200 and len(runnable) > 40
+    assert len(params) > 40 and len(runnable) > 40
+
+
+# Fifth source: the target-specific commands (`reveal src/processor.py process_batch --varflow
+# results`, `reveal 'git://.?author=John'`) run literally in tests/doc_command_fixture.py, a
+# tree built under the names the docs use. A command runs only when every path, ref and
+# session it names exists there; the rest stay skips that say what they need.
+
+SUBCOMMANDS = {'check', 'review', 'pack', 'hotspots', 'overview', 'deps', 'surface',
+               'architecture', 'contracts', 'trace', 'testability', 'health', 'dev', 'scaffold'}
+# Path-less schemes: their target is the environment, the interpreter or the recorded homes.
+PATHLESS_SCHEMES = ('env://', 'python://', 'reveal://', 'adapter://', 'help://', 'claude://',
+                    'codex://')
+SHELL_OPERATORS = {'>', '>>', '||', '&&', ';', '2>/dev/null', '2>&1'}
+# Depend on what the interpreter running the suite has installed (as SCHEMA_UNRUNNABLE).
+INTERPRETER_DEPENDENT = ('python://packages/', 'python://module/', 'python://venv')
+_URI = re.compile(r'^([a-z]+)://(.*)$')
+# A ref as the docs write it: a branch, a tag, HEAD~N, or a commit hash.
+_REF_PARAM = re.compile(r'(?:^|&)(?:ref|since|hash|ignore)=([^&]+)')
+# Two docs give one name two incompatible shapes; the fixture can hold only one of them.
+FIXTURE_CONFLICTS = {
+    'data.json/users': 'data.json is a root array here, for the ?filter examples',
+    'src/processor.py MyClass.process_batch': 'a method of the same name makes the bare '
+                                              'process_batch the docs use 11 times ambiguous',
+}
+
+
+def _fixture_names():
+    from doc_command_fixture import BRANCHES, GIT_COMMITS, TAGS, binary_paths, named_paths
+    refs = {'HEAD', *BRANCHES, *TAGS} | {f'HEAD~{n}' for n in range(1, GIT_COMMITS)}
+    return named_paths() | binary_paths(), refs
+
+
+def _missing_path(path, paths):
+    path = path.removeprefix('./')
+    path = path.rstrip('/') or '.'
+    return None if path in paths else path
+
+
+def _missing_in_uri(uri, paths, refs):
+    """The first path or ref a URI names that the fixture lacks, else None."""
+    scheme, rest = _URI.match(uri).groups()
+    resource, _, query = rest.partition('?')
+    missing = [r for r in _REF_PARAM.findall(query)
+               if r not in refs and r != 'off' and not re.fullmatch(r'\d{4}-\d{2}-\d{2}', r)]
+    if missing:
+        return f'ref {missing[0]}'
+    if scheme == 'diff':
+        for side in re.split(r':(?!//)', resource):
+            found = _missing_in_uri(side if _URI.match(side) else f'file://{side}', paths, refs)
+            if found:
+                return found
+        return None
+    if scheme == 'git':
+        if '@' in resource:
+            resource, ref = resource.split('@', 1)
+            if ref not in refs:
+                return f'ref {ref}'
+        if uri.startswith('git://') and '/' in resource and resource.split('/')[0] in refs:
+            resource = resource.split('/', 1)[1]  # git://HEAD~1/src/ inside diff://
+    if scheme == 'calls' and ':' in resource:
+        resource = resource.split(':', 1)[0]
+    if scheme in ('json', 'sqlite', 'xlsx'):  # file, then a path inside it
+        parts = resource.split('/')
+        for n in range(len(parts), 0, -1):
+            if '/'.join(parts[:n]) in paths:
+                return None
+    return _missing_path(resource or '.', paths)
+
+
+def _named_fixture_skip(tokens):
+    """Why a target-specific documented command cannot run in the named fixture, else None."""
+    stages, stage = [[]], tokens
+    for token in tokens:
+        if token == '|':
+            stages.append([])
+        else:
+            stages[-1].append(token)
+    stage = stages[0]
+    tools = sorted({s[0] for s in stages[1:] if s and s[0] != 'grep'})
+    if tools:
+        return f'pipes into {", ".join(tools)}: needs that tool and its expected output'
+    if SHELL_OPERATORS & set(stage) or any(t.startswith(('>', '$')) or '$' in t for t in stage):
+        return 'shell redirection, operator or variable'
+    if any(re.search(r'<[A-Za-z_-]+>', t) for t in stage):
+        return '<placeholder> template'
+    if any(scheme in t for t in stage for scheme in NEEDS_HOST) or any(
+            t.endswith('.conf') or t.startswith(('/etc/', '@')) for t in stage):
+        return 'needs a live host or server files'
+    if any(t.startswith(INTERPRETER_DEPENDENT) or t == 'python://packages' and len(stages) > 1
+           for t in stage):
+        return "depends on the suite interpreter's installed packages"
+    if '://' not in stage[1] and re.search(r'[*?]', stage[1]):
+        return 'an unquoted glob the shell expands'
+    conflict = next((why for key, why in FIXTURE_CONFLICTS.items() if key in ' '.join(stage)), None)
+    if conflict:
+        return f'fixture conflict: {conflict}'
+    if stage[1] in ('dev', 'scaffold') and len(stage) > 2 and stage[2] != 'inspect-config':
+        return 'writes generated files into the tree'
+    paths, refs = _fixture_names()
+    if stage[1] in SUBCOMMANDS:
+        args = [t for t in stage[2:3] if not t.startswith('-')]
+        targets = []
+        for arg in args or ['.']:
+            if '..' in arg and stage[1] == 'review':
+                bad = [r for r in arg.split('..') if r not in refs]
+                if bad:
+                    return f'names ref {bad[0]}, which the named fixture lacks'
+            elif _URI.match(arg) or stage[1] not in ('dev', 'scaffold'):
+                targets.append(arg)
+        for flag in ('--against', '--since'):
+            if flag in stage and stage[stage.index(flag) + 1] not in refs:
+                return f'names ref {stage[stage.index(flag) + 1]}, which the named fixture lacks'
+        if '--from' in stage and ':' in stage[stage.index('--from') + 1]:
+            targets.append(stage[stage.index('--from') + 1].split(':', 1)[0])
+    elif stage[1].startswith('-'):
+        targets = [t for t in stage[2:] if not t.startswith('-') and ('/' in t or re.search(r'\.\w+$', t))]
+    else:
+        targets = [stage[1]]
+    for target in targets:
+        if target.startswith(PATHLESS_SCHEMES):
+            continue
+        found = _missing_in_uri(target, paths, refs) if _URI.match(target) else _missing_path(target, paths)
+        if found:
+            return f'names {found}, which the named fixture lacks'
+    return None
+
+
+def _named_fixture_commands(docs=None):
+    """Each distinct target-specific command once, under the first doc that shows it."""
+    seen = {}
+    for source, line, tokens, failing in _documented_commands(docs):
+        if not _is_discovery(tokens):
+            seen.setdefault(shlex.join(tokens), (source, tokens, failing))
+    params = []
+    for query, (source, tokens, failing) in seen.items():
+        reason = 'the doc shows it failing' if failing else _named_fixture_skip(tokens)
+        marks = [pytest.mark.skip(reason=f'named fixture: {reason}')] if reason else []
+        if query in NAMED_KNOWN_VIOLATIONS:
+            marks.append(pytest.mark.xfail(strict=True, reason=NAMED_KNOWN_VIOLATIONS[query]))
+        params.append(pytest.param(query, marks=marks, id=f'{source}:{query}'))
+    return params
+
+
+# command -> task naming why it fails today. Strict xfail: a fix fails the run until deleted.
+# Untracked entries name the defect; the manager files them (wave1-c-docgate report).
+_STATS_RANGE = ("stats:// rejects the lo..hi range QUERY_SYNTAX_GUIDE documents as universal "
+                "('Unknown query param'), while lines>100 works (untracked)")
+NAMED_KNOWN_VIOLATIONS: dict = {
+    "reveal 'ast://src?sort=name' --sort complexity": (
+        "the no-effect note says ast:// does not support --sort, but it does: the URI's sort= "
+        "wins (UX_GUIDE.md) (untracked)"),
+    "reveal 'stats://src/?complexity=5..15'": _STATS_RANGE,
+    "reveal 'stats://src/?lines=100..500'": _STATS_RANGE,
+    "reveal 'stats://src/?lines=100..500&sort=-complexity'": _STATS_RANGE,
+    "reveal 'stats://src/?lines=50..100&sort=-complexity'": _STATS_RANGE,
+}
+
+
+@pytest.fixture(scope='module')
+def named_harness(tmp_path_factory):
+    from doc_command_fixture import CLAUDE_SESSIONS, build_doc_command_tree, build_session_extras
+    root = build_doc_command_tree(tmp_path_factory.mktemp('doc_commands'))
+    build_claude_home(root / 'home', extra_sessions=CLAUDE_SESSIONS)
+    build_codex_home(root / 'home')
+    build_session_extras(root / 'home')
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv('DATABASE_URL', 'postgres://fixture')  # env://DATABASE_URL
+        yield _Harness(root)
+
+
+@pytest.mark.parametrize('command', _named_fixture_commands())
+def test_documentation_command_runs_in_named_fixture(named_harness, command):
+    _assert_text_as_written(named_harness, command, literal=True)
+
+
+def test_named_fixture_inventory_runs_most_and_says_why_it_skips_the_rest():
+    """The skips can't grow silently: most target commands run, and every skip names its need."""
+    params = _named_fixture_commands()
+    skipped = [p for p in params if any(m.name == 'skip' for m in p.marks)]
+    assert len(params) > 1100 and len(params) - len(skipped) > 900, (len(params), len(skipped))
+    assert all(m.kwargs['reason'].startswith('named fixture: ')
+               for p in skipped for m in p.marks if m.name == 'skip')
+
+
+def test_named_fixture_gate_bites(named_harness, tmp_path):
+    """Negative control: a documented command naming an element, flag or path the code doesn't
+    have fails the gate; one the doc marks as failing, or one naming a path the fixture lacks,
+    is a disclosed skip; a correct one passes."""
+    (tmp_path / 'guides').mkdir()
+    (tmp_path / 'AGENT_HELP.md').write_text(
+        '```bash\nreveal app.py process_batch\nreveal app.py no_such_element\n'
+        'reveal app.py process_batch --no-such-flag\nreveal app.py ghost  # not valid\n'
+        'reveal nosuch/app.py main\n```\n', encoding='utf-8')
+    params = {p.values[0]: p.marks for p in _named_fixture_commands(tmp_path)}
+    assert [m.kwargs['reason'] for m in params['reveal app.py ghost']] == ['named fixture: the doc shows it failing']
+    assert [m.kwargs['reason'] for m in params['reveal nosuch/app.py main']] == [
+        'named fixture: names nosuch/app.py, which the named fixture lacks']
+    _assert_text_as_written(named_harness, 'reveal app.py process_batch', literal=True)
+    for broken in ('reveal app.py no_such_element', 'reveal app.py process_batch --no-such-flag'):
+        assert not params[broken]
+        with pytest.raises(AssertionError):
+            _assert_text_as_written(named_harness, broken, literal=True)
 
 
 def test_multiline_documentation_collector():
