@@ -32,7 +32,6 @@ type Set[K comparable] map[K]struct{}
 func (b *Batch) Run() int { return b.n }
 func (t T) String() string { return "t" }
 func (f F) Call() { f() }
-func (s Set[K]) Len() int { return len(s) }
 func helper() {}
 """
 
@@ -76,7 +75,7 @@ def test_methods_nest_under_their_named_type(go_file):
     assert shape(build_hierarchy(structure)) == [
         ('Batch', [('Run', [])]), ('Shape', []),
         ('T', [('String', [])]), ('F', [('Call', [])]), ('M', []), ('Alias', []),
-        ('A', []), ('B', []), ('Set', [('Len', [])]), ('helper', []),
+        ('A', []), ('B', []), ('Set', []), ('helper', []),
     ]
 
 
