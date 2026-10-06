@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Collection, Dict, List, Optional
 from ...core import node_children as _children
-from ...core.treesitter_compat import _zero_arg
+from ...core.treesitter_compat import _zero_arg, iter_tree
 from .node_taxonomy import (
     FOR_NODES, FOR_EXPRESSION_NODES, FOR_EACH_NAME_VALUE_NODES,
     FOR_RANGE_LOOP_NODES, IF_WHILE_NODES, MATCH_EXPRESSION_NODES,
@@ -88,6 +88,12 @@ _DECL_SHAPES: Dict[str, _DeclShape] = {
     # was tracked but mislabeled READ instead of WRITE at its own binding
     # site (BACK-431 tier A real-corpus dogfood audit).
     'enumerator': _DeclShape(positional='_walk_scala_enumerator'),
+    # Go func literal: its parameters bind names inside the literal (BACK-1408).
+    'func_literal': _DeclShape(positional='_walk_func_literal'),
+    # Java `x instanceof T name` / C# `x is T name`: `name` is a pattern binding
+    # (BACK-1408). Without a binding, a plain walk of the children.
+    'instanceof_expression': _DeclShape(positional='_walk_pattern_binding'),
+    'declaration_pattern': _DeclShape(positional='_walk_pattern_binding'),
 }
 
 
@@ -242,10 +248,13 @@ class VarFlowWalker:
             # exclusion for --varflow's direct queries (BACK-431 feature-breadth
             # pass). Compare by position, not object identity — tree-sitter node
             # wrappers are not guaranteed stable across separate _children() calls.
-            skip_positions = {_start_pos(c) for c in skipped}
-            for child in _children(n):
-                if _start_pos(child) not in skip_positions:
-                    self.walk(child, c)
+            skip_positions = {_start_pos(part) for part in skipped}
+            if ntype in _PATTERN_BINDING_KINDS:
+                self._walk_pattern_binding(n, skip_positions)  # C# `is Type name`
+            else:
+                for child in _children(n):
+                    if _start_pos(child) not in skip_positions:
+                        self.walk(child, c)
             return True
 
         return False
@@ -283,10 +292,6 @@ class VarFlowWalker:
             self._walk_for(n, c, 'declarator', 'right')
         elif ntype == 'with_statement':
             self._walk_with(n, c)
-        elif ntype == 'func_literal':
-            self._walk_func_literal(n, c)
-        elif ntype == 'instanceof_expression' and n.child_by_field_name('name') is not None:
-            self._walk_instanceof(n, c)
         elif ntype in IF_WHILE_NODES:
             # Rust's `if`/`if let`/`while` produce `if_expression`/
             # `while_expression`, not `if_statement`/`while_statement`
@@ -600,7 +605,7 @@ class VarFlowWalker:
             if (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) not in processed:
                 self.walk(child, c)
 
-    def _walk_func_literal(self, n: Any, c: str) -> None:
+    def _walk_func_literal(self, n: Any) -> None:
         """Go `func(x string, y int) error { ... }`: the literal's parameters are
         bindings inside it, so their declaration sites are WRITEs, not reads of an
         outer variable (BACK-1408: `rv`/`eventReceivedBesidesAdded` read as
@@ -618,19 +623,19 @@ class VarFlowWalker:
                 for decl in _children(params):
                     for part in _children(decl):
                         if _start_pos(part) not in param_names:
-                            self.walk(part, c)
+                            self.walk(part, 'READ')
             else:
-                self.walk(child, c)
+                self.walk(child, 'READ')
 
-    def _walk_instanceof(self, n: Any, c: str) -> None:
-        """Java `x instanceof T name`: `name` is a pattern binding (a WRITE at that
-        site), not a read of an outer variable (BACK-1408)."""
+    def _walk_pattern_binding(self, n: Any, skip: Collection[Any] = ()) -> None:
+        """Java `x instanceof T name` / C# `x is T name`: `name` is a pattern
+        binding (a WRITE at that site), not a read of an outer variable (BACK-1408)."""
         binding = n.child_by_field_name('name')
         for child in _children(n):
-            if _start_pos(child) == _start_pos(binding):
+            if binding is not None and _start_pos(child) == _start_pos(binding):
                 self.walk(child, 'WRITE')
-            else:
-                self.walk(child, c)
+            elif _start_pos(child) not in skip:
+                self.walk(child, 'READ')
 
     def _walk_with(self, n: Any, c: str) -> None:
         for child in _children(n):
@@ -956,6 +961,18 @@ def _declared_name_node(scope_node: Any) -> Optional[Any]:
     return None
 
 
+# Pattern nodes whose `name` field declares a binding (Java instanceof, C# declaration pattern).
+_PATTERN_BINDING_KINDS = frozenset({'instanceof_expression', 'declaration_pattern'})
+# A type reference parses as a bare identifier-like node in a `type`/`returns` field
+# (C#: `Widget w`, `new Widget()`, `(Gadget)x`, `typeof(Thing)`, `List<Widget>`, `A.B.C`).
+_TYPE_REF_KINDS = frozenset({
+    'identifier', 'generic_name', 'qualified_name', 'array_type', 'nullable_type',
+})
+_TYPE_REF_FIELDS = frozenset({'type', 'returns'})
+# Scala string interpolators defined on StringContext; a custom one (`sql"..."`) resolves
+# through an implicit in scope, so it stays a read.
+_SCALA_STD_INTERPOLATORS = frozenset({'s', 'f', 'raw'})
+
 _GO_STRUCT_TYPE_KINDS = frozenset({'type_identifier', 'qualified_type', 'generic_type'})
 
 
@@ -975,7 +992,7 @@ def _go_names_non_struct_type(literal_type: Any, get_text: Callable) -> bool:
             spec_name = spec.child_by_field_name('name')
             spec_type = spec.child_by_field_name('type')
             if (spec_name is not None and spec_type is not None and get_text(spec_name) == name):
-                return _zero_arg(spec_type, 'kind') != 'struct_type'
+                return bool(_zero_arg(spec_type, 'kind') != 'struct_type')
     return False
 
 
@@ -1013,17 +1030,53 @@ def _start_pos(node: Any) -> tuple:
     return (point.row, point.column)
 
 
+def _csharp_attribute_name_node(node: Any) -> Optional[Any]:
+    """The `Obsolete` in C# `[Obsolete("x")]`. Python's member-access node is also
+    called `attribute`, but it has `object`/`attribute` fields and no `name`."""
+    if _zero_arg(node, 'kind') != 'attribute':
+        return None
+    name = node.child_by_field_name('name')
+    return name if name is not None and _zero_arg(name, 'kind') == 'identifier' else None
+
+
+def _scala_std_interpolator_node(node: Any, get_text: Callable) -> Optional[Any]:
+    """The `s` / `f` / `raw` in `s"hello $name"`: a StringContext method, not a variable."""
+    if _zero_arg(node, 'kind') != 'interpolated_string_expression':
+        return None
+    interpolator = node.child_by_field_name('interpolator')
+    if interpolator is not None and get_text(interpolator) in _SCALA_STD_INTERPOLATORS:
+        return interpolator
+    return None
+
+
+def _type_reference_children(node: Any) -> List[Any]:
+    """Children of `node` that are type references or type-argument lists (C#),
+    which name types, not variables. `Foo<Bar>(a)`'s callee `Foo` is not among
+    them: only the `<Bar>` list is."""
+    found = []
+    for index, child in enumerate(_children(node)):
+        kind = _zero_arg(child, 'kind')
+        if kind == 'type_argument_list' or (
+                kind in _TYPE_REF_KINDS and node.field_name_for_child(index) in _TYPE_REF_FIELDS):
+            found.append(child)
+    return found
+
+
 def _non_variable_children(node: Any, get_text: Callable) -> List[Any]:
     """Children of `node` that look like identifiers but are not variables: a
-    lowercase JSX tag name, a Java annotation's type name and a Go struct-literal
-    field key. The one table both
-    the candidate-name pass and the --varflow walker consult."""
+    lowercase JSX tag name, a Java annotation name, a C# attribute name, a Go
+    struct-literal field key, a Scala `s`/`f`/`raw` interpolator, and C# type
+    references. The one table both the candidate-name pass and the --varflow
+    walker consult."""
     skipped = []
     for found in (_jsx_lowercase_tag_name_node(node, get_text),
                   _java_annotation_name_node(node),
-                  _go_struct_literal_key_node(node, get_text)):
+                  _csharp_attribute_name_node(node),
+                  _go_struct_literal_key_node(node, get_text),
+                  _scala_std_interpolator_node(node, get_text)):
         if found is not None:
             skipped.append(found)
+    skipped.extend(_type_reference_children(node))
     return skipped
 
 
@@ -1038,7 +1091,7 @@ def _register_skip_positions(node: Any, skip_positions: set, get_text: Callable)
             point = _zero_arg(external_name, 'start_position')
             skip_positions.add((point.row, point.column))
     for skipped in _non_variable_children(node, get_text):
-        skip_positions.add(_start_pos(skipped))
+        skip_positions.update(_start_pos(part) for part in iter_tree(skipped))
 
 
 def _member_access_descent(node: Any) -> Optional[List[Any]]:

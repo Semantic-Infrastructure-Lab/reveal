@@ -128,6 +128,7 @@ class B {
         Widget local = new Widget();
         var x = (Gadget)w;
         var t = typeof(Thing);
+        if (w is Gizmo g) { return g.Parts; }
         Foo<Bar>(a);
         return Other.Make<Item>(a) ?? missing;
     }
@@ -139,7 +140,7 @@ class TestCSharpAttributeAndTypeNames:
     def test_attribute_type_and_qualified_names_are_not_inputs(self):
         got = _inputs('c_sharp', CSHARP)
         for name in ('Obsolete', 'Widget', 'Gadget', 'Thing', 'Bar', 'Item',
-                     'Collections', 'Generic', 'List'):
+                     'Collections', 'Generic', 'List', 'Gizmo', 'g'):
             assert name not in got, name
 
     def test_real_reads_stay(self):
