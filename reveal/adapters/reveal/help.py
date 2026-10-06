@@ -86,7 +86,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
     },
     {
         'uri': 'reveal:// --check',
-        'description': 'Run all validation rules (V-series)',
+        'description': 'Run every rule that applies to reveal itself: the V-series plus the general quality rules',
         'cli_flag': '--check',
         'output_type': 'reveal_check'
     },
@@ -130,7 +130,7 @@ _HELP_EXAMPLES = [
     },
     {
         'uri': 'reveal reveal:// --check',
-        'description': 'Run all validation rules (V-series)'
+        'description': 'Run every rule that applies to reveal itself: the V-series plus the general quality rules'
     },
     {
         'uri': 'reveal reveal:// --check --select V001,V002',
@@ -143,7 +143,7 @@ _HELP_WORKFLOWS = [
         'name': 'Validate Reveal Configuration',
         'scenario': 'Before committing changes, ensure reveal is properly configured',
         'steps': [
-            "reveal reveal:// --check                # Run all validation rules",
+            "reveal reveal:// --check                # Run every applicable rule (V-series + general quality rules)",
             "reveal reveal:// --check --select V001  # Check help completeness",
             "reveal reveal://analyzers               # Review registered analyzers",
         ],
@@ -204,7 +204,7 @@ def get_schema() -> Dict[str, Any]:
         'example_queries': _SCHEMA_EXAMPLE_QUERIES,
         'notes': [
             'reveal:// is reveal\'s self-inspection adapter — introspects its own internals',
-            '--check runs V-series validation rules; --only-failures shows just failed checks',
+            '--check runs the V-series and the general rules that apply to reveal itself (--select V for the V-series only); --only-failures shows just failed checks',
             '--select=V001,V002 runs only specified rules (use reveal://rules to list all)',
             'reveal://config shows configuration with source transparency (file, env, default)',
             'Useful for verifying adapter registration, help completeness, and output contract compliance',
@@ -252,6 +252,7 @@ def get_help() -> Dict[str, Any]:
         ],
         'notes': [
             'Validation rules (V-series) check reveal\'s own codebase for completeness',
+            'A bare --check also runs the general rules that apply to reveal\'s own source; rules for other targets are reported as skipped ("target does not match"), which is expected',
             'These rules prevent issues like missing documentation or forgotten test files',
             'Run reveal:// --check as part of CI to catch configuration issues'
         ],

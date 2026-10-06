@@ -36,7 +36,16 @@
 #   scripts/ci-local.sh --matrix --changed  # optional quick check (~1 min): only the test files you added/edited
 #                                           # vs upstream, on every leg incl. the language-pack floor
 #   scripts/ci-local.sh --no-tests          # only the non-pytest CI steps
+#   scripts/ci-local.sh --push              # the whole push gate in one command (~10 min, see below)
 #   scripts/ci-local.sh --fresh             # rebuild the venv from scratch
+#
+# --push is the gate to run when Scott says push (beige-chroma-1006: a green 3.12 run let a fork-only test
+# reach CI red on 3.14 and macOS). In order, stopping at the first failure:
+#   1. --no-tests            the lints, ratchets and reveal:// self-validation (~2 min, mostly install + mypy)
+#   2. (default)             the full suite on 3.12 plus the primary-leg steps
+#   3. --lp 1.8.1            the full suite on the language-pack floor
+#   4. --matrix --changed    the test files you added or edited, on 3.10, 3.12, 3.14 and the floor
+# It cannot run Windows or macOS; read those CI legs after the push.
 #
 # What only --matrix catches (both reached GitHub CI from a green 3.12 run, BACK-1438):
 #   - 3.10: PEP 701 f-strings (same quote nested inside, backslashes in {...}) are 3.12+ syntax
@@ -66,6 +75,7 @@ RUN_TESTS=1
 FRESH=0
 MATRIX=0
 CHANGED=0
+PUSH=0
 PYTEST_TARGETS=(tests/)
 EXPLICIT_TARGETS=0
 while [[ $# -gt 0 ]]; do
@@ -76,11 +86,25 @@ while [[ $# -gt 0 ]]; do
         --fresh) FRESH=1; shift ;;
         --matrix) MATRIX=1; shift ;;
         --changed) CHANGED=1; shift ;;
+        --push) PUSH=1; shift ;;
         --) shift; [[ $# -gt 0 ]] && { PYTEST_TARGETS=("$@"); EXPLICIT_TARGETS=1; }; break ;;
         -h|--help) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit 0 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
+
+# --push: the whole push gate, cheapest first, stopping at the first failure.
+if [[ $PUSH -eq 1 ]]; then
+    [[ $PY_EXPLICIT -eq 1 || -n "$LP_VERSION" || $MATRIX -eq 1 || $CHANGED -eq 1 || $RUN_TESTS -eq 0 || $EXPLICIT_TARGETS -eq 1 || $FRESH -eq 1 ]] \
+        && { echo "--push takes no other options" >&2; exit 2; }
+    for gate in "--no-tests" "" "--lp $FLOOR_LP" "--matrix --changed"; do
+        printf '\n######## push gate: ci-local.sh %s ########\n' "${gate:-(default)}"
+        # shellcheck disable=SC2086  # $gate is a fixed option list, word-split on purpose
+        "$0" $gate || { echo "push gate FAILED at: ci-local.sh ${gate:-(default)}" >&2; exit 1; }
+    done
+    printf '\nPush gate passed. Windows and macOS legs still only run on GitHub: read all 15 jobs after the push.\n'
+    exit 0
+fi
 
 # --changed: pytest targets = test files added/edited vs upstream (committed, staged, unstaged, new).
 # It catches what a NEW test does on an old dependency (BACK-1406's helper, red only on the language-pack
@@ -226,8 +250,9 @@ if [[ $PRIMARY -eq 1 ]]; then
     "$PY" scripts/check_complexity.py 2>&1 | tee -a "$LOG" | tail -20
     [[ ${PIPESTATUS[0]} -eq 0 ]] || fail "complexity ratchet (see scripts/check_complexity.py)"
 
-    step "Reveal self-validation (V-series)"
-    "$VENV/bin/reveal" reveal:// --check --select V >>"$LOG" 2>&1 || fail "V-series self-validation"
+    # Bare --check, not --select V: also runs the general rules (C901, D001, E501, ...) over reveal's own source.
+    step "Reveal self-validation (reveal:// --check)"
+    "$VENV/bin/reveal" reveal:// --check >>"$LOG" 2>&1 || { tail -12 "$LOG"; fail "reveal:// --check self-validation"; }
 
     # The baseline is keyed to the maintainer mypy (system python3, as
     # pre-release-check.sh runs it) -- not the venv's eagerly-upgraded one, whose

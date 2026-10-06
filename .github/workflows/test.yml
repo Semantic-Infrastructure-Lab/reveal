@@ -89,7 +89,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         shell: bash
         run: |
-          reveal reveal:// --check --select V
+          reveal reveal:// --check
 
       - name: B006 silent-exception-handler regression gate (dogfooding)
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
