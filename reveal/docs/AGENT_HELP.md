@@ -4536,15 +4536,17 @@ Need to inspect code?
 ├─ Unknown file? → reveal file.py
 ├─ Know function name? → reveal file.py "function_name"
 ├─ Find by pattern? → reveal 'ast://path?name=pattern*'
-├─ Find complex code? → reveal 'ast://path?complexity>8'
+├─ Find complex code? → reveal 'ast://path?complexity>10'
 ├─ Check quality? → reveal file.py --check
 └─ Read everything? → (Are you sure? Try reveal first!)
 
 Need to search text?
 ├─ In code (functions/classes)? → reveal 'ast://?name=*pattern*'
 ├─ In markdown (sections)? → reveal file.md "section name"
-├─ Across multiple files? → reveal 'ast://path?name=*pattern*'
+├─ Across multiple files? → reveal path/ --grep 'pattern'
 └─ Non-code text/logs? → Use grep (OK!)
+
+Something else? → reveal help://quick (every intent, one line each)
 ```
 
 ---
