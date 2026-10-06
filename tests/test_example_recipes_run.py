@@ -21,6 +21,8 @@ lacks) stay skips that name what they need -- this is not complete coverage. Vio
 that exist today are strict xfails naming their task, so a fix fails the run until its entry
 is deleted. Text recipes run too, with positive matches for nine result families;
 registered grep pipelines run without a shell, and multiline doc arguments stay intact.
+Filter recipes, schema examples and bare ast:// / markdown:// doc commands are held to their
+own query: every row satisfies its predicates, in its sort= order, within its limit=.
 """
 
 import json
@@ -128,6 +130,7 @@ def harness(tmp_path_factory):
     build_codex_home(root / 'home')
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv('DB_RECIPE_FIXTURE', 'fixture-db')
+        mp.setenv('DATABASE_URL', 'postgres://fixture')  # env://DATABASE_URL examples
         yield _Harness(root)
 
 
@@ -217,10 +220,88 @@ def _assert_positive_claim(query, payload):
         assert payload.get(field), f'{query}: positive fixture matched nothing in {field}'
 
 
+# What a filter recipe's description claims ("Locate high-complexity functions") is what its own
+# query states (complexity>15): every row satisfies each predicate, rows come in the sort=
+# order, and limit= caps them (BACK-1611). Checked for the families whose rows carry the
+# filtered field; a query naming any other key is not claim-checked (see the inventory test).
+_PREDICATE = re.compile(r'^([a-z_-]+)(~=|>=|<=|=|>|<)(.+)$')
+_AST_FIELDS = {'name': 'name', 'type': 'category', 'complexity': 'complexity', 'lines': 'line_count'}
+_AST_TYPES = {'function': 'functions', 'class': 'classes', 'method': 'methods'}
+_MARKDOWN_FIELDS = {'type': 'type', 'status': 'status'}
+_IGNORED_KEYS = {'explain'}
+_SORT_FIELDS = {'name': 'name', 'lines': 'line_count', 'complexity': 'complexity',
+                'modified': 'modified'}
+
+
+def _markdown_body(root, row):
+    text = (root / row['path']).read_text(encoding='utf-8')
+    return text.split('---', 2)[2] if text.startswith('---') else text
+
+
+def _row_matches(family, key, op, value, row, root):
+    import fnmatch
+    if family == 'markdown_query' and key == 'body-contains':
+        return value.lower() in _markdown_body(root, row).lower()
+    actual = row.get((_AST_FIELDS if family == 'ast_query' else _MARKDOWN_FIELDS)[key])
+    if key == 'type' and family == 'ast_query':
+        value = _AST_TYPES.get(value, value)
+    if op == '~=':
+        return re.search(value, str(actual)) is not None
+    if op == '=' and re.fullmatch(r'\d+\.\.\d+', value):  # lo..hi, inclusive
+        low, high = value.split('..')
+        return actual is not None and int(low) <= float(actual) <= int(high)
+    if op == '=':
+        return fnmatch.fnmatch(str(actual), value) if '*' in value else str(actual) == value
+    return actual is not None and {'>': float.__gt__, '<': float.__lt__, '>=': float.__ge__,
+                                   '<=': float.__le__}[op](float(actual), float(value))
+
+
+def _claim_violations(uri, payload, root):
+    """Rows that contradict the query's own predicates, or None when it is not claim-checkable."""
+    family = payload.get('type')
+    fields = {'ast_query': _AST_FIELDS, 'markdown_query': {**_MARKDOWN_FIELDS, 'body-contains': 0}}
+    if family not in fields or '?' not in uri:
+        return None
+    rows, problems, predicates, sort, limit = payload.get('results') or [], [], [], None, None
+    for part in uri.split('?', 1)[1].split('&'):
+        if part in _IGNORED_KEYS:
+            continue
+        match = _PREDICATE.match(part)
+        if not match:
+            return None  # a flag (?!topics, ?circular) this checker has no reading of
+        key, op, value = match.groups()
+        if key == 'sort' and value.lstrip('-') in _SORT_FIELDS:
+            sort = value
+        elif key == 'limit' and value.isdigit():
+            limit = int(value)
+        elif key in fields[family]:
+            predicates.append((key, op, value))
+        else:
+            return None
+    for row in rows:
+        problems += [f"{row.get('name') or row.get('path')}: not {k}{o}{v}"
+                     for k, o, v in predicates if not _row_matches(family, k, o, v, row, root)]
+    if sort:  # rows without the field (a class has no complexity) come last either way
+        keys = [row.get(_SORT_FIELDS[sort.lstrip('-')]) for row in rows]
+        valued = [k for k in keys if k is not None]
+        if keys != sorted(valued, reverse=sort.startswith('-')) + [None] * (len(keys) - len(valued)):
+            problems.append(f'not in {sort} order: {keys}')
+    if limit is not None and len(rows) > limit:
+        problems.append(f'{len(rows)} rows past limit={limit}')
+    return problems
+
+
+def _assert_claim(harness, query, payload):
+    problems = _claim_violations(_argv(query)[0], payload, harness.root)
+    assert not problems, f'{query}: output contradicts the query: {problems[:3]}'
+    return problems is not None
+
+
 @pytest.mark.parametrize('recipe', _recipes())
 def test_recipe_runs_as_written(harness, recipe):
     payload = _assert_runs_as_written(harness, recipe['query'], recipe.get('output_type'))
     _assert_positive_claim(recipe['query'], payload)
+    _assert_claim(harness, recipe['query'], payload)
     _assert_text_as_written(harness, recipe['query'])
 
 
@@ -259,7 +340,7 @@ _PLACEHOLDER_MAP = dict(SCHEMA_PLACEHOLDERS)
 # key). Their syntax is not checked here; a fixture that grew the content would be.
 SCHEMA_UNRUNNABLE = (
     'diff://mysql://', 'diff://git://app.py@main', 'git://.@abc1234', 'git://.@main',
-    'git://src/app.py@v1.0', 'element=load_config', 'sheet=Sales', 'env://DATABASE_URL',
+    'git://src/app.py@v1.0', 'element=load_config', 'sheet=Sales',
     'json://data.json/users', 'json://package.json/', 'format=dot',
     # Depend on the interpreter running the suite: a venv, an installed `requests`.
     'python://venv', 'python://packages/requests',
@@ -298,7 +379,8 @@ def _schema_query(uri):
 
 @pytest.mark.parametrize('example', _schema_examples())
 def test_schema_example_runs_as_written(harness, example):
-    _assert_runs_as_written(harness, _schema_query(example['uri']), example.get('output_type'))
+    query = _schema_query(example['uri'])
+    _assert_claim(harness, query, _assert_runs_as_written(harness, query, example.get('output_type')))
 
 
 # -- third source: help://fields examples (FIELD_SELECTION_GUIDE.md, BACK-1607) -------------
@@ -379,6 +461,33 @@ def test_schema_examples_are_enumerated_and_mostly_run():
     params = _schema_examples()
     runnable = [p for p in params if not any(m.name == 'skip' for m in p.marks)]
     assert len(params) > 150 and len(runnable) > 100, (len(params), len(runnable))
+
+
+def test_filter_claims_are_checked_and_the_check_bites(harness):
+    """The claim check covers the filter recipes (not vacuous) and catches a row, an order or a
+    count that contradicts the query; flags it has no reading of are left unchecked."""
+    params = [p for p in _recipes() + _schema_examples() if not p.marks]
+    checked = [p for p in params if _claim_violations(
+        _argv(p.values[0].get('query') or _schema_query(p.values[0]['uri']))[0],
+        {'type': p.values[0].get('output_type'), 'results': []}, None) is not None]
+    assert len(checked) >= 20, len(checked)
+    assert _claim_violations('markdown://proj/?!topics', {'type': 'markdown_query'}, None) is None
+    rows = [{'name': 'big', 'category': 'functions', 'complexity': 20, 'line_count': 9},
+            {'name': 'small', 'category': 'functions', 'complexity': 3, 'line_count': 90}]
+    ast = {'type': 'ast_query', 'results': rows}
+    assert _claim_violations('ast://proj?complexity>15', ast, None) == ['small: not complexity>15']
+    assert _claim_violations('ast://proj?type=class', ast, None) == [
+        'big: not type=class', 'small: not type=class']
+    assert _claim_violations('ast://proj?sort=-lines&limit=1', ast, None) == [
+        'not in -lines order: [9, 90]', '2 rows past limit=1']
+    assert _claim_violations('ast://proj?name~=^b&type=function', ast, None) == ['small: not name~=^b']
+    assert _claim_violations('ast://proj?lines=9..50', ast, None) == ['small: not lines=9..50']
+    nulls = {'type': 'ast_query', 'results': [{'name': 'C'}, *rows]}
+    assert _claim_violations('ast://proj?sort=-complexity', nulls, None) == [
+        'not in -complexity order: [None, 20, 3]']
+    doc = {'type': 'markdown_query', 'results': [{'path': 'proj/README.md'}, {'path': 'proj/auth.md'}]}
+    assert _claim_violations('markdown://proj/?body-contains=nginx', doc, harness.root) == [
+        'proj/auth.md: not body-contains=nginx']
 
 
 def test_pipeline_and_positive_claim_guards_bite(harness):
@@ -632,6 +741,11 @@ def named_harness(tmp_path_factory):
 @pytest.mark.parametrize('command', _named_fixture_commands())
 def test_documentation_command_runs_in_named_fixture(named_harness, command):
     _assert_text_as_written(named_harness, command, literal=True)
+    argv = _pipeline(command)[0][1:]
+    if len(argv) == 1 and argv[0].startswith(('ast://', 'markdown://')):  # rows as the query has them
+        _, out, _, _ = named_harness.run_subcommand(argv[0], '--format', 'json')
+        problems = _claim_violations(argv[0], json.loads(out), named_harness.root)
+        assert not problems, f'{command}: output contradicts the query: {problems[:3]}'
 
 
 def test_named_fixture_inventory_runs_most_and_says_why_it_skips_the_rest():
