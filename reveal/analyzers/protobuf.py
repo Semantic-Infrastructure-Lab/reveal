@@ -218,6 +218,14 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
             })
         return messages
 
+    def _get_node_name(self, node: Any) -> Optional[str]:
+        """A message's name sits in its `message_name` child, which the generic
+        strategies do not read; without it `Outer.Inner` has no container to
+        resolve through (BACK-1479)."""
+        if _zero_arg(node, 'kind') == 'message':
+            return self._get_message_name(node)
+        return super()._get_node_name(node)
+
     def _get_message_name(self, msg_node: Any) -> Optional[str]:
         """Extract identifier string from a message node's message_name child."""
         return self._find_identifier_in(msg_node, 'message_name')

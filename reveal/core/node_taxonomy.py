@@ -394,6 +394,7 @@ TYPE_DECL_NODES: frozenset = frozenset({
     'union_specifier',        # C/C++ `union U { }`
     'namespace_declaration',  # C# `namespace App { }`
     'file_scoped_namespace_declaration',  # C# 10 `namespace App;`
+    'message',                # Protobuf `message Outer { message Inner {} }` (BACK-1479)
 })
 # Every node kind that can be the `Parent` of `Parent.member` extraction.
 # 'module' is Ruby's module (Python's root is also 'module', but it has no
