@@ -1,7 +1,6 @@
 """Statistics adapter (stats://) for codebase metrics and hotspots."""
 
 import logging
-import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 from reveal.reveal_types import CONTRACT_VERSION
@@ -19,6 +18,7 @@ from ...utils.gitignore import respect_gitignore_param
 from ...utils.path_utils import to_relative_display
 from ...utils.results import ResultBuilder, note_truncation, note_warning
 from ...utils.validation import require_path_exists
+from ...utils.parallel import pool_worker_count
 
 # Import modular functions
 from .renderer import StatsRenderer
@@ -312,14 +312,7 @@ class StatsAdapter(ResourceAdapter):
         # only uncapped worker pool reachable from `overview`, causing
         # concurrent full-repo scans on one machine to blow past timeouts even
         # though each is fast in isolation.
-        override = os.environ.get('REVEAL_MAX_WORKERS')
-        if override:
-            try:
-                workers = max(1, int(override))
-            except ValueError:
-                workers = min(8, max(1, len(files) // 10))
-        else:
-            workers = min(8, max(1, len(files) // 10))
+        workers = pool_worker_count(min(8, max(1, len(files) // 10)))
         if workers > 1:
             graph_cache = _i002_preload(self.path, files)
             with ProcessPoolExecutor(

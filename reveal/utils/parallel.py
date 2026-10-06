@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from concurrent.futures import ProcessPoolExecutor
 from ..logging_setup import worker_bootstrap
 from pathlib import Path
@@ -21,6 +22,23 @@ try:
     _HAS_STRINGZILLA = True
 except ImportError:
     _HAS_STRINGZILLA = False
+
+
+def pool_worker_count(default: int) -> int:
+    """Worker processes for one of reveal's process pools; 1 means run serially.
+
+    ``REVEAL_MAX_WORKERS`` overrides *default* everywhere reveal fans work out
+    across processes (set it to 1 to force every serial path -- used by the test
+    suite under pytest-xdist and for byte-identical verification; BACK-1004,
+    BACK-1436). A non-integer value is ignored and *default* applies.
+    """
+    override = os.environ.get('REVEAL_MAX_WORKERS')
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:
+            pass
+    return max(1, default)
 
 
 def _scan_one(args: tuple) -> Path | None:

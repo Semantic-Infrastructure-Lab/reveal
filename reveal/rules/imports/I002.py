@@ -15,6 +15,7 @@ from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...analyzers.imports import ImportGraph
 from ...analyzers.imports.base import get_extractor, get_all_extensions
 from ...core import disk_cache
+from ...utils.parallel import pool_worker_count
 from ...utils.path_utils import (
     EVIDENCE, _walk_code_files, is_unsafe_scan_root, resolve_project_root,
 )
@@ -76,15 +77,9 @@ def _graph_worker_count(n_files: int) -> int:
     only above _GRAPH_PARALLEL_MIN_FILES, capped at _GRAPH_PARALLEL_MAX_WORKERS
     and the CPU count.
     """
-    override = os.environ.get('REVEAL_MAX_WORKERS')
-    if override:
-        try:
-            return max(1, int(override))
-        except ValueError:
-            pass
     if n_files < _GRAPH_PARALLEL_MIN_FILES:
-        return 1
-    return max(1, min(os.cpu_count() or 1, _GRAPH_PARALLEL_MAX_WORKERS))
+        return pool_worker_count(1)
+    return pool_worker_count(min(os.cpu_count() or 1, _GRAPH_PARALLEL_MAX_WORKERS))
 
 
 def _extract_imports_for_file(fp_str: str) -> tuple:

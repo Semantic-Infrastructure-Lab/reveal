@@ -33,6 +33,7 @@ from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 from ..analyzers.imports import service as import_analysis
 from ..registry import get_code_extensions
+from ..utils.parallel import pool_worker_count
 from ..utils.path_utils import to_posix, to_relative_display
 from ..utils.results import ResultBuilder, note_truncation
 
@@ -874,15 +875,9 @@ def _parallel_worker_count(n_files: int) -> int:
     path — used by tests and for debugging); otherwise parallelize only above
     `_PARALLEL_MIN_FILES`, capped at `_PARALLEL_MAX_WORKERS` and the CPU count.
     """
-    override = os.environ.get('REVEAL_MAX_WORKERS')
-    if override:
-        try:
-            return max(1, int(override))
-        except ValueError:
-            pass
     if n_files < _PARALLEL_MIN_FILES:
-        return 1
-    return max(1, min(os.cpu_count() or 1, _PARALLEL_MAX_WORKERS))
+        return pool_worker_count(1)
+    return pool_worker_count(min(os.cpu_count() or 1, _PARALLEL_MAX_WORKERS))
 
 
 def _extract_one_file(fp_str: str, want_structure: bool):
