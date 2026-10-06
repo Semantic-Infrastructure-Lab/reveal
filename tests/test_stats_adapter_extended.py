@@ -10,6 +10,8 @@ import pytest
 import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+
+from conftest import needs_forked_workers
 from reveal.adapters.stats.adapter import StatsAdapter
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
@@ -79,6 +81,7 @@ class TestI002GraphCachePreload:
     (TestI002Preload and siblings); this is the end-to-end stats check.
     """
 
+    @needs_forked_workers  # the patched _find_project_root and caplog see forked workers only
     @pytest.mark.real_worker_pool
     def test_root_mis_detection_warning_logged_once_across_workers(self, tmp_path, monkeypatch, caplog):
         """End-to-end BACK-531 regression: a project with no I002 project markers

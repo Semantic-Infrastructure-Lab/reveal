@@ -7,13 +7,16 @@ rebuilt the whole-project scan on its own first .py file -- on home-assistant's 
 component ~6.7s of M102 per worker process (BACK-1429 note #2).
 
 The build counter below wraps ``M102._collect_all_imports`` and appends one line per
-cache miss to a file, so builds in forked workers are counted too.
+cache miss to a file, so builds in forked workers are counted too. A spawned or forkserver
+worker re-imports M102 without the counter, so the pool tests would pass without seeing
+any worker: they run only where the default pool forks (``needs_forked_workers``).
 """
 
 import os
 
 import pytest
 
+from conftest import needs_forked_workers
 from reveal.cli import file_checker
 from reveal.rules.maintainability import M102 as m102_module
 
@@ -60,6 +63,7 @@ def _m102_findings(result):
 
 
 class TestCheckPoolPreloadsM102:
+    @needs_forked_workers
     def test_pool_builds_the_import_scan_once(self, tmp_path, monkeypatch, count_m102_builds):
         files = _project(tmp_path)
         monkeypatch.setenv("REVEAL_MAX_WORKERS", "3")
@@ -86,6 +90,7 @@ class TestCheckPoolPreloadsM102:
         ]
         assert serial == parallel
 
+    @needs_forked_workers
     def test_not_preloaded_when_m102_is_not_selected(self, tmp_path, monkeypatch, count_m102_builds):
         """Negative control: --select without M102 builds no M102 scan anywhere."""
         files = _project(tmp_path)
@@ -172,6 +177,7 @@ class TestStatsPoolPreloads:
     preloaded I002 only; M102 and T006 were built once per worker (and T006's
     ceiling warning printed once per worker)."""
 
+    @needs_forked_workers
     def test_pool_builds_each_index_once_in_the_parent(
             self, tmp_path, monkeypatch, count_m102_builds, count_t006_builds):
         _stats_project(tmp_path)
