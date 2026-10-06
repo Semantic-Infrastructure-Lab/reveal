@@ -1520,6 +1520,8 @@ class HelpAdapter(ResourceAdapter):
          'use': 'surface://', 'example': "reveal 'surface://src/?type=http'"},
         {'want': 'search text or an identifier across many files (with enclosing-function context)',
          'use': '--grep', 'example': "reveal src/ --grep 'API_TIMEOUT'"},
+        {'want': 'check a file or directory for quality issues (lint-style rules)',
+         'use': '--check', 'example': "reveal src/app.py --check"},
         {'want': 'check import health / circular deps',
          'use': 'imports://', 'example': "reveal imports://src/"},
         {'want': 'compare files or git revisions',

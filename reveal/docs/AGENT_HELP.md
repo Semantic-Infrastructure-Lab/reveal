@@ -3174,7 +3174,7 @@ exit 0
 
 **reveal auto-detects and provides structure for:**
 
-### Programming Languages (51 languages and file formats in total — run `reveal --languages` for the live breakdown)
+### Programming Languages (every language `reveal --languages` lists — run it for the live breakdown)
 Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Scala, Swift, Kotlin, Dart, Elixir, Zig, GDScript, Bash, PowerShell, SQL, PHP, Ruby, Lua, and more — plus 7 tree-sitter fallback languages (elm, erlang, haskell, objc, ocaml, r, verilog) that get a raw file view and a best-effort outline (may be empty or misnamed)
 
 **Structure provided (explicit analyzers):** Functions, classes, methods, imports, decorators, complexity
@@ -4531,23 +4531,8 @@ reveal src/ --grep 'deprecated' -i      # directory scan with element context
 
 ## Decision Tree
 
-```
-Need to inspect code?
-├─ Unknown file? → reveal file.py
-├─ Know function name? → reveal file.py "function_name"
-├─ Find by pattern? → reveal 'ast://path?name=pattern*'
-├─ Find complex code? → reveal 'ast://path?complexity>10'
-├─ Check quality? → reveal file.py --check
-└─ Read everything? → (Are you sure? Try reveal first!)
-
-Need to search text?
-├─ In code (functions/classes)? → reveal 'ast://?name=*pattern*'
-├─ In markdown (sections)? → reveal file.md "section name"
-├─ Across multiple files? → reveal path/ --grep 'pattern'
-└─ Non-code text/logs? → Use grep (OK!)
-
-Something else? → reveal help://quick (every intent, one line each)
-```
+Run `reveal help://quick` for "which tool for which question". It is the routing table
+(intent, tool, example); this guide does not keep a second copy.
 
 ---
 
