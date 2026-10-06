@@ -11,6 +11,9 @@ jobs:
   test:
     name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    # A hung leg (BACK-1475: a compat-matrix run sat silent for ~50 min) otherwise runs to GitHub's 6 h
+    # default. The slowest leg takes ~13 min.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -136,6 +139,7 @@ jobs:
     # of this flip.
     name: Compat matrix (Python ${{ matrix.python-version }}, tree-sitter-language-pack ${{ matrix.lp-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     continue-on-error: false
     strategy:
       fail-fast: false
