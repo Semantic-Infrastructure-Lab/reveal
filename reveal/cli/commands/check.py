@@ -126,8 +126,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         '--max-items', type=int, metavar='N', dest='max_items',
         help='Stop after N violations total (budget mode) -- documented elsewhere as a '
              '"universal adapter option" but previously rejected by check specifically '
-             '(BACK-1181). Same semantics as URI adapters\' --max-items: total_available '
-             'is still reported so truncation is visible.',
+             '(BACK-1181). Same semantics as URI adapters\' --max-items: totals and the exit '
+             'code still count every violation, and the cut is disclosed (a directory: a '
+             '"truncated" meta.warnings entry plus summary.items_truncated in JSON, a '
+             '"⚠ Truncated" line in text; a single file: total_available).',
     )
     parser.add_argument(
         '--max-snippet-chars', type=int, metavar='N', dest='max_snippet_chars',

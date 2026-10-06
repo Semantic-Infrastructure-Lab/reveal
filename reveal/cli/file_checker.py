@@ -14,6 +14,7 @@ from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from ..logging_setup import worker_bootstrap
 from ..utils.parallel import pool_worker_count
+from ..utils.results import note_truncation
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, List, Dict, TYPE_CHECKING
@@ -123,7 +124,7 @@ def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore):
     than buffering the entire list before returning, so at most max_workers
     results are held in memory simultaneously during execution. Yield order is
     completion order (non-deterministic) -- callers that need a stable
-    processing order (e.g. _check_files_text's --limit cutoff, BACK-1243)
+    processing order (e.g. the text report's --limit cutoff, BACK-1243)
     must buffer and re-sort before acting on it; this generator itself makes
     no ordering guarantee.
 
@@ -514,34 +515,25 @@ def _build_cli_overrides(args: 'Namespace') -> dict:
     return cli_overrides
 
 
-def _handle_no_files_found(directory: Path, output_format: str) -> None:
-    """Handle case when no files found to check.
+def _no_files_message(directory) -> str:
+    return f"No supported files found in {to_posix(directory)}"
 
-    Args:
-        directory: Directory that was checked
-        output_format: Output format (json or text)
-    """
-    import json
-    from reveal.utils.results import add_cli_contract_fields
-    from reveal.utils.json_utils import attach_provenance
 
-    if output_format == 'json':
-        result = {
-            "files": [],
-            "summary": {
-                "files_checked": 0,
-                "files_with_issues": 0,
-                "total_issues": 0,
-                "exit_code": 0
-            }
+def _handle_no_files_found(directory: Path, args: 'Namespace') -> None:
+    """Answer a directory with nothing to check: an empty result, through the
+    subcommand seam like every other check result (BACK-1545)."""
+    from .routing.subcommand import emit_subcommand_result
+    result = {
+        "files": [],
+        "summary": {
+            "files_checked": 0,
+            "files_with_issues": 0,
+            "total_issues": 0,
+            "exit_code": 0
         }
-        print(json.dumps(
-            attach_provenance(add_cli_contract_fields(result, result_type='check', source=to_posix(directory),
-                                                    source_type='directory')),
-            indent=2,
-        ))
-    else:
-        print(f"No supported files found in {directory}")
+    }
+    emit_subcommand_result(result, args, name='check', source=directory,
+                           render=lambda _result: print(_no_files_message(directory)))
 
 
 _SEVERITY_ORDER = ['low', 'medium', 'high', 'critical']
@@ -651,16 +643,27 @@ class _ItemBudget:
     def __init__(self, max_items: Optional[int]):
         self.remaining = max_items
         self.truncated = False
+        self.offered = 0   # detections the render reached
+        self.shown = 0     # of those, the ones it kept
 
     def take(self, detections: list) -> list:
         """The part of *detections* the budget still allows; the rest is cut."""
-        if self.remaining is None:
-            return detections
-        rendered = detections[:max(self.remaining, 0)]
+        rendered = detections
+        if self.remaining is not None:
+            rendered = detections[:max(self.remaining, 0)]
+            self.remaining -= len(rendered)
         if len(rendered) < len(detections):
             self.truncated = True
-        self.remaining -= len(rendered)
+        self.offered += len(detections)
+        self.shown += len(rendered)
         return rendered
+
+    def note_cut(self, result: dict) -> None:
+        """Record the cut on *result* the way every other result records one
+        (note_truncation, BACK-1545): JSON gets a ``meta.warnings`` entry and the
+        subcommand seam prints ``⚠ Truncated ...`` after a text render. Nothing is
+        recorded when nothing was cut."""
+        note_truncation(result, 'detections', self.shown, self.offered, cause='max_items')
 
 
 @dataclass
@@ -726,7 +729,7 @@ def _json_file_entries(
     no_snippets: bool = False,
     max_snippet_chars: Optional[int] = None,
 ) -> tuple:
-    """The JSON report's ``files[]`` and whether --max-items cut any detection.
+    """The JSON report's ``files[]`` and the --max-items budget that cut it.
     Shared by --format json/grep and text's --also-json (BACK-1248), so the
     artifact is the document --format json prints."""
     budget = _ItemBudget(max_items)
@@ -737,7 +740,7 @@ def _json_file_entries(
         )
         for checked in checked_files if checked.reportable
     ]
-    return entries, budget.truncated
+    return entries, budget
 
 
 def _check_files_json(
@@ -772,6 +775,18 @@ def _check_files_json(
         analyzer for the file type), which are not counted as an error.
         items_truncated is True when max_items cut off some detections.
     """
+    checked_files = _check_json(files, directory, select, ignore, severity)
+    tally = _tally(checked_files)
+    file_results, budget = _json_file_entries(
+        checked_files, max_items, no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
+    )
+    return tally.total_issues, tally.files_with_issues, file_results, tally.files_errored, budget.truncated
+
+
+def _check_json(files: List[Path], directory: Path, select, ignore,
+                severity: Optional[str]) -> List[_CheckedFile]:
+    """Run the JSON/grep path's checks (an order-preserving pool map, or serially)
+    and apply --severity."""
     sorted_files = sorted(files)
 
     if _check_worker_count(len(sorted_files)) > 1:
@@ -783,13 +798,7 @@ def _check_files_json(
             results = [(f, *check_and_collect_file(f, directory, select, ignore)) for f in sorted_files]
     else:
         results = [(f, *check_and_collect_file(f, directory, select, ignore)) for f in sorted_files]
-
-    checked_files = _filter_results(results, directory, severity)
-    tally = _tally(checked_files)
-    file_results, items_truncated = _json_file_entries(
-        checked_files, max_items, no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
-    )
-    return tally.total_issues, tally.files_with_issues, file_results, tally.files_errored, items_truncated
+    return _filter_results(results, directory, severity)
 
 
 def _results_in_sorted_order(sorted_files: List[Path], directory: Path, select, ignore) -> list:
@@ -839,22 +848,26 @@ class _TextFileBlock:
 @dataclass
 class _TextReport:
     """The text report as plain data, before printing (BACK-1534; the print half
-    is what BACK-916's single rendering layer takes over)."""
+    is what BACK-916's single rendering layer takes over). ``budget`` is the
+    --max-items cut of what the text prints; ``checked_files`` feed --also-json."""
 
     blocks: List[_TextFileBlock]
     tally: _CheckTally
+    budget: _ItemBudget
+    checked_files: List[_CheckedFile]
     hidden_files: int = 0
     hidden_issues: int = 0
-    items_truncated: bool = False
 
 
 def _build_text_report(
     checked_files: List[_CheckedFile], limit: int, max_items: Optional[int],
 ) -> _TextReport:
     """Apply --limit (files with issues shown in full) and --max-items (detections
-    shown across the run). Both only shorten what prints: every file still counts."""
-    report = _TextReport(blocks=[], tally=_CheckTally())
+    shown across the run). Both only shorten what prints: every file still counts.
+    The budget only reaches the files --limit lets print, so its cut counts those;
+    the rest are --limit's footer to disclose."""
     budget = _ItemBudget(max_items)
+    report = _TextReport(blocks=[], tally=_CheckTally(), budget=budget, checked_files=checked_files)
     for checked in checked_files:
         report.tally.add(checked)
         block = _TextFileBlock(checked)
@@ -865,7 +878,6 @@ def _build_text_report(
             else:
                 block.shown = budget.take(checked.detections)
         report.blocks.append(block)
-    report.items_truncated = budget.truncated
     return report
 
 
@@ -883,12 +895,12 @@ def _print_file_status(checked: _CheckedFile) -> None:
 def _print_text_report(
     report: _TextReport,
     limit: int,
-    max_items: Optional[int],
     no_group: bool = False,
     no_snippets: bool = False,
     max_snippet_chars: Optional[int] = None,
 ) -> None:
-    """Print the per-file blocks and the --max-items/--limit footers."""
+    """Print the per-file blocks and the --limit footer. The --max-items cut is the
+    subcommand seam's to print, once, after the render (BACK-1545)."""
     # BACK-1039: shared run-wide (not per-file) so a rule's full guidance
     # prints once for the whole run — see _print_grouped_detections.
     shown_guidance: set = set()
@@ -904,12 +916,6 @@ def _print_text_report(
             no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
         )
 
-    if report.items_truncated:
-        print(
-            f"\n… some issues hidden (--max-items {max_items}) — "
-            f"raise --max-items or narrow with --select to see more\n"
-        )
-
     hidden_files, hidden_issues = report.hidden_files, report.hidden_issues
     if hidden_files:
         print(
@@ -919,97 +925,70 @@ def _print_text_report(
         )
 
 
-def _check_files_text(
+def _check_text(
     files: List[Path],
     directory: Path,
     select: Optional[List[str]],
     ignore: Optional[List[str]],
-    no_group: bool = False,
     severity: Optional[str] = None,
     limit: int = 50,
-    no_snippets: bool = False,
-    max_snippet_chars: Optional[int] = None,
     max_items: Optional[int] = None,
-    collect_json: bool = False,
-) -> tuple:
-    """Check files with text output: run, filter, build the report, print it.
+) -> _TextReport:
+    """Check files for the text report: run, filter, build the report as data.
+    Printing it is the render's job (_print_text_report), called by the
+    subcommand seam.
 
     Args:
         files: List of files to check
         directory: Base directory
         select: Rule codes to select
         ignore: Rule codes to ignore
-        no_group: Disable collapsing of repeated rule detections
         severity: Minimum severity level to report (low/medium/high/critical)
         limit: Stop printing full per-file detail after this many files-with-
             issues and print a "+N more files" summary footer instead (BACK-539).
             0 (or negative) disables the cap — print every file in full.
-        no_snippets: Omit the 📝 code-excerpt line (BACK-1182).
-        max_snippet_chars: Truncate the excerpt to N chars instead of
-            omitting it (BACK-1181). Ignored when no_snippets.
         max_items: Cap the total number of rendered detections across the
             whole scan (BACK-1181) -- a running budget, not per-file (see
             _check_files_json).
-        collect_json: Also accumulate the `files[]` entries that --format json
-            would emit, for --also-json (BACK-1248). The JSON artifact gets its
-            own max_items budget and ignores `limit`, because `limit` is a
-            print-density cap on the human report -- letting it truncate the
-            machine artifact would make --also-json's content depend on a
-            flag that exists only to shorten terminal output.
 
-    Returns:
-        Tuple of (total_issues, files_with_issues, files_errored, files_degraded,
-        file_results, items_truncated_json). file_results is [] unless
-        collect_json. See _check_files_json for what counts as errored vs.
-        skipped (BACK-1083); files_degraded is status == "warning" (parsed via
-        error-recovery).
+    The report's ``checked_files`` give --also-json its `files[]` (BACK-1248),
+    built with their own max_items budget and without `limit`, because `limit`
+    is a print-density cap on the human report -- letting it truncate the
+    machine artifact would make --also-json's content depend on a flag that
+    exists only to shorten terminal output. See _check_files_json for what
+    counts as errored vs. skipped (BACK-1083); files_degraded is status ==
+    "warning" (parsed via error-recovery).
     """
     results = _results_in_sorted_order(sorted(files), directory, select, ignore)
-    checked_files = _filter_results(results, directory, severity)
-    report = _build_text_report(checked_files, limit, max_items)
-
-    file_results: List[dict] = []
-    json_items_truncated = False
-    if collect_json:
-        file_results, json_items_truncated = _json_file_entries(
-            checked_files, max_items, no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
-        )
-
-    _print_text_report(
-        report, limit, max_items, no_group=no_group,
-        no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
-    )
-    tally = report.tally
-    return (
-        tally.total_issues, tally.files_with_issues, tally.files_errored, tally.files_degraded,
-        file_results, json_items_truncated,
-    )
+    return _build_text_report(_filter_results(results, directory, severity), limit, max_items)
 
 
-def _build_json_report(
-    file_results: List[dict],
+def _check_report(
+    tally: _CheckTally,
     files_checked: int,
-    files_with_issues: int,
-    total_issues: int,
-    source: Path,
+    budget: _ItemBudget,
+    file_results: Optional[List[dict]] = None,
     scope: Optional[ScopeCensus] = None,
     select: Optional[List[str]] = None,
     ignore: Optional[List[str]] = None,
-    files_errored: int = 0,
     scan_disclosures: Optional[List[str]] = None,
     exit_zero: bool = False,
-    items_truncated: bool = False,
 ) -> dict:
-    """Build check's JSON report dict (Output Contract envelope included).
-
-    Split out of _print_json_output (BACK-1248) so `--also-json` can write the
-    exact same document to a file while the text report goes to stdout.
+    """check's result as plain data; the subcommand seam (emit_subcommand_result /
+    subcommand_json) adds the Output Contract envelope (BACK-1545).
 
     Args:
-        file_results: List of file result dicts
+        tally: The summary counts. files_errored are files whose analyzer/parse
+            pipeline raised (BACK-1083) — a subset of files_checked that could not
+            be checked at all; individual reasons are on each file_results entry's
+            "detail". files_degraded parsed via error recovery.
         files_checked: Total files checked
-        files_with_issues: Files with issues count
-        total_issues: Total issues count
+        budget: The --max-items budget the answer was cut with. Its cut is a
+            ``note_truncation`` (``meta.warnings``); ``summary.items_truncated``
+            stays for compatibility (BACK-1181).
+        file_results: The ``files[]`` entries. None for the text report's result,
+            whose per-file blocks are printed from _TextReport: it carries the
+            summary and the cut the text printed under.
         scope: BACK-884 census (files discovered/analyzed/skipped by reason,
             per-language capability tier) — additive top-level key, omitted
             when not supplied.
@@ -1017,66 +996,57 @@ def _build_json_report(
             `scope.unscoped_categories` (BACK-1021) only reports gaps among
             rule categories that actually ran.
         ignore: Rule ignore filter actually applied to this run (see `select`).
-        source: Directory that was checked, for the Output Contract envelope
-            (BACK-962).
-        files_errored: Files whose analyzer/parse pipeline raised (BACK-1083)
-            — a subset of files_checked that could not be checked at all;
-            individual reasons are on each file_results entry's "detail".
         scan_disclosures: BACK-1051 — one-line skip reasons from any
-            scan-capped rule (I002, D005) whose own project/directory-wide
+            scan-capped rule (I002, D005, T006) whose own project/directory-wide
             index build was truncated by a safety ceiling. Distinct from
             files_errored/files_degraded (those are per-file); this is
             rule-wide — e.g. "I002 skipped, tree too large" doesn't map to
             any single file. [] means confirmed complete, not omitted.
     """
-    from reveal.utils.results import add_cli_contract_fields
-    from reveal.utils.json_utils import attach_provenance
-
-    files_degraded = sum(1 for fr in file_results if fr.get("status") == "warning")
-    result = {
-        "files": file_results,
-        "summary": {
-            "files_checked": files_checked,
-            "files_with_issues": files_with_issues,
-            "files_errored": files_errored,
-            "files_degraded": files_degraded,
-            "total_issues": total_issues,
-            "exit_code": check_exit_code(total_issues, files_errored, files_degraded, exit_zero=exit_zero),
-            "scan_disclosures": scan_disclosures or [],
-            "items_truncated": items_truncated,
-        }
+    result: dict = {}
+    if file_results is not None:
+        result["files"] = file_results
+    result["summary"] = {
+        "files_checked": files_checked,
+        "files_with_issues": tally.files_with_issues,
+        "files_errored": tally.files_errored,
+        "files_degraded": tally.files_degraded,
+        "total_issues": tally.total_issues,
+        "exit_code": check_exit_code(
+            tally.total_issues, tally.files_errored, tally.files_degraded, exit_zero=exit_zero),
+        "scan_disclosures": scan_disclosures or [],
+        "items_truncated": budget.truncated,
     }
     if scope is not None:
-        from ..capabilities import capability_tiers_for
-        from ..registry import display_name_for_extension
-        from ..rules import RuleRegistry
-        from ..rules.coverage import unscoped_rule_categories
-
-        scope_dict = scope.to_scope_dict(
-            capability_tiers=capability_tiers_for(scope.language_extensions)
-        )
-        active_rules = RuleRegistry.get_rules(select, ignore)
-        gaps = unscoped_rule_categories(scope.language_extensions.keys(), active_rules)
-        for gap in gaps:
-            ext = scope.language_extensions.get(gap["language"], "")
-            gap["language"] = display_name_for_extension(ext) or gap["language"]
-        scope_dict["unscoped_categories"] = gaps
-        result["scope"] = scope_dict
-    return attach_provenance(add_cli_contract_fields(
-        result, result_type='check', source=source, source_type='directory',
-    ))
+        result["scope"] = _scope_dict(scope, select, ignore)
+    budget.note_cut(result)
+    return result
 
 
-def _print_json_output(*args, **kwargs) -> None:
-    """Print check's JSON report to stdout. See _build_json_report."""
-    import json
-    print(json.dumps(_build_json_report(*args, **kwargs), indent=2))
+def _scope_dict(scope: ScopeCensus, select, ignore) -> dict:
+    """The JSON report's ``scope`` block, with the rule categories no analyzer covers
+    for the languages present (BACK-1021)."""
+    from ..capabilities import capability_tiers_for
+    from ..registry import display_name_for_extension
+    from ..rules import RuleRegistry
+    from ..rules.coverage import unscoped_rule_categories
+
+    scope_dict = scope.to_scope_dict(
+        capability_tiers=capability_tiers_for(scope.language_extensions)
+    )
+    active_rules = RuleRegistry.get_rules(select, ignore)
+    gaps = unscoped_rule_categories(scope.language_extensions.keys(), active_rules)
+    for gap in gaps:
+        ext = scope.language_extensions.get(gap["language"], "")
+        gap["language"] = display_name_for_extension(ext) or gap["language"]
+    scope_dict["unscoped_categories"] = gaps
+    return scope_dict
 
 
-def _write_also_json_report(path: str, *args, **kwargs) -> None:
+def _write_also_json_report(path: str, result: dict, source: str) -> None:
     """BACK-1248: write check's JSON report to *path* alongside a text/grep
     render on stdout, so one invocation produces both the human report and the
-    machine artifact.
+    machine artifact -- the document --format json prints (subcommand_json).
 
     Previously --also-json was wired only for the uri:// render paths and this
     subcommand merely warned that the flag did nothing, which left consumers
@@ -1084,10 +1054,10 @@ def _write_also_json_report(path: str, *args, **kwargs) -> None:
     on stderr and does not change the exit code -- the check itself succeeded,
     and its exit code is the answer the caller is branching on.
     """
-    import json
+    from .routing.subcommand import subcommand_json
     try:
         with open(path, 'w', encoding='utf-8') as f:
-            f.write(json.dumps(_build_json_report(*args, **kwargs), indent=2))
+            f.write(subcommand_json(result, name='check', source=source))
     except OSError as e:
         print(f"Warning: --also-json could not write {path}: {e}", file=sys.stderr)
 
@@ -1125,7 +1095,7 @@ def _print_text_summary(
             results (including "no issues") may be wrong, not just absent.
         scan_disclosures: BACK-1051 — one-line skip reasons from any
             scan-capped rule (I002, D005) whose project-wide index build was
-            truncated. See _print_json_output's matching parameter.
+            truncated. See _check_report's matching parameter.
     """
     print(f"\n{'='*60}")
     print(f"Checked {files_checked} files")
@@ -1155,6 +1125,12 @@ def _print_text_summary(
 def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     """Handle recursive quality checking of a directory.
 
+    The result leaves through the subcommand seam like every other ``reveal
+    <name>`` (emit_subcommand_result, BACK-1545): JSON gets its envelope there,
+    text and grep are rendered by it, and a --max-items cut is printed once after
+    the render. The exit code stays check's own (EXIT_CODE_CONTRACT, BACK-1099):
+    0 clean, 1 issues found, 2 usage error, 3 scan incomplete.
+
     Args:
         directory: Directory to check recursively
         args: Parsed arguments
@@ -1176,102 +1152,30 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     collection = collect_files_to_check(directory, respect_gitignore, exclude_patterns)
     files_to_check = collection.files
 
-    # Handle no files found
     output_format = getattr(args, 'format', 'text')
     if not files_to_check:
-        _handle_no_files_found(Path(shown), output_format)
+        _handle_no_files_found(Path(shown), args)
         return
-
-    # Parse select/ignore options
-    select = args.select.split(',') if args.select else None
-    ignore = args.ignore.split(',') if args.ignore else None
-    no_group = getattr(args, 'no_group', False)
-    no_snippets = getattr(args, 'no_snippets', False)
-    max_snippet_chars = getattr(args, 'max_snippet_chars', None)
-    max_items = getattr(args, 'max_items', None)
-    severity = getattr(args, 'severity', None)
-    limit = getattr(args, 'limit', None)
-    if limit is None:  # --limit not typed (parser default is None; URI targets share the flag)
-        limit = 50
-
-    def scan_disclosures_all() -> List[str]:
-        return get_scan_disclosures() + capability_disclosures(files_to_check, select, ignore)
-
-    def report_kwargs(files_errored: int, items_truncated: bool) -> dict:
-        # One argument set for --format json and both --also-json writers, so the
-        # artifact is the document --format json prints (BACK-1248): same source
-        # spelling (BACK-1366) and the same scan disclosures -- [] there claims
-        # the scan was complete.
-        return dict(
-            source=shown, scope=collection.to_scope_census(), select=select, ignore=ignore,
-            files_errored=files_errored, scan_disclosures=scan_disclosures_all(),
-            exit_zero=getattr(args, 'exit_zero', False), items_truncated=items_truncated,
+    if output_format == 'typed':
+        # Not implemented for this path (or, as of BACK-1035's follow-up audit,
+        # almost anywhere else in the CLI either) — error rather than silently
+        # rendering text as if it were typed.
+        print(
+            "Error: --format typed is not yet implemented for 'reveal check' "
+            "on a directory. Use --format json or --format grep instead.",
+            file=sys.stderr,
         )
+        sys.exit(2)
 
-    # Check files based on output format
-    files_degraded = 0
-    if output_format == 'json':
-        total_issues, files_with_issues, file_results, files_errored, items_truncated = _check_files_json(
-            files_to_check, directory, select, ignore, severity=severity, no_snippets=no_snippets,
-            max_snippet_chars=max_snippet_chars, max_items=max_items,
-        )
-        files_degraded = sum(1 for fr in file_results if fr.get("status") == "warning")
-        _print_json_output(
-            file_results, len(files_to_check), files_with_issues, total_issues,
-            **report_kwargs(files_errored, items_truncated),
-        )
-    elif output_format == 'grep':
-        # BACK-1035: this recursive/directory path only ever branched on
-        # 'json' vs everything-else-is-text, so --format grep silently
-        # rendered identical to text. Single-file `reveal check <file>`
-        # already honors grep correctly via checks.py's
-        # _format_detections_grep — reuse the same file:line:col:rule:msg
-        # shape here, built from the JSON-mode per-file detections.
-        total_issues, files_with_issues, file_results, files_errored, items_truncated = _check_files_json(
-            files_to_check, directory, select, ignore, severity=severity
-        )
-        files_degraded = sum(1 for fr in file_results if fr.get("status") == "warning")
-        _print_grep_output(file_results)
-        if getattr(args, 'also_json', None):
-            _write_also_json_report(
-                args.also_json, file_results, len(files_to_check), files_with_issues, total_issues,
-                **report_kwargs(files_errored, items_truncated),
-            )
-        for reason in scan_disclosures_all():
-            # BACK-1051: grep output is meant to stay machine-parseable
-            # (file:line:col:rule:message only) — disclose to stderr rather
-            # than polluting stdout with a non-conforming line.
-            print(f"⚠️  {reason}", file=sys.stderr)
+    if output_format in ('json', 'grep'):
+        tally, result, render, artifact = _json_or_grep_check(files_to_check, directory, collection, args)
     else:
-        if output_format == 'typed':
-            # Not implemented for this path (or, as of BACK-1035's
-            # follow-up audit, almost anywhere else in the CLI either) —
-            # error rather than silently rendering text as if it were typed.
-            print(
-                "Error: --format typed is not yet implemented for 'reveal check' "
-                "on a directory. Use --format json or --format grep instead.",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-        also_json = getattr(args, 'also_json', None)
-        (
-            total_issues, files_with_issues, files_errored, files_degraded,
-            json_file_results, json_items_truncated,
-        ) = _check_files_text(
-            files_to_check, directory, select, ignore, no_group=no_group, severity=severity, limit=limit,
-            no_snippets=no_snippets, max_snippet_chars=max_snippet_chars, max_items=max_items,
-            collect_json=bool(also_json),
-        )
-        _print_text_summary(
-            len(files_to_check), files_with_issues, total_issues, directory, config,
-            files_errored=files_errored, files_degraded=files_degraded,
-            scan_disclosures=scan_disclosures_all(),
-        )
-        if also_json:
-            _write_also_json_report(
-                also_json, json_file_results, len(files_to_check), files_with_issues, total_issues,
-                **report_kwargs(files_errored, json_items_truncated),
-            )
+        tally, result, render, artifact = _text_check(files_to_check, directory, collection, config, args)
+
+    from .routing.subcommand import emit_subcommand_result
+    emit_subcommand_result(result, args, name='check', source=shown, render=render)
+    if artifact is not None:
+        _write_also_json_report(args.also_json, artifact, shown)
 
     # Exit with appropriate code (BACK-1099: distinguish "clean" from
     # "issues found" from "scan incomplete" -- files_errored/files_degraded
@@ -1281,9 +1185,115 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     from .routing.ledger import complete
     complete(args)  # the exit code is the result: the flag ledger still reports
     sys.exit(check_exit_code(
-        total_issues, files_errored, files_degraded,
+        tally.total_issues, tally.files_errored, tally.files_degraded,
         exit_zero=getattr(args, 'exit_zero', False),
     ))
+
+
+def _rule_filters(args: 'Namespace') -> tuple:
+    """--select/--ignore as rule-code lists (None when not given)."""
+    select = args.select.split(',') if args.select else None
+    ignore = args.ignore.split(',') if args.ignore else None
+    return select, ignore
+
+
+def _scan_disclosures(files: List[Path], select, ignore) -> List[str]:
+    """Everything the run could not fully check, rule-wide: a capped scan
+    (BACK-1051) and rules a language skips (BACK-1466). Read after the scan --
+    the caps are recorded by it. [] claims the scan was complete."""
+    return get_scan_disclosures() + capability_disclosures(files, select, ignore)
+
+
+def _report_for(files: List[Path], collection: 'FileCollectionResult', args: 'Namespace',
+                select, ignore, disclosures: List[str]):
+    """_check_report with this run's arguments, so --format json and both
+    --also-json writers describe the run the same way (BACK-1248): same scope,
+    same scan disclosures, same exit_zero."""
+    def report(tally: _CheckTally, budget: _ItemBudget, file_results: Optional[List[dict]] = None) -> dict:
+        return _check_report(
+            tally, len(files), budget, file_results,
+            scope=collection.to_scope_census() if file_results is not None else None,
+            select=select, ignore=ignore, scan_disclosures=disclosures,
+            exit_zero=getattr(args, 'exit_zero', False),
+        )
+    return report
+
+
+def _json_or_grep_check(files: List[Path], directory: Path, collection: 'FileCollectionResult',
+                        args: 'Namespace') -> tuple:
+    """Run check for --format json or grep: (tally, result, render, --also-json result).
+
+    BACK-1035: --format grep renders file:line:col:rule:message, the shape the
+    single-file ``reveal check <file> --format grep`` prints, from the JSON
+    result's per-file detections. It never applied --max-items or the snippet
+    flags, and its --also-json artifact is that same result.
+    """
+    select, ignore = _rule_filters(args)
+    severity = getattr(args, 'severity', None)
+    checked = _check_json(files, directory, select, ignore, severity)
+    tally = _tally(checked)
+    if args.format == 'json':
+        file_results, budget = _json_file_entries(
+            checked, getattr(args, 'max_items', None),
+            no_snippets=getattr(args, 'no_snippets', False),
+            max_snippet_chars=getattr(args, 'max_snippet_chars', None),
+        )
+    else:
+        file_results, budget = _json_file_entries(checked)
+    disclosures = _scan_disclosures(files, select, ignore)
+    result = _report_for(files, collection, args, select, ignore, disclosures)(tally, budget, file_results)
+
+    def render_grep(_result: dict) -> None:
+        _print_grep_output(file_results)
+        for reason in disclosures:
+            # BACK-1051: grep output is meant to stay machine-parseable
+            # (file:line:col:rule:message only) — disclose to stderr rather
+            # than polluting stdout with a non-conforming line.
+            print(f"⚠️  {reason}", file=sys.stderr)
+
+    artifact = result if args.format == 'grep' and getattr(args, 'also_json', None) else None
+    return tally, result, render_grep, artifact
+
+
+def _text_check(files: List[Path], directory: Path, collection: 'FileCollectionResult', config,
+                args: 'Namespace') -> tuple:
+    """Run check for the text report: (tally, result, render, --also-json result).
+
+    The text result carries the summary and the --max-items cut of what the text
+    prints; its per-file blocks are printed from the _TextReport. --also-json gets
+    the --format json document, with its own budget over every file (BACK-1248).
+    """
+    select, ignore = _rule_filters(args)
+    no_group = getattr(args, 'no_group', False)
+    no_snippets = getattr(args, 'no_snippets', False)
+    max_snippet_chars = getattr(args, 'max_snippet_chars', None)
+    max_items = getattr(args, 'max_items', None)
+    limit = getattr(args, 'limit', None)
+    if limit is None:  # --limit not typed (parser default is None; URI targets share the flag)
+        limit = 50
+    text = _check_text(files, directory, select, ignore, getattr(args, 'severity', None), limit, max_items)
+    tally = text.tally
+    disclosures = _scan_disclosures(files, select, ignore)
+    report = _report_for(files, collection, args, select, ignore, disclosures)
+    result = report(tally, text.budget)
+
+    artifact = None
+    if getattr(args, 'also_json', None):
+        entries, budget = _json_file_entries(
+            text.checked_files, max_items, no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
+        )
+        artifact = report(tally, budget, entries)
+
+    def render_text(_result: dict) -> None:
+        _print_text_report(text, limit, no_group=no_group,
+                           no_snippets=no_snippets, max_snippet_chars=max_snippet_chars)
+        _print_text_summary(
+            len(files), tally.files_with_issues, tally.total_issues, directory, config,
+            files_errored=tally.files_errored, files_degraded=tally.files_degraded,
+            scan_disclosures=disclosures,
+        )
+
+    return tally, result, render_text, artifact
 
 
 def handle_profile_rules(directory: Path, args: 'Namespace') -> None:
@@ -1313,7 +1323,7 @@ def handle_profile_rules(directory: Path, args: 'Namespace') -> None:
     exclude_patterns = getattr(args, 'exclude', None) or []
     files_to_check = collect_files_to_check(directory, respect_gitignore, exclude_patterns).files
     if not files_to_check:
-        _handle_no_files_found(directory, 'text')
+        print(_no_files_message(directory))
         return
 
     select = args.select.split(',') if args.select else None

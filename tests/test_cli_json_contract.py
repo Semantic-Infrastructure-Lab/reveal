@@ -57,18 +57,21 @@ class TestCheckJsonContract(unittest.TestCase):
     # file (relative to reveal/) -> number of JSON serialization sites.
     # BACK-1248 added a second site to each file: --also-json writes check's
     # report to a path while a text/grep report goes to stdout. Both sites in
-    # a file serialize the SAME enveloping builder (_build_detections_json /
-    # _build_json_report), so the envelope assertion below counts builders,
-    # not a 1:1 site-to-envelope ratio.
+    # a file serialize the SAME enveloping builder, so the envelope assertion
+    # below counts builders, not a 1:1 site-to-envelope ratio.
+    # cli/file_checker.py has none since BACK-1545: its stdout JSON leaves through
+    # emit_subcommand_result, and --also-json writes the seam's subcommand_json(),
+    # which tests/test_output_contract_compliance.py (invariant 6) holds to the
+    # envelope.
     _EXPECTED_CHECK_JSON_SITES = {
         'checks.py': 2,
-        'cli/file_checker.py': 3,
+        'cli/file_checker.py': 0,
     }
 
     # file -> the enveloping builder its --also-json site shares with stdout.
     _EXPECTED_ENVELOPE_BUILDERS = {
         'checks.py': '_build_detections_json',
-        'cli/file_checker.py': '_build_json_report',
+        'cli/file_checker.py': 'subcommand_json',
     }
 
     def test_check_json_dumps_sites_are_enveloped(self):

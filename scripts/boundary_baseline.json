@@ -45,8 +45,7 @@
  "silent-except": {},
  "subcommand-output": {
   "reveal/checks.py": 1,
-  "reveal/cli/commands/review.py": 1,
-  "reveal/cli/file_checker.py": 2
+  "reveal/cli/commands/review.py": 1
  },
  "tree-sitter-import": {},
  "walker": {}

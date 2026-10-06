@@ -324,7 +324,8 @@ What landed, and when, is in CHANGELOG `[0.130.0]` and `internal-docs/RESOLVED_L
 3. **The result contract.** One failed result and one cut marker are in place for the URI
    router, the subcommands and the file view. Open: BACK-1059 (typed outcomes at adapter and
    analyzer boundaries; broad handlers now disclose or narrow, both silent-handler gates at
-   0), BACK-1545 (`reveal check` still has its own cut marker and output path), BACK-916 (one
+   0), BACK-1545 (`reveal check <dir>` now leaves through the subcommand seam; single-file
+   `reveal check <file>` still has its own cut marker and output path), BACK-916 (one
    rendering layer: patches is migrated; the rest still print; the 10-01 review proposes
    starting at `adapters/nginx/handlers.py`, pending a maintainer decision) and BACK-1052 (one scan budget; patches pilot only).
 4. **One seam per concern.** The parser, path, root-finder and walker seams are done. Open:

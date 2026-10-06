@@ -48,8 +48,12 @@ def _run_json(files, root):
 
 
 def _run_text(files, root, capsys):
-    result = file_checker._check_files_text(files, root, None, None, collect_json=True)
-    return result, capsys.readouterr().out
+    report = file_checker._check_text(files, root, None, None)
+    file_checker._print_text_report(report, 50)
+    entries, _budget = file_checker._json_file_entries(report.checked_files)
+    tally = report.tally
+    counts = (tally.total_issues, tally.files_with_issues, tally.files_errored, tally.files_degraded)
+    return (*counts, entries), capsys.readouterr().out
 
 
 class TestPoolWorkerCount:

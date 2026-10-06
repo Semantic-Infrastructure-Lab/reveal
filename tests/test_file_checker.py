@@ -825,21 +825,12 @@ class TestScanDisclosures:
         """_print_json_output always emits scan_disclosures (empty list when
         nothing capped), not an omitted key -- [] must mean 'confirmed
         complete', not 'this run predates the field'."""
-        import json
-        import io
-        import contextlib
-        from reveal.cli.file_checker import _print_json_output
+        from reveal.cli.file_checker import _check_report, _CheckTally, _ItemBudget
 
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            _print_json_output([], 0, 0, 0, source=Path("."))
-        data = json.loads(buf.getvalue())
+        data = _check_report(_CheckTally(), 0, _ItemBudget(None), [])
         assert data["summary"]["scan_disclosures"] == []
 
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            _print_json_output([], 0, 0, 0, source=Path("."), scan_disclosures=["I002: capped"])
-        data = json.loads(buf.getvalue())
+        data = _check_report(_CheckTally(), 0, _ItemBudget(None), [], scan_disclosures=["I002: capped"])
         assert data["summary"]["scan_disclosures"] == ["I002: capped"]
 
 
@@ -1352,7 +1343,7 @@ class TestApplySeverityFilter:
 
 
 class TestCheckFilesTextSeverity:
-    """Tests that _check_files_text and _check_files_json honour the severity= parameter."""
+    """Tests that _check_text and _check_files_json honour the severity= parameter."""
 
     def _make_detection(self, sev: str) -> Mock:
         d = Mock()
@@ -1366,19 +1357,19 @@ class TestCheckFilesTextSeverity:
         d.context = ''
         return d
 
-    def test_check_files_text_filters_by_severity(self, tmp_path, capsys):
-        """_check_files_text with severity='high' should report only high/critical issues."""
-        from reveal.cli.file_checker import _check_files_text
+    def test_check_text_filters_by_severity(self, tmp_path):
+        """_check_text with severity='high' should report only high/critical issues."""
+        from reveal.cli.file_checker import _check_text
         dummy = tmp_path / 'a.py'
         dummy.write_text('x = 1')
         low = self._make_detection('low')
         high = self._make_detection('high')
 
         with patch('reveal.cli.file_checker.check_and_collect_file', return_value=(2, [low, high], {"status": "ok"})):
-            total, files_with, _errored, _degraded, *_ = _check_files_text([dummy], tmp_path, None, None, severity='high')
+            tally = _check_text([dummy], tmp_path, None, None, severity='high').tally
 
-        assert total == 1
-        assert files_with == 1
+        assert tally.total_issues == 1
+        assert tally.files_with_issues == 1
 
     def test_check_files_json_filters_by_severity(self, tmp_path):
         """_check_files_json with severity='high' should count only high/critical issues."""
@@ -1396,7 +1387,7 @@ class TestCheckFilesTextSeverity:
 
 
 class TestCheckFilesTextLimit:
-    """BACK-539: _check_files_text caps full per-file detail at `limit` files with
+    """BACK-539: the text report caps full per-file detail at `limit` files with
     issues, printing a summary footer for the rest instead of continuing —
     `check --select B,C,D,I,U` on a Kubernetes-scale tree emitted 178K+ lines /
     17MB with no cap. total_issues/files_with_issues must still reflect every
@@ -1424,13 +1415,15 @@ class TestCheckFilesTextLimit:
         return files
 
     def test_limit_caps_printed_files_and_prints_footer(self, tmp_path, capsys):
-        from reveal.cli.file_checker import _check_files_text
+        from reveal.cli.file_checker import _check_text, _print_text_report
         files = self._files_with_issues(tmp_path, 10)
         det = self._make_detection()
 
         with patch('reveal.cli.file_checker._PARALLEL_THRESHOLD', 999), \
              patch('reveal.cli.file_checker.check_and_collect_file', return_value=(1, [det], {"status": "ok"})):
-            total, files_with, _errored, _degraded, *_ = _check_files_text(files, tmp_path, None, None, limit=3)
+            report = _check_text(files, tmp_path, None, None, limit=3)
+        _print_text_report(report, 3)
+        total, files_with = report.tally.total_issues, report.tally.files_with_issues
 
         # Counts reflect ALL files, not just the ones printed in full.
         assert total == 10
@@ -1441,13 +1434,15 @@ class TestCheckFilesTextLimit:
         assert "+7 more files with 7 issues hidden (--limit 3)" in out
 
     def test_limit_zero_disables_cap(self, tmp_path, capsys):
-        from reveal.cli.file_checker import _check_files_text
+        from reveal.cli.file_checker import _check_text, _print_text_report
         files = self._files_with_issues(tmp_path, 10)
         det = self._make_detection()
 
         with patch('reveal.cli.file_checker._PARALLEL_THRESHOLD', 999), \
              patch('reveal.cli.file_checker.check_and_collect_file', return_value=(1, [det], {"status": "ok"})):
-            total, files_with, _errored, _degraded, *_ = _check_files_text(files, tmp_path, None, None, limit=0)
+            report = _check_text(files, tmp_path, None, None, limit=0)
+        _print_text_report(report, 0)
+        total, files_with = report.tally.total_issues, report.tally.files_with_issues
 
         assert total == 10
         assert files_with == 10
@@ -1456,13 +1451,15 @@ class TestCheckFilesTextLimit:
         assert "more files" not in out
 
     def test_limit_above_file_count_prints_no_footer(self, tmp_path, capsys):
-        from reveal.cli.file_checker import _check_files_text
+        from reveal.cli.file_checker import _check_text, _print_text_report
         files = self._files_with_issues(tmp_path, 5)
         det = self._make_detection()
 
         with patch('reveal.cli.file_checker._PARALLEL_THRESHOLD', 999), \
              patch('reveal.cli.file_checker.check_and_collect_file', return_value=(1, [det], {"status": "ok"})):
-            total, files_with, _errored, _degraded, *_ = _check_files_text(files, tmp_path, None, None, limit=50)
+            report = _check_text(files, tmp_path, None, None, limit=50)
+        _print_text_report(report, 50)
+        total, files_with = report.tally.total_issues, report.tally.files_with_issues
 
         assert total == 5
         assert files_with == 5
