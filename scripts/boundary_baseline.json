@@ -30,7 +30,7 @@
   "reveal/adapters/surface.py": 43,
   "reveal/adapters/testability.py": 30,
   "reveal/adapters/trace.py": 11,
-  "reveal/checks.py": 25,
+  "reveal/checks.py": 23,
   "reveal/config.py": 2,
   "reveal/diff/architecture_diff.py": 19,
   "reveal/file_handler.py": 7,
@@ -44,7 +44,6 @@
  },
  "silent-except": {},
  "subcommand-output": {
-  "reveal/checks.py": 1,
   "reveal/cli/commands/review.py": 1
  },
  "tree-sitter-import": {},

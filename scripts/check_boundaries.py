@@ -123,7 +123,7 @@ RULES: Dict[str, Dict[str, Any]] = {
         'home': (('func', 'reveal/main.py', 'main'),),
     },
     'subcommand-output': {
-        'task': 'BACK-1544 (removal: BACK-1545 for check)',
+        'task': 'BACK-1544 (removal: BACK-1059)',
         'fix': 'print the result through reveal.cli.routing.subcommand.emit_subcommand_result',
         'home': (('func', 'reveal/cli/routing/subcommand.py', 'emit_subcommand_result'),
                  ('func', 'reveal/cli/routing/subcommand.py', 'subcommand_json')),

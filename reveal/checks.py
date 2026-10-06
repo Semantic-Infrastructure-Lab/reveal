@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional, Any, List
 
 from .base import FileAnalyzer
-from .utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
+from .utils import get_file_type_from_analyzer, print_breadcrumbs
 
 # When a single rule fires this many times in one file, collapse to a summary line.
 # Users can disable with --no-group.
@@ -80,46 +80,7 @@ def capability_disclosures(files, select, ignore) -> List[str]:
             + _i001_not_checked_disclosures(files, select, ignore))
 
 
-def _format_detections_json(
-    path: str,
-    detections: List[Any],
-    parse_degraded: bool = False,
-    rule_errors: Optional[List[dict]] = None,
-    no_snippets: bool = False,
-    max_snippet_chars: Optional[int] = None,
-    total_available: Optional[int] = None,
-    disclosures: Optional[List[str]] = None,
-) -> None:
-    """Format detections as JSON.
-
-    Args:
-        path: File path
-        detections: List of Detection objects (already max-items-truncated
-            by the caller, if requested — this just renders what it's given)
-        parse_degraded: True when the parser recovered from a syntax error
-            (BACK-1084's structure['_has_errors']) — detections/structure for
-            this file may be incomplete or wrong, not just "clean" (BACK-1083).
-        rule_errors: Rules that raised during check() ({"rule", "error"}, from
-            RuleRegistry.check_file's errors= param) — otherwise invisible on
-            stdout/JSON, visible only in the stderr log (BACK-1083).
-        no_snippets: Omit each detection's `context` (code excerpt) field
-            (BACK-1182).
-        max_snippet_chars: Truncate each detection's `context` to N chars
-            instead of omitting it (BACK-1181). Ignored when no_snippets.
-        total_available: True detection count before any --max-items
-            truncation, if different from len(detections) (BACK-1181).
-        disclosures: Rules in the effective set that skipped this file's
-            language (capability_disclosures, BACK-1466); emitted as
-            ``scan_disclosures``, the key recursive check's summary uses.
-    """
-    print(safe_json_dumps(_build_detections_json(
-        path, detections, parse_degraded=parse_degraded, rule_errors=rule_errors,
-        no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
-        total_available=total_available, disclosures=disclosures,
-    )))
-
-
-def _build_detections_json(
+def _detections_result(
     path: str,
     detections: List[Any],
     parse_degraded: bool = False,
@@ -129,12 +90,34 @@ def _build_detections_json(
     total_available: Optional[int] = None,
     disclosures: Optional[List[str]] = None,
 ) -> dict:
-    """Build the single-file check JSON document. Split out of
-    _format_detections_json (BACK-1248) so --also-json can write the exact
-    document --format json prints, rather than a second shape.
+    """The single-file check result as plain data; the subcommand seam
+    (emit_subcommand_result / subcommand_json) adds the Output Contract envelope
+    (BACK-1702, as BACK-1545 did for ``check <dir>``), so --format json and --also-json
+    are one document (BACK-1248).
+
+    A --max-items cut (``total_available`` > ``len(detections)``) is recorded with
+    note_truncation (``meta.warnings``; the seam prints it once in text). The
+    ``meta.truncated/total_available/returned`` triple stays for compatibility.
+
+    Args:
+        path: File path
+        detections: Detection objects, already --max-items-truncated by the caller
+        parse_degraded: True when the parser recovered from a syntax error
+            (BACK-1084's structure['_has_errors']) -- detections for this file may be
+            incomplete or wrong, not just "clean" (BACK-1083).
+        rule_errors: Rules that raised during check() ({"rule", "error"})
+            (BACK-1083).
+        no_snippets: Omit each detection's `context` (code excerpt) field (BACK-1182).
+        max_snippet_chars: Truncate each detection's `context` to N chars instead of
+            omitting it (BACK-1181). Ignored when no_snippets.
+        total_available: True detection count before any --max-items truncation, if
+            different from len(detections) (BACK-1181).
+        disclosures: Rules in the effective set that skipped this file's language
+            (capability_disclosures, BACK-1466); emitted as ``scan_disclosures``, the
+            key recursive check's summary uses.
     """
-    from reveal.utils.results import add_cli_contract_fields
     from reveal.utils.path_utils import to_posix
+    from reveal.utils.results import note_truncation
 
     path = to_posix(path)  # '/' on every OS, like the directory envelope (BACK-1366)
     result = {
@@ -153,15 +136,58 @@ def _build_detections_json(
             'total_available': total_available,
             'returned': len(detections),
         }
+        note_truncation(result, 'detections', len(detections), total_available,
+                        cause='max_items')
     if parse_degraded:
         result['warning'] = (
             "file did not parse cleanly; results may be incomplete or incorrect"
         )
     if rule_errors:
         result['errors'] = rule_errors
-    return add_cli_contract_fields(
-        result, result_type='check', source=path, source_type='file',
-    )
+    return result
+
+
+def _detections_json(path: str, result: dict) -> str:
+    """The document ``--format json`` prints for a single-file *result*: what --also-json
+    writes beside a text or grep render (BACK-1248)."""
+    from reveal.cli.routing.subcommand import subcommand_json
+    return subcommand_json(result, name='check', source=path, source_type='file')
+
+
+def _emit_detections(path: str, output_format: str, detections: List[Any],
+                     rendered: List[Any], no_group: bool = False, **result_fields: Any) -> dict:
+    """Print a single-file check's result through the subcommand seam and return it.
+
+    JSON gets its envelope there, text/grep are rendered by it, and a --max-items cut
+    is disclosed once after the render (BACK-1702). *rendered* is *detections* after
+    --max-items; grep prints every detection, as it always has, so its result carries
+    no cut. *result_fields* are _detections_result's (parse_degraded, rule_errors,
+    no_snippets, max_snippet_chars, total_available, disclosures). The returned result
+    is the one for *rendered*, which --also-json writes.
+    """
+    from argparse import Namespace
+    from reveal.cli.routing.subcommand import emit_subcommand_result
+
+    result = _detections_result(path, rendered, **result_fields)
+    printed = _detections_result(path, detections, **result_fields) \
+        if output_format == 'grep' else result
+
+    def render(_result: dict) -> None:
+        if output_format == 'grep':
+            _format_detections_grep(detections)
+        else:
+            _format_detections_text(
+                path, rendered, no_group=no_group,
+                parse_degraded=result_fields.get('parse_degraded', False),
+                rule_errors=result_fields.get('rule_errors'),
+                no_snippets=result_fields.get('no_snippets', False),
+                max_snippet_chars=result_fields.get('max_snippet_chars'),
+                disclosures=result_fields.get('disclosures'),
+            )
+
+    emit_subcommand_result(printed, Namespace(format=output_format), name='check', source=path,
+                           render=render, source_type='file')
+    return result
 
 
 def _format_detections_grep(detections: List[Any]) -> None:
@@ -182,7 +208,6 @@ def _format_detections_text(
     rule_errors: Optional[List[dict]] = None,
     no_snippets: bool = False,
     max_snippet_chars: Optional[int] = None,
-    total_available: Optional[int] = None,
     disclosures: Optional[List[str]] = None,
 ) -> None:
     """Format detections as human-readable text.
@@ -193,7 +218,8 @@ def _format_detections_text(
     Args:
         path: File path
         detections: List of Detection objects (already max-items-truncated
-            by the caller, if requested — this just renders what it's given)
+            by the caller, if requested — this just renders what it's given;
+            the cut is disclosed by the subcommand seam, BACK-1702)
         no_group: Disable collapsing of repeated rules
         parse_degraded: True when the parser recovered from a syntax error —
             see _format_detections_json (BACK-1083).
@@ -201,8 +227,6 @@ def _format_detections_text(
         no_snippets: Omit the 📝 code-excerpt line (BACK-1182).
         max_snippet_chars: Truncate the excerpt to N chars instead of
             omitting it (BACK-1181). Ignored when no_snippets.
-        total_available: True detection count before any --max-items
-            truncation, if different from len(detections) (BACK-1181).
         disclosures: Rules that skipped this file's language (BACK-1466),
             printed before the verdict so a ✅ can't read as a full check.
     """
@@ -223,15 +247,10 @@ def _format_detections_text(
         print(f"{path}: ⚠️  file did not parse cleanly — results below may be incomplete or incorrect")
     print(f"{path}: Found {count} issue{'s' if count != 1 else ''}\n")
 
-    def _print_truncation_footer():
-        if total_available is not None and total_available > count:
-            print(f"… +{total_available - count} more issue(s) hidden (--max-items {count})\n")
-
     if no_group or count < _GROUP_THRESHOLD:
         for d in sorted(detections, key=lambda x: (x.line, x.column)):
             print(d.render(no_snippets=no_snippets, max_snippet_chars=max_snippet_chars))
             print()
-        _print_truncation_footer()
         return
 
     # Group by rule_code to find repeated rules
@@ -251,7 +270,6 @@ def _format_detections_text(
             total = len(by_rule[d.rule_code])
             print(d.render(no_snippets=no_snippets, max_snippet_chars=max_snippet_chars))
             print(f"\n  ↳ +{total - 1} more {d.rule_code} occurrences hidden — use --no-group to expand\n")
-    _print_truncation_footer()
 
 
 def structure_parse_degraded(structure: Any) -> bool:
@@ -344,23 +362,12 @@ def run_pattern_detection(
     if max_items is not None and total_available > max_items:
         rendered_detections = detections[:max_items]
 
-    # Format and output results
-    formatters = {
-        'json': lambda: _format_detections_json(
-            path, rendered_detections, parse_degraded=parse_degraded, rule_errors=rule_errors,
-            no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
-            total_available=total_available, disclosures=disclosures,
-        ),
-        'grep': lambda: _format_detections_grep(detections),
-        'text': lambda: _format_detections_text(
-            path, rendered_detections, no_group=no_group, parse_degraded=parse_degraded, rule_errors=rule_errors,
-            no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
-            total_available=total_available, disclosures=disclosures,
-        ),
-    }
-
-    formatter = formatters.get(output_format, formatters['text'])
-    formatter()
+    result = _emit_detections(
+        path, output_format, detections, rendered_detections, no_group=no_group,
+        parse_degraded=parse_degraded, rule_errors=rule_errors, no_snippets=no_snippets,
+        max_snippet_chars=max_snippet_chars, total_available=total_available,
+        disclosures=disclosures,
+    )
 
     # BACK-1248: --also-json on a single file. Built from the same detections
     # the renderer just used -- no second analysis pass -- and deliberately the
@@ -372,12 +379,7 @@ def run_pattern_detection(
     if isinstance(also_json, (str, os.PathLike)) and output_format != 'json':
         try:
             with open(also_json, 'w', encoding='utf-8') as f:
-                f.write(safe_json_dumps(_build_detections_json(
-                    path, rendered_detections, parse_degraded=parse_degraded,
-                    rule_errors=rule_errors, no_snippets=no_snippets,
-                    max_snippet_chars=max_snippet_chars,
-                    total_available=total_available, disclosures=disclosures,
-                )))
+                f.write(_detections_json(path, result))
         except OSError as e:
             print(f"Warning: --also-json could not write {also_json}: {e}", file=sys.stderr)
 
@@ -446,15 +448,7 @@ def run_schema_validation(
             path, structure, content, select=select, ignore=ignore
         )
 
-        # Format and output results
-        formatters = {
-            'json': lambda: _format_detections_json(path, detections),
-            'grep': lambda: _format_detections_grep(detections),
-            'text': lambda: _format_detections_text(path, detections),
-        }
-
-        formatter = formatters.get(output_format, formatters['text'])
-        formatter()
+        _emit_detections(path, output_format, detections, detections)
 
         # Exit with error code if validation failed
         if detections:
