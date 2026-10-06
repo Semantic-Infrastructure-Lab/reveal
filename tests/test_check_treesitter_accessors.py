@@ -39,6 +39,41 @@ def test_allows(src):
     assert cta.find_offenders(src) == []
 
 
+_TS = "from reveal.core.treesitter_compat import node_children\n"
+
+
+@pytest.mark.parametrize('src, expected', [
+    # The three wave-2 patterns that reached CI red on the 1.8.1 floor (28f675fd, BACK-1700).
+    (_TS + "kind in F and node.field_name_for_child(index) in F", [(2, 'field_name_for_child')]),
+    (_TS + "stack.extend(node.children)", [(2, 'children')]),
+    (_TS + "if child == target_node:\n    pass", [(2, '==')]),
+    (_TS + "node.field_name_for_named_child(0)", [(2, 'field_name_for_named_child')]),
+    (_TS + "for c in tree_root(tree).children: pass", [(2, 'children')]),
+    (_TS + "x = a_node != b_node", [(2, '==')]),
+    (_TS + "a = node.child_by_field_name('x').children", [(2, 'children')]),
+])
+def test_flags_floor_hazards(src, expected):
+    assert cta.find_offenders(src) == expected
+
+
+@pytest.mark.parametrize('src', [
+    # Negative controls: the same spellings that are not tree-sitter nodes, or the safe form.
+    "stack.extend(node.children)",                            # no tree-sitter in this file
+    "x = child == other",
+    _TS + "stack.extend(node_children(node))",
+    _TS + "for c in el.children: pass",                      # reveal's Element model receiver
+    _TS + "self.children",
+    _TS + "if node == None: pass",
+    _TS + "if node.type == 'identifier': pass",
+    _TS + "if child == 'x': pass",
+    _TS + "key = (_zero_arg(a, 'start_byte'), _zero_arg(a, 'end_byte')) == (1, 2)",
+    _TS + "stack.extend(node.children)  # noqa: ts-accessor",
+    _TS + "if node is target_node: pass",
+])
+def test_allows_safe_forms(src):
+    assert cta.find_offenders(src) == []
+
+
 def test_repo_has_no_bare_accessors():
     """Strict, not baselined: the only bare reads are the seam's own, marked noqa."""
     result = subprocess.run([sys.executable, str(_ROOT / 'scripts' / 'check_treesitter_accessors.py')],
