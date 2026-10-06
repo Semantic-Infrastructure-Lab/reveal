@@ -792,6 +792,103 @@ def _build_file_entry(
     return entry
 
 
+class _ItemBudget:
+    """--max-items: a running cap on rendered detections across the whole scan
+    (BACK-1181), not per file. Each render (text, JSON, --also-json) holds its own.
+    """
+
+    def __init__(self, max_items: Optional[int]):
+        self.remaining = max_items
+        self.truncated = False
+
+    def take(self, detections: list) -> list:
+        """The part of *detections* the budget still allows; the rest is cut."""
+        if self.remaining is None:
+            return detections
+        rendered = detections[:max(self.remaining, 0)]
+        if len(rendered) < len(detections):
+            self.truncated = True
+        self.remaining -= len(rendered)
+        return rendered
+
+
+@dataclass
+class _CheckedFile:
+    """One file's check result after the --severity filter: the plain data every
+    render of a directory check is built from (BACK-1534)."""
+
+    relative: str
+    detections: list
+    status: dict
+
+    @property
+    def state(self) -> str:
+        return str(self.status.get("status", "ok"))
+
+    @property
+    def reportable(self) -> bool:
+        """Has issues or a non-ok status, so it gets a JSON ``files[]`` entry."""
+        return bool(self.detections) or self.state != "ok"
+
+
+@dataclass
+class _CheckTally:
+    """The summary counts, and the inputs to check_exit_code()."""
+
+    total_issues: int = 0
+    files_with_issues: int = 0
+    files_errored: int = 0
+    files_degraded: int = 0
+
+    def add(self, checked: _CheckedFile) -> None:
+        if checked.state == "error":
+            self.files_errored += 1
+        elif checked.state == "warning":
+            self.files_degraded += 1
+        if checked.detections:
+            self.total_issues += len(checked.detections)
+            self.files_with_issues += 1
+
+
+def _filter_results(results, directory: Path, severity: Optional[str]) -> List[_CheckedFile]:
+    """Apply --severity to each (file_path, issue_count, detections, status) result.
+    A file's issue count is its filtered detections, so the summary and exit code
+    agree with what is shown."""
+    cwd = Path.cwd()
+    return [
+        _CheckedFile(_cwd_relative(file_path, directory, cwd),
+                     _apply_severity_filter(detections, severity), status)
+        for file_path, _issue_count, detections, status in results
+    ]
+
+
+def _tally(checked_files: List[_CheckedFile]) -> _CheckTally:
+    tally = _CheckTally()
+    for checked in checked_files:
+        tally.add(checked)
+    return tally
+
+
+def _json_file_entries(
+    checked_files: List[_CheckedFile],
+    max_items: Optional[int] = None,
+    no_snippets: bool = False,
+    max_snippet_chars: Optional[int] = None,
+) -> tuple:
+    """The JSON report's ``files[]`` and whether --max-items cut any detection.
+    Shared by --format json/grep and text's --also-json (BACK-1248), so the
+    artifact is the document --format json prints."""
+    budget = _ItemBudget(max_items)
+    entries = [
+        _build_file_entry(
+            checked.relative, len(checked.detections), budget.take(checked.detections),
+            checked.status, no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
+        )
+        for checked in checked_files if checked.reportable
+    ]
+    return entries, budget.truncated
+
+
 def _check_files_json(
     files: List[Path], directory: Path, select: Optional[List[str]], ignore: Optional[List[str]],
     severity: Optional[str] = None,
@@ -824,13 +921,7 @@ def _check_files_json(
         analyzer for the file type), which are not counted as an error.
         items_truncated is True when max_items cut off some detections.
     """
-    total_issues = 0
-    files_with_issues = 0
-    files_errored = 0
-    file_results = []
     sorted_files = sorted(files)
-    remaining_budget = max_items
-    items_truncated = False
 
     if len(sorted_files) >= _PARALLEL_THRESHOLD:
         try:
@@ -842,36 +933,139 @@ def _check_files_json(
     else:
         results = [(f, *check_and_collect_file(f, directory, select, ignore)) for f in sorted_files]
 
-    cwd = Path.cwd()
-    for file_path, issue_count, detections, status in results:
-        detections = _apply_severity_filter(detections, severity)
-        issue_count = len(detections)
-        st = status.get("status", "ok")
-        if st == "error":
-            files_errored += 1
-        if issue_count > 0:
-            total_issues += issue_count
-            files_with_issues += 1
-        if issue_count > 0 or st != "ok":
-            rel_path = _cwd_relative(file_path, directory, cwd)
+    checked_files = _filter_results(results, directory, severity)
+    tally = _tally(checked_files)
+    file_results, items_truncated = _json_file_entries(
+        checked_files, max_items, no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
+    )
+    return tally.total_issues, tally.files_with_issues, file_results, tally.files_errored, items_truncated
 
-            rendered = detections
-            if remaining_budget is not None:
-                if remaining_budget <= 0:
-                    rendered = []
-                    if detections:
-                        items_truncated = True
-                elif len(detections) > remaining_budget:
-                    rendered = detections[:remaining_budget]
-                    items_truncated = True
-                remaining_budget -= len(rendered)
 
-            file_results.append(_build_file_entry(
-                rel_path, issue_count, rendered, status,
-                no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
-            ))
+def _results_in_sorted_order(sorted_files: List[Path], directory: Path, select, ignore) -> list:
+    """Run the text path's checks; (file_path, issue_count, detections, status) per
+    file, in ``sorted_files`` order.
 
-    return total_issues, files_with_issues, file_results, files_errored, items_truncated
+    Uses streaming parallel execution so workers run concurrently rather than
+    buffering the full result set before any of them start. Completion order is
+    non-deterministic, so results are gathered by file and returned in the stable
+    input order (BACK-1243): the ``--limit`` cutoff decides which files get full
+    detail vs. get folded into the "N more files hidden" footer, and on completion
+    order that decision (and the hidden-count total) varied run to run on
+    byte-identical input. A file whose worker raised is absent (already logged by
+    _run_parallel_streaming).
+    """
+    if len(sorted_files) >= _PARALLEL_THRESHOLD:
+        try:
+            result_iter = _run_parallel_streaming(sorted_files, directory, select, ignore)
+        except Exception:
+            # Parallel execution itself failed (e.g. pool startup) — fall back to
+            # serial, still checking every file in sorted_files, not a smaller set.
+            result_iter = (
+                (f, *check_and_collect_file(f, directory, select, ignore))
+                for f in sorted_files
+            )
+    else:
+        result_iter = (
+            (f, *check_and_collect_file(f, directory, select, ignore))
+            for f in sorted_files
+        )
+    results_by_file = {
+        file_path: (issue_count, detections, status)
+        for file_path, issue_count, detections, status in result_iter
+    }
+    return [(f, *results_by_file[f]) for f in sorted_files if f in results_by_file]
+
+
+@dataclass
+class _TextFileBlock:
+    """One file in the text report. ``shown`` is what prints under its
+    "Found N issues" header; None = no header (no issues, or past --limit)."""
+
+    checked: _CheckedFile
+    shown: Optional[list] = None
+
+
+@dataclass
+class _TextReport:
+    """The text report as plain data, before printing (BACK-1534; the print half
+    is what BACK-916's single rendering layer takes over)."""
+
+    blocks: List[_TextFileBlock]
+    tally: _CheckTally
+    hidden_files: int = 0
+    hidden_issues: int = 0
+    items_truncated: bool = False
+
+
+def _build_text_report(
+    checked_files: List[_CheckedFile], limit: int, max_items: Optional[int],
+) -> _TextReport:
+    """Apply --limit (files with issues shown in full) and --max-items (detections
+    shown across the run). Both only shorten what prints: every file still counts."""
+    report = _TextReport(blocks=[], tally=_CheckTally())
+    budget = _ItemBudget(max_items)
+    for checked in checked_files:
+        report.tally.add(checked)
+        block = _TextFileBlock(checked)
+        if checked.detections:
+            if limit > 0 and report.tally.files_with_issues > limit:
+                report.hidden_files += 1
+                report.hidden_issues += len(checked.detections)
+            else:
+                block.shown = budget.take(checked.detections)
+        report.blocks.append(block)
+    report.items_truncated = budget.truncated
+    return report
+
+
+def _print_file_status(checked: _CheckedFile) -> None:
+    """A file that could not be checked, parsed degraded, or had a rule crash."""
+    relative = checked.relative
+    if checked.state == "error":
+        print(f"\n{relative}: ⚠️  could not be checked — {checked.status.get('detail', 'error')}")
+    elif checked.state == "warning":
+        print(f"\n{relative}: ⚠️  {checked.status.get('detail', 'file did not parse cleanly')}")
+    for err in checked.status.get("rule_errors", []):
+        print(f"{relative}: ⚠️  rule {err['rule']} crashed and did not run — {err['error']}")
+
+
+def _print_text_report(
+    report: _TextReport,
+    limit: int,
+    max_items: Optional[int],
+    no_group: bool = False,
+    no_snippets: bool = False,
+    max_snippet_chars: Optional[int] = None,
+) -> None:
+    """Print the per-file blocks and the --max-items/--limit footers."""
+    # BACK-1039: shared run-wide (not per-file) so a rule's full guidance
+    # prints once for the whole run — see _print_grouped_detections.
+    shown_guidance: set = set()
+    for block in report.blocks:
+        _print_file_status(block.checked)
+        if block.shown is None:
+            continue
+        relative = block.checked.relative
+        issue_count = len(block.checked.detections)
+        print(f"\n{relative}: Found {issue_count} issue{'s' if issue_count != 1 else ''}\n")
+        _print_grouped_detections(
+            block.shown, relative, no_group=no_group, shown_guidance=shown_guidance,
+            no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
+        )
+
+    if report.items_truncated:
+        print(
+            f"\n… some issues hidden (--max-items {max_items}) — "
+            f"raise --max-items or narrow with --select to see more\n"
+        )
+
+    hidden_files, hidden_issues = report.hidden_files, report.hidden_issues
+    if hidden_files:
+        print(
+            f"\n… +{hidden_files} more file{'s' if hidden_files != 1 else ''} "
+            f"with {hidden_issues} issue{'s' if hidden_issues != 1 else ''} hidden "
+            f"(--limit {limit}) — narrow with --select, or raise/disable with --limit N/--limit 0"
+        )
 
 
 def _check_files_text(
@@ -887,7 +1081,7 @@ def _check_files_text(
     max_items: Optional[int] = None,
     collect_json: bool = False,
 ) -> tuple:
-    """Check files with text output.
+    """Check files with text output: run, filter, build the report, print it.
 
     Args:
         files: List of files to check
@@ -919,138 +1113,24 @@ def _check_files_text(
         skipped (BACK-1083); files_degraded is status == "warning" (parsed via
         error-recovery).
     """
-    total_issues = 0
-    files_with_issues = 0
-    files_errored = 0
-    files_degraded = 0
-    hidden_files = 0
-    hidden_issues = 0
-    remaining_budget = max_items
-    items_truncated = False
+    results = _results_in_sorted_order(sorted(files), directory, select, ignore)
+    checked_files = _filter_results(results, directory, severity)
+    report = _build_text_report(checked_files, limit, max_items)
+
     file_results: List[dict] = []
-    json_budget = max_items
     json_items_truncated = False
-    sorted_files = sorted(files)
-
-    # Use streaming parallel execution so workers run concurrently rather than
-    # buffering the full result set before any of them start. Completion order
-    # itself is non-deterministic, which is why results are gathered into
-    # results_by_file below and then walked in sorted_files' stable order --
-    # BACK-1243, see the comment there for what broke when this used
-    # completion order directly.
-    if len(sorted_files) >= _PARALLEL_THRESHOLD:
-        try:
-            result_iter = _run_parallel_streaming(sorted_files, directory, select, ignore)
-        except Exception:
-            # Parallel execution itself failed (e.g. pool startup) — fall back to
-            # serial, still checking every file in sorted_files, not a smaller set.
-            result_iter = (
-                (f, *check_and_collect_file(f, directory, select, ignore))
-                for f in sorted_files
-            )
-    else:
-        result_iter = (
-            (f, *check_and_collect_file(f, directory, select, ignore))
-            for f in sorted_files
+    if collect_json:
+        file_results, json_items_truncated = _json_file_entries(
+            checked_files, max_items, no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
         )
 
-    cwd = Path.cwd()
-    # BACK-1039: shared run-wide (not per-file) so a rule's full guidance
-    # prints once for the whole run — see _print_grouped_detections.
-    shown_guidance: set = set()
-
-    # BACK-1243: consume the streaming iterator into a dict first, then drive
-    # the print/limit loop over `sorted_files`'s stable order rather than
-    # completion order. Workers still run concurrently (unchanged) -- only
-    # the order results are PROCESSED in changes. This isn't just cosmetic:
-    # the `--limit` cutoff below decides which files get full detail vs. get
-    # folded into the "N more files hidden" footer, and on completion order
-    # that decision (and the hidden-count total) varied run to run on
-    # byte-identical input -- confirmed live, `check --format json` was
-    # already unaffected since it uses order-preserving `_run_parallel`.
-    results_by_file = {
-        file_path: (issue_count, detections, status)
-        for file_path, issue_count, detections, status in result_iter
-    }
-
-    for file_path in sorted_files:
-        if file_path not in results_by_file:
-            continue  # worker raised; already logged by _run_parallel_streaming
-        issue_count, detections, status = results_by_file[file_path]
-        detections = _apply_severity_filter(detections, severity)
-        issue_count = len(detections)
-        st = status.get("status", "ok")
-        if st == "error":
-            files_errored += 1
-        elif st == "warning":
-            files_degraded += 1
-
-        relative = _cwd_relative(file_path, directory, cwd)
-
-        if st == "error":
-            print(f"\n{relative}: ⚠️  could not be checked — {status.get('detail', 'error')}")
-        elif st == "warning":
-            print(f"\n{relative}: ⚠️  {status.get('detail', 'file did not parse cleanly')}")
-        for err in status.get("rule_errors", []):
-            print(f"{relative}: ⚠️  rule {err['rule']} crashed and did not run — {err['error']}")
-
-        # BACK-1248: build the --also-json artifact off the same collected
-        # results, before the `limit` cutoff below skips printing this file.
-        if collect_json and (issue_count > 0 or st != "ok"):
-            json_rendered = detections
-            if json_budget is not None:
-                if json_budget <= 0:
-                    json_rendered = []
-                    if detections:
-                        json_items_truncated = True
-                elif len(detections) > json_budget:
-                    json_rendered = detections[:json_budget]
-                    json_items_truncated = True
-                json_budget -= len(json_rendered)
-            file_results.append(_build_file_entry(
-                relative, issue_count, json_rendered, status,
-                no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
-            ))
-
-        if issue_count > 0:
-            total_issues += issue_count
-            files_with_issues += 1
-            if limit > 0 and files_with_issues > limit:
-                hidden_files += 1
-                hidden_issues += issue_count
-                continue
-            print(f"\n{relative}: Found {issue_count} issue{'s' if issue_count != 1 else ''}\n")
-
-            rendered = detections
-            if remaining_budget is not None:
-                if remaining_budget <= 0:
-                    rendered = []
-                    items_truncated = True
-                elif len(detections) > remaining_budget:
-                    rendered = detections[:remaining_budget]
-                    items_truncated = True
-                remaining_budget -= len(rendered)
-
-            _print_grouped_detections(
-                rendered, relative, no_group=no_group, shown_guidance=shown_guidance,
-                no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
-            )
-
-    if items_truncated:
-        print(
-            f"\n… some issues hidden (--max-items {max_items}) — "
-            f"raise --max-items or narrow with --select to see more\n"
-        )
-
-    if hidden_files:
-        print(
-            f"\n… +{hidden_files} more file{'s' if hidden_files != 1 else ''} "
-            f"with {hidden_issues} issue{'s' if hidden_issues != 1 else ''} hidden "
-            f"(--limit {limit}) — narrow with --select, or raise/disable with --limit N/--limit 0"
-        )
-
+    _print_text_report(
+        report, limit, max_items, no_group=no_group,
+        no_snippets=no_snippets, max_snippet_chars=max_snippet_chars,
+    )
+    tally = report.tally
     return (
-        total_issues, files_with_issues, files_errored, files_degraded,
+        tally.total_issues, tally.files_with_issues, tally.files_errored, tally.files_degraded,
         file_results, json_items_truncated,
     )
 
