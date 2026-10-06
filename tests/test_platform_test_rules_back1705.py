@@ -213,7 +213,8 @@ class TestV037:
         # cross-platform names
         'def test(p):\n    os.kill(p, signal.SIGTERM)\n    os.getpid()\n    os._exit(0)\n',
         # POSIX paths as strings only (a fake root, an expected value)
-        "def test():\n    run(Path('/tmp'))\n    assert x == '/tmp/a.py'\n",
+        "def test():\n    run(Path('/tmp'))\n"
+        "    assert x == '/tmp/a.py'\n",  # noqa: win-path (fixture source text)
         # POSIX calls inside a source fixture / subprocess driver
         "SRC = '''\nimport fcntl\nos.fork()\nopen('/tmp/x', 'w')\n'''\n",
         # tempfile, not /tmp
