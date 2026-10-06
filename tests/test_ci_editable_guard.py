@@ -4,6 +4,7 @@ Exercised against fake venv directories (a dist-info/direct_url.json), never the
 ~/.cache/reveal-ci venv.
 """
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -29,10 +30,9 @@ def _fake_venv(root: Path, target: Path | None, editable: bool = True) -> Path:
 
 
 def _guard(venv: Path, top: Path, **env):
-    import os
-
     full = {**os.environ, **env}
-
+    if "REVEAL_CI_ALLOW_REPOINT" not in env:
+        full.pop("REVEAL_CI_ALLOW_REPOINT", None)
     return subprocess.run(
         ["bash", "-c", f'source "{GUARD.as_posix()}"; ci_editable_guard "$1" "$2"', "_", str(venv), str(top)],
         capture_output=True, text=True, timeout=30, env=full,
