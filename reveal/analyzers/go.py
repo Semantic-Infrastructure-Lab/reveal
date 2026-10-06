@@ -18,14 +18,32 @@ class GoAnalyzer(TreeSitterAnalyzer):
     """
     language = 'go'
     IMPORTS_VIA_EXTRACTOR = True  # BACK-1089
-    DECLARATION_CATEGORIES = {'interfaces': ('interface_type',)}
+    # BACK-1651: a named non-struct type (`type T int`, `type F func()`, `type M map[..]..`,
+    # `type A = B`) is a `type_spec`/`type_alias` that is no struct or interface, so it
+    # is listed under `types` and the methods declared on it nest under it.
+    DECLARATION_CATEGORIES = {'interfaces': ('interface_type',),
+                              'types': ('type_spec', 'type_alias')}
 
     def _get_node_name(self, node) -> Optional[str]:
         # `type Foo interface {...}`: like struct_type, the name is a sibling
         # type_identifier under type_spec, not a child of interface_type.
-        if _zero_arg(node, 'kind') == 'interface_type':
+        kind = _zero_arg(node, 'kind')
+        if kind == 'interface_type':
             return self._struct_type_name(node)
+        if kind in ('type_spec', 'type_alias'):
+            return self._named_type_name(node)
         return super()._get_node_name(node)
+
+    def _named_type_name(self, spec) -> Optional[str]:
+        """Name of a `type_spec`/`type_alias` that is neither a struct nor an interface
+        (those are listed by their `struct_type`/`interface_type` body); None for those."""
+        kids = _children(spec)
+        if any(_zero_arg(c, 'kind') in ('struct_type', 'interface_type') for c in kids):
+            return None
+        for child in kids:
+            if _zero_arg(child, 'kind') == 'type_identifier':
+                return self._get_node_text(child)
+        return None
 
     def _extraction_node(self, node):
         """`type Foo struct {...}` parses the body as a bare `struct_type` /
