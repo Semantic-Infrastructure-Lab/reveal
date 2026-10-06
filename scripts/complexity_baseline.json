@@ -10,7 +10,7 @@
   "reveal/adapters/claude/handlers/post_process.py::_post_process_session_list": 22,
   "reveal/adapters/depends.py::DependsAdapter._format_file_dependents": 22,
   "reveal/adapters/depends.py::DependsAdapter._index_one_file": 25,
-  "reveal/adapters/help.py::HelpAdapter._search_help": 26,
+  "reveal/adapters/help.py::HelpAdapter._search_help": 24,
   "reveal/adapters/overview.py::_render_architecture": 27,
   "reveal/adapters/pack.py::_compute_priority": 27,
   "reveal/adapters/surface.py::_scan_surface": 23,

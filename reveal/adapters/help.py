@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer, _ADAPTER_REGISTRY, list_public_schemes
 from .registry import _SCAFFOLD_SCHEMES, is_internal_scheme
 from ..utils.formatting import shell_command
+from ..utils.query_parser import ParamSpec, param_schema, whole_number
 from ..utils.results import ResultBuilder, note_truncation
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -293,8 +294,11 @@ class HelpRenderer:
         render_help(result, format)
 
 
-# help://search lists at most this many hits and records the rest as a cut (BACK-1543).
-_SEARCH_HIT_CAP = 20
+# help://search's hit cap; the rest is recorded as a cut (BACK-1543). ?top=N widens it
+# (BACK-1383). Named like the native caps of hotspots/calls/depends/testability: limit= is
+# a result-control key that help:// does not take (HONORS_RESULT_CONTROL = False strips it).
+_SEARCH_TOP = ParamSpec('top', 'integer', 'help://search only: maximum hits to list', 20,
+                        whole_number, ('top=50',), minimum=0, zero_policy='all')
 _FENCE_RE = re.compile(r'^\s*(```|~~~)')
 _HEADING_RE = re.compile(r'^(#{1,6})\s+(.*)')
 
@@ -334,6 +338,25 @@ def _markdown_headings(lines: List[str]) -> List[tuple]:
             if h:
                 headings.append((i, len(h.group(1)), h.group(2).strip()))
     return headings
+
+
+def _search_result(term: str, ranked: List[Dict[str, Any]], top: int) -> Dict[str, Any]:
+    """help://search's answer: the first `top` ranked hits (0 = all), the rest recorded as a cut."""
+    hits = ranked[:top] if top else ranked
+    result = {
+        'type': 'help_search',
+        'query': term,
+        'count': len(hits),
+        'hits': hits,
+        'next': (
+            [h['command'] for h in hits[:3]] if hits
+            else ['reveal help://quick', 'reveal help://adapters']
+        ),
+    }
+    # BACK-1543: 'help://search/file' listed 20 of 47 hits as all of them.
+    note_truncation(result, 'hits', len(hits), len(ranked), 'limit',
+                    hint='raise ?top=N (0 = all), or add a search word to narrow it')
+    return result
 
 
 @register_adapter('help')
@@ -567,6 +590,7 @@ class HelpAdapter(ResourceAdapter):
                     'type': 'string',
                     'description': 'help://search?search=<term>: full-text search over guides, adapters and recipes',
                 },
+                **param_schema((_SEARCH_TOP,)),
             },
             'elements': {},
             'cli_flags': [],
@@ -889,7 +913,17 @@ class HelpAdapter(ResourceAdapter):
         from urllib.parse import unquote_plus
         from ..utils.query_parser import parse_query_params
         params = parse_query_params(query_string)
-        return self._search_help(unquote_plus(str(params.get('search') or '')))
+        term = unquote_plus(str(params.get('search') or ''))
+        try:
+            top = _SEARCH_TOP.read(params)
+        except ValueError as exc:
+            return {
+                'type': 'help_search',
+                'query': term.strip(),
+                'error': str(exc),
+                'message': "Usage: reveal 'help://search?search=<term>&top=N' (top=0 lists every hit)",
+            }
+        return self._search_help(term, top=top)
 
     def _get_schema_route(self, remainder: str) -> Optional[Dict[str, Any]]:
         """help://schemas/<adapter>[/<output_type>|/full]."""
@@ -1099,7 +1133,7 @@ class HelpAdapter(ResourceAdapter):
         universe = set(self._list_topics()) | discovery
         return difflib.get_close_matches(base, sorted(universe), n=n, cutoff=0.6)
 
-    def _search_help(self, query_term: str) -> Dict[str, Any]:
+    def _search_help(self, query_term: str, top: int = _SEARCH_TOP.default) -> Dict[str, Any]:
         """Full-text search over reveal's own help corpus (help://search?search=<term>).
 
         BACK-1023: help://quick's decision_tree only routes a reader who
@@ -1214,23 +1248,7 @@ class HelpAdapter(ResourceAdapter):
             })
 
         hits.sort(key=lambda h: (-h.pop('_strength'), _TYPE_PRIORITY.get(h['type'], 9)))
-        found = len(hits)
-        hits = hits[:_SEARCH_HIT_CAP]
-
-        result = {
-            'type': 'help_search',
-            'query': term,
-            'count': len(hits),
-            'hits': hits,
-            'next': (
-                [h['command'] for h in hits[:3]] if hits
-                else ['reveal help://quick', 'reveal help://adapters']
-            ),
-        }
-        # BACK-1543: 'help://search/file' listed 20 of 47 hits as all of them.
-        note_truncation(result, 'hits', len(hits), found, 'limit',
-                        hint='add a search word to narrow it')
-        return result
+        return _search_result(term, hits, top)
 
     def _get_adapter_description(self, adapter_class: type[Any]) -> str:
         """Get description from adapter's help method.

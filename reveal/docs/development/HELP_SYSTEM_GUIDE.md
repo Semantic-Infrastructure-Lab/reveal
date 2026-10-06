@@ -93,7 +93,7 @@ reveal help://schemas/ast/ast_query    # One output type's full JSON-Schema
 reveal help://schemas/ast/full         # Unsummarized schema payload
 reveal help://examples        # Canonical query recipes by task
 reveal help://examples/quality  # Recipes for code quality analysis
-reveal 'help://search?search=<term>'  # Full-text search across guides/adapters/examples
+reveal 'help://search?search=<term>'  # Full-text search across guides/adapters/examples (&top=N: more than 20 hits)
 ```
 
 **Audience:** Humans exploring capabilities, developers

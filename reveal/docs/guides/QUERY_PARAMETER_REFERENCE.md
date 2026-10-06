@@ -26,7 +26,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **codex://** | `search`, `filter`, `since`, `until` | `codex://sessions/?search=auth-refactor` |
 | **depends://** | `top`, `format` | `depends://src?top=10` |
 | **xlsx://** | `sheet`, `range`, `search`, `format`, `limit`, `formulas`, `powerpivot`, `powerquery`, `names`, `connections` | `xlsx://model.xlsx?sheet=Sales` |
-| **help://** | `search` (only on `help://search`) | `help://search?search=find callers` |
+| **help://** | `search`, `top` (only on `help://search`; `top` caps hits, default 20, `0` = all) | `help://search?search=find callers&top=50` |
 | **cpanel://** | `domain_type`, `dns-verified`, `check-live` | `cpanel://USER/ssl?domain_type=addon` |
 | **ssl://** | `expiring-within`, `summary` | `ssl://host?expiring-within=30` |
 | **diff://** | none | N/A |

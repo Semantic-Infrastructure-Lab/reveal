@@ -377,9 +377,9 @@ both forms (BACK-1544). A subcommand's findings exit (`hotspots`/`deps` exit 1 o
   N and record it with the adapter's own knob as the hint (`hint='raise ?top=N'`). Cut where
   the knob is read, not inside a shared helper: a helper that returns only the top N has lost
   the total (`identify_hotspots`, `group_patches` did, BACK-1543). A total field (`total`,
-  `total_modules`, `count`) may stay for JSON readers, but it doesn't replace the marker. A
-  cap with no knob still records the cut and says how to narrow the question
-  (`help://search`: `add a search word to narrow it`).
+  `total_modules`, `count`) may stay for JSON readers, but it doesn't replace the marker. The
+  hint can also say how to narrow the question (`help://search`: `raise ?top=N (0 = all), or
+  add a search word to narrow it`); a cap with no knob still records the cut and says that.
 - **A cap cuts the answer; it doesn't bound what is read.** Build the whole answer, order it,
   then keep the first N. Stop reading early only when the reading order is the answer's order,
   and then read one past the page: that item proves more exist, so record a lower bound,
