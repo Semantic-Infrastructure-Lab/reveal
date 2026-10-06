@@ -10,6 +10,7 @@ including a one-statement body that actually computes something.
 import pytest
 
 from reveal.analyzers.python import PythonAnalyzer
+from reveal.rules.duplicates import _bodies
 from reveal.rules.duplicates.D001 import D001
 
 pytestmark = pytest.mark.component
@@ -96,3 +97,18 @@ def test_hooks_do_not_hide_a_real_duplicate_beside_them(tmp_path):
     findings = _detect(tmp_path, HOOKS + "\n" + REAL_DUPLICATES.replace("class Svc", "class Svc2"))
     assert [d.message.split("'")[1] for d in findings] == ["second"]
 
+
+
+@pytest.mark.parametrize("body", [
+    "return []", "return {}", "return None", "return ()", "return 0", "return False", "return True",
+    'return ""', "return", "pass", "...", "return null;", "return false;", "return;", "{\nreturn null;\n}",
+])
+def test_trivial_hook_body_recognized(body):
+    assert _bodies.is_trivial_hook_body(body)
+
+
+@pytest.mark.parametrize("body", [
+    "return self.x", "return [1]", "return foo()", "return None\nreturn []", "x = 1", "return -1", "",
+])
+def test_non_trivial_body_not_a_hook(body):
+    assert not _bodies.is_trivial_hook_body(body)

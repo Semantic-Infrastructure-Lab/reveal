@@ -2,6 +2,8 @@
 
 Abusively lean approach:
 - Normalize function body (strip whitespace, comments)
+- Skip no-op hook bodies (a lone ``return []``/``return None``/``pass``): base
+  implementations of extension points are identical by design (BACK-1049)
 - Hash normalized content
 - O(n) time, O(n) space where n = number of functions
 - Zero new dependencies (stdlib only)
@@ -17,7 +19,7 @@ from hashlib import sha256
 import re
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from ._bodies import extract_function_body
+from ._bodies import extract_function_body, is_trivial_hook_body
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +76,7 @@ class D001(BaseRule):
             if not func_body or len(func_body.strip()) < 10:
                 continue
             normalized = self._normalize(func_body)
-            if not normalized:
+            if not normalized or is_trivial_hook_body(normalized):
                 continue
             func_hash = sha256(normalized.encode('utf-8')).hexdigest()[:16]
             scope = class_for(func.get('line', 0)) or '__module__'
