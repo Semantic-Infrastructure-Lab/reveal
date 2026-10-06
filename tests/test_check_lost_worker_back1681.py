@@ -6,6 +6,7 @@ report: files_errored 0, exit 1 instead of 3. A lost file now arrives as a ``sta
 result, so the report counts it, the exit is 3, and the disclosure is the report's own line.
 """
 
+import multiprocessing
 import os
 import sys
 from pathlib import Path
@@ -16,9 +17,13 @@ from reveal.cli import file_checker
 from reveal.cli.defaults import _default_args
 from reveal.cli.file_checker import handle_recursive_check
 
-pytestmark = pytest.mark.skipif(
-    sys.platform == "win32" or "fork" not in __import__("multiprocessing").get_all_start_methods(),
-    reason="the dying worker is injected by patching the module the forked pool inherits",
+pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX pool semantics")
+
+# The dying worker is injected by patching the module the pool's workers inherit, which only
+# a forked worker does. Python 3.14 (Linux: forkserver) and macOS (spawn) do not default to fork.
+needs_forked_workers = pytest.mark.skipif(
+    multiprocessing.get_context().get_start_method() != "fork",
+    reason="the default pool does not fork, so the patched worker never reaches it",
 )
 
 DYING = "m2.py"
@@ -44,6 +49,7 @@ def two_workers(monkeypatch):
     monkeypatch.setenv("REVEAL_MAX_WORKERS", "2")
 
 
+@needs_forked_workers
 def test_text_path_counts_every_file_when_a_worker_dies(tmp_path, monkeypatch, two_workers):
     files = _tree(tmp_path)
     monkeypatch.setattr(file_checker, "check_and_collect_file",
@@ -56,6 +62,7 @@ def test_text_path_counts_every_file_when_a_worker_dies(tmp_path, monkeypatch, t
     assert "BrokenProcessPool" in dead.status["detail"]
 
 
+@needs_forked_workers
 def test_cli_exits_3_and_discloses_the_lost_file_once(tmp_path, monkeypatch, capsys, caplog, two_workers):
     _tree(tmp_path)
     monkeypatch.setattr(file_checker, "check_and_collect_file",
