@@ -169,7 +169,7 @@ The most-used adapters; `reveal --adapters` lists every one.
 
 | Adapter | What it queries |
 |---------|-----------------|
-| `ast://` | Functions, classes, complexity, decorators — 51 languages |
+| `ast://` | Functions, classes, complexity, decorators — every language `reveal --languages` lists |
 | `calls://` | Cross-file call graph: callers, callees, coupling metrics, dead code |
 | `depends://` | Inverse module dependency graph: who imports this module |
 | `diff://` | Structural diff between branches or commits (with per-function complexity delta) |

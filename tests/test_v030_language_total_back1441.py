@@ -1,12 +1,11 @@
-"""V030 checks the AGENT_HELP.md language total it claims to check (BACK-1441).
+"""V030 gates the README headline language count against `reveal --languages` (BACK-1441).
 
-V030's pattern required "Programming Languages (N total"; 2eaf0d31 reworded the heading
-to "(N languages and file formats in total", after which V030 matched nothing and
-reported a clean result. A zero needs a positive control: these tests prove V030
-finds the real heading and flags a wrong number in it.
+README.md carries the one hand-written language total; other docs point at
+`reveal --languages`. V030 once matched nothing after a reword and reported clean, so these
+tests are the positive control (the real headline is found and checked) and the negative
+controls (a wrong headline, an underclaim, and a missing headline all fail loudly).
 """
 import re
-import shutil
 from pathlib import Path
 
 import pytest
@@ -15,42 +14,20 @@ from reveal.rules.validation import V030 as v030_module
 from reveal.rules.validation.V030 import V030
 
 ROOT = Path(__file__).resolve().parent.parent
-AGENT_HELP = ROOT / 'reveal' / 'docs' / 'AGENT_HELP.md'
-OLD_PATTERN = re.compile(r'Programming Languages\s*\((\d+)\+?\s*total\b', re.IGNORECASE)
+README = ROOT / 'README.md'
 
 
-def _main_body_count_lines():
-    lines = []
-    for line in AGENT_HELP.read_text(encoding='utf-8').split('\n'):
-        if V030._CHANGELOG_HEADING.match(line):
-            break
-        if re.search(r'Programming Languages\s*\(\s*\d', line, re.IGNORECASE):
-            lines.append(line)
-    return lines
-
-
-def _matches(line):
-    return any(pattern.search(line) for pattern, _metric in V030._TOTAL_PATTERNS)
-
-
-def test_every_numbered_language_heading_is_checked():
-    lines = _main_body_count_lines()
-    assert lines, 'AGENT_HELP.md main body has no numbered Programming Languages heading'
-    assert all(_matches(line) for line in lines), lines
-
-
-def test_old_pattern_missed_the_current_heading():
-    """Negative control: the pre-fix pattern is blind to today's wording."""
-    assert not any(OLD_PATTERN.search(line) for line in _main_body_count_lines())
-
-
-def _tree_with_claim(tmp_path, claimed):
-    docs = tmp_path / 'reveal' / 'docs'
-    docs.mkdir(parents=True)
-    text = AGENT_HELP.read_text(encoding='utf-8')
-    text = re.sub(r'(Programming Languages\s*\()\d+', rf'\g<1>{claimed}', text, count=1)
-    (docs / 'AGENT_HELP.md').write_text(text, encoding='utf-8')
+def _tree_with_readme(tmp_path, transform):
+    (tmp_path / 'reveal').mkdir()
+    text = transform(README.read_text(encoding='utf-8'))
+    (tmp_path / 'README.md').write_text(text, encoding='utf-8')
     return tmp_path / 'reveal'
+
+
+def _check(monkeypatch, tmp_path, transform):
+    monkeypatch.setattr(v030_module, 'find_reveal_root',
+                        lambda: _tree_with_readme(tmp_path, transform))
+    return V030().check('reveal://', None, '')
 
 
 @pytest.fixture
@@ -60,17 +37,47 @@ def actual():
     return count
 
 
-def test_wrong_total_is_flagged(monkeypatch, tmp_path, actual):
-    monkeypatch.setattr(v030_module, 'find_reveal_root', lambda: _tree_with_claim(tmp_path, actual + 7))
-    detections = V030().check('reveal://', None, '')
-    assert len(detections) == 1
-    assert f'claims {actual + 7}, actual {actual}' in detections[0].message
+def test_readme_has_exactly_one_headline_claim():
+    text = README.read_text(encoding='utf-8')
+    assert len(V030._CLAIM.findall(text)) == 1
+
+
+def test_real_readme_is_clean():
+    assert V030().check('reveal://', None, '') == []
 
 
 def test_right_total_is_clean(monkeypatch, tmp_path, actual):
-    monkeypatch.setattr(v030_module, 'find_reveal_root', lambda: _tree_with_claim(tmp_path, actual))
-    assert V030().check('reveal://', None, '') == []
+    assert _check(monkeypatch, tmp_path,
+                  lambda t: V030._CLAIM.sub(f'{actual} languages and file formats', t)) == []
 
 
-def test_real_doc_is_clean():
-    assert V030().check('reveal://', None, '') == []
+@pytest.mark.parametrize('delta', [7, -3])
+def test_wrong_total_is_flagged(monkeypatch, tmp_path, actual, delta):
+    claimed = actual + delta
+    detections = _check(monkeypatch, tmp_path,
+                        lambda t: V030._CLAIM.sub(f'{claimed} languages and file formats', t))
+    assert len(detections) == 1
+    assert f'claims {claimed}, actual {actual}' in detections[0].message
+    assert detections[0].file_path == 'README.md'
+
+
+def test_missing_headline_fails_loudly(monkeypatch, tmp_path):
+    detections = _check(monkeypatch, tmp_path,
+                        lambda t: re.sub(r'\d+ languages and file formats', 'many languages', t))
+    assert len(detections) == 1
+    assert 'not found' in detections[0].message
+
+
+def test_other_docs_carry_no_language_total():
+    """The pointer wording is what keeps the number single-homed."""
+    pattern = re.compile(r'(?<![\w.-])\d+\+?\s+(?:programming\s+)?languages(?: and file formats)?\b', re.I)
+    docs = [ROOT / 'reveal' / 'docs' / n for n in
+            ('AGENT_HELP.md', 'QUICK_START.md', 'WHY_REVEAL.md', 'adapters/AST_ADAPTER_GUIDE.md')]
+    docs.append(ROOT / 'STABILITY.md')
+    for doc in docs:
+        text = doc.read_text(encoding='utf-8')
+        text = text.split('## What Changed in This Guide', 1)[0]
+        # per-feature counts like "11 languages: Python, ..." are not totals
+        hits = [m.group(0) for m in pattern.finditer(text)
+                if not text[m.end():m.end() + 1] == ':']
+        assert hits == [], (doc.name, hits)

@@ -1,30 +1,18 @@
-"""V030: AGENT_HELP.md main-body aggregate-count accuracy.
+"""V030: the README headline language count matches `reveal --languages`.
 
-Validates hand-written aggregate-count claims in AGENT_HELP.md's main body
-against live registries (BACK-686). V012/V013/V029 already guard these same
-counts (languages/adapters/rules) everywhere else, but all three deliberately
-exclude AGENT_HELP.md from `CURRENT_CLAIM_DOCS` — its "What Changed in This
-Guide" changelog section is full of historically-correct per-version counts
-(e.g. "v0.59.0 - 20 adapters support help://schemas/") that a whole-file
-guard would wrongly try to "fix". V030 closes that gap the other direction:
-it checks only AGENT_HELP.md, and only the portion above the changelog
-heading, so history stays untouched while the main-body claims stay honest.
-
-Example violation:
-    - AGENT_HELP.md main body claims: "Programming Languages (85 total ...)"
-    - `reveal --languages` reports: 87
-    - Result: an agent reading the guide undercounts what reveal can parse
+BACK-1441 option (b): the README headline ("... N languages and file formats ...")
+is the ONE hand-written total of supported languages. Every other doc points at
+`reveal --languages` instead of repeating a number, so there is nothing else to
+drift. V012 only flags overclaims (floor semantics, any "N languages" in the
+current-claim docs); V030 is the exact check on the headline, so an underclaim
+fails too.
 
 Scope:
-    - reveal/docs/AGENT_HELP.md only, content above the "## What Changed in
-      This Guide" heading. Everything at or past that heading is skipped —
-      see BACK-686's corrected scope note.
-    - Currently only one main-body pattern carries a total-count claim: the
-      "Programming Languages (N ...)" heading, whose first number is the total.
-      It once required "(N total" and silently matched nothing once 2eaf0d31
-      reworded the heading to "(N languages and file formats in total" (BACK-1441).
-      Extend `_TOTAL_PATTERNS` if an equivalent adapters/rules total-count claim
-      is ever added to the body.
+    - README.md only, every "N languages and file formats" occurrence.
+    - The rule fails loudly if README.md is missing the claim: a rule whose target
+      text was reworded away matches nothing and reports clean (that is how
+      V030's earlier AGENT_HELP pattern went blind after 2eaf0d31). If the
+      headline is deliberately removed or reworded, update `_CLAIM` here.
 """
 
 import logging
@@ -38,70 +26,67 @@ logger = logging.getLogger(__name__)
 
 
 class V030(BaseRule):
-    """Validate AGENT_HELP.md main-body aggregate counts match live registries."""
+    """Validate the README.md headline language count against the live registry."""
 
     code = "V030"
-    message = "Aggregate-count mismatch in AGENT_HELP.md main body"
+    message = "README headline language count mismatch"
     category = RulePrefix.V
     severity = Severity.MEDIUM  # Important for releases
     file_patterns = []  # No file-extension form; reveal:// self-check only
     uri_patterns = ['^reveal://.*']
     internal = True  # reveal-internal self-check, never applies to external user code
 
-    _AGENT_HELP_REL_PATH = 'reveal/docs/AGENT_HELP.md'
-    _CHANGELOG_HEADING = re.compile(r'^##\s+What Changed in This Guide', re.IGNORECASE)
-
-    _TOTAL_PATTERNS = [
-        (re.compile(r'Programming Languages\s*\((\d+)\b', re.IGNORECASE),
-         'languages'),
-    ]
+    _README_REL_PATH = 'README.md'
+    _CLAIM = re.compile(r'\b(\d+)\s+languages and file formats\b', re.IGNORECASE)
 
     def check(self,
               file_path: str,
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
-        """Check AGENT_HELP.md main-body aggregate counts against live registries."""
+        """Check every README.md "N languages and file formats" claim against the live count."""
         if not file_path.startswith('reveal://'):
             return []
 
         reveal_root = find_reveal_root()
         if not reveal_root:
             return self.unavailable("reveal source root unavailable")
-        project_root = reveal_root.parent
-
-        agent_help_path = project_root / self._AGENT_HELP_REL_PATH
-        if not agent_help_path.exists():
-            return self.unavailable("required source or documentation missing", agent_help_path.as_posix())
+        readme_path = reveal_root.parent / self._README_REL_PATH
+        if not readme_path.exists():
+            return self.unavailable("required source or documentation missing", readme_path.as_posix())
 
         try:
-            lines = agent_help_path.read_text(encoding='utf-8').split('\n')
+            lines = readme_path.read_text(encoding='utf-8').split('\n')
         except Exception as e:
-            return self.unavailable(f"V030: failed to read {agent_help_path}: {e}")
+            return self.unavailable(f"V030: failed to read {readme_path}: {e}")
 
-        actual_counts = {'languages': self._count_supported_languages()}
+        actual = self._count_supported_languages()
+        if actual is None:
+            return []  # _count_supported_languages already recorded why
 
         detections: List[Detection] = []
+        found = False
         for i, line in enumerate(lines, 1):
-            if self._CHANGELOG_HEADING.match(line):
-                break  # everything from here down is version history — stop scanning
-            for pattern, metric in self._TOTAL_PATTERNS:
-                match = pattern.search(line)
-                if not match:
-                    continue
-                actual = actual_counts.get(metric)
-                if actual is None:
-                    continue
+            for match in self._CLAIM.finditer(line):
+                found = True
                 claimed = int(match.group(1))
                 if claimed == actual:
                     continue
                 detections.append(self.create_detection(
-                    file_path=self._AGENT_HELP_REL_PATH,
+                    file_path=self._README_REL_PATH,
                     line=i,
-                    message=f"{metric.capitalize()} count mismatch: claims {claimed}, actual {actual}",
-                    suggestion=f"Update {self._AGENT_HELP_REL_PATH} line {i} to '{actual} total'",
-                    context=f"Claimed: {claimed}, Actual: {actual} {metric}"
+                    message=f"Languages count mismatch: claims {claimed}, actual {actual}",
+                    suggestion=f"Update {self._README_REL_PATH} line {i} to '{actual} languages and file formats' (see `reveal --languages`)",
+                    context=f"Claimed: {claimed}, Actual: {actual} languages"
                 ))
 
+        if not found:
+            detections.append(self.create_detection(
+                file_path=self._README_REL_PATH,
+                line=1,
+                message="README headline language count not found: V030 has nothing to check",
+                suggestion="Restore the 'N languages and file formats' headline, or update V030._CLAIM to the new wording",
+                context=f"Pattern: {self._CLAIM.pattern}"
+            ))
         return detections
 
     def _count_supported_languages(self) -> Optional[int]:

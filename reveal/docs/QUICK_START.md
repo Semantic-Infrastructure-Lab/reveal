@@ -375,7 +375,7 @@ reveal help://anti-patterns      # What NOT to do
 2. **Progressive disclosure** - Directory → File → Element
 3. **Token efficiency** - typically 3.9–15x fewer tokens than cat/grep ([measured](BENCHMARKS.md))
 4. **Line numbers** - All output is `file:line` format (vim compatible)
-5. **Zero config** - Works out of the box on 51 languages and file formats
+5. **Zero config** - Works out of the box on every language `reveal --languages` lists
 
 ---
 
