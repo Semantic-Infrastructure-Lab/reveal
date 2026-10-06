@@ -29,6 +29,9 @@ MANIFEST = Path(__file__).resolve().parent.parent / 'tests/corpus/manifest.yaml'
 BASELINE = MANIFEST.with_name('recall_baseline.json')
 INCLUDES = re.compile(r'^\s*#\s*include\s*"([^"]+)"', re.MULTILINE)
 DEPTH_ONE = re.compile(r'^\. (.+)$', re.MULTILINE)
+# One-line probes take milliseconds; a cold macOS runner (clang shim, first-run caches) stalled past 15 s
+# once (BACK-1678). Generous, but a probe that still hangs is a measurement failure, never an empty row.
+ORACLE_PROBE_TIMEOUT = 60
 
 
 def tracked_importers(root: Path, directories: list[str]) -> list[Path]:
@@ -41,10 +44,14 @@ def tracked_importers(root: Path, directories: list[str]) -> list[Path]:
 
 def resolve_c_include(root: Path, importer: Path, target: str, include_dirs: list[str], stub: Path) -> str | None:
     stub.write_text(f'#include "{target}"\n', encoding='utf-8')
-    result = subprocess.run(['gcc', '-H', '-fsyntax-only', '-xc', f'-iquote{importer.parent}',
-                             *[f'-I{root / d}' for d in include_dirs], str(stub)],
-                            cwd=root, capture_output=True, text=True, encoding='utf-8',
-                            errors='replace', timeout=15)
+    try:
+        result = subprocess.run(['gcc', '-H', '-fsyntax-only', '-xc', f'-iquote{importer.parent}',
+                                 *[f'-I{root / d}' for d in include_dirs], str(stub)],
+                                cwd=root, capture_output=True, text=True, encoding='utf-8',
+                                errors='replace', timeout=ORACLE_PROBE_TIMEOUT)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f'GCC oracle probe timed out after {ORACLE_PROBE_TIMEOUT}s resolving '
+                           f'"{target}" from {importer}; measurement unavailable') from exc
     # Compilation can fail after opening the direct header (generated config,
     # platform macros). GCC's depth-one opened path is still authoritative.
     for opened in DEPTH_ONE.findall(result.stderr):

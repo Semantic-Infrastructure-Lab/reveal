@@ -104,8 +104,9 @@ def test_slow_probe_gets_the_larger_budget_and_a_timeout_is_a_disclosed_failure(
         raise subprocess.TimeoutExpired(cmd, kwargs.get('timeout'))
 
     monkeypatch.setattr(gate.shutil, 'which', lambda name: '/usr/bin/gcc')
+    real_run = subprocess.run
     monkeypatch.setattr(gate.subprocess, 'run', lambda cmd, **kw: hang(cmd, **kw) if cmd[0] == 'gcc'
-                        else subprocess.run(cmd, **kw))
+                        else real_run(cmd, **kw))
     with pytest.raises(RuntimeError, match=r'timed out after 60s.*target\.h'):
         gate.build_c_oracle(root, entry['recall'])
     assert seen == [gate.ORACLE_PROBE_TIMEOUT] and gate.ORACLE_PROBE_TIMEOUT >= 60
