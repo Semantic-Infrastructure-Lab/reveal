@@ -42,7 +42,7 @@ def files(tmp_path):
     'diff://a.yaml:b.yaml',
     'diff://a.md:b.md',
     'diff://sqlite://a.db:sqlite://b.db',
-    'diff://env://:env://HOME',
+    'diff://env://:env://PATH',
 ])
 def test_non_code_pair_is_declined_not_called_clean(files, uri):
     proc = _reveal(files, uri, '--format', 'json')
