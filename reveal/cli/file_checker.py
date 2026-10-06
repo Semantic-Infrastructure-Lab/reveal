@@ -137,7 +137,9 @@ def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore):
         ignore: Rule codes to ignore
 
     Yields:
-        (file_path, issue_count, detections, status) tuples as futures complete
+        (file_path, issue_count, detections, status) tuples as futures complete;
+        a future that failed (a dead worker breaks the pool and fails every
+        pending one) yields ``status: error`` for its file instead of dropping it
     """
     from concurrent.futures import as_completed
     workers = _pool_size(len(files))
@@ -153,8 +155,11 @@ def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore):
             try:
                 yield future.result()
             except Exception as e:
-                file_path = futures[future]
-                logging.warning("check: skipped %s — %s: %s", file_path, type(e).__name__, e)
+                # A lost file (its worker died, BrokenProcessPool) is an errored file:
+                # it stays in the report, counts in files_errored and exits 3
+                # (BACK-1681). The report line is the one disclosure.
+                yield (futures[future], 0, [],
+                       {"status": "error", "detail": f"{type(e).__name__}: {e}"})
 
 
 def _print_grouped_detections(
@@ -811,29 +816,23 @@ def _results_in_sorted_order(sorted_files: List[Path], directory: Path, select, 
     input order (BACK-1243): the ``--limit`` cutoff decides which files get full
     detail vs. get folded into the "N more files hidden" footer, and on completion
     order that decision (and the hidden-count total) varied run to run on
-    byte-identical input. A file whose worker raised is absent (already logged by
-    _run_parallel_streaming).
+    byte-identical input. Every file is in the result: one whose worker died is an
+    errored file (BACK-1681).
     """
+    results_by_file: dict = {}
     if _check_worker_count(len(sorted_files)) > 1:
         try:
-            result_iter = _run_parallel_streaming(sorted_files, directory, select, ignore)
-        except Exception:
-            # Parallel execution itself failed (e.g. pool startup) — fall back to
-            # serial, still checking every file in sorted_files, not a smaller set.
-            result_iter = (
-                (f, *check_and_collect_file(f, directory, select, ignore))
-                for f in sorted_files
-            )
-    else:
-        result_iter = (
-            (f, *check_and_collect_file(f, directory, select, ignore))
-            for f in sorted_files
-        )
-    results_by_file = {
-        file_path: (issue_count, detections, status)
-        for file_path, issue_count, detections, status in result_iter
-    }
-    return [(f, *results_by_file[f]) for f in sorted_files if f in results_by_file]
+            for file_path, *rest in _run_parallel_streaming(sorted_files, directory, select, ignore):
+                results_by_file[file_path] = tuple(rest)
+        except Exception as e:
+            # The pool itself failed (e.g. startup) -- the generator raises when
+            # iterated, not when created. Check what it did not deliver serially.
+            logging.warning("check: parallel run failed (%s: %s); checking the rest serially",
+                            type(e).__name__, e)
+    for f in sorted_files:
+        if f not in results_by_file:
+            results_by_file[f] = check_and_collect_file(f, directory, select, ignore)
+    return [(f, *results_by_file[f]) for f in sorted_files]
 
 
 @dataclass

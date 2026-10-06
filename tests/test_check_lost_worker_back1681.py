@@ -56,7 +56,7 @@ def test_text_path_counts_every_file_when_a_worker_dies(tmp_path, monkeypatch, t
     assert "BrokenProcessPool" in dead.status["detail"]
 
 
-def test_cli_exits_3_and_discloses_the_lost_file_once(tmp_path, monkeypatch, capsys, two_workers):
+def test_cli_exits_3_and_discloses_the_lost_file_once(tmp_path, monkeypatch, capsys, caplog, two_workers):
     _tree(tmp_path)
     monkeypatch.setattr(file_checker, "check_and_collect_file",
                         _killer(file_checker.check_and_collect_file, DYING))
@@ -65,7 +65,7 @@ def test_cli_exits_3_and_discloses_the_lost_file_once(tmp_path, monkeypatch, cap
     assert exc.value.code == 3
     captured = capsys.readouterr()
     assert captured.out.count(f"{DYING}: ") == 1 and "could not be checked" in captured.out
-    assert DYING not in captured.err  # not also a stderr log line
+    assert DYING not in captured.err and not any(DYING in r.getMessage() for r in caplog.records)
 
 
 def test_negative_control_no_death_is_unchanged(tmp_path, two_workers, capsys):
