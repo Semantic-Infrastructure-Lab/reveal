@@ -43,6 +43,7 @@ _DRIVER = textwrap.dedent('''
 _RULE = textwrap.dedent('''
     import multiprocessing
     import os
+    import uuid
     from pathlib import Path
 
     from reveal.rules.base import BaseRule, RulePrefix, Severity
@@ -58,8 +59,10 @@ _RULE = textwrap.dedent('''
 
         def check(self, file_path, structure, content):
             in_worker = multiprocessing.parent_process() is not None
-            with open(os.environ["WORKER_LOG"], "a", encoding="utf-8") as log:
-                log.write(f"{multiprocessing.get_start_method()} {in_worker}\\n")
+            # One file per call: two workers appending to one shared file can lose a line on
+            # Windows (BACK-1704, CI run 37536176203).
+            record = Path(os.environ["WORKER_LOG"]) / uuid.uuid4().hex
+            record.write_text(f"{multiprocessing.get_start_method()} {in_worker}", encoding="utf-8")
             if in_worker and Path(file_path).name == os.environ.get("DIE_ON"):
                 os._exit(1)
             return []
@@ -83,7 +86,7 @@ def work(tmp_path):
     return tmp_path
 
 
-def _run(work, method, workers, *argv, die=False, log='worker.log'):
+def _run(work, method, workers, *argv, die=False, log='worker-calls'):
     """Run the CLI in a fresh interpreter under *method*; returns (proc, logged calls).
 
     Each run gets its own XDG data dir holding the user rule, so per-user state a run
@@ -95,14 +98,14 @@ def _run(work, method, workers, *argv, die=False, log='worker.log'):
     env = dict(os.environ, REVEAL_MAX_WORKERS=str(workers), REVEAL_DISK_CACHE='0',
                REVEAL_NO_UPDATE_CHECK='1', PYTHONIOENCODING='utf-8',
                XDG_DATA_HOME=str(data), WORKER_LOG=str(work / log))
+    (work / log).mkdir()
     env.pop('DIE_ON', None)
     if die:
         env['DIE_ON'] = DYING
     proc = subprocess.run([sys.executable, str(work / 'driver.py'), method, *argv],
                           capture_output=True, text=True, encoding='utf-8', cwd=str(work),
                           env=env, timeout=300)
-    log_path = work / log
-    calls = log_path.read_text(encoding='utf-8').splitlines() if log_path.exists() else []
+    calls = sorted(p.read_text(encoding='utf-8') for p in (work / log).iterdir())
     return proc, calls
 
 
@@ -138,7 +141,7 @@ def test_check_pool_matches_the_serial_run(work, method, fmt):
     """Negative control (no death): the pooled run prints what the serial run prints,
     byte for byte, with the same exit code."""
     _need(method)
-    serial, serial_calls = _run(work, method, 1, *CHECK, '--format', fmt, log='serial.log')
+    serial, serial_calls = _run(work, method, 1, *CHECK, '--format', fmt, log='serial-calls')
     pooled, calls = _run(work, method, 2, *CHECK, '--format', fmt)
     assert serial_calls and all(c.endswith(' False') for c in serial_calls)  # no pool
     _ran_in_pool(calls, method)
@@ -153,7 +156,7 @@ def test_stats_pool_matches_the_serial_run(work, method):
     """stats://'s pool: every file analysed, JSON identical to the serial run, exit 0."""
     _need(method)
     argv = ('stats://tree', '--format', 'json')
-    serial, _ = _run(work, method, 1, *argv, log='serial.log')
+    serial, _ = _run(work, method, 1, *argv, log='serial-calls')
     pooled, calls = _run(work, method, 2, *argv)
     _ran_in_pool(calls, method)
     assert serial.returncode == pooled.returncode == 0, (serial.stderr, pooled.stderr)
