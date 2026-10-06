@@ -103,6 +103,87 @@ def _find_rust_tail_expression(scope_node: Any) -> Optional[Any]:
         return last
     return None
 
+
+# BACK-1482: Ruby returns its last expression, so `def f; if c; 5; else; 6; end; end`
+# returns 5 or 6 with no `return` keyword. Branch containers whose value is the
+# value of their last statement (the `then`/`else` bodies of if/unless/elsif,
+# case `when`, case/in `in_clause`); anything else at the tail is a leaf value.
+_RUBY_METHOD_KINDS: frozenset = frozenset({'method', 'singleton_method'})
+_RUBY_BRANCH_KINDS: frozenset = frozenset({
+    'if', 'unless', 'elsif', 'case', 'case_match', 'when', 'in_clause',
+    'then', 'else',
+})
+# `x if c` / `x unless c`: the value is x (or nil), so x is the tail.
+_RUBY_MODIFIER_KINDS: frozenset = frozenset({'if_modifier', 'unless_modifier'})
+# Tails that yield no useful value (loops, definitions) or whose
+# rescue/ensure flow this does not model: reported as no tail, not guessed at.
+_RUBY_NO_TAIL_KINDS: frozenset = frozenset({
+    'while', 'until', 'for', 'begin', 'method', 'singleton_method', 'class',
+    'module', 'singleton_class', 'comment', 'while_modifier', 'until_modifier',
+    'rescue_modifier',
+})
+
+
+def _named_statements(node: Any) -> List[Any]:
+    return [c for c in _children(node)
+            if _zero_arg(c, 'is_named') and _zero_arg(c, 'kind') != 'comment']
+
+
+def _ruby_tail_values(node: Any, get_text: Callable,
+                      call_node_types: Collection[str]) -> List[Any]:
+    """Leaf nodes whose value a Ruby statement evaluates to, branch by branch."""
+    kind = _zero_arg(node, 'kind')
+    if kind in _RUBY_NO_TAIL_KINDS:
+        return []
+    if kind in _RUBY_MODIFIER_KINDS:
+        body = _named_statements(node)[:1]
+        return _ruby_tail_values(body[0], get_text, call_node_types) if body else []
+    if kind in _RUBY_BRANCH_KINDS:
+        parts = _named_statements(node)
+        if kind in ('then', 'else'):
+            parts = parts[-1:]
+        else:
+            parts = [c for c in parts if _zero_arg(c, 'kind') in _RUBY_BRANCH_KINDS]
+        values: List[Any] = []
+        for part in parts:
+            values.extend(_ruby_tail_values(part, get_text, call_node_types))
+        return values
+    if _exit_at(node, get_text, call_node_types) is not None:
+        return []  # an explicit return/raise: already reported, never doubled
+    return [node]
+
+
+def find_tail_expressions(scope_node: Any, get_text: Callable,
+                          call_node_types: Collection[str]) -> List[Any]:
+    """Implicit-return value nodes of a function whose language returns its
+    last expression: Rust's `function_item` tail, Ruby's `method` /
+    `singleton_method` last statement (one per if/case branch)."""
+    kind = _zero_arg(scope_node, 'kind')
+    if kind == 'function_item':
+        tail = _find_rust_tail_expression(scope_node)
+        return [tail] if tail is not None else []
+    if kind in _RUBY_METHOD_KINDS:
+        for child in _children(scope_node):
+            if _zero_arg(child, 'kind') == 'body_statement':
+                stmts = _named_statements(child)
+                if stmts and _zero_arg(stmts[-1], 'kind') not in ('rescue', 'ensure'):
+                    return _ruby_tail_values(stmts[-1], get_text, call_node_types)
+    return []
+
+
+def _tail_returns(scope_node: Any, from_line: int, to_line: int, get_text: Callable,
+                  call_node_types: Collection[str]) -> List[Dict[str, Any]]:
+    """RETURN items for the implicit returns of scope_node within a line range."""
+    items = []
+    for tail in find_tail_expressions(scope_node, get_text, call_node_types):
+        tail_line = _zero_arg(tail, 'start_position').row + 1
+        if from_line <= tail_line <= to_line:
+            text = get_text(tail).splitlines()[0].strip()
+            if len(text) > 80:
+                text = text[:77] + '...'
+            items.append({'kind': 'RETURN', 'line': tail_line, 'text': text})
+    return items
+
 _HARD_EXIT_KINDS: frozenset = frozenset({'RETURN', 'RAISE', 'THROW', 'EXIT'})
 
 # YIELD suspends a generator — not a hard exit but transfers control.
@@ -172,15 +253,7 @@ def collect_exits(
 
         stack.extend(reversed(_children(node)))
 
-    if _zero_arg(scope_node, 'kind') == 'function_item':
-        tail = _find_rust_tail_expression(scope_node)
-        if tail is not None:
-            tail_line = _zero_arg(tail, 'start_position').row + 1
-            if from_line <= tail_line <= to_line:
-                text = get_text(tail).splitlines()[0].strip()
-                if len(text) > 80:
-                    text = text[:77] + '...'
-                results.append({'kind': 'RETURN', 'line': tail_line, 'text': text})
+    results.extend(_tail_returns(scope_node, from_line, to_line, get_text, call_node_types))
 
     results.sort(key=lambda r: r['line'])
     return results
@@ -394,15 +467,8 @@ def collect_gate_chains(
 
     walk(scope_node, [])
 
-    if _zero_arg(scope_node, 'kind') == 'function_item':
-        tail = _find_rust_tail_expression(scope_node)
-        if tail is not None:
-            tail_line = _zero_arg(tail, 'start_position').row + 1
-            if from_line <= tail_line <= to_line:
-                text = get_text(tail).splitlines()[0].strip()
-                if len(text) > 80:
-                    text = text[:77] + '...'
-                results.append({'kind': 'RETURN', 'line': tail_line, 'text': text, 'gates': []})
+    results.extend({**item, 'gates': []} for item in _tail_returns(
+        scope_node, from_line, to_line, get_text, call_node_types))
 
     results.sort(key=lambda r: r['line'])
     return results

@@ -631,7 +631,8 @@ def test_ruby_raise_is_an_exit():
     out = _run(str(_sample_path("ruby")), "validate", "--exits", "--format", "json")
     data = json.loads(out)
     findings = [{"kind": f["kind"], "line": f["line"]} for f in data["findings"]]
-    assert findings == [{"kind": "EXIT", "line": 5}], (
+    # BACK-1482: the method's last expression (`order`, line 6) is its implicit RETURN.
+    assert findings == [{"kind": "EXIT", "line": 5}, {"kind": "RETURN", "line": 6}], (
         f"ruby: raise must be detected as an exit\n{out}"
     )
 

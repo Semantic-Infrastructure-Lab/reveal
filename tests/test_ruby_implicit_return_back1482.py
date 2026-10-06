@@ -101,14 +101,14 @@ class TestRubyImplicitReturn:
         assert fn(SRC, 'plain') == [('RETURN', 3, 'x')]
 
     def test_singleton_method(self, fn):
-        assert fn(SRC, 'single') == [('RETURN', 24, 'y')]
+        assert fn(SRC, 'single') == [('RETURN', 25, 'y')]
 
     def test_if_elsif_else_returns_each_branch_value(self, fn):
         assert [(k, l, t) for k, l, t in fn(SRC, 'branches')] == [
             ('RETURN', 8, '5'), ('RETURN', 10, '6'), ('RETURN', 12, '7')]
 
     def test_case_returns_each_branch_value(self, fn):
-        assert [(l, t) for _, l, t in fn(SRC, 'cased')] == [(17, ':one'), (18, ':other')]
+        assert [(l, t) for _, l, t in fn(SRC, 'cased')] == [(18, ':one'), (19, ':other')]
 
     def test_guarded_modifier_return_kept_and_tail_added(self, fn):
         assert [(l, t) for _, l, t in fn(SRC, 'guarded')] == [(33, 'return 1'), (34, 'a.foo')]
