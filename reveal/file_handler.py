@@ -261,12 +261,15 @@ def _resolve_element(analyzer, element: str):
     and test-callback labels come last (element_resolve._unnamed_kind_matches).
     Returns None when nothing named matches.
     """
-    from .element_resolve import TYPE_TIER, resolve_bare_name, resolve_path  # noqa: I006
+    from .element_resolve import (  # noqa: I006
+        TYPE_TIER, resolve_bare_name, resolve_path, resolve_scope_qualified,
+    )
     from .treesitter import ELEMENT_TYPE_MAP  # noqa: I006
 
     if '.' in element:
         return resolve_path(analyzer, element)
-    return resolve_bare_name(analyzer, element, (ELEMENT_TYPE_MAP['function'], TYPE_TIER))
+    return (resolve_bare_name(analyzer, element, (ELEMENT_TYPE_MAP['function'], TYPE_TIER))
+            or resolve_scope_qualified(analyzer, element))
 
 
 def _find_element_node(analyzer, element: str):

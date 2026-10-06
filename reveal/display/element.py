@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Optional, cast
 from reveal.base import FileAnalyzer
 from reveal.element_resolve import (
     TYPE_TIER, Resolution, ambiguity_note, describe_candidates, resolve_bare_name, resolve_path,
+    resolve_scope_qualified,
 )
 from reveal.treesitter import ELEMENT_TYPE_MAP, ALL_ELEMENT_NODE_TYPES
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
@@ -282,7 +283,8 @@ def _try_treesitter_extraction(analyzer, element: str):
     """
     # Named node kinds, then JS-family `const f = (...) => {}` values and
     # test-callback labels (element_resolve._unnamed_kind_matches).
-    resolution = resolve_bare_name(analyzer, element, _DISPLAY_NAME_TIERS)
+    resolution = (resolve_bare_name(analyzer, element, _DISPLAY_NAME_TIERS)
+                  or resolve_scope_qualified(analyzer, element))
     if resolution is None:
         return None
     return _element_from_resolution(analyzer, resolution, element)

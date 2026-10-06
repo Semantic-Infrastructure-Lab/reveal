@@ -313,6 +313,19 @@ def _function_value_members(analyzer, parent_name: str, child_name: str) -> List
             if _qualifies(qualified_name(analyzer, node, child_name), f'{parent_name}.{child_name}')]
 
 
+def resolve_scope_qualified(analyzer, name: str) -> Optional[Resolution]:
+    """C++ `TT::probe`, `TT::Inner::deep`: a scope-qualified name resolves as its
+    dotted path -- the namespace or class is the `Parent` of `Parent.member`.
+
+    Tried after the bare-name lookup, which already matches the stored `::` name
+    of an out-of-line definition (`Foo::bar`); this covers a definition inside
+    `namespace TT { }`, whose stored name is the bare `probe` (BACK-1655).
+    """
+    if '::' not in name:
+        return None
+    return resolve_path(analyzer, name.replace('::', '.'))
+
+
 def resolve_path(analyzer, dotted: str) -> Optional[Resolution]:
     """Resolve `Parent.member` or a deeper `Outer.Inner.member`.
 
