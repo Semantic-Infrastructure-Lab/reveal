@@ -23,22 +23,13 @@ def guide():
 
 
 def _namespaces():
-    from reveal import treesitter
-    from reveal.adapters import imports as imports_adapter
-    from reveal.adapters.git import files as git_files
-    from reveal.adapters.markdown import operations as markdown_operations
-    from reveal.analyzers import markdown as markdown_analyzer
-    from reveal.analyzers.imports import generic, go, javascript, python, rust, zig
-
-    names = {
-        treesitter._STRUCTURE_CACHE_NAMESPACE,
-        treesitter._OUTLINE_CACHE_NAMESPACE,
-        imports_adapter._ADAPTER_IMPORT_GRAPH_NAMESPACE,
-        git_files._CHURN_CACHE_NAMESPACE,
-        markdown_operations._LINK_GRAPH_CACHE_NAMESPACE,
-        markdown_analyzer._HEADINGS_CACHE_NAMESPACE,
-    }
-    names |= {module._IMPORTS_CACHE.namespace for module in (generic, go, javascript, python, rust, zig)}
+    """Every cache namespace the source declares: `_..._NAMESPACE = "x"` constants and
+    `ImportsDiskCache("x")` instances, found by scanning reveal/ so a new one is caught."""
+    names = set()
+    for path in sorted((GUIDE.parents[2]).rglob('*.py')):
+        text = path.read_text(encoding='utf-8')
+        names.update(re.findall(r'^_[A-Z_]*NAMESPACE\s*=\s*["\']([\w-]+)["\']', text, flags=re.MULTILINE))
+        names.update(re.findall(r'ImportsDiskCache\(\s*["\']([\w-]+)["\']', text))
     return names
 
 
@@ -73,7 +64,7 @@ def test_every_cached_artifact_kind_is_listed(guide):
 
 
 def test_negative_control_the_namespace_scan_sees_a_real_namespace_set():
-    """If an import above silently yielded nothing the coverage test would pass vacuously."""
+    """If the scan silently yielded nothing the coverage test would pass vacuously."""
     names = _namespaces()
-    assert {'structure', 'churn', 'python_imports'} <= names
-    assert len(names) >= 10
+    assert {'structure', 'churn', 'python_imports', 'import_graph_v3'} <= names
+    assert len(names) >= 12

@@ -356,6 +356,27 @@ reveal --disable-breadcrumbs
 
 **Note:** Breadcrumbs are automatically hidden when output is piped (TTY detection).
 
+#### `REVEAL_DISK_CACHE`
+Turn the on-disk cache off. It is on unless this is set to `0`, `false`, `no`, `off` or an empty
+value (case-insensitive); with it off nothing is read from or written to the cache directory.
+See [Disk cache](#disk-cache) below.
+
+```bash
+export REVEAL_DISK_CACHE=0
+```
+
+#### `REVEAL_CACHE_DIR`
+Where the disk cache lives, instead of `~/.reveal/cache`:
+
+```bash
+export REVEAL_CACHE_DIR=/var/tmp/reveal-cache
+```
+
+#### `REVEAL_STRUCTURE_CACHE_MAX_FILES`
+How many per-file structures the cache keeps before evicting the oldest. Default `100000`; raise it
+only for a repository with more source files than that, or every entry is evicted before it can be
+reused. A value that is not an integer is ignored.
+
 ### Environment Variable Combinations
 
 ```bash
@@ -366,6 +387,63 @@ export REVEAL_IGNORE="*.min.js,vendor/**"
 
 reveal --check src/
 ```
+
+### Disk cache
+
+Each `reveal` command is a fresh process, so an in-memory cache dies at exit. Agents and CI usually
+run many commands against one unchanged checkout, so reveal keeps the expensive, deterministic
+parts on disk and the second command on an unchanged tree is cheap. The cache only ever holds
+values reveal can recompute; deleting it costs time, never correctness.
+
+**Where:** `~/.reveal/cache/` (override with `REVEAL_CACHE_DIR`), laid out as
+
+```
+~/.reveal/cache/v2/<reveal version>-<build>/<namespace>/<key>.pkl
+```
+
+where `v2` is the cache schema version, `<build>` is a 12-character digest of the code that produced
+the values, and `<namespace>` names the kind of artifact.
+
+**What is cached** (one namespace each):
+
+| Namespace | Holds |
+|-----------|-------|
+| `structure` | a file's parsed structure: imports, functions, classes, declarations |
+| `structure-outline` | the lighter outline-only structure `--grep` uses to name each hit's enclosing function |
+| `adapter_import_graph` | the project import graph behind `imports://` |
+| `import_graph_v3` | the project import graph behind the `I002` rule |
+| `python_imports`, `javascript_imports`, `go_imports`, `rust_imports`, `zig_imports`, `generic_imports` | per-language import extraction feeding those graphs |
+| `markdown-headings` | a Markdown file's heading index |
+| `markdown_link_graph` | the link graph behind `markdown://` link queries |
+| `churn` | per-file commit counts behind `stats://` `hotspots=true` |
+
+**How it stays correct (invalidation):**
+
+- *Per entry.* A file's structure is keyed on its absolute path, modification time (nanoseconds),
+  size and language, so any edit misses. Project-wide artifacts such as the import graph are keyed
+  on a fingerprint of every source file's path, mtime and size; churn counts are keyed on the commit
+  being walked and the query options.
+- *Per build.* `<build>` is computed from the path, mtime and size of every file in the `reveal`
+  package plus `tree_sitter` and `tree_sitter_language_pack`. Upgrading reveal, editing a
+  development checkout or swapping the language pack therefore lands in a different directory, and
+  the old one is never read. A rule or extractor change cannot serve an answer computed by older code.
+- *On any error* (unreadable directory, corrupt or truncated entry, full disk) reading is a miss and
+  writing is skipped, so the command runs uncached and gives the same answer.
+
+**Housekeeping:** when a new build directory appears, only the 4 most recently used build
+directories are kept and the rest are deleted. Within a namespace the oldest entries are evicted past
+64 entries (the `structure` namespace uses `REVEAL_STRUCTURE_CACHE_MAX_FILES` instead).
+
+**Turn it off or clear it:**
+
+```bash
+REVEAL_DISK_CACHE=0 reveal check src/    # one command, nothing read or written
+rm -rf ~/.reveal/cache                   # clear everything; it is rebuilt on demand
+```
+
+Use `REVEAL_DISK_CACHE=0` when you are measuring cold-start cost or checking an analyzer change in
+a development checkout. Entries are Python pickles, so do not point `REVEAL_CACHE_DIR` at a
+directory other users can write to.
 
 ---
 
