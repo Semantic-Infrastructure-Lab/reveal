@@ -331,9 +331,9 @@ def build_java_oracle(scope: Scope) -> tuple[Edges, Coverage]:
         if wildcard:
             return packages.get(dotted, [])
         parts = dotted.split('.')
-        # a.b.C, then a.b.Outer for a nested a.b.Outer.Nested
-        for cut in (1, 2):
-            if len(parts) > cut and (hit := types.get(('.'.join(parts[:-cut]), parts[-cut]))):
+        # a.b.C, then a.b.Outer for a.b.Outer.Nested, a.b.Outer.Mid.Nested, ...
+        for cut in range(1, len(parts)):
+            if hit := types.get(('.'.join(parts[:-cut]), parts[-cut])):
                 return hit
         return []
 
