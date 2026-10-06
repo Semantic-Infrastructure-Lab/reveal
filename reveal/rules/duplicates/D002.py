@@ -12,14 +12,16 @@ Philosophy:
 - Human makes final call on whether to refactor
 """
 
+import keyword
 import logging
+from difflib import SequenceMatcher
 from typing import List, Dict, Any, Optional
 from collections import Counter
 import math
 import re
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from ._bodies import extract_function_body
+from ._bodies import extract_function_body, is_trivial_hook_body
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +43,26 @@ class D002(BaseRule):
     # Minimum similarity to even consider (very low bar, ranking does the work)
     MIN_SIMILARITY = 0.50
 
+    # Minimum token-sequence match once local names are alpha-renamed. The vector's
+    # shape features (line count, control-flow density) dominate its cosine, so
+    # unrelated functions with the same skeleton scored 95%+ (BACK-1062). A
+    # copy-paste -- renamed variables included -- keeps its token sequence; the
+    # known unrelated pairs in reveal's own rules/adapters match 0.06-0.33 and the
+    # first plausible copies 0.49 (the renamed Go/JS pairs in test_back432 match 1.0).
+    MIN_SEQUENCE_MATCH = 0.5
+
     # Maximum candidates to report
     MAX_CANDIDATES = 5
+
+    _TOKEN = re.compile(r"[A-Za-z_]\w*|\d+(?:\.\d+)?|\"[^\"]*\"|'[^']*'|==|!=|<=|>=|\+=|-=|\*=|->|::|\S")
+    _IDENTIFIER = re.compile(r'[A-Za-z_]')
+
+    # Keywords and type words every function body shares; kept literal, never renamed.
+    _NOISE_WORDS = frozenset(keyword.kwlist) | frozenset({
+        'self', 'cls', 'this', 'function', 'func', 'fn', 'void', 'int', 'string', 'bool',
+        'var', 'let', 'const', 'public', 'private', 'protected', 'static', 'final',
+        'null', 'nil', 'undefined', 'new', 'switch', 'case', 'catch', 'throw', 'throws',
+    })
 
     def check(self,
              file_path: str,
@@ -82,20 +102,26 @@ class D002(BaseRule):
             if line_count < self.MIN_FUNCTION_SIZE:
                 continue
 
+            normalized = self._normalize(func_body)
+            if is_trivial_hook_body(normalized):
+                continue
+
             vector = self._vectorize(func_body)
-            func_vectors.append((func, vector, line_count))
+            func_vectors.append((func, vector, line_count, self._token_shape(normalized)))
 
         # Compute pairwise similarities with interestingness score
         candidates = []
 
         for i in range(len(func_vectors)):
             for j in range(i + 1, len(func_vectors)):
-                func1, vec1, size1 = func_vectors[i]
-                func2, vec2, size2 = func_vectors[j]
+                func1, vec1, size1, shape1 = func_vectors[i]
+                func2, vec2, size2, shape2 = func_vectors[j]
 
                 similarity = self._cosine_similarity(vec1, vec2)
 
                 if similarity < self.MIN_SIMILARITY:
+                    continue
+                if self._sequence_match(shape1, shape2) < self.MIN_SEQUENCE_MATCH:
                     continue
 
                 # Interestingness: similarity weighted by size (sqrt to not over-weight huge functions)
@@ -119,6 +145,26 @@ class D002(BaseRule):
             ))
 
         return detections
+
+    def _token_shape(self, normalized: str) -> List[str]:
+        """Token sequence of a normalized body with each distinct non-keyword
+        identifier replaced by its first-occurrence index, so a renamed copy has
+        the same shape as its original."""
+        seen: Dict[str, int] = {}
+        shape = []
+        for token in self._TOKEN.findall(normalized):
+            if self._IDENTIFIER.match(token) and token.lower() not in self._NOISE_WORDS:
+                shape.append(f"#{seen.setdefault(token, len(seen))}")
+            else:
+                shape.append(token)
+        return shape
+
+    def _sequence_match(self, shape1: List[str], shape2: List[str]) -> float:
+        """Alpha-renamed token-sequence similarity (0.0-1.0), bounded cheaply first."""
+        matcher = SequenceMatcher(None, shape1, shape2, autojunk=False)
+        if matcher.real_quick_ratio() < self.MIN_SEQUENCE_MATCH or matcher.quick_ratio() < self.MIN_SEQUENCE_MATCH:
+            return 0.0
+        return matcher.ratio()
 
     def _vectorize(self, code: str) -> Dict[str, float]:
         """
