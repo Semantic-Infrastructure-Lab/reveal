@@ -136,7 +136,8 @@ def _reads_via_shared_seam(name, flag):
 
 def derive_matrix():
     matrix = {}
-    for name, (modpath, parser_fn, _runner_fn, _formats) in SUBCOMMANDS.items():
+    for name, spec in SUBCOMMANDS.items():
+        modpath, parser_fn = spec.module, spec.parser_factory
         mod = importlib.import_module(modpath)
         parser = getattr(mod, parser_fn)()
         dests = {a.dest for a in parser._actions}
@@ -226,7 +227,8 @@ def test_probes_only_target_honored_cells():
 
 
 def _run_subcommand(name, argv):
-    modpath, parser_fn, runner_fn, _formats = SUBCOMMANDS[name]
+    spec = SUBCOMMANDS[name]
+    modpath, parser_fn, runner_fn = spec.module, spec.parser_factory, spec.runner
     mod = importlib.import_module(modpath)
     args = getattr(mod, parser_fn)().parse_args(argv)
     from reveal.cli.global_flags import apply_global_flags
