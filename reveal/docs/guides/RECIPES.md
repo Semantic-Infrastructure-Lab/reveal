@@ -834,10 +834,7 @@ ls docs/*.md | reveal --stdin --links 2>/dev/null | grep BROKEN
 ### Extract content
 
 ```bash
-# See frontmatter structure
-reveal docs/page.md --frontmatter
-
-# Get as JSON for scripting
+# Frontmatter as parsed YAML (text mode shows only the heading outline)
 reveal docs/page.md --frontmatter --format=json
 
 # All code blocks
