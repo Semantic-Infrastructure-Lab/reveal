@@ -3,8 +3,9 @@
 import logging
 import re
 from dataclasses import dataclass, asdict, replace
+from functools import partial
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer, _ADAPTER_REGISTRY, list_public_schemes
 from .registry import _SCAFFOLD_SCHEMES, is_internal_scheme
 from ..utils.formatting import shell_command
@@ -780,151 +781,165 @@ class HelpAdapter(ResourceAdapter):
         return result
 
     def _get_element_impl(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
-        topic = element_name  # Alias for readability
-        # Check for schemas route: help://schemas/ssl
-        # Bare 'schemas/' lists available adapters
-        if topic == 'schemas' or topic == 'schemas/':
-            # Only list adapters that actually provide a schema — listing a
-            # schema-less adapter (get_schema() returns None) would walk an agent
-            # straight into a "no schema available" error from its own menu (N1).
-            # A navigational index, not a failure: its own success type with no
-            # 'error' key, as BACK-998 did for help://examples (BACK-1059).
-            adapters = self._adapters_with_schema()
-            return {
-                'type': 'adapter_schema_index',
-                'available_adapters': adapters,
-                'usage': 'reveal help://schemas/<adapter>',
-                'examples': [
-                    'reveal help://schemas/ast',
-                    'reveal help://schemas/ssl',
-                    'reveal help://schemas/git',
-                ],
-                # BACK-847: help://schema (singular) is a different page — the
-                # markdown front-matter validation guide — not an alias/typo of
-                # this one. Cross-signpost so landing here doesn't silently
-                # misinform an agent looking for that guide instead.
-                'note': (
-                    'Looking for markdown front-matter validation instead? '
-                    'That is help://schema (singular) — this page is adapter '
-                    'query schemas (plural).'
-                ),
-                'next': [
-                    'reveal help://schemas/index',
-                    'reveal help://schemas/all',
-                ],
-            }
-        # Full-text search over the help corpus: help://search?search=<term>
-        # (also accepts help://search/<term> for shells that mangle '?'). Param
-        # name matches the ?search= convention already used by claude://,
-        # codex://, and xlsx:// for the same "free-text content search"
-        # operation (see QUERY_PARAMETER_REFERENCE.md's Search vs Filter note).
-        if topic == 'search' or topic.startswith('search?') or topic.startswith('search/'):
-            if topic.startswith('search?'):
-                # The shared parser records that ?search= was read; a private
-                # parse_qs left the flag ledger saying it had no effect (BACK-1569).
-                from urllib.parse import unquote_plus
-                from ..utils.query_parser import parse_query_params
-                params = parse_query_params(topic.split('?', 1)[1])
-                query_term = unquote_plus(str(params.get('search') or ''))
-            elif topic.startswith('search/'):
-                query_term = topic.split('/', 1)[1]
-            else:
-                query_term = ''
-            return self._search_help(query_term)
-        if topic in ('rules', 'rules/'):
-            # BACK-846: --rules was flag-only, so MCP clients (whose only
-            # introspection channel is reveal_query(uri)) could not reach the
-            # rule catalog at all.
-            return self._get_rules_catalog()
-        if topic in ('languages', 'languages/'):
-            # BACK-846: same hole for --languages.
-            return self._get_languages_catalog()
-        if topic in ('schemas/all', 'schemas/index'):
+        """Route one help:// topic to its handler (BACK-1373).
+
+        Order: fixed pages, then prefix routes, then 'guide-or-adapter/section',
+        then a bare guide/adapter/file-analyzer name. A fixed page wins over a
+        same-named static guide ('anti-patterns' is both).
+        """
+        topic = element_name
+        route = self._fixed_topic_routes().get(topic)
+        if route is not None:
+            return route()
+        for prefix, handler in self._prefix_topic_routes():
+            if topic.startswith(prefix):
+                return handler(topic[len(prefix):])
+        if '/' in topic:
+            return self._get_section_topic(topic, kwargs.get('section'))
+        return self._get_named_topic(topic, kwargs.get('section'))
+
+    def _fixed_topic_routes(self) -> Dict[str, Callable[[], Optional[Dict[str, Any]]]]:
+        """help:// topics with a page of their own, by exact name.
+
+        The bare names here are also the discovery topics suggest_topics()
+        offers for a mistyped topic. 'adapters' is deliberately not here: it is
+        checked after the static guides (see _get_named_topic).
+        """
+        return {
+            'schemas': self._get_schema_index,
+            'schemas/': self._get_schema_index,
             # BACK-840: the aggregate view agents kept asking for already
             # exists as `reveal --discover` (flag-only, invisible from the
             # URI tier); route it here instead of building a second one.
             # 'index' is the ~1K thin rung (scheme/uri_syntax/description
             # only) between the bare menu and the full 'all' payload.
-            return self._get_schema_all(thin=(topic == 'schemas/index'))
-        if topic.startswith('schemas/'):
-            remainder = topic.split('/', 1)[1]
-            # help://schemas/<adapter>/<output_type> drills into one output type;
-            # help://schemas/<adapter>/full returns the unsummarized payload.
-            if '/' in remainder:
-                adapter_name, section = remainder.split('/', 1)
-                return self._get_adapter_schema(adapter_name, section=section)
-            return self._get_adapter_schema(remainder)
+            'schemas/all': partial(self._get_schema_all, thin=False),
+            'schemas/index': partial(self._get_schema_all, thin=True),
+            'search': partial(self._search_help, ''),
+            # BACK-846: --rules and --languages were flag-only, so MCP clients
+            # (whose only introspection channel is reveal_query(uri)) could not
+            # reach the catalogs at all.
+            'rules': self._get_rules_catalog,
+            'rules/': self._get_rules_catalog,
+            'languages': self._get_languages_catalog,
+            'languages/': self._get_languages_catalog,
+            # Bare 'examples' and 'examples/' show the task list.
+            'examples': partial(self._get_example_recipes, ''),
+            'examples/': partial(self._get_example_recipes, ''),
+            'quick': self._get_quick_help,
+            'relationships': self._get_adapter_relationships,
+            # Bounded section from AGENT_HELP rather than the full doc.
+            'anti-patterns': self._get_anti_patterns_section,
+        }
 
-        # Check for examples route: help://examples/security
-        # Bare 'examples' and 'examples/' show the task list (same as passing empty task)
-        if topic == 'examples' or topic == 'examples/':
-            return self._get_example_recipes('')
-        if topic.startswith('examples/'):
-            task_name = topic.split('/', 1)[1]
-            return self._get_example_recipes(task_name)
+    def _prefix_topic_routes(self) -> Tuple[Tuple[str, Callable[[str], Optional[Dict[str, Any]]]], ...]:
+        """(prefix, handler) pairs; each handler gets the topic after its prefix."""
+        return (
+            # Full-text search over the help corpus: help://search?search=<term>
+            # (also help://search/<term> for shells that mangle '?'). Param
+            # name matches the ?search= convention already used by claude://,
+            # codex://, and xlsx:// for the same "free-text content search"
+            # operation (see QUERY_PARAMETER_REFERENCE.md's Search vs Filter note).
+            ('search?', self._search_from_query),
+            ('search/', self._search_help),
+            ('schemas/', self._get_schema_route),
+            ('examples/', self._get_example_recipes),
+        )
 
-        # Check for section extraction: help://ast/workflows or help://ast/full
-        if '/' in topic:
-            adapter_name, uri_section = topic.split('/', 1)
-            # Static guides support /full to bypass progressive disclosure
-            if adapter_name in self.help_topics:
-                if uri_section == 'full':
-                    heading_filter = kwargs.get('section')
-                    result = self._load_static_help(adapter_name, full=True, section=heading_filter)
-                    if result and 'error' not in result:
-                        result['topic'] = f'{adapter_name}/full'
-                    return result
-                # Fall through: if also a URI adapter, let it handle the section
-            # Only route to adapter section handler when the adapter actually exists;
-            # returning None here gives a clean "not found" rather than a misleading
-            # "Unknown section" error when the base topic doesn't exist at all.
-            if adapter_name in _ADAPTER_REGISTRY and uri_section in self.VALID_SECTIONS:
-                result = self._get_adapter_section(adapter_name, uri_section)
-                if result and 'error' not in result:
-                    return result
-            # help://git/file-history -> the guide's "File History" section: the
-            # footer lists guide sections, and nothing opened one (BACK-1507).
-            if adapter_name in self.help_topics:
-                guide = self._load_static_help(adapter_name, full=True,
-                                               section=uri_section.replace('-', ' '))
-                if guide and 'error' not in guide:
-                    guide['topic'] = f'{adapter_name}/{uri_section}'
-                    return guide
-            if adapter_name in _ADAPTER_REGISTRY:
-                return self._get_adapter_section(adapter_name, uri_section)
-            return None
+    def _get_schema_index(self) -> Dict[str, Any]:
+        """help://schemas: the adapters that provide a schema."""
+        # Only list adapters that actually provide a schema — listing a
+        # schema-less adapter (get_schema() returns None) would walk an agent
+        # straight into a "no schema available" error from its own menu (N1).
+        # A navigational index, not a failure: its own success type with no
+        # 'error' key, as BACK-998 did for help://examples (BACK-1059).
+        return {
+            'type': 'adapter_schema_index',
+            'available_adapters': self._adapters_with_schema(),
+            'usage': 'reveal help://schemas/<adapter>',
+            'examples': [
+                'reveal help://schemas/ast',
+                'reveal help://schemas/ssl',
+                'reveal help://schemas/git',
+            ],
+            # BACK-847: help://schema (singular) is a different page — the
+            # markdown front-matter validation guide — not an alias/typo of
+            # this one. Cross-signpost so landing here doesn't silently
+            # misinform an agent looking for that guide instead.
+            'note': (
+                'Looking for markdown front-matter validation instead? '
+                'That is help://schema (singular) — this page is adapter '
+                'query schemas (plural).'
+            ),
+            'next': [
+                'reveal help://schemas/index',
+                'reveal help://schemas/all',
+            ],
+        }
 
-        # Quick-start orientation cheat sheet
-        if topic == 'quick':
-            return self._get_quick_help()
+    def _search_from_query(self, query_string: str) -> Dict[str, Any]:
+        """help://search?search=<term>."""
+        # The shared parser records that ?search= was read; a private
+        # parse_qs left the flag ledger saying it had no effect (BACK-1569).
+        from urllib.parse import unquote_plus
+        from ..utils.query_parser import parse_query_params
+        params = parse_query_params(query_string)
+        return self._search_help(unquote_plus(str(params.get('search') or '')))
 
-        # Adapter ecosystem relationships map
-        if topic == 'relationships':
-            return self._get_adapter_relationships()
+    def _get_schema_route(self, remainder: str) -> Optional[Dict[str, Any]]:
+        """help://schemas/<adapter>[/<output_type>|/full]."""
+        # help://schemas/<adapter>/<output_type> drills into one output type;
+        # help://schemas/<adapter>/full returns the unsummarized payload.
+        if '/' in remainder:
+            adapter_name, section = remainder.split('/', 1)
+            return self._get_adapter_schema(adapter_name, section=section)
+        return self._get_adapter_schema(remainder)
 
-        # Anti-patterns: extract bounded section from AGENT_HELP rather than dumping full doc
-        if topic == 'anti-patterns':
-            return self._get_anti_patterns_section()
+    def _get_section_topic(self, topic: str,
+                           heading_filter: Optional[str]) -> Optional[Dict[str, Any]]:
+        """help://<guide-or-adapter>/<section>, e.g. help://ast/workflows or help://ast/full."""
+        adapter_name, uri_section = topic.split('/', 1)
+        is_guide = adapter_name in self.help_topics
+        # Static guides support /full to bypass progressive disclosure
+        if is_guide and uri_section == 'full':
+            result = self._load_static_help(adapter_name, full=True, section=heading_filter)
+            if result and 'error' not in result:
+                result['topic'] = f'{adapter_name}/full'
+            return result
+        # Fall through: if also a URI adapter, let it handle the section.
+        # Only route to adapter section handler when the adapter actually exists;
+        # returning None here gives a clean "not found" rather than a misleading
+        # "Unknown section" error when the base topic doesn't exist at all.
+        is_adapter = adapter_name in _ADAPTER_REGISTRY
+        if is_adapter and uri_section in self.VALID_SECTIONS:
+            result = self._get_adapter_section(adapter_name, uri_section)
+            if result and 'error' not in result:
+                return result
+        # help://git/file-history -> the guide's "File History" section: the
+        # footer lists guide sections, and nothing opened one (BACK-1507).
+        if is_guide:
+            guide = self._load_static_help(adapter_name, full=True,
+                                           section=uri_section.replace('-', ' '))
+            if guide and 'error' not in guide:
+                guide['topic'] = f'{adapter_name}/{uri_section}'
+                return guide
+        if is_adapter:
+            return self._get_adapter_section(adapter_name, uri_section)
+        return None
 
-        # Check if it's a static guide (includes auto-discovered + manual)
+    def _get_named_topic(self, topic: str,
+                         heading_filter: Optional[str]) -> Optional[Dict[str, Any]]:
+        """help://<name>: a static guide, 'adapters', an adapter, or a file analyzer."""
+        # Static guides (auto-discovered + manual) win over a same-named adapter.
         if topic in self.help_topics:
-            return self._load_static_help(topic, section=kwargs.get('section'))
-
-        # Check if it's 'adapters' (list all)
+            return self._load_static_help(topic, section=heading_filter)
         if topic == 'adapters':
             return self._get_all_adapter_help()
-
-        # Check if it's an adapter scheme
         if topic in _ADAPTER_REGISTRY:
             return self._get_adapter_help(topic)
-
-        # Check if it's a known file-based analyzer (not a URI adapter)
-        # Return focused inline help rather than failing with "not found"
-        file_analyzer_help = self._get_file_analyzer_help(topic)
-        if file_analyzer_help is not None:
-            return file_analyzer_help
-
-        return None
+        # A known file-based analyzer (not a URI adapter): focused inline help
+        # rather than failing with "not found". None when it is not one either.
+        return self._get_file_analyzer_help(topic)
 
     def _validate_section_name(
         self, adapter_name: str, section: str
@@ -1061,12 +1076,6 @@ class HelpAdapter(ResourceAdapter):
         # alias) — dedupe the combined list rather than the source dicts.
         return sorted(set(topics))
 
-    # Discovery entry points that aren't adapter schemes or static guides but are
-    # valid help:// topics — included when suggesting fixes for a mistyped topic.
-    _DISCOVERY_TOPICS = (
-        'quick', 'relationships', 'anti-patterns', 'schemas', 'examples',
-        'rules', 'languages', 'search',
-    )
 
     def suggest_topics(self, query: str, n: int = 3) -> List[str]:
         """Closest known help topics to a mistyped `query`, best first.
@@ -1079,7 +1088,10 @@ class HelpAdapter(ResourceAdapter):
 
         # Compare against the base topic only (before any '/section').
         base = query.split('/', 1)[0]
-        universe = set(self._list_topics()) | set(self._DISCOVERY_TOPICS)
+        # Discovery pages (quick, schemas, search, ...) are valid topics that
+        # are neither adapter schemes nor static guides.
+        discovery = {t for t in self._fixed_topic_routes() if '/' not in t}
+        universe = set(self._list_topics()) | discovery
         return difflib.get_close_matches(base, sorted(universe), n=n, cutoff=0.6)
 
     def _search_help(self, query_term: str) -> Dict[str, Any]:
