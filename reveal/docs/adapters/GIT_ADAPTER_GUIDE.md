@@ -1774,9 +1774,16 @@ reveal git://path/to/repo
 
 ### Error: "Failed to open repository"
 
-**Problem**: Repository is corrupted or inaccessible
+**Problem**: Repository is corrupted or inaccessible. The error ends with libgit2's own reason.
 
-**Solution**:
+**`... is not owned by current user`** (a repo bind-mounted into a container, or checked out by
+another UID): libgit2 applies git's `safe.directory` check. The error names the fix; run it as the
+user reveal runs as:
+```bash
+git config --global --add safe.directory /path/to/repo
+```
+
+**Solution** (corruption):
 ```bash
 # Check repository integrity
 git fsck
