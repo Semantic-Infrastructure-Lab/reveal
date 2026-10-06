@@ -1,7 +1,7 @@
 """Project-wide indexes some rules build once per process, shared with pool workers.
 
-I002 (import graph), D005 (literal index) and T006 (TypedDict index) each scan the
-whole project on first use and cache the result in a module-level dict. A
+I002 (import graph), D005 (literal index), T006 (TypedDict index) and M102 (who
+imports what, BACK-1437) each scan the whole project on first use and cache the result in a module-level dict. A
 ProcessPoolExecutor worker starts with those dicts empty, so without help every worker
 rebuilds every index -- and a scan-ceiling disclosure recorded in a worker never reaches
 the parent that renders the summary (BACK-1051). Every pool that runs rules -- `reveal
@@ -158,6 +158,49 @@ def _t006_init_worker(project_index: dict) -> None:
     _project_index.update(project_index)
 
 
+def _m102_preload(directory: Path, select, ignore, files: Optional[List[Path]] = None) -> dict:
+    """Build M102's whole-project import scan in the main process (BACK-1437,
+    BACK-1429). Without it every worker re-reads every .py file under the
+    project root on its first Python file -- ~6.7s per worker process on
+    home-assistant's mqtt component. M102 has no scan ceiling (one would mean
+    abstaining on large projects, which needs a decision), so there is no
+    disclosure to carry; this is the one-build half only.
+
+    The sample is the first file M102 would actually scan from: a .py file
+    that is not an entry point or a test (M102 returns before resolving a
+    root for those) and has a project root (BACK-1372's resolver), so the
+    preload builds the same cache key the workers look up -- and builds
+    nothing for, e.g., a tests/ directory where no worker would either.
+    """
+    try:
+        if not rule_will_run("M102", select, ignore):
+            return {}
+        from .maintainability.M102 import M102, _import_cache, _project_root
+        rule = M102()
+        for path in files or []:
+            if path.suffix != '.py' or rule._is_entry_point(path) or rule._is_test_file(path):
+                continue
+            root = _project_root(path.resolve())
+            if root is not None:
+                rule._collect_all_imports(root)   # populates _import_cache
+                break
+        return dict(_import_cache)
+    except Exception:
+        # Documented fallback: workers build the index themselves, as they would
+        # with no preload at all.
+        logging.warning("shared-index preload failed; workers will build it "
+                        "themselves", exc_info=True)
+        return {}
+
+
+def _m102_init_worker(import_cache: dict) -> None:
+    """ProcessPoolExecutor initializer: seed each worker's M102 import cache."""
+    if not import_cache:
+        return
+    from .maintainability.M102 import _import_cache
+    _import_cache.update(import_cache)
+
+
 def preload_scan_caches(files: List[Path], directory: Path, select, ignore) -> dict:
     """Preload every scan-capped rule's shared index/graph in the main
     process, returning a dict of {rule_code: cache} for the pool initializer.
@@ -170,6 +213,7 @@ def preload_scan_caches(files: List[Path], directory: Path, select, ignore) -> d
         'I002': _i002_preload(directory, select, ignore, files),
         'D005': _d005_preload(directory, select, ignore, files),
         'T006': _t006_preload(directory, select, ignore, files),
+        'M102': _m102_preload(directory, select, ignore, files),
     }
 
 
@@ -178,6 +222,7 @@ def init_scan_caches(caches: dict) -> None:
     _i002_init_worker(caches.get('I002', {}))
     _d005_init_worker(caches.get('D005', {}))
     _t006_init_worker(caches.get('T006', {}))
+    _m102_init_worker(caches.get('M102', {}))
 
 
 def get_scan_disclosures() -> List[str]:

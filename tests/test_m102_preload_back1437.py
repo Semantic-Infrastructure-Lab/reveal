@@ -99,3 +99,41 @@ class TestCheckPoolPreloadsM102:
         monkeypatch.setenv("REVEAL_MAX_WORKERS", "1")
         file_checker._check_files_json(files, tmp_path, None, None)
         assert count_m102_builds() == [str(os.getpid())]
+
+
+class TestM102PreloadUnit:
+    def test_skipped_when_m102_not_in_rule_set(self, tmp_path, count_m102_builds):
+        from reveal.rules.scan_caches import _m102_preload
+        files = _project(tmp_path)
+        assert _m102_preload(tmp_path, ["C901"], None, files) == {}
+        assert count_m102_builds() == []
+
+    def test_no_build_for_files_m102_never_scans_from(self, tmp_path, count_m102_builds):
+        """Tests and entry points return before M102 resolves a root, so a
+        preload sampled from one would build a scan no worker asked for."""
+        from reveal.rules.scan_caches import _m102_preload
+        _project(tmp_path)
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_x.py").write_text("def test_x():\n    pass\n", encoding="utf-8")
+        files = [tests_dir / "test_x.py", tmp_path / "pkg" / "__init__.py"]
+        assert _m102_preload(tmp_path, None, None, files) == {}
+        assert count_m102_builds() == []
+
+    def test_preload_keys_the_root_workers_resolve(self, tmp_path):
+        from reveal.rules.scan_caches import _m102_preload
+        files = _project(tmp_path)
+        cache = _m102_preload(tmp_path, None, None, files)
+        assert list(cache) == [m102_module._project_root(files[-1].resolve())]
+        assert "pkg.used" in next(iter(cache.values()))
+
+    def test_init_worker_seeds_cache(self, tmp_path):
+        from reveal.rules.scan_caches import _m102_init_worker
+        _m102_init_worker({tmp_path: {"a.b"}})
+        assert m102_module._import_cache[tmp_path] == {"a.b"}
+
+    def test_init_worker_noop_on_empty(self):
+        from reveal.rules.scan_caches import _m102_init_worker
+        before = dict(m102_module._import_cache)
+        _m102_init_worker({})
+        assert m102_module._import_cache == before
