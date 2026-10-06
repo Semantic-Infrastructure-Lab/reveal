@@ -21,6 +21,9 @@
 #                             Console output under a non-UTF-8 stream: tests/test_console_encoding.py.
 #                             This replaced a full second pytest run under LC_ALL=C (~5 min, never
 #                             caught anything the other checks missed)
+# Checkout guard (BACK-1680): the venv is shared and the install step points it at THIS checkout, so a run
+#                             from a git worktree or second checkout is refused (scripts/ci_editable_guard.sh).
+#                             Test a worktree with ~/.cache/reveal-wt/wt-check.sh; REVEAL_CI_ALLOW_REPOINT=1 overrides.
 # What it cannot do: run Windows or macOS. scripts/check_windows_compat.py is the local guard
 # for the Windows path class; anything else Windows-specific still needs CI.
 #
