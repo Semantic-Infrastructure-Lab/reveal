@@ -449,13 +449,15 @@ def scan(adapter, path):
 
     def test_unknown_helper_call_still_flagged(self):
         """A method call with an error-sounding name is NOT a free pass —
-        only the explicitly-named known helper is recognized (BACK-992)."""
+        only the explicitly-named known helper is recognized (BACK-992).
+        The call does not receive the exception (BACK-1430: a call that does
+        is forwarding, see test_b006_forwarding_back1430.py)."""
         content = """
 def scan(adapter, path):
     try:
         return other.get_structure()
     except Exception as exc:
-        adapter.handle_error(exc)
+        adapter.handle_error()
         return {}
 """
         path = self.create_temp_file(content)

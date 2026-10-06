@@ -166,6 +166,19 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     # doesn't become a blanket escape hatch for actually-silent handlers.
     _ERROR_FIELD_NAMES = frozenset({'error', 'status', 'parse_error', 'failed'})
 
+    # BACK-1430: handing the caught exception to a callee (``listener.onFailure(e)``,
+    # ``reject(e)``) discloses it -- the callee reports or handles it. Recognized
+    # narrowly: the caught variable is a *bare* argument of a call whose result is
+    # discarded, and the callee does not announce a non-disclosure. A debug-level
+    # log call, a container store (collecting without reading) and a discard-named
+    # callee keep the handler silent, preserving the policy above.
+    _NON_DISCLOSING_CALLEES = frozenset({
+        'debug', 'trace', 'info', 'notice', 'verbose', 'log', 'fine', 'finer', 'finest', 'd', 'v', 'i',
+        'add', 'addAll', 'addFirst', 'addLast', 'append', 'push', 'put', 'offer', 'insert', 'extend',
+        'set', 'compareAndSet', 'update',
+    })
+    _DISCARD_CALLEE_PREFIXES = ('ignore', 'swallow', 'suppress', 'discard')
+
     # Pattern to detect explanatory comments near pass statement
     COMMENT_PATTERN = re.compile(r'#\s*\w+')
 
@@ -322,7 +335,29 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
                         return False
                 if isinstance(sub, ast.Dict) and self._has_error_field_key(sub):
                     return False
+                if isinstance(sub, ast.Expr) and self._py_forwards_exception(sub.value, node.name):
+                    return False
         return True
+
+    @classmethod
+    def _forwards_exception(cls, callee: Optional[str], bare_args: List[str], caught: Optional[str]) -> bool:
+        """Policy shared by every language: does this call hand ``caught`` to a callee
+        that is not debug-level, a container store or discard-named (BACK-1430)?"""
+        if not caught or not callee or caught not in bare_args:
+            return False
+        if callee in cls._NON_DISCLOSING_CALLEES:
+            return False
+        return not callee.lower().startswith(cls._DISCARD_CALLEE_PREFIXES)
+
+    def _py_forwards_exception(self, value: ast.expr, caught: Optional[str]) -> bool:
+        """True for a discarded-result call ``cb(e)`` / ``obj.cb(error=e)`` in a Python handler."""
+        if not isinstance(value, ast.Call):
+            return False
+        func = value.func
+        callee = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else None
+        operands = [*value.args, *(kw.value for kw in value.keywords)]
+        bare = [arg.id for arg in operands if isinstance(arg, ast.Name)]
+        return self._forwards_exception(callee, bare, caught)
 
     def _has_error_field_key(self, node: ast.Dict) -> bool:
         """True if a dict literal has a string-literal key recording failure state in-band.
@@ -683,6 +718,25 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             if _zero_arg(descendant, 'kind') == 'method_invocation':
                 if self._java_call_name(descendant, content_bytes) in self._JAVA_VISIBLE_METHODS:
                     return True
+        return self._java_forwards_exception(node, block, content_bytes)
+
+    def _java_forwards_exception(self, node, block, content_bytes: bytes) -> bool:
+        """True if a discarded-result call in the catch body gets the caught
+        exception as a bare argument (``listener.onFailure(e);``, BACK-1430)."""
+        param = next((c for c in node_children(node) if _zero_arg(c, 'kind') == 'catch_formal_parameter'), None)
+        ident = next((c for c in node_children(param) if _zero_arg(c, 'kind') == 'identifier'), None) if param else None
+        caught = self._ts_node_text(ident, content_bytes) if ident else None
+        for stmt in self._ts_walk(block):
+            if _zero_arg(stmt, 'kind') != 'expression_statement':
+                continue
+            for call in node_children(stmt):
+                if _zero_arg(call, 'kind') != 'method_invocation':
+                    continue
+                args = next((c for c in node_children(call) if _zero_arg(c, 'kind') == 'argument_list'), None)
+                bare = [self._ts_node_text(a, content_bytes) for a in node_children(args)
+                        if _zero_arg(a, 'kind') == 'identifier'] if args else []
+                if self._forwards_exception(self._java_call_name(call, content_bytes), bare, caught):
+                    return True
         return False
 
     def _java_call_name(self, node, content_bytes: bytes) -> Optional[str]:
@@ -764,6 +818,32 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
                 if obj_text == 'console':
                     return True
                 if prop_text in self._JS_VISIBLE_METHODS:
+                    return True
+        return self._js_forwards_exception(node, block, content_bytes)
+
+    def _js_forwards_exception(self, node, block, content_bytes: bytes) -> bool:
+        """True if a discarded-result call in the catch body gets the caught
+        exception as a bare argument (``reject(e);``, ``this.onError(e);``, BACK-1430)."""
+        param = next((c for c in node_children(node) if _zero_arg(c, 'kind') == 'identifier'), None)
+        caught = self._ts_node_text(param, content_bytes) if param else None
+        for stmt in self._ts_walk(block):
+            if _zero_arg(stmt, 'kind') != 'expression_statement':
+                continue
+            for call in node_children(stmt):
+                if _zero_arg(call, 'kind') != 'call_expression':
+                    continue
+                children = node_children(call)
+                callee = children[0] if children else None
+                if callee is None:
+                    continue
+                if _zero_arg(callee, 'kind') == 'member_expression':
+                    callee = next((c for c in node_children(callee)
+                                   if _zero_arg(c, 'kind') == 'property_identifier'), None)
+                name = self._ts_node_text(callee, content_bytes) if callee is not None else None
+                args = next((c for c in children if _zero_arg(c, 'kind') == 'arguments'), None)
+                bare = [self._ts_node_text(a, content_bytes) for a in node_children(args)
+                        if _zero_arg(a, 'kind') == 'identifier'] if args else []
+                if self._forwards_exception(name, bare, caught):
                     return True
         return False
 
