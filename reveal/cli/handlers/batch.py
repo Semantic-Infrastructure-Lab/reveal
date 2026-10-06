@@ -121,8 +121,23 @@ def _process_stdin_file(
         )
         return violations, degraded
 
+    if getattr(args, 'validate_schema', None):
+        return _validate_schema_of(str(path), args, handle_file_func), False
     handle_file_func(str(path), None, args.meta, args.format, args)
     return 0, False
+
+
+def _validate_schema_of(target: str, args: 'Namespace', handle_file_func) -> int:
+    """``--validate-schema`` on one stdin path: 1 if it failed, so the run goes on to the rest.
+
+    The validation branch ends the process on a failure (exit 1); left alone, the first
+    invalid file hid every later path from the run (BACK-1687).
+    """
+    try:
+        handle_file_func(target, None, args.meta, args.format, args)
+    except SystemExit as e:
+        return 1 if e.code else 0
+    return 0
 
 
 def handle_stdin_mode(args: 'Namespace', handle_file_func):

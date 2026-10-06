@@ -625,7 +625,7 @@ reveal --rules | grep F00
 ```bash
 reveal README.md --validate-schema session         # Validate against session schema
 reveal README.md --validate-schema hugo         # Validate against hugo schema
-find . -name README.md -exec reveal {} --validate-schema session --format json \;  # Batch: one file per call
+find . -name README.md -exec reveal {} --validate-schema session --format json \;  # Batch: one file per call (or: find . -name README.md | reveal --stdin --validate-schema session)
 reveal README.md --list-schemas                 # Show available built-in schemas
 ```
 

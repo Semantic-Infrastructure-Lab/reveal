@@ -385,6 +385,12 @@ def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Names
         return
 
     element = element_from_path or args.element
+    if element and getattr(args, 'validate_schema', None):
+        # Validation reads no element: `a.md b.md` parsed b.md as one and validated only a.md (BACK-1687).
+        print(f"Error: --validate-schema validates one file per call; '{element}' would be ignored.\n"
+              "Run it once per file, or validate several: ls *.md | reveal --stdin --validate-schema SCHEMA",
+              file=sys.stderr)
+        sys.exit(2)
     if not element and getattr(args, 'section', None):
         if path.suffix.lower() in get_markdown_extensions():
             element = args.section

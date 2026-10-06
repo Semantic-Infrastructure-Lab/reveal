@@ -691,7 +691,7 @@ reveal 'depends://src?format=dot' | dot -Tsvg > deps.svg
 
 ### Validate markdown frontmatter
 
-One file per call: given several paths, `--validate-schema` checks only the first.
+One file per call: a second path on the command line is refused (exit 2), since it would be read as an element. Several paths go through `--stdin`, which validates each and exits 1 if any failed.
 
 ```bash
 # Session READMEs
