@@ -66,7 +66,7 @@ class TestToPosixWindowsShapes:
             assert '\\' not in to_posix(W(raw))
 
     def test_posix_string_control_is_untouched(self):
-        assert to_posix('/usr/lib/x.py') == '/usr/lib/x.py'
+        assert to_posix('/usr/lib/x.py') == '/usr/lib/x.py'  # noqa: win-path  (string in, string out; no filesystem path)
         assert to_posix('a/b') == 'a/b'
 
 
