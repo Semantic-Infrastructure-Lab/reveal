@@ -23,7 +23,7 @@ def _names(lang, code, category, tmp_path):
     ('<?php\n$a = Mysqli_Connect("h");\n$b = new pdo("dsn");\n$c = new \\SQLITE3("f");\n',
      'db', ['Mysqli_Connect', 'new SQLITE3', 'new pdo']),
     ('<?php\n$a = FOPEN("https://x/a", "r");\n$b = File_Get_Contents("http://x");\n',
-     'network', ['File_Get_Contents', 'FOPEN']),
+     'network', ['FOPEN', 'File_Get_Contents']),
     ('<?php\n$a = SYSTEM("ls");\n$b = Shell_Exec("ls");\n', 'subprocess', ['SYSTEM', 'Shell_Exec']),
     ('<?php\nFile_Put_Contents("/tmp/x", "y");\n', 'fs', ['File_Put_Contents']),
 ], ids=['php-net-funcs', 'php-db', 'php-url-fopen', 'php-subprocess', 'php-fs-write'])

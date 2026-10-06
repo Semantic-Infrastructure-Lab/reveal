@@ -316,6 +316,11 @@ _LANGS: Dict[str, _Lang] = {
 
 LANGUAGES = tuple(sorted({'python', *_LANGS}))
 
+# Languages whose function and class names are case-insensitive (PHP: `CURL_INIT()` is
+# `curl_init()`, `new pdo` is `new PDO`). Rule name matching folds case for these and only these
+# (BACK-1455); a case-sensitive language must keep telling `system` from a user's `SYSTEM`.
+CASE_INSENSITIVE_NAMES = frozenset({'php'})
+
 
 def _extension_language() -> Dict[str, str]:
     """{extension: key of LANGUAGES}, derived from the registry (BACK-1255): the
@@ -386,7 +391,8 @@ class FactCollector:
     Imports, subshells and everything the filters accept are always kept.
 
     `needles`: literal byte strings, at least one of which must occur in the source for any
-    call or `new` to be able to match. When none does, call and `new` nodes are not visited
+    call or `new` to be able to match (lowercase, tested against the lowercased source, for a
+    `CASE_INSENSITIVE_NAMES` language). When none does, call and `new` nodes are not visited
     at all for this file (a substring test over the bytes, far cheaper than naming callees).
     """
 
@@ -401,7 +407,8 @@ class FactCollector:
         spec = self._spec
         # Later entries win when a kind has two roles: call > import > new > subshell.
         self._dispatch: Dict[str, Callable[[Any, str], None]] = {}
-        can_match = needles is None or any(n in content for n in needles)
+        haystack = content.lower() if language in CASE_INSENSITIVE_NAMES else content
+        can_match = needles is None or any(n in haystack for n in needles)
         self._can_match = can_match
         for kinds, handler in ((spec.subshell_kinds, self._visit_subshell),
                                (spec.new_kinds if can_match else (), self._visit_new),

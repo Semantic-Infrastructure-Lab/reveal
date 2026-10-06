@@ -187,11 +187,12 @@ def _record_builtin_call(fname: str, strings: List[str], node: Any, file_path: s
     """Classify a call to a PHP subprocess / file-write builtin (BACK-1090). True when
     recorded. Network and database builtins are rule rows."""
     line = _get_line(node)
-    if fname in _SUBPROCESS_FUNCS:
+    lowered = fname.lower()             # PHP function names are case-insensitive (BACK-1455)
+    if lowered in _SUBPROCESS_FUNCS:
         category, kind = 'subprocess', 'subprocess'
-    elif fname in _FS_WRITE_FUNCS:
+    elif lowered in _FS_WRITE_FUNCS:
         category, kind = 'fs', 'fs_write'
-    elif fname == 'fopen':
+    elif lowered == 'fopen':
         # Only write/append/create modes are a write; a URL is network egress (a rule row).
         if len(strings) >= 2 and any(m in strings[1] for m in 'wacx') \
                 and not strings[0].startswith(('php://', *_URL_SCHEMES)):
@@ -219,12 +220,12 @@ def _process_function_call(node: Any, file_path: str, content_bytes: bytes,
     if _record_builtin_call(fname, strings, node, file_path, surfaces):
         return
 
-    if fname == 'getenv' and strings:
+    if fname.lower() == 'getenv' and strings:
         surfaces['env'].append({
             'type': 'env_var', 'name': strings[0], 'expr': 'getenv',
             'file': file_path, 'line': _get_line(node),
         })
-    elif fname == 'register_rest_route':
+    elif fname.lower() == 'register_rest_route':
         route = _wp_rest_route(_argument_values(args), content_bytes, scope_of(node))
         if route is not None:
             surfaces['http'].append({**route, 'file': file_path, 'line': _get_line(node)})

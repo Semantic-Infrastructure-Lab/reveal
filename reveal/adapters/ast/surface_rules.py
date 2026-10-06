@@ -29,7 +29,7 @@ from functools import lru_cache
 from fnmatch import fnmatchcase
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
-from .surface_facts import CallFilter, FactCollector, NewFilter, python_facts_from_ast
+from .surface_facts import CASE_INSENSITIVE_NAMES, CallFilter, FactCollector, NewFilter, python_facts_from_ast
 from .surface_facts import Call as CallFact
 from .surface_facts import Fact
 from .surface_facts import Import as ImportFact
@@ -50,8 +50,12 @@ def _names(value: Names) -> Tuple[str, ...]:
     return (value,) if isinstance(value, str) else tuple(value)
 
 
-def _name_matches(patterns: Tuple[str, ...], candidate: str) -> bool:
-    """Empty `patterns` matches anything; entries may use `*` globs (`exec*`)."""
+def _name_matches(patterns: Tuple[str, ...], candidate: str, fold: bool = False) -> bool:
+    """Empty `patterns` matches anything; entries may use `*` globs (`exec*`). `fold`: ignore
+    case, for a language whose names are case-insensitive (`CASE_INSENSITIVE_NAMES`)."""
+    if fold:
+        candidate = candidate.lower()
+        return not patterns or any(fnmatchcase(candidate, p.lower()) for p in patterns)
     return not patterns or any(fnmatchcase(candidate, p) for p in patterns)
 
 
@@ -92,8 +96,8 @@ def _split_dotted(path: str) -> Tuple[str, str]:
     return receiver, name
 
 
-def _call_fields(rule_match: Call, call: CallFact,
-                 aliases: Dict[str, str]) -> Optional[Dict[str, str]]:
+def _call_fields(rule_match: Call, call: CallFact, aliases: Dict[str, str],
+                 fold: bool = False) -> Optional[Dict[str, str]]:
     if rule_match.qualified is not None and call.qualified != rule_match.qualified:
         return None
     if rule_match.resolved:
@@ -111,7 +115,7 @@ def _call_fields(rule_match: Call, call: CallFact,
         return None
     if rule_match.receiver_endswith and not _segment_suffix(receiver, rule_match.receiver_endswith):
         return None
-    if not _name_matches(_names(rule_match.name), name):
+    if not _name_matches(_names(rule_match.name), name, fold):
         return None
     key = next((a for a in call.args if a), None)     # first non-empty string literal
     if rule_match.string_arg and key is None:
@@ -143,11 +147,13 @@ def _module_matches(segments: frozenset, globs: Tuple[str, ...], module: str) ->
             or any(fnmatchcase(module, g) for g in globs))
 
 
-def _match_fields(m: Match, fact: Fact, aliases: Dict[str, str]) -> Optional[Dict[str, str]]:
+def _match_fields(m: Match, fact: Fact, aliases: Dict[str, str],
+                  fold: bool = False) -> Optional[Dict[str, str]]:
     if isinstance(m, Call) and isinstance(fact, CallFact):
-        return _call_fields(m, fact, aliases)
+        return _call_fields(m, fact, aliases, fold)
     if isinstance(m, New) and isinstance(fact, NewFact):
-        return {'type': fact.type_name} if _name_matches(_names(m.type), fact.type_name) else None
+        return ({'type': fact.type_name}
+                if _name_matches(_names(m.type), fact.type_name, fold) else None)
     if isinstance(m, Subshell) and isinstance(fact, SubshellFact):
         return {}
     if isinstance(m, Import) and isinstance(fact, ImportFact):
@@ -204,7 +210,7 @@ def _hits(rules: Iterable[Rule], facts: List[Fact]) -> List[Tuple[Rule, Fact, Di
         tried = (import_candidates(fact) if type(fact) is ImportFact
                  else usable.get(type(fact), []))
         for rule in tried:
-            fields = _match_fields(rule.match, fact, aliases)
+            fields = _match_fields(rule.match, fact, aliases, rule.lang in CASE_INSENSITIVE_NAMES)
             if fields is not None:
                 out.append((rule, fact, fields))
                 break
@@ -306,6 +312,7 @@ def _call_filter(lang: str) -> Optional[CallFilter]:
     Built from the tables so the fact extractor can skip most calls before doing the
     expensive part. Returns None (no filtering) when some rule can match any call name.
     """
+    fold = lang in CASE_INSENSITIVE_NAMES
     exact: set = set()
     globs: List[str] = []
     receivers_any_name: set = set()
@@ -325,6 +332,7 @@ def _call_filter(lang: str) -> Optional[CallFilter]:
                 continue
             return None
         for pat in patterns:
+            pat = pat.lower() if fold else pat
             if any(c in pat for c in '*?['):
                 globs.append(pat)
             else:
@@ -332,6 +340,8 @@ def _call_filter(lang: str) -> Optional[CallFilter]:
     frozen, receivers = frozenset(exact), frozenset(receivers_any_name)
 
     def want(receiver: str, name: str) -> bool:
+        if fold:
+            name = name.lower()
         return (name in frozen or receiver in receivers
                 or any(fnmatchcase(name, g) for g in globs))
     return want
@@ -339,6 +349,7 @@ def _call_filter(lang: str) -> Optional[CallFilter]:
 
 @lru_cache(maxsize=None)
 def _new_filter(lang: str) -> Optional[NewFilter]:
+    fold = lang in CASE_INSENSITIVE_NAMES
     exact: set = set()
     for r in all_rules():
         m = r.match
@@ -347,8 +358,10 @@ def _new_filter(lang: str) -> Optional[NewFilter]:
         patterns = _names(m.type)
         if not patterns or any(c in p for p in patterns for c in '*?['):
             return None
-        exact.update(patterns)
+        exact.update(p.lower() if fold else p for p in patterns)
     frozen = frozenset(exact)
+    if fold:
+        return lambda type_name: type_name.lower() in frozen
     return lambda type_name: type_name in frozen
 
 
@@ -401,7 +414,9 @@ def _needles(lang: str) -> Optional[Tuple[bytes, ...]]:
         literals = _rule_literals(r.match)
         if literals is None:
             return None
-        needles.update(lit.encode('utf-8') for lit in literals)
+        # Lowercase for a case-insensitive language: FactCollector tests the lowercased source.
+        needles.update((lit.lower() if lang in CASE_INSENSITIVE_NAMES else lit).encode('utf-8')
+                       for lit in literals)
     return tuple(sorted(needles))
 
 

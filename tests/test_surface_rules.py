@@ -462,7 +462,7 @@ def test_python_imports_match_the_replaced_scanner(code, category, expected, tmp
     # Builtins: bare or `\`-qualified calls and constructors, exact names; not a method, a static
     # call or a namespaced function.
     ('<?php\n$h = \\curl_init();\n$s = fsockopen("h", 80);\n$o = $c->curl_init();\n'
-     '$n = App\\curl_init();\n$x = CURL_INIT();\n', 'network', ['curl_init', 'fsockopen']),
+     '$n = App\\curl_init();\n$x = CURL_INIT();\n', 'network', ['CURL_INIT', 'curl_init', 'fsockopen']),
     ("<?php\nuse Doctrine\\ORM\\EntityManager;\n$a = new \\PDO('dsn');\n$b = new mysqli();\n"
      "$c = pg_connect('x');\n$d = Db::mysqli_connect();\n$e = new PDOx();\n", 'db',
      ['Doctrine\\ORM\\EntityManager', 'new PDO', 'new mysqli', 'pg_connect']),
