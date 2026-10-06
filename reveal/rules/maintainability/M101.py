@@ -49,7 +49,7 @@ class M101(BaseRule):
             path = Path(file_path)
 
             # Count lines
-            line_count = content.count('\n') + 1
+            line_count = len(content.splitlines())
 
             # Get file size
             size_bytes = path.stat().st_size if path.exists() else len(content)
@@ -89,7 +89,7 @@ class M101(BaseRule):
                 )
             elif line_count > self.THRESHOLD_WARN:
                 severity = Severity.MEDIUM
-                msg = f"{self.message} ({line_count:,} lines, consider splitting at {self.THRESHOLD_ERROR:,})"
+                msg = f"File is getting large ({line_count:,} lines, consider splitting at {self.THRESHOLD_ERROR:,})"
                 suggestion = (
                     f"This file is getting large. Consider splitting if it grows beyond {self.THRESHOLD_ERROR:,} lines. "
                     f"Use reveal's progressive disclosure: structure → outline → specific functions. "
