@@ -11,7 +11,7 @@ import pytest
 import tree_sitter_language_pack as ts
 
 from reveal.adapters.ast.nav_exits import collect_exits, collect_gate_chains
-from reveal.core.treesitter_compat import _zero_arg, ts_parse, tree_root
+from reveal.core.treesitter_compat import _zero_arg, ts_parse, tree_root, node_children
 
 
 def _method(code: str, name: str):
@@ -29,7 +29,7 @@ def _method(code: str, name: str):
             name_node = node.child_by_field_name('name')
             if get_text(name_node) == name:
                 return node, get_text
-        stack.extend(node.children)
+        stack.extend(node_children(node))
     raise AssertionError(name)
 
 

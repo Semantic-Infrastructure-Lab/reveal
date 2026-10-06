@@ -1053,13 +1053,14 @@ def _type_reference_children(node: Any) -> List[Any]:
     """Children of `node` that are type references or type-argument lists (C#),
     which name types, not variables. `Foo<Bar>(a)`'s callee `Foo` is not among
     them: only the `<Bar>` list is."""
-    found = []
-    for index, child in enumerate(_children(node)):
-        kind = _zero_arg(child, 'kind')
-        if kind == 'type_argument_list' or (
-                kind in _TYPE_REF_KINDS and node.field_name_for_child(index) in _TYPE_REF_FIELDS):
-            found.append(child)
-    return found
+    # child_by_field_name, not field_name_for_child (missing on the tree-sitter-language-pack
+    # 1.8.1 floor), and spans, not ==: the floor's vendored Node compares unequal to itself.
+    typed = {(_zero_arg(c, 'start_byte'), _zero_arg(c, 'end_byte'))
+             for c in (node.child_by_field_name(f) for f in sorted(_TYPE_REF_FIELDS))
+             if c is not None and _zero_arg(c, 'kind') in _TYPE_REF_KINDS}
+    return [child for child in _children(node)
+            if _zero_arg(child, 'kind') == 'type_argument_list'
+            or (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) in typed]
 
 
 def _non_variable_children(node: Any, get_text: Callable) -> List[Any]:

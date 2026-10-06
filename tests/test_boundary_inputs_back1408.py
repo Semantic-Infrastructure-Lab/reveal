@@ -11,7 +11,7 @@ import pytest
 import tree_sitter_language_pack as ts
 
 from reveal.adapters.ast.nav_boundary import collect_boundary
-from reveal.core.treesitter_compat import _zero_arg, ts_parse, tree_root
+from reveal.core.treesitter_compat import _zero_arg, ts_parse, tree_root, node_children
 
 _FUNCTION_KINDS = {
     'go': ('function_declaration',),
@@ -37,7 +37,7 @@ def _inputs(language: str, code: str) -> set:
             end = _zero_arg(node, 'end_position').row + 1
             result = collect_boundary(node, 1, end, get_text, language=language)
             return {d['var'] for d in result['inputs']}
-        stack.extend(node.children)
+        stack.extend(node_children(node))
     raise AssertionError('no function named target')
 
 
