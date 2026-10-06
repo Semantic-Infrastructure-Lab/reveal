@@ -78,7 +78,7 @@
  "reveal/adapters/git/commits.py::return-value": 1,
  "reveal/adapters/git/commits.py::typeddict-item": 1,
  "reveal/adapters/git/files.py::assignment": 1,
- "reveal/adapters/git/files.py::no-any-return": 2,
+ "reveal/adapters/git/files.py::no-any-return": 1,
  "reveal/adapters/git/files.py::return-value": 6,
  "reveal/adapters/git/files.py::typeddict-item": 1,
  "reveal/adapters/git/files.py::typeddict-unknown-key": 5,

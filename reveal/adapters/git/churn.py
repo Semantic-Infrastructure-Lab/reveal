@@ -92,7 +92,7 @@ def get_churn_counts(
 
     fingerprint = _churn_fingerprint(repo, start.id, since, no_merges)
     if fingerprint is not None:
-        cached = disk_cache.get(_CHURN_CACHE_NAMESPACE, fingerprint)
+        cached: Optional[Dict[str, int]] = disk_cache.get(_CHURN_CACHE_NAMESPACE, fingerprint)
         if cached is not None:
             if scope_paths is None:
                 return cached
