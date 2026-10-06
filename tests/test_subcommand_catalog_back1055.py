@@ -11,8 +11,6 @@ of keeping its own alias rows.
 import re
 from pathlib import Path
 
-import pytest
-
 from reveal.adapters.help import HelpAdapter
 from reveal.cli.invocation import COMMANDS, EPILOG_ORDER, render_subcommand_lines, subcommand_help_guides
 from reveal.cli.parser import build_help_epilog
