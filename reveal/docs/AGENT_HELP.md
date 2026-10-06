@@ -3223,8 +3223,9 @@ reveal 'xlsx://file.xlsx?search=pattern' --format=json
 # See how reveal interprets a file
 reveal file.unknown --meta
 
-# Force specific analyzer (if detection fails)
-reveal file.txt --language python
+# Which analyzer reveal picks (or none), and its fallback status
+# (--language only filters markdown code blocks; it does not force an analyzer)
+reveal file.txt --explain-file
 ```
 
 ---
@@ -3451,8 +3452,8 @@ The message now includes line count — use it to decide whether `Read` is worth
    # Check file type detection
    reveal file.unknown --meta
 
-   # Force language if detection fails
-   reveal file.txt --language python
+   # Which analyzer reveal picks (or none), and its fallback status
+   reveal file.txt --explain-file
    ```
 
 3. **TreeSitter parser missing**
