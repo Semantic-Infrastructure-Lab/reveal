@@ -15,6 +15,52 @@ syntax patterns per category. Project-specific clients outside that taxonomy
 are not detected, and dynamic registrations (e.g. plugin-loaded routes) are
 not tracked.
 
+## What surface:// is and is not
+
+**It is** an inventory of boundary points: the places where the code meets the outside world.
+One entry is one site (`file` and `line`) where something comes in (a CLI argument, an HTTP
+route, an MCP tool, an environment variable), goes out to a client library (network, database,
+SDK), or acts on the machine (a file write, a launched process).
+
+**It is not**:
+
+- *Internal structure.* Modules, classes and functions that never touch a boundary do not appear.
+  For structure use `reveal <file>`; for who calls whom use `calls://`.
+- *Layers or dependency direction.* "Which layer may import which" is `architecture://`, and the
+  full import graph is `imports://`. `surface://` only lists the imports that are boundary clients
+  (the `network`, `db` and `sdk` buckets) and, with `--by dir`, which directory owns them.
+- *Data flow or behavior.* An entry says a boundary exists at that site, not what flows through it
+  or whether the path is reachable at run time.
+- *Complete.* It matches a curated list of libraries and call shapes (see Limits), so project-specific
+  clients are missed and the confidence is `medium`.
+
+The categories do not all detect the same way, and the difference changes how to read a count:
+`network`, `db` and `sdk` are **import-detected** (importing a known client is the entry; no call is
+needed), `subprocess` is **call-shaped** (a launch call is the entry), `fs` records **writes only**
+(a read is never an entry), and `env` records **reads**.
+
+## Categories at a glance
+
+One row per category, in the order the JSON `surfaces` object and the text report use. "No detector
+for" is read from the language coverage matrix (`reveal/adapters/ast/surface_matrix.py`): a `0` in
+those languages means "no detector", not "scanned, found nothing".
+
+| Category | One entry is | Entry `type` and key fields | Detected by | No detector for |
+|----------|--------------|-----------------------------|-------------|-----------------|
+| `cli` | a command-line entry point: an argument, subcommand or command declaration, or a program `main` | `type` is `argument`, `subcommand`, `command` or `main`; `name`, plus `expr` or `decorator` | language scanner (argparse `add_argument`/`add_parser`, click/typer decorators, Go/Rust `main`) | php, ruby |
+| `http` | a route: the path, methods and handler that serve it | `type` is `route`; `name` (handler), `path`, `methods`, `decorator`, `test_origin` | language scanner (route decorators and registration calls) | none |
+| `mcp` | an MCP tool registration | `type` is `tool`; `name`, `decorator` | language scanner (Python and TypeScript/JavaScript only) | cpp, csharp, go, java, kotlin, php, ruby, rust, swift |
+| `env` | a read of an environment variable | `type` is `env_var`; `name` (the key), `expr` (the call form) | rule table for Go, Java, Kotlin, C#, Rust; hand-coded scanner for the rest | none |
+| `network` | an import of a known network client library | `type` is `import`; `name` (the module) | import taxonomy (rule table; TypeScript/JavaScript has its own scanner) | none |
+| `db` | an import of a known database client library | `type` is `import`; `name` (the module) | import taxonomy, as `network` | none |
+| `sdk` | an import of a known cloud or service SDK | `type` is `import`; `name` (the module) | import taxonomy, as `network` | none |
+| `fs` | a file write or file creation | `type` is `fs_write`; `name` (the call), `target` when known | rule table for Go, Java, Kotlin, C#, Rust, Ruby, Swift; hand-coded scanner for Python, TypeScript/JavaScript, PHP, C++ | none |
+| `subprocess` | a process launch, matched by call shape | `type` is `subprocess`; `name` (the call, e.g. `subprocess.run`) | rule table, except TypeScript/JavaScript and PHP (own scanners) | none |
+
+Every entry also carries `file` and `line`, and `in_error_region` when the parser had to recover
+around a syntax error at that site. For the exact call shapes and libraries behind each row, and
+what is deliberately not detected, see Limits below.
+
 ## Quick Start
 
 ```bash
