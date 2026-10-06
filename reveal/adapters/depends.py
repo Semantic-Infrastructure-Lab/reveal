@@ -56,6 +56,22 @@ _C_CPP_FAMILY_EXTENSIONS = frozenset(CImportExtractor.extensions | CppImportExtr
 _C_CPP_LANGUAGES = frozenset({CImportExtractor.language_name, CppImportExtractor.language_name})
 
 
+def scan_extensions_for(target_path: Path) -> Optional[frozenset]:
+    """The parse-corpus extension family depends:// scans for one file target.
+
+    BACK-525 layer 4: only the target's own extractor family can satisfy
+    resolve_import's extension-qualified lookup; BACK-675 widens C/C++ to the
+    shared header family. ``None`` (an unsupported file) scans every extension.
+    The recall gate (scripts/recall_gate.py) reads the same choice.
+    """
+    target_extractor = get_extractor(target_path)
+    if target_extractor is None:
+        return None
+    if target_extractor.language_name in _C_CPP_LANGUAGES:
+        return _C_CPP_FAMILY_EXTENSIONS
+    return frozenset(target_extractor.extensions)
+
+
 class _ResolutionIndices(NamedTuple):
     """The per-scan indices `_build_graph` builds in its first pass over
     `files` and consumes in edge resolution. Grouped so the pass that
@@ -528,15 +544,7 @@ class DependsAdapter(ResourceAdapter):
         # gate G1) — parsing every other supported language's files under
         # scan_root just to build the dependency graph is pure waste. A
         # directory target may span languages, so it stays unscoped.
-        scan_extensions = None
-        if target_path.is_file():
-            target_extractor = get_extractor(target_path)
-            if target_extractor is not None:
-                scan_extensions = frozenset(target_extractor.extensions)
-                # BACK-675: widen to the whole C/C++ family so a '.h' target
-                # doesn't drop every .cpp importer from the scan (see note above).
-                if target_extractor.language_name in _C_CPP_LANGUAGES:
-                    scan_extensions = _C_CPP_FAMILY_EXTENSIONS
+        scan_extensions = scan_extensions_for(target_path) if target_path.is_file() else None
         self._build_graph(project_root, scan_extensions=scan_extensions)
 
         fmt = self._query_params.get('format', 'text')
