@@ -194,10 +194,28 @@ def _extract_by_syntax(analyzer, element: str, syntax: dict):
                 return result
         # Not a member path after all: a dotted name the analyzer knows as-is
         # (a markdown heading `setup.py`, a JSON key `a.b`).
-        return _extract_by_name(analyzer, element)
+        result = _extract_by_name(analyzer, element)
+        if result is None and not isinstance(analyzer, TreeSitterAnalyzer):
+            result = _extract_dotted_via_get_element(analyzer, element)
+        return result
 
     else:  # name-based extraction
         return _extract_by_name(analyzer, element)
+
+
+def _extract_dotted_via_get_element(analyzer, element: str):
+    """`section.key` on an analyzer whose own get_element() resolves it (INI).
+
+    Only a renderable record is taken (a source span or a flat `data` dict);
+    anything else (XML's tag/matches shape) is left as not found.
+    """
+    getter = getattr(analyzer, 'get_element', None)
+    if getter is None:
+        return None
+    result = getter(element)
+    if isinstance(result, dict) and ('source' in result or 'data' in result):
+        return result
+    return None
 
 
 def _extract_by_name(analyzer, element: str):

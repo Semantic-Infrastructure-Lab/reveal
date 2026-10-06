@@ -230,6 +230,39 @@ class IniAnalyzer(FileAnalyzer):
         except (configparser.NoSectionError, configparser.NoOptionError):
             return None
 
+    def _key_span(self, section: str, key: str) -> Dict[str, Any]:
+        """Source span of `key` inside `[section]` (name/line_start/line_end/source).
+
+        Empty when the line cannot be located (e.g. a DEFAULT-inherited key),
+        so callers fall back to the value-only record. A continuation-line
+        value extends the span over its indented lines.
+        """
+        import re
+        text_lines = self.content.split('\n')
+        section_lines = {}
+        for i, line in enumerate(text_lines, 1):
+            match = re.match(r'^\s*\[([^\]]+)\]\s*$', line)
+            if match:
+                section_lines[match.group(1)] = i
+        start = section_lines.get(section)
+        if start is None:
+            return {}
+        end = self._section_ends(section_lines, text_lines)[section]
+        key_re = re.compile(r'^\s*' + re.escape(key) + r'\s*[=:]', re.IGNORECASE)
+        for lineno in range(start + 1, end + 1):
+            if key_re.match(text_lines[lineno - 1]):
+                last = lineno
+                while last < end and text_lines[last][:1] in (' ', '\t') \
+                        and text_lines[last].strip():
+                    last += 1
+                return {
+                    'name': f'{section}.{key}',
+                    'line_start': lineno,
+                    'line_end': last,
+                    'source': '\n'.join(text_lines[lineno - 1:last]),
+                }
+        return {}
+
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get a specific section or key value.
 
@@ -253,12 +286,14 @@ class IniAnalyzer(FileAnalyzer):
             section, key = element_name.split('.', 1)
             value = self._get_ini_key_value(config, section, key)
             if value is not None:
-                return {
+                found = {
                     'section': section,
                     'key': key,
                     'value': value,
                     'type': self._infer_type(value)
                 }
+                found.update(self._key_span(section, key))
+                return found
             return None
 
         # Get entire section
