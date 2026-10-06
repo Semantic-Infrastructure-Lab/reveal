@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
 from ..registry import (
-    FALLBACK_SUPPORT_NOTE, get_analyzer, get_all_analyzers, get_markdown_extensions,
-    language_for_extension,
+    FALLBACK_SUPPORT_NOTE, display_name_for_extension, fallback_languages, get_analyzer,
+    get_all_analyzers, get_markdown_extensions, language_for_extension,
 )
 from ..core import node_children as _children
 from ..core import tree_root
@@ -268,6 +268,39 @@ def _format_ast_node(node, depth: int = 0, max_depth: Optional[int] = None, pref
 
 # Helper functions for language info
 
+def _all_language_entries() -> Dict[str, Dict[str, Any]]:
+    """`get_all_analyzers()` plus the fallback-only languages `--languages` lists.
+
+    Fallback languages (haskell, ocaml, objc, ...) have no registered analyzer, so
+    `get_all_analyzers()` omits them; `--language-info` said "Language not found" for
+    languages `--languages` advertises and `reveal a.hs` opens (BACK-1650). Their set
+    comes from `fallback_languages()`, the same source `--languages` reads; one
+    dynamic analyzer class per grammar, so its extensions resolve as one language.
+    """
+    entries = dict(get_all_analyzers())
+    classes: Dict[str, Any] = {}
+    for ext, grammar in fallback_languages().items():
+        if ext in entries:
+            continue
+        if grammar not in classes:
+            classes[grammar] = get_analyzer(f"file{ext}", allow_fallback=True)
+        cls = classes[grammar]
+        if cls is None:
+            continue
+        entries[ext] = {
+            'extension': ext,
+            'name': display_name_for_extension(ext) or cls.type_name,
+            'icon': getattr(cls, 'icon', ''),
+            'class': cls,
+            'category': getattr(cls, 'CATEGORY', 'code'),
+            'is_fallback': True,
+            'fallback_quality': cls.fallback_quality,
+            'fallback_language': cls.fallback_language,
+            'content_ambiguous': None,
+        }
+    return entries
+
+
 def _find_language_by_name(language: str) -> Tuple[Optional[str], Optional[Dict], Optional[str]]:
     """Find extension and info by language name.
 
@@ -277,7 +310,7 @@ def _find_language_by_name(language: str) -> Tuple[Optional[str], Optional[Dict]
     Returns:
         Tuple of (ext, info, error_message)
     """
-    all_analyzers = get_all_analyzers()
+    all_analyzers = _all_language_entries()
     wanted = language.lower()
     # The analyzer's language slug (`csharp`, `cpp`, `bash`) is the name reveal
     # uses everywhere else; `--language-info csharp` found nothing (BACK-1421).
@@ -327,7 +360,7 @@ def _validate_extension(ext: str) -> Tuple[Optional[Dict], Optional[str]]:
     Returns:
         Tuple of (info, error_message)
     """
-    all_analyzers = get_all_analyzers()
+    all_analyzers = _all_language_entries()
     if ext not in all_analyzers:
         return None, f"❌ Extension not supported: {ext}\n\nTry: reveal --languages"
     return all_analyzers[ext], None
@@ -402,8 +435,10 @@ def _build_fallback_info(info: Dict[str, Any]) -> List[str]:
         "   • Imports",
         "   • Structure",
         "",
-        "⚠️  Note: Fallback analyzers provide basic structural",
-        "   analysis only. No language-specific features.",
+        f"🎯 Conformance level: {CONFORMANCE_UNTESTED}",
+        "",
+        f"⚠️  Note: {FALLBACK_SUPPORT_NOTE}.",
+        "   No language-specific features.",
     ]
 
 
