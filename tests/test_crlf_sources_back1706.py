@@ -78,15 +78,24 @@ def _reveal(cwd, *args):
     )
 
 
+def _own_newlines(data):
+    """Drop the platform's own line terminator: Windows text-mode stdout writes every \\n as \\r\\n.
+
+    Only that pair goes, so a CR that leaked from CRLF source (arriving as \\r\\r\\n) still shows.
+    """
+    return data.replace(b'\r\n', b'\n') if sys.platform == 'win32' else data
+
+
 def _both(tmp_path, name, text, *args, check=False):
     dirs = _pair(tmp_path, name, text)
     out = {}
     for label, d in dirs.items():
         r = _reveal(d, *(('check', name) if check else (name,)), *args)
         assert r.returncode in (0, 1), r.stderr.decode('utf-8', 'replace')
-        assert b'\r' not in r.stdout, f'{label}: stray CR in stdout for {args}'
-        assert b'\r' not in r.stderr, f'{label}: stray CR in stderr for {args}'
-        out[label] = r.stdout.decode('utf-8')
+        stdout, stderr = _own_newlines(r.stdout), _own_newlines(r.stderr)
+        assert b'\r' not in stdout, f'{label}: stray CR in stdout for {args}'
+        assert b'\r' not in stderr, f'{label}: stray CR in stderr for {args}'
+        out[label] = stdout.decode('utf-8')
     return out
 
 
