@@ -1417,10 +1417,26 @@ every sample matched the published target and edge counts.
   file keeps the imports outside the error region and is still flagged as partially
   parsed), every one of them measures its published figure again on 2026-09-24, with
   the same false-positive counts as the published runs.
+- **Re-pinned and gated (BACK-1461, 2026-10-06):** four second corpora are now pinned in
+  `tests/corpus/manifest.yaml` and measured on every run of
+  [scripts/recall_gate.py](scripts/recall_gate.py) (full population, importers under
+  the listed directories). Their original commits were never recorded, so these are new
+  measurements at a new commit, not reproductions; the rows above stand as published.
+  - Python/celery `17b895ba` (whole repo): 443 files, 186 targets, 1,444/1,444 edges,
+    0 extra (100% recall and precision).
+  - Rust/ripgrep `3fce3b5b` (whole repo): 110 files, 46 targets, 100/100 edges, 0 extra.
+  - Java/guava `786bb1a9` (`guava/src`; `android/` repeats every type): 611 files,
+    159 targets, 2,081/2,081 edges, 0 extra.
+  - C++/assimp `d334c32f` (`code/`, `include/`): 522 files, 250 targets, 707/707 edges,
+    1 extra (precision 99.86%). `code/AssetLib/IFC/IFCReaderGen_4.h`, which the CMake
+    build does not compile, includes `"STEPFile.h"`; the build's include path cannot
+    open it, but the sole-basename fallback (BACK-1669) resolves it to
+    `code/AssetLib/Step/STEPFile.h`. The published 50 extra edges came from importers
+    outside the oracle's scope (`test/`, `tools/`, `contrib/`), which the gate excludes.
 - **Cannot be re-run (BACK-1461):**
-  - Corpus clone not preserved: Java/guava, Go/client_golang, Python/celery,
-    Ruby/solidus, Kotlin/kotlinx.coroutines, Scala/cats-effect, Rust/ripgrep,
-    C#/Newtonsoft.Json, PHP/osCommerce, Swift/swift-collections.
+  - Corpus clone not preserved: Go/client_golang, Ruby/solidus,
+    Kotlin/kotlinx.coroutines, Scala/cats-effect, C#/Newtonsoft.Json, PHP/osCommerce,
+    Swift/swift-collections.
   - Oracle input not committed: TypeScript/VS Code (main + barrel), Java/Elasticsearch,
     C#/Jellyfin.
   - No diff harness: Ruby/Discourse, Swift/Kickstarter.
@@ -1751,27 +1767,41 @@ is checked where symbol-usage extraction is supported. A renamed Python project
 preserves its cycle count. These are regression guards, not recall measurements.
 
 
-The first public scheduled gate is [scripts/recall_gate.py](scripts/recall_gate.py),
-with an independent GCC oracle for literal quoted C includes on pinned Redis and
-curl source trees. These are optional test inputs, never runtime dependencies or
-services. Normal installation and the normal test suite do not fetch either repo.
+The public scheduled gate is [scripts/recall_gate.py](scripts/recall_gate.py). Each
+manifest entry with a `recall:` block names an independent oracle from
+[scripts/recall_oracles.py](scripts/recall_oracles.py), which never imports reveal:
+
+| Oracle | Mechanism | Pinned corpora |
+|---|---|---|
+| `gcc-c` | GCC opens each literal quoted include in an isolated probe | Redis, curl |
+| `gcc-cpp` | The same probe as C++ | assimp |
+| `python-ast` | `ast.parse` plus filesystem module resolution; `TYPE_CHECKING` imports skipped | celery |
+| `rust-use` | Deepest real module file for `crate::`/`super::`/`self::` use paths | ripgrep |
+| `java-jls` | A public top-level type `C` of package `a.b` is `a/b/C.java` | guava |
+
+The corpora are optional test inputs, never runtime dependencies or services. Normal
+installation and the normal test suite do not fetch them.
 
 ```bash
-python scripts/fetch_corpus.py c
+python scripts/fetch_corpus.py --recall
 python scripts/recall_gate.py --corpus-root ~/.cache/reveal-corpus --output recall-report.json
+python scripts/recall_gate.py --corpus-root ~/.cache/reveal-corpus --output r.json --corpus java-guava
 ```
 
 The compiler probe is currently qualified on POSIX hosts. Windows GCC probes
 timed out in CI and remain unavailable pending qualification; deterministic gate
-controls still run there, while the two real-compiler tests disclose their skip.
+controls and the non-compiler oracles still run there, while the real-compiler tests
+disclose their skip.
 
 The [scheduled workflow](.github/workflows/recall.yml) runs weekly and can be
 started manually. It verifies exact corpus commits, compares recall/precision with
 [the baseline](tests/corpus/recall_baseline.json), and preserves a timestamped
-report with missed/extra edges, partial parses and unresolved directives. Missing
-GCC, missing corpora, changed populations, zero measurements or metric drops fail
-loudly. `--write-baseline` is for reviewed local remeasurement only. Other languages'
-per-loop harnesses remain maintainer-internal script pairs; promotion is incremental.
+report with missed/extra edges, partial parses and the oracle's coverage counts. Missing
+GCC, missing corpora, changed populations, zero measurements, a file the Python oracle
+cannot parse, an ambiguous Java type or metric drops fail loudly. `--corpus ID` measures
+a subset against its own baseline rows; `--write-baseline` is for reviewed local
+remeasurement only and replaces just the rows it measured. Other languages' per-loop
+harnesses remain maintainer-internal script pairs; promotion is incremental.
 
 What you can reproduce today:
 

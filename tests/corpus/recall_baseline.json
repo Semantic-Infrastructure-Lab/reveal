@@ -34,5 +34,84 @@
     },
     "partial_files": 218,
     "differences": []
+  },
+  "python-celery": {
+    "oracle": "python-ast",
+    "sha": "17b895bad43aab73fca37609ae9b93be6cc1c6e1",
+    "targets": 186,
+    "oracle_edges": 1444,
+    "hit_edges": 1444,
+    "extra_edges": 0,
+    "recall": 1.0,
+    "precision": 1.0,
+    "coverage": {
+      "files": 443,
+      "import_statements": 3437,
+      "resolved_statements": 1459,
+      "type_checking_skipped": 24
+    },
+    "partial_files": 0,
+    "differences": []
+  },
+  "rust-ripgrep": {
+    "oracle": "rust-use",
+    "sha": "3fce3b5bb0236da2df6d99672afb8a719642eca7",
+    "targets": 46,
+    "oracle_edges": 100,
+    "hit_edges": 100,
+    "extra_edges": 0,
+    "recall": 1.0,
+    "precision": 1.0,
+    "coverage": {
+      "files": 110,
+      "use_statements": 428,
+      "local_paths": 484
+    },
+    "partial_files": 0,
+    "differences": []
+  },
+  "java-guava": {
+    "oracle": "java-jls",
+    "sha": "786bb1a9b44685875ebe7b83f1404a1f07ac653c",
+    "targets": 159,
+    "oracle_edges": 2081,
+    "hit_edges": 2081,
+    "extra_edges": 0,
+    "recall": 1.0,
+    "precision": 1.0,
+    "coverage": {
+      "files": 611,
+      "indexed_types": 611,
+      "import_statements": 6501,
+      "resolved_statements": 2520
+    },
+    "partial_files": 5,
+    "differences": []
+  },
+  "cpp-assimp": {
+    "oracle": "gcc-cpp",
+    "sha": "d334c32f1e4f5f17220411a031c4c15f9e03e3de",
+    "targets": 250,
+    "oracle_edges": 707,
+    "hit_edges": 707,
+    "extra_edges": 1,
+    "recall": 1.0,
+    "precision": 0.998587570621469,
+    "coverage": {
+      "files": 522,
+      "directives": 729,
+      "unresolved_directives": 21,
+      "gcc_probes": 423
+    },
+    "partial_files": 457,
+    "differences": [
+      {
+        "target": "code/AssetLib/Step/STEPFile.h",
+        "missed": [],
+        "extra": [
+          "code/AssetLib/IFC/IFCReaderGen_4.h"
+        ]
+      }
+    ]
   }
 }

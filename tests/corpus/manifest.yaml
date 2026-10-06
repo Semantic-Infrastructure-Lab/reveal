@@ -140,6 +140,51 @@ corpora:
     license: Apache-2.0
     role: Real iOS app, idiomatic Swift
 
+  # ---- Second (overfit-guard) corpora, BACK-1461 ----
+  # The original loops' clones lived in /tmp without a recorded commit, so these
+  # pins (2026-10-06 HEAD) are NEW measurements, not reproductions of the
+  # historical VALIDATION.md figures.
+  - id: python-celery
+    language: python
+    repo: https://github.com/celery/celery.git
+    sha: 17b895bad43aab73fca37609ae9b93be6cc1c6e1
+    license: BSD-3-Clause
+    role: Second Python corpus; flat task-queue library, heavy `from . import a, b` idiom
+    recall:
+      oracle: python-ast
+      importer_dirs: [.]
+  - id: rust-ripgrep
+    language: rust
+    repo: https://github.com/BurntSushi/ripgrep.git
+    sha: 3fce3b5bb0236da2df6d99672afb8a719642eca7
+    license: MIT OR Unlicense
+    role: Second Rust corpus; small multi-crate workspace, nested use-lists
+    recall:
+      oracle: rust-use
+      importer_dirs: [.]
+  - id: java-guava
+    language: java
+    repo: https://github.com/google/guava.git
+    sha: 786bb1a9b44685875ebe7b83f1404a1f07ac653c
+    license: Apache-2.0
+    role: Second Java corpus; utility library, static and nested-type imports
+    recall:
+      # android/ mirrors guava/ type for type; the main library alone is unambiguous.
+      oracle: java-jls
+      scan_root: guava
+      importer_dirs: [guava/src]
+  - id: cpp-assimp
+    language: cpp
+    repo: https://github.com/assimp/assimp.git
+    sha: d334c32f1e4f5f17220411a031c4c15f9e03e3de
+    license: BSD-3-Clause (assimp license)
+    role: Second C++ corpus; plugin architecture, relative parent-directory includes
+    recall:
+      # contrib/ is vendored with its own build systems; test/tools/samples are outside the core graph.
+      oracle: gcc-cpp
+      importer_dirs: [code, include]
+      include_dirs: [., code, include]
+
   # ---- Tier B additions: .git already removed on disk, sha unrecoverable ----
   - language: dart
     repo: https://github.com/AppFlowy-IO/AppFlowy.git
