@@ -517,6 +517,7 @@ class GitAdapter(ResourceAdapter):
         self._check_pygit2()
 
         if self.repo is None:
+            repo_path = None
             try:
                 # Discover the repository from the target, not the cwd (BACK-1654)
                 start = self._discovery_start()
@@ -526,8 +527,26 @@ class GitAdapter(ResourceAdapter):
                     raise NotApplicableError(f"Not a git repository: {target}")
                 self.repo = pygit2.Repository(repo_path)
             except (pygit2.GitError, KeyError) as e:
-                raise ValueError(f"Failed to open repository: {self.path}") from e
+                raise ValueError(self._open_failure_message(e, repo_path)) from e
         return self.repo
+
+    def _open_failure_message(self, cause: Exception, repo_path: Optional[str]) -> str:
+        """Why the repository would not open, with the fix when libgit2 refused ownership.
+
+        libgit2 won't open a repo owned by another UID (CVE-2022-24765): a bind-mounted
+        host checkout read by a container user. Its own message names the refusal but not
+        the remedy, so the router's one-line error was "Failed to open repository" with
+        the cause only in a traceback nobody sees (BACK-1118).
+        """
+        detail = str(cause) or type(cause).__name__
+        message = f"Failed to open repository: {self.path}: {detail}"
+        if 'not owned by current user' in detail or 'safe.directory' in detail:
+            repo_dir = (repo_path or self.path).rstrip('/\\')
+            if repo_dir.endswith('.git'):  # libgit2 names the .git dir; trust its worktree
+                repo_dir = os.path.dirname(repo_dir)
+            message += (f"\nThe repository belongs to another user. Mark it trusted with: "
+                        f"git config --global --add safe.directory {to_posix(repo_dir)}")
+        return message
 
     def _discovery_start(self) -> str:
         """Where repository discovery begins: the target's nearest existing directory.
