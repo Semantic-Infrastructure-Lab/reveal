@@ -232,37 +232,19 @@ class VarFlowWalker:
                 self.walk(child, c)
             return True
 
-        jsx_tag = _jsx_lowercase_tag_name_node(n, self.get_text)
-        if jsx_tag is not None:
-            # A lowercase JSX tag (`<div>`) is a string-like intrinsic, not a
-            # variable — but attributes/attribute values on the same element
-            # (`className={x}`) are real reads and must still be walked, so
-            # this can't just `return` the way _MEMBER_ACCESS_KINDS does.
-            # Mirrors _collect_identifier_names's exclusion for --varflow's
-            # direct queries (BACK-431 feature-breadth pass). Compare by
-            # position, not object identity — tree-sitter node wrappers are
-            # not guaranteed stable across separate _children() calls.
-            tag_point = _zero_arg(jsx_tag, 'start_position')
-            tag_pos = (tag_point.row, tag_point.column)
+        skipped = _non_variable_children(n, self.get_text)
+        if skipped:
+            # A lowercase JSX tag (`<div>`) or a Java annotation's type name
+            # (`@Override`) is not a variable — but sibling attributes/arguments
+            # (`className={x}`, `@SuppressWarnings("x")`) are real reads and must
+            # still be walked, so this can't just `return` the way
+            # _MEMBER_ACCESS_KINDS does. Mirrors _collect_identifier_names's
+            # exclusion for --varflow's direct queries (BACK-431 feature-breadth
+            # pass). Compare by position, not object identity — tree-sitter node
+            # wrappers are not guaranteed stable across separate _children() calls.
+            skip_positions = {_start_pos(c) for c in skipped}
             for child in _children(n):
-                child_point = _zero_arg(child, 'start_position')
-                pos = (child_point.row, child_point.column)
-                if pos != tag_pos:
-                    self.walk(child, c)
-            return True
-
-        java_annotation_name = _java_annotation_name_node(n)
-        if java_annotation_name is not None:
-            # `@Override`'s name is a type reference, not a variable — but
-            # any `annotation_argument_list` (`@SuppressWarnings("x")`) must
-            # still be walked. Mirrors the JSX-tag exclusion just above
-            # (BACK-431 feature-breadth pass).
-            name_point = _zero_arg(java_annotation_name, 'start_position')
-            name_pos = (name_point.row, name_point.column)
-            for child in _children(n):
-                child_point = _zero_arg(child, 'start_position')
-                pos = (child_point.row, child_point.column)
-                if pos != name_pos:
+                if _start_pos(child) not in skip_positions:
                     self.walk(child, c)
             return True
 
@@ -938,6 +920,23 @@ def _declared_name_node(scope_node: Any) -> Optional[Any]:
     return None
 
 
+def _start_pos(node: Any) -> tuple:
+    point = _zero_arg(node, 'start_position')
+    return (point.row, point.column)
+
+
+def _non_variable_children(node: Any, get_text: Callable) -> List[Any]:
+    """Children of `node` that look like identifiers but are not variables: a
+    lowercase JSX tag name and a Java annotation's type name. The one table both
+    the candidate-name pass and the --varflow walker consult."""
+    skipped = []
+    for found in (_jsx_lowercase_tag_name_node(node, get_text),
+                  _java_annotation_name_node(node)):
+        if found is not None:
+            skipped.append(found)
+    return skipped
+
+
 def _register_skip_positions(node: Any, skip_positions: set, get_text: Callable) -> None:
     """Record positions of names that look like identifiers but are not
     variables, so the terminal-identifier collector skips them: a parameter's
@@ -948,14 +947,8 @@ def _register_skip_positions(node: Any, skip_positions: set, get_text: Callable)
         if external_name is not None:
             point = _zero_arg(external_name, 'start_position')
             skip_positions.add((point.row, point.column))
-    jsx_tag = _jsx_lowercase_tag_name_node(node, get_text)
-    if jsx_tag is not None:
-        point = _zero_arg(jsx_tag, 'start_position')
-        skip_positions.add((point.row, point.column))
-    java_annotation_name = _java_annotation_name_node(node)
-    if java_annotation_name is not None:
-        point = _zero_arg(java_annotation_name, 'start_position')
-        skip_positions.add((point.row, point.column))
+    for skipped in _non_variable_children(node, get_text):
+        skip_positions.add(_start_pos(skipped))
 
 
 def _member_access_descent(node: Any) -> Optional[List[Any]]:
