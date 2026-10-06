@@ -55,8 +55,8 @@ def _pyproject_extras():
 def test_install_topic_is_readable_and_lists_every_pyproject_extra():
     extras = _pyproject_extras()
     assert {'git', 'database', 'mcp'} <= set(extras)  # the parser found the table
-    result = HelpAdapter().get_element('install')
+    result = HelpAdapter().get_element('install/full')
     assert result is not None
     content = result.get('content') or ''
-    missing = [name for name in extras if f'reveal-cli[{name}]' not in content]
+    missing = [name for name in extras if f'| `{name}` |' not in content]
     assert not missing, f'extras absent from help://install: {missing}'

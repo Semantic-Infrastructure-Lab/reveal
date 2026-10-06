@@ -457,6 +457,7 @@ class HelpAdapter(ResourceAdapter):
         'duplicates': 'guides/DUPLICATE_DETECTION_GUIDE.md',
         'elements': 'guides/ELEMENT_DISCOVERY_GUIDE.md',
         'fields': 'guides/FIELD_SELECTION_GUIDE.md',
+        'install': 'guides/INSTALL_GUIDE.md',
         'mcp': 'guides/MCP_SETUP.md',
         'mcp-setup': 'guides/MCP_SETUP.md',
         'nav': 'guides/NAV_GUIDE.md',

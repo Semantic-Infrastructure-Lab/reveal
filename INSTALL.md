@@ -87,58 +87,18 @@ Just `pip install reveal-cli` gives you everything:
 
 ## Optional Features
 
-### MySQL Database Inspection
-
-For database health inspection with the `mysql://` adapter:
-
-```bash
-pip install reveal-cli[database]
-```
-
-**What you get:**
-- MySQL database health monitoring and diagnostics
-- Industry-standard DBA tuning ratios (table scans, thread cache efficiency, temp tables)
-- Index usage analysis (most used indexes, unused indexes)
-- Slow query detection and analysis (last 24 hours)
-- InnoDB buffer pool metrics and lock information
-
-**Examples:**
-```bash
-reveal mysql://localhost                    # Health overview
-reveal mysql://localhost/performance        # Performance metrics + DBA tuning ratios
-reveal mysql://localhost/indexes            # Index usage analysis
-reveal mysql://localhost/slow-queries       # Slow query analysis (last 24h)
-reveal mysql://localhost/innodb             # InnoDB buffer pool and locks
-```
-
-### MCP Server (Claude Code, Cursor, Windsurf, ...)
-
-For `reveal-mcp`, the Model Context Protocol server (BACK-1247: a plain
-`pip install reveal-cli` does not include this -- `reveal-mcp` will exit
-with a clear message telling you to install this extra if it's missing):
+The base install leaves out a few third-party packages, each behind an extra:
+`git` (the `git://` adapter), `database` (`mysql://`), `dns` and `whois` (parts of
+`domain://`), `mcp` (the `reveal-mcp` server), `html`, `powerpivot`, `xlsx` and `dev`.
 
 ```bash
-pip install reveal-cli[mcp]
+pip install "reveal-cli[git]"            # one extra
+pip install "reveal-cli[git,database]"   # several
 ```
 
-**What you get:** the `reveal-mcp` command, exposing reveal's capabilities
-as MCP tools over stdio or SSE transport. See `reveal-mcp --help`.
-
-### Development Tools
-
-For contributors:
-
-```bash
-pip install reveal-cli[dev]
-```
-
-**Includes:** pytest, pytest-cov, black, ruff
-
-### Installing Multiple Extras
-
-```bash
-pip install reveal-cli[database,dev]
-```
+What each extra unlocks, and the error you get without it, is in the
+[install guide](reveal/docs/guides/INSTALL_GUIDE.md#optional-extras) -- also searchable
+from the CLI: `reveal help://install` or `reveal 'help://search?search=extras'`.
 
 ## Migration Note
 
@@ -157,47 +117,20 @@ pip install reveal-cli
 
 ## Network Requirements
 
-`pip install reveal-cli` needs network access to PyPI as usual. Beyond that,
-reveal itself only makes network calls for explicitly network-oriented
-features (`ssl://`, `domain://`, `nginx` upstream checks, `cpanel://`,
-`mysql://`, the opt-in `L002` link-checker, the `reveal-mcp` server) and a
-daily PyPI update check (disable with `REVEAL_NO_UPDATE_CHECK=1`).
+`pip install reveal-cli` needs PyPI. After that, reveal only touches the network for
+explicitly network-oriented features and a daily PyPI update check
+(`REVEAL_NO_UPDATE_CHECK=1` disables it).
 
-**One thing to plan for in air-gapped or network-restricted environments**:
-the `tree-sitter-language-pack` dependency does not ship every grammar
-inside its wheel. The first time reveal parses a file in a language it
-hasn't parsed before on that machine, the pack downloads an ~18–21MB
-platform-specific grammar bundle from GitHub Releases
-(`github.com` + `release-assets.githubusercontent.com`) and caches it at
-`~/.cache/tree-sitter-language-pack/v<version>/`. After that first fetch,
-parsing that language (and any other language already cached) works fully
-offline.
-
-If your environment can't reach GitHub at runtime (CI sandboxes, air-gapped
-hosts, restrictive egress policies), pre-seed the cache while building your
-base image or container, on a machine that does have network access:
+**Air-gapped or restricted hosts:** the first parse of a language not yet parsed on the machine
+downloads a tree-sitter grammar bundle from GitHub Releases. Pre-seed it on a connected machine:
 
 ```bash
-pip install reveal-cli
-reveal offline --languages python,javascript,go   # pre-download just what you need
-reveal offline                                    # or every grammar the pack ships (306+, larger image)
-reveal offline --disable-update-check             # also stop the daily PyPI version check permanently
-# then copy ~/.cache/tree-sitter-language-pack/ into the restricted image
+reveal offline --languages python,javascript,go   # or `reveal offline` for every grammar
 ```
 
-(`reveal offline` wraps the pack's own `download()`/`download_all()` — calling
-those directly still works if you'd rather not shell out.)
-
-If the cache isn't pre-seeded and the download fails, reveal surfaces it
-rather than degrading silently: a `WARNING`-level log before the fetch
-attempt, `--explain-file` reports the grammar isn't cached instead of
-claiming full support, and `--format json` includes an explicit `"error"`
-key instead of an ambiguous empty structure (fixed by `BACK-979`).
-
-An egress allowlist for CI needs `pypi.org` + `files.pythonhosted.org` (pip
-install) and `github.com` + `release-assets.githubusercontent.com`
-(grammar bundle) — a PyPI-only allowlist will let install succeed but the
-first real parse will hang or fail.
+The egress allowlist, cache location, failure behavior and the full container recipe are in the
+[install guide](reveal/docs/guides/INSTALL_GUIDE.md#network-requirements)
+(`reveal help://install/full`).
 
 ## Troubleshooting
 
