@@ -216,7 +216,6 @@
  "reveal/checks.py::return-value": 1,
  "reveal/cli/commands/check.py::has-type": 2,
  "reveal/cli/commands/check.py::misc": 1,
- "reveal/cli/file_checker.py::no-any-return": 1,
  "reveal/cli/file_checker.py::operator": 1,
  "reveal/cli/handlers/batch.py::has-type": 2,
  "reveal/cli/handlers/batch.py::misc": 1,
