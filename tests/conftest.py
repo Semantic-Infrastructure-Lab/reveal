@@ -363,6 +363,51 @@ def _disk_cache_marker(request, monkeypatch):
         monkeypatch.delenv("REVEAL_DISK_CACHE", raising=False)
 
 
+# Module-level caches that outlive a test inside an xdist worker (BACK-1440). Three leaks so
+# far: I002 `_graph_cache` (Windows TestI002Preload got {}), `cli.defaults._parser_defaults`
+# (fixed at source, lru_cache(1)), and the adapter registry (test plugin adapters). Anything
+# keyed by a path or env-derived value belongs here. A module that no test has imported yet has
+# nothing cached, so only ``sys.modules`` is consulted: the fixture never imports (cheap, and it
+# cannot change which modules a test sees loaded). A listed name that no longer exists fails the
+# fixture loudly, so renames cannot silently drop a cache from the sweep.
+_MODULE_CACHES = (
+    ('reveal.config', '_path_resolve_cache'),
+    ('reveal.rules.imports.I002', '_graph_cache'),
+    ('reveal.rules.imports.I003', '_config_cache'),
+    ('reveal.rules.links.L001', '_anchor_cache'),
+    ('reveal.rules.maintainability.M102', '_import_cache'),
+    ('reveal.rules.urls.U502', '_pyproject_dir_cache'),
+    ('reveal.rules.urls.U502', '_canonical_url_cache'),
+    ('reveal.rules.duplicates.D005', '_project_index'),
+    ('reveal.rules.types.T006', '_project_index'),
+    ('reveal.adapters.calls.index', '_INDEX_CACHE'),
+    ('reveal.adapters.calls.index', '_REFERENCE_CACHE'),
+    ('reveal.analyzers.imports.javascript', '_TSCONFIG_FIND_CACHE'),
+    ('reveal.analyzers.imports.javascript', '_TSCONFIG_ALIAS_CACHE'),
+    ('reveal.analyzers.imports.javascript', '_WORKSPACE_PACKAGES_CACHE'),
+    ('reveal.analyzers.imports.python', '_python_project_inventory'),
+    ('reveal.analyzers.imports.rust', '_rust_crate_inventory'),
+    ('reveal.analyzers.imports.generic', '_ruby_gem_inventory'),
+)
+
+
+def _clear_module_caches():
+    for mod_name, attr in _MODULE_CACHES:
+        mod = sys.modules.get(mod_name)
+        if mod is None:
+            continue
+        cache = getattr(mod, attr)
+        (cache.cache_clear if hasattr(cache, 'cache_clear') else cache.clear)()
+
+
+@pytest.fixture(autouse=True)
+def _reset_module_caches():
+    """Start and end every test with the module-level caches empty (BACK-1440)."""
+    _clear_module_caches()
+    yield
+    _clear_module_caches()
+
+
 @pytest.fixture(autouse=True)
 def _reset_gitignore_state():
     """--no-gitignore is process state (BACK-1386): a test that runs apply_global_flags
