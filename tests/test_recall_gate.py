@@ -90,3 +90,30 @@ def test_missing_baseline_leaves_a_failure_report(tmp_path, monkeypatch):
     import json
     report = json.loads(output.read_text(encoding='utf-8'))
     assert report['failures'] and report['measured_at']
+
+
+def test_slow_probe_gets_the_larger_budget_and_a_timeout_is_a_disclosed_failure(corpus, monkeypatch):
+    # BACK-1678: a cold macOS runner blew the old 15 s budget on a one-line probe. The budget is now
+    # a named 60 s constant, and a probe that still times out is a named measurement failure, not a
+    # raw TimeoutExpired and never an empty/"unresolved" oracle row.
+    root, entry = corpus
+    seen = []
+
+    def hang(cmd, **kwargs):
+        seen.append(kwargs.get('timeout'))
+        raise subprocess.TimeoutExpired(cmd, kwargs.get('timeout'))
+
+    monkeypatch.setattr(gate.shutil, 'which', lambda name: '/usr/bin/gcc')
+    monkeypatch.setattr(gate.subprocess, 'run', lambda cmd, **kw: hang(cmd, **kw) if cmd[0] == 'gcc'
+                        else subprocess.run(cmd, **kw))
+    with pytest.raises(RuntimeError, match=r'timed out after 60s.*target\.h'):
+        gate.build_c_oracle(root, entry['recall'])
+    assert seen == [gate.ORACLE_PROBE_TIMEOUT] and gate.ORACLE_PROBE_TIMEOUT >= 60
+
+
+@pytest.mark.skipif(sys.platform == 'win32' or not shutil.which('gcc'),
+                    reason='optional GCC oracle requires a qualified POSIX compiler host')
+def test_a_fast_probe_is_unaffected_by_the_timeout_handling(corpus):
+    root, entry = corpus
+    oracle, _ = gate.build_c_oracle(root, entry['recall'])
+    assert oracle == {'src/target.h': ['src/clean.c', 'src/partial.c']}
