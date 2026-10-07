@@ -26,6 +26,7 @@ from ..registry import language_for_extension
 from ..utils import print_json_result
 from ..utils.path_utils import is_test_path
 from ..utils.query import parse_query_params
+from ..utils.query_control import print_omitted
 from ..utils.results import ResultBuilder
 
 logger = logging.getLogger(__name__)
@@ -294,6 +295,7 @@ def _render_entry_points(entry_points: List[Dict], top: int, base_path: Path) ->
     for ep in entry_points[:top]:
         rel = _relpath(ep['file'], base_path)
         print(f"  {rel:<54}  fan-out {ep['fan_out']}")
+    print_omitted(len(entry_points), top)
     print()
 
 
@@ -305,13 +307,15 @@ def _is_reexport_file(file_str: str) -> bool:
 
 
 def _render_core_abstractions(core: List[Dict], top: int, base_path: Path) -> None:
-    ranked = [e for e in core if e.get('fan_in', 0) > 0 and not _is_reexport_file(e['file'])][:top]
+    candidates = [e for e in core if e.get('fan_in', 0) > 0 and not _is_reexport_file(e['file'])]
+    ranked = candidates[:top]
     if not ranked:
         return
     print("Core Abstractions  (most imported)")
     for e in ranked:
         rel = _relpath(e['file'], base_path)
         print(f"  {rel:<54}  fan-in {e['fan_in']}")
+    print_omitted(len(candidates), len(ranked))
     print()
 
 
@@ -324,6 +328,7 @@ def _render_components(components: List[Dict], top: int, base_path: Path) -> Non
         cohesion = c['cohesion']
         bar = '█' * int(cohesion * 10) + '░' * (10 - int(cohesion * 10))
         print(f"  {rel:<44}  {cohesion:.2f}  {bar}  {c['files']} files")
+    print_omitted(len(components), top)
     print()
 
 

@@ -29,6 +29,7 @@ from ..utils.exclusions import exclusion_scope
 from ..utils.gitignore import respect_gitignore_param
 from ..utils.path_utils import as_spelled, display_name_for_path, is_test_path
 from ..utils.query import parse_query_params
+from ..utils.query_control import print_omitted
 from ..utils.query_parser import join_exclude_patterns, split_exclude_param
 from ..utils.results import ResultBuilder
 
@@ -469,12 +470,14 @@ def _render_architecture(
         if remaining > 0:
             print(f"    ... and {remaining} more (use --all)")
 
-    core = [e for e in fan_in if e.get('fan_in', 0) > 0][:5]
+    all_core = [e for e in fan_in if e.get('fan_in', 0) > 0]
+    core = all_core[:5]
     if core:
         print("  Core abstractions  (most imported)")
         for e in core:
             rel = _relpath(e['file'], base_path)
             print(f"    {rel:<50}  fan-in {e['fan_in']}")
+        print_omitted(len(all_core), len(core), '    ')
 
     if components:
         print(f"  Components  ({len(components)} directories, by cohesion)")

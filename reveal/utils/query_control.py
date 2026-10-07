@@ -304,3 +304,20 @@ def _truncate_dict_strings(d: Dict[str, Any], max_length: int) -> Dict[str, Any]
         else:
             result[key] = value
     return result
+
+
+def omitted_line(total: int, shown: int, indent: str = '  ') -> str:
+    """The "... and N more" footer for a text list cut at *shown* of *total*; '' when
+    nothing was cut. JSON carries every item, so the footer says where to find them
+    (BACK-1550)."""
+    remaining = total - shown
+    if remaining <= 0:
+        return ''
+    return f"{indent}... and {remaining} more (--format json lists all)"
+
+
+def print_omitted(total: int, shown: int, indent: str = '  ') -> None:
+    """Print ``omitted_line`` when something was cut."""
+    footer = omitted_line(total, shown, indent)
+    if footer:
+        print(footer)

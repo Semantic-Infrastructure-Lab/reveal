@@ -2,6 +2,7 @@
 
 from ...utils import print_json_result
 from ...utils.formatting import lines_label
+from ...utils.query_control import print_omitted
 
 
 class GitRenderer:
@@ -218,7 +219,8 @@ class GitRenderer:
 
     @staticmethod
     def _render_key_hunks(hunks: list) -> None:
-        key_hunks = sorted(hunks, key=lambda h: h['lines']['count'], reverse=True)[:5]
+        ranked = sorted(hunks, key=lambda h: h['lines']['count'], reverse=True)
+        key_hunks = ranked[:5]
         print("Key hunks (largest continuous blocks):")
         for hunk in key_hunks:
             lines_info = hunk['lines']
@@ -227,6 +229,7 @@ class GitRenderer:
             end = start + lines_info['count'] - 1
             print(f"  Lines {start:3}-{end:3} ({lines_info['count']:3} lines)  {commit_info['hash']} {commit_info['date']} {commit_info['author'][:20]}")
             print(f"    {commit_info['message'][:70]}")
+        print_omitted(len(ranked), len(key_hunks))
         print()
 
     @staticmethod

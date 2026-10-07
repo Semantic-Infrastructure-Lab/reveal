@@ -23,6 +23,7 @@ from ..conventions import family_for_path
 from ..utils import print_json_result
 from ..utils.path_utils import _language_for_path
 from ..utils.query import parse_query_params
+from ..utils.query_control import print_omitted
 from ..utils.results import ResultBuilder
 
 # BACK-1190: the stdlib list, local-package heuristic, and classifier itself
@@ -303,6 +304,7 @@ def _render_top_importers(analysis: Dict[str, Any], top: int) -> None:
         bar_len = int(c / max_count * 15) if max_count else 0
         bar = '█' * bar_len
         print(f"  {f:<50} {c:>3}  {bar}")
+    print_omitted(len(importers), len(shown))
 
 
 def _imports_uri(path: Path) -> str:
