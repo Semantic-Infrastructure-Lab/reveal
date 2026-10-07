@@ -179,7 +179,7 @@ class TestGitAdapterBasics:
             with pytest.raises(ImportError) as exc_info:
                 adapter.get_structure()
 
-            assert "pip install reveal-cli[git]" in str(exc_info.value)
+            assert 'pip install "reveal-cli[git]"' in str(exc_info.value)
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_adapter_with_invalid_path(self):

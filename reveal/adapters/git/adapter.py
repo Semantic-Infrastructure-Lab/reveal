@@ -117,7 +117,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
 ]
 
 _SCHEMA_NOTES = [
-    'Requires pygit2 library (pip install pygit2)',
+    'Requires pygit2 library (pip install "reveal-cli[git]")',
     'Supports @ syntax for refs (branches, tags, commits)',
     'Query params for file-level operations (history, blame)',
     'Semantic blame works with Python functions/classes'
@@ -175,7 +175,7 @@ class GitAdapter(ResourceAdapter):
         git://path/file.py?type=history  # File history
         git://path/file.py?type=blame    # File blame
 
-    Requires: pip install reveal-cli[git]
+    Requires: pip install "reveal-cli[git]"
     """
     HELP_CLUSTER = ('Code Analysis', 'Sessions & Docs')
     QUICK_RANK = 4
@@ -535,8 +535,7 @@ class GitAdapter(ResourceAdapter):
         if not PYGIT2_AVAILABLE:
             raise ImportError(
                 "git:// adapter requires pygit2\n\n"
-                "Install with: pip install reveal-cli[git]\n"
-                "Alternative: pip install pygit2>=1.14.0\n\n"
+                'Install with: pip install "reveal-cli[git]"\n\n'
                 "For more info: reveal help://git"
             )
 
@@ -852,7 +851,7 @@ class GitAdapter(ResourceAdapter):
                 'no_merges': 'Set to 1 to exclude merge commits (commits with more than one parent). Useful for repos with noisy merge-commit messages.',
             },
             'notes': [
-                'Requires pygit2: pip install reveal-cli[git]',
+                'Requires pygit2: pip install "reveal-cli[git]"',
                 'Read-only inspection (no write operations)',
                 'Supports all Git references: commit hash, branch, tag, HEAD~N, etc.',
                 'Use @ for ref specification: git://path@ref',

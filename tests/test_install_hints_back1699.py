@@ -39,14 +39,7 @@ PYPROJECT = ROOT / 'pyproject.toml'
 OUR_DIST = 'reveal-cli'
 
 # (repo-relative posix path, rule, canonical package name) -> reason. Keep it short and reviewed.
-_GIT_OWNED = ('reveal/adapters/git/* is owned by wave-9 agent A (BACK-1690); the replacement '
-              'strings are in agent D\'s report. Drop these entries when they land.')
-ALLOWLIST = {
-    ('reveal/adapters/git/adapter.py', 'bare-extra-package', 'pygit2'): _GIT_OWNED,
-    ('reveal/adapters/git/adapter.py', 'needs-double-quotes', 'pygit2'): _GIT_OWNED,
-    ('reveal/adapters/git/adapter.py', 'needs-double-quotes', 'reveal-cli'): _GIT_OWNED,
-    ('reveal/adapters/git/__init__.py', 'needs-double-quotes', 'reveal-cli'): _GIT_OWNED,
-}
+ALLOWLIST: dict = {}
 
 _INSTALL = re.compile(
     r'(?<![\w-])(?:pip3?|python3?\s+-m\s+pip|uv\s+pip|pipx)\s+install(?![\w-])')

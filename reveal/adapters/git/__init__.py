@@ -6,7 +6,7 @@ Provides progressive disclosure for Git repositories:
 - File history and blame
 - Time-travel queries (file@commit, file@tag)
 
-Requires: pip install reveal-cli[git]
+Requires: pip install "reveal-cli[git]"
 """
 
 from .adapter import GitAdapter
