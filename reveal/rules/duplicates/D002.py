@@ -52,6 +52,14 @@ class D002(BaseRule):
     # first plausible copies 0.49 (the renamed Go/JS pairs in test_back432 match 1.0).
     MIN_SEQUENCE_MATCH = 0.5
 
+    # Alpha-renaming numbers identifiers by first appearance, so one inserted guard or
+    # one swapped statement shifts every later name and a near-copy's shaped match
+    # collapses (BACK-1733: plain 0.86, shaped 0.42). The literal-identifier match
+    # rescues those, at a stricter floor: a literal match of 0.5-0.7 is mostly shared
+    # punctuation (max(plain, shaped) at 0.5 added 120 findings on reveal's own tree;
+    # a 0.7 floor adds 10, all pairs sharing real boilerplate).
+    MIN_LITERAL_MATCH = 0.7
+
     # Maximum candidates to report
     MAX_CANDIDATES = 5
 
@@ -108,7 +116,7 @@ class D002(BaseRule):
                 continue
 
             vector = self._vectorize(func_body)
-            func_vectors.append((func, vector, line_count, self._token_shape(normalized)))
+            func_vectors.append((func, vector, line_count, self._tokens(normalized)))
 
         # Compute pairwise similarities with interestingness score
         candidates = []
@@ -122,7 +130,7 @@ class D002(BaseRule):
 
                 if similarity < self.MIN_SIMILARITY:
                     continue
-                if self._sequence_match(shape1, shape2) < self.MIN_SEQUENCE_MATCH:
+                if not self._is_sequence_match(shape1, shape2):
                     continue
 
                 # Interestingness: similarity weighted by size (sqrt to not over-weight huge functions)
@@ -147,6 +155,10 @@ class D002(BaseRule):
 
         return detections
 
+    def _tokens(self, normalized: str) -> tuple:
+        """(alpha-renamed shape, literal tokens) of a normalized body."""
+        return self._token_shape(normalized), self._TOKEN.findall(normalized)
+
     def _token_shape(self, normalized: str) -> List[str]:
         """Token sequence of a normalized body with each distinct non-keyword
         identifier replaced by its first-occurrence index, so a renamed copy has
@@ -154,16 +166,29 @@ class D002(BaseRule):
         seen: Dict[str, int] = {}
         shape = []
         for token in self._TOKEN.findall(normalized):
-            if self._IDENTIFIER.match(token) and token.lower() not in self._NOISE_WORDS:
+            if self._IDENTIFIER.match(token) and not self._is_noise_word(token):
                 shape.append(f"#{seen.setdefault(token, len(seen))}")
             else:
                 shape.append(token)
         return shape
 
-    def _sequence_match(self, shape1: List[str], shape2: List[str]) -> float:
-        """Alpha-renamed token-sequence similarity (0.0-1.0), bounded cheaply first."""
+    def _is_noise_word(self, token: str) -> bool:
+        # Exact first: True/False/None are keywords only in their own case.
+        return token in self._NOISE_WORDS or token.lower() in self._NOISE_WORDS
+
+    def _is_sequence_match(self, tokens1: tuple, tokens2: tuple) -> bool:
+        """A copy keeps its alpha-renamed shape, or (after an edit that shifted the
+        renaming) most of its literal tokens."""
+        return (self._sequence_match(tokens1[0], tokens2[0]) >= self.MIN_SEQUENCE_MATCH
+                or self._sequence_match(tokens1[1], tokens2[1], self.MIN_LITERAL_MATCH)
+                >= self.MIN_LITERAL_MATCH)
+
+    def _sequence_match(self, shape1: List[str], shape2: List[str],
+                        floor: Optional[float] = None) -> float:
+        """Token-sequence similarity (0.0-1.0), bounded cheaply first."""
+        floor = self.MIN_SEQUENCE_MATCH if floor is None else floor
         matcher = SequenceMatcher(None, shape1, shape2, autojunk=False)
-        if matcher.real_quick_ratio() < self.MIN_SEQUENCE_MATCH or matcher.quick_ratio() < self.MIN_SEQUENCE_MATCH:
+        if matcher.real_quick_ratio() < floor or matcher.quick_ratio() < floor:
             return 0.0
         return matcher.ratio()
 
