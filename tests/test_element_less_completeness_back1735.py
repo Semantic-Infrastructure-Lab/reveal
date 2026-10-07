@@ -11,6 +11,9 @@ that reads `path` is not declared in ELEMENT_LESS_FLAGS (the next one cannot be 
 Flags handled outside that table (check, meta, extract, validate-schema, the nginx modes) have
 no mechanical marker; they stay declared by hand and are exercised in
 test_element_less_flags_back1715.py.
+
+BACK-1751: a special mode whose handler reads no path at all must be declared in PATHLESS_FLAGS
+(it refuses a path), so every entry of the table is classified one way or the other.
 """
 
 import subprocess
@@ -58,6 +61,11 @@ def test_hint_for_a_boolean_flag_has_no_placeholder(files):
 
 def _special_modes_reading_path(monkeypatch):
     """dest of every _SPECIAL_MODES entry whose handler lambda reads `args.path`."""
+    return _probe_special_modes(monkeypatch)[0]
+
+
+def _probe_special_modes(monkeypatch):
+    """(dests whose handler reads `args.path`, every dest) of _SPECIAL_MODES, in table order."""
     import reveal.main as main_module
 
     class Probe:
@@ -78,7 +86,7 @@ def _special_modes_reading_path(monkeypatch):
         handler(probe)
         if 'path' in probe.read:
             readers.append(dest)
-    return readers
+    return readers, [dest for dest, _ in main_module._SPECIAL_MODES]
 
 
 def test_every_special_mode_that_reads_the_path_is_declared_element_less(monkeypatch):
@@ -94,6 +102,29 @@ def test_the_probe_sees_a_missing_declaration(monkeypatch):
     readers = _special_modes_reading_path(monkeypatch)
     declared = set(readers) - {'show_ast'}
     assert [d for d in readers if d not in declared] == ['show_ast']
+
+
+def _unclassified(readers, dests, pathless):
+    """Modes declared the wrong way round, or not at all (BACK-1751)."""
+    return ([d for d in dests if d not in readers and d not in pathless]
+            + [d for d in readers if d in pathless])
+
+
+def test_every_special_mode_is_classified_by_what_it_reads(monkeypatch):
+    from reveal.cli.routing import PATHLESS_FLAGS
+    readers, dests = _probe_special_modes(monkeypatch)
+    assert {'rules', 'adapters', 'languages', 'list_schemas', 'stdin'} <= set(dests) - set(readers)
+    assert _unclassified(readers, dests, PATHLESS_FLAGS) == []
+    assert [d for d in PATHLESS_FLAGS if d not in dests] == []
+
+
+def test_the_probe_sees_a_missing_pathless_declaration(monkeypatch):
+    """Negative control: with one pathless declaration removed, or a reader declared pathless,
+    the check names exactly that mode."""
+    from reveal.cli.routing import PATHLESS_FLAGS
+    readers, dests = _probe_special_modes(monkeypatch)
+    assert _unclassified(readers, dests, set(PATHLESS_FLAGS) - {'list_schemas'}) == ['list_schemas']
+    assert _unclassified(readers, dests, set(PATHLESS_FLAGS) | {'show_ast'}) == ['show_ast']
 
 
 # Negative controls: what must not change.
