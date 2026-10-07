@@ -357,25 +357,56 @@ def pytest_configure(config):
     os.environ.setdefault("REVEAL_MAX_WORKERS", "1")
 
 
+_SHARD_DURATIONS = Path(__file__).with_name("windows_test_durations.json")
+
+
+def _recorded_file_costs():
+    """{test file: Windows worker-seconds} from tests/windows_test_durations.json (BACK-1747)."""
+    import json
+    return json.loads(_SHARD_DURATIONS.read_text(encoding="utf-8"))["files"]
+
+
+def shard_files(files, total, costs):
+    """Assign each test file to one of *total* shards: heaviest first, to the lightest shard.
+
+    A file missing from *costs* counts as the median recorded cost, so a new file lands
+    somewhere sensible until the record is regenerated. Ties break on crc32 of the path (stable
+    across runs and platforms, unlike hash()), so the result depends only on the set of files.
+    Returns {file: 0-based shard index}.
+    """
+    import statistics
+    import zlib
+    default = statistics.median(costs.values()) if costs else 1.0
+    order = sorted(set(files), key=lambda f: (-costs.get(f, default), zlib.crc32(f.encode()), f))
+    load = [0.0] * total
+    assignment = {}
+    for name in order:
+        lightest = min(range(total), key=lambda i: (load[i], i))
+        assignment[name] = lightest
+        load[lightest] += costs.get(name, default)
+    return assignment
+
+
 def pytest_collection_modifyitems(config, items):
     """REVEAL_TEST_SHARD=i/n keeps only shard i of n (1-based), split by test file.
 
     CI splits the Windows legs in two: they ran the suite in ~20 min against 7-9 min
     on Linux/macOS, so they alone set the run's wall time. Whole files stay together
-    (module fixtures run once); crc32 of the file path is stable across runs and
-    platforms, unlike hash(). Unset, everything runs.
+    (module fixtures run once). Files are balanced by their recorded Windows cost
+    (tests/windows_test_durations.json, regenerated with scripts/windows_test_durations.py);
+    crc32 of the path split them 980 s / 3526 s. Unset, everything runs.
     """
     spec = os.environ.get("REVEAL_TEST_SHARD")
     if not spec:
         return
-    import zlib
     index, total = (int(part) for part in spec.split("/"))
     if not 1 <= index <= total:
         raise pytest.UsageError(f"REVEAL_TEST_SHARD={spec}: want i/n with 1 <= i <= n")
+    test_files = [item.nodeid.split("::", 1)[0] for item in items]
+    owner = shard_files(test_files, total, _recorded_file_costs())
     keep, drop = [], []
-    for item in items:
-        test_file = item.nodeid.split("::", 1)[0]
-        (keep if zlib.crc32(test_file.encode()) % total == index - 1 else drop).append(item)
+    for item, test_file in zip(items, test_files):
+        (keep if owner[test_file] == index - 1 else drop).append(item)
     if drop:
         config.hook.pytest_deselected(items=drop)
         items[:] = keep
