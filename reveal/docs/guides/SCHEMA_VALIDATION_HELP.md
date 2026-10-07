@@ -620,13 +620,13 @@ reveal --rules | grep F00
 | Flag | Description |
 |------|-------------|
 | `--validate-schema SCHEMA` | Validate front matter against named or custom schema (e.g., `session`, `hugo`, `/path/schema.yaml`) |
-| `--list-schemas` | List all available built-in schemas |
+| `--list-schemas` | List all available built-in schemas (takes no path: `reveal README.md --list-schemas` is refused, exit 2) |
 
 ```bash
 reveal README.md --validate-schema session         # Validate against session schema
 reveal README.md --validate-schema hugo         # Validate against hugo schema
 find . -name README.md -exec reveal {} --validate-schema session --format json \;  # Batch: one file per call (or: find . -name README.md | reveal --stdin --validate-schema session)
-reveal README.md --list-schemas                 # Show available built-in schemas
+reveal --list-schemas                           # Show available built-in schemas (no path)
 ```
 
 ## See Also
