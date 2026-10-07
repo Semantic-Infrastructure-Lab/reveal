@@ -18,7 +18,7 @@ from ...analyzers.imports.base import get_extractor, get_all_extensions
 from ...analyzers.imports.file_index import basename_index
 from ...analyzers.imports.types import ImportAnalysis
 from ...core import disk_cache
-from ...utils.parallel import pool_worker_count
+from ...utils.parallel import pool_worker_count, submit_each
 from ...utils.path_utils import (
     EVIDENCE, _walk_code_files, cross_file_scan_root,
 )
@@ -66,8 +66,8 @@ _DEFAULT_CYCLE_DETECTION_MAX_FILES = 2000
 # independent, so fan it out across processes, reusing BACK-489 P1's pattern and
 # its REVEAL_MAX_WORKERS override. The graph is built in the main process (see
 # rules/scan_caches._i002_preload) before the check worker pool spawns, so this pool
-# never nests inside another; ProcessPoolExecutor.map preserves order, so the
-# assembled graph is identical to the serial path.
+# never nests inside another; results are read in submission order
+# (utils.parallel.submit_each), so the assembled graph is identical to the serial path.
 _GRAPH_PARALLEL_MIN_FILES = 200   # below this, pool startup/IPC outweighs the win
 _GRAPH_PARALLEL_MAX_WORKERS = 16  # cap so huge core counts don't oversubscribe
 
@@ -110,6 +110,32 @@ def _extract_imports_for_file(fp_str: str) -> tuple:
         # signal, surfaced as a logger.warning by the caller once per graph
         # build (_build_import_graph) rather than once per file here.
         return [], True
+
+
+def _extract_in_pool(file_strs: List[str], workers: int, results: Dict[str, tuple]) -> None:
+    """``_extract_imports_for_file`` over *file_strs* in a process pool, one future
+    per file, into ``results[fp_str] = (imports, failed)`` in submission order.
+
+    A dead worker breaks the pool and fails every pending future, so the culprit
+    cannot be told from the files lost with it; each of them is a failed file
+    (``([], True)``), the channel a file tree-sitter could not parse already uses,
+    which ``get_scan_disclosures`` reports. None is re-run in this process, where
+    the culprit could take the whole run down (BACK-1726).
+    """
+    from concurrent.futures import ProcessPoolExecutor
+    from ...logging_setup import worker_bootstrap
+    lost: List[BaseException] = []
+    with ProcessPoolExecutor(max_workers=workers, initializer=worker_bootstrap) as executor:
+        for fp_str, future in zip(file_strs, submit_each(executor, _extract_imports_for_file, file_strs)):
+            try:
+                results[fp_str] = future.result()
+            except Exception as e:  # recorded as a failed file; disclosed below
+                results[fp_str] = ([], True)
+                lost.append(e)
+    if lost:
+        logger.warning("I002: %d file(s) lost to a dead import-extraction worker (%s: %s); "
+                       "circular-dependency results may be incomplete",
+                       len(lost), type(lost[0]).__name__, lost[0])
 
 
 def _max_graph_files() -> int:
@@ -451,48 +477,29 @@ class I002(BaseRule):
             return [], [], reason
 
         # Pass B: parse the (now bounded) set of files. Independent per file, so
-        # fan out across processes on large trees (BACK-536). map() preserves
+        # fan out across processes on large trees (BACK-536). Results are read in
         # submission order, so the assembled graph is identical to the serial path.
         file_strs = [str(f) for f in source_files]
         workers = _graph_worker_count(len(file_strs))
-
-        if workers <= 1:
-            all_imports: list = []
-            failed_files: list = []
-            for fp_str in file_strs:
-                imports, failed = _extract_imports_for_file(fp_str)
-                all_imports.extend(imports)
-                if failed:
-                    failed_files.append(Path(fp_str))
-            return all_imports, failed_files, None
-
-        try:
-            from concurrent.futures import ProcessPoolExecutor
-            from ...logging_setup import worker_bootstrap
-            all_imports = []
-            failed_files = []
-            with ProcessPoolExecutor(
-                max_workers=workers, initializer=worker_bootstrap,
-            ) as executor:
-                for fp_str, (imports, failed) in zip(
-                    file_strs, executor.map(_extract_imports_for_file, file_strs)
-                ):
-                    all_imports.extend(imports)
-                    if failed:
-                        failed_files.append(Path(fp_str))
-            return all_imports, failed_files, None
-        except Exception as e:
-            # Degrade to serial on any pool failure (restricted/forbidden-fork
-            # environments) rather than losing the analysis entirely.
-            logger.debug("I002: parallel import extraction failed (%s); running serially", e)
-            all_imports = []
-            failed_files = []
-            for fp_str in file_strs:
-                imports, failed = _extract_imports_for_file(fp_str)
-                all_imports.extend(imports)
-                if failed:
-                    failed_files.append(Path(fp_str))
-            return all_imports, failed_files, None
+        results: Dict[str, tuple] = {}
+        if workers > 1:
+            try:
+                _extract_in_pool(file_strs, workers, results)
+            except Exception as e:
+                # The pool itself could not run (restricted/forbidden-fork
+                # environments); a worker that dies inside a running pool is
+                # handled per file in _extract_in_pool and never lands here.
+                # Only the files the pool did not deliver run serially.
+                logger.warning("I002: parallel import extraction failed (%s: %s); "
+                               "extracting the rest serially", type(e).__name__, e)
+        all_imports: list = []
+        failed_files: list = []
+        for fp_str in file_strs:
+            imports, failed = results[fp_str] if fp_str in results else _extract_imports_for_file(fp_str)
+            all_imports.extend(imports)
+            if failed:
+                failed_files.append(Path(fp_str))
+        return all_imports, failed_files, None
 
     def _resolve_graph_dependencies(self, graph: ImportGraph, directory: Path) -> None:
         """Phase 2: resolve import statements to files through the shared

@@ -117,7 +117,9 @@ def grep_files(
         workers: Maximum number of parallel worker processes.  Defaults to 8.
 
     Returns:
-        Subset of *paths* where all terms were found, in input order.
+        Subset of *paths* where all terms were found, in input order. A file
+        that could not be read, or was lost to a dead pool worker, is logged
+        as a warning and left out.
 
     Example::
 
@@ -141,10 +143,22 @@ def grep_files(
     if len(paths_list) < _PARALLEL_THRESHOLD:
         return [p for p in paths_list if _scan_one((p, needles)) is not None]
 
-    # Parallel scan — ProcessPoolExecutor preserves result order via .map().
-    args = [(p, needles) for p in paths_list]
+    # Parallel scan, one future per file, read in input order. A file lost to a
+    # dead worker (which fails every pending future) gets the warning a file
+    # _scan_one cannot read gets, and is not a match (BACK-1726).
     with ProcessPoolExecutor(
         max_workers=min(workers, len(paths_list)), initializer=worker_bootstrap,
     ) as pool:
-        results = pool.map(_scan_one, args)
-    return [p for p in results if p is not None]
+        futures = submit_each(pool, _scan_one, [(p, needles) for p in paths_list])
+        matches, lost = [], []
+        for path, future in zip(paths_list, futures):
+            try:
+                if future.result() is not None:
+                    matches.append(path)
+            except Exception as e:  # the warning below is the disclosure
+                lost.append((path, e))
+    if lost:
+        logger.warning("grep_files: %d file(s) not scanned, a pool worker died (%s: %s): %s%s",
+                       len(lost), type(lost[0][1]).__name__, lost[0][1],
+                       ', '.join(str(p) for p, _ in lost[:5]), ' ...' if len(lost) > 5 else '')
+    return matches

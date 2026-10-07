@@ -25,7 +25,7 @@ from ..core import disk_cache
 from ..utils.formatting import cwd_path
 from ..utils import print_json_result
 from ..analyzers.imports import ImportGraph, ImportStatement
-from ..analyzers.imports.types import ImportAnalysis
+from ..analyzers.imports.types import ImportAnalysis, ImportExtraction
 from ..analyzers.imports.classify import classify_import, local_package_names
 from ..conventions import family_for_path
 from ..analyzers.imports.base import build_project_namespaces
@@ -33,7 +33,7 @@ from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 from ..analyzers.imports import service as import_analysis
 from ..registry import get_code_extensions
-from ..utils.parallel import pool_worker_count
+from ..utils.parallel import pool_worker_count, submit_each
 from ..utils.path_utils import to_posix, to_relative_display
 from ..utils.results import ResultBuilder, note_truncation
 
@@ -920,6 +920,19 @@ def _extract_one_file(fp_str: str, want_structure: bool):
     return fp_str, imports, symbols, structure, extraction
 
 
+def _extract_chunk(job: Tuple[List[str], bool]) -> list:
+    """`_extract_one_file` over one chunk of paths: the pool's unit of work."""
+    paths, want_structure = job
+    return [_extract_one_file(fp_str, want_structure) for fp_str in paths]
+
+
+def _lost_extraction(error: BaseException) -> ImportExtraction:
+    """The extraction record of a file a dead pool worker lost: failed, with the
+    cause, like a file its extractor could not parse (BACK-1726)."""
+    return ImportExtraction(parse_failed=True, diagnostics={
+        'parse': {'status': 'unavailable', 'reason': f"{type(error).__name__}: {error}"}})
+
+
 def _relativize_imports_paths(result: Dict[str, Any], base_path: Path) -> None:
     """Relativize the file-path fields the text renderer already relativizes
     (ImportsRenderer._render_components's local `rel()`, etc.), but in the
@@ -1159,9 +1172,11 @@ class ImportsAdapter(ResourceAdapter):
 
         Fans the independent per-file extraction out across processes when the
         repo is large enough to pay back pool startup (`_parallel_worker_count`);
-        otherwise runs it inline. `ProcessPoolExecutor.map` preserves input
-        order, so the caller's assembly is identical either way — and identical
-        to the previous purely-serial implementation.
+        otherwise runs it inline. Chunks are read in submission order, so the
+        caller's assembly is identical either way. A file lost to a dead worker
+        (which fails every pending chunk) is yielded with no imports and a failed
+        extraction (`_lost_extraction`), so it reaches ``files_failed`` and the
+        run's partial-parse warning instead of failing the whole run (BACK-1726).
         """
         workers = _parallel_worker_count(len(candidates))
         if workers <= 1:
@@ -1172,19 +1187,22 @@ class ImportsAdapter(ResourceAdapter):
 
         from concurrent.futures import ProcessPoolExecutor
         from ..logging_setup import worker_bootstrap
-        from itertools import repeat
 
         n = len(candidates)
         # A few chunks per worker balances load without excessive IPC round-trips.
         chunksize = max(1, n // (workers * 8))
-        paths = [str(fp) for fp in candidates]
+        chunks = [[str(fp) for fp in candidates[i:i + chunksize]] for i in range(0, n, chunksize)]
         with ProcessPoolExecutor(
             max_workers=workers, initializer=worker_bootstrap,
         ) as executor:
-            for fp_str, imports, symbols, structure, extraction in executor.map(
-                _extract_one_file, paths, repeat(want_structure), chunksize=chunksize
-            ):
-                yield Path(fp_str), imports, symbols, structure, extraction
+            futures = submit_each(executor, _extract_chunk, [(chunk, want_structure) for chunk in chunks])
+            for chunk, future in zip(chunks, futures):
+                try:
+                    rows = future.result()
+                except Exception as e:  # each lost file carries the error; files_failed discloses it
+                    rows = [(fp_str, None, None, None, _lost_extraction(e)) for fp_str in chunk]
+                for fp_str, imports, symbols, structure, extraction in rows:
+                    yield Path(fp_str), imports, symbols, structure, extraction
 
     @staticmethod
     def _discover_candidate_files(
