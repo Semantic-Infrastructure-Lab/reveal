@@ -25,7 +25,7 @@ def _open_repo():
     except ImportError:
         raise ImportError(
             "git:// support requires pygit2\n"
-            "Install with: pip install reveal-cli[git]"
+            'Install with: pip install "reveal-cli[git]"'
         )
 
     repo_path = pygit2.discover_repository('.')
@@ -133,7 +133,7 @@ def resolve_git_adapter(resource: str) -> Dict[str, Any]:
         from ..git.adapter import GitAdapter
     except ImportError:
         raise ImportError(
-            "GitAdapter not available. Install with: pip install reveal-cli[git]\n"
+            'GitAdapter not available. Install with: pip install "reveal-cli[git]"\n'
             "Note: diff:// also supports git CLI format: git://REF/path"
         )
 

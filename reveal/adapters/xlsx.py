@@ -307,7 +307,7 @@ class XlsxRenderer:
                 print(message)
             else:
                 print("DAX measures not available — XMLA schema absent (modern Power BI export).")
-                print("Install pbixray (pip install reveal-cli[powerpivot]) for full extraction.")
+                print('Install pbixray (pip install "reveal-cli[powerpivot]") for full extraction.')
             return
 
         has_full_schema = xmla_available or pbixray_available
@@ -1708,7 +1708,7 @@ class XlsxAdapter(ResourceAdapter):
                                 f'read the model ({type(pbixray_error).__name__}: {pbixray_error}).'
                                 if pbixray_error else
                                 'DAX measures not available — XMLA schema absent (modern Power BI export). '
-                                'Install pbixray (pip install reveal-cli[powerpivot]) for full extraction.'
+                                'Install pbixray (pip install "reveal-cli[powerpivot]") for full extraction.'
                             )
 
                 data['file'] = str(self.file_path)

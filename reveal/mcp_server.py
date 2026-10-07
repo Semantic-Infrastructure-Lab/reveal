@@ -37,7 +37,7 @@ except ImportError:
     # toward the fix. Confirmed live: reproduces at 0.124.0/0.125.0.
     print(
         "reveal-mcp requires the 'mcp' package, which is not installed.\n"
-        "Fix: pip install reveal-cli[mcp]",
+        'Fix: pip install "reveal-cli[mcp]"',
         file=sys.stderr,
     )
     sys.exit(1)

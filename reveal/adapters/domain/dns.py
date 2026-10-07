@@ -27,7 +27,7 @@ def get_dns_records(domain: str) -> Dict[str, List[str]]:
         ImportError: If dnspython is not installed
     """
     if not HAS_DNSPYTHON:
-        raise ImportError("dnspython is required for DNS operations. Install with: pip install reveal-cli[dns]")
+        raise ImportError('dnspython is required for DNS operations. Install with: pip install "reveal-cli[dns]"')
 
     records = {}
     record_types = ['A', 'AAAA', 'MX', 'TXT', 'NS', 'CNAME', 'SOA']
@@ -57,7 +57,7 @@ def get_dns_summary(domain: str) -> Dict[str, Any]:
     """
     if not HAS_DNSPYTHON:
         return {
-            'error': 'dnspython not installed (pip install reveal-cli[dns])',
+            'error': 'dnspython not installed (pip install "reveal-cli[dns]")',
             'nameservers': [],
             'a_records': [],
             'has_mx': False,
@@ -147,7 +147,7 @@ def check_nameserver_response(domain: str) -> Dict[str, Any]:
             'status': 'warning',
             'value': 'Skipped',
             'threshold': 'Responsive',
-            'message': 'dnspython not installed (pip install reveal-cli[dns])',
+            'message': 'dnspython not installed (pip install "reveal-cli[dns]")',
             'severity': 'low',
         }
 
@@ -205,7 +205,7 @@ def check_mx_records(domain: str) -> Dict[str, Any]:
             'status': 'warning',
             'value': 'Skipped',
             'threshold': 'MX configured',
-            'message': 'dnspython not installed (pip install reveal-cli[dns])',
+            'message': 'dnspython not installed (pip install "reveal-cli[dns]")',
             'severity': 'medium',
         }
     try:
@@ -255,7 +255,7 @@ def check_spf_record(domain: str) -> Dict[str, Any]:
             'status': 'warning',
             'value': 'Skipped',
             'threshold': 'SPF present',
-            'message': 'dnspython not installed (pip install reveal-cli[dns])',
+            'message': 'dnspython not installed (pip install "reveal-cli[dns]")',
             'severity': 'medium',
         }
     try:
@@ -329,7 +329,7 @@ def check_dmarc_record(domain: str) -> Dict[str, Any]:
             'status': 'warning',
             'value': 'Skipped',
             'threshold': 'DMARC present',
-            'message': 'dnspython not installed (pip install reveal-cli[dns])',
+            'message': 'dnspython not installed (pip install "reveal-cli[dns]")',
             'severity': 'medium',
         }
     dmarc_domain = f'_dmarc.{domain}'
@@ -438,7 +438,7 @@ def check_dns_propagation(domain: str) -> Dict[str, Any]:
             'status': 'warning',
             'value': 'Skipped',
             'threshold': 'Consistent',
-            'message': 'dnspython not installed (pip install reveal-cli[dns])',
+            'message': 'dnspython not installed (pip install "reveal-cli[dns]")',
             'severity': 'low',
         }
 
@@ -575,7 +575,7 @@ def check_ns_authority(domain: str) -> Dict[str, Any]:
             'type': 'domain_ns_audit',
             'domain': domain,
             'status': 'skipped',
-            'message': 'dnspython not installed (pip install reveal-cli[dns])',
+            'message': 'dnspython not installed (pip install "reveal-cli[dns]")',
             'registered_nameservers': [],
             'servers': [],
             'consensus_ns_records': [],

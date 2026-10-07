@@ -41,7 +41,7 @@ category: guide
 
 ```bash
 # 1. Install dependency (if not already installed)
-pip install reveal-cli[git]
+pip install "reveal-cli[git]"
 
 # 2. Repository overview (branches, tags, recent commits)
 reveal git://.
@@ -1739,7 +1739,7 @@ git:// is optimized for AI agent consumption:
 **Solution**:
 ```bash
 # Install with git extras
-pip install reveal-cli[git]
+pip install "reveal-cli[git]"
 
 # Note: pygit2 has system dependencies (libgit2)
 # On Ubuntu/Debian:
@@ -1833,7 +1833,7 @@ reveal 'git://src/models.py?type=blame&element=User.save'
 1. **Requires pygit2**
    - Not included in base reveal install
    - Has system dependencies (libgit2)
-   - Install: `pip install reveal-cli[git]`
+   - Install: `pip install "reveal-cli[git]"`
 
 2. **Read-only operations**
    - No write operations (by design, for safety)
@@ -2032,11 +2032,11 @@ reveal git://. --format=json | jq -r '.branches.items[].name' | \
 ```bash
 # Ubuntu/Debian
 sudo apt-get install libgit2-dev python3-dev
-pip install reveal-cli[git]
+pip install "reveal-cli[git]"
 
 # macOS
 brew install libgit2
-pip install reveal-cli[git]
+pip install "reveal-cli[git]"
 
 # Verify installation
 python -c "import pygit2; print(pygit2.__version__)"

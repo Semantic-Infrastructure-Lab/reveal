@@ -38,7 +38,7 @@ category: guide
 
 ```bash
 # 1. Install dependency (if not already installed)
-pip install reveal-cli[database]
+pip install "reveal-cli[database]"
 
 # 2. Configure credentials (recommended: ~/.my.cnf)
 cat > ~/.my.cnf <<EOF
@@ -1710,7 +1710,7 @@ mysql:// is designed for AI agent consumption:
 **Solution**:
 ```bash
 # Install with database extras
-pip install reveal-cli[database]
+pip install "reveal-cli[database]"
 ```
 
 ### Error: "Access denied for user"
@@ -1810,7 +1810,7 @@ reveal mysql://localhost --check
 
 1. **Requires pymysql**
    - Not included in base reveal install
-   - Install with: `pip install reveal-cli[database]`
+   - Install with: `pip install "reveal-cli[database]"`
 
 2. **Read-only operations**
    - No write/modify capabilities (by design, for safety)

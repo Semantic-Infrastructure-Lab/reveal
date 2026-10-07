@@ -109,7 +109,7 @@ Tree-sitter is now included by default (since v0.8.0, Nov 2025). You can safely 
 **Example:**
 ```bash
 # Old (still works, but unnecessary)
-pip install reveal-cli[treesitter]
+pip install "reveal-cli[treesitter]"
 
 # New (recommended)
 pip install reveal-cli

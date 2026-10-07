@@ -2152,7 +2152,7 @@ reveal domain://api.example.com      # inspect the upstream domain
 
 # domain:// also supports WHOIS lookup
 reveal domain://example.com/whois    # registrar, creation/expiry dates, nameservers
-reveal domain://example.com/registrar  # registrar + WHOIS fields (requires: pip install reveal-cli[whois])
+reveal domain://example.com/registrar  # registrar + WHOIS fields (requires: pip install "reveal-cli[whois]")
 
 # Validate nginx config + SSL in one workflow
 reveal nginx://example.com           # check vhost config
@@ -2177,16 +2177,16 @@ reveal domain://example.com --check
 reveal domain://example.com --check --only-failures
 
 # Specific sub-views
-reveal domain://example.com/dns          # All DNS records (A, AAAA, MX, TXT, NS, CNAME, SOA) (requires: pip install reveal-cli[dns])
+reveal domain://example.com/dns          # All DNS records (A, AAAA, MX, TXT, NS, CNAME, SOA) (requires: pip install "reveal-cli[dns]")
 reveal domain://example.com/ssl          # SSL certificate status (delegates to ssl://)
 reveal domain://example.com/registrar    # Registrar name and key dates from WHOIS
-reveal domain://example.com/whois        # WHOIS data (requires: pip install reveal-cli[whois])
+reveal domain://example.com/whois        # WHOIS data (requires: pip install "reveal-cli[whois]")
 
 # JSON for scripting
 reveal domain://example.com --check --format=json
 ```
 
-**Optional extras:** DNS views (`/dns`, `/mail`, `/ns-audit`) need `pip install reveal-cli[dns]` (dnspython); WHOIS views (`/whois`, `/registrar`) need `pip install reveal-cli[whois]`. Without them `domain://` degrades gracefully and prints the install hint.
+**Optional extras:** DNS views (`/dns`, `/mail`, `/ns-audit`) need `pip install "reveal-cli[dns]"` (dnspython); WHOIS views (`/whois`, `/registrar`) need `pip install "reveal-cli[whois]"`. Without them `domain://` degrades gracefully and prints the install hint.
 
 **Exit codes (`--check`):** `0` pass, `1` warning, `2` failure — computed from all checks, even when `--only-failures` trims the display.
 

@@ -516,7 +516,7 @@ class DomainAdapter(ResourceAdapter):
 
     Elements:
         dns: DNS records (A, AAAA, MX, TXT, NS, CNAME, SOA)
-        whois: WHOIS registration data (optional: pip install reveal-cli[whois])
+        whois: WHOIS registration data (optional: pip install "reveal-cli[whois]")
         ssl: SSL certificate status (delegates to ssl:// adapter)
         registrar: Registrar and nameserver information
     """
@@ -769,9 +769,9 @@ class DomainAdapter(ResourceAdapter):
             return {
                 'type': 'domain_whois',
                 'domain': self.domain,
-                'error': 'python-whois not installed (pip install reveal-cli[whois])',
+                'error': 'python-whois not installed (pip install "reveal-cli[whois]")',
                 'next_steps': [
-                    'Install python-whois: pip install reveal-cli[whois]',
+                    'Install python-whois: pip install "reveal-cli[whois]"',
                     f"View DNS instead: reveal domain://{self.domain}/dns",
                 ],
             }

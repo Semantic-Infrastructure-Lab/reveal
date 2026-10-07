@@ -119,7 +119,7 @@ anti_patterns:
 
 notes:
   - '⚠️  IMPORTANT: Requires pymysql dependency'
-  - 'Install: pip install reveal-cli[database]'
+  - 'Install: pip install "reveal-cli[database]"'
   - 'Credentials: URI > env vars > ~/.my.cnf (3-tier resolution system)'
   - 'Env vars: MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE'
   - '~/.my.cnf: Reads [client] section when params not explicitly set (RECOMMENDED for production)'
