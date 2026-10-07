@@ -26,9 +26,11 @@ pytestmark = pytest.mark.component
 def _fresh_seam_state():
     seam._warned_uncached.clear()
     seam._ready.clear()
+    seam._pack_name.clear()
     yield
     seam._warned_uncached.clear()
     seam._ready.clear()
+    seam._pack_name.clear()
 
 
 class TestGetTree:
@@ -56,6 +58,47 @@ class TestGetTree:
                 seam.get_tree('python', 'x = 1')
         assert caught.value.cause is boom
         assert str(caught.value) == "no tree-sitter grammar for 'python': Download error: no network"
+
+
+class TestPackSpelling:
+    """language-pack 1.21 knows C# only as 'csharp'; reveal says 'c_sharp' (registry,
+    analyzers). get_parser('c_sharp') worked only after something had downloaded the
+    grammar under 'csharp', so on a fresh install C# did not parse (CI 37569690545: the
+    Windows shard without that earlier download failed both C# tests)."""
+
+    @staticmethod
+    def _pack_knowing_only_csharp(real_get_parser):
+        def get_parser(language):
+            if language == 'c_sharp':
+                raise RuntimeError("Language 'c_sharp' is not in the download manifest")
+            return real_get_parser(language)
+        return get_parser
+
+    def test_c_sharp_falls_back_to_the_packs_csharp(self):
+        import tree_sitter_language_pack as tslp
+        fake = self._pack_knowing_only_csharp(tslp.get_parser)
+        with patch('tree_sitter_language_pack.get_parser', side_effect=fake) as pack_get:
+            root = tree_root(seam.get_tree('c_sharp', 'class A { void M() { int x = 1; } }'))
+            assert _zero_arg(root, 'kind') == 'compilation_unit'
+            seam.get_parser('c_sharp')   # remembered: no second failed attempt
+        assert [c.args[0] for c in pack_get.call_args_list] == ['c_sharp', 'csharp', 'csharp']
+
+    def test_unknown_language_is_still_unavailable(self):
+        with pytest.raises(seam.GrammarUnavailable) as caught:
+            seam.get_parser('no_such_language')
+        assert caught.value.language == 'no_such_language'
+
+    def test_csharp_in_the_cache_counts_as_c_sharp_downloaded(self, caplog):
+        with patch('tree_sitter_language_pack.downloaded_languages', return_value=['csharp']):
+            assert seam.is_downloaded('c_sharp')
+            with caplog.at_level('WARNING', logger=seam.__name__):
+                seam.get_parser('c_sharp')
+        assert not caplog.records   # no false "not yet downloaded" warning
+
+    def test_download_asks_for_the_packs_spelling(self):
+        with patch('tree_sitter_language_pack.download', return_value=2) as pack_download:
+            seam.download(['c_sharp', 'python'])
+        pack_download.assert_called_once_with(['csharp', 'python'])
 
 
 class TestFetchAnnouncement:

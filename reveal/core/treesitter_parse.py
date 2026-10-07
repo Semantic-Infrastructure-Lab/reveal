@@ -15,7 +15,7 @@ in ``reveal/core/treesitter*.py``.
 """
 
 import logging
-from typing import Any, Iterable, Set
+from typing import Any, Dict, Iterable, Set
 
 from .treesitter_compat import ts_parse
 
@@ -25,6 +25,14 @@ logger = logging.getLogger(__name__)
 # obtained for -- their grammar is in the local cache, so they need no check.
 _warned_uncached: Set[str] = set()
 _ready: Set[str] = set()
+
+# reveal's language name -> the pack's, where a pack release spells it differently.
+# language-pack 1.21 knows C# only as 'csharp' (1.8.1 shipped 'c_sharp' built in, but its
+# download manifest also says 'csharp'); asking 1.21 for 'c_sharp' worked only once some
+# other call had downloaded 'csharp'. reveal's own name is tried first, so a pack that
+# still accepts it keeps working; _pack_name remembers which spelling answered.
+_PACK_ALIASES: Dict[str, str] = {'c_sharp': 'csharp'}
+_pack_name: Dict[str, str] = {}
 
 
 class GrammarUnavailable(RuntimeError):
@@ -55,6 +63,12 @@ def downloaded_languages() -> Set[str]:
         return set()
 
 
+def is_downloaded(language: str) -> bool:
+    """Whether *language*'s grammar is in the local cache, under reveal's name or the
+    pack's (``c_sharp`` is cached as ``csharp``)."""
+    return bool({language, _PACK_ALIASES.get(language, language)} & downloaded_languages())
+
+
 def get_parser(language: str, *, announce_fetch: bool = True) -> Any:
     """A parser for *language*, or ``GrammarUnavailable``.
 
@@ -62,8 +76,9 @@ def get_parser(language: str, *, announce_fetch: bool = True) -> Any:
     With *announce_fetch*, say so once per language before that fetch, so an offline
     host learns why the parse is slow or fails (BACK-979)."""
     pack = _pack(language)
+    alias = _PACK_ALIASES.get(language)
     if announce_fetch and language not in _ready and language not in _warned_uncached:
-        if language not in downloaded_languages():
+        if not is_downloaded(language):
             _warned_uncached.add(language)
             logger.warning(
                 "tree-sitter grammar for %r not yet downloaded — first parse "
@@ -71,10 +86,17 @@ def get_parser(language: str, *, announce_fetch: bool = True) -> Any:
                 "INSTALL.md#network-requirements for offline setups)",
                 language,
             )
+    name = _pack_name.get(language, language)
     try:
-        parser = pack.get_parser(language)
+        parser = pack.get_parser(name)
     except Exception as e:  # noqa: BLE001 - the pack raises its own types (LookupError, download errors)
-        raise GrammarUnavailable(language, e) from e
+        if alias is None or name == alias:
+            raise GrammarUnavailable(language, e) from e
+        try:
+            parser = pack.get_parser(alias)
+        except Exception:  # noqa: BLE001 - report the failure under reveal's own name
+            raise GrammarUnavailable(language, e) from e
+        _pack_name[language] = alias
     _ready.add(language)
     return parser
 
@@ -96,7 +118,7 @@ def has_grammar(language: str) -> bool:
 
 def download(languages: Iterable[str]) -> int:
     """Fetch the named grammars into the local cache; returns how many."""
-    return int(_pack('*').download(list(languages)))
+    return int(_pack('*').download([_PACK_ALIASES.get(name, name) for name in languages]))
 
 
 def download_all() -> int:
