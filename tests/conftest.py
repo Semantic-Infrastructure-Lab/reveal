@@ -357,6 +357,30 @@ def pytest_configure(config):
     os.environ.setdefault("REVEAL_MAX_WORKERS", "1")
 
 
+def pytest_collection_modifyitems(config, items):
+    """REVEAL_TEST_SHARD=i/n keeps only shard i of n (1-based), split by test file.
+
+    CI splits the Windows legs in two: they ran the suite in ~20 min against 7-9 min
+    on Linux/macOS, so they alone set the run's wall time. Whole files stay together
+    (module fixtures run once); crc32 of the file path is stable across runs and
+    platforms, unlike hash(). Unset, everything runs.
+    """
+    spec = os.environ.get("REVEAL_TEST_SHARD")
+    if not spec:
+        return
+    import zlib
+    index, total = (int(part) for part in spec.split("/"))
+    if not 1 <= index <= total:
+        raise pytest.UsageError(f"REVEAL_TEST_SHARD={spec}: want i/n with 1 <= i <= n")
+    keep, drop = [], []
+    for item in items:
+        test_file = item.nodeid.split("::", 1)[0]
+        (keep if zlib.crc32(test_file.encode()) % total == index - 1 else drop).append(item)
+    if drop:
+        config.hook.pytest_deselected(items=drop)
+        items[:] = keep
+
+
 @pytest.fixture(autouse=True)
 def _serial_workers_unless_pool_test(request, monkeypatch):
     if request.node.get_closest_marker("real_worker_pool"):

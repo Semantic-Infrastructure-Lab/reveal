@@ -16,7 +16,7 @@
 # 2. CHANGELOG validation
 # 3. Version bump in pyproject.toml (before tests, so version-match tests pass)
 # 4. Reveal self-check (V007/V011/V012/V013)
-# 5. Test suite
+# 5. Test suite (skipped when pre-bumped: the green CI run for HEAD already covers it)
 # 6. Build package
 # 7. Git commit and tag
 # 8. Push to GitHub
@@ -282,11 +282,16 @@ echo
 # TESTS
 # ============================================================================
 
-info "Running test suite..."
-
-python3 -m pytest tests/ -q --tb=short || error "Tests failed — fix failures before releasing"
-
-success "All tests passed"
+if [ "$CURRENT_VERSION_IN_FILE" = "$NEW_VERSION" ]; then
+    # Pre-bumped (the 4-file prep commit): nothing changed since the CI check above, so
+    # GitHub's green run for this exact HEAD -- every OS and Python leg -- is the test result.
+    # Re-running the suite here only re-tested one leg of it (~5 min).
+    success "Tests: GitHub Actions run for HEAD is green and the release adds no change"
+else
+    info "Running test suite (version bumped by this script, so HEAD differs from the tested commit)..."
+    python3 -m pytest tests/ -q --tb=short || error "Tests failed — fix failures before releasing"
+    success "All tests passed"
+fi
 
 # Tests passed — version bump is permanent; disable the rollback trap
 trap - EXIT

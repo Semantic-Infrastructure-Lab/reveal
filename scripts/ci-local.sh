@@ -36,16 +36,19 @@
 #   scripts/ci-local.sh --matrix --changed  # optional quick check (~1 min): only the test files you added/edited
 #                                           # vs upstream, on every leg incl. the language-pack floor
 #   scripts/ci-local.sh --no-tests          # only the non-pytest CI steps
-#   scripts/ci-local.sh --push              # the whole push gate in one command (~10 min, see below)
+#   scripts/ci-local.sh --push              # the push gate (~6 min, see below)
 #   scripts/ci-local.sh --fresh             # rebuild the venv from scratch
 #
-# --push is the gate to run when Scott says push (beige-chroma-1006: a green 3.12 run let a fork-only test
-# reach CI red on 3.14 and macOS). In order, stopping at the first failure:
-#   1. --no-tests            the lints, ratchets and reveal:// self-validation (~2 min, mostly install + mypy)
-#   2. (default)             the full suite on 3.12 plus the primary-leg steps
-#   3. --lp 1.8.1            the full suite on the language-pack floor
-#   4. --matrix --changed    the test files you added or edited, on 3.10, 3.12, 3.14 and the floor
-# It cannot run Windows or macOS; read those CI legs after the push.
+# --push is the gate before a push: the default run (lints, ratchets, reveal:// self-validation, then
+# the full suite on 3.12). Everything else it used to add runs on GitHub anyway, and the history says
+# what each part is worth (580 runs, 2025-12 to 2026-10-06; since 2026-09-01, 29 pushes broke a green
+# job): 15 broke only macOS/Windows, which nothing local can run; 7 broke Linux 3.12, which this run
+# catches, and those are the pushes that turn most of the matrix red; 3 broke only the 1.8.1 floor and
+# 4 only 3.10/3.14. The floor and --matrix --changed steps (~6.5 min a push) were dropped from the gate
+# on 2026-10-06: they would have spared at most those 7 red runs at ~12 h of gate time. Run them by
+# hand when they fit the change: --lp 1.8.1 for tree-sitter Node work (V040 lints the known floor
+# hazards in seconds), --matrix --changed for a new test of version-sensitive behaviour.
+# Push, keep working, and let scripts/ci-watch.sh report the GitHub run.
 #
 # What only --matrix catches (both reached GitHub CI from a green 3.12 run, BACK-1438):
 #   - 3.10: PEP 701 f-strings (same quote nested inside, backslashes in {...}) are 3.12+ syntax
@@ -93,16 +96,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# --push: the whole push gate, cheapest first, stopping at the first failure.
+# --push: the push gate is the default run (the lints run before the suite, so they fail in seconds).
 if [[ $PUSH -eq 1 ]]; then
     [[ $PY_EXPLICIT -eq 1 || -n "$LP_VERSION" || $MATRIX -eq 1 || $CHANGED -eq 1 || $RUN_TESTS -eq 0 || $EXPLICIT_TARGETS -eq 1 || $FRESH -eq 1 ]] \
         && { echo "--push takes no other options" >&2; exit 2; }
-    for gate in "--no-tests" "" "--lp $FLOOR_LP" "--matrix --changed"; do
-        printf '\n######## push gate: ci-local.sh %s ########\n' "${gate:-(default)}"
-        # shellcheck disable=SC2086  # $gate is a fixed option list, word-split on purpose
-        "$0" $gate || { echo "push gate FAILED at: ci-local.sh ${gate:-(default)}" >&2; exit 1; }
-    done
-    printf '\nPush gate passed. Windows and macOS legs still only run on GitHub: read all 15 jobs after the push.\n'
+    "$0" || { echo "push gate FAILED (ci-local.sh default run)" >&2; exit 1; }
+    printf '\nPush gate passed. Push, then: scripts/ci-watch.sh (macOS, Windows and the floor run only on GitHub).\n'
     exit 0
 fi
 
@@ -224,13 +223,6 @@ unset PYTHONPYCACHEPREFIX PYTHONPATH
 export XDG_CONFIG_HOME="${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/empty-xdg-config"
 rm -rf "$XDG_CONFIG_HOME" && mkdir -p "$XDG_CONFIG_HOME"
 
-if [[ $RUN_TESTS -eq 1 ]]; then
-    step "Run tests (pytest ${PYTEST_TARGETS[*]})"
-    "$PY" -m pytest "${PYTEST_TARGETS[@]}" -q -p no:cacheprovider -n auto >>"$LOG" 2>&1 \
-        || { grep -E '^FAILED |^ERROR ' "$LOG" | head -30; fail "pytest"; }
-    tail -1 "$LOG"
-fi
-
 step "CLI basics"
 "$VENV/bin/reveal" --version >>"$LOG" 2>&1 && "$VENV/bin/reveal" --list-supported >>"$LOG" 2>&1 || fail "CLI basics"
 
@@ -280,6 +272,14 @@ if [[ $PRIMARY -eq 1 ]]; then
         | "$PY" -c "import json,sys; print(json.load(sys.stdin)['summary']['total_issues'])")
     echo "B006 issues: $COUNT (baseline: $BASELINE)" | tee -a "$LOG"
     [[ "$COUNT" -le "$BASELINE" ]] || fail "B006 count increased ($BASELINE -> $COUNT)"
+fi
+
+# The suite runs last: the lints and ratchets above fail in seconds, the suite takes minutes.
+if [[ $RUN_TESTS -eq 1 ]]; then
+    step "Run tests (pytest ${PYTEST_TARGETS[*]})"
+    "$PY" -m pytest "${PYTEST_TARGETS[@]}" -q -p no:cacheprovider -n auto >>"$LOG" 2>&1 \
+        || { grep -E '^FAILED |^ERROR ' "$LOG" | head -30; fail "pytest"; }
+    tail -1 "$LOG"
 fi
 
 printf '\nCI-parity run passed (python %s%s%s). Log: %s\n' "$PY_VERSION" \

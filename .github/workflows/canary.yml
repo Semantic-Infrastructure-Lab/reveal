@@ -1,7 +1,7 @@
 name: Latest-deps canary
 
-# BACK-1327: the main matrix pins nothing and the compat matrix pins only two
-# tree-sitter-language-pack versions, so a breaking upstream release is
+# BACK-1327: the main matrix pins nothing and the compat matrix pins only the
+# tree-sitter-language-pack floor, so a breaking upstream release is
 # invisible until a user hits it (BACK-574). This runs the suite weekly against
 # the newest release of every dependency, allowed by pyproject.toml's own
 # bounds (the tree-sitter<0.26 ceiling, BACK-1161, still applies).
@@ -37,6 +37,41 @@ jobs:
           pip install --upgrade --upgrade-strategy eager -e ".[dev]"
           pip install build  # tests/test_packaging_manifest.py shells out to `python -m build`
           pip list
+
+      - name: Run tests
+        env:
+          PYTHONIOENCODING: utf-8
+        run: pytest tests/
+
+  language-pack-middle:
+    # pyproject.toml allows any tree-sitter-language-pack from the 1.8.1 floor up. Per push,
+    # test.yml runs the floor and the latest; these middle releases ran there too until
+    # 2026-10-06, but never failed without a main-matrix leg failing as well, so they now
+    # run weekly. 1.12.5: first release after the vendored parser; 1.14.3: a later one.
+    name: Language-pack ${{ matrix.lp-version }} (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.14']
+        lp-version: ['1.12.5', '1.14.3']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies (forcing tree-sitter-language-pack==${{ matrix.lp-version }})
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install "tree-sitter-language-pack==${{ matrix.lp-version }}"
+          pip install build  # tests/test_packaging_manifest.py shells out to `python -m build`
 
       - name: Run tests
         env:

@@ -80,7 +80,10 @@ def test_existing_path_and_query_still_work(tmp_path):
     assert 'K' in out
 
 
-def test_empty_resource_means_cwd_not_an_error():
+def test_empty_resource_means_cwd_not_an_error(tmp_path, monkeypatch):
+    # A small cwd: from the repo root this scanned all of reveal (~40 s under xdist).
+    (tmp_path / 'app.py').write_text('import os\n', encoding='utf-8')
+    monkeypatch.chdir(tmp_path)
     code, _, err = _run('surface://')
     assert code == 0
     assert 'Path not found' not in err

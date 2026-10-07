@@ -152,7 +152,8 @@ The script will:
 5. Check CHANGELOG has entry for new version
 6. Update version in `pyproject.toml` (or skip if pre-bumped)
 7. Run reveal self-check
-8. Run full test suite
+8. Run full test suite -- only when the script bumped the version itself; a pre-bumped HEAD is
+   the commit GitHub's green Tests run (required before step 1) already tested on every leg
 9. Build and verify package
 10. Create git commit and tag
 11. Push to GitHub

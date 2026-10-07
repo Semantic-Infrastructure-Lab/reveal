@@ -415,16 +415,20 @@ scripts/ci-local.sh --no-tests     # seconds: ratchets, lints, V-series, mypy (C
 pytest tests/test_<what_you_touched>.py tests/test_flag_ledger.py tests/test_output_contract_compliance.py
 ```
 
-Push to master and read the run: `test.yml` runs every Python version on Linux, macOS and
-Windows plus the language-pack compat legs (`gh run list --workflow test.yml`). A red master is
-fixed forward; releases are cut from a tag only after CI is green (RELEASING.md). The local matrix
+Before a push, maintainers run `scripts/ci-local.sh --push` (~6 min: the lints and ratchets,
+then the full suite on Python 3.12). Push to master, keep working, and let `scripts/ci-watch.sh`
+wait for the run and print each job plus the failing tests: `test.yml` runs every Python version
+on Linux, macOS and Windows (each Windows leg as two halves) plus the language-pack 1.8.1 floor;
+the middle language-pack versions run weekly in `canary.yml`. A red master is fixed forward;
+releases are cut from a tag only after CI is green (RELEASING.md). The rest of the local matrix
 duplicates CI's Linux legs, so it is a tool to reproduce a CI failure or work offline, not a push gate:
 
 ```bash
-scripts/ci-local.sh                # Python 3.12, latest deps: pytest + the CI-only steps
+scripts/ci-local.sh                # Python 3.12, latest deps: the CI-only steps, then pytest
 scripts/ci-local.sh --matrix       # 3.10, 3.12, 3.14, then 3.12 @ the language-pack 1.8.1 floor (minutes per leg; use tmux)
 scripts/ci-local.sh --matrix -- tests/test_foo.py   # only these tests, per leg
-scripts/ci-local.sh --lp 1.12.5    # force a tree-sitter-language-pack version (CI compat-matrix)
+scripts/ci-local.sh --lp 1.8.1     # force a tree-sitter-language-pack version (CI's floor leg)
+REVEAL_TEST_SHARD=1/2 pytest tests/  # one half of the suite, as a Windows CI leg runs it
 ```
 
 Classes that pass a 3.12 run and fail elsewhere: 3.10 rejects PEP 701 f-strings (a nested

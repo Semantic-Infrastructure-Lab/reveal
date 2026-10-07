@@ -7,9 +7,16 @@ on:
     branches: [ master, main ]
   workflow_call:  # Allow this workflow to be called by other workflows
 
+# A newer push to the same branch cancels the run it supersedes: a fix-forward push otherwise
+# waits behind ~20 min of a run whose answer no longer matters. release.sh still requires a
+# green run for the exact HEAD it releases.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
-    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}${{ matrix.shard && format(' (shard {0})', matrix.shard) || '' }}
     runs-on: ${{ matrix.os }}
     # A hung leg (BACK-1475: a compat-matrix run sat silent for ~50 min) otherwise runs to GitHub's 6 h
     # default. The slowest leg takes ~13 min.
@@ -17,14 +24,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest]
         python-version: ['3.10', '3.12', '3.14']
+        shard: ['']
         include:
           # BACK-1357: ubuntu-latest becomes Ubuntu 26.04 from 2026-10-19
           # (actions/runner-images#14748). Test it ahead of the switch; the
-          # ubuntu-latest-only steps below stay on the 24.04 leg.
+          # ubuntu-latest-only steps below stay on the 24.04 leg. After the
+          # switch this leg duplicates ubuntu-latest/3.12: remove it.
           - os: ubuntu-26.04
             python-version: '3.12'
+            shard: ''
+          # Windows ran the suite in ~20 min against 7-9 min on Linux/macOS and set the
+          # whole run's wall time, so each Windows leg runs as two halves split by test
+          # file (REVEAL_TEST_SHARD, tests/conftest.py). Every Python version stays:
+          # Windows 3.12 broke alone twice since 2026-07.
+          - {os: windows-latest, python-version: '3.10', shard: '1/2'}
+          - {os: windows-latest, python-version: '3.10', shard: '2/2'}
+          - {os: windows-latest, python-version: '3.12', shard: '1/2'}
+          - {os: windows-latest, python-version: '3.12', shard: '2/2'}
+          - {os: windows-latest, python-version: '3.14', shard: '1/2'}
+          - {os: windows-latest, python-version: '3.14', shard: '2/2'}
 
     steps:
       - name: Checkout code
@@ -47,6 +67,7 @@ jobs:
           # Makes reveal/ text I/O without encoding= fail its test (pyproject filterwarnings).
           # Console output under a non-UTF-8 stream: tests/test_console_encoding.py.
           PYTHONWARNDEFAULTENCODING: '1'
+          REVEAL_TEST_SHARD: ${{ matrix.shard }}
         run: pytest tests/
 
       - name: Shared-seam ratchet (walkers, tree-sitter imports, exit, print)
@@ -112,6 +133,10 @@ jobs:
           fi
 
   compat-matrix:
+    # Per push, only the language-pack floor runs here. The middle versions (1.12.5, 1.14.3 on
+    # Python 3.12/3.14) moved to the weekly canary.yml (2026-10-06): across every red run since
+    # 2025-12 they never failed without a main-matrix leg failing too, while the floor broke
+    # alone 3 times since 2026-09-01.
     # BACK-1125: forced-dependency-version + Python-version-boundary visibility
     # job. This is the gap that let BACK-574 (a tree-sitter-language-pack bump
     # silently flipping accessor method->property semantics, swallowed by a
@@ -129,14 +154,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.12', '3.14']
-        lp-version: ['1.12.5', '1.14.3']  # 1.12.5: first post-vendored-parser release; 1.14.3: current upstream
-        include:
-          # BACK-1327: pyproject.toml declares tree-sitter-language-pack>=1.8.1;
-          # test that floor so the declaration cannot silently rot. Full suite
-          # verified green at 1.8.1 locally (2026-09-21).
-          - python-version: '3.12'
-            lp-version: '1.8.1'
+        # BACK-1327: pyproject.toml declares tree-sitter-language-pack>=1.8.1;
+        # test that floor so the declaration cannot silently rot.
+        python-version: ['3.12']
+        lp-version: ['1.8.1']
 
     steps:
       - name: Checkout code
