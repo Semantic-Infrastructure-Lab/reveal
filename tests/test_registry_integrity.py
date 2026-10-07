@@ -10,6 +10,7 @@ weren't imported in adapters/__init__.py, causing list_supported_schemes() to
 show 10 instead of 12 adapters.
 """
 
+import ast
 import unittest
 import re
 from pathlib import Path
@@ -84,6 +85,30 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
             f"  In registry but no @register_adapter found: {extra}\n"
             f"  Expected: {sorted(registered_in_code)}\n"
             f"  Got: {sorted(actually_registered)}"
+        )
+
+    def test_every_adapter_class_is_decorated_with_register_adapter(self):
+        """A ResourceAdapter subclass without @register_adapter silently drops its scheme.
+
+        test_all_adapter_files_are_registered compares decorator text with the registry, so a
+        class that lost its decorator (BACK-916: a renderer cut took it along) is invisible to it
+        when a direct import still reaches the class. Scan the classes, not the decorators."""
+        adapters_dir = Path(__file__).parent.parent / 'reveal' / 'adapters'
+        undecorated = []
+        for path in sorted(adapters_dir.rglob('*.py')):
+            if path.name in ('base.py', 'test.py', 'demo.py') or '__pycache__' in path.parts:
+                continue
+            tree = ast.parse(path.read_text(encoding='utf-8'))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ClassDef):
+                    continue
+                if not any(ast.unparse(b).endswith('Adapter') for b in node.bases):
+                    continue
+                if not any('register_adapter' in ast.unparse(d) for d in node.decorator_list):
+                    undecorated.append(f"{path.relative_to(adapters_dir.parent.parent)}::{node.name}")
+        self.assertEqual(
+            undecorated, [],
+            f"Adapter classes without @register_adapter (their scheme is not served): {undecorated}",
         )
 
     def test_all_registered_adapters_are_importable(self):
