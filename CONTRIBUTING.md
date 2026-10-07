@@ -282,7 +282,7 @@ def extract_element(self, element_type, name):
 **Text encoding (breaks on Windows only):** pass `encoding='utf-8'` to every text-mode
 `open()` / `read_text()` / `write_text()` (`errors='replace'` when reading user files). Windows
 defaults to cp1252, so a bare call passes on Linux/macOS and fails on Windows CI.
-`scripts/check_text_encoding.py` blocks new offenders, and in `reveal/` a bare call fails the
+rule V041 in `reveal reveal:// --check` blocks new offenders (`python scripts/check_text_encoding.py --update-baseline` re-freezes the legacy count after a fix), and in `reveal/` a bare call fails the
 test that reaches it under `PYTHONWARNDEFAULTENCODING=1` (CI and `ci-local.sh` set it). To
 reproduce a Windows encoding bug on Linux, run under the cp1252 simulator:
 `PYTHONUTF8=0 PYTHONPATH=scripts/cp1252_sim reveal check some.conf`.

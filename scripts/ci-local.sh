@@ -17,7 +17,7 @@
 #                             PYTHONPYCACHEPREFIX unset (stale bytecode), and XDG_CONFIG_HOME
 #                             pointed at an empty dir (no ~/.config/reveal user config)
 #   - Windows text encoding -> PYTHONWARNDEFAULTENCODING=1, so reveal/ text I/O without encoding=
-#                             fails its test (pyproject filterwarnings), and scripts/check_text_encoding.py.
+#                             fails its test (pyproject filterwarnings), and V041 (reveal:// --check).
 #                             Console output under a non-UTF-8 stream: tests/test_console_encoding.py.
 #                             This replaced a full second pytest run under LC_ALL=C (~5 min, never
 #                             caught anything the other checks missed)
@@ -61,7 +61,7 @@
 #   - '/tmp' or other POSIX paths: not a directory on Windows; use tmp_path/tempfile.gettempdir()
 #   - shell=True / POSIX quoting in subprocess: pass an argument list
 #   - str(path) compared or split on '/': use Path parts or as_posix() (V039)
-#   - open()/read_text() without encoding=: cp1252 default (check_text_encoding.py)
+#   - open()/read_text() without encoding=: cp1252 default (V041)
 # Bare node.start_byte etc. (floor leg above) is also linted in seconds: V040 (reveal:// --check).
 set -euo pipefail
 
@@ -236,7 +236,6 @@ step "CLI basics"
 
 if [[ $PRIMARY -eq 1 ]]; then
     step "Windows compatibility checks"
-    "$PY" scripts/check_text_encoding.py >>"$LOG" 2>&1 || { tail -8 "$LOG"; fail "text encoding (bare read_text/open breaks on Windows)"; }
 
     # Counts of re-implemented shared infrastructure; each may only fall (BACK-1512).
     step "Shared-seam ratchet"
