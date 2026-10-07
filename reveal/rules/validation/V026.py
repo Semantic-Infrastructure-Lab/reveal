@@ -52,14 +52,26 @@ _ROOT_LITERAL_RE = re.compile(
 
 
 def _own_scope_nodes(fn: ast.AST):
-    """Yield the nodes of *fn*'s body without entering nested function scopes."""
-    stack = list(ast.iter_child_nodes(fn))
+    """Yield ``(node, block)`` for *fn*'s body without entering nested scopes.
+
+    *block* identifies the statement list the node sits in, as a tuple of
+    enclosing statement-list ids, so a caller can tell whether one statement
+    is guaranteed to run before another (its block is a prefix of the other's).
+    """
+    stack = [(fn, ())]
     while stack:
-        node = stack.pop()
-        yield node
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
-            continue
-        stack.extend(ast.iter_child_nodes(node))
+        parent, block = stack.pop()
+        for name, value in ast.iter_fields(parent):
+            if isinstance(value, list) and value and isinstance(value[0], ast.stmt):
+                child_block = block + (id(value),)
+            else:
+                child_block = block
+            for child in (value if isinstance(value, list) else [value]):
+                if not isinstance(child, ast.AST):
+                    continue
+                yield child, child_block
+                if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                    stack.append((child, child_block))
 
 
 def _is_relative_to_call(value: ast.AST) -> bool:
@@ -71,8 +83,9 @@ def relative_to_leaks(content: str) -> List[int]:
     """Line numbers where a ``.relative_to()`` local is str()'d or f-string'd.
 
     One hop, one function: ``rel = a.relative_to(b)`` makes ``rel`` a leak
-    candidate until it is rebound to something else; ``str(rel)`` and
-    ``f"{rel}"`` on a candidate leak the platform separator.
+    candidate until a rebinding that is guaranteed to run before the use (same
+    or enclosing block, so an ``except`` branch's ``rel = fpath`` does not
+    count); ``str(rel)`` and ``f"{rel}"`` on a candidate leak the separator.
     """
     try:
         tree = ast.parse(content)
@@ -82,26 +95,29 @@ def relative_to_leaks(content: str) -> List[int]:
     for fn in ast.walk(tree):
         if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        events = []  # (lineno, col, kind, name)
-        for node in _own_scope_nodes(fn):
+        events = []  # (lineno, col, kind, name, block)
+        for node, block in _own_scope_nodes(fn):
             if isinstance(node, ast.Assign):
                 kind = 'taint' if _is_relative_to_call(node.value) else 'clear'
                 for target in node.targets:
                     if isinstance(target, ast.Name):
-                        events.append((node.lineno, node.col_offset, kind, target.id))
+                        events.append((node.lineno, node.col_offset, kind, target.id, block))
             elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                   and node.func.id == 'str' and len(node.args) == 1
                   and isinstance(node.args[0], ast.Name)):
-                events.append((node.lineno, node.col_offset, 'use', node.args[0].id))
+                events.append((node.lineno, node.col_offset, 'use', node.args[0].id, block))
             elif isinstance(node, ast.FormattedValue) and isinstance(node.value, ast.Name):
-                events.append((node.lineno, node.col_offset, 'use', node.value.id))
-        tainted = set()
-        for lineno, _col, kind, name in sorted(events):
+                events.append((node.lineno, node.col_offset, 'use', node.value.id, block))
+        tainted: Dict[str, bool] = {}
+        cleared: Dict[str, List[tuple]] = {}
+        for lineno, _col, kind, name, block in sorted(events, key=lambda e: e[:4]):
             if kind == 'taint':
-                tainted.add(name)
+                tainted[name] = True
+                cleared[name] = []
             elif kind == 'clear':
-                tainted.discard(name)
-            elif name in tainted:
+                cleared.setdefault(name, []).append(block)
+            elif tainted.get(name) and not any(
+                    block[:len(c)] == c for c in cleared.get(name, [])):
                 lines.append(lineno)
     return sorted(set(lines))
 

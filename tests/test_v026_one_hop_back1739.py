@@ -118,3 +118,29 @@ class TestOneHopNegatives:
             "    return str(p.relative_to(base))\n"
         ))
         assert [d.line for d in found] == [2]
+
+
+class TestBranchRebinding:
+    """A rebinding in a branch does not dominate a later use (tree_view.py shape)."""
+
+    def test_except_branch_rebind_does_not_clear(self, tmp_path):
+        found = _scan(tmp_path, (
+            "def f(p, root):\n"
+            "    try:\n"
+            "        rel = p.relative_to(root)\n"
+            "    except ValueError:\n"
+            "        rel = p\n"
+            "    return f'{rel}'\n"
+        ))
+        assert [d.line for d in found] == [6]
+
+    def test_rebind_in_same_block_clears(self, tmp_path):
+        assert _scan(tmp_path, (
+            "def f(p, root):\n"
+            "    try:\n"
+            "        rel = p.relative_to(root)\n"
+            "        rel = to_posix(rel)\n"
+            "        return str(rel)\n"
+            "    except ValueError:\n"
+            "        return ''\n"
+        )) == []
