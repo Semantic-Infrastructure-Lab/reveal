@@ -43,6 +43,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root, has_noqa, load_sources
+from reveal.utils.lines import split_lines
 
 TREES = ('reveal', 'tests', 'scripts')
 BASELINE_REL = 'scripts/text_encoding_baseline.json'
@@ -166,7 +167,7 @@ def scan_modules(modules: Iterable[Tuple[str, str]],
                 unparsed.append((display, f"{type(e).__name__}: {e}"))
             continue
         legacy, strict_lines = find_bare_text_io(
-            tree, source.splitlines(), display.startswith('tests/'))
+            tree, split_lines(source), display.startswith('tests/'))
         if legacy:
             found[display] = legacy
         if strict_lines:
@@ -239,7 +240,7 @@ class V041(BaseRule):
                 message=f"Text I/O without encoding= (breaks on Windows cp1252): {why}",
                 suggestion="Pass encoding='utf-8' (or use binary mode); suppress a "
                            "reviewed false positive with # noqa: text-encoding",
-                context=sources[display].splitlines()[lineno - 1].strip(),
+                context=split_lines(sources[display])[lineno - 1].strip(),
             ))
 
         for display in sorted(strict):

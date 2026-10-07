@@ -12,6 +12,7 @@ from typing import List, Dict, Any, Optional
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
 from ...utils.secrets import KNOWN_SECRET_PREFIXES
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +162,7 @@ class S001(BaseRule, ASTParsingMixin):
 
     def _check_env(self, file_path: str, content: str) -> List[Detection]:
         detections = []
-        for i, line in enumerate(content.splitlines(), start=1):
+        for i, line in enumerate(split_lines(content), start=1):
             line = line.strip()
             if not line or line.startswith('#'):
                 continue
@@ -177,7 +178,7 @@ class S001(BaseRule, ASTParsingMixin):
 
     def _check_yaml(self, file_path: str, content: str) -> List[Detection]:
         detections = []
-        for i, line in enumerate(content.splitlines(), start=1):
+        for i, line in enumerate(split_lines(content), start=1):
             if not line.strip() or line.strip().startswith('#'):
                 continue
             m = self._YAML_LINE_RE.match(line)
@@ -192,7 +193,7 @@ class S001(BaseRule, ASTParsingMixin):
 
     def _check_toml(self, file_path: str, content: str) -> List[Detection]:
         detections = []
-        for i, line in enumerate(content.splitlines(), start=1):
+        for i, line in enumerate(split_lines(content), start=1):
             if not line.strip() or line.strip().startswith('#'):
                 continue
             m = self._TOML_LINE_RE.match(line.strip())

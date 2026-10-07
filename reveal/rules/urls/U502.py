@@ -15,6 +15,7 @@ except ImportError:
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...registry import extensions_for_languages
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ class U502(BaseRule):
             return detections
 
         # Check file content for inconsistent URLs
-        lines = content.splitlines()
+        lines = split_lines(content)
         for i, line in enumerate(lines, start=1):
             for match in self.GITHUB_URL_PATTERN.finditer(line):
                 found_url = match.group(0)

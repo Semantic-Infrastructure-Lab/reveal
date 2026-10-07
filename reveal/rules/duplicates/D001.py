@@ -20,6 +20,7 @@ import re
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ._bodies import extract_function_body, is_trivial_hook_body
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +151,7 @@ class D001(BaseRule):
         # Remove empty lines
         code = re.sub(r'\n\s*\n', '\n', code)
         # Strip leading/trailing whitespace per line
-        lines = [line.strip() for line in code.splitlines()]
+        lines = [line.strip() for line in split_lines(code)]
         code = '\n'.join(lines)
 
         return code.strip()

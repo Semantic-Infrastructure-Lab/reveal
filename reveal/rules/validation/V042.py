@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import has_noqa, load_sources, parse_test_module
+from reveal.utils.lines import split_lines
 
 POSIX_ONLY_VARS = ('HOME', 'USER', 'SHELL', 'TERM', 'LOGNAME')
 
@@ -100,7 +101,7 @@ class V042(BaseRule):
             tree = parse_test_module(self, display, source)
             if tree is None:
                 continue
-            lines = source.splitlines()
+            lines = split_lines(source)
             for lineno, var in find_posix_env_uris(tree):
                 line = lines[lineno - 1]
                 if has_noqa(line, self.code):

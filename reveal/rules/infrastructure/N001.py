@@ -18,6 +18,7 @@ from collections import defaultdict
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from . import NGINX_FILE_PATTERNS
+from reveal.utils.lines import split_lines
 
 
 class N001(BaseRule):
@@ -42,7 +43,7 @@ class N001(BaseRule):
 
     def _has_intent_comment(self, content: str, upstream_start_line: int) -> bool:
         """Return True if the 3 lines before upstream_start_line contain an intent comment."""
-        lines = content.splitlines()
+        lines = split_lines(content)
         check_from = max(0, upstream_start_line - 4)
         check_to = upstream_start_line - 1
         for line in lines[check_from:check_to]:

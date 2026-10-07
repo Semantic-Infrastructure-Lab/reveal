@@ -27,6 +27,7 @@ from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import has_noqa, load_test_suite, parse_test_module
+from reveal.utils.lines import split_lines
 
 # A Windows guard, or the normalising replace of the platform's own pair.
 _GUARD_RE = re.compile(
@@ -184,7 +185,7 @@ class V038(BaseRule):
             tree = parse_test_module(self, display, source)
             if tree is None or not any(_is_raw_subprocess_call(n) for n in ast.walk(tree)):
                 continue
-            lines = source.splitlines()
+            lines = split_lines(source)
             found = sorted({hit for scope in _scopes(tree)
                             for hit in _assertions(scope, _captured_names(scope))})
             for lineno, what in found:

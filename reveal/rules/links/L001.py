@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,7 @@ class L001(BaseRule):
         """
         refs: List[Dict[str, Any]] = []
         in_fence = False
-        for i, line in enumerate(content.splitlines(), 1):
+        for i, line in enumerate(split_lines(content), 1):
             if self._FENCE_RE.match(line):
                 in_fence = not in_fence
                 continue

@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import has_noqa, load_sources, parse_test_module
+from reveal.utils.lines import split_lines
 
 TREES = ('reveal', 'tests')
 NAMES = frozenset({
@@ -64,7 +65,7 @@ def find_offenders(source: str, tree: ast.Module) -> List[Tuple[int, str]]:
     """(line, kind) for every floor hazard in `source` (whose parse is `tree`): a bare read
     of a guarded accessor (kind = its name), ``field_name_for_child``, a node ``.children``
     or a node ``==``."""
-    lines = source.splitlines()
+    lines = split_lines(source)
     # An Attribute's only child expression is its .value, so `mock.<name>.return_value` is
     # found from the outer Attribute (no whole-tree parent map: that cost ~8s over the repo).
     mock_stubs = {id(n.value) for n in ast.walk(tree)
@@ -150,7 +151,7 @@ class V040(BaseRule):
             tree = parse_test_module(self, display, source)
             if tree is None:
                 continue
-            lines = source.splitlines()
+            lines = split_lines(source)
             for lineno, name in find_offenders(source, tree):
                 label = 'Node ==' if name == '==' else f"bare .{name}"
                 detections.append(self.create_detection(

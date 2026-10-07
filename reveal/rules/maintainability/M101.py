@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ class M101(BaseRule):
             path = Path(file_path)
 
             # Count lines
-            line_count = len(content.splitlines())
+            line_count = len(split_lines(content))
 
             # Get file size
             size_bytes = path.stat().st_size if path.exists() else len(content)

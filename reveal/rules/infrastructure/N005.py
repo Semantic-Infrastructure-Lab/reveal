@@ -25,6 +25,7 @@ from typing import List, Dict, Any, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from . import NGINX_FILE_PATTERNS
+from reveal.utils.lines import split_lines
 
 
 def _parse_duration_seconds(value: str) -> Optional[float]:
@@ -139,7 +140,7 @@ class N005(BaseRule):
         if not match:
             return directives
         body = match.group(1)
-        for line in body.splitlines():
+        for line in split_lines(body):
             stripped = line.strip()
             if not stripped or stripped.startswith('#') or '{' in stripped:
                 continue
@@ -150,7 +151,7 @@ class N005(BaseRule):
 
     def _find_directive_line(self, content: str, directive: str) -> int:
         """Find the line number of a directive inside http{}."""
-        for i, line in enumerate(content.splitlines(), 1):
+        for i, line in enumerate(split_lines(content), 1):
             if re.match(r'\s*' + re.escape(directive) + r'\s+', line):
                 return i
         return 1

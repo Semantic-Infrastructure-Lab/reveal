@@ -22,6 +22,7 @@ except ImportError:
     import tomli as tomllib  # Python < 3.11 fallback
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +119,7 @@ class M103(BaseRule):
 
     def _find_version_line(self, content: str) -> int:
         """Find the line number containing __version__."""
-        for i, line in enumerate(content.splitlines(), start=1):
+        for i, line in enumerate(split_lines(content), start=1):
             if '__version__' in line and '=' in line:
                 return i
         return 1

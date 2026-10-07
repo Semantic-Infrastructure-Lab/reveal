@@ -8,6 +8,7 @@ import logging
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ class S701(BaseRule):
     def _check_file(self, file_path: str, content: str) -> List[Detection]:
         """Check Dockerfile content for :latest usage."""
         detections: List[Detection] = []
-        lines = content.splitlines()
+        lines = split_lines(content)
 
         for i, line in enumerate(lines, start=1):
             # Check for explicit :latest

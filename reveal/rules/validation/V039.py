@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import has_noqa, load_sources
+from reveal.utils.lines import split_lines
 
 # Test files whose path assertions are intentionally POSIX data content
 # (nginx configs, SSL certs, ZIP archives, URI specs -- never filesystem paths):
@@ -144,7 +145,7 @@ class V039(BaseRule):
             return []
         detections: List[Detection] = []
         for display, source in load_sources(self, ('tests',), _is_scanned):
-            for lineno, pattern, line in find_windows_path_hazards(source.splitlines()):
+            for lineno, pattern, line in find_windows_path_hazards(split_lines(source)):
                 if has_noqa(line, self.code):
                     continue
                 label, advice = _LABELS[pattern]

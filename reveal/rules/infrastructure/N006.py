@@ -23,6 +23,7 @@ from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from . import NGINX_FILE_PATTERNS
+from reveal.utils.lines import split_lines
 
 # Minimum timeout that is safe when large bodies are allowed (seconds).
 _MIN_SAFE_TIMEOUT_S = 60.0
@@ -72,7 +73,7 @@ def _extract_directives(content: str) -> Dict[str, str]:
     """
     directives: Dict[str, str] = {}
     interesting = set(_TIMEOUT_DIRECTIVES) | {_SIZE_DIRECTIVE}
-    for line in content.splitlines():
+    for line in split_lines(content):
         stripped = line.strip()
         if stripped.startswith('#'):
             continue
@@ -159,7 +160,7 @@ class N006(BaseRule):
     @staticmethod
     def _find_directive_line(content: str, directive: str) -> int:
         """Return the 1-based line number of the first occurrence of a directive."""
-        for i, line in enumerate(content.splitlines(), 1):
+        for i, line in enumerate(split_lines(content), 1):
             if re.match(r'\s*' + re.escape(directive) + r'\s+', line):
                 return i
         return 1

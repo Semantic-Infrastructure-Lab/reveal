@@ -11,6 +11,7 @@ A line-count heuristic is the fallback for analyzers that report no score.
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from reveal.utils.lines import split_lines
 
 
 class C901(BaseRule):
@@ -109,7 +110,7 @@ class C901(BaseRule):
             return max(1, line_count // 10)
 
         # Extract function content
-        lines = content.splitlines()
+        lines = split_lines(content)
         if start_line > len(lines) or end_line > len(lines):
             return 1
 

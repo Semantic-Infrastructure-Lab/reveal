@@ -48,6 +48,7 @@ import ast
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
 from ...utils.pyparse import parse_python
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +210,7 @@ class V021(BaseRule):
         """Create detection for inappropriate regex usage."""
         # Find the import line for 're'
         import_line = 1
-        for i, line in enumerate(content.splitlines(), 1):
+        for i, line in enumerate(split_lines(content), 1):
             if 'import re' in line:
                 import_line = i
                 break
@@ -244,7 +245,7 @@ Benefits:
 - Better error handling
 
 See treesitter.py for full capabilities and analyzers/python.py for example.
-Current regex-based implementation: ~{len(content.splitlines())} lines
+Current regex-based implementation: ~{len(split_lines(content))} lines
 Tree-sitter implementation: ~10-15 lines (just set language attribute)"""
 
         return self.create_detection(

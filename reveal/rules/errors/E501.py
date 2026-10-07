@@ -8,6 +8,7 @@ import logging
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ class E501(BaseRule):
             List of detections
         """
         detections: List[Detection] = []
-        lines = content.splitlines()
+        lines = split_lines(content)
 
         # Get configuration
         max_length = self.get_threshold('max_length', self.DEFAULT_MAX_LENGTH)

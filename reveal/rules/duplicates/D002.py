@@ -22,6 +22,7 @@ import re
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ._bodies import extract_function_body, is_trivial_hook_body
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,7 @@ class D002(BaseRule):
             if not func_body or len(func_body.strip()) < 20:
                 continue
 
-            line_count = len(func_body.splitlines())
+            line_count = len(split_lines(func_body))
             if line_count < self.MIN_FUNCTION_SIZE:
                 continue
 
@@ -195,7 +196,7 @@ class D002(BaseRule):
             features[f'token_{token}'] = tf
 
         # 2. Control flow features (normalized by line count for density)
-        line_count = len(normalized.splitlines())
+        line_count = len(split_lines(normalized))
         line_count_safe = max(line_count, 1)
 
         features['density_if'] = normalized.count('if ') / line_count_safe
@@ -206,7 +207,7 @@ class D002(BaseRule):
 
         # 3. Structural features (normalized to 0-1 range)
         features['line_count_norm'] = min(line_count / 100.0, 1.0)  # Cap at 100 lines
-        avg_len = sum(len(line) for line in normalized.splitlines()) / line_count_safe
+        avg_len = sum(len(line) for line in split_lines(normalized)) / line_count_safe
         features['avg_line_length_norm'] = min(avg_len / 80.0, 1.0)  # Cap at 80 chars
 
         # 4. Operator features (normalized by line count)

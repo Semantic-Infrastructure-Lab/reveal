@@ -35,6 +35,7 @@ from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +220,7 @@ class V020(BaseRule):
     def _find_line_matching(self, file_path: Path, pattern: str) -> int:
         """Find the first line number (1-indexed) containing *pattern*, or 1."""
         try:
-            for i, line in enumerate(Path(file_path).read_text(encoding='utf-8').splitlines(), start=1):
+            for i, line in enumerate(split_lines(Path(file_path).read_text(encoding='utf-8')), start=1):
                 if pattern in line:
                     return i
         except OSError:

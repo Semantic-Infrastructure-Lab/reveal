@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import has_noqa, load_test_suite, parse_test_module
+from reveal.utils.lines import split_lines
 
 # A check of the default start method (tests/conftest.py's needs_forked_workers is
 # one), or an explicit one.
@@ -149,7 +150,7 @@ class V036(BaseRule):
                     or not _POOL_HINT.search(source)):
                 continue
             tree = parse_test_module(self, display, source)
-            detection = tree and self._scan_module(display, source.splitlines(), tree)
+            detection = tree and self._scan_module(display, split_lines(source), tree)
             if detection:
                 detections.append(detection)
         return detections

@@ -21,6 +21,7 @@ from typing import List, Dict, Any, Optional
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root, is_dev_checkout
 from ...utils.path_utils import to_posix, _STATIC_UNSAFE_ROOTS
+from reveal.utils.lines import split_lines
 
 # Files exempt from these checks: they're the canonical implementation the
 # rule tells everyone else to route through, or this rule's own source
@@ -106,7 +107,7 @@ class V026(BaseRule):
 
     def _scan_content(self, display_path: str, content: str) -> List[Detection]:
         detections: List[Detection] = []
-        for lineno, line in enumerate(content.splitlines(), start=1):
+        for lineno, line in enumerate(split_lines(content), start=1):
             if _STR_RELATIVE_TO_RE.search(line):
                 detections.append(self.create_detection(
                     display_path, lineno,

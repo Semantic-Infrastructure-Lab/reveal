@@ -2,6 +2,7 @@
 
 import re
 from typing import Any, Dict
+from reveal.utils.lines import split_lines
 
 
 def extract_function_body(func: Dict[str, Any], content: str) -> str:
@@ -19,7 +20,7 @@ def extract_function_body(func: Dict[str, Any], content: str) -> str:
     if start == 0 or end == 0:
         return ""
 
-    lines = content.splitlines()
+    lines = split_lines(content)
     if start > len(lines) or end > len(lines):
         return ""
 
@@ -48,6 +49,6 @@ def is_trivial_hook_body(body: str) -> bool:
     docstring or comments around the statement are ignored by normalizing first, and
     lone block punctuation (``{``, ``}``, ``end``) is skipped.
     """
-    statements = [line.strip() for line in body.splitlines()]
+    statements = [line.strip() for line in split_lines(body)]
     statements = [line for line in statements if line and line not in _BLOCK_PUNCTUATION]
     return len(statements) == 1 and bool(_TRIVIAL_STATEMENT.match(statements[0]))

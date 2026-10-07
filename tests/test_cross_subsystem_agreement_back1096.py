@@ -28,8 +28,7 @@ def serial_pools(monkeypatch):
 
 FILLER = ''.join('x%d = %d\n' % (i, i) for i in range(520))   # > M101's 500-line floor
 TAIL = 'def tail():\n    return 1\n'
-DISAGREE = ('FileAnalyzer._read_file uses str.splitlines() (it also splits on \\x0c, \\x85, \\u2028): '
-            'stats://, M101 and ast:// all count one line too many')
+
 
 
 def _spell(label):
@@ -45,9 +44,7 @@ def _spell(label):
 
 LINE_VARIANTS = [
     'lf', 'crlf', 'bom', 'bom_crlf', 'no_final_newline',
-    pytest.param('formfeed', marks=pytest.mark.xfail(strict=True, reason=DISAGREE)),
-    pytest.param('u2028', marks=pytest.mark.xfail(strict=True, reason=DISAGREE)),
-    pytest.param('nel', marks=pytest.mark.xfail(strict=True, reason=DISAGREE)),
+    'formfeed', 'u2028', 'nel',   # not line ends: BACK-1722
 ]
 
 

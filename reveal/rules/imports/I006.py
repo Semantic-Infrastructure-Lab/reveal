@@ -19,6 +19,7 @@ import logging
 from typing import List, Dict, Any, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +178,7 @@ class I006(BaseRule):
             return detections
 
         # Index raw source lines for noqa detection (analyzers strip comments from 'content')
-        source_lines = content.splitlines() if content else []
+        source_lines = split_lines(content) if content else []
 
         for imp in imports:
             import_line: int = imp.get('line', 0)

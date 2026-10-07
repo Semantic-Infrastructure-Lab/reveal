@@ -4,6 +4,7 @@ from ...reveal_types import StructureItem
 import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ def estimate_complexity(func: StructureItem, content: str) -> Optional[int]:
     if start_line == 0 or end_line == 0:
         return None
 
-    lines = content.splitlines()
+    lines = split_lines(content)
     if start_line > len(lines) or end_line > len(lines):
         return None
 
@@ -275,7 +276,7 @@ def calculate_file_stats(
     Returns:
         Dict with file statistics
     """
-    lines = content.splitlines()
+    lines = split_lines(content)
     total_lines = len(lines)
 
     # Count different line types

@@ -3,6 +3,7 @@ import re
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ class M501(BaseRule):
             #       ignore_patterns: ["remove in v", "intentional"]
             ignore_patterns: List[str] = self.get_threshold("ignore_patterns", []) or []
 
-            for lineno, line in enumerate(content.splitlines(), start=1):
+            for lineno, line in enumerate(split_lines(content), start=1):
                 m = _MARKER_RE.search(line)
                 if not m:
                     continue
