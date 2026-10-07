@@ -642,8 +642,8 @@ class TestI002Preload:
             assert isinstance(detections, list)
 
     def test_run_parallel_uses_preload(self, tmp_path):
-        """_run_parallel calls _i002_preload and passes result to workers."""
-        from reveal.cli.file_checker import _run_parallel
+        """_run_parallel_streaming calls _i002_preload and passes result to workers."""
+        from reveal.cli.file_checker import _run_parallel_streaming
 
         (tmp_path / "a.py").write_text("x = 1\n")
         files = [tmp_path / "a.py"]
@@ -655,7 +655,7 @@ class TestI002Preload:
             return {}
 
         with patch("reveal.rules.scan_caches._i002_preload", side_effect=fake_preload):
-            _run_parallel(files, tmp_path, select=None, ignore=None)
+            list(_run_parallel_streaming(files, tmp_path, select=None, ignore=None))
 
         assert len(preload_calls) == 1
         assert preload_calls[0][0] == tmp_path

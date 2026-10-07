@@ -89,46 +89,19 @@ def _check_worker_count(n_files: int) -> int:
     return _pool_size(n_files)
 
 
-def _run_parallel(files: List[Path], directory: Path, select, ignore) -> list:
-    """Run file checks in parallel, preserving input order in results.
-
-    The I002 import graph and D005 literal index are each built once in the
-    main process and injected into every worker via the initializer, so
-    workers get a cache hit instead of rebuilding independently (was: 4
-    builds for 4 workers → now: 1; see rules/scan_caches.py).
-
-    Args:
-        files: Already-sorted list of files to check
-        directory: Base directory for relative paths
-        select: Rule codes to select
-        ignore: Rule codes to ignore
-
-    Returns:
-        List of (file_path, issue_count, detections, status) in same order as input
-    """
-    workers = _pool_size(len(files))
-    args_iter = [(f, directory, select, ignore) for f in files]
-    caches = preload_scan_caches(files, directory, select, ignore)
-    with ProcessPoolExecutor(
-        max_workers=workers,
-        initializer=worker_bootstrap,
-        initargs=(init_scan_caches, (caches,)),
-    ) as pool:
-        return list(pool.map(_parallel_worker, args_iter))
-
-
 def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore):
     """Run file checks in parallel, yielding results as each future completes.
 
-    Unlike _run_parallel, results are emitted as soon as they are ready rather
-    than buffering the entire list before returning, so at most max_workers
-    results are held in memory simultaneously during execution. Yield order is
-    completion order (non-deterministic) -- callers that need a stable
-    processing order (e.g. the text report's --limit cutoff, BACK-1243)
-    must buffer and re-sort before acting on it; this generator itself makes
-    no ordering guarantee.
+    Results are emitted as soon as they are ready, in completion order
+    (non-deterministic) -- callers that need a stable order (the text report's
+    --limit cutoff, BACK-1243; the JSON files[] list) must buffer and re-sort
+    before acting on it; this generator itself makes no ordering guarantee.
+    ``_results_in_sorted_order`` is that caller, shared by every format.
 
-    Use _run_parallel for JSON output where deterministic ordering matters.
+    The I002 import graph and D005 literal index are each built once in the
+    main process and injected into every worker via the initializer, so
+    workers get a cache hit instead of rebuilding independently (see
+    rules/scan_caches.py).
 
     Args:
         files: Files to check
@@ -790,19 +763,10 @@ def _check_files_json(
 
 def _check_json(files: List[Path], directory: Path, select, ignore,
                 severity: Optional[str]) -> List[_CheckedFile]:
-    """Run the JSON/grep path's checks (an order-preserving pool map, or serially)
-    and apply --severity."""
-    sorted_files = sorted(files)
-
-    if _check_worker_count(len(sorted_files)) > 1:
-        try:
-            results = _run_parallel(sorted_files, directory, select, ignore)
-        except Exception:
-            # Parallel execution itself failed (e.g. pool startup) — fall back to
-            # serial, still checking every file in sorted_files, not a smaller set.
-            results = [(f, *check_and_collect_file(f, directory, select, ignore)) for f in sorted_files]
-    else:
-        results = [(f, *check_and_collect_file(f, directory, select, ignore)) for f in sorted_files]
+    """Run the JSON/grep path's checks (the same pool or serial run as the text path,
+    in sorted order) and apply --severity. A file lost to a dead pool worker is an
+    errored file here too (BACK-1717)."""
+    results = _results_in_sorted_order(sorted(files), directory, select, ignore)
     return _filter_results(results, directory, severity)
 
 
@@ -817,7 +781,8 @@ def _results_in_sorted_order(sorted_files: List[Path], directory: Path, select, 
     detail vs. get folded into the "N more files hidden" footer, and on completion
     order that decision (and the hidden-count total) varied run to run on
     byte-identical input. Every file is in the result: one whose worker died is an
-    errored file (BACK-1681).
+    errored file (BACK-1681, and for --format json/grep BACK-1717). The serial
+    fallback below is only for a pool that fails to run at all, and says so.
     """
     results_by_file: dict = {}
     if _check_worker_count(len(sorted_files)) > 1:
