@@ -9,8 +9,8 @@
 #                             exactly as CI installs (optionally forcing a language-pack version)
 #   - Python version       -> --python picks one of CI's matrix (3.10 / 3.12 / 3.14);
 #                             --matrix runs all three, plus CI's language-pack floor leg (below)
-#   - CI-only steps        -> the primary leg (3.12, no --lp) also runs the Windows-compat lint,
-#                             V-series self-validation, shared-seam, complexity, doc-hygiene and B006 ratchets, which CI runs only on
+#   - CI-only steps        -> the primary leg (3.12, no --lp) also runs the
+#                             V-series self-validation (incl. the Windows/accessor/encoding/env rules V039-V042), shared-seam, complexity, doc-hygiene and B006 ratchets, which CI runs only on
 #                             ubuntu/3.12, plus the mypy ratchet (system python3, as the release gate
 #                             runs it -- CI does not); other legs run pytest + CLI basics, as CI does
 #   - local caches/env     -> REVEAL_DISK_CACHE=0 (CI starts cold; keep ~/.reveal/cache out),
@@ -235,8 +235,6 @@ step "CLI basics"
 "$VENV/bin/reveal" --version >>"$LOG" 2>&1 && "$VENV/bin/reveal" --list-supported >>"$LOG" 2>&1 || fail "CLI basics"
 
 if [[ $PRIMARY -eq 1 ]]; then
-    step "Windows compatibility checks"
-
     # Counts of re-implemented shared infrastructure; each may only fall (BACK-1512).
     step "Shared-seam ratchet"
     "$PY" scripts/check_boundaries.py 2>&1 | tee -a "$LOG" | tail -20

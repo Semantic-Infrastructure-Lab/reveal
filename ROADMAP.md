@@ -309,7 +309,7 @@ a check that counts violations and lets the count only fall. Then the cause is r
 
 **Next, in priority order**
 
-Steps 1 and 2 are done except for one follow-up each; steps 3 and 4 hold the open work.
+Steps 1 and 2 are done; steps 3 and 4 hold the open work, and the gates below run alongside.
 What landed, and when, is in CHANGELOG `[0.130.0]` and `internal-docs/RESOLVED_LEDGER.md`.
 
 1. **The ratchets are in place (2026-09-30).** The walker, parser-import, print/exit,
@@ -319,13 +319,15 @@ What landed, and when, is in CHANGELOG `[0.130.0]` and `internal-docs/RESOLVED_L
    every adapter and subcommand's envelope, path spelling and disclosed cuts. Counts only fall.
 2. **The largest class (flags dropped between invocation forms) is retired at its cause.**
    The flag ledger (`reveal/cli/routing/ledger.py`) and one parsed `Invocation` replaced the
-   seven forwarding mechanisms. Open follow-up: BACK-1538 (flag/adapter pairs read with no
-   visible effect on the fixture; 13 explicit cases remain).
+   seven forwarding mechanisms. Its last follow-up, the flag/adapter pairs read with no visible
+   effect on the fixture, was resolved 2026-10-06 (every known-silent pair now shows its effect),
+   and a flag that reads no element refuses a second path instead of dropping it.
 3. **The result contract.** One failed result and one cut marker are in place for the URI
    router, the subcommands and the file view. Open: BACK-1059 (typed outcomes at adapter and
    analyzer boundaries; broad handlers now disclose or narrow, both silent-handler gates at
    0; `reveal check` leaves through the subcommand seam in both its directory and single-file
-   forms, and `review` is the one remaining boundary site), BACK-916 (one
+   forms, and `review` is the one remaining boundary site; whether the ~379 remaining broad
+   handlers become one dedicated pass waits on a maintainer decision), BACK-916 (one
    rendering layer: patches is migrated; the rest still print; the 10-01 review proposes
    starting at `adapters/nginx/handlers.py`, pending a maintainer decision) and BACK-1052 (one scan budget; patches pilot only).
 4. **One seam per concern.** The parser, path, root-finder and walker seams are done. Open:
@@ -337,12 +339,23 @@ These gates run continuously alongside the steps above:
   checks positive findings and grep pipelines, and executes documentation discovery
   commands; named-target examples still need fixtures.
 - BACK-1518: a recall-regression gate that turns the Validation & Trust oracles below into
-  scheduled checks. The first weekly/manual gate measures pinned Redis and curl C source
-  with an independent GCC oracle. Both are optional test corpora, never
-  runtime dependencies or services; other languages remain to be promoted.
+  scheduled checks. It runs 5 independent oracles over 8 pinned corpora (two each for C,
+  Rust and Java, one each for Python and C++) against a committed baseline; a deliberately
+  dropped import edge lowers recall on every corpus. The corpora are optional test inputs,
+  never runtime dependencies or services. Go (no local toolchain) and other languages remain;
+  every corpus currently sits at recall 1.0, which means "no regression", not proven recall.
 - BACK-1096: cross-subsystem invariants. Registry-wide import recovery, citation and
-  copy/rename controls now run without external corpora.
+  copy/rename controls now run without external corpora. Slice 2 added structure invariants
+  over 31 analyzers and agreement tests between subsystems (stats vs M101 vs ast line counts,
+  imports vs depends edges); it found the line-separator bug fixed in BACK-1722, and the
+  remaining disagreements are strict expected failures tied to their tasks.
 - BACK-1055: one source of truth for help.
+- BACK-1703: platform classes caught before CI. V036-V042 in `reveal reveal:// --check` lint
+  fork-only tests, POSIX-only calls, raw newline assertions, POSIX path literals, tree-sitter
+  accessors the 1.8.1 floor lacks, text I/O without `encoding=` and POSIX-only env variables.
+- BACK-1726: a dead pool worker must cost only its own files, never the run. `check` and
+  `stats://` hand work out through one helper (`utils.parallel.submit_each`); the imports,
+  I002 and grep pools still use bare `map`.
 
 **Working rules while the track runs:**
 - A fix in one of these classes goes through the shared seam. It must not add another

@@ -422,7 +422,7 @@ duplicates CI's Linux legs, so it is a tool to reproduce a CI failure or work of
 
 ```bash
 scripts/ci-local.sh                # Python 3.12, latest deps: pytest + the CI-only steps
-scripts/ci-local.sh --matrix       # 3.10, 3.12, 3.14, then 3.12 @ the language-pack 1.8.1 floor (~20 min; use tmux)
+scripts/ci-local.sh --matrix       # 3.10, 3.12, 3.14, then 3.12 @ the language-pack 1.8.1 floor (minutes per leg; use tmux)
 scripts/ci-local.sh --matrix -- tests/test_foo.py   # only these tests, per leg
 scripts/ci-local.sh --lp 1.12.5    # force a tree-sitter-language-pack version (CI compat-matrix)
 ```
@@ -438,8 +438,8 @@ Your dev environment drifts from CI (dependency versions, Python version, stale 
 so a plain local `pytest` can pass while every CI job fails -- that is exactly how a
 `Node.to_sexp()` call, present only on the older vendored tree-sitter node, broke CI. `ci-local.sh`
 builds a dedicated venv under `~/.cache/reveal-ci/`, installs the way CI does, and also runs the
-steps that are CI-only: the Windows path lint, the V-series self-validation (e.g. V004: every
-analyzer needs a test file), the doc-hygiene ratchet, the B006 ratchet and the mypy ratchet (`scripts/check_mypy_baseline.py`, run on
+steps that are CI-only: the V-series self-validation (e.g. V004: every analyzer needs a test
+file; V039-V042 lint Windows paths, floor-only tree-sitter accessors, text I/O encoding and POSIX-only env variables), the doc-hygiene ratchet, the B006 ratchet and the mypy ratchet (`scripts/check_mypy_baseline.py`, run on
 system `python3` -- the interpreter its baseline was built with; CI does not run mypy). It cannot run Windows or macOS;
 `reveal reveal:// --check` (rule V039) is the local guard for the Windows path class (`str(path)` uses
 backslashes, so never split or compare paths as `'/'` strings).

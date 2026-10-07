@@ -14,6 +14,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`help://install`, and `--language-info` for fallback languages (BACK-1116, BACK-1650)** — install and optional-extra guidance has its own help topic; `reveal --language-info <lang>` now answers for languages served by the fallback analyzer instead of only the tier-1 set.
+- **`surface://` sees `import.meta.env` and Swift `getenv` (BACK-1349)** — both read the environment and were missing from the env category.
+
+### Changed
+- **Line numbers count `\n` only, matching `grep -n`, `wc -l` and compilers (BACK-1722)** — reveal split file content with `str.splitlines()`, which also breaks at form feed, vertical tab, NEL, U+2028/U+2029 and the file/group/record separators, so on any file containing one, stats line counts, M101 and every later line number were 1-2 lines off. `stats://` on a C file with two form feeds reported 364 lines where `wc -l` says 362; it now says 362. Numbers on such files shift by design.
+- **A flag that reads no element refuses a second path (BACK-1687, BACK-1715)** — `reveal a.md b.md --validate-schema X` validated only `a.md` and said nothing about `b.md`; the same held for 13 element-less flags. They now exit 2 naming the ignored path and pointing at `--stdin`, which validates every path it is given.
+- **`diff://` declines resources it cannot compare instead of reporting them clean (BACK-1689)** — a diff of two SQLite databases, env files, JSON or YAML documents answered "No structural changes detected" whatever changed. It now declines. (Code files whose changes fall outside functions, classes and imports — a Go interface, a Rust struct, a changed constant — still read as clean: BACK-1732.)
+- **Default outline labels name the owner, `Owner.Name`, in every language (BACK-1652)**; Go named non-struct types join `types` (BACK-1651).
+- **`meta.budget.total_available` is the disclosed total, not the page size (BACK-1645)** — `ast://reveal/adapters` reported 200 (one page) where 2,276 elements exist.
+- **`REVEAL_MAX_WORKERS` is the one worker-count knob for every pool, and `reveal check` honors values above 4 (BACK-1436)**; `=1` runs serially.
+- **B006 accepts a handler that forwards the exception (`listener.onFailure(e)`, `reject(e)`) (BACK-1430)**, and D002 drops low-similarity candidates (BACK-1062): on reveal's own source D002 went from 1,666 to 469 candidates. Known gaps: an inserted line plus a swapped statement can now hide a real near-copy from D002 (BACK-1733), and B006's forwarding test accepts some calls that do not handle the error (BACK-1734).
+
+### Fixed
+- **`reveal check` reports a file lost to a dead pool worker as errored, exit 3, in text, JSON and grep output (BACK-1681, BACK-1717)** — a worker killed by OOM or a native crash dropped its files from the text report (exit 1, `files_errored` 0), and `--format json/grep` re-ran every file in the parent, the culprit included. A worker dying while files were still being handed to the pool sent every format back to that serial re-run; that case, seen only on macOS under fork, is fixed too.
+- **`stats://` (and `overview`/`hotspots`) keeps the run when a pool worker dies (BACK-1718)** — the lost files are reported as `analysis_failed` instead of the whole scan failing.
+- **YAML keeps its top-level keys after a trailing syntax error; TOML and Dockerfile names with non-ASCII text are no longer cut mid-character (BACK-1096).**
+- **`git://` resolves a relative target to its own repository (BACK-1654), discloses the `?limit` window (BACK-1552), and names the `safe.directory` fix when libgit2 refuses a repository's ownership (BACK-1118).**
+- **Language fixes:** Ruby's implicit last-expression return (BACK-1482); C++ `TT::probe` names and multi-line Rust signatures (BACK-1655); Swift files that forced parse recovery, 158 to 27 of 2,051 in the corpus (BACK-1484); PHP surface names matched case-insensitively (BACK-1455); a C++ call after a bare macro line (BACK-1320); `--boundary` INPUTS noise for Go, Java, C# and Scala (BACK-1408).
+
 ## [0.130.0] - 2026-10-02 (sessions navy-canvas-0926, infinite-antimatter-0926, sacred-basilisk-0926, homosona-0926, dimensional-onslaught-0926, quantum-pulsar-0926, epic-armor-0926, magical-hydra-0926, wuvoki-0926, muggy-sleet-0928, magical-giant-0928, cosmic-nebula-0928, zen-wave-0929, warming-deluge-0929, cocidubo-0929, aqua-brilliance-0929, clever-golem-0929, balmy-whirlwind-0929, girago-0930, valley-drizzle-0930, silver-patina-0930, oracular-shrine-0930, benevolent-seraph-0930, dufuneki-0930, salmon-glimmer-0930, peach-pigment-0930, scarlet-beam-0930, omniscient-sorcerer-1001, orbital-belt-1001, kinetic-nightmare-1001, radical-knockout-1001, shining-portal-1001, fecisace-1001, fierce-zephyr-1001, sacred-angel-1001, wuzulaki-1001, vefada-1002, indigo-palette-1002, toxic-nuke-1002, jomasuwa-1002, saturated-mosaic-1002)
 
 ### Added
