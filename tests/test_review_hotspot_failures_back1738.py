@@ -71,15 +71,30 @@ def test_review_negative_control_no_failure_no_caveat(tmp_path):
     assert 'Caveats:' not in text and 'failed analysis' not in text
 
 
-def test_review_exit_code_is_unchanged_by_a_lost_hotspot_file(tmp_path, monkeypatch):
-    """The caveat informs; the quality check, not the ranking, decides the exit code."""
-    root = _tree(tmp_path)
-    clean_code, _ = _review(root, 'json')
-    real = stats_adapter._analyze_file_worker
-    monkeypatch.setattr(stats_adapter, '_analyze_file_worker', lambda a: (
-        {'analysis_failed': 'X: y', 'path': a[0]} if a[0].endswith(LOST) else real(a)))
-    lost_code, _ = _review(root, 'json')
-    assert clean_code == lost_code
+def test_review_is_incomplete_when_hotspots_lost_a_file(tmp_path, stats_loses_one_file):
+    """A review that could not rank every file did not cover everything: incomplete/3,
+    like a quality pass that could not check every file (Scott, 2026-10-07), so a CI
+    gate reading only the exit code sees it."""
+    code, out = _review(_tree(tmp_path), 'json')
+    report = json.loads(out)
+    assert (code, report['overall_status'], report['exit_code']) == (3, 'incomplete', 3)
+    _, text = _review(_tree(tmp_path / 'again'), 'text')
+    assert 'Recommendation: Review incomplete' in text and 'hotspot' in text.split('Recommendation:')[1]
+
+
+def test_review_negative_control_clean_tree_is_not_incomplete(tmp_path):
+    code, out = _review(_tree(tmp_path), 'json')
+    assert json.loads(out)['overall_status'] != 'incomplete' and code != 3
+
+
+def test_review_blocking_issue_still_fails_when_hotspots_lost_a_file(
+        tmp_path, stats_loses_one_file, monkeypatch):
+    """fail/2 outranks incomplete/3, as it does for a quality pass that missed files."""
+    from reveal.cli.commands import review
+    monkeypatch.setattr(review, '_run_check', lambda *a, **k: [
+        {'file': 'm0.py', 'line': 1, 'rule': 'S001', 'severity': 'critical', 'message': 'x'}])
+    code, out = _review(_tree(tmp_path), 'json')
+    assert (code, json.loads(out)['overall_status']) == (2, 'fail')
 
 
 def test_single_file_review_names_a_file_hotspots_could_not_analyze(tmp_path, monkeypatch):
