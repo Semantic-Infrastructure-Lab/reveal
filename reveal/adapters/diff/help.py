@@ -99,7 +99,9 @@ _SCHEMA_NOTES = [
     'Supports any two reveal URIs that resolve to comparable structures',
     'Automatically detects resource types and adapts comparison strategy',
     'Element-specific diffs extract and compare individual functions/classes',
-    'Compares functions, classes and imports. A resource whose structure has none of them (env://, sqlite://, mysql://, JSON/YAML files) is declined as not applicable (exit 0, applicable=false); compare those with the shell diff of each adapter\'s own output',
+    'Compares every element category the analyzer emits: functions, classes and imports, plus interfaces, structs, enums, types and the rest by element name (summary and diff gain one key per category either side has)',
+    'Never a silent clean: a pair of files that differ in nothing compared (e.g. a Python module-level constant), or in a category whose items have no name, carries a meta.warnings entry of type not_compared',
+    'A resource whose structure has no functions, classes or imports (env://, sqlite://, mysql://, JSON/YAML files) is declined as not applicable (exit 0, applicable=false); compare those with the shell diff of each adapter\'s own output',
     'Git URIs use path@ref format: git://file.py@HEAD~1 (not git://HEAD~1:file.py)',
     'Git ref format matches git adapter syntax, not git CLI show command'
 ]
@@ -112,7 +114,7 @@ def get_schema() -> Dict[str, Any]:
     """
     return {
         'adapter': 'diff',
-        'description': 'Compare two reveal-compatible resources to detect structural changes (functions, classes, imports)',
+        'description': 'Compare two reveal-compatible resources to detect structural changes (functions, classes, imports, interfaces, structs, types, ...)',
         'uri_syntax': 'diff://<left-uri>:<right-uri>[/element]',
         'query_params': {},
         'elements': {},

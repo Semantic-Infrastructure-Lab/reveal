@@ -34,7 +34,7 @@ category: guide
 
 ## Overview
 
-The **diff://** adapter provides semantic structural comparison between two reveal-compatible resources. Unlike traditional line-level diff tools (like `diff` or `git diff`), it compares structure and semantics, making it ideal for understanding functional changes in code: which functions, classes and imports were added, removed or modified. It compares code structure only; see [What diff:// does not compare](#what-diff-does-not-compare).
+The **diff://** adapter provides semantic structural comparison between two reveal-compatible resources. Unlike traditional line-level diff tools (like `diff` or `git diff`), it compares structure and semantics, making it ideal for understanding functional changes in code: which functions, classes, imports, interfaces, structs, enums and types were added, removed or modified. It compares code structure only; see [What diff:// does not compare](#what-diff-does-not-compare).
 
 **Primary Use Cases**:
 - Pre-commit validation (check uncommitted changes)
@@ -526,8 +526,22 @@ reveal diff://git://HEAD/.:./
 
 ### What diff:// does not compare
 
-`diff://` compares **code structure**: the functions, classes and imports an analyzer extracts. A
-resource whose structure has none of those is declined: diff:// answers "not applicable" (exit 0,
+`diff://` compares **code structure**: every element category an analyzer extracts. Functions,
+classes and imports have their own comparison (signature, complexity, bases, methods); every other
+category (Go and TypeScript interfaces, Rust structs, enums and traits, TypeScript type aliases, C#
+properties, shell variables, ...) is compared by element name, and an element whose fields other
+than its position changed is `modified`. JSON `summary` and `diff` carry one key per category either
+side has.
+
+It never reports a silent clean (BACK-1732). When two files differ in nothing it compares, for
+example a Python module-level constant (`X = 1` vs `X = 2`; Python's analyzer extracts no constants)
+or a body edit below the function change thresholds, the text output still says "No structural
+changes detected" and then warns that the files differ (`meta.warnings` entry of type
+`not_compared` in JSON); compare the text to see the change. A category whose items carry no name
+is listed as not compared when it differs. A plain-directory diff (`diff://dir1:dir2`) still
+aggregates only functions, classes and imports; a `git://REF/dir` diff aggregates every category.
+
+A resource whose structure has no functions, classes or imports is declined: diff:// answers "not applicable" (exit 0,
 `applicable: false` in JSON, with the reason) instead of comparing, so it never reports a clean
 result it did not compute. This covers:
 
@@ -1024,6 +1038,11 @@ only the source text differs) plus `left`/`right`; `added`/`removed` carry `elem
   "right": {"name": "process", "line": 10, "complexity": 4}
 }
 ```
+
+Any other element category either side has (`interfaces`, `structs`, `enums`, `types`, ...) adds a
+`summary` entry `{"added", "removed", "modified"}` and a `diff` list of `{"type", "name", "line"}`
+entries, with `changes` (`{field: {old, new}}`) on a `modified` one. When the sides differ in
+something no category covers, `meta.warnings` carries `{"type": "not_compared", "message": ...}`.
 
 **Note on the examples below**: several `jq` snippets in this guide (Detailed Workflows, Integration Examples) predate this schema and reference a flat `.changes[]` array with `.element`, `.old`/`.new`, `.delta.complexity`, and `.improvement` fields. Translate them as: `.changes[]` → `(.diff.functions + .diff.classes + .diff.imports)[]`, `.element` → `.name`, `.delta.complexity` → `.complexity_delta` (already correct in most places), and `.improvement == true` → `.complexity_delta < 0`. There is no `.improvement` field in the live output.
 

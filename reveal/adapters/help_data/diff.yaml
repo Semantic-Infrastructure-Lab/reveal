@@ -21,7 +21,8 @@ examples:
 
 features:
   - 'Semantic diff - compares structure, not text'
-  - 'Works with file paths, directories and git refs; compares functions, classes and imports'
+  - 'Works with file paths, directories and git refs; compares functions, classes, imports and every other element category the analyzer emits (interfaces, structs, enums, types, ...)'
+  - 'Never a silent clean: files that differ in nothing it compares (e.g. a Python module-level constant) get a not_compared warning'
   - 'Directory comparison - aggregates changes from all files'
   - 'Git integration - compare commits, branches, working tree (uses git CLI)'
   - 'Two-level output: summary (counts) + details (changes)'

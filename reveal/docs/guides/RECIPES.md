@@ -963,7 +963,7 @@ reveal mysql://localhost/innodb
 
 ### Schema drift detection
 
-`diff://` compares functions, classes and imports, so it cannot report schema drift:
+`diff://` compares code structure (functions, classes, imports, interfaces, structs, ...), so it cannot report schema drift:
 `diff://sqlite://a.db:sqlite://b.db` declines with "not applicable" (exit 0) rather than
 comparing, because neither side has functions, classes or imports. For SQLite, compare each
 database's own output with the shell's `diff` (see `reveal help://sqlite`, "With diff (Schema
