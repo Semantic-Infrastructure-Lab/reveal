@@ -3,7 +3,7 @@ import importlib
 
 import pytest
 
-from tests.conftest import _MODULE_CACHES, _clear_module_caches
+from conftest import _MODULE_CACHES, _clear_module_caches
 
 pytestmark = pytest.mark.component
 
