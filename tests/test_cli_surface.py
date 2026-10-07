@@ -22,13 +22,13 @@ from reveal.adapters.ast.nav_surface import (
 from reveal.cli.commands.surface import (
     _SURFACE_SCANNERS,
     _is_test_file,
-    _render_report,
     _scan_surface,
     _supported_coverage_languages,
     create_surface_parser,
     run_surface,
 )
 from reveal.registry import language_for_extension
+from reveal.rendering.adapters.surface import surface_text
 
 # BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
 pytestmark = pytest.mark.component
@@ -840,10 +840,7 @@ class TestHttpRouteProvenance(unittest.TestCase):
 class TestRenderReport(unittest.TestCase):
 
     def _capture(self, report, **kwargs):
-        buf = StringIO()
-        with patch('sys.stdout', buf):
-            _render_report(report, **kwargs)
-        return buf.getvalue()
+        return surface_text(report, **kwargs)
 
     def _empty_report(self, **kwargs):
         base = {
@@ -2528,10 +2525,7 @@ class TestSurfaceByDir(unittest.TestCase):
     def test_text_render_and_top(self):
         import contextlib
         _, result = self._by_dir()
-        buf = StringIO()
-        with contextlib.redirect_stdout(buf):
-            _render_report(result, top=2)
-        out = buf.getvalue()
+        out = surface_text(result, top=2)
         self.assertIn('By directory (4):', out)
         self.assertIn('Showing top 2 directories', out)
         self.assertIn('env 3', out)

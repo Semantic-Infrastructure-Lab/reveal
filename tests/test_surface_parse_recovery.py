@@ -13,7 +13,8 @@ from unittest.mock import patch
 import pytest
 
 from reveal.adapters.ast.surface_matrix import RECOVERED_KEY
-from reveal.cli.commands.surface import _SURFACE_SCANNERS, _render_report, _scan_surface
+from reveal.cli.commands.surface import _SURFACE_SCANNERS, _scan_surface
+from reveal.rendering.adapters.surface import surface_text
 
 # One unbalanced-brace snippet per tree-sitter language: parses with error recovery.
 _BROKEN = {
@@ -95,9 +96,7 @@ def test_scan_report_names_recovered_files_and_counts_tagged_entries(tmp_path):
 def test_text_report_marks_the_entry_and_warns(tmp_path):
     (tmp_path / 'a.php').write_text(_BROKEN['php'][1], encoding='utf-8')
     report = _scan_surface(tmp_path)
-    with patch('sys.stdout', new_callable=StringIO) as out:
-        _render_report(report)
-    text = out.getvalue()
+    text = surface_text(report)
     assert '1 file(s) parsed with error recovery' in text
     assert 'a.php:3  [parse-recovered]' in text
     assert 'a.php:4  [parse-recovered]' not in text

@@ -24,7 +24,7 @@ import json
 import sys
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
-from typing import Any, Callable, Dict, Union
+from typing import Any, Callable, Dict, Optional, Union
 
 from ...display.formatting import print_result_control_notes
 from ...utils.exclusions import dispatch_scope, exclusion_scope
@@ -82,7 +82,7 @@ def subcommand_json(result: Dict[str, Any], *, name: str, source: Union[str, Pat
 
 
 def emit_subcommand_result(result: Dict[str, Any], args: Namespace, *, name: str,
-                           source: Union[str, Path], render: Callable[[Dict[str, Any]], None],
+                           source: Union[str, Path], render: Callable[[Dict[str, Any]], Optional[str]],
                            source_type: str = 'directory') -> None:
     """Print a subcommand's result and act on its outcome, as ``_emit_result`` does for a URI.
 
@@ -106,7 +106,9 @@ def emit_subcommand_result(result: Dict[str, Any], args: Namespace, *, name: str
     if args.format == 'json':
         print(subcommand_json(result, name=name, source=source, source_type=source_type))
     else:
-        render(result)
+        body = render(result)
+        if isinstance(body, str) and body:  # a renderer that returns its text body (BACK-916)
+            print(body, end='' if body.endswith('\n') else '\n')
         print_result_control_notes(result, args.format)
     if outcome == 'failed':
         sys.exit(1)

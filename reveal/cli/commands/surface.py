@@ -23,8 +23,6 @@ from reveal.adapters.surface import (  # noqa: F401 - re-exported for back-compa
     _is_test_dir,
     _is_test_file,
     _load_scanner,
-    _render_entry,
-    _render_report,
     _scan_surface,
     _supported_coverage_languages,
 )

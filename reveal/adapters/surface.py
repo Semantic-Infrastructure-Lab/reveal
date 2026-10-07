@@ -16,11 +16,17 @@ from typing import Any, Callable, Dict, List, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
+from ..rendering.adapters.surface import (  # noqa: F401 -- _SURFACE_LABELS and the notes are re-exported
+    SurfaceRenderer,
+    _SURFACE_LABELS,
+    _count_error_region,
+    _recovered_note,
+    _unparsed_note,
+)
 from ..capabilities import capability_tiers_for
 from ..registry import (
     JS_TS_LANGUAGES, _is_cpp_header_content, extensions_for_languages, language_for_extension,
 )
-from ..utils import print_json_result
 from ..utils.path_utils import (
     ANALYSIS,
     census_and_coverage_for_path,
@@ -38,19 +44,6 @@ from ..utils.results import ResultBuilder
 from ..defaults import TEST_DIR_PREFIX as _TEST_DIR_PREFIX
 
 # Test file patterns pruned by --source-only
-
-_SURFACE_LABELS = {
-    'cli': 'CLI commands / arguments',
-    'http': 'HTTP routes',
-    'mcp': 'MCP tool registrations',
-    'env': 'Environment variables',
-    'network': 'Network I/O (imports)',
-    'db': 'Database / storage (imports)',
-    'sdk': 'External SDK (imports)',
-    'fs': 'Filesystem writes',
-    'subprocess': 'Subprocess / shell execution',
-}
-
 
 def _is_test_dir(name: str) -> bool:
     # Broader than the canonical is_test_dir() by design — also matches
@@ -296,193 +289,6 @@ def _scan_surface(
             ],
         },
     }
-
-
-def _recovered_note(recovered_files: List[str], error_region_entries: int) -> str:
-    """BACK-1480: files tree-sitter parsed only by guessing across an ERROR/MISSING region."""
-    shown = ', '.join(recovered_files[:5])
-    more = f" (+{len(recovered_files) - 5} more)" if len(recovered_files) > 5 else ''
-    return (f"{len(recovered_files)} file(s) parsed with error recovery; "
-            f"{error_region_entries} entries lie in a recovered region (tagged 'in_error_region', "
-            f"may be fabricated): {shown}{more}")
-
-
-def _unparsed_note(unparsed_files: List[str]) -> str:
-    shown = ', '.join(unparsed_files[:5])
-    more = f" (+{len(unparsed_files) - 5} more)" if len(unparsed_files) > 5 else ''
-    return (f"{len(unparsed_files)} file(s) could not be parsed and contribute no entries: "
-            f"{shown}{more}")
-
-
-_LANGUAGE_NAMES = {
-    'python': 'Python', 'typescript': 'TypeScript/JavaScript', 'java': 'Java', 'csharp': 'C#',
-    'php': 'PHP', 'swift': 'Swift', 'kotlin': 'Kotlin', 'ruby': 'Ruby', 'go': 'Go',
-    'rust': 'Rust', 'cpp': 'C++',
-}
-
-
-def _render_not_implemented(report: Dict[str, Any]) -> None:
-    """BACK-1332: say which zero counts are missing detectors, not clean results."""
-    missing = report.get('matrix', {}).get('not_implemented', {})
-    if not missing:
-        return
-    print("Not implemented for scanned languages (a 0 here is not a clean result):")
-    for category, langs in missing.items():
-        names = ', '.join(_LANGUAGE_NAMES.get(lang, lang) for lang in langs)
-        print(f"  {category}: {names}")
-    print()
-
-
-def _render_report(report: Dict[str, Any], top: int = None) -> None:
-    path = report['path']
-    total = report['total']
-    surfaces = report['surfaces']
-
-    print()
-    print(f"Surface: {path}")
-    print("━" * 50)
-    # BACK-518: warn when reveal only understood a minority of the tree — the
-    # results (total>0) are a supported-language subset, or the emptiness
-    # (total==0) is a false-clean on a mostly-unsupported repo, not a real
-    # "no surfaces" verdict. The coverage warning is the authoritative signal
-    # and supersedes the legacy detect_non_python_language decline below.
-    warning = report.get('coverage', {}).get('warning', '')
-    if warning:
-        print(warning)
-        print()
-    if report.get('unparsed_files'):
-        print(f"⚠ {_unparsed_note(report['unparsed_files'])}")
-        print()
-    if report.get('recovered_files'):
-        print(f"⚠ {_recovered_note(report['recovered_files'], _count_error_region(report['surfaces']))}")
-        print()
-    print(f"Total surface entries: {total}")
-    if top is not None:
-        unit = 'directories' if 'by_dir' in report else 'per category'
-        print(f"Showing top {top} {unit}  (use --top N or omit for all)")
-    print()
-    _render_not_implemented(report)
-
-    if total == 0:
-        if not warning:
-            lang = report.get('unsupported_language', '')
-            if lang:
-                print("  reveal surface currently supports Python, TypeScript, JavaScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, and C++.")
-                print(f"  No supported files found — detected {lang}.")
-            else:
-                print("  No external surfaces detected.")
-            print()
-        print("ℹ Taxonomy-based — project-specific clients outside known libraries not detected.")
-        print()
-        return
-
-    if 'by_dir' in report:
-        _render_by_dir(report['by_dir'], top)
-        return
-
-    for key, label in _SURFACE_LABELS.items():
-        entries = surfaces.get(key, [])
-        if not entries:
-            continue
-        shown = entries[:top] if top is not None else entries
-        truncated = len(entries) - len(shown)
-        print(f"{label} ({len(entries)}):")
-        for entry in shown:
-            _render_entry(key, entry)
-        if truncated:
-            print(f"  … {truncated} more (use --top {len(entries)} or --type {key} to see all)")
-        print()
-
-    print("ℹ Taxonomy-based — project-specific clients outside known libraries not detected.")
-    print()
-
-
-def _render_by_dir(rows: List[Dict[str, Any]], top: Optional[int]) -> None:
-    shown = rows[:top] if top is not None else rows
-    width = max((len(r['dir']) for r in shown), default=0)
-    print(f"By directory ({len(rows)}):")
-    for row in shown:
-        cells = '  '.join(f"{cat} {row['counts'][cat]}" for cat in _SURFACE_LABELS if cat in row['counts'])
-        print(f"  {row['dir']:<{width}}  {row['total']:>4}  {cells}")
-    if len(rows) > len(shown):
-        print(f"  … {len(rows) - len(shown)} more directories (use --top {len(rows)} to see all)")
-    print()
-    print("ℹ Taxonomy-based — project-specific clients outside known libraries not detected.")
-    print()
-
-
-def _count_error_region(surfaces: Dict[str, List[Dict[str, Any]]]) -> int:
-    return sum(1 for entries in surfaces.values() for e in entries if e.get('in_error_region'))
-
-
-def _render_entry(surface_type: str, entry: Dict[str, Any]) -> None:
-    file_path = entry.get('file', '')
-    line = entry.get('line', '')
-    loc = f"  {file_path}:{line}" if file_path else ''
-    if entry.get('in_error_region'):
-        loc += '  [parse-recovered]'
-    if entry.get('declaration_shaped'):
-        loc += '  [declaration-shaped: may be a variable]'
-
-    if surface_type == 'cli':
-        kind = entry.get('type', '')
-        name = entry.get('name', '?')
-        if kind == 'argument':
-            print(f"  {name}{loc}")
-        elif kind == 'subcommand':
-            print(f"  subcommand: {name}{loc}")
-        elif kind == 'main':
-            print(f"  entrypoint: {name}{loc}")
-        else:
-            print(f"  @{entry.get('decorator', '?')}  {name}{loc}")
-
-    elif surface_type == 'http':
-        method = entry.get('methods', 'ANY')
-        path_ = entry.get('path', '?')
-        name = entry.get('name', '?')
-        # BACK-1244: flag test-spec-sourced entries inline, not just in
-        # known_limits -- easy to miss a text summary note once a scan
-        # scrolls past it.
-        marker = '  [test]' if entry.get('test_origin') else ''
-        # BACK-1417: a Rails route declared under `if Rails.env.test?` etc.
-        if entry.get('condition'):
-            marker += f"  [{entry['condition']}]"
-        print(f"  {method}  {path_}  → {name}{loc}{marker}")
-
-    elif surface_type == 'mcp':
-        name = entry.get('name', '?')
-        print(f"  {name}{loc}")
-
-    elif surface_type == 'env':
-        name = entry.get('name', '?')
-        print(f"  {name}{loc}")
-
-    elif surface_type in ('network', 'db', 'sdk'):
-        name = entry.get('name', '?')
-        print(f"  import {name}{loc}")
-
-    elif surface_type == 'fs':
-        name = entry.get('name', '?')
-        target = entry.get('target', '?')
-        if target and target != '?':
-            print(f"  {name}({target}){loc}")
-        else:
-            print(f"  {name}{loc}")
-
-    elif surface_type == 'subprocess':
-        name = entry.get('name', '?')
-        print(f"  {name}{loc}")
-
-
-class SurfaceRenderer:
-    """Renderer for surface:// results."""
-
-    @staticmethod
-    def render_structure(result: Dict[str, Any], format: str = 'text', top: Optional[int] = None) -> None:
-        if format == 'json':
-            print_json_result(result)
-            return
-        _render_report(result, top=top)
 
 
 @register_adapter('surface')

@@ -8,7 +8,8 @@ import pytest
 from reveal.adapters import surface as surface_adapter
 from reveal.adapters.ast import surface_matrix as sm
 from reveal.adapters.ast import surface_rules
-from reveal.adapters.surface import _SURFACE_SCANNERS, _render_report, _scan_surface
+from reveal.adapters.surface import _SURFACE_SCANNERS, _scan_surface
+from reveal.rendering.adapters.surface import surface_text
 
 _AST_DIR = Path(surface_adapter.__file__).parent / 'ast'
 
@@ -103,13 +104,11 @@ def test_type_filter_narrows_the_matrix_to_that_category(tmp_path):
 
 
 def test_text_report_names_the_languages_with_no_detector(tmp_path, capsys):
-    _render_report(_scan(tmp_path, {'a.rb': 'x = 1\n', 'b.swift': 'let x = 1\n'}))
-    out = capsys.readouterr().out
+    out = surface_text(_scan(tmp_path, {'a.rb': 'x = 1\n', 'b.swift': 'let x = 1\n'}))
     assert 'Not implemented for scanned languages' in out
     assert 'mcp: Swift, Ruby' in out or 'mcp: Ruby, Swift' in out
     assert 'No external surfaces detected' in out
 
 
 def test_text_report_is_quiet_when_nothing_is_missing(tmp_path, capsys):
-    _render_report(_scan(tmp_path, {'a.py': 'import os\nos.system("x")\n'}))
-    assert 'Not implemented' not in capsys.readouterr().out
+    assert 'Not implemented' not in surface_text(_scan(tmp_path, {'a.py': 'import os\nos.system("x")\n'}))
