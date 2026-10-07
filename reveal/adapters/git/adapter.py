@@ -5,8 +5,9 @@ Progressive disclosure for Git repositories with token-efficient output.
 
 import os
 import sys
+from pathlib import Path
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...errors import NotApplicableError
@@ -130,6 +131,32 @@ try:
 except ImportError:
     PYGIT2_AVAILABLE = False
     pygit2 = None  # type: ignore[assignment]
+
+
+def _absolute_directory_scope(directory: str) -> Tuple[str, Optional[str]]:
+    """``(path, subpath)`` for an absolute directory: the repository, or a directory in its work tree.
+
+    A directory below the work-tree root becomes the work tree plus the root-relative
+    subpath, so every path view (ownership, history, blame, diff, the file view) answers
+    for it exactly as its relative spelling does (BACK-1654), instead of for the whole
+    repository (BACK-1690). The root itself, anything inside the git dir, and a bare
+    repository stay the repository. Discovery is the call ``_open_repository`` makes;
+    when it finds nothing or libgit2 refuses the repository, the directory stays the
+    repository path and ``_open_repository`` reports that failure.
+    """
+    if not PYGIT2_AVAILABLE:
+        return directory, None
+    try:
+        git_dir = pygit2.discover_repository(directory)
+        workdir = pygit2.Repository(git_dir).workdir if git_dir else None
+    except (pygit2.GitError, KeyError):  # reported by _open_repository on the same discovery
+        return directory, None
+    if not workdir:
+        return directory, None
+    target, root = Path(directory).resolve(), Path(workdir).resolve()
+    if target == root or not target.is_relative_to(root) or target.is_relative_to(Path(git_dir).resolve()):
+        return directory, None
+    return workdir.rstrip('/\\'), target.relative_to(root).as_posix()
 
 
 @register_adapter('git')
@@ -471,6 +498,7 @@ class GitAdapter(ResourceAdapter):
         # Logic:
         #   "."             → repo root at CWD (bare overview)
         #   "/abs/repo"     → repo root at absolute path
+        #   "/abs/repo/sub" → that directory of the repo, as "sub" from inside it (BACK-1690)
         #   "../other-repo" → repo root at relative path (no file extension heuristic)
         #   "./file.py"     → file path relative to CWD (strip leading ./)
         #   "path/file.py"  → file path relative to CWD
@@ -483,15 +511,15 @@ class GitAdapter(ResourceAdapter):
                 path = '.'
                 subpath = resource[2:]
             elif resource.startswith('/') or os.path.isabs(resource):
-                # An absolute *directory* is a repo root (bare overview). An
+                # An absolute *directory* is the repo when it is the work-tree root,
+                # else that directory of the repo (BACK-1690). An
                 # absolute *file* path must be split into repo-dir + subpath, or
                 # it silently falls through to a repo overview with the file and
                 # @ref ignored — which then cascades into a bogus diff:// showing
                 # every function removed (BACK-417). _repo_relative_subpath
                 # converts the absolute subpath back to repo-root-relative.
                 if os.path.isdir(resource):
-                    path = resource
-                    subpath = None
+                    path, subpath = _absolute_directory_scope(resource)
                 else:
                     path = os.path.dirname(resource) or os.sep
                     subpath = resource

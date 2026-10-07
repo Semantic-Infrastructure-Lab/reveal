@@ -1123,13 +1123,19 @@ class TestGitAdapterBugFixes:
         assert parsed['path'] == os.path.dirname(abs_file)
         assert parsed['ref'] == 'HEAD'
 
-    def test_absolute_directory_still_means_repo_overview(self):
-        """An absolute *directory* must still route to a repo overview."""
+    def test_absolute_work_tree_root_still_means_repo_overview(self, git_repo):
+        """The absolute work-tree root must still route to a repo overview."""
         from reveal.adapters.git.adapter import GitAdapter
-        abs_dir = os.path.dirname(os.path.abspath(__file__))
-        parsed = GitAdapter._parse_resource_string(abs_dir)
-        assert parsed['path'] == abs_dir
+        parsed = GitAdapter._parse_resource_string(str(git_repo))
+        assert parsed['path'] == str(git_repo)
         assert parsed['subpath'] is None
+
+    def test_absolute_subdirectory_is_a_root_relative_subpath(self, git_repo):
+        """BACK-1690: an absolute directory below the root is that directory, not the repo."""
+        from reveal.adapters.git.adapter import GitAdapter
+        parsed = GitAdapter._parse_resource_string(str(git_repo / 'src'))
+        assert os.path.realpath(parsed['path']) == os.path.realpath(git_repo)
+        assert parsed['subpath'] == 'src'
 
 
 class TestApplyElementBlameFilter(unittest.TestCase):

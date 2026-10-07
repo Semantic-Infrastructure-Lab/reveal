@@ -100,6 +100,10 @@ git://<path>[/<subpath>][@<ref>][?<query>]
 | `ref` | No | `HEAD` | Git reference (commit, branch, tag, HEAD~N) |
 | `query` | No | (none) | Query parameters (?type=history, ?author=John) |
 
+An absolute path is split at the work-tree root it lies in: `git:///home/me/repo/src?type=ownership`
+answers for `src`, the same as `git://src?type=ownership` run inside `repo`. The absolute work-tree
+root itself (or its `.git` directory) is the whole repository.
+
 ### Reference Syntax
 
 Use `@<ref>` to specify Git references:
