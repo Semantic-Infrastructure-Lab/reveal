@@ -24,7 +24,7 @@ from conftest import _run_reveal_direct  # noqa: E402
 from reveal.adapters.pack import _get_changed_files  # noqa: E402
 
 pytestmark = [
-    pytest.mark.component,
+    pytest.mark.cli,  # the git:// and pack entry points via _run_reveal_direct (BACK-1149)
     pytest.mark.skipif(shutil.which('git') is None, reason='git not installed'),
 ]
 

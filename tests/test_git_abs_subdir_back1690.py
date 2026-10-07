@@ -20,7 +20,7 @@ pytest.importorskip('pygit2')
 from conftest import _run_reveal_direct  # noqa: E402
 
 pytestmark = [
-    pytest.mark.component,
+    pytest.mark.cli,  # the git:// and overview:// entry points via _run_reveal_direct (BACK-1149)
     pytest.mark.skipif(shutil.which('git') is None, reason='git not installed'),
 ]
 
