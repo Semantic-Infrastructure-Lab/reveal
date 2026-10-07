@@ -323,11 +323,11 @@ What landed, and when, is in CHANGELOG `[0.130.0]` and `internal-docs/RESOLVED_L
    effect on the fixture, was resolved 2026-10-06 (every known-silent pair now shows its effect),
    and a flag that reads no element refuses a second path instead of dropping it.
 3. **The result contract.** One failed result and one cut marker are in place for the URI
-   router, the subcommands and the file view. Open: BACK-1059 (typed outcomes at adapter and
+   router, the subcommands and the file view. Open: typed outcomes at adapter and
    analyzer boundaries; broad handlers now disclose or narrow, both silent-handler gates at
    0; `reveal check` leaves through the subcommand seam in both its directory and single-file
-   forms, and `review` is the one remaining boundary site; whether the ~379 remaining broad
-   handlers become one dedicated pass waits on a maintainer decision), BACK-916 (one
+   forms, and `review` is the one remaining boundary site; the ~379 remaining broad
+   handlers are decided: one solo pass, run when no parallel agents are active, one subsystem per slice), BACK-916 (one
    rendering layer: patches and nginx:// are migrated and the rest still print; next is the nginx
    file-flag handlers in `adapters/nginx/handlers.py`, one renderer per slice) and BACK-1052 (one scan budget; patches pilot only).
 4. **One seam per concern.** The parser, path, root-finder and walker seams are done. Open:
@@ -360,7 +360,7 @@ These gates run continuously alongside the steps above:
 - Dead pool workers: a dead worker must cost only its own files, never the run. `check`,
   `stats://`, `imports://`, I002 and `grep_files` hand work out through one helper
   (`utils.parallel.submit_each`). A lost file is disclosed as lost (`worker_lost`) in each of
-  them, and in the architecture view, markdown `body-contains` and claude `?search=` (BACK-1752/1753/1754);
+  them, and in the architecture view, markdown `body-contains` and claude `?search=`;
   `claude://` file-touch search (`track_file_sessions`) does not show them yet.
 
 **Working rules while the track runs:**
