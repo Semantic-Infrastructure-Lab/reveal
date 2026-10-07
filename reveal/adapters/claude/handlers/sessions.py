@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from datetime import datetime, date as _date
 from reveal.reveal_types import CONTRACT_VERSION
+from reveal.utils.lines import split_lines
 
 from ..analysis import search_sessions_for_term, get_files_touched
 from ....utils.parallel import grep_files as _grep_files
@@ -118,7 +119,7 @@ def _read_session_stats(jsonl_path: Path) -> Dict[str, Any]:
     """
     stats: Dict[str, Any] = {}
     try:
-        lines = [line for line in jsonl_path.read_text(encoding='utf-8', errors='replace').splitlines()
+        lines = [line for line in split_lines(jsonl_path.read_text(encoding='utf-8', errors='replace'))
                  if line.strip().startswith('{')]
         if not lines:
             return stats

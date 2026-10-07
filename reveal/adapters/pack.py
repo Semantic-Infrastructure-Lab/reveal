@@ -25,6 +25,7 @@ from ..utils.path_utils import DISPLAY, _walk_code_files, classify_path_provenan
 from ..utils.query import parse_query_params
 from ..utils.query_parser import split_exclude_param
 from ..utils.results import ResultBuilder
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -220,7 +221,7 @@ def _get_file_raw_content(file_path: str, max_lines: int = 500) -> str:
     when the file can't be read; _tiered_content records it.
     """
     text = Path(file_path).read_text(encoding='utf-8', errors='replace')
-    lines = text.splitlines(keepends=True)
+    lines = split_lines(text, keepends=True)
     if len(lines) > max_lines:
         truncated = ''.join(lines[:max_lines])
         remaining = len(lines) - max_lines

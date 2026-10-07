@@ -20,6 +20,7 @@ from .node_taxonomy import (  # noqa: F401 — re-exported for nav.py/back-compa
     opens_scope,
     scope_label,
 )
+from reveal.utils.lines import split_lines
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +35,7 @@ def _node_label(node: Any, get_text: Callable, keyword: Optional[str] = None) ->
     """
     if keyword is None:
         keyword = scope_label(node, _zero_arg(node, 'kind'))
-    first_line = get_text(node).splitlines()[0].strip().rstrip(':').rstrip('{').strip()
+    first_line = split_lines(get_text(node))[0].strip().rstrip(':').rstrip('{').strip()
     lower = first_line.lower()
     kw_lower = keyword.lower()
     if lower.startswith(kw_lower):

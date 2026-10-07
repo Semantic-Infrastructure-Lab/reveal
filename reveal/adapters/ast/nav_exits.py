@@ -9,6 +9,7 @@ from .nav_varflow import all_var_flow
 from .node_taxonomy import GATE_NODES, exit_label, is_rust_try_operator
 from ...core import node_children as _children
 from ...core.treesitter_compat import _zero_arg
+from reveal.utils.lines import split_lines
 
 
 # Language-construct names treated as hard exits even when represented as calls.
@@ -178,7 +179,7 @@ def _tail_returns(scope_node: Any, from_line: int, to_line: int, get_text: Calla
     for tail in find_tail_expressions(scope_node, get_text, call_node_types):
         tail_line = _zero_arg(tail, 'start_position').row + 1
         if from_line <= tail_line <= to_line:
-            text = get_text(tail).splitlines()[0].strip()
+            text = split_lines(get_text(tail))[0].strip()
             if len(text) > 80:
                 text = text[:77] + '...'
             items.append({'kind': 'RETURN', 'line': tail_line, 'text': text})
@@ -191,7 +192,7 @@ _SOFT_EXIT_KINDS: frozenset = frozenset({'BREAK', 'CONTINUE', 'YIELD'})
 
 
 def _first_line(text: str) -> str:
-    text = text.splitlines()[0].strip() if text else ''
+    text = split_lines(text)[0].strip() if text else ''
     return text[:77] + '...' if len(text) > 80 else text
 
 

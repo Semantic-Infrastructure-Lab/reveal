@@ -6,6 +6,7 @@ from datetime import datetime
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ def _parse_agent_frontmatter(content: str) -> Dict[str, Any]:
     end = content.find('\n---', 3)
     if end < 0:
         return fm
-    for line in content[3:end].splitlines():
+    for line in split_lines(content[3:end]):
         if ':' in line:
             k, _, v = line.partition(':')
             k = k.strip()
@@ -100,7 +101,7 @@ def get_plans(plans_dir: Path, resource: str, query_params: Dict[str, Any]) -> D
             if search and search not in content.lower():
                 continue
             title = ''
-            for raw_line in content.splitlines():
+            for raw_line in split_lines(content):
                 stripped = raw_line.strip()
                 if stripped.startswith('#'):
                     title = stripped.lstrip('#').strip()

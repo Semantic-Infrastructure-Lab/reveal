@@ -23,6 +23,7 @@ from ...utils.results import (Outcome, ResultBuilder, echo_source, note_truncati
 from .flag_specs import exclude_fragment, inject_query_flags, strip_result_control_keys
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
 from .formats import declared_output_formats, require_supported_format
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +178,7 @@ def _render_router_result(result: Any, output_format: str,
 def _parse_text_headings(text: str) -> List[dict]:
     """Extract ATX headings from a markdown text string."""
     headings = []
-    for i, line in enumerate(text.splitlines(), 1):
+    for i, line in enumerate(split_lines(text), 1):
         m = re.match(r'^(#{1,6})\s+(.+)$', line)
         if m:
             headings.append({'line': i, 'level': len(m.group(1)), 'name': m.group(2).strip()})
@@ -187,7 +188,7 @@ def _parse_text_headings(text: str) -> List[dict]:
 def _parse_text_links(text: str) -> List[dict]:
     """Extract markdown inline links [text](url) from a text string."""
     links = []
-    for i, line in enumerate(text.splitlines(), 1):
+    for i, line in enumerate(split_lines(text), 1):
         for m in re.finditer(r'\[([^\]]+)\]\(([^)\s]+)[^)]*\)', line):
             url = m.group(2).strip()
             ltype = ('email' if url.startswith('mailto:')
@@ -838,7 +839,7 @@ def _element_answer(adapter, renderer_class: type[Any], element: Optional[str],
         for field in ('content', 'body'):
             if field in result and isinstance(result[field], str):
                 mark(args, 'head', 'tail')
-                lines = result[field].splitlines()
+                lines = split_lines(result[field])
                 if head:
                     lines = lines[:head]
                 else:

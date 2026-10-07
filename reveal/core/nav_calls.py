@@ -9,6 +9,7 @@ from .callees.dart import cascade_sites as dart_cascade_sites, selector_sites as
 from .callees.zig import suffix_sites as zig_suffix_sites
 from .callees.gdscript import attribute_sites as gdscript_attribute_sites
 from .callees import callee_name_from_node, extract_by_kind, is_misparsed_call, CHAIN_COLLAPSE
+from reveal.utils.lines import split_lines
 
 
 def _generic_call_hits(
@@ -322,7 +323,7 @@ def _extract_first_arg(call_node: Any, get_text: Callable) -> tuple:
     ]
     if not real_args:
         return None, False
-    text = get_text(real_args[0]).splitlines()[0].strip()
+    text = split_lines(get_text(real_args[0]))[0].strip()
     if len(text) > 40:
         text = text[:37] + '...'
     return text, len(real_args) > 1

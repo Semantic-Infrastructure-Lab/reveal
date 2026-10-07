@@ -11,6 +11,7 @@ from ...core import node_children as _children
 from ...core.treesitter_compat import _zero_arg
 from .nav_calls import range_calls
 from .node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_NODES
+from reveal.utils.lines import split_lines
 
 # Each entry: (kind_label, list_of_patterns).
 #
@@ -1896,7 +1897,7 @@ def _collect_statement_exits(func_node: Any, from_line: int, to_line: int,
                 kind == 'name' and bare_exit_name(node, get_text) in _HARD_STOP_NAMES):
             if from_line <= line <= to_line:
                 results.append({
-                    'line': line, 'callee': get_text(node).splitlines()[0].strip().rstrip(';'),
+                    'line': line, 'callee': split_lines(get_text(node))[0].strip().rstrip(';'),
                     'first_arg': None, 'has_more_args': False, 'kind': 'hard_stop',
                     'via': 'statement',
                 })

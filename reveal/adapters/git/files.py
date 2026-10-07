@@ -11,6 +11,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 from ...utils.results import ResultBuilder, note_truncation
 from .commits import (commit_filter, disclose_timeline_cut, history_sort, timeline_fields,
                       walk_history)
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ def get_file_at_ref(
             blob = cast('pygit2.Blob', repo[entry.id])
             content = blob.data.decode('utf-8', errors='replace')
             short_hash = str(commit.id)[:7]
-            line_count = len(content.splitlines())
+            line_count = len(split_lines(content))
             commit_info = {
                 'hash': short_hash,
                 'author': commit.author.name,
@@ -207,7 +208,7 @@ def get_file_diff(
 
 def _filter_diff_to_element(diff_text: str, element: str) -> str:
     """Return only the hunks from diff_text whose context or body mention element."""
-    lines = diff_text.splitlines(keepends=True)
+    lines = split_lines(diff_text, keepends=True)
     header_lines: List[str] = []
     hunks: List[List[str]] = []
     current: List[str] = []
@@ -533,7 +534,7 @@ def _read_blob_lines(repo: 'pygit2.Repository', commit: 'pygit2.Commit', subpath
     tree = commit.tree
     entry = tree[subpath]
     blob = cast('pygit2.Blob', repo[entry.id])
-    return blob.data.decode('utf-8', errors='replace').splitlines()
+    return split_lines(blob.data.decode('utf-8', errors='replace'))
 
 
 def _format_blame_hunks(repo: 'pygit2.Repository', blame: Any) -> List[Dict[str, Any]]:
@@ -926,7 +927,7 @@ def _get_element_content_at_commit(
         entry = tree[filepath]
         blob = cast('pygit2.Blob', repo[entry.id])
         content = blob.data.decode('utf-8', errors='replace')
-        file_lines = content.splitlines()
+        file_lines = split_lines(content)
 
         suffix = Path(filepath).suffix or '.txt'
         with tempfile.NamedTemporaryFile(mode='w', suffix=suffix, delete=False, encoding='utf-8') as f:

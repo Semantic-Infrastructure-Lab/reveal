@@ -5,6 +5,7 @@ import json
 from typing import Dict, Any
 
 from reveal.utils.formatting import lines_label
+from reveal.utils.lines import split_lines
 
 
 def render_diff(diff_result: Dict[str, Any], format: str = 'text',
@@ -276,7 +277,7 @@ def _render_imports_section(imports: list) -> None:
 
 def _print_body_diff(old: str, new: str) -> None:
     """Print a unified diff of two element bodies."""
-    for line in difflib.unified_diff(str(old).splitlines(), str(new).splitlines(),
+    for line in difflib.unified_diff(split_lines(str(old)), split_lines(str(new)),
                                      'old', 'new', lineterm='', n=2):
         print(f"    {line}")
     print()

@@ -9,6 +9,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder, note_truncation
 from ..analysis.normalize import normalize_record
+from reveal.utils.lines import split_lines
 
 _USER_FILTER = "(thread_source IS NULL OR thread_source = 'user') AND archived = 0"
 
@@ -153,7 +154,7 @@ def _collect_snippets(content: str, raw_forms: set, term: str, cap: int) -> tupl
     """(kept snippets, every match found) in one rollout; cap <= 0 keeps them all."""
     snippets: List[Dict[str, Any]] = []
     found = 0
-    for line in content.splitlines():
+    for line in split_lines(content):
         line_lower = line.lower()
         if not any(form in line_lower for form in raw_forms):
             continue

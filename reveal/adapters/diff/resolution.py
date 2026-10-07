@@ -9,6 +9,7 @@ from ..base import get_adapter_class
 from ...errors import NotApplicableError
 from ...registry import get_analyzer
 from ...utils.path_utils import _walk_code_files
+from reveal.utils.lines import split_lines
 
 
 _CODE_KEYS = ('functions', 'classes', 'imports')
@@ -303,4 +304,4 @@ def read_element_source(uri: str, element: Dict[str, Any]) -> Optional[str]:
         return None
     if text is None:
         return None
-    return '\n'.join(text.splitlines()[start - 1:end])
+    return '\n'.join(split_lines(text)[start - 1:end])

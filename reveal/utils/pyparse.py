@@ -6,6 +6,7 @@ import re
 import tokenize
 import warnings
 from typing import List, Optional, Tuple
+from reveal.utils.lines import split_lines
 
 # PEP 750 template-string prefixes; a 3.13 tokenizer reads `t"..."` as NAME + STRING.
 _T_PREFIX = re.compile(r'(?:[tT][rR]?|[rR][tT])')
@@ -66,7 +67,7 @@ def downlevel_source(source: str) -> Optional[str]:
             edits.append((tok.start[0], tok.start[1], len(tok.string), prefix))
     if not edits:
         return None
-    lines = source.splitlines(keepends=True)
+    lines = split_lines(source, keepends=True)
     for row, col, width, text in sorted(edits, reverse=True):
         line = lines[row - 1]
         lines[row - 1] = line[:col] + text + line[col + width:]

@@ -29,6 +29,7 @@ from .base import ImportsDiskCache, LanguageExtractor, register_extractor
 from .resolver import resolve_python_import, resolve_python_from_import_submodules
 from ...rules.imports import STDLIB_MODULES
 from ...utils.path_utils import resolve_project_root
+from reveal.utils.lines import split_lines
 
 try:
     import tomllib
@@ -548,7 +549,7 @@ def _parse_requirement_names(path: Path) -> Set[str]:
         content = path.read_text(encoding='utf-8', errors='ignore')
     except OSError:
         return names
-    for line in content.splitlines():
+    for line in split_lines(content):
         line = line.strip()
         if not line or line.startswith('#') or line.startswith('-'):
             continue

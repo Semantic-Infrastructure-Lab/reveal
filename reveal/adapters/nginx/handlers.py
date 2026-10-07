@@ -13,6 +13,7 @@ import os
 import sys
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
+from reveal.utils.lines import split_lines
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -207,7 +208,7 @@ def _render_acme_text(results: list, analyzer, only_failures: bool, verbose: boo
                 # Show the location block: the matched line + up to 3 lines ahead (closing brace)
                 snippet_lines = analyzer_lines[line_no - 1:line_no + 3]
                 snippet = ''.join(snippet_lines).rstrip()
-                for sl in snippet.splitlines():
+                for sl in split_lines(snippet):
                     print(f"       {line_no}: {sl.rstrip()}")
                     line_no += 1
         printed += 1

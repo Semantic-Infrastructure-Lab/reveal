@@ -12,6 +12,7 @@ from typing import Optional, Any, List
 
 from .base import FileAnalyzer
 from .utils import get_file_type_from_analyzer, print_breadcrumbs
+from reveal.utils.lines import split_lines
 
 # When a single rule fires this many times in one file, collapse to a summary line.
 # Users can disable with --no-group.
@@ -35,7 +36,7 @@ _GENERATED_PATTERNS = [
 
 def _is_generated_file(content: str) -> bool:
     """Return True if content appears to be auto-generated (first 15 lines)."""
-    head = '\n'.join(content.splitlines()[:15])
+    head = '\n'.join(split_lines(content)[:15])
     return any(p.search(head) for p in _GENERATED_PATTERNS)
 
 

@@ -73,6 +73,7 @@ from .nav_handlers import (  # noqa: F401
     _nav_around,
     _NAV_DISPATCH,
 )
+from reveal.utils.lines import split_lines
 
 
 def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code: int = 1):
@@ -175,7 +176,7 @@ def _resolve_func_node(analyzer, element: str):
             func_end = (
                 syntax['end_line']
                 if syntax.get('end_line')
-                else len(analyzer.content.splitlines())
+                else len(split_lines(analyzer.content))
             )
         else:
             print(
@@ -384,7 +385,7 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         )
         for flag in _FLAT_FLAGS:
             if getattr(args, flag, None):
-                total = len(analyzer.content.splitlines())
+                total = len(split_lines(analyzer.content))
                 element = f':1-{total}'
                 break
 

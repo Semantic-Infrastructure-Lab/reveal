@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from reveal.reveal_types import CONTRACT_VERSION
+from reveal.utils.lines import split_lines
 
 from ..base import AdapterFlag, ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
@@ -84,7 +85,7 @@ def _collect_nginx_cert_paths(nginx_dirs: List[str]) -> List[str]:
             if not conf_file.is_file():
                 continue
             try:
-                for line in conf_file.read_text(errors='replace', encoding='utf-8').splitlines():
+                for line in split_lines(conf_file.read_text(errors='replace', encoding='utf-8')):
                     m = _SSL_CERT_RE.match(line)
                     if m:
                         paths.append(m.group(1).strip().strip('"\''))

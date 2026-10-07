@@ -65,6 +65,7 @@ from ...registry import extensions_for_languages
 from .base import ImportsDiskCache, LanguageExtractor, nearest_marker_dir, register_extractor
 from .file_index import basename_index, load_path_manifests
 from .types import ImportStatement
+from reveal.utils.lines import split_lines
 
 # Cross-invocation disk cache (BACK-626, extending BACK-625): same
 # independent-reparse gap PythonExtractor had -- extract_imports() does not
@@ -2977,7 +2978,7 @@ def _ruby_gem_inventory(project_root: Path) -> Tuple[FrozenSet[str], FrozenSet[s
     section: Optional[str] = None
     in_specs = False
     spec_line = re.compile(r'^    (\S+) \(')
-    for line in text.splitlines():
+    for line in split_lines(text):
         if line and not line[0].isspace():
             section = line.strip()
             in_specs = False

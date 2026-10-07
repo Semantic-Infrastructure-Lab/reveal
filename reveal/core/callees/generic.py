@@ -20,6 +20,7 @@ from typing import AbstractSet, Any, Callable, Optional
 from .. import node_children as _children
 from ..node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_KINDS
 from ..treesitter_compat import _zero_arg
+from reveal.utils.lines import split_lines
 
 CHAIN_FULL = 'full'
 CHAIN_COLLAPSE = 'collapse'
@@ -171,7 +172,7 @@ def callee_name_from_node(
         if prop:
             return f".{prop}"
         # No clean property: fall back to a sanitized single-line form.
-        first_line = get_text(callee_node).lstrip('*').strip().splitlines()[0].strip()
+        first_line = split_lines(get_text(callee_node).lstrip('*').strip())[0].strip()
         return first_line or None
 
     # tree-sitter parses `*foo(args)` as call(list_splat(*foo), args).

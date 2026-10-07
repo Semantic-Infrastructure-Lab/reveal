@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, List, Optional
 
 from .core import tree_root
+from reveal.utils.lines import split_lines
 
 
 # Branch keywords for --ifmap and --catchmap filtering
@@ -138,7 +139,7 @@ def _nav_varflow(ctx: _NavCtx) -> None:
         else:
             if trust_warning:
                 print(f"⚠️  {trust_warning}", file=sys.stderr)
-            print(render_cross_var_flow(var_name, frames, ctx.analyzer.content.splitlines()))
+            print(render_cross_var_flow(var_name, frames, split_lines(ctx.analyzer.content)))
         return
     events = var_flow(ctx.func_node, var_name, from_line, to_line, ctx.get_text)
     if ctx.as_json:
@@ -149,7 +150,7 @@ def _nav_varflow(ctx: _NavCtx) -> None:
     else:
         if trust_warning:
             print(f"⚠️  {trust_warning}", file=sys.stderr)
-        print(render_var_flow(var_name, events, ctx.analyzer.content.splitlines()))
+        print(render_var_flow(var_name, events, split_lines(ctx.analyzer.content)))
 
 
 def _nav_narrow(ctx: _NavCtx) -> None:
@@ -166,7 +167,7 @@ def _nav_narrow(ctx: _NavCtx) -> None:
         _nav_json('narrow', ctx.analyzer.path, ctx.element, from_line, to_line,
                   findings, extra_meta={'var': var_name})
     else:
-        print(render_narrowing(var_name, events, ctx.analyzer.content.splitlines()))
+        print(render_narrowing(var_name, events, split_lines(ctx.analyzer.content)))
 
 
 def _implicit_nodes(ctx: _NavCtx) -> list:
@@ -440,7 +441,7 @@ def _nav_scope(analyzer, element: str, as_json: bool) -> None:
     if as_json:
         _nav_json('scope', analyzer.path, element, line_no, line_no, chain)
     else:
-        content_lines = analyzer.content.splitlines()
+        content_lines = split_lines(analyzer.content)
         line_text = content_lines[line_no - 1].strip() if 0 < line_no <= len(content_lines) else ''
         print(render_scope_chain(line_no, chain, line_text))
 
@@ -457,7 +458,7 @@ def _nav_around(analyzer, element: str, as_json: bool, n: int) -> None:
         )
         sys.exit(1)
     line_no = syntax['start_line']
-    content_lines = analyzer.content.splitlines()
+    content_lines = split_lines(analyzer.content)
     total = len(content_lines)
     start = max(1, line_no - n)
     end = min(total, line_no + n)

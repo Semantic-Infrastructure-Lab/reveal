@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 from reveal.reveal_types import CONTRACT_VERSION
+from reveal.utils.lines import split_lines
 
 from ....utils.results import ResultBuilder
 
@@ -22,7 +23,7 @@ def _parse_skill_frontmatter(content: str) -> Dict[str, Any]:
     end = content.find('\n---', 3)
     if end < 0:
         return fm
-    for line in content[3:end].splitlines():
+    for line in split_lines(content[3:end]):
         if ':' in line:
             k, _, v = line.partition(':')
             fm[k.strip()] = v.strip().strip('"')

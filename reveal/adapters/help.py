@@ -12,6 +12,7 @@ from ..utils.formatting import shell_command
 from ..utils.query_parser import ParamSpec, param_schema, whole_number
 from ..utils.results import ResultBuilder, note_truncation
 from reveal.reveal_types import CONTRACT_VERSION
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ def _strip_frontmatter(content: str) -> str:
     """
     if not content.startswith('---'):
         return content
-    lines = content.splitlines()
+    lines = split_lines(content)
     # First line is the opening fence; find the closing fence.
     for i in range(1, len(lines)):
         if lines[i].strip() == '---':
@@ -1210,7 +1211,7 @@ class HelpAdapter(ResourceAdapter):
                     content = (docs_root / guide['file']).read_text(encoding='utf-8')
                 except OSError:
                     content = ''
-                for line in content.splitlines():
+                for line in split_lines(content):
                     if _matches(line):
                         snippet = line.strip()
                         break
@@ -1727,7 +1728,7 @@ class HelpAdapter(ResourceAdapter):
         # A packaged file: failing to read it is a broken install, reported as an error
         # (the router's failed-result path), not as "no such topic".
         help_path = Path(__file__).parent.parent / 'docs' / 'AGENT_HELP.md'
-        lines = help_path.read_text(encoding='utf-8').splitlines()
+        lines = split_lines(help_path.read_text(encoding='utf-8'))
 
         # Find the section and extract until the next ## heading
         start = None
@@ -1826,7 +1827,7 @@ class HelpAdapter(ResourceAdapter):
             # Guides carry YAML front matter (title, help_* fields) consumed by
             # the topic registry; strip it so it never leaks into rendered help.
             content = _strip_frontmatter(content)
-            lines = content.splitlines()
+            lines = split_lines(content)
 
             if section:
                 content = self._extract_markdown_section(lines, section, topic)

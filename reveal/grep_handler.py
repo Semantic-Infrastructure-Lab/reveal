@@ -21,6 +21,7 @@ from argparse import Namespace
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .defaults import DisplayDefaults
+from .utils.lines import split_lines
 from .utils.results import note_truncation, slice_items
 
 logger = logging.getLogger(__name__)
@@ -78,7 +79,7 @@ def _compile(pattern: str, args: Namespace) -> 're.Pattern[str] | str':
 
 
 def _read_lines(fpath: Path) -> List[str]:
-    return fpath.read_text(encoding='utf-8', errors='replace').splitlines()
+    return split_lines(fpath.read_text(encoding='utf-8', errors='replace'))
 
 
 def _hit_lines(lines: Sequence[str], compiled: 're.Pattern[str]') -> List[int]:

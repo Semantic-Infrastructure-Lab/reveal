@@ -1,5 +1,7 @@
 """Renderer for reveal self-inspection results."""
 
+from reveal.utils.lines import split_lines
+
 
 class RevealRenderer:
     """Renderer for reveal self-inspection results."""
@@ -24,7 +26,7 @@ class RevealRenderer:
             return
         start = result.get('line_start', 1)
         print(f"reveal://{result.get('file')}:{start}-{result.get('line_end')} | {result.get('element')}\n")
-        for offset, line in enumerate(str(result.get('content', '')).splitlines()):
+        for offset, line in enumerate(split_lines(str(result.get('content', '')))):
             print(f"{start + offset:>6}  {line}")
 
     @staticmethod

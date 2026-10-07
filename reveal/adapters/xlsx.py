@@ -20,6 +20,7 @@ from ..utils.path_utils import to_posix
 from ..utils.results import ResultBuilder, note_truncation
 from ..utils.warning_render import render_meta_warnings
 from reveal.reveal_types import CONTRACT_VERSION
+from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -346,7 +347,7 @@ class XlsxRenderer:
             print(f"Queries ({len(queries)}):")
             for q in queries:
                 expr = q.get('expression', '')
-                lines = len(expr.splitlines())
+                lines = len(split_lines(expr))
                 print(f"  {q['name']}  ({lines} lines)")
             print(f"\nRun with ?powerquery=show to see all M code")
             print(f"Run with ?powerquery=<name> to see a specific query")
