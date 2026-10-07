@@ -65,7 +65,10 @@ def find_offenders(source: str, tree: ast.Module) -> List[Tuple[int, str]]:
     of a guarded accessor (kind = its name), ``field_name_for_child``, a node ``.children``
     or a node ``==``."""
     lines = source.splitlines()
-    parents = {child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
+    # An Attribute's only child expression is its .value, so `mock.<name>.return_value` is
+    # found from the outer Attribute (no whole-tree parent map: that cost ~8s over the repo).
+    mock_stubs = {id(n.value) for n in ast.walk(tree)
+                  if isinstance(n, ast.Attribute) and n.attr in MOCK_ATTRS}
     ts_file = bool(TS_FILE.search(source))
     found = []
 
@@ -76,8 +79,7 @@ def find_offenders(source: str, tree: ast.Module) -> List[Tuple[int, str]]:
     for node in ast.walk(tree):
         kind = None
         if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load):
-            parent = parents.get(node)
-            if node.attr in NAMES and not (isinstance(parent, ast.Attribute) and parent.attr in MOCK_ATTRS):
+            if node.attr in NAMES and id(node) not in mock_stubs:
                 kind = node.attr
             elif node.attr in MISSING_ON_FLOOR:
                 kind = node.attr
