@@ -151,7 +151,7 @@ def _absolute_directory_scope(directory: str) -> Tuple[str, Optional[str]]:
         workdir = pygit2.Repository(git_dir).workdir if git_dir else None
     except (pygit2.GitError, KeyError):  # reported by _open_repository on the same discovery
         return directory, None
-    if not workdir:
+    if not git_dir or not workdir:
         return directory, None
     target, root = Path(directory).resolve(), Path(workdir).resolve()
     if target == root or not target.is_relative_to(root) or target.is_relative_to(Path(git_dir).resolve()):
