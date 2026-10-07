@@ -1421,22 +1421,19 @@ class TestI002ProjectRootCache(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_no_false_positive_across_packages(self):
-        """Files in sibling packages do not produce false-positive cycles (correctness).
-
-        Note: I002 resolves imports relative to each file's directory; absolute
-        cross-package imports (e.g. ``from pkg_b import mod``) are not yet
-        resolved to file paths, so no cycle is reported.  This is by design —
-        better silent than wrong.
-        """
+    def test_cross_package_cycle_is_reported(self):
+        """The absolute cross-package cycle above is a real one, and I002 reports it
+        from both files (BACK-1723: I002 resolves absolute imports from the project
+        root and through ``from pkg import submodule``, like imports://). It used to
+        stay silent because absolute imports were resolved from each file's own
+        directory only."""
         from reveal.rules.imports.I002 import I002, _graph_cache
         _graph_cache.clear()
         rule = I002()
-        # Neither file should produce a false positive
         detections_a = rule.check(str(self.tmp / 'pkg_a' / 'mod.py'), None, '')
         detections_b = rule.check(str(self.tmp / 'pkg_b' / 'mod.py'), None, '')
-        self.assertEqual(len(detections_a), 0, "No false-positive cycle for pkg_a/mod.py")
-        self.assertEqual(len(detections_b), 0, "No false-positive cycle for pkg_b/mod.py")
+        self.assertEqual(len(detections_a), 1, "pkg_a/mod.py is in the cycle")
+        self.assertEqual(len(detections_b), 1, "pkg_b/mod.py is in the cycle")
 
     def test_shared_cache_across_subdirs(self):
         """Both pkg_a and pkg_b files share the same cached graph (performance)."""

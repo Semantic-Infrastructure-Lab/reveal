@@ -285,11 +285,8 @@ def test_imports_and_depends_agree_on_who_depends_on_whom(tmp_path, shape):
 MEMBER_IMPORT = {
     'pkg/__init__.py': '', 'pkg/a.py': 'from pkg import b\n', 'pkg/b.py': 'import pkg.a\n',
 }
-MEMBER_REASON = ("imports:// drops the file edge of an absolute `from pkg import submodule` "
-                 '(depends:// keeps it), so a cycle made of such edges is invisible to ?circular')
 
 
-@pytest.mark.xfail(strict=True, reason=MEMBER_REASON)
 def test_member_import_of_a_submodule_is_a_file_edge_in_both(tmp_path):
     root = _python_project(tmp_path / 'member', {
         **MEMBER_IMPORT, 'main.py': 'from pkg import b\n'})
@@ -299,7 +296,6 @@ def test_member_import_of_a_submodule_is_a_file_edge_in_both(tmp_path):
     assert imports_edges.get('pkg/b.py', set()) == depends_edges['pkg/b.py']
 
 
-@pytest.mark.xfail(strict=True, reason=MEMBER_REASON)
 def test_cycle_through_a_member_import_is_found_by_imports(tmp_path):
     root = _python_project(tmp_path / 'cycle', MEMBER_IMPORT)
     depends_edges = _depends_edges(root)

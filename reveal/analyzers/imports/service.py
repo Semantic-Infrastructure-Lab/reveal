@@ -127,8 +127,8 @@ def resolve_graph(scope: ScanScope, files: ImportFileSet, analysis: ImportAnalys
         # signature, so gate the index-passing on spec presence.
         for stmt in imports:
             # BACK-445: skip imports that can't cause a circular ImportError
-            # at startup — matching the I002 circular-import rule's definition
-            # (rules/imports/I002.py:_resolve_graph_dependencies):
+            # at startup — the circular-import definition imports:// and I002
+            # share (I002 resolves through this function too, BACK-1723):
             #   - TYPE_CHECKING imports never run at runtime
             #   - function-body (deferred/lazy) imports run only after all
             #     top-level code has finished importing — they are the
@@ -139,18 +139,23 @@ def resolve_graph(scope: ScanScope, files: ImportFileSet, analysis: ImportAnalys
             if stmt.is_type_checking or stmt.is_in_function:
                 continue
 
-            resolved = resolve_primary(
-                stmt, extractor, ResolutionContext(base_path, tuple(extra_paths), file_index))
+            # BACK-1723: every file the statement loads, not only the primary
+            # one -- `from pkg import b` (b a submodule) runs pkg/b.py at
+            # startup, so it is a cycle edge; depends:// already used targets.
             # Skip self-references (e.g., logging.py importing stdlib logging
             # should not create logging.py → logging.py dependency)
-            if resolved and resolved != file_path:
-                analysis.graph.add_dependency(file_path, resolved)
-                analysis.graph.resolved_paths[stmt.module_name] = resolved
+            targets = [t for t in resolve_targets(
+                stmt, extractor, ResolutionContext(base_path, tuple(extra_paths), file_index))
+                if t != file_path]
+            if targets:
+                for resolved in targets:
+                    analysis.graph.add_dependency(file_path, resolved)
+                analysis.graph.resolved_paths[stmt.module_name] = targets[0]
                 # BACK-1193: carry the resolution onto the statement itself
                 # (not just the module-name-keyed graph index) so per-import
                 # consumers like deps:// can classify on resolution truth
                 # instead of re-guessing from the raw module string.
-                stmt.resolved_path = resolved
+                stmt.resolved_path = targets[0]
                 continue
 
             # BACK-544: the single-file dotted match above only catches a

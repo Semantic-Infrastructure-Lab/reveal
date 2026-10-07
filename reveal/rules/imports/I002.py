@@ -13,7 +13,10 @@ from typing import List, Dict, Any, Iterator, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...analyzers.imports import ImportGraph
+from ...analyzers.imports import service as import_analysis
 from ...analyzers.imports.base import get_extractor, get_all_extensions
+from ...analyzers.imports.file_index import basename_index
+from ...analyzers.imports.types import ImportAnalysis
 from ...core import disk_cache
 from ...utils.parallel import pool_worker_count
 from ...utils.path_utils import (
@@ -376,7 +379,7 @@ class I002(BaseRule):
         graph = ImportGraph.from_imports(all_imports)
         graph.failed_files = failed_files
         graph.scan_skipped_reason = skipped_reason
-        self._resolve_graph_dependencies(graph)
+        self._resolve_graph_dependencies(graph, directory)
 
         _graph_cache[directory] = graph
         if fingerprint is not None:
@@ -491,62 +494,20 @@ class I002(BaseRule):
                     failed_files.append(Path(fp_str))
             return all_imports, failed_files, None
 
-    def _resolve_graph_dependencies(self, graph: ImportGraph) -> None:
-        """Phase 2: Resolve import statements to actual file paths and add edges."""
-        from dataclasses import replace as dc_replace
+    def _resolve_graph_dependencies(self, graph: ImportGraph, directory: Path) -> None:
+        """Phase 2: resolve import statements to files through the shared
+        import-analysis service, the same resolution imports:// uses (BACK-1723).
 
-        extractors = {fp: get_extractor(fp) for fp in graph.files}
-        # BACK-544: C#'s `using X.Y` names a namespace, not one type — a
-        # namespace index (built once, same as the imports:// adapter's
-        # _build_namespace_index) lets a genuine cross-file cycle through
-        # C#'s namespace imports be detected here too, not just via imports://.
-        namespace_index: Dict[str, List[Path]] = {}
-        for file_path, extractor in extractors.items():
-            if not getattr(getattr(extractor, 'spec', None), 'resolve_namespaces', False):
-                continue
-            for ns in extractor.extract_namespaces(file_path):
-                namespace_index.setdefault(ns, []).append(file_path)
-
-        for file_path, imports in graph.files.items():
-            extractor = extractors[file_path]
-            if not extractor:
-                continue
-            base_path = file_path.parent
-            for stmt in imports:
-                # Skip imports that can't cause circular ImportError at startup:
-                # - TYPE_CHECKING imports never run at runtime
-                # - Function-body imports run after all top-level code completes
-                if stmt.is_type_checking or stmt.is_in_function:
-                    continue
-                # For `from . import X, Y, Z` (relative, no module path), each
-                # imported name may resolve to a distinct sibling module.  Emit
-                # one edge per name so that all submodule dependencies are tracked
-                # and resolver.py can match names to their actual files.
-                if stmt.is_relative and not stmt.module_name and stmt.imported_names:
-                    for name in stmt.imported_names:
-                        single = dc_replace(stmt, imported_names=[name])
-                        resolved = extractor.resolve_import(single, base_path)
-                        if resolved and resolved != file_path:
-                            graph.add_dependency(file_path, resolved)
-                else:
-                    resolved = extractor.resolve_import(stmt, base_path)
-                    # Skip self-references (e.g., logging.py importing stdlib logging
-                    # should not create logging.py → logging.py dependency)
-                    if resolved and resolved != file_path:
-                        graph.add_dependency(file_path, resolved)
-                    else:
-                        self._add_namespace_dependencies(graph, file_path, extractor, stmt, namespace_index)
-
-    @staticmethod
-    def _add_namespace_dependencies(graph, file_path, extractor, stmt, namespace_index) -> None:
-        """BACK-544 fallback: fan out an edge to every file declaring the
-        namespace ``stmt`` imports (C#'s ``using X.Y``), when the single-file
-        dotted match above didn't resolve one."""
-        if not namespace_index or not getattr(getattr(extractor, 'spec', None), 'resolve_namespaces', False):
-            return
-        for target in extractor.resolve_namespace_targets(stmt, namespace_index):
-            if target != file_path:
-                graph.add_dependency(file_path, target)
+        The project root is a search path, so an absolute intra-project import
+        (`import pkg.b`, `from pkg import b`) resolves, and every target of a
+        statement becomes an edge (`from pkg import b` loads pkg/b.py). The
+        service skips TYPE_CHECKING and function-body imports, which cannot
+        cause a circular ImportError at startup.
+        """
+        import_analysis.resolve_graph(
+            import_analysis.ScanScope(directory, frozenset(get_all_extensions())),
+            import_analysis.ImportFileSet(tuple(graph.files), basename_index([directory])),
+            ImportAnalysis(graph=graph, scanned_files=set(graph.files)))
 
     def _format_cycle(self, cycle: List[Path]) -> str:
         """Format a cycle for human-readable display.

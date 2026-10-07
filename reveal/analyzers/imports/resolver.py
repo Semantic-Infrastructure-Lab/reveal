@@ -255,7 +255,9 @@ def _from_import_package_dir(
             target = target / part
         return target if target.is_dir() else None
 
-    if not parts:
+    # Same stdlib guard as _resolve_absolute (BACK-1080): `from os import path`
+    # loads the stdlib, never a same-named in-tree os/ package's path.py.
+    if not parts or parts[0] in STDLIB_MODULES:
         return None
     # Same package-interior guard as _resolve_absolute: a `from typing import X`
     # whose base_path package also holds a `typing/` dir must not shadow the

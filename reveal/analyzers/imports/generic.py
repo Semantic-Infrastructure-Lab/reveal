@@ -2015,7 +2015,8 @@ class _GenericTreeSitterImportExtractor(LanguageExtractor):
         The index must have been built from the same root passed in
         ``search_paths`` with the same ``SKIP_DIRECTORIES``/hidden-dir filtering
         (as ``_build_graph`` does), which makes the lookup byte-identical to the
-        walk it replaces. Callers that pass no index (I002, call_graph, depends)
+        walk it replaces. imports://, depends:// and I002 pass one through
+        ``analyzers.imports.service``; callers that pass none (call_graph, B005)
         fall back to the walk unchanged.
         """
         if self.spec.resolve_includes:
