@@ -18,8 +18,9 @@ _CODE_KEYS = ('functions', 'classes', 'imports')
 def require_comparable(structure: Dict[str, Any], uri: str) -> Dict[str, Any]:
     """Return ``structure`` if diff:// can compare it, else decline (BACK-1689).
 
-    diff:// compares functions, classes and imports. A code analyzer's structure is
-    untyped (an empty file has no keys at all) or carries those keys, flat or under
+    diff:// compares a code structure's element categories (functions, classes, imports,
+    interfaces, structs ...; BACK-1732). A code analyzer's structure is untyped (an empty
+    file has no keys at all) or carries functions, classes or imports, flat or under
     ``structure``; a directory aggregate is typed 'directory'/'git_directory'. Anything
     else (sqlite, env, JSON, YAML, Markdown, TOML ...) has none of them and would
     compare as "No structural changes detected" whatever differs: a false clean.

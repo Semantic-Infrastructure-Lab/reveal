@@ -2,7 +2,7 @@
 
 import difflib
 import json
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from reveal.utils.formatting import lines_label
 from reveal.utils.lines import split_lines
@@ -49,6 +49,9 @@ def render_diff_text(diff_result: Dict[str, Any]) -> None:
     _render_functions_section(details.get('functions', []))
     _render_classes_section(details.get('classes', []))
     _render_imports_section(details.get('imports', []))
+    for category in _categories_in_order(details):
+        if category not in _OWN_SECTIONS:
+            _render_named_section(category, details[category])
 
     # Breadcrumbs - suggest next steps
     _render_diff_breadcrumbs(left, right, details)
@@ -90,6 +93,15 @@ def _render_category_summary(category_name: str, data: Dict[str, int], show_modi
     return True
 
 
+_OWN_SECTIONS = ('functions', 'classes', 'imports')
+
+
+def _categories_in_order(categories: Dict[str, Any]) -> List[str]:
+    """Functions, classes and imports first, then the other categories as the diff lists them."""
+    return ([c for c in _OWN_SECTIONS if c in categories]
+            + [c for c in categories if c not in _OWN_SECTIONS])
+
+
 def _render_diff_summary(summary: Dict[str, Any]) -> bool:
     """Render summary section.
 
@@ -101,14 +113,11 @@ def _render_diff_summary(summary: Dict[str, Any]) -> bool:
 
     has_changes = False
 
-    if summary.get('functions'):
-        has_changes |= _render_category_summary('Functions', summary['functions'])
-
-    if summary.get('classes'):
-        has_changes |= _render_category_summary('Classes', summary['classes'])
-
-    if summary.get('imports'):
-        has_changes |= _render_category_summary('Imports', summary['imports'], show_modified=False)
+    # functions, classes, imports, then every other category the analyzers emit (BACK-1732)
+    for category in _categories_in_order(summary):
+        if summary[category]:
+            has_changes |= _render_category_summary(category.capitalize(), summary[category],
+                                                    show_modified=category != 'imports')
 
     if not has_changes:
         print("  No structural changes detected")
@@ -273,6 +282,25 @@ def _render_imports_section(imports: list) -> None:
         elif imp['type'] == 'removed':
             print(f"  - {imp['content']}")
     print()
+
+
+def _render_named_section(category: str, elements: list) -> None:
+    """Render a category compared by element name: interfaces, structs, enums, types... (BACK-1732)."""
+    if not elements:
+        return
+
+    print(f"🧩 {category.capitalize()}:")
+    print()
+    for element in elements:
+        marker = {'added': '+', 'removed': '-', 'modified': '~'}.get(element['type'], '?')
+        print(f"  {marker} {element['name']}")
+        if element.get('line'):
+            print(f"      Line {element['line']}")
+        if element['type'] == 'removed':
+            print("      [REMOVED]")
+        for field, change in element.get('changes', {}).items():
+            print(f"      {field}: {change['old']} → {change['new']}")
+        print()
 
 
 def _print_body_diff(old: str, new: str) -> None:

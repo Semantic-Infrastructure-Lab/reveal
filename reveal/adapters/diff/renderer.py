@@ -1,6 +1,7 @@
 """Rendering for diff adapter."""
 
 from ...rendering.diff import render_diff
+from ...utils.warning_render import render_meta_warnings
 
 
 class DiffRenderer:
@@ -15,6 +16,9 @@ class DiffRenderer:
             format: Output format (text, json, grep)
         """
         render_diff(result, format, is_element=False)
+        if format != 'json':
+            # What the comparison could not see (BACK-1732); JSON carries it in meta.
+            render_meta_warnings(result)
 
     @staticmethod
     def render_element(result: dict, format: str = 'text') -> None:

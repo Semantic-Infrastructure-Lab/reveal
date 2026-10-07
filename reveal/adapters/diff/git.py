@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, Any, Optional, cast
 
+from ...diff.structure_diff import element_categories
 from ...registry import get_analyzer
 
 logger = logging.getLogger(__name__)
@@ -282,7 +283,8 @@ def _tag_items_with_file(struct: Dict[str, Any], rel_path: str, key: str) -> lis
     """Return items from struct[key] with 'file' set to rel_path."""
     items = []
     for item in struct.get(key, []):
-        item['file'] = rel_path
+        if isinstance(item, dict):
+            item['file'] = rel_path
         items.append(item)
     return items
 
@@ -300,9 +302,8 @@ def resolve_git_directory(git_ref: str, dir_path: str) -> Dict[str, Any]:
 
     file_paths = _ls_tree_files(git_ref, dir_path)
 
-    all_functions: list = []
-    all_classes: list = []
-    all_imports: list = []
+    # Every element category any file has, not only functions/classes/imports (BACK-1732).
+    aggregated: Dict[str, list] = {'functions': [], 'classes': [], 'imports': []}
     file_count = 0
 
     for file_path in file_paths:
@@ -320,17 +321,15 @@ def resolve_git_directory(git_ref: str, dir_path: str) -> Dict[str, Any]:
         if dir_path and dir_path != '.':
             rel_path = file_path[len(dir_path.rstrip('/')) + 1:]
 
-        all_functions.extend(_tag_items_with_file(struct, rel_path, 'functions'))
-        all_classes.extend(_tag_items_with_file(struct, rel_path, 'classes'))
-        all_imports.extend(_tag_items_with_file(struct, rel_path, 'imports'))
+        for category in element_categories(struct):
+            aggregated.setdefault(category, []).extend(
+                _tag_items_with_file(struct, rel_path, category))
         file_count += 1
 
     return {
+        **aggregated,
         'type': 'git_directory',
         'ref': git_ref,
         'path': dir_path,
         'file_count': file_count,
-        'functions': all_functions,
-        'classes': all_classes,
-        'imports': all_imports
     }

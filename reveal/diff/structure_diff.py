@@ -1,11 +1,33 @@
 """Core diff algorithm for comparing reveal structures."""
 
-from typing import Dict, Any, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+# Fields that say where an element is, not what it is: an element pushed down the file by
+# an edit above it has moved, not changed. 'file' is part of an element's identity instead.
+_POSITION_FIELDS = frozenset({'line', 'line_end', 'line_start', 'file'})
+
+
+def element_categories(struct: Dict[str, Any]) -> List[str]:
+    """The element categories of an analyzer's structure, in the order it emits them.
+
+    A category is any list-valued key: functions, classes, imports, and whatever else the
+    analyzer extracts (interfaces, structs, enums, types, namespaces, variables, ...). This
+    is the one place that decides it, so a new category is compared without a new list
+    (BACK-1732). Scalars and dicts are not elements: an envelope's type, source and meta,
+    a batch file's stats, a ``_has_errors`` flag.
+    """
+    return [key for key, value in struct.items() if isinstance(value, list)]
 
 
 def compute_structure_diff(left: Dict[str, Any],
                           right: Dict[str, Any]) -> Dict[str, Any]:
     """Compute semantic diff between two structures.
+
+    Functions, classes and imports have comparisons of their own and are always in the
+    summary. Every other category either side has (``element_categories``) is compared by
+    element name (``diff_named_elements``). A category whose items carry no name cannot be
+    matched item by item; if the two sides differ there it is listed in ``not_compared``
+    for the caller to disclose, never dropped (BACK-1732).
 
     Args:
         left: Structure from left URI
@@ -16,7 +38,8 @@ def compute_structure_diff(left: Dict[str, Any],
             'summary': {
                 'functions': {'added': N, 'removed': M, 'modified': K},
                 'classes': {...},
-                'imports': {...}
+                'imports': {...},
+                'interfaces': {...},   # any other category either side has
             },
             'details': {
                 'functions': [
@@ -25,7 +48,8 @@ def compute_structure_diff(left: Dict[str, Any],
                     {'type': 'modified', 'name': 'baz', 'changes': {...}}
                 ],
                 ...
-            }
+            },
+            'not_compared': ['widgets'],  # differing categories with unnamed items
         }
     """
     # Handle both nested and flat structure formats
@@ -33,34 +57,90 @@ def compute_structure_diff(left: Dict[str, Any],
     left_struct = left.get('structure', left)
     right_struct = right.get('structure', right)
 
-    # Get summary counts
-    func_summary, func_details = diff_functions(
-        left_struct.get('functions', []),
-        right_struct.get('functions', [])
-    )
+    summary: Dict[str, Dict[str, int]] = {}
+    details: Dict[str, List[Dict]] = {}
+    not_compared: List[str] = []
+    for category, differ in _OWN_COMPARISONS.items():
+        summary[category], details[category] = differ(
+            _items(left_struct, category), _items(right_struct, category))
 
-    class_summary, class_details = diff_classes(
-        left_struct.get('classes', []),
-        right_struct.get('classes', [])
-    )
+    categories = element_categories(left_struct) + element_categories(right_struct)
+    for category in dict.fromkeys(categories):
+        if category in _OWN_COMPARISONS:
+            continue
+        left_items, right_items = _items(left_struct, category), _items(right_struct, category)
+        if _is_named(left_items) and _is_named(right_items):
+            summary[category], details[category] = diff_named_elements(left_items, right_items)
+        elif left_items != right_items:
+            not_compared.append(category)
 
-    import_summary, import_details = diff_imports(
-        left_struct.get('imports', []),
-        right_struct.get('imports', [])
-    )
+    return {'summary': summary, 'details': details, 'not_compared': not_compared}
 
-    return {
-        'summary': {
-            'functions': func_summary,
-            'classes': class_summary,
-            'imports': import_summary
-        },
-        'details': {
-            'functions': func_details,
-            'classes': class_details,
-            'imports': import_details
-        }
-    }
+
+def _items(struct: Dict[str, Any], category: str) -> List[Any]:
+    value = struct.get(category)
+    return value if isinstance(value, list) else []
+
+
+def _is_named(items: List[Any]) -> bool:
+    return all(isinstance(item, dict) and isinstance(item.get('name'), str) for item in items)
+
+
+def _shape(value: Any) -> Any:
+    """``value`` without position fields, at any depth: what an element is, not where."""
+    if isinstance(value, dict):
+        return {k: _shape(v) for k, v in value.items() if k not in _POSITION_FIELDS}
+    if isinstance(value, list):
+        return [_shape(v) for v in value]
+    return value
+
+
+def diff_named_elements(left_items: List[Dict],
+                        right_items: List[Dict]) -> Tuple[Dict[str, int], List[Dict]]:
+    """Compare a category that has no comparison of its own (interfaces, structs, enums,
+    types, ...) by element name.
+
+    An element is keyed by (file, name, n): the n-th element of that name, so a second
+    element sharing a name (a variable assigned twice) is an addition, not a collision.
+    A pair is modified when any field other than its position differs (BACK-1732).
+
+    Returns:
+        Tuple of (summary_dict, details_list)
+    """
+    def keyed(items: List[Dict]) -> Dict[Tuple[Any, str, int], Dict]:
+        seen: Dict[Tuple[Any, str], int] = {}
+        out = {}
+        for item in items:
+            ident = (item.get('file'), item['name'])
+            seen[ident] = seen.get(ident, 0) + 1
+            out[ident + (seen[ident],)] = item
+        return out
+
+    def order(key: Tuple[Any, str, int]) -> Tuple[str, str, int]:
+        return (key[1], key[0] or '', key[2])
+
+    left_keyed, right_keyed = keyed(left_items), keyed(right_items)
+    details: List[Dict] = []
+    for change, keys, side in (('added', right_keyed.keys() - left_keyed.keys(), right_keyed),
+                               ('removed', left_keyed.keys() - right_keyed.keys(), left_keyed)):
+        for key in sorted(keys, key=order):
+            details.append({'type': change, 'name': key[1], 'line': side[key].get('line')})
+
+    modified = 0
+    for key in sorted(left_keyed.keys() & right_keyed.keys(), key=order):
+        old, new = _shape(left_keyed[key]), _shape(right_keyed[key])
+        changes = {field: {'old': old.get(field), 'new': new.get(field)}
+                   for field in sorted(old.keys() | new.keys())
+                   if old.get(field) != new.get(field)}
+        if changes:
+            modified += 1
+            details.append({'type': 'modified', 'name': key[1],
+                            'line': right_keyed[key].get('line'), 'changes': changes})
+
+    summary = {'added': len(right_keyed.keys() - left_keyed.keys()),
+               'removed': len(left_keyed.keys() - right_keyed.keys()),
+               'modified': modified}
+    return summary, details
 
 
 def compute_element_diff(left_elem: Optional[Dict[str, Any]],
@@ -477,6 +557,14 @@ def diff_imports(left_imports: List[Dict],
     }
 
     return summary, details
+
+
+# The categories with a comparison of their own, always in the summary, in this order.
+_OWN_COMPARISONS: Dict[str, Callable[[List[Dict], List[Dict]], Tuple[Dict[str, int], List[Dict]]]] = {
+    'functions': diff_functions,
+    'classes': diff_classes,
+    'imports': diff_imports,
+}
 
 
 def _compute_element_changes(left: Dict, right: Dict) -> Dict[str, Any]:

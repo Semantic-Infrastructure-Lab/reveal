@@ -5,7 +5,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from .parsing import parse_diff_uris, split_trailing_element
 from .resolution import (resolve_uri, extract_metadata, find_element, element_names,
-                         read_element_source)
+                         read_element_source, read_source_text)
 from .help import get_schema as _get_schema, get_help as _get_help
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import DiffRenderer
@@ -24,9 +24,12 @@ class DiffAdapter(ResourceAdapter):
         diff://app.py:backup/app.py               # File comparison
         diff://app.py:old.py/handle_request       # Element-specific diff
 
-    Compares functions, classes and imports. A resource whose structure has none
-    (env://, sqlite://, mysql://, JSON/YAML files) always reports no changes, so it is
-    not a schema- or config-drift check (BACK-1642).
+    Compares every element category the analyzer emits: functions, classes, imports,
+    and interfaces, structs, enums, types... by name (BACK-1732). A pair of files that
+    differ outside every compared element is disclosed in ``meta.warnings``, never called
+    clean. A resource whose structure has no functions, classes or imports (env://,
+    sqlite://, mysql://, JSON/YAML files) is declined as not applicable, so it is not a
+    schema- or config-drift check (BACK-1642, BACK-1689).
     """
     HELP_CLUSTER = 'Code Analysis'
 
@@ -136,12 +139,15 @@ class DiffAdapter(ResourceAdapter):
                     'functions': {'added': 2, 'removed': 1, 'modified': 3},
                     'classes': {'added': 0, 'removed': 0, 'modified': 1},
                     'imports': {'added': 5, 'removed': 2},
+                    'interfaces': {...},  # any other category either side has
                 },
                 'diff': {
                     'functions': [...],  # Detailed function diffs
                     'classes': [...],    # Detailed class diffs
-                    'imports': [...]     # Import changes
-                }
+                    'imports': [...],    # Import changes
+                    'interfaces': [...], # added/removed/modified by name
+                },
+                'meta': {'warnings': [{'type': 'not_compared', ...}]},  # only when needed
             }
         """
         from ...diff import compute_structure_diff
@@ -158,6 +164,7 @@ class DiffAdapter(ResourceAdapter):
             source=f"{self.left_uri} vs {self.right_uri}",
             source_type='runtime',
             contract_version=CONTRACT_VERSION,
+            warnings=self._uncompared_warnings(diff_result) or None,
             data={
                 'left': extract_metadata(left_struct, self.left_uri),
                 'right': extract_metadata(right_struct, self.right_uri),
@@ -165,6 +172,32 @@ class DiffAdapter(ResourceAdapter):
                 'diff': diff_result['details'],
             }
         )
+
+    def _uncompared_warnings(self, diff_result: Dict[str, Any]) -> list:
+        """What the comparison could not see, so "no changes" is never a silent clean
+        (BACK-1732): categories whose items have no name to match, and a pair of
+        single files that differ although no compared element does (a Python
+        module-level constant is in no category; a body edit can stay under the
+        function thresholds)."""
+        warnings = []
+        if diff_result['not_compared']:
+            warnings.append({
+                'type': 'not_compared', 'field': 'categories',
+                'message': (f"Categories not compared: {', '.join(diff_result['not_compared'])} "
+                            "(their items have no name to match); they differ between the sides"),
+            })
+        if not any(any(counts.values()) for counts in diff_result['summary'].values()):
+            left, right = read_source_text(self.left_uri), read_source_text(self.right_uri)
+            if left is not None and right is not None and left != right:
+                warnings.append({
+                    'type': 'not_compared', 'field': 'source',
+                    'message': (f"{self.left_uri} and {self.right_uri} differ, but in nothing "
+                                f"diff:// compares ({', '.join(diff_result['summary'])}): the "
+                                "change is outside every element (e.g. a module-level constant) "
+                                "or inside a body below the change thresholds. Compare the text "
+                                "to see it"),
+                })
+        return warnings
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get diff for a specific element (function, class, etc.).
