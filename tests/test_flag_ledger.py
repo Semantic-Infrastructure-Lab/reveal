@@ -317,21 +317,46 @@ PROBES = {
     'depth': ('--depth', 1),
 }
 
-_NOT_VISIBLE = 'BACK-1538'  # read, but the fixture cannot show an effect
+# (scheme, dest) -> task, for a flag that is read yet shows no effect on the fixture. Empty since
+# BACK-1538: every pair now shows its effect (xfail strict, so a new row must name its task).
+KNOWN_SILENT: dict = {}
 
-KNOWN_SILENT = {
-    ('testability', 'limit'): _NOT_VISIBLE,
-    ('hotspots', 'exclude'): _NOT_VISIBLE,
-    ('trace', 'exclude'): _NOT_VISIBLE,
-    ('architecture', 'all'): _NOT_VISIBLE,
-    ('ast', 'all'): _NOT_VISIBLE,
-    ('calls', 'all'): _NOT_VISIBLE,
-    ('claude', 'all'): _NOT_VISIBLE,
-    ('deps', 'all'): _NOT_VISIBLE,
-    ('hotspots', 'all'): _NOT_VISIBLE,
-    ('overview', 'all'): _NOT_VISIBLE,
-    ('testability', 'all'): _NOT_VISIBLE,
-}
+# The cap --all lifts belongs to the text renderer (ACCEPTS_TOP); the JSON result already lists
+# every item, so these pairs are judged on the text view (BACK-1538).
+TEXT_ONLY_EFFECT = {('architecture', 'all'), ('deps', 'all')}
+
+
+def _enrich_past_default_caps(root, proj):
+    """More items than any adapter's default cap, so --all (and --limit/--exclude) can show.
+
+    Defaults being lifted: ast 200 results, calls/hotspots 10, architecture 5 per section,
+    testability 20 groups, claude 20 sessions (BACK-1538).
+    """
+    (proj / 'many.py').write_text(''.join(
+        f'def fn_{i}():\n    return fn_{i + 1}()\n\n\n' for i in range(210)), encoding='utf-8')
+    branches = ''.join(f'    if x == {i}:\n        return {i}\n' for i in range(12))
+    for i in range(12):
+        (proj / f'mod_{i}.py').write_text(f'def m_{i}():\n    return {i}\n', encoding='utf-8')
+        (proj / f'hot_{i}.py').write_text(
+            f'import mod_{i}\nimport thirdparty_{i}\n\n\ndef hot_{i}(x):\n{branches}    return mod_{i}.m_{i}()\n',
+            encoding='utf-8')
+    (proj / 'targets.py').write_text(''.join(f'def t_{i}():\n    return {i}\n\n\n' for i in range(22)),
+                                    encoding='utf-8')
+    (proj / 'tests' / 'test_many_patches.py').write_text(
+        'from unittest import mock\nimport targets\n\n\ndef test_many():\n' + ''.join(
+            f'    with mock.patch("targets.t_{i}"), mock.patch("targets.t_{i}"), '
+            f'mock.patch("targets.t_{i}"):\n        pass\n' for i in range(22)), encoding='utf-8')
+    # --exclude tests must change hotspots (the heaviest function lives in tests/) and trace
+    # (tests/ holds a second `main`, so the entry point is ambiguous until tests are excluded).
+    heavy = ''.join(f'    if x == {i}:\n        return {i}\n' for i in range(40))
+    (proj / 'tests' / 'test_heavy.py').write_text(
+        f'def main():\n    return 0\n\n\ndef test_heavy(x):\n{heavy}    return -1\n', encoding='utf-8')
+    for i in range(22):
+        d = root / 'home' / '.claude' / 'projects' / f'-extra{i}'
+        d.mkdir(parents=True)
+        (d / f'session-{i}.jsonl').write_text(
+            f'{{"type": "user", "sessionId": "session-{i}", "timestamp": "2026-01-02T00:00:00Z", '
+            '"message": {"role": "user", "content": "hi"}}\n', encoding='utf-8')
 
 
 def _enrich(root):
@@ -362,6 +387,7 @@ def _enrich(root):
     (proj / 'GUIDE.md').write_text('---\ntitle: Guide\n---\n# Guide\n\n## One\n', encoding='utf-8')
     (proj / 'data.json').write_text(
         '[{"name": "b", "n": 2}, {"name": "a", "n": 1}, {"name": "c", "n": 3}]', encoding='utf-8')
+    _enrich_past_default_caps(root, proj)
     conn = sqlite3.connect(str(proj / 'app.db'))
     conn.execute('CREATE TABLE orders (id INTEGER)')
     conn.execute('CREATE TABLE audit (id INTEGER)')
@@ -383,8 +409,8 @@ def _enrich(root):
 
 
 class _FlagHarness(harness_module._Harness):
-    def run_flags(self, scheme, **flags):
-        key = (scheme, tuple(sorted((k, str(v)) for k, v in flags.items())))
+    def run_flags(self, scheme, fmt='json', **flags):
+        key = (scheme, fmt, tuple(sorted((k, str(v)) for k, v in flags.items())))
         if key not in self._cache:
             out, err, code = StringIO(), StringIO(), 0
             with self._hermetic(), redirect_stdout(out), redirect_stderr(err):
@@ -392,7 +418,7 @@ class _FlagHarness(harness_module._Harness):
                     uri = {'calls': 'calls://proj?rank=callers',
                            'patches': 'patches://proj'}.get(scheme, harness_module.FIXTURE_URIS[scheme])
                     handle_uri(uri, None,
-                               _default_args(format='json', **flags))
+                               _default_args(format=fmt, **flags))
                 except SystemExit as exc:
                     code = exc.code if isinstance(exc.code, int) else 1
             self._cache[key] = (code, out.getvalue(), err.getvalue())
@@ -420,6 +446,7 @@ def _cases():
 def test_known_silent_rows_name_real_cases():
     assert {s for s, _ in KNOWN_SILENT} <= set(harness_module.FIXTURE_URIS)
     assert {d for _, d in KNOWN_SILENT} <= set(PROBES)
+    assert TEXT_ONLY_EFFECT <= {(s, d) for s in harness_module.FIXTURE_URIS for d in PROBES}
 
 
 def test_every_runnable_adapter_is_probed():
@@ -434,8 +461,9 @@ def test_flag_is_honored_or_named(flag_harness, scheme, dest):
     if scheme == 'git' and not (flag_harness.root / '.git').exists():
         pytest.skip('git not installed')
     option, value = PROBES[dest]
-    base = flag_harness.run_flags(scheme)
-    code, out, err = flag_harness.run_flags(scheme, **{dest: value})
+    fmt = 'text' if (scheme, dest) in TEXT_ONLY_EFFECT else 'json'
+    base = flag_harness.run_flags(scheme, fmt)
+    code, out, err = flag_harness.run_flags(scheme, fmt, **{dest: value})
     named = option in err or f"'{dest}'" in err  # an adapter's own 'Unknown query param' warning
     honored = (code, out) != base[:2]
     assert named or honored, (
