@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 from reveal.utils import format_size, get_file_type_from_analyzer
+from reveal.utils.lines import split_lines
 from reveal.utils.results import slice_structure
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,7 @@ class FileAnalyzer(ABC):
                     text = f.read()
                     self._detected_encoding = encoding
                     self._ends_with_newline = text.endswith(('\n', '\r'))
-                    return text.splitlines()
+                    return split_lines(text)
             except (UnicodeDecodeError, LookupError):
                 # Try next encoding
                 logger.debug(f"Failed to read {self.path} with {encoding}, trying next")
@@ -75,7 +76,8 @@ class FileAnalyzer(ABC):
         with open(self.path, 'rb') as f:
             content = f.read().decode('utf-8', errors='replace')
             self._ends_with_newline = content.endswith(('\n', '\r'))
-            return content.splitlines()
+            # binary mode has no universal newlines: a lone \r ends a line here too, as above
+            return split_lines(content.replace('\r\n', '\n').replace('\r', '\n'))
 
     def get_metadata(self) -> Dict[str, Any]:
         """Return file metadata.
