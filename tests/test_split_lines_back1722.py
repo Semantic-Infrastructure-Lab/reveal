@@ -48,3 +48,11 @@ def test_read_file_line_count_is_the_newline_count(tmp_path, payload, count):
     path.write_bytes(payload)
     assert len(_Reader(str(path)).lines) == count
     assert count == payload.count(b'\n') + (0 if payload.endswith(b'\n') or not payload else 1)
+
+
+@pytest.mark.parametrize('text', ['', 'a', 'a\n', 'a\r\nb\n\nc', 'a\x0c\r\nb\x85\n', '\n\n'])
+def test_keepends_pieces_join_back_and_count_like_the_plain_split(text):
+    pieces = split_lines(text, keepends=True)
+    assert ''.join(pieces) == text
+    assert len(pieces) == len(split_lines(text))
+    assert all(p.endswith('\n') for p in pieces[:-1])
