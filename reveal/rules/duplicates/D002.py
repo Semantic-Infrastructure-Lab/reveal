@@ -56,8 +56,8 @@ class D002(BaseRule):
     # one swapped statement shifts every later name and a near-copy's shaped match
     # collapses (BACK-1733: plain 0.86, shaped 0.42). The literal-identifier match
     # rescues those, at a stricter floor: a literal match of 0.5-0.7 is mostly shared
-    # punctuation (max(plain, shaped) at 0.5 added 120 findings on reveal's own tree;
-    # a 0.7 floor adds 10, all pairs sharing real boilerplate).
+    # punctuation. On reveal's own tree (findings capped per file): shaped only 479,
+    # max(plain, shaped) at 0.5 599 with clear noise in a sample, the 0.7 floor 490.
     MIN_LITERAL_MATCH = 0.7
 
     # Maximum candidates to report
