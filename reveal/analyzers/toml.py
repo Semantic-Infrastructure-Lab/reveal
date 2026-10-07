@@ -33,10 +33,9 @@ class TomlAnalyzer(TreeSitterAnalyzer):
         key_node = node.child(0) if _children(node) else None
         key_kind = _zero_arg(key_node, 'kind') if key_node is not None else None
         if key_kind in ['bare_key', 'dotted_key', 'quoted_key']:
-            start, end = _zero_arg(key_node, 'start_byte'), _zero_arg(key_node, 'end_byte')
             keys.append({
                 'line_start': _zero_arg(node, 'start_position').row + 1,
-                'name': self.content[start:end],
+                'name': self._get_node_text(key_node),
             })
 
     def _process_toml_table_node(self, node, outline: bool, sections: list) -> None:
@@ -86,7 +85,7 @@ class TomlAnalyzer(TreeSitterAnalyzer):
         # Find the key node between [ and ]
         for child in _children(node):
             if _zero_arg(child, 'kind') in ['bare_key', 'dotted_key', 'quoted_key']:
-                return self.content[_zero_arg(child, 'start_byte'):_zero_arg(child, 'end_byte')]
+                return self._get_node_text(child)
         return ''
 
     def _find_section_end_line(self, node) -> int:

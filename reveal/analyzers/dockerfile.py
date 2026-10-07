@@ -99,7 +99,7 @@ class DockerfileAnalyzer(TreeSitterAnalyzer):
             if _zero_arg(child, 'kind') not in ['FROM', 'RUN', 'COPY', 'ADD', 'ENV', 'EXPOSE',
                                   'WORKDIR', 'ENTRYPOINT', 'CMD', 'LABEL', 'ARG']:
                 # Get text content, handling line continuations
-                text = self.content[_zero_arg(child, 'start_byte'):_zero_arg(child, 'end_byte')]
+                text = self._get_node_text(child)
                 # Normalize whitespace from line continuations
                 text = ' '.join(text.split())
                 if text.strip():
