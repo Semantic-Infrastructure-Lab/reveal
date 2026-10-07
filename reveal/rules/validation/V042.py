@@ -22,7 +22,7 @@ Examples:
 
 import ast
 import re
-from pathlib import PurePosixPath
+from pathlib import PurePath
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
@@ -59,7 +59,7 @@ def find_posix_env_uris(tree: ast.Module) -> List[Tuple[int, str]]:
     return sorted(found)
 
 
-def _is_scanned(rel: PurePosixPath) -> bool:
+def _is_scanned(rel: PurePath) -> bool:
     # fixtures are sample sources, not tests
     return ((rel.name.startswith('test_') or rel.name == 'conftest.py')
             and rel.parts[:2] != ('tests', 'fixtures'))

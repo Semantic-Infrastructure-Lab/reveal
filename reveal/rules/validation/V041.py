@@ -80,6 +80,28 @@ def _is_text_mode(mode) -> bool:
     return not (isinstance(mode, str) and 'b' in mode)
 
 
+def _is_bare_attr_open(owner: str | None, call: ast.Call) -> bool:
+    """``x.open(...)`` / ``io.open(...)`` in text mode with no encoding."""
+    if owner in NOT_FILES and owner != 'io':
+        return False
+    return _is_text_mode(_mode(call, call.args[0:1])) and not _has_encoding(call)
+
+
+def _is_bare_tempfile(call: ast.Call) -> bool:
+    mode = _mode(call, call.args[0:1])
+    return isinstance(mode, str) and _is_text_mode(mode) and not _has_encoding(call)
+
+
+def _is_bare_subprocess(call: ast.Call) -> bool:
+    """A subprocess call that decodes text (text=True, universal_newlines=True, errors=)
+    but names no encoding: cp1252 on Windows."""
+    textual = any(
+        (kw := _kw(call, name)) is not None and not (isinstance(kw.value, ast.Constant) and not kw.value.value)
+        for name in ('text', 'universal_newlines', 'errors')
+    )
+    return textual and not _has_encoding(call)
+
+
 def is_bare_text_io(call: ast.Call) -> bool:
     func = call.func
     attr = func.attr if isinstance(func, ast.Attribute) else None
@@ -91,18 +113,11 @@ def is_bare_text_io(call: ast.Call) -> bool:
     if isinstance(func, ast.Name) and func.id == 'open':
         return _is_text_mode(_mode(call, call.args[1:2])) and not _has_encoding(call)
     if attr == 'open':
-        if owner in NOT_FILES and owner != 'io':
-            return False
-        return _is_text_mode(_mode(call, call.args[0:1])) and not _has_encoding(call)
+        return _is_bare_attr_open(owner, call)
     if (attr or getattr(func, 'id', None)) in TEMPFILES:
-        mode = _mode(call, call.args[0:1])
-        return isinstance(mode, str) and _is_text_mode(mode) and not _has_encoding(call)
+        return _is_bare_tempfile(call)
     if owner == 'subprocess' and attr in SUBPROCESS_FUNCS:
-        textual = any(
-            (kw := _kw(call, name)) is not None and not (isinstance(kw.value, ast.Constant) and not kw.value.value)
-            for name in ('text', 'universal_newlines', 'errors')
-        )
-        return textual and not _has_encoding(call)
+        return _is_bare_subprocess(call)
     return False
 
 
@@ -110,7 +125,7 @@ def is_strict_site(call: ast.Call) -> bool:
     """A repo-file read: the path derives from __file__ or an UPPERCASE constant."""
     func = call.func
     if isinstance(func, ast.Attribute) and func.attr in ('read_text', 'open', 'write_text'):
-        target: ast.AST | None = func.value
+        target: ast.AST = func.value
     elif isinstance(func, ast.Name) and func.id == 'open' and call.args:
         target = call.args[0]
     else:
@@ -169,7 +184,10 @@ def regressions(found: Dict[str, List[int]],
 def load_baseline(root: Path) -> Dict[str, int]:
     """The per-file legacy counts under *root*; empty when the file does not exist."""
     path = root / BASELINE_REL
-    return json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
+    if not path.exists():
+        return {}
+    counts: Dict[str, int] = json.loads(path.read_text(encoding='utf-8'))
+    return counts
 
 
 class V041(BaseRule):
