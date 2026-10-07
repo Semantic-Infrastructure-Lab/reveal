@@ -404,7 +404,7 @@ def _commit_diff_contains(
         cmd += ['--', subpath]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, errors='replace', encoding='utf-8')
-        for line in result.stdout.splitlines():
+        for line in result.stdout.splitlines():  # boundary-ok: splitlines -- git subprocess stdout
             if (line and line[0] in ('+', '-')
                     and not line.startswith('+++')
                     and not line.startswith('---')

@@ -17,7 +17,7 @@ def _render_codex_messages(result: dict) -> None:
         print(header)
         text = msg.get('message', '')
         if text:
-            for line in str(text).splitlines():
+            for line in str(text).splitlines():  # boundary-ok: splitlines -- message text being rendered
                 print(f"  {line}")
         print()
 

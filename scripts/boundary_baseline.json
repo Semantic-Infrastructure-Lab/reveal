@@ -43,6 +43,7 @@
   "reveal/utils/warning_render.py": 2
  },
  "silent-except": {},
+ "splitlines": {},
  "subcommand-output": {
   "reveal/cli/commands/review.py": 1
  },

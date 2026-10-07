@@ -421,7 +421,7 @@ def handle_explain_rule(rule_code: str):
     compliant_example = getattr(rule, 'compliant_example', '')
     if compliant_example:
         print("\nCompliant Example:")
-        for line in compliant_example.strip().splitlines():
+        for line in compliant_example.strip().splitlines():  # boundary-ok: splitlines -- help example text
             print(f"  {line}")
 
     sys.exit(0)

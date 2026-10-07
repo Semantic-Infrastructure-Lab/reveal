@@ -103,7 +103,7 @@ def _get_changed_files(path: Path, since_ref: str) -> Tuple[Set[str], Optional[s
             capture_output=True, text=True, cwd=str(git_root), timeout=10, encoding='utf-8', errors='replace',
         )
         if diff_result.returncode != 0:
-            err = diff_result.stderr.strip().splitlines()[0] if diff_result.stderr.strip() else f"unknown ref '{since_ref}'"
+            err = diff_result.stderr.strip().splitlines()[0] if diff_result.stderr.strip() else f"unknown ref '{since_ref}'"  # boundary-ok: splitlines -- git subprocess output
             return set(), err
     except FileNotFoundError:
         return set(), "git not found"
@@ -111,7 +111,7 @@ def _get_changed_files(path: Path, since_ref: str) -> Tuple[Set[str], Optional[s
         return set(), "git diff timed out"
 
     changed: Set[str] = set()
-    for rel in diff_result.stdout.splitlines():
+    for rel in diff_result.stdout.splitlines():  # boundary-ok: splitlines -- git subprocess output
         rel = rel.strip()
         if not rel:
             continue

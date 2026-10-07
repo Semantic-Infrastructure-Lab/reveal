@@ -218,7 +218,7 @@ def _check_uri(scheme: str, uri: str, args: Namespace):
     if result.returncode == 2:
         return 2, f"{scheme}: critical failure"
     elif result.returncode == 1:
-        lines = [l for l in combined.splitlines() if l.strip()]
+        lines = [l for l in combined.splitlines() if l.strip()]  # boundary-ok: splitlines -- subprocess output
         summary = lines[0] if lines else "warning"
         return 1, f"{scheme}: {summary}"
     else:

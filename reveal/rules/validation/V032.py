@@ -132,7 +132,7 @@ class V032(BaseRule):
             return None, 0
 
         # git log is newest-first; the last line is the oldest unreleased commit.
-        oldest_line = log.stdout.strip().splitlines()[-1]
+        oldest_line = log.stdout.strip().splitlines()[-1]  # boundary-ok: splitlines -- git log subprocess stdout
         commit_hash, commit_iso = oldest_line.split(' ', 1)
         try:
             commit_dt = datetime.fromisoformat(commit_iso)

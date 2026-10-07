@@ -20,7 +20,7 @@ def _render_codex_tools(result: dict) -> None:
         if output:
             # An exec script's output is a list of content blocks; a shell call's is text
             # with newlines. Show the first lines, indented, not a repr cut mid-line.
-            lines = text_of(output.get('output')).strip().splitlines()
+            lines = text_of(output.get('output')).strip().splitlines()  # boundary-ok: splitlines -- rendered tool output, no file line numbers
             for i, line in enumerate(lines[:3]):
                 print(f"    {'output: ' if i == 0 else '        '}{line[:110]}")
             if len(lines) > 3:
@@ -75,7 +75,7 @@ def _render_codex_shell(result: dict) -> None:
             print(f"    → {status}")
         out = (cmd_rec.get('aggregated_output') or '').strip()
         if out:
-            for line in out.splitlines()[:3]:
+            for line in out.splitlines()[:3]:  # boundary-ok: splitlines -- rendered tool output, no file line numbers
                 print(f"    {line}")
         print()
 

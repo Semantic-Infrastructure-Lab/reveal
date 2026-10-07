@@ -165,7 +165,7 @@ def _render_lint(data: Dict[str, Any], output_format: str) -> None:
         if kind == 'no_frontmatter':
             print(f"  {issue['file']}  [no frontmatter]")
         elif kind == 'malformed_yaml':
-            first_line = (detail or '').splitlines()[0] if detail else ''
+            first_line = (detail or '').splitlines()[0] if detail else ''  # boundary-ok: splitlines -- error message text
             print(f"  {issue['file']}  [malformed YAML] {first_line}")
         elif kind == 'missing_fields':
             fields = ', '.join(detail or [])

@@ -919,7 +919,7 @@ def load_certificate_from_file(path: str) -> Tuple[CertificateInfo, List[Certifi
     if b'-----BEGIN CERTIFICATE-----' in data:
         pem_blocks = []
         current: List[bytes] = []
-        for raw_line in data.splitlines(keepends=True):
+        for raw_line in data.splitlines(keepends=True):  # boundary-ok: splitlines -- PEM blocks, no line numbers
             current.append(raw_line)
             if b'-----END CERTIFICATE-----' in raw_line:
                 pem_blocks.append(b''.join(current))

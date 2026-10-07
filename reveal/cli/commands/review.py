@@ -221,7 +221,7 @@ def _run_diff(git_range: str) -> Dict[str, Any]:
             ['git', 'diff', '--name-only', '--end-of-options', parts[0], parts[1]],
             capture_output=True, text=True, timeout=10, encoding='utf-8', errors='replace'
         )
-        files = [f for f in result.stdout.splitlines() if f.strip()]
+        files = [f for f in result.stdout.splitlines() if f.strip()]  # boundary-ok: splitlines -- git subprocess stdout
         return {'status': 'ok', 'changed_files': files, 'count': len(files),
                 'structural_diff_error': structural_error}
     except Exception:
@@ -387,7 +387,7 @@ def _changed_files(git_range: str) -> List[Path]:
         )
         root = Path(toplevel.stdout.strip()) if toplevel.returncode == 0 else Path.cwd()
         files: List[Path] = []
-        for name in result.stdout.splitlines():
+        for name in result.stdout.splitlines():  # boundary-ok: splitlines -- git subprocess stdout
             name = name.strip()
             if not name:
                 continue

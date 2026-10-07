@@ -292,7 +292,7 @@ def render_cross_var_flow(
 
         if events:
             rendered = render_var_flow(frame_var, events, content_lines)
-            for rline in rendered.splitlines():
+            for rline in rendered.splitlines():  # boundary-ok: splitlines -- text this module just rendered
                 lines.append(f"{indent}  {rline}" if depth > 0 else f"  {rline}")
         else:
             lines.append(f"{indent}  (no {frame_var} events in {func_name})")

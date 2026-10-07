@@ -68,6 +68,13 @@ Rules (home = where the concern is allowed to live):
     B006 policy. Bare catches and optional-import probes retain boundary-specific
     handling; boundary-ok markers require a concrete reason.
 
+``splitlines`` (BACK-1722)
+    ``.splitlines()`` on anything. ``str.splitlines()`` ends a line at form feed, vertical tab,
+    FS/GS/RS, NEL and U+2028/U+2029 as well as at ``\\n``, so every line number after a GNU C
+    ``^L`` page break was one too high against tree-sitter, ``grep -n`` and editors. File content
+    is split with ``reveal.utils.lines.split_lines``. A site that splits something that is not
+    file content (subprocess output, a rendered or help string) is marked
+    ``# boundary-ok: splitlines -- <why>``.
 
 Code under ``if __name__ == '__main__':`` is exempt from ``exit`` and ``print``.
 Suppress one deliberate site with ``# boundary-ok: <rule> -- <why>`` on any line of the
@@ -139,6 +146,12 @@ RULES: Dict[str, Dict[str, Any]] = {
         'task': 'BACK-1614 (removal: BACK-1059)',
         'fix': 'log it (logger.debug), narrow the exception type, or return a result marker -- '
                'a swallowed failure reads as a clean empty result',
+        'home': (),
+    },
+    'splitlines': {
+        'task': 'BACK-1722',
+        'fix': 'split file content with reveal.utils.lines.split_lines (a line ends at \\n only); '
+               'mark non-file text # boundary-ok: splitlines -- <why>',
         'home': (),
     },
     'print': {
@@ -346,6 +359,8 @@ class _Scanner(ast.NodeVisitor):
             self._add('exit', node)
         if name in ('print', 'sys.stdout.write', 'sys.stderr.write'):
             self._add('print', node)
+        if attr == 'splitlines':
+            self._add('splitlines', node)
         if name.rsplit('.', 1)[-1] == 'add_cli_contract_fields':
             self._add('subcommand-output', node)
         self.generic_visit(node)

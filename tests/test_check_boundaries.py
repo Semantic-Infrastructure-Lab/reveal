@@ -292,3 +292,24 @@ def test_boundary_uses_product_handler_policy(monkeypatch):
     "return {'error': str(e)}", "logger.warning('failed: %s', e)"])
 def test_shared_gate_accepts_explicit_failure_signal(signal):
     assert 'silent-except' not in _hits('try:\n    f()\nexcept Exception as e:\n    ' + signal)
+
+
+# ---- splitlines (BACK-1722) -------------------------------------------------
+
+@pytest.mark.parametrize('src', [
+    "lines = content.splitlines()",
+    "n = len(path.read_text(encoding='utf-8').splitlines())",
+    "for i, l in enumerate(text.splitlines(keepends=True), 1):\n    pass",
+])
+def test_splitlines_flagged(src):
+    assert set(_hits(src)) == {'splitlines'}
+
+
+@pytest.mark.parametrize('src', [
+    "lines = split_lines(content)",
+    "lines = content.split('\\n')",
+    "lines = proc.stdout.splitlines()  # boundary-ok: splitlines -- subprocess output",
+    "# boundary-ok: splitlines -- subprocess output\nlines = proc.stdout.splitlines()",
+])
+def test_splitlines_not_flagged(src):
+    assert 'splitlines' not in _hits(src)

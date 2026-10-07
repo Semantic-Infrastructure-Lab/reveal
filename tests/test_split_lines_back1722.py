@@ -56,3 +56,15 @@ def test_keepends_pieces_join_back_and_count_like_the_plain_split(text):
     assert ''.join(pieces) == text
     assert len(pieces) == len(split_lines(text))
     assert all(p.endswith('\n') for p in pieces[:-1])
+
+
+def test_c_function_after_a_form_feed_is_on_the_line_grep_reports(tmp_path):
+    """GNU C puts ^L between sections; grep -n / compilers count it inside its line."""
+    data = b'/* a */\n\x0c\n/* b */\nint f(void)\n{\n  return 1;\n}\n\x0c\nint g(void)\n{\n  return 2;\n}\n'
+    path = tmp_path / 'x.c'
+    path.write_bytes(data)
+    expected = {name: data[:data.index(b'int %s(' % name)].count(b'\n') + 1 for name in (b'f', b'g')}
+    from reveal.registry import get_analyzer
+    functions = get_analyzer(str(path))(str(path)).get_structure()['functions']
+    assert {f['name']: f['line'] for f in functions} == {n.decode(): v for n, v in expected.items()}
+    assert expected == {b'f': 4, b'g': 9}   # hand-counted

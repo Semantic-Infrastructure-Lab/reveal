@@ -97,7 +97,7 @@ def _acl_grants_nobody(path: str, perm: str) -> Optional[bool]:
         )
         if result.returncode != 0:
             return False
-        for line in result.stdout.splitlines():
+        for line in result.stdout.splitlines():  # boundary-ok: splitlines -- nginx -T subprocess stdout
             # Lines like: user:nobody:r-x  or  other::r-x
             if line.startswith(('user:nobody:', 'other::')) and perm in line.split(':', 2)[-1]:
                 return True
