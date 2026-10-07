@@ -468,10 +468,11 @@ def _render_diff_section(diff: Dict[str, Any]) -> None:
 
 def _render_structural_summary(summary: Dict[str, Any]) -> None:
     """The diff adapter's summary: {functions|classes: {added, removed,
-    modified}, imports: {added, removed}}."""
+    modified}, imports: {added, removed}}, then every other category diff://
+    compared (interfaces, structs, ...; BACK-1732), in the order it lists them."""
     parts = []
-    for kind in ('functions', 'classes', 'imports'):
-        counts = summary.get(kind) or {}
+    for kind, counts in summary.items():
+        counts = counts or {}
         changes = [f"{sign}{counts[key]}" for key, sign in
                    (('added', '+'), ('removed', '-'), ('modified', '~')) if counts.get(key)]
         if changes:
