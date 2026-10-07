@@ -170,8 +170,8 @@ def is_dev_checkout(reveal_root: Optional[Path]) -> bool:
 def load_sources(rule: 'BaseRule', trees: Tuple[str, ...],
                  accept: Callable[[Path], bool]) -> List[Tuple[str, str]]:
     """(display path, source) for each ``*.py`` under *trees* (directories of the dev
-    checkout's root) that *accept* takes, sorted per tree; the shared reader behind
-    the source-scanning rules.
+    checkout's root) that *accept* takes (given the path relative to the root), sorted per
+    tree; the shared reader behind the source-scanning rules.
 
     Records on *rule* why there is nothing to scan (no reveal root: unavailable; an
     installed package or no tests/: not applicable) and each module that cannot be read
@@ -194,9 +194,9 @@ def load_sources(rule: 'BaseRule', trees: Tuple[str, ...],
     for tree in trees:
         # boundary-ok: walker -- V-series: reveal's own source and test suite
         for path in sorted((project_root / tree).rglob('*.py')):
-            if not accept(path):
-                continue
             display = to_posix(path.relative_to(project_root))
+            if not accept(path.relative_to(project_root)):
+                continue
             try:
                 modules.append((display, path.read_text(encoding='utf-8')))
             except (OSError, UnicodeDecodeError) as e:
