@@ -10,9 +10,9 @@ left as written for a valid file: `parse_mode: tree_sitter_full`, `confidence: 1
 and the one analyzer that lowers its own confidence on bad input uses 0.5 (jsonl).
 
 The owner is the BACK-1589 wrapper (TreeSitterAnalyzer.__init_subclass__ in
-reveal/treesitter.py), which sees every override; the strict xfails below flip when it
-rewrites the meta. The private `_has_errors` key also reaches the JSON payload next to
-the public `meta.parse_recovered` (reveal/display/structure.py). The NginxAnalyzer named
+reveal/treesitter.py), which sees every override; `_recovered_trust` there rewrites the
+meta. The private `_has_errors` key also reached the JSON payload next to the public
+`meta.parse_recovered`; `_enrich_structure` (reveal/display/structure.py) drops it. The NginxAnalyzer named
 in the task never sets `_has_errors` (it is a line parser), so it cannot leak it.
 """
 import json
@@ -31,8 +31,6 @@ pytestmark = [pytest.mark.component]
 IDS = [c[0] for c in CASES]
 # Dockerfile's recovered structure has no meta at all, so it states no trust to correct.
 WITH_META = [c for c in CASES if c[0] != 'Dockerfile']
-OWNER = ('BACK-1729: the BACK-1589 wrapper (TreeSitterAnalyzer.__init_subclass__, '
-         'reveal/treesitter.py) adds _has_errors but keeps the tree_sitter_full / 1.0 meta')
 
 
 @pytest.fixture(autouse=True)
@@ -53,7 +51,6 @@ def test_a_valid_file_keeps_full_trust(tmp_path, name, broken, valid):
     assert _trust(structure) == ('tree_sitter_full', 1.0)
 
 
-@pytest.mark.xfail(strict=True, reason=OWNER)
 @pytest.mark.parametrize('name,broken,valid', WITH_META, ids=[c[0] for c in WITH_META])
 def test_a_recovered_parse_lowers_its_own_trust(tmp_path, name, broken, valid):
     structure = _structure(tmp_path, name, broken)
@@ -78,7 +75,6 @@ HCL_BROKEN = 'variable "region" {\n  default = "x"\n}\n\nresource = = =\n'
 HCL_VALID = 'variable "region" {\n  default = "x"\n}\n'
 
 
-@pytest.mark.xfail(strict=True, reason=OWNER)
 def test_the_json_document_does_not_contradict_itself(tmp_path):
     (tmp_path / 'main.tf').write_text(HCL_BROKEN, encoding='utf-8')
     result = _reveal_json(tmp_path, 'main.tf')
@@ -86,9 +82,6 @@ def test_the_json_document_does_not_contradict_itself(tmp_path):
     assert result['structure']['meta']['confidence'] < 1.0
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    'BACK-1729: _render_json_output (reveal/display/structure.py) publishes '
-    'meta.parse_recovered and also leaves the private _has_errors key in structure'))
 def test_the_private_flag_stays_out_of_the_json_payload(tmp_path):
     (tmp_path / 'main.tf').write_text(HCL_BROKEN, encoding='utf-8')
     result = _reveal_json(tmp_path, 'main.tf')

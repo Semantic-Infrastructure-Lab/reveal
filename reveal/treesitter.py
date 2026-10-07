@@ -431,6 +431,19 @@ _NAMESPACE_KINDS = frozenset({
 })
 
 
+def _recovered_trust(structure: Dict[str, Any]) -> Dict[str, Any]:
+    """A recovered parse does not keep a clean parse's trust: an override's meta said
+    tree_sitter_full at confidence 1.0 beside parse_recovered (BACK-1729). Lowered to the
+    contract's tree_sitter_partial, at most 0.5 as jsonl reports a malformed file."""
+    meta = (structure or {}).get('meta')
+    if not structure.get('_has_errors') or not isinstance(meta, dict) \
+            or meta.get('parse_mode') != 'tree_sitter_full':
+        return structure
+    confidence = meta.get('confidence')
+    lowered = 0.5 if confidence is None else min(confidence, 0.5)
+    return {**structure, 'meta': {**meta, 'parse_mode': 'tree_sitter_partial', 'confidence': lowered}}
+
+
 class TreeSitterAnalyzer(FileAnalyzer):
     """Base class for tree-sitter based analyzers.
 
@@ -494,7 +507,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             if (self._tree_parsed and not (structure or {}).get('_has_errors')
                     and self._has_recovery_artifacts()):
                 structure = {**(structure or {}), '_has_errors': True}
-            return structure
+            return _recovered_trust(structure)
 
         get_structure._discloses_recovery = True  # type: ignore[attr-defined]
         cls.get_structure = get_structure  # type: ignore[method-assign]

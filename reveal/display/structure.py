@@ -417,6 +417,8 @@ def _enrich_structure(structure: Dict[str, Any], file_path: str) -> Dict[str, An
     cuts are the envelope's, not repeated here."""
     enriched_structure: Dict[str, Any] = {}
     for category, items in structure.items():
+        if category == '_has_errors':  # published as meta.parse_recovered (BACK-1729)
+            continue
         # A cut is the envelope's meta.warnings entry (_render_json_output), not also the
         # structure's; a meta that held only cuts (a tree-sitter result's) goes.
         if category == 'meta' and isinstance(items, dict):
