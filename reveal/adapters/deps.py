@@ -23,7 +23,7 @@ from ..conventions import family_for_path
 from ..utils import print_json_result
 from ..utils.path_utils import _language_for_path
 from ..utils.query import parse_query_params
-from ..utils.query_control import print_omitted
+from ..rendering.base import print_omitted
 from ..utils.results import ResultBuilder
 
 # BACK-1190: the stdlib list, local-package heuristic, and classifier itself

@@ -314,10 +314,3 @@ def omitted_line(total: int, shown: int, indent: str = '  ') -> str:
     if remaining <= 0:
         return ''
     return f"{indent}... and {remaining} more (--format json lists all)"
-
-
-def print_omitted(total: int, shown: int, indent: str = '  ') -> None:
-    """Print ``omitted_line`` when something was cut."""
-    footer = omitted_line(total, shown, indent)
-    if footer:
-        print(footer)

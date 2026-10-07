@@ -26,7 +26,7 @@ from ..registry import language_for_extension
 from ..utils import print_json_result
 from ..utils.path_utils import is_test_path
 from ..utils.query import parse_query_params
-from ..utils.query_control import print_omitted
+from ..rendering.base import print_omitted
 from ..utils.results import ResultBuilder
 
 logger = logging.getLogger(__name__)

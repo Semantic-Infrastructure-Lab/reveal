@@ -29,7 +29,7 @@ from ..utils.exclusions import exclusion_scope
 from ..utils.gitignore import respect_gitignore_param
 from ..utils.path_utils import as_spelled, display_name_for_path, is_test_path
 from ..utils.query import parse_query_params
-from ..utils.query_control import print_omitted
+from ..rendering.base import print_omitted
 from ..utils.query_parser import join_exclude_patterns, split_exclude_param
 from ..utils.results import ResultBuilder
 

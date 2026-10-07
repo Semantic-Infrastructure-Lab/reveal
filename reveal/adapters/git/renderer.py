@@ -2,7 +2,7 @@
 
 from ...utils import print_json_result
 from ...utils.formatting import lines_label
-from ...utils.query_control import print_omitted
+from ...rendering.base import print_omitted
 
 
 class GitRenderer:

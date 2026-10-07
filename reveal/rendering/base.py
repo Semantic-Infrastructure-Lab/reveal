@@ -10,7 +10,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, TypeVar
 
 from reveal.utils.json_utils import print_json_result
 from reveal.utils.results import outcome_of
-from reveal.utils.query_control import BudgetAccounting
+from reveal.utils.query_control import BudgetAccounting, omitted_line
 from reveal.utils.warning_render import render_meta_warnings
 
 
@@ -267,3 +267,10 @@ class TypeDispatchRenderer(BaseRenderer):
         else:
             # Fallback to JSON for unknown types
             cls.render_json(result)
+
+
+def print_omitted(total: int, shown: int, indent: str = '  ') -> None:
+    """Print ``omitted_line`` when something was cut (BACK-1550)."""
+    footer = omitted_line(total, shown, indent)
+    if footer:
+        print(footer)
