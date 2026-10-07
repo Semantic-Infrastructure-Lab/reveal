@@ -11,7 +11,8 @@ from typing import Any, Dict, List, Optional
 from ..global_flags import add_gitignore_arguments, rule_patterns
 from ..routing.ledger import complete
 from ..routing.subcommand import emit_subcommand_result
-from ...utils.results import note_truncation
+from ...utils.results import RESULT_CONTROL_WARNINGS, note_truncation
+from ...utils.warning_render import collect_meta_warnings, render_meta_warnings
 
 # Hotspots and complex functions each list their top this-many (BACK-1543 records the rest).
 _SECTION_TOP = 10
@@ -117,8 +118,11 @@ def run_review(args: Namespace) -> None:
 
     # Step 4: Hotspots
     print("  Analyzing hotspots…", file=sys.stderr)
-    _add_top_section(report, 'hotspots', _run_hotspots(path, files=changed_files),
+    hotspot_warnings: List[Dict[str, Any]] = []
+    _add_top_section(report, 'hotspots', _run_hotspots(path, files=changed_files, warnings=hotspot_warnings),
                      'see all: reveal hotspots <path> --all')
+    if hotspot_warnings:
+        report.setdefault('meta', {}).setdefault('warnings', []).extend(hotspot_warnings)
 
     # Step 5: Complexity
     print("  Scanning complexity…", file=sys.stderr)
@@ -279,12 +283,21 @@ def _run_check(path: Optional[Path], select: str,
 
 
 def _run_hotspots(path: Optional[Path],
-                  files: Optional[List[Path]] = None) -> List[Dict[str, Any]]:
+                  files: Optional[List[Path]] = None,
+                  warnings: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
     """Run hotspot analysis.
 
     When `files` is given (a diff-scoped review), rank only those files by their
     own churn×complexity score instead of scanning the whole tree.
+
+    stats:// reports a file it could not analyze (a raising analyzer, or a pool
+    worker that died, BACK-1718) through a meta warning and leaves it out of the
+    ranking, and a single-file target through its ``error``. Both are appended to
+    `warnings`, as overview:// and hotspots:// fold them, so a lost file is
+    named instead of silently missing from the list (BACK-1738).
     """
+    if warnings is None:
+        warnings = []
     try:
         from reveal.adapters.stats.adapter import StatsAdapter
         targets = files if files is not None else ([path] if path is not None else [])
@@ -293,6 +306,13 @@ def _run_hotspots(path: Optional[Path],
             try:
                 adapter = StatsAdapter(str(target), 'hotspots=true&top=0')  # all: cut once, above
                 data = adapter.get_structure(hotspots=True)
+                if data.get('error'):
+                    warnings.append({'type': 'analysis_failed', 'count': 1,
+                                     'message': f"hotspots: {target}: {data['error']}"})
+                    continue
+                warnings.extend({**w, 'message': f"hotspots: {w.get('message', '')}"}
+                                for w in collect_meta_warnings(data)
+                                if w.get('type') not in RESULT_CONTROL_WARNINGS)
                 found = data.get('hotspots', data.get('files', [])) or []
                 hotspots.extend(_as_hotspot(h) for h in found)
             except Exception as e:
@@ -547,6 +567,7 @@ def _render_report(report: Dict[str, Any], verbose: bool) -> None:
     _render_violations_section(violations, verbose)
     _render_hotspots_section(sections.get('hotspots', []))
     _render_complexity_section(sections.get('complexity', []))
+    render_meta_warnings(report, heading="Caveats:")
     for reason in report.get('scan_disclosures', []):
         print(f"⚠️  {reason}")
     _render_recommendation(violations, report.get('errors'))

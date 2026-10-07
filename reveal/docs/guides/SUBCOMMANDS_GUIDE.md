@@ -82,7 +82,8 @@ reveal review HEAD~3..HEAD         # Review last 3 commits
 2. **Violations** — quality rule failures by severity (`critical` / `high` / `medium` / `low`, the same levels as `reveal check`)
 3. **Hotspots** — files below 100/100 quality, ranked by churn×complexity
 4. **Complex functions** — functions above complexity threshold
-5. **Recommendation** — pass/fail summary
+5. **Caveats** — files the hotspot step could not analyze (a failing analyzer or a dead worker); they are missing from the ranking. JSON: `meta.warnings` entries of type `analysis_failed`. They do not change the exit code.
+6. **Recommendation** — pass/fail summary
 
 JSON carries the same result as `overall_status` (`pass` / `warn` / `fail` / `incomplete`, or `error` for an invalid target) and `exit_code`.
 
