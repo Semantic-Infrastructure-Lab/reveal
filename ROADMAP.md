@@ -353,6 +353,9 @@ These gates run continuously alongside the steps above:
 - BACK-1703: platform classes caught before CI. V036-V042 in `reveal reveal:// --check` lint
   fork-only tests, POSIX-only calls, raw newline assertions, POSIX path literals, tree-sitter
   accessors the 1.8.1 floor lacks, text I/O without `encoding=` and POSIX-only env variables.
+  Each of those rules came after its break; the largest class still unlinted is output with
+  Windows `\` separators from a `.relative_to()` local (BACK-1739, 3 of the 15 macOS/Windows-only
+  breaks since 2026-09-01).
 - BACK-1726: a dead pool worker must cost only its own files, never the run. `check` and
   `stats://` hand work out through one helper (`utils.parallel.submit_each`); the imports,
   I002 and grep pools still use bare `map`.
