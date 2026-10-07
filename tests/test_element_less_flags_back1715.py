@@ -104,3 +104,12 @@ def test_flags_that_take_an_element_still_take_one(files, flag):
     proc = _reveal(files, 'a.py', 'f', *flag)
     assert proc.returncode == 0, proc.stderr
     assert 'reads no element' not in proc.stderr
+
+
+def test_every_declared_flag_is_a_real_parser_option():
+    """A declaration naming a dest the parser lacks would silently guard nothing."""
+    from reveal.cli.parser import create_argument_parser
+    from reveal.cli.routing import ELEMENT_LESS_FLAGS
+    dests = {a.dest: a.option_strings for a in create_argument_parser('x')._actions}
+    for dest, spelling in ELEMENT_LESS_FLAGS.items():
+        assert spelling in dests.get(dest, []), dest

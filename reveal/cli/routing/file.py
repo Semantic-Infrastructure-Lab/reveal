@@ -372,6 +372,38 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
                                       include_extensions=include_extensions))
 
 
+# Flags whose answer never reads the ELEMENT argument (dest -> spelling). `reveal a b --flag`
+# parses b as the element, so these answered for a alone and exited 0 (BACK-1687, BACK-1715).
+# A new flag of this kind is declared here, not guarded with another `if`.
+ELEMENT_LESS_FLAGS = {
+    'validate_schema': '--validate-schema', 'check': '--check', 'meta': '--meta',
+    'extract': '--extract', 'check_acl': '--check-acl', 'validate_nginx_acme': '--validate-nginx-acme',
+    'global_audit': '--global-audit', 'check_conflicts': '--check-conflicts',
+    'cpanel_certs': '--cpanel-certs', 'diagnose': '--diagnose',
+    'explain_file': '--explain-file', 'capabilities': '--capabilities', 'show_ast': '--show-ast',
+}
+
+
+def reject_ignored_element(args: 'Namespace') -> None:
+    """Exit 2 when an element-less flag is given an element (a second path or ``file:N``).
+
+    One disclosed refusal in place of a run that silently covers the first path only.
+    URIs and ``@file`` lists read their second argument themselves and are left alone.
+    """
+    path_str = getattr(args, 'path', None)
+    if not path_str or '://' in path_str or path_str.startswith('@'):
+        return
+    element = getattr(args, 'element', None) or _parse_file_line_syntax(path_str)[1]
+    if not element:
+        return
+    for dest, spelling in ELEMENT_LESS_FLAGS.items():
+        if getattr(args, dest, None):
+            print(f"Error: {spelling} reads no element and covers one path per call; '{element}' would be ignored.\n"
+                  f"Run it once per path, or for several: ls PATHS | reveal --stdin {spelling}",
+                  file=sys.stderr)
+            sys.exit(2)
+
+
 def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Namespace') -> None:
     """Route a resolved file path — to ast query if convenience flags set, else normal handler."""
     if getattr(args, 'grep', None):
@@ -385,12 +417,6 @@ def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Names
         return
 
     element = element_from_path or args.element
-    if element and getattr(args, 'validate_schema', None):
-        # Validation reads no element: `a.md b.md` parsed b.md as one and validated only a.md (BACK-1687).
-        print(f"Error: --validate-schema validates one file per call; '{element}' would be ignored.\n"
-              "Run it once per file, or validate several: ls *.md | reveal --stdin --validate-schema SCHEMA",
-              file=sys.stderr)
-        sys.exit(2)
     if not element and getattr(args, 'section', None):
         if path.suffix.lower() in get_markdown_extensions():
             element = args.section

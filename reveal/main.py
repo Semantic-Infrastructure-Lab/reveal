@@ -110,6 +110,7 @@ from .cli import (
     handle_decorator_stats,
     handle_uri,
     handle_file_or_directory,
+    reject_ignored_element,
     handle_file,
 )
 
@@ -423,6 +424,8 @@ def _main_impl(invocation: Invocation, parser: Any, args: Namespace) -> None:
     """Run the path/URI form with its parsed ``args``."""
     # Check for updates (once per day, non-blocking, opt-out available)
     check_for_updates()
+
+    reject_ignored_element(args)  # an element-less flag must not drop a second path (BACK-1715)
 
     # Handle special modes (exit early)
     if _handle_special_modes(args):
