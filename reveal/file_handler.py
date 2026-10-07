@@ -19,31 +19,52 @@ from .utils.results import outcome_of
 if TYPE_CHECKING:
     from argparse import Namespace
 
-# Nginx handlers — canonical location is adapters/nginx/handlers.py
+# Nginx handlers — canonical location is adapters/nginx/handlers.py. They return a
+# FlagOutput; the _handle_* names below write it out (BACK-916), the helpers re-export.
+from .adapters.nginx import handlers as _nginx_handlers
 from .adapters.nginx.handlers import (  # noqa: F401 — re-exported for backward compat
-    _handle_domain_extraction,
-    _handle_acme_roots_extraction,
-    _handle_check_acl,
+    FlagOutput,
     _format_acl_col,
     _format_acme_ssl_col,
     _fetch_acme_ssl_data,
-    _render_acme_json,
-    _render_acme_text,
-    _handle_validate_nginx_acme,
-    _handle_global_audit,
-    _handle_check_conflicts,
     _resolve_log_path,
-    _render_diagnose_table,
-    _handle_diagnose,
     _load_disk_cert,
     _load_live_cert,
     _cert_match_label,
     _format_disk_col,
     _format_live_col,
     _format_match_col,
-    _handle_cpanel_certs,
-    _handle_extract_option,
 )
+
+
+def _write_flag_output(output: FlagOutput) -> None:
+    """The one place an nginx flag handler's stdout, stderr and exit code leave the process."""
+    if output.err:
+        print(output.stderr, end='', file=sys.stderr)  # boundary-ok: print -- the flag-output seam
+    if output.out:
+        print(output.stdout, end='')  # boundary-ok: print -- the flag-output seam
+    if output.code:
+        sys.exit(output.code)  # boundary-ok: exit -- the flag-output seam
+
+
+def _emitting(build):
+    """A flag handler that writes what `build` returns."""
+    def handler(*args, **kwargs) -> None:
+        _write_flag_output(build(*args, **kwargs))
+    handler.__name__ = build.__name__
+    handler.__doc__ = build.__doc__
+    return handler
+
+
+_handle_domain_extraction = _emitting(_nginx_handlers._handle_domain_extraction)
+_handle_acme_roots_extraction = _emitting(_nginx_handlers._handle_acme_roots_extraction)
+_handle_check_acl = _emitting(_nginx_handlers._handle_check_acl)
+_handle_validate_nginx_acme = _emitting(_nginx_handlers._handle_validate_nginx_acme)
+_handle_global_audit = _emitting(_nginx_handlers._handle_global_audit)
+_handle_check_conflicts = _emitting(_nginx_handlers._handle_check_conflicts)
+_handle_diagnose = _emitting(_nginx_handlers._handle_diagnose)
+_handle_cpanel_certs = _emitting(_nginx_handlers._handle_cpanel_certs)
+_handle_extract_option = _emitting(_nginx_handlers._handle_extract_option)
 
 # Nav handlers — canonical location is reveal/nav_handlers.py (BACK-306).
 # Re-exported for backward compat with tests that import from file_handler.

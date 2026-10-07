@@ -6,13 +6,16 @@ NginxAnalyzer objects: --extract, --check-acl, --validate-nginx-acme,
 
 Moved from reveal/handlers_nginx.py to this package (BACK-097) to keep
 nginx operations co-located with other nginx adapter code.
+
+Each handler returns a FlagOutput (stdout text, stderr text, exit code) instead of
+printing and exiting; reveal.file_handler writes it out in one place (BACK-916).
 """
 
 import json
 import os
-import sys
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 from reveal.utils.lines import split_lines
 
 if TYPE_CHECKING:
@@ -28,77 +31,104 @@ _SEVERITY_LABEL = {
 }
 
 
-def _handle_domain_extraction(analyzer, canonical_only: bool = False) -> None:
+@dataclass
+class FlagOutput:
+    """What a flag handler produced: stdout lines, stderr lines and the exit code."""
+    out: List[str] = field(default_factory=list)
+    err: List[str] = field(default_factory=list)
+    code: int = 0
+
+    def line(self, text: str = '') -> None:
+        self.out.append(text)
+
+    def exit_if(self, failed: bool) -> 'FlagOutput':
+        """Exit 2 when the audit found failures."""
+        if failed:
+            self.code = 2
+        return self
+
+    @property
+    def stdout(self) -> str:
+        return ''.join(f"{text}\n" for text in self.out)
+
+    @property
+    def stderr(self) -> str:
+        return ''.join(f"{text}\n" for text in self.err)
+
+
+def _error(*lines: str) -> FlagOutput:
+    """A failed handler: the message on stderr, exit 1."""
+    return FlagOutput(err=list(lines), code=1)
+
+
+def _unsupported(flag: str, analyzer) -> FlagOutput:
+    return _error(f"Error: {flag} not supported for {type(analyzer).__name__}",
+                  "This option is available for nginx config files.")
+
+
+def _handle_domain_extraction(analyzer, canonical_only: bool = False) -> FlagOutput:
     """Handle domain extraction from analyzer.
 
     Args:
         analyzer: Analyzer instance
         canonical_only: When True, emit one URI per vhost (primary server_name only)
 
-    Exits:
-        With error code 1 if domain extraction not supported
+    Exit code 1 if domain extraction not supported.
     """
-    if hasattr(analyzer, 'extract_ssl_domains'):
-        domains = analyzer.extract_ssl_domains(canonical_only=canonical_only)
-        for domain in domains:
-            print(f"ssl://{domain}")
-    else:
-        print(f"Error: --extract domains not supported for {type(analyzer).__name__}", file=sys.stderr)
-        print("This option is available for nginx config files.", file=sys.stderr)
-        sys.exit(1)
+    if not hasattr(analyzer, 'extract_ssl_domains'):
+        return _unsupported("--extract domains", analyzer)
+    result = FlagOutput()
+    for domain in analyzer.extract_ssl_domains(canonical_only=canonical_only):
+        result.line(f"ssl://{domain}")
+    return result
 
 
-def _handle_acme_roots_extraction(analyzer) -> None:
-    """Print ACME challenge root paths and nobody ACL status (N4)."""
+def _acme_root_detail(r: dict) -> tuple:
+    """Return (icon, detail) for one ACME root row."""
+    status = r['acl_status']
+    if status == 'ok':
+        return "✅", "nobody:read OK"
+    if status == 'denied':
+        return "", f"❌ DENIED  ({r['acl_message']})"
+    if status == 'not_found':
+        return "⚠️ ", f"path not found: {r['acme_path']}"
+    return "❓", r['acl_message']
+
+
+def _handle_acme_roots_extraction(analyzer) -> FlagOutput:
+    """ACME challenge root paths and nobody ACL status (N4)."""
     if not hasattr(analyzer, 'extract_acme_roots'):
-        print(f"Error: --extract acme-roots not supported for {type(analyzer).__name__}",
-              file=sys.stderr)
-        print("This option is available for nginx config files.", file=sys.stderr)
-        sys.exit(1)
+        return _unsupported("--extract acme-roots", analyzer)
 
+    result = FlagOutput()
     rows = analyzer.extract_acme_roots()
     if not rows:
-        print("No ACME challenge location blocks found.")
-        return
+        result.line("No ACME challenge location blocks found.")
+        return result
 
     col_domain = max(len(r['domain']) for r in rows)
     col_path = max(len(r['acme_path']) for r in rows)
 
     header = (f"  {'domain':<{col_domain}}  {'acme root path':<{col_path}}  acl status")
-    print(header)
-    print("  " + "-" * (len(header) - 2))
+    result.line(header)
+    result.line("  " + "-" * (len(header) - 2))
 
     for r in rows:
-        status = r['acl_status']
-        if status == 'ok':
-            icon = "✅"
-            detail = "nobody:read OK"
-        elif status == 'denied':
-            failing = r.get('acl_failing_path') or ''
-            detail = f"❌ DENIED  ({r['acl_message']})"
-            icon = ""
-        elif status == 'not_found':
-            icon = "⚠️ "
-            detail = f"path not found: {r['acme_path']}"
-        else:
-            icon = "❓"
-            detail = r['acl_message']
-
-        print(f"  {r['domain']:<{col_domain}}  {r['acme_path']:<{col_path}}  {icon} {detail}")
+        icon, detail = _acme_root_detail(r)
+        result.line(f"  {r['domain']:<{col_domain}}  {r['acme_path']:<{col_path}}  {icon} {detail}")
+    return result
 
 
-def _handle_check_acl(analyzer) -> None:
-    """Print nobody ACL status for all root directives in config (N1)."""
+def _handle_check_acl(analyzer) -> FlagOutput:
+    """Nobody ACL status for all root directives in config (N1)."""
     if not hasattr(analyzer, 'extract_docroot_acl'):
-        print(f"Error: --check-acl not supported for {type(analyzer).__name__}",
-              file=sys.stderr)
-        print("This option is available for nginx config files.", file=sys.stderr)
-        sys.exit(1)
+        return _unsupported("--check-acl", analyzer)
 
+    result = FlagOutput()
     rows = analyzer.extract_docroot_acl()
     if not rows:
-        print("No root directives found.")
-        return
+        result.line("No root directives found.")
+        return result
 
     failures = [r for r in rows if r['acl_status'] != 'ok']
     passes = [r for r in rows if r['acl_status'] == 'ok']
@@ -107,21 +137,18 @@ def _handle_check_acl(analyzer) -> None:
     col_domain = max(len(r['domain']) for r in rows)
 
     if failures:
-        print(f"❌ ACL failures ({len(failures)}):")
+        result.line(f"❌ ACL failures ({len(failures)}):")
         for r in failures:
-            msg = r['acl_message']
-            print(f"  {r['root']:<{col_root}}  ({r['domain']})  {msg}")
-        print()
+            result.line(f"  {r['root']:<{col_root}}  ({r['domain']})  {r['acl_message']}")
+        result.line()
 
     if passes:
-        print(f"✅ OK ({len(passes)}):")
+        result.line(f"✅ OK ({len(passes)}):")
         for r in passes:
-            print(f"  {r['root']:<{col_root}}  ({r['domain']})")
-        print()
+            result.line(f"  {r['root']:<{col_root}}  ({r['domain']})")
+        result.line()
 
-    exit_code = 2 if failures else 0
-    if failures:
-        sys.exit(exit_code)
+    return result.exit_if(bool(failures))
 
 
 def _format_acl_col(acl_status: str) -> tuple:
@@ -169,29 +196,40 @@ def _fetch_acme_ssl_data(rows: list, check_ssl_health) -> list:
     return results
 
 
-def _render_acme_json(results: list, only_failures: bool, has_failures: bool) -> None:
-    """Render ACME audit results as JSON and exit with code 2 on failures."""
+def _render_acme_json(results: list, only_failures: bool, has_failures: bool) -> FlagOutput:
+    """ACME audit results as JSON; exit 2 on failures."""
     output_rows = [r for r in results if not only_failures or r['has_failure']]
-    print(json.dumps({
+    result = FlagOutput()
+    result.line(json.dumps({
         'type': 'nginx_acme_audit',
         'has_failures': has_failures,
         'only_failures': only_failures,
         'domains': output_rows,
     }, default=str))
-    if has_failures:
-        sys.exit(2)
+    return result.exit_if(has_failures)
+
+
+def _acme_verbose_snippet(r: dict, analyzer_lines: list) -> List[str]:
+    """The location block behind one ACME row: the matched line + up to 3 lines ahead."""
+    line_no = r.get('line', 0)
+    if not (line_no and 0 < line_no <= len(analyzer_lines)):
+        return []
+    snippet = ''.join(analyzer_lines[line_no - 1:line_no + 3]).rstrip()
+    return [f"       {line_no + offset}: {sl.rstrip()}"
+            for offset, sl in enumerate(split_lines(snippet))]
 
 
 def _render_acme_text(results: list, analyzer, only_failures: bool, verbose: bool,
-                      has_failures: bool) -> None:
-    """Render ACME audit results as a text table and exit with code 2 on failures."""
+                      has_failures: bool) -> FlagOutput:
+    """ACME audit results as a text table; exit 2 on failures."""
+    result = FlagOutput()
     col_domain = max(len(r['domain']) for r in results)
     col_path = max(len(r['acme_path']) for r in results)
 
     header = (f"  {'domain':<{col_domain}}  {'acme root path':<{col_path}}"
               f"  {'acl':<14}  ssl status")
-    print(header)
-    print("  " + "─" * (len(header) - 2))
+    result.line(header)
+    result.line("  " + "─" * (len(header) - 2))
 
     printed = 0
     analyzer_lines = getattr(analyzer, 'lines', [])
@@ -200,32 +238,22 @@ def _render_acme_text(results: list, analyzer, only_failures: bool, verbose: boo
         ssl_col, _ = _format_acme_ssl_col(r['ssl_status'], r['ssl_days'], r['ssl_not_after'])
         if only_failures and not r['has_failure']:
             continue
-        print(f"  {r['domain']:<{col_domain}}  {r['acme_path']:<{col_path}}"
-              f"  {acl_col:<14}  {ssl_col}")
+        result.line(f"  {r['domain']:<{col_domain}}  {r['acme_path']:<{col_path}}"
+                    f"  {acl_col:<14}  {ssl_col}")
         if verbose and analyzer_lines:
-            line_no = r.get('line', 0)
-            if line_no and 0 < line_no <= len(analyzer_lines):
-                # Show the location block: the matched line + up to 3 lines ahead (closing brace)
-                snippet_lines = analyzer_lines[line_no - 1:line_no + 3]
-                snippet = ''.join(snippet_lines).rstrip()
-                for sl in split_lines(snippet):
-                    print(f"       {line_no}: {sl.rstrip()}")
-                    line_no += 1
+            for snippet_line in _acme_verbose_snippet(r, analyzer_lines):
+                result.line(snippet_line)
         printed += 1
 
     if only_failures and printed == 0:
-        print("✅ No failures found.")
-    if has_failures:
-        sys.exit(2)
+        result.line("✅ No failures found.")
+    return result.exit_if(has_failures)
 
 
-def _handle_validate_nginx_acme(analyzer, args=None) -> None:
+def _handle_validate_nginx_acme(analyzer, args=None) -> FlagOutput:
     """Full ACME pipeline audit: acme root + ACL + live SSL per domain (--validate-nginx-acme)."""
     if not hasattr(analyzer, 'extract_acme_roots'):
-        print(f"Error: --validate-nginx-acme not supported for {type(analyzer).__name__}",
-              file=sys.stderr)
-        print("This option is available for nginx config files.", file=sys.stderr)
-        sys.exit(1)
+        return _unsupported("--validate-nginx-acme", analyzer)
 
     only_failures = getattr(args, 'only_failures', False)
     output_format = getattr(args, 'format', 'text')
@@ -233,12 +261,14 @@ def _handle_validate_nginx_acme(analyzer, args=None) -> None:
 
     rows = analyzer.extract_acme_roots()
     if not rows:
+        result = FlagOutput()
         if output_format == 'json':
-            print(json.dumps({'type': 'nginx_acme_audit', 'domains': [],
-                              'has_failures': False, 'message': 'No ACME challenge location blocks found.'}))
+            result.line(json.dumps({'type': 'nginx_acme_audit', 'domains': [],
+                                    'has_failures': False,
+                                    'message': 'No ACME challenge location blocks found.'}))
         else:
-            print("No ACME challenge location blocks found.")
-        return
+            result.line("No ACME challenge location blocks found.")
+        return result
 
     results = _fetch_acme_ssl_data(rows, check_ssl_health)
 
@@ -250,18 +280,16 @@ def _handle_validate_nginx_acme(analyzer, args=None) -> None:
     has_failures = any(r['has_failure'] for r in results)
 
     if output_format == 'json':
-        _render_acme_json(results, only_failures, has_failures)
-        return
+        return _render_acme_json(results, only_failures, has_failures)
 
-    _render_acme_text(results, analyzer, only_failures,
-                      getattr(args, 'verbose', False), has_failures)
+    return _render_acme_text(results, analyzer, only_failures,
+                             getattr(args, 'verbose', False), has_failures)
 
 
-def _handle_global_audit(analyzer, args=None) -> None:
+def _handle_global_audit(analyzer, args=None) -> FlagOutput:
     """Audit http{} block + main context for security/operational directives (--global-audit)."""
     if not hasattr(analyzer, 'audit_global_directives'):
-        print("Error: --global-audit is only supported for nginx config files.", file=sys.stderr)
-        sys.exit(1)
+        return _error("Error: --global-audit is only supported for nginx config files.")
 
     only_failures = getattr(args, 'only_failures', False)
     output_format = getattr(args, 'format', 'text')
@@ -269,25 +297,23 @@ def _handle_global_audit(analyzer, args=None) -> None:
     findings = analyzer.audit_global_directives()
     findings.sort(key=lambda f: (_SEVERITY_ORDER.get(f['severity'], 99), f['label']))
 
-    missing = [f for f in findings if not f['present']]
-    has_failures = bool(missing)
+    has_failures = any(not f['present'] for f in findings)
+    result = FlagOutput()
 
     if output_format == 'json':
         output = [f for f in findings if not only_failures or not f['present']]
-        print(json.dumps({
+        result.line(json.dumps({
             'type': 'nginx_global_audit',
             'has_failures': has_failures,
             'only_failures': only_failures,
             'findings': output,
         }))
-        if has_failures:
-            sys.exit(2)
-        return
+        return result.exit_if(has_failures)
 
     col_label = max(len(f['label']) for f in findings)
     header = f"  {'directive':<{col_label}}  severity  context  status"
-    print(header)
-    print("  " + "─" * (len(header) - 2))
+    result.line(header)
+    result.line("  " + "─" * (len(header) - 2))
 
     printed = 0
     for f in findings:
@@ -295,51 +321,46 @@ def _handle_global_audit(analyzer, args=None) -> None:
             continue
         sev_str, _ = _SEVERITY_LABEL.get(f['severity'], (f['severity'], False))
         status = "✅ present" if f['present'] else "❌ missing"
-        print(f"  {f['label']:<{col_label}}  {sev_str}  {f['context']:<7}  {status}")
+        result.line(f"  {f['label']:<{col_label}}  {sev_str}  {f['context']:<7}  {status}")
         printed += 1
 
     if only_failures and printed == 0:
-        print("✅ No missing directives.")
-    if has_failures:
-        sys.exit(2)
+        result.line("✅ No missing directives.")
+    return result.exit_if(has_failures)
 
 
-def _handle_check_conflicts(analyzer) -> None:
+def _conflict_lines(c: dict) -> List[str]:
+    """One conflict: the server, both locations and the note."""
+    return [f"\n  [{c['server']}]",
+            f"    {c['location_a']['path']}  (line {c['location_a']['line']})",
+            f"    {c['location_b']['path']}  (line {c['location_b']['line']})",
+            f"    → {c['note']}"]
+
+
+def _handle_check_conflicts(analyzer) -> FlagOutput:
     """Detect nginx location prefix overlaps and regex/prefix conflicts (N2)."""
     if not hasattr(analyzer, 'detect_location_conflicts'):
-        print(f"Error: --check-conflicts not supported for {type(analyzer).__name__}",
-              file=sys.stderr)
-        print("This option is available for nginx config files.", file=sys.stderr)
-        sys.exit(1)
+        return _unsupported("--check-conflicts", analyzer)
 
+    result = FlagOutput()
     conflicts = analyzer.detect_location_conflicts()
     if not conflicts:
-        print("✅ No location conflicts detected.")
-        return
+        result.line("✅ No location conflicts detected.")
+        return result
 
     warnings = [c for c in conflicts if c['severity'] == 'warning']
     infos = [c for c in conflicts if c['severity'] == 'info']
 
-    if warnings:
-        print(f"⚠️  Conflicts ({len(warnings)}):")
-        for c in warnings:
-            print(f"\n  [{c['server']}]")
-            print(f"    {c['location_a']['path']}  (line {c['location_a']['line']})")
-            print(f"    {c['location_b']['path']}  (line {c['location_b']['line']})")
-            print(f"    → {c['note']}")
-        print()
+    for heading, group in ((f"⚠️  Conflicts ({len(warnings)}):", warnings),
+                           (f"ℹ️  Prefix overlaps ({len(infos)}):", infos)):
+        if not group:
+            continue
+        result.line(heading)
+        for c in group:
+            result.out.extend(_conflict_lines(c))
+        result.line()
 
-    if infos:
-        print(f"ℹ️  Prefix overlaps ({len(infos)}):")
-        for c in infos:
-            print(f"\n  [{c['server']}]")
-            print(f"    {c['location_a']['path']}  (line {c['location_a']['line']})")
-            print(f"    {c['location_b']['path']}  (line {c['location_b']['line']})")
-            print(f"    → {c['note']}")
-        print()
-
-    if warnings:
-        sys.exit(2)
+    return result.exit_if(bool(warnings))
 
 
 def _resolve_log_path(analyzer, explicit_path: Optional[str]) -> Optional[str]:
@@ -355,8 +376,8 @@ def _resolve_log_path(analyzer, explicit_path: Optional[str]) -> Optional[str]:
     return None
 
 
-def _render_diagnose_table(hits: list, resolved_path: str) -> bool:
-    """Print the diagnose results table. Returns True if there are hard failures."""
+def _render_diagnose_table(hits: list, resolved_path: str, result: FlagOutput) -> bool:
+    """Add the diagnose results table to `result`. Returns True if there are hard failures."""
     LABELS = {
         'permission_denied': '❌ Permission Denied',
         'not_found':         '⚠️  Not Found (ENOENT)',
@@ -365,55 +386,53 @@ def _render_diagnose_table(hits: list, resolved_path: str) -> bool:
     col_domain = max(len(r['domain']) for r in hits)
     col_pattern = max(len(LABELS.get(r['pattern'], r['pattern'])) for r in hits)
 
-    print(f"nginx error log: {resolved_path}")
+    result.line(f"nginx error log: {resolved_path}")
     header = (f"  {'domain':<{col_domain}}  {'pattern':<{col_pattern}}"
               f"  {'count':>5}  last seen")
-    print(header)
-    print("  " + "─" * (len(header) - 2))
+    result.line(header)
+    result.line("  " + "─" * (len(header) - 2))
 
     has_failures = False
     for r in hits:
         label = LABELS.get(r['pattern'], r['pattern'])
         if r['pattern'] in ('permission_denied', 'ssl_error'):
             has_failures = True
-        print(f"  {r['domain']:<{col_domain}}  {label:<{col_pattern}}"
-              f"  {r['count']:>5}  {r['last_seen']}")
+        result.line(f"  {r['domain']:<{col_domain}}  {label:<{col_pattern}}"
+                    f"  {r['count']:>5}  {r['last_seen']}")
 
-    print()
-    print("Sample (most recent match per type):")
+    result.line()
+    result.line("Sample (most recent match per type):")
     seen = set()
     for r in hits:
         key = (r['domain'], r['pattern'])
         if key not in seen:
-            print(f"  [{r['domain']} / {r['pattern']}]")
-            print(f"    {r['sample']}")
+            result.line(f"  [{r['domain']} / {r['pattern']}]")
+            result.line(f"    {r['sample']}")
             seen.add(key)
     return has_failures
 
 
-def _handle_diagnose(analyzer, log_path: Optional[str] = None) -> None:
+def _handle_diagnose(analyzer, log_path: Optional[str] = None) -> FlagOutput:
     """Diagnose ACME / SSL failures from the nginx error log."""
     if not hasattr(analyzer, 'diagnose_acme_errors'):
-        print(f"Error: --diagnose not supported for {type(analyzer).__name__}", file=sys.stderr)
-        print("This option is available for nginx config files.", file=sys.stderr)
-        sys.exit(1)
+        return _error(f"Error: --diagnose not supported for {type(analyzer).__name__}",
+                      "This option is available for nginx config files.")
 
     resolved_path = _resolve_log_path(analyzer, log_path)
     if not resolved_path or not os.path.exists(resolved_path):
-        print(f"⚠️  No nginx error log found.", file=sys.stderr)
+        lines = ["⚠️  No nginx error log found."]
         if resolved_path:
-            print(f"   Checked: {resolved_path}", file=sys.stderr)
-        print("   Use --log-path /path/to/error.log to specify the log file.", file=sys.stderr)
-        sys.exit(1)
+            lines.append(f"   Checked: {resolved_path}")
+        lines.append("   Use --log-path /path/to/error.log to specify the log file.")
+        return _error(*lines)
 
+    result = FlagOutput()
     hits = analyzer.diagnose_acme_errors(resolved_path)
     if not hits:
-        print(f"✅ No ACME/SSL errors found in {resolved_path} (last 5,000 lines).")
-        return
+        result.line(f"✅ No ACME/SSL errors found in {resolved_path} (last 5,000 lines).")
+        return result
 
-    has_failures = _render_diagnose_table(hits, resolved_path)
-    if has_failures:
-        sys.exit(2)
+    return result.exit_if(_render_diagnose_table(hits, resolved_path, result))
 
 
 def _load_disk_cert(cert_path: str, load_certificate_from_file) -> dict:
@@ -506,7 +525,7 @@ def _format_match_col(match: str) -> tuple:
     return f"? {match}", False
 
 
-def _handle_cpanel_certs(analyzer, args=None) -> None:
+def _handle_cpanel_certs(analyzer, args=None) -> FlagOutput:
     """Compare cPanel on-disk certs against live certs per domain (S4 -- --cpanel-certs).
 
     For each SSL domain found in the nginx config:
@@ -522,20 +541,18 @@ def _handle_cpanel_certs(analyzer, args=None) -> None:
     Use --only-failures to skip rows where disk cert is not found (further noise reduction).
     """
     if not hasattr(analyzer, 'extract_ssl_domains'):
-        print(f"Error: --cpanel-certs not supported for {type(analyzer).__name__}",
-              file=sys.stderr)
-        print("This option is available for nginx config files.", file=sys.stderr)
-        sys.exit(1)
+        return _unsupported("--cpanel-certs", analyzer)
 
     from reveal.adapters.ssl.certificate import load_certificate_from_file, check_ssl_health  # noqa: I006 — optional heavy dep
 
     show_all = getattr(args, 'all', False)
     only_failures = getattr(args, 'only_failures', False)
+    result = FlagOutput()
 
     domains = analyzer.extract_ssl_domains(canonical_only=not show_all)
     if not domains:
-        print("No SSL domains found in nginx config.")
-        return
+        result.line("No SSL domains found in nginx config.")
+        return result
 
     CPANEL_CERT_DIR = "/var/cpanel/ssl/apache_tls"
     rows = []
@@ -557,13 +574,13 @@ def _handle_cpanel_certs(analyzer, args=None) -> None:
         rows = [r for r in rows if r['disk'].get('status') != 'missing']
 
     if not rows:
-        print("✅ No failures found.")
-        return
+        result.line("✅ No failures found.")
+        return result
 
     col_domain = max(len(r['domain']) for r in rows)
     header = f"  {'domain':<{col_domain}}  {'disk cert':<28}  {'live cert':<28}  match"
-    print(header)
-    print("  " + "─" * (len(header) - 2))
+    result.line(header)
+    result.line("  " + "─" * (len(header) - 2))
 
     has_failures = False
     for r in rows:
@@ -571,14 +588,13 @@ def _handle_cpanel_certs(analyzer, args=None) -> None:
         live_col, live_fail = _format_live_col(r['live'])
         match_col, match_fail = _format_match_col(r['match'])
         has_failures = has_failures or disk_fail or live_fail or match_fail
-        print(f"  {r['domain']:<{col_domain}}  {disk_col:<28}  {live_col:<28}  {match_col}")
+        result.line(f"  {r['domain']:<{col_domain}}  {disk_col:<28}  {live_col:<28}  {match_col}")
 
-    print()
-    if has_failures:
-        sys.exit(2)
+    result.line()
+    return result.exit_if(has_failures)
 
 
-def _handle_extract_option(analyzer, extract_type: str, args=None) -> None:
+def _handle_extract_option(analyzer, extract_type: str, args=None) -> FlagOutput:
     """Handle --extract option with validation.
 
     Args:
@@ -586,15 +602,12 @@ def _handle_extract_option(analyzer, extract_type: str, args=None) -> None:
         extract_type: Type to extract (e.g., 'domains', 'acme-roots')
         args: Full argument namespace (for --canonical-only and other flags)
 
-    Exits:
-        With error code 1 if extract type unknown
+    Exit code 1 if extract type unknown.
     """
     if extract_type == 'domains':
         canonical_only = getattr(args, 'canonical_only', False) if args else False
-        _handle_domain_extraction(analyzer, canonical_only=canonical_only)
-    elif extract_type == 'acme-roots':
-        _handle_acme_roots_extraction(analyzer)
-    else:
-        print(f"Error: Unknown extract type '{extract_type}'", file=sys.stderr)
-        print("Supported types: domains, acme-roots (for nginx configs)", file=sys.stderr)
-        sys.exit(1)
+        return _handle_domain_extraction(analyzer, canonical_only=canonical_only)
+    if extract_type == 'acme-roots':
+        return _handle_acme_roots_extraction(analyzer)
+    return _error(f"Error: Unknown extract type '{extract_type}'",
+                  "Supported types: domains, acme-roots (for nginx configs)")

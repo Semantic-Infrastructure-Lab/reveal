@@ -3,7 +3,6 @@
  "display-path": {},
  "exit": {
   "reveal/adapters/cpanel/renderer.py": 1,
-  "reveal/adapters/nginx/handlers.py": 18,
   "reveal/adapters/overview.py": 1,
   "reveal/checks.py": 2,
   "reveal/display/element.py": 1,
@@ -22,7 +21,6 @@
   "reveal/adapters/git/files.py": 3,
   "reveal/adapters/hotspots.py": 17,
   "reveal/adapters/nginx/adapter.py": 1,
-  "reveal/adapters/nginx/handlers.py": 73,
   "reveal/adapters/overview.py": 37,
   "reveal/adapters/pack.py": 21,
   "reveal/adapters/ssl/probe.py": 1,

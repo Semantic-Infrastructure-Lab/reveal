@@ -319,6 +319,8 @@ omitted rows have a remainder. Do not print a failed result as an empty success.
 A renderer never exits: override `exit_code(result, format)` to report findings (a fleet audit
 with gaps) and the URI seam acts on it after the render, and override `_failure_detail` to add
 domain lines under the router's error line.
+A file-flag handler (`adapters/nginx/handlers.py`) likewise returns a `FlagOutput` (stdout, stderr,
+exit code) and `file_handler._write_flag_output` is the one place it is written and exited.
 The shared failure guard retains distinct `message` details and `next_steps` on
 stderr; the URI boundary owns the error line and exit code.
 
