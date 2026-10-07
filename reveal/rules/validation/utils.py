@@ -9,7 +9,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple
 
 from ...utils.path_utils import to_posix
 
@@ -167,14 +167,17 @@ def is_dev_checkout(reveal_root: Optional[Path]) -> bool:
     return (project_root / 'pyproject.toml').exists()
 
 
-def load_test_suite(rule: 'BaseRule') -> List[Tuple[str, str]]:
-    """(display path, source) for each test module of the dev checkout's ``tests/``
-    (``test_*.py`` and ``conftest.py``): what the test-suite rules scan.
+def load_sources(rule: 'BaseRule', trees: Tuple[str, ...],
+                 accept: Callable[[Path], bool]) -> List[Tuple[str, str]]:
+    """(display path, source) for each ``*.py`` under *trees* (directories of the dev
+    checkout's root) that *accept* takes, sorted per tree; the shared reader behind
+    the source-scanning rules.
 
     Records on *rule* why there is nothing to scan (no reveal root: unavailable; an
     installed package or no tests/: not applicable) and each module that cannot be read
-    (unavailable, with the module as subject) rather than skipping it silently. Rules
-    pre-filter the source cheaply and parse only candidates (``parse_test_module``).
+    (unavailable, with the module as subject) rather than skipping it silently. A tree
+    absent from the checkout is skipped; ``tests/`` is required, as the marker that
+    this is a development checkout. Display paths are posix, relative to the root.
     """
     reveal_root = find_reveal_root()
     if not reveal_root:
@@ -184,21 +187,32 @@ def load_test_suite(rule: 'BaseRule') -> List[Tuple[str, str]]:
         rule.not_applicable("requires a development checkout")
         return []
     project_root = reveal_root.parent
-    tests_dir = project_root / 'tests'
-    if not tests_dir.is_dir():
+    if not (project_root / 'tests').is_dir():
         rule.not_applicable("no tests/ directory")
         return []
     modules: List[Tuple[str, str]] = []
-    # boundary-ok: walker -- V-series: reveal's own test suite
-    for path in sorted(tests_dir.rglob('*.py')):
-        if not (path.name.startswith('test_') or path.name == 'conftest.py'):
-            continue
-        display = to_posix(path.relative_to(project_root))
-        try:
-            modules.append((display, path.read_text(encoding='utf-8')))
-        except (OSError, UnicodeDecodeError) as e:
-            rule.unavailable(f"{type(e).__name__}: {e}", display)
+    for tree in trees:
+        # boundary-ok: walker -- V-series: reveal's own source and test suite
+        for path in sorted((project_root / tree).rglob('*.py')):
+            if not accept(path):
+                continue
+            display = to_posix(path.relative_to(project_root))
+            try:
+                modules.append((display, path.read_text(encoding='utf-8')))
+            except (OSError, UnicodeDecodeError) as e:
+                rule.unavailable(f"{type(e).__name__}: {e}", display)
     return modules
+
+
+def _is_test_module(path: Path) -> bool:
+    return path.name.startswith('test_') or path.name == 'conftest.py'
+
+
+def load_test_suite(rule: 'BaseRule') -> List[Tuple[str, str]]:
+    """(display path, source) for each test module of the dev checkout's ``tests/``
+    (``test_*.py`` and ``conftest.py``): what the test-suite rules scan. Rules
+    pre-filter the source cheaply and parse only candidates (``parse_test_module``)."""
+    return load_sources(rule, ('tests',), _is_test_module)
 
 
 def parse_test_module(rule: 'BaseRule', display: str, source: str) -> Optional[ast.Module]:
