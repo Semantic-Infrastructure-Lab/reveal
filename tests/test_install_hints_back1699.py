@@ -10,7 +10,12 @@ AGENT_HELP.md, adapter guides), pyproject.toml's own comments and the root *.md 
   (a) our own package spelled as anything but ``reveal-cli`` (``reveal[whois]``, ``reveal-tool``);
   (b) ``reveal-cli[x]`` (or a local ``.[x]``) whose ``x`` is not a defined extra;
   (c) a bare install of a package that is the sole content of a defined extra
-      (``pip install dnspython`` where ``reveal-cli[dns]`` exists).
+      (``pip install dnspython`` where ``reveal-cli[dns]`` exists);
+  (d) a requirement with ``[`` ``]`` ``<`` ``>`` that is not in double quotes. Unquoted,
+      zsh (the macOS default shell) stops on ``reveal-cli[dns]`` with "no matches found",
+      and every shell reads ``pygit2>=1.14`` as a redirect to a file named ``=1.14``.
+      Double quotes work in sh/bash/zsh, PowerShell and cmd.exe; single quotes do not
+      work in cmd.exe (pip receives the quote characters).
 
 Third-party packages that no extra provides (beautifulsoup4 for a broken base install,
 tree-sitter grammars, the user's own packages in python:// doctor hints) are not checked.
@@ -34,17 +39,21 @@ PYPROJECT = ROOT / 'pyproject.toml'
 OUR_DIST = 'reveal-cli'
 
 # (repo-relative posix path, rule, canonical package name) -> reason. Keep it short and reviewed.
+_GIT_OWNED = ('reveal/adapters/git/* is owned by wave-9 agent A (BACK-1690); the replacement '
+              'strings are in agent D\'s report. Drop these entries when they land.')
 ALLOWLIST = {
-    ('reveal/adapters/git/adapter.py', 'bare-extra-package', 'pygit2'):
-        'reveal/adapters/git/* is owned by wave-9 agent A (BACK-1690); the replacement strings '
-        'are in agent D\'s report. Drop this entry when they land.',
+    ('reveal/adapters/git/adapter.py', 'bare-extra-package', 'pygit2'): _GIT_OWNED,
+    ('reveal/adapters/git/adapter.py', 'needs-double-quotes', 'pygit2'): _GIT_OWNED,
+    ('reveal/adapters/git/adapter.py', 'needs-double-quotes', 'reveal-cli'): _GIT_OWNED,
+    ('reveal/adapters/git/__init__.py', 'needs-double-quotes', 'reveal-cli'): _GIT_OWNED,
 }
 
 _INSTALL = re.compile(
     r'(?<![\w-])(?:pip3?|python3?\s+-m\s+pip|uv\s+pip|pipx)\s+install(?![\w-])')
 _WORD = re.compile(r'[A-Za-z0-9._\-\[\],<>=!~+$/:@{}]+')
 _NAME = re.compile(r'([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[([^\]]*)\])?')
-_TEMPLATE = re.compile(r'[{}$]|<[A-Za-z_-]+>')
+_TEMPLATE = re.compile(r'[{}$]')
+_PLACEHOLDER = re.compile(r'<[A-Za-z][A-Za-z _-]*>')  # <extra>, <current version>
 # pip options whose value is the next token (that value is not a requirement)
 _ARG_OPTIONS = {
     '-r', '--requirement', '-c', '--constraint', '-i', '--index-url', '--extra-index-url',
@@ -118,7 +127,7 @@ def _requirements(rest):
 def check_command(rest, extras, sole):
     """Findings for one install command: list of (rule, canonical name, token, message)."""
     findings = []
-    for text, _quote in _requirements(rest):
+    for text, quote in _requirements(_PLACEHOLDER.sub('{placeholder}', rest)):
         if _TEMPLATE.search(text) or '://' in text:
             continue
         if text.startswith(('.', '/')):  # local checkout: '.', '.[dev]', './reveal'
@@ -129,6 +138,10 @@ def check_command(rest, extras, sole):
             if not m:
                 continue
             name, wanted = _canon(m.group(1)), m.group(2)
+        if quote != '"' and re.search(r'[\[\]<>]', text):
+            findings.append(('needs-double-quotes', name, text,
+                             f'write pip install "{text}" (zsh globs [], shells redirect on <>, '
+                             'cmd.exe keeps single quotes)'))
         if name != OUR_DIST and (name == 'reveal' or name.startswith('reveal-')):
             findings.append(('wrong-dist-name', name, text,
                              f'our distribution is {OUR_DIST!r}, not {m.group(1)!r}'))
@@ -219,19 +232,23 @@ def test_sole_package_map_skips_dev_and_empty_extras():
 
 @pytest.mark.parametrize('line, expected', [
     ('whois: WHOIS data (optional: pip install reveal[whois])',
-     [('wrong-dist-name', 'reveal[whois]')]),
+     [('needs-double-quotes', 'reveal[whois]'), ('wrong-dist-name', 'reveal[whois]')]),
     ('        run: pip install reveal-tool', [('wrong-dist-name', 'reveal-tool')]),
     ('RUN pip install reveal-tool dnspython',
      [('wrong-dist-name', 'reveal-tool'), ('bare-extra-package', 'dnspython')]),
     ('pip install "reveal-cli[git,nosuch]"', [('unknown-extra', 'reveal-cli[git,nosuch]')]),
     ('pip install -e ".[all]"', [('unknown-extra', '.[all]')]),
     ('"Install with: pip install dnspython")', [('bare-extra-package', 'dnspython')]),
-    ('"Alternative: pip install pygit2>=1.14.0\\n\\n"', [('bare-extra-package', 'pygit2>=1.14.0')]),
+    ('"Alternative: pip install pygit2>=1.14.0\\n\\n"',
+     [('needs-double-quotes', 'pygit2>=1.14.0'), ('bare-extra-package', 'pygit2>=1.14.0')]),
     ('pip install "mcp>=2.0.0"', [('bare-extra-package', 'mcp>=2.0.0')]),
     ('python -m pip install Python_Whois', [('bare-extra-package', 'Python_Whois')]),
     # two commands on one line: each is checked once, the second is not re-read by the first
     ("'Install: pip install reveal-cli[dns] OR pip install dnspython'",
-     [('bare-extra-package', 'dnspython')]),
+     [('needs-double-quotes', 'reveal-cli[dns]'), ('bare-extra-package', 'dnspython')]),
+    ('pip install reveal-cli[dns]', [('needs-double-quotes', 'reveal-cli[dns]')]),
+    ("pip install 'reveal-cli[dns]'", [('needs-double-quotes', 'reveal-cli[dns]')]),  # cmd.exe
+    ('pip install -e .[dev]', [('needs-double-quotes', '.[dev]')]),
 ])
 def test_scanner_flags_wrong_installs(line, expected):
     assert _rules(line) == expected
@@ -241,16 +258,18 @@ def test_scanner_flags_wrong_installs(line, expected):
     'pip install reveal-cli',
     'pip install --upgrade reveal-cli',
     'pip install "reveal-cli[git,dns]"            # several',
-    'pip install reveal_cli[git]',  # PEP 503: the same distribution
+    'pip install "reveal_cli[git]"',  # PEP 503: the same distribution
     'pip install -e ".[dev]"',
     'pip install -e .',
-    'pip install reveal-cli[treesitter]',  # a defined (empty) extra
+    'pip install "reveal-cli[treesitter]"',  # a defined (empty) extra
+    "'dnspython not installed (pip install \"reveal-cli[dns]\")'",  # quotes inside a literal
     'pip install beautifulsoup4',  # base dependency, no extra
     'pip install -r requirements.txt',
     'pip install --index-url https://test.pypi.org/simple/ reveal-cli',
     "f\"pip install {pkg_name} --force-reinstall\",",
     'Install one with `pip install "reveal-cli[<extra>]"`, several with',
     'pip3 install reveal-cli==${VERSION} --quiet',
+    '(`pip install reveal-cli==<current version>` -- see `reveal --version`)',
     'pip install git+https://github.com/Semantic-Infrastructure-Lab/reveal.git@main',
     '**Note:** PyPI releases can\'t be deleted, only "yanked" (hidden from pip install):',
     'pip install reveal-cli  # then: pygit2 comes with reveal-cli[git]',  # '#' ends the command
