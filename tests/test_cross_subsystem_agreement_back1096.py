@@ -236,6 +236,7 @@ def test_env_every_listed_variable_resolves_to_the_same_facts(monkeypatch):
 
 def _python_project(root, files):
     root.mkdir()
+    root = root.resolve()  # macOS tmp is /private/var; graph paths are resolved
     (root / 'pyproject.toml').write_text('[project]\nname="probe"\n', encoding='utf-8')
     for rel, text in files.items():
         target = root / rel
