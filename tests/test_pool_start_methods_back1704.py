@@ -106,7 +106,10 @@ def _run(work, method, workers, *argv, die=False, log='worker-calls'):
     proc = subprocess.run([sys.executable, str(work / 'driver.py'), method, *argv],
                           capture_output=True, text=True, encoding='utf-8', cwd=str(work),
                           env=env, timeout=300)
-    calls = sorted(p.read_text(encoding='utf-8') for p in (work / log).iterdir())
+    # A worker the dying one takes down with the pool can be killed between creating its
+    # record and writing it: an empty record is a call that never finished, not a call.
+    texts = (p.read_text(encoding='utf-8') for p in (work / log).iterdir())
+    calls = sorted(t for t in texts if t)
     return proc, calls
 
 
