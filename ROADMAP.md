@@ -359,8 +359,9 @@ These gates run continuously alongside the steps above:
   (BACK-1741), shared-file appends from pool workers (BACK-1742).
 - Dead pool workers: a dead worker must cost only its own files, never the run. `check`,
   `stats://`, `imports://`, I002 and `grep_files` hand work out through one helper
-  (`utils.parallel.submit_each`). Open: lost files read as parse failures (BACK-1753), the
-  architecture view and grep callers do not show them (BACK-1752, BACK-1754).
+  (`utils.parallel.submit_each`). A lost file is disclosed as lost (`worker_lost`) in each of
+  them, and in the architecture view, markdown `body-contains` and claude `?search=` (BACK-1752/1753/1754);
+  `claude://` file-touch search (`track_file_sessions`) does not show them yet.
 
 **Working rules while the track runs:**
 - A fix in one of these classes goes through the shared seam. It must not add another
