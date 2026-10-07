@@ -25,7 +25,7 @@ from ..base import AdapterFlag, ResourceAdapter, register_adapter, register_rend
 from ..ssl.probe import probe_http_redirect
 from ...utils.nginx_conf import find_blocks, strip_comments
 from ...utils.results import ResultBuilder
-from .renderer import NginxUriRenderer
+from ...rendering.adapters.nginx import NginxRenderer
 
 
 # Common nginx config directories, in search priority order
@@ -814,7 +814,7 @@ def _run_fleet_audit(
 
 
 @register_adapter('nginx')
-@register_renderer(NginxUriRenderer)
+@register_renderer(NginxRenderer)
 class NginxUriAdapter(ResourceAdapter):
     """Adapter for domain-centric nginx vhost inspection (nginx://).
 

@@ -491,36 +491,30 @@ class TestNginxFleetAuditRenderer(unittest.TestCase):
             ],
         }
 
+    def _render(self, result):
+        from reveal.rendering.adapters.nginx import NginxRenderer
+        return NginxRenderer._render_nginx_fleet_audit(result)
+
     def test_render_text_basic(self):
-        from io import StringIO
-        import sys
-        result = self._make_result(site_count=2, has_gaps=False)
-        from reveal.adapters.nginx.renderer import NginxUriRenderer
-        buf = StringIO()
-        with patch('sys.stdout', buf):
-            NginxUriRenderer._render_nginx_fleet_audit(result)
-        output = buf.getvalue()
+        output = self._render(self._make_result(site_count=2, has_gaps=False))
         self.assertIn('Fleet Audit', output)
         self.assertIn('2 sites', output)
         self.assertIn('Strict-Transport-Security', output)
 
-    def test_render_exits_2_on_gaps(self):
-        from reveal.adapters.nginx.renderer import NginxUriRenderer
-        result = self._make_result(site_count=2, has_gaps=True)
-        with patch('sys.stdout'), self.assertRaises(SystemExit) as cm:
-            NginxUriRenderer._render_nginx_fleet_audit(result)
-        self.assertEqual(cm.exception.code, 2)
+    def test_render_does_not_exit_itself(self):
+        # the exit code is the URI seam's (NginxRenderer.exit_code, tested in
+        # tests/adapters/test_nginx_renderer.py), never a sys.exit in the renderer
+        self.assertIn('Fleet Audit', self._render(self._make_result(site_count=2, has_gaps=True)))
 
-    def test_render_no_exit_when_no_gaps(self):
-        from reveal.adapters.nginx.renderer import NginxUriRenderer
-        result = self._make_result(site_count=2, has_gaps=False)
-        # Should not raise SystemExit
-        with patch('sys.stdout'):
-            NginxUriRenderer._render_nginx_fleet_audit(result)
+    def test_exit_code_2_on_gaps(self):
+        from reveal.rendering.adapters.nginx import NginxRenderer
+        self.assertEqual(NginxRenderer.exit_code(self._make_result(site_count=2, has_gaps=True), 'text'), 2)
+
+    def test_no_exit_when_no_gaps(self):
+        from reveal.rendering.adapters.nginx import NginxRenderer
+        self.assertEqual(NginxRenderer.exit_code(self._make_result(site_count=2, has_gaps=False), 'text'), 0)
 
     def test_render_only_failures_shows_gaps_only(self):
-        from io import StringIO
-        from reveal.adapters.nginx.renderer import NginxUriRenderer
         result = self._make_result(site_count=2, has_gaps=True, only_failures=True)
         # Add a passing check
         result['matrix'].append({
@@ -536,37 +530,21 @@ class TestNginxFleetAuditRenderer(unittest.TestCase):
             'consolidation_opportunity': False,
             'action': 'Globally set ✓',
         })
-        buf = StringIO()
-        with patch('sys.stdout', buf), self.assertRaises(SystemExit):
-            NginxUriRenderer._render_nginx_fleet_audit(result)
-        output = buf.getvalue()
+        output = self._render(result)
         self.assertIn('Strict-Transport-Security', output)
         self.assertNotIn('X-Content-Type-Options', output)
 
     def test_render_no_sites_message(self):
-        from io import StringIO
-        from reveal.adapters.nginx.renderer import NginxUriRenderer
         result = self._make_result(site_count=0, has_gaps=False)
         result['matrix'] = []
-        buf = StringIO()
-        with patch('sys.stdout', buf):
-            NginxUriRenderer._render_nginx_fleet_audit(result)
-        self.assertIn('No site configs found', buf.getvalue())
+        self.assertIn('No site configs found', self._render(result))
 
     def test_render_consolidation_opportunity_marked(self):
-        from io import StringIO
-        from reveal.adapters.nginx.renderer import NginxUriRenderer
         result = self._make_result(site_count=4, has_gaps=False)
         result['matrix'][0]['consolidation_opportunity'] = True
-        buf = StringIO()
-        with patch('sys.stdout', buf):
-            NginxUriRenderer._render_nginx_fleet_audit(result)
-        output = buf.getvalue()
-        self.assertIn('↑', output)
+        self.assertIn('↑', self._render(result))
 
     def test_render_snippet_consistency_shown(self):
-        from io import StringIO
-        from reveal.adapters.nginx.renderer import NginxUriRenderer
         result = self._make_result(site_count=3, has_gaps=False)
         result['snippet_consistency'] = [{
             'snippet': 'snippets/security.conf',
@@ -574,10 +552,7 @@ class TestNginxFleetAuditRenderer(unittest.TestCase):
             'sites_without': 1,
             'missing_from': ['c.example.com'],
         }]
-        buf = StringIO()
-        with patch('sys.stdout', buf):
-            NginxUriRenderer._render_nginx_fleet_audit(result)
-        output = buf.getvalue()
+        output = self._render(result)
         self.assertIn('snippets/security.conf', output)
         self.assertIn('c.example.com', output)
 

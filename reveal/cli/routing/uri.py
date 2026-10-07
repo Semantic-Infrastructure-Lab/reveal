@@ -867,7 +867,8 @@ def _emit_element(result: Any, renderer_class: type[Any], args: 'Namespace',
             if _mode(result, args, _text_field, _label):
                 return
 
-    _emit_result(result, args, scheme, renderer_class.render_element)
+    _emit_result(result, args, scheme, renderer_class.render_element,
+                 exit_code=getattr(renderer_class, 'exit_code', None))
 
 
 def _build_adapter_kwargs(adapter, args: 'Namespace', scheme: Optional[str] = None, resource: Optional[str] = None) -> dict:
@@ -1128,6 +1129,7 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
     result = _apply_field_selection(result, args, scheme)
     return Answer(result, 'structure',
                   lambda: _emit_result(result, args, scheme, renderer_class.render_structure,
+                                       exit_code=getattr(renderer_class, 'exit_code', None),
                                        **_render_structure_top_kwargs(renderer_class, args, adapter)))
 
 
@@ -1138,7 +1140,8 @@ def _echo_source(result: Any, adapter_class: type, resource: Optional[str]) -> N
     echo_source(result, resource_path(spelled) if resource_path and spelled else spelled)
 
 
-def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render, **render_kwargs) -> None:
+def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render,
+                 exit_code: Optional[Callable[[Any, str], int]] = None, **render_kwargs) -> None:
     """Render a URI result and turn its outcome into the exit code (BACK-1059).
 
     Every printed URI result, for the CLI and MCP alike, ends here (the emit of a
@@ -1152,12 +1155,17 @@ def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render, 
     The error line comes before the render, so renderers add only detail (an example, the
     valid names) and never print the error themselves. The exit comes after it, so
     --format json still prints the whole error envelope. A truncated result exits 0; what
-    it left out is printed after the render (print_result_control_notes).
+    it left out is printed after the render (print_result_control_notes). A renderer that
+    reports findings (a fleet audit with gaps) says so through `exit_code`, acted on here
+    after the render instead of by a sys.exit inside the renderer.
     """
     outcome = announce_outcome(result, f"{scheme or 'unknown'}://")
     write_also_json(result, args)
     emit_rendered(render, result, args.format, **render_kwargs)
     conclude_outcome(result, outcome, args.format)
+    code = exit_code(result, args.format) if exit_code and outcome != 'failed' else 0
+    if code:
+        sys.exit(code)
 
 
 def announce_outcome(result: Any, label: str) -> Outcome:

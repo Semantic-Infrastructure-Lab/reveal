@@ -4,7 +4,6 @@
  "exit": {
   "reveal/adapters/cpanel/renderer.py": 1,
   "reveal/adapters/nginx/handlers.py": 18,
-  "reveal/adapters/nginx/renderer.py": 1,
   "reveal/adapters/overview.py": 1,
   "reveal/checks.py": 2,
   "reveal/display/element.py": 1,
@@ -26,7 +25,7 @@
   "reveal/adapters/nginx/handlers.py": 73,
   "reveal/adapters/overview.py": 37,
   "reveal/adapters/pack.py": 21,
-  "reveal/adapters/ssl/probe.py": 10,
+  "reveal/adapters/ssl/probe.py": 1,
   "reveal/adapters/surface.py": 43,
   "reveal/adapters/testability.py": 30,
   "reveal/adapters/trace.py": 11,

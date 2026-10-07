@@ -189,12 +189,27 @@ class BaseRenderer(ABC, RendererMixin):
             detail = result.get('message')
             if detail and detail != result.get('error'):
                 print(detail, file=sys.stderr)
+            for line in cls._failure_detail(result):
+                print(line, file=sys.stderr)
             if result.get('next_steps'):
                 print("Next Steps:", file=sys.stderr)
                 for step in result['next_steps']:
                     print(f"  • {step}", file=sys.stderr)
             return None
         return cls._render_text(result)
+
+    @classmethod
+    def _failure_detail(cls, result: dict) -> List[str]:
+        """Domain lines for stderr under the router's error line (the valid names, where
+        it looked). The message and next steps are printed by render_structure itself."""
+        return []
+
+    @classmethod
+    def exit_code(cls, result: dict, format: str = 'text') -> int:
+        """Exit code for a result that rendered without failing (0 unless a renderer
+        reports findings, e.g. a fleet audit with gaps). The URI seam acts on it after the
+        render, so a renderer never exits itself."""
+        return 0
 
     @classmethod
     @abstractmethod
@@ -245,12 +260,13 @@ class TypeDispatchRenderer(BaseRenderer):
     """
 
     @classmethod
-    def _render_text(cls, result: dict) -> None:
+    def _render_text(cls, result: dict) -> Optional[str]:
         """Dispatch to type-specific renderer.
 
         Looks for a method named _render_{type}() where {type} is
         the value of result['type']. Falls back to JSON if no
-        matching method found.
+        matching method found. A type method returns its text body (legacy ones
+        print and return None).
         """
         result_type = result.get('type', 'default')
 
@@ -259,14 +275,16 @@ class TypeDispatchRenderer(BaseRenderer):
         method = getattr(cls, method_name, None)
 
         if method and callable(method):
-            method(result)
+            body: Optional[str] = method(result)
+            return body
         elif outcome_of(result) == 'failed':
             # An error-only type (codex_error, ...) has no text view, and the router has
             # already printed its error (BACK-1059); a JSON dump would only repeat it.
-            return
+            return None
         else:
             # Fallback to JSON for unknown types
             cls.render_json(result)
+            return None
 
 
 def print_omitted(total: int, shown: int, indent: str = '  ') -> None:

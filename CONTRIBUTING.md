@@ -316,6 +316,9 @@ is not evidence for a recipe that promises a match.
 JSON at the shared format boundary. Legacy print renderers remain compatible during
 migration. Use immutable `RenderOptions` and `capped_section` for bounded sections so
 omitted rows have a remainder. Do not print a failed result as an empty success.
+A renderer never exits: override `exit_code(result, format)` to report findings (a fleet audit
+with gaps) and the URI seam acts on it after the render, and override `_failure_detail` to add
+domain lines under the router's error line.
 The shared failure guard retains distinct `message` details and `next_steps` on
 stderr; the URI boundary owns the error line and exit code.
 

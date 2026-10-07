@@ -119,8 +119,8 @@ def _resolve_location(base_url: str, location: str) -> str:
 
 
 
-def render_probe_text(probe: Dict[str, Any]) -> None:
-    """Print a human-readable HTTP probe summary."""
+def probe_text_lines(probe: Dict[str, Any]) -> List[str]:
+    """The human-readable HTTP probe summary, one string per line."""
     host = probe.get('host', '')
     error = probe.get('error')
     chain = probe.get('redirect_chain', [])
@@ -128,11 +128,11 @@ def render_probe_text(probe: Dict[str, Any]) -> None:
     redirects_to_https = probe.get('redirects_to_https', False)
     https_headers = probe.get('https_headers', {})
 
-    print(f"HTTP Probe: {host}")
+    lines = [f"HTTP Probe: {host}"]
 
     if error and not chain:
-        print(f"  ❌  Connection failed: {error}")
-        return
+        lines.append(f"  ❌  Connection failed: {error}")
+        return lines
 
     # Redirect chain
     parts = []
@@ -140,20 +140,20 @@ def render_probe_text(probe: Dict[str, Any]) -> None:
         parts.append(f"{hop['url']} ({hop['status']})")
     if len(parts) > 1:
         chain_str = ' → '.join(parts)
-        print(f"  Chain: {chain_str}")
+        lines.append(f"  Chain: {chain_str}")
     elif parts:
-        print(f"  {parts[0]}")
+        lines.append(f"  {parts[0]}")
 
     # HTTPS redirect verdict
     if redirects_to_https:
-        print(f"  ✅  Redirects to HTTPS  ({final_url})")
+        lines.append(f"  ✅  Redirects to HTTPS  ({final_url})")
     else:
-        print(f"  ❌  Does NOT redirect to HTTPS  (final: {final_url})")
+        lines.append(f"  ❌  Does NOT redirect to HTTPS  (final: {final_url})")
 
     # Security headers (only when HTTPS was reached)
     if https_headers:
-        print()
-        print("  Security headers at HTTPS endpoint:")
+        lines.append("")
+        lines.append("  Security headers at HTTPS endpoint:")
         _HEADER_LABELS = {
             'hsts': 'Strict-Transport-Security',
             'xcto': 'X-Content-Type-Options',
@@ -165,6 +165,12 @@ def render_probe_text(probe: Dict[str, Any]) -> None:
             icon = '✅' if value else '—'
             if value:
                 display = value[:60] + ('…' if len(value) > 60 else '')
-                print(f"  {icon}  {label}: {display}")
+                lines.append(f"  {icon}  {label}: {display}")
             else:
-                print(f"  {icon}  {label}: missing")
+                lines.append(f"  {icon}  {label}: missing")
+    return lines
+
+
+def render_probe_text(probe: Dict[str, Any]) -> None:
+    """Print a human-readable HTTP probe summary."""
+    print('\n'.join(probe_text_lines(probe)))
