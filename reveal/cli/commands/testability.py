@@ -17,12 +17,10 @@ from typing import List
 from reveal.adapters.testability import (  # noqa: F401 - re-exported for back-compat
     TestabilityAdapter,
     TestabilityRenderer,
-    _render_boundary_hotspots,
-    _render_patch_hotspots,
-    _render_report,
     _resolve_test_paths,
 )
 from reveal.errors import NotApplicableError
+from reveal.rendering.adapters.testability import testability_text
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
 from ..routing.subcommand import emit_subcommand_result
 
@@ -114,4 +112,4 @@ def run_testability(args: Namespace) -> None:
         )
         sys.exit(1)
 
-    emit_subcommand_result(result, args, name='testability', source=path, render=_render_report)
+    emit_subcommand_result(result, args, name='testability', source=path, render=testability_text)

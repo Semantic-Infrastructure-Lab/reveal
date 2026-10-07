@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..errors import NotApplicableError
-from ..utils import print_json_result
+from ..rendering.adapters.testability import TestabilityRenderer
 from ..utils.query import parse_query_params
 
 
@@ -37,87 +37,6 @@ def _resolve_test_paths(src_path: Path, tests: Optional[List[str]]) -> List[Path
             if candidate.exists():
                 roots.append(candidate.resolve())
     return sorted(set(roots))
-
-
-def _render_patch_hotspots(rows: List[Dict[str, Any]], note: str = '') -> None:
-    print("Production Patch Hotspots")
-    if not rows:
-        if note:
-            print(f"  {note}")
-        else:
-            print("  none above threshold")
-        print()
-        return
-    for row in rows:
-        print()
-        print(f"  {row.get('key')}")
-        print(
-            f"    patched {row.get('patch_count', 0)} times across "
-            f"{row.get('test_count', 0)} test(s)"
-        )
-        categories = row.get('boundary_categories') or []
-        if categories:
-            print(f"    boundary categories: {', '.join(categories)}")
-        profiles = row.get('related_profiles') or []
-        if profiles:
-            # JSON lists every profile; the header says when text shows only 3 (BACK-1551).
-            shown = f" (3 of {len(profiles)}; --format json lists all)" if len(profiles) > 3 else ""
-            print(f"    related production functions{shown}:")
-            for profile in profiles[:3]:
-                print(
-                    f"      {profile.get('file')}::{profile.get('function')} "
-                    f"(cx {profile.get('complexity')}, line {profile.get('line')})"
-                )
-        print(f"    suggestion: {row.get('suggestion')}")
-    print()
-
-
-def _render_boundary_hotspots(rows: List[Dict[str, Any]]) -> None:
-    print("Boundary Fan-Out Hotspots")
-    if not rows:
-        print("  none above threshold")
-        print()
-        return
-    for row in rows:
-        print()
-        print(f"  {row.get('file')}::{row.get('function')}")
-        print(f"    complexity: {row.get('complexity')}  lines: {row.get('lines')}")
-        print(f"    categories: {', '.join(row.get('categories', []))}")
-        if row.get('patch_count'):
-            print(f"    related patch pressure: {row.get('patch_count')} patches")
-        print(f"    suggestion: {row.get('suggestion')}")
-    print()
-
-
-def _render_report(report: Dict[str, Any]) -> None:
-    print(f"Testability: {report.get('source')}")
-    tests = ', '.join(report.get('tests', []))
-    print(f"Tests: {tests}")
-    print("-" * 50)
-    summary = report.get('summary', {})
-    print(
-        f"Patch uses: {summary.get('total_patch_uses', 0)}  "
-        f"Patch targets: {summary.get('total_patch_targets', 0)}"
-    )
-    print()
-
-    _render_patch_hotspots(report.get('patch_hotspots', []), note=report.get('_patch_note', ''))
-    _render_boundary_hotspots(report.get('boundary_hotspots', []))
-
-    print("Summary")
-    print(f"  {summary.get('patch_groups_reported', 0)} patch hotspot(s) reported")
-    print(f"  {summary.get('boundary_profiles_reported', 0)} boundary hotspot(s) reported")
-
-
-class TestabilityRenderer:
-    """Renderer for testability:// results."""
-
-    @staticmethod
-    def render_structure(result: Dict[str, Any], format: str = 'text') -> None:
-        if format == 'json':
-            print_json_result(result)
-            return
-        _render_report(result)
 
 
 @register_adapter('testability')

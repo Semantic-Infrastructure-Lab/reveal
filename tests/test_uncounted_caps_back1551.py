@@ -11,7 +11,7 @@ from conftest import _run_reveal_direct
 from reveal.adapters.help import HelpAdapter
 from reveal.adapters.imports import ImportsAdapter
 from reveal.adapters.python.doctor import check_cwd_shadowing
-from reveal.adapters.testability import _render_patch_hotspots
+from reveal.rendering.adapters.testability import patch_hotspot_lines
 from reveal.analyzers.markdown import MarkdownAnalyzer
 from reveal.utils.results import truncations_of
 
@@ -39,12 +39,12 @@ def test_related_text_view_says_how_many_it_left_out(tmp_path):
     assert '... and 7 more' in out
 
 
-def test_patch_hotspot_text_says_how_many_profiles_it_left_out(capsys):
+def test_patch_hotspot_text_says_how_many_profiles_it_left_out():
     """JSON lists every related profile; text shows 3 and now says so (HEAD: 5, then 3, silently)."""
     profile = {'file': 'f.py', 'function': 'g', 'complexity': 1, 'line': 1}
-    _render_patch_hotspots([{'key': 'k', 'patch_count': 3, 'test_count': 1,
-                             'related_profiles': [profile] * 7, 'suggestion': 's'}])
-    assert 'related production functions (3 of 7; --format json lists all):' in capsys.readouterr().out
+    lines = patch_hotspot_lines([{'key': 'k', 'patch_count': 3, 'test_count': 1,
+                                  'related_profiles': [profile] * 7, 'suggestion': 's'}])
+    assert '    related production functions (3 of 7; --format json lists all):' in lines
 
 
 def test_schema_example_cut_is_a_note_and_leaves_the_full_schema_whole():
@@ -92,3 +92,14 @@ def test_doctor_says_its_file_list_is_a_sample(tmp_path, monkeypatch):
     assert len(warning['files']) == 5
     assert warning['message'].endswith('contains 7 .py files; the first 5 are listed')
 
+
+
+def test_testability_uri_text_carries_the_result_warnings(tmp_path):
+    """BACK-916: the renderer returns its body, so the router's warning footer reaches testability://
+    (the old print renderer dropped it)."""
+    (tmp_path / 'pkg').mkdir()
+    (tmp_path / 'pkg' / 'a.py').write_text('import requests\n\ndef f():\n    return requests.get("x")\n', encoding='utf-8')
+    (tmp_path / 'tests').mkdir()
+    (tmp_path / 'tests' / 'test_a.py').write_text('def test_a():\n    assert True\n', encoding='utf-8')
+    out = _run_reveal_direct(f'testability://{tmp_path / "pkg"}?tests={tmp_path / "tests"}').stdout
+    assert 'Summary' in out and 'best-effort' in out
