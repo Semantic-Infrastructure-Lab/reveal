@@ -1400,6 +1400,23 @@ def resolve_project_root(
     return None
 
 
+def cross_file_scan_root(file_path: Path, **resolve_kwargs: Any) -> Optional[Path]:
+    """The directory a cross-file rule (D005, T006, I002) indexes for *file_path*.
+
+    :func:`resolve_project_root` with *resolve_kwargs*, falling back to the file's
+    own directory when no marker is found -- so two loose scripts in one folder
+    still see each other. ``None`` when that directory is the OS temp dir, $HOME
+    or a filesystem root (:func:`is_unsafe_scan_root`): a lone ``/tmp/x.py`` has
+    no project, and indexing ``/tmp`` walked every file in it (5.8 s for a
+    5-line file; the shared temp dir also vanishes under the walk on Windows).
+    Callers skip their cross-file index on ``None``.
+    """
+    root = resolve_project_root(file_path, **resolve_kwargs)
+    if root is None:
+        root = file_path.parent
+    return None if is_unsafe_scan_root(root) else root
+
+
 def get_relative_to_root(
     path: Path,
     root_markers: Optional[List[str]] = None

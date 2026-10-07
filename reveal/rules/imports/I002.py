@@ -17,7 +17,7 @@ from ...analyzers.imports.base import get_extractor, get_all_extensions
 from ...core import disk_cache
 from ...utils.parallel import pool_worker_count
 from ...utils.path_utils import (
-    EVIDENCE, _walk_code_files, is_unsafe_scan_root, resolve_project_root,
+    EVIDENCE, _walk_code_files, cross_file_scan_root,
 )
 
 logger = logging.getLogger(__name__)
@@ -212,7 +212,7 @@ def _tree_fingerprint(directory: Path) -> Optional[str]:
         return None
 
 
-def _find_project_root(path: Path) -> Path:
+def _find_project_root(path: Path) -> Optional[Path]:
     """Nearest project root above *path*, via the shared ceiling-bounded
     resolver (BACK-612). Resolution order, first that applies:
       0. ``.reveal.yaml root:true`` — an explicit pin (newly honored here).
@@ -223,7 +223,9 @@ def _find_project_root(path: Path) -> Path:
       3. Top of the *contiguous* ``__init__.py`` chain rooted at the target's
          own directory (Python packages only) — the BACK-338 guard: a stray
          far-ancestor ``__init__.py`` can never hijack a non-package tree.
-      4. ``path.parent`` when nothing matches before the hard ceiling.
+      4. ``path.parent`` when nothing matches before the hard ceiling --
+         ``None`` when that is the OS temp dir, $HOME or a filesystem root
+         (:func:`cross_file_scan_root`); ``check`` then skips the scan.
 
     Adopting the shared resolver closes the scan-root over-climb bug for I002
     the way BACK-609/610 closed it for ``depends://``: a marker-less C/C++ tree
@@ -232,8 +234,7 @@ def _find_project_root(path: Path) -> Path:
     the guard skips a marker-bearing package dir and there is no real higher
     root, the contiguous-``__init__`` tier recovers the same dir.
     """
-    root = resolve_project_root(path, python_init_chain=True)
-    return root if root is not None else path.parent
+    return cross_file_scan_root(path, python_init_chain=True)
 
 
 def get_scan_disclosures() -> List[str]:
@@ -304,10 +305,10 @@ class I002(BaseRule):
             # 1. The cache hits for every file in the same project (not per-subdir)
             # 2. Cross-package cycles are detected (subdir scan misses them)
             scan_root = _find_project_root(target_path)
-            if is_unsafe_scan_root(scan_root):
+            if scan_root is None:
                 logger.debug(
                     "I002: skipping circular-dependency scan for standalone file under %s",
-                    scan_root,
+                    target_path.parent,
                 )
                 return detections
             graph = self._build_import_graph(scan_root)

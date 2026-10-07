@@ -31,7 +31,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
 from ...utils.pyparse import parse_python
-from ...utils.path_utils import EVIDENCE, _walk_code_files, resolve_project_root
+from ...utils.path_utils import EVIDENCE, _walk_code_files, cross_file_scan_root
 
 logger = logging.getLogger(__name__)
 
@@ -77,15 +77,15 @@ def _max_project_files() -> int:
 
 # ── Helpers (module-level, no self) ──────────────────────────────────────────
 
-def _find_project_root(path: Path) -> Path:
+def _find_project_root(path: Path) -> Optional[Path]:
     """Nearest project root above *path* via the shared, ceiling-bounded
     resolver (BACK-612): ``.reveal.yaml root:true`` → package marker → VCS root.
     Falls back to the file's own directory when nothing matches before the
-    hard ceiling. Now honors ``root:true`` and ``.git`` (which the old flat
-    5-marker climb ignored) and the ``__init__.py`` guard — so D005's
+    hard ceiling, and is ``None`` when that directory is the OS temp dir,
+    $HOME or a filesystem root (:func:`cross_file_scan_root`). Honors
+    ``root:true`` and ``.git`` and the ``__init__.py`` guard — so D005's
     duplicate scan is scoped to the same project boundary depends:// uses."""
-    root = resolve_project_root(path)
-    return root if root is not None else path.parent
+    return cross_file_scan_root(path)
 
 
 def _canonical_key(values: frozenset) -> str:
@@ -213,6 +213,9 @@ class D005(BaseRule, ASTParsingMixin):
     ) -> List[Detection]:
         path = Path(file_path).resolve()
         project_root = _find_project_root(path)
+        if project_root is None:
+            logger.debug("D005: no cross-file scan for standalone file under %s", path.parent)
+            return []
 
         if project_root not in _project_index:
             _project_index[project_root] = _build_index(project_root, self)

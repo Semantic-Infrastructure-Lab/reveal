@@ -37,7 +37,7 @@ from ...analyzers._python_dict_usage import (
     iter_python_files,
     resolve_typeddicts,
 )
-from ...utils.path_utils import EVIDENCE, resolve_project_root
+from ...utils.path_utils import EVIDENCE, cross_file_scan_root
 
 logger = logging.getLogger(__name__)
 
@@ -205,14 +205,15 @@ def _project_facts(file_path: str) -> Dict[str, Any]:
     if not path.is_file():
         return _EMPTY_FACTS
     root = _find_project_root(path.resolve())
+    if root is None:  # a standalone file in the temp dir, $HOME or a drive root
+        return _EMPTY_FACTS
     if root not in _project_index:
         _project_index[root] = _build_index(root)
     return _project_index[root]
 
 
-def _find_project_root(path: Path) -> Path:
-    root = resolve_project_root(path)
-    return root if root is not None else path.parent
+def _find_project_root(path: Path) -> Optional[Path]:
+    return cross_file_scan_root(path)
 
 
 def _max_project_files() -> int:

@@ -62,6 +62,8 @@ def _i002_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
         from .imports.I002 import I002, _find_project_root, _graph_cache
         sample = files[0] if files else directory
         root = _find_project_root(sample.resolve())
+        if root is None:  # standalone file in the temp dir/$HOME: nothing to index
+            return {}
         I002()._build_import_graph(root)   # populates _graph_cache in main process
         return dict(_graph_cache)          # plain dict is picklable
     except Exception:
@@ -109,6 +111,8 @@ def _d005_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
         from .duplicates.D005 import D005, _build_index, _find_project_root, _project_index
         sample = files[0] if files else directory
         root = _find_project_root(sample.resolve())
+        if root is None:  # standalone file in the temp dir/$HOME: nothing to index
+            return {}
         if root not in _project_index:
             _project_index[root] = _build_index(root, D005())
         return dict(_project_index)
@@ -139,6 +143,8 @@ def _t006_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
         from .types.T006 import _build_index, _find_project_root, _project_index
         sample = files[0] if files else directory
         root = _find_project_root(sample.resolve())
+        if root is None:  # standalone file in the temp dir/$HOME: nothing to index
+            return {}
         if root not in _project_index:
             _project_index[root] = _build_index(root)
         return dict(_project_index)
