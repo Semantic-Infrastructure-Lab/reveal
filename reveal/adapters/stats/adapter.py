@@ -28,6 +28,22 @@ from .queries import SORT_FIELDS, get_quality_config, field_value, compare, matc
 from .aggregation import aggregate_stats, identify_hotspots
 
 
+def _pool_results(executor, args: list) -> list:
+    """Run ``_analyze_file_worker`` over *args* in *executor*; one result per arg, in
+    input order. A future that failed (a dead worker breaks the pool and fails every
+    pending one, so the culprit cannot be told from the files lost with it) becomes the
+    same failure record a raising analyzer yields, so it reaches ``_analysis_failures``
+    and the run's warning instead of failing the whole scan (BACK-1718)."""
+    futures = [executor.submit(_analyze_file_worker, a) for a in args]
+    results = []
+    for a, future in zip(args, futures):
+        try:
+            results.append(future.result())
+        except Exception as e:  # the failure record below is the disclosure
+            results.append({'analysis_failed': f"{type(e).__name__}: {e}", 'path': a[0]})
+    return results
+
+
 def _analyze_file_worker(args: tuple):
     """Top-level worker for ProcessPoolExecutor — args must be picklable.
 
@@ -280,7 +296,7 @@ class StatsAdapter(ResourceAdapter):
                 initializer=worker_bootstrap,
                 initargs=(init_scan_caches, (caches,)),
             ) as executor:
-                all_stats = list(executor.map(_analyze_file_worker, args))
+                all_stats = _pool_results(executor, args)
         else:
             all_stats = [_analyze_file_worker(a) for a in args]
 
