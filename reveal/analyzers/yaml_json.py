@@ -78,9 +78,15 @@ class YamlAnalyzer(TreeSitterAnalyzer):
         if not self.tree:
             return []
         pairs: List[Any] = []
-        for node in _children(tree_root(self.tree)):
+        root = tree_root(self.tree)
+        for node in _children(root):
             if _zero_arg(node, 'kind') == 'document':
                 pairs.extend(self._get_document_mapping_pairs(node))
+        if _zero_arg(root, 'kind') == 'ERROR':
+            # A syntax error after the keys makes the whole stream an ERROR
+            # node whose children are the recovered pairs (BACK-1096).
+            pairs.extend(p for p in _children(root)
+                         if _zero_arg(p, 'kind') == 'block_mapping_pair')
         return pairs
 
     def _extract_key_info(self, pair_node):
