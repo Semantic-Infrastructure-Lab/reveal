@@ -53,7 +53,7 @@ class LayerRule:
         if project_root:
             try:
                 file_relative = file_path.relative_to(project_root)
-                file_str = str(file_relative).replace("\\", "/")
+                file_str = to_posix(file_relative)
             except ValueError:
                 # file_path is not under project_root
                 return False

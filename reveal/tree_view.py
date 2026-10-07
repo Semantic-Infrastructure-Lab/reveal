@@ -158,7 +158,7 @@ def show_file_list(path: str, show_hidden: bool = False,
             rel = fpath.relative_to(root_path)
         except ValueError:
             rel = fpath
-        lines.append(f"{date_str}  {rel}")
+        lines.append(f"{date_str}  {to_posix(rel)}")
 
     if not (max_entries <= 0) and len(files) == max_entries:
         lines.append(f"\n... showing first {max_entries} entries (use --max-entries 0 to show all)"

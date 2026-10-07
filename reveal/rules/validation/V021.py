@@ -47,6 +47,7 @@ import ast
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
+from ...utils.path_utils import to_posix
 from ...utils.pyparse import parse_python
 from reveal.utils.lines import split_lines
 
@@ -101,7 +102,7 @@ class V021(BaseRule):
         Returns a Detection if a violation is found, None otherwise.
         """
         relative = analyzer_file.relative_to(analyzers_dir)
-        if str(relative) in self.REGEX_WHITELIST:
+        if to_posix(relative) in self.REGEX_WHITELIST:
             return None
         if relative.parts and relative.parts[0] in self.NON_STRUCTURAL_SUBDIRS:
             return None

@@ -149,15 +149,15 @@ def resolve_directory(dir_path: str) -> Dict[str, Any]:
 
             # Add file context to each element
             for func in struct.get('functions', []):
-                func['file'] = str(rel_path)
+                func['file'] = rel_path.as_posix()
                 all_functions.append(func)
 
             for cls in struct.get('classes', []):
-                cls['file'] = str(rel_path)
+                cls['file'] = rel_path.as_posix()
                 all_classes.append(cls)
 
             for imp in struct.get('imports', []):
-                imp['file'] = str(rel_path)
+                imp['file'] = rel_path.as_posix()
                 all_imports.append(imp)
 
     return {

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, cast
 
 from ...registry import get_markdown_extensions
-from ...utils.path_utils import _walk_code_files
+from ...utils.path_utils import _walk_code_files, to_posix
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +120,7 @@ def extract_internal_links(path: Path, base_path: Path) -> List[str]:
         if not resolved.exists():
             continue
 
-        rel_str = str(rel).replace('\\', '/')
+        rel_str = to_posix(rel)
         if rel_str not in seen:
             seen.add(rel_str)
             results.append(rel_str)
