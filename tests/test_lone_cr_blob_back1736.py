@@ -13,6 +13,7 @@ Negative controls: the same files with LF and with CRLF line ends behave as befo
 """
 
 import json
+import tempfile
 import subprocess
 import sys
 
@@ -98,3 +99,32 @@ def test_normalize_newlines_values():
     assert normalize_newlines('a\r\r\nb') == 'a\n\nb'
     assert normalize_newlines('') == ''
     assert normalize_newlines('no breaks') == 'no breaks'
+
+
+@pytest.fixture
+def windows_text_writes(monkeypatch):
+    """Temp files written in text mode translate ``\\n`` to ``\\r\\n``, as on Windows, unless the
+    caller passes ``newline=``: a CRLF blob written that way became ``\\r\\r\\n``, two breaks."""
+    real = tempfile.NamedTemporaryFile
+
+    def windows(*args, **kwargs):
+        if 'b' not in kwargs.get('mode', 'w+b'):
+            kwargs.setdefault('newline', '\r\n')
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(tempfile, 'NamedTemporaryFile', windows)
+
+
+def test_crlf_blob_element_diff_with_windows_text_writes(tmp_path, monkeypatch,
+                                                        windows_text_writes):
+    from reveal.adapters.diff.adapter import DiffAdapter
+    monkeypatch.chdir(_repo(tmp_path / 'r', CRLF))
+    assert DiffAdapter('git://m.py@HEAD:m.py').get_element('target')['change'] == 'unchanged'
+
+
+def test_crlf_blob_element_source_with_windows_text_writes(tmp_path, windows_text_writes):
+    from reveal.adapters.git.files import _get_element_content_at_commit
+    repo = pygit2.Repository(str(_repo(tmp_path / 'r', CRLF)))
+    commit = repo.revparse_single('HEAD')
+    assert _get_element_content_at_commit(repo, commit, 'm.py', 'target') == \
+        'def target():\n    return 2'
