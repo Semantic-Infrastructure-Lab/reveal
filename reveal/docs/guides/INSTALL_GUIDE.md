@@ -33,7 +33,7 @@ Install one with `pip install "reveal-cli[<extra>]"`, several with
 | `whois` | `python-whois` | `domain://` views `/whois`, `/registrar` | the view fails with `python-whois not installed`; `/dns` still works |
 | `mcp` | `mcp` | the `reveal-mcp` server (see `reveal help://mcp`) | `reveal-mcp` exits 1 with `requires the 'mcp' package` |
 | `html` | `lxml` | faster HTML parsing | none; HTML falls back to the stdlib `html.parser` |
-| `powerpivot` | `pbixray` | full schema/DAX from modern Power BI `xlsx://` data models | Excel 2010/2013 models still work; modern ones report limited schema and ask for `pbixray` |
+| `powerpivot` | `pbixray` | full schema/DAX from modern Power BI `xlsx://` data models | Excel 2010/2013 models still work; modern ones report limited schema and ask for `reveal-cli[powerpivot]` |
 | `xlsx` | `openpyxl` | building `.xlsx` test fixtures only | none; the `xlsx://` adapter reads workbooks without it |
 | `treesitter` | nothing | deprecated no-op kept so old install commands still resolve | n/a (tree-sitter ships by default) |
 | `dev` | pytest, black, ruff, plus the packages the adapter tests need | contributing | n/a |

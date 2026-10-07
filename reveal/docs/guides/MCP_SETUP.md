@@ -20,15 +20,14 @@ native integration with Claude Code, Cursor, Windsurf, and any MCP-compatible ag
 ## Installation
 
 ```bash
-pip install reveal-cli
+pip install "reveal-cli[mcp]"
 ```
 
-The `reveal-mcp` command is included as an entry point in `reveal-cli` — no separate package needed.
+The `reveal-mcp` command is an entry point of `reveal-cli` — no separate package — but it
+needs the `mcp` extra: a plain `pip install reveal-cli` installs the command without the
+`mcp` package, and `reveal-mcp` then exits 1 with the install hint.
 
-Or if reveal is already installed and `mcp` isn't:
-```bash
-pip install "mcp>=2.0.0"
-```
+The same command adds the extra if reveal is already installed and `mcp` isn't.
 
 ## Configuration
 

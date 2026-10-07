@@ -1470,7 +1470,7 @@ cat domains.txt | xargs -P 10 -I {} sh -c 'reveal domain://{} --check'
    - **Workaround**: Use ssl:// directly for deep SSL inspection
 
 4. **Requires dnspython**
-   - **Dependency**: `pip install reveal-cli[dns]` (or `pip install dnspython`)
+   - **Dependency**: `pip install reveal-cli[dns]`
    - **Impact**: Won't work without dnspython
    - **Workaround**: Install dependency
 
@@ -1847,10 +1847,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install reveal
-        run: pip install reveal-tool
-
-      - name: Install dnspython
-        run: pip install dnspython
+        run: pip install "reveal-cli[dns]"
 
       - name: Check production domain
         run: |
@@ -1981,7 +1978,7 @@ fi
 ```dockerfile
 FROM python:3.11-slim
 
-RUN pip install reveal-tool dnspython
+RUN pip install "reveal-cli[dns]"
 
 COPY check-domains.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/check-domains.sh

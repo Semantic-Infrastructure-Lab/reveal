@@ -287,7 +287,7 @@ Reveal parses this directly — no dependencies beyond stdlib.
 
 **Tier 2 — pbixray (modern Excel 365 / Power BI exports)**: Modern files have the
 binary VertiPaq store but no XMLA envelope. If the optional `pbixray` library is
-installed (`pip install pbixray`), reveal reads the `metadata.sqlitedb` embedded in
+installed (`pip install reveal-cli[powerpivot]`), reveal reads the `metadata.sqlitedb` embedded in
 `xl/model/item.data` to get full columns and relationships. DAX measures are
 extracted when present (many demo/sample files have none).
 
@@ -370,10 +370,10 @@ Relationships (3):
 ### Optional: pbixray for Modern Files
 
 To unlock full column and relationship extraction from modern Excel 365 / Power BI
-export files (Tier 2), install `pbixray`:
+export files (Tier 2), install `pbixray` (the `powerpivot` extra):
 
 ```bash
-pip install pbixray
+pip install reveal-cli[powerpivot]
 ```
 
 Without it, modern files fall back to Tier 3 (table names only). With it, reveal

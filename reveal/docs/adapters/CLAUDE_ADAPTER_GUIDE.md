@@ -2303,7 +2303,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install reveal
-        run: pip install reveal-tool
+        run: pip install reveal-cli
 
       - name: Analyze session
         id: analyze

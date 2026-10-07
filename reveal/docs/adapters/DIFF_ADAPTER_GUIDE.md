@@ -1660,7 +1660,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install reveal
-        run: pip install reveal-tool
+        run: pip install reveal-cli
 
       - name: Compare branches
         run: |

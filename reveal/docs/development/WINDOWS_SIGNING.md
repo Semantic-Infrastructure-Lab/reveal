@@ -119,7 +119,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install pyinstaller
-          pip install -e ".[all]"
+          pip install -e ".[git,mcp]"
 
       - name: Build with PyInstaller
         run: |

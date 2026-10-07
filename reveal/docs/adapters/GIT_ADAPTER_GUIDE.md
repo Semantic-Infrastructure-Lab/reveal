@@ -42,8 +42,6 @@ category: guide
 ```bash
 # 1. Install dependency (if not already installed)
 pip install reveal-cli[git]
-# OR
-pip install pygit2>=1.14.0
 
 # 2. Repository overview (branches, tags, recent commits)
 reveal git://.
@@ -1743,9 +1741,6 @@ git:// is optimized for AI agent consumption:
 # Install with git extras
 pip install reveal-cli[git]
 
-# OR install pygit2 directly
-pip install pygit2>=1.14.0
-
 # Note: pygit2 has system dependencies (libgit2)
 # On Ubuntu/Debian:
 sudo apt-get install libgit2-dev
@@ -2037,11 +2032,11 @@ reveal git://. --format=json | jq -r '.branches.items[].name' | \
 ```bash
 # Ubuntu/Debian
 sudo apt-get install libgit2-dev python3-dev
-pip install pygit2
+pip install reveal-cli[git]
 
 # macOS
 brew install libgit2
-pip install pygit2
+pip install reveal-cli[git]
 
 # Verify installation
 python -c "import pygit2; print(pygit2.__version__)"
