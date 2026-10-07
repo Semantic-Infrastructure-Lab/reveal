@@ -430,7 +430,7 @@ scripts/ci-local.sh --lp 1.12.5    # force a tree-sitter-language-pack version (
 Classes that pass a 3.12 run and fail elsewhere: 3.10 rejects PEP 701 f-strings (a nested
 same-type quote), and 3.14 tokenizes t-strings natively. On the language-pack 1.8.1 floor
 `node.start_byte` is a bound method, not a value, so a bare read passes everywhere but CI's compat
-leg -- read Node accessors with `_zero_arg(node, 'start_byte')` (`scripts/check_treesitter_accessors.py`,
+leg -- read Node accessors with `_zero_arg(node, 'start_byte')` (rule V040 in `reveal reveal:// --check`,
 part of `--no-tests`, fails a bare read in seconds). The script's header also lists the Windows-only
 pitfalls worth checking by hand.
 

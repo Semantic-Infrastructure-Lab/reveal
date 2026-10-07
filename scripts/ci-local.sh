@@ -62,7 +62,7 @@
 #   - shell=True / POSIX quoting in subprocess: pass an argument list
 #   - str(path) compared or split on '/': use Path parts or as_posix() (V039)
 #   - open()/read_text() without encoding=: cp1252 default (check_text_encoding.py)
-# Bare node.start_byte etc. (floor leg above) is also linted in seconds: check_treesitter_accessors.py.
+# Bare node.start_byte etc. (floor leg above) is also linted in seconds: V040 (reveal:// --check).
 set -euo pipefail
 
 MATRIX_VERSIONS=(3.10 3.12 3.14)  # keep in step with .github/workflows/test.yml
@@ -237,7 +237,6 @@ step "CLI basics"
 if [[ $PRIMARY -eq 1 ]]; then
     step "Windows compatibility checks"
     "$PY" scripts/check_text_encoding.py >>"$LOG" 2>&1 || { tail -8 "$LOG"; fail "text encoding (bare read_text/open breaks on Windows)"; }
-    "$PY" scripts/check_treesitter_accessors.py >>"$LOG" 2>&1 || { tail -8 "$LOG"; fail "bare tree-sitter accessor (a method on language-pack 1.8.1; use _zero_arg)"; }
 
     # Counts of re-implemented shared infrastructure; each may only fall (BACK-1512).
     step "Shared-seam ratchet"

@@ -542,7 +542,7 @@ reveal check Dockerfile                # Docker best practices (S701)
 - **S** (security) - Security vulnerabilities (S001 opt-in, S701)
 - **T** (types) - Type annotation issues (T004-T006)
 - **U** (urls) - URL consistency and security (U501, U502)
-- **V** (validation) - Internal validation rules (V001-V039)
+- **V** (validation) - Internal validation rules (V001-V040)
 
 **List all rules (including opt-in):** `reveal --rules`
 **Explain specific rule:** `reveal --explain B001`
@@ -4239,10 +4239,10 @@ server {
 
 ### Validation (V)
 
-**V001-V039 (mostly internal; there is no V010):** Validation rules for reveal's own codebase and plugin adapters
+**V001-V040 (mostly internal; there is no V010):** Validation rules for reveal's own codebase and plugin adapters
 - Most are internal self-checks used by `reveal reveal://` — ensure adapter completeness, doc/count accuracy, output-contract compliance. Hidden by default; pass `--all` to `reveal --rules`/`--explain` to see them.
 - Two are public and apply to your own plugin adapters: **V016** (adapter missing `get_help()` documentation) and **V023** (adapter output doesn't comply with the Output Contract).
-- [V026](rules/V026.md) (path-handling convention/portability) has a dedicated deep-dive doc, as do [V036](rules/V036.md) (fork-dependent pool tests) and [V037](rules/V037.md) (POSIX-only calls in tests without a Windows guard) and [V038](rules/V038.md) (raw subprocess bytes asserted on newlines without normalising `\r\n`), and [V039](rules/V039.md) (POSIX path literals and slash-splits in tests), which scan reveal's own `tests/`.
+- [V026](rules/V026.md) (path-handling convention/portability) has a dedicated deep-dive doc, as do [V036](rules/V036.md) (fork-dependent pool tests) and [V037](rules/V037.md) (POSIX-only calls in tests without a Windows guard) and [V038](rules/V038.md) (raw subprocess bytes asserted on newlines without normalising `\r\n`), and [V039](rules/V039.md) (POSIX path literals and slash-splits in tests), which scan reveal's own `tests/`; [V040](rules/V040.md) (tree-sitter Node accessors the language-pack 1.8.1 floor lacks) scans `reveal/` and `tests/`.
 
 ---
 

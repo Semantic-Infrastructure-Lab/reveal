@@ -53,10 +53,6 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         run: python scripts/check_text_encoding.py
 
-      - name: Tree-sitter accessor guard (bare node.start_byte breaks language-pack 1.8.1)
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        run: python scripts/check_treesitter_accessors.py
-
       - name: Shared-seam ratchet (walkers, tree-sitter imports, exit, print)
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         run: python scripts/check_boundaries.py
