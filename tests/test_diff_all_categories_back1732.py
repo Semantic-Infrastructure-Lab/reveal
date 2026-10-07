@@ -172,10 +172,6 @@ def test_git_directory_diff_sees_added_interface(tmp_path, monkeypatch):
     assert result['summary']['interfaces'] == {'added': 1, 'removed': 0, 'modified': 0}
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    'BACK-1732 follow-up: resolve_directory (reveal/adapters/diff/resolution.py) aggregates '
-    'functions/classes/imports only, so a plain-directory diff still drops the other '
-    'categories; resolve_git_directory aggregates all of them'))
 def test_directory_diff_sees_added_interface(tmp_path):
     for side, text in zip(('d1', 'd2'), PAIRS['go']):
         (tmp_path / side).mkdir()

@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, Iterator, cast
 
 from .git import resolve_git_ref, resolve_git_adapter, read_git_text
 from ..base import get_adapter_class
+from ...diff.structure_diff import element_categories
 from ...errors import NotApplicableError
 from ...registry import get_analyzer
 from ...utils.path_utils import _walk_code_files
@@ -131,10 +132,8 @@ def resolve_directory(dir_path: str) -> Dict[str, Any]:
     if not directory.is_dir():
         raise ValueError(f"Not a directory: {dir_path}")
 
-    # Aggregate all structures
-    all_functions = []
-    all_classes = []
-    all_imports = []
+    # Every element category any file has, not only functions/classes/imports (BACK-1732).
+    aggregated: Dict[str, list] = {'functions': [], 'classes': [], 'imports': []}
     file_count = 0
 
     for file_path in find_analyzable_files(directory):
@@ -149,25 +148,17 @@ def resolve_directory(dir_path: str) -> Dict[str, Any]:
             struct = structure.get('structure', structure)
 
             # Add file context to each element
-            for func in struct.get('functions', []):
-                func['file'] = rel_path.as_posix()
-                all_functions.append(func)
-
-            for cls in struct.get('classes', []):
-                cls['file'] = rel_path.as_posix()
-                all_classes.append(cls)
-
-            for imp in struct.get('imports', []):
-                imp['file'] = rel_path.as_posix()
-                all_imports.append(imp)
+            for category in element_categories(struct):
+                for item in struct[category]:
+                    if isinstance(item, dict):
+                        item['file'] = rel_path.as_posix()
+                    aggregated.setdefault(category, []).append(item)
 
     return {
+        **aggregated,
         'type': 'directory',
         'path': str(directory),
         'file_count': file_count,
-        'functions': all_functions,
-        'classes': all_classes,
-        'imports': all_imports
     }
 
 
