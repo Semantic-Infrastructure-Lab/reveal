@@ -374,13 +374,16 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
 
 # Flags whose answer never reads the ELEMENT argument (dest -> spelling). `reveal a b --flag`
 # parses b as the element, so these answered for a alone and exited 0 (BACK-1687, BACK-1715).
-# A new flag of this kind is declared here, not guarded with another `if`.
+# A new flag of this kind is declared here, not guarded with another `if`. An early-exit mode
+# in main._SPECIAL_MODES that reads the path is checked against this set by
+# tests/test_element_less_completeness_back1735.py; the other flags are declared by hand.
 ELEMENT_LESS_FLAGS = {
     'validate_schema': '--validate-schema', 'check': '--check', 'meta': '--meta',
     'extract': '--extract', 'check_acl': '--check-acl', 'validate_nginx_acme': '--validate-nginx-acme',
     'global_audit': '--global-audit', 'check_conflicts': '--check-conflicts',
     'cpanel_certs': '--cpanel-certs', 'diagnose': '--diagnose',
     'explain_file': '--explain-file', 'capabilities': '--capabilities', 'show_ast': '--show-ast',
+    'decorator_stats': '--decorator-stats',
 }
 
 
@@ -390,18 +393,28 @@ def reject_ignored_element(args: 'Namespace') -> None:
     One disclosed refusal in place of a run that silently covers the first path only.
     URIs and ``@file`` lists read their second argument themselves and are left alone.
     """
+    declared = [(dest, spelling) for dest, spelling in ELEMENT_LESS_FLAGS.items()
+                if getattr(args, dest, None)]
     path_str = getattr(args, 'path', None)
-    if not path_str or '://' in path_str or path_str.startswith('@'):
+    if not declared or not path_str or '://' in path_str or path_str.startswith('@'):
         return
     element = getattr(args, 'element', None) or _parse_file_line_syntax(path_str)[1]
     if not element:
         return
-    for dest, spelling in ELEMENT_LESS_FLAGS.items():
-        if getattr(args, dest, None):
-            print(f"Error: {spelling} reads no element and covers one path per call; '{element}' would be ignored.\n"
-                  f"Run it once per path, or for several: ls PATHS | reveal --stdin {spelling}",
-                  file=sys.stderr)
-            sys.exit(2)
+    dest, spelling = declared[0]
+    print(f"Error: {spelling} reads no element and covers one path per call; '{element}' would be ignored.\n"
+          f"Run it once per path, or for several: ls PATHS | reveal --stdin {_flag_usage(dest, spelling)}",
+          file=sys.stderr)
+    sys.exit(2)
+
+
+def _flag_usage(dest: str, spelling: str) -> str:
+    """The flag as it must be typed: with its metavar when it takes a value."""
+    from ..parser import create_argument_parser
+    for action in create_argument_parser('')._actions:
+        if action.dest == dest and action.nargs != 0:
+            return f"{spelling} {action.metavar or dest.upper()}"
+    return spelling
 
 
 def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Namespace') -> None:
