@@ -178,3 +178,33 @@ def test_every_reported_name_occurs_on_its_reported_line(tmp_path, name):
                 '%s %r cited at line %d: %r' % (key, item_name, first, lines[first - 1]))
             if last is not None:
                 assert first <= last <= len(lines)
+
+
+@pytest.mark.parametrize('name', CASES)
+def test_structure_ignores_encoding_and_line_ending_spelling(tmp_path, name):
+    """The same program spelled with a BOM, CRLF, no final newline or a non-ASCII
+    first comment line must report the same symbols (names are sliced by byte
+    offsets, so a one-character BOM or accent shifts a character-indexed slice)."""
+    source, comment, _ = CASES[name]
+    clean_path = tmp_path / 'clean' / name
+    clean_path.parent.mkdir()
+    clean_path.write_text(source, encoding='utf-8')
+    expected = items(structure_of(clean_path)[0])
+    assert expected
+
+    def spelled(label, text, bom=False):
+        path = tmp_path / label / name
+        path.parent.mkdir()
+        path.write_bytes((b'\xef\xbb\xbf' if bom else b'') + text.encode('utf-8'))
+        return items(structure_of(path)[0])
+
+    assert spelled('bom', source, bom=True) == expected
+    assert spelled('crlf', source.replace('\n', '\r\n')) == expected
+    assert spelled('nonl', source.rstrip('\n')) == expected
+    if comment is not None:
+        # One non-ASCII comment line before the first symbol (after `<?php`).
+        head = len('<?php\n') if source.startswith('<?php') else 0
+        accented = source[:head] + comment.replace('comment', 'caf\u00e9 \u2603') + source[head:]
+        shifted = [(k, n, first + 1, None if last is None else last + 1)
+                   for k, n, first, last in expected]
+        assert spelled('accent', accented) == shifted
