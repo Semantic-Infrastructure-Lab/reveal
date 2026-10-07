@@ -309,3 +309,91 @@ def test_cycle_through_a_member_import_is_found_by_imports(tmp_path):
         'positive control: depends:// sees a <-> b')
     adapter, _ = _import_edges(root)
     assert len(adapter.analysis.graph.find_cycle_groups()) == 1
+
+
+# ------------------------------ NginxAnalyzer vs adapters/nginx regex parsing
+
+NGINX_BASE = '''server {
+    listen 80;
+    listen 443 ssl http2;
+    server_name a.example.com www.a.example.com;
+    location / { proxy_pass http://127.0.0.1:3000; }
+    location /static/ { root /var/www; }
+}
+'''
+NGINX_COMMENTED = NGINX_BASE + '''
+# server {
+#     listen 8080;
+#     server_name old.example.com;
+# }
+server {
+    listen 81; # listen 9999;
+    server_name b.example.com; # server_name c.example.com;
+    # location /ghost { return 200; }
+    location /real { return 200; }
+}
+'''
+NGINX_BRACES = '''server {
+    listen 80;
+    server_name e.example.com;
+    location ~ ^/(a|b){2}$ { return 301 /x; }
+    location /q { if ($a) { set $b "}"; } return 200; }
+}
+'''
+
+
+def _analyzer_view(path):
+    """{domain: (is_ssl, location paths)} as the line-based NginxAnalyzer reports it."""
+    structure = get_analyzer(str(path))(str(path)).get_structure()
+    locations = {}
+    for loc in structure['locations']:
+        locations.setdefault(loc['server'], []).append(loc['path'])
+    view = {}
+    for server in structure['servers']:
+        for domain in server['domains']:
+            view[domain] = (server['is_ssl'], locations.get(server['name'], []))
+    return view
+
+
+def _adapter_view(text):
+    """The same view from the regex helpers adapters/nginx uses for vhost lookup."""
+    from reveal.adapters.nginx import adapter as nginx
+    view = {}
+    for domain in nginx._extract_domains_from_content(text):
+        block = nginx._parse_server_block_for_domain(text, domain) or ''
+        view[domain] = (any(p['is_ssl'] for p in nginx._extract_ports(block)),
+                        [loc['path'] for loc in nginx._extract_location_blocks(block)])
+    return view
+
+
+COMMENT_REASON = ('adapters/nginx matches regexes over raw text, so commented-out '
+                  'server_name/listen/location lines become phantom domains, ports and locations; '
+                  'NginxAnalyzer skips comments')
+NGINX_CONFIGS = [
+    pytest.param(NGINX_BASE, id='clean'),
+    pytest.param(NGINX_COMMENTED, id='commented-out-directives',
+                 marks=pytest.mark.xfail(strict=True, reason=COMMENT_REASON)),
+    pytest.param(NGINX_BRACES, id='braces-in-location', marks=pytest.mark.xfail(strict=True, reason=(
+        'a location with a {n} quantifier or a nested `if` block: the two parsers disagree on '
+        'which locations exist (and both cut the regex path at the first brace)'))),
+]
+
+
+@pytest.mark.parametrize('text', NGINX_CONFIGS)
+def test_nginx_analyzer_and_adapter_agree_on_domains_ssl_and_locations(tmp_path, text):
+    path = tmp_path / 'site.conf'
+    path.write_text(text, encoding='utf-8')
+    analyzer_view = _analyzer_view(path)
+    assert analyzer_view, 'positive control: the analyzer sees the live vhost'
+    assert _adapter_view(text) == analyzer_view
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    'NginxAnalyzer reports a phantom server entry on the line of a commented-out `# server {`'))
+def test_nginx_analyzer_cites_only_live_server_lines(tmp_path):
+    path = tmp_path / 'site.conf'
+    path.write_text(NGINX_COMMENTED, encoding='utf-8')
+    lines = NGINX_COMMENTED.splitlines()
+    cited = [lines[s['line'] - 1].strip()
+             for s in get_analyzer(str(path))(str(path)).get_structure()['servers']]
+    assert cited and all(c.startswith('server') for c in cited), cited
