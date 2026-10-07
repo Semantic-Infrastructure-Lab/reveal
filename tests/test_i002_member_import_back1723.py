@@ -17,6 +17,8 @@ pytestmark = pytest.mark.component
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv('REVEAL_CACHE_DIR', str(tmp_path / 'cache'))
+    # Resolution, not caching, is under test: same answer whatever the ambient switch (BACK-1677).
+    monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
     monkeypatch.setenv('REVEAL_MAX_WORKERS', '1')
     _graph_cache.clear()
     yield
