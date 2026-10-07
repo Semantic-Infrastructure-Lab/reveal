@@ -213,12 +213,18 @@ def test_stats_pool_matches_the_serial_run(work, method):
 
 
 @pytest.mark.parametrize('method', METHODS)
-def test_stats_worker_death_fails_the_run_visibly(work, method):
-    """stats:// has no per-file recovery: a dead worker fails the whole run. Pins that it
-    fails loudly (non-zero exit, the pool's own message), never a clean partial answer."""
+def test_stats_worker_death_reports_the_lost_file_and_continues(work, method):
+    """BACK-1718: a dead worker no longer fails the whole run. The file lost with it goes
+    through BACK-1614's failure channel (a named warning, not in the totals) and the files
+    that did finish are still reported. Which collateral files the broken pool takes with
+    it varies, so the count is a bound; every file is either counted or named once."""
     _need(method)
     proc, calls = _run(work, method, 2, 'stats://tree', '--format', 'json', die=True)
     _ran_in_pool(calls, method)
-    assert proc.returncode != 0
-    assert 'terminated abruptly' in proc.stderr
-    assert '"total_files"' not in proc.stdout
+    assert proc.returncode == 0, (proc.returncode, proc.stdout, proc.stderr)
+    result = json.loads(proc.stdout)
+    warning, = [w for w in result['meta']['warnings'] if w['type'] == 'analysis_failed']
+    assert DYING in warning['files'], warning
+    assert 1 <= warning['count'] <= N_FILES
+    assert result['summary']['total_files'] + warning['count'] == N_FILES, (result['summary'], warning)
+    assert 'terminated abruptly' not in proc.stderr
