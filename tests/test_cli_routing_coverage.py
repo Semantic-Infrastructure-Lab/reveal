@@ -91,6 +91,7 @@ class TestHandleUriSortDesc:
         """Cover line 51: --desc prepends - to sort_field."""
         mock_adapter_cls = MagicMock()
         mock_renderer_cls = MagicMock()
+        mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
 
         # get_adapter_class is imported inside handle_uri, patch at source
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
@@ -108,6 +109,7 @@ class TestHandleUriSortDesc:
         """BACK-161: --sort is not injected when URI already has sort= param."""
         mock_adapter_cls = MagicMock()
         mock_renderer_cls = MagicMock()
+        mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
 
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
             with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
@@ -133,6 +135,7 @@ class TestHandleUriExclude:
     def test_exclude_injected_for_overview_scheme(self):
         mock_adapter_cls = MagicMock()
         mock_renderer_cls = MagicMock()
+        mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
             with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
                 with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
@@ -145,6 +148,7 @@ class TestHandleUriExclude:
     def test_exclude_joins_multiple_patterns_with_comma(self):
         mock_adapter_cls = MagicMock()
         mock_renderer_cls = MagicMock()
+        mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
             with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
                 with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
@@ -157,6 +161,7 @@ class TestHandleUriExclude:
     def test_uri_exclude_takes_precedence_over_flag(self):
         mock_adapter_cls = MagicMock()
         mock_renderer_cls = MagicMock()
+        mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
             with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
                 with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
@@ -170,6 +175,7 @@ class TestHandleUriExclude:
     def test_exclude_warns_on_non_supporting_scheme(self, capsys):
         mock_adapter_cls = MagicMock()
         mock_renderer_cls = MagicMock()
+        mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
             with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
                 with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
@@ -184,6 +190,7 @@ class TestHandleUriExclude:
     def test_no_exclude_flag_no_injection_no_warning(self, capsys):
         mock_adapter_cls = MagicMock()
         mock_renderer_cls = MagicMock()
+        mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
             with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
                 with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
@@ -280,7 +287,7 @@ class TestHandleUriStructuralFlagsWarning:
         args = _args(**{'sort': None, 'exclude': None, 'respect_gitignore': True, 'ext': None,
                         'type': None, 'fast': False, 'base_path': None, **flags})
         with patch('reveal.adapters.base.get_adapter_class', return_value=adapter_cls):
-            with patch('reveal.adapters.base.get_renderer_class', return_value=MagicMock()):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=MagicMock(**{'exit_code.return_value': 0})):
                 from reveal.cli.routing import handle_uri
                 handle_uri('overview://.', None, args)
 
@@ -298,7 +305,7 @@ class TestHandleUriStructuralFlagsWarning:
 
     def _run_ast(self, uri, type_value):
         with patch('reveal.adapters.base.get_adapter_class', return_value=_StubAdapterNoStructuralParams):
-            with patch('reveal.adapters.base.get_renderer_class', return_value=MagicMock()):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=MagicMock(**{'exit_code.return_value': 0})):
                 with patch('reveal.cli.routing.uri.handle_adapter', side_effect=_parses_its_query):
                     from reveal.cli.routing import handle_uri
                     args = _args(sort=None, exclude=None, respect_gitignore=True,
@@ -336,6 +343,7 @@ class TestHandleUriStructuralFlagsWarning:
     def test_no_since_until_flags_no_injection_no_warning(self, capsys):
         mock_adapter_cls = MagicMock()
         mock_renderer_cls = MagicMock()
+        mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
             with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
                 with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
@@ -356,6 +364,8 @@ class TestGenericAdapterHandlerBasePath:
 
         mock_renderer_cls = MagicMock()
 
+        mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
+
         args = _args(base_path='/new', format='text')
 
         # _default_from_uri is called when adapter_class is not a real type
@@ -373,6 +383,8 @@ class TestGenericAdapterHandlerBasePath:
         mock_adapter_cls.from_uri.return_value = mock_adapter
 
         mock_renderer_cls = MagicMock()
+
+        mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(check=True, base_path=None, format='text')
 
         with patch('reveal.cli.routing.uri._check_answer') as mock_check:
@@ -573,6 +585,8 @@ class TestRenderStructure:
         adapter.get_structure.side_effect = ValueError("line1\nline2")
 
         renderer_cls = MagicMock()
+
+        renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args()
         with pytest.raises(SystemExit):
             _render_structure(adapter, renderer_cls, args, scheme='test', resource='x')
@@ -585,6 +599,8 @@ class TestRenderStructure:
         adapter.get_structure.side_effect = ValueError("bad input")
 
         renderer_cls = MagicMock()
+
+        renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args()
         with pytest.raises(SystemExit):
             _render_structure(adapter, renderer_cls, args, scheme='env', resource='x')
@@ -602,6 +618,7 @@ class TestRenderStructure:
 
         adapter = ConcreteAdapter()
         renderer_cls = MagicMock()
+        renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args()
         _render_structure(adapter, renderer_cls, args)
         # Verify render_structure was called with post-processed result
@@ -631,6 +648,7 @@ class TestRenderStructureTopForwarding:
     def test_overview_renderer_gets_no_top_kwarg_when_unset(self):
         """No --top/--all/--verbose passed: let render_structure keep its own default."""
         renderer_cls = MagicMock()
+        renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         renderer_cls.ACCEPTS_TOP = True
         args = _args()  # no all/verbose attributes at all
         _render_structure(self._adapter(), renderer_cls, args)
@@ -642,6 +660,7 @@ class TestRenderStructureTopForwarding:
         others use differently-shaped signatures) must not receive one just
         because --all was passed -- scoped to OverviewRenderer specifically."""
         renderer_cls = MagicMock()
+        renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         renderer_cls.__name__ = 'ArchitectureRenderer'
         args = _args(all=True, verbose=False, top=5)
         _render_structure(self._adapter(), renderer_cls, args)
@@ -652,6 +671,7 @@ class TestRenderStructureTopForwarding:
         """A bare MagicMock() (common in other tests here) has no real
         __name__ -- accessing it directly used to raise AttributeError."""
         renderer_cls = MagicMock()
+        renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(all=True, verbose=False, top=5)
         _render_structure(self._adapter(), renderer_cls, args)  # must not raise
         _, kwargs = renderer_cls.render_structure.call_args
@@ -1096,6 +1116,7 @@ class TestRenderElement:
         mock_adapter = MagicMock()
         mock_adapter.get_element.return_value = {'name': 'foo', 'body': 'x = 1'}
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args()
 
         _render_element(mock_adapter, mock_renderer, 'foo', None, args)
@@ -1114,6 +1135,7 @@ class TestRenderElement:
             'type': 'static_guide', 'content': 'line1\nline2\nline3\nline4\nline5'
         }
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(head=3)
         _render_element(mock_adapter, mock_renderer, 'claude', None, args)
         passed = mock_renderer.render_element.call_args[0][0]
@@ -1126,6 +1148,7 @@ class TestRenderElement:
             'type': 'static_guide', 'content': 'line1\nline2\nline3\nline4\nline5'
         }
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(tail=2)
         _render_element(mock_adapter, mock_renderer, 'claude', None, args)
         passed = mock_renderer.render_element.call_args[0][0]
@@ -1136,6 +1159,7 @@ class TestRenderElement:
         mock_adapter = MagicMock()
         mock_adapter.get_element.return_value = {'name': 'fn', 'body': 'a\nb\nc\nd'}
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(head=2)
         _render_element(mock_adapter, mock_renderer, 'fn', None, args)
         passed = mock_renderer.render_element.call_args[0][0]
@@ -1147,6 +1171,7 @@ class TestRenderElement:
         mock_adapter = MagicMock()
         mock_adapter.get_element.return_value = original
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args()
         _render_element(mock_adapter, mock_renderer, 'topic', None, args)
         passed = mock_renderer.render_element.call_args[0][0]
@@ -1157,6 +1182,7 @@ class TestRenderElement:
         mock_adapter = MagicMock()
         mock_adapter.get_element.return_value = {'content': 'a\nb'}
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(head=100)
         _render_element(mock_adapter, mock_renderer, 'x', None, args)
         passed = mock_renderer.render_element.call_args[0][0]
@@ -1168,6 +1194,7 @@ class TestRenderElement:
         mock_adapter = MagicMock()
         mock_adapter.get_element.return_value = original
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(head=1)
         _render_element(mock_adapter, mock_renderer, 'x', None, args)
         passed = mock_renderer.render_element.call_args[0][0]
@@ -1182,6 +1209,7 @@ class TestRenderElement:
         mock_adapter = MagicMock()
         mock_adapter.get_element.return_value = {'type': 'static_guide', 'topic': 'test', 'content': md}
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(outline=True)
         _render_element(mock_adapter, mock_renderer, 'test', None, args)
         out = capsys.readouterr().out
@@ -1195,6 +1223,7 @@ class TestRenderElement:
         mock_adapter = MagicMock()
         mock_adapter.get_element.return_value = {'name': 'fn', 'body': '# Intro\n## Details'}
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(outline=True)
         _render_element(mock_adapter, mock_renderer, 'fn', None, args)
         out = capsys.readouterr().out
@@ -1207,6 +1236,7 @@ class TestRenderElement:
         mock_adapter = MagicMock()
         mock_adapter.get_element.return_value = {'topic': 'x', 'content': 'plain text, no headings'}
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(outline=True)
         _render_element(mock_adapter, mock_renderer, 'x', None, args)
         err = capsys.readouterr().err
@@ -1219,6 +1249,7 @@ class TestRenderElement:
         mock_adapter = MagicMock()
         mock_adapter.get_element.return_value = original
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(outline=True)
         _render_element(mock_adapter, mock_renderer, 'x', None, args)
         mock_renderer.render_element.assert_called_once()
@@ -1228,6 +1259,7 @@ class TestRenderElement:
         mock_adapter = MagicMock()
         mock_adapter.get_element.return_value = {'topic': 'x', 'content': '# Title\ntext'}
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(outline=False)
         _render_element(mock_adapter, mock_renderer, 'x', None, args)
         mock_renderer.render_element.assert_called_once()
@@ -1243,6 +1275,7 @@ class TestRenderElement:
         from reveal.adapters.help import HelpAdapter
         adapter = HelpAdapter()
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args()
         with pytest.raises(SystemExit):
             _render_element(adapter, mock_renderer, 'query/Elements Reference', None, args, scheme='help')
@@ -1257,6 +1290,7 @@ class TestRenderElement:
         from reveal.adapters.help import HelpAdapter
         adapter = HelpAdapter()
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args()
         with pytest.raises(SystemExit):
             _render_element(adapter, mock_renderer, 'quik', None, args, scheme='help')
@@ -1271,6 +1305,7 @@ class TestRenderElement:
         from reveal.adapters.help import HelpAdapter
         adapter = HelpAdapter()
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args()
         with pytest.raises(SystemExit):
             _render_element(adapter, mock_renderer, 'zzzzzzzz', None, args, scheme='help')
@@ -1284,6 +1319,7 @@ class TestRenderElement:
         mock_adapter.get_element.return_value = None
         del mock_adapter.list_elements
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args()
         with pytest.raises(SystemExit):
             _render_element(mock_adapter, mock_renderer, 'missing_fn', None, args, scheme='ast')
@@ -1406,6 +1442,7 @@ class TestRenderElementLinksAndFrontmatter:
         mock_adapter = MagicMock()
         mock_adapter.get_element.return_value = {'topic': 'guide', 'content': self.MD_WITH_LINKS}
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(links=True, link_type=None, domain=None)
         _render_element(mock_adapter, mock_renderer, 'guide', None, args)
         out = capsys.readouterr().out
@@ -1417,6 +1454,7 @@ class TestRenderElementLinksAndFrontmatter:
         mock_adapter = MagicMock()
         mock_adapter.get_element.return_value = {'topic': 'guide', 'content': self.MD_WITH_LINKS}
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(links=True, link_type='internal', domain=None)
         _render_element(mock_adapter, mock_renderer, 'guide', None, args)
         out = capsys.readouterr().out
@@ -1428,6 +1466,7 @@ class TestRenderElementLinksAndFrontmatter:
         mock_adapter = MagicMock()
         mock_adapter.get_element.return_value = {'topic': 'x', 'content': 'plain text no links'}
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(links=True, link_type=None, domain=None)
         _render_element(mock_adapter, mock_renderer, 'x', None, args)
         err = capsys.readouterr().err
@@ -1439,6 +1478,7 @@ class TestRenderElementLinksAndFrontmatter:
         mock_adapter = MagicMock()
         mock_adapter.get_element.return_value = {'topic': 'guide', 'content': self.MD_WITH_FM}
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(frontmatter=True)
         _render_element(mock_adapter, mock_renderer, 'guide', None, args)
         out = capsys.readouterr().out
@@ -1450,6 +1490,7 @@ class TestRenderElementLinksAndFrontmatter:
         mock_adapter = MagicMock()
         mock_adapter.get_element.return_value = {'topic': 'x', 'content': '# No frontmatter here'}
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(frontmatter=True)
         _render_element(mock_adapter, mock_renderer, 'x', None, args)
         err = capsys.readouterr().err
@@ -1465,6 +1506,7 @@ class TestRenderElementLinksAndFrontmatter:
             'topic': 'x', 'content': "---\n: invalid: yaml: : :\n---\n# Body"
         }
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(frontmatter=True)
         _render_element(mock_adapter, mock_renderer, 'x', None, args)
         err = capsys.readouterr().err
@@ -1477,6 +1519,7 @@ class TestRenderElementLinksAndFrontmatter:
         mock_adapter = MagicMock()
         mock_adapter.get_element.return_value = {'type': 'items', 'results': [1]}
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(links=True, link_type=None, domain=None)
         _render_element(mock_adapter, mock_renderer, 'x', None, args)
         mock_renderer.render_element.assert_called_once()
@@ -1486,6 +1529,7 @@ class TestRenderElementLinksAndFrontmatter:
         mock_adapter = MagicMock()
         mock_adapter.get_element.return_value = {'type': 'items', 'results': [1]}
         mock_renderer = MagicMock()
+        mock_renderer.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args(frontmatter=True)
         _render_element(mock_adapter, mock_renderer, 'x', None, args)
         mock_renderer.render_element.assert_called_once()
@@ -1509,6 +1553,7 @@ class TestHandleUriMarkdownFlags:
         mock_adapter_cls = MM()
         mock_adapter_cls.return_value.get_structure.return_value = {'contract_version': '1.0', 'type': 'markdown_query', 'source': '.', 'source_type': 'directory', 'results': []}
         mock_renderer_cls = MM()
+        mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls), \
              patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
             handle_uri('markdown://docs/', None, args)
@@ -1522,6 +1567,7 @@ class TestHandleUriMarkdownFlags:
         mock_adapter_cls = MM()
         mock_adapter_cls.return_value.get_structure.return_value = {'contract_version': '1.0', 'type': 'markdown_query', 'source': '.', 'source_type': 'directory', 'results': []}
         mock_renderer_cls = MM()
+        mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls), \
              patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
             handle_uri('markdown://docs/', None, args)
@@ -1571,6 +1617,7 @@ class TestHandleAdapter:
 
         mock_adapter_cls = MagicMock()
         mock_renderer_cls = MagicMock()
+        mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         args = _args()
 
         with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):

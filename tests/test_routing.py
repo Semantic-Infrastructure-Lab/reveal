@@ -1383,6 +1383,7 @@ class TestAdapterParameters(unittest.TestCase):
         # Mock renderer
         mock_renderer = Mock()
         mock_renderer.render_structure = Mock()
+        mock_renderer.exit_code = Mock(return_value=0)  # a renderer's findings exit (BACK-916)
         mock_renderer.render_element = Mock()
 
         # Call generic_adapter_handler (simulating stats:// with --hotspots)
@@ -1430,6 +1431,7 @@ class TestAdapterParameters(unittest.TestCase):
         # Mock renderer
         mock_renderer = Mock()
         mock_renderer.render_structure = Mock()
+        mock_renderer.exit_code = Mock(return_value=0)  # a renderer's findings exit (BACK-916)
 
         # Call generic_adapter_handler
         generic_adapter_handler(
@@ -1473,6 +1475,7 @@ class TestAdapterParameters(unittest.TestCase):
         # Mock renderer
         mock_renderer = Mock()
         mock_renderer.render_structure = Mock()
+        mock_renderer.exit_code = Mock(return_value=0)  # a renderer's findings exit (BACK-916)
 
         # Call generic_adapter_handler
         generic_adapter_handler(
