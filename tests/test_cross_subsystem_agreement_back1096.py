@@ -330,7 +330,7 @@ server {
 NGINX_BRACES = '''server {
     listen 80;
     server_name e.example.com;
-    location ~ ^/(a|b){2}$ { return 301 /x; }
+    location ~ "^/(a|b){2}$" { return 301 /x; }
     location /q { if ($a) { set $b "}"; } return 200; }
 }
 '''
@@ -360,16 +360,10 @@ def _adapter_view(text):
     return view
 
 
-COMMENT_REASON = ('adapters/nginx matches regexes over raw text, so commented-out '
-                  'server_name/listen/location lines become phantom domains, ports and locations; '
-                  'NginxAnalyzer skips comments')
 NGINX_CONFIGS = [
     pytest.param(NGINX_BASE, id='clean'),
-    pytest.param(NGINX_COMMENTED, id='commented-out-directives',
-                 marks=pytest.mark.xfail(strict=True, reason=COMMENT_REASON)),
-    pytest.param(NGINX_BRACES, id='braces-in-location', marks=pytest.mark.xfail(strict=True, reason=(
-        'a location with a {n} quantifier or a nested `if` block: the two parsers disagree on '
-        'which locations exist (and both cut the regex path at the first brace)'))),
+    pytest.param(NGINX_COMMENTED, id='commented-out-directives'),
+    pytest.param(NGINX_BRACES, id='braces-in-location'),  # nginx requires the {n} regex quoted
 ]
 
 
@@ -382,8 +376,6 @@ def test_nginx_analyzer_and_adapter_agree_on_domains_ssl_and_locations(tmp_path,
     assert _adapter_view(text) == analyzer_view
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    'NginxAnalyzer reports a phantom server entry on the line of a commented-out `# server {`'))
 def test_nginx_analyzer_cites_only_live_server_lines(tmp_path):
     path = tmp_path / 'site.conf'
     path.write_text(NGINX_COMMENTED, encoding='utf-8')

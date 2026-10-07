@@ -23,6 +23,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import AdapterFlag, ResourceAdapter, register_adapter, register_renderer
 from ..ssl.probe import probe_http_redirect
+from ...utils.nginx_conf import find_blocks, strip_comments
 from ...utils.results import ResultBuilder
 from .renderer import NginxUriRenderer
 
@@ -308,7 +309,7 @@ def _find_config_for_domain(domain: str) -> Optional[str]:
 def _extract_domains_from_content(content: str) -> List[str]:
     """Extract unique domain names from nginx server_name directives in content."""
     domains: List[str] = []
-    for m in re.finditer(r'server_name\s+([^;]+);', content):
+    for m in re.finditer(r'server_name\s+([^;]+);', strip_comments(content)):
         for name in m.group(1).split():
             if name not in ('_', 'localhost') and '.' in name and name not in domains:
                 domains.append(name)
@@ -330,24 +331,22 @@ def _resolve_symlink_info(path: str) -> Dict[str, Any]:
 
 def _parse_server_block_for_domain(content: str, domain: str) -> Optional[str]:
     """Extract the server block(s) relevant to domain from nginx config content."""
-    # Match all server blocks; handles 3 levels of brace nesting to cover
-    # nested location blocks (server → location → location ~* inside location /).
-    SERVER_BLOCK_RE = re.compile(
-        r'(server\s*\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\})',
-        re.MULTILINE | re.DOTALL
-    )
+    # Every server block, any nesting depth inside it, comments and quoted braces ignored
+    # (BACK-1725: the regex this replaced read commented-out directives and stopped at a
+    # quoted "}").
     matching = []
-    for m in SERVER_BLOCK_RE.finditer(content):
-        block = m.group(1)
-        sn_match = re.search(r'server_name\s+([^;]+);', block)
+    for _, body in find_blocks(content, 'server'):
+        sn_match = re.search(r'server_name\s+([^;]+);', body)
         if sn_match and domain in sn_match.group(1).split():
-            matching.append(block)
+            matching.append('server {' + body + '}')
     return '\n\n'.join(matching) if matching else None
 
 
 def _extract_ports(server_block: str) -> List[Dict[str, Any]]:
     """Extract listening ports from a server block."""
     ports = []
+    raw_block = server_block  # certbot marks its lines with `# managed by Certbot` comments
+    server_block = strip_comments(server_block)
     for m in re.finditer(r'listen\s+([^;]+);', server_block):
         spec = m.group(1).strip()
         is_ssl = 'ssl' in spec or '443' in spec
@@ -362,7 +361,7 @@ def _extract_ports(server_block: str) -> List[Dict[str, Any]]:
         if not is_ssl and re.search(r'return\s+3\d\d\s+https://', server_block):
             entry['redirect_to_https'] = True
         # Detect certbot-managed SSL
-        if is_ssl and re.search(r'letsencrypt', server_block):
+        if is_ssl and re.search(r'letsencrypt', raw_block):
             entry['certbot_managed'] = True
         ports.append(entry)
     return ports
@@ -525,10 +524,10 @@ def _extract_auth_directives(server_block: str) -> Dict[str, Any]:
 def _extract_location_blocks(server_block: str) -> List[Dict[str, Any]]:
     """Extract location blocks with their targets."""
     locations = []
-    LOC_RE = re.compile(r'location\s+([^\{]+)\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}', re.MULTILINE | re.DOTALL)
-    for m in LOC_RE.finditer(server_block):
-        path = m.group(1).strip()
-        body = m.group(2)
+    # A server block's own locations: look inside the server wrapper if the text has one.
+    bodies = [body for _, body in find_blocks(server_block, 'server')]
+    scope = '\n'.join(bodies) if bodies else server_block
+    for path, body in find_blocks(scope, 'location'):
 
         loc: Dict[str, Any] = {'path': path}
 

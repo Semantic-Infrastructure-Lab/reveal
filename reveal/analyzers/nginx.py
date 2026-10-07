@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 from ..base import FileAnalyzer
 from ..registry import register
+from ..utils.nginx_conf import block_header, brace_delta, strip_comments
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -393,12 +394,11 @@ class NginxAnalyzer(FileAnalyzer):
 
     def _is_server_block_start(self, stripped: str) -> bool:
         """Check if line starts a server block."""
-        return 'server {' in stripped or stripped.startswith('server {')
+        return block_header(stripped, 'server') is not None
 
     def _try_parse_location_block(self, stripped: str) -> Optional[str]:
         """Try to parse location path from line."""
-        match = re.match(r'location\s+(.+?)\s*\{', stripped)
-        return match.group(1) if match else None
+        return block_header(stripped, 'location') or None
 
     def _try_parse_upstream_block(self, stripped: str) -> Optional[str]:
         """Try to parse upstream name from line."""
@@ -474,16 +474,19 @@ class NginxAnalyzer(FileAnalyzer):
 
         for i, line in enumerate(self.lines, 1):
             stripped = line.strip()
-            brace_depth += stripped.count('{') - stripped.count('}')
-
             self._process_comment(comments, stripped, i)
 
-            if self._is_server_block_start(stripped):
+            # Block structure comes from the code on the line: a commented-out
+            # `# server {` opens nothing and a quoted "}" closes nothing (BACK-1725).
+            code = strip_comments(stripped).strip()
+            brace_depth += brace_delta(code)
+
+            if self._is_server_block_start(code):
                 current_server, in_server = self._process_server_block(servers, i)
             else:
-                self._process_location_block(locations, stripped, i, in_server, brace_depth, current_server)
-                self._process_upstream_block(upstreams, stripped, i)
-                self._process_map_block(maps, stripped, i)
+                self._process_location_block(locations, code, i, in_server, brace_depth, current_server)
+                self._process_upstream_block(upstreams, code, i)
+                self._process_map_block(maps, code, i)
 
             # Reset server context when we exit server block
             if in_server and brace_depth == 0:
