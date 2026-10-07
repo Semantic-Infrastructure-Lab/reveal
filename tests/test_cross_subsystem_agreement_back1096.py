@@ -230,3 +230,82 @@ def test_env_every_listed_variable_resolves_to_the_same_facts(monkeypatch):
             assert element[field] == entry[field], (name, field)
     assert listed['REVEAL_B1096_API_KEY'][1]['sensitive'] is True
     assert 'hunter2-secret' not in str(adapter.get_structure())
+
+
+# ------------------------------------------- imports:// vs depends:// edges
+
+def _python_project(root, files):
+    root.mkdir()
+    (root / 'pyproject.toml').write_text('[project]\nname="probe"\n', encoding='utf-8')
+    for rel, text in files.items():
+        target = root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding='utf-8')
+    return root
+
+
+def _import_edges(root):
+    """{file: set(files that depend on it)} from the imports:// graph."""
+    from reveal.adapters.imports import ImportsAdapter
+    adapter = ImportsAdapter(resource=str(root))
+    adapter._build_graph(root)
+    dependents = {}
+    for source, targets in adapter.analysis.graph.dependencies.items():
+        for target in targets:
+            dependents.setdefault(target.relative_to(root).as_posix(), set()).add(
+                source.relative_to(root).as_posix())
+    return adapter, dependents
+
+
+def _depends_edges(root):
+    from reveal.adapters.depends import DependsAdapter
+    found = {}
+    for path in sorted(root.rglob('*.py')):
+        result = DependsAdapter(str(path)).get_structure()
+        found[path.relative_to(root).as_posix()] = {d['file'] for d in result['dependents']}
+    return found
+
+
+SHAPES = {
+    'absolute_and_relative': {
+        'pkg/__init__.py': '', 'pkg/a.py': 'import os\nfrom . import b\n',
+        'pkg/b.py': 'from .c import x\n', 'pkg/c.py': 'x = 1\n',
+        'main.py': 'import pkg.a\nimport requests\n', 'tool.py': 'from pkg.b import x\nimport pkg.c as cc\n'},
+}
+
+
+@pytest.mark.parametrize('shape', SHAPES)
+def test_imports_and_depends_agree_on_who_depends_on_whom(tmp_path, shape):
+    root = _python_project(tmp_path / shape, SHAPES[shape])
+    _, imports_edges = _import_edges(root)
+    depends_edges = _depends_edges(root)
+    assert sum(len(v) for v in depends_edges.values()) >= 5, 'positive control: edges exist'
+    for name, dependents in depends_edges.items():
+        assert imports_edges.get(name, set()) == dependents, name
+
+
+MEMBER_IMPORT = {
+    'pkg/__init__.py': '', 'pkg/a.py': 'from pkg import b\n', 'pkg/b.py': 'import pkg.a\n',
+}
+MEMBER_REASON = ("imports:// drops the file edge of an absolute `from pkg import submodule` "
+                 '(depends:// keeps it), so a cycle made of such edges is invisible to ?circular')
+
+
+@pytest.mark.xfail(strict=True, reason=MEMBER_REASON)
+def test_member_import_of_a_submodule_is_a_file_edge_in_both(tmp_path):
+    root = _python_project(tmp_path / 'member', {
+        **MEMBER_IMPORT, 'main.py': 'from pkg import b\n'})
+    _, imports_edges = _import_edges(root)
+    depends_edges = _depends_edges(root)
+    assert 'main.py' in depends_edges['pkg/b.py'], 'positive control: depends:// sees the edge'
+    assert imports_edges.get('pkg/b.py', set()) == depends_edges['pkg/b.py']
+
+
+@pytest.mark.xfail(strict=True, reason=MEMBER_REASON)
+def test_cycle_through_a_member_import_is_found_by_imports(tmp_path):
+    root = _python_project(tmp_path / 'cycle', MEMBER_IMPORT)
+    depends_edges = _depends_edges(root)
+    assert 'pkg/a.py' in depends_edges['pkg/b.py'] and 'pkg/b.py' in depends_edges['pkg/a.py'], (
+        'positive control: depends:// sees a <-> b')
+    adapter, _ = _import_edges(root)
+    assert len(adapter.analysis.graph.find_cycle_groups()) == 1
