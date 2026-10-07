@@ -1203,7 +1203,7 @@ reveal src/changed_file.py changed_function
 - `0` pass — no findings
 - `1` warn — only `low`/`medium` findings
 - `2` fail — any `high`/`critical` finding, **or** an invalid target (unknown revision such as `main..nosuchbranch`, or not inside a git repository — `Error: cannot review …`)
-- `3` incomplete — a quality check crashed or couldn't analyze some files, so an empty result is not proof of a clean change
+- `3` incomplete — a quality check crashed or couldn't analyze some files, or the hotspot step couldn't rank some (named under Caveats), so an empty result is not proof of a clean change
 
 JSON output carries the same verdict as `overall_status` (`pass` / `warn` / `fail` / `incomplete`, or `error` for an invalid target) and `exit_code`:
 ```bash

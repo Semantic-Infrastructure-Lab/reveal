@@ -75,10 +75,11 @@ def test_review_is_incomplete_when_hotspots_lost_a_file(tmp_path, stats_loses_on
     """A review that could not rank every file did not cover everything: incomplete/3,
     like a quality pass that could not check every file (Scott, 2026-10-07), so a CI
     gate reading only the exit code sees it."""
-    code, out = _review(_tree(tmp_path), 'json')
+    root = _tree(tmp_path)
+    code, out = _review(root, 'json')
     report = json.loads(out)
     assert (code, report['overall_status'], report['exit_code']) == (3, 'incomplete', 3)
-    _, text = _review(_tree(tmp_path / 'again'), 'text')
+    _, text = _review(root, 'text')
     assert 'Recommendation: Review incomplete' in text and 'hotspot' in text.split('Recommendation:')[1]
 
 

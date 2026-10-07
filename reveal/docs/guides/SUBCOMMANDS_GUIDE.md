@@ -82,7 +82,7 @@ reveal review HEAD~3..HEAD         # Review last 3 commits
 2. **Violations** — quality rule failures by severity (`critical` / `high` / `medium` / `low`, the same levels as `reveal check`)
 3. **Hotspots** — files below 100/100 quality, ranked by churn×complexity
 4. **Complex functions** — functions above complexity threshold
-5. **Caveats** — files the hotspot step could not analyze (a failing analyzer or a dead worker); they are missing from the ranking. JSON: `meta.warnings` entries of type `analysis_failed`. They do not change the exit code.
+5. **Caveats** — files the hotspot step could not analyze (a failing analyzer or a dead worker); they are missing from the ranking. JSON: `meta.warnings` entries of type `analysis_failed`. A missing file makes the review `incomplete` (exit 3) unless a blocking issue already fails it (exit 2).
 6. **Recommendation** — pass/fail summary
 
 JSON carries the same result as `overall_status` (`pass` / `warn` / `fail` / `incomplete`, or `error` for an invalid target) and `exit_code`.
@@ -95,7 +95,7 @@ JSON carries the same result as `overall_status` (`pass` / `warn` / `fail` / `in
 | `1` | `warn` | Only `medium`/`low` violations |
 | `2` | `fail` | A `high` or `critical` violation |
 | `2` | `error` | Invalid invocation: unknown revision in the range, not inside a git repository, or a path that does not exist (nothing was reviewed) |
-| `3` | `incomplete` | The quality check failed or could not analyze some files, so an empty violation list is not proof the change is clean |
+| `3` | `incomplete` | The quality check failed or could not analyze some files, or the hotspot step could not rank some files, so an empty violation list is not proof the change is clean |
 
 ### CI/CD Integration
 

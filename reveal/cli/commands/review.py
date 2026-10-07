@@ -26,7 +26,7 @@ def create_review_parser() -> argparse.ArgumentParser:
         parents=[_build_global_options_parser()],
         description='Assess code quality and structural changes before a PR merge. '
                     'Exit code 0 = pass, 1 = warnings, 2 = a blocking (high/critical) issue or an '
-                    'invalid target, 3 = incomplete (some files could not be checked). '
+                    'invalid target, 3 = incomplete (some files could not be checked or ranked). '
                     'A large range can take minutes.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
@@ -131,7 +131,8 @@ def run_review(args: Namespace) -> None:
 
     if errors:
         report['errors'] = errors
-    report['overall_status'], report['exit_code'] = _review_outcome(violations, errors)
+    report['overall_status'], report['exit_code'] = _review_outcome(
+        violations, errors, hotspots_incomplete=_lost_hotspot_files(report))
 
     # Render
     if is_git_range:
@@ -157,13 +158,21 @@ def _add_top_section(report: Dict[str, Any], name: str, ranked: List[Dict[str, A
     note_truncation(report, name, min(len(ranked), _SECTION_TOP), len(ranked), 'limit', hint=hint)
 
 
-def _review_outcome(violations: List[Dict[str, Any]], errors: List[str]) -> tuple:
+def _lost_hotspot_files(report: Dict[str, Any]) -> bool:
+    """True when the hotspot step could not analyze a file (BACK-1738)."""
+    return any(w.get('type') == 'analysis_failed'
+               for w in report.get('meta', {}).get('warnings', []))
+
+
+def _review_outcome(violations: List[Dict[str, Any]], errors: List[str],
+                    hotspots_incomplete: bool = False) -> tuple:
     """(overall_status, exit_code): fail/2 on a blocking-severity issue,
     incomplete/3 when the quality pass could not check everything (so an
-    empty violation list is not proof of a clean change), warn/1, pass/0."""
+    empty violation list is not proof of a clean change) or the hotspot step
+    could not rank every file (Scott, 2026-10-07), warn/1, pass/0."""
     if any(v.get('severity') in BLOCKING_SEVERITIES for v in violations):
         return 'fail', 2
-    if errors:
+    if errors or hotspots_incomplete:
         return 'incomplete', 3
     if violations:
         return 'warn', 1
@@ -538,7 +547,8 @@ def _render_complexity_section(complex_fns: list) -> None:
         print(f"  {fn.get('name', '?')} (complexity: {fn.get('complexity', '?')})  {loc}")
 
 
-def _render_recommendation(violations: list, errors: Optional[List[str]] = None) -> None:
+def _render_recommendation(violations: list, errors: Optional[List[str]] = None,
+                           hotspots_incomplete: bool = False) -> None:
     blocking = sum(1 for v in violations if v.get('severity') in BLOCKING_SEVERITIES)
     print()
     if blocking > 0:
@@ -547,6 +557,9 @@ def _render_recommendation(violations: list, errors: Optional[List[str]] = None)
         for e in errors:
             print(f"⚠️  {e}")
         print("Recommendation: Review incomplete — the quality check did not cover every file. ⚠️")
+    elif hotspots_incomplete:
+        print("Recommendation: Review incomplete — the hotspot ranking is missing the files "
+              "named under Caveats. ⚠️")
     elif violations:
         print(f"Recommendation: {len(violations)} warning(s) — review before merge. ⚠️")
     else:
@@ -571,4 +584,4 @@ def _render_report(report: Dict[str, Any], verbose: bool) -> None:
     render_meta_warnings(report, heading="Caveats:")
     for reason in report.get('scan_disclosures', []):
         print(f"⚠️  {reason}")
-    _render_recommendation(violations, report.get('errors'))
+    _render_recommendation(violations, report.get('errors'), _lost_hotspot_files(report))
