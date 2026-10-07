@@ -11,7 +11,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 from ...utils.results import ResultBuilder, note_truncation
 from .commits import (commit_filter, disclose_timeline_cut, history_sort, timeline_fields,
                       walk_history)
-from reveal.utils.lines import split_lines
+from reveal.utils.lines import normalize_newlines, split_lines
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,10 @@ def _analyze_blob_content(content: str, subpath: str) -> Dict[str, Any]:
     from reveal.registry import get_analyzer
 
     suffix = Path(subpath).suffix
-    with tempfile.NamedTemporaryFile(mode='w', suffix=suffix, delete=False, encoding='utf-8') as f:
+    # newline='': write the blob's own line ends; text mode would turn a CRLF blob's \r\n into
+    # \r\r\n on Windows, which the analyzer reads as two line breaks (BACK-1736).
+    with tempfile.NamedTemporaryFile(mode='w', newline='', suffix=suffix, delete=False,
+                                     encoding='utf-8') as f:
         f.write(content)
         temp_path = f.name
 
@@ -926,11 +929,13 @@ def _get_element_content_at_commit(
         tree = commit.tree
         entry = tree[filepath]
         blob = cast('pygit2.Blob', repo[entry.id])
-        content = blob.data.decode('utf-8', errors='replace')
+        # The analyzer's line numbers count a lone \r as a break; the slice must too (BACK-1736).
+        content = normalize_newlines(blob.data.decode('utf-8', errors='replace'))
         file_lines = split_lines(content)
 
         suffix = Path(filepath).suffix or '.txt'
-        with tempfile.NamedTemporaryFile(mode='w', suffix=suffix, delete=False, encoding='utf-8') as f:
+        with tempfile.NamedTemporaryFile(mode='w', newline='', suffix=suffix, delete=False,
+                                         encoding='utf-8') as f:
             f.write(content)
             tmp_path = f.name
 

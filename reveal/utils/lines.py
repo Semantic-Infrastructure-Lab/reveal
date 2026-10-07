@@ -27,3 +27,14 @@ def split_lines(text: str, keepends: bool = False) -> List[str]:
     if lines[-1] == '':
         lines.pop()
     return [line[:-1] if line.endswith('\r') else line for line in lines]
+
+
+def normalize_newlines(text: str) -> str:
+    """``text`` with every ``\\r\\n`` and lone ``\\r`` turned into ``\\n``: what a text-mode read gives.
+
+    An analyzer reads its file in text mode, whose universal newlines make a lone ``\\r`` a line
+    break. Text decoded raw (a git blob, the binary-mode fallback in ``FileAnalyzer._read_file``)
+    goes through this before it is split or sliced by the analyzer's line numbers, or a lone
+    ``\\r`` shifts every later line by one (BACK-1736).
+    """
+    return text.replace('\r\n', '\n').replace('\r', '\n')

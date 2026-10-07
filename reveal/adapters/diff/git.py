@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, cast
 
 from ...diff.structure_diff import element_categories
 from ...registry import get_analyzer
+from ...utils.lines import normalize_newlines
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,8 @@ def _read_blob_text(repo, commit, path: str) -> str:
     if entry.type_str != 'blob':
         raise ValueError(f"Path is not a file: {path}")
     blob = repo[entry.id]
-    return blob.data.decode('utf-8', errors='replace')
+    # The analyzer's line numbers count a lone \r as a break; slices of this text must too (BACK-1736).
+    return normalize_newlines(blob.data.decode('utf-8', errors='replace'))
 
 
 def read_git_text(resource: str) -> Optional[str]:
@@ -174,7 +176,7 @@ def resolve_git_adapter(resource: str) -> Dict[str, Any]:
 
             # Create temporary file or use in-memory analysis
             # Most analyzers can work with content directly
-            with tempfile.NamedTemporaryFile(mode='w', suffix=os.path.splitext(file_path)[1], delete=False, encoding='utf-8') as f:
+            with tempfile.NamedTemporaryFile(mode='w', newline='', suffix=os.path.splitext(file_path)[1], delete=False, encoding='utf-8') as f:
                 f.write(content)
                 temp_path = f.name
 
@@ -206,7 +208,7 @@ def resolve_git_file(git_ref: str, path: str) -> Dict[str, Any]:
     content = _read_blob_text(repo, commit, path)
 
     # Write to temp file for analysis
-    with tempfile.NamedTemporaryFile(mode='w', suffix=Path(path).suffix, delete=False, encoding='utf-8') as f:
+    with tempfile.NamedTemporaryFile(mode='w', newline='', suffix=Path(path).suffix, delete=False, encoding='utf-8') as f:
         f.write(content)
         temp_path = f.name
 
@@ -229,7 +231,7 @@ def _fetch_and_analyze_git_file(git_ref: str, file_path: str) -> Dict[str, Any]:
     commit = _resolve_commit(repo, git_ref)
     content = _read_blob_text(repo, commit, file_path)
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix=Path(file_path).suffix, delete=False, encoding='utf-8') as f:
+    with tempfile.NamedTemporaryFile(mode='w', newline='', suffix=Path(file_path).suffix, delete=False, encoding='utf-8') as f:
         f.write(content)
         temp_path = f.name
 

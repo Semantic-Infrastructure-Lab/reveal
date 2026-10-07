@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 from reveal.utils import format_size, get_file_type_from_analyzer
-from reveal.utils.lines import split_lines
+from reveal.utils.lines import normalize_newlines, split_lines
 from reveal.utils.results import slice_structure
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ class FileAnalyzer(ABC):
             content = f.read().decode('utf-8', errors='replace')
             self._ends_with_newline = content.endswith(('\n', '\r'))
             # binary mode has no universal newlines: a lone \r ends a line here too, as above
-            return split_lines(content.replace('\r\n', '\n').replace('\r', '\n'))
+            return split_lines(normalize_newlines(content))
 
     def get_metadata(self) -> Dict[str, Any]:
         """Return file metadata.
