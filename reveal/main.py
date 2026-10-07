@@ -111,6 +111,7 @@ from .cli import (
     handle_uri,
     handle_file_or_directory,
     reject_ignored_element,
+    reject_ignored_path,
     handle_file,
 )
 
@@ -351,6 +352,7 @@ def _handle_special_modes(args: Any) -> bool:
     for dest, handler in _SPECIAL_MODES:
         if not getattr(args, dest, None):
             continue
+        reject_ignored_path(args, dest)  # a mode that reads no path must not drop one (BACK-1751)
         if dest == 'stdin':  # each piped path or URI is answered by its own route
             handler(args)
         else:

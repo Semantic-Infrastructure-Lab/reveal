@@ -7,6 +7,7 @@ directory tree/file-list views.
 
 import os
 import re
+import shlex
 import sys
 from pathlib import Path
 from argparse import Namespace
@@ -386,14 +387,32 @@ ELEMENT_LESS_FLAGS = {
     'decorator_stats': '--decorator-stats',
 }
 
+# Flags that ARE the element, spelled as a flag (dest -> spelling). Beside an element argument
+# one of the two was dropped: `reveal a.md b.md --section X` looked for 'b.md' in a.md and never
+# mentioned X, and `reveal a.md A --section X` extracted A and exited 0 (BACK-1728).
+ELEMENT_FLAGS = {'section': '--section'}
+
+# Early-exit modes that read no path at all (dest -> spelling): `reveal a.py b.py --rules` listed
+# the rules, dropped both paths and exited 0 (BACK-1751). Every main._SPECIAL_MODES entry is
+# declared either here or, when its handler reads the path, in ELEMENT_LESS_FLAGS;
+# tests/test_element_less_completeness_back1735.py checks that against the handlers.
+PATHLESS_FLAGS = {
+    'list_supported': '--list-supported', 'languages': '--languages', 'adapters': '--adapters',
+    'language_info': '--language-info', 'agent_help': '--agent-help', 'rules': '--rules',
+    'profiles': '--profiles', 'schema': '--schema', 'explain': '--explain',
+    'list_schemas': '--list-schemas', 'discover': '--discover', 'stdin': '--stdin',
+    'disable_breadcrumbs': '--disable-breadcrumbs',
+}
+
 
 def reject_ignored_element(args: 'Namespace') -> None:
-    """Exit 2 when an element-less flag is given an element (a second path or ``file:N``).
+    """Exit 2 when an element-less or element flag is given an element (a second path or ``file:N``).
 
-    One disclosed refusal in place of a run that silently covers the first path only.
-    URIs and ``@file`` lists read their second argument themselves and are left alone.
+    One disclosed refusal in place of a run that silently covers the first path only, or drops
+    the flag's own element. URIs and ``@file`` lists read their second argument themselves and
+    are left alone.
     """
-    declared = [(dest, spelling) for dest, spelling in ELEMENT_LESS_FLAGS.items()
+    declared = [(dest, spelling) for dest, spelling in {**ELEMENT_LESS_FLAGS, **ELEMENT_FLAGS}.items()
                 if getattr(args, dest, None)]
     path_str = getattr(args, 'path', None)
     if not declared or not path_str or '://' in path_str or path_str.startswith('@'):
@@ -402,9 +421,31 @@ def reject_ignored_element(args: 'Namespace') -> None:
     if not element:
         return
     dest, spelling = declared[0]
-    print(f"Error: {spelling} reads no element and covers one path per call; '{element}' would be ignored.\n"
-          f"Run it once per path, or for several: ls PATHS | reveal --stdin {_flag_usage(dest, spelling)}",
-          file=sys.stderr)
+    if dest in ELEMENT_FLAGS:
+        print(f"Error: {spelling} '{getattr(args, dest)}' and the element '{element}' both name what to "
+              f"extract; one would be ignored.\nGive one of them: reveal reads one file and one element per call.",
+              file=sys.stderr)
+    else:
+        print(f"Error: {spelling} reads no element and covers one path per call; '{element}' would be ignored.\n"
+              f"Run it once per path, or for several: ls PATHS | reveal --stdin {_flag_usage(dest, spelling)}",
+              file=sys.stderr)
+    sys.exit(2)
+
+
+def reject_ignored_path(args: 'Namespace', dest: str) -> None:
+    """Exit 2 when the special mode ``dest`` reads no path but was given one (or a URI, ``@file``).
+
+    Called with the mode that is about to run, so a path-reading mode dispatched first keeps it.
+    """
+    spelling = PATHLESS_FLAGS.get(dest)
+    ignored = [f"'{value}'" for value in (getattr(args, 'path', None), getattr(args, 'element', None))
+               if isinstance(value, str) and value]
+    if not spelling or not ignored:
+        return
+    value = getattr(args, dest)
+    usage = spelling if value is True else f"{spelling} {shlex.quote(str(value))}"
+    print(f"Error: {spelling} takes no path; {' and '.join(ignored)} would be ignored.\n"
+          f"Run it without one: reveal {usage}", file=sys.stderr)
     sys.exit(2)
 
 

@@ -35,7 +35,10 @@ from .uri import (
 from .file import (
     handle_file_or_directory,
     reject_ignored_element,
+    reject_ignored_path,
     ELEMENT_LESS_FLAGS,
+    ELEMENT_FLAGS,
+    PATHLESS_FLAGS,
     _parse_file_line_syntax,
     _validate_path_exists,
     _stat_one_file,
@@ -77,7 +80,10 @@ __all__ = [
     # File/directory dispatch
     'handle_file_or_directory',
     'reject_ignored_element',
+    'reject_ignored_path',
     'ELEMENT_LESS_FLAGS',
+    'ELEMENT_FLAGS',
+    'PATHLESS_FLAGS',
     '_parse_file_line_syntax',
     '_validate_path_exists',
     '_stat_one_file',
