@@ -347,7 +347,7 @@ These gates run continuously alongside the steps above:
 - BACK-1096: cross-subsystem invariants. Registry-wide import recovery, citation and
   copy/rename controls now run without external corpora. Slice 2 added structure invariants
   over 31 analyzers and agreement tests between subsystems (stats vs M101 vs ast line counts,
-  imports vs depends edges); it found the line-separator bug fixed in BACK-1722, and the
+  imports vs depends edges); it found the line-separator bug (line numbers now count `\n` only), and the
   remaining disagreements are strict expected failures tied to their tasks.
 - BACK-1055: one source of truth for help.
 - BACK-1703: platform classes caught before CI. V036-V042 in `reveal reveal:// --check` lint
