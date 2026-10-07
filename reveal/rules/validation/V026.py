@@ -7,6 +7,9 @@ cannot silently creep back in:
 1. ``str(x.relative_to(...))`` (or any ``str(...)`` wrapping a
    ``.relative_to(`` call) — emits backslashes on Windows. Use
    ``to_posix()`` from ``reveal/utils/path_utils.py`` instead.
+   The same leak one hop away is flagged too (BACK-1739): inside one function,
+   ``rel = x.relative_to(...)`` followed by ``str(rel)`` or ``f"{rel}"``.
+   Suppress a same-platform, non-output use with ``# noqa: V026 -- reason``.
 2. Hardcoded POSIX system-root literals (``'/tmp'``, ``'/var'``, ``'/'``, ...)
    compared or collected outside ``path_utils.py`` itself — silently no-ops
    on Windows/macOS. Use ``is_unsafe_scan_root()`` instead.
@@ -15,11 +18,12 @@ Examples:
     reveal reveal://. --check --select V026  # Check reveal's own source
 """
 
+import ast
 import re
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from .utils import find_reveal_root, is_dev_checkout
+from .utils import find_reveal_root, has_noqa, is_dev_checkout
 from ...utils.path_utils import to_posix, _STATIC_UNSAFE_ROOTS
 from reveal.utils.lines import split_lines
 
@@ -47,6 +51,61 @@ _ROOT_LITERAL_RE = re.compile(
 )
 
 
+def _own_scope_nodes(fn: ast.AST):
+    """Yield the nodes of *fn*'s body without entering nested function scopes."""
+    stack = list(ast.iter_child_nodes(fn))
+    while stack:
+        node = stack.pop()
+        yield node
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            continue
+        stack.extend(ast.iter_child_nodes(node))
+
+
+def _is_relative_to_call(value: ast.AST) -> bool:
+    return (isinstance(value, ast.Call) and isinstance(value.func, ast.Attribute)
+            and value.func.attr == 'relative_to')
+
+
+def relative_to_leaks(content: str) -> List[int]:
+    """Line numbers where a ``.relative_to()`` local is str()'d or f-string'd.
+
+    One hop, one function: ``rel = a.relative_to(b)`` makes ``rel`` a leak
+    candidate until it is rebound to something else; ``str(rel)`` and
+    ``f"{rel}"`` on a candidate leak the platform separator.
+    """
+    try:
+        tree = ast.parse(content)
+    except (SyntaxError, ValueError):
+        return []
+    lines: List[int] = []
+    for fn in ast.walk(tree):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        events = []  # (lineno, col, kind, name)
+        for node in _own_scope_nodes(fn):
+            if isinstance(node, ast.Assign):
+                kind = 'taint' if _is_relative_to_call(node.value) else 'clear'
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        events.append((node.lineno, node.col_offset, kind, target.id))
+            elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                  and node.func.id == 'str' and len(node.args) == 1
+                  and isinstance(node.args[0], ast.Name)):
+                events.append((node.lineno, node.col_offset, 'use', node.args[0].id))
+            elif isinstance(node, ast.FormattedValue) and isinstance(node.value, ast.Name):
+                events.append((node.lineno, node.col_offset, 'use', node.value.id))
+        tainted = set()
+        for lineno, _col, kind, name in sorted(events):
+            if kind == 'taint':
+                tainted.add(name)
+            elif kind == 'clear':
+                tainted.discard(name)
+            elif name in tainted:
+                lines.append(lineno)
+    return sorted(set(lines))
+
+
 class V026(BaseRule):
     """Detect path-str-portability and hardcoded-root regressions.
 
@@ -56,6 +115,8 @@ class V026(BaseRule):
 
     Detects:
     - ``str(x.relative_to(...))`` instead of ``to_posix(x.relative_to(...))``
+    - the same through a local (``rel = x.relative_to(...); str(rel)`` or
+      ``f"{rel}"``) inside one function (BACK-1739)
     - Hardcoded POSIX root-literal comparisons instead of
       ``is_unsafe_scan_root()``
 
@@ -107,7 +168,24 @@ class V026(BaseRule):
 
     def _scan_content(self, display_path: str, content: str) -> List[Detection]:
         detections: List[Detection] = []
-        for lineno, line in enumerate(split_lines(content), start=1):
+        source_lines = split_lines(content)
+        for lineno in relative_to_leaks(content):
+            line = source_lines[lineno - 1] if lineno <= len(source_lines) else ''
+            if has_noqa(line, self.code):
+                continue
+            detections.append(self.create_detection(
+                display_path, lineno,
+                message="A .relative_to() result is rendered with str()/f-string "
+                        "— emits backslashes on Windows",
+                suggestion="Use to_posix(rel) (or as_spelled) from "
+                           "reveal/utils/path_utils.py, or add "
+                           "'# noqa: V026 -- <reason>' for a same-platform "
+                           "non-output use",
+                context=line.strip(),
+            ))
+        for lineno, line in enumerate(source_lines, start=1):
+            if has_noqa(line, self.code):
+                continue
             if _STR_RELATIVE_TO_RE.search(line):
                 detections.append(self.create_detection(
                     display_path, lineno,
