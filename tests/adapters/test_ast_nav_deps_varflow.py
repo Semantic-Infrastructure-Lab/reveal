@@ -24,7 +24,9 @@ through the nav functions accepting root_node as scope_node.
 import textwrap
 import unittest
 
-import tree_sitter_language_pack as ts
+# reveal's grammar seam, not the pack: it maps reveal's 'c_sharp' to the pack's 'csharp',
+# which the pack alone only resolves once that grammar is cached (BACK-1746).
+from reveal.core import treesitter_parse as ts
 
 import pytest
 from reveal.core.treesitter_compat import _zero_arg, ts_parse, tree_root

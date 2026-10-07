@@ -8,7 +8,9 @@ with a REAL undefined read in the same function that must stay listed.
 import textwrap
 
 import pytest
-import tree_sitter_language_pack as ts
+# reveal's grammar seam, not the pack: it maps reveal's 'c_sharp' to the pack's 'csharp',
+# which the pack alone only resolves once that grammar is cached (BACK-1746).
+from reveal.core import treesitter_parse as ts
 
 from reveal.adapters.ast.nav_boundary import collect_boundary
 from reveal.core.treesitter_compat import _zero_arg, ts_parse, tree_root, node_children
