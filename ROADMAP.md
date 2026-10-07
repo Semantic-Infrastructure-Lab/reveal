@@ -328,8 +328,8 @@ What landed, and when, is in CHANGELOG `[0.130.0]` and `internal-docs/RESOLVED_L
    0; `reveal check` leaves through the subcommand seam in both its directory and single-file
    forms, and `review` is the one remaining boundary site; the ~379 remaining broad
    handlers are decided: one solo pass, run when no parallel agents are active, one subsystem per slice), BACK-916 (one
-   rendering layer: patches, nginx://, the nginx file-flag handlers, surface:// and overview:// return
-   their output and the rest still print; next are the largest print sites in `adapters/` (testability, deps,
+   rendering layer: patches, nginx://, the nginx file-flag handlers, surface://, overview:// and testability:// return
+   their output and the rest still print; next are the largest print sites in `adapters/` (deps,
    contracts, pack), one renderer per slice) and BACK-1052 (one scan budget; patches pilot only).
 4. **One seam per concern.** The parser, path, root-finder and walker seams are done. Open:
    BACK-1054 (import resolution: imports and depends share scope and dispatch; depends'
