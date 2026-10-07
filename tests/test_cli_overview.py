@@ -61,10 +61,11 @@ def _args(**kwargs):
 
 
 def _capture(fn, *args, **kwargs):
+    """What a section builder renders (its returned lines) or a runner prints, as text."""
     buf = StringIO()
     with patch('sys.stdout', buf):
-        fn(*args, **kwargs)
-    return buf.getvalue()
+        lines = fn(*args, **kwargs)
+    return buf.getvalue() + ''.join(f"{line}\n" for line in lines or [])
 
 
 

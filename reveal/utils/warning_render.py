@@ -40,17 +40,17 @@ def collect_meta_warnings(result: Dict[str, Any]) -> List[Dict[str, Any]]:
     return warnings
 
 
-def render_meta_warnings(
+def meta_warning_lines(
     result: Dict[str, Any],
     *,
     heading: Optional[str] = None,
     skip_types: Optional[frozenset] = None,
-) -> None:
-    """Print *result*'s meta.warnings as human-readable lines.
+) -> List[str]:
+    """The lines render_meta_warnings prints, for a renderer that returns its text body.
 
     Args:
-        heading: Section heading to print above the warnings; omitted when
-            there are none, so a clean run prints nothing at all.
+        heading: Section heading above the warnings; omitted when there are none, so a
+            clean run yields no lines at all.
         skip_types: Warning `type`s the caller already renders inline in its
             own output — passing them here keeps the disclosure from appearing
             twice rather than silently dropping the whole block.
@@ -65,10 +65,21 @@ def render_meta_warnings(
     meta = result.get('meta') or {}
     warnings.extend(e for e in meta.get('errors', []) if isinstance(e, dict))
     if not warnings:
-        return
-    if heading:
-        print(f"\n{heading}")
+        return []
+    lines = [f"\n{heading}"] if heading else []
     for warning in warnings:
         message = warning.get('message') or warning.get('code') or ''
         if message:
-            print(f"  ⚠ {message}")
+            lines.append(f"  ⚠ {message}")
+    return lines
+
+
+def render_meta_warnings(
+    result: Dict[str, Any],
+    *,
+    heading: Optional[str] = None,
+    skip_types: Optional[frozenset] = None,
+) -> None:
+    """Print *result*'s meta.warnings as human-readable lines (see meta_warning_lines)."""
+    for line in meta_warning_lines(result, heading=heading, skip_types=skip_types):
+        print(line)

@@ -116,8 +116,7 @@ def test_text_census_sniffs_cpp_headers_like_the_json_scope(tmp_path, capsys):
     (tmp_path / 'plain.h').write_text('int plain(void);\n', encoding='utf-8')
     report = OverviewAdapter(str(tmp_path), 'no_git=true&no_imports=true').get_structure()
     scope = {row['language']: row['files'] for row in report['scope']['languages']}
-    _render_language_breakdown(report['stats']['files'], 5)
-    out = capsys.readouterr().out
+    out = '\n'.join(_render_language_breakdown(report['stats']['files'], 5))
     assert scope == {'C++': 2, 'C': 1}
     assert 'C++                 2 files' in out
     assert 'C                   1 files' in out

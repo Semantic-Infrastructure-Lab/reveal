@@ -8,14 +8,11 @@ every other capability follows.
 from __future__ import annotations
 
 import logging
-from collections import Counter
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from reveal.capabilities import scope_dict_for_path
 from reveal.errors import NotApplicableError
-from reveal.registry import display_name_for_extension
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .ast import AstAdapter
@@ -23,13 +20,27 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from .git import GitAdapter
 from .imports import ImportsAdapter
 from .stats import StatsAdapter
-from ..utils.formatting import cwd_path
-from ..utils import print_json_result
 from ..utils.exclusions import exclusion_scope
 from ..utils.gitignore import respect_gitignore_param
-from ..utils.path_utils import as_spelled, display_name_for_path, is_test_path
+from ..utils.path_utils import as_spelled, display_name_for_path
 from ..utils.query import parse_query_params
-from ..rendering.base import print_omitted
+from ..rendering.adapters.overview import (  # noqa: F401 -- the render helpers are re-exported
+    OverviewRenderer,
+    _NON_CODE_EXT_LABELS,
+    _age_label,
+    _is_test_file,
+    _language_breakdown,
+    _relpath,
+    _render_architecture,
+    _render_codebase_stats,
+    _render_complex_functions,
+    _render_git_log,
+    _render_hotspots,
+    _render_language_breakdown,
+    _render_next_steps,
+    _render_overview,
+    _render_quality_pulse,
+)
 from ..utils.query_parser import join_exclude_patterns, split_exclude_param
 from ..utils.results import ResultBuilder
 
@@ -44,20 +55,6 @@ logger = logging.getLogger(__name__)
 # like an uncapped one, bounded by the actual repo/result size either way
 # (BACK-1226).
 UNLIMITED_TOP = 10**9
-
-
-# Display labels for extensions the language registry doesn't know at all
-# (BACK-431 Issue B #5) — these are document/data formats, not tree-sitter
-# languages, so they aren't derivable from language_for_extension(); genuinely
-# different knowledge from the language-identity table, not a parallel copy
-# of it. Extensions the registry *does* know (code + config languages like
-# JSON/YAML/HCL) are resolved via display_name_for_extension() instead — see
-# _language_breakdown().
-_NON_CODE_EXT_LABELS: Dict[str, str] = {
-    '.jsonl': 'JSONL', '.html': 'HTML', '.xml': 'XML', '.csv': 'CSV',
-    '.dockerfile': 'Dockerfile', '.ini': 'INI', '.ipynb': 'Jupyter',
-    '.xlsx': 'Excel', '.docx': 'Word', '.pptx': 'PowerPoint',
-}
 
 
 # ── Data collectors ────────────────────────────────────────────────────────────
@@ -198,169 +195,6 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path) -> Dict[str, A
         return {'fan_in': [], 'entrypoints': [], 'components': [], 'circular_count': 0, 'unsupported_extensions': {}}
 
 
-def _language_breakdown(files: List[Dict[str, Any]]) -> List[tuple]:
-    """Derive language→file count from stats files list."""
-    counts: Counter = Counter()
-    for f in files:
-        path = f.get('file', '')
-        ext = Path(path).suffix.lower()
-        # Dockerfile has no extension
-        if f.get('language'):
-            lang = f['language']
-        elif not ext and Path(path).name.lower() == 'dockerfile':
-            lang = 'Dockerfile'
-        else:
-            lang = (
-                display_name_for_extension(ext)
-                or _NON_CODE_EXT_LABELS.get(ext)
-                or (ext.lstrip('.').upper() if ext else 'Other')
-            )
-        counts[lang] += 1
-    return counts.most_common()
-
-
-def _age_label(timestamp: Optional[int]) -> str:
-    """Convert unix timestamp to human-friendly age string."""
-    if not timestamp:
-        return ''
-    now = datetime.now(timezone.utc).timestamp()
-    diff = int(now - timestamp)
-    if diff < 3600:
-        return f"{diff // 60}m ago"
-    if diff < 86400:
-        return f"{diff // 3600}h ago"
-    days = diff // 86400
-    return f"{days}d ago"
-
-
-# ── Renderers ──────────────────────────────────────────────────────────────────
-
-def _render_codebase_stats(summary: Dict[str, Any]) -> None:
-    if not summary:
-        return
-    total_files = summary.get('total_files', 0)
-    total_lines = summary.get('total_lines', 0)
-    total_fns = summary.get('total_functions', 0)
-    total_cls = summary.get('total_classes', 0)
-
-    parts = [f"{total_files:,} files"]
-    if total_lines:
-        parts.append(f"{total_lines:,} lines")
-    if total_fns:
-        parts.append(f"{total_fns:,} functions")
-    if total_cls:
-        parts.append(f"{total_cls:,} classes")
-
-    print(f"\nCodebase  {' · '.join(parts)}")
-
-
-def _render_language_breakdown(files_list: List[Dict[str, Any]], top: int) -> None:
-    if not files_list:
-        return
-    langs = _language_breakdown(files_list)
-    total = sum(c for _, c in langs)
-    shown = langs[:top]
-
-    print("\nLanguages")
-    for lang, count in shown:
-        pct = int(count / total * 100) if total else 0
-        bar = '█' * (pct // 5)
-        print(f"  {lang:<16} {count:>4} files  {bar} {pct}%")
-    remaining = len(langs) - len(shown)
-    if remaining > 0:
-        print(f"  ... and {remaining} more (use --all)")
-
-
-def _render_quality_pulse(summary: Dict[str, Any], hotspots: List[Dict[str, Any]]) -> None:
-    if not summary:
-        return
-    avg_q = summary.get('avg_quality_score')
-    avg_cx = summary.get('avg_complexity')
-    critical = sum(1 for h in hotspots if h.get('quality_score', 100) < 70)
-    warning = sum(1 for h in hotspots if 70 <= h.get('quality_score', 100) < 85)
-
-    if avg_q is None:
-        return
-
-    if avg_q >= 90:
-        icon = '✅'
-    elif avg_q >= 75:
-        icon = '⚠️ '
-    else:
-        icon = '❌'
-
-    parts = [f"{avg_q}/100 avg quality"]
-    if avg_cx is not None and avg_cx > 0:
-        parts.append(f"avg complexity {avg_cx:.1f}")
-    if critical:
-        parts.append(f"{critical} critical file(s)")
-    elif warning:
-        parts.append(f"{warning} warning file(s)")
-    else:
-        parts.append("no hotspots")
-
-    print(f"\nQuality   {icon} {' · '.join(parts)}")
-
-
-def _render_hotspots(hotspots: List[Dict[str, Any]], top: int, root: str = '') -> None:
-    if not hotspots:
-        return
-    print(f"\nHotspots  (top {min(len(hotspots), top)} files needing attention)")
-    for h in hotspots[:top]:
-        name = h.get('file', '?')
-        q = h.get('quality_score', '?')
-        issues = h.get('issues', [])
-
-        if isinstance(q, (int, float)):
-            icon = '❌' if q < 70 else '⚠️ '
-        else:
-            icon = '  '
-
-        issue_str = f"  — {', '.join(issues)}" if issues else ''
-        print(f"  {icon} {name}  {q}/100{issue_str}")
-        print(f"       → reveal {cwd_path(root, name)}")
-    remaining = len(hotspots) - min(len(hotspots), top)
-    if remaining > 0:
-        print(f"  ... and {remaining} more (use --all)")
-
-
-def _render_complex_functions(fns: List[Dict[str, Any]], base_path: Optional[Path] = None) -> None:
-    if not fns:
-        return
-    print(f"\nComplex functions  (complexity > 9)")
-    for fn in fns:
-        name = fn.get('name', '?')
-        cx = fn.get('complexity', '?')
-        loc = fn.get('file', '')
-        line = fn.get('line', '')
-        lc = fn.get('line_count', '')
-
-        # Show relative path if possible
-        if loc and base_path:
-            loc = _relpath(loc, base_path)
-
-        icon = '❌' if isinstance(cx, int) and cx >= 20 else '⚠️ '
-        lc_str = f"  {lc}L" if lc else ''
-        loc_str = f"  {loc}:{line}" if loc else ''
-        print(f"  {icon} {name}  cx:{cx}{lc_str}{loc_str}")
-
-
-def _is_test_file(file_str: str) -> bool:
-    """Return True if file looks like a test file (shared classifier, BACK-1277)."""
-    return is_test_path(file_str.replace('\\', '/'))
-
-
-def _relpath(file_str: str, base_path: Optional[Path]) -> str:
-    """Return path relative to base_path if possible, else the original string.
-
-    BACK-1194: delegates to the shared, resolve()-aware helper — see
-    to_relative_display()'s docstring for why the old lexical-only
-    relative_to() let absolute paths leak through on relative CLI targets.
-    """
-    from ..utils.path_utils import to_relative_display
-    return to_relative_display(file_str, base_path)
-
-
 def _relativize_paths(
     complex_fns: List[Dict[str, Any]],
     architecture: Dict[str, Any],
@@ -413,171 +247,6 @@ def _annotate_provenance(complex_fns: List[Dict[str, Any]], architecture: Dict[s
             entry['provenance'] = provenance_for(entry.get('file'))
     for component in architecture.get('components', []):
         component['provenance'] = provenance_for(component.get('component'))
-
-
-def _render_architecture(
-    arch: Dict[str, Any],
-    complex_fns: List[Dict[str, Any]],
-    top: int,
-    base_path: Optional[Path] = None,
-) -> None:
-    """Render architectural overview: entry points, core abstractions, components."""
-    fan_in = arch.get('fan_in', [])
-    entrypoints = arch.get('entrypoints', [])
-    components = arch.get('components', [])
-    circular_count = arch.get('circular_count', 0)
-    unsupported = arch.get('unsupported_extensions', {})
-
-    if not fan_in and not entrypoints and not components and not unsupported:
-        return
-
-    print("\nArchitecture")
-
-    from reveal.adapters.imports import coverage_warning_line, detect_autoload_regime, autoload_regime_warning
-    warning = coverage_warning_line(unsupported)
-    if warning:
-        print(f"  {warning}")
-
-    if base_path is not None:
-        regime = detect_autoload_regime(base_path)
-        if regime:
-            # BACK-1245: same disclosure as architecture://'s text/JSON forms
-            # -- this summary view shares the identical fan-in/circular data.
-            print(f"  {autoload_regime_warning(regime)}")
-
-    if not fan_in and not entrypoints and not components:
-        return
-
-    parts = [f"circulars: {circular_count}"]
-    if complex_fns:
-        sample = complex_fns[:10]
-        centroid = sum(f.get('complexity', 0) for f in sample) / len(sample)
-        parts.append(f"complexity centroid: {centroid:.1f}")
-    print(f"  {'  ·  '.join(parts)}")
-
-    live_eps = [
-        e for e in entrypoints
-        if e.get('fan_out', 0) > 0
-        and not _is_test_file(e['file'])
-        and Path(e['file']).name != '__init__.py'
-    ]
-    if live_eps:
-        print(f"  Entry points  ({len(entrypoints)} fan-in=0, {len(live_eps)} active)")
-        for ep in live_eps[:top]:
-            rel = _relpath(ep['file'], base_path)
-            print(f"    {rel:<50}  fan-out {ep['fan_out']}")
-        remaining = len(live_eps) - min(len(live_eps), top)
-        if remaining > 0:
-            print(f"    ... and {remaining} more (use --all)")
-
-    all_core = [e for e in fan_in if e.get('fan_in', 0) > 0]
-    core = all_core[:5]
-    if core:
-        print("  Core abstractions  (most imported)")
-        for e in core:
-            rel = _relpath(e['file'], base_path)
-            print(f"    {rel:<50}  fan-in {e['fan_in']}")
-        print_omitted(len(all_core), len(core), '    ')
-
-    if components:
-        print(f"  Components  ({len(components)} directories, by cohesion)")
-        for c in components[:top]:
-            rel = _relpath(c['component'], base_path)
-            cohesion = c['cohesion']
-            bar = '█' * int(cohesion * 10) + '░' * (10 - int(cohesion * 10))
-            print(f"    {rel:<42}  {cohesion:.2f}  {bar}  {c['files']} files")
-        remaining = len(components) - min(len(components), top)
-        if remaining > 0:
-            print(f"    ... and {remaining} more (use --all)")
-
-
-def _render_git_log(history: List[Dict[str, Any]], foreign_root: Optional[str] = None) -> None:
-    if not history:
-        return
-    print("\nRecent changes")
-    if foreign_root:
-        # foreign_root is spelled from the cwd (BACK-1366), so it can be '.' or '../..'.
-        print(f"  ⚠ this directory has no .git of its own — history is from the enclosing repo at '{foreign_root}'")
-    for commit in history:
-        ts = commit.get('timestamp')
-        age = _age_label(ts)
-        msg = commit.get('message', '').strip()
-        sha = commit.get('hash', '')[:7]
-        # Truncate long messages
-        if len(msg) > 55:
-            msg = msg[:52] + '...'
-        age_str = f"{age:<8}" if age else ''
-        print(f"  {age_str}  {msg}  [{sha}]")
-
-
-def _render_next_steps(path: str) -> None:
-    """Commands for the scanned path, runnable from any cwd (BACK-1420)."""
-    print("\nNext steps")
-    print(f"  reveal hotspots {path}                    # Full hotspot breakdown")
-    print(f"  reveal check {path}                       # Run quality rules")
-    print(f"  reveal deps {path}                        # Dependency graph")
-    print(f"  reveal 'imports://{path}?rank=fan-in'     # Full fan-in ranking")
-    print(f"  reveal 'imports://{path}?entrypoints'     # All entry points")
-    print(f"  reveal pack {path}                        # Agent context snapshot")
-    print()
-
-
-def _render_overview(report: Dict[str, Any], top: int) -> None:
-    path_str = report['path']
-    path = Path(path_str)
-    stats = report['stats']
-    git_log = report['git_log']
-    complex_fns = report['complex_functions']
-    architecture = report.get('architecture', {})
-
-    summary = stats.get('summary', {})
-    hotspots = stats.get('hotspots', [])
-    files_list = stats.get('files', [])
-
-    print()
-    print(f"Overview: {path_str}")
-    print("━" * 60)
-
-    _render_codebase_stats(summary)
-    _render_language_breakdown(files_list, top)
-    _render_quality_pulse(summary, hotspots)
-    _render_hotspots(hotspots, top, root=path_str)
-    _render_complex_functions(complex_fns, base_path=path)
-    _render_architecture(architecture, complex_fns, top, base_path=path)
-    _render_git_log(git_log, report.get('git_foreign_root'))
-    # BACK-1261: the JSON documented these and the render dropped them, so a
-    # section showing 5 of 97 complex functions looked complete. Printed after
-    # the body rather than inline because they describe the report as a whole.
-    from ..utils.warning_render import render_meta_warnings
-    render_meta_warnings(report, heading="Caveats")
-    _render_next_steps(path_str)
-
-
-class OverviewRenderer:
-    """Renderer for overview:// results."""
-
-    ACCEPTS_TOP = True  # render_structure(top=) is fed by handle_uri (--all/--verbose, ?top=N BACK-1606)
-
-    @staticmethod
-    def render_structure(result: Dict[str, Any], format: str = 'text', top: int = 5) -> None:
-        if format == 'json':
-            print_json_result(result)
-            return
-        if format in ('typed', 'grep'):
-            # BACK-1035: previously fell through to the text renderer below,
-            # silently ignoring the requested format (confirmed byte-identical
-            # to --format text via diff). overview is an aggregate dashboard,
-            # not a line-oriented findings list, so there's no faithful
-            # typed/grep rendering to fall back to — fail loud instead of
-            # lying about the output shape.
-            import sys
-            print(
-                f"Error: --format {format} is not yet implemented for overview. "
-                "Use --format json or --format text instead.",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-        _render_overview(result, top)
 
 
 @register_adapter('overview')

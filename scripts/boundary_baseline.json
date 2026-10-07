@@ -3,7 +3,6 @@
  "display-path": {},
  "exit": {
   "reveal/adapters/cpanel/renderer.py": 1,
-  "reveal/adapters/overview.py": 1,
   "reveal/checks.py": 2,
   "reveal/display/element.py": 1,
   "reveal/file_handler.py": 6,
@@ -21,7 +20,6 @@
   "reveal/adapters/git/files.py": 3,
   "reveal/adapters/hotspots.py": 17,
   "reveal/adapters/nginx/adapter.py": 1,
-  "reveal/adapters/overview.py": 37,
   "reveal/adapters/pack.py": 21,
   "reveal/adapters/ssl/probe.py": 1,
   "reveal/adapters/testability.py": 30,
@@ -36,7 +34,7 @@
   "reveal/utils/json_utils.py": 1,
   "reveal/utils/query_parser.py": 1,
   "reveal/utils/updates.py": 2,
-  "reveal/utils/warning_render.py": 2
+  "reveal/utils/warning_render.py": 1
  },
  "silent-except": {},
  "splitlines": {},

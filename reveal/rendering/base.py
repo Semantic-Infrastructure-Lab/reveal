@@ -36,12 +36,17 @@ def capped_section(items: Sequence[_Item], limit: Optional[int], format_item: Ca
 
 
 def emit_rendered(render, result: dict, format: str = "text", **kwargs) -> None:
-    """Emit a returned text body and diagnostics; legacy print renderers still work."""
+    """Emit a returned text body and diagnostics; legacy print renderers still work.
+
+    A renderer whose body already carries the result's warnings (in its own place and
+    under its own heading) sets RENDERS_META_WARNINGS so they are not printed twice."""
     body = render(result, format, **kwargs)
     if isinstance(body, str):
         if body:
             print(body, end="" if body.endswith("\n") else "\n")
-        if format != "json" and outcome_of(result) != "failed":
+        owner = getattr(render, "__self__", None)
+        if (format != "json" and outcome_of(result) != "failed"
+                and not getattr(owner, "RENDERS_META_WARNINGS", False)):
             render_meta_warnings(result)
 
 

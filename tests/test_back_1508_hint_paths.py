@@ -25,6 +25,6 @@ def test_overview_hotspot_hint_names_a_path_that_exists(tmp_path, monkeypatch, c
     pkg.mkdir()
     (pkg / 'mod.py').write_text('x = 1\n', encoding='utf-8')
     monkeypatch.chdir(tmp_path)
-    _render_hotspots([{'file': 'mod.py', 'quality_score': 50, 'issues': []}], 5, root='pkg')
-    hint = capsys.readouterr().out.split('→ reveal ', 1)[1].strip()
+    out = '\n'.join(_render_hotspots([{'file': 'mod.py', 'quality_score': 50, 'issues': []}], 5, root='pkg'))
+    hint = out.split('→ reveal ', 1)[1].strip()
     assert os.path.exists(hint), hint
