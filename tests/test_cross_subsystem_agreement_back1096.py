@@ -144,3 +144,89 @@ def test_unselected_run_is_the_union_of_single_rule_runs(tmp_path):
         assert {d.rule_code for d in routed} <= {rule_class.code}, 'select leaked another rule'
     assert Counter(_key(d) for d in everything) == union
     assert len(union) >= 5
+
+
+# ----------------------------------- adapter get_structure() vs get_element()
+# Everything an overview lists must resolve by name, and the detail view must
+# repeat the overview's numbers (a listed name that "is not found" is the
+# BACK-530 failure class, here for URI adapters rather than file analyzers).
+
+def test_json_every_listed_key_resolves_to_its_listed_value(tmp_path):
+    from reveal.adapters.json import JsonAdapter
+    path = tmp_path / 'keys.json'
+    path.write_text('{"alpha": {"x": 1}, "a.b": 2, "c[0]": 3, "sp ace": 4, "": 5, '
+                    '"nil": null, "caf\\u00e9": 6, "0": 7}\n', encoding='utf-8')
+    adapter = JsonAdapter(str(path))
+    listed = adapter.get_structure()['value']
+    assert len(listed) == 8, 'positive control: awkward keys are listed'
+    for key, value in listed.items():
+        element = adapter.get_element(key)
+        assert element is not None, key
+        assert element['value'] == value, key
+
+
+def _sqlite_fixture(tmp_path):
+    import sqlite3
+    path = tmp_path / 'agree.db'
+    conn = sqlite3.connect(str(path))
+    try:
+        conn.executescript(
+            'create table "we ird"(id integer primary key, name text);'
+            'create index i1 on "we ird"(name);'
+            'create table child(id integer, p integer references "we ird"(id));'
+            'create table w(k text primary key) without rowid;'
+            'insert into "we ird" values (1, "a"), (2, "b");'
+            'create view v as select * from child;')
+        conn.commit()
+    finally:
+        conn.close()
+    return path
+
+
+def test_sqlite_table_detail_repeats_the_overview_numbers(tmp_path):
+    from reveal.adapters.sqlite import SQLiteAdapter
+    adapter = SQLiteAdapter('sqlite://' + str(_sqlite_fixture(tmp_path)))
+    overview = adapter.get_structure()
+    tables = [t for t in overview['tables'] if t['type'] == 'table']
+    assert {t['name'] for t in tables} == {'we ird', 'child', 'w'}
+    for listed in tables:
+        detail = adapter.get_element(listed['name'])
+        assert detail is not None, listed['name']
+        assert (detail['row_count'], len(detail['columns']), len(detail['indexes'])) == (
+            listed['rows'], listed['columns'], listed['indexes']), listed['name']
+    assert sum(len(adapter.get_element(t['name'])['foreign_keys']) for t in tables) == (
+        overview['statistics']['foreign_keys'])
+    assert sum(t['rows'] for t in tables) == overview['statistics']['total_rows']
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    'sqlite:// lists views in get_structure()["tables"] but get_element() only looks '
+    "up type='table', so a listed view is 'not found'"))
+def test_sqlite_every_listed_object_resolves_by_name(tmp_path):
+    from reveal.adapters.sqlite import SQLiteAdapter
+    adapter = SQLiteAdapter('sqlite://' + str(_sqlite_fixture(tmp_path)))
+    listed = adapter.get_structure()['tables']
+    assert 'v' in {t['name'] for t in listed}, 'positive control: the view is listed'
+    assert [t['name'] for t in listed if adapter.get_element(t['name']) is None] == []
+
+
+def test_env_every_listed_variable_resolves_to_the_same_facts(monkeypatch):
+    from reveal.adapters.env import EnvAdapter
+    planted = {'REVEAL_B1096_PLAIN': 'value', 'REVEAL_B1096_API_KEY': 'hunter2-secret',
+               'REVEAL_B1096_ACCENT': 'caf\u00e9'}
+    for name, value in planted.items():
+        monkeypatch.setenv(name, value)
+    adapter = EnvAdapter()
+    listed = {v['name']: (category, v)
+              for category, variables in adapter.get_structure()['categories'].items()
+              for v in variables}
+    assert set(planted) <= set(listed), 'positive control: planted variables are listed'
+    for name in planted:
+        category, entry = listed[name]
+        element = adapter.get_element(name)
+        assert element is not None, name
+        assert element['category'] == category, name
+        for field in ('value', 'sensitive', 'length'):
+            assert element[field] == entry[field], (name, field)
+    assert listed['REVEAL_B1096_API_KEY'][1]['sensitive'] is True
+    assert 'hunter2-secret' not in str(adapter.get_structure())
