@@ -56,12 +56,16 @@ class FileAnalyzer(ABC):
                 f"limit is {self.MAX_INPUT_SIZE:,} bytes."
             )
 
-        encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252']
+        encodings = ['utf-8', 'latin-1', 'cp1252']
 
         for encoding in encodings:
             try:
                 with open(self.path, 'r', encoding=encoding) as f:
                     text = f.read()
+                    if encoding == 'utf-8' and text.startswith('\ufeff'):
+                        # A BOM marks the encoding and is not text: CPython skips it, and
+                        # left in, it broke every stdlib-ast parse of the file (BACK-1729).
+                        text, encoding = text[1:], 'utf-8-sig'
                     self._detected_encoding = encoding
                     self._ends_with_newline = text.endswith(('\n', '\r'))
                     return split_lines(text)

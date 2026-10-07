@@ -30,7 +30,13 @@ def parse_python(source: str, filename: str = '<unknown>') -> ast.Module:
 
     SyntaxWarnings (e.g. invalid escape sequences) belong to the file being
     analyzed, not to reveal, and are not printed.
+
+    One leading U+FEFF is a UTF-8 BOM read as text by a caller that decoded the
+    file as 'utf-8': it is dropped, as CPython drops it when it runs the file
+    (BACK-1729). Line numbers are unchanged; line-1 columns count from after it.
     """
+    if source.startswith('\ufeff'):
+        source = source[1:]
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', SyntaxWarning)
         try:
