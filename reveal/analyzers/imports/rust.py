@@ -362,22 +362,25 @@ class RustExtractor(LanguageExtractor):
         self, node, file_path: Path, line_number: int, analyzer, base_path: str, is_reexport: bool = False
     ) -> List[ImportStatement]:
         """Parse use_as_clause within a scoped use list."""
-        item_name = None
+        item_path = None
         alias = None
 
+        # The item is the clause's first child: a bare `identifier` (`io as MyIo`) or a
+        # `scoped_identifier` (`d::Thing as T`, BACK-1710); the alias is the identifier
+        # after `as`.
         for child in _children(node):
-            if _zero_arg(child, 'kind') == 'identifier':
-                if not item_name:
-                    item_name = analyzer._get_node_text(child)
-                else:
-                    alias = analyzer._get_node_text(child)
+            kind = _zero_arg(child, 'kind')
+            if kind in ('identifier', 'scoped_identifier') and item_path is None:
+                item_path = analyzer._get_node_text(child)
+            elif kind == 'identifier':
+                alias = analyzer._get_node_text(child)
 
-        if not item_name:
+        if not item_path:
             return []
 
-        full_path = f"{base_path}::{item_name}"
+        full_path = f"{base_path}::{item_path}"
         return [self._create_import(
-            file_path, line_number, full_path, alias, item_name, skip_unused=is_reexport,
+            file_path, line_number, full_path, alias, item_path.split('::')[-1], skip_unused=is_reexport,
             source_line=_line_text(analyzer, line_number),
         )]
 

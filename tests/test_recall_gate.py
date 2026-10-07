@@ -148,8 +148,6 @@ def test_rust_oracle_expands_nested_groups_and_super_paths(tmp_path):
     assert measured['recall'] == measured['precision'] == 1
 
 
-@pytest.mark.xfail(strict=True, reason='reveal gap found by this gate: an aliased item inside a Rust use-list '
-                   '(use crate::{d::Thing as T};) yields no edge; use crate::d::Thing as T; does')
 def test_rust_aliased_use_list_item_is_an_edge(tmp_path):
     root, entry = _repo(tmp_path, {**RUST, 'src/main.rs': 'mod a;\nmod d;\nuse crate::{d::Thing as T};\nfn main() {}\n'},
                         {'oracle': 'rust-use', 'importer_dirs': ['.']})

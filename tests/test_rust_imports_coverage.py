@@ -126,6 +126,14 @@ class TestParseUseStatements:
         names = [imp.imported_names[0] for imp in imports]
         assert 'fs' in names
 
+    def test_scoped_path_with_alias_in_use_list(self, tmp_path):
+        """BACK-1710: use crate::{d::Thing as T, e as E}; -- the aliased item may itself be
+        a scoped path; it was dropped without an error."""
+        p = _write_rs(tmp_path, 'scoped_alias.rs', "use crate::{d::Thing as T, e as E};\n")
+        imports = RustExtractor().extract_imports(p)
+        got = {(imp.module_name, imp.alias, tuple(imp.imported_names)) for imp in imports}
+        assert got == {('crate::d::Thing', 'T', ('Thing as T',)), ('crate::e', 'E', ('e as E',))}
+
     def test_pub_use_reexport_marked_skip_unused(self, tmp_path):
         """BACK-431 feature-breadth pass (imports://?unused, real-corpus
         dogfood on Meilisearch's search/mod.rs): `pub use foo::{...};`
