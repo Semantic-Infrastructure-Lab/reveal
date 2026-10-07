@@ -283,25 +283,30 @@ def element_names(structure: Dict[str, Any]) -> list:
     return list(dict.fromkeys(e['name'] for e in _iter_elements(structure) if e.get('name')))
 
 
-def read_element_source(uri: str, element: Dict[str, Any]) -> Optional[str]:
-    """Return the source text of ``element`` in the resource ``uri`` names.
+def read_source_text(uri: str) -> Optional[str]:
+    """Return the whole source text of the resource ``uri`` names.
 
     Only single-file resources (plain path, ``file://``, ``git://``) carry
     source; directories and other adapters return None, meaning "not comparable".
     """
+    scheme, _, resource = uri.partition('://') if '://' in uri else ('file', '', uri)
+    if scheme == 'git':
+        return read_git_text(resource)
+    if scheme == 'file':
+        try:
+            return Path(resource).read_text(encoding='utf-8', errors='replace')
+        except OSError:
+            return None
+    return None
+
+
+def read_element_source(uri: str, element: Dict[str, Any]) -> Optional[str]:
+    """Return the source text of ``element`` in the resource ``uri`` names, or None
+    where ``read_source_text`` has none."""
     start, end = element.get('line'), element.get('line_end')
     if not isinstance(start, int) or not isinstance(end, int):
         return None
-    scheme, _, resource = uri.partition('://') if '://' in uri else ('file', '', uri)
-    if scheme == 'git':
-        text = read_git_text(resource)
-    elif scheme == 'file':
-        try:
-            text = Path(resource).read_text(encoding='utf-8', errors='replace')
-        except OSError:
-            return None
-    else:
-        return None
+    text = read_source_text(uri)
     if text is None:
         return None
     return '\n'.join(split_lines(text)[start - 1:end])
