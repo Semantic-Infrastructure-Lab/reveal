@@ -15,6 +15,7 @@ calls ``os._exit`` on one file, only inside a pool worker, and logs every call's
 method so each test can show its pool actually ran under the method it asked for.
 """
 
+import json
 import multiprocessing
 import os
 import subprocess
@@ -135,7 +136,54 @@ def test_check_counts_every_file_when_a_worker_dies(work, method):
     assert DYING not in proc.stderr
 
 
-@pytest.mark.parametrize('fmt', ['text', 'json'])
+def _json_files(out):
+    return {f['file']: f for f in json.loads(out)['files']}
+
+
+@pytest.mark.parametrize('method', METHODS)
+def test_check_json_counts_every_file_when_a_worker_dies(work, method):
+    """BACK-1717: --format json treats the lost file like the text path (BACK-1681): an
+    errored file in files[], files_errored counts it, exit 3, and no file is re-run in
+    the parent (the user rule only dies in a worker, so a serial re-run would hide it)."""
+    _need(method)
+    proc, calls = _run(work, method, 2, *CHECK, '--format', 'json', die=True)
+    assert proc.returncode == 3, (proc.returncode, proc.stdout, proc.stderr)
+    assert set(calls) <= {f'{method} True'}, sorted(set(calls))  # nothing ran in the parent
+    result = json.loads(proc.stdout)
+    files = _json_files(proc.stdout)
+    assert sorted(files) == [f'tree/m{i}.py' for i in range(N_FILES)], sorted(files)
+    assert 'BrokenProcessPool' in json.dumps(files[f'tree/{DYING}'])
+    assert result['summary']['files_errored'] >= 1, result['summary']
+
+
+@pytest.mark.parametrize('method', METHODS)
+def test_check_also_json_matches_format_json_when_a_worker_dies(work, method):
+    """BACK-1717: text's --also-json artifact lists the same files, errored one included,
+    as --format json."""
+    _need(method)
+    out = work / 'also.json'
+    text, _ = _run(work, method, 2, *CHECK, '--also-json', str(out), die=True, log='text-calls')
+    as_json, _ = _run(work, method, 2, *CHECK, '--format', 'json', die=True)
+    assert text.returncode == as_json.returncode == 3, (text.stderr, as_json.stderr)
+    also = json.loads(out.read_text(encoding='utf-8'))
+    assert sorted(f['file'] for f in also['files']) == sorted(_json_files(as_json.stdout))
+    # How many collateral files the broken pool takes with it varies run to run; the dead
+    # one is always an errored file in both.
+    assert 'BrokenProcessPool' in json.dumps(
+        next(f for f in also['files'] if f['file'] == f'tree/{DYING}'))
+    assert also['summary']['files_errored'] >= 1
+
+
+@pytest.mark.parametrize('method', METHODS)
+def test_check_grep_does_not_hide_a_dead_worker(work, method):
+    """BACK-1717: --format grep exits 3 on a lost file and never re-runs it in the parent."""
+    _need(method)
+    proc, calls = _run(work, method, 2, *CHECK, '--format', 'grep', die=True)
+    assert proc.returncode == 3, (proc.returncode, proc.stdout, proc.stderr)
+    assert set(calls) <= {f'{method} True'}, sorted(set(calls))
+
+
+@pytest.mark.parametrize('fmt', ['text', 'json', 'grep'])
 @pytest.mark.parametrize('method', METHODS)
 def test_check_pool_matches_the_serial_run(work, method, fmt):
     """Negative control (no death): the pooled run prints what the serial run prints,
