@@ -28,7 +28,8 @@ def serial_pools(monkeypatch):
 
 FILLER = ''.join('x%d = %d\n' % (i, i) for i in range(520))   # > M101's 500-line floor
 TAIL = 'def tail():\n    return 1\n'
-DISAGREE = 'stats:// and M101 count str.splitlines() (it also splits on \\x0c, \\x85, \\u2028); ast:// and editors count \\n'
+DISAGREE = ('FileAnalyzer._read_file uses str.splitlines() (it also splits on \\x0c, \\x85, \\u2028): '
+            'stats://, M101 and ast:// all count one line too many')
 
 
 def _spell(label):
@@ -64,9 +65,10 @@ def _line_counts(tmp_path, label):
 
 @pytest.mark.parametrize('label', LINE_VARIANTS)
 def test_stats_m101_and_ast_agree_on_line_count(tmp_path, label):
+    text, _ = _spell(label)
     last_function_end, stats_total, m101_total = _line_counts(tmp_path, label)
-    assert last_function_end == 522, 'positive control: the file ends where its last function ends'
-    assert stats_total == m101_total == last_function_end
+    true_total = text.count('\n') + (0 if text.endswith('\n') else 1)
+    assert stats_total == m101_total == last_function_end == true_total
 
 
 def test_empty_file_has_zero_lines_in_every_counter(tmp_path):

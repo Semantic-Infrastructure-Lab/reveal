@@ -208,3 +208,36 @@ def test_structure_ignores_encoding_and_line_ending_spelling(tmp_path, name):
         shifted = [(k, n, first + 1, None if last is None else last + 1)
                    for k, n, first, last in expected]
         assert spelled('accent', accented) == shifted
+
+
+SEPARATORS = {'formfeed': '\x0c', 'vtab': '\x0b', 'nel': '\x85', 'u2028': ' ', 'fs': '\x1c'}
+# FileAnalyzer._read_file returns text.splitlines(), which also breaks lines at
+# these characters, so every analyzer parses text with extra newlines and every
+# later line number is off (BACK-1096 finding: form feed is routine in GNU C).
+SPLITTERS_BREAK_LINES = pytest.mark.xfail(strict=True, reason=(
+    'FileAnalyzer._read_file uses str.splitlines(): a line separator that is not \\n '
+    'inflates every later line number'))
+
+
+# Form feed for every language; the other separators share the mechanism, so one language.
+SEPARATOR_CASES = [(n, 'formfeed') for n, c in CASES.items() if c[1] is not None] + [
+    ('a.py', s) for s in SEPARATORS if s != 'formfeed']
+
+
+@SPLITTERS_BREAK_LINES
+@pytest.mark.parametrize('name,separator', SEPARATOR_CASES)
+def test_symbol_lines_ignore_separators_that_are_not_newlines(tmp_path, name, separator):
+    """A form feed (or U+2028 ...) inside a comment line is not a line break:
+    editors, tree-sitter and `wc -l` all keep the symbols on the same lines."""
+    source, comment, _ = CASES[name]
+    clean_path = tmp_path / 'clean' / name
+    clean_path.parent.mkdir()
+    clean_path.write_text(source, encoding='utf-8')
+    expected = items(structure_of(clean_path)[0])
+    head = len('<?php\n') if source.startswith('<?php') else 0
+    noisy = comment.replace('comment', 'a%sb' % SEPARATORS[separator])
+    path = tmp_path / 'noisy' / name
+    path.parent.mkdir()
+    path.write_bytes((source[:head] + noisy + source[head:]).encode('utf-8'))
+    assert items(structure_of(path)[0]) == [
+        (k, n, first + 1, None if last is None else last + 1) for k, n, first, last in expected]
