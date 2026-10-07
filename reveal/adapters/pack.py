@@ -98,8 +98,10 @@ def _get_changed_files(path: Path, since_ref: str) -> Tuple[Set[str], Optional[s
         # --end-of-options: since_ref is caller-controlled (MCP reveal_pack's `since`
         # param) -- without it, a ref starting with '-' is parsed as a git option
         # (e.g. '--output=/path' writes an arbitrary file) instead of a revision.
+        # -z: NUL-terminated and unquoted, so a name with a non-ASCII character or a line
+        # separator other than \n (U+2028, NEL, form feed) is read as git wrote it (BACK-1731).
         diff_result = subprocess.run(
-            ['git', 'diff', '--name-only', '--end-of-options', f'{since_ref}...HEAD'],
+            ['git', 'diff', '--name-only', '-z', '--end-of-options', f'{since_ref}...HEAD'],
             capture_output=True, text=True, cwd=str(git_root), timeout=10, encoding='utf-8', errors='replace',
         )
         if diff_result.returncode != 0:
@@ -111,8 +113,7 @@ def _get_changed_files(path: Path, since_ref: str) -> Tuple[Set[str], Optional[s
         return set(), "git diff timed out"
 
     changed: Set[str] = set()
-    for rel in diff_result.stdout.splitlines():  # boundary-ok: splitlines -- git subprocess output
-        rel = rel.strip()
+    for rel in diff_result.stdout.split('\0'):
         if not rel:
             continue
         abs_path = git_root / rel
