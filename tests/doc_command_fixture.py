@@ -675,8 +675,13 @@ def _git(root, *cmd, author=('John', 'john@example.com'), date='2026-01-05'):
     stamp = f'{date}T12:00:00'
     env = dict(os.environ, GIT_AUTHOR_NAME=name, GIT_AUTHOR_EMAIL=email, GIT_COMMITTER_NAME=name,
                GIT_COMMITTER_EMAIL=email, GIT_AUTHOR_DATE=stamp, GIT_COMMITTER_DATE=stamp)
-    subprocess.run(['git', '-C', str(root), *cmd], check=True, capture_output=True, env=env,
-                   timeout=60)
+    try:
+        subprocess.run(['git', '-C', str(root), *cmd], check=True, capture_output=True, env=env,
+                       timeout=60)
+    except subprocess.CalledProcessError as exc:
+        # check=True + capture_output hid git's own message, so a CI exit 128 had no cause (BACK-1759)
+        raise RuntimeError(f"git {' '.join(cmd)} exited {exc.returncode} in {root}: "
+                           f"{exc.stderr.decode('utf-8', 'replace').strip()}") from exc
 
 
 def _commit(root, author, email, date, message, path, text):
