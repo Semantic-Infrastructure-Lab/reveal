@@ -17,7 +17,7 @@ from ...utils.gitignore import respect_gitignore_param
 from ...utils.path_utils import to_relative_display
 from ...utils.results import ResultBuilder, note_truncation, note_warning
 from ...utils.validation import require_path_exists
-from ...utils.parallel import pool_worker_count
+from ...utils.parallel import pool_worker_count, submit_each
 from ...rules.scan_caches import init_scan_caches, preload_scan_caches
 
 # Import modular functions
@@ -34,7 +34,7 @@ def _pool_results(executor, args: list) -> list:
     pending one, so the culprit cannot be told from the files lost with it) becomes the
     same failure record a raising analyzer yields, so it reaches ``_analysis_failures``
     and the run's warning instead of failing the whole scan (BACK-1718)."""
-    futures = [executor.submit(_analyze_file_worker, a) for a in args]
+    futures = submit_each(executor, _analyze_file_worker, args)
     results = []
     for a, future in zip(args, futures):
         try:

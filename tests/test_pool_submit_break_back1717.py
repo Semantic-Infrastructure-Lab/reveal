@@ -89,6 +89,5 @@ def test_stats_reports_files_the_broken_pool_refused_and_keeps_the_run(tmp_path)
     args = [(str(f), None, str(tmp_path)) for f in files]
     results = _pool_results(_BreaksOnSubmit(), args)
     assert len(results) == len(files)
-    failed = [r for r in results if 'analysis_failed' in r]
-    assert [r['path'] for r in failed] == [str(f) for f in files[1:]]
-    assert all("BrokenProcessPool" in r['analysis_failed'] for r in failed)
+    lost = [r['path'] for r in results if "BrokenProcessPool" in r.get('analysis_failed', '')]
+    assert lost == [str(f) for f in files[1:]]

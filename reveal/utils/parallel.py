@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 import os
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from ..logging_setup import worker_bootstrap
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -39,6 +40,27 @@ def pool_worker_count(default: int) -> int:
         except ValueError:
             pass
     return max(1, default)
+
+
+def submit_each(executor, fn, items: Iterable) -> list[Future]:
+    """``executor.submit(fn, item)`` for every item: one Future per item, in order.
+
+    A worker that dies while items are still being handed out breaks the pool, and
+    every later ``submit`` raises BrokenProcessPool instead of returning a Future.
+    Those items get a Future that already holds that error, so a caller's per-future
+    handling treats them like the pending futures the dead worker failed: lost items,
+    never a whole-run failure or a serial re-run of the culprit (BACK-1717, BACK-1718;
+    seen only on a fast-dying worker, macOS under fork).
+    """
+    futures = []
+    for item in items:
+        try:
+            futures.append(executor.submit(fn, item))
+        except BrokenProcessPool as e:
+            refused: Future = Future()
+            refused.set_exception(e)
+            futures.append(refused)
+    return futures
 
 
 def _scan_one(args: tuple) -> Path | None:
