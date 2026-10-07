@@ -8,7 +8,7 @@ from concurrent.futures import Future, ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from ..logging_setup import worker_bootstrap
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -94,12 +94,43 @@ def _scan_one(args: tuple) -> Path | None:
         return None
 
 
+class GrepResult(list):
+    """The matching paths (a plain list to every caller) plus ``lost``: the paths a dead
+    pool worker kept from being scanned, which are not matches and not non-matches
+    (BACK-1754). Callers that build a result disclose them with ``worker_lost_warning``."""
+
+    lost: list[Path]
+
+    def __init__(self, matches=(), lost=()):
+        super().__init__(matches)
+        self.lost = list(lost)
+
+
+def worker_lost_warning(lost: Iterable, consequence: str, base: Path | None = None) -> dict[str, Any] | None:
+    """One ``worker_lost`` meta warning for files a dead pool worker kept from being
+    processed (BACK-1753/1754); None when nothing was lost. *consequence* says what is
+    missing from the result, so the same disclosure reads right for imports and for grep."""
+    from .path_utils import to_posix, to_relative_display
+    paths = sorted(str(p) for p in lost)
+    if not paths:
+        return None
+    shown = [to_relative_display(p, base) if base else to_posix(p) for p in paths[:5]]
+    more = f" and {len(paths) - len(shown)} more" if len(paths) > len(shown) else ''
+    return {
+        'type': 'worker_lost',
+        'count': len(paths),
+        'files': shown,
+        'message': f"{len(paths)} file(s) not processed, a pool worker died -- {consequence}: "
+                   f"{', '.join(shown)}{more}",
+    }
+
+
 def grep_files(
     paths: Sequence[Path] | Iterable[Path],
     terms: str | Iterable[str],
     *,
     workers: int = 8,
-) -> list[Path]:
+) -> GrepResult:
     """Return paths where all *terms* appear (case-insensitive byte scan).
 
     Uses parallel worker processes for large corpora. Falls back to sequential
@@ -119,7 +150,8 @@ def grep_files(
     Returns:
         Subset of *paths* where all terms were found, in input order. A file
         that could not be read, or was lost to a dead pool worker, is logged
-        as a warning and left out.
+        as a warning and left out; the files lost to a dead worker are also on
+        the result's ``lost`` attribute so the caller can disclose them (BACK-1754).
 
     Example::
 
@@ -129,7 +161,7 @@ def grep_files(
     """
     paths_list = list(paths)
     if not paths_list:
-        return []
+        return GrepResult()
 
     # Normalise terms → tuple of lowercased bytes (empty strings skipped).
     if isinstance(terms, str):
@@ -137,11 +169,11 @@ def grep_files(
     needles = tuple(t.lower().encode() for t in terms if t)
 
     if not needles:
-        return paths_list  # no constraints → everything matches
+        return GrepResult(paths_list)  # no constraints → everything matches
 
     # Sequential fast path for small inputs.
     if len(paths_list) < _PARALLEL_THRESHOLD:
-        return [p for p in paths_list if _scan_one((p, needles)) is not None]
+        return GrepResult(p for p in paths_list if _scan_one((p, needles)) is not None)
 
     # Parallel scan, one future per file, read in input order. A file lost to a
     # dead worker (which fails every pending future) gets the warning a file
@@ -161,4 +193,4 @@ def grep_files(
         logger.warning("grep_files: %d file(s) not scanned, a pool worker died (%s: %s): %s%s",
                        len(lost), type(lost[0][1]).__name__, lost[0][1],
                        ', '.join(str(p) for p, _ in lost[:5]), ' ...' if len(lost) > 5 else '')
-    return matches
+    return GrepResult(matches, [p for p, _ in lost])

@@ -112,7 +112,8 @@ def _extract_imports_for_file(fp_str: str) -> tuple:
         return [], True
 
 
-def _extract_in_pool(file_strs: List[str], workers: int, results: Dict[str, tuple]) -> None:
+def _extract_in_pool(file_strs: List[str], workers: int, results: Dict[str, tuple],
+                     lost_files: Optional[set] = None) -> None:
     """``_extract_imports_for_file`` over *file_strs* in a process pool, one future
     per file, into ``results[fp_str] = (imports, failed)`` in submission order.
 
@@ -120,7 +121,9 @@ def _extract_in_pool(file_strs: List[str], workers: int, results: Dict[str, tupl
     cannot be told from the files lost with it; each of them is a failed file
     (``([], True)``), the channel a file tree-sitter could not parse already uses,
     which ``get_scan_disclosures`` reports. None is re-run in this process, where
-    the culprit could take the whole run down (BACK-1726).
+    the culprit could take the whole run down (BACK-1726). Each is also added to
+    *lost_files*, so the disclosure can say a worker died, not that the file had
+    parse errors (BACK-1753).
     """
     from concurrent.futures import ProcessPoolExecutor
     from ...logging_setup import worker_bootstrap
@@ -132,6 +135,8 @@ def _extract_in_pool(file_strs: List[str], workers: int, results: Dict[str, tupl
             except Exception as e:  # recorded as a failed file; disclosed below
                 results[fp_str] = ([], True)
                 lost.append(e)
+                if lost_files is not None:
+                    lost_files.add(fp_str)
     if lost:
         logger.warning("I002: %d file(s) lost to a dead import-extraction worker (%s: %s); "
                        "circular-dependency results may be incomplete",
@@ -279,9 +284,16 @@ def get_scan_disclosures() -> List[str]:
     for directory, graph in _graph_cache.items():
         if graph.scan_skipped_reason:
             disclosures.append(graph.scan_skipped_reason)
-        if graph.failed_files:
+        lost = set(graph.lost_files)
+        parse_failed = [fp for fp in graph.failed_files if fp not in lost]
+        if parse_failed:
             disclosures.append(
-                f"I002: {len(graph.failed_files)} file(s) under {directory} parsed with errors; "
+                f"I002: {len(parse_failed)} file(s) under {directory} parsed with errors; "
+                "circular-dependency results may be incomplete"
+            )
+        if lost:
+            disclosures.append(
+                f"I002: {len(lost)} file(s) under {directory} not analyzed, a pool worker died; "
                 "circular-dependency results may be incomplete"
             )
     return disclosures
@@ -401,9 +413,10 @@ class I002(BaseRule):
                 _graph_cache[directory] = cached
                 return cached
 
-        all_imports, failed_files, skipped_reason = self._collect_raw_imports(directory)
+        all_imports, failed_files, lost_files, skipped_reason = self._collect_raw_imports(directory)
         graph = ImportGraph.from_imports(all_imports)
         graph.failed_files = failed_files
+        graph.lost_files = lost_files
         graph.scan_skipped_reason = skipped_reason
         self._resolve_graph_dependencies(graph, directory)
 
@@ -415,10 +428,11 @@ class I002(BaseRule):
     def _collect_raw_imports(self, directory: Path) -> tuple:
         """Phase 1: Walk directory and extract raw import statements from all files.
 
-        Returns ``(all_imports, failed_files, skipped_reason)`` -- ``failed_files``
-        (BACK-982) are source files whose language IS supported but that
-        tree-sitter parsed with errors. Recovered edges are retained; missing
-        edges can still hide a cycle. Empty in the two early-abort paths below (the scan never
+        Returns ``(all_imports, failed_files, lost_files, skipped_reason)`` --
+        ``failed_files`` (BACK-982) are source files whose language IS supported but
+        that tree-sitter parsed with errors, or that a dead pool worker took down
+        before they were parsed; ``lost_files`` (BACK-1753) is that second subset.
+        Recovered edges are retained; missing edges can still hide a cycle. Empty in the two early-abort paths below (the scan never
         reached Pass B, so failure status is simply unknown, not "none failed").
         ``skipped_reason`` (BACK-1051) is None when the scan ran to completion,
         or a one-line human-readable string naming which ceiling tripped --
@@ -462,7 +476,7 @@ class I002(BaseRule):
                     "raise the limit)"
                 )
                 logger.warning(reason)
-                return [], [], reason
+                return [], [], [], reason
 
         cycle_limit = _cycle_detection_max_files()
         if cycle_limit and len(source_files) > cycle_limit:
@@ -474,7 +488,7 @@ class I002(BaseRule):
                 "raise the limit or 0 to disable it"
             )
             logger.warning(reason)
-            return [], [], reason
+            return [], [], [], reason
 
         # Pass B: parse the (now bounded) set of files. Independent per file, so
         # fan out across processes on large trees (BACK-536). Results are read in
@@ -482,9 +496,10 @@ class I002(BaseRule):
         file_strs = [str(f) for f in source_files]
         workers = _graph_worker_count(len(file_strs))
         results: Dict[str, tuple] = {}
+        lost_strs: set = set()
         if workers > 1:
             try:
-                _extract_in_pool(file_strs, workers, results)
+                _extract_in_pool(file_strs, workers, results, lost_strs)
             except Exception as e:
                 # The pool itself could not run (restricted/forbidden-fork
                 # environments); a worker that dies inside a running pool is
@@ -499,7 +514,8 @@ class I002(BaseRule):
             all_imports.extend(imports)
             if failed:
                 failed_files.append(Path(fp_str))
-        return all_imports, failed_files, None
+        lost_files = [Path(fp_str) for fp_str in file_strs if fp_str in lost_strs]
+        return all_imports, failed_files, lost_files, None
 
     def _resolve_graph_dependencies(self, graph: ImportGraph, directory: Path) -> None:
         """Phase 2: resolve import statements to files through the shared

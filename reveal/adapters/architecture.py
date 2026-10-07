@@ -77,9 +77,9 @@ def _run_imports_analysis(adapter: 'ArchitectureAdapter', path: Path) -> Dict[st
         from reveal.adapters.imports import ImportsAdapter
         importer = ImportsAdapter(str(path))
         importer._build_graph(path)
-        partial = importer.partial_parse_warning(path)  # BACK-1598
-        if partial:
-            adapter.fold_meta({'warnings': [partial]})
+        warnings = importer.integrity_warnings(path)  # BACK-1598, BACK-1753
+        if warnings:
+            adapter.fold_meta({'warnings': warnings})
         return _format_imports_data(importer, path)
     except Exception as exc:
         adapter.record_composed_error('ImportsAdapter', path, exc)
@@ -141,9 +141,9 @@ def _run_combined_analysis(adapter: 'ArchitectureAdapter', path: Path, limit: in
         importer._build_graph(path, collect_structures=True)
         structures = importer._structures
         graph_built = True
-        partial = importer.partial_parse_warning(path)  # BACK-1598
-        if partial:
-            adapter.fold_meta({'warnings': [partial]})
+        warnings = importer.integrity_warnings(path)  # BACK-1598, BACK-1753
+        if warnings:
+            adapter.fold_meta({'warnings': warnings})
         imports_data = _format_imports_data(importer, path)
     except Exception as exc:
         adapter.record_composed_error('ImportsAdapter', path, exc)

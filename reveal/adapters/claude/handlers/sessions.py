@@ -9,8 +9,8 @@ from reveal.reveal_types import CONTRACT_VERSION
 from reveal.utils.lines import split_lines
 
 from ..analysis import search_sessions_for_term, get_files_touched
-from ....utils.parallel import grep_files as _grep_files
-from ....utils.results import ResultBuilder
+from ....utils.parallel import grep_files as _grep_files, worker_lost_warning
+from ....utils.results import ResultBuilder, note_warning
 
 logger = logging.getLogger(__name__)
 
@@ -314,9 +314,11 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
         snippet_window = max(60, min(500, int(query_params.get('snippet', 120))))
     except (ValueError, TypeError):
         snippet_window = 120
-    matches = search_sessions_for_term(all_sessions, term, whole_word=whole_word, window_chars=snippet_window)
+    lost: List[Path] = []
+    matches = search_sessions_for_term(all_sessions, term, whole_word=whole_word,
+                                       window_chars=snippet_window, lost_out=lost)
 
-    return ResultBuilder.create(
+    result = ResultBuilder.create(
         result_type='claude_cross_session_search',
         source=str(conversation_base),
         source_type='directory',
@@ -331,6 +333,9 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
             'matches': matches,
         }
     )
+    note_warning(result, worker_lost_warning(
+        lost, "they were not searched, so matches may be missing", conversation_base))  # BACK-1754
+    return result
 
 
 def _extract_session_ops(session: Dict[str, Any], file_path: str) -> Optional[Dict[str, Any]]:

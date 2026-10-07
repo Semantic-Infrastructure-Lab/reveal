@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional
 
 from . import files, filtering, results
 from ...core import disk_cache
-from ...utils.parallel import grep_files
+from ...utils.parallel import grep_files, worker_lost_warning
 from ...utils.query import unknown_sort_field_warning
 from ...utils.results import note_warning
 
@@ -51,6 +51,7 @@ def get_structure(
     # grep_files scans whole-file bytes; matches_body_contains re-checks
     # body-only content to drop any frontmatter false-positives.
     candidates = grep_files(all_files, body_contains) if body_contains else all_files
+    lost = getattr(candidates, 'lost', [])
 
     matched_results = []
     seen_fields = set()
@@ -109,6 +110,8 @@ def get_structure(
     displayed = len(controlled_results)
     results.add_truncation_warning(response, displayed, total_matches)
     note_warning(response, unknown_sort_field_warning(result_control.sort_field, matched_results))
+    note_warning(response, worker_lost_warning(
+        lost, "they were not searched, so matches may be missing", base_path))  # BACK-1754
 
     # Add hint when filter matches very few files (likely front matter mismatch)
     results.add_low_match_rate_hint(response, len(all_files), total_matches, filters)

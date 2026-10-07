@@ -72,6 +72,7 @@ def search_sessions_for_term(
     workers: int = 8,
     whole_word: bool = False,
     window_chars: int = 120,
+    lost_out: List[Path] | None = None,
 ) -> List[Dict[str, Any]]:
     """Search across multiple sessions for a term and return one snippet per match.
 
@@ -93,6 +94,8 @@ def search_sessions_for_term(
         whole_word: If True, only return sessions where the term appears as a
             whole word (word-boundary semantics).  Phase 1 grep is still
             substring for speed; whole-word filtering happens in phase 2.
+        lost_out: When given, receives the session files a dead pool worker kept
+            from being searched (BACK-1754); they are not in the returned matches.
 
     Returns:
         List of match dicts, sorted most-recent-first, each containing:
@@ -111,6 +114,8 @@ def search_sessions_for_term(
 
     # Phase 1: parallel byte-level pre-filter (always substring — fast).
     matching_paths = grep_files(all_paths, term, workers=workers)
+    if lost_out is not None:
+        lost_out.extend(matching_paths.lost)
 
     # Phase 2: extract one snippet per matching session.
     # With whole_word=True, sessions that only contain the term as a substring

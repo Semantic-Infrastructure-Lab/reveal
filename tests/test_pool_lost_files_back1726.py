@@ -122,8 +122,8 @@ def test_imports_reports_files_the_broken_pool_refused_and_keeps_the_run(tmp_pat
     assert meta['files_failed_count'] == len(lost)
     reasons = [d['parse']['reason'] for d in meta['extraction_diagnostics'].values()]
     assert reasons and all('BrokenProcessPool' in r for r in reasons)
-    warning = adapter.partial_parse_warning(root)
-    assert warning is not None and warning['count'] == len(lost)
+    warnings = adapter.integrity_warnings(root)
+    assert [w['type'] for w in warnings] == ['worker_lost'] and warnings[0]['count'] == len(lost)
 
 
 def test_imports_negative_control_a_healthy_pool_fails_nothing(tmp_path, pools):
@@ -153,7 +153,7 @@ def test_i002_reports_files_the_broken_pool_refused_without_a_serial_rerun(tmp_p
     pools.setattr('concurrent.futures.ProcessPoolExecutor', _BreaksOnSubmit)
     calls = _counting_extract(pools)
     with caplog.at_level(logging.WARNING, logger=i002.logger.name):
-        imports, failed, skipped = i002.I002()._collect_raw_imports(root)
+        imports, failed, _lost, skipped = i002.I002()._collect_raw_imports(root)
     assert skipped is None
     assert len(calls) == 1, f'only the in-process first item ran; nothing re-ran in the parent: {calls}'
     assert 1 <= len(failed) <= N_FILES - 1
@@ -176,7 +176,7 @@ def test_i002_pool_that_cannot_start_runs_serially_and_says_so(tmp_path, pools, 
     pools.setattr('concurrent.futures.ProcessPoolExecutor', _CannotStart)
     calls = _counting_extract(pools)
     with caplog.at_level(logging.WARNING, logger=i002.logger.name):
-        imports, failed, _ = i002.I002()._collect_raw_imports(root)
+        imports, failed, _lost, _ = i002.I002()._collect_raw_imports(root)
     assert sorted(calls) == sorted(f'm{i}.py' for i in range(N_FILES))
     assert failed == []
     assert len(imports) == N_FILES
@@ -187,7 +187,7 @@ def test_i002_negative_control_a_healthy_pool_fails_nothing(tmp_path, pools, cap
     root = _tree(tmp_path)
     pools.setattr('concurrent.futures.ProcessPoolExecutor', _Healthy)
     with caplog.at_level(logging.WARNING, logger=i002.logger.name):
-        imports, failed, _ = i002.I002()._collect_raw_imports(root)
+        imports, failed, _lost, _ = i002.I002()._collect_raw_imports(root)
     assert failed == [] and len(imports) == N_FILES
     assert 'lost to a dead' not in caplog.text and 'serially' not in caplog.text
 
@@ -257,7 +257,7 @@ def test_i002_real_dying_worker_costs_only_lost_files(tmp_path, pools, caplog):
     root = _tree(tmp_path)
     pools.setattr(i002, '_extract_imports_for_file', _i002_extract_dying)
     with caplog.at_level(logging.WARNING, logger=i002.logger.name):
-        imports, failed, _ = i002.I002()._collect_raw_imports(root)
+        imports, failed, _lost, _ = i002.I002()._collect_raw_imports(root)
     lost = {Path(f).name for f in failed}
     assert DYING in lost and len(lost) <= N_FILES
     assert 'lost to a dead import-extraction worker' in caplog.text

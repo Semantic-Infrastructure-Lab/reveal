@@ -16,7 +16,7 @@ import hashlib
 import os
 import stat as stat_module
 from pathlib import Path
-from typing import Callable, Dict, Any, List, Optional, Tuple
+from typing import Callable, Dict, Any, List, Optional, Tuple, cast
 from reveal.reveal_types import CONTRACT_VERSION, WarningEntry
 
 from .base import ResourceAdapter, register_adapter, register_renderer
@@ -33,7 +33,7 @@ from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 from ..analyzers.imports import service as import_analysis
 from ..registry import get_code_extensions
-from ..utils.parallel import pool_worker_count, submit_each
+from ..utils.parallel import pool_worker_count, submit_each, worker_lost_warning as _worker_lost_warning
 from ..utils.path_utils import to_posix, to_relative_display
 from ..utils.results import ResultBuilder, note_truncation
 
@@ -134,6 +134,14 @@ _AUTOLOAD_REGIMES: Tuple[Tuple[str, str, str], ...] = (
 
 
 _AUTOLOAD_REGIME_MAX_WALK_UP = 6
+
+
+def worker_lost_warning(lost_files: List[str], base: Optional[Path] = None) -> Optional[WarningEntry]:
+    """One meta warning for the files a dead pool worker took down before they were
+    parsed (BACK-1753): not a parse error, and a file with no import extractor loses
+    its structure the same way (BACK-1752)."""
+    return cast(Optional[WarningEntry], _worker_lost_warning(
+        lost_files, "their imports and structure are missing, so results can under-report", base))
 
 
 def parse_failure_warning(failed_files: List[str], base: Optional[Path] = None) -> Optional[WarningEntry]:
@@ -668,16 +676,28 @@ class ImportsRenderer:
         # parse silently contributed zero imports/symbols above -- indistinguishable
         # from a genuinely empty file without this. Also means Cycles Found can
         # under-report: a real cycle running through one of these is invisible.
-        files_failed_count = metadata.get('files_failed_count', 0)
+        files_lost_count = metadata.get('files_lost_count', 0)
+        lost = set(metadata.get('files_lost', []))
+        files_failed_count = metadata.get('files_failed_count', 0) - files_lost_count
         if files_failed_count:
             # Their recovered imports ARE in the graph (BACK-1460); only what sat
             # inside the error region is missing (BACK-1598 wording).
             print(f"  ⚠️  {files_failed_count} file(s) parsed with errors — their imports may be incomplete")
             print("      (import/cycle results can under-report; unused imports not checked in them)")
-            for fp in metadata.get('files_failed', [])[:10]:
+            parse_failed = [fp for fp in metadata.get('files_failed', []) if fp not in lost]
+            for fp in parse_failed[:10]:
                 print(f"      - {fp}")
             if files_failed_count > 10:
                 print(f"      ... and {files_failed_count - 10} more")
+            print()
+        # A file lost to a dead pool worker was never parsed (BACK-1753).
+        if files_lost_count:
+            print(f"  ⚠️  {files_lost_count} file(s) not analyzed — a pool worker died")
+            print("      (their imports and structure are missing; results can under-report)")
+            for fp in sorted(lost)[:10]:
+                print(f"      - {fp}")
+            if files_lost_count > 10:
+                print(f"      ... and {files_lost_count - 10} more")
             print()
         # The scanned path, not the renderer's `resource` argument, which reaches
         # here as '.' and widened a copy-pasted query to the whole cwd (BACK-1508).
@@ -929,7 +949,7 @@ def _extract_chunk(job: Tuple[List[str], bool]) -> list:
 def _lost_extraction(error: BaseException) -> ImportExtraction:
     """The extraction record of a file a dead pool worker lost: failed, with the
     cause, like a file its extractor could not parse (BACK-1726)."""
-    return ImportExtraction(parse_failed=True, diagnostics={
+    return ImportExtraction(parse_failed=True, worker_lost=True, diagnostics={
         'parse': {'status': 'unavailable', 'reason': f"{type(error).__name__}: {error}"}})
 
 
@@ -1078,10 +1098,16 @@ class ImportsAdapter(ResourceAdapter):
 
         return None
 
-    def partial_parse_warning(self, base: Optional[Path] = None) -> Optional[WarningEntry]:
-        """This graph's parse_failure_warning, for the commands that build it
-        through _build_graph rather than get_structure (overview, architecture)."""
-        return parse_failure_warning([str(fp) for fp in self.analysis.files_failed], base)
+    def integrity_warnings(self, base: Optional[Path] = None) -> List[WarningEntry]:
+        """The graph's disclosures, for the commands that build it through _build_graph
+        rather than get_structure (overview, architecture): files parsed with errors
+        (parse_failure_warning) and files a dead pool worker took down
+        (worker_lost_warning), each under its own cause."""
+        lost = set(self.analysis.files_lost)
+        parse_failed = [str(fp) for fp in self.analysis.files_failed if fp not in lost]
+        warnings = [parse_failure_warning(parse_failed, base),
+                    worker_lost_warning([str(fp) for fp in lost], base)]
+        return [w for w in warnings if w]
 
     def get_metadata(self) -> Dict[str, Any]:
         """Get metadata about import analysis."""
@@ -1115,8 +1141,12 @@ class ImportsAdapter(ResourceAdapter):
                 to_relative_display(fp, self._target_path): artifact.diagnostics
                 for fp, artifact in self.analysis.extractions.items() if artifact.diagnostics
             },
+            # files_failed is every file whose imports may be incomplete; files_lost is
+            # the subset a dead pool worker took down before it was parsed (BACK-1753).
             'files_failed_count': len(self.analysis.files_failed),
             'files_failed': sorted(str(fp) for fp in self.analysis.files_failed)[:50],
+            'files_lost_count': len(self.analysis.files_lost),
+            'files_lost': sorted(str(fp) for fp in self.analysis.files_lost)[:50],
             # BACK-1245: None on every corpus except a detected convention-
             # autoloading framework (Rails/Django/Laravel) -- see
             # detect_autoload_regime()/autoload_regime_warning() above.
@@ -1238,9 +1268,18 @@ class ImportsAdapter(ResourceAdapter):
         structures: List[Dict[str, Any]] = []
         unextractable: Dict[str, int] = {}
         failed_files: List[Path] = []
+        lost_files: List[Path] = []
 
         for fp, imports, symbols, structure, extraction in self._extract_files(candidates, collect_structures):
-            if fp.suffix in supported_exts:
+            if extraction is not None and extraction.worker_lost:
+                # Lost before its extractor ran, so "no import extractor" is unknown for
+                # it: failed either way, never silently unsupported (BACK-1752).
+                if fp.suffix in supported_exts:
+                    files.append(fp)
+                    self.analysis.extractions[fp] = extraction
+                failed_files.append(fp)
+                lost_files.append(fp)
+            elif fp.suffix in supported_exts:
                 files.append(fp)
                 if imports is not None:
                     self.analysis.symbols_by_file[fp] = symbols
@@ -1262,6 +1301,7 @@ class ImportsAdapter(ResourceAdapter):
         self.analysis.unsupported_extensions = unextractable
         self._structures = structures
         self.analysis.files_failed = failed_files
+        self.analysis.files_lost = lost_files
         return all_imports
 
     def _resolve_dependencies(self, target_path: Path, file_index: Dict[str, List[Path]]) -> None:

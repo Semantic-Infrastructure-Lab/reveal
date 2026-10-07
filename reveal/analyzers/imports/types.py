@@ -46,6 +46,9 @@ class ImportExtraction:
     """Complete per-file analysis artifact, persisted without selecting diagnostic fields."""
     imports: List[ImportStatement] = field(default_factory=list)
     parse_failed: bool = False
+    # The file was never parsed: its pool worker died (BACK-1753). Also sets parse_failed
+    # so every consumer that treats a failed file as incomplete keeps doing so.
+    worker_lost: bool = False
     diagnostics: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -57,6 +60,9 @@ class ImportAnalysis:
     scanned_files: Set[Path] = field(default_factory=set)
     unsupported_extensions: Dict[str, int] = field(default_factory=dict)
     files_failed: List[Path] = field(default_factory=list)
+    # The subset of files_failed lost to a dead pool worker rather than parsed with errors
+    # (BACK-1753); includes code files with no import extractor (BACK-1752).
+    files_lost: List[Path] = field(default_factory=list)
     diagnostics: Dict[str, Any] = field(default_factory=dict)
     extractions: Dict[Path, ImportExtraction] = field(default_factory=dict)
 
@@ -95,6 +101,8 @@ class ImportGraph:
     # build time) so it survives the disk/in-process graph cache and callers
     # can tell a clean "no cycles" apart from "couldn't see everything".
     failed_files: List[Path] = field(default_factory=list)
+    # The subset of failed_files lost to a dead pool worker, never parsed (BACK-1753).
+    lost_files: List[Path] = field(default_factory=list)
     # BACK-1051: set (a one-line human-readable reason) when the scan that
     # produced this graph was skipped/truncated by a safety ceiling — e.g.
     # I002's _DEFAULT_MAX_GRAPH_FILES or _DEFAULT_CYCLE_DETECTION_MAX_FILES.
