@@ -27,7 +27,7 @@ def get_dns_records(domain: str) -> Dict[str, List[str]]:
         ImportError: If dnspython is not installed
     """
     if not HAS_DNSPYTHON:
-        raise ImportError("dnspython is required for DNS operations. Install with: pip install dnspython")
+        raise ImportError("dnspython is required for DNS operations. Install with: pip install reveal-cli[dns]")
 
     records = {}
     record_types = ['A', 'AAAA', 'MX', 'TXT', 'NS', 'CNAME', 'SOA']

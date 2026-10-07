@@ -139,7 +139,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
 ]
 
 _SCHEMA_NOTES = [
-    'Requires pymysql package (pip install pymysql)',
+    'Requires pymysql package (pip install reveal-cli[database])',
     'Credentials can be provided in URI or via environment variables',
     'Read-only operations for safety',
     'Health checks include connection utilization, InnoDB buffer pool, and resource limits'

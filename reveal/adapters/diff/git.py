@@ -25,8 +25,7 @@ def _open_repo():
     except ImportError:
         raise ImportError(
             "git:// support requires pygit2\n"
-            "Install with: pip install reveal-cli[git]\n"
-            "Alternative: pip install pygit2>=1.14.0"
+            "Install with: pip install reveal-cli[git]"
         )
 
     repo_path = pygit2.discover_repository('.')

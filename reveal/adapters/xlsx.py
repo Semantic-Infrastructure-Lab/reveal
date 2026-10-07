@@ -204,7 +204,7 @@ class XlsxRenderer:
             else:
                 print(f"  {t['name']}")
         if not xmla_available:
-            print("\n(Column counts not available — install pbixray for full schema)")
+            print("\n(Column counts not available — install reveal-cli[powerpivot] for full schema)")
 
     @staticmethod
     def _render_powerpivot_schema(
@@ -229,7 +229,7 @@ class XlsxRenderer:
             for m in measures:
                 print(f"  [{m['name']:<{max_name}}]  {m['table']}")
         if not xmla_available:
-            print("\n(Schema limited — install pbixray for full columns and DAX)")
+            print("\n(Schema limited — install reveal-cli[powerpivot] for full columns and DAX)")
 
     @staticmethod
     def _render_powerpivot_measures(filename: str, measures: list) -> None:
@@ -307,7 +307,7 @@ class XlsxRenderer:
                 print(message)
             else:
                 print("DAX measures not available — XMLA schema absent (modern Power BI export).")
-                print("Install pbixray (pip install pbixray) for full extraction.")
+                print("Install pbixray (pip install reveal-cli[powerpivot]) for full extraction.")
             return
 
         has_full_schema = xmla_available or pbixray_available
@@ -1708,7 +1708,7 @@ class XlsxAdapter(ResourceAdapter):
                                 f'read the model ({type(pbixray_error).__name__}: {pbixray_error}).'
                                 if pbixray_error else
                                 'DAX measures not available — XMLA schema absent (modern Power BI export). '
-                                'Install pbixray (pip install pbixray) for full extraction.'
+                                'Install pbixray (pip install reveal-cli[powerpivot]) for full extraction.'
                             )
 
                 data['file'] = str(self.file_path)

@@ -33,8 +33,7 @@ class MySQLConnection:
         if not PYMYSQL_AVAILABLE:
             raise ImportError(
                 "pymysql is required for mysql:// adapter.\n"
-                "Install with: pip install reveal-cli[database]\n"
-                "Or: pip install pymysql"
+                "Install with: pip install reveal-cli[database]"
             )
 
         self.connection_string = connection_string

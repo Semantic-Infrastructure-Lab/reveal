@@ -516,7 +516,7 @@ class DomainAdapter(ResourceAdapter):
 
     Elements:
         dns: DNS records (A, AAAA, MX, TXT, NS, CNAME, SOA)
-        whois: WHOIS registration data (optional: pip install reveal[whois])
+        whois: WHOIS registration data (optional: pip install reveal-cli[whois])
         ssl: SSL certificate status (delegates to ssl:// adapter)
         registrar: Registrar and nameserver information
     """
