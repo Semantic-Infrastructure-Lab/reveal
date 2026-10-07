@@ -359,7 +359,7 @@ def _dir_relpath_or_none(dir_str: str, root: Path) -> Optional[str]:
         rel = Path(dir_str).resolve().relative_to(root.resolve())
     except ValueError:
         return None
-    return rel.as_posix() if str(rel) != '.' else '.'
+    return rel.as_posix() if str(rel) != '.' else '.'  # noqa: V026 -- compares against '.', never rendered
 
 
 def _normalize_snapshot(raw: Dict[str, Any], top_n: int) -> Dict[str, Any]:

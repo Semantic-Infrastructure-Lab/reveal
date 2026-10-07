@@ -20,7 +20,7 @@ Examples:
 
 import ast
 import re
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root, has_noqa, is_dev_checkout
@@ -51,21 +51,23 @@ _ROOT_LITERAL_RE = re.compile(
 )
 
 
-def _own_scope_nodes(fn: ast.AST):
+_Block = Tuple[int, ...]
+_Event = Tuple[int, int, str, str, _Block]  # (lineno, col, kind, name, block)
+
+
+def _own_scope_nodes(fn: ast.AST) -> Iterator[Tuple[ast.AST, _Block]]:
     """Yield ``(node, block)`` for *fn*'s body without entering nested scopes.
 
     *block* identifies the statement list the node sits in, as a tuple of
     enclosing statement-list ids, so a caller can tell whether one statement
     is guaranteed to run before another (its block is a prefix of the other's).
     """
-    stack = [(fn, ())]
+    stack: List[Tuple[ast.AST, _Block]] = [(fn, ())]
     while stack:
         parent, block = stack.pop()
-        for name, value in ast.iter_fields(parent):
-            if isinstance(value, list) and value and isinstance(value[0], ast.stmt):
-                child_block = block + (id(value),)
-            else:
-                child_block = block
+        for _name, value in ast.iter_fields(parent):
+            is_stmts = isinstance(value, list) and value and isinstance(value[0], ast.stmt)
+            child_block = block + (id(value),) if is_stmts else block
             for child in (value if isinstance(value, list) else [value]):
                 if not isinstance(child, ast.AST):
                     continue
@@ -77,6 +79,39 @@ def _own_scope_nodes(fn: ast.AST):
 def _is_relative_to_call(value: ast.AST) -> bool:
     return (isinstance(value, ast.Call) and isinstance(value.func, ast.Attribute)
             and value.func.attr == 'relative_to')
+
+
+def _scope_events(fn: ast.AST) -> List[_Event]:
+    """Assignments to names and str()/f-string uses of bare names in one function."""
+    events: List[_Event] = []
+    for node, block in _own_scope_nodes(fn):
+        if isinstance(node, ast.Assign):
+            kind = 'taint' if _is_relative_to_call(node.value) else 'clear'
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    events.append((node.lineno, node.col_offset, kind, target.id, block))
+        elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+              and node.func.id == 'str' and len(node.args) == 1
+              and isinstance(node.args[0], ast.Name)):
+            events.append((node.lineno, node.col_offset, 'use', node.args[0].id, block))
+        elif isinstance(node, ast.FormattedValue) and isinstance(node.value, ast.Name):
+            events.append((node.lineno, node.col_offset, 'use', node.value.id, block))
+    return sorted(events, key=lambda e: e[:4])
+
+
+def _leak_lines(events: List[_Event]) -> List[int]:
+    tainted: Set[str] = set()
+    cleared: Dict[str, List[_Block]] = {}
+    lines: List[int] = []
+    for lineno, _col, kind, name, block in events:
+        if kind == 'taint':
+            tainted.add(name)
+            cleared[name] = []
+        elif kind == 'clear':
+            cleared.setdefault(name, []).append(block)
+        elif name in tainted and not any(block[:len(c)] == c for c in cleared[name]):
+            lines.append(lineno)
+    return lines
 
 
 def relative_to_leaks(content: str) -> List[int]:
@@ -93,32 +128,8 @@ def relative_to_leaks(content: str) -> List[int]:
         return []
     lines: List[int] = []
     for fn in ast.walk(tree):
-        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        events = []  # (lineno, col, kind, name, block)
-        for node, block in _own_scope_nodes(fn):
-            if isinstance(node, ast.Assign):
-                kind = 'taint' if _is_relative_to_call(node.value) else 'clear'
-                for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        events.append((node.lineno, node.col_offset, kind, target.id, block))
-            elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-                  and node.func.id == 'str' and len(node.args) == 1
-                  and isinstance(node.args[0], ast.Name)):
-                events.append((node.lineno, node.col_offset, 'use', node.args[0].id, block))
-            elif isinstance(node, ast.FormattedValue) and isinstance(node.value, ast.Name):
-                events.append((node.lineno, node.col_offset, 'use', node.value.id, block))
-        tainted: Dict[str, bool] = {}
-        cleared: Dict[str, List[tuple]] = {}
-        for lineno, _col, kind, name, block in sorted(events, key=lambda e: e[:4]):
-            if kind == 'taint':
-                tainted[name] = True
-                cleared[name] = []
-            elif kind == 'clear':
-                cleared.setdefault(name, []).append(block)
-            elif tainted.get(name) and not any(
-                    block[:len(c)] == c for c in cleared.get(name, [])):
-                lines.append(lineno)
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            lines.extend(_leak_lines(_scope_events(fn)))
     return sorted(set(lines))
 
 

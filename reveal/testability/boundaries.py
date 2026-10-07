@@ -151,7 +151,7 @@ def module_name_from_file(file_path: str, src_root: str) -> str:
     if isinstance(rel, Path):
         parts = list(rel.with_suffix('').parts)
     else:
-        parts = [str(rel)]
+        parts = [str(rel)]  # noqa: V026 -- rel is the bare filename str here, not a relative Path
     name_parts = [p for p in parts if p != '__init__']
     if not name_parts:
         # file_path IS src_root's own __init__.py — its module identity is the

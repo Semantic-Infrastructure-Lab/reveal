@@ -716,7 +716,7 @@ class RevealConfig:
 
         from .utils.gitignore import pattern_set
         return pattern_set(tuple(ignore_patterns)).matches(
-            str(rel_path).replace(os.sep, '/'), is_dir)
+            str(rel_path).replace(os.sep, '/'), is_dir)  # noqa: V026 -- separators normalised on the spot; hot path
 
     def ignore_matcher(self, walk_root: Path) -> Optional[Callable[[str, bool], bool]]:
         """``should_ignore`` for a walk: a matcher on posix paths relative to *walk_root*,
