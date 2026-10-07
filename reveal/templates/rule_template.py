@@ -51,7 +51,7 @@ class {code}(BaseRule):
         # Examples:
         #
         # 1. Check content directly:
-        #    lines = content.splitlines()
+        #    lines = split_lines(content)  # reveal.utils.lines: a line ends at \n only
         #    for i, line in enumerate(lines, start=1):
         #        if some_condition(line):
         #            detections.append(Detection(...))

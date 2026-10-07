@@ -1432,7 +1432,7 @@ from reveal.registry import register
 class MyFormatAnalyzer(FileAnalyzer):
     def get_structure(self, **kwargs):
         content = self.path.read_text()
-        return {'type': 'myformat', 'lines': len(content.splitlines())}
+        return {'type': 'myformat', 'lines': len(self.lines)}
 ```
 
 On the next `reveal` run, `.myfmt` files are handled by `MyFormatAnalyzer` automatically — no source edits, no registration step. Bad plugin files log a warning and are skipped without crashing.
