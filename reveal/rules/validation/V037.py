@@ -11,7 +11,7 @@ Windows guard anywhere (``skipif(sys.platform == 'win32')``,
 The local gate runs on Linux, where all of these work, so such a test passes
 locally and fails only in the Windows CI job. Paths that are only strings (a
 fake root handed to a mocked function, a fixture's source text) are not I/O
-and are not flagged; ``scripts/check_windows_compat.py`` owns path-literal
+and are not flagged; V039 owns path-literal
 assertions.
 
 Suppress a reviewed site with ``# noqa: V037 <why>`` on the reported line.

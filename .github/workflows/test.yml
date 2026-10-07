@@ -49,10 +49,6 @@ jobs:
           PYTHONWARNDEFAULTENCODING: '1'
         run: pytest tests/
 
-      - name: Test Windows compatibility checks
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        run: python scripts/check_windows_compat.py
-
       - name: Text-encoding ratchet (Windows cp1252 guard)
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         run: python scripts/check_text_encoding.py

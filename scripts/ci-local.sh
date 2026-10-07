@@ -24,7 +24,7 @@
 # Checkout guard (BACK-1680): the venv is shared and the install step points it at THIS checkout, so a run
 #                             from a git worktree or second checkout is refused (scripts/ci_editable_guard.sh).
 #                             Test a worktree with ~/.cache/reveal-wt/wt-check.sh; REVEAL_CI_ALLOW_REPOINT=1 overrides.
-# What it cannot do: run Windows or macOS. scripts/check_windows_compat.py is the local guard
+# What it cannot do: run Windows or macOS. V039 (reveal:// --check) is the local guard
 # for the Windows path class; anything else Windows-specific still needs CI.
 #
 # Usage:
@@ -60,7 +60,7 @@
 #   - a Windows path as a re.sub replacement string (backslashes are escapes): pass a lambda
 #   - '/tmp' or other POSIX paths: not a directory on Windows; use tmp_path/tempfile.gettempdir()
 #   - shell=True / POSIX quoting in subprocess: pass an argument list
-#   - str(path) compared or split on '/': use Path parts or as_posix() (check_windows_compat.py)
+#   - str(path) compared or split on '/': use Path parts or as_posix() (V039)
 #   - open()/read_text() without encoding=: cp1252 default (check_text_encoding.py)
 # Bare node.start_byte etc. (floor leg above) is also linted in seconds: check_treesitter_accessors.py.
 set -euo pipefail
@@ -236,7 +236,6 @@ step "CLI basics"
 
 if [[ $PRIMARY -eq 1 ]]; then
     step "Windows compatibility checks"
-    "$PY" scripts/check_windows_compat.py >>"$LOG" 2>&1 || fail "windows compat"
     "$PY" scripts/check_text_encoding.py >>"$LOG" 2>&1 || { tail -8 "$LOG"; fail "text encoding (bare read_text/open breaks on Windows)"; }
     "$PY" scripts/check_treesitter_accessors.py >>"$LOG" 2>&1 || { tail -8 "$LOG"; fail "bare tree-sitter accessor (a method on language-pack 1.8.1; use _zero_arg)"; }
 

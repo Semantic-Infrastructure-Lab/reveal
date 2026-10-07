@@ -441,7 +441,7 @@ builds a dedicated venv under `~/.cache/reveal-ci/`, installs the way CI does, a
 steps that are CI-only: the Windows path lint, the V-series self-validation (e.g. V004: every
 analyzer needs a test file), the doc-hygiene ratchet, the B006 ratchet and the mypy ratchet (`scripts/check_mypy_baseline.py`, run on
 system `python3` -- the interpreter its baseline was built with; CI does not run mypy). It cannot run Windows or macOS;
-`scripts/check_windows_compat.py` is the local guard for the Windows path class (`str(path)` uses
+`reveal reveal:// --check` (rule V039) is the local guard for the Windows path class (`str(path)` uses
 backslashes, so never split or compare paths as `'/'` strings).
 
 **Test template:**
