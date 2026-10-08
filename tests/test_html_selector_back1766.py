@@ -31,10 +31,15 @@ def _assert_clean_not_found(r):
     assert 'not found' in r.stderr
 
 
-def test_second_path_with_metadata_is_not_found(pages):
+def test_second_path_with_metadata_is_refused_not_a_traceback(pages):
+    # The original BACK-1766 repro. Since BACK-1773 the second path is refused up front (exit 2)
+    # instead of reaching the selector; the invariant here is that it never tracebacks.
     a, b = pages
     r = _run_reveal_direct(a, b, '--metadata')
-    _assert_clean_not_found(r)
+    assert 'Traceback' not in r.stderr
+    assert 'SelectorSyntaxError' not in r.stderr
+    assert r.returncode == 2
+    assert '--metadata' in r.stderr
 
 
 @pytest.mark.parametrize('selector', ['.', '#', '> p', 'div >', 'a b/c', '.box /x'])
