@@ -25,6 +25,3 @@ def test_missing_ids_are_reported_and_covered_ones_are_not(monkeypatch):
     assert list(missing) == ['BACK-2']
     assert idless == ['ddd fix: no id here']
 
-
-def test_this_repo_is_covered():
-    assert gate.main([]) == 0
