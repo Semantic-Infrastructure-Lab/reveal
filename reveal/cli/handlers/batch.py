@@ -154,6 +154,8 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     When --check is used with SSL URIs, results are aggregated and
     batch flags (--summary, --only-failures, --expiring-within) are applied.
     """
+    from ..routing.file import reject_stdin_element_flag
+    reject_stdin_element_flag(args)  # --section names one element of one file (BACK-1765)
     if args.element:
         print("Error: Cannot use element extraction with --stdin", file=sys.stderr)
         sys.exit(1)

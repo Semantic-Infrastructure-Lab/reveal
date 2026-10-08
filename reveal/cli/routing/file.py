@@ -405,6 +405,12 @@ PATHLESS_FLAGS = {
 }
 
 
+# The ELEMENT_LESS_FLAGS that are early-exit modes dispatched before --stdin in main._SPECIAL_MODES:
+# `--stdin` cannot reach them, so the pipe the other flags are pointed at is no answer for these
+# (it scanned '.' for --decorator-stats and printed a usage line for the rest, BACK-1764).
+STDIN_BLIND_FLAGS = frozenset({'explain_file', 'capabilities', 'show_ast', 'decorator_stats'})
+
+
 def reject_ignored_element(args: 'Namespace') -> None:
     """Exit 2 when an element-less or element flag is given an element (a second path or ``file:N``).
 
@@ -425,11 +431,43 @@ def reject_ignored_element(args: 'Namespace') -> None:
         print(f"Error: {spelling} '{getattr(args, dest)}' and the element '{element}' both name what to "
               f"extract; one would be ignored.\nGive one of them: reveal reads one file and one element per call.",
               file=sys.stderr)
+    elif dest in STDIN_BLIND_FLAGS:
+        print(f"Error: {spelling} reads no element and covers one path per call; '{element}' would be ignored.\n"
+              f"Run it once per path: for f in PATHS; do reveal {spelling} \"$f\"; done", file=sys.stderr)
     else:
         print(f"Error: {spelling} reads no element and covers one path per call; '{element}' would be ignored.\n"
               f"Run it once per path, or for several: ls PATHS | reveal --stdin {_flag_usage(dest, spelling)}",
               file=sys.stderr)
     sys.exit(2)
+
+
+def reject_stdin_for_path_mode(args: 'Namespace', dest: str) -> None:
+    """Exit 2 when ``--stdin`` is given beside a mode that reads one path (STDIN_BLIND_FLAGS).
+
+    Those modes run before the stdin route, so the piped list was dropped: --decorator-stats
+    scanned the current directory and exited 0.
+    """
+    if dest not in STDIN_BLIND_FLAGS or not getattr(args, 'stdin', False):
+        return
+    spelling = ELEMENT_LESS_FLAGS[dest]
+    print(f"Error: {spelling} reads one path and cannot take --stdin; the piped list would be ignored.\n"
+          f"Run it once per path: for f in PATHS; do reveal {spelling} \"$f\"; done", file=sys.stderr)
+    sys.exit(2)
+
+
+def reject_stdin_element_flag(args: 'Namespace') -> None:
+    """Exit 2 when ``--stdin`` is given an ELEMENT_FLAGS flag such as ``--section``.
+
+    The flag names one element of one file; the stdin route answers many paths and never applied
+    it (`printf 'a.md\\n' | reveal --stdin --section X` printed the outline, BACK-1765).
+    """
+    for dest, spelling in ELEMENT_FLAGS.items():
+        value = getattr(args, dest, None)
+        if value:
+            print(f"Error: {spelling} {shlex.quote(str(value))} names one element of one file; --stdin reads "
+                  f"many paths, so it would be ignored.\nRun it once per path: "
+                  f"for f in PATHS; do reveal \"$f\" {spelling} {shlex.quote(str(value))}; done", file=sys.stderr)
+            sys.exit(2)
 
 
 def reject_ignored_path(args: 'Namespace', dest: str) -> None:

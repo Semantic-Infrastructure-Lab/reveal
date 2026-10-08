@@ -112,6 +112,7 @@ from .cli import (
     handle_file_or_directory,
     reject_ignored_element,
     reject_ignored_path,
+    reject_stdin_for_path_mode,
     handle_file,
 )
 
@@ -259,7 +260,13 @@ def _dispatch_and_run(invocation: Invocation) -> None:
     # --copy) is honored. A raw scan of argv missed the combined short form.
     with _copy_scope(bool(getattr(args, 'copy', False))):
         try:
-            run()
+            try:
+                run()
+            except SystemExit:
+                # A special mode ends in sys.exit(0) after printing (--rules, --discover): flush
+                # before the exit leaves this try, or `| head` fails at interpreter exit (BACK-1767).
+                sys.stdout.flush()
+                raise
             # Flush here so a reader that closed early (`| head`) raises inside this
             # try: output smaller than the buffer otherwise failed at interpreter exit
             # with "Exception ignored ... BrokenPipeError" and exit 120 (BACK-1510).
@@ -352,6 +359,7 @@ def _handle_special_modes(args: Any) -> bool:
     for dest, handler in _SPECIAL_MODES:
         if not getattr(args, dest, None):
             continue
+        reject_stdin_for_path_mode(args, dest)  # --stdin cannot reach a mode that runs before it (BACK-1764)
         reject_ignored_path(args, dest)  # a mode that reads no path must not drop one (BACK-1751)
         if dest == 'stdin':  # each piped path or URI is answered by its own route
             handler(args)

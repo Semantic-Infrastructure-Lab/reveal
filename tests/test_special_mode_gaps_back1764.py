@@ -85,7 +85,7 @@ def test_stdin_refuses_section(files):
     r = _reveal(['--stdin', '--section', 'B'], stdin=f'{md}\n')
     assert r.returncode == 2, (r.returncode, r.stdout, r.stderr)
     assert r.stdout == ''
-    assert "--section 'B'" in r.stderr and '--stdin' in r.stderr, r.stderr
+    assert '--section B' in r.stderr and '--stdin' in r.stderr, r.stderr
 
 
 def test_stdin_without_section_and_section_on_one_file_unchanged(files):
@@ -111,3 +111,14 @@ def test_special_mode_into_a_closed_pipe_is_quiet(mode):
 def test_special_mode_output_and_exit_unchanged_when_read_fully():
     r = _run_reveal_direct('--rules')
     assert r.returncode == 0 and 'Total:' in r.stdout
+
+
+def test_stdin_blind_flags_are_the_path_reading_modes_dispatched_before_stdin():
+    # the declared set cannot drift from main._SPECIAL_MODES: every element-less mode that runs
+    # before the 'stdin' entry is one --stdin cannot reach
+    from reveal.cli.routing.file import ELEMENT_LESS_FLAGS, STDIN_BLIND_FLAGS
+    from reveal.main import _SPECIAL_MODES
+    dests = [d for d, _ in _SPECIAL_MODES]
+    before_stdin = set(dests[:dests.index('stdin')])
+    assert STDIN_BLIND_FLAGS == before_stdin & set(ELEMENT_LESS_FLAGS)
+    assert set(PATH_MODES) == {f"--{d.replace('_', '-')}" for d in STDIN_BLIND_FLAGS}

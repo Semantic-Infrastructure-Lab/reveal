@@ -43,6 +43,7 @@ from .routing import (
     handle_file_or_directory,
     reject_ignored_element,
     reject_ignored_path,
+    reject_stdin_for_path_mode,
 )
 
 # Import from file_handler to avoid circular dependency
@@ -79,5 +80,6 @@ __all__ = [
     'handle_file_or_directory',
     'reject_ignored_element',
     'reject_ignored_path',
+    'reject_stdin_for_path_mode',
     'handle_file',
 ]
