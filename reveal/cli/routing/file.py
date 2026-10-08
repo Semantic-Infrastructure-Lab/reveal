@@ -387,6 +387,24 @@ ELEMENT_LESS_FLAGS = {
     'decorator_stats': '--decorator-stats',
 }
 
+# Per-file views read only by the no-element structure view (display/formatting.py
+# _build_analyzer_kwargs, display/structure.py) (dest -> spelling). Beside a NAMED element they
+# are dropped with a ledger note ("--links has no effect on the file view", pinned by
+# tests/test_multipath_section_back1728.py), so unlike ELEMENT_LESS_FLAGS they do not refuse an
+# element; but when the "element" is an existing file it is a second path, and
+# `reveal a.html b.html --metadata` looked for 'b.html' in a.html and never mentioned --metadata
+# (BACK-1773). The parser's file-specific groups are checked against this table by
+# tests/test_element_less_flags_back1773.py.
+WHOLE_FILE_FLAGS = {
+    'metadata': '--metadata', 'semantic': '--semantic', 'scripts': '--scripts', 'styles': '--styles',
+    'links': '--links', 'link_type': '--link-type', 'broken_only': '--broken-only', 'domain': '--domain',
+    'code': '--code', 'language': '--language', 'inline': '--inline', 'frontmatter': '--frontmatter',
+    'related': '--related', 'related_all': '--related-all', 'related_flat': '--related-flat',
+    'typed': '--typed', 'filter': '--filter',
+    'server_name': '--server-name', 'log_path': '--log-path',
+    'select': '--select', 'ignore': '--ignore', 'severity': '--severity', 'no_group': '--no-group',
+}
+
 # Flags that ARE the element, spelled as a flag (dest -> spelling). Beside an element argument
 # one of the two was dropped: `reveal a.md b.md --section X` looked for 'b.md' in a.md and never
 # mentioned X, and `reveal a.md A --section X` extracted A and exited 0 (BACK-1728).
@@ -411,6 +429,11 @@ PATHLESS_FLAGS = {
 STDIN_BLIND_FLAGS = frozenset({'explain_file', 'capabilities', 'show_ast', 'decorator_stats'})
 
 
+def _given_flags(args: 'Namespace', table: dict) -> list:
+    """The (dest, spelling) pairs of ``table`` the command line set."""
+    return [(dest, spelling) for dest, spelling in table.items() if getattr(args, dest, None)]
+
+
 def reject_ignored_element(args: 'Namespace') -> None:
     """Exit 2 when an element-less or element flag is given an element (a second path or ``file:N``).
 
@@ -418,13 +441,19 @@ def reject_ignored_element(args: 'Namespace') -> None:
     the flag's own element. URIs and ``@file`` lists read their second argument themselves and
     are left alone.
     """
-    declared = [(dest, spelling) for dest, spelling in {**ELEMENT_LESS_FLAGS, **ELEMENT_FLAGS}.items()
-                if getattr(args, dest, None)]
     path_str = getattr(args, 'path', None)
-    if not declared or not path_str or '://' in path_str or path_str.startswith('@'):
+    if not path_str or '://' in path_str or path_str.startswith('@'):
+        return
+    declared = _given_flags(args, {**ELEMENT_LESS_FLAGS, **ELEMENT_FLAGS})
+    whole_file = _given_flags(args, WHOLE_FILE_FLAGS)
+    if not declared and not whole_file:
         return
     element = getattr(args, 'element', None) or _parse_file_line_syntax(path_str)[1]
     if not element:
+        return
+    if not declared and Path(element).exists():
+        declared = whole_file  # the "element" is a second path; a named element only gets the ledger note
+    if not declared:
         return
     dest, spelling = declared[0]
     if dest in ELEMENT_FLAGS:

@@ -3,8 +3,9 @@
 `reveal a.html b.html --metadata` parsed b.html as the ELEMENT, printed "Element 'b.html' not
 found in a.html" (exit 1) and never mentioned --metadata. Every per-file flag of the parser's
 Markdown, HTML, Type-aware and Quality groups that only the no-element view reads (the
-structure view, show_structure) is now declared in ELEMENT_LESS_FLAGS, so it is refused like
---check-acl (exit 2, stderr names the flag and the ignored argument, BACK-1715).
+structure view, show_structure) is now declared in WHOLE_FILE_FLAGS: given a second path it is
+refused like --check-acl (exit 2, stderr names the flag and the ignored argument, BACK-1715);
+given a named element it keeps the BACK-1728 behavior (the element answers, the ledger notes the flag).
 
 The parser-derived guard fails when a flag is added to one of those groups and classified in
 no table, so the next one cannot be missed.
@@ -62,12 +63,15 @@ def test_flag_refuses_a_second_path(files, kind, flag):
 
 
 @pytest.mark.parametrize('kind,flag', CASES, ids=_ids(CASES))
-def test_flag_refuses_an_element(files, kind, flag):
-    """`reveal a.html '#x' --metadata` dropped --metadata the same way (element wins)."""
+def test_a_named_element_still_answers_and_the_flag_is_noted(files, kind, flag):
+    """Pinned by BACK-1728: beside a NAMED element the element answers and the ledger notes the
+    unused flag; only an "element" that is an existing file (a second path) is refused."""
     element = {'html': '#x', 'md': 'S', 'py': 'f', 'conf': 'server'}[kind]
     proc = _reveal(files, f'a.{kind}', element, *flag)
-    assert proc.returncode == 2, proc.stdout + proc.stderr
-    assert flag[0] in proc.stderr
+    assert proc.returncode != 2 and 'reads no element' not in proc.stderr, proc.stdout + proc.stderr
+    if kind != 'conf':  # the nginx fixture has no extractable element by that name
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert f'{flag[0]} has no effect' in proc.stderr
 
 
 @pytest.mark.parametrize('kind,flag', CASES, ids=_ids(CASES))
@@ -144,32 +148,35 @@ def _file_specific_dests():
             for a in group._group_actions}
 
 
+def _classified():
+    from reveal.cli.routing import ELEMENT_FLAGS, ELEMENT_LESS_FLAGS, PATHLESS_FLAGS, WHOLE_FILE_FLAGS
+    return (set(ELEMENT_LESS_FLAGS) | set(ELEMENT_FLAGS) | set(PATHLESS_FLAGS) | set(WHOLE_FILE_FLAGS)
+            | set(NOT_ELEMENT_LESS))
+
+
 def test_every_file_specific_flag_is_classified():
-    from reveal.cli.routing import ELEMENT_FLAGS, ELEMENT_LESS_FLAGS, PATHLESS_FLAGS
-    classified = set(ELEMENT_LESS_FLAGS) | set(ELEMENT_FLAGS) | set(PATHLESS_FLAGS) | set(NOT_ELEMENT_LESS)
+    classified = _classified()
     dests = _file_specific_dests()
     assert {'metadata', 'links', 'typed', 'section', 'validate_schema'} <= dests, \
         'the guard found no file-specific groups: it no longer measures anything'
     assert sorted(dests - classified) == [], \
-        'a file-specific flag is in no table: declare it in ELEMENT_LESS_FLAGS (reads no element), ' \
+        'a file-specific flag is in no table: declare it in WHOLE_FILE_FLAGS or ELEMENT_LESS_FLAGS (reads no element), ' \
         'ELEMENT_FLAGS (is the element) or PATHLESS_FLAGS, or give its reason in NOT_ELEMENT_LESS'
 
 
 def test_the_guard_sees_a_missing_declaration():
     """Negative control: with --metadata unclassified the guard names exactly it."""
-    from reveal.cli.routing import ELEMENT_FLAGS, ELEMENT_LESS_FLAGS, PATHLESS_FLAGS
-    classified = (set(ELEMENT_LESS_FLAGS) | set(ELEMENT_FLAGS) | set(PATHLESS_FLAGS)
-                  | set(NOT_ELEMENT_LESS)) - {'metadata'}
+    classified = _classified() - {'metadata'}
     assert sorted(_file_specific_dests() - classified) == ['metadata']
 
 
 def test_no_table_names_a_flag_the_parser_lacks():
     from reveal.cli.parser import create_argument_parser
-    from reveal.cli.routing import ELEMENT_FLAGS, ELEMENT_LESS_FLAGS
+    from reveal.cli.routing import ELEMENT_FLAGS, ELEMENT_LESS_FLAGS, WHOLE_FILE_FLAGS
     parser = create_argument_parser('')
     dests = {a.dest for a in parser._actions}
     spellings = {opt for a in parser._actions for opt in a.option_strings}
-    for table in (ELEMENT_LESS_FLAGS, ELEMENT_FLAGS):
+    for table in (ELEMENT_LESS_FLAGS, ELEMENT_FLAGS, WHOLE_FILE_FLAGS):
         assert [d for d in table if d not in dests] == []
         assert [s for s in table.values() if s not in spellings] == []
     assert [d for d in NOT_ELEMENT_LESS if d not in dests] == []
