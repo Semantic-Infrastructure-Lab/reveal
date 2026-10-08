@@ -159,6 +159,22 @@ def _absolute_directory_scope(directory: str) -> Tuple[str, Optional[str]]:
     return workdir.rstrip('/\\'), target.relative_to(root).as_posix()
 
 
+def _relative_target_scope(target: str) -> Tuple[str, Optional[str]]:
+    """``(path, subpath)`` for a cwd-relative target: a repository root, else a path inside one.
+
+    ``git://repo`` from the repo's parent names the repository, but parsed as the
+    subpath ``repo`` of ``.`` it resolved to the work-tree root ``.``, which no commit
+    touches (history: 0 commits, ownership: "Path not found", BACK-1760). A directory
+    that ``_absolute_directory_scope`` (the BACK-1690 seam) reads as a repository
+    stays the repository, spelled as typed so errors keep naming it; a directory below
+    a work-tree root, a file and a path that does not exist stay a cwd-relative subpath.
+    """
+    if os.path.isdir(target):
+        if _absolute_directory_scope(os.path.abspath(target))[1] is None:
+            return target, None
+    return '.', target
+
+
 @register_adapter('git')
 @register_renderer(GitRenderer)
 class GitAdapter(ResourceAdapter):
@@ -508,8 +524,7 @@ class GitAdapter(ResourceAdapter):
                 subpath = None
             elif resource.startswith('./'):
                 # "./path/to/file.py" — a file path written with explicit ./ prefix
-                path = '.'
-                subpath = resource[2:]
+                path, subpath = _relative_target_scope(resource[2:])
             elif resource.startswith('/') or os.path.isabs(resource):
                 # An absolute *directory* is the repo when it is the work-tree root,
                 # else that directory of the repo (BACK-1690). An
@@ -524,9 +539,9 @@ class GitAdapter(ResourceAdapter):
                     path = os.path.dirname(resource) or os.sep
                     subpath = resource
             else:
-                # Resource looks like a file path, not a repo path
-                path = '.'
-                subpath = resource
+                # Resource looks like a file path, or a directory of the cwd's repo
+                # or a repo root of its own (BACK-1760)
+                path, subpath = _relative_target_scope(resource)
 
         return {'path': path, 'ref': ref, 'subpath': subpath, 'query': query}
 

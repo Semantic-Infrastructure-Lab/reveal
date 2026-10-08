@@ -103,6 +103,8 @@ git://<path>[/<subpath>][@<ref>][?<query>]
 An absolute path is split at the work-tree root it lies in: `git:///home/me/repo/src?type=ownership`
 answers for `src`, the same as `git://src?type=ownership` run inside `repo`. The absolute work-tree
 root itself (or its `.git` directory) is the whole repository.
+A relative path works the same way: `git://repo?type=history` from the repo's parent, `git://../other-repo`
+and `git://./repo` are the whole repository, and `git://repo/src` is its `src` directory.
 
 ### Reference Syntax
 
