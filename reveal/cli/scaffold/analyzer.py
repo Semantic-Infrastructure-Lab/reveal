@@ -86,7 +86,7 @@ def scaffold_analyzer(
         'test_file': str(test_file),
         'doc_file': str(doc_file),
         'next_steps': [
-            f'1. Install tree-sitter-{language}: pip install tree-sitter-{language}',
+            f'1. Confirm tree-sitter-language-pack ships a {language} grammar (reveal --languages)',
             f'2. Register it: add `from .{module_name} import {class_name}Analyzer` to '
             f'reveal/analyzers/__init__.py — reveal <file{extension}> raises '
             f"'No analyzer found' until this import runs",

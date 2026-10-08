@@ -124,7 +124,7 @@ Examples:
 - Documentation template
 
 **Requirements**:
-- Tree-sitter grammar must exist: `pip install tree-sitter-<language>`
+- A tree-sitter grammar must exist in `tree-sitter-language-pack` (grammars come from it; do not `pip install tree-sitter-<language>`)
 - If no grammar exists, implement custom `FileAnalyzer` subclass
 
 **Next steps**:

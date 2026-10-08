@@ -471,6 +471,7 @@ class NginxAnalyzer(FileAnalyzer):
         current_server = None
         in_server = False
         brace_depth = 0
+        went_negative = False
 
         for i, line in enumerate(self.lines, 1):
             stripped = line.strip()
@@ -480,6 +481,7 @@ class NginxAnalyzer(FileAnalyzer):
             # `# server {` opens nothing and a quoted "}" closes nothing (BACK-1725).
             code = strip_comments(stripped).strip()
             brace_depth += brace_delta(code)
+            went_negative = went_negative or brace_depth < 0
 
             if self._is_server_block_start(code):
                 current_server, in_server = self._process_server_block(servers, i)
@@ -493,6 +495,7 @@ class NginxAnalyzer(FileAnalyzer):
                 in_server = False
                 current_server = None
 
+        unbalanced = brace_depth != 0 or went_negative
         main_directives = self._parse_main_directives()
         http_directives = self._parse_block_directives('http')
         events_directives = self._parse_block_directives('events')
@@ -503,7 +506,12 @@ class NginxAnalyzer(FileAnalyzer):
             data={'comments': comments},
             contract_version=CONTRACT_VERSION,
             parse_mode='regex',
-            confidence=1.0,
+            confidence=0.5 if unbalanced else 1.0,
+            warnings=[{
+                'code': 'unbalanced_braces',
+                'message': 'Braces do not balance (an unterminated block or an extra "}"); '
+                           'the servers and locations listed may be incomplete',
+            }] if unbalanced else None,
         )
         if main_directives:
             result['main_directives'] = main_directives

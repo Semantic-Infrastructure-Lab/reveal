@@ -18,7 +18,7 @@ class {class_name}Analyzer(TreeSitterAnalyzer):
     specific node types.
 
     Prerequisites:
-    - tree-sitter-{language} must be installed: pip install tree-sitter-{language}
+    - tree-sitter-language-pack must ship a {language} grammar (no separate install)
     - If no tree-sitter grammar exists, use FileAnalyzer base class instead
 
     See reveal/treesitter.py for extraction methods to override:
@@ -114,11 +114,7 @@ The {display_name} analyzer provides structure extraction and navigation for `{e
 
 ## Installation
 
-Ensure tree-sitter-{language} is installed:
-
-```bash
-pip install tree-sitter-{language}
-```
+Ensure tree-sitter-language-pack ships a {language} grammar (`reveal --languages`); no separate grammar package is installed.
 
 If the tree-sitter grammar doesn't exist, you'll need to create a custom analyzer.
 

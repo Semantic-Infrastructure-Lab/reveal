@@ -355,7 +355,7 @@ Tables (6):
   Date
   ...
 
-(Schema limited — XMLA absent; table names from pivotCache only)
+(Schema limited — install reveal-cli[powerpivot] for full columns and DAX)
 ```
 
 **`?powerpivot=relationships` output:**

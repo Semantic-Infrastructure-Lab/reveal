@@ -1176,13 +1176,13 @@ reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf' --check --only-failures
 
 **Workaround**: Use `openssl s_client -status` to perform a live OCSP revocation check.
 
-### 2. Chain Limited Without PyOpenSSL
+### 2. Leaf Certificate Only
 
-**Limitation**: Full chain inspection requires PyOpenSSL (optional dependency).
+**Limitation**: The adapter inspects the leaf certificate the server presents. It does not walk or validate the intermediate/root chain, and no optional dependency adds that.
 
-**Impact**: Basic adapter shows leaf certificate only.
+**Impact**: Chain problems (a missing intermediate, a wrong order) are not reported.
 
-**Workaround**: Install PyOpenSSL: `pip install pyopenssl`
+**Workaround**: Use `openssl s_client -showcerts -connect host:443`.
 
 ### 3. No Certificate Generation/Modification
 
