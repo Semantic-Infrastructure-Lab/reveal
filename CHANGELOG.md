@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.131.0] - 2026-10-07 (sessions azure-glaze-1005, doroxa-1005, fierce-current-1005, divine-giant-1005, prairie-sirocco-1005, monsoonal-downdraft-1005, vivid-gleam-1005, beige-chroma-1006, glossy-fresco-1006, roaring-zephyr-1006, elliptical-blackhole-1006, awakened-banshee-1006, chrome-chroma-1007, contracting-cargo-1007, merging-parsec-1007, coastal-steam-1007, togupevi-1007)
+
 ### Added
 - **`pip install "reveal-cli[all]"` installs every runtime extra (BACK-1117)** — `git`, `database`, `dns`, `whois`, `mcp` and `html` in one install. `powerpivot` stays opt-in (~100 MB of pandas/numpy, and `xpress9` ships prebuilt wheels for x86_64 Linux only): `"reveal-cli[all,powerpivot]"`. See `reveal help://install`.
 - **`help://install`, and `--language-info` for fallback languages (BACK-1116, BACK-1650)** — install and optional-extra guidance has its own help topic; `reveal --language-info <lang>` now answers for languages served by the fallback analyzer instead of only the tier-1 set.

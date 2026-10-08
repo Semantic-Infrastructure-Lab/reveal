@@ -36,9 +36,12 @@ def last_release_tag():
     return max(tags, key=lambda t: tuple(int(n) for n in t[1:].split('.')), default=None)
 
 
-def unreleased_section():
+def unreleased_section(since=None):
+    """Everything above the last release's heading: [Unreleased], and at release time the
+    new `## [X.Y.Z]` section the prep commit moved those entries under."""
     text = (ROOT / 'CHANGELOG.md').read_text(encoding='utf-8')
-    match = re.search(r'^## \[Unreleased\]\n(.*?)(?=^## \[)', text, re.S | re.M)
+    release = re.escape(since[1:]) if since and re.fullmatch(r'v\d+\.\d+\.\d+', since) else r'\d'
+    match = re.search(r'^## \[Unreleased\]\n(.*?)(?=^## \[' + release + r')', text, re.S | re.M)
     return match.group(1) if match else ''
 
 
@@ -52,7 +55,7 @@ def skipped_ids():
 
 def uncovered(since):
     """Return (missing, idless): task id -> first commit subject, and commits with no id."""
-    covered = set(TASK_ID.findall(unreleased_section())) | skipped_ids()
+    covered = set(TASK_ID.findall(unreleased_section(since))) | skipped_ids()
     missing, idless = {}, []
     for line in _git('log', f'{since}..HEAD', '--format=%h %s').splitlines():
         sha, _, subject = line.partition(' ')

@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-10-02 (v0.130.0 release: reliability seams, one failed/cut outcome, core-path goldens, namespaces and nesting, help accuracy)
+> **Last updated**: 2026-10-07 (v0.131.0 release: silent answers refused or disclosed, special modes and `--stdin`, install hints, cross-platform self-checks)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -8,6 +8,15 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 Full release history with per-item detail lives in [CHANGELOG.md](CHANGELOG.md).
+
+### v0.131.0 — Silent answers refused or disclosed, special modes and `--stdin`, install hints, cross-platform self-checks
+
+- ✅ A command that cannot honor an argument says so: a mode that reads no path, a flag that reads no element, 23 per-file flags and `--stdin --section` refuse a second path or section and exit 2 instead of answering for the first (BACK-1751, 1728, 1687, 1715, 1735, 1773, 1764, 1765).
+- ✅ Wrong answers that looked clean now decline or disclose: `diff://` on resources it cannot compare and on every element category (BACK-1689, 1732), a recovered parse no longer claims clean-parse trust (BACK-1729), unbalanced nginx braces lower confidence (BACK-1768), files lost to a dead pool worker are reported as lost everywhere (BACK-1726, 1752-1754, 1681, 1717, 1718).
+- ✅ `git://` scopes to the directory asked for, relative or absolute, and resolves a target to its own repository (BACK-1690, 1654, 1760); line numbers count `\n` only (BACK-1722); `imports://` and I002 find cycles through `from pkg import submodule` (BACK-1723).
+- ✅ Install hints name `reveal-cli` and a real extra, `reveal-cli[all]` installs every runtime extra, and `help://install` exists (BACK-1699, 1117, 1116); C# parses on a fresh language-pack 1.21 install (BACK-1746).
+- ✅ Self-checks catch the cross-platform failure classes locally: V036-V042 in `reveal reveal:// --check`, the one-hop V026, and Windows test shards balanced by recorded cost; the push gate is the lints plus the 3.12 suite (BACK-1705, 1707, 1720, 1739, 1745, 1747).
+- ⚠️ Scripts that passed extra paths to element-less flags, special modes or `--stdin --section` now get exit 2; line numbers on files containing form feeds or other non-`\n` separators shift by design — see CHANGELOG "Changed".
 
 ### v0.130.0 — Reliability seams, one failed and one cut outcome, core-path goldens, namespaces and nesting, help accuracy
 

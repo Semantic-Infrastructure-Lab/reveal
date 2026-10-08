@@ -19,7 +19,7 @@ def test_missing_ids_are_reported_and_covered_ones_are_not(monkeypatch):
     log = ('aaa fix(git): one (BACK-1)\nbbb fix(cli): two (BACK-2, BACK-3)\n'
            'ccc test: three (BACK-4)\nddd fix: no id here\n')
     monkeypatch.setattr(gate, '_git', lambda *a: log)
-    monkeypatch.setattr(gate, 'unreleased_section', lambda: 'BACK-1 is described; BACK-3 too')
+    monkeypatch.setattr(gate, 'unreleased_section', lambda since=None: 'BACK-1 is described; BACK-3 too')
     monkeypatch.setattr(gate, 'skipped_ids', lambda: set())
     missing, idless = gate.uncovered('v0')
     assert list(missing) == ['BACK-2']
