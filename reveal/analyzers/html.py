@@ -3,6 +3,8 @@
 import re
 import logging
 from typing import Dict, List, Any, Optional, cast
+from soupsieve.util import SelectorSyntaxError
+
 from ..base import FileAnalyzer
 from ..registry import register
 from ..structure_options import StructureOptions
@@ -726,7 +728,12 @@ class HTMLAnalyzer(FileAnalyzer):
 
         # Try as CSS selector first (if it looks like one)
         if selector.startswith('.') or selector.startswith('#') or ' ' in selector or '>' in selector:
-            element = self.soup.select_one(selector)
+            try:
+                element = self.soup.select_one(selector)
+            except SelectorSyntaxError:
+                # Not a CSS selector (a path, a stray word): no match, so the
+                # caller reports the normal "not found" (BACK-1766).
+                return None
         else:
             # Try as ID
             element = self.soup.find(id=selector.lstrip('#'))
