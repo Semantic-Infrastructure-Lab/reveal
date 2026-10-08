@@ -138,6 +138,10 @@ rename the previous release's heading.** Three preps did that (0.94.0, 0.103.0, 
 and each time that release's entries silently became part of the next one.
 `tests/test_changelog_release_headings.py` fails if a release tag has no heading.
 
+`scripts/check_changelog_coverage.py` (run by `pre-release-check.sh`) fails if a `feat`/`fix`/`perf` commit since the last tag
+names a BACK id that `[Unreleased]` does not mention. Internal work (CI, ratchets, harnesses) goes in
+`scripts/changelog_coverage_skip.txt` with a reason; empty that file when you cut the release.
+
 ### Step 2: Run Release Script
 
 ```bash

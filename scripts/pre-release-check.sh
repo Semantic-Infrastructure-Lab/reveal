@@ -138,6 +138,14 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
+# Every fix/feat/perf task id since the last tag is in [Unreleased] or named internal.
+if python3 scripts/check_changelog_coverage.py; then
+    echo -e "${GREEN}✓ CHANGELOG covers every shipped task${NC}"
+else
+    echo -e "${RED}✗ CHANGELOG is missing shipped tasks${NC}"
+    FAILURES=$((FAILURES + 1))
+fi
+
 # 9. Build Test
 check_step "Build Test (Package Creation)" 9 12
 

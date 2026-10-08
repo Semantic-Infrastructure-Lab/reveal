@@ -259,6 +259,12 @@ if [[ $PRIMARY -eq 1 ]]; then
     "$PY" scripts/check_doc_hygiene.py --baseline .github/doc_hygiene_baseline.txt >>"$LOG" 2>&1 \
         || { tail -12 "$LOG"; fail "doc hygiene regressed vs .github/doc_hygiene_baseline.txt"; }
 
+    # A warning, not a gate: a push should not wait on prose. pre-release-check.sh fails
+    # on the same script, so the list only grows if it is ignored until release day.
+    step "CHANGELOG coverage (warning only)"
+    "$PY" scripts/check_changelog_coverage.py >>"$LOG" 2>&1 \
+        || { tail -8 "$LOG"; echo "WARNING: CHANGELOG [Unreleased] lacks the tasks above; fix before the next release" | tee -a "$LOG"; }
+
     # recall.yml sat invalid for 7 pushes (runner.temp in job env); GitHub only shows a
     # 0s "workflow file issue" run nobody reads (BACK-1675). Required, not skipped: a
     # silent skip is the failure being guarded.

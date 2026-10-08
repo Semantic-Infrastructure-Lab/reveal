@@ -1,0 +1,6 @@
+# Task ids whose feat/fix/perf commits are internal work a user never sees, so CHANGELOG
+# has no entry for them (scripts/check_changelog_coverage.py). One per line: id, then why.
+# Clear this list at each release: it only names work since the last tag.
+BACK-1071 mypy typing of an extracted helper
+BACK-1518 recall-regression gate oracles (CI/test infrastructure)
+BACK-1670 corpus fetch script refuses to delete a mismatched directory (maintainer tooling)
