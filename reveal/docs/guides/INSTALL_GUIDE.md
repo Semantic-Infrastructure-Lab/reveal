@@ -37,6 +37,13 @@ Install one with `pip install "reveal-cli[<extra>]"`, several with
 | `xlsx` | `openpyxl` | building `.xlsx` test fixtures only | none; the `xlsx://` adapter reads workbooks without it |
 | `treesitter` | nothing | deprecated no-op kept so old install commands still resolve | n/a (tree-sitter ships by default) |
 | `dev` | pytest, black, ruff, plus the packages the adapter tests need | contributing | n/a |
+| `all` | everything in `git`, `database`, `dns`, `whois`, `mcp` and `html` | every adapter and `reveal-mcp` in one install (e.g. an offline container) | n/a |
+
+`all` deliberately leaves out `powerpivot`: it pulls in about 100 MB of pandas/numpy, and
+its `xpress9` dependency ships prebuilt wheels for x86_64 Linux only, so elsewhere it needs a
+compiler. Add it explicitly if you read modern Power BI models:
+`pip install "reveal-cli[all,powerpivot]"`. `all` also skips `xlsx`, `treesitter` and `dev`,
+which no runtime feature needs.
 
 ## Network requirements
 
@@ -60,7 +67,7 @@ by pack version (19 MB to 135 MB across the versions cached on one development m
 On a machine that has network access, while building the base image:
 
 ```bash
-pip install reveal-cli
+pip install reveal-cli            # or "reveal-cli[all]" so no adapter is missing an extra offline
 reveal offline --languages python,javascript,go   # only what you need
 reveal offline                                    # or every grammar the pack ships (much larger)
 reveal offline --disable-update-check             # also stop the daily PyPI check permanently

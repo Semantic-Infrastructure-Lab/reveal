@@ -89,11 +89,13 @@ Just `pip install reveal-cli` gives you everything:
 
 The base install leaves out a few third-party packages, each behind an extra:
 `git` (the `git://` adapter), `database` (`mysql://`), `dns` and `whois` (parts of
-`domain://`), `mcp` (the `reveal-mcp` server), `html`, `powerpivot`, `xlsx` and `dev`.
+`domain://`), `mcp` (the `reveal-mcp` server), `html`, `powerpivot`, `xlsx` and `dev`, plus `all`
+(every runtime extra except `powerpivot`, which adds ~100 MB; see the install guide).
 
 ```bash
 pip install "reveal-cli[git]"            # one extra
 pip install "reveal-cli[git,database]"   # several
+pip install "reveal-cli[all]"            # every adapter + reveal-mcp (not powerpivot)
 ```
 
 What each extra unlocks, and the error you get without it, is in the

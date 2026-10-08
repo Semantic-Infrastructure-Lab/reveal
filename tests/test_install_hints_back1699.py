@@ -66,11 +66,16 @@ def _optional_dependencies():
 
 
 def _sole_package_extras(extras):
-    """{package: extra} for every extra that installs exactly one package (dev excluded)."""
+    """{package: extra} for every extra that installs exactly one package (dev excluded).
+
+    An extra made of our own other extras (`all = ["reveal-cli[git,...]"]`, BACK-1117) is
+    not one: a bare `pip install reveal-cli` must not be told to name it."""
     sole = {}
     for extra, reqs in extras.items():
         if extra != 'dev' and len(reqs) == 1:
-            sole[_canon(_NAME.match(reqs[0]).group(1))] = extra
+            name = _canon(_NAME.match(reqs[0]).group(1))
+            if name != _canon(OUR_DIST):
+                sole[name] = extra
     return sole
 
 
@@ -208,7 +213,8 @@ def test_allowlist_entries_are_still_needed():
 # ---------------------------------------------------------------------------
 
 EXTRAS = {'git': ['pygit2>=1.14.0'], 'dns': ['dnspython>=2.0.0'], 'whois': ['python-whois>=0.9.0'],
-          'mcp': ['mcp>=2.0.0'], 'dev': ['pytest>=7.0', 'pygit2>=1.14.0'], 'treesitter': []}
+          'mcp': ['mcp>=2.0.0'], 'dev': ['pytest>=7.0', 'pygit2>=1.14.0'], 'treesitter': [],
+          'all': ['reveal-cli[git,dns,whois,mcp]']}
 SOLE = _sole_package_extras(EXTRAS)
 
 
@@ -219,7 +225,7 @@ def _rules(line):
             for rule, _, token, _ in check_command(rest, EXTRAS, SOLE)]
 
 
-def test_sole_package_map_skips_dev_and_empty_extras():
+def test_sole_package_map_skips_dev_empty_and_self_referencing_extras():
     assert SOLE == {'pygit2': 'git', 'dnspython': 'dns', 'python-whois': 'whois', 'mcp': 'mcp'}
 
 
@@ -230,7 +236,7 @@ def test_sole_package_map_skips_dev_and_empty_extras():
     ('RUN pip install reveal-tool dnspython',
      [('wrong-dist-name', 'reveal-tool'), ('bare-extra-package', 'dnspython')]),
     ('pip install "reveal-cli[git,nosuch]"', [('unknown-extra', 'reveal-cli[git,nosuch]')]),
-    ('pip install -e ".[all]"', [('unknown-extra', '.[all]')]),
+    ('pip install -e ".[everything]"', [('unknown-extra', '.[everything]')]),
     ('"Install with: pip install dnspython")', [('bare-extra-package', 'dnspython')]),
     ('"Alternative: pip install pygit2>=1.14.0\\n\\n"',
      [('needs-double-quotes', 'pygit2>=1.14.0'), ('bare-extra-package', 'pygit2>=1.14.0')]),

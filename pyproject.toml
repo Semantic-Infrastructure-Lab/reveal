@@ -95,6 +95,12 @@ xlsx = [
 powerpivot = [
     "pbixray>=0.5.0",  # Parses binary VertiPaq/SSAS model — brings apsw, kaitaistruct, xpress9, pandas
 ]
+# Every runtime extra except powerpivot (~100MB pandas/numpy; xpress9 ships prebuilt wheels
+# for x86_64 Linux only), xlsx (test fixtures only), treesitter (empty) and dev (BACK-1117).
+# Install: pip install "reveal-cli[all]"   (add powerpivot: "reveal-cli[all,powerpivot]")
+all = [
+    "reveal-cli[git,database,dns,whois,mcp,html]",
+]
 
 [project.urls]
 Homepage = "https://github.com/Semantic-Infrastructure-Lab/reveal"
