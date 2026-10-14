@@ -41,6 +41,12 @@ and neither the caller's own file nor its imports pick one; the frame lists
 them in `candidates` (text: `[ambiguous: N definitions -- a.py:3, ...]`) and
 is not expanded. `warnings` names ambiguous roots and callees.
 
+JSX component-reference frames carry `relationship: jsx_reference` (or
+`call_and_jsx_reference` when the symbol is also called) and text labels them
+`[JSX reference]`. Their parent retains source reference lines. Following these
+frames explores source dependencies; it does not establish runtime render order.
+Imported component aliases use the same resolver as ordinary calls.
+
 ## Good Review Questions
 
 - Does the actual call graph from this entry point match your mental model?
@@ -65,3 +71,11 @@ is not expanded. `warnings` names ambiguous roots and callees.
 - `reveal help://schemas/trace` - JSON schema
 - `reveal 'calls://<dir>?target=<fn>'` - the reverse direction (who calls this?)
 - MCP tool `reveal_trace(dir, entry_point)` - same narrative, MCP-native
+
+
+Top-level Python, JS/TS, PHP and Ruby script/block calls can be traced from a
+file-qualified synthetic root, for example
+`reveal 'trace://src?from=script.py:<module>&depth=2'`. The module root begins at
+line 1; `calls://?target=` retains the actual call-site lines. This static scope
+excludes deferred function bodies, class-body initializers, extensionless Ruby DSL
+files and other languages' top-level code.

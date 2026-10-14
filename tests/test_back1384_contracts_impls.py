@@ -1,7 +1,5 @@
 """BACK-1384: contracts lists 5 implementers per contract in text; ?impls=N widens it and a cut names it."""
 
-from io import StringIO
-from contextlib import redirect_stdout
 
 import pytest
 
@@ -22,10 +20,7 @@ def abc_tree(tmp_path):
 
 def _text(abc_tree, query):
     result = ContractsAdapter(str(abc_tree), query).get_structure()
-    out = StringIO()
-    with redirect_stdout(out):
-        ContractsRenderer.render_structure(result, "text")
-    return out.getvalue(), result
+    return ContractsRenderer.render_structure(result, "text"), result
 
 
 def test_contracts_default_lists_five_and_names_the_knob(abc_tree):

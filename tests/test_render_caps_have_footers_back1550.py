@@ -34,10 +34,9 @@ def test_architecture_core_abstractions_entry_points_and_components(capsys):
 
 def test_deps_top_importers(capsys):
     importers = [{'file': f'f{i}.py', 'count': 20 - i} for i in range(9)]
-    deps._render_top_importers({'top_importers': importers}, 4)
-    assert '... and 5 more' in _out(capsys)
-    deps._render_top_importers({'top_importers': importers}, 9)
-    assert 'more' not in _out(capsys)
+    assert '... and 5 more' in '\n'.join(deps._render_top_importers({'top_importers': importers}, 4))
+    assert 'more' not in '\n'.join(deps._render_top_importers({'top_importers': importers}, 9))
+    assert not _out(capsys)
 
 
 def test_git_blame_key_hunks(capsys):

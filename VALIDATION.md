@@ -1765,6 +1765,103 @@ Zig's BACK-753/754/755, Lua's BACK-757/758, GDScript's BACK-759, and Dart's
 BACK-760/761/763/764/765/766/767/769 all show even an "unflagged" language
 can hide a systemic callee-, caller-, or grammar-level bug.
 
+## Bounded mixed-framework source matrix (2026-10-14)
+
+[framework_matrix.yaml](tests/corpus/framework_matrix.yaml) names seven selected
+files: Excalidraw Button/HelpDialog, Dagster Button/Dialog/server context/package
+configuration, and React Router BrowserRouter. Excalidraw and React Router reuse
+verified existing pins; Dagster is a new sparse pin
+`c97898c3e4a8a3cc5e32fcc2ca97aea810342ed9`, not the historical stripped pilot.
+The manifest owns all three source identities and qualified snapshot exceptions.
+
+The [matrix runner](scripts/framework_matrix.py) independently compares TypeScript
+5.9.3/Node 22.14.0 compiler JSX opening/self-closing nodes and interfaces, Python
+`ast` ABC declarations, and standard-library JSON keys against Reveal's existing
+AST, contracts and configuration owners. Exact name/line multisets are compared
+for references/contracts; JSON compares top-level key multisets. No corpus code
+runs. Source pin mismatches, missing files/tools, parse failures, empty selected
+checks, zero positive populations and missing/extra answers fail.
+
+All seven selected files passed locally: **103 JSX references, 10 interfaces,
+one Python ABC and 14 configuration keys**, with no missing/extra answers.
+This is a bounded source comparison, not whole-project component or import recall.
+Existing scheduled import measurements separately cover aliases, barrels and
+workspaces. Hand fixtures cover imported component aliases, namespace components,
+render callbacks, `memo`/`forwardRef`, caller/callee/trace agreement and unchanged
+uncalled suppression. Deliberately dropping a component reference or configuration
+key fails the matrix controls.
+
+Angular decorator/class structure is available, but template strings produce no
+JSX references. Class-field JSX retains its class source owner but is excluded from caller
+navigation; render methods remain indexed. Intrinsic tags, string/HTML templates and unavailable Vue/Svelte
+analyzers are explicit negative controls. A supported FastAPI route is retained
+while React Router file-based `route()` and Django `path`/`re_path` are reproduced
+as existing convention gaps (BACK-1336/BACK-789). Runtime callback registration
+and render scheduling are not inferred. These gaps remain follow-on framework
+work, with no new adapter or unsupported clean-result claim.
+
+```bash
+npm ci --prefix scripts/oracles --ignore-scripts --no-audit --no-fund
+python scripts/fetch_corpus.py tsx mixed-dagster
+python scripts/fetch_corpus.py --list-snapshots  # React Router must be a verified existing snapshot
+python scripts/framework_matrix.py --corpus-root ~/.cache/reveal-corpus --output framework-report.json
+```
+
+The framework matrix is a local optional measurement; the scheduled workflow
+currently owns import recall only. Normal tests require no corpus fetch.
+
+## Bounded reliability corpus loops (2026-10-14)
+
+The optional import gate now includes a newly pinned `go-client_golang` source at
+`6e3f4b1091875216850a486b1c2eb0e5ea852f98` (v1.19.1). This is a new measurement;
+historical client_golang figures do not transfer to it. Go 1.21.5 supplies package
+directory resolution through `go list`, and its standard-library parser supplies
+each tracked file's import facts. The oracle never imports Reveal or executes
+corpus application code. Its helper is
+[go_import_oracle.go](scripts/oracles/go_import_oracle.go).
+
+The declared population is buildless tracked source under `prometheus/`, including
+tests and build-excluded generators. Package directories fan out to that same
+target-file population. The gate measures the existing public file-dependents
+projection, which expands Go's directory-keyed graph edges. Across 116 files and
+11 packages, all **2,589 expected edges** are found (**100% recall**); **12 extra
+self-edges** give **99.5386% precision**. The report preserves those extras rather
+than removing them from the metric: external-test/generator files can import their
+own directory's package, whose buildless fan-out includes the importer itself.
+This does not establish build-selected or runtime dependency resolution.
+
+The same runner has an optional local `--signal calls` mode. Its first population
+is the existing pinned celery corpus, `celery/utils/`, using Python's standard AST
+to derive bare-name caller relationships independently. All **1,046 expected
+relationships** agree (**100% recall and precision**). The scope is function/method
+bodies, deduplicated by file and caller name, with import aliases normalized.
+Module calls, decorators/default-expression evaluation, class initialization,
+dynamic dispatch and receiver-type resolution are excluded. This population does
+not establish correctness for every Python project or all call-graph directions.
+
+```bash
+python scripts/fetch_corpus.py go-client_golang python-celery
+python scripts/recall_gate.py --corpus-root ~/.cache/reveal-corpus \
+  --corpus go-client_golang --output go-report.json
+python scripts/recall_gate.py --signal calls --corpus-root ~/.cache/reveal-corpus \
+  --corpus python-celery --output callers-report.json
+```
+
+Go must be on PATH at the pinned version. Import baselines remain in
+[recall_baseline.json](tests/corpus/recall_baseline.json); the local callers baseline
+is [calls_baseline.json](tests/corpus/calls_baseline.json). Both compare populations,
+recall and precision, reject unexpected zero results, and fail deliberate lost-edge
+controls. Reports identify the implementation through Git HEAD, tracked-diff and
+untracked-file digests plus Python/grammar versions. Remote runner qualification of the expanded Go workflow remains unverified. Callers mode
+is local only and is not added to the scheduled import workflow.
+
+Complementary adversarial controls in
+[test_import_precision_invariants.py](tests/test_import_precision_invariants.py)
+place recoverable syntax damage between independently known imports and functions
+in Python, JavaScript, TypeScript and C. Earlier and later claims survive, while
+analysis and text/JSON results disclose partial parsing. These fixtures establish
+containment for this input family; they are not real-corpus recall measurements.
+
 ## Re-running this yourself
 
 Before corpus measurements, `pytest tests/test_import_precision_invariants.py` runs
@@ -1787,17 +1884,19 @@ manifest entry with a `recall:` block names an independent oracle from
 | `python-ast` | `ast.parse` plus filesystem module resolution; `TYPE_CHECKING` imports skipped | celery |
 | `rust-use` | Deepest real module file for `crate::`/`super::`/`self::` use paths | Meilisearch, ripgrep |
 | `java-jls` | A public top-level type `C` of package `a.b` is `a/b/C.java` | Elasticsearch `server/src/main/java`, guava |
+| `typescript-compiler` | TypeScript parser plus `ts.resolveModuleName`, including aliases, re-exports, dynamic and type-query imports | VS Code base, Excalidraw workspace, three.js src |
 
 The corpora are optional test inputs, never runtime dependencies or services. Normal
 installation and the normal test suite do not fetch them.
 
 ```bash
+npm ci --prefix scripts/oracles --ignore-scripts --no-audit --no-fund  # optional compiler oracle
 python scripts/fetch_corpus.py --recall
 python scripts/recall_gate.py --corpus-root ~/.cache/reveal-corpus --output recall-report.json
 python scripts/recall_gate.py --corpus-root ~/.cache/reveal-corpus --output r.json --corpus java-guava
 ```
 
-The compiler probe is currently qualified on POSIX hosts. Windows GCC probes
+The GCC compiler probe is currently qualified on POSIX hosts. Windows GCC probes
 timed out in CI and remain unavailable pending qualification; deterministic gate
 controls and the non-compiler oracles still run there, while the real-compiler tests
 disclose their skip.
@@ -1811,6 +1910,24 @@ cannot parse, an ambiguous Java type or metric drops fail loudly. `--corpus ID` 
 a subset against its own baseline rows; `--write-baseline` is for reviewed local
 remeasurement only and replaces just the rows it measured. Other languages' per-loop
 harnesses remain maintainer-internal script pairs; promotion is incremental.
+
+The JS/TS/TSX oracle pins TypeScript 5.9.3 and Node 22.14.0. It reads each
+tracked importer population and the committed compiler configuration, excludes
+external/declaration targets, and records toolchain, population/configuration digests
+and unresolved specifiers. VS Code uses its `src/` scan root with an explicit
+20,000-file measurement cap; its measured importers are `src/vs/base`.
+Excalidraw measures workspace packages plus `excalidraw-app`; three.js measures
+`src/`. Missing tools, wrong versions, parser/configuration failures and zero inputs
+fail. Ordinary tests skip the optional compiler controls when it is not installed.
+
+Measured 2026-10-14 at Reveal 0.131.0 on the current manifest pins: three.js
+750 files / 3,042 edges, VS Code 464 files / 1,889 edges, Excalidraw 652 files /
+3,587 edges; all had import recall and precision 1.0 against this scoped compiler
+oracle. A deterministic fixture's deliberately removed TSX edge drops recall from
+1.0 to 0.8 and fails the gate. These figures measure imports, not JSX component
+invocations or runtime framework behavior. Historical snapshots remain separately
+qualified; `fetch_corpus.py --list-snapshots` reports preserved source exceptions
+without fetching or replacing them.
 
 What you can reproduce today:
 

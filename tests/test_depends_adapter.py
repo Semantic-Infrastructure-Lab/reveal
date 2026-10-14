@@ -1254,6 +1254,8 @@ class TestDependsAdapterRootOverride:
         r = a.get_structure()
 
         assert r['metadata']['scan_capped'] is True
+        assert r['metadata']['scan_budget'] == {
+            'scope': 'scan', 'limit': 3, 'total': 4, 'returned': 3, 'exact': False}
         warning = r['warning']
         assert "Can't narrow a single-file target" in warning
         assert '?root=' in warning
@@ -1275,6 +1277,8 @@ class TestDependsAdapterRootOverride:
         r = a.get_structure()
 
         assert r['metadata']['scan_capped'] is True
+        assert r['metadata']['scan_budget'] == {
+            'scope': 'scan', 'limit': 3, 'total': 4, 'returned': 3, 'exact': False}
         assert 'exceeds the scan cap even as scoped' in r['warning']
         assert '?root=DIR' not in r['warning']
 
@@ -1403,6 +1407,8 @@ class TestDependsAdapterScanCap:
         a = DependsAdapter(str(wide_pkg / 'pkg' / 'mod0.py'))
         r = a.get_structure()
         assert r['metadata']['scan_capped'] is True
+        assert r['metadata']['scan_budget'] == {
+            'scope': 'scan', 'limit': 3, 'total': 4, 'returned': 3, 'exact': False}
 
     def test_cap_emits_warning_in_result(self, wide_pkg, monkeypatch):
         from reveal.adapters.depends import DependsAdapter

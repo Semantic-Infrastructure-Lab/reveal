@@ -107,6 +107,14 @@ def build_meta(path: str, *, uncalled: bool = False) -> Dict[str, Any]:
     # (BACK-1391). Kept when the language is unknown.
     warnings = list(_CALL_GRAPH_WARNINGS if dominant in ('python', '') else _CALL_GRAPH_WARNINGS[:1])
     warnings[0] = {'code': 'W-CALLS-1', 'message': f'Dynamic dispatch ({vocab}) is not resolved.'}
+    warnings.append({'code': 'W-CALLS-7', 'message': (
+        'Top-level caller scopes are indexed for Python, JS/TS, PHP and Ruby source files; '
+        'module calls retain file/line provenance. Class-body initializers, extensionless Ruby DSL files '
+        'and top-level scopes in other languages are outside this relationship scope.')})
+    if dominant in ('javascript', 'typescript', 'tsx', ''):
+        warnings.append({'code': 'W-CALLS-8', 'message': (
+            'JSX component uses are typed jsx_reference relationships; runtime render scheduling is unresolved. '
+            'Class-field initializer navigation, string/HTML/Angular templates and Vue/Svelte component relationships are outside this scope.')})
     if uncalled:
         warnings.append(_UNCALLED_DERIVED_SIGNAL_WARNING)
         # BACK-1197: name what was ACTUALLY excluded for the language being

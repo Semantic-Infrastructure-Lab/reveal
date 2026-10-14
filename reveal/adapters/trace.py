@@ -53,6 +53,8 @@ def _build_trace(path: str, root: str, depth: int) -> Dict[str, Any]:
     for defn in roots:
         walker.expand(root_name, defn, 0)
     frames = walker.frames or [_frame(root, None, 0)]
+    if any(frame.get('references') for frame in frames):
+        warnings.append('JSX edges are component-use references; runtime render scheduling is not resolved.')
     if walker.ambiguous_names:
         warnings.append(
             f"{len(walker.ambiguous_names)} callee name(s) match several definitions and are "
@@ -125,9 +127,13 @@ class _TraceWalker:
         self._expanded: Set[Tuple[str, int, str]] = set()
         self._leaf_names: Set[str] = set()
 
-    def expand(self, name: str, defn: Dict[str, Any], depth: int) -> None:
+    def expand(self, name: str, defn: Dict[str, Any], depth: int, relationship: Optional[str] = None) -> None:
         self._expanded.add((defn['file'], defn['line'], name))
         frame = _frame(name, defn, depth)
+        if relationship:
+            frame['relationship'] = relationship
+        if defn.get('references'):
+            frame['references'] = defn['references']
         self.frames.append(frame)
         if depth >= self.max_depth:
             return
@@ -136,28 +142,33 @@ class _TraceWalker:
             label, target = self._resolve(call, defn['file'])
             if label not in frame['calls']:
                 frame['calls'].append(label)
-                targets.append((label, target))
-        for label, target in targets:
+                relationship = None
+                if any(r['callee'] == call for r in defn.get('references', [])):
+                    relationship = 'jsx_reference' if call in defn.get('reference_only_calls', []) else 'call_and_jsx_reference'
+                targets.append((label, target, relationship))
+        for label, target, relationship in targets:
             if target is None:
                 self.unresolved += 1
-                self._leaf(label, depth + 1, resolved=False)
+                self._leaf(label, depth + 1, resolved=False, relationship=relationship)
             elif isinstance(target, list):
                 self.resolved += 1
                 self.ambiguous_names.add(label)
-                self._leaf(label, depth + 1, resolved=False, candidates=target)
+                self._leaf(label, depth + 1, resolved=False, candidates=target, relationship=relationship)
             else:
                 self.resolved += 1
                 if (target['file'], target['line'], label) not in self._expanded:
-                    self.expand(label, target, depth + 1)
+                    self.expand(label, target, depth + 1, relationship=relationship)
 
     def _leaf(self, label: str, depth: int, resolved: bool,
-              candidates: Optional[List[Dict[str, Any]]] = None) -> None:
+              candidates: Optional[List[Dict[str, Any]]] = None, relationship: Optional[str] = None) -> None:
         """External and ambiguous callees: one frame per name, never expanded."""
         if label in self._leaf_names:
             return
         self._leaf_names.add(label)
         frame = _frame(label, None, depth)
         frame['resolved'] = resolved
+        if relationship:
+            frame['relationship'] = relationship
         if candidates:
             frame['ambiguous'] = True
             frame['candidates'] = [{'file': c['file'], 'line': c['line']} for c in candidates]
@@ -180,14 +191,15 @@ def _definition_index(structures: List[Dict[str, Any]]) -> Dict[str, List[Dict[s
     from reveal.conventions import conventions_for
     from reveal.registry import language_for_extension
 
+    from .ast.analysis import call_sources
     index: Dict[str, List[Dict[str, Any]]] = {}
     for file_struct in structures:
         file_path = file_struct.get('file', '')
         language = language_for_extension(Path(file_path).suffix)
         builtins = conventions_for(_lang_family(file_path)).builtins
-        for elem in file_struct.get('elements', []):
+        for elem in call_sources(file_struct):
             # 'tests' so a Zig test block can be a root (BACK-663).
-            if elem.get('category') not in ('functions', 'methods', 'tests'):
+            if elem.get('category') not in ('functions', 'methods', 'tests', 'modules'):
                 continue
             name = elem.get('name', '')
             if not name:
@@ -197,8 +209,10 @@ def _definition_index(structures: List[Dict[str, Any]]) -> Dict[str, List[Dict[s
                 'file': to_posix(file_path),  # '/' on every OS (BACK-1586)
                 'line': elem.get('line', 0),
                 'params': _params_from_signature(elem.get('signature', ''), name),
-                'effects': _effects_from_calls(calls, classify_call, language),
+                'effects': _effects_from_calls([c for c in calls if c not in elem.get('reference_only_calls', [])], classify_call, language),
                 'calls': [c for c in calls if c.split('.')[-1] not in builtins] if builtins else calls,
+                'references': elem.get('references', []),
+                'reference_only_calls': elem.get('reference_only_calls', []),
             }
             # A C++ out-of-line `Cls::poll` is keyed as `poll` too, so a bare
             # `--from poll` and a bare `poll()` call site both reach it (BACK-1400).
@@ -333,7 +347,8 @@ def _render_trace(report: Dict[str, Any]) -> None:
             marker = f"  [ambiguous: {len(frame['candidates'])} definitions -- {where}{more}]"
         else:
             marker = '' if frame['resolved'] else '  [external]'
-        print(f"{indent}{name}{loc}{marker}")
+        relation = ' [JSX reference]' if frame.get('relationship') in ('jsx_reference', 'call_and_jsx_reference') else ''
+        print(f"{indent}{name}{loc}{marker}{relation}")
 
         inner = indent + '  '
         if frame['params']:

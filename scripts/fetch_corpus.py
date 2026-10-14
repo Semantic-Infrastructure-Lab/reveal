@@ -152,6 +152,8 @@ def fetch_one(entry: dict, root: Path, dry: bool = False) -> None:
               "--single-branch", repo, str(dest)], dry=dry)
         _run(["git", "-C", str(dest), "fetch", "--depth", "1",
               "--filter=blob:none", "origin", sha], dry=dry)
+        if entry.get('sparse_paths'):
+            _run(['git', '-C', str(dest), 'sparse-checkout', 'set', '--cone', *entry['sparse_paths']], dry=dry)
         _run(["git", "-C", str(dest), "checkout", "--detach", sha], dry=dry)
     else:
         # No pinned commit: shallow-clone default HEAD and report the SHA.
@@ -209,6 +211,33 @@ def cmd_list(manifest: dict, root: Path) -> None:
         print(f"{lang:<12} {sha_display:<14} {disk:<14} {status:<24} {e['repo']}")
 
 
+
+def snapshot_status(entry: dict, roots: dict, repo_root: Path) -> tuple[Path, str]:
+    """Check a preserved input without treating an enclosing repository as its pin."""
+    base = Path(roots[entry['collection']]).expanduser()
+    if not base.is_absolute():
+        base = repo_root / base
+    path = base / entry['path']
+    if not path.is_dir():
+        return path, 'MISSING — restore from preserved backup or recorded pin'
+    if entry.get('sha'):
+        # A stripped snapshot under a maintainer checkout must not inherit that HEAD.
+        if not (path / '.git').exists():
+            return path, 'PIN UNVERIFIABLE — source has no own git metadata'
+        return path, 'ok' if _head_sha(path) == entry['sha'] else 'SHA MISMATCH'
+    return path, entry['identity']
+
+
+def cmd_list_snapshots(manifest: dict) -> int:
+    """List legacy exceptions and pinned source views; never fetch or overwrite them."""
+    failed = False
+    for entry in manifest.get('snapshots', []):
+        path, status = snapshot_status(entry, manifest['snapshot_roots'], MANIFEST.parents[2])
+        print(f"{entry['id']}: {status} — {path}")
+        failed = failed or status.startswith(('MISSING', 'PIN UNVERIFIABLE', 'SHA MISMATCH'))
+    return int(failed)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -217,10 +246,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="print commands without running them")
     ap.add_argument("--recall", action="store_true",
                     help="only entries with a recall configuration (the recall gate's corpora)")
+    ap.add_argument("--list-snapshots", action="store_true",
+                    help="check preserved legacy source exceptions without fetching or changing them")
     args = ap.parse_args(argv)
 
     manifest = _load_manifest()
     root = cache_root(manifest)
+
+    if args.list_snapshots:
+        return cmd_list_snapshots(manifest)
 
     if args.list:
         cmd_list(manifest, root)

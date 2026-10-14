@@ -51,10 +51,10 @@ def _cache_entry_for(root):
     """The one cache entry a plain (non-structure, no-callback) build of *root*
     should produce, or None if nothing was cached."""
     adapter = ImportsAdapter(resource=str(root))
-    candidates, _ = adapter._discover_candidate_files(
+    candidates, index = adapter._discover_candidate_files(
         adapter._target_path, frozenset(get_all_extensions()), get_code_extensions(),
     )
-    fp = _candidate_set_fingerprint(candidates)
+    fp = _candidate_set_fingerprint(candidates, index)
     return disk_cache.get(_ADAPTER_IMPORT_GRAPH_NAMESPACE, fp) if fp else None
 
 
@@ -199,3 +199,19 @@ def test_complete_artifact_preserves_nested_diagnostics(tmp_path, monkeypatch):
     warm = ImportsAdapter(resource=str(tmp_path))
     warm._build_graph(warm._target_path)
     assert warm.get_metadata()['extraction_diagnostics'] == expected
+
+
+def test_target_only_add_delete_invalidates_resolved_graph(tmp_path):
+    (tmp_path / '.gitignore').write_text('generated.py\n', encoding='utf-8')
+    (tmp_path / 'use.py').write_text('import generated\n', encoding='utf-8')
+    source = tmp_path / 'use.py'
+    def build():
+        adapter = ImportsAdapter(str(tmp_path))
+        adapter._build_graph(adapter._target_path)
+        return adapter.analysis.graph
+    assert source not in build().reverse_deps.get(tmp_path / 'generated.py', set())
+    target = tmp_path / 'generated.py'
+    target.write_text('VALUE = 1\n', encoding='utf-8')
+    assert source in build().reverse_deps.get(target, set())
+    target.unlink()
+    assert source not in build().reverse_deps.get(target, set())

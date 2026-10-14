@@ -95,7 +95,7 @@ class TestDepsSkippedChecks:
         from reveal.adapters.deps import _render_deps
         buf = StringIO()
         with patch("sys.stdout", buf):
-            _render_deps(report, top=10)
+            print("\n".join(_render_deps(report, top=10)))
         return buf.getvalue()
 
     @staticmethod

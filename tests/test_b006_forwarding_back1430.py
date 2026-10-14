@@ -3,8 +3,8 @@
 The dominant Java listener style is ``catch (Exception e) { listener.onFailure(e); }``:
 the exception object itself is delivered to the code that reports or handles it,
 so the handler is not silent.  The recognition is deliberately narrow (see
-``B006._forwards_exception``): the caught variable must be a *bare* argument of a
-call whose result is discarded, and the callee must not be a debug-level log
+``B006._forwards_exception``): the caught variable must be an argument (including wrapped arguments) of a
+direct, returned or awaited call, and the callee must not be a debug-level log
 call, a container store or a name that announces a discard.  Those keep the
 debug-only / swallow policy from the developer guidelines (item 3).
 """
@@ -106,3 +106,45 @@ class TestOtherwiseStillFlagged:
 
     def test_js_container_store_only(self, tmp_path):
         assert _js(tmp_path, "errors.push(e);") == 1
+
+
+@pytest.mark.parametrize('body', [
+    ['setattr(handler, "err", e)'], ['errors.remove(e)'], ['q.put_nowait(e)'],
+    ['return str(e)'], ['return repr(e)'], ['str(e)'],
+    ['def later():', '    handler.on_failure(e)'],
+    ['later = lambda: handler.on_failure(e)'],
+    ['def later():', '    print(e)'],
+])
+def test_unexecuted_and_non_reporting_python_sinks_remain_silent(tmp_path, body):
+    assert _py(tmp_path, body) == 1
+
+
+@pytest.mark.parametrize('body', ['Objects.requireNonNull(e);', 'cache.remove(key, e);',
+                                   'return String.valueOf(e);',
+                                   'Runnable later = () -> handler.onFailure(e);'])
+def test_non_reporting_java_sinks_remain_silent(tmp_path, body):
+    assert _java(tmp_path, [body]) == 1
+
+
+@pytest.mark.parametrize('body', ['const later = () => report(e);', 'function later(){ report(e); }',
+                                   'cache.delete(e);', 'return String(e);'])
+def test_unexecuted_and_non_reporting_js_sinks_remain_silent(tmp_path, body):
+    assert _js(tmp_path, body) == 1
+
+
+@pytest.mark.parametrize('body', [['return handler.on_failure(e)'], ['return handler.report(str(e))'],
+                                   ['await handler.report(e)']])
+def test_python_return_and_await_forwarding(tmp_path, body):
+    # Await is syntactically valid only in an async function.
+    content = PY_HEAD.replace('def f', 'async def f') + ''.join(f'        {line}\n' for line in body)
+    assert _count(tmp_path, 'a.py', content) == 0
+
+
+@pytest.mark.parametrize('body', ['return handler.onFailure(e);', 'handler.onFailure(format(e));'])
+def test_java_return_and_wrapped_forwarding(tmp_path, body):
+    assert _java(tmp_path, [body]) == 0
+
+
+@pytest.mark.parametrize('body', ['await report(e);', 'return report(e);', 'report(String(e));'])
+def test_js_return_await_and_wrapped_forwarding(tmp_path, body):
+    assert _js(tmp_path, body) == 0

@@ -73,3 +73,47 @@ def test_two_positionals_without_the_flag_are_still_file_and_element(docs):
     proc = _reveal(docs, 'good.md', 'Good')
     assert proc.returncode == 0
     assert 'Good' in proc.stdout
+
+
+@pytest.mark.parametrize('fmt', ['text', 'json'])
+def test_unknown_schema_is_one_usage_error(docs, fmt):
+    import json
+    proc = _reveal(docs, '--stdin', '--validate-schema', 'missing-sprint-schema',
+                   '--format', fmt, stdin='good.md\ngood2.md\n')
+    assert proc.returncode == 2
+    if fmt == 'json':
+        result = json.loads(proc.stdout)
+        assert 'not found' in result['error']
+        assert result['type'] == 'schema_validation_batch'
+    else:
+        assert proc.stderr.count("Schema 'missing-sprint-schema' not found") == 1
+
+
+def test_batch_json_is_one_document_with_per_file_outcomes(docs):
+    import json
+    proc = _reveal(docs, '--stdin', '--validate-schema', 'hugo', '--format', 'json',
+                   stdin='bad.md\ngood.md\nmissing.md\nbad2.md\n')
+    assert proc.returncode == 1
+    result = json.loads(proc.stdout)
+    assert result['type'] == 'schema_validation_batch'
+    assert result['source_type'] == 'runtime'
+    assert [row['source'] for row in result['results']] == ['bad.md', 'good.md', 'missing.md', 'bad2.md']
+    assert [row['status'] for row in result['results']] == ['invalid', 'valid', 'error', 'invalid']
+    assert result['summary'] == {'total': 4, 'valid': 1, 'invalid': 2, 'errors': 1}
+    assert result['results'][0]['detections']
+    assert result['results'][2]['error']
+
+
+@pytest.mark.parametrize('stdin', ['missing.md\n', '', '.\n'])
+def test_missing_empty_or_directory_batch_cannot_pass(docs, stdin):
+    proc = _reveal(docs, '--stdin', '--validate-schema', 'hugo', stdin=stdin)
+    assert proc.returncode == 1
+
+
+def test_non_markdown_input_is_not_a_clean_schema_check(docs):
+    import json
+    (docs / 'code.py').write_text('x = 1\n', encoding='utf-8')
+    proc = _reveal(docs, '--stdin', '--validate-schema', 'hugo', '--format', 'json', stdin='code.py\ngood.md\n')
+    result = json.loads(proc.stdout)
+    assert proc.returncode == 1
+    assert [row['status'] for row in result['results']] == ['error', 'valid']

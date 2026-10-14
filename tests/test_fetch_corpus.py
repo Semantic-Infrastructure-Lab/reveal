@@ -232,3 +232,37 @@ def test_main_reports_refusal_with_nonzero_exit(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv('REVEAL_CORPUS_DIR', str(tmp_path))
     assert fetch_corpus.main([]) == 1
     assert 'refusing to delete' in capsys.readouterr().err
+
+
+def test_snapshot_identity_never_inherits_parent_git_pin(tmp_path):
+    sha = _init_repo(tmp_path / 'parent', {'x.txt': 'x'})
+    snapshot = tmp_path / 'parent' / 'snapshot'
+    snapshot.mkdir()
+    entry = {'collection': 'local', 'path': 'snapshot', 'sha': sha, 'identity': 'git-pin'}
+    roots = {'local': str(tmp_path / 'parent')}
+    path, status = fetch_corpus.snapshot_status(entry, roots, tmp_path)
+    assert path == snapshot and status.startswith('PIN UNVERIFIABLE')
+    entry['sha'] = None
+    entry['identity'] = 'unknown-historical-commit'
+    assert fetch_corpus.snapshot_status(entry, roots, tmp_path)[1] == 'unknown-historical-commit'
+
+
+def test_snapshot_reports_missing_and_changed_pin(tmp_path):
+    entry = {'collection': 'local', 'path': 'repo', 'sha': '0' * 40, 'identity': 'git-pin'}
+    roots = {'local': str(tmp_path)}
+    assert fetch_corpus.snapshot_status(entry, roots, tmp_path)[1].startswith('MISSING')
+    sha = _init_repo(tmp_path / 'repo', {'x.txt': 'x'})
+    assert fetch_corpus.snapshot_status(entry, roots, tmp_path)[1] == 'SHA MISMATCH'
+    entry['sha'] = sha
+    assert fetch_corpus.snapshot_status(entry, roots, tmp_path)[1] == 'ok'
+
+
+def test_sparse_fetch_selects_paths_before_checkout(tmp_path, monkeypatch):
+    commands = []
+    monkeypatch.setattr(fetch_corpus, '_run', lambda cmd, **kwargs: commands.append(cmd))
+    fetch_corpus.fetch_one({'id': 'mixed', 'language': 'python', 'repo': 'https://example.invalid/source.git',
+                           'sha': 'abc123', 'sparse_paths': ['server', 'ui']}, tmp_path, dry=True)
+    sparse = next(i for i, cmd in enumerate(commands) if 'sparse-checkout' in cmd)
+    checkout = next(i for i, cmd in enumerate(commands) if 'checkout' in cmd)
+    assert sparse < checkout
+    assert commands[sparse][-2:] == ['server', 'ui']

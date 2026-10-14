@@ -208,8 +208,9 @@ class TestMissingGrammarIsDisclosedByContracts:
         assert result['unparsed_files'] == ['proj/main.go']
         assert any(w['code'] == 'W-CONTRACTS-2' and 'proj/main.go' in w['message']
                    for w in result['meta']['warnings'])
-        ContractsRenderer.render_structure(result, 'text')
-        assert '1 file(s) could not be parsed and contribute no entries: proj/main.go' in capsys.readouterr().out
+        body = ContractsRenderer.render_structure(result, 'text')
+        assert '1 file(s) could not be parsed and contribute no entries: proj/main.go' in body
+        assert not capsys.readouterr().out
 
     def test_polyglot_tree_carries_the_unparsed_go_file_to_the_top(self, tmp_path, monkeypatch):
         from reveal.adapters.contracts import _scan_contracts

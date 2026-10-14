@@ -206,6 +206,8 @@ Fleet Audit — (46 sites, 2026-03-19)
 Exit code: 2 (gaps found)
 ```
 
+**Exit codes:** fleet audits exit 2 when gaps are found and 0 when clean, in both text and JSON. A failed request exits 1.
+
 **Consolidation hint**: when a directive appears in ≥50% of site configs but is absent from nginx.conf http{}, it's marked with `↑` as a consolidation opportunity — one line in nginx.conf fixes the whole fleet.
 
 **`X-XSS-Protection`** is a deprecated header check — "Sites With" means sites that *have* the deprecated header (should remove it). "Sites Without" is `—` because absence is the correct state.

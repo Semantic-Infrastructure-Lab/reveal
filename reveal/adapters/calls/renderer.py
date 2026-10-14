@@ -90,7 +90,10 @@ def _render_text(data: Dict[str, Any]) -> None:
             caller = rec['caller']
             line = rec['line']
             call_expr = rec.get('call_expr', rec.get('callee', target))
-            print(f"  {file_path}:{line}  {caller}  (calls {call_expr})")
+            verb = 'JSX reference to' if rec.get('relationship') == 'jsx_reference' else 'calls'
+            sites = rec.get('call_lines', [])
+            locations = f" [lines {', '.join(map(str, sites))}]" if len(sites) > 1 else ''
+            print(f"  {file_path}:{line}  {caller}  ({verb} {call_expr}){locations}")
         if depth > 1:
             print()
 

@@ -14,6 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Optional Go import regression measurement uses a pinned client_golang corpus and the native Go parser; the same runner supports a bounded local Python caller baseline with implementation provenance (BACK-1461, BACK-1518, BACK-1096).
+- Calls, callees and trace share source-attributed module callers and typed JSX component references, with scope warnings and source lines (BACK-1778, BACK-1784).
+- Scheduled JS/TS/TSX import recall uses a pinned independent compiler oracle; a separate bounded mixed-framework matrix verifies components, contracts and configuration (BACK-1783, BACK-1785).
+
+### Changed
+- `deps` and `contracts` return text through the shared rendering boundary and capped-section accounting (BACK-916).
+- I002 uses shared scan policy and reports candidate/analysis counts separately from presentation cuts, preserving its existing thresholds (BACK-1052).
+- Stdin schema-validation batches return one envelope with per-file outcomes and consistent error/usage exits (BACK-1714).
+
+### Fixed
+- MCP configuration discovery and merged values refresh between serialized tool requests, so edits to `.reveal.yaml` take effect without restarting the server (BACK-1572).
+- Nginx fleet gaps exit consistently across text/JSON; touched rendering paths preserve diagnostics and disclose omitted items (BACK-1758).
+- B006 rejects nested uncalled forwarding and non-reporting sinks; imports/I002 disk cache keys include target-only index changes (BACK-1734, BACK-1755).
+
 ## [0.131.0] - 2026-10-07 (sessions azure-glaze-1005, doroxa-1005, fierce-current-1005, divine-giant-1005, prairie-sirocco-1005, monsoonal-downdraft-1005, vivid-gleam-1005, beige-chroma-1006, glossy-fresco-1006, roaring-zephyr-1006, elliptical-blackhole-1006, awakened-banshee-1006, chrome-chroma-1007, contracting-cargo-1007, merging-parsec-1007, coastal-steam-1007, togupevi-1007)
 
 ### Added
@@ -4938,4 +4953,3 @@ This release completes the link validation feature with anchor support, fixes do
 - **GitHub**: https://github.com/Semantic-Infrastructure-Lab/reveal
 - **PyPI**: https://pypi.org/project/reveal-cli/
 - **Issues**: https://github.com/Semantic-Infrastructure-Lab/reveal/issues
-

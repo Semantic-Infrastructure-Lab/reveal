@@ -7,6 +7,8 @@ BACK-1467). generic.py kept three more walks for callers that pass no index. The
 through the shared walker's resolution purpose now (BACK-1580).
 """
 
+import hashlib
+import stat
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
@@ -59,3 +61,30 @@ def load_path_manifests(root: Path, pattern: str) -> List[Path]:
     to *root* -- the old filter tested the absolute path, so a project under ``~/.cache``
     lost every gemspec."""
     return [path for path, _ in walk_with_causes(root, RESOLUTION) if fnmatch(path.name, pattern)]
+
+
+def resolution_fingerprint(candidates: Iterable[Path], index: Dict[str, List[Path]],
+                           excluded_root: Optional[Path] = None) -> Optional[str]:
+    """Hash source membership plus the complete resolution target set (BACK-1755).
+
+    Roles stay distinct: changing source eligibility still invalidates an unchanged
+    target index. Stat failure disables caching. Reveal's own cache artifacts are
+    excluded so writing this graph does not invalidate the next read.
+    """
+    try:
+        excluded = excluded_root.resolve() if excluded_root is not None else None
+        hasher = hashlib.sha256()
+        groups = (('sources', set(candidates)), ('targets', {p for paths in index.values() for p in paths}))
+        for role, paths in groups:
+            hasher.update(role.encode('ascii'))
+            for path in sorted(paths):
+                if excluded is not None and path.resolve().is_relative_to(excluded):
+                    continue
+                info = path.stat()
+                if not stat.S_ISREG(info.st_mode):
+                    continue
+                hasher.update(str(path).encode('utf-8', 'replace'))
+                hasher.update(f"\x02{info.st_mtime_ns}\x03{info.st_size}\x04".encode('ascii'))
+        return hasher.hexdigest()
+    except (OSError, ValueError):
+        return None

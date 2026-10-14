@@ -14,6 +14,7 @@ the oracle read, so a population change is visible and a zero is never a clean a
 from __future__ import annotations
 
 import ast
+import json
 import re
 import shutil
 import subprocess
@@ -24,7 +25,7 @@ from pathlib import Path
 from typing import Callable, NamedTuple
 
 Edges = dict[str, list[str]]
-Coverage = dict[str, int]
+Coverage = dict[str, object]
 
 # One-line probes take milliseconds; a cold macOS runner (clang shim, first-run caches) stalled past 15 s
 # once (BACK-1678). Generous, but a probe that still hangs is a measurement failure, never an empty row.
@@ -358,10 +359,134 @@ def build_java_oracle(scope: Scope) -> tuple[Edges, Coverage]:
 C_SUFFIXES = frozenset({'.c', '.h'})
 CPP_SUFFIXES = frozenset({'.cpp', '.cc', '.cxx', '.h', '.hpp', '.hh', '.hxx'})
 
+
+def build_typescript_oracle(scope: Scope) -> tuple[Edges, Coverage]:
+    """The compiler parses/resolves the explicit population; Reveal is never imported."""
+    if not shutil.which('node'):
+        raise RuntimeError('TypeScript oracle prerequisite unavailable: Node is required')
+    probe = Path(__file__).with_name('ts_import_oracle.cjs')
+    result = subprocess.run(
+        ['node', str(probe)], input=json.dumps({'root': str(scope.root), 'scan': str(scope.scan),
+                                             'importers': [str(p) for p in scope.importers],
+                                             'config': scope.config}),
+        capture_output=True, text=True, encoding='utf-8', timeout=180)
+    if result.returncode:
+        raise RuntimeError(f'TypeScript compiler oracle failed: {result.stderr.strip()}')
+    output = json.loads(result.stdout)
+    return output['edges'], output['coverage']
+
+def build_python_calls_oracle(scope: Scope) -> tuple[Edges, Coverage]:
+    """Python AST source calls, deduplicated by file/function and bare callee.
+
+    Function bodies only; decorators, defaults, class initialization and module
+    calls are outside this bounded population. Import aliases are resolved from
+    Python's AST. This does not resolve runtime dispatch or receiver types.
+    """
+    edges: dict[str, set[str]] = defaultdict(set)
+    functions = sites = 0
+    for path in scope.importers:
+        tree = ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
+        aliases = {alias.asname: alias.name for node in ast.walk(tree)
+                   if isinstance(node, ast.ImportFrom) for alias in node.names if alias.asname}
+        class Visitor(ast.NodeVisitor):
+            caller = None
+
+            def visit_FunctionDef(self, node):
+                nonlocal functions
+                functions += 1
+                previous, self.caller = self.caller, node.name
+                for statement in node.body:
+                    self.visit(statement)
+                self.caller = previous
+
+            visit_AsyncFunctionDef = visit_FunctionDef
+
+            def visit_ClassDef(self, node):
+                previous, self.caller = self.caller, None
+                for statement in node.body:
+                    self.visit(statement)
+                self.caller = previous
+
+            def visit_Call(self, node):
+                nonlocal sites
+                func = node.func
+                name = func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else None
+                if self.caller and name:
+                    sites += 1
+                    name = aliases.get(name, name).split('.')[-1]
+                    edges[name].add(f"{_relative(scope, path)}::{self.caller}")
+                self.generic_visit(node)
+        Visitor().visit(tree)
+    return {name: sorted(callers) for name, callers in sorted(edges.items())}, {
+        'files': len(scope.importers), 'functions': functions, 'call_sites': sites,
+        'population': 'python-function-body-bare-name-callers'}
+
+
+def build_go_oracle(scope: Scope) -> tuple[Edges, Coverage]:
+    """Go resolves package directories; its standard parser supplies per-file imports.
+
+    The declared population is buildless: every tracked .go file under importer_dirs,
+    including tests and build-excluded generators. Targets fan out to that same file
+    population in each toolchain-resolved directory, excluding the importing file.
+    This is source dependency evidence, not a build-selected package graph.
+    """
+    go = shutil.which('go')
+    if not go:
+        raise RuntimeError('Go oracle prerequisite unavailable: Go is required')
+    version = subprocess.run([go, 'version'], capture_output=True, text=True,
+                             encoding='utf-8', check=True, timeout=30).stdout.split()[2]
+    expected = scope.config.get('go_version', 'go1.21.5')
+    if version != expected:
+        raise RuntimeError(f'Go oracle requires {expected}, got {version}')
+    patterns = ['./' + directory.strip('./') + '/...' if directory != '.' else './...'
+                for directory in scope.config['importer_dirs']]
+    listed = subprocess.run([go, 'list', '-json', *patterns], cwd=scope.root,
+                            capture_output=True, text=True, encoding='utf-8', timeout=180)
+    if listed.returncode:
+        raise RuntimeError(f'Go package resolution failed: {listed.stderr.strip()}')
+    decoder = json.JSONDecoder()
+    remaining = listed.stdout.strip()
+    packages = {}
+    while remaining:
+        package, end = decoder.raw_decode(remaining)
+        packages[package['ImportPath']] = Path(package['Dir']).resolve()
+        remaining = remaining[end:].lstrip()
+    probe = Path(__file__).with_name('oracles') / 'go_import_oracle.go'
+    parsed = subprocess.run([go, 'run', str(probe)], cwd=scope.root,
+                            input=json.dumps([str(p) for p in scope.importers]),
+                            capture_output=True, text=True, encoding='utf-8', timeout=180)
+    if parsed.returncode:
+        raise RuntimeError(f'Go source parse failed: {parsed.stderr.strip()}')
+    facts = json.loads(parsed.stdout)
+    if len(facts) != len(scope.importers) or not packages:
+        raise RuntimeError('Go oracle population is empty or incomplete')
+    by_directory: dict[Path, list[Path]] = defaultdict(list)
+    for path in scope.importers:
+        by_directory[path.parent].append(path)
+    edges: dict[Path, set[Path]] = defaultdict(set)
+    statements = resolved = 0
+    for name, imports in facts.items():
+        importer = Path(name)
+        for specifier in imports:
+            statements += 1
+            directory = packages.get(specifier)
+            if directory not in by_directory:
+                continue
+            resolved += 1
+            for target in by_directory[directory]:
+                if target != importer:
+                    edges[target].add(importer)
+    return _finish(scope, edges), {'files': len(facts), 'packages': len(packages),
+                                  'import_statements': statements, 'resolved_statements': resolved,
+                                  'go_version': version, 'population': 'tracked-buildless-source'}
+
+
 ORACLES: dict[str, Oracle] = {
+    'go-toolchain': Oracle(frozenset({'.go'}), build_go_oracle),
     'gcc-c': Oracle(C_SUFFIXES, _gcc_oracle('c')),
     'gcc-cpp': Oracle(CPP_SUFFIXES, _gcc_oracle('c++')),
     'python-ast': Oracle(frozenset({'.py'}), build_python_oracle),
     'rust-use': Oracle(frozenset({'.rs'}), build_rust_oracle),
+    'typescript-compiler': Oracle(frozenset({'.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'}), build_typescript_oracle),
     'java-jls': Oracle(frozenset({'.java'}), build_java_oracle),
 }

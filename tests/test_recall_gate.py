@@ -333,3 +333,162 @@ def test_a_fast_probe_is_unaffected_by_the_timeout_handling(corpus):
     root, entry = corpus
     oracle, _ = _build(root, entry)
     assert oracle == {'src/target.h': ['src/clean.c', 'src/partial.c']}
+
+
+def _ts_config(**extra):
+    return {'oracle': 'typescript-compiler', 'importer_dirs': ['src'],
+            'exclude_importer_suffixes': ['.d.ts', '.d.mts', '.d.cts'],
+            'typescript_version': '5.9.3', 'node_version': '22.14.0', 'tsconfig': 'tsconfig.json', **extra}
+
+
+@pytest.fixture
+def compiler_oracle():
+    import os
+    if not shutil.which('node'):
+        pytest.skip('optional Node/TypeScript compiler oracle not installed')
+    module = os.environ.get('REVEAL_TS_ORACLE_MODULE', str(SCRIPTS / 'oracles/node_modules/typescript'))
+    probe = subprocess.run(['node', '-e', 'console.log(require(process.argv[1]).version)', module],
+                           capture_output=True, text=True, encoding='utf-8', timeout=30)
+    if probe.returncode:
+        pytest.skip('optional TypeScript oracle dependency not installed')
+    assert probe.stdout.strip() == '5.9.3'
+    return module
+
+
+@pytest.fixture
+def typescript_corpus(tmp_path, compiler_oracle):
+    return _repo(tmp_path, {
+        'package.json': '{"name":"oracle-fixture","private":true}',
+        'tsconfig.json': '{"compilerOptions":{"baseUrl":".","paths":{"@lib/*":["src/lib/*"]},"allowJs":true,"module":"esnext","moduleResolution":"bundler","jsx":"react-jsx"}}',
+        'src/lib/value.ts': 'export const value = 1;\n',
+        'src/lib/index.ts': 'export { value } from "./value";\n',
+        'src/use.tsx': 'import { value } from "@lib/value";\nexport const View = () => <div>{value}</div>;\n',
+        'src/use.js': 'export { value } from "./lib";\n',
+        'src/dynamic.ts': 'const mod = import("./lib/value");\n',
+        'src/types.ts': 'export type T = typeof import("@lib/value");\n',
+        'src/decl.d.ts': 'import { value } from "./lib/value";\n',
+    }, _ts_config())
+
+
+def test_compiler_oracle_resolves_aliases_barrels_dynamic_and_js(typescript_corpus):
+    root, entry = typescript_corpus
+    edges, coverage = _build(root, entry)
+    assert edges == {'src/lib/index.ts': ['src/use.js'],
+                     'src/lib/value.ts': ['src/dynamic.ts', 'src/lib/index.ts', 'src/types.ts', 'src/use.tsx']}
+    assert coverage['files'] == 6 and coverage['declaration_files_skipped'] == 1
+    assert coverage['typescript_version'] == '5.9.3' and coverage['population_digest']
+    measured = gate.measure(entry, root)
+    assert measured['recall'] == measured['precision'] == 1
+
+
+def test_compiler_oracle_lost_edge_fails_the_existing_gate(typescript_corpus, monkeypatch):
+    root, entry = typescript_corpus
+    baseline = gate.measure(entry, root)
+    real = DependsAdapter._resolve_statement_edges
+    def lossy(self, stmt, file_path, *args, **kwargs):
+        return None if file_path.name == 'use.tsx' else real(self, stmt, file_path, *args, **kwargs)
+    monkeypatch.setattr(DependsAdapter, '_resolve_statement_edges', lossy)
+    current = gate.measure(entry, root)
+    assert current['recall'] == .8
+    assert gate.regressions({'ts': current}, {'ts': baseline}) == ['ts: recall dropped 100.000000% -> 80.000000%']
+
+
+def test_compiler_oracle_wrong_toolchain_and_zero_population_fail(typescript_corpus):
+    root, entry = typescript_corpus
+    with pytest.raises(RuntimeError, match='toolchain mismatch'):
+        _build(root, {'recall': {**entry['recall'], 'typescript_version': '0.0.0'}})
+    with pytest.raises(RuntimeError, match='zero rows'):
+        gate.measure({**entry, 'recall': {**entry['recall'], 'importer_dirs': ['absent']}}, root)
+
+
+def test_compiler_oracle_missing_node_is_a_failure(python_corpus, monkeypatch):
+    root, _ = python_corpus
+    monkeypatch.setattr(oracles.shutil, 'which', lambda name: None)
+    with pytest.raises(RuntimeError, match='prerequisite unavailable'):
+        oracles.build_typescript_oracle(oracles.Scope(root, root, [], _ts_config()))
+
+
+def _pinned_go_available():
+    if not shutil.which('go'):
+        return False
+    try:
+        result = subprocess.run(['go', 'version'], capture_output=True, text=True,
+                                encoding='utf-8', check=True, timeout=30)
+        return result.stdout.split()[2] == 'go1.21.5'
+    except (OSError, subprocess.SubprocessError, IndexError):
+        return False
+
+
+needs_go = pytest.mark.skipif(not _pinned_go_available(),
+                             reason='optional Go 1.21.5 oracle toolchain unavailable')
+
+
+@pytest.fixture
+def go_corpus(tmp_path):
+    return _repo(tmp_path, {
+        'go.mod': 'module example.org/project\n\ngo 1.20\n',
+        'target/target.go': 'package target\nfunc Run() {}\n',
+        'use/use.go': 'package use\nimport alias "example.org/project/target"\nfunc Run() { alias.Run() }\n',
+        'use/strings.go': 'package use\n// import "example.org/project/target"\nvar Text = `import "example.org/project/target"`\n',
+    }, {'oracle': 'go-toolchain', 'importer_dirs': ['.'], 'go_version': 'go1.21.5'})
+
+
+@needs_go
+def test_go_native_parser_and_public_package_projection(go_corpus):
+    root, entry = go_corpus
+    edges, coverage = _build(root, entry)
+    assert edges == {'target/target.go': ['use/use.go']}
+    assert coverage['files'] == 3 and coverage['resolved_statements'] == 1
+    measured = gate.measure(entry, root)
+    assert measured['recall'] == measured['precision'] == 1
+
+
+@needs_go
+def test_go_lost_edge_fails_the_existing_gate(go_corpus, monkeypatch):
+    root, entry = go_corpus
+    before = gate.measure(entry, root)
+    original = DependsAdapter._format_file_dependents
+    def drop(self, target, **kwargs):
+        answer = original(self, target, **kwargs)
+        answer['dependents'] = []
+        return answer
+    monkeypatch.setattr(DependsAdapter, '_format_file_dependents', drop)
+    with pytest.raises(RuntimeError, match='zero oracle edges'):
+        gate.measure(entry, root)
+    assert gate.regressions({'go': {**before, 'recall': 0.5}}, {'go': before})
+
+
+@needs_go
+def test_go_wrong_toolchain_is_unavailable(go_corpus):
+    root, entry = go_corpus
+    entry['recall']['go_version'] = 'go0.0.0'
+    with pytest.raises(RuntimeError, match='requires go0.0.0'):
+        _build(root, entry)
+
+
+def test_python_call_oracle_handles_aliases_nested_scopes_and_negative_text(tmp_path):
+    root, entry = _repo(tmp_path, {
+        'pkg/a.py': 'from elsewhere import target as alias\ndef outer():\n alias()\n def inner():\n  helper()\n return inner\nclass API:\n def method(self):\n  self.target()\nTEXT = "target()"\n# target()\n',
+    }, {})
+    scope = oracles.Scope(root, root, [root / 'pkg/a.py'], {})
+    edges, coverage = oracles.build_python_calls_oracle(scope)
+    assert edges == {'target': ['pkg/a.py::method', 'pkg/a.py::outer'], 'helper': ['pkg/a.py::inner']}
+    assert coverage['functions'] == 3
+
+
+def test_python_call_loss_and_bad_population_fail(tmp_path, monkeypatch):
+    root, entry = _repo(tmp_path, {
+        'pkg/a.py': 'def caller():\n target()\n helper()\n',
+        'pkg/b.py': 'def target(): pass\ndef helper(): pass\n',
+    }, {})
+    entry['call_recall'] = {'scan_root': 'pkg', 'importer_dirs': ['pkg']}
+    before = gate.measure_calls(entry, root)
+    assert before['recall'] == before['precision'] == 1
+    from reveal.adapters.calls import index
+    original = index.find_callers
+    monkeypatch.setattr(index, 'find_callers', lambda path, target: {'levels': []} if target == 'target' else original(path, target))
+    after = gate.measure_calls(entry, root)
+    assert after['recall'] == 0.5 and gate.regressions({'calls': after}, {'calls': before})
+    (root / 'pkg/a.py').write_text('def broken(:\n', encoding='utf-8')
+    with pytest.raises(SyntaxError):
+        gate.measure_calls(entry, root)

@@ -323,6 +323,18 @@ class RevealConfig:
     # without caching; O(unique_dirs) with caching).
     _root_cache: Dict[Path, Path] = {}
 
+    @classmethod
+    def reset_request_cache(cls) -> None:
+        """Start a host request with fresh config discovery and merged values.
+
+        Long-lived hosts call this at their serialized request boundary. Config
+        instances and root discovery are reused within the request, so edits,
+        additions, removals and root:true changes are visible on the next one.
+        Analysis, grammar and disk caches have separate owners and lifetimes.
+        """
+        cls._cache.clear()
+        cls._root_cache.clear()
+
     # Path resolution is handled by module-level _cached_resolve() (shared with
     # FileConfig.matches) so there is no separate _resolve_cache here.
 

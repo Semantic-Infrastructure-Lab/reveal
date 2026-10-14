@@ -333,9 +333,8 @@ class TestFleetAuditExitCode:
     def test_no_gaps_exit_0(self):
         assert R.exit_code(dict(self.AUDIT, has_gaps=False), 'text') == 0
 
-    def test_json_exit_is_unchanged_by_the_migration(self):
-        # BACK-1758: text exits 2, json has always exited 0
-        assert R.exit_code(self.AUDIT, 'json') == 0
+    def test_json_gaps_exit_2_like_text(self):
+        assert R.exit_code(self.AUDIT, 'json') == 2
 
     def test_other_result_types_never_exit(self):
         assert R.exit_code({'type': 'nginx_vhost_ports', 'has_gaps': True}, 'text') == 0
@@ -348,8 +347,11 @@ class TestFleetAuditExitCode:
         assert exc.value.code == 2
         assert 'Fleet Audit' in capsys.readouterr().out
 
-    def test_router_exits_0_for_json(self, capsys):
+    def test_router_exits_2_for_json_after_a_parseable_document(self, capsys):
+        import json
         args = _default_args()
         args.format = 'json'
-        router._emit_result(self.AUDIT, args, 'nginx', R.render_structure, exit_code=R.exit_code)
-        assert '"has_gaps": true' in capsys.readouterr().out
+        with pytest.raises(SystemExit) as exc:
+            router._emit_result(self.AUDIT, args, 'nginx', R.render_structure, exit_code=R.exit_code)
+        assert exc.value.code == 2
+        assert json.loads(capsys.readouterr().out)['has_gaps'] is True

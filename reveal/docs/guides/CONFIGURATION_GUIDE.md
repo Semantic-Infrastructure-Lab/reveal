@@ -411,7 +411,7 @@ the values, and `<namespace>` names the kind of artifact.
 | `structure` | a file's parsed structure: imports, functions, classes, declarations |
 | `structure-outline` | the lighter outline-only structure `--grep` uses to name each hit's enclosing function |
 | `adapter_import_graph` | the project import graph behind `imports://` |
-| `import_graph_v3` | the project import graph behind the `I002` rule |
+| `import_graph_v4` | the project import graph behind the `I002` rule, including source-scan accounting |
 | `python_imports`, `javascript_imports`, `go_imports`, `rust_imports`, `zig_imports`, `generic_imports` | per-language import extraction feeding those graphs |
 | `markdown-headings` | a Markdown file's heading index |
 | `markdown_link_graph` | the link graph behind `markdown://` link queries |

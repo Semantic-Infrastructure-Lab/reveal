@@ -242,7 +242,12 @@ def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = 
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
             _log_mcp_access(fn.__name__, kwargs)
-            return _raise_if_error_sentinel(fn(*args, **kwargs))
+            from .config import RevealConfig
+            # The existing reentrant lock also protects request-scoped config:
+            # one client cannot reset it halfway through another client's scan.
+            with _capture_lock:
+                RevealConfig.reset_request_cache()
+                return _raise_if_error_sentinel(fn(*args, **kwargs))
 
         mcp.tool(annotations=annotations, title=title)(wrapper)
         return fn

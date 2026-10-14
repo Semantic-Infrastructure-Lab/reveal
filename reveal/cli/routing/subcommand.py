@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Union
 
 from ...display.formatting import print_result_control_notes
+from ...rendering.base import emit_body
 from ...utils.exclusions import dispatch_scope, exclusion_scope
 from ...utils.json_utils import attach_provenance
 from ...utils.path_utils import to_posix
@@ -83,7 +84,7 @@ def subcommand_json(result: Dict[str, Any], *, name: str, source: Union[str, Pat
 
 def emit_subcommand_result(result: Dict[str, Any], args: Namespace, *, name: str,
                            source: Union[str, Path], render: Callable[[Dict[str, Any]], Optional[str]],
-                           source_type: str = 'directory') -> None:
+                           source_type: str = 'directory', error_exit_code: int = 1) -> None:
     """Print a subcommand's result and act on its outcome, as ``_emit_result`` does for a URI.
 
     Each runner printed its own JSON envelope or rendered its own text, and none asked
@@ -97,6 +98,7 @@ def emit_subcommand_result(result: Dict[str, Any], args: Namespace, *, name: str
     - A failed result (top-level ``error``) is reported on stderr and exits 1, after the
       output, as the URI form does.
 
+    ``error_exit_code`` permits an explicit usage error (2); default failures remain 1.
     It returns otherwise, so a runner still applies its own findings exit
     (EXIT_CODE_CONTRACT).
     """
@@ -106,9 +108,7 @@ def emit_subcommand_result(result: Dict[str, Any], args: Namespace, *, name: str
     if args.format == 'json':
         print(subcommand_json(result, name=name, source=source, source_type=source_type))
     else:
-        body = render(result)
-        if isinstance(body, str) and body:  # a renderer that returns its text body (BACK-916)
-            print(body, end='' if body.endswith('\n') else '\n')
+        emit_body(render(result), result, render, args.format)
         print_result_control_notes(result, args.format)
     if outcome == 'failed':
-        sys.exit(1)
+        sys.exit(error_exit_code)

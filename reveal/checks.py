@@ -8,7 +8,7 @@ import re
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Tuple
 
 from .base import FileAnalyzer
 from .utils import get_file_type_from_analyzer, print_breadcrumbs
@@ -411,8 +411,6 @@ def run_schema_validation(
         args: CLI arguments (for --select, --ignore)
     """
     from .schemas.frontmatter import load_schema
-    from .rules.frontmatter import set_validation_context, clear_validation_context
-    from .rules import RuleRegistry
     from .registry import get_markdown_extensions
 
     # Check if file is markdown (schema validation is for markdown front matter)
@@ -432,29 +430,31 @@ def run_schema_validation(
         print("\nOr provide a path to a custom schema file", file=sys.stderr)
         sys.exit(1)
 
-    # Get structure with frontmatter extraction enabled
+    detections, degraded, errors = collect_schema_detections(analyzer, path, schema, args)
+    _emit_detections(path, output_format, detections, detections,
+                     parse_degraded=degraded, rule_errors=errors)
+    if detections or degraded or errors:
+        sys.exit(1)
+
+
+def collect_schema_detections(analyzer: FileAnalyzer, path: str, schema: dict,
+                              args: Any) -> Tuple[List[Any], bool, List[dict]]:
+    """Collect one validation without emitting or exiting; shared by file and stdin.
+
+    Returns detections, parse degradation and rule errors. Schema context belongs to
+    this call and is cleared even if structure extraction or a rule fails.
+    """
+    from .rules.frontmatter import set_validation_context, clear_validation_context
+    from .rules import RuleRegistry
+
     structure = analyzer.get_structure(extract_frontmatter=True)
-    content = analyzer.content
-
-    # Set schema context for F-series rules
+    errors: List[dict] = []
     set_validation_context(schema)
-
     try:
-        # Parse select/ignore options (default to F-series rules if not specified)
         select = args.select.split(',') if args.select else ['F']
         ignore = args.ignore.split(',') if args.ignore else None
-
-        # Run rules (F003, F004, F005 will use the schema context)
         detections = RuleRegistry.check_file(
-            path, structure, content, select=select, ignore=ignore
-        )
-
-        _emit_detections(path, output_format, detections, detections)
-
-        # Exit with error code if validation failed
-        if detections:
-            sys.exit(1)
-
+            path, structure, analyzer.content, select=select, ignore=ignore, errors=errors)
+        return detections, structure_parse_degraded(structure), errors
     finally:
-        # Always clear context, even if an error occurred
         clear_validation_context()

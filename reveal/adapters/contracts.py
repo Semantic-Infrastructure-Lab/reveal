@@ -7,7 +7,6 @@ capability follows (BACK-901). Same treatment as surface.py (BACK-904).
 
 from __future__ import annotations
 
-from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
@@ -17,7 +16,6 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from .surface import _supported_coverage_languages, _unparsed_note
 from .ast.surface_matrix import UNPARSED_KEY
 from ..registry import JS_TS_LANGUAGES, _is_cpp_header_content, extensions_for_languages
-from ..utils import print_json_result
 from ..utils.path_utils import (
     _walk_code_files,
     assess_language_coverage,
@@ -27,6 +25,7 @@ from ..utils.path_utils import (
 from ..utils.query import parse_query_params
 from ..utils.query_parser import ParamSpec, param_schema, whole_number
 from ..utils.results import ResultBuilder
+from ..rendering.adapters.contracts import ContractsRenderer
 
 _CONTRACT_PATH_HINTS: frozenset = frozenset({
     'base', 'schema', 'contract', 'protocol', 'interface',
@@ -787,169 +786,10 @@ def _add_implementations(
                 })
 
 
-_LANGUAGE_LABELS: Dict[str, str] = {
-    'python': 'Python',
-    'ts': 'TypeScript / Java / C# / PHP / Swift / Kotlin / JS',
-    'ruby': 'Ruby',
-    'go': 'Go',
-    'rust': 'Rust',
-    'cpp': 'C++',
-}
-
-# Fixed render order for the polyglot (`by_language`) case — arbitrary but stable.
-_LANGUAGE_RENDER_ORDER: List[str] = ['python', 'ts', 'ruby', 'go', 'rust', 'cpp']
-
 # Implementers listed under each contract in the text view; JSON always carries
 # them all. 0 lists every one (BACK-1384).
 _IMPLS = ParamSpec('impls', 'integer', 'Implementers listed per contract in the text view (0 = all; JSON always has all)',
                    5, whole_number, ('impls=20', 'impls=0'), minimum=0, zero_policy='all')
-
-
-def _render_contract_groups(mode: str, report: Dict[str, Any], impls_cap: int = 5) -> None:
-    """Render one language's contract groups under its own labels/groupings."""
-    group = partial(_render_group, impls_cap=impls_cap)
-    if mode == 'ts':
-        group("Abstract Classes", report['abcs'], show_methods=False, show_impls=True)
-        group("Interfaces", report['protocols'], show_methods=False, show_impls=True)
-        group("Type Aliases", report['typeddicts'], show_methods=False, show_impls=False)
-        group("Implementing Classes", report['dataclasses'], show_methods=False, show_impls=False)
-    elif mode == 'ruby':
-        group("Mixins (Modules)", report['protocols'], show_methods=False, show_impls=True)
-        group("Including Classes", report['dataclasses'], show_methods=False, show_impls=False)
-    elif mode == 'go':
-        group("Interfaces", report['protocols'], show_methods=False, show_impls=True)
-        group("Implementing Types (structural)", report['dataclasses'], show_methods=False, show_impls=False)
-    elif mode == 'rust':
-        group("Traits", report['protocols'], show_methods=False, show_impls=True)
-        group("Implementing Types", report['dataclasses'], show_methods=False, show_impls=False)
-    elif mode == 'cpp':
-        group("Abstract Classes (interfaces)", report['protocols'], show_methods=False, show_impls=True)
-        group("Subclasses", report['dataclasses'], show_methods=False, show_impls=False)
-    else:
-        group("Abstract Base Classes", report['abcs'], show_methods=True, show_impls=True)
-        group("Protocols", report['protocols'], show_methods=True, show_impls=True)
-        group("TypedDicts", report['typeddicts'], show_methods=False, show_impls=False)
-        group("Dataclasses", report['dataclasses'], show_methods=False, show_impls=False)
-        group("Pydantic BaseModels", report['basemodels'], show_methods=False, show_impls=False)
-        group("Path-heuristic bases", report['path_heuristic'], show_methods=True, show_impls=True)
-
-
-def _no_contracts_hint(mode: str) -> str:
-    if mode == 'ts':
-        return "  Try widening the path or checking for interface/abstract class usage."
-    if mode == 'ruby':
-        return "  Try widening the path or checking for module/include/extend (mixin) usage."
-    if mode == 'go':
-        return "  Try widening the path or checking for interface type declarations."
-    if mode == 'rust':
-        return "  Try widening the path or checking for trait / impl-for declarations."
-    if mode == 'cpp':
-        return "  Try widening the path or checking for abstract classes (pure virtual methods)."
-    return "  Try widening the path or checking imports for ABC/Protocol usage."
-
-
-def _render_report(report: Dict[str, Any], impls_cap: int = 5) -> None:
-    path = report['path']
-    total = report['total_contracts']
-
-    print()
-    print(f"Contracts: {path}")
-    print("━" * 50)
-    # BACK-518: warn when reveal only understood a minority of the tree — the
-    # results (total>0) are a supported-language subset, or the emptiness
-    # (total==0) is a false-clean on a mostly-unsupported repo (e.g. 15 stray
-    # .py files in a Lua tree yielding "no contracts"), not a real verdict. The
-    # coverage warning supersedes the legacy detect_non_python_language decline.
-    warning = report.get('coverage', {}).get('warning', '')
-    notices = [warning] if warning else []
-    if report.get('unparsed_files'):  # BACK-1588: a file with no grammar is not a clean file
-        notices.append(f"⚠ {_unparsed_note(report['unparsed_files'])}")
-    for notice in notices:
-        print(notice)
-        print()
-    print(f"Total contracts found: {total}")
-    print()
-
-    by_language = report.get('by_language')
-    if by_language is not None:
-        # BACK-780: more than one language present — render each language's
-        # section under its own labels rather than picking one winner.
-        if total == 0:
-            if not warning:
-                print("  No contracts or seams found.")
-                print()
-            return
-        for name in _LANGUAGE_RENDER_ORDER:
-            group = by_language.get(name)
-            if group is None:
-                continue
-            print(f"── {_LANGUAGE_LABELS[name]} ──")
-            print()
-            _render_contract_groups(name, group, impls_cap)
-        return
-
-    ts_mode = report.get('_ts_mode', False)
-    ruby_mode = report.get('_ruby_mode', False)
-    go_mode = report.get('_go_mode', False)
-    rust_mode = report.get('_rust_mode', False)
-    cpp_mode = report.get('_cpp_mode', False)
-    mode = ('ts' if ts_mode else 'ruby' if ruby_mode else 'go' if go_mode
-            else 'rust' if rust_mode else 'cpp' if cpp_mode else 'python')
-
-    if total == 0:
-        if not warning:
-            lang = report.get('unsupported_language', '')
-            if lang:
-                print("  reveal contracts currently supports Python, TypeScript, JavaScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, and C++.")
-                print(f"  No supported files found — detected {lang}.")
-            else:
-                print("  No contracts or seams found.")
-                print(_no_contracts_hint(mode))
-            print()
-        return
-
-    _render_contract_groups(mode, report, impls_cap)
-
-
-def _render_group(
-    label: str,
-    entries: List[Dict[str, Any]],
-    show_methods: bool,
-    show_impls: bool,
-    impls_cap: int = 5,
-) -> None:
-    if not entries:
-        return
-    print(f"{label} ({len(entries)}):")
-    for cls in entries:
-        name = cls['name']
-        file_path = cls['file']
-        line = cls['line']
-        bases = cls.get('bases', [])
-        bases_str = f"({', '.join(bases)})" if bases else ''
-        print(f"  {name}  {bases_str}  {file_path}:{line}")
-        if show_methods and cls.get('abstract_methods'):
-            methods = ', '.join(cls['abstract_methods'])
-            print(f"    → abstract: {methods}")
-        if show_impls and cls.get('implementations'):
-            impls = cls['implementations']
-            shown = impls[:impls_cap] if impls_cap > 0 else impls
-            impl_strs = [f"{i['name']} ({i['file']}:{i['line']})" for i in shown]
-            print(f"    ← implements: {', '.join(impl_strs)}")
-            if len(impls) > len(shown):
-                print(f"    ← … and {len(impls) - len(shown)} more (?impls=0 lists all, ?impls=N widens)")
-    print()
-
-
-class ContractsRenderer:
-    """Renderer for contracts:// results."""
-
-    @staticmethod
-    def render_structure(result: Dict[str, Any], format: str = 'text') -> None:
-        if format == 'json':
-            print_json_result(result)
-            return
-        _render_report(result, result.get('impls_cap', 5))
 
 
 @register_adapter('contracts')

@@ -233,3 +233,22 @@ def test_offline_mysql_actual_slow_log_failure_is_quiet(monkeypatch, capsys):
     output = capsys.readouterr()
     assert not output.out and result['error'] not in output.err
     assert output.err.count(result['message']) == 1
+
+
+@pytest.mark.parametrize('element', [None, 'ports', 'upstream', 'auth', 'locations', 'config'])
+def test_nginx_actual_missing_vhost_views_fail_once(element, monkeypatch, capsys):
+    from reveal.adapters.nginx.adapter import NginxUriAdapter
+    from reveal.rendering.adapters.nginx import NginxRenderer
+    adapter = NginxUriAdapter('offline.invalid')
+    monkeypatch.setattr(adapter, '_load_vhost', lambda: (None, None, None))
+    result = adapter.get_element(element) if element else adapter.get_structure()
+    assert result['error']
+    with pytest.raises(SystemExit) as exc:
+        router._emit_result(result, _default_args(format='text'), 'nginx', NginxRenderer.render_structure)
+    output = capsys.readouterr()
+    assert exc.value.code == 1 and not output.out
+    assert output.err.count(result['error']) == 1
+    out = io.StringIO()
+    with redirect_stdout(out):
+        NginxRenderer.render_structure(result, 'json')
+    assert json.loads(out.getvalue()) == result

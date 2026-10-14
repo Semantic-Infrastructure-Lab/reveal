@@ -4,6 +4,7 @@ Detects circular import dependencies between modules.
 Supports Python, JavaScript, Go, and Rust.
 """
 
+from dataclasses import asdict
 import hashlib
 import logging
 import os
@@ -15,9 +16,10 @@ from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...analyzers.imports import ImportGraph
 from ...analyzers.imports import service as import_analysis
 from ...analyzers.imports.base import get_extractor, get_all_extensions
-from ...analyzers.imports.file_index import basename_index
+from ...analyzers.imports.file_index import basename_index, resolution_fingerprint
 from ...analyzers.imports.types import ImportAnalysis
 from ...core import disk_cache
+from ...utils.query_control import ScanBudget
 from ...utils.parallel import pool_worker_count, submit_each
 from ...utils.path_utils import (
     EVIDENCE, _walk_code_files, cross_file_scan_root,
@@ -32,7 +34,8 @@ logger = logging.getLogger(__name__)
 # old-shape cached object (pickled before this field existed) must never be
 # unpickled and returned as-is. v3 (BACK-1579): the file set is now the evidence walk's
 # (noise dirs, gitignored and REVEAL_IGNORE'd files left out), not every file under the root.
-_IMPORT_GRAPH_NAMESPACE = "import_graph_v3"
+# v4: preserve source-candidate scan accounting alongside cached graph diagnostics.
+_IMPORT_GRAPH_NAMESPACE = "import_graph_v4"
 
 # Module-level cache: project_root → ImportGraph.
 # _build_import_graph scans every source file under the project root via
@@ -187,10 +190,11 @@ def _graph_source_files(directory: Path, supported) -> Iterator[Path]:
 
 
 def _tree_fingerprint(directory: Path) -> Optional[str]:
-    """Hash the source-file set under ``directory`` for the disk-cache key.
+    """Hash source membership and the resolution target index for the disk-cache key.
 
     Selects files with ``_graph_source_files``, as Pass A does, then digests each file's
-    ``(relpath, mtime_ns, size)``.
+    ``(relpath, mtime_ns, size)`` through the shared fingerprint owner. Indexed targets
+    include ignored/generated files and non-source extensions used by resolution.
     A content edit bumps mtime_ns (and usually size); an add/delete/rename
     changes the file set — every realistic change yields a different digest, so
     a stale graph is never served. Stat-only (no parse), so it is cheap relative
@@ -213,8 +217,10 @@ def _tree_fingerprint(directory: Path) -> Optional[str]:
     """
     try:
         supported = get_all_extensions()
-        max_files = _max_graph_files()
-        cycle_limit = _cycle_detection_max_files()
+        budget = ScanBudget(_max_graph_files())
+        max_files = budget.limit
+        cycle_budget = ScanBudget(_cycle_detection_max_files() or None)
+        cycle_limit = cycle_budget.limit
         hasher = hashlib.sha256()
         # Bind the digest to the exact extension set that selected the files —
         # if support changes, the same tree fingerprints differently.
@@ -231,14 +237,16 @@ def _tree_fingerprint(directory: Path) -> Optional[str]:
             if not stat_module.S_ISREG(st.st_mode):
                 continue
             entries.append((str(file_path), st.st_mtime_ns, st.st_size))
-            if len(entries) > max_files:
+            if max_files is not None and len(entries) > max_files:
                 return None
         if cycle_limit and len(entries) > cycle_limit:
             return None
-        entries.sort()
-        for path_str, mtime_ns, size in entries:
-            hasher.update(path_str.encode("utf-8", "replace"))
-            hasher.update(f"\x02{mtime_ns}\x03{size}\x04".encode("ascii"))
+        targets = basename_index([directory])
+        source_paths = [Path(entry[0]) for entry in entries]
+        fingerprint = resolution_fingerprint(source_paths, targets, excluded_root=disk_cache.cache_root())
+        if fingerprint is None:
+            return None
+        hasher.update(fingerprint.encode('ascii'))
         return hasher.hexdigest()
     except Exception:  # boundary-ok: silent-except -- None means "skip the cache, build directly", not a lost result
         # Intentional silence: None means "skip the cache, build directly" --
@@ -269,6 +277,13 @@ def _find_project_root(path: Path) -> Optional[Path]:
     root, the contiguous-``__init__`` tier recovers the same dir.
     """
     return cross_file_scan_root(path, python_init_chain=True)
+
+
+def get_scan_budgets(files: List[Path]) -> List[Dict[str, Any]]:
+    """Source accounting for graphs reached by this report's files."""
+    return [{'rule': 'I002', 'root': directory, **graph.scan_budget}
+            for directory, graph in _graph_cache.items() if graph.scan_budget
+            and any(path.resolve().is_relative_to(directory) for path in files)]
 
 
 def get_scan_disclosures() -> List[str]:
@@ -418,6 +433,7 @@ class I002(BaseRule):
         graph.failed_files = failed_files
         graph.lost_files = lost_files
         graph.scan_skipped_reason = skipped_reason
+        graph.scan_budget = self._scan_budget_metadata
         self._resolve_graph_dependencies(graph, directory)
 
         _graph_cache[directory] = graph
@@ -460,7 +476,8 @@ class I002(BaseRule):
         early-abort path.
         """
         supported_extensions = get_all_extensions()
-        max_files = _max_graph_files()
+        budget = ScanBudget(_max_graph_files())
+        max_files = budget.limit
 
         # Pass A: cheap count-only walk — abort before any parsing if over ceiling.
         source_files = []
@@ -468,7 +485,8 @@ class I002(BaseRule):
             if not file_path.is_file():
                 continue
             source_files.append(file_path)
-            if len(source_files) > max_files:
+            if max_files is not None and len(source_files) > max_files:
+                self._record_scan_budget(budget, max_files, capped=True, analyzed=0)
                 reason = (
                     f"I002: import-graph scan of {directory} exceeded {max_files} "
                     "source files; skipping circular-dependency analysis (likely a "
@@ -478,8 +496,10 @@ class I002(BaseRule):
                 logger.warning(reason)
                 return [], [], [], reason
 
-        cycle_limit = _cycle_detection_max_files()
+        cycle_budget = ScanBudget(_cycle_detection_max_files() or None)
+        cycle_limit = cycle_budget.limit
         if cycle_limit and len(source_files) > cycle_limit:
+            self._record_scan_budget(budget, len(source_files), analyzed=0)
             reason = (
                 f"I002: import-graph scan of {directory} found {len(source_files)} "
                 f"source files (over the {cycle_limit}-file cycle-detection "
@@ -489,6 +509,8 @@ class I002(BaseRule):
             )
             logger.warning(reason)
             return [], [], [], reason
+
+        self._record_scan_budget(budget, len(source_files), analyzed=len(source_files))
 
         # Pass B: parse the (now bounded) set of files. Independent per file, so
         # fan out across processes on large trees (BACK-536). Results are read in
@@ -516,6 +538,15 @@ class I002(BaseRule):
                 failed_files.append(Path(fp_str))
         lost_files = [Path(fp_str) for fp_str in file_strs if fp_str in lost_strs]
         return all_imports, failed_files, lost_files, None
+
+    def _record_scan_budget(self, budget: ScanBudget, count: int, *,
+                            capped: bool = False, analyzed: int) -> None:
+        self._scan_budget_metadata = {
+            **asdict(budget.accounting(count, capped)),
+            'limit': budget.limit,
+            'cycle_limit': _cycle_detection_max_files(),
+            'analyzed_files': analyzed,
+        }
 
     def _resolve_graph_dependencies(self, graph: ImportGraph, directory: Path) -> None:
         """Phase 2: resolve import statements to files through the shared

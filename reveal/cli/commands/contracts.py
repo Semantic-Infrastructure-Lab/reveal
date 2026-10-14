@@ -17,8 +17,6 @@ from reveal.adapters.contracts import (  # noqa: F401 - re-exported for back-com
     _CONTRACT_PATH_HINTS,
     _CPP_EXTENSIONS,
     _INTERFACE_FAMILY_EXTENSIONS,
-    _LANGUAGE_LABELS,
-    _LANGUAGE_RENDER_ORDER,
     _add_implementations,
     _base_tail,
     _classify_ts,
@@ -32,10 +30,6 @@ from reveal.adapters.contracts import (  # noqa: F401 - re-exported for back-com
     _is_dataclass,
     _is_protocol,
     _is_typeddict,
-    _no_contracts_hint,
-    _render_contract_groups,
-    _render_group,
-    _render_report,
     _scan_contracts,
     _scan_contracts_cpp,
     _scan_contracts_go,
@@ -43,6 +37,9 @@ from reveal.adapters.contracts import (  # noqa: F401 - re-exported for back-com
     _scan_contracts_ruby,
     _scan_contracts_rust,
     _scan_contracts_ts,
+)
+from reveal.rendering.adapters.contracts import (  # noqa: F401 - compatibility exports
+    _LANGUAGE_LABELS, _LANGUAGE_RENDER_ORDER, _no_contracts_hint, _render_contract_groups, _render_group, _render_report
 )
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
 from ..routing.subcommand import emit_subcommand_result

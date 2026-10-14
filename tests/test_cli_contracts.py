@@ -333,7 +333,7 @@ class TestRenderReport(unittest.TestCase):
     def _capture(self, report):
         buf = StringIO()
         with patch('sys.stdout', buf):
-            _render_report(report)
+            print("\n".join(_render_report(report)))
         return buf.getvalue()
 
     def _empty_report(self, **kwargs):
@@ -596,7 +596,7 @@ class TestScanContractsTypeScript(unittest.TestCase):
         report = _scan_contracts(Path(self.tmp))
         buf = StringIO()
         with patch('sys.stdout', buf):
-            _render_report(report)
+            print("\n".join(_render_report(report)))
         out = buf.getvalue()
         self.assertIn('Interfaces', out)
         self.assertIn('Abstract Classes', out)
@@ -1987,7 +1987,7 @@ class TestScanContractsPolyglot(unittest.TestCase):
         report = _scan_contracts(Path(self.tmp))
         buf = StringIO()
         with patch('sys.stdout', buf):
-            _render_report(report)
+            print("\n".join(_render_report(report)))
         output = buf.getvalue()
         self.assertIn('PyContract', output)
         self.assertIn('GoContract', output)

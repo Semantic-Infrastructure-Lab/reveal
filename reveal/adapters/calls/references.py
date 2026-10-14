@@ -19,7 +19,7 @@ per false entry (the trade _python_referenced_names documents).
 import logging
 import re
 from pathlib import Path
-from typing import Dict, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 from ...core import get_tree, iter_tree, _zero_arg
 from ...conventions import family_for_path
@@ -185,3 +185,44 @@ def non_python_referenced_names(
         if count > own:
             referenced.setdefault(family, set()).add(name)
     return referenced
+
+
+def jsx_component_references(analyzer, elements):
+    """Typed component uses attributed through the analyzer's existing function owners."""
+    from ...core.nav_calls import jsx_reference_hit
+    tree = analyzer.tree
+    if tree is None:
+        return []
+    by_name: Dict[str, List[Dict[str, Any]]] = {}
+    for element in elements:
+        if element.get('category') in ('functions', 'methods'):
+            by_name.setdefault(element['name'], []).append(element)
+    values = analyzer._iter_function_values() if hasattr(analyzer, '_iter_function_values') else ()
+    value_names = {(_zero_arg(node, 'start_byte'), _zero_arg(node, 'end_byte')): name for name, node in values}
+    references = []
+    for node in iter_tree(_zero_arg(tree, 'root_node')):
+        reference = jsx_reference_hit(node, analyzer._get_node_text)
+        if reference is None:
+            continue
+        parent = _zero_arg(node, 'parent')
+        owner = None
+        while parent is not None:
+            kind = _zero_arg(parent, 'kind')
+            if kind in ('class_declaration', 'class'):
+                # Class field initializers retain their source owner; they are not module callers.
+                owner = {'name': analyzer._get_node_name(parent) or '<class>',
+                         'line': _zero_arg(parent, 'start_position').row + 1}
+                break
+            if kind in ('function_declaration', 'function_expression', 'arrow_function', 'method_definition'):
+                name = analyzer._get_node_name(parent)
+                if not name:
+                    name = value_names.get((_zero_arg(parent, 'start_byte'), _zero_arg(parent, 'end_byte')))
+                line = _zero_arg(parent, 'start_position').row + 1
+                matches = [e for e in by_name.get(name, []) if e['line'] <= line < e['line'] + max(e['line_count'], 1)]
+                if matches:
+                    owner = min(matches, key=lambda e: e['line_count'])
+                    break
+            parent = _zero_arg(parent, 'parent')
+        references.append({**reference, 'owner': owner['name'] if owner else '<module>',
+                           'owner_line': owner['line'] if owner else 1})
+    return references

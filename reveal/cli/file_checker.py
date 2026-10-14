@@ -46,6 +46,7 @@ from reveal.checks import (  # noqa: E402
 # The rules' project-wide indexes, built once here and seeded into every pool
 # worker (BACK-1051); shared with stats://'s pool.
 from reveal.rules.scan_caches import (  # noqa: E402
+    get_scan_budgets,
     get_scan_disclosures,
     init_scan_caches,
     preload_scan_caches,
@@ -1174,12 +1175,16 @@ def _report_for(files: List[Path], collection: 'FileCollectionResult', args: 'Na
     --also-json writers describe the run the same way (BACK-1248): same scope,
     same scan disclosures, same exit_zero."""
     def report(tally: _CheckTally, budget: _ItemBudget, file_results: Optional[List[dict]] = None) -> dict:
-        return _check_report(
+        result = _check_report(
             tally, len(files), budget, file_results,
             scope=collection.to_scope_census() if file_results is not None else None,
             select=select, ignore=ignore, scan_disclosures=disclosures,
             exit_zero=getattr(args, 'exit_zero', False),
         )
+        result['summary']['scan_budgets'] = [
+            {**row, 'root': as_spelled(row['root'], getattr(args, 'path', '.') or '.')}
+            for row in get_scan_budgets(files, select, ignore)]
+        return result
     return report
 
 

@@ -22,6 +22,24 @@ class BudgetAccounting:
         return self.total - self.returned
 
 
+@dataclass(frozen=True)
+class ScanBudget:
+    """A source-scan ceiling, distinct from page/text presentation limits.
+
+    None is unlimited; zero admits no candidates. Consumers retain ownership of
+    their defaults and overrides while sharing validation and count semantics.
+    """
+    limit: Optional[int]
+
+    def __post_init__(self) -> None:
+        if self.limit is not None and self.limit < 0:
+            raise ValueError('Scan limit must be nonnegative')
+
+    def accounting(self, returned: int, capped: bool = False) -> BudgetAccounting:
+        """A stopped walk knows at least one additional candidate, not the full total."""
+        return BudgetAccounting('scan', returned + int(capped), returned, exact=not capped)
+
+
 # The query key behind each field, for the flag ledger (BACK-1537).
 _FIELD_KEYS = {'sort_field': 'sort', 'sort_descending': 'sort', 'limit': 'limit', 'offset': 'offset'}
 

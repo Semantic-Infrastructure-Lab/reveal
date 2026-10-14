@@ -98,3 +98,37 @@ def test_tool_output_with_non_ascii_source_survives_ascii_locale(child, non_asci
     assert '❤ →' in text, text
     # The wire is UTF-8 (JSON-RPC), whatever the child's locale.
     assert '❤'.encode('utf-8') in raw or b'\\u2764' in raw
+
+
+def test_config_edits_are_visible_between_live_requests(child, tmp_path):
+    root = tmp_path / 'project'
+    nested = root / 'nested'
+    nested.mkdir(parents=True)
+    path = nested / 'demo.py'
+    path.write_text('VALUE = "' + 'x' * 80 + '"\n', encoding='utf-8')
+    config = root / '.reveal.yaml'
+
+    def threshold(value):
+        config.write_text(f'root: true\nrules:\n  E501:\n    max_length: {value}\n', encoding='utf-8')
+
+    def check(server):
+        _, answer = server.call('reveal_check', {'path': str(path), 'select': 'E501'})
+        assert not answer['result']['isError'], answer
+        return answer['result']['content'][0]['text']
+
+    threshold(20)
+    assert '[E501]' in check(child)
+    threshold(200)
+    edited = check(child)
+    assert edited == 'No issues found.'
+    assert check(child) == edited
+    with open(tmp_path / 'fresh-stderr.txt', 'wb') as err:
+        fresh = _McpChild(err)
+        try:
+            assert check(fresh) == edited
+        finally:
+            fresh.close()
+    config.unlink()
+    # Removing the root config returns to the default 100-column threshold.
+    path.write_text('VALUE = "' + 'x' * 110 + '"\n', encoding='utf-8')
+    assert '[E501]' in check(child)

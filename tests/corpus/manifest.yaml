@@ -21,6 +21,8 @@
 # population, an optional `scan_root` (default: the corpus root) that both the
 # oracle and depends:// treat as the project, and oracle-specific keys
 # (`include_dirs` for the GCC oracles). Baseline: tests/corpus/recall_baseline.json.
+# `call_recall:` declares an optional local Python caller population measured by
+# recall_gate.py --signal calls; its baseline is tests/corpus/calls_baseline.json.
 # TWO KINDS OF TESTING, DELIBERATELY SEPARATED
 #   - Deterministic regression tests (CI, tests/test_conformance_matrix.py,
 #     tests/test_smoke_tier.py) use tiny HAND-WRITTEN fixtures under
@@ -85,6 +87,16 @@ corpora:
     sha: 359c508e3cafcded7482361fadc1a5a8f07c8bcb
     license: Apache-2.0
     role: Largest widely-known idiomatic Go application codebase
+  - id: go-client_golang
+    language: go
+    repo: https://github.com/prometheus/client_golang.git
+    sha: 6e3f4b1091875216850a486b1c2eb0e5ea852f98
+    license: Apache-2.0
+    role: Second-corpus single-module Go import measurement; new pin, new baseline
+    recall:
+      oracle: go-toolchain
+      importer_dirs: [prometheus]
+      go_version: go1.21.5
   - language: java
     repo: https://github.com/elastic/elasticsearch.git
     sha: a6141b9dbec012eb147c8280ccc65f847b2956fa
@@ -99,6 +111,18 @@ corpora:
     sha: 4a1f515d1316b842e9388a3e59a23ea9edd8e52e
     license: MIT
     role: Large, well-known, pure JS library
+    recall:
+      oracle: typescript-compiler
+      exclude_importer_suffixes: [.d.ts, .d.mts, .d.cts]
+      typescript_version: 5.9.3
+      node_version: 22.14.0
+      scan_root: src
+      importer_dirs:
+      - src
+      compiler_options:
+        allowJs: true
+        module: ESNext
+        moduleResolution: Bundler
   - language: python
     repo: https://github.com/home-assistant/core.git
     sha: d6fe80d208b2dc96a34447fc749b31f4d249fdd2
@@ -120,6 +144,16 @@ corpora:
     sha: 71a83f43ef275a9adc01278e75a13915cf46e686
     license: MIT
     role: Huge real desktop app, extensive idiomatic TypeScript
+    recall:
+      oracle: typescript-compiler
+      exclude_importer_suffixes: [.d.ts, .d.mts, .d.cts]
+      typescript_version: 5.9.3
+      node_version: 22.14.0
+      scan_root: src
+      importer_dirs:
+      - src/vs/base
+      tsconfig: src/tsconfig.json
+      scan_file_cap: 20000
 
   # ---- Tier A/B/deep-9: smoke-tier languages ----
   - language: kotlin
@@ -161,6 +195,10 @@ corpora:
     recall:
       oracle: python-ast
       importer_dirs: [.]
+    call_recall:
+      scan_root: celery/utils
+      importer_dirs: [celery/utils]
+      oracle: python-ast-callers
   - id: rust-ripgrep
     language: rust
     repo: https://github.com/BurntSushi/ripgrep.git
@@ -219,3 +257,756 @@ corpora:
     sha: 53973c3a423fbd75a4ce68107786b4fcb90e4968  # re-pinned 2026-10-06 (BACK-1461); the 2026-07-02 snapshot's commit is lost
     license: MIT
     role: Real product (drawing app), heavy TSX
+    recall:
+      oracle: typescript-compiler
+      exclude_importer_suffixes: [.d.ts, .d.mts, .d.cts]
+      typescript_version: 5.9.3
+      node_version: 22.14.0
+      importer_dirs:
+      - packages
+      - excalidraw-app
+      tsconfig: tsconfig.json
+
+  - id: mixed-dagster
+    language: mixed
+    repo: https://github.com/dagster-io/dagster.git
+    sha: c97898c3e4a8a3cc5e32fcc2ca97aea810342ed9
+    license: Apache-2.0
+    role: Pinned mixed Python server / React TypeScript UI / configuration source for framework validation;
+      new pin, new measurements
+    sparse_paths:
+    - python_modules/dagster/dagster
+    - js_modules/ui-components
+    - js_modules/ui-core/src
+
+# Preserved snapshots: identity exceptions are explicit; fetching never mutates these roots.
+framework_validation: framework_matrix.yaml
+snapshot_roots:
+  mixed: ~/.cache/reveal-corpus/mixed
+  samples: ../samples
+  calls: ~/.cache/reveal-corpus-calls-oracle
+snapshots:
+- id: mixed-dagster-pilot
+  collection: mixed
+  path: dagster-pilot
+  repo: https://github.com/dagster-io/dagster.git
+  sha: null
+  identity: stripped-filtered-snapshot-historical-commit-unknown
+  population: historical filtered Dagster contracts pilot; original builder owns selection
+  restore: copy preserved snapshot or backup; new canonical mixed-dagster pin requires new measurements
+  restore_command: cp -a ~/.cache/reveal-corpus/mixed/dagster-pilot <new-isolated-destination>
+  measurement_policy: Never transfer historical pilot results onto the new mixed-dagster pin.
+- id: samples-c
+  collection: samples
+  path: c
+  repo: null
+  sha: null
+  identity: mixed-source-collection-historical-commits
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/c <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-c-curl
+  collection: samples
+  path: c/curl
+  repo: https://github.com/curl/curl.git
+  sha: 1128177a6f725d1f8c4cba4f7ff6532969109e7a
+  identity: git-pin
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: clone exact repo/sha into an isolated directory
+  restore_command: git clone --filter=blob:none https://github.com/curl/curl.git <isolated-destination>; git -C
+    <isolated-destination> checkout --detach 1128177a6f725d1f8c4cba4f7ff6532969109e7a
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-cpp
+  collection: samples
+  path: cpp
+  repo: https://github.com/godotengine/godot.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/cpp <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-cpp_assimp
+  collection: samples
+  path: cpp_assimp
+  repo: https://github.com/assimp/assimp.git
+  sha: a939f2479513a4d92060f2348909886b67d548aa
+  identity: git-pin
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: clone exact repo/sha into an isolated directory
+  restore_command: git clone --filter=blob:none https://github.com/assimp/assimp.git <isolated-destination>; git
+    -C <isolated-destination> checkout --detach a939f2479513a4d92060f2348909886b67d548aa
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-csharp
+  collection: samples
+  path: csharp
+  repo: https://github.com/jellyfin/jellyfin.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/csharp <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-dart
+  collection: samples
+  path: dart
+  repo: https://github.com/AppFlowy-IO/AppFlowy.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/dart <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-dart_drift
+  collection: samples
+  path: dart_drift
+  repo: https://github.com/simolus3/drift.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/dart_drift <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-gdscript
+  collection: samples
+  path: gdscript
+  repo: null
+  sha: null
+  identity: mixed-source-collection-historical-commits
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/gdscript <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-gdscript-godot-demo-projects
+  collection: samples
+  path: gdscript/godot-demo-projects
+  repo: https://github.com/godotengine/godot-demo-projects.git
+  sha: 6ad6167e0577fe3622c18546138f456b107ce93c
+  identity: git-pin
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: clone exact repo/sha into an isolated directory
+  restore_command: git clone --filter=blob:none https://github.com/godotengine/godot-demo-projects.git <isolated-destination>;
+    git -C <isolated-destination> checkout --detach 6ad6167e0577fe3622c18546138f456b107ce93c
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-gdscript_pixelorama
+  collection: samples
+  path: gdscript_pixelorama
+  repo: https://github.com/Orama-Interactive/Pixelorama.git
+  sha: c35456fcc14396d1ca8828ae865e4fc0ede9c5c0
+  identity: git-pin
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: clone exact repo/sha into an isolated directory
+  restore_command: git clone --filter=blob:none https://github.com/Orama-Interactive/Pixelorama.git <isolated-destination>;
+    git -C <isolated-destination> checkout --detach c35456fcc14396d1ca8828ae865e4fc0ede9c5c0
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-go
+  collection: samples
+  path: go
+  repo: https://github.com/kubernetes/kubernetes.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/go <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-java
+  collection: samples
+  path: java
+  repo: https://github.com/elastic/elasticsearch.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/java <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-javascript
+  collection: samples
+  path: javascript
+  repo: https://github.com/mrdoob/three.js.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/javascript <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-js_react_router
+  collection: samples
+  path: js_react_router
+  repo: https://github.com/remix-run/react-router.git
+  sha: 1ca0e8f6dbb4f02874183dadd6b2481a6d599008
+  identity: git-pin
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: clone exact repo/sha into an isolated directory
+  restore_command: git clone --filter=blob:none https://github.com/remix-run/react-router.git <isolated-destination>;
+    git -C <isolated-destination> checkout --detach 1ca0e8f6dbb4f02874183dadd6b2481a6d599008
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-kotlin
+  collection: samples
+  path: kotlin
+  repo: https://github.com/chrisbanes/tivi.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/kotlin <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-lua
+  collection: samples
+  path: lua
+  repo: https://github.com/Kong/kong.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/lua <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-lua_awesome
+  collection: samples
+  path: lua_awesome
+  repo: https://github.com/awesomeWM/awesome.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/lua_awesome <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-php
+  collection: samples
+  path: php
+  repo: https://github.com/WordPress/WordPress.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/php <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-ruby
+  collection: samples
+  path: ruby
+  repo: https://github.com/discourse/discourse.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/ruby <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-rust
+  collection: samples
+  path: rust
+  repo: https://github.com/meilisearch/meilisearch.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/rust <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-scala
+  collection: samples
+  path: scala
+  repo: https://github.com/gitbucket/gitbucket.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/scala <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-swift
+  collection: samples
+  path: swift
+  repo: https://github.com/kickstarter/ios-oss.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/swift <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-tsx
+  collection: samples
+  path: tsx
+  repo: null
+  sha: null
+  identity: mixed-source-collection-historical-commits
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/tsx <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-tsx-excalidraw
+  collection: samples
+  path: tsx/excalidraw
+  repo: https://github.com/excalidraw/excalidraw.git
+  sha: 51ca8abde450e44f8f0db1b2708e0408915c7ab1
+  identity: git-pin
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: clone exact repo/sha into an isolated directory
+  restore_command: git clone --filter=blob:none https://github.com/excalidraw/excalidraw.git <isolated-destination>;
+    git -C <isolated-destination> checkout --detach 51ca8abde450e44f8f0db1b2708e0408915c7ab1
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-typescript
+  collection: samples
+  path: typescript
+  repo: https://github.com/microsoft/vscode.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/typescript <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-zig
+  collection: samples
+  path: zig
+  repo: null
+  sha: null
+  identity: mixed-source-collection-historical-commits
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ../samples/zig <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-zig-ghostty
+  collection: samples
+  path: zig/ghostty
+  repo: https://github.com/ghostty-org/ghostty.git
+  sha: d560c645488d158c3e554e13025c0eaad68d1f43
+  identity: git-pin
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: clone exact repo/sha into an isolated directory
+  restore_command: git clone --filter=blob:none https://github.com/ghostty-org/ghostty.git <isolated-destination>;
+    git -C <isolated-destination> checkout --detach d560c645488d158c3e554e13025c0eaad68d1f43
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: samples-zig-tigerbeetle
+  collection: samples
+  path: zig/tigerbeetle
+  repo: https://github.com/tigerbeetle/tigerbeetle.git
+  sha: 97c7a8ef385270ebe0e1b75959d3d21d134629df
+  identity: git-pin
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: clone exact repo/sha into an isolated directory
+  restore_command: git clone --filter=blob:none https://github.com/tigerbeetle/tigerbeetle.git <isolated-destination>;
+    git -C <isolated-destination> checkout --detach 97c7a8ef385270ebe0e1b75959d3d21d134629df
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: calls-c
+  collection: calls
+  path: c
+  repo: https://github.com/redis/redis.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ~/.cache/reveal-corpus-calls-oracle/c <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: calls-csharp
+  collection: calls
+  path: csharp
+  repo: https://github.com/jellyfin/jellyfin.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  symlink_target: samples/csharp
+  restore_command: cp -a ~/.cache/reveal-corpus-calls-oracle/csharp <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: calls-dart
+  collection: calls
+  path: dart
+  repo: https://github.com/AppFlowy-IO/AppFlowy.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ~/.cache/reveal-corpus-calls-oracle/dart <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: calls-gdscript
+  collection: calls
+  path: gdscript
+  repo: https://github.com/Orama-Interactive/Pixelorama.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ~/.cache/reveal-corpus-calls-oracle/gdscript <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: calls-go
+  collection: calls
+  path: go
+  repo: https://go.googlesource.com/go
+  sha: null
+  identity: frozen-toolchain-source
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: restage cmd/compile/internal from Go 1.21.5; preserve TOOLCHAIN_VERSION.txt; match the recorded oracle
+    population
+  toolchain: go1.21.5 linux/amd64
+  restore_command: cp -a ~/.cache/reveal-corpus-calls-oracle/go <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: calls-java
+  collection: calls
+  path: java
+  repo: https://github.com/elastic/elasticsearch.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  symlink_target: samples/java
+  restore_command: cp -a ~/.cache/reveal-corpus-calls-oracle/java <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: calls-kotlin
+  collection: calls
+  path: kotlin
+  repo: https://github.com/chrisbanes/tivi.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ~/.cache/reveal-corpus-calls-oracle/kotlin <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: calls-lua
+  collection: calls
+  path: lua
+  repo: https://github.com/Kong/kong.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ~/.cache/reveal-corpus-calls-oracle/lua <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: calls-php
+  collection: calls
+  path: php
+  repo: https://github.com/WordPress/WordPress.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ~/.cache/reveal-corpus-calls-oracle/php <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: calls-python
+  collection: calls
+  path: python
+  repo: https://github.com/home-assistant/core.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ~/.cache/reveal-corpus-calls-oracle/python <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: calls-ruby
+  collection: calls
+  path: ruby
+  repo: https://github.com/discourse/discourse.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ~/.cache/reveal-corpus-calls-oracle/ruby <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: calls-rust
+  collection: calls
+  path: rust
+  repo: https://github.com/meilisearch/meilisearch.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ~/.cache/reveal-corpus-calls-oracle/rust <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: calls-swift
+  collection: calls
+  path: swift
+  repo: https://github.com/signalapp/Signal-iOS.git
+  sha: null
+  identity: filtered-snapshot-recorded-pin-not-reverified
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  recorded_sha: 2f109075a7a3471686fbd4308991746fec7677a5
+  restore_command: cp -a ~/.cache/reveal-corpus-calls-oracle/swift <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: calls-swift-src
+  collection: calls
+  path: swift-src
+  repo: https://github.com/signalapp/Signal-iOS.git
+  sha: null
+  identity: filtered-snapshot-recorded-pin-not-reverified
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  recorded_sha: 2f109075a7a3471686fbd4308991746fec7677a5
+  restore_command: cp -a ~/.cache/reveal-corpus-calls-oracle/swift-src <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: calls-typescript
+  collection: calls
+  path: typescript
+  repo: https://github.com/microsoft/vscode.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ~/.cache/reveal-corpus-calls-oracle/typescript <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+- id: calls-zig
+  collection: calls
+  path: zig
+  repo: https://github.com/ghostty-org/ghostty.git
+  sha: null
+  identity: unknown-historical-commit
+  population: preserved source tree; consumer-specific scope recorded in views
+  restore: copy preserved snapshot or backup; exact remote restoration unavailable; a new pin requires new measurements
+  restore_command: cp -a ~/.cache/reveal-corpus-calls-oracle/zig <new-isolated-destination>
+  measurement_policy: Never reuse historical results for a new pin or changed filtered population.
+views:
+- consumer: calls
+  language: python
+  source: calls/python
+  query_subdir: homeassistant
+  oracle: oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: typescript
+  source: calls/typescript
+  query_subdir: ''
+  oracle: oracle_ts.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: js_threejs
+  source: samples/javascript/src
+  query_subdir: ''
+  oracle: oracle_js_threejs.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: js_excalidraw
+  source: samples/tsx/excalidraw
+  query_subdir: ''
+  oracle: oracle_js_excalidraw.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: go
+  source: calls/go
+  query_subdir: compile-internal
+  oracle: oracle_go.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: rust
+  source: calls/rust
+  query_subdir: milli
+  oracle: oracle_rust.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: java
+  source: calls/java/server/src/main/java
+  query_subdir: ''
+  oracle: oracle_java.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: ruby
+  source: calls/ruby
+  query_subdir: ''
+  oracle: oracle_ruby.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: php
+  source: calls/php
+  query_subdir: ''
+  oracle: oracle_php.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: csharp
+  source: calls/csharp
+  query_subdir: ''
+  oracle: oracle_csharp.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: kotlin
+  source: calls/kotlin
+  query_subdir: ''
+  oracle: oracle_kotlin.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: swift
+  source: calls/swift/SignalServiceKit
+  query_subdir: ''
+  oracle: oracle_swift.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: cpp
+  source: samples/cpp_assimp
+  query_subdir: code
+  oracle: oracle_cpp.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: scala
+  source: samples/scala/src/main/scala
+  query_subdir: ''
+  oracle: oracle_scala.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: zig
+  source: calls/zig/ghostty
+  query_subdir: ''
+  oracle: oracle_zig_ghostty.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: c
+  source: calls/c/redis-src
+  query_subdir: ''
+  oracle: oracle_c.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: lua
+  source: calls/lua/kong
+  query_subdir: ''
+  oracle: oracle_lua.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: gdscript
+  source: calls/gdscript/pixelorama
+  query_subdir: ''
+  oracle: oracle_gdscript.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: calls
+  language: dart
+  source: calls/dart/appflowy
+  query_subdir: ''
+  oracle: oracle_dart.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: go
+  source: samples/go/staging/src/k8s.io/client-go
+  query_subdir: ''
+  oracle: oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: python
+  source: canonical/python/homeassistant
+  query_subdir: ''
+  oracle: python/oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: java
+  source: samples/java/server/src/main/java
+  query_subdir: ''
+  oracle: java/oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: cpp
+  source: samples/cpp/core
+  query_subdir: ''
+  oracle: cpp/oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: typescript
+  source: samples/typescript
+  query_subdir: ''
+  oracle: typescript/oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: ruby
+  source: samples/ruby
+  query_subdir: ''
+  oracle: ruby/oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: php
+  source: samples/php
+  query_subdir: ''
+  oracle: php/oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: csharp
+  source: samples/csharp
+  query_subdir: ''
+  oracle: csharp/oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: rust
+  source: samples/rust/crates/milli
+  query_subdir: ''
+  oracle: rust/oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: c
+  source: samples/c/src
+  query_subdir: ''
+  oracle: c/oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: lua
+  source: samples/lua/kong
+  query_subdir: ''
+  oracle: lua/oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: zig
+  source: samples/zig/tigerbeetle/src
+  query_subdir: ''
+  oracle: zig/oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: scala
+  source: samples/scala/src/main
+  query_subdir: ''
+  oracle: scala/oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: dart
+  source: samples/dart/frontend/appflowy_flutter/lib
+  query_subdir: ''
+  oracle: dart/oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: gdscript
+  source: samples/gdscript_pixelorama
+  query_subdir: ''
+  oracle: gdscript/oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: tsx
+  source: samples/tsx/excalidraw
+  query_subdir: ''
+  oracle: tsx/oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: kotlin
+  source: samples/kotlin
+  query_subdir: ''
+  oracle: kotlin/oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder
+- consumer: sideeffects
+  language: swift
+  source: samples/swift
+  query_subdir: ''
+  oracle: swift/oracle.json
+  population: recorded oracle rows; preflight requires >=90% of sampled source files; filters stay with the existing
+    oracle builder

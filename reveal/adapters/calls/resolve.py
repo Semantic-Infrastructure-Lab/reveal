@@ -27,12 +27,17 @@ class CallResolver:
 
     def __init__(self, index: Dict[str, List[Definition]]) -> None:
         self.index = index
+        self._alias_maps: Dict[str, Dict[str, str]] = {}
         self._symbol_maps: Dict[str, Dict[str, Optional[str]]] = {}
 
     def resolve(self, call: str, caller_file: str) -> Tuple[str, Any]:
         """(bare name, target): target is one definition, a list of candidate
         definitions when the name stays ambiguous, or None when external."""
         tail = _bare_callee_name(call)
+        from ..ast.call_graph import build_alias_map
+        if caller_file not in self._alias_maps:
+            self._alias_maps[caller_file] = build_alias_map(caller_file)
+        tail = self._alias_maps[caller_file].get(tail, tail)
         family = _lang_family(caller_file)
         candidates = [d for d in self.index.get(tail, [])
                       if not family or _lang_family(d['file']) == family]
@@ -48,7 +53,8 @@ class CallResolver:
         A bare call prefers a same-file definition (it shadows imports); a
         qualified one (`strings.rtrim`, `h.run`) prefers the module it names."""
         qualifier = call.split('.')[0] if '.' in call else ''
-        imported = self._symbol_map(caller_file).get(qualifier or tail)
+        symbols = self._symbol_map(caller_file)
+        imported = symbols.get(qualifier or (call if call in symbols else tail))
         imported_path = Path(imported).resolve() if imported else None
         via_import = [c for c in candidates if imported_path and Path(c['file']).resolve() == imported_path]
         same_file = [c for c in candidates if c['file'] == caller_file]

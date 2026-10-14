@@ -310,6 +310,25 @@ reveal README.md --validate-schema session
 1 issue found
 ```
 
+### Validating paths from stdin
+
+Pass one Markdown file path per line. The schema is loaded once, and validation
+continues after an invalid or unreadable input:
+
+```bash
+find docs -name "*.md" | reveal --stdin --validate-schema hugo --format json
+```
+
+JSON is one `schema_validation_batch` document with `schema`, per-file `results`
+and a `summary` of `total`, `valid`, `invalid` and `errors`. Each result records
+its source and status; invalid files retain their detections and failed inputs
+retain an error. Text reports the same per-file outcomes.
+
+Exit 0 means every selected file validated; exit 1 means a file was invalid or
+could not be validated, or no files were selected. An unknown schema is one
+usage error (exit 2). Missing files, directories and non-Markdown inputs count
+as failures. `--ext` selects which input paths to validate.
+
 ### JSON Format (CI/CD)
 Structured output for automation:
 

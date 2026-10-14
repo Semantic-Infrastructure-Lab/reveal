@@ -605,3 +605,17 @@ class TestNginxUriAdapterAuditFlag(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_recorded_fleet_result_discloses_missing_snippet_names(tmp_path):
+    from reveal.rendering.adapters.nginx import NginxRenderer
+    for i in range(11):
+        (tmp_path / f'site{i}.conf').write_text(
+            _site(f'site{i}.invalid', includes=['snippets/security.conf'] if i < 3 else []),
+            encoding='utf-8')
+    result = _run_fleet_audit([str(tmp_path)], [])
+    assert result['snippet_consistency'][0]['sites_without'] == 8
+    text = NginxRenderer.render_structure(result, 'text')
+    assert '(+2 more)' in text
+    assert len(result['snippet_consistency'][0]['missing_from']) == 8
+    assert NginxRenderer.exit_code(result, 'json') == NginxRenderer.exit_code(result, 'text') == 2

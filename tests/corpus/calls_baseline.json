@@ -1,0 +1,19 @@
+{
+  "python-celery": {
+    "oracle": "python-ast-callers",
+    "sha": "17b895bad43aab73fca37609ae9b93be6cc1c6e1",
+    "targets": 437,
+    "oracle_edges": 1046,
+    "hit_edges": 1046,
+    "extra_edges": 0,
+    "recall": 1.0,
+    "precision": 1.0,
+    "coverage": {
+      "files": 25,
+      "functions": 490,
+      "call_sites": 1240,
+      "population": "python-function-body-bare-name-callers"
+    },
+    "differences": []
+  }
+}

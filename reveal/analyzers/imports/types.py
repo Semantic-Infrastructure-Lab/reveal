@@ -111,6 +111,8 @@ class ImportGraph:
     # and callers can disclose a silent skip instead of presenting an empty
     # cycle list as a clean "no circular dependencies found".
     scan_skipped_reason: Optional[str] = None
+    # Source-candidate accounting, distinct from graph membership and output paging.
+    scan_budget: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_imports(cls, imports: List[ImportStatement]) -> 'ImportGraph':

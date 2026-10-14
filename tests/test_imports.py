@@ -2202,7 +2202,8 @@ class TestUnusedNotChecked:
     def test_deps_text_carries_the_note(self, tmp_path, capsys):
         from reveal.adapters.deps import DepsAdapter, DepsRenderer
         (tmp_path / "A.java").write_text(self.JAVA, encoding='utf-8')
-        DepsRenderer.render_structure(DepsAdapter(str(tmp_path)).get_structure(), format='text')
+        from reveal.rendering.base import emit_rendered
+        emit_rendered(DepsRenderer.render_structure, DepsAdapter(str(tmp_path)).get_structure(), 'text')
         assert 'Unused imports not checked' in capsys.readouterr().out
 
 

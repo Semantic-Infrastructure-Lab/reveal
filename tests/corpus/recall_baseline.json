@@ -234,5 +234,185 @@
     },
     "partial_files": 0,
     "differences": []
+  },
+  "javascript": {
+    "oracle": "typescript-compiler",
+    "sha": "4a1f515d1316b842e9388a3e59a23ea9edd8e52e",
+    "targets": 746,
+    "oracle_edges": 3042,
+    "hit_edges": 3042,
+    "extra_edges": 0,
+    "recall": 1.0,
+    "precision": 1.0,
+    "coverage": {
+      "files": 750,
+      "directives": 3045,
+      "unresolved_directives": 0,
+      "excluded_targets": 1,
+      "declaration_files_skipped": 0,
+      "population_digest": "8d1424627bb91358f9d45aabf3e8272587ddd51206cf0840f8c5439164929911",
+      "config_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "compiler_options_digest": "b3a907a99c4cda346550fbb768af481d625fdda0b2cdd96690680d267b2ffd29",
+      "typescript_version": "5.9.3",
+      "node_version": "22.14.0",
+      "scan_file_cap": 5000
+    },
+    "partial_files": 0,
+    "differences": []
+  },
+  "typescript": {
+    "oracle": "typescript-compiler",
+    "sha": "71a83f43ef275a9adc01278e75a13915cf46e686",
+    "targets": 264,
+    "oracle_edges": 1889,
+    "hit_edges": 1889,
+    "extra_edges": 0,
+    "recall": 1.0,
+    "precision": 1.0,
+    "coverage": {
+      "files": 464,
+      "directives": 2165,
+      "unresolved_directives": 248,
+      "excluded_targets": 6,
+      "declaration_files_skipped": 5,
+      "population_digest": "f5f36db5b0dfe1638dabda0ee90d7974f892693a444e300e2c5845e4705a456d",
+      "config_digest": "d82f8969f1f3f8641d62cffdb6763348ca7f48e0a2ae0f17b976d2cf37b40fbe",
+      "compiler_options_digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "typescript_version": "5.9.3",
+      "node_version": "22.14.0",
+      "scan_file_cap": 20000
+    },
+    "partial_files": 10,
+    "differences": []
+  },
+  "tsx": {
+    "oracle": "typescript-compiler",
+    "sha": "53973c3a423fbd75a4ce68107786b4fcb90e4968",
+    "targets": 504,
+    "oracle_edges": 3587,
+    "hit_edges": 3587,
+    "extra_edges": 0,
+    "recall": 1.0,
+    "precision": 1.0,
+    "coverage": {
+      "files": 652,
+      "directives": 4909,
+      "unresolved_directives": 839,
+      "excluded_targets": 5,
+      "declaration_files_skipped": 13,
+      "population_digest": "7c1dcb9b88a0248d174901dc002ebed66d7813662e7fe38d3c7daea647b4b192",
+      "config_digest": "ad7b1e5402655673d940f2fbcb5d4aeebab0c66b50cff15f719ae0faf89b1072",
+      "compiler_options_digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "typescript_version": "5.9.3",
+      "node_version": "22.14.0",
+      "scan_file_cap": 5000
+    },
+    "partial_files": 5,
+    "differences": []
+  },
+  "go-client_golang": {
+    "oracle": "go-toolchain",
+    "sha": "6e3f4b1091875216850a486b1c2eb0e5ea852f98",
+    "targets": 98,
+    "oracle_edges": 2589,
+    "hit_edges": 2589,
+    "extra_edges": 12,
+    "recall": 1.0,
+    "precision": 0.9953863898500577,
+    "coverage": {
+      "files": 116,
+      "packages": 11,
+      "import_statements": 499,
+      "resolved_statements": 58,
+      "go_version": "go1.21.5",
+      "population": "tracked-buildless-source"
+    },
+    "partial_files": 0,
+    "differences": [
+      {
+        "target": "prometheus/example_clustermanager_test.go",
+        "missed": [],
+        "extra": [
+          "prometheus/example_clustermanager_test.go"
+        ]
+      },
+      {
+        "target": "prometheus/example_metricvec_test.go",
+        "missed": [],
+        "extra": [
+          "prometheus/example_metricvec_test.go"
+        ]
+      },
+      {
+        "target": "prometheus/example_timer_complex_test.go",
+        "missed": [],
+        "extra": [
+          "prometheus/example_timer_complex_test.go"
+        ]
+      },
+      {
+        "target": "prometheus/example_timer_gauge_test.go",
+        "missed": [],
+        "extra": [
+          "prometheus/example_timer_gauge_test.go"
+        ]
+      },
+      {
+        "target": "prometheus/example_timer_test.go",
+        "missed": [],
+        "extra": [
+          "prometheus/example_timer_test.go"
+        ]
+      },
+      {
+        "target": "prometheus/examples_test.go",
+        "missed": [],
+        "extra": [
+          "prometheus/examples_test.go"
+        ]
+      },
+      {
+        "target": "prometheus/expvar_collector_test.go",
+        "missed": [],
+        "extra": [
+          "prometheus/expvar_collector_test.go"
+        ]
+      },
+      {
+        "target": "prometheus/gen_go_collector_metrics_set.go",
+        "missed": [],
+        "extra": [
+          "prometheus/gen_go_collector_metrics_set.go"
+        ]
+      },
+      {
+        "target": "prometheus/push/example_add_from_gatherer_test.go",
+        "missed": [],
+        "extra": [
+          "prometheus/push/example_add_from_gatherer_test.go"
+        ]
+      },
+      {
+        "target": "prometheus/push/examples_test.go",
+        "missed": [],
+        "extra": [
+          "prometheus/push/examples_test.go"
+        ]
+      },
+      {
+        "target": "prometheus/registry_test.go",
+        "missed": [],
+        "extra": [
+          "prometheus/registry_test.go"
+        ]
+      },
+      {
+        "target": "prometheus/testutil/promlint/promlint_test.go",
+        "missed": [],
+        "extra": [
+          "prometheus/testutil/promlint/promlint_test.go"
+        ]
+      }
+    ]
   }
 }

@@ -337,23 +337,29 @@ What landed, and when, is in CHANGELOG `[0.130.0]` and `internal-docs/RESOLVED_L
    0; `reveal check` leaves through the subcommand seam in both its directory and single-file
    forms, and `review` is the one remaining boundary site; the ~379 remaining broad
    handlers are decided: one solo pass, run when no parallel agents are active, one subsystem per slice), BACK-916 (one
-   rendering layer: patches, nginx://, the nginx file-flag handlers, surface://, overview:// and testability:// return
-   their output and the rest still print; next are the largest print sites in `adapters/` (deps,
-   contracts, pack), one renderer per slice) and BACK-1052 (one scan budget; patches pilot only).
+   rendering layer: patches, nginx://, the nginx file-flag handlers, surface://, overview://,
+   testability://, deps and contracts return their output; next are pack, architecture and
+   hotspots, one renderer per slice) and BACK-1052 (shared scan policy now used by depends
+   and I002; D005, health and broader defaults/environment policy remain).
 4. **One seam per concern.** The parser, path, root-finder and walker seams are done. Open:
    BACK-1054 (import resolution: imports and depends share scope and dispatch; depends'
-   indexing, I002 and the extraction cache still consolidate separately).
+   indexing/fallback and extraction-cache ownership remain; I002 already uses the service).
 
 These gates run continuously alongside the steps above:
 - BACK-1365: executable docs. The first gate runs offline recipes as text and JSON,
   checks positive findings and grep pipelines, and executes documentation discovery
   commands; named-target examples still need fixtures.
 - BACK-1518: a recall-regression gate that turns the Validation & Trust oracles below into
-  scheduled checks. It runs 5 independent oracles over 8 pinned corpora (two each for C,
-  Rust and Java, one each for Python and C++) against a committed baseline; a deliberately
-  dropped import edge lowers recall on every corpus. The corpora are optional test inputs,
-  never runtime dependencies or services. Go (no local toolchain) and other languages remain;
-  every corpus currently sits at recall 1.0, which means "no regression", not proven recall.
+  scheduled checks. The existing gate now includes JS/TS/TSX compiler oracles alongside
+  C/C++/Python/Rust/Java; pinned populations and reviewed baselines are owned by
+  [VALIDATION.md](VALIDATION.md#re-running-this-yourself) and the corpus manifest.
+  Deliberately dropping an import edge fails the gate. The corpora are optional test inputs,
+  never runtime dependencies or services. Go is now included through its native toolchain; other language promotions remain.
+  Passing means no regression against each scoped baseline; it does not establish
+  runtime resolution or component-reference correctness. The separate local
+  [mixed-framework matrix](VALIDATION.md#bounded-mixed-framework-source-matrix-2026-10-14)
+  checks selected component, contract and configuration answers. Remote execution of the
+  expanded scheduled corpus workflow remains unverified.
 - BACK-1096: cross-subsystem invariants. Registry-wide import recovery, citation and
   copy/rename controls now run without external corpora. Slice 2 added structure invariants
   over 31 analyzers and agreement tests between subsystems (stats vs M101 vs ast line counts,

@@ -1,6 +1,6 @@
 """deps:// adapter - dependency health dashboard.
 
-Scan/render logic lives here (BACK-901/BACK-956); `cli/commands/deps.py` is a
+Scan logic lives here; returned text bodies live in rendering/adapters/deps.py (BACK-901/BACK-956); `cli/commands/deps.py` is a
 thin argparse shim over this adapter, matching the URI/adapter contract every
 other capability follows.
 """
@@ -20,10 +20,18 @@ from ..analyzers.imports.classify import (
     local_package_names as _local_package_names,
 )
 from ..conventions import family_for_path
-from ..utils import print_json_result
 from ..utils.path_utils import _language_for_path
 from ..utils.query import parse_query_params
-from ..rendering.base import print_omitted
+from ..rendering.adapters.deps import (  # noqa: F401 - compatibility exports
+    DepsRenderer,
+    _render_summary,
+    _render_external_packages,
+    _render_circular,
+    _render_unused,
+    _render_top_importers,
+    _render_next_steps,
+    _render_deps,
+)
 from ..utils.results import ResultBuilder
 
 # BACK-1190: the stdlib list, local-package heuristic, and classifier itself
@@ -180,199 +188,6 @@ def _analyse_imports(files: Dict[str, List[Dict[str, Any]]], base_path: Path) ->
         'stdlib_packages': stdlib_counts.most_common(),
         'top_importers': top_importers,
     }
-
-
-# ── Renderers ──────────────────────────────────────────────────────────────────
-
-def _render_summary(analysis: Dict[str, Any], cycle_count: int, unused_count: int,
-                    meta: Optional[Dict[str, Any]] = None,
-                    skipped: Optional[List[str]] = None) -> None:
-    meta = meta or {}
-    skipped = skipped or []
-    total_files = analysis['total_files']
-    total_imports = analysis['total_imports']
-    ext_pkgs = len(analysis['external_packages'])
-    stdlib_pkgs = len(analysis['stdlib_packages'])
-    scanned = meta.get('scanned_files', total_files)
-
-    # BACK-1405: `total_files` counts files WITH imports; alone it read "0 files ✅"
-    # for 58 scanned PHP files whose includes are all computed paths.
-    files_part = (f"{scanned:,} files ({total_files:,} with imports)"
-                  if scanned != total_files else f"{total_files:,} files")
-    parts = [
-        files_part,
-        f"{total_imports:,} imports",
-        f"{ext_pkgs} unresolved packages",
-        f"{stdlib_pkgs} stdlib packages",
-    ]
-
-    health_parts = []
-    if 'circular' in skipped:
-        health_parts.append("— circular deps not checked (--no-circular)")
-    elif cycle_count:
-        health_parts.append(f"❌ {cycle_count} circular dep(s)")
-    elif total_imports:
-        health_parts.append("✅ no circular deps")
-    else:
-        health_parts.append("— no imports found, so nothing to check for cycles")
-    if 'unused' in skipped:
-        health_parts.append("— unused imports not checked (--no-unused)")
-    elif unused_count:
-        health_parts.append(f"⚠️  {unused_count} unused import(s)")
-
-    print(f"\nSummary   {' · '.join(parts)}")
-    if health_parts:
-        print(f"Health    {' · '.join(health_parts)}")
-    failed = meta.get('files_failed_count') or 0
-    if failed:
-        print(f"          ⚠ {failed} file(s) parsed with errors; their imports above may be incomplete")
-    unsupported = meta.get('unsupported_extensions') or {}
-    if unsupported:
-        listing = ', '.join(f"{ext} ({n})" for ext, n in unsupported.items())
-        print(f"          ⚠ No import extraction for: {listing}")
-
-
-def _render_external_packages(analysis: Dict[str, Any], top: int) -> None:
-    packages = analysis['external_packages']
-    if not packages:
-        return
-    shown = packages[:top]
-    # BACK-1262: on a mixed-stack repo this list interleaves ecosystems --
-    # pytest/pydantic/fastapi next to @mui/material and react -- sorted by
-    # usage with nothing saying which is which, so it is easy to misattribute
-    # at a glance. The per-file language classification already exists upstream.
-    langs = analysis.get('external_package_languages', {})
-    multi_stack = len({l for ls in langs.values() for l in ls}) > 1
-    # BACK-1193: honest label — these are modules resolve_import() could not
-    # place in-tree. Most are real third-party packages, but an unresolved
-    # local (load-path boundary, missing file_index coverage) lands here too.
-    print(f"\nUnresolved packages (third-party or unresolved-local)  (top {len(shown)} by usage)")
-    for pkg, count in shown:
-        if multi_stack:
-            label = ', '.join(langs.get(pkg, [])) or '?'
-            print(f"  {pkg:<30} {count:>4} use(s)  [{label}]")
-        else:
-            print(f"  {pkg:<30} {count:>4} use(s)")
-    remaining = len(packages) - len(shown)
-    if remaining > 0:
-        print(f"  ... and {remaining} more")
-
-
-def _render_circular(cycles: List, cycle_count: int, base_path: Path, top: int) -> None:
-    if cycle_count == 0:
-        return
-    from ..utils.path_utils import to_relative_display
-    print(f"\nCircular dependencies  ({cycle_count} cycle(s))")
-    for cycle in cycles[:top]:
-        # Shorten paths to relative
-        parts = [to_relative_display(fp, base_path) for fp in cycle]
-        print(f"  ❌ {' → '.join(parts)}")
-    if cycle_count > top:
-        print(f"  ... and {cycle_count - top} more  (run: reveal '{_imports_uri(base_path)}?circular')")
-
-
-def _render_unused(unused: List[Dict[str, Any]], base_path: Path, top: int) -> None:
-    if not unused:
-        return
-    from ..utils.path_utils import to_relative_display
-    count = len(unused)
-    print(f"\nUnused imports  ({count} found)")
-    for imp in unused[:top]:
-        filepath = imp.get('file', '?')
-        line = imp.get('line', '?')
-        module = imp.get('module', '?')
-        # The unused ones, not every name the line imports (BACK-1371): `from typing
-        # import Dict, List, Any, Optional` with only Dict and Any unused listed all four.
-        names = imp.get('unused_names') or imp.get('names', [])
-        rel = to_relative_display(filepath, base_path)
-        name_str = f".{', '.join(names)}" if names else ''
-        print(f"  ⚠️  {rel}:{line}  {module}{name_str}")
-    if count > top:
-        print(f"  ... and {count - top} more  (run: reveal '{_imports_uri(base_path)}?unused')")
-
-
-def _render_top_importers(analysis: Dict[str, Any], top: int) -> None:
-    importers = analysis['top_importers']
-    if not importers:
-        return
-    shown = importers[:top]
-    max_count = shown[0]['count'] if shown else 1
-    print(f"\nTop importers  (files with most dependencies)")
-    for item in shown:
-        f = item['file']
-        c = item['count']
-        bar_len = int(c / max_count * 15) if max_count else 0
-        bar = '█' * bar_len
-        print(f"  {f:<50} {c:>3}  {bar}")
-    print_omitted(len(importers), len(shown))
-
-
-def _imports_uri(path: Path) -> str:
-    """The imports:// URI for the scanned path, runnable from any cwd (BACK-1420)."""
-    return f"imports://{path}"
-
-
-def _render_next_steps(path: Path) -> None:
-    uri = _imports_uri(path)
-    print("\nNext steps")
-    print(f"  reveal '{uri}?circular'    # Full circular dep list")
-    print(f"  reveal '{uri}?unused'      # All unused imports")
-    print(f"  reveal '{uri}?violations'  # Layer violation check")
-    print()
-
-
-def _render_deps(report: Dict[str, Any], top: int) -> None:
-    path_str = report['path']
-    base = report['base']
-    circular = report['circular']
-    unused = report['unused']
-
-    files = base.get('files', {})
-    analysis = _analyse_imports(files, Path(path_str))
-
-    cycles = circular.get('cycles', [])
-    cycle_count = circular.get('count', 0)
-
-    print()
-    print(f"Dependencies: {path_str}")
-    print("━" * 60)
-
-    # BACK-1261: deps.json carried autoload_regime from the start and the text
-    # render never showed it, while all three sibling import-graph adapters
-    # print it. On a Rails/Django/Laravel codebase the entire dependency report
-    # below describes the small explicit import graph, not real usage -- the
-    # one caveat a reader most needs, and the only adapter that withheld it.
-    from .imports import autoload_regime_warning, unused_not_checked_line
-    base_meta = report.get('base', {}).get('metadata', {}) or {}
-    warning = autoload_regime_warning(base_meta.get('autoload_regime'))
-    if warning:
-        print(f"\n{warning}")
-
-    skipped = report.get('skipped') or []
-    _render_summary(analysis, cycle_count, len(unused), base_meta, skipped=skipped)
-    # Per-language "not checked" is moot when --no-unused turned the check off.
-    if 'unused' not in skipped:
-        not_checked_note = unused_not_checked_line(base_meta.get('unused_not_checked_extensions') or {})
-        if not_checked_note:
-            print(f"          {not_checked_note}")
-    _render_external_packages(analysis, top)
-    _render_circular(cycles, cycle_count, Path(path_str), top)
-    _render_unused(unused, Path(path_str), top)
-    _render_top_importers(analysis, top)
-    _render_next_steps(Path(path_str))
-
-
-class DepsRenderer:
-    """Renderer for deps:// results."""
-
-    ACCEPTS_TOP = True  # render_structure(top=) is fed by handle_uri (--all/--verbose BACK-1379, ?top=N BACK-1606)
-
-    @staticmethod
-    def render_structure(result: Dict[str, Any], format: str = 'text', top: int = 10) -> None:
-        if format == 'json':
-            print_json_result(result)
-            return
-        _render_deps(result, top)
 
 
 @register_adapter('deps')

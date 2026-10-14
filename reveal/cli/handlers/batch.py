@@ -121,23 +121,8 @@ def _process_stdin_file(
         )
         return violations, degraded
 
-    if getattr(args, 'validate_schema', None):
-        return _validate_schema_of(str(path), args, handle_file_func), False
     handle_file_func(str(path), None, args.meta, args.format, args)
     return 0, False
-
-
-def _validate_schema_of(target: str, args: 'Namespace', handle_file_func) -> int:
-    """``--validate-schema`` on one stdin path: 1 if it failed, so the run goes on to the rest.
-
-    The validation branch ends the process on a failure (exit 1); left alone, the first
-    invalid file hid every later path from the run (BACK-1687).
-    """
-    try:
-        handle_file_func(target, None, args.meta, args.format, args)
-    except SystemExit as e:
-        return 1 if e.code else 0
-    return 0
 
 
 def handle_stdin_mode(args: 'Namespace', handle_file_func):
@@ -159,6 +144,10 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     if args.element:
         print("Error: Cannot use element extraction with --stdin", file=sys.stderr)
         sys.exit(1)
+
+    if getattr(args, 'validate_schema', None) and not getattr(args, 'check', False):
+        _handle_schema_batch(args)
+        return
 
     # Check if we're in batch mode (explicit --batch or SSL batch checks)
     is_batch_mode = getattr(args, 'batch', False)
@@ -555,3 +544,66 @@ def _render_batch_results(results: list, args: 'Namespace') -> None:
     # Exit with appropriate code
     exit_code = _calculate_batch_exit_code(stats['failures'], stats['warnings'])
     sys.exit(exit_code)
+
+
+def _schema_batch_entry(target: str, schema: dict, args: 'Namespace') -> dict:
+    """One file's validation; a missing, unreadable or failed input is an error row."""
+    from ...checks import collect_schema_detections, _detections_result
+    from ...registry import get_analyzer, get_markdown_extensions
+    from ...utils.path_utils import to_posix
+
+    entry: Dict[str, Any] = {'source': to_posix(target), 'status': 'error'}
+    try:
+        path = Path(target)
+        if not path.is_file():
+            entry['error'] = 'Input is not a readable file'
+            return entry
+        if path.suffix.lower() not in get_markdown_extensions():
+            entry['error'] = 'Schema validation requires a Markdown file'
+            return entry
+        analyzer_class = get_analyzer(target, allow_fallback=not getattr(args, 'no_fallback', False))
+        if analyzer_class is None:
+            entry['error'] = 'No analyzer available for input'
+            return entry
+        detections, degraded, errors = collect_schema_detections(analyzer_class(target), target, schema, args)
+        entry.update(_detections_result(target, detections, parse_degraded=degraded, rule_errors=errors))
+        if degraded or errors:
+            entry['error'] = 'Validation incomplete: parse or rule failure'
+        else:
+            entry['status'] = 'invalid' if detections else 'valid'
+    except (OSError, ValueError) as exc:
+        entry['error'] = str(exc)
+    return entry
+
+
+def _handle_schema_batch(args: 'Namespace') -> None:
+    """Load once, collect every selected input, then emit one result and its exit."""
+    from ...schemas.frontmatter import load_schema
+    from ...utils.results import ResultBuilder
+    from ...rendering.schema import schema_batch_text
+    from ..routing.subcommand import emit_subcommand_result
+
+    schema_name = args.validate_schema
+    schema = load_schema(schema_name)
+    if not schema:
+        result = dict(ResultBuilder.create_error(
+            'schema_validation_batch', 'stdin', f"Schema '{schema_name}' not found",
+            source_type='runtime', schema=schema_name, results=[]))
+        emit_subcommand_result(result, args, name='schema_validation_batch', source='stdin',
+                               source_type='runtime', render=schema_batch_text, error_exit_code=2)
+        return
+    results = [_schema_batch_entry(target, schema, args)
+               for line in sys.stdin if (target := line.strip())
+               and _passes_ext_filter(target, getattr(args, 'ext', None))]
+    summary = {'total': len(results),
+               'valid': sum(r['status'] == 'valid' for r in results),
+               'invalid': sum(r['status'] == 'invalid' for r in results),
+               'errors': sum(r['status'] == 'error' for r in results)}
+    result = dict(ResultBuilder.create(
+        'schema_validation_batch', 'stdin', source_type='runtime',
+        data={'schema': schema_name, 'results': results, 'summary': summary}))
+    if not results:
+        result['error'] = 'No files selected for schema validation'
+    emit_subcommand_result(result, args, name='schema_validation_batch', source='stdin',
+                           source_type='runtime', render=lambda r: schema_batch_text(r, args.format))
+    sys.exit(1 if summary['invalid'] or summary['errors'] else 0)

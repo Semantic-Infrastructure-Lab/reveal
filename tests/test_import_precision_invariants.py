@@ -116,3 +116,60 @@ def test_partial_parse_preserves_symbols_where_supported(tmp_path, suffix, body,
     extractor = get_extractor(partial_path)
     after = extractor.extract_symbols(partial_path)
     assert before <= after and extractor.parse_failed
+
+
+MIDDLE_DAMAGE = {
+    '.py': ('import os\ndef before(): return os.getcwd()\n', '@@@\n',
+            'import json\ndef after(): return json.loads("{}")\n', {'os', 'json'}),
+    '.js': ('import alpha from "alpha";\nfunction before(){ alpha(); }\n', 'const broken = ;\n',
+            'import beta from "beta";\nfunction after(){ beta(); }\n', {'alpha', 'beta'}),
+    '.ts': ('import alpha from "alpha";\nfunction before(){ alpha(); }\n', 'const broken = ;\n',
+            'import beta from "beta";\nfunction after(){ beta(); }\n', {'alpha', 'beta'}),
+    '.c': ('#include "alpha.h"\nint before(){ return 1; }\n', '@@@\n',
+           '#include "beta.h"\nint after(){ return 2; }\n', {'alpha.h', 'beta.h'}),
+}
+
+
+def _assert_middle_damage_claims(path, expected):
+    analyzer = get_analyzer(str(path))(str(path))
+    structure = analyzer.get_structure()
+    assert analyzer.has_parse_errors(), 'damaged source must not be classified clean'
+    assert {'before', 'after'} <= {row['name'] for row in structure['functions']}
+    extractor = get_extractor(path)
+    assert {row.module_name for row in extractor.extract_imports(path)} == expected
+    assert extractor.parse_failed
+
+
+@pytest.mark.parametrize('suffix', MIDDLE_DAMAGE)
+def test_middle_damage_retains_known_claims_and_discloses_at_result_boundary(tmp_path, suffix):
+    import json
+    from conftest import _run_reveal_direct
+    before, broken, after, expected = MIDDLE_DAMAGE[suffix]
+    path = tmp_path / ('middle' + suffix)
+    path.write_text(before + after, encoding='utf-8')
+    clean = get_extractor(path)
+    assert {row.module_name for row in clean.extract_imports(path)} == expected and not clean.parse_failed
+    path.write_text(before + broken + after, encoding='utf-8')
+    _assert_middle_damage_claims(path, expected)
+    result = ImportsAdapter(str(path)).get_structure()
+    assert result['metadata']['files_failed_count'] == 1
+    assert result['metadata']['extraction_diagnostics'][path.name]['parse']['status'] == 'partial'
+    for fmt in ('json', 'text'):
+        output = _run_reveal_direct(f'imports://{path}', '--format', fmt)
+        if fmt == 'json':
+            answer = json.loads(output.stdout)
+            assert answer['metadata']['files_failed_count'] == 1
+            assert {row['module'] for rows in answer['files'].values() for row in rows} == expected
+        else:
+            assert 'partial' in (output.stdout + output.stderr).lower() or 'error' in (output.stdout + output.stderr).lower()
+
+
+def test_middle_damage_guard_rejects_a_deliberately_lost_import(tmp_path, monkeypatch):
+    path = tmp_path / 'broken.py'
+    before, damage, after, expected = MIDDLE_DAMAGE['.py']
+    path.write_text(before + damage + after, encoding='utf-8')
+    extractor_class = type(get_extractor(path))
+    original = extractor_class.extract_imports
+    monkeypatch.setattr(extractor_class, 'extract_imports', lambda self, fp: original(self, fp)[:1])
+    with pytest.raises(AssertionError):
+        _assert_middle_damage_claims(path, expected)

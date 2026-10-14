@@ -9,6 +9,8 @@ Usage:
     reveal 'depends://src?format=dot'      # GraphViz output
 """
 
+from ..utils.query_control import ScanBudget
+
 import os
 from pathlib import Path
 from typing import Dict, Any, List, NamedTuple, Optional, Set, Tuple
@@ -459,6 +461,8 @@ class DependsAdapter(ResourceAdapter):
         self._warn_unknown_query_params(self._query_params)  # BACK-507
         self._scan_root: Optional[Path] = None
         self._scan_capped = False
+        self._scan_budget = ScanBudget(self._SCAN_FILE_CAP)
+        self._scan_accounting = self._scan_budget.accounting(0)
         self._root_inferred = False
         # BACK-610: the validated ?root= override actually in effect (None when
         # not passed or rejected), plus a one-line reason when a passed ?root=
@@ -636,6 +640,11 @@ class DependsAdapter(ResourceAdapter):
             'total_import_edges': sum(len(v) for v in self._graph.reverse_deps.values()),
             'analyzer': 'depends',
             'scan_capped': self._scan_capped,
+            'scan_budget': {'scope': self._scan_accounting.scope,
+                            'limit': self._scan_budget.limit,
+                            'total': self._scan_accounting.total,
+                            'returned': self._scan_accounting.returned,
+                            'exact': self._scan_accounting.exact},
             'root_inferred': self._root_inferred,
             'zeitwerk_edges_inferred': self._zeitwerk_edges,
             'php_constants_indexed': self._constants_indexed,
@@ -666,6 +675,8 @@ class DependsAdapter(ResourceAdapter):
         supported_exts = scan_extensions if scan_extensions is not None else frozenset(get_all_extensions())
         self._scan_root = scan_root
         self._scan_capped = False
+        self._scan_budget = ScanBudget(self._SCAN_FILE_CAP)
+        self._scan_accounting = self._scan_budget.accounting(0)
         self._unresolved_intra = 0
         self._unresolved_examples = []
         self._files_failed = []
@@ -702,8 +713,9 @@ class DependsAdapter(ResourceAdapter):
 
         Sets ``self._scan_capped`` as a side effect (the file-count cap).
         """
-        files = import_analysis.discover(import_analysis.ScanScope(scan_root, supported_exts, cap=self._SCAN_FILE_CAP))
+        files = import_analysis.discover(import_analysis.ScanScope(scan_root, supported_exts, cap=self._scan_budget.limit))
         self._scan_capped = files.capped
+        self._scan_accounting = self._scan_budget.accounting(len(files.candidates), files.capped)
         return list(files.candidates), files.index
 
     def _build_resolution_indices(self, files: List[Path], scan_root: Path) -> '_ResolutionIndices':

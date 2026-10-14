@@ -13,8 +13,6 @@
   "reveal/adapters/architecture.py": 18,
   "reveal/adapters/ast/analysis.py": 1,
   "reveal/adapters/calls/adapter.py": 2,
-  "reveal/adapters/contracts.py": 22,
-  "reveal/adapters/deps.py": 26,
   "reveal/adapters/domain/adapter.py": 1,
   "reveal/adapters/git/adapter.py": 4,
   "reveal/adapters/git/files.py": 3,

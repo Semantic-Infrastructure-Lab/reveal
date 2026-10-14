@@ -131,6 +131,18 @@ reveal 'calls://.?target=my_function'
 
 ## How It Works
 
+JSX component uses are typed source references, not runtime invocation proof.
+`<Button/>`, paired tags and namespace components contribute records marked
+`relationship: jsx_reference`, with `reference_lines`; an expression that is also
+called has `call_and_jsx_reference`. Intrinsic tags and template strings contribute
+no component edge. Named render functions and `memo`/`forwardRef` function values
+retain their existing owners. Class-field initializer references keep class
+source ownership but are outside caller navigation; render methods remain indexed. Imported aliases are resolved through the shared
+name-resolution seam. Callees and trace use the same references; text labels them
+`JSX reference`. Dynamic render scheduling, Angular/HTML strings and Vue/Svelte
+navigation remain outside this relationship model. The existing conservative
+`uncalled` suppression remains separate from caller attribution.
+
 The `calls://` adapter builds a **project-level callers index** from all code files under the given path:
 
 1. **Collect structures** — runs the same analysis as `ast://` on every code file in the directory
@@ -524,7 +536,18 @@ reveal 'calls://src/?target=fn'   # won't see callers in tests/ above src/
 reveal 'calls://.?target=fn'       # use project root for full coverage
 ```
 
-**Module-level call sites are not indexed.** The callers index tracks calls inside function and method bodies only. A function called only at module level — e.g., in a list literal, dict literal, or top-level code outside any function — will not appear in the index and will be flagged as uncalled. This affects factory helpers like `_make_output_type('...', ...)` called to build module-level data structures.
+**Top-level callers:** Python, JS/TS, PHP and Ruby source files include a synthetic
+`<module>` caller for calls outside named functions/methods, including script loops
+and Ruby DSL blocks. Caller JSON carries `caller_kind: module`, the first call's
+`line` and every matching `call_lines` location. Counts are unique caller scopes;
+several sites in one module remain one caller. Deferred function bodies retain
+their own scope. Class-body initializers, extensionless Ruby DSL files and other
+languages' top-level code remain outside this relationship scope and are disclosed.
+
+```bash
+reveal 'calls://src?callees=<module>'
+reveal 'trace://src?from=script.py:<module>&depth=2'
+```
 
 **`line` in a caller record is the caller function's definition line, not the call-site line.** Each record is built per-*function*, not per-*call-expression* — repeat calls to the same target within one function collapse to a single record, and that record's `line` is where the caller function is `def`ined, not where the call itself appears in the body. Don't use it to jump to the exact call; use it to locate the calling function.
 
@@ -544,7 +567,7 @@ trigger() {
 
 ### False Positives in `?uncalled`
 
-`?uncalled` uses static name matching and cannot see runtime dispatch. Common sources of false positives: framework entry points (`@mcp.tool()`, `@app.route()`), console scripts wired in `pyproject.toml`, dispatch table functions (`_RENDERERS = {'key': fn}`), and functions called only at module level outside any function body.
+`?uncalled` uses static name matching and cannot see runtime dispatch. Common sources of false positives: framework entry points (`@mcp.tool()`, `@app.route()`), console scripts wired in `pyproject.toml`, dispatch table functions (`_RENDERERS = {'key': fn}`), and unsupported top-level/class-body call shapes.
 
 A function used without being called is not listed, in any language: passed as a value, callback or function pointer (C `qsort(..., cmp)`, C++ `&Class::method` in Godot's `ClassDB::bind_method`, Go `wg.Go(l.run)`, Java `X::m`, a JS callback, object-literal value, `export` or JSX `<Button/>`), called outside a function body (module level, a Kotlin `init {}` block, a Scala class body), named in a PHP hook string or callable array (`add_action('init', 'fn')`, `[$this, 'm']`) or a Ruby symbol (`before_action :authenticate`). The rule is by name, like the rest of `calls://`: any other occurrence of the name counts, so an unrelated variable of the same name can hide a dead function (BACK-1391). A function referenced only from a non-code file (Redis's `commands.def` table) is still listed. Constructors are excluded in Java, C#, C++ and Dart (recognized by their declaration: no return type), as are overrides wherever the language marks them (`override` in C#/Kotlin/Swift/C++, including a C++ `override` on the in-class declaration of an out-of-line definition, and `@Override`/`@override` in Java/Dart), framework-registered methods (Spring/JAX-RS/Dagger annotations, ASP.NET `[HttpGet]`/`[Route]`, ASP.NET `Invoke`/`Configure` by name), Swift `init`/`deinit`/operators, C/C++ `main`, operators, destructors and GoogleTest/Catch2 `TEST(...)` bodies, and Godot's GDCLASS hooks (`_bind_methods`, `_notification`, ...) in classes that declare `GDCLASS` (BACK-1392). The exact list for the scanned language is printed with the result. Rust calls inside macro arguments (`format!("{}", h())`) are recovered best-effort from the macro's token tree (BACK-1393).
 

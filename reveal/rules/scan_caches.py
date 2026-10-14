@@ -231,6 +231,14 @@ def init_scan_caches(caches: dict) -> None:
     _m102_init_worker(caches.get('M102', {}))
 
 
+def get_scan_budgets(files: List[Path], select, ignore) -> List[dict]:
+    """Numeric source accounting for reached shared indexes, independent of paging."""
+    if not rule_will_run('I002', select, ignore):
+        return []
+    from .imports.I002 import get_scan_budgets as i002_budgets
+    return i002_budgets(files)
+
+
 def get_scan_disclosures() -> List[str]:
     """BACK-1051: collect every capped-scan disclosure recorded in this
     process by rules with a shared-index/graph scan ceiling (I002, D005, T006).

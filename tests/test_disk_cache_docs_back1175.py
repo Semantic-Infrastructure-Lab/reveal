@@ -66,5 +66,5 @@ def test_every_cached_artifact_kind_is_listed(guide):
 def test_negative_control_the_namespace_scan_sees_a_real_namespace_set():
     """If the scan silently yielded nothing the coverage test would pass vacuously."""
     names = _namespaces()
-    assert {'structure', 'churn', 'python_imports', 'import_graph_v3'} <= names
+    assert {'structure', 'churn', 'python_imports', 'import_graph_v4'} <= names
     assert len(names) >= 12

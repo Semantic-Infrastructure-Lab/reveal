@@ -97,3 +97,6 @@ coverage.json
 # Internal maintainer documentation (not public)
 internal-docs/
 *.xlsx
+
+# Optional compiler-oracle dependencies
+scripts/oracles/node_modules/

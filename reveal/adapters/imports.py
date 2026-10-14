@@ -12,9 +12,7 @@ Usage:
     reveal 'imports://src?circular'          # Find cycles
 """
 
-import hashlib
 import os
-import stat as stat_module
 from pathlib import Path
 from typing import Callable, Dict, Any, List, Optional, Tuple, cast
 from reveal.reveal_types import CONTRACT_VERSION, WarningEntry
@@ -32,6 +30,7 @@ from ..analyzers.imports.base import build_project_namespaces
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 from ..analyzers.imports import service as import_analysis
+from ..analyzers.imports.file_index import resolution_fingerprint
 from ..registry import get_code_extensions
 from ..utils.parallel import pool_worker_count, submit_each, worker_lost_warning as _worker_lost_warning
 from ..utils.path_utils import to_posix, to_relative_display
@@ -40,40 +39,16 @@ from ..utils.results import ResultBuilder, note_truncation
 # Disk-cache namespace for this adapter's resolved import graph (BACK-834).
 # Mirrors rules/imports/I002.py's own import-graph disk cache (_tree_fingerprint
 # / _IMPORT_GRAPH_NAMESPACE) — same fingerprint recipe (path + mtime_ns + size
-# per candidate file), but this adapter builds a graph rooted at whatever
+# per source and indexed target file), but this adapter builds a graph rooted at whatever
 # `path` argument the caller gave it (imports://<path>, pack --architecture,
 # pack --focus), not I002's resolved *project* root, so it gets its own
 # namespace rather than sharing I002's cache entries.
 _ADAPTER_IMPORT_GRAPH_NAMESPACE = "adapter_import_graph"
 
-def _candidate_set_fingerprint(candidates: List[Path]) -> Optional[str]:
-    """Hash (path, mtime_ns, size) for every candidate file — the disk-cache key.
-
-    Same recipe as I002's `_tree_fingerprint` (BACK-536 opt 2), but reuses the
-    candidate list `_build_graph` already computed via `_discover_candidate_files`
-    instead of a second directory walk — the fingerprint costs one extra
-    `stat()` per already-discovered file, nothing more. A content edit bumps
-    mtime_ns; an add/delete/rename changes the candidate list itself — either
-    way the digest changes and the cache misses. Returns None (→ caller skips
-    the cache and builds directly) on any stat error, so a vanished/unreadable
-    file fails open to the correct, uncached path rather than raising or
-    silently keying on a partial view.
-    """
-    try:
-        entries = []
-        for fp in candidates:
-            st = fp.stat()
-            if not stat_module.S_ISREG(st.st_mode):
-                continue
-            entries.append((str(fp), st.st_mtime_ns, st.st_size))
-    except OSError:
-        return None
-    entries.sort()
-    hasher = hashlib.sha256()
-    for path_str, mtime_ns, size in entries:
-        hasher.update(path_str.encode('utf-8', 'replace'))
-        hasher.update(f"\x02{mtime_ns}\x03{size}\x04".encode('ascii'))
-    return hasher.hexdigest()
+def _candidate_set_fingerprint(candidates: List[Path],
+                               file_index: Optional[Dict[str, List[Path]]] = None) -> Optional[str]:
+    """Shared source/target fingerprint; preserve the private source-only call shape."""
+    return resolution_fingerprint(candidates, file_index or {}, excluded_root=disk_cache.cache_root())
 
 
 def _module_label(path: str) -> str:
@@ -1350,7 +1325,7 @@ class ImportsAdapter(ResourceAdapter):
         `on_file_processed` callback was given — the common case for
         `imports://`, `pack --architecture`'s fan-in, and `pack --focus`'s
         graph-relevance ranking — the resolved graph is cached on disk keyed by
-        a fingerprint of the candidate file set, so a 2nd+ call on an unchanged
+        a fingerprint of source membership and resolution targets, so a 2nd+ call on an unchanged
         tree skips the tree-sitter extraction and dependency-resolution walk
         entirely. Skipped (never read or written) when either is set, since
         `self._structures` and per-file progress callbacks aren't part of the
@@ -1364,7 +1339,7 @@ class ImportsAdapter(ResourceAdapter):
         candidates, file_index = self._discover_candidate_files(target_path, supported_exts, code_exts)
 
         cacheable = not collect_structures and on_file_processed is None
-        fingerprint = _candidate_set_fingerprint(candidates) if cacheable else None
+        fingerprint = _candidate_set_fingerprint(candidates, file_index) if cacheable else None
         if fingerprint is not None:
             cached = disk_cache.get(_ADAPTER_IMPORT_GRAPH_NAMESPACE, fingerprint)
             if isinstance(cached, ImportAnalysis):

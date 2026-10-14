@@ -53,7 +53,7 @@ class SchemaLoader:
         # Resolve to file path
         schema_path = cls._resolve_schema_path(schema_name_or_path)
         if not schema_path or not schema_path.exists():
-            logger.error(f"Schema not found: {schema_name_or_path}")
+            logger.debug(f"Schema not found: {schema_name_or_path}")
             return None
 
         # Cached by the file, not the name as typed: a relative './s.yaml' names a

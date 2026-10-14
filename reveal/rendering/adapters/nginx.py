@@ -193,9 +193,8 @@ class NginxRenderer(TypeDispatchRenderer):
 
     @classmethod
     def exit_code(cls, result: Dict[str, Any], format: str = 'text') -> int:
-        """A fleet audit with gaps exits 2 in text; --format json has always exited 0
-        (BACK-1758 decides whether it should not)."""
-        if format != 'json' and result.get('type') == 'nginx_fleet_audit' and result.get('has_gaps'):
+        """A fleet audit with gaps exits 2 in every format (BACK-1758)."""
+        if result.get('type') == 'nginx_fleet_audit' and result.get('has_gaps'):
             return 2
         return 0
 

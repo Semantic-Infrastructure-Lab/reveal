@@ -15,7 +15,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, Iterator, List, Optional, Set, Tuple
 
-from ..ast.analysis import collect_structures, is_code_file
+from ..ast.analysis import collect_structures, is_code_file, call_sources
 from ...utils.pyparse import parse_python
 from ..ast.call_graph import build_alias_map, build_symbol_map, resolve_callees as _resolve_callees
 from ...conventions import conventions_for, family_for_path, is_builtin_anywhere
@@ -413,14 +413,14 @@ def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
         # from falsely reporting `helper` as dead code and lets find_callers
         # locate callers that use the alias.
         alias_map = build_alias_map(file_path)
-        for elem in file_struct.get('elements', []):
+        for elem in call_sources(file_struct):
             # 'tests' (Zig's TestDecl blocks — the only 'tests'-category
             # producer today) counts as a caller here for the same reason
             # JS/TS's describe()/it() callbacks are folded into 'functions'
             # (BACK-334): a function called only from a test previously
             # reported zero callers — indistinguishable from dead code,
             # BACK-660's exact failure mode, just one hop further in.
-            if elem.get('category') not in ('functions', 'methods', 'tests'):
+            if elem.get('category') not in ('functions', 'methods', 'tests', 'modules'):
                 continue
             record_base = {
                 'file': file_path,
@@ -428,7 +428,15 @@ def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
                 'line': elem.get('line', 0),
             }
             for callee in elem.get('calls', []):
-                _index_callee(index, callee, {**record_base, 'call_expr': callee}, alias_map)
+                record = {**record_base, 'call_expr': callee}
+                refs = [r for r in elem.get('references', []) if r['callee'] == callee]
+                if refs:
+                    record.update(relationship='jsx_reference' if callee in elem.get('reference_only_calls', []) else 'call_and_jsx_reference',
+                                  reference_lines=sorted({r['line'] for r in refs}))
+                if elem.get('caller_kind') == 'module':
+                    lines = sorted({site['line'] for site in elem['call_sites'] if site['callee'] == callee})
+                    record.update(caller_kind='module', line=lines[0], call_lines=lines)
+                _index_callee(index, callee, record, alias_map)
 
     _INDEX_CACHE[dir_str] = (cache_key, index)
     _INDEX_CACHE.move_to_end(dir_str)
@@ -471,12 +479,12 @@ def find_callees(
     builtins_hidden = 0
     for file_struct in structures:
         file_path = file_struct.get('file', '')
-        for elem in file_struct.get('elements', []):
+        for elem in call_sources(file_struct):
             # 'tests' included for the same reason as build_callers_index
             # (BACK-663): a Zig test is a valid call *source* now that it
             # carries a populated `calls` list (BACK-660) — "what does this
             # test call" should work the same way "what calls X" already does.
-            if elem.get('category') not in ('functions', 'methods', 'tests'):
+            if elem.get('category') not in ('functions', 'methods', 'tests', 'modules'):
                 continue
             if not name_matches(elem.get('name', ''), target):
                 continue
@@ -491,6 +499,7 @@ def find_callees(
                 'function': elem.get('name', target),
                 'line': elem.get('line', 0),
                 'calls': calls,
+                'references': elem.get('references', []),
             })
 
     return {
@@ -510,10 +519,10 @@ def _build_forward_index(
     forward: Dict[str, List[Dict[str, Any]]] = {}
     for file_struct in structures:
         file_path = file_struct.get('file', '')
-        for elem in file_struct.get('elements', []):
+        for elem in call_sources(file_struct):
             # 'tests' included so a recursive walk (find_callees_recursive) can
             # start from or pass through a Zig test root (BACK-663).
-            if elem.get('category') not in ('functions', 'methods', 'tests'):
+            if elem.get('category') not in ('functions', 'methods', 'tests', 'modules'):
                 continue
             name = elem.get('name', '')
             if not name:
@@ -522,7 +531,8 @@ def _build_forward_index(
             builtins = conventions_for(_lang_family(file_path)).builtins
             if not include_builtins and builtins:
                 calls = [c for c in calls if c.split('.')[-1] not in builtins]
-            record = {'file': file_path, 'line': elem.get('line', 0), 'calls': calls}
+            record = {'file': file_path, 'line': elem.get('line', 0), 'calls': calls,
+                      'references': elem.get('references', [])}
             for key in lookup_keys(name):
                 forward.setdefault(key, []).append(record)
     return forward
@@ -1238,10 +1248,10 @@ def build_module_dependency_graph(
             sym_cache[from_file] = build_symbol_map(from_file)
         symbol_map = sym_cache[from_file]
 
-        for elem in file_struct.get('elements', []):
+        for elem in call_sources(file_struct):
             # 'tests' included so a Zig test file's calls into other modules
             # register as real module-dependency edges (BACK-663).
-            if elem.get('category') not in ('functions', 'methods', 'tests'):
+            if elem.get('category') not in ('functions', 'methods', 'tests', 'modules'):
                 continue
             raw_calls = elem.get('calls', [])
             if not raw_calls:

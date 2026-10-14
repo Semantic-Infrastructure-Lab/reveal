@@ -90,3 +90,53 @@ def test_budget_stages_preserve_existing_page_and_text_results():
     assert BudgetAccounting('page', 3, 1) != BudgetAccounting('text', 3, 1)
     with pytest.raises(ValueError):
         BudgetAccounting('page', 1, 2)
+
+
+def test_scan_policy_keeps_scope_and_lower_bound_counts():
+    from reveal.utils.query_control import ScanBudget
+    budget = ScanBudget(3)
+    assert budget.accounting(3, capped=True) == BudgetAccounting('scan', 4, 3, exact=False)
+    assert budget.accounting(2) == BudgetAccounting('scan', 2, 2)
+    assert ScanBudget(None).limit is None and ScanBudget(0).limit == 0
+    with pytest.raises(ValueError):
+        ScanBudget(-1)
+    with pytest.raises(FrozenInstanceError):
+        budget.limit = 4
+
+
+@pytest.mark.parametrize('maximum,cycle_limit,returned,total,exact,analyzed', [
+    ('1', '0', 1, 2, False, 0),
+    ('20', '1', 3, 3, True, 0),
+    ('20', '0', 3, 3, True, 3),
+])
+def test_i002_scan_accounting_distinguishes_discovery_and_analysis(
+        tmp_path, monkeypatch, maximum, cycle_limit, returned, total, exact, analyzed):
+    from reveal.rules.imports.I002 import I002, _graph_cache
+    monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
+    monkeypatch.setenv('REVEAL_I002_MAX_FILES', maximum)
+    monkeypatch.setenv('REVEAL_I002_CYCLE_LIMIT', cycle_limit)
+    for name in ('a', 'b', 'c'):
+        (tmp_path / f'{name}.py').write_text('import a\n', encoding='utf-8')
+    _graph_cache.clear()
+    graph = I002()._build_import_graph(tmp_path)
+    budget = graph.scan_budget
+    assert budget == {'scope': 'scan', 'limit': int(maximum), 'total': total,
+                      'returned': returned, 'exact': exact,
+                      'cycle_limit': int(cycle_limit), 'analyzed_files': analyzed}
+    assert bool(graph.scan_skipped_reason) == (analyzed == 0)
+    assert I002()._build_import_graph(tmp_path).scan_budget == budget
+
+
+def test_i002_counts_are_present_with_an_independent_presentation_cut(tmp_path, monkeypatch):
+    import json
+    from conftest import _run_reveal_direct
+    (tmp_path / '.reveal.yaml').write_text('root: true\n', encoding='utf-8')
+    (tmp_path / 'a.py').write_text('import b\n', encoding='utf-8')
+    (tmp_path / 'b.py').write_text('import a\n', encoding='utf-8')
+    monkeypatch.setenv('REVEAL_I002_CYCLE_LIMIT', '0')
+    monkeypatch.chdir(tmp_path)
+    result = _run_reveal_direct('check', '.', '--select', 'I002', '--format', 'json', '--max-items', '1')
+    summary = json.loads(result.stdout)['summary']
+    assert summary['items_truncated']
+    assert summary['scan_budgets'][0]['total'] == summary['scan_budgets'][0]['analyzed_files'] == 2
+    assert summary['scan_budgets'][0]['exact'] is True

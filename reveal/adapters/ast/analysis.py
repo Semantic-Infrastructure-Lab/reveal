@@ -145,6 +145,57 @@ def create_element_dict(
     return element
 
 
+
+_MODULE_CALL_FAMILIES = frozenset({'python', 'js', 'php', 'ruby'})
+_MODULE_DEFERRED_KINDS = frozenset({
+    'function_definition', 'function_declaration', 'method_declaration',
+    'method', 'singleton_method', 'lambda', 'lambda_expression',
+    'arrow_function', 'function_expression', 'anonymous_function',
+    'generator_function', 'generator_function_declaration',
+    'class', 'class_definition', 'class_declaration', 'module',
+})
+
+
+def module_call_sites(file_path: str, analyzer) -> List[Dict[str, Any]]:
+    """Script/block calls through the shared call collector; definitions keep their scopes."""
+    from ...conventions import family_for_path
+    from ...registry import language_for_extension
+    from ...core import get_tree, _zero_arg
+    from ...core.nav_calls import range_calls
+    if family_for_path(file_path) not in _MODULE_CALL_FAMILIES:
+        return []
+    language = language_for_extension(Path(file_path).suffix)
+    if language is None:
+        return []
+    tree = getattr(analyzer, 'tree', None) or get_tree(language, analyzer.content)
+    root = _zero_arg(tree, 'root_node')
+    content = analyzer.content.encode('utf-8')
+    def text(node):
+        return content[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8', errors='replace')
+    implicit = analyzer._implicit_call_nodes(root) if hasattr(analyzer, '_implicit_call_nodes') else ()
+    # Python's root node is 'module'; only children are excluded by range_calls.
+    return range_calls(root, 1, _zero_arg(root, 'end_position').row + 1, text,
+                       implicit_nodes=implicit, skip_kinds=_MODULE_DEFERRED_KINDS)
+
+
+def call_sources(file_struct: Dict[str, Any]):
+    """Call/reference projection shared by callers, callees and trace."""
+    refs = file_struct.get('jsx_references', [])
+    for elem in file_struct.get('elements', []):
+        references = [r for r in refs if r['owner'] == elem.get('name') and r['owner_line'] == elem.get('line')]
+        if references:
+            yield {**elem, 'calls': list(dict.fromkeys([*elem.get('calls', []), *(r['callee'] for r in references)])),
+                   'references': references, 'reference_only_calls': [r['callee'] for r in references if r['callee'] not in elem.get('calls', [])]}
+        else:
+            yield elem
+    sites = [s for s in file_struct.get('module_call_sites', []) if s.get('relationship') != 'jsx_reference']
+    references = [r for r in refs if r['owner'] == '<module>']
+    if sites or references:
+        yield {'category': 'modules', 'name': '<module>', 'line': 1,
+               'caller_kind': 'module', 'calls': list(dict.fromkeys(s['callee'] for s in [*sites, *references])),
+               'call_sites': [*sites, *references], 'references': references,
+               'reference_only_calls': [r['callee'] for r in references if r['callee'] not in {s['callee'] for s in sites}]}
+
 def analyze_file(file_path: str) -> Optional[Dict[str, Any]]:
     """Analyze a single file and extract structure.
 
@@ -185,6 +236,12 @@ def analyze_file(file_path: str) -> Optional[Dict[str, Any]]:
                 element = create_element_dict(
                     file_path, category, cast(StructureItem, item), analyzer, symbol_map)
                 result['elements'].append(element)
+
+        result['module_call_sites'] = module_call_sites(file_path, analyzer)
+        from ...conventions import family_for_path
+        if family_for_path(file_path) == 'js':
+            from ..calls.references import jsx_component_references
+            result['jsx_references'] = jsx_component_references(analyzer, result['elements'])
 
         # Free large per-file buffers held by the analyzer so directory scans
         # (ast://, overview) don't accumulate memory proportional to all files.

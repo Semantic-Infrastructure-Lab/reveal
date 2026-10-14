@@ -222,16 +222,13 @@ def test_kill_switch_writes_nothing(tmp_path, monkeypatch):
     assert disk_cache.get(i002_mod._IMPORT_GRAPH_NAMESPACE, fp) is None
 
 
-def test_fingerprint_matches_pass_a_file_selection(tmp_path):
-    """The fingerprint must digest exactly the files Pass A parses — no drift.
-
-    A file with an unsupported extension must not affect the fingerprint;
-    adding a supported-extension file must.
-    """
+def test_fingerprint_covers_source_and_resolution_target_selections(tmp_path):
+    """Non-source targets can affect resolution and must invalidate cached answers."""
     root = _project(tmp_path / "proj")
     fp = i002_mod._tree_fingerprint(root)
     (root / "notes.txt").write_text("not source\n")     # unsupported ext
-    assert i002_mod._tree_fingerprint(root) == fp
+    assert i002_mod._tree_fingerprint(root) != fp
+    fp = i002_mod._tree_fingerprint(root)
     (root / "e.py").write_text("y = 2\n")                # supported ext
     assert i002_mod._tree_fingerprint(root) != fp
 
@@ -243,3 +240,21 @@ def test_graph_is_picklable():
     g = ImportGraph()
     g.add_dependency(Path("a.py"), Path("b.py"))
     assert pickle.loads(pickle.dumps(g)) == g
+
+
+def test_target_only_add_delete_changes_i002_disk_fingerprint(tmp_path):
+    (tmp_path / '.gitignore').write_text('generated.py\n', encoding='utf-8')
+    (tmp_path / 'use.py').write_text('import generated\n', encoding='utf-8')
+    fingerprint = i002_mod._tree_fingerprint(tmp_path)
+    rule = i002_mod.I002()
+    graph = rule._build_import_graph(tmp_path)
+    target = tmp_path / 'generated.py'
+    assert tmp_path / 'use.py' not in graph.reverse_deps.get(target, set())
+    target.write_text('VALUE = 1\n', encoding='utf-8')
+    assert i002_mod._tree_fingerprint(tmp_path) != fingerprint
+    i002_mod._graph_cache.clear()  # model a fresh CLI invocation, using the disk cache
+    graph = rule._build_import_graph(tmp_path)
+    assert tmp_path / 'use.py' in graph.reverse_deps.get(target, set())
+    target.unlink()
+    i002_mod._graph_cache.clear()
+    assert tmp_path / 'use.py' not in rule._build_import_graph(tmp_path).reverse_deps.get(target, set())

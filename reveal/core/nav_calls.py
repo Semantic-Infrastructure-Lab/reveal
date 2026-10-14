@@ -12,6 +12,20 @@ from .callees import callee_name_from_node, extract_by_kind, is_misparsed_call, 
 from reveal.utils.lines import split_lines
 
 
+def jsx_reference_hit(node: Any, get_text: Callable) -> Optional[Dict[str, Any]]:
+    """One component-use reference; paired closing tags and intrinsic tags are excluded."""
+    if _zero_arg(node, 'kind') not in ('jsx_self_closing_element', 'jsx_opening_element'):
+        return None
+    name_node = node.child_by_field_name('name')
+    if name_node is None:
+        return None
+    name = ''.join(get_text(name_node).split())
+    if not name or ':' in name or ('-' in name) or ('.' not in name and name[0] in 'abcdefghijklmnopqrstuvwxyz'):
+        return None
+    return {'line': _zero_arg(node, 'start_position').row + 1, 'callee': name,
+            'relationship': 'jsx_reference', 'first_arg': None, 'has_more_args': False}
+
+
 def _generic_call_hits(
     node: Any, call_node_types: frozenset, get_text: Callable, from_line: int, to_line: int,
 ) -> List[Dict[str, Any]]:
@@ -27,6 +41,9 @@ def _generic_call_hits(
     # (caught by test_calls_ignores_bare_property_access_in_chain
     # regressing to ['x.field.method', 'method'] instead of
     # ['x.field.method']).
+    reference = jsx_reference_hit(node, get_text)
+    if reference is not None and from_line <= reference['line'] <= to_line:
+        return [reference]
     line = _zero_arg(node, 'start_position').row + 1
     in_range = from_line <= line <= to_line
     node_kind = _zero_arg(node, 'kind')
@@ -181,6 +198,7 @@ def range_calls(
     get_text: Callable,
     call_node_types: Optional[frozenset] = None,
     implicit_nodes: Sequence[Any] = (),
+    skip_kinds: frozenset = frozenset(),
 ) -> List[Dict[str, Any]]:
     """Return call sites within a line range.
 
@@ -204,6 +222,8 @@ def range_calls(
         line = _zero_arg(node, 'start_position').row + 1
         if _zero_arg(node, 'end_position').row + 1 < from_line or line > to_line:
             continue
+        if _zero_arg(node, 'kind') in skip_kinds:
+            continue
         children = _children(node)
         results.extend(_generic_call_hits(node, call_node_types, get_text, from_line, to_line))
         results.extend(_dart_selector_hits(children, get_text, from_line, to_line))
@@ -213,6 +233,15 @@ def range_calls(
         stack.extend(reversed(children))
 
     for node in implicit_nodes:
+        parent = _zero_arg(node, 'parent')
+        skipped = False
+        while parent is not None and skip_kinds:
+            if _zero_arg(parent, 'kind') in skip_kinds:
+                skipped = True
+                break
+            parent = _zero_arg(parent, 'parent')
+        if skipped:
+            continue
         line = _zero_arg(node, 'start_position').row + 1
         if from_line <= line <= to_line:
             results.append({'line': line, 'callee': get_text(node).strip(),
@@ -345,5 +374,8 @@ def render_range_calls(
             arg_part = f'({call["first_arg"]}, ...)' if call['has_more_args'] else f'({call["first_arg"]})'
         else:
             arg_part = '(...)'
-        lines.append(f'L{call["line"]}:  {callee}{arg_part}')
+        relation = " [JSX reference]" if call.get("relationship") == "jsx_reference" else ""
+        if relation:
+            arg_part = ''
+        lines.append(f'L{call["line"]}:  {callee}{arg_part}{relation}')
     return '\n'.join(lines)

@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, TypeVar
 from reveal.utils.json_utils import print_json_result
 from reveal.utils.results import outcome_of
 from reveal.utils.query_control import BudgetAccounting, omitted_line
-from reveal.utils.warning_render import render_meta_warnings
+from reveal.utils.warning_render import meta_warning_lines
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,8 @@ class RenderOptions:
 _Item = TypeVar("_Item")
 
 
-def capped_section(items: Sequence[_Item], limit: Optional[int], format_item: Callable[[_Item], str]) -> List[str]:
+def capped_section(items: Sequence[_Item], limit: Optional[int], format_item: Callable[[_Item], str],
+                   *, indent: str = "    ", suffix: str = "") -> List[str]:
     """Render a bounded section with its exact remainder; None shows everything."""
     if limit is not None and limit < 0:
         raise ValueError("Display limit must be nonnegative")
@@ -31,7 +32,7 @@ def capped_section(items: Sequence[_Item], limit: Optional[int], format_item: Ca
     lines = [format_item(item) for item in shown]
     accounting = BudgetAccounting("text", len(items), len(shown))
     if accounting.remaining:
-        lines.append(f"    ... and {accounting.remaining} more")
+        lines.append(f"{indent}... and {accounting.remaining} more{suffix}")
     return lines
 
 
@@ -40,14 +41,24 @@ def emit_rendered(render, result: dict, format: str = "text", **kwargs) -> None:
 
     A renderer whose body already carries the result's warnings (in its own place and
     under its own heading) sets RENDERS_META_WARNINGS so they are not printed twice."""
-    body = render(result, format, **kwargs)
-    if isinstance(body, str):
-        if body:
-            print(body, end="" if body.endswith("\n") else "\n")
-        owner = getattr(render, "__self__", None)
-        if (format != "json" and outcome_of(result) != "failed"
-                and not getattr(owner, "RENDERS_META_WARNINGS", False)):
-            render_meta_warnings(result)
+    emit_body(render(result, format, **kwargs), result, render, format)
+
+
+def emit_body(body: Optional[str], result: dict, render, format: str = 'text') -> None:
+    """Emit a returned body and its diagnostics for URI and subcommand callers.
+
+    Partial-bound renderers preserve their warning ownership, so a body containing
+    a Caveats section does not acquire a second warning footer.
+    """
+    if not isinstance(body, str):
+        return  # legacy print renderers own their output
+    if body:
+        print(body, end="" if body.endswith("\n") else "\n")
+    owner = getattr(getattr(render, 'func', render), '__self__', None)
+    if (format != 'json' and outcome_of(result) != 'failed'
+            and not getattr(owner, 'RENDERS_META_WARNINGS', False)):
+        for line in meta_warning_lines(result):
+            print(line, file=sys.stderr if format == 'grep' else sys.stdout)
 
 
 class RendererMixin:

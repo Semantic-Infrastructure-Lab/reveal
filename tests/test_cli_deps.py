@@ -52,7 +52,9 @@ def _args(**kwargs):
 def _capture(fn, *args, **kwargs):
     buf = StringIO()
     with patch('sys.stdout', buf):
-        fn(*args, **kwargs)
+        result = fn(*args, **kwargs)
+    if isinstance(result, list):
+        return "\n".join(result)
     return buf.getvalue()
 
 
@@ -764,7 +766,7 @@ class TestHonestSummaryAndRunnableNextSteps:
     def _summary(self, analysis, meta):
         buf = StringIO()
         with patch('sys.stdout', buf):
-            _render_summary(analysis, 0, 0, meta)
+            print("\n".join(_render_summary(analysis, 0, 0, meta)))
         return buf.getvalue()
 
     def _analysis(self, files, imports):
@@ -788,7 +790,7 @@ class TestHonestSummaryAndRunnableNextSteps:
     def test_next_steps_name_the_scanned_path(self, tmp_path):
         buf = StringIO()
         with patch('sys.stdout', buf):
-            _render_next_steps(tmp_path)
+            print("\n".join(_render_next_steps(tmp_path)))
         out = buf.getvalue()
         assert f"imports://{tmp_path}?circular" in out
         assert 'imports://. ' not in out
