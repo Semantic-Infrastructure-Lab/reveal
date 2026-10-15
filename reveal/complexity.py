@@ -4,7 +4,7 @@ Standalone functions — no TreeSitterAnalyzer dependency — so the check/revie
 flow can import this without pulling the full analyzer base class into scope.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Mapping, Optional
 
 from .core import node_children as _children
 from .core.node_taxonomy import is_do_block
@@ -359,7 +359,7 @@ _FALLBACK_PATTERNS = (
 )
 
 
-def fallback_complexity(func: Dict[str, Any], content: Optional[str]) -> int:
+def fallback_complexity(func: Mapping[str, Any], content: Optional[str]) -> int:
     """Estimate complexity for a function whose analyzer supplies no tree-sitter score.
 
     The one fallback for ast://, stats:// and C901 (BACK-1519): count control-flow
