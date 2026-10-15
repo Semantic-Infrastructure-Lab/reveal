@@ -5,13 +5,13 @@
     "repo": "https://github.com/celery/celery.git"
   },
   "implementation": {
-    "head": "6896f1470154478af86106db6fdd654b7a62f22b",
-    "tracked_diff_sha256": "41fbbf2827aff23533071b0dbf30ed1aae2734fe5a8f88e0a7e8186cf7ebda45",
-    "untracked_sha256": "97f8357c1bcfd739f057986754c0607f40af6f7bf89ff5c3ee20a2d0d09cf2c0",
+    "head": "474b03db81d16f4ea6b32db42f69282218df4a1b",
+    "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "untracked_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "tree_sitter": "0.25.2",
-    "language_pack": "1.21.0"
+    "language_pack": "1.20.0"
   },
-  "python": "3.12.12 (main, Nov 19 2025, 22:46:53) [Clang 21.1.4 ]",
+  "python": "3.13.16 (main, Oct  1 2026, 15:40:21) [GCC 11.4.0]",
   "rules": [
     "D001",
     "B006",
@@ -22,16 +22,16 @@
     "files_with_issues": 52,
     "files_errored": 0,
     "files_degraded": 5,
-    "total_issues": 184,
+    "total_issues": 169,
     "exit_code": 3,
     "scan_disclosures": [],
     "items_truncated": false,
     "scan_budgets": []
   },
   "population_by_rule": {
-    "D001": 144,
-    "I001": 3,
-    "B006": 37
+    "D001": 154,
+    "I001": 2,
+    "B006": 13
   },
   "excluded_files": [
     {
@@ -80,17 +80,30 @@
       "stratum_sample": 9
     },
     {
-      "file": "t/unit/app/test_beat.py",
-      "source_sha256": "511d47f109de52bc8bea0c1f63d70ad6581eb50d2b023fb8155a46fc62099602",
+      "file": "examples/django/demoapp/tasks.py",
+      "source_sha256": "d719f1354be6df49beea97fc2a2e924e5648949eab0b1b170243aec3f3f5730e",
+      "stratum": "examples",
+      "rule_code": "D001",
+      "line": 44,
+      "column": 1,
+      "message": "Duplicate function detected: 'error_backoff_test' identical to 'error_task' (line 35)",
+      "suggestion": "Refactor to share implementation with error_task",
+      "id": "f7f51e8de0dc16d20815",
+      "stratum_population": 1,
+      "stratum_sample": 1
+    },
+    {
+      "file": "t/unit/tasks/test_trace.py",
+      "source_sha256": "d82eceb436664dbea1deb93dc902fb643cd3bf0b798a31079f275b5cc587ac76",
       "stratum": "t",
       "rule_code": "D001",
-      "line": 206,
+      "line": 136,
       "column": 1,
-      "message": "Duplicate function detected: 'foo' identical to 'foo' (line 194)",
-      "suggestion": "Refactor to share implementation with foo",
-      "id": "007b1358731b1721b091",
-      "stratum_population": 135,
-      "stratum_sample": 11
+      "message": "Duplicate function detected: 'add' identical to 'add_with_before_start' (line 62)",
+      "suggestion": "Refactor to share implementation with add_with_before_start",
+      "id": "04aab28757579f2bcc9d",
+      "stratum_population": 144,
+      "stratum_sample": 10
     },
     {
       "file": "celery/apps/multi.py",
@@ -115,8 +128,8 @@
       "message": "Duplicate function detected: 'on_errback' identical to 'on_errback' (line 787)",
       "suggestion": "Refactor to share implementation with on_errback",
       "id": "04ca9843e185a8f46ae2",
-      "stratum_population": 135,
-      "stratum_sample": 11
+      "stratum_population": 144,
+      "stratum_sample": 10
     },
     {
       "file": "celery/app/trace.py",
@@ -132,17 +145,17 @@
       "stratum_sample": 9
     },
     {
-      "file": "t/unit/tasks/test_trace.py",
-      "source_sha256": "d82eceb436664dbea1deb93dc902fb643cd3bf0b798a31079f275b5cc587ac76",
+      "file": "t/unit/tasks/test_tasks.py",
+      "source_sha256": "05082b6c644ac4056ef4697fde07fc346c56ad7c4df7abe0dc01e121bddfee3c",
       "stratum": "t",
       "rule_code": "D001",
-      "line": 952,
+      "line": 242,
       "column": 1,
-      "message": "Duplicate function detected: 'add' identical to 'add' (line 136)",
-      "suggestion": "Refactor to share implementation with add",
-      "id": "076d979c270019efc505",
-      "stratum_population": 135,
-      "stratum_sample": 11
+      "message": "Duplicate function detected: 'autoretry_arith_task' identical to 'autoretry_task_no_kwargs' (line 226)",
+      "suggestion": "Refactor to share implementation with autoretry_task_no_kwargs",
+      "id": "059745e8baad4ee6abce",
+      "stratum_population": 144,
+      "stratum_sample": 10
     },
     {
       "file": "celery/backends/base.py",
@@ -158,17 +171,17 @@
       "stratum_sample": 9
     },
     {
-      "file": "t/unit/tasks/test_trace.py",
-      "source_sha256": "d82eceb436664dbea1deb93dc902fb643cd3bf0b798a31079f275b5cc587ac76",
+      "file": "t/unit/tasks/test_tasks.py",
+      "source_sha256": "05082b6c644ac4056ef4697fde07fc346c56ad7c4df7abe0dc01e121bddfee3c",
       "stratum": "t",
       "rule_code": "D001",
-      "line": 780,
+      "line": 854,
       "column": 1,
-      "message": "Duplicate function detected: 'add' identical to 'add' (line 136)",
-      "suggestion": "Refactor to share implementation with add",
-      "id": "08228b7a4915ebb3b2a8",
-      "stratum_population": 135,
-      "stratum_sample": 11
+      "message": "Duplicate function detected: 'task_b' identical to 'task_a' (line 850)",
+      "suggestion": "Refactor to share implementation with task_a",
+      "id": "075e3180df34a1da03cf",
+      "stratum_population": 144,
+      "stratum_sample": 10
     },
     {
       "file": "celery/schedules.py",
@@ -184,17 +197,17 @@
       "stratum_sample": 9
     },
     {
-      "file": "t/unit/tasks/test_tasks.py",
-      "source_sha256": "05082b6c644ac4056ef4697fde07fc346c56ad7c4df7abe0dc01e121bddfee3c",
+      "file": "t/unit/tasks/test_chord.py",
+      "source_sha256": "c9216e35ef4dec2767d5676f9aa859ac0974fc2c55988ad3990c13b300882954",
       "stratum": "t",
       "rule_code": "D001",
-      "line": 1924,
+      "line": 281,
       "column": 1,
-      "message": "Duplicate function detected: 'task' identical to 'task' (line 1917)",
-      "suggestion": "Refactor to share implementation with task",
-      "id": "085b0b03c9b35b32f9fb",
-      "stratum_population": 135,
-      "stratum_sample": 11
+      "message": "Duplicate function detected: 'mul' identical to 'mul' (line 260)",
+      "suggestion": "Refactor to share implementation with mul",
+      "id": "08879d139463e5db4406",
+      "stratum_population": 144,
+      "stratum_sample": 10
     },
     {
       "file": "celery/worker/components.py",
@@ -210,17 +223,17 @@
       "stratum_sample": 9
     },
     {
-      "file": "t/unit/tasks/test_chord.py",
-      "source_sha256": "c9216e35ef4dec2767d5676f9aa859ac0974fc2c55988ad3990c13b300882954",
+      "file": "t/unit/tasks/test_trace.py",
+      "source_sha256": "d82eceb436664dbea1deb93dc902fb643cd3bf0b798a31079f275b5cc587ac76",
       "stratum": "t",
       "rule_code": "D001",
-      "line": 281,
+      "line": 1018,
       "column": 1,
-      "message": "Duplicate function detected: 'mul' identical to 'mul' (line 260)",
-      "suggestion": "Refactor to share implementation with mul",
-      "id": "08879d139463e5db4406",
-      "stratum_population": 135,
-      "stratum_sample": 11
+      "message": "Duplicate function detected: 'add' identical to 'add_with_before_start' (line 62)",
+      "suggestion": "Refactor to share implementation with add_with_before_start",
+      "id": "089f67a6b0d7db5496bc",
+      "stratum_population": 144,
+      "stratum_sample": 10
     },
     {
       "file": "celery/backends/asynchronous.py",
@@ -245,8 +258,8 @@
       "message": "Duplicate function detected: 'on_signature' identical to 'on_signature' (line 4037)",
       "suggestion": "Refactor to share implementation with on_signature",
       "id": "0a9556e1e647e270d72a",
-      "stratum_population": 135,
-      "stratum_sample": 11
+      "stratum_population": 144,
+      "stratum_sample": 10
     },
     {
       "file": "celery/backends/asynchronous.py",
@@ -262,17 +275,17 @@
       "stratum_sample": 9
     },
     {
-      "file": "t/unit/app/test_app.py",
-      "source_sha256": "6ec78a289a9f37ff29fb83a30d39cb8bc4eb5a1bc2dfc04ec983793d07e1848b",
+      "file": "t/unit/tasks/test_stamping.py",
+      "source_sha256": "e85d5c57549ac39e83c7219d6c49f1741cc655784242cdfbbf87027a18095622",
       "stratum": "t",
       "rule_code": "D001",
-      "line": 1070,
+      "line": 1080,
       "column": 1,
-      "message": "Duplicate function detected: 'foo' identical to 'foo' (line 416)",
-      "suggestion": "Refactor to share implementation with foo",
-      "id": "0b2b0e5a290e1d6532f0",
-      "stratum_population": 135,
-      "stratum_sample": 11
+      "message": "Duplicate function detected: 'on_signature' identical to 'on_signature' (line 745)",
+      "suggestion": "Refactor to share implementation with on_signature",
+      "id": "0c4831245cf490b09407",
+      "stratum_population": 144,
+      "stratum_sample": 10
     },
     {
       "file": "celery/backends/asynchronous.py",
@@ -288,19 +301,6 @@
       "stratum_sample": 9
     },
     {
-      "file": "t/unit/tasks/test_stamping.py",
-      "source_sha256": "e85d5c57549ac39e83c7219d6c49f1741cc655784242cdfbbf87027a18095622",
-      "stratum": "t",
-      "rule_code": "D001",
-      "line": 1080,
-      "column": 1,
-      "message": "Duplicate function detected: 'on_signature' identical to 'on_signature' (line 745)",
-      "suggestion": "Refactor to share implementation with on_signature",
-      "id": "0c4831245cf490b09407",
-      "stratum_population": 135,
-      "stratum_sample": 11
-    },
-    {
       "file": "t/unit/concurrency/test_prefork.py",
       "source_sha256": "e3060b647efcbff3a1c743df78a5a1e53d4c66286e11a46b5f195d1e5156fa96",
       "stratum": "t",
@@ -310,21 +310,21 @@
       "message": "Duplicate function detected: '_fake_hub' identical to '_fake_hub' (line 441)",
       "suggestion": "Refactor to share implementation with _fake_hub",
       "id": "0cbdb9b73bf8f4b67c9c",
-      "stratum_population": 135,
-      "stratum_sample": 11
+      "stratum_population": 144,
+      "stratum_sample": 10
     },
     {
-      "file": "t/unit/tasks/test_trace.py",
-      "source_sha256": "d82eceb436664dbea1deb93dc902fb643cd3bf0b798a31079f275b5cc587ac76",
+      "file": "t/unit/tasks/test_tasks.py",
+      "source_sha256": "05082b6c644ac4056ef4697fde07fc346c56ad7c4df7abe0dc01e121bddfee3c",
       "stratum": "t",
       "rule_code": "D001",
-      "line": 516,
+      "line": 281,
       "column": 1,
-      "message": "Duplicate function detected: 'add' identical to 'add' (line 136)",
-      "suggestion": "Refactor to share implementation with add",
-      "id": "109d4d8e348d49be8416",
-      "stratum_population": 135,
-      "stratum_sample": 11
+      "message": "Duplicate function detected: 'retry_backoff_from_base_task' identical to 'autoretry_for_from_base_task' (line 251)",
+      "suggestion": "Refactor to share implementation with autoretry_for_from_base_task",
+      "id": "11bf3b84337eaae5dd33",
+      "stratum_population": 144,
+      "stratum_sample": 10
     },
     {
       "file": "celery/backends/rpc.py",
@@ -336,164 +336,8 @@
       "message": "Broad exception handler with no visible failure signal can hide bugs",
       "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
       "id": "28c68e88e59d7c0e5721",
-      "stratum_population": 6,
-      "stratum_sample": 6
-    },
-    {
-      "file": "t/unit/worker/test_request.py",
-      "source_sha256": "a5a208ceafc0f140ebc9ec79367f9a25301ddddced437800907dc4f4dc4ffef7",
-      "stratum": "t",
-      "rule_code": "B006",
-      "line": 107,
-      "column": 9,
-      "message": "Broad exception handler with no visible failure signal can hide bugs",
-      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
-      "id": "034d85ad96141f260822",
-      "stratum_population": 31,
-      "stratum_sample": 14
-    },
-    {
-      "file": "celery/backends/database/__init__.py",
-      "source_sha256": "ca7bee8373c7b798b92e33571e32d0a77b091fc72128a4477ac3a99b8a1557a9",
-      "stratum": "celery",
-      "rule_code": "B006",
-      "line": 240,
-      "column": 17,
-      "message": "Broad exception handler with no visible failure signal can hide bugs",
-      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
-      "id": "3db402563159c032905c",
-      "stratum_population": 6,
-      "stratum_sample": 6
-    },
-    {
-      "file": "t/integration/test_redis_backend.py",
-      "source_sha256": "b19f590105f942c76ffcdc0c47eedbe4b6ad13d9d0933818a1f03cd35d7d6fa0",
-      "stratum": "t",
-      "rule_code": "B006",
-      "line": 99,
-      "column": 13,
-      "message": "Broad exception handler with no visible failure signal can hide bugs",
-      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
-      "id": "117f88c2801ef6fac95f",
-      "stratum_population": 31,
-      "stratum_sample": 14
-    },
-    {
-      "file": "celery/backends/database/models.py",
-      "source_sha256": "b24d5a7a5f3d1516ee655c47ecbb462f43d458b01f78568d36924756dff4c90e",
-      "stratum": "celery",
-      "rule_code": "B006",
-      "line": 87,
-      "column": 9,
-      "message": "Broad exception handler with no visible failure signal can hide bugs",
-      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
-      "id": "51da32cd9e3fcb3e1fe5",
-      "stratum_population": 6,
-      "stratum_sample": 6
-    },
-    {
-      "file": "t/unit/backends/test_base.py",
-      "source_sha256": "c1adff1839e0c67fd4e6055a24ef62604b05bd3cc250ca25d77a14843645c3bc",
-      "stratum": "t",
-      "rule_code": "B006",
-      "line": 2028,
-      "column": 13,
-      "message": "Broad exception handler with no visible failure signal can hide bugs",
-      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
-      "id": "166110794279cef94b1c",
-      "stratum_population": 31,
-      "stratum_sample": 14
-    },
-    {
-      "file": "celery/bin/celery.py",
-      "source_sha256": "76730385bda66607440b5dd34c688f987f6eb15103d55f2ee887e7b672c601ac",
-      "stratum": "celery",
-      "rule_code": "B006",
-      "line": 148,
-      "column": 9,
-      "message": "Broad exception handler with no visible failure signal can hide bugs",
-      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
-      "id": "758f4643b0131c1cf58f",
-      "stratum_population": 6,
-      "stratum_sample": 6
-    },
-    {
-      "file": "t/integration/test_redis_backend.py",
-      "source_sha256": "b19f590105f942c76ffcdc0c47eedbe4b6ad13d9d0933818a1f03cd35d7d6fa0",
-      "stratum": "t",
-      "rule_code": "B006",
-      "line": 185,
-      "column": 9,
-      "message": "Broad exception handler with no visible failure signal can hide bugs",
-      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
-      "id": "1699d50831040933a716",
-      "stratum_population": 31,
-      "stratum_sample": 14
-    },
-    {
-      "file": "celery/backends/database/models.py",
-      "source_sha256": "b24d5a7a5f3d1516ee655c47ecbb462f43d458b01f78568d36924756dff4c90e",
-      "stratum": "celery",
-      "rule_code": "B006",
-      "line": 48,
-      "column": 9,
-      "message": "Broad exception handler with no visible failure signal can hide bugs",
-      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
-      "id": "9395a880e4b6b44c8db6",
-      "stratum_population": 6,
-      "stratum_sample": 6
-    },
-    {
-      "file": "t/unit/utils/test_collections.py",
-      "source_sha256": "fc9398d53421f1c4d2a5f6786a2f23b2f20f82cc44ecdc352b1f0bc9f9ab0fc0",
-      "stratum": "t",
-      "rule_code": "B006",
-      "line": 279,
-      "column": 9,
-      "message": "Broad exception handler with no visible failure signal can hide bugs",
-      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
-      "id": "2f85f200cc0ac7392c6b",
-      "stratum_population": 31,
-      "stratum_sample": 14
-    },
-    {
-      "file": "celery/backends/rpc.py",
-      "source_sha256": "6a700be69919c2affcebf1f09c04c95baf554b5fabed2edcc6e82c64cb238ac2",
-      "stratum": "celery",
-      "rule_code": "B006",
-      "line": 98,
-      "column": 13,
-      "message": "Broad exception handler with no visible failure signal can hide bugs",
-      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
-      "id": "c20d5b37fdc75ee14533",
-      "stratum_population": 6,
-      "stratum_sample": 6
-    },
-    {
-      "file": "t/unit/backends/test_database.py",
-      "source_sha256": "a958056984701dd90c0e4fa92752ec1bbd623624b9a2e309d7d4d68848ce9b0a",
-      "stratum": "t",
-      "rule_code": "B006",
-      "line": 394,
-      "column": 13,
-      "message": "Broad exception handler with no visible failure signal can hide bugs",
-      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
-      "id": "30a6c28de1812120bdda",
-      "stratum_population": 31,
-      "stratum_sample": 14
-    },
-    {
-      "file": "t/unit/worker/test_request.py",
-      "source_sha256": "a5a208ceafc0f140ebc9ec79367f9a25301ddddced437800907dc4f4dc4ffef7",
-      "stratum": "t",
-      "rule_code": "B006",
-      "line": 934,
-      "column": 9,
-      "message": "Broad exception handler with no visible failure signal can hide bugs",
-      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
-      "id": "3801781ca9680bee21f8",
-      "stratum_population": 31,
-      "stratum_sample": 14
+      "stratum_population": 5,
+      "stratum_sample": 5
     },
     {
       "file": "t/integration/test_mem_leak_in_exception_handling.py",
@@ -505,34 +349,21 @@
       "message": "Broad exception handler with no visible failure signal can hide bugs",
       "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
       "id": "60671a0d0c8c4ed80098",
-      "stratum_population": 31,
-      "stratum_sample": 14
+      "stratum_population": 8,
+      "stratum_sample": 8
     },
     {
-      "file": "t/unit/backends/test_base.py",
-      "source_sha256": "c1adff1839e0c67fd4e6055a24ef62604b05bd3cc250ca25d77a14843645c3bc",
-      "stratum": "t",
+      "file": "celery/backends/database/__init__.py",
+      "source_sha256": "ca7bee8373c7b798b92e33571e32d0a77b091fc72128a4477ac3a99b8a1557a9",
+      "stratum": "celery",
       "rule_code": "B006",
-      "line": 2122,
-      "column": 13,
+      "line": 240,
+      "column": 17,
       "message": "Broad exception handler with no visible failure signal can hide bugs",
       "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
-      "id": "6b01bcc369d1a0d30c99",
-      "stratum_population": 31,
-      "stratum_sample": 14
-    },
-    {
-      "file": "t/unit/backends/test_elasticsearch.py",
-      "source_sha256": "0347d4189804e5007fe82a43f09e82a7b8fa359c03c58f24ea934b86f461543b",
-      "stratum": "t",
-      "rule_code": "B006",
-      "line": 857,
-      "column": 13,
-      "message": "Broad exception handler with no visible failure signal can hide bugs",
-      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
-      "id": "741e700f257eed44eea9",
-      "stratum_population": 31,
-      "stratum_sample": 14
+      "id": "3db402563159c032905c",
+      "stratum_population": 5,
+      "stratum_sample": 5
     },
     {
       "file": "t/integration/test_connection_recovery.py",
@@ -544,21 +375,21 @@
       "message": "Broad exception handler with no visible failure signal can hide bugs",
       "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
       "id": "7ace371bfbaf8b663ad8",
-      "stratum_population": 31,
-      "stratum_sample": 14
+      "stratum_population": 8,
+      "stratum_sample": 8
     },
     {
-      "file": "t/integration/test_canvas.py",
-      "source_sha256": "bc955da299ee8b41356b4432ba1b8887f1a3845a5bc1b056b9402d7da6174d5d",
-      "stratum": "t",
+      "file": "celery/backends/database/models.py",
+      "source_sha256": "b24d5a7a5f3d1516ee655c47ecbb462f43d458b01f78568d36924756dff4c90e",
+      "stratum": "celery",
       "rule_code": "B006",
-      "line": 3561,
+      "line": 87,
       "column": 9,
       "message": "Broad exception handler with no visible failure signal can hide bugs",
       "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
-      "id": "7cc0ca808b3805f16c02",
-      "stratum_population": 31,
-      "stratum_sample": 14
+      "id": "51da32cd9e3fcb3e1fe5",
+      "stratum_population": 5,
+      "stratum_sample": 5
     },
     {
       "file": "t/integration/test_mem_leak_in_exception_handling.py",
@@ -570,34 +401,112 @@
       "message": "Broad exception handler with no visible failure signal can hide bugs",
       "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
       "id": "7e04a4725db287f386a4",
-      "stratum_population": 31,
-      "stratum_sample": 14
+      "stratum_population": 8,
+      "stratum_sample": 8
     },
     {
-      "file": "t/integration/test_tasks.py",
-      "source_sha256": "1c2dbcdca6930cdb58ec7b517aea37782b5302c3a6f2bd02d71bc2263354626d",
+      "file": "celery/backends/database/models.py",
+      "source_sha256": "b24d5a7a5f3d1516ee655c47ecbb462f43d458b01f78568d36924756dff4c90e",
+      "stratum": "celery",
+      "rule_code": "B006",
+      "line": 48,
+      "column": 9,
+      "message": "Broad exception handler with no visible failure signal can hide bugs",
+      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
+      "id": "9395a880e4b6b44c8db6",
+      "stratum_population": 5,
+      "stratum_sample": 5
+    },
+    {
+      "file": "t/unit/utils/test_sysinfo.py",
+      "source_sha256": "7b949086d3c665cf74641617ed46ae0709d7ef6d2bf9a279bf32b0bc5d2f180c",
       "stratum": "t",
       "rule_code": "B006",
-      "line": 844,
+      "line": 13,
+      "column": 1,
+      "message": "Broad exception handler with no visible failure signal can hide bugs",
+      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
+      "id": "9ae72f17ca7b66527227",
+      "stratum_population": 8,
+      "stratum_sample": 8
+    },
+    {
+      "file": "celery/backends/rpc.py",
+      "source_sha256": "6a700be69919c2affcebf1f09c04c95baf554b5fabed2edcc6e82c64cb238ac2",
+      "stratum": "celery",
+      "rule_code": "B006",
+      "line": 98,
       "column": 13,
       "message": "Broad exception handler with no visible failure signal can hide bugs",
       "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
-      "id": "946f21781972921ef34d",
-      "stratum_population": 31,
-      "stratum_sample": 14
+      "id": "c20d5b37fdc75ee14533",
+      "stratum_population": 5,
+      "stratum_sample": 5
     },
     {
-      "file": "celery/fixups/django.py",
-      "source_sha256": "f176a7c57aa5f33a018b9633dad3a5bf2370e8f56baf355af597959521ee5abd",
+      "file": "t/unit/backends/test_asynchronous.py",
+      "source_sha256": "ef4b60c7b1ead8d4d5f6db196f7acfe00c34c73d3047499307baa45e56feccbe",
+      "stratum": "t",
+      "rule_code": "B006",
+      "line": 568,
+      "column": 9,
+      "message": "Broad exception handler with no visible failure signal can hide bugs",
+      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
+      "id": "9ec65257eeeb7f9cf0a9",
+      "stratum_population": 8,
+      "stratum_sample": 8
+    },
+    {
+      "file": "t/integration/test_mem_leak_in_exception_handling.py",
+      "source_sha256": "d00fcf2a9fbb8533f416114bbfcf23677120f2cb9be7e85ecf2727b7bea8a903",
+      "stratum": "t",
+      "rule_code": "B006",
+      "line": 189,
+      "column": 9,
+      "message": "Broad exception handler with no visible failure signal can hide bugs",
+      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
+      "id": "bc17ed857f3c04ff57a7",
+      "stratum_population": 8,
+      "stratum_sample": 8
+    },
+    {
+      "file": "t/integration/test_mem_leak_in_exception_handling.py",
+      "source_sha256": "d00fcf2a9fbb8533f416114bbfcf23677120f2cb9be7e85ecf2727b7bea8a903",
+      "stratum": "t",
+      "rule_code": "B006",
+      "line": 136,
+      "column": 9,
+      "message": "Broad exception handler with no visible failure signal can hide bugs",
+      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
+      "id": "d43e5ba5035e8d4c6c97",
+      "stratum_population": 8,
+      "stratum_sample": 8
+    },
+    {
+      "file": "t/integration/test_mem_leak_in_exception_handling.py",
+      "source_sha256": "d00fcf2a9fbb8533f416114bbfcf23677120f2cb9be7e85ecf2727b7bea8a903",
+      "stratum": "t",
+      "rule_code": "B006",
+      "line": 230,
+      "column": 9,
+      "message": "Broad exception handler with no visible failure signal can hide bugs",
+      "suggestion": "Consider:\n  1. Use specific exception types (ValueError, KeyError, etc.)\n  2. Add visible logging: logger.warning(f'Ignoring error: {e}') \u2014\n     logger.debug() alone is invisible by default and does not count\n  3. Add comment explaining why silence is intentional\n  4. Re-raise if you can't handle: raise",
+      "id": "d550855fdaa8c353de7f",
+      "stratum_population": 8,
+      "stratum_sample": 8
+    },
+    {
+      "file": "celery/backends/arangodb.py",
+      "source_sha256": "f3201be463a85b774bff1ec27ddf555a52ec4940b94bfb2239941b02fb5101a1",
       "stratum": "celery",
       "rule_code": "I001",
-      "line": 18,
+      "line": 16,
       "column": 1,
       "message": "Unused import detected",
-      "suggestion": "Remove unused import: `WorkController`",
-      "id": "0d728317d2527664720b",
-      "stratum_population": 2,
-      "stratum_sample": 2
+      "suggestion": "Remove unused import: `AQLQueryError`",
+      "id": "12e3e08e4b3fa573e058",
+      "stratum_population": 1,
+      "stratum_sample": 1
     },
     {
       "file": "t/unit/backends/test_couchbase.py",
@@ -611,19 +520,6 @@
       "id": "91d959b6f7ae5c399e98",
       "stratum_population": 1,
       "stratum_sample": 1
-    },
-    {
-      "file": "celery/backends/arangodb.py",
-      "source_sha256": "f3201be463a85b774bff1ec27ddf555a52ec4940b94bfb2239941b02fb5101a1",
-      "stratum": "celery",
-      "rule_code": "I001",
-      "line": 16,
-      "column": 1,
-      "message": "Unused import detected",
-      "suggestion": "Remove unused import: `AQLQueryError`",
-      "id": "12e3e08e4b3fa573e058",
-      "stratum_population": 2,
-      "stratum_sample": 2
     }
   ]
 }

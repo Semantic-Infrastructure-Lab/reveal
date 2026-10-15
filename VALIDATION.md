@@ -1878,7 +1878,8 @@ containment for this input family; they are not real-corpus recall measurements.
 ## Rule precision pilot (2026-10-14)
 
 The pinned Celery repository (`17b895bad43aab73fca37609ae9b93be6cc1c6e1`) supplies
-144 D001, 37 B006 and three I001 emitted claims in a 507-file check. Five
+154 D001, 13 B006 and two I001 emitted claims after the Sprint 4 rule fixes, in a
+507-file check. Before those fixes it supplied 144, 37 and three respectively. Five
 non-Python files parsed partially and one generated Python file was skipped;
 the sample excludes those records, which contain no selected-rule claims.
 The retained population summary discloses these limits. Sampling is deterministic
@@ -1886,36 +1887,51 @@ within rule × top-level directory strata, with 20 claims per rule or all claims
 when fewer exist. D002's advisory candidate ranking was inspected during selection
 and is outside this pilot's binary claim criteria.
 
-| Rule | Reviewed TP / FP / uncertain | Weighted estimate | Approximate conservative 95% sampling interval |
+| Rule | Before: TP / FP / uncertain, population | After: TP / FP / uncertain, population | After: label bounds and conservative 95% sampling interval |
 |---|---|---|---|
-| D001 | 17 / 3 / 0 | 74% | 43–92% |
-| B006 | 7 / 12 / 1 | 27% | 17–53% |
-| I001 | 2 / 1 / 0 (all three claims) | 2/3 | Census: no sampling uncertainty |
+| D001 | 17 / 3 / 0, 144 | 20 / 0 / 0, 154 | 100% decided; 66–100% sampling interval |
+| B006 | 7 / 12 / 1, 37 | 12 / 0 / 1, 13 (census) | 92–100% label bounds; no sampling uncertainty |
+| I001 | 2 / 1 / 0, 3 (census) | 2 / 0 / 0, 2 (census) | 100%; no sampling uncertainty |
 
-These are scoped pilot estimates from one primary source review, not general
-accuracy claims. Weighting accounts for unequal sampling of source and test
-strata. Sampling intervals combine stratum Wilson envelopes with a Bonferroni
+These are scoped estimates from one primary source review of each sample, not
+general accuracy claims. The 11 newly sampled claims were source-reviewed; old
+labels were carried forward only when the claim identity and source hash matched.
+Comparing the original sampled claim locations with the complete new rule
+population, all 16 reviewed false claims disappeared, all 26 reviewed true
+claims survived, and the one uncertain claim remained.
+The after D001 result remains a 20-of-154 sample, so its 100% observed rate has
+a wide 66–100% sampling interval. B006 and I001 are complete censuses of their
+emitted claims; B006's one uncertain case gives separate 92–100% label bounds.
+Sampling intervals combine stratum Wilson envelopes with a Bonferroni
 adjustment, conditional on decided labels; census strata carry no sampling error.
-B006's separate uncertain-label bounds are about 25–31%; these describe label
-uncertainty **only**, not sampling error. The criteria encode conformance to each
-rule's published specification, rather than usefulness. A blind second agent run
-reviewed 15 claims (the first six committed D001 and B006 claims and all three
-I001 claims): agreement was 15/15 (100%), Cohen's kappa 1.0. This small fixed subset
-and shared criteria do not establish label validity across the whole population. Recall, runtime semantics,
-refactoring value and appropriate default rule selection were not measured.
+The criteria encode conformance to each rule's published specification, rather
+than usefulness. On the **before** sample, a blind second agent reviewed 15 claims:
+agreement was 15/15 (100%), Cohen's kappa 1.0. That agreement does not apply to
+the newly reviewed claims or establish validity across the whole population.
+Recall, runtime semantics, refactoring value and appropriate default rule
+selection were not measured.
 D001 labels distinguish real body duplication—including intentional abstract
 hooks and test fixtures—from decorated pass-only bodies that should have been
 excluded by the documented policy. B006 labels follow caught exceptions through
 assertions and checked thread/callback state; debug-only logs remain non-reporting.
-I001's false claim is a name used in a quoted local type annotation. The criteria
-and individual reasons remain reviewable, including the uncertain case.
+I001's false claim was a name used in a quoted local type annotation. The
+criteria and individual reasons remain reviewable, including the uncertain case.
+B006's reviewed synthetic swallows now report 7/7 Python, 4/4 Java and 5/5
+JavaScript cases. On four pinned real populations, the final B006 sets changed
+Celery 37→13 and remained exactly 181 Guava, three three.js and 43 Excalidraw;
+none of the 17 previously removed false positives returned. PHP, C# and Kotlin
+synthetic broad catches with computed returns each still produced one finding.
 
-Artifacts: [sample](tests/corpus/rule_precision_sample.json),
+After artifacts: [sample](tests/corpus/rule_precision_sample.json),
 [labels and criteria](tests/corpus/rule_precision_labels.json),
-[blind subset labels](tests/corpus/rule_precision_second_rater.json),
 [report](tests/corpus/rule_precision_report.json), and
 [runner](scripts/rule_precision.py). Source-file hashes, exact corpus pin,
 Python/parser versions and Reveal working-tree digests identify the measurement.
+The [before sample](tests/corpus/rule_precision_before_sprint4_sample.json),
+[before labels](tests/corpus/rule_precision_before_sprint4_labels.json),
+[before report](tests/corpus/rule_precision_before_sprint4_report.json) and
+[blind subset labels](tests/corpus/rule_precision_second_rater.json) retain the
+earlier result and its agreement measurement.
 The failure controls reject missing labels, missing/zero populations, changed
 source, unsupported verdicts and deliberate claim loss. Labels are maintained by
 source review and are never inferred automatically from a passing rule run.
@@ -1923,7 +1939,7 @@ source review and are never inferred automatically from a passing rule run.
 ```bash
 python scripts/fetch_corpus.py python-celery
 python scripts/rule_precision.py sample --corpus-root ~/.cache/reveal-corpus --output /tmp/rule-sample.json
-python scripts/rule_precision.py score --corpus-root ~/.cache/reveal-corpus --sample tests/corpus/rule_precision_sample.json --labels tests/corpus/rule_precision_labels.json --second-labels tests/corpus/rule_precision_second_rater.json --output /tmp/rule-precision.json
+python scripts/rule_precision.py score --corpus-root ~/.cache/reveal-corpus --sample tests/corpus/rule_precision_sample.json --labels tests/corpus/rule_precision_labels.json --output /tmp/rule-precision.json
 ```
 
 A new sample is reviewed before replacing the committed labels; the scoring

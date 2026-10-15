@@ -1,6 +1,6 @@
 {
-  "reviewer": "maintainer source review",
-  "method": "Independent source and Python AST inspection, including enclosing test consumers; no Reveal rule verdict was used as a correctness oracle.",
+  "reviewer": "maintainer source review, Sprint 4",
+  "method": "Retained unchanged source labels for surviving claims; independently inspected every newly sampled source and enclosing control flow against the published criteria. Historical before labels and report are retained beside this artifact.",
   "criteria": {
     "D001": "A nontrivial normalized function body is duplicated within the reported class/module grouping. Published pass/empty-return hook exclusions apply. Distinct defaults, intentional abstract hooks and repeated test fixtures are classified explicitly; semantic equivalence and refactor usefulness are not claimed.",
     "B006": "The broad caught failure has no normally visible reporting, forwarding or subsequently checked error channel. Expected-exception assertions and checked thread/callback state are visible consumers. Debug-only logs and unasserted counters do not count.",
@@ -13,9 +13,14 @@
       "reason": "Both bodies return convert(key, key). The distinct default conversion maps are deliberate contextual differences; this verifies body duplication only, not semantic interchangeability."
     },
     {
-      "id": "007b1358731b1721b091",
-      "verdict": "fp",
-      "reason": "Both decorated task bodies are pass-only hooks, explicitly excluded by the documented no-op-body policy. Decorator/definition text leaks into the body comparison."
+      "id": "f7f51e8de0dc16d20815",
+      "verdict": "tp",
+      "reason": "Both decorated tasks raise the same Exception body. Decorator retry settings differ, but the rule claims body duplication only."
+    },
+    {
+      "id": "04aab28757579f2bcc9d",
+      "verdict": "tp",
+      "reason": "The two local add tasks return x + y; distinct surrounding tests do not change their body text."
     },
     {
       "id": "1888ea20475ccd9b2f88",
@@ -33,9 +38,9 @@
       "reason": "Both handlers call self._log_error with task, req and a new ExceptionInfo. The duplicated body is present in source."
     },
     {
-      "id": "076d979c270019efc505",
+      "id": "059745e8baad4ee6abce",
       "verdict": "tp",
-      "reason": "Both test task functions return x + y. This is real body duplication in repeated test fixtures; refactor usefulness is not measured."
+      "reason": "Both autoretry task bodies increment iterations and divide a by b; decorator policy differs outside the body."
     },
     {
       "id": "3a62e5e454249b8db23d",
@@ -43,9 +48,9 @@
       "reason": "Both base-backend hooks return the result parameter. The documented trivial-literal/empty-return exemption does not include parameter passthrough; classify this as intentional structural over-inclusion."
     },
     {
-      "id": "08228b7a4915ebb3b2a8",
+      "id": "075e3180df34a1da03cf",
       "verdict": "tp",
-      "reason": "Both task fixtures return x + y; their independent test setup is intentional but the structural duplicate claim is supported."
+      "reason": "Both task bodies return x / y. The different base-task decorators are outside the claimed body comparison."
     },
     {
       "id": "7764900d585436c1aa38",
@@ -53,9 +58,9 @@
       "reason": "Both abstract schedule hooks raise NotImplementedError(). This body is deliberately repeated for independent override points; the documented no-op exemption does not cover raises."
     },
     {
-      "id": "085b0b03c9b35b32f9fb",
-      "verdict": "fp",
-      "reason": "The decorated task fixtures contain only pass. This violates the rule documented exemption for no-op hooks rather than establishing a meaningful duplicate body."
+      "id": "08879d139463e5db4406",
+      "verdict": "tp",
+      "reason": "Both task fixtures return x * y. The body match is real; separate test fixtures do not establish refactoring value."
     },
     {
       "id": "78eb18708d6d84e3cd30",
@@ -63,9 +68,9 @@
       "reason": "Both worker-component methods close w.hub. The two lifecycle names do not change the duplicated statement."
     },
     {
-      "id": "08879d139463e5db4406",
+      "id": "089f67a6b0d7db5496bc",
       "verdict": "tp",
-      "reason": "Both task fixtures return x * y. The body match is real; separate test fixtures do not establish refactoring value."
+      "reason": "This local add task and the earlier add_with_before_start both return x + y; repeated fixtures are body duplicates."
     },
     {
       "id": "ca0ce34943660319af4a",
@@ -83,9 +88,9 @@
       "reason": "Both abstract result-consumer methods raise NotImplementedError(); different parameters are outside the normalized body claim."
     },
     {
-      "id": "0b2b0e5a290e1d6532f0",
-      "verdict": "fp",
-      "reason": "Both decorated task bodies are pass-only. Different task decorators do not make a nontrivial body; the documented hook exclusion should apply."
+      "id": "0c4831245cf490b09407",
+      "verdict": "tp",
+      "reason": "Both hooks return the identical nonempty header dictionary. The source supports the normalized body claim."
     },
     {
       "id": "fb003e6bce57a7b31aa4",
@@ -93,19 +98,14 @@
       "reason": "Both abstract result-consumer methods raise NotImplementedError(). Preserve the deliberate-over-inclusion classification."
     },
     {
-      "id": "0c4831245cf490b09407",
-      "verdict": "tp",
-      "reason": "Both hooks return the identical nonempty header dictionary. The source supports the normalized body claim."
-    },
-    {
       "id": "0cbdb9b73bf8f4b67c9c",
       "verdict": "tp",
       "reason": "Both fake-hub helpers raise OSError. The statements are duplicated; intentional test failure fixtures are not automatically candidates for refactoring."
     },
     {
-      "id": "109d4d8e348d49be8416",
+      "id": "11bf3b84337eaae5dd33",
       "verdict": "tp",
-      "reason": "Both task fixtures return x + y. This verifies structural duplication only."
+      "reason": "Both decorated retry tasks increment iterations and return a + b; body duplication is source-visible."
     },
     {
       "id": "28c68e88e59d7c0e5721",
@@ -113,9 +113,9 @@
       "reason": "The reconnect handler only writes a debug-level log. Failure detail remains invisible at the normal logging level under the published rule policy."
     },
     {
-      "id": "034d85ad96141f260822",
-      "verdict": "fp",
-      "reason": "The handler constructs Retry with the caught exception and asserts the retained exception identity. This is an explicit exception-behavior test, not an unobserved failure."
+      "id": "60671a0d0c8c4ed80098",
+      "verdict": "tp",
+      "reason": "The handler increments exception_count, but that count is only printed at debug level and is never asserted. The memory assertion does not check whether the expected exceptions were observed."
     },
     {
       "id": "3db402563159c032905c",
@@ -123,9 +123,9 @@
       "reason": "The broad handler consists solely of pass, with no forwarding, report, or checked failure state."
     },
     {
-      "id": "117f88c2801ef6fac95f",
-      "verdict": "fp",
-      "reason": "The worker stores the exception in errors; after joining the worker, the enclosing test asserts that errors is empty. The exception reaches an observable test failure."
+      "id": "7ace371bfbaf8b663ad8",
+      "verdict": "uncertain",
+      "reason": "A subsequent assertion verifies that BRPOP was armed, but does not explicitly observe the caught exception. The source alone does not prove whether every tolerated connection error is checked or silently lost."
     },
     {
       "id": "51da32cd9e3fcb3e1fe5",
@@ -133,19 +133,9 @@
       "reason": "The handler substitutes stamps=None and provides no diagnostic or explicit failure-state assertion. Computed defaults do not disclose the caught failure."
     },
     {
-      "id": "166110794279cef94b1c",
-      "verdict": "fp",
-      "reason": "The handler asserts the caught exception equals expected_exc and that the retry sleep was not called. These assertions are the test observation."
-    },
-    {
-      "id": "758f4643b0131c1cf58f",
-      "verdict": "fp",
-      "reason": "The Click command formats the traceback and passes it to ctx.fail, which raises a visible command error. This is a reporting sink missed by the rule."
-    },
-    {
-      "id": "1699d50831040933a716",
-      "verdict": "fp",
-      "reason": "The thread stores the exception in errors and the enclosing joined-thread test asserts not errors. This is a checked cross-thread error channel."
+      "id": "7e04a4725db287f386a4",
+      "verdict": "tp",
+      "reason": "The warm-up handler is pass-only. Its intentional tolerance is not a visible diagnostic under the stated B006 policy."
     },
     {
       "id": "9395a880e4b6b44c8db6",
@@ -153,9 +143,9 @@
       "reason": "The handler replaces children with None without reporting the exception or marking an analysis failure."
     },
     {
-      "id": "2f85f200cc0ac7392c6b",
-      "verdict": "fp",
-      "reason": "The handler captures ExceptionInfo and asserts the exception type, arguments and traceback. The captured exception is the subject of the test."
+      "id": "9ae72f17ca7b66527227",
+      "verdict": "tp",
+      "reason": "The broad import fallback sets posix to None and provides no visible failure signal."
     },
     {
       "id": "c20d5b37fdc75ee14533",
@@ -163,64 +153,34 @@
       "reason": "The reconnect close handler only uses logger.debug with exc_info. The default logging level does not expose this failure."
     },
     {
-      "id": "30a6c28de1812120bdda",
-      "verdict": "fp",
-      "reason": "The handler checks expected exception identity and the zero sleep-call count, explicitly observing the tested failure behavior."
-    },
-    {
-      "id": "3801781ca9680bee21f8",
-      "verdict": "fp",
-      "reason": "The test supplies ExceptionInfo to job.on_success and asserts job.on_failure was called. That mock assertion is an observable failure signal."
-    },
-    {
-      "id": "60671a0d0c8c4ed80098",
+      "id": "9ec65257eeeb7f9cf0a9",
       "verdict": "tp",
-      "reason": "The handler increments exception_count, but that count is only printed at debug level and is never asserted. The memory assertion does not check whether the expected exceptions were observed."
+      "reason": "The broad thread.wait handler contains only pass; the caught failure is not asserted or reported in that handler."
     },
     {
-      "id": "6b01bcc369d1a0d30c99",
-      "verdict": "fp",
-      "reason": "The handler asserts the caught exception equals expected_exc and that no retry sleep occurred. Expected-failure testing is explicit."
-    },
-    {
-      "id": "741e700f257eed44eea9",
-      "verdict": "fp",
-      "reason": "The handler builds encoded failure metadata and asserts an encode round trip. The exception is deliberately exercised and checked."
-    },
-    {
-      "id": "7ace371bfbaf8b663ad8",
-      "verdict": "uncertain",
-      "reason": "A subsequent assertion verifies that BRPOP was armed, but does not explicitly observe the caught exception. The source alone does not prove whether every tolerated connection error is checked or silently lost."
-    },
-    {
-      "id": "7cc0ca808b3805f16c02",
-      "verdict": "fp",
-      "reason": "The handler asserts the exception is not an internal TypeError and checks its message against the known regression. This is deliberate negative exception testing."
-    },
-    {
-      "id": "7e04a4725db287f386a4",
+      "id": "bc17ed857f3c04ff57a7",
       "verdict": "tp",
-      "reason": "The warm-up handler is pass-only. Its intentional tolerance is not a visible diagnostic under the stated B006 policy."
+      "reason": "The broad retry memory-loop handler contains pass and no visible failure signal."
     },
     {
-      "id": "946f21781972921ef34d",
-      "verdict": "fp",
-      "reason": "The signal handler sets the nonlocal assertion_result=False on failure; the enclosing test asserts assertion_result after the task completes. The error is carried to a visible test failure."
-    },
-    {
-      "id": "0d728317d2527664720b",
-      "verdict": "fp",
-      "reason": "WorkController is referenced in the quoted local annotation Optional[\"WorkController\"] on line 132. The name is used for typing even though no ast.Name load exists."
-    },
-    {
-      "id": "91d959b6f7ae5c399e98",
+      "id": "d43e5ba5035e8d4c6c97",
       "verdict": "tp",
-      "reason": "The couchbase binding is never read. The same module independently calls pytest.importorskip(\"couchbase\"), so this label verifies unused binding only and does not treat arbitrary side-effect imports as removable."
+      "reason": "The broad task-success memory-loop handler contains pass and no visible failure signal."
+    },
+    {
+      "id": "d550855fdaa8c353de7f",
+      "verdict": "tp",
+      "reason": "The broad nested-stack memory-loop handler contains pass and no visible failure signal."
     },
     {
       "id": "12e3e08e4b3fa573e058",
       "verdict": "tp",
       "reason": "AQLQueryError is imported and assigned in the dependency-fallback branch but never read or exported. The __all__ list exports only ArangoDbBackend."
+    },
+    {
+      "id": "91d959b6f7ae5c399e98",
+      "verdict": "tp",
+      "reason": "The couchbase binding is never read. The same module independently calls pytest.importorskip(\"couchbase\"), so this label verifies unused binding only and does not treat arbitrary side-effect imports as removable."
     }
   ]
 }
