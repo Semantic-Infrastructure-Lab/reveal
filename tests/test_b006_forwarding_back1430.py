@@ -3,8 +3,9 @@
 The dominant Java listener style is ``catch (Exception e) { listener.onFailure(e); }``:
 the exception object itself is delivered to the code that reports or handles it,
 so the handler is not silent.  The recognition is deliberately narrow (see
-``B006._forwards_exception``): the caught variable must be an argument (including wrapped arguments) of a
-direct, returned or awaited call, and the callee must not be a debug-level log
+``B006._forwards_exception``): the caught variable must be an argument of a
+direct, returned or awaited call (a wrapped argument counts only for a callee in
+``_REPORTING_CALLEES``), and the callee must not be a debug-level log
 call, a container store or a name that announces a discard.  Those keep the
 debug-only / swallow policy from the developer guidelines (item 3).
 """

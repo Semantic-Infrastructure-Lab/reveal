@@ -1820,7 +1820,8 @@ python scripts/framework_matrix.py --corpus-root ~/.cache/reveal-corpus --output
 ```
 
 The framework matrix is a local optional measurement; the scheduled workflow
-currently owns import recall only. Normal tests require no corpus fetch.
+owns import and caller recall and runs the matrix's unit tests in its control step.
+Normal tests require no corpus fetch.
 
 ## Bounded reliability corpus loops (2026-10-14)
 
@@ -1832,16 +1833,22 @@ each tracked file's import facts. The oracle never imports Reveal or executes
 corpus application code. Its helper is
 [go_import_oracle.go](scripts/oracles/go_import_oracle.go).
 
-Across 116 tracked files and 499 import statements, Go resolves **58/58 selected
+Across 116 tracked files and 499 import statements, the Go oracle resolves **58 selected
 package imports to seven target packages**. Eleven package directories occur in
-the input. This is the package-import evidence; it does not prove file-level or
-runtime dependency resolution.
+the input. A direct review measurement (not retained by the gate, whose report
+records only `resolved_statements: 58`) found that Reveal's graph holds the same 58
+importer-to-package facts, with none missed and none extra. This is the
+package-import evidence; it does not prove file-level or runtime dependency
+resolution.
 
 The separate buildless file projection fans each resolved package import out to
 every tracked target file in that directory, reusing Reveal's projection model.
-Its **2,589/2,589 projected edges** include 1,251 edges to `_test.go` files, 337 to
-separate external-test packages and 37 to a build-ignored `package main` generator.
-At least those latter 374 edges are not valid Go package dependencies. Agreement
+Its **2,589/2,589 projected edges** include 1,251 edges to `_test.go` files (337 to
+separate external-test packages, 914 to in-package test files) and 37 to a
+build-ignored `package main` generator. Test files never compile into another
+package's dependency, so the 337 external-test edges, the 37 generator edges and the
+728 in-package test-file edges whose importer is outside that directory are not valid
+Go package dependencies: **at least 1,102 of 2,589 (43%)**. Agreement
 with this fan-out is therefore projection conformance, not independent file-level
 truth or build-selected recall. Sprint 4 removed the private file-dependents
 projection's 12 self-edge extras: all 2,589 projected edges remain matched with
@@ -1873,6 +1880,13 @@ recall and precision, reject unexpected zero results, and fail deliberate lost-e
 controls. Reports identify the implementation through Git HEAD, tracked-diff and
 untracked-file digests plus Python/grammar versions. The scheduled workflow now includes separate import and caller steps and retains both reports, including failed comparisons. Remote qualification requires a successful run of the exact revision; a local pass alone does not qualify the runner.
 
+**Qualification caveat.** The run below qualifies `b12fcef4` only. Sprint 4 then
+changed the gate (`regressions()` now locks extra identities and counts), the Go
+baseline row (12 extras to 0, precision 0.99539 to 1.0) and `depends` product code,
+and the workflow's control step. Those changes are verified locally; no run of a
+revision that contains them exists yet, so remote qualification of the current gate
+and baseline is pending.
+
 The expanded import/caller workflow passed on `b12fcef49c159dbd12f9dd05aa17e04a61096105` in
 [run 38660795370](https://github.com/Semantic-Infrastructure-Lab/reveal/actions/runs/38660795370):
 all 12 import populations matched their reviewed baselines, the caller population
@@ -1899,27 +1913,41 @@ within rule × top-level directory strata, with 20 claims per rule or all claims
 when fewer exist. D002's advisory candidate ranking was inspected during selection
 and is outside this pilot's binary claim criteria.
 
-| Rule | Before: TP / FP / uncertain, population | After: TP / FP / uncertain, population | After: label bounds and conservative 95% sampling interval |
-|---|---|---|---|
-| D001 | 17 / 3 / 0, 144 | 20 / 0 / 0, 154 | 100% decided; 66–100% sampling interval |
-| B006 | 7 / 12 / 1, 37 | 12 / 0 / 1, 13 (census) | 92–100% label bounds; no sampling uncertainty |
-| I001 | 2 / 1 / 0, 3 (census) | 2 / 0 / 0, 2 (census) | 100%; no sampling uncertainty |
+| Rule | Before: TP / FP / uncertain, population | Before: precision, label bounds, conservative 95% sampling interval | After: TP / FP / uncertain, population | After: label bounds and conservative 95% sampling interval |
+|---|---|---|---|---|
+| D001 | 17 / 3 / 0, 144 | 74%; 43–92% sampling interval | 20 / 0 / 0, 154 | 100% decided; 66–100% sampling interval |
+| B006 | 7 / 12 / 1, 37 | 27%; 25–31% label bounds; 17–53% sampling interval | 12 / 0 / 1, 13 (census) | 92–100% label bounds; no sampling uncertainty |
+| I001 | 2 / 1 / 0, 3 (census) | 67%; no sampling uncertainty | 2 / 0 / 0, 2 (census) | 100%; no sampling uncertainty |
 
 These are scoped estimates from one primary source review of each sample, not
 general accuracy claims. The 11 newly sampled claims were source-reviewed; old
 labels were carried forward only when the claim identity and source hash matched.
 Comparing the original sampled claim locations with the complete new rule
 population, all 16 reviewed false claims disappeared, all 26 reviewed true
-claims survived, and the one uncertain claim remained.
+claims survived by location, and the one uncertain claim remained. Survival is
+by location, not by claim: three D001 true claims in `t/unit/tasks/test_trace.py`
+(lines 516, 780, 952) now name a different duplicate partner, so they are new
+claims that were not re-reviewed. The D001 population also churned: 28 locations
+were lost (decorated pass-only hooks) and 38 gained (decorated real duplicates
+whose `def` line the old rule saw as body), netting 144 to 154.
+The before and after measurements ran under different grammar packs (language-pack
+1.21.0 on a dirty tree, then 1.20.0 on clean `474b03db`); a review re-run of the
+old rule under 1.20.0 regenerated the before sample with identical claim ids and
+population, so the difference is not known to affect the result.
 The after D001 result remains a 20-of-154 sample, so its 100% observed rate has
 a wide 66–100% sampling interval. B006 and I001 are complete censuses of their
 emitted claims; B006's one uncertain case gives separate 92–100% label bounds.
 Sampling intervals combine stratum Wilson envelopes with a Bonferroni
 adjustment, conditional on decided labels; census strata carry no sampling error.
 The criteria encode conformance to each rule's published specification, rather
-than usefulness. On the **before** sample, a blind second agent reviewed 15 claims:
-agreement was 15/15 (100%), Cohen's kappa 1.0. That agreement does not apply to
-the newly reviewed claims or establish validity across the whole population.
+than usefulness. On the **before** sample, a second agent reviewed 15 claims:
+agreement was 15/15 (100%), Cohen's kappa 1.0. The retained rater input does not
+contain the criteria text the rater was given, the criteria already encode the first
+review's conclusions, the retained file is labelled "second run" although no earlier
+rater run is kept, and its metadata was edited after rating (verdicts and reasons
+are unchanged). Shared criteria do not establish label validity, so treat this as an
+agreement check, not independent validation. It does not apply to the newly reviewed
+claims or establish validity across the whole population.
 Recall, runtime semantics, refactoring value and appropriate default rule
 selection were not measured.
 D001 labels distinguish real body duplication—including intentional abstract
@@ -1930,9 +1958,17 @@ I001's false claim was a name used in a quoted local type annotation. The
 criteria and individual reasons remain reviewable, including the uncertain case.
 B006's reviewed synthetic swallows now report 7/7 Python, 4/4 Java and 5/5
 JavaScript cases. On four pinned real populations, the final B006 sets changed
-Celery 37→13 and remained exactly 181 Guava, three three.js and 43 Excalidraw;
-none of the 17 previously removed false positives returned. PHP, C# and Kotlin
-synthetic broad catches with computed returns each still produced one finding.
+Celery 37→13 and remained exactly 181 Guava and 43 Excalidraw. The three.js "three"
+counts `src/` only (751 files); the full pinned three.js tree (4,386 files) goes
+66→69, three regained, two of them false positives. None of the 17 previously
+removed false positives returned on those populations, but that holds in part by
+construction: five names in B006's reporting-callee allowlist (`setAppState`,
+`setErrorMessage`, `updateScene`, `updateMagicGeneration`, `immediateFailedFuture`)
+exist only to hold back reviewed corpus cases. Corpora outside the four were not
+measured by this pilot; the Sprint 4 review found new false positives on vscode,
+WordPress JS, dagster and full three.js (BACK-1835). PHP, C# and Kotlin have no
+forwarding recognition at all, so their synthetic broad catches producing one
+finding each is not a measurement of the forwarding direction (BACK-1698).
 
 After artifacts: [sample](tests/corpus/rule_precision_sample.json),
 [labels and criteria](tests/corpus/rule_precision_labels.json),

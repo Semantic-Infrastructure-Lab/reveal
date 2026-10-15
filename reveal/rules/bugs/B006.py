@@ -169,8 +169,9 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
     # BACK-1430: handing the caught exception to a callee (``listener.onFailure(e)``,
     # ``reject(e)``) discloses it -- the callee reports or handles it. Recognized
-    # narrowly: the caught variable is an argument (possibly wrapped) of a direct, returned
-    # or awaited call, and the callee does not announce a non-disclosure. A debug-level
+    # narrowly: the caught variable is an argument of a direct, returned
+    # or awaited call -- bare, or wrapped only when the callee is in
+    # _REPORTING_CALLEES -- and the callee does not announce a non-disclosure. A debug-level
     # log call, a container store (collecting without reading) and a discard-named
     # callee keep the handler silent, preserving the policy above.
     _NON_DISCLOSING_CALLEES = frozenset({
