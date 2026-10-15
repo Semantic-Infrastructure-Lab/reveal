@@ -121,13 +121,27 @@ def _resolve_git_root(path: Path) -> Optional[Path]:
     tree, a sample corpus, a submodule checked out without its own ``.git`` — silently
     inherits its enclosing repo's history. Returns the discovered root so callers can
     detect and disclose that mismatch; returns ``None`` if *path* isn't inside a repo
-    at all.
+    at all. A ValueError (GitAdapter's "Failed to open repository", e.g. a libgit2
+    ``safe.directory`` refusal) is not "no repo" and propagates (BACK-1691); see
+    ``_git_root_or_disclose``.
     """
     try:
         metadata = GitAdapter(path=str(path)).get_metadata()
         root = metadata.get('path')
         return Path(root).resolve() if root else None
-    except (ImportError, OSError, ValueError, NotApplicableError):  # absent/unavailable git
+    except (ImportError, OSError, NotApplicableError):  # absent/unavailable git, or not a repo
+        return None
+
+
+def _git_root_or_disclose(adapter: 'OverviewAdapter', path: Path) -> Optional[Path]:
+    """``_resolve_git_root``, with a refused repository recorded as a composed error (BACK-1691).
+
+    Without it the git-root mismatch warning was skipped and nothing said why.
+    """
+    try:
+        return _resolve_git_root(path)
+    except ValueError as exc:
+        adapter.record_composed_error('git_root', path, exc)
         return None
 
 
@@ -361,7 +375,7 @@ class OverviewAdapter(ResourceAdapter):
         git_log = [] if no_git else _run_git_log(self, path, top)
         git_foreign_root: Optional[Path] = None
         if git_log:
-            git_root = _resolve_git_root(path)
+            git_root = _git_root_or_disclose(self, path)
             # Compare resolved: 'overview://.' at a repo root is not foreign to itself.
             if git_root is not None and git_root.resolve() != path.resolve():
                 git_foreign_root = git_root
