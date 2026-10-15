@@ -135,7 +135,8 @@ def measure_calls(entry: dict, root: Path) -> dict[str, Any]:
             'coverage': coverage, 'differences': differences}
 
 
-def regressions(current: dict, baseline: dict) -> list[str]:
+def regressions(current: dict, baseline: dict, notes: list[str] | None = None) -> list[str]:
+    """Failures against the baseline; ``notes`` collects comparisons that could not be made (not failures)."""
     failures = [f'{key}: baseline missing; review required' for key in sorted(current.keys() - baseline.keys())]
     if not baseline:
         return failures or ['Baseline is empty; measurement unavailable']
@@ -153,7 +154,23 @@ def regressions(current: dict, baseline: dict) -> list[str]:
         for field in ('recall', 'precision'):
             if measured[field] + 1e-12 < reference[field]:
                 failures.append(f'{key}: {field} dropped {reference[field]:.6%} -> {measured[field]:.6%}')
+        _compare_partial_files(key, measured, reference, failures, notes)
     return failures
+
+
+def _compare_partial_files(key: str, measured: dict, reference: dict, failures: list[str],
+                           notes: list[str] | None) -> None:
+    """More partially parsed files than the baseline is a regression; fewer is not. A side without the
+    field (calls measurements, baselines written before it existed) is disclosed as not compared."""
+    now, before = measured.get('partial_files'), reference.get('partial_files')
+    if now is None and before is None:
+        return
+    if now is None or before is None:
+        if notes is not None:
+            side = 'baseline' if before is None else 'measurement'
+            notes.append(f'{key}: partial_files not compared ({side} has no partial_files)')
+    elif now > before:
+        failures.append(f'{key}: partial_files rose {before} -> {now}; more files parse only partially')
 
 
 def extra_identities(measurement: dict) -> set:
@@ -210,6 +227,7 @@ def main(argv=None) -> int:
         args.baseline = BASELINE.with_name('calls_baseline.json') if args.signal == 'calls' else BASELINE
     entries, errors = _selected(manifest, args.corpus, args.signal)
     current: dict[str, Any] = {}
+    notes: list[str] = []
     for entry in entries:
         key = corpus_key(entry)
         started = time.monotonic()
@@ -234,14 +252,16 @@ def main(argv=None) -> int:
         if args.corpus:  # a partial run compares only the corpora it measured
             baseline = {k: v for k, v in baseline.items() if k in current}
         try:
-            errors.extend(regressions(current, baseline))
+            errors.extend(regressions(current, baseline, notes))
         except (KeyError, TypeError) as exc:
             errors.append(f'Baseline malformed: {type(exc).__name__}: {exc}')
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps({'measured_at': datetime.now(timezone.utc).isoformat(),
                                      'reveal_version': __version__, 'python': sys.version,
                                      'signal': args.signal, 'implementation': implementation_identity(),
-                                     'measurements': current, 'failures': errors}, indent=2) + '\n', encoding='utf-8')
+                                     'measurements': current, 'failures': errors, 'notes': notes}, indent=2) + '\n', encoding='utf-8')
+    for note in notes:
+        print(f'note: {note}', flush=True)
     for error in errors:
         print(error, file=sys.stderr)
     return 1 if errors else 0

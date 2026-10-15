@@ -643,3 +643,22 @@ def test_fewer_partial_files_than_baseline_is_not_a_regression(key, lowered):
     current = json.loads(json.dumps(baseline))
     current[key]['partial_files'] = lowered
     assert gate.regressions(current, baseline) == []
+
+
+def test_missing_partial_files_is_disclosed_not_failed_or_crashed():
+    baseline = _committed_baseline()
+    old_baseline = json.loads(json.dumps(baseline))
+    del old_baseline['c']['partial_files']  # a baseline written before the field existed
+    current = json.loads(json.dumps(baseline))
+    notes: list[str] = []
+    assert gate.regressions(current, old_baseline, notes) == []
+    assert notes == ['c: partial_files not compared (baseline has no partial_files)']
+    lost = json.loads(json.dumps(baseline))
+    del lost['c-curl']['partial_files']
+    notes = []
+    assert gate.regressions(lost, baseline, notes) == []
+    assert notes == ['c-curl: partial_files not compared (measurement has no partial_files)']
+    # Calls measurements never carry the field: nothing to compare, nothing to disclose.
+    notes = []
+    calls = {'calls': {k: v for k, v in baseline['c'].items() if k != 'partial_files'}}
+    assert gate.regressions(calls, calls, notes) == [] and notes == []
