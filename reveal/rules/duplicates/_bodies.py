@@ -40,17 +40,37 @@ def _signature_end(lines: List[str], first: int, last: int) -> Optional[int]:
 
     Structure records start at the first decorator/annotation line (Python
     ``@task(...)``, Java ``@Override``), so the signature can sit several lines
-    below. The signature closes on the first line, counting from ``first``, that
-    ends outside every ``(``/``[`` with ``:`` (Python) or ``{`` (brace languages).
-    One rule, no per-language branches (BACK-1837).
+    below. Decorator/annotation lines (with their bracketed continuations) are
+    skipped; the signature then closes on the line where its own ``(``/``[`` are
+    balanced, which must end with ``:`` (Python) or ``{`` (brace languages), or be
+    followed by a lone ``{`` line (Allman). Any other line means the language has
+    no terminator (Ruby, Lua): None, so a ``{``/``:`` line inside the body is never
+    taken as the signature's end. One rule, no per-language branches (BACK-1837).
     """
+    stop = min(last, len(lines))
     depth = 0
-    for index in range(first, min(last, len(lines))):
-        code = _LINE_COMMENT.sub('', _STRING_LITERAL.sub('""', lines[index])).rstrip()
+    in_decorator = False
+    for index in range(first, stop):
+        code = _signature_code(lines[index])
+        if depth <= 0 and code.lstrip().startswith('@'):
+            in_decorator = True
         depth += sum(code.count(c) for c in '([') - sum(code.count(c) for c in ')]')
-        if depth <= 0 and code.endswith((':', '{')):
+        if depth > 0:
+            continue
+        if code.endswith((':', '{')):
             return index
+        if in_decorator:
+            in_decorator = False
+            continue
+        if index + 1 < stop and _signature_code(lines[index + 1]).strip() == '{':
+            return index + 1
+        return None
     return None
+
+
+def _signature_code(line: str) -> str:
+    """``line`` without string literals and trailing ``#``/``//`` comments."""
+    return _LINE_COMMENT.sub('', _STRING_LITERAL.sub('""', line)).rstrip()
 
 
 def _definition_line(lines: List[str], first: int, last: int) -> int:
