@@ -48,18 +48,27 @@ def test_parse_degraded_hotspots_never_claims_clean(tmp_path):
     assert 'Code quality looks good' not in result.stdout
 
 
+def _diagnostic_lines(result):
+    """Diagnostics from both streams, prefix-normalised: `⚠ text` lines and `Warning: text` lines."""
+    lines = result.stdout.splitlines() + result.stderr.splitlines()
+    return [re.sub(r'^(?:\s*⚠\s*)+|^Warning:\s*', '', line)
+            for line in lines if '⚠' in line or line.startswith('Warning:')]
+
+
 @pytest.mark.parametrize('command', [
     'deps', 'contracts', 'pack', 'architecture', 'hotspots', 'surface',
 ])
 def test_migrated_subcommands_emit_each_diagnostic_once(tmp_path, command):
+    # Six .sh files have no import extraction, so every subcommand has something to warn about
+    # (pack warns on stderr, the others on stdout). Plain .lua files gave pack and architecture none.
     (tmp_path / 'app.py').write_text('def small():\n    return 1\n', encoding='utf-8')
     for index in range(6):
-        (tmp_path / f'foreign_{index}.lua').write_text('function main() end\n', encoding='utf-8')
+        (tmp_path / f'foreign_{index}.sh').write_text('echo hi\n', encoding='utf-8')
     result = _run(command, tmp_path)
     assert result.returncode in (0, 1, 3)
-    warnings = [re.sub(r'^(?:\s*⚠\s*)+', '', line)
-                for line in result.stdout.splitlines() if '⚠' in line]
-    assert len(warnings) == len(set(warnings))
+    warnings = _diagnostic_lines(result)
+    assert warnings, f'{command}: fixture produced no diagnostic, so "once" proves nothing'
+    assert len(warnings) == len(set(warnings)), warnings
     if command == 'surface':
         assert result.stdout.count('source files') == 1
         uri_result = _run(f'surface://{tmp_path}')
