@@ -458,11 +458,12 @@ def check_and_collect_file(
         )
 
         status: dict = {"status": "ok"}
-        from ..checks import structure_parse_degraded
+        from ..checks import _analyzer_error_position, parse_error_suffix, structure_parse_degraded
         if structure_parse_degraded(structure):
             status = {
                 "status": "warning",
-                "detail": "file did not parse cleanly; results may be incomplete or incorrect",
+                "detail": f"file did not parse cleanly{parse_error_suffix(_analyzer_error_position(analyzer))}; "
+                          "results may be incomplete or incorrect",
             }
         if rule_errors:
             status["rule_errors"] = rule_errors

@@ -21,7 +21,7 @@ from .core import suppress_treesitter_warnings
 from .core import node_children as _children
 from .core import node_next_sibling as _next_sibling
 from .core import iter_tree as _iter_tree
-from .core.treesitter_compat import _zero_arg, tree_has_recovery_artifacts
+from .core.treesitter_compat import _zero_arg, first_error_position, tree_has_recovery_artifacts
 from .core import tree_root
 from .core.node_taxonomy import (
     DEF_NODES as _DEF_NODES,
@@ -1443,6 +1443,10 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if not self.tree:
             return False
         return tree_has_recovery_artifacts(self.tree)
+
+    def first_parse_error_position(self) -> Optional[Tuple[int, int]]:
+        """1-based (line, column) of the first ERROR node, or None (BACK-1779)."""
+        return first_error_position(self.tree) if self.tree else None
 
     def _get_node_text(self, node) -> str:
         """Get the source text for a node.

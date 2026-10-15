@@ -672,7 +672,7 @@ def _check_notes(files, select_list, ignore_list, file_results) -> tuple[list[st
         if fr.get('status') == 'error':
             notes.append(f"⚠️  {fr['file']}: could not be checked -- {fr.get('detail', 'analyzer error')}")
         elif fr.get('status') == 'warning':
-            notes.append(f"⚠️  {fr['file']}: did not parse cleanly; results may be incomplete or incorrect")
+            notes.append(f"⚠️  {fr['file']}: " + fr.get('detail', 'did not parse cleanly; results may be incomplete or incorrect'))
         for err in fr.get('rule_errors', []):
             notes.append(f"⚠️  {fr['file']}: rule {err['rule']} crashed and did not run -- {err['error']}")
 

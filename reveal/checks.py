@@ -81,10 +81,17 @@ def capability_disclosures(files, select, ignore) -> List[str]:
             + _i001_not_checked_disclosures(files, select, ignore))
 
 
+def parse_error_suffix(position: Optional[Tuple[int, int]]) -> str:
+    """" (first error at line L:C)" for a degraded parse, "" when none is known
+    (BACK-1779). One spelling for every check surface."""
+    return f" (first error at line {position[0]}:{position[1]})" if position else ""
+
+
 def _detections_result(
     path: str,
     detections: List[Any],
     parse_degraded: bool = False,
+    parse_error_at: Optional[Tuple[int, int]] = None,
     rule_errors: Optional[List[dict]] = None,
     no_snippets: bool = False,
     max_snippet_chars: Optional[int] = None,
@@ -141,7 +148,8 @@ def _detections_result(
                         cause='max_items')
     if parse_degraded:
         result['warning'] = (
-            "file did not parse cleanly; results may be incomplete or incorrect"
+            f"file did not parse cleanly{parse_error_suffix(parse_error_at)}; "
+            "results may be incomplete or incorrect"
         )
     if rule_errors:
         result['errors'] = rule_errors
@@ -182,6 +190,7 @@ def _emit_detections(path: str, output_format: str, detections: List[Any],
             _format_detections_text(
                 path, rendered, no_group=no_group,
                 parse_degraded=result_fields.get('parse_degraded', False),
+                parse_error_at=result_fields.get('parse_error_at'),
                 rule_errors=result_fields.get('rule_errors'),
                 no_snippets=result_fields.get('no_snippets', False),
                 max_snippet_chars=result_fields.get('max_snippet_chars'),
@@ -209,6 +218,7 @@ def _format_detections_text(
     detections: List[Any],
     no_group: bool = False,
     parse_degraded: bool = False,
+    parse_error_at: Optional[Tuple[int, int]] = None,
     rule_errors: Optional[List[dict]] = None,
     no_snippets: bool = False,
     max_snippet_chars: Optional[int] = None,
@@ -246,7 +256,8 @@ def _format_detections_text(
 
     if not detections:
         if parse_degraded:
-            print(f"{path}: ⚠️  file did not parse cleanly — results may be incomplete or incorrect")
+            print(f"{path}: ⚠️  file did not parse cleanly{parse_error_suffix(parse_error_at)}"
+                  " — results may be incomplete or incorrect")
         else:
             if rule_errors or scan_incomplete:
                 verdict = "⚠️  No findings in the checked population; scan incomplete"
@@ -259,7 +270,8 @@ def _format_detections_text(
 
     count = len(detections)
     if parse_degraded:
-        print(f"{path}: ⚠️  file did not parse cleanly — results below may be incomplete or incorrect")
+        print(f"{path}: ⚠️  file did not parse cleanly{parse_error_suffix(parse_error_at)}"
+              " — results below may be incomplete or incorrect")
     print(f"{path}: Found {count} issue{'s' if count != 1 else ''}\n")
 
     if no_group or count < _GROUP_THRESHOLD:
@@ -285,6 +297,12 @@ def _format_detections_text(
             total = len(by_rule[d.rule_code])
             print(d.render(no_snippets=no_snippets, max_snippet_chars=max_snippet_chars))
             print(f"\n  ↳ +{total - 1} more {d.rule_code} occurrences hidden — use --no-group to expand\n")
+
+
+def _analyzer_error_position(analyzer: Any) -> Optional[Tuple[int, int]]:
+    """The first parse error's (line, column), for analyzers that can say (BACK-1779)."""
+    locate = getattr(analyzer, 'first_parse_error_position', None)
+    return locate() if callable(locate) else None
 
 
 def structure_parse_degraded(structure: Any) -> bool:
@@ -382,6 +400,7 @@ def run_pattern_detection(
     result = _emit_detections(
         path, output_format, detections, rendered_detections, no_group=no_group,
         parse_degraded=parse_degraded, rule_errors=rule_errors, no_snippets=no_snippets,
+        parse_error_at=_analyzer_error_position(analyzer) if parse_degraded else None,
         max_snippet_chars=max_snippet_chars, total_available=total_available,
         disclosures=disclosures, scan_incomplete=bool(scan_disclosures),
     )

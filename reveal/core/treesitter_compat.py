@@ -38,7 +38,7 @@ import inspect
 import operator
 import re
 import warnings
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 
 def suppress_treesitter_warnings():
@@ -320,6 +320,28 @@ def error_node_spans(root) -> List[Tuple[int, int]]:
             continue
         stack.extend(node_children(node))
     return spans
+
+
+def first_error_position(tree) -> Optional[Tuple[int, int]]:
+    """1-based (line, column) where the first ERROR node in the file starts, or None.
+
+    BACK-1779: "did not parse cleanly" without a place sends the reader bisecting a
+    long file. MISSING-only recoveries have no ERROR node and return None.
+    """
+    first = None
+    stack = [tree_root(tree)]
+    while stack:
+        node = stack.pop()
+        if not _zero_arg(node, 'has_error'):
+            continue
+        if _zero_arg(node, 'kind') == 'ERROR':
+            start = _zero_arg(node, 'start_position')
+            at = (start.row + 1, start.column + 1)
+            if first is None or at < first:
+                first = at
+            continue
+        stack.extend(node_children(node))
+    return first
 
 
 def tree_has_recovery_artifacts(tree) -> bool:
