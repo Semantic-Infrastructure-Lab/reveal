@@ -3049,7 +3049,7 @@ class TestTimeline:
         adapter = GitAdapter(path=str(git_repo_timeline), subpath='src/',
                               query={'type': 'history', 'bucket': 'month'})
         r = adapter.get_structure()
-        assert r['source_type'] == 'file'  # directory shares the file-timeline code path
+        assert r['source_type'] == 'directory'  # BACK-1761: was 'file'
         assert r['commit_count'] == 4  # README excluded, only src/app.py commits
         assert {b['period'] for b in r['buckets']} == {'2026-01', '2026-02'}
 
