@@ -57,6 +57,17 @@ logger = logging.getLogger(__name__)
 UNLIMITED_TOP = 10**9
 
 
+def without_internal_filter_warnings(meta: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The composed warnings minus the typo hint for a filter key this adapter wrote itself.
+
+    overview:// and hotspots:// both compose an AST query they generate (``complexity>9``,
+    ``complexity>=N``); on a tree with no function AST cannot observe that key and warns
+    "this may be a typo", which no caller could act on. A filter the CALLER wrote still
+    warns, because ast:// emits it for a user query that never passes through here.
+    """
+    return [w for w in ((meta or {}).get('warnings') or []) if w.get('type') != 'unknown_filter_key']
+
+
 # ── Data collectors ────────────────────────────────────────────────────────────
 
 def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int) -> Dict[str, Any]:
@@ -401,7 +412,7 @@ class OverviewAdapter(ResourceAdapter):
             contract_version=CONTRACT_VERSION,
             scope=report.pop('scope'),
             data=report,
-            warnings=meta.get('warnings') if meta else None,
+            warnings=without_internal_filter_warnings(meta) or None,
             errors=meta.get('errors') if meta else None,
             confidence=meta.get('confidence') if meta else None,
         )
