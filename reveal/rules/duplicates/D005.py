@@ -34,7 +34,7 @@ from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
 from ...utils.pyparse import parse_python
 from ...utils.query_control import ScanBudget
-from ...utils.path_utils import EVIDENCE, _walk_code_files, cross_file_scan_root, to_posix
+from ...utils.path_utils import EVIDENCE, _walk_code_files, cross_file_scan_root, scan_roots, to_posix
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +154,7 @@ def get_scan_disclosures(files: Optional[List[Path]] = None) -> List[str]:
     """BACK-1051: one-line skip reasons for every project root whose D005
     cross-file scan was skipped by the file-count ceiling. Mirrors
     I002.get_scan_disclosures()."""
-    roots = {_find_project_root(path.resolve()) for path in files} if files is not None else None
+    roots = scan_roots(files, _find_project_root) if files is not None else None
     details = [message for root, index in _project_index.items()
                if roots is None or root in roots
                for message in _index_disclosures(root, index)]

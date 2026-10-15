@@ -17,7 +17,7 @@ from ..utils.parallel import pool_worker_count, submit_each
 from ..utils.results import note_truncation
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List, Dict, TYPE_CHECKING
+from typing import Optional, List, Dict, Tuple, TYPE_CHECKING
 
 from ..utils.path_utils import (
     ScopeCensus,
@@ -1174,15 +1174,20 @@ def _rule_filters(args: 'Namespace') -> tuple:
     return select, ignore
 
 
-def _scan_disclosures(files: List[Path], select, ignore) -> List[str]:
+def _scan_disclosures(files: List[Path], select, ignore) -> Tuple[List[str], bool]:
     """Everything the run could not fully check, rule-wide: a capped scan
     (BACK-1051) and rules a language skips (BACK-1466). Read after the scan --
-    the caps are recorded by it. [] claims the scan was complete."""
-    return get_scan_disclosures(files, select, ignore) + capability_disclosures(files, select, ignore)
+    the caps are recorded by it. [] claims the scan was complete.
+
+    Also returns whether the scan itself was incomplete (a capped/lost scan,
+    not a capability note). Collected once per run: each collection maps every
+    file to its project root (BACK-1827)."""
+    scan = get_scan_disclosures(files, select, ignore)
+    return scan + capability_disclosures(files, select, ignore), bool(scan)
 
 
 def _report_for(files: List[Path], collection: 'FileCollectionResult', args: 'Namespace',
-                select, ignore, disclosures: List[str]):
+                select, ignore, disclosures: List[str], scan_incomplete: bool):
     """_check_report with this run's arguments, so --format json and both
     --also-json writers describe the run the same way (BACK-1248): same scope,
     same scan disclosures, same exit_zero."""
@@ -1192,7 +1197,7 @@ def _report_for(files: List[Path], collection: 'FileCollectionResult', args: 'Na
             scope=collection.to_scope_census() if file_results is not None else None,
             select=select, ignore=ignore, scan_disclosures=disclosures,
             exit_zero=getattr(args, 'exit_zero', False),
-            scan_incomplete=bool(get_scan_disclosures(files, select, ignore)),
+            scan_incomplete=scan_incomplete,
         )
         result['summary']['scan_budgets'] = [
             {**row, 'root': as_spelled(row['root'], getattr(args, 'path', '.') or '.')}
@@ -1222,8 +1227,9 @@ def _json_or_grep_check(files: List[Path], directory: Path, collection: 'FileCol
         )
     else:
         file_results, budget = _json_file_entries(checked)
-    disclosures = _scan_disclosures(files, select, ignore)
-    result = _report_for(files, collection, args, select, ignore, disclosures)(tally, budget, file_results)
+    disclosures, scan_incomplete = _scan_disclosures(files, select, ignore)
+    result = _report_for(files, collection, args, select, ignore, disclosures, scan_incomplete)(
+        tally, budget, file_results)
 
     def render_grep(_result: dict) -> None:
         _print_grep_output(file_results)
@@ -1255,8 +1261,8 @@ def _text_check(files: List[Path], directory: Path, collection: 'FileCollectionR
         limit = 50
     text = _check_text(files, directory, select, ignore, getattr(args, 'severity', None), limit, max_items)
     tally = text.tally
-    disclosures = _scan_disclosures(files, select, ignore)
-    report = _report_for(files, collection, args, select, ignore, disclosures)
+    disclosures, scan_incomplete = _scan_disclosures(files, select, ignore)
+    report = _report_for(files, collection, args, select, ignore, disclosures, scan_incomplete)
     result = report(tally, text.budget)
 
     artifact = None
@@ -1273,7 +1279,7 @@ def _text_check(files: List[Path], directory: Path, collection: 'FileCollectionR
             len(files), tally.files_with_issues, tally.total_issues, directory, config,
             files_errored=tally.files_errored, files_degraded=tally.files_degraded,
             scan_disclosures=disclosures,
-            scan_incomplete=bool(get_scan_disclosures(files, select, ignore)),
+            scan_incomplete=scan_incomplete,
         )
 
     return tally, result, render_text, artifact

@@ -23,7 +23,7 @@ from ...core import disk_cache
 from ...utils.query_control import ScanBudget
 from ...utils.parallel import pool_worker_count, submit_each
 from ...utils.path_utils import (
-    EVIDENCE, _walk_code_files, cross_file_scan_root,
+    EVIDENCE, _walk_code_files, cross_file_scan_root, scan_roots,
 )
 
 logger = logging.getLogger(__name__)
@@ -297,7 +297,7 @@ def get_scan_disclosures(files: Optional[List[Path]] = None) -> List[str]:
     scan present its empty cycle list as a clean "no circular dependencies
     found" -- the exact silent-skip symptom that motivated this ticket.
     """
-    roots = {_find_project_root(path.resolve()) for path in files} if files is not None else None
+    roots = scan_roots(files, _find_project_root) if files is not None else None
     disclosures = []
     for directory, graph in _graph_cache.items():
         if roots is not None and directory not in roots:

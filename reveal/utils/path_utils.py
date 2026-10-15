@@ -1417,6 +1417,27 @@ def cross_file_scan_root(file_path: Path, **resolve_kwargs: Any) -> Optional[Pat
     return None if is_unsafe_scan_root(root) else root
 
 
+def scan_roots(paths: Iterable[Path], find_root: Callable[[Path], Optional[Path]]) -> Dict[Path, None]:
+    """The distinct roots *find_root* gives *paths*, in first-seen order, one call per directory.
+
+    A file's cross-file scan root depends only on its directory (the resolver climbs from
+    the file, and a file is never itself a marker), so siblings share one resolution.
+    Mapping every file cost ~11 parent walks per file in ``reveal check`` (BACK-1827).
+    ``None`` roots are dropped.  Resolution is per call: nothing is kept between runs.
+    """
+    by_directory: Dict[Path, Optional[Path]] = {}
+    roots: Dict[Path, None] = {}
+    for path in paths:
+        resolved = path.resolve()
+        directory = resolved if resolved.is_dir() else resolved.parent
+        if directory not in by_directory:
+            by_directory[directory] = find_root(resolved)
+        root = by_directory[directory]
+        if root is not None:
+            roots.setdefault(root, None)
+    return roots
+
+
 def get_relative_to_root(
     path: Path,
     root_markers: Optional[List[str]] = None

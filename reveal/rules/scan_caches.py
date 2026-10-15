@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from . import RuleRegistry
+from ..utils.path_utils import scan_roots
 
 
 def rule_will_run(code: str, select, ignore) -> bool:
@@ -34,8 +35,7 @@ def rule_will_run(code: str, select, ignore) -> bool:
 
 def _project_roots(directory: Path, files, find_root):
     """Resolve each reached root once, using the rule's own root policy."""
-    return dict.fromkeys(root for path in files or [directory]
-                         if (root := find_root(path.resolve())) is not None)
+    return scan_roots(files or [directory], find_root)
 
 
 def _i002_preload(directory: Path, select, ignore, files: Optional[List[Path]] = None) -> dict:
