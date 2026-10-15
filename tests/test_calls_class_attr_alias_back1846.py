@@ -74,3 +74,17 @@ def test_typescript_member_call_is_still_not_a_caller(tmp_path):
         'export function member(o: any) { return o.Schedule(); }\n'
         'export function direct() { return new Schedule(); }\n', encoding='utf-8')
     assert ('app.ts', 'member') not in _callers(tmp_path, 'Timer')
+
+
+def test_nested_class_without_the_binding_shadows_the_outer_class(tmp_path):
+    (tmp_path / 'timer.py').write_text('class Timer:\n    pass\n', encoding='utf-8')
+    (tmp_path / 'app.py').write_text(
+        'from timer import Timer as Schedule\n\n'
+        'class Outer:\n'
+        '    Schedule = Schedule\n\n'
+        '    class Inner:\n'
+        '        def run(self):\n            return self.Schedule()\n\n'
+        '    def go(self):\n        return self.Schedule()\n', encoding='utf-8')
+    callers = _callers(tmp_path, 'Timer')
+    assert ('app.py', 'go') in callers
+    assert ('app.py', 'run') not in callers

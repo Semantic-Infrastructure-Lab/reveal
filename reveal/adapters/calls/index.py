@@ -17,7 +17,10 @@ from typing import Any, Dict, FrozenSet, Iterator, List, Optional, Set, Tuple
 
 from ..ast.analysis import collect_structures, is_code_file, call_sources, unattributed_references
 from ...utils.pyparse import parse_python
-from ..ast.call_graph import build_alias_map, build_symbol_map, resolve_callees as _resolve_callees
+from ..ast.call_graph import (
+    ClassAliasSpan, build_alias_map, build_class_attribute_aliases, build_symbol_map, class_attribute_alias,
+    resolve_callees as _resolve_callees,
+)
 from ...conventions import conventions_for, family_for_path, is_builtin_anywhere
 from ...defaults import TEST_FRAMEWORK_CALLEE_NAMES
 from ...utils.gitignore import gitignore_enabled
@@ -208,6 +211,7 @@ def _index_callee(
     callee: str,
     record: Dict[str, Any],
     alias_map: Dict[str, str],
+    class_aliases: Optional[List[ClassAliasSpan]] = None,
 ) -> None:
     """Add *record* to *index* under the bare name, dotted/arrow form, and canonical alias."""
     bare = _bare_callee_name(callee)
@@ -216,7 +220,11 @@ def _index_callee(
         index.setdefault(callee, []).append(record)
     # An import alias renames a bare call only: after ``from m import helper as h``, ``h()`` is
     # ``m.helper`` but ``o.h()`` is still a method called h (BACK-1820's rule in resolve.py).
-    canonical = alias_map.get(bare) if bare == callee else None
+    # The exception is ``self.X``/``cls.X`` where the class body binds ``X = <alias>`` (BACK-1846).
+    if bare == callee:
+        canonical = alias_map.get(bare)
+    else:
+        canonical = class_attribute_alias(callee, record.get('line', 0), class_aliases or [])
     if canonical and canonical != bare:
         index.setdefault(canonical, []).append(record)
 
@@ -415,6 +423,7 @@ def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
         # from falsely reporting `helper` as dead code and lets find_callers
         # locate callers that use the alias.
         alias_map = build_alias_map(file_path)
+        class_aliases = build_class_attribute_aliases(file_path, alias_map)
         for elem in call_sources(file_struct):
             # 'tests' (Zig's TestDecl blocks — the only 'tests'-category
             # producer today) counts as a caller here for the same reason
@@ -442,7 +451,7 @@ def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
                     sites = [site for site in elem['call_sites'] if site['callee'] == callee]
                     record.update(caller_kind='module', line=min(site['line'] for site in sites),
                                   call_lines=sorted({site['line'] for site in sites if site.get('relationship') != 'jsx_reference'}))
-                _index_callee(index, callee, record, alias_map)
+                _index_callee(index, callee, record, alias_map, class_aliases)
 
     _INDEX_CACHE[dir_str] = (cache_key, index)
     _INDEX_CACHE.move_to_end(dir_str)
