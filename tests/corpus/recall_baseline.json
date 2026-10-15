@@ -316,9 +316,9 @@
     "targets": 98,
     "oracle_edges": 2589,
     "hit_edges": 2589,
-    "extra_edges": 12,
+    "extra_edges": 0,
     "recall": 1.0,
-    "precision": 0.9953863898500577,
+    "precision": 1.0,
     "coverage": {
       "files": 116,
       "packages": 11,
@@ -328,91 +328,6 @@
       "population": "tracked-buildless-source"
     },
     "partial_files": 0,
-    "differences": [
-      {
-        "target": "prometheus/example_clustermanager_test.go",
-        "missed": [],
-        "extra": [
-          "prometheus/example_clustermanager_test.go"
-        ]
-      },
-      {
-        "target": "prometheus/example_metricvec_test.go",
-        "missed": [],
-        "extra": [
-          "prometheus/example_metricvec_test.go"
-        ]
-      },
-      {
-        "target": "prometheus/example_timer_complex_test.go",
-        "missed": [],
-        "extra": [
-          "prometheus/example_timer_complex_test.go"
-        ]
-      },
-      {
-        "target": "prometheus/example_timer_gauge_test.go",
-        "missed": [],
-        "extra": [
-          "prometheus/example_timer_gauge_test.go"
-        ]
-      },
-      {
-        "target": "prometheus/example_timer_test.go",
-        "missed": [],
-        "extra": [
-          "prometheus/example_timer_test.go"
-        ]
-      },
-      {
-        "target": "prometheus/examples_test.go",
-        "missed": [],
-        "extra": [
-          "prometheus/examples_test.go"
-        ]
-      },
-      {
-        "target": "prometheus/expvar_collector_test.go",
-        "missed": [],
-        "extra": [
-          "prometheus/expvar_collector_test.go"
-        ]
-      },
-      {
-        "target": "prometheus/gen_go_collector_metrics_set.go",
-        "missed": [],
-        "extra": [
-          "prometheus/gen_go_collector_metrics_set.go"
-        ]
-      },
-      {
-        "target": "prometheus/push/example_add_from_gatherer_test.go",
-        "missed": [],
-        "extra": [
-          "prometheus/push/example_add_from_gatherer_test.go"
-        ]
-      },
-      {
-        "target": "prometheus/push/examples_test.go",
-        "missed": [],
-        "extra": [
-          "prometheus/push/examples_test.go"
-        ]
-      },
-      {
-        "target": "prometheus/registry_test.go",
-        "missed": [],
-        "extra": [
-          "prometheus/registry_test.go"
-        ]
-      },
-      {
-        "target": "prometheus/testutil/promlint/promlint_test.go",
-        "missed": [],
-        "extra": [
-          "prometheus/testutil/promlint/promlint_test.go"
-        ]
-      }
-    ]
+    "differences": []
   }
 }

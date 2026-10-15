@@ -1831,9 +1831,11 @@ Its **2,589/2,589 projected edges** include 1,251 edges to `_test.go` files, 337
 separate external-test packages and 37 to a build-ignored `package main` generator.
 At least those latter 374 edges are not valid Go package dependencies. Agreement
 with this fan-out is therefore projection conformance, not independent file-level
-truth or build-selected recall. The private file-dependents projection also emits
-12 self-edge extras, giving 99.5386% precision against this model. Those identities
-remain visible in the reviewed baseline pending their separate product fix.
+truth or build-selected recall. Sprint 4 removed the private file-dependents
+projection's 12 self-edge extras: all 2,589 projected edges remain matched with
+zero extras (100% precision against this model, previously 99.5386%). The reviewed
+baseline changed only extra identities/count and precision; package/build-scope
+limitations remain unchanged.
 
 The same runner has a separately scoped `--signal calls` mode. Its first population
 is the existing pinned celery corpus, `celery/utils/`, using Python's standard AST

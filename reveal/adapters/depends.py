@@ -1544,6 +1544,8 @@ class DependsAdapter(ResourceAdapter):
         if dir_importers:
             importer_files |= dir_importers
             used_dir_fallback = True
+        # Package projection must not turn an importer into its own dependent.
+        importer_files.discard(target)
 
         # Gather the actual ImportStatements pointing to target. Prefer the
         # precise per-edge map (BACK-542: correct even when one statement
