@@ -86,3 +86,32 @@ def test_real_manifest_pin_is_required(tmp_path):
     subprocess.run(['git', 'init', '-q', str(tmp_path)], check=True, timeout=30)
     with pytest.raises(subprocess.CalledProcessError):
         pilot.source_identity(tmp_path, 'missing')
+
+
+def test_sampling_interval_is_deterministic_and_not_a_point_for_small_samples():
+    claims = [{'id': str(i), 'stratum': 'source', 'stratum_population': 100,
+               'stratum_sample': 4} for i in range(4)]
+    labels = {'0': 'tp', '1': 'tp', '2': 'fp', '3': 'fp'}
+    interval = pilot.sampling_interval(claims, labels)
+    assert 0 < interval[0] < .5 < interval[1] < 1
+    assert interval == pilot.sampling_interval(list(reversed(claims)), labels)
+    for claim in claims:
+        claim['stratum_population'] = 4
+    assert pilot.sampling_interval(claims, labels) == [.5, .5]
+
+
+def test_sampling_interval_cannot_invent_precision_for_no_decided_labels():
+    claim = {'id': 'a', 'stratum_population': 100, 'stratum_sample': 1}
+    assert pilot.sampling_interval([claim], {'a': 'uncertain'}) == [None, None]
+
+
+def test_rater_agreement_detects_disagreement_and_rejects_unknown_claims():
+    first = {'labels': [{'id': 'a', 'verdict': 'tp'}, {'id': 'b', 'verdict': 'fp'}]}
+    second = {'labels': [{'id': 'a', 'verdict': 'tp', 'reason': 'substantive'},
+                         {'id': 'b', 'verdict': 'tp', 'reason': 'review disagrees'}]}
+    result = pilot.rater_agreement(first, second)
+    assert result['percent_agreement'] == 50 and result['cohens_kappa'] == 0
+    assert result['disagreement_ids'] == ['b']
+    second['labels'][1]['id'] = 'unknown'
+    with pytest.raises(ValueError, match='Invalid second-rater'):
+        pilot.rater_agreement(first, second)

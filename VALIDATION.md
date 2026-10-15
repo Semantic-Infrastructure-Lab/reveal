@@ -1879,16 +1879,22 @@ within rule × top-level directory strata, with 20 claims per rule or all claims
 when fewer exist. D002's advisory candidate ranking was inspected during selection
 and is outside this pilot's binary claim criteria.
 
-| Rule | Reviewed TP / FP / uncertain | Stratum-weighted precision on decidable claims |
-|---|---|---|
-| D001 | 17 / 3 / 0 | 74.43% |
-| B006 | 7 / 12 / 1 | 27.10% |
-| I001 | 2 / 1 / 0 (all three claims) | 66.67% |
+| Rule | Reviewed TP / FP / uncertain | Weighted estimate | Approximate conservative 95% sampling interval |
+|---|---|---|---|
+| D001 | 17 / 3 / 0 | 74% | 43–92% |
+| B006 | 7 / 12 / 1 | 27% | 17–53% |
+| I001 | 2 / 1 / 0 (all three claims) | 2/3 | Census: no sampling uncertainty |
 
-These are scoped pilot estimates from one source review, not population-wide
+These are scoped pilot estimates from one primary source review, not general
 accuracy claims. Weighting accounts for unequal sampling of source and test
-strata. B006's uncertain-label bounds are 25.48–31.47%; these bounds describe
-label uncertainty **only**, not sampling error. Recall, runtime semantics,
+strata. Sampling intervals combine stratum Wilson envelopes with a Bonferroni
+adjustment, conditional on decided labels; census strata carry no sampling error.
+B006's separate uncertain-label bounds are about 25–31%; these describe label
+uncertainty **only**, not sampling error. The criteria encode conformance to each
+rule's published specification, rather than usefulness. A blind second agent run
+reviewed 15 claims (the first six committed D001 and B006 claims and all three
+I001 claims): agreement was 15/15 (100%), Cohen's kappa 1.0. This small fixed subset
+and shared criteria do not establish label validity across the whole population. Recall, runtime semantics,
 refactoring value and appropriate default rule selection were not measured.
 D001 labels distinguish real body duplication—including intentional abstract
 hooks and test fixtures—from decorated pass-only bodies that should have been
@@ -1899,6 +1905,7 @@ and individual reasons remain reviewable, including the uncertain case.
 
 Artifacts: [sample](tests/corpus/rule_precision_sample.json),
 [labels and criteria](tests/corpus/rule_precision_labels.json),
+[blind subset labels](tests/corpus/rule_precision_second_rater.json),
 [report](tests/corpus/rule_precision_report.json), and
 [runner](scripts/rule_precision.py). Source-file hashes, exact corpus pin,
 Python/parser versions and Reveal working-tree digests identify the measurement.
@@ -1909,7 +1916,7 @@ source review and are never inferred automatically from a passing rule run.
 ```bash
 python scripts/fetch_corpus.py python-celery
 python scripts/rule_precision.py sample --corpus-root ~/.cache/reveal-corpus --output /tmp/rule-sample.json
-python scripts/rule_precision.py score --corpus-root ~/.cache/reveal-corpus --sample tests/corpus/rule_precision_sample.json --labels tests/corpus/rule_precision_labels.json --output /tmp/rule-precision.json
+python scripts/rule_precision.py score --corpus-root ~/.cache/reveal-corpus --sample tests/corpus/rule_precision_sample.json --labels tests/corpus/rule_precision_labels.json --second-labels tests/corpus/rule_precision_second_rater.json --output /tmp/rule-precision.json
 ```
 
 A new sample is reviewed before replacing the committed labels; the scoring

@@ -1,0 +1,92 @@
+{
+  "reviewer": "blind independent agent source review (second run)",
+  "method": {
+    "input": "15-claim subset of rule_precision_sample.json, selected in committed order: first six D001, first six B006, all three I001",
+    "source": {
+      "id": "python-celery",
+      "sha": "17b895bad43aab73fca37609ae9b93be6cc1c6e1",
+      "repo": "https://github.com/celery/celery.git"
+    },
+    "source_sha256_verification": "All 15 supplied file SHA256 values matched before labeling and before writing.",
+    "blindness": "Read only supplied claims and source files; did not read first-rater labels, reports or review findings.",
+    "review": "Inspected source neighborhoods, compared D001 function-body ASTs excluding signatures, and searched I001 bindings throughout their source files. Applied supplied D001/B006/I001 criteria.",
+    "limitations": "Static source review of 15 supplied claims only; no runtime execution, precision extrapolation, repository edits, git operations, or independent commit identity verification. Pinned source identity taken from input; claimed file contents verified by SHA256."
+  },
+  "labels": [
+    {
+      "id": "00a793be3886e6070a82",
+      "verdict": "tp",
+      "reason": "celery/app/utils.py:223,227 have identical executable return convert(key, key) bodies. Different default mapping bindings change semantics but do not change the syntactic bodies; neither is a no-op."
+    },
+    {
+      "id": "007b1358731b1721b091",
+      "verdict": "fp",
+      "reason": "t/unit/app/test_beat.py:195-196,207-208 define task fixtures whose entire bodies are pass. These are trivial no-op bodies excluded by the criterion."
+    },
+    {
+      "id": "1888ea20475ccd9b2f88",
+      "verdict": "tp",
+      "reason": "celery/apps/multi.py:476,479 contain the identical return self._stop_nodes(retry=retry, on_down=callback, sig=sig) body. Different retry defaults are outside the bodies; both perform a substantive stop operation."
+    },
+    {
+      "id": "04ca9843e185a8f46ae2",
+      "verdict": "tp",
+      "reason": "t/unit/tasks/test_stamping.py:788,1015 return the same nonempty dictionary {\"on_errback\": True}. This produces stamping metadata used by the visitor; it is an identical executable body, not a pass/no-op hook."
+    },
+    {
+      "id": "2f2318cc59ff6a6f475d",
+      "verdict": "tp",
+      "reason": "celery/app/trace.py:207,210 both call self._log_error(task, req, ExceptionInfo()). These identical bodies perform error logging rather than no-op hooks."
+    },
+    {
+      "id": "076d979c270019efc505",
+      "verdict": "tp",
+      "reason": "t/unit/tasks/test_trace.py:138,954 both execute return x + y. These are identical executable arithmetic bodies, despite being separate test-local task definitions."
+    },
+    {
+      "id": "28c68e88e59d7c0e5721",
+      "verdict": "tp",
+      "reason": "celery/backends/rpc.py:88-93 catches cancellation exceptions and only logs at debug level. The earlier warning reports connection loss, not this subsequently caught cancellation failure; there is no checked error channel for the caught exception."
+    },
+    {
+      "id": "034d85ad96141f260822",
+      "verdict": "fp",
+      "reason": "t/unit/worker/test_request.py:105-109 intentionally raises Exception(\"foo\"), captures it, constructs Retry with it, and asserts ret.exc == exc. The caught exception is explicitly checked by the test."
+    },
+    {
+      "id": "3db402563159c032905c",
+      "verdict": "tp",
+      "reason": "celery/backends/database/__init__.py:233-241 catches any error decoding or applying stamp metadata and executes pass, then returns ordinary decoded metadata without reporting or propagating the caught error."
+    },
+    {
+      "id": "117f88c2801ef6fac95f",
+      "verdict": "fp",
+      "reason": "t/integration/test_redis_backend.py:99-101 appends the caught exception to errors and stops draining; after thread joins, line 120 asserts not errors. This is a checked error channel that fails the test on a captured exception."
+    },
+    {
+      "id": "51da32cd9e3fcb3e1fe5",
+      "verdict": "tp",
+      "reason": "celery/backends/database/models.py:85-88 catches errors accessing self.stamps and substitutes stamps = None. The returned dictionary includes this computed default but no checked error signal or reporting."
+    },
+    {
+      "id": "166110794279cef94b1c",
+      "verdict": "fp",
+      "reason": "t/unit/backends/test_base.py:2025-2030 checks the caught exception equals expected_exc and checks no retry sleep occurred. Expected exception propagation is explicitly asserted."
+    },
+    {
+      "id": "0d728317d2527664720b",
+      "verdict": "fp",
+      "reason": "celery/fixups/django.py imports WorkController at line 18 and uses it in the quoted type annotation Optional[\"WorkController\"] at line 132. Quoted type annotations count as binding uses under the supplied criterion."
+    },
+    {
+      "id": "91d959b6f7ae5c399e98",
+      "verdict": "tp",
+      "reason": "t/unit/backends/test_couchbase.py imports couchbase at line 15, but never loads that binding. Its fallback assignment is not a use; pytest.importorskip(\"couchbase\") and patch(\"couchbase.cluster.Cluster\") contain ordinary strings, not binding references."
+    },
+    {
+      "id": "12e3e08e4b3fa573e058",
+      "verdict": "tp",
+      "reason": "celery/backends/arangodb.py imports AQLQueryError at line 16, but the source never loads that binding or uses it in a type annotation. Line 18 only assigns a fallback None value."
+    }
+  ]
+}

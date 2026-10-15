@@ -23,7 +23,12 @@
       "weighted_precision_bounds": [
         0.7443181818181819,
         0.7443181818181819
-      ]
+      ],
+      "sampling_precision_interval_95": [
+        0.434372341892887,
+        0.9206596909238962
+      ],
+      "sampling_method": "Weighted Wilson stratum envelope with Bonferroni adjustment; conditional on decided labels; census strata exact"
     },
     "B006": {
       "sample_counts": {
@@ -37,7 +42,12 @@
       "weighted_precision_bounds": [
         0.25482625482625476,
         0.3146718146718146
-      ]
+      ],
+      "sampling_precision_interval_95": [
+        0.17419209431564303,
+        0.5275882716686902
+      ],
+      "sampling_method": "Weighted Wilson stratum envelope with Bonferroni adjustment; conditional on decided labels; census strata exact"
     },
     "I001": {
       "sample_counts": {
@@ -50,8 +60,32 @@
       "weighted_precision_bounds": [
         0.6666666666666666,
         0.6666666666666666
-      ]
+      ],
+      "sampling_precision_interval_95": [
+        0.6666666666666666,
+        0.6666666666666666
+      ],
+      "sampling_method": "Weighted Wilson stratum envelope with Bonferroni adjustment; conditional on decided labels; census strata exact"
     }
   },
-  "interpretation": "Stratum-weighted pilot estimates on emitted claims only; bounds cover uncertain labels, not sampling error. No recall or runtime correctness claim."
+  "interpretation": "Stratum-weighted conformance estimates on emitted claims only. Label bounds and approximate conservative 95% sampling intervals are separate; neither establishes usefulness, recall or runtime correctness.",
+  "rater_agreement": {
+    "sample_size": 15,
+    "percent_agreement": 100.0,
+    "cohens_kappa": 1.0,
+    "disagreement_ids": [],
+    "second_reviewer": "blind independent agent source review (second run)",
+    "method": {
+      "input": "15-claim subset of rule_precision_sample.json, selected in committed order: first six D001, first six B006, all three I001",
+      "source": {
+        "id": "python-celery",
+        "sha": "17b895bad43aab73fca37609ae9b93be6cc1c6e1",
+        "repo": "https://github.com/celery/celery.git"
+      },
+      "source_sha256_verification": "All 15 supplied file SHA256 values matched before labeling and before writing.",
+      "blindness": "Read only supplied claims and source files; did not read first-rater labels, reports or review findings.",
+      "review": "Inspected source neighborhoods, compared D001 function-body ASTs excluding signatures, and searched I001 bindings throughout their source files. Applied supplied D001/B006/I001 criteria.",
+      "limitations": "Static source review of 15 supplied claims only; no runtime execution, precision extrapolation, repository edits, git operations, or independent commit identity verification. Pinned source identity taken from input; claimed file contents verified by SHA256."
+    }
+  }
 }

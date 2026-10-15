@@ -9,6 +9,8 @@ import argparse
 from collections import Counter, defaultdict
 import hashlib
 import json
+from math import sqrt
+from statistics import NormalDist
 from pathlib import Path
 import subprocess
 import sys
@@ -81,7 +83,62 @@ def stratified_sample(claims: list[dict], rules: list[str], limit: int) -> list[
     return selected
 
 
-def score(sample: dict, labels: dict, root: Path) -> dict:
+def sampling_interval(claims: list[dict], labels: dict) -> list:
+    """Conservative weighted Wilson envelope, conditional on decided labels.
+
+    Bonferroni adjusts the stratum intervals. Census strata have no sampling
+    uncertainty; label uncertainty is reported separately by score().
+    """
+    strata = defaultdict(list)
+    for claim in claims:
+        strata[claim.get('stratum', claim['id'])].append(claim)
+    z = NormalDist().inv_cdf(1 - .05 / (2 * len(strata)))
+    bounds = [0.0, 0.0]
+    weight = 0.0
+    for group in strata.values():
+        decided = [c for c in group if labels[c['id']] != 'uncertain']
+        n = len(decided)
+        if not n:
+            continue
+        p = sum(labels[c['id']] == 'tp' for c in decided) / n
+        population = group[0]['stratum_population']
+        sample_size = group[0]['stratum_sample']
+        w = population * n / sample_size
+        if sample_size == population:
+            lower = upper = p
+        else:
+            denominator = 1 + z * z / n
+            center = (p + z * z / (2 * n)) / denominator
+            radius = z * sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denominator
+            lower, upper = max(0.0, center - radius), min(1.0, center + radius)
+        bounds[0] += w * lower
+        bounds[1] += w * upper
+        weight += w
+    return [bound / weight for bound in bounds] if weight else [None, None]
+
+
+def rater_agreement(first: dict, second: dict) -> dict:
+    """Agreement on a blind reviewed subset, with three-category Cohen's kappa."""
+    original = {r['id']: r['verdict'] for r in first['labels']}
+    subset = second['labels']
+    if not subset or len({r['id'] for r in subset}) != len(subset):
+        raise ValueError('Second-rater subset must contain unique claims')
+    for row in subset:
+        if (row['id'] not in original or row['verdict'] not in ('tp', 'fp', 'uncertain')
+                or not row.get('reason', '').strip()):
+            raise ValueError('Invalid second-rater label')
+    size = len(subset)
+    counts_a = Counter(original[r['id']] for r in subset)
+    counts_b = Counter(r['verdict'] for r in subset)
+    observed = sum(original[r['id']] == r['verdict'] for r in subset) / size
+    chance = sum(counts_a[k] * counts_b[k] for k in ('tp', 'fp', 'uncertain')) / (size * size)
+    return {'sample_size': size, 'percent_agreement': observed * 100,
+            'cohens_kappa': (observed - chance) / (1 - chance) if chance < 1 else None,
+            'disagreement_ids': [r['id'] for r in subset if original[r['id']] != r['verdict']],
+            'second_reviewer': second.get('reviewer'), 'method': second.get('method')}
+
+
+def score(sample: dict, labels: dict, root: Path, second_labels: dict | None = None) -> dict:
     source_identity(root, sample['source']['sha'])
     expected = {c['id']: c for c in sample['claims']}
     if len(expected) != len(sample['claims']):
@@ -113,9 +170,16 @@ def score(sample: dict, labels: dict, root: Path) -> dict:
         results[rule] = {'sample_counts': dict(counts), 'sample_size': sum(counts.values()),
                          'estimated_population': total,
                          'weighted_decidable_precision': weights['tp']/decided if decided else None,
-                         'weighted_precision_bounds': [weights['tp']/total, (weights['tp']+weights['uncertain'])/total]}
-    return {'source': sample['source'], 'implementation': sample['implementation'], 'rules': results,
-            'interpretation': 'Stratum-weighted pilot estimates on emitted claims only; bounds cover uncertain labels, not sampling error. No recall or runtime correctness claim.'}
+                         'weighted_precision_bounds': [weights['tp']/total, (weights['tp']+weights['uncertain'])/total],
+                         'sampling_precision_interval_95': sampling_interval(
+                             [c for c in sample['claims'] if c['rule_code'] == rule],
+                             {r['id']: r['verdict'] for r in rows}),
+                         'sampling_method': 'Weighted Wilson stratum envelope with Bonferroni adjustment; conditional on decided labels; census strata exact'}
+    report = {'source': sample['source'], 'implementation': sample['implementation'], 'rules': results,
+            'interpretation': 'Stratum-weighted conformance estimates on emitted claims only. Label bounds and approximate conservative 95% sampling intervals are separate; neither establishes usefulness, recall or runtime correctness.'}
+    if second_labels is not None:
+        report['rater_agreement'] = rater_agreement(labels, second_labels)
+    return report
 
 
 def main(argv=None) -> int:
@@ -127,6 +191,7 @@ def main(argv=None) -> int:
     parser.add_argument('--per-rule', type=int, default=20)
     parser.add_argument('--sample', type=Path)
     parser.add_argument('--labels', type=Path)
+    parser.add_argument('--second-labels', type=Path, help='Blind second-rater subset labels')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args(argv)
     if args.mode == 'score' and (args.sample is None or args.labels is None):
@@ -139,7 +204,8 @@ def main(argv=None) -> int:
             sample = json.loads(args.sample.read_text(encoding='utf-8'))
             if sample['source']['sha'] != entry['sha']:
                 raise ValueError('Sample pin differs from manifest')
-            output = score(sample, json.loads(args.labels.read_text(encoding='utf-8')), root)
+            output = score(sample, json.loads(args.labels.read_text(encoding='utf-8')), root,
+                           json.loads(args.second_labels.read_text(encoding='utf-8')) if args.second_labels else None)
         else:
             identity = implementation_identity()
             result = subprocess.run([sys.executable, '-m', 'reveal', 'check', str(root),
