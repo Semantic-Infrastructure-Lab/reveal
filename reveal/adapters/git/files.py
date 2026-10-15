@@ -322,6 +322,7 @@ def get_file_timeline(
     format_commit_func,
     matches_all_filters_func,
     commit_touches_file_func,
+    is_dir: bool = False,
 ) -> Dict[str, Any]:
     """Bucket commit history for a file or directory by week/month.
 
@@ -329,7 +330,8 @@ def get_file_timeline(
     directories via the subtree-oid touch check), but returns aggregated
     period counts instead of a flat commit list. Uses a much higher default
     limit than get_file_history since a meaningful timeline needs the full
-    matching range, not a 50-commit page.
+    matching range, not a 50-commit page. ``is_dir`` only labels ``source_type``,
+    as in get_file_history (BACK-1761).
     """
     import pygit2
 
@@ -353,7 +355,7 @@ def get_file_timeline(
         result = ResultBuilder.create(
             result_type='git_timeline',
             source=f"{subpath}@{ref}",
-            source_type='file',
+            source_type='directory' if is_dir else 'file',
             contract_version=CONTRACT_VERSION,
             path=subpath,
             ref=ref,

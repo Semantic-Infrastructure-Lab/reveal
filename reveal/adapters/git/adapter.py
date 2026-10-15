@@ -679,6 +679,7 @@ class GitAdapter(ResourceAdapter):
                         commits.format_commit,
                         lambda cd: queries.matches_all_filters(cd, self.query_filters),
                         touch_func,
+                        is_dir=subpath_is_dir,
                     )
 
                 result = files.get_file_history(
