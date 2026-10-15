@@ -47,7 +47,7 @@ def test_multi_project_cap_is_partial_with_cycle_positive_control(tmp_path, monk
     assert data['summary']['exit_code'] == result.returncode == 3
     text = _run_reveal_direct('check', str(tmp_path), '--select', 'I002')
     assert text.returncode == 3 and 'No issues found' not in text.stdout
-    monkeypatch.setenv('REVEAL_I002_MAX_FILES', '0')
+    monkeypatch.setenv('REVEAL_I002_MAX_FILES', '100000')  # 0 would mean the default, not uncapped
     # CLI invocations are separate processes; the in-process helper needs a cold cache.
     from reveal.rules.imports.I002 import _graph_cache
     _graph_cache.clear()

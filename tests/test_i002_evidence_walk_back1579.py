@@ -20,8 +20,11 @@ def project(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv('REVEAL_I002_CYCLE_LIMIT', '10')  # 2 real files, 12 in .venv
     monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
-    monkeypatch.setattr(i002_module, '_graph_cache', {})
-    return tmp_path
+    # Clear in place: the cache registry holds this dict's bound .clear, so rebinding the name
+    # would leave a request reset clearing the wrong dict.
+    i002_module._graph_cache.clear()
+    yield tmp_path
+    i002_module._graph_cache.clear()
 
 
 def _i002(*args):

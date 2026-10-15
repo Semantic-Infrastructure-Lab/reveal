@@ -131,3 +131,29 @@ def test_fail_banner_does_not_claim_critical_findings(capsys):
     _render_results([{'target': 'code', 'exit_code': 2, 'summary': 'code: 7 violations (7 high, 0 critical)'}])
     out = capsys.readouterr().out
     assert 'Health: FAIL' in out and 'critical issues found' not in out
+
+
+def test_ssl_failure_answer_with_exit_zero_is_not_healthy():
+    import json
+    failing = {'type': 'ssl_check', 'status': 'failure', 'exit_code': 2, 'summary': {'failures': 1}}
+    result = _uri_health_result('ssl', 0, json.dumps(failing))
+    assert (result.exit_code, result.outcome) == (2, 'failed')
+
+
+def test_capped_scan_does_not_claim_an_exact_budget():
+    from reveal.cli.commands.health import _code_result
+    data = {'summary': {'total_issues': 0, 'files_checked': 3, 'files_errored': 0, 'files_degraded': 0,
+                        'scan_disclosures': ['I002: skipped, tree too large']}, 'files': []}
+    result = _code_result(data, 3, {'scope': 'scan', 'total': 3, 'returned': 3, 'exact': True,
+                                    'limit': 5000, 'analyzed_files': 0, 'skipped': False})
+    assert result.outcome == 'partial'
+    assert result.scan_budget['exact'] is False
+
+
+def test_complete_scan_keeps_its_exact_budget():
+    from reveal.cli.commands.health import _code_result
+    data = {'summary': {'total_issues': 0, 'files_checked': 3, 'files_errored': 0, 'files_degraded': 0,
+                        'scan_disclosures': []}, 'files': []}
+    result = _code_result(data, 0, {'scope': 'scan', 'total': 3, 'returned': 3, 'exact': True,
+                                    'limit': 5000, 'analyzed_files': 0, 'skipped': False})
+    assert result.outcome == 'ok' and result.scan_budget['exact'] is True

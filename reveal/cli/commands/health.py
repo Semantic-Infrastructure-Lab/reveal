@@ -238,9 +238,10 @@ def _code_result(data: dict, returncode: int, accounting: dict) -> HealthResult:
         return HealthResult(1, 'code: check not applicable', 'not_applicable', accounting)
     report = _read_code_report(data, accounting['total'])
     changed = report.checked != accounting['returned']
+    capped = bool(report.disclosures)
     accounting = {**accounting, 'preflight_files': accounting['total'],
                   'total': max(accounting['total'], report.checked),
-                  'returned': report.checked, 'exact': accounting['exact'] and not changed,
+                  'returned': report.checked, 'exact': accounting['exact'] and not changed and not capped,
                   'analyzed_files': report.checked - report.errors,
                   'failed_files': report.errors, 'degraded_files': report.degraded}
     if report.errors or returncode < 0:
@@ -330,6 +331,10 @@ def _uri_health_result(scheme: str, returncode: int, output: str,
         meta = data.get('meta') or {}
         if not isinstance(meta, dict):
             raise ValueError('invalid metadata')
+        reported = data.get('exit_code')
+        if type(reported) is int and reported >= 2:
+            # The answer itself says it failed, whatever the process exit code was.
+            return HealthResult(2, f"{scheme}: critical failure (reported exit {reported})", 'failed')
         if meta.get('errors') or meta.get('warnings') or data.get('warnings'):
             return HealthResult(1, f"{scheme}: incomplete or warning result", 'partial')
         if returncode:
