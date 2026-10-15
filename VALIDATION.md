@@ -1965,7 +1965,13 @@ disclose their skip.
 The [scheduled workflow](.github/workflows/recall.yml) runs weekly and can be
 started manually. It verifies exact corpus commits, compares recall/precision with
 [the baseline](tests/corpus/recall_baseline.json), and preserves a timestamped
-report with missed/extra edges, partial parses and the oracle's coverage counts. Missing
+report with missed/extra edges, partial parses and the oracle's coverage counts.
+Extra-edge identities and counts are locked to the reviewed baseline: even an
+improvement requires an explicit baseline edit, preventing later regression to the
+old extras. Precision here covers fan-in to oracle-listed targets only; edges to
+other targets are outside its denominator (nine such Celery edges, one ripgrep and
+one curl edge in the reviewed snapshot, none in Go). The Go file projection is
+called through private adapter methods, not an independent public API. Missing
 GCC, missing corpora, changed populations, zero measurements, a file the Python oracle
 cannot parse, an ambiguous Java type or metric drops fail loudly. `--corpus ID` measures
 a subset against its own baseline rows; `--write-baseline` is for reviewed local

@@ -492,3 +492,28 @@ def test_python_call_loss_and_bad_population_fail(tmp_path, monkeypatch):
     (root / 'pkg/a.py').write_text('def broken(:\n', encoding='utf-8')
     with pytest.raises(SyntaxError):
         gate.measure_calls(entry, root)
+
+
+def test_swapped_extra_and_improvement_require_reviewed_baseline():
+    baseline = {'oracle': 'fixture', 'sha': 'pin', 'targets': 1, 'oracle_edges': 2,
+                'coverage': {}, 'extra_edges': 1, 'recall': 1, 'precision': 2 / 3,
+                'differences': [{'target': 'target.py', 'missed': [], 'extra': ['a.py']}]}
+    swapped = {**baseline, 'differences': [{'target': 'target.py', 'extra': ['b.py']}]}
+    assert 'extra-edge population changed' in gate.regressions({'x': swapped}, {'x': baseline})[0]
+    improved = {**baseline, 'extra_edges': 0, 'precision': 1, 'differences': []}
+    assert gate.regressions({'x': improved}, {'x': baseline})
+    assert not gate.regressions({'x': improved}, {'x': improved})
+    assert gate.regressions({'x': baseline}, {'x': improved})
+
+
+def test_non_python_oracles_do_not_import_reveal():
+    import re
+    js = (SCRIPTS / 'ts_import_oracle.cjs').read_text(encoding='utf-8')
+    go = (SCRIPTS / 'oracles/go_import_oracle.go').read_text(encoding='utf-8')
+    imports = []
+    for expression in re.findall(r'\brequire\s*\(([^)]*)\)', js):
+        imports.extend(re.findall(r'[\'"]([^\'"]+)[\'"]', expression))
+    for block in re.findall(r'\bimport\s*\((.*?)\)', go, re.S):
+        imports.extend(re.findall(r'"([^"\n]+)"', block))
+    assert imports  # Positive extraction control: this cannot pass by finding nothing.
+    assert not any('reveal' in name.lower().split('/') for name in imports)

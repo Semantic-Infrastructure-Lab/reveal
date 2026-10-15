@@ -72,7 +72,7 @@ def measure(entry: dict, root: Path) -> dict[str, Any]:
     for target, truth_list in edges.items():
         truth = set(truth_list)
         if name == 'go-toolchain':
-            # Go imports name packages; measure the public file projection, which
+            # Go imports name packages; measure the private file projection, which
             # expands directory-keyed edges, rather than raw graph storage keys.
             view = adapter._format_file_dependents(root / target)
             found = {Path(item['file']).as_posix() for item in view['dependents']
@@ -147,10 +147,19 @@ def regressions(current: dict, baseline: dict) -> list[str]:
         for field in POPULATION_FIELDS:
             if measured.get(field) != reference.get(field):
                 failures.append(f'{key}: oracle population/pin changed ({field}); baseline review required')
+        if (measured.get('extra_edges') != reference.get('extra_edges')
+                or extra_identities(measured) != extra_identities(reference)):
+            failures.append(f'{key}: extra-edge population changed; baseline review required')
         for field in ('recall', 'precision'):
             if measured[field] + 1e-12 < reference[field]:
                 failures.append(f'{key}: {field} dropped {reference[field]:.6%} -> {measured[field]:.6%}')
     return failures
+
+
+def extra_identities(measurement: dict) -> set:
+    """Reviewed extras are identities, not interchangeable errors of equal count."""
+    return {(row['target'], source) for row in measurement.get('differences', [])
+            for source in row.get('extra', [])}
 
 
 def _selected(manifest: dict, wanted: list[str], signal: str = "imports") -> tuple[list[dict], list[str]]:
