@@ -49,8 +49,8 @@ def _relativize_hotspots_paths(file_hotspots: List[Dict[str, Any]], fn_hotspots:
             fn['file'] = rel(fn['file'])
 
 
-def _run_file_hotspots(adapter: 'HotspotsAdapter', path: Path, top: int) -> List[Dict[str, Any]]:
-    """Fetch file-level hotspots via StatsAdapter."""
+def _compose_stats(adapter: 'HotspotsAdapter', path: Path, **params: Any) -> Dict[str, Any]:
+    """Run StatsAdapter through compose() and keep its summary as the scan's coverage record."""
     from reveal.adapters.stats import StatsAdapter
     from reveal.utils.exclusions import active_exclusions
     # BACK-1257: stats:// filters via its own ?exclude= param, not the walk-scope
@@ -59,10 +59,23 @@ def _run_file_hotspots(adapter: 'HotspotsAdapter', path: Path, top: int) -> List
     # for its function list (via ast://) but not its file list.
     _root, _patterns = active_exclusions()
     extra: Dict[str, Any] = {'exclude': list(_patterns)} if _patterns else {}
-    data = adapter.compose(StatsAdapter, str(path), default={}, hotspots=True, top=top,
-                           cut_as=('file_hotspots', 'raise ?top=N'), **extra)
+    data = adapter.compose(StatsAdapter, str(path), default={}, **params, **extra)
     adapter.stats_summary = data.get('summary', {})
+    return cast(Dict[str, Any], data)
+
+
+def _run_file_hotspots(adapter: 'HotspotsAdapter', path: Path, top: int) -> List[Dict[str, Any]]:
+    """Fetch file-level hotspots via StatsAdapter."""
+    data = _compose_stats(adapter, path, hotspots=True, top=top,
+                          cut_as=('file_hotspots', 'raise ?top=N'))
     return cast(List[Dict[str, Any]], data.get('hotspots', []))
+
+
+def _record_function_scan_coverage(adapter: 'HotspotsAdapter', path: Path) -> None:
+    """--functions-only runs no stats scan, so nothing says how many files the function
+    scan covered or which did not parse (BACK-1839 F4). Take the same coverage record the
+    default mode has, from stats' summary and its parse_degraded warning, without ranking files."""
+    _compose_stats(adapter, path, summary_only=True)
 
 
 def _run_function_hotspots(adapter: 'HotspotsAdapter', path: Path, min_complexity: int, top: int) -> List[Dict[str, Any]]:
@@ -277,6 +290,8 @@ class HotspotsAdapter(ResourceAdapter):
         self.stats_summary = {}
         file_hotspots: List[Dict[str, Any]] = [] if functions_only else _run_file_hotspots(self, path, top)
         fn_hotspots: List[Dict[str, Any]] = [] if files_only else _run_function_hotspots(self, path, min_cx, top)
+        if functions_only:
+            _record_function_scan_coverage(self, path)
 
         _relativize_hotspots_paths(file_hotspots, fn_hotspots, path)
 
