@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional, cast
 
+from ...complexity import fallback_complexity
 from ...reveal_types import StructureItem
 from ...utils.path_utils import _walk_code_files
 from .call_graph import build_symbol_map, resolve_callees
@@ -130,7 +131,10 @@ def create_element_dict(
     if category in ('functions', 'methods', 'tests'):
         # Use complexity from item if available (tree-sitter calculated)
         # Otherwise calculate with heuristic
-        element['complexity'] = item.get('complexity') or calculate_complexity(element, analyzer)
+        element['complexity'] = item.get('complexity') or fallback_complexity(
+            {'line': line, 'line_end': line + line_count - 1 if line_count else line,
+             'line_count': line_count},
+            getattr(analyzer, 'content', ''))
         element['depth'] = item.get('depth', 0)
         # Propagate call graph fields (Phase 1 data from tree-sitter)
         calls = item.get('calls', [])
@@ -259,41 +263,3 @@ def analyze_file(file_path: str) -> Optional[Dict[str, Any]]:
         # Skip files we can't analyze
         print(f"Warning: Failed to analyze {file_path}: {e}", file=sys.stderr)
         return None
-
-
-def calculate_complexity(element: Dict[str, Any], analyzer) -> int:
-    """Calculate cyclomatic complexity for a function.
-
-    NOTE: This is a fallback heuristic for non-tree-sitter analyzers.
-    Tree-sitter analyzers calculate proper McCabe complexity.
-
-    Args:
-        element: Function element dict
-        analyzer: FileAnalyzer instance
-
-    Returns:
-        Complexity score (1 = simple, higher = more complex)
-    """
-    # Fallback heuristic based on line count
-    # Used only when tree-sitter complexity is not available
-    line_count: int = element.get('line_count', 0)
-
-    # Very rough heuristic:
-    # - Simple function (1-10 lines) = 1-2
-    # - Medium function (11-30 lines) = 3-5
-    # - Complex function (31-50 lines) = 6-8
-    # - Very complex (50+) = proportional to lines
-
-    if line_count <= 10:
-        return 1
-    elif line_count <= 20:
-        return 2
-    elif line_count <= 30:
-        return 3
-    elif line_count <= 40:
-        return 5
-    elif line_count <= 60:
-        return 7
-    else:
-        # No cap! Let it scale with line count
-        return line_count // 10

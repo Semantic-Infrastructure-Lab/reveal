@@ -4,6 +4,7 @@ from ...reveal_types import StructureItem
 import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+from reveal.complexity import fallback_complexity
 from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
@@ -25,49 +26,25 @@ def count_line_types(lines: list) -> tuple:
     return empty_lines, comment_lines, code_lines
 
 
-def estimate_complexity(func: StructureItem, content: str) -> Optional[int]:
+def estimate_complexity(func: StructureItem, content: str) -> int:
     """Estimate cyclomatic complexity for a function.
 
     Uses pre-computed complexity from the tree-sitter analyzer when available
     (all tree-sitter languages populate func['complexity'] in _build_function_dict).
-    Falls back to keyword counting for analyzers that don't supply it.
+    Falls back to ``reveal.complexity.fallback_complexity`` for analyzers that don't supply it.
 
     Args:
         func: Function metadata
         content: File content
 
     Returns:
-        Complexity score or None
+        Complexity score
     """
     # Prefer the tree-sitter computed value — it's accurate and language-aware.
     if 'complexity' in func:
         return func['complexity']
 
-    # Fallback: keyword-count heuristic for non-tree-sitter analyzers.
-    # Note: key is 'line_end' (not 'end_line') — matches _build_function_dict.
-    start_line = func.get('line', 0)
-    end_line = func.get('line_end', start_line)
-
-    if start_line == 0 or end_line == 0:
-        return None
-
-    lines = split_lines(content)
-    if start_line > len(lines) or end_line > len(lines):
-        return None
-
-    func_content = '\n'.join(lines[start_line - 1:end_line])
-
-    # Calculate complexity (same algorithm as C901 rule)
-    complexity = 1
-    decision_keywords = [
-        'if ', 'elif ', 'else:', 'else ', 'for ', 'while ',
-        'and ', 'or ', 'try:', 'except ', 'except:', 'case ', 'when ',
-    ]
-
-    for keyword in decision_keywords:
-        complexity += func_content.count(keyword)
-
-    return complexity
+    return fallback_complexity(func, content)  # BACK-1519: the one shared fallback
 
 
 def _get_check_thresholds(file_path: Optional[Path]) -> tuple:

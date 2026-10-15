@@ -4,9 +4,12 @@ Standalone functions — no TreeSitterAnalyzer dependency — so the check/revie
 flow can import this without pulling the full analyzer base class into scope.
 """
 
+from typing import Any, Dict, Optional
+
 from .core import node_children as _children
 from .core.node_taxonomy import is_do_block
 from .core.treesitter_compat import _zero_arg
+from .utils.lines import split_lines
 
 
 # Cyclomatic-complexity taxonomy. This is a SEPARATE concern from the nav
@@ -338,3 +341,41 @@ def get_nesting_depth(node) -> int:
         return 0
     _, depth = calculate_complexity_and_depth(node)
     return int(depth)
+
+
+# Control-flow tokens the keyword fallback counts. Language-agnostic and text-based, so it
+# is an estimate: it also counts a token inside a string or comment.
+_FALLBACK_PATTERNS = (
+    ' if ', ' if(',       # conditionals
+    ' else if ', 'elif ',  # else-if chains
+    ' for ', ' for(',     # loops
+    ' while ', ' while(',
+    ' && ', ' and ',      # boolean operators
+    ' || ', ' or ',
+    ' case ',             # switch/match cases
+    ' catch ', ' catch(',  # exception handling
+    ' except ',
+    ' ? ',                # ternary operator
+)
+
+
+def fallback_complexity(func: Dict[str, Any], content: Optional[str]) -> int:
+    """Estimate complexity for a function whose analyzer supplies no tree-sitter score.
+
+    The one fallback for ast://, stats:// and C901 (BACK-1519): count control-flow
+    tokens in the function's lines, starting at 1. A record with no line range gets
+    ``line_count // 10`` (at least 1); a range outside *content* gets 1. Callers use a
+    supplied ``func['complexity']`` first and call this only when there is none.
+    """
+    start_line = func.get('line', 0)
+    end_line = func.get('line_end') or start_line
+
+    if start_line == 0 or end_line == 0:
+        return max(1, int(func.get('line_count', 0)) // 10)
+
+    lines = split_lines(content or '')
+    if start_line > len(lines) or end_line > len(lines):
+        return 1
+
+    func_content = '\n'.join(lines[start_line - 1:end_line])
+    return 1 + sum(func_content.count(pattern) for pattern in _FALLBACK_PATTERNS)
