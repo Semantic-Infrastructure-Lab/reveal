@@ -160,6 +160,11 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         'handle_failure',
     })
 
+    # ``fail`` / ``handle_failure`` are also what a metrics counter is called
+    # (``metrics.fail()``), and a counter says nothing to the user.  Those two names count
+    # only when the call hands something over -- a message or the exception (BACK-1836).
+    _ARGUMENT_REQUIRED_HELPERS = frozenset({'fail', 'handle_failure'})
+
     # Dict-key / attribute names that, when assigned to inside an except
     # body, record the failure in-band for the caller to inspect instead of
     # (or alongside) a log call — e.g. result['status'] = 'query_failed',
@@ -294,6 +299,7 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
                    for stmt in scope.body for assertion in self._py_executed_nodes(stmt)
                    if isinstance(assertion, ast.Assert)
                    and assertion.lineno > getattr(node, 'end_lineno', node.lineno)
+                   and not self._is_trivial_assertion(assertion.test, stored)
                    for sub in ast.walk(assertion.test))
 
     @staticmethod
@@ -304,6 +310,24 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             if B006._asserts_checked_failure(stmt, checked):
                 return True
             checked.update(B006._new_checked_names(stmt, checked))
+        return False
+
+    @staticmethod
+    def _is_trivial_assertion(test: ast.expr, names: set) -> bool:
+        """An assertion that cannot fail once the name exists: the name alone, ``is [not] None``,
+        or ``isinstance(name, Exception)``.  It checks that the failure was caught, not what it was."""
+        if isinstance(test, ast.BoolOp):
+            return all(B006._is_trivial_assertion(value, names) for value in test.values)
+        if isinstance(test, ast.Name):
+            return test.id in names
+        if isinstance(test, ast.Compare):
+            return (isinstance(test.left, ast.Name) and test.left.id in names
+                    and all(isinstance(op, (ast.Is, ast.IsNot)) for op in test.ops)
+                    and all(isinstance(c, ast.Constant) and c.value is None for c in test.comparators))
+        if (isinstance(test, ast.Call) and isinstance(test.func, ast.Name) and test.func.id == 'isinstance'
+                and len(test.args) == 2 and isinstance(test.args[0], ast.Name) and test.args[0].id in names):
+            kind = test.args[1]
+            return isinstance(kind, ast.Name) and kind.id in ('Exception', 'BaseException', 'object')
         return False
 
     @staticmethod
@@ -328,8 +352,9 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
                     and func.value.attr in ('on_failure', 'on_error', 'report_error'))
         if not isinstance(stmt, ast.Assert):
             return False
-        return any(isinstance(sub, ast.Name) and sub.id in checked
-                   for sub in ast.walk(stmt.test)) or any(
+        return (not B006._is_trivial_assertion(stmt.test, checked) and any(
+            isinstance(sub, ast.Name) and sub.id in checked
+            for sub in ast.walk(stmt.test))) or any(
                        isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute)
                        and sub.func.attr == 'exc_info' and isinstance(sub.func.value, ast.Name)
                        and sub.func.value.id == 'sys' for sub in ast.walk(stmt.test))
@@ -353,7 +378,8 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         nonlocal_names = {name for stmt in inner.body if isinstance(stmt, ast.Nonlocal)
                           for name in stmt.names}
         for stmt in node.body:
-            if B006._sets_checked_nonlocal(stmt, nonlocal_names & checked_in_outer):
+            if (B006._sets_checked_nonlocal(stmt, nonlocal_names & checked_in_outer)
+                    and B006._flips_asserted_flag(stmt, outer, inner)):
                 return True
             if joined and B006._appends_checked_error(stmt, node.name, checked_in_outer):
                 return True
@@ -367,14 +393,49 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
     @staticmethod
     def _outer_has_join(outer: Any, inner: ast.AST) -> bool:
-        return any(isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute)
-                   and sub.func.attr == 'join' for stmt in outer.body if stmt is not inner
-                   for sub in ast.walk(stmt))
+        return any(isinstance(sub, ast.Call) and B006._is_thread_join(sub)
+                   for stmt in outer.body if stmt is not inner for sub in ast.walk(stmt))
+
+    @staticmethod
+    def _is_thread_join(call: ast.Call) -> bool:
+        """``t.join()``, ``t.join(5)`` or ``t.join(timeout=5)``; ``", ".join(parts)`` is a string."""
+        func = call.func
+        if not isinstance(func, ast.Attribute) or func.attr != 'join':
+            return False
+        if isinstance(func.value, ast.Constant) and isinstance(func.value.value, str):
+            return False
+        return (all(isinstance(a, ast.Constant) and isinstance(a.value, (int, float)) for a in call.args)
+                and all(k.arg == 'timeout' for k in call.keywords))
 
     @staticmethod
     def _sets_checked_nonlocal(stmt: ast.stmt, checked: set) -> bool:
         return isinstance(stmt, ast.Assign) and any(
             isinstance(target, ast.Name) and target.id in checked for target in stmt.targets)
+
+    @staticmethod
+    def _flips_asserted_flag(stmt: ast.stmt, outer: Any, inner: ast.AST) -> bool:
+        """The handler sets the flag to the opposite of what the outer scope asserts.
+
+        ``flag = False`` in the handler under ``assert flag`` records a failure; ``flag = True``
+        under the same assertion records success, so the failure is still hidden.  Anything that is
+        not a plain constant assigned under a plain ``flag`` / ``not flag`` assertion is left alone.
+        """
+        if not isinstance(stmt, ast.Assign) or not isinstance(stmt.value, ast.Constant):
+            return True
+        names = {t.id for t in stmt.targets if isinstance(t, ast.Name)}
+        wanted = set()
+        for body_stmt in outer.body:
+            if body_stmt is inner:
+                continue
+            for assertion in (a for a in ast.walk(body_stmt) if isinstance(a, ast.Assert)):
+                test = assertion.test
+                negated = isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not)
+                target = test.operand if isinstance(test, ast.UnaryOp) and negated else test
+                if isinstance(target, ast.Name) and target.id in names:
+                    wanted.add(not negated)
+                elif any(isinstance(sub, ast.Name) and sub.id in names for sub in ast.walk(test)):
+                    return True
+        return not wanted or any(bool(stmt.value.value) != truthy for truthy in wanted)
 
     @staticmethod
     def _appends_checked_error(stmt: ast.stmt, caught: Optional[str], checked: set) -> bool:
@@ -410,6 +471,15 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
         return False
 
+    def _is_visible_call(self, call: ast.Call) -> bool:
+        """A warning-level log, ``print`` or a known reporting helper (BACK-984, BACK-1836)."""
+        func = call.func
+        name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else None
+        if name in self._VISIBLE_LOG_CALLS or name == 'print':
+            return True
+        return name in self._VISIBLE_HELPER_CALLS and (
+            bool(call.args or call.keywords) or name not in self._ARGUMENT_REQUIRED_HELPERS)
+
     def _is_silent(self, node: ast.ExceptHandler) -> bool:
         """Check if exception handler body produces no visible failure signal.
 
@@ -433,18 +503,8 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
                     return False
                 if self._returns_caught_exception(sub, node.name):
                     return False
-                if isinstance(sub, ast.Call):
-                    func = sub.func
-                    if isinstance(func, ast.Attribute):
-                        name = func.attr
-                    elif isinstance(func, ast.Name):
-                        name = func.id
-                    else:
-                        name = None
-                    if name in self._VISIBLE_LOG_CALLS or name == 'print':
-                        return False
-                    if name in self._VISIBLE_HELPER_CALLS:
-                        return False
+                if isinstance(sub, ast.Call) and self._is_visible_call(sub):
+                    return False
                 if isinstance(sub, (ast.Assign, ast.AugAssign)):
                     targets = sub.targets if isinstance(sub, ast.Assign) else [sub.target]
                     if any(self._is_error_field_target(t) for t in targets):
@@ -457,8 +517,14 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
     @staticmethod
     def _returns_caught_exception(stmt: ast.AST, caught: Optional[str]) -> bool:
-        return (isinstance(stmt, ast.Return) and caught is not None
-                and isinstance(stmt.value, ast.Name) and stmt.value.id == caught)
+        if not isinstance(stmt, ast.Return) or caught is None:
+            return False
+        value = stmt.value
+        # ``return e`` and the Go-style pairs / result records that carry the object itself.
+        parts: List[Optional[ast.expr]] = (
+            list(value.elts) if isinstance(value, (ast.Tuple, ast.List))
+            else list(value.values) if isinstance(value, ast.Dict) else [value])
+        return any(isinstance(part, ast.Name) and part.id == caught for part in parts)
 
     @staticmethod
     def _py_executed_nodes(root):
