@@ -74,14 +74,6 @@ def python_corpus(tmp_path):
     return _repo(tmp_path, PYTHON, {'oracle': 'python-ast', 'importer_dirs': ['.']})
 
 
-def test_the_oracles_never_import_reveal():
-    # The oracle must stay independent of the resolver it measures, or a shared bug scores 100%.
-    tree = ast.parse((SCRIPTS / 'recall_oracles.py').read_text(encoding='utf-8'))
-    imported = {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names}
-    imported |= {node.module or '' for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
-    assert not {name for name in imported if name.split('.')[0] == 'reveal'}
-
-
 @needs_gcc
 def test_independent_oracle_sees_partial_source_and_measurement(corpus):
     root, entry = corpus
@@ -506,14 +498,76 @@ def test_swapped_extra_and_improvement_require_reviewed_baseline():
     assert gate.regressions({'x': baseline}, {'x': improved})
 
 
-def test_non_python_oracles_do_not_import_reveal():
+# --- Oracle independence (BACK-1840 F9): the oracles must not depend on the resolver they measure. ---
+
+def oracle_imports(source: str, language: str) -> list[str]:
+    """Names the oracle source imports, as the predicate recognises them."""
     import re
-    js = (SCRIPTS / 'ts_import_oracle.cjs').read_text(encoding='utf-8')
-    go = (SCRIPTS / 'oracles/go_import_oracle.go').read_text(encoding='utf-8')
-    imports = []
-    for expression in re.findall(r'\brequire\s*\(([^)]*)\)', js):
-        imports.extend(re.findall(r'[\'"]([^\'"]+)[\'"]', expression))
-    for block in re.findall(r'\bimport\s*\((.*?)\)', go, re.S):
-        imports.extend(re.findall(r'"([^"\n]+)"', block))
-    assert imports  # Positive extraction control: this cannot pass by finding nothing.
-    assert not any('reveal' in name.lower().split('/') for name in imports)
+    names: list[str] = []
+    if language == 'python':
+        tree = ast.parse(source)
+        names += [alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names]
+        names += [node.module or '' for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
+    elif language == 'js':
+        for expression in re.findall(r'\brequire\s*\(([^)]*)\)', source):
+            names.extend(re.findall(r'[\'"]([^\'"]+)[\'"]', expression))
+    elif language == 'go':
+        for block in re.findall(r'\bimport\s*\((.*?)\)', source, re.S):
+            names.extend(re.findall(r'"([^"\n]+)"', block))
+    return names
+
+
+def depends_on_reveal(source: str, language: str) -> bool:
+    return any('reveal' in name.lower().split('/') or name.split('.')[0] == 'reveal'
+               for name in oracle_imports(source, language))
+
+
+ORACLE_PLANTS = [
+    # (id, language, source, must_catch)
+    ('js-require', 'js', "const r = require('reveal');", True),
+    ('js-require-relative', 'js', "const r = require('../reveal/x');", True),
+    ('js-require-template', 'js', "const r = require(`reveal`);", True),
+    ('js-require-pypi-name', 'js', "require('reveal-cli');", True),
+    ('js-dynamic-import', 'js', "import('reveal');", True),
+    ('js-spawnsync-python-m', 'js', "require('child_process').spawnSync('python', ['-m', 'reveal']);", True),
+    ('js-spawn-reveal', 'js', "const { spawn } = require('child_process');\nspawn('reveal', ['depends://x']);", True),
+    ('js-execfile-reveal', 'js', "execFile('reveal', ['x'], cb);", True),
+    ('go-grouped', 'go', 'import (\n\t"os"\n\t"example.org/reveal"\n)\n', True),
+    ('go-grouped-alias', 'go', 'import (\n\t"os"\n\tr "example.org/reveal/core"\n)\n', True),
+    ('go-single-line', 'go', 'import "example.org/reveal"\nimport (\n\t"os"\n)\n', True),
+    ('go-single-line-alias', 'go', 'import r "example.org/reveal"\n', True),
+    ('go-exec-command', 'go', 'import (\n\t"os/exec"\n)\nfunc f() { exec.Command("reveal", "depends://x").Run() }\n', True),
+    ('go-exec-python-m', 'go', 'func f() { exec.Command("python", "-m", "reveal").Run() }\n', True),
+    ('py-import', 'python', 'import reveal.adapters\n', True),
+    ('py-from-import', 'python', 'from reveal.adapters import depends\n', True),
+    ('py-subprocess-run', 'python', "import subprocess\nsubprocess.run(['reveal', 'depends://x'])\n", True),
+    ('py-subprocess-python-m', 'python', "import subprocess, sys\nsubprocess.run([sys.executable, '-m', 'reveal', 'x'])\n", True),
+    ('py-subprocess-shell-string', 'python', "import subprocess\nsubprocess.check_output('reveal depends://x', shell=True)\n", True),
+    # Negative controls: none of these depends on Reveal.
+    ('js-comment-mentions-reveal', 'js', "// reveal is the resolver we measure; never require('reveal') here\nconst fs = require('fs');", False),
+    ('js-unrelated-revealjs', 'js', "const r = require('revealjs');", False),
+    ('js-string-mentions-reveal', 'js', "const fs = require('fs');\nconsole.log('reveal says hi');", False),
+    ('go-comment-mentions-reveal', 'go', 'import (\n\t"os"\n)\n// reveal is the resolver we measure\n', False),
+    ('go-unrelated-revealjs', 'go', 'import "example.org/revealjs"\n', False),
+    ('go-exec-other-command', 'go', 'func f() { exec.Command("go", "list").Run() }\n', False),
+    ('py-comment-mentions-reveal', 'python', "import os\n# reveal is the resolver we measure\n", False),
+    ('py-unrelated-revealjs', 'python', 'import revealjs\n', False),
+    ('py-subprocess-other', 'python', "import subprocess\nsubprocess.run(['go', 'list'])\n", False),
+]
+
+
+@pytest.mark.parametrize('language,source,must_catch',
+                         [pytest.param(lang, src, catch, id=name) for name, lang, src, catch in ORACLE_PLANTS])
+def test_oracle_independence_predicate_on_planted_snippets(language, source, must_catch):
+    assert depends_on_reveal(source, language) is must_catch
+
+
+@pytest.mark.parametrize('language,path', [
+    ('python', 'recall_oracles.py'), ('js', 'ts_import_oracle.cjs'), ('go', 'oracles/go_import_oracle.go'),
+])
+def test_oracles_never_depend_on_reveal(language, path):
+    # The oracle must stay independent of the resolver it measures, or a shared bug scores 100%.
+    source = (SCRIPTS / path).read_text(encoding='utf-8')
+    # Positive control per file: a file whose imports all go unrecognised must fail, not borrow another's.
+    assert oracle_imports(source, language), f'{path}: the predicate recognised no import'
+    assert not depends_on_reveal(source, language)
