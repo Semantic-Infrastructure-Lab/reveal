@@ -1,5 +1,6 @@
 """Calls and JSX share source scope without sharing effect classification."""
 import json
+import re
 from pathlib import Path
 import pytest
 from reveal.adapters.ast.analysis import analyze_file
@@ -107,13 +108,34 @@ def test_text_preserves_mixed_relationship_and_reference_locations(tmp_path):
     assert 'Button (includes JSX reference)' in callees.stdout
 
 
+# Every key call_sources/jsx_component_references use to carry JSX and module-call data between
+# the structure and the calls index (BACK-1834 F12; jsx_call_sites and call_lines added with F7).
+INTERNAL_CALL_KEYS = ('references', 'reference_only_calls', 'call_sites', 'owner', 'owner_line',
+                      'reference_lines', 'relationship', 'jsx_references', 'module_call_sites',
+                      'jsx_call_sites', 'call_lines')
+
+
+def leaked_keys(result):
+    return {key for row in records(result) for key in INTERNAL_CALL_KEYS if key in row}
+
+
 def test_private_reference_fields_do_not_leak_into_ast_or_uncalled(tmp_path):
     from conftest import _run_reveal_direct
     from reveal.adapters.calls.index import find_uncalled
-    (tmp_path / 'App.tsx').write_text('function Button(){return null;}\nfunction App(){return <Button/>;}\n', encoding='utf-8')
+    (tmp_path / 'App.tsx').write_text('function Button(){return null;}\nfunction App(){Button(); return <Button/>;}\n'
+                                    'function Lone(){return <Button/>;}\nButton();\n<Button/>;\n', encoding='utf-8')
     ast_result = _run_reveal_direct('ast://' + str(tmp_path), '--format', 'json')
-    for result in (json.loads(ast_result.stdout), find_uncalled(str(tmp_path))):
-        assert all(not ({'jsx_references', 'module_call_sites'} & set(row)) for row in records(result))
+    assert ast_result.returncode == 0
+    assert leaked_keys(json.loads(ast_result.stdout)) == set()
+    assert leaked_keys(find_uncalled(str(tmp_path))) == set()
+    text = _run_reveal_direct('ast://' + str(tmp_path)).stdout
+    assert 'App' in text and not any(re.search(rf'\b{key}\b', text) for key in INTERNAL_CALL_KEYS)
+
+
+def test_leak_check_detects_a_leaked_key(tmp_path):
+    """Negative control: the check fails on a result that carries one of the keys."""
+    assert leaked_keys({'results': [{'name': 'App', 'jsx_call_sites': []}]}) == {'jsx_call_sites'}
+    assert leaked_keys({'results': [{'name': 'App', 'owner_line': 3}]}) == {'owner_line'}
 
 
 def test_jsx_in_test_and_hook_callbacks_belongs_to_the_enclosing_element(tmp_path):
