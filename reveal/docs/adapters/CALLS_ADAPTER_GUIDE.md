@@ -137,7 +137,11 @@ JSX component uses are typed source references, not runtime invocation proof.
 called has `call_and_jsx_reference`. Intrinsic tags and template strings contribute
 no component edge. Named render functions and `memo`/`forwardRef` function values
 retain their existing owners, including named function expressions whose inner
-name differs from the wrapped variable. The nearest tracked function owns nested
+name differs from the wrapped variable, `memo(fn, areEqual)` with a comparator,
+`React.memo`, `memo(forwardRef(fn))` and `Object.assign(wrapper(fn), {...})`. Any other
+call with exactly one function-literal argument (`withFallback("X", fn)`) also names that
+function after the variable; a callback passed to an array method (`xs.map(x => <B/>)`)
+is not a component, so its references belong to the function that runs the `map`. The nearest tracked function owns nested
 callback references, and an unnamed callback (`it`, `describe`, `beforeEach`, hooks)
 belongs to the smallest tracked element that contains it, as call sites do; a deferred
 body with no tracked element around it is marked

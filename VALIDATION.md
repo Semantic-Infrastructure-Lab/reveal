@@ -1796,9 +1796,13 @@ blocks take Reveal's `it(title)` element label. It previously dropped every use 
 could not name, and the tree before BACK-1829 still passed. A fixture of those hard shapes
 now fails on the trees before BACK-1829 and before the BACK-1832 callback fix; the
 first run of the full comparison found a real wrong owner (Excalidraw HelpDialog line
-110, credited to a `.map` result variable instead of `Shortcut`). Not covered: the
-BACK-1830 shapes (`memo(fn, areEqual)` with an inline comparator, `Object.assign`
-around `forwardRef`) and class-field arrows. This is a bounded
+110, credited to a `.map` result variable instead of `Shortcut`). The wrapper shapes
+(`memo(fn, areEqual)` with an inline comparator, `Object.assign` around `forwardRef`)
+are covered by hand-written tests (`tests/test_jsx_owner_wrappers_back1830.py`), not by
+the matrix cases; a one-off comparison over Excalidraw's `components/` on 2026-10-15
+compared 698 owned uses, 667 agree, and the other 31 are custom higher-order wrappers
+(`withInternalFallback("DefaultSidebar", fn)`) that Reveal names after the variable and
+the oracle leaves `<anonymous>`. Class-field arrows remain uncovered. This is a bounded
 source comparison, not whole-project component or import recall. The 103 tag
 checks alone do not validate owner attribution, import aliases, callers,
 callees or trace output.

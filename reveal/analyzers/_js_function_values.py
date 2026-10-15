@@ -29,6 +29,8 @@ _FUNCTION_LITERALS = ('arrow_function', 'function_expression', 'generator_functi
 # What an object literal's parent must be for its methods to be named API:
 # `const api = {...}`, `x = {...}` (incl. module.exports), `export default {...}`.
 _NAMED_OBJECT_HOLDERS = ('variable_declarator', 'assignment_expression', 'export_statement')
+# HOCs whose first argument is the component, whatever follows it (``memo(fn, areEqual)``).
+_COMPONENT_WRAPPERS = frozenset({'memo', 'forwardRef'})
 
 
 class JSFunctionValueMixin(_Base):
@@ -92,9 +94,13 @@ class JSFunctionValueMixin(_Base):
                 value_node = self._call_wrapped_function_literal(ch)
         return name_node, value_node
 
-    @staticmethod
-    def _call_wrapped_function_literal(call_expression_node) -> Optional[Any]:
-        """Return the sole function-literal argument of a call, or None.
+    def _call_wrapped_function_literal(self, call_expression_node) -> Optional[Any]:
+        """Return the function literal a call wraps, or None.
+
+        A component wrapper (``memo``, ``React.forwardRef``) may carry more arguments (a
+        comparator), nest another wrapper (``memo(forwardRef(fn))``) or sit in
+        ``Object.assign(wrapper(fn), {...})`` (BACK-1830); any other call wraps its sole
+        function-literal argument.
 
         BACK-726: supports the `HOC(...)((...) => {...})` shape — looks only
         at the call's own direct `arguments` list (not nested calls), so a
@@ -104,12 +110,45 @@ class JSFunctionValueMixin(_Base):
         for ch in _children(call_expression_node):
             if _zero_arg(ch, 'kind') != 'arguments':
                 continue
+            if self._is_wrapper_call(call_expression_node):
+                # The component is the first argument; a trailing comparator is not it.
+                return self._wrapper_first_argument(call_expression_node, ch)
             candidates = [
                 arg for arg in _children(ch)
                 if _zero_arg(arg, 'kind') in ('arrow_function', 'function_expression', 'generator_function')
             ]
             if len(candidates) == 1:
                 return candidates[0]
+        return None
+
+    def _callee_parts(self, call) -> Tuple[str, str]:
+        """(object text, property or identifier name) of a call's callee, '' when not a plain name."""
+        callee = next(iter(_children(call)), None)
+        kind = _zero_arg(callee, 'kind') if callee is not None else None
+        if callee is not None and kind == 'identifier':
+            return '', self._get_node_text(callee)
+        if callee is not None and kind == 'member_expression':
+            obj = callee.child_by_field_name('object')
+            prop = callee.child_by_field_name('property')
+            if obj is not None and prop is not None:
+                return self._get_node_text(obj), self._get_node_text(prop)
+        return '', ''
+
+    def _is_wrapper_call(self, call) -> bool:
+        obj, name = self._callee_parts(call)
+        return name in _COMPONENT_WRAPPERS or (obj, name) == ('Object', 'assign')
+
+    def _wrapper_first_argument(self, call, arguments) -> Optional[Any]:
+        """The component a ``memo`` / ``forwardRef`` / ``Object.assign`` call is given first."""
+        is_assign = self._callee_parts(call) == ('Object', 'assign')
+        first = next((a for a in _children(arguments)
+                      if _zero_arg(a, 'kind') not in ('(', ')', ',')), None)
+        if first is None:
+            return None
+        if _zero_arg(first, 'kind') in _FUNCTION_LITERALS:
+            return first
+        if _zero_arg(first, 'kind') == 'call_expression':
+            return self._call_wrapped_function_literal(first)
         return None
 
     def _extract_language_specific_functions(self) -> List[StructureItem]:
