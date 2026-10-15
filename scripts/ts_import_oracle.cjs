@@ -11,6 +11,23 @@ if (ts.version !== config.typescript_version || process.versions.node !== config
 }
 if (input.mode === 'jsx' || input.mode === 'interfaces') {
   const references = [], protocols = [];
+  const bindingName = declaration => declaration && ts.isIdentifier(declaration.name) ? declaration.name.text : null;
+  const scopeOwner = node => {
+    for (let current = node.parent; current; current = current.parent) {
+      if (ts.isFunctionDeclaration(current) || ts.isMethodDeclaration(current) ||
+          ts.isGetAccessorDeclaration(current) || ts.isSetAccessorDeclaration(current)) {
+        return current.name ? current.name.getText() : null;
+      }
+      if (ts.isArrowFunction(current) || ts.isFunctionExpression(current)) {
+        let holder = current.parent;
+        if (holder && ts.isCallExpression(holder) && holder.arguments.includes(current) &&
+            /^(memo|forwardRef)$/.test(holder.expression.getText())) holder = holder.parent;
+        return holder && ts.isVariableDeclaration(holder) ? bindingName(holder) : null;
+      }
+      if (ts.isClassDeclaration(current)) return current.name ? current.name.text : null;
+    }
+    return '<module>';
+  };
   for (const file of input.importers) {
     const source = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
     if (source.parseDiagnostics.length) throw new Error(`TypeScript cannot parse ${file}`);
@@ -19,7 +36,7 @@ if (input.mode === 'jsx' || input.mode === 'interfaces') {
       if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
         const callee = node.tagName.getText(source).replace(/\s+/g, '');
         if (!callee.includes(':') && !(ts.isIdentifier(node.tagName) && ts.isIntrinsicJsxName(callee))) {
-          references.push({ line, callee });
+          references.push({ line, callee, owner: scopeOwner(node) });
         }
       }
       if (ts.isInterfaceDeclaration(node)) protocols.push({ name: node.name.text, line });

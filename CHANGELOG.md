@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pinned-source rule precision pilot retains stratified claims, source-reviewed TP/FP/uncertain labels and reproducible weighted reports with sampling intervals and blind subset agreement; the scheduled corpus workflow also runs the accepted Python caller baseline (BACK-1796, BACK-1797).
 - Optional Go import regression measurement uses a pinned client_golang corpus and the native Go parser; the same runner supports a bounded local Python caller baseline with implementation provenance (BACK-1461, BACK-1518, BACK-1096).
 - Calls, callees and trace share source-attributed module callers and typed JSX component references, with scope warnings and source lines (BACK-1778, BACK-1784).
-- Scheduled JS/TS/TSX import recall uses a pinned independent compiler oracle; a separate bounded mixed-framework matrix verifies components, contracts and configuration (BACK-1783, BACK-1785).
+- Scheduled JS/TS/TSX import recall uses a pinned independent compiler oracle; a separate bounded mixed-framework matrix verifies JSX tag extraction, 13 selected JSX owner scopes, contracts and configuration (BACK-1783, BACK-1785, BACK-1807).
 
 ### Changed
 - `deps`, `contracts`, `pack`, `architecture` and `hotspots` return text through the shared rendering boundary and capped-section accounting (BACK-916).

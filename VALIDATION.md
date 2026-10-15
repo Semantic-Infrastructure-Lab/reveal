@@ -1778,18 +1778,30 @@ The [matrix runner](scripts/framework_matrix.py) independently compares TypeScri
 5.9.3/Node 22.14.0 compiler JSX opening/self-closing nodes and interfaces, Python
 `ast` ABC declarations, and standard-library JSON keys against Reveal's existing
 AST, contracts and configuration owners. Exact name/line multisets are compared
-for references/contracts; JSON compares top-level key multisets. No corpus code
+for JSX tag extraction and contracts; 13 selected JSX references also compare
+their owning scope against the compiler's syntax tree. JSON compares top-level
+key multisets. No corpus code
 runs. Source pin mismatches, missing files/tools, parse failures, empty selected
 checks, zero positive populations and missing/extra answers fail.
 
-All seven selected files passed locally: **103 JSX references, 10 interfaces,
-one Python ABC and 14 configuration keys**, with no missing/extra answers.
-This is a bounded source comparison, not whole-project component or import recall.
+All seven selected files passed locally: **103 JSX tag extractions, 13 selected
+owner scopes, 10 interfaces, one Python ABC and 14 configuration keys**, with no
+missing/extra answers. Owner checks cover Dagster Dialog's 12 references and
+React Router BrowserRouter's one class-render reference. This is a bounded
+source comparison, not whole-project component or import recall. The 103 tag
+checks alone do not validate owner attribution, import aliases, callers,
+callees or trace output.
 Existing scheduled import measurements separately cover aliases, barrels and
 workspaces. Hand fixtures cover imported component aliases, namespace components,
 render callbacks, `memo`/`forwardRef`, caller/callee/trace agreement and unchanged
 uncalled suppression. Deliberately dropping a component reference or configuration
 key fails the matrix controls.
+
+`test.yml` does not install the optional TypeScript compiler, so its oracle
+fixtures skip there. The scheduled `recall.yml` workflow installs the compiler
+but currently runs only `test_recall_gate.py` and `test_fetch_corpus.py` in its
+control step; the framework tests are not yet a CI control. The local 13-owner
+comparison used TypeScript 5.9.3 and Node 22.14.0.
 
 Angular decorator/class structure is available, but template strings produce no
 JSX references. Class-field JSX retains its class source owner but is excluded from caller

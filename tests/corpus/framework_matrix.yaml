@@ -6,10 +6,10 @@ cases:
   - {id: excalidraw-button, corpus: tsx, file: packages/excalidraw/components/Button.tsx, checks: [interfaces]}
   - {id: excalidraw-dialog, corpus: tsx, file: packages/excalidraw/components/HelpDialog.tsx, checks: [jsx]}
   - {id: dagster-button, corpus: mixed-dagster, file: js_modules/ui-components/src/components/Button.tsx, checks: [jsx, interfaces]}
-  - {id: dagster-dialog, corpus: mixed-dagster, file: js_modules/ui-components/src/components/Dialog.tsx, checks: [jsx, interfaces]}
+  - {id: dagster-dialog, corpus: mixed-dagster, file: js_modules/ui-components/src/components/Dialog.tsx, checks: [jsx, jsx-owner, interfaces]}
   - {id: dagster-server-context, corpus: mixed-dagster, file: python_modules/dagster/dagster/_core/execution/context/op_execution_context.py, checks: [python-abcs]}
   - {id: dagster-config, corpus: mixed-dagster, file: js_modules/ui-components/package.json, checks: [json-config]}
-  - {id: react-router-class, snapshot: samples-js_react_router, file: packages/react-router-dom/modules/BrowserRouter.js, checks: [jsx]}
+  - {id: react-router-class, snapshot: samples-js_react_router, file: packages/react-router-dom/modules/BrowserRouter.js, checks: [jsx, jsx-owner]}
 exclusions:
   - String, HTML and Angular templates are outside JSX reference relationships.
   - Vue/Svelte parsing/component navigation remains unsupported.

@@ -28,6 +28,24 @@ def test_component_and_contract_answers_are_independent(tmp_path, compiler_oracl
         matrix.check_file(path, ['jsx'], TOOLCHAIN)
 
 
+def test_compiler_scope_owner_sample_catches_wrong_reveal_owner(tmp_path, compiler_oracle, monkeypatch):
+    path = tmp_path / 'Owners.tsx'
+    path.write_text('const App = () => <Button/>;\n'
+                    'const Wrapped = forwardRef((props, ref) => <Button/>);\n'
+                    'class Panel extends React.Component { render(){ return <Button/>; } }\n',
+                    encoding='utf-8')
+    answer = matrix.check_file(path, ['jsx-owner'], TOOLCHAIN)['jsx-owner']
+    assert answer['expected'] == answer['actual'] == 3
+    original = matrix.jsx_component_references
+    def wrong_owner(analyzer, elements):
+        rows = original(analyzer, elements)
+        rows[0]['owner'] = '<module>'
+        return rows
+    monkeypatch.setattr(matrix, 'jsx_component_references', wrong_owner)
+    with pytest.raises(RuntimeError, match='mismatch'):
+        matrix.check_file(path, ['jsx-owner'], TOOLCHAIN)
+
+
 def test_intrinsic_and_template_text_have_no_reveal_component_edges(tmp_path):
     path = tmp_path / 'Angular.tsx'
     path.write_text('const template = "<Button/>";\nfunction App(){return <div><my-widget/><Custom-Element/></div>;}\n', encoding='utf-8')

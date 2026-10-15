@@ -17,6 +17,7 @@ from pathlib import Path
 import yaml
 from fetch_corpus import MANIFEST, snapshot_status
 from reveal.adapters.ast.analysis import analyze_file
+from reveal.adapters.calls.references import jsx_component_references
 from reveal.adapters.contracts import ContractsAdapter
 from reveal.registry import get_analyzer
 
@@ -40,14 +41,27 @@ def check_file(path: Path, checks: list[str], toolchain: dict) -> dict:
         raise RuntimeError('No framework checks selected')
     outcomes = {}
     for kind in checks:
-        if kind in ('jsx', 'interfaces'):
-            answer = _compiler_answer(path, toolchain, kind)
+        if kind in ('jsx', 'jsx-owner', 'interfaces'):
+            answer = _compiler_answer(path, toolchain, 'jsx' if kind == 'jsx-owner' else kind)
             if kind == 'jsx':
                 expected = Counter((r['line'], r['callee']) for r in answer['references'])
                 structure = analyze_file(str(path))
                 if structure is None:
                     raise RuntimeError('Reveal could not analyze selected JSX source')
                 actual = Counter((r['line'], r['callee']) for r in structure.get('jsx_references', []))
+            elif kind == 'jsx-owner':
+                expected_rows = [r for r in answer['references'] if r['owner'] is not None]
+                expected = Counter((r['line'], r['callee'], r['owner']) for r in expected_rows)
+                selected = {(r['line'], r['callee']) for r in expected_rows}
+                structure = analyze_file(str(path))
+                analyzer_class = get_analyzer(str(path))
+                if structure is None or analyzer_class is None:
+                    raise RuntimeError('Reveal could not analyze selected JSX owner source')
+                analyzer = analyzer_class(str(path))
+                analyzer.get_structure()
+                actual = Counter((r['line'], r['callee'], r['owner'])
+                                 for r in jsx_component_references(analyzer, structure['elements'])
+                                 if (r['line'], r['callee']) in selected)
             else:
                 expected = Counter((r['line'], r['name']) for r in answer['protocols'])
                 result = ContractsAdapter(str(path)).get_structure()
