@@ -2061,7 +2061,9 @@ started manually. It verifies exact corpus commits, compares recall/precision wi
 report with missed/extra edges, partial parses and the oracle's coverage counts.
 Extra-edge identities and counts are locked to the reviewed baseline: even an
 improvement requires an explicit baseline edit, preventing later regression to the
-old extras. Precision here covers fan-in to oracle-listed targets only; edges to
+old extras. A rise in a corpus's `partial_files` over the baseline also fails the gate (a fall does
+not); a baseline or measurement without the field is listed under `notes` in the report as
+not compared. Precision here covers fan-in to oracle-listed targets only; edges to
 other targets are outside its denominator (nine such Celery edges, one ripgrep and
 one curl edge in the reviewed snapshot, none in Go). The Go file projection is
 called through private adapter methods, not an independent public API. Missing
