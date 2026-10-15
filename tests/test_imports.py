@@ -799,6 +799,16 @@ def main():
         assert 'print' in symbols
         # 'sys' imported but not used, so won't be in used symbols
 
+    def test_quoted_annotation_counts_as_symbol_use(self, tmp_path):
+        test_file = tmp_path / "quoted.py"
+        test_file.write_text('from pkg import WorkController, Spare\n'
+                             'def run():\n'
+                             '    controller: Optional["WorkController"] = None\n'
+                             '    ordinary = "Spare"\n', encoding='utf-8')
+        symbols = extract_python_symbols(test_file)
+        assert 'WorkController' in symbols
+        assert 'Spare' not in symbols
+
     def test_is_type_checking_flag_set(self, tmp_path):
         """Imports inside 'if TYPE_CHECKING:' blocks must be flagged."""
         code = (

@@ -165,6 +165,30 @@ class TestD001ExtractFunctionBody(unittest.TestCase):
         body = extract_function_body(func, content)
         self.assertEqual(body, "")
 
+    def test_decorated_pass_hook_excludes_signature(self):
+        content = "@task(name='first')\ndef first(self):\n    pass\n"
+        func = {"name": "first", "line": 1, "line_end": 3}
+        self.assertEqual(extract_function_body(func, content).strip(), "pass")
+
+    def test_decorated_real_body_is_preserved(self):
+        content = "@task(name='first')\ndef first(self):\n    return self.run()\n"
+        func = {"name": "first", "line": 1, "line_end": 3}
+        self.assertEqual(extract_function_body(func, content).strip(), "return self.run()")
+
+    def test_decorated_pass_hooks_are_exempt_but_real_duplicates_remain(self):
+        content = ("@task(name='first')\ndef first():\n    pass\n"
+                   "@task(name='second')\ndef second():\n    pass\n"
+                   "@task(name='third')\ndef third():\n    value = compute()\n    return value\n"
+                   "@task(name='fourth')\ndef fourth():\n    value = compute()\n    return value\n")
+        structure = {'functions': [
+            {'name': 'first', 'line': 1, 'line_end': 3},
+            {'name': 'second', 'line': 4, 'line_end': 6},
+            {'name': 'third', 'line': 7, 'line_end': 10},
+            {'name': 'fourth', 'line': 11, 'line_end': 14},
+        ]}
+        detections = self.rule.check('hooks.py', structure, content)
+        self.assertEqual([d.line for d in detections], [11])
+
 
 class TestD001MultipleDuplicates(unittest.TestCase):
     """Tests for multiple duplicate scenarios."""

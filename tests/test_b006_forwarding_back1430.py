@@ -148,3 +148,127 @@ def test_java_return_and_wrapped_forwarding(tmp_path, body):
 @pytest.mark.parametrize('body', ['await report(e);', 'return report(e);', 'report(String(e));'])
 def test_js_return_await_and_wrapped_forwarding(tmp_path, body):
     assert _js(tmp_path, body) == 0
+
+
+@pytest.mark.parametrize('body', [
+    'return isinstance(e, KeyError)', 'return bool(e)', 'return len(e.args)',
+    "return getattr(e, 'default', None)", 'statsd.incr(type(e).__name__)',
+])
+def test_python_computation_of_exception_is_still_silent(tmp_path, body):
+    assert _py(tmp_path, [body]) == 1
+
+
+@pytest.mark.parametrize('body', ['return Objects.isNull(e);', 'return Objects.hash(e);'])
+def test_java_computation_of_exception_is_still_silent(tmp_path, body):
+    assert _java(tmp_path, [body]) == 1
+
+
+@pytest.mark.parametrize('body', ['return Boolean(e);', 'return Promise.resolve(e);',
+                                   'return Array.isArray(e);'])
+def test_js_computation_of_exception_is_still_silent(tmp_path, body):
+    assert _js(tmp_path, body) == 1
+
+
+@pytest.mark.parametrize('body', ['return self.retry(exc=e)',
+                                   "return {'error': str(e)}", 'handler.report(str(e))'])
+def test_python_forwarding_and_error_result_remain_visible(tmp_path, body):
+    assert _py(tmp_path, [body]) == 0
+
+
+def test_js_state_error_result_remains_visible(tmp_path):
+    assert _js(tmp_path, 'setState({errorMessage: e.message});') == 0
+
+
+@pytest.mark.parametrize('body', [
+    ['assert e == expected'],
+    ['info = ExceptionInfo()', 'assert info.traceback'],
+    ['ret = Retry("failed", e)', 'assert ret.exc == e'],
+    ['handler.on_success((1, ExceptionInfo(), 0.001))',
+     'handler.on_failure.assert_called()'],
+])
+def test_checked_exception_handler_is_visible(tmp_path, body):
+    assert _py(tmp_path, body) == 0
+
+
+def test_unrelated_assert_does_not_hide_silent_handler(tmp_path):
+    assert _py(tmp_path, ['assert True']) == 1
+
+
+def test_click_fail_reports_failure(tmp_path):
+    assert _py(tmp_path, ['handler.fail("bad")']) == 0
+
+
+def test_checked_joined_thread_error_list(tmp_path):
+    code = ('def test_case():\n'
+            '    errors = []\n'
+            '    def worker():\n'
+            '        try: run()\n'
+            '        except Exception as e: errors.append(e)\n'
+            '    thread = Thread(target=worker)\n'
+            '    thread.start()\n'
+            '    thread.join()\n'
+            '    assert not errors\n')
+    assert _count(tmp_path, 'thread.py', code) == 0
+
+
+def test_unchecked_thread_error_list_is_silent(tmp_path):
+    code = ('def test_case():\n'
+            '    errors = []\n'
+            '    def worker():\n'
+            '        try: run()\n'
+            '        except Exception as e: errors.append(e)\n'
+            '    thread = Thread(target=worker)\n'
+            '    thread.start()\n')
+    assert _count(tmp_path, 'thread.py', code) == 1
+
+
+def test_checked_nonlocal_failure_flag(tmp_path):
+    code = ('def test_case():\n'
+            '    passed = True\n'
+            '    def callback():\n'
+            '        nonlocal passed\n'
+            '        try: run()\n'
+            '        except Exception: passed = False\n'
+            '    callback()\n'
+            '    assert passed\n')
+    assert _count(tmp_path, 'flag.py', code) == 0
+
+
+def test_caught_exception_returned_to_caller(tmp_path):
+    assert _py(tmp_path, ['return e']) == 0
+
+
+def test_error_list_asserted_after_try(tmp_path):
+    code = ('def test_case():\n'
+            '    failures = []\n'
+            '    try: run()\n'
+            '    except Exception as e: failures.append(e)\n'
+            '    assert not failures\n')
+    assert _count(tmp_path, 'checked.py', code) == 0
+
+
+def test_error_list_asserted_after_loop(tmp_path):
+    code = ('def test_case():\n'
+            '    failures = []\n'
+            '    for item in items:\n'
+            '        try: run(item)\n'
+            '        except Exception as e: failures.append((item, e))\n'
+            '    assert not failures\n')
+    assert _count(tmp_path, 'checked.py', code) == 0
+
+
+def test_captured_exception_info_forwarded_after_handler(tmp_path):
+    code = ('def test_case():\n'
+            '    try: run()\n'
+            '    except Exception: info = ExceptionInfo()\n'
+            '    callback(info)\n')
+    assert _count(tmp_path, 'checked.py', code) == 0
+
+
+def test_java_nested_failed_future_remains_disclosed(tmp_path):
+    assert _java(tmp_path, ['return singletonList(immediateFailedFuture(e));']) == 0
+
+
+def test_js_error_state_and_warning_remain_visible(tmp_path):
+    assert _js(tmp_path, 'setAppState({errorMessage: e.message});') == 0
+    assert _js(tmp_path, 'warnOnce(`failed: ${e.message}`);') == 0

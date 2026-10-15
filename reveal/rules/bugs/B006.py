@@ -43,7 +43,7 @@ ellipsis catch-all) remains open — see BACK-1011.
 import ast
 import re
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Sequence
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin, TreeSitterParsingMixin
@@ -90,7 +90,7 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     # Debug/Trace exclusion elsewhere in this rule. error/warn(ing) on any
     # other object (a custom logger) uses the same name-only heuristic as
     # the other languages.
-    _JS_VISIBLE_METHODS = frozenset({'error', 'warn', 'warning'})
+    _JS_VISIBLE_METHODS = frozenset({'error', 'warn', 'warning', 'warnOnce', 'err'})
 
     _PHP_LANGUAGE = 'php'
     _PHP_BROAD_TYPES = frozenset({'Exception', 'Throwable'})
@@ -155,7 +155,8 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     # no-op method with an error-sounding name (BACK-992).
     _VISIBLE_HELPER_CALLS = frozenset({
         'record_composed_error', 'create_error', 'create_error_result', 'unavailable', 'create_detection',
-        '_build_ssl_health_error_result', '_build_ssl_failure_result',
+        '_build_ssl_health_error_result', '_build_ssl_failure_result', 'fail', 'reraise',
+        'handle_failure',
     })
 
     # Dict-key / attribute names that, when assigned to inside an except
@@ -179,8 +180,15 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         'requireNonNull', 'checkNotNull', 'identity', 'setattr', 'delattr',
         'str', 'repr', 'String', 'valueOf', 'format',
         'remove', 'removeAll', 'delete', 'pop', 'put_nowait', 'increment', 'decrement',
+        'isinstance', 'bool', 'len', 'getattr', 'hash', 'id', 'type', 'dict',
+        'isNull', 'hashCode', 'ofNullable', 'Boolean', 'Number', 'resolve', 'isArray',
     })
     _DISCARD_CALLEE_PREFIXES = ('ignore', 'swallow', 'suppress', 'discard')
+    _REPORTING_CALLEES = frozenset({
+        'report', 'onFailure', 'onError', 'reject', 'fail', 'retry', 'setState',
+        'setAppState', 'setErrorMessage', 'updateScene', 'updateMagicGeneration',
+        'immediateFailedFuture', 'record', 'notify', 'emit',
+    })
 
     # Pattern to detect explanatory comments near pass statement
     COMMENT_PATTERN = re.compile(r'#\s*\w+')
@@ -270,9 +278,129 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     def is_silent_handler(self, node, lines, parent_map=None) -> bool:
         """Shared Python handler policy used by the product rule and CI boundary gate."""
         return (self._is_broad_exception(node) and self._is_silent(node)
+                and not self._has_checked_assertion(node)
                 and not self._has_explanatory_comment(node, lines)
                 and not (parent_map and self._is_intentional_fallback(node, parent_map))
-                and not (parent_map and self._has_deferred_visible_signal(node, parent_map)))
+                and not (parent_map and self._has_deferred_visible_signal(node, parent_map))
+                and not (parent_map and self._has_checked_local_channel(node, parent_map))
+                and not (parent_map and self._has_checked_outer_channel(node, parent_map)))
+
+    def _has_checked_local_channel(self, node: ast.ExceptHandler,
+                                   parent_map: Dict[ast.AST, ast.AST]) -> bool:
+        """An exception appended to a list later asserted empty is observed."""
+        if not node.name:
+            return False
+        try_node = parent_map.get(node)
+        scope = parent_map.get(try_node) if try_node else None
+        while scope is not None and not isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            scope = parent_map.get(scope)
+        if scope is None:
+            return False
+        stored = {
+            stmt.value.func.value.id for stmt in node.body
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call)
+            and isinstance(stmt.value.func, ast.Attribute) and stmt.value.func.attr == 'append'
+            and isinstance(stmt.value.func.value, ast.Name)
+            and any(isinstance(sub, ast.Name) and sub.id == node.name
+                    for arg in stmt.value.args for sub in ast.walk(arg))
+        }
+        return self._local_asserts_stored(scope, stored, node)
+
+    def _local_asserts_stored(self, scope, stored: set, node: ast.ExceptHandler) -> bool:
+        return any(isinstance(sub, ast.Name) and sub.id in stored
+                   for stmt in scope.body for assertion in self._py_executed_nodes(stmt)
+                   if isinstance(assertion, ast.Assert)
+                   and assertion.lineno > getattr(node, 'end_lineno', node.lineno)
+                   for sub in ast.walk(assertion.test))
+
+    @staticmethod
+    def _has_checked_assertion(node: ast.ExceptHandler) -> bool:
+        """An assertion must inspect the caught exception or captured info."""
+        checked = {node.name} if node.name else set()
+        for stmt in node.body:
+            if B006._asserts_checked_failure(stmt, checked):
+                return True
+            checked.update(B006._new_checked_names(stmt, checked))
+        return False
+
+    @staticmethod
+    def _new_checked_names(stmt: ast.stmt, checked: set) -> set:
+        if not isinstance(stmt, ast.Assign):
+            return set()
+        source = stmt.value
+        captures = any(isinstance(sub, ast.Name) and sub.id in checked
+                       for sub in ast.walk(source))
+        captures = captures or any(
+            isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name)
+            and sub.func.id == 'ExceptionInfo' for sub in ast.walk(source))
+        return ({t.id for target in stmt.targets for t in ast.walk(target)
+                 if isinstance(t, ast.Name)} if captures else set())
+
+    @staticmethod
+    def _asserts_checked_failure(stmt: ast.stmt, checked: set) -> bool:
+        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+            func = stmt.value.func
+            return (isinstance(func, ast.Attribute) and func.attr.startswith('assert_called')
+                    and isinstance(func.value, ast.Attribute)
+                    and func.value.attr in ('on_failure', 'on_error', 'report_error'))
+        if not isinstance(stmt, ast.Assert):
+            return False
+        return any(isinstance(sub, ast.Name) and sub.id in checked
+                   for sub in ast.walk(stmt.test)) or any(
+                       isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute)
+                       and sub.func.attr == 'exc_info' and isinstance(sub.func.value, ast.Name)
+                       and sub.func.value.id == 'sys' for sub in ast.walk(stmt.test))
+
+    @staticmethod
+    def _has_checked_outer_channel(node: ast.ExceptHandler,
+                                   parent_map: Dict[ast.AST, ast.AST]) -> bool:
+        """Recognize a joined worker's checked error list or a checked nonlocal flag."""
+        inner = parent_map.get(node)
+        while inner is not None and not isinstance(inner, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            inner = parent_map.get(inner)
+        outer = parent_map.get(inner) if inner is not None else None
+        while outer is not None and not isinstance(outer, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            outer = parent_map.get(outer)
+        if inner is None or outer is None:
+            return False
+        checked_in_outer = B006._outer_asserted_names(outer, inner)
+        if not checked_in_outer:
+            return False
+        joined = B006._outer_has_join(outer, inner)
+        nonlocal_names = {name for stmt in inner.body if isinstance(stmt, ast.Nonlocal)
+                          for name in stmt.names}
+        for stmt in node.body:
+            if B006._sets_checked_nonlocal(stmt, nonlocal_names & checked_in_outer):
+                return True
+            if joined and B006._appends_checked_error(stmt, node.name, checked_in_outer):
+                return True
+        return False
+
+    @staticmethod
+    def _outer_asserted_names(outer: Any, inner: ast.AST) -> set:
+        return {sub.id for stmt in outer.body if stmt is not inner
+                for assertion in ast.walk(stmt) if isinstance(assertion, ast.Assert)
+                for sub in ast.walk(assertion.test) if isinstance(sub, ast.Name)}
+
+    @staticmethod
+    def _outer_has_join(outer: Any, inner: ast.AST) -> bool:
+        return any(isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute)
+                   and sub.func.attr == 'join' for stmt in outer.body if stmt is not inner
+                   for sub in ast.walk(stmt))
+
+    @staticmethod
+    def _sets_checked_nonlocal(stmt: ast.stmt, checked: set) -> bool:
+        return isinstance(stmt, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id in checked for target in stmt.targets)
+
+    @staticmethod
+    def _appends_checked_error(stmt: ast.stmt, caught: Optional[str], checked: set) -> bool:
+        if not caught or not isinstance(stmt, ast.Expr) or not isinstance(stmt.value, ast.Call):
+            return False
+        call = stmt.value
+        return (isinstance(call.func, ast.Attribute) and call.func.attr == 'append'
+                and isinstance(call.func.value, ast.Name) and call.func.value.id in checked
+                and any(isinstance(arg, ast.Name) and arg.id == caught for arg in call.args))
 
     def _is_broad_exception(self, node: ast.ExceptHandler) -> bool:
         """Check if exception handler catches Exception (broad catch).
@@ -320,6 +448,8 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             for sub in self._py_executed_nodes(stmt):
                 if isinstance(sub, ast.Raise):
                     return False
+                if self._returns_caught_exception(sub, node.name):
+                    return False
                 if isinstance(sub, ast.Call):
                     func = sub.func
                     if isinstance(func, ast.Attribute):
@@ -342,15 +472,26 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
                     return False
         return True
 
+    @staticmethod
+    def _returns_caught_exception(stmt: ast.AST, caught: Optional[str]) -> bool:
+        return (isinstance(stmt, ast.Return) and caught is not None
+                and isinstance(stmt.value, ast.Name) and stmt.value.id == caught)
+
     @classmethod
-    def _forwards_exception(cls, callee: Optional[str], bare_args: List[str], caught: Optional[str]) -> bool:
-        """Shared forwarding policy: does this call hand ``caught`` to a callee
-        that is not debug-level, a container store or discard-named (BACK-1430)?"""
-        if not caught or not callee or caught not in bare_args:
+    def _forwards_exception(cls, callee: Optional[str], bare_args: List[str], caught: Optional[str],
+                            wrapped_args: Sequence[str] = ()) -> bool:
+        """A direct exception argument is forwarded unless the callee computes on it.
+
+        Wrapped occurrences need a reporting-shaped callee; inspecting an
+        exception to calculate a value does not make the failure visible.
+        """
+        if not caught or not callee:
             return False
         if callee in cls._NON_DISCLOSING_CALLEES:
             return False
-        return not callee.lower().startswith(cls._DISCARD_CALLEE_PREFIXES)
+        if callee.lower().startswith(cls._DISCARD_CALLEE_PREFIXES):
+            return False
+        return caught in bare_args or (caught in wrapped_args and callee in cls._REPORTING_CALLEES)
 
     @staticmethod
     def _py_executed_nodes(root):
@@ -372,9 +513,10 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         func = value.func
         callee = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else None
         operands = [*value.args, *(kw.value for kw in value.keywords)]
+        bare_names = [arg.id for arg in operands if isinstance(arg, ast.Name)]
         names = [node.id for arg in operands for node in self._py_executed_nodes(arg)
                  if isinstance(node, ast.Name)]
-        return self._forwards_exception(callee, names, caught)
+        return self._forwards_exception(callee, bare_names, caught, names)
 
     def _handler_nodes(self, root):
         """Executed catch nodes, excluding nested callable/class scopes."""
@@ -514,9 +656,6 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         does not by itself qualify — so a genuinely silent handler with an
         unrelated variable set in the body doesn't accidentally pass.
         """
-        if node.name is None:
-            return False  # no `as e` binding to trace
-
         captured: set = set()
         for stmt in node.body:
             if isinstance(stmt, ast.Assign):
@@ -527,11 +666,7 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
                 value = stmt.value
             else:
                 continue
-            references_exc = any(
-                isinstance(sub, ast.Name) and sub.id == node.name
-                for sub in ast.walk(value)
-            )
-            if not references_exc:
+            if not self._references_caught_or_info(value, node.name):
                 continue
             for t in targets:
                 if isinstance(t, ast.Tuple):
@@ -554,6 +689,13 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
                         and isinstance(sub.ctx, ast.Load)):
                     return True
         return False
+
+    @staticmethod
+    def _references_caught_or_info(value: ast.AST, caught: Optional[str]) -> bool:
+        return any(isinstance(sub, ast.Name) and caught and sub.id == caught
+                   for sub in ast.walk(value)) or any(
+                       isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name)
+                       and sub.func.id == 'ExceptionInfo' for sub in ast.walk(value))
 
     def _get_enclosing_body(
         self, node: ast.AST, parent_map: Dict[ast.AST, ast.AST]
@@ -762,6 +904,8 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             if _zero_arg(descendant, 'kind') == 'method_invocation':
                 if self._java_call_name(descendant, content_bytes) in self._JAVA_VISIBLE_METHODS:
                     return True
+                if self._ts_node_text(descendant, content_bytes).startswith('System.err.println('):
+                    return True
         return self._java_forwards_exception(node, block, content_bytes)
 
     def _java_forwards_exception(self, node, block, content_bytes: bytes) -> bool:
@@ -772,9 +916,29 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         caught = self._ts_node_text(ident, content_bytes) if ident else None
         for call in self._forwarding_calls(block, 'method_invocation'):
             args = next((c for c in node_children(call) if _zero_arg(c, 'kind') == 'argument_list'), None)
+            bare = [self._ts_node_text(a, content_bytes) for a in node_children(args)
+                    if _zero_arg(a, 'kind') == 'identifier'] if args else []
             names = [self._ts_node_text(a, content_bytes) for a in self._handler_nodes(args)
                      if _zero_arg(a, 'kind') == 'identifier'] if args else []
-            if self._forwards_exception(self._java_call_name(call, content_bytes), names, caught):
+            if self._forwards_exception(self._java_call_name(call, content_bytes), bare, caught, names):
+                return True
+            if self._java_nested_reporting_call(call, caught, content_bytes):
+                return True
+        return False
+
+    def _java_nested_reporting_call(self, call, caught: Optional[str], content_bytes: bytes) -> bool:
+        if not caught:
+            return False
+        for nested in self._handler_nodes(call):
+            if nested is call or _zero_arg(nested, 'kind') != 'method_invocation':
+                continue
+            if self._java_call_name(nested, content_bytes) not in self._REPORTING_CALLEES:
+                continue
+            args = next((c for c in node_children(nested)
+                         if _zero_arg(c, 'kind') == 'argument_list'), None)
+            if args and any(_zero_arg(arg, 'kind') == 'identifier'
+                            and self._ts_node_text(arg, content_bytes) == caught
+                            for arg in node_children(args)):
                 return True
         return False
 
@@ -875,9 +1039,11 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
                                if _zero_arg(c, 'kind') == 'property_identifier'), None)
             name = self._ts_node_text(callee, content_bytes) if callee is not None else None
             args = next((c for c in children if _zero_arg(c, 'kind') == 'arguments'), None)
+            bare = [self._ts_node_text(a, content_bytes) for a in node_children(args)
+                    if _zero_arg(a, 'kind') == 'identifier'] if args else []
             names = [self._ts_node_text(a, content_bytes) for a in self._handler_nodes(args)
                      if _zero_arg(a, 'kind') == 'identifier'] if args else []
-            if self._forwards_exception(name, names, caught):
+            if self._forwards_exception(name, bare, caught, names):
                 return True
         return False
 

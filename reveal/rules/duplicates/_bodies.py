@@ -24,8 +24,15 @@ def extract_function_body(func: Dict[str, Any], content: str) -> str:
     if start > len(lines) or end > len(lines):
         return ""
 
-    # start is 1-indexed, so lines[start:end] begins after the signature line.
-    body_lines = lines[start:end]
+    # Python structure records can start at a decorator. Find the definition
+    # before slicing, so its signature is never mistaken for body content.
+    definition = start - 1
+    if lines[definition].lstrip().startswith('@'):
+        for index in range(start, end):
+            if re.match(r'^\s*(?:async\s+)?def\s+', lines[index]):
+                definition = index
+                break
+    body_lines = lines[definition + 1:end]
     return '\n'.join(body_lines) if body_lines else ""
 
 

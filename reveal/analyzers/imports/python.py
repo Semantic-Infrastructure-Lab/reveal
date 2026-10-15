@@ -12,6 +12,7 @@ Extracts import statements and symbol usage from Python source files.
 Uses tree-sitter for consistent parsing across all language analyzers.
 """
 
+import ast
 import hashlib
 import logging
 import os
@@ -320,6 +321,22 @@ class PythonExtractor(LanguageExtractor):
                 root = self._get_root_identifier(parent, analyzer)
                 if root:
                     symbols.add(root)
+
+        # A forward reference in a type annotation is a binding use even
+        # though tree-sitter represents its name as string content. Keep this
+        # scoped to type nodes: an ordinary string is not a symbol reference.
+        for node in analyzer._find_nodes_by_type('string'):
+            parent = _zero_arg(node, 'parent')
+            if parent is None or _zero_arg(parent, 'kind') != 'type':
+                continue
+            try:
+                value = ast.literal_eval(analyzer._get_node_text(node))
+                annotation = ast.parse(value, mode='eval') if isinstance(value, str) else None
+            except (SyntaxError, ValueError):
+                continue
+            if annotation is not None:
+                symbols.update(child.id for child in ast.walk(annotation)
+                               if isinstance(child, ast.Name))
 
         return symbols
 
