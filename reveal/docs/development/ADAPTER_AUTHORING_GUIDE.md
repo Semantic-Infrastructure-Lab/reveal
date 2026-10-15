@@ -107,6 +107,9 @@ class MyAdapter(ResourceAdapter):
     # fragment can't reach it. Set `ACCEPTS_TOP = True` on the renderer class instead;
     # cli/routing/uri.py's handle_uri forwards --all/--verbose there directly
     # (see reveal/adapters/overview.py's OverviewRenderer for the pattern, BACK-1226).
+    # The same declaration makes the URI router reject a bad ?top= (negative, non-numeric,
+    # fractional) with exit 2 before the adapter runs (BACK-1839); a subcommand's --top uses
+    # argparse type=cli_display_limit from reveal/utils/query_parser.py.
 
     def __init__(self, resource: str = '', query: str = None, **kwargs):
         # super().__init__() sets self.resource/self.query/self.query_params
