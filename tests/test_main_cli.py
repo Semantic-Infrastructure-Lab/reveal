@@ -264,7 +264,11 @@ class TestPerfLogging(unittest.TestCase):
             self.assertEqual(len(lines), 1)
             record = json.loads(lines[0])
             self.assertEqual(record["argv"][0], "check")
-            self.assertIn(result.returncode, (0, 1))
+            # 3 is the disclosed "scan incomplete" outcome of a project-wide rule (BACK-1824); this
+            # test is about perf logging, so it accepts it but requires the disclosure.
+            self.assertIn(result.returncode, (0, 1, 3), result.stderr[-2000:])
+            if result.returncode == 3:
+                self.assertIn('incomplete', result.stdout + result.stderr, (result.stdout + result.stderr)[-2000:])
             self.assertEqual(record["exit_code"], result.returncode)
 
     def test_no_perf_flag_writes_nothing(self):

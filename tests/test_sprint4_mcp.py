@@ -167,6 +167,13 @@ def test_unchanged_tree_does_not_rebuild_indexes_changed_tree_does(tmp_path, mon
     (tmp_path / 'other.py').write_text('import demo\n', encoding='utf-8')
     from reveal.utils import request_cache
     request_cache._STAMPS.clear()
+    # A file modified at or after the request start is never stamped (see
+    # test_files_modified_at_the_request_start_are_not_stamped). Windows' file clock ticks every
+    # ~15 ms, so a fixture written just before the first call can share its tick: age them.
+    import os, time
+    aged = time.time_ns() - 10_000_000_000
+    for path in tmp_path.rglob('*'):
+        os.utime(path, ns=(aged, aged))
     calls = _count_builds(monkeypatch)
     select = 'D005,T006,M102,I002'
     m.reveal_check(str(file), select=select)
@@ -204,3 +211,20 @@ def test_file_edited_during_a_request_is_not_stamped_as_current(tmp_path):
     request_cache.reset_request_caches()
     assert tmp_path not in D005._project_index
     D005._clear_index()
+
+
+def test_files_modified_at_the_request_start_are_not_stamped(tmp_path):
+    # The guard is conservative on purpose: a file whose mtime is not strictly before the request
+    # start may have changed after an index read it, so the tree is left unstamped and the next
+    # request rebuilds. Pinned with explicit times; real clocks make it timing-dependent.
+    import os
+    from reveal.utils.request_cache import _tree_stamp
+    (tmp_path / 'pyproject.toml').touch()
+    file = tmp_path / 'demo.py'
+    file.write_text('value = 1\n', encoding='utf-8')
+    for path in (tmp_path / 'pyproject.toml', file):
+        os.utime(path, ns=(1_000_000_000, 1_000_000_000))
+    assert _tree_stamp(tmp_path, started_ns=1_000_000_001) is not None
+    assert _tree_stamp(tmp_path, started_ns=1_000_000_000) is None
+    assert _tree_stamp(tmp_path, started_ns=999_999_999) is None
+    assert _tree_stamp(tmp_path) is not None
