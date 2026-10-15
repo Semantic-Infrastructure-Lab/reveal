@@ -555,7 +555,7 @@ class TestRunReview(unittest.TestCase):
             self.assertEqual((data['overall_status'], data['exit_code']), ('pass', 0))
 
     def test_check_failure_exits_3_incomplete(self):
-        def failing_check(path, select, files=None, errors=None):
+        def failing_check(path, select, files=None, errors=None, disclosures=None):
             errors.append('quality check failed: boom')
             return []
         with tempfile.TemporaryDirectory() as d, \

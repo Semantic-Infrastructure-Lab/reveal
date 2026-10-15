@@ -7,6 +7,7 @@ These are often dead code left behind after refactoring.
 import ast
 import logging
 import re
+from ...utils.request_cache import register_request_cache
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
 
@@ -408,3 +409,6 @@ class M102(BaseRule):
         except SyntaxError:
             # If it can't parse, probably has code
             return len(content.strip()) > 100
+
+
+register_request_cache(__name__, _import_cache.clear)

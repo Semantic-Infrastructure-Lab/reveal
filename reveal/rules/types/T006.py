@@ -21,6 +21,7 @@ import ast
 import logging
 import os
 import re
+from ...utils.request_cache import register_request_cache
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, List, Optional
 
@@ -281,3 +282,6 @@ def _clear_index() -> None:
     """Clear the project index cache (for tests)."""
     _project_index.clear()
     _project_skip_reasons.clear()
+
+
+register_request_cache(__name__, _clear_index)

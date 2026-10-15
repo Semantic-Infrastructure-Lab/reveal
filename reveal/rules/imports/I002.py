@@ -9,6 +9,7 @@ import hashlib
 import logging
 import os
 import stat as stat_module
+from ...utils.request_cache import register_request_cache
 from pathlib import Path
 from typing import List, Dict, Any, Iterator, Optional
 
@@ -606,3 +607,6 @@ class I002(BaseRule):
             return f"Consider removing import from {current_file.name} to {next_file.name}, or refactor shared code into a separate module"
         else:
             return "Refactor to remove circular import (move shared code to a separate module)"
+
+
+register_request_cache(__name__, _graph_cache.clear)

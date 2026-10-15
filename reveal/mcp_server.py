@@ -240,17 +240,21 @@ def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = 
 
     def decorator(fn):
         @functools.wraps(fn)
+        def request(*args, **kwargs):
+            from .utils.request_cache import reset_request_caches
+            # Direct Python callers and registered tools have the same evidence
+            # lifetime, while retaining their distinct error-sentinel contracts.
+            with _capture_lock:
+                reset_request_caches()
+                return fn(*args, **kwargs)
+
+        @functools.wraps(fn)
         def wrapper(*args, **kwargs):
             _log_mcp_access(fn.__name__, kwargs)
-            from .config import RevealConfig
-            # The existing reentrant lock also protects request-scoped config:
-            # one client cannot reset it halfway through another client's scan.
-            with _capture_lock:
-                RevealConfig.reset_request_cache()
-                return _raise_if_error_sentinel(fn(*args, **kwargs))
+            return _raise_if_error_sentinel(request(*args, **kwargs))
 
         mcp.tool(annotations=annotations, title=title)(wrapper)
-        return fn
+        return request
 
     return decorator
 
@@ -592,7 +596,6 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
         ignore: Comma-separated rule codes/series to exclude, e.g. 'N'
     """
     from pathlib import Path
-    from .checks import capability_disclosures
     from .cli.file_checker import collect_files_to_check, _check_files_json
 
     p = Path(path)
@@ -620,22 +623,11 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
     total_issues, _, file_results, _, _ = _check_files_json(
         files, directory, select_list, ignore_list, severity=severity_filter
     )
-    # BACK-1466: what the CLI prints beside its verdict -- rules skipped for a
-    # language, and files that errored or parsed degraded -- so a clean result
-    # here can't claim more than actually ran. Scan-cap disclosures (I002/D005/
-    # T006) are not included: they read process-global caches that outlive one
-    # call in this long-lived server and would report an earlier target's cap.
-    notes = [f"⚠️  {n}" for n in capability_disclosures(files, select_list, ignore_list)]
-    for fr in file_results:
-        if fr.get('status') == 'error':
-            notes.append(f"⚠️  {fr['file']}: could not be checked -- {fr.get('detail', 'analyzer error')}")
-        elif fr.get('status') == 'warning':
-            notes.append(f"⚠️  {fr['file']}: did not parse cleanly; results may be incomplete or incorrect")
-        for err in fr.get('rule_errors', []):
-            notes.append(f"⚠️  {fr['file']}: rule {err['rule']} crashed and did not run -- {err['error']}")
+    notes = _check_notes(files, select_list, ignore_list, file_results)
 
     if total_issues == 0:
-        return "\n".join(notes + ["No issues found."])
+        verdict = "No findings in the checked population; scan incomplete." if notes else "No issues found."
+        return "\n".join(notes + [verdict])
 
     lines = list(notes)
     for fr in file_results:
@@ -653,6 +645,24 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
 
     lines.append(f"\n{total_issues} issue{'s' if total_issues != 1 else ''} found.")
     return "\n".join(lines)
+
+
+def _check_notes(files, select_list, ignore_list, file_results) -> list[str]:
+    """Request-scoped diagnostics precede every MCP check verdict."""
+    from .checks import capability_disclosures
+    from .rules.scan_caches import get_scan_disclosures
+    disclosures = get_scan_disclosures(files, select_list, ignore_list)
+    notes = [f"⚠️  {n}" for n in
+             disclosures + capability_disclosures(files, select_list, ignore_list)]
+    for fr in file_results:
+        if fr.get('status') == 'error':
+            notes.append(f"⚠️  {fr['file']}: could not be checked -- {fr.get('detail', 'analyzer error')}")
+        elif fr.get('status') == 'warning':
+            notes.append(f"⚠️  {fr['file']}: did not parse cleanly; results may be incomplete or incorrect")
+        for err in fr.get('rule_errors', []):
+            notes.append(f"⚠️  {fr['file']}: rule {err['rule']} crashed and did not run -- {err['error']}")
+
+    return notes
 
 
 @mcp_tool(annotations=_OPEN_WORLD_READONLY, title='Reveal: Health Verdict')

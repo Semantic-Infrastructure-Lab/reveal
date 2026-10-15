@@ -224,6 +224,19 @@ reveal_review("main..feature")
 reveal_review("src/", select="B,S")
 ```
 
+## Request freshness and incomplete scans
+
+Each serialized tool request starts with fresh configuration, rule-wide indexes
+(I002, D005, T006 and M102), and Python project inventory. Edits become visible on
+the next request; these caches are reused within that request. Disk and grammar
+caches retain their own validation, and other manifest/schema/deep-call caches
+have separate freshness scope.
+
+`reveal_check` and `reveal_review` disclose scan caps and parse losses for the
+projects reached by that request. An incomplete zero-result scan says no findings
+in the checked population, rather than claiming a clean scan. D005 shows the total
+failed-file count, up to five examples, and the remaining count.
+
 ## Available Resources
 
 Unlike Tools (model-decided actions), Resources are read-only, non-side-effecting

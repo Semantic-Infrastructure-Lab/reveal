@@ -17,6 +17,7 @@ import logging
 import os
 import re
 from functools import lru_cache
+from ...utils.request_cache import register_request_cache
 from pathlib import Path
 from typing import FrozenSet, List, Set, Optional, Dict, Tuple
 from ...core import node_children as _children, node_prev_sibling as _prev_sibling
@@ -639,3 +640,5 @@ __all__ = [
     'extract_python_imports',  # deprecated
     'extract_python_symbols',  # deprecated
 ]
+
+register_request_cache(__name__, _python_project_inventory.cache_clear)

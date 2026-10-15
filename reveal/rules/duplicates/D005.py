@@ -26,6 +26,7 @@ import hashlib
 import logging
 import os
 from dataclasses import asdict
+from ...utils.request_cache import register_request_cache
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 
@@ -156,10 +157,21 @@ def get_scan_disclosures(files: Optional[List[Path]] = None) -> List[str]:
     roots = {_find_project_root(path.resolve()) for path in files} if files is not None else None
     details = [message for root, index in _project_index.items()
                if roots is None or root in roots
-               for message in getattr(index, 'disclosures', [])]
+               for message in _index_disclosures(root, index)]
     skipped = [message for root, message in _project_skip_reasons.items()
                if roots is None or root in roots]
     return list(dict.fromkeys([*skipped, *details]))
+
+
+def _index_disclosures(root: Path, index: dict) -> List[str]:
+    """Keep complete numeric accounting and bound the per-file diagnostic display."""
+    from ...rendering.base import capped_section
+    messages = sorted(getattr(index, 'disclosures', []))
+    failed = getattr(index, 'scan_budget', {}).get('failed_files', 0)
+    if not failed:
+        return messages
+    return [f'D005: {failed} file(s) under {root} were not analyzed; cross-file results may be incomplete',
+            *capped_section(messages, 5, str, indent='D005: ')]
 
 
 def get_scan_budgets(files: List[Path]) -> List[Dict[str, Any]]:
@@ -328,3 +340,6 @@ def _build_index(
             index.setdefault(key, []).append((str(py_file), line, var_name))
 
     return index
+
+
+register_request_cache(__name__, _clear_index)

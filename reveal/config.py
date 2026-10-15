@@ -14,6 +14,7 @@ target path until a config with root:true is found or the filesystem root.
 YAML is the primary format. TOML support via pyproject.toml [tool.reveal] section.
 """
 
+from .utils.request_cache import register_request_cache
 from pathlib import Path
 import os
 import sys
@@ -332,8 +333,11 @@ class RevealConfig:
         additions, removals and root:true changes are visible on the next one.
         Analysis, grammar and disk caches have separate owners and lifetimes.
         """
+        global _config
         cls._cache.clear()
         cls._root_cache.clear()
+        _path_resolve_cache.clear()
+        _config = None
 
     # Path resolution is handled by module-level _cached_resolve() (shared with
     # FileConfig.matches) so there is no separate _resolve_cache here.
@@ -1058,3 +1062,7 @@ def disable_update_check_permanently() -> bool:
     config = _read_user_config()
     config.setdefault('network', {})['no_update_check'] = True
     return _write_user_config(config, "Update check disabled")
+
+
+# A host request owns discovery and merged configuration, including legacy get_config().
+register_request_cache(__name__, RevealConfig.reset_request_cache)

@@ -105,14 +105,14 @@ def run_review(args: Namespace) -> None:
 
     # Step 3: Quality check
     print("  Checking quality rules…", file=sys.stderr)
-    violations = _run_check(path, args.select, files=changed_files, errors=errors)
+    scan_disclosures: List[str] = []
+    violations = _run_check(path, args.select, files=changed_files, errors=errors,
+                            disclosures=scan_disclosures)
     report['sections']['violations'] = violations
     # BACK-1051: `review` is a composite command wrapping `check` — it must
     # propagate a capped-scan disclosure (I002/D005) rather than swallowing
     # it, the concrete symptom that motivated this ticket ("reveal review ."
     # on 20,000+ files produced a silent I002 skip").
-    from reveal.rules.scan_caches import get_scan_disclosures
-    scan_disclosures = get_scan_disclosures()
     if scan_disclosures:
         report['scan_disclosures'] = scan_disclosures
 
@@ -243,7 +243,8 @@ def _run_diff(git_range: str) -> Dict[str, Any]:
 
 def _run_check(path: Optional[Path], select: str,
                files: Optional[List[Path]] = None,
-               errors: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+               errors: Optional[List[str]] = None,
+               disclosures: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """Run quality check and return violations.
 
     When `files` is given (a diff-scoped review), only those files are checked.
@@ -272,6 +273,9 @@ def _run_check(path: Optional[Path], select: str,
         select_list = select.split(',') if select else None
         _, _, file_results, files_errored, _ = _check_files_json(
             check_files, directory, select_list, None)
+        if disclosures is not None:
+            from reveal.rules.scan_caches import get_scan_disclosures
+            disclosures.extend(get_scan_disclosures(check_files, select_list, None))
         if files_errored:
             errors.append(f"quality check could not analyze {files_errored} file(s)")
         violations: List[Dict[str, Any]] = []
