@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from reveal.capabilities import scope_dict_for_path
 from reveal.errors import NotApplicableError
-from reveal.reveal_types import CONTRACT_VERSION
+from reveal.reveal_types import CONTRACT_VERSION, RevealMeta, WarningEntry
 
 from .ast import AstAdapter
 from .base import ResourceAdapter, register_adapter, register_renderer
@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 UNLIMITED_TOP = 10**9
 
 
-def without_internal_filter_warnings(meta: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def without_internal_filter_warnings(meta: Optional[RevealMeta]) -> List[WarningEntry]:
     """The composed warnings minus the typo hint for a filter key this adapter wrote itself.
 
     overview:// and hotspots:// both compose an AST query they generate (``complexity>9``,
