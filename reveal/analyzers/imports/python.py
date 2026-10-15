@@ -326,8 +326,7 @@ class PythonExtractor(LanguageExtractor):
         # though tree-sitter represents its name as string content. Keep this
         # scoped to type nodes: an ordinary string is not a symbol reference.
         for node in analyzer._find_nodes_by_type('string'):
-            parent = _zero_arg(node, 'parent')
-            if parent is None or _zero_arg(parent, 'kind') != 'type':
+            if not _is_forward_reference(node, analyzer):
                 continue
             try:
                 value = ast.literal_eval(analyzer._get_node_text(node))
@@ -552,6 +551,53 @@ class PythonExtractor(LanguageExtractor):
 # ---------------------------------------------------------------------------
 
 _DEP_NAME_RE = re.compile(r'^\s*([A-Za-z0-9][A-Za-z0-9._-]*)')
+
+
+# Node kinds a forward-reference string may sit under between itself and the
+# enclosing annotation (`type`): `Optional["X"]`, `typing.List["X"]`, `Callable[["X"], "Y"]`.
+_ANNOTATION_CONTAINERS = frozenset({'type_parameter', 'generic_type', 'subscript', 'list', 'tuple'})
+_SUBSCRIPT_PUNCTUATION = frozenset({'[', ']', ','})
+
+
+def _span(node) -> Tuple[int, int]:
+    return (_zero_arg(node, 'start_byte'), _zero_arg(node, 'end_byte'))
+
+
+def _subscript_arguments(container) -> list:
+    """The type arguments of a ``type_parameter`` or ``subscript`` node, in order."""
+    children = [c for c in _children(container) if _zero_arg(c, 'kind') not in _SUBSCRIPT_PUNCTUATION]
+    return children[1:] if _zero_arg(container, 'kind') == 'subscript' else children
+
+
+def _subscript_name(container, analyzer) -> str:
+    """Last dotted segment of the subscripted name: ``typing.Literal[...]`` -> ``Literal``."""
+    named = container if _zero_arg(container, 'kind') == 'subscript' else _zero_arg(container, 'parent')
+    head = _children(named)[0]
+    return analyzer._get_node_text(head).rsplit('.', 1)[-1].strip()
+
+
+def _is_forward_reference(string_node, analyzer) -> bool:
+    """True when ``string_node`` is a type (a forward reference) inside an annotation.
+
+    The string must be the annotation or a type argument in a type position.
+    Strings inside ``Literal[...]`` are values, and in ``Annotated[T, m1, m2]``
+    only ``T`` is a type (pyflakes and ruff agree; BACK-1837).
+    """
+    child = string_node
+    parent = _zero_arg(child, 'parent')
+    in_annotation = False
+    while parent is not None and _zero_arg(parent, 'kind') in _ANNOTATION_CONTAINERS | {'type'}:
+        in_annotation = in_annotation or _zero_arg(parent, 'kind') == 'type'
+        if _zero_arg(parent, 'kind') in ('type_parameter', 'subscript'):
+            name = _subscript_name(parent, analyzer)
+            if name == 'Literal':
+                return False
+            if name == 'Annotated':
+                arguments = _subscript_arguments(parent)
+                if arguments and _span(child) != _span(arguments[0]):
+                    return False
+        child, parent = parent, _zero_arg(parent, 'parent')
+    return in_annotation
 
 
 def _normalize_dist_name(name: str) -> str:
