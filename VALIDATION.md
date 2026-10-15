@@ -1820,15 +1820,20 @@ each tracked file's import facts. The oracle never imports Reveal or executes
 corpus application code. Its helper is
 [go_import_oracle.go](scripts/oracles/go_import_oracle.go).
 
-The declared population is buildless tracked source under `prometheus/`, including
-tests and build-excluded generators. Package directories fan out to that same
-target-file population. The gate measures the existing public file-dependents
-projection, which expands Go's directory-keyed graph edges. Across 116 files and
-11 packages, all **2,589 expected edges** are found (**100% recall**); **12 extra
-self-edges** give **99.5386% precision**. The report preserves those extras rather
-than removing them from the metric: external-test/generator files can import their
-own directory's package, whose buildless fan-out includes the importer itself.
-This does not establish build-selected or runtime dependency resolution.
+Across 116 tracked files and 499 import statements, Go resolves **58/58 selected
+package imports to seven target packages**. Eleven package directories occur in
+the input. This is the package-import evidence; it does not prove file-level or
+runtime dependency resolution.
+
+The separate buildless file projection fans each resolved package import out to
+every tracked target file in that directory, reusing Reveal's projection model.
+Its **2,589/2,589 projected edges** include 1,251 edges to `_test.go` files, 337 to
+separate external-test packages and 37 to a build-ignored `package main` generator.
+At least those latter 374 edges are not valid Go package dependencies. Agreement
+with this fan-out is therefore projection conformance, not independent file-level
+truth or build-selected recall. The private file-dependents projection also emits
+12 self-edge extras, giving 99.5386% precision against this model. Those identities
+remain visible in the reviewed baseline pending their separate product fix.
 
 The same runner has a separately scoped `--signal calls` mode. Its first population
 is the existing pinned celery corpus, `celery/utils/`, using Python's standard AST
@@ -1946,6 +1951,8 @@ manifest entry with a `recall:` block names an independent oracle from
 | `rust-use` | Deepest real module file for `crate::`/`super::`/`self::` use paths | Meilisearch, ripgrep |
 | `java-jls` | A public top-level type `C` of package `a.b` is `a/b/C.java` | Elasticsearch `server/src/main/java`, guava |
 | `typescript-compiler` | TypeScript parser plus `ts.resolveModuleName`, including aliases, re-exports, dynamic and type-query imports | VS Code base, Excalidraw workspace, three.js src |
+| `go-toolchain` | Go standard parser and `go list` decide package imports; file fan-out is a separate buildless projection | client_golang |
+| `python-ast-callers` | Python AST derives scoped function/method caller relationships; selected with `--signal calls` | celery `celery/utils/` |
 
 The corpora are optional test inputs, never runtime dependencies or services. Normal
 installation and the normal test suite do not fetch them.
