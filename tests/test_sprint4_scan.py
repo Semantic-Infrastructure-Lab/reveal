@@ -112,3 +112,87 @@ def test_project_parse_loss_is_disclosed_for_an_individually_clean_file(tmp_path
     result = _run_reveal_direct('check', str(clean), '--select', 'I002', '--format', 'json')
     assert result.returncode == 3
     assert any('parsed with errors' in d for d in json.loads(result.stdout)['scan_disclosures'])
+
+
+# BACK-1823: the suite runs serially (conftest sets REVEAL_MAX_WORKERS=1), where every index is
+# built in the main process. These rows run reveal's own pool, where only a preload keeps a capped
+# second project's skip reason visible to the process that renders the verdict.
+
+def _clear_rule_caches():
+    from reveal.rules.duplicates.D005 import _clear_index as clear_d005
+    from reveal.rules.imports.I002 import _graph_cache
+    from reveal.rules.types.T006 import _clear_index as clear_t006
+    clear_d005(); clear_t006(); _graph_cache.clear()
+
+
+def test_t006_preload_accounts_for_every_root(tmp_path, monkeypatch):
+    from reveal.rules.scan_caches import _t006_preload
+    files = projects(tmp_path)
+    monkeypatch.setenv('REVEAL_T006_MAX_FILES', '6')
+    caches = _t006_preload(tmp_path, ['T006'], None, files)
+    assert set(caches) == {tmp_path / 'p1', tmp_path / 'p2'}
+    disclosures = get_scan_disclosures(files, ['T006'], None)
+    assert all(any(str(tmp_path / p) in d for d in disclosures) for p in ('p1', 'p2'))
+
+
+def test_m102_preload_builds_every_reached_root(tmp_path):
+    from reveal.rules.scan_caches import _m102_preload
+    files = projects(tmp_path)
+    caches = _m102_preload(tmp_path, ['M102'], None, files)
+    assert {tmp_path / 'p1', tmp_path / 'p2'} <= set(caches)
+
+
+@pytest.mark.real_worker_pool
+@pytest.mark.parametrize('rule,env', [('I002', 'REVEAL_I002_MAX_FILES'),
+                                      ('D005', 'REVEAL_D005_MAX_FILES'),
+                                      ('T006', 'REVEAL_T006_MAX_FILES')])
+def test_parallel_cap_on_second_project_is_incomplete(tmp_path, monkeypatch, rule, env):
+    from conftest import _run_reveal_direct
+    projects(tmp_path)
+    monkeypatch.setenv(env, '6')
+    _clear_rule_caches()
+    capped = _run_reveal_direct('check', str(tmp_path), '--select', rule, '--format', 'json')
+    summary = json.loads(capped.stdout)['summary']
+    assert capped.returncode == 3, capped.stdout
+    assert any('p2' in d for d in summary['scan_disclosures'])
+    monkeypatch.setenv(env, '0')
+    _clear_rule_caches()
+    control = _run_reveal_direct('check', str(tmp_path), '--select', rule, '--format', 'json')
+    assert not json.loads(control.stdout)['summary'].get('scan_disclosures')
+    assert control.returncode != 3
+
+
+# BACK-1824: a capped scan is not a clean review.
+
+def _review(tmp_path, *args):
+    from conftest import _run_reveal_direct
+    return _run_reveal_direct('review', str(tmp_path), '--select', 'I002', *args)
+
+
+def test_capped_review_is_incomplete_in_text_and_json(tmp_path, monkeypatch):
+    projects(tmp_path)
+    monkeypatch.setenv('REVEAL_I002_MAX_FILES', '7')
+    _clear_rule_caches()
+    text = _review(tmp_path)
+    assert text.returncode == 3
+    assert 'Ready for review' not in text.stdout and 'No violations found ✅' not in text.stdout
+    assert 'Review incomplete' in text.stdout
+    _clear_rule_caches()
+    report = json.loads(_review(tmp_path, '--format', 'json').stdout)
+    assert (report['overall_status'], report['exit_code']) == ('incomplete', 3)
+    assert report['scan_disclosures']
+    monkeypatch.setenv('REVEAL_I002_MAX_FILES', '0')
+    _clear_rule_caches()
+    control = _review(tmp_path)
+    assert control.returncode == 2          # the 7 high I002 cycle findings are visible uncapped
+    assert 'Review incomplete' not in control.stdout
+
+
+def test_capped_mcp_review_is_not_ready(tmp_path, monkeypatch):
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_review
+    projects(tmp_path)
+    monkeypatch.setenv('REVEAL_I002_MAX_FILES', '7')
+    _clear_rule_caches()
+    out = reveal_review(str(tmp_path), select='I002')
+    assert 'Ready for review' not in out and 'incomplete' in out.lower()

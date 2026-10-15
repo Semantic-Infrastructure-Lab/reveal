@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - B006 distinguishes checked failure channels and exception forwarding from computations that still swallow failures; D001 excludes decorated no-op hooks, and I001 counts quoted annotations as binding uses. The pinned Celery precision pilot retains before/after samples and reports (BACK-1810, BACK-1799, BACK-1798, BACK-1800).
 - Health reads current file/directory check reports, preserving real violations and failed/partial outcomes instead of defaulting them to healthy. D005 and health expose scan counts separately from presentation cuts; stats exclusions survive composed hotspots/overview results (BACK-1793, BACK-1794, BACK-1795).
+- `reveal review` reports `incomplete` (exit 3, CLI and MCP) when a project-wide scan was capped or skipped instead of "Ready for review"; T006 and M102 preload every project root, so a capped second project is no longer lost in parallel runs (BACK-1823, BACK-1824).
 - MCP configuration discovery and merged values refresh between serialized tool requests, so edits to `.reveal.yaml` take effect without restarting the server (BACK-1572).
 - Nginx fleet gaps exit consistently across text/JSON; touched rendering paths preserve diagnostics and disclose omitted items (BACK-1758).
 - B006 rejects nested uncalled forwarding and non-reporting sinks; imports/I002 disk cache keys include target-only index changes (BACK-1734, BACK-1755).

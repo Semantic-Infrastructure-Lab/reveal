@@ -141,12 +141,12 @@ def _t006_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
         if not rule_will_run("T006", select, ignore):
             return {}
         from .types.T006 import _build_index, _find_project_root, _project_index
-        sample = files[0] if files else directory
-        root = _find_project_root(sample.resolve())
-        if root is None:  # standalone file in the temp dir/$HOME: nothing to index
-            return {}
-        if root not in _project_index:
-            _project_index[root] = _build_index(root)
+        # Every reached root, not files[0]: a capped second project's skip reason
+        # must land in the main process too (BACK-1823). A standalone file in the
+        # temp dir/$HOME has no root: nothing to index.
+        for root in _project_roots(directory, files, _find_project_root):
+            if root not in _project_index:
+                _project_index[root] = _build_index(root)
         return dict(_project_index)
     except Exception:
         # Documented fallback: workers build the index themselves, as they would
@@ -183,13 +183,14 @@ def _m102_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
             return {}
         from .maintainability.M102 import M102, _import_cache, _project_root
         rule = M102()
-        for path in files or []:
-            if path.suffix != '.py' or rule._is_entry_point(path) or rule._is_test_file(path):
-                continue
-            root = _project_root(path.resolve())
-            if root is not None:
-                rule._collect_all_imports(root)   # populates _import_cache
-                break
+        eligible = [path for path in files or []
+                    if path.suffix == '.py' and not rule._is_entry_point(path)
+                    and not rule._is_test_file(path)]
+        # Every reached root (BACK-1823 audit), so a second project is built once here
+        # instead of once per worker. No eligible file builds nothing, as no worker would
+        # (_project_roots would fall back to the directory).
+        for root in _project_roots(directory, eligible, _project_root) if eligible else ():
+            rule._collect_all_imports(root)   # populates _import_cache
         return dict(_import_cache)
     except Exception:
         # Documented fallback: workers build the index themselves, as they would

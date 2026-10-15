@@ -132,7 +132,8 @@ def run_review(args: Namespace) -> None:
     if errors:
         report['errors'] = errors
     report['overall_status'], report['exit_code'] = _review_outcome(
-        violations, errors, hotspots_incomplete=_lost_hotspot_files(report))
+        violations, errors, hotspots_incomplete=_lost_hotspot_files(report),
+        scan_incomplete=bool(scan_disclosures))
 
     # Render
     if is_git_range:
@@ -165,14 +166,16 @@ def _lost_hotspot_files(report: Dict[str, Any]) -> bool:
 
 
 def _review_outcome(violations: List[Dict[str, Any]], errors: List[str],
-                    hotspots_incomplete: bool = False) -> tuple:
+                    hotspots_incomplete: bool = False,
+                    scan_incomplete: bool = False) -> tuple:
     """(overall_status, exit_code): fail/2 on a blocking-severity issue,
     incomplete/3 when the quality pass could not check everything (so an
-    empty violation list is not proof of a clean change) or the hotspot step
+    empty violation list is not proof of a clean change), a rule-wide scan was
+    capped, skipped or partly unparsed (BACK-1824), or the hotspot step
     could not rank every file (Scott, 2026-10-07), warn/1, pass/0."""
     if any(v.get('severity') in BLOCKING_SEVERITIES for v in violations):
         return 'fail', 2
-    if errors or hotspots_incomplete:
+    if errors or hotspots_incomplete or scan_incomplete:
         return 'incomplete', 3
     if violations:
         return 'warn', 1
@@ -496,9 +499,11 @@ def _render_structural_summary(summary: Dict[str, Any]) -> None:
 _SEVERITY_ORDER = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
 
 
-def _render_violations_section(violations: list, verbose: bool) -> None:
+def _render_violations_section(violations: list, verbose: bool,
+                               scan_incomplete: bool = False) -> None:
     if not violations:
-        print("\nNo violations found ✅")
+        print("\nNo violations found in the scanned population ⚠️" if scan_incomplete
+              else "\nNo violations found ✅")
         return
     by_sev: Dict[str, list] = {}
     for v in violations:
@@ -552,7 +557,8 @@ def _render_complexity_section(complex_fns: list) -> None:
 
 
 def _render_recommendation(violations: list, errors: Optional[List[str]] = None,
-                           hotspots_incomplete: bool = False) -> None:
+                           hotspots_incomplete: bool = False,
+                           scan_incomplete: bool = False) -> None:
     blocking = sum(1 for v in violations if v.get('severity') in BLOCKING_SEVERITIES)
     print()
     if blocking > 0:
@@ -564,6 +570,9 @@ def _render_recommendation(violations: list, errors: Optional[List[str]] = None,
     elif hotspots_incomplete:
         print("Recommendation: Review incomplete — the hotspot ranking is missing the files "
               "named under Caveats. ⚠️")
+    elif scan_incomplete:
+        print("Recommendation: Review incomplete — a project-wide scan was capped, skipped or "
+              "partly unparsed (see the warnings above). ⚠️")
     elif violations:
         print(f"Recommendation: {len(violations)} warning(s) — review before merge. ⚠️")
     else:
@@ -582,10 +591,12 @@ def _render_report(report: Dict[str, Any], verbose: bool) -> None:
     _render_diff_section(sections.get('diff', {}))
     _render_complexity_spikes_section(sections.get('complexity_spikes', []))
     violations = sections.get('violations', [])
-    _render_violations_section(violations, verbose)
+    scan_incomplete = bool(report.get('scan_disclosures'))
+    _render_violations_section(violations, verbose, scan_incomplete)
     _render_hotspots_section(sections.get('hotspots', []))
     _render_complexity_section(sections.get('complexity', []))
     render_meta_warnings(report, heading="Caveats:")
     for reason in report.get('scan_disclosures', []):
         print(f"⚠️  {reason}")
-    _render_recommendation(violations, report.get('errors'), _lost_hotspot_files(report))
+    _render_recommendation(violations, report.get('errors'), _lost_hotspot_files(report),
+                           scan_incomplete)
