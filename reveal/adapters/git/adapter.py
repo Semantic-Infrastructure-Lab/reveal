@@ -884,16 +884,16 @@ class GitAdapter(ResourceAdapter):
         }
 
     def get_metadata(self) -> Dict[str, Any]:
-        """Get metadata about the resource."""
-        try:
-            repo = self._open_repository()
-            return {
-                'type': 'git_repository',
-                'path': repo.workdir or repo.path,
-                'adapter': 'git',
-            }
-        except (OSError, ValueError, pygit2.GitError):
-            return {
-                'type': 'git_repository',
-                'adapter': 'git',
-            }
+        """Get metadata about the resource.
+
+        An open failure raises, as every other method does: ``NotApplicableError`` for
+        "not a repository", ``ValueError`` for a repository libgit2 refuses (ownership /
+        ``safe.directory``). It used to return metadata with no ``path`` for both, so
+        callers read a refusal as "not a repository" (BACK-1845).
+        """
+        repo = self._open_repository()
+        return {
+            'type': 'git_repository',
+            'path': repo.workdir or repo.path,
+            'adapter': 'git',
+        }
