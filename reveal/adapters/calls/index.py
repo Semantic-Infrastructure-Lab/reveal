@@ -15,7 +15,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, Iterator, List, Optional, Set, Tuple
 
-from ..ast.analysis import collect_structures, is_code_file, call_sources
+from ..ast.analysis import collect_structures, is_code_file, call_sources, unattributed_references
 from ...utils.pyparse import parse_python
 from ..ast.call_graph import build_alias_map, build_symbol_map, resolve_callees as _resolve_callees
 from ...conventions import conventions_for, family_for_path, is_builtin_anywhere
@@ -1207,6 +1207,18 @@ def rank_by_callers(
     }
 
 
+def _unattributed_sources(file_struct: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """One synthetic module-level source per deferred body whose JSX uses have no tracked owner.
+
+    The module graph is file-to-file: a dependency exists whichever scope renders the
+    component, so these uses are kept as edges instead of dropped (BACK-1831)."""
+    groups: Dict[Tuple[str, int], List[str]] = {}
+    for ref in unattributed_references(file_struct):
+        groups.setdefault((ref['owner'], ref['owner_line']), []).append(ref['callee'])
+    return [{'category': 'modules', 'name': owner, 'line': line, 'calls': list(dict.fromkeys(callees))}
+            for (owner, line), callees in groups.items()]
+
+
 def build_module_dependency_graph(
     path: str,
     include_external: bool = False,
@@ -1248,7 +1260,7 @@ def build_module_dependency_graph(
             sym_cache[from_file] = build_symbol_map(from_file)
         symbol_map = sym_cache[from_file]
 
-        for elem in call_sources(file_struct):
+        for elem in [*call_sources(file_struct), *_unattributed_sources(file_struct)]:
             # 'tests' included so a Zig test file's calls into other modules
             # register as real module-dependency edges (BACK-663).
             if elem.get('category') not in ('functions', 'methods', 'tests', 'modules'):

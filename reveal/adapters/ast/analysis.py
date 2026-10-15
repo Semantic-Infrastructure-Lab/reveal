@@ -189,6 +189,16 @@ def call_sources(file_struct: Dict[str, Any]):
                'call_sites': [*sites, *references], 'references': references,
                'reference_only_calls': [r['callee'] for r in references if r['callee'] not in {s['callee'] for s in sites}]}
 
+
+def unattributed_references(file_struct: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """JSX uses that call_sources attributes to no caller (``<anonymous>``: deferred body with no
+    tracked element). A caller graph cannot name them, but a file-level dependency does not
+    depend on which scope owns the use (BACK-1831)."""
+    owners = {(e.get('name'), e.get('line')) for e in file_struct.get('elements', [])}
+    return [r for r in file_struct.get('jsx_references', [])
+            if r['owner'] != '<module>' and (r['owner'], r['owner_line']) not in owners]
+
+
 def analyze_file(file_path: str) -> Optional[Dict[str, Any]]:
     """Analyze a single file and extract structure.
 

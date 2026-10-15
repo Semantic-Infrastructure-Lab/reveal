@@ -141,3 +141,21 @@ def test_jsx_in_test_and_hook_callbacks_belongs_to_the_enclosing_element(tmp_pat
     # Positive control: an ordinary call on the same lines is credited to the same elements.
     mounts = {r['caller'] for r in find_callers(str(tmp_path), 'mount')['levels'][0]['callers']}
     assert {'beforeEach', 'it(renders)', 'Panel'} <= mounts
+
+
+def test_module_graph_keeps_jsx_dependency_with_no_tracked_owner(tmp_path):
+    # BACK-1831: <Button/> sits in a deferred body passed to register(), with no enclosing
+    # element, so the use is <anonymous>. The file-to-file edge must not depend on that.
+    from reveal.adapters.calls.index import build_module_dependency_graph
+    (tmp_path / 'ui.tsx').write_text('export function Button() { return null; }\n'
+                                     'export function Label() { return null; }\n', encoding='utf-8')
+    (tmp_path / 'actions.tsx').write_text("import { Button } from './ui';\n"
+                                          'register({ perform: () => <Button/> });\n', encoding='utf-8')
+    (tmp_path / 'unused.tsx').write_text("import { Label } from './ui';\n"
+                                         'export const x = 1;\n', encoding='utf-8')
+    refs = analyze_file(str(tmp_path / 'actions.tsx'))['jsx_references']
+    assert [r['owner'] for r in refs] == ['<anonymous>']
+    edges = {(Path(e['from']).name, Path(e['to']).name) for e in build_module_dependency_graph(str(tmp_path))['edges']}
+    assert ('actions.tsx', 'ui.tsx') in edges
+    # Control: an import with no use stays out of the graph.
+    assert ('unused.tsx', 'ui.tsx') not in edges
