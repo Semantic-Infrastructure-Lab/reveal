@@ -1852,7 +1852,7 @@ Go must be on PATH at the pinned version. Import baselines remain in
 is [calls_baseline.json](tests/corpus/calls_baseline.json). Both compare populations,
 recall and precision, reject unexpected zero results, and fail deliberate lost-edge
 controls. Reports identify the implementation through Git HEAD, tracked-diff and
-untracked-file digests plus Python/grammar versions. The scheduled workflow now includes separate import and caller steps and retains both reports, including failed comparisons. Remote qualification of the expanded workflow remains outstanding until its exact revision runs successfully.
+untracked-file digests plus Python/grammar versions. The scheduled workflow now includes separate import and caller steps and retains both reports, including failed comparisons. Remote qualification requires a successful run of the exact revision; a local pass alone does not qualify the runner.
 
 Complementary adversarial controls in
 [test_import_precision_invariants.py](tests/test_import_precision_invariants.py)

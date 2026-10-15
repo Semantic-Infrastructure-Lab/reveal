@@ -5,6 +5,7 @@ cap (`ResourceAdapter.CLI_QUERY_FLAGS['all']`) and the CLI injects it for `--all
 """
 
 from argparse import Namespace
+import re
 
 import pytest
 
@@ -77,7 +78,8 @@ def test_end_to_end_lifts_hotspots_cap(tmp_path):
         out = StringIO()
         with redirect_stdout(out), redirect_stderr(StringIO()):
             handle_uri(f'hotspots://{tmp_path}?functions_only=true', None, _default_args(**flags))
-        return sum(1 for line in out.getvalue().splitlines() if ' f' in line and 'complexity' in line)
+        # Count function rows, excluding the now-visible McCabe caveat.
+        return len(re.findall(r'\bf\d+\s+complexity:', out.getvalue()))
 
     assert functions_listed() == 10
     assert functions_listed(all=True) == 14
