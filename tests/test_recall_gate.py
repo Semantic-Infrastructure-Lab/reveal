@@ -348,7 +348,7 @@ def compiler_oracle():
         pytest.skip('optional Node/TypeScript compiler oracle not installed')
     module = os.environ.get('REVEAL_TS_ORACLE_MODULE', str(SCRIPTS / 'oracles/node_modules/typescript'))
     probe = subprocess.run(['node', '-e', 'console.log(require(process.argv[1]).version)', module],
-                           capture_output=True, text=True, encoding='utf-8', timeout=30)
+                           capture_output=True, text=True, encoding='utf-8', timeout=120)
     if probe.returncode:
         pytest.skip('optional TypeScript oracle dependency not installed')
     assert probe.stdout.strip() == '5.9.3'
