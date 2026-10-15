@@ -167,21 +167,21 @@ class TestCheckCode(unittest.TestCase):
         self.assertNotIn('healthy', summary)
 
     @patch('subprocess.run')
-    def test_nonzero_returncode_returns_1(self, mock_run):
+    def test_nonzero_returncode_returns_2(self, mock_run):
         # stdout must be non-empty but unparseable to trigger the except branch
         mock_run.return_value = MagicMock(returncode=1, stdout='not valid json')
         result = _check_code(Path('/tmp'), Namespace(select=None))
         code, summary = result.exit_code, result.summary
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 2)  # a dead checker is FAIL, not WARN (BACK-1828)
 
     @patch('subprocess.run')
-    def test_empty_stdout_with_nonzero_returncode_returns_1(self, mock_run):
+    def test_empty_stdout_with_nonzero_returncode_returns_2(self, mock_run):
         """A crashed `reveal check` subprocess (traceback on stderr, empty stdout)
         must not be reported as healthy (BACK-853)."""
         mock_run.return_value = MagicMock(returncode=1, stdout='')
         result = _check_code(Path('/tmp'), Namespace(select=None))
         code, summary = result.exit_code, result.summary
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 2)  # a dead checker is FAIL, not WARN (BACK-1828)
         self.assertIn('failed', summary)
 
     @patch('subprocess.run')

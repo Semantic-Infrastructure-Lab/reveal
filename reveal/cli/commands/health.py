@@ -184,7 +184,10 @@ def _check_code(path: Path, args: Namespace) -> HealthResult:
         return _code_result(data, result.returncode, accounting)
     except (ValueError, TypeError, KeyError) as exc:
         if result.returncode != 0:
-            return HealthResult(1, 'code: check failed', 'failed', accounting)
+            # A checker that died (signal, traceback) produced no answer: FAIL, like the
+            # same death inside a parsed answer and like a dead URI child (BACK-1828).
+            return HealthResult(2, f'code: check failed (exit {result.returncode}'
+                                   f'{_child_reason(result.stderr)})', 'failed', accounting)
         return HealthResult(2, f'code: could not parse check results ({exc})',
                             'failed', accounting)
 
@@ -297,14 +300,24 @@ def _check_uri(scheme: str, uri: str, args: Namespace) -> HealthResult:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, encoding='utf-8', errors='replace')
     except subprocess.TimeoutExpired:
         return HealthResult(2, f"{scheme}: timed out", 'failed')
-    return _uri_health_result(scheme, result.returncode, result.stdout)
+    return _uri_health_result(scheme, result.returncode, result.stdout, result.stderr)
 
 
-def _uri_health_result(scheme: str, returncode: int, output: str) -> HealthResult:
+def _child_reason(stderr: Optional[str], first: bool = False) -> str:
+    """One of the child's own stderr lines as ``: reason`` ('' when it said nothing): the
+    last by default (a traceback ends on its cause), the first for a CLI error message."""
+    text = stderr if isinstance(stderr, str) else ''
+    lines = [line.strip() for line in text.splitlines() if line.strip()]  # boundary-ok: splitlines -- child stderr, not file content
+    return f': {lines[0 if first else -1][:200]}' if lines else ''
+
+
+def _uri_health_result(scheme: str, returncode: int, output: str,
+                       stderr: Optional[str] = None) -> HealthResult:
     """A failed child is failed; a partial or unavailable answer cannot be clean."""
     import json
     if returncode < 0 or returncode >= 2:
-        return HealthResult(2, f"{scheme}: critical failure (exit {returncode})", 'failed')
+        return HealthResult(2, f"{scheme}: critical failure (exit {returncode}{_child_reason(stderr)})",
+                            'failed')
     try:
         data = json.loads(output)
         if not isinstance(data, dict):
@@ -317,11 +330,15 @@ def _uri_health_result(scheme: str, returncode: int, output: str) -> HealthResul
         meta = data.get('meta') or {}
         if not isinstance(meta, dict):
             raise ValueError('invalid metadata')
-        if meta.get('errors') or meta.get('warnings') or data.get('warnings') or returncode:
+        if meta.get('errors') or meta.get('warnings') or data.get('warnings'):
             return HealthResult(1, f"{scheme}: incomplete or warning result", 'partial')
+        if returncode:
+            # A completed answer whose findings set the exit code is not partial.
+            return HealthResult(1, f"{scheme}: warnings found", 'ok')
         return HealthResult(0, f"{scheme}: healthy", 'ok')
     except (ValueError, TypeError):
-        return HealthResult(2, f"{scheme}: malformed check results", 'failed')
+        return HealthResult(2, f"{scheme}: malformed check results (exit {returncode}"
+                               f"{_child_reason(stderr, first=True)})", 'failed')
 
 
 def _check_nginx(path: Path, args: Namespace):
@@ -361,7 +378,7 @@ def _render_results(results: list) -> None:
     elif overall == 1:
         print("Health: WARN — review warnings above")
     else:
-        print("Health: FAIL — critical issues found")
+        print("Health: FAIL — see failed checks above")
     print()
 
 

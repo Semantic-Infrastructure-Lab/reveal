@@ -675,7 +675,10 @@ class _CheckTally:
     files_degraded: int = 0
 
     def add(self, checked: _CheckedFile) -> None:
-        if checked.state == "error":
+        # A rule that raised left its file only partly checked, exactly the single-file
+        # check's ``errors`` (exit 3, health FAILED); its status stays "ok" because the
+        # analyzer/parse pipeline itself succeeded (BACK-1828).
+        if checked.state == "error" or checked.status.get("rule_errors"):
             self.files_errored += 1
         elif checked.state == "warning":
             self.files_degraded += 1
