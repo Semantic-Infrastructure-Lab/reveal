@@ -148,8 +148,12 @@ body with no tracked element around it is marked
 `<anonymous>` and excluded from module callers. Only references outside deferred
 bodies belong to `<module>`. Class-field initializer references keep class
 source ownership but are outside caller navigation; render methods remain indexed. Imported aliases are resolved through the shared
-name-resolution seam. Callees and trace use the same references; text labels them
-`JSX reference`. Dynamic render scheduling, Angular/HTML strings and Vue/Svelte
+name-resolution seam. Callees and trace use the same references; callees text labels a name that is only rendered
+`(JSX reference)` and a name that is both called and rendered `(includes JSX reference)`. Callers text
+names each kind of site: `[call line 3, JSX line 4]` (JSON: `call_lines` and `reference_lines`), `[JSX line 6]`,
+and `[lines 5, 6]` for a name that is only called more than once. `--sideeffects --transitive` follows a
+render-only reference as a hop (rendering a child runs it) and labels it `(JSX render)`; the `chain` of
+the JSON findings ends in `<Child/>`. Dynamic render scheduling, Angular/HTML strings and Vue/Svelte
 navigation remain outside this relationship model. The existing conservative
 `uncalled` suppression remains separate from caller attribution.
 
@@ -548,7 +552,8 @@ reveal 'calls://.?target=fn'       # use project root for full coverage
 
 **Top-level callers:** Python, JS/TS, PHP and Ruby source files include a synthetic
 `<module>` caller for calls outside named functions/methods, including script loops
-and Ruby DSL blocks. Caller JSON carries `caller_kind: module`, scope `line: 1` and every matching `call_lines` location. Counts are unique caller scopes;
+and Ruby DSL blocks. Caller JSON carries `caller_kind: module`, `line` set to the first call line (the first JSX line when
+the name is only rendered; `callees=<module>` prints the module's first call line, not 1) and every matching call in `call_lines`. Counts are unique caller scopes;
 several sites in one module remain one caller. Deferred function bodies retain
 their own scope. Class-body initializers, extensionless Ruby DSL files and other
 languages' top-level code remain outside this relationship scope and are disclosed.

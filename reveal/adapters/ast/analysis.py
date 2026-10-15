@@ -181,14 +181,20 @@ def call_sources(file_struct: Dict[str, Any]):
     for elem in file_struct.get('elements', []):
         references = [r for r in refs if r['owner'] == elem.get('name') and r['owner_line'] == elem.get('line')]
         if references:
+            call_lines: Dict[str, List[int]] = {}
+            for site in file_struct.get('jsx_call_sites', []):
+                if site['owner'] == elem.get('name') and site['owner_line'] == elem.get('line'):
+                    call_lines.setdefault(site['callee'], []).append(site['line'])
             yield {**elem, 'calls': list(dict.fromkeys([*elem.get('calls', []), *(r['callee'] for r in references)])),
-                   'references': references, 'reference_only_calls': [r['callee'] for r in references if r['callee'] not in elem.get('calls', [])]}
+                   'references': references, 'reference_only_calls': [r['callee'] for r in references if r['callee'] not in elem.get('calls', [])],
+                   'call_lines': {callee: sorted(set(lines)) for callee, lines in call_lines.items()}}
         else:
             yield elem
     sites = [s for s in file_struct.get('module_call_sites', []) if s.get('relationship') != 'jsx_reference']
     references = [r for r in refs if r['owner'] == '<module>']
     if sites or references:
-        yield {'category': 'modules', 'name': '<module>', 'line': 1,
+        # The scope line of a module is its first call or reference: what callers report per callee.
+        yield {'category': 'modules', 'name': '<module>', 'line': min(s['line'] for s in [*sites, *references]),
                'caller_kind': 'module', 'calls': list(dict.fromkeys(s['callee'] for s in [*sites, *references])),
                'call_sites': [*sites, *references], 'references': references,
                'reference_only_calls': [r['callee'] for r in references if r['callee'] not in {s['callee'] for s in sites}]}
@@ -247,8 +253,9 @@ def analyze_file(file_path: str) -> Optional[Dict[str, Any]]:
         result['module_call_sites'] = module_call_sites(file_path, analyzer)
         from ...conventions import family_for_path
         if family_for_path(file_path) == 'js':
-            from ..calls.references import jsx_component_references
+            from ..calls.references import jsx_component_references, jsx_owner_call_sites
             result['jsx_references'] = jsx_component_references(analyzer, result['elements'])
+            result['jsx_call_sites'] = jsx_owner_call_sites(analyzer, result['elements'], result['jsx_references'])
 
         # Free large per-file buffers held by the analyzer so directory scans
         # (ast://, overview) don't accumulate memory proportional to all files.

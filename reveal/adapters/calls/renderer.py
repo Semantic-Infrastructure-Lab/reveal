@@ -1,7 +1,7 @@
 """Renderer for calls:// adapter output."""
 
 import os
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from reveal.utils import print_json_result
 
@@ -92,11 +92,23 @@ def _render_text(data: Dict[str, Any]) -> None:
             call_expr = rec.get('call_expr', rec.get('callee', target))
             verb = {'jsx_reference': 'JSX reference to',
                     'call_and_jsx_reference': 'calls and JSX reference to'}.get(rec.get('relationship'), 'calls')
-            sites = sorted(set(rec.get('call_lines', [])) | set(rec.get('reference_lines', [])))
-            locations = f" [lines {', '.join(map(str, sites))}]" if len(sites) > 1 or rec.get('reference_lines') else ''
-            print(f"  {file_path}:{line}  {caller}  ({verb} {call_expr}){locations}")
+            print(f"  {file_path}:{line}  {caller}  ({verb} {call_expr}){_site_locations(rec)}")
         if depth > 1:
             print()
+
+
+def _line_list(label: str, lines: List[int]) -> str:
+    return f"{label}{'line' if len(lines) == 1 else 'lines'} {', '.join(map(str, lines))}"
+
+
+def _site_locations(rec: Dict[str, Any]) -> str:
+    """` [call line 3, JSX line 4]`: each kind of site named; a lone call site needs none."""
+    calls = sorted(set(rec.get('call_lines', [])))
+    references = sorted(set(rec.get('reference_lines', [])))
+    if references:
+        parts = ([_line_list('call ', calls)] if calls else []) + [_line_list('JSX ', references)]
+        return f" [{', '.join(parts)}]"
+    return f" [{_line_list('', calls)}]" if len(calls) > 1 else ''
 
 
 def _render_callees_text(data: Dict[str, Any]) -> None:
@@ -124,8 +136,10 @@ def _render_callees_text(data: Dict[str, Any]) -> None:
         print(f"  {file_path}:{line}  {target}")
         if calls:
             references = {r['callee'] for r in match.get('references', [])}
+            reference_only = set(match.get('reference_only_calls', []))
             for callee in calls:
-                suffix = ' (includes JSX reference)' if callee in references else ''
+                suffix = (' (JSX reference)' if callee in reference_only
+                          else ' (includes JSX reference)' if callee in references else '')
                 print(f"    → {callee}{suffix}")
         else:
             print(f"    (no calls detected)")

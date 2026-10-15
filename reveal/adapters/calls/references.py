@@ -242,24 +242,60 @@ def _jsx_owner(analyzer, node, by_name, value_names, elements):
     return None, deferred_line
 
 
-def jsx_component_references(analyzer, elements):
-    """Typed component uses attributed through the analyzer's existing function owners."""
-    from ...core.nav_calls import jsx_reference_hit
-    tree = analyzer.tree
-    if tree is None:
-        return []
+def _owner_tables(analyzer, elements):
+    """(elements by name, function-value names by byte span): what `_jsx_owner` resolves against."""
     by_name: Dict[str, List[Dict[str, Any]]] = {}
     for element in elements:
         if element.get('category') in ('functions', 'methods'):
             by_name.setdefault(element['name'], []).append(element)
     values = analyzer._iter_function_values() if hasattr(analyzer, '_iter_function_values') else ()
     value_names = {(_zero_arg(node, 'start_byte'), _zero_arg(node, 'end_byte')): name for name, node in values}
+    return by_name, value_names
+
+
+def _owner_fields(owner, deferred_line):
+    return {'owner': owner['name'] if owner else '<anonymous>' if deferred_line else '<module>',
+            'owner_line': owner['line'] if owner else deferred_line or 1}
+
+
+def jsx_component_references(analyzer, elements):
+    """Typed component uses attributed through the analyzer's existing function owners."""
+    from ...core.nav_calls import jsx_reference_hit
+    tree = analyzer.tree
+    if tree is None:
+        return []
+    by_name, value_names = _owner_tables(analyzer, elements)
     references = []
     for node in iter_tree(_zero_arg(tree, 'root_node')):
         reference = jsx_reference_hit(node, analyzer._get_node_text)
         if reference is None:
             continue
         owner, deferred_line = _jsx_owner(analyzer, node, by_name, value_names, elements)
-        references.append({**reference, 'owner': owner['name'] if owner else '<anonymous>' if deferred_line else '<module>',
-                           'owner_line': owner['line'] if owner else deferred_line or 1})
+        references.append({**reference, **_owner_fields(owner, deferred_line)})
     return references
+
+
+def jsx_owner_call_sites(analyzer, elements, references):
+    """Call lines of the names a scope also renders (BACK-1834 F7).
+
+    A function element lists its callees without lines, so `Btn(); return <Btn/>` could only
+    show the JSX line. Each call to a rendered name is attributed through the same owner seam
+    as its JSX use; `call_sources` joins the two on (owner, owner_line, callee).
+    """
+    from ...treesitter import CALL_NODE_TYPES
+    tree = analyzer.tree
+    rendered = {r['callee'] for r in references}
+    if tree is None or not rendered:
+        return []
+    by_name, value_names = _owner_tables(analyzer, elements)
+    sites = []
+    for node in iter_tree(_zero_arg(tree, 'root_node')):
+        if _zero_arg(node, 'kind') not in CALL_NODE_TYPES:
+            continue
+        callee = analyzer._get_callee_name(node)
+        if callee not in rendered:
+            continue
+        owner, deferred_line = _jsx_owner(analyzer, node, by_name, value_names, elements)
+        sites.append({'callee': callee, 'line': _zero_arg(node, 'start_position').row + 1,
+                      **_owner_fields(owner, deferred_line)})
+    return sites

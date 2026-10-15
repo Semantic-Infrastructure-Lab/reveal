@@ -435,9 +435,13 @@ def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
                 if refs:
                     record.update(relationship='jsx_reference' if callee in elem.get('reference_only_calls', []) else 'call_and_jsx_reference',
                                   reference_lines=sorted({r['line'] for r in refs}))
+                    if elem.get('call_lines', {}).get(callee):
+                        record['call_lines'] = elem['call_lines'][callee]
                 if elem.get('caller_kind') == 'module':
-                    lines = sorted({site['line'] for site in elem['call_sites'] if site['callee'] == callee})
-                    record.update(caller_kind='module', line=lines[0], call_lines=lines)
+                    # `line` is the first site of any kind; `call_lines` only the calls (JSX uses are `reference_lines`).
+                    sites = [site for site in elem['call_sites'] if site['callee'] == callee]
+                    record.update(caller_kind='module', line=min(site['line'] for site in sites),
+                                  call_lines=sorted({site['line'] for site in sites if site.get('relationship') != 'jsx_reference'}))
                 _index_callee(index, callee, record, alias_map)
 
     _INDEX_CACHE[dir_str] = (cache_key, index)
@@ -502,6 +506,7 @@ def find_callees(
                 'line': elem.get('line', 0),
                 'calls': calls,
                 'references': elem.get('references', []),
+                'reference_only_calls': elem.get('reference_only_calls', []),
             })
 
     return {
@@ -534,7 +539,8 @@ def _build_forward_index(
             if not include_builtins and builtins:
                 calls = [c for c in calls if c.split('.')[-1] not in builtins]
             record = {'file': file_path, 'line': elem.get('line', 0), 'calls': calls,
-                      'references': elem.get('references', [])}
+                      'references': elem.get('references', []),
+                      'reference_only_calls': elem.get('reference_only_calls', [])}
             for key in lookup_keys(name):
                 forward.setdefault(key, []).append(record)
     return forward

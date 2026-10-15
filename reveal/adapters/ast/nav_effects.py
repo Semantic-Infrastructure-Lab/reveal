@@ -2021,7 +2021,10 @@ def collect_effects_transitive(
                     if resolved is None:
                         continue
                     node, start, end, callee_get_text, callee_language = resolved
-                    new_chain = chain + [tail]
+                    # A scope that only renders the component runs it without calling it
+                    # (BACK-1834): the hop stays, labelled `<Name/>` in the chain.
+                    renders = callee in defn.get('reference_only_calls', ())
+                    new_chain = chain + [f'<{callee}/>' if renders else tail]
                     hop_effects = collect_effects(node, start, end, callee_get_text, callee_language)
                     for e in hop_effects:
                         e['hop'] = hop
@@ -2082,6 +2085,8 @@ def render_effects_transitive(
             header = f'[hop 0] {root_name} (own body)'
         else:
             header = f"[hop {hop}] via {' → '.join(chain)}"
+            if chain[-1].startswith('<') and chain[-1].endswith('/>'):
+                header += ' (JSX render)'
         lines = [header]
         for e in group_effects:
             kind = e['kind'] or '?'

@@ -930,6 +930,8 @@ reveal app.py handle_request --boundary --transitive --depth 3
 ```
 Modifier for `--sideeffects` or `--boundary`: instead of only the entry function's own body, walks calls into project-local helper functions and reports their effects too — a real interprocedural blast-radius/agentic-exposure read, not just what's written inline. `--depth` controls how many call hops to follow (default 2, max 5). Stdlib/third-party calls are not followed (no source to walk); only project-local functions resolvable in the same codebase.
 
+In JSX/TSX a component the function only renders (`return <Child/>`) is followed too, because rendering a child runs it. That hop is labelled: text prints `[hop 1] via App → <Child/> (JSX render)`, and `--format=json` carries `<Child/>` as the last `chain` entry instead of a bare name.
+
 **`--loopmap` → loop skeleton (FOR/WHILE/LOOP/DO) with nesting depth**
 ```bash
 reveal file.py process_batch --loopmap
