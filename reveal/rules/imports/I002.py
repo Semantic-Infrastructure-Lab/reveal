@@ -9,7 +9,7 @@ import hashlib
 import logging
 import os
 import stat as stat_module
-from ...utils.request_cache import register_request_cache
+from ...utils.request_cache import register_validated_cache
 from pathlib import Path
 from typing import List, Dict, Any, Iterator, Optional
 
@@ -609,4 +609,8 @@ class I002(BaseRule):
             return "Refactor to remove circular import (move shared code to a separate module)"
 
 
-register_request_cache(__name__, _graph_cache.clear)
+def _evict_root(root: Path) -> None:
+    _graph_cache.pop(root, None)
+
+
+register_validated_cache(__name__, _graph_cache, _evict_root)

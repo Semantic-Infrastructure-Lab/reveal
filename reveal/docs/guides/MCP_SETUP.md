@@ -226,9 +226,11 @@ reveal_review("src/", select="B,S")
 
 ## Request freshness and incomplete scans
 
-Each serialized tool request starts with fresh configuration, rule-wide indexes
-(I002, D005, T006 and M102), and Python project inventory. Edits become visible on
-the next request; these caches are reused within that request. Disk and grammar
+Each serialized tool request starts with fresh configuration and Python project
+inventory. The rule-wide indexes (I002, D005, T006 and M102) are kept across requests
+only while a stat fingerprint of their project tree is unchanged, so a repeated call on
+an unchanged project is fast and any edit under the root rebuilds them on the next
+request. Disk and grammar
 caches retain their own validation, and other manifest/schema/deep-call caches
 have separate freshness scope.
 

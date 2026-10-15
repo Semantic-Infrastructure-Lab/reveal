@@ -7,7 +7,7 @@ These are often dead code left behind after refactoring.
 import ast
 import logging
 import re
-from ...utils.request_cache import register_request_cache
+from ...utils.request_cache import register_validated_cache
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
 
@@ -411,4 +411,8 @@ class M102(BaseRule):
             return len(content.strip()) > 100
 
 
-register_request_cache(__name__, _import_cache.clear)
+def _evict_root(root: Path) -> None:
+    _import_cache.pop(root, None)
+
+
+register_validated_cache(__name__, _import_cache, _evict_root)

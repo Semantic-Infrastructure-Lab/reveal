@@ -21,7 +21,7 @@ import ast
 import logging
 import os
 import re
-from ...utils.request_cache import register_request_cache
+from ...utils.request_cache import register_validated_cache
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, List, Optional
 
@@ -284,4 +284,9 @@ def _clear_index() -> None:
     _project_skip_reasons.clear()
 
 
-register_request_cache(__name__, _clear_index)
+def _evict_root(root: Path) -> None:
+    _project_index.pop(root, None)
+    _project_skip_reasons.pop(root, None)
+
+
+register_validated_cache(__name__, _project_index, _evict_root)

@@ -60,7 +60,7 @@ def export_tree(ref: str) -> Path:
     if ref == WORKTREE:
         return REPO
     sha = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--verify", f"{ref}^{{commit}}"],
-                         check=True, capture_output=True, text=True).stdout.strip()
+                         check=True, capture_output=True, text=True, encoding='utf-8').stdout.strip()
     dest = cache_dir() / sha
     if not (dest / "reveal" / "__init__.py").exists():
         dest.mkdir(parents=True, exist_ok=True)

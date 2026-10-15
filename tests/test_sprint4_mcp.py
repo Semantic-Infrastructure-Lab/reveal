@@ -130,3 +130,77 @@ def test_path_resolution_refreshes_on_next_request(tmp_path):
     assert _cached_resolve(link) == first
     m.reveal_check(str(file), select='C901')
     assert _cached_resolve(link) == second
+
+
+# BACK-1825: validated caches survive a request while their tree is unchanged.
+
+def _count_builds(monkeypatch):
+    """Count index builds of the four validated owners (D005, T006, M102, I002)."""
+    from reveal.rules.duplicates import D005
+    from reveal.rules.imports.I002 import I002
+    from reveal.rules.maintainability.M102 import M102
+    from reveal.rules.types import T006
+    calls = {'D005': 0, 'T006': 0, 'M102': 0, 'I002': 0}
+
+    def wrap(owner, name, key):
+        real = getattr(owner, name)
+
+        def counted(*args, **kwargs):
+            calls[key] += 1
+            return real(*args, **kwargs)
+        monkeypatch.setattr(owner, name, counted)
+    wrap(D005, '_build_index', 'D005'); wrap(T006, '_build_index', 'T006')
+    wrap(I002, '_collect_raw_imports', 'I002')
+    real = M102._collect_all_imports
+
+    def counted(self, package_root):      # M102 has no separate build step: count cache misses
+        from reveal.rules.maintainability.M102 import _import_cache
+        calls['M102'] += package_root not in _import_cache
+        return real(self, package_root)
+    monkeypatch.setattr(M102, '_collect_all_imports', counted)
+    return calls
+
+
+def test_unchanged_tree_does_not_rebuild_indexes_changed_tree_does(tmp_path, monkeypatch):
+    monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
+    file = project(tmp_path)
+    (tmp_path / 'other.py').write_text('import demo\n', encoding='utf-8')
+    from reveal.utils import request_cache
+    request_cache._STAMPS.clear()
+    calls = _count_builds(monkeypatch)
+    select = 'D005,T006,M102,I002'
+    m.reveal_check(str(file), select=select)
+    first = dict(calls)
+    assert all(first.values()), first
+    m.reveal_check(str(file), select=select)
+    assert calls == first, f'second call on an unchanged tree rebuilt: {calls} vs {first}'
+    m.reveal_check(str(file), select=select)
+    assert calls == first
+    # An edit anywhere under the root drops every index built from that tree.
+    import os, time
+    other = tmp_path / 'other.py'
+    other.write_text('import something_else_entirely\n', encoding='utf-8')
+    os.utime(other, ns=(time.time_ns() + 5_000_000_000,) * 2)
+    m.reveal_check(str(file), select=select)
+    assert all(calls[k] > first[k] for k in first), (calls, first)
+
+
+def test_file_edited_during_a_request_is_not_stamped_as_current(tmp_path):
+    from reveal.utils import request_cache
+    from reveal.rules.duplicates import D005
+    file = project(tmp_path)
+    request_cache.reset_request_caches()
+    D005._project_index[tmp_path] = {}
+    request_cache.seal_request_caches(1)          # every mtime is newer than "start"
+    assert (D005.__name__, tmp_path) not in request_cache._STAMPS
+    request_cache.reset_request_caches()
+    assert tmp_path not in D005._project_index    # unstamped: rebuilt next request
+    D005._project_index[tmp_path] = {}
+    request_cache.seal_request_caches(request_cache.request_started_ns() + 10**12)
+    assert (D005.__name__, tmp_path) in request_cache._STAMPS
+    request_cache.reset_request_caches()
+    assert tmp_path in D005._project_index        # unchanged tree: kept
+    file.write_text('value = 22222\n', encoding='utf-8')
+    request_cache.reset_request_caches()
+    assert tmp_path not in D005._project_index
+    D005._clear_index()
