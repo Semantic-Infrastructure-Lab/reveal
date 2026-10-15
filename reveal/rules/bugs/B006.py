@@ -939,8 +939,9 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         ident = next((c for c in node_children(param) if _zero_arg(c, 'kind') == 'identifier'), None) if param else None
         caught = self._ts_node_text(ident, content_bytes) if ident else None
         text = lambda n: self._ts_node_text(n, content_bytes)
-        return any(flow.ts_forwards(call, caught, text)
-                   for call in self._forwarding_calls(block, 'method_invocation'))
+        return self._ts_returns_caught(block, caught, content_bytes) or any(
+            flow.ts_forwards(call, caught, text)
+            for call in self._forwarding_calls(block, 'method_invocation'))
 
     def _java_call_name(self, node, content_bytes: bytes) -> Optional[str]:
         """Extract a `method_invocation`'s callee name.
@@ -994,6 +995,23 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
 
         return detections
 
+    def _js_callee_is_visible(self, call, callee, content_bytes: bytes) -> bool:
+        """``warn(msg)``, ``logger.error(..)``, ``console.*`` and ``console['x'](..)`` in a catch body."""
+        kind = _zero_arg(callee, 'kind')
+        if kind == 'identifier':
+            return (self._ts_node_text(callee, content_bytes) in self._JS_VISIBLE_METHODS
+                    and self._has_call_arguments(call))
+        members = node_children(callee)
+        if not members:
+            return False
+        if kind == 'member_expression':
+            prop = next((c for c in members if _zero_arg(c, 'kind') == 'property_identifier'), None)
+            prop_text = self._ts_node_text(prop, content_bytes) if prop else None
+            return (self._ts_node_text(members[0], content_bytes) == 'console'
+                    or prop_text in self._JS_VISIBLE_METHODS)
+        # console['log'](...) is the same always-emitted call as console.log(...)
+        return kind == 'subscript_expression' and self._ts_node_text(members[0], content_bytes) == 'console'
+
     def _js_has_visible_signal(self, node, content_bytes: bytes) -> bool:
         """True if the catch body re-throws or calls a visible logging method."""
         block = next((c for c in node_children(node) if _zero_arg(c, 'kind') == 'statement_block'), None)
@@ -1008,26 +1026,38 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             callee = node_children(descendant)[0] if node_children(descendant) else None
             if callee is None:
                 continue
-            if _zero_arg(callee, 'kind') == 'identifier':
-                if self._ts_node_text(callee, content_bytes) in self._JS_VISIBLE_METHODS:
-                    return True
-            elif _zero_arg(callee, 'kind') == 'member_expression':
-                members = node_children(callee)
-                if not members:
-                    continue
-                obj_text = self._ts_node_text(members[0], content_bytes)
-                prop = next((c for c in members if _zero_arg(c, 'kind') == 'property_identifier'), None)
-                prop_text = self._ts_node_text(prop, content_bytes) if prop else None
-                if obj_text == 'console':
-                    return True
-                if prop_text in self._JS_VISIBLE_METHODS:
-                    return True
-            elif _zero_arg(callee, 'kind') == 'subscript_expression':
-                # console['log'](...) is the same always-emitted call as console.log(...)
-                members = node_children(callee)
-                if members and self._ts_node_text(members[0], content_bytes) == 'console':
-                    return True
+            if self._js_callee_is_visible(descendant, callee, content_bytes):
+                return True
         return self._js_forwards_exception(node, block, content_bytes)
+
+    @staticmethod
+    def _has_call_arguments(call) -> bool:
+        """``warn(msg)`` reports something; a bare ``err()`` has nothing to say (BACK-1836)."""
+        args = next((c for c in node_children(call) if _zero_arg(c, 'kind') == 'arguments'), None)
+        return args is not None and any(_zero_arg(c, 'kind') not in ('(', ')', ',') for c in node_children(args))
+
+    def _ts_returns_caught(self, block, caught: Optional[str], content_bytes: bytes) -> bool:
+        """``return err``, ``return [null, err]`` or ``return {ok: false, error: err}``: the exception
+        object itself goes back to the caller, as ``return e`` does in Python (BACK-1836)."""
+        if not caught:
+            return False
+        is_caught = lambda n: (_zero_arg(n, 'kind') in ('identifier', 'shorthand_property_identifier')
+                               and self._ts_node_text(n, content_bytes) == caught)
+        for stmt in self._handler_nodes(block):
+            if _zero_arg(stmt, 'kind') != 'return_statement':
+                continue
+            for value in node_children(stmt):
+                kind = _zero_arg(value, 'kind')
+                if kind == 'array':
+                    parts = node_children(value)
+                elif kind == 'object':
+                    parts = [node_children(p)[-1] if _zero_arg(p, 'kind') == 'pair' and node_children(p) else p
+                             for p in node_children(value)]
+                else:
+                    parts = [value]
+                if any(is_caught(part) for part in parts):
+                    return True
+        return False
 
     def _js_forwards_exception(self, node, block, content_bytes: bytes) -> bool:
         """True if a direct/returned/awaited call hands the caught exception on
@@ -1035,8 +1065,9 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         param = next((c for c in node_children(node) if _zero_arg(c, 'kind') == 'identifier'), None)
         caught = self._ts_node_text(param, content_bytes) if param else None
         text = lambda n: self._ts_node_text(n, content_bytes)
-        return any(flow.ts_forwards(call, caught, text)
-                   for call in self._forwarding_calls(block, 'call_expression'))
+        return self._ts_returns_caught(block, caught, content_bytes) or any(
+            flow.ts_forwards(call, caught, text)
+            for call in self._forwarding_calls(block, 'call_expression'))
 
     def _check_php(self, file_path: str, content: str) -> List[Detection]:
         """Check PHP source for silent broad `catch` clauses."""
