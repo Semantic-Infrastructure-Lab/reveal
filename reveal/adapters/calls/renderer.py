@@ -90,9 +90,10 @@ def _render_text(data: Dict[str, Any]) -> None:
             caller = rec['caller']
             line = rec['line']
             call_expr = rec.get('call_expr', rec.get('callee', target))
-            verb = 'JSX reference to' if rec.get('relationship') == 'jsx_reference' else 'calls'
-            sites = rec.get('call_lines', [])
-            locations = f" [lines {', '.join(map(str, sites))}]" if len(sites) > 1 else ''
+            verb = {'jsx_reference': 'JSX reference to',
+                    'call_and_jsx_reference': 'calls and JSX reference to'}.get(rec.get('relationship'), 'calls')
+            sites = sorted(set(rec.get('call_lines', [])) | set(rec.get('reference_lines', [])))
+            locations = f" [lines {', '.join(map(str, sites))}]" if len(sites) > 1 or rec.get('reference_lines') else ''
             print(f"  {file_path}:{line}  {caller}  ({verb} {call_expr}){locations}")
         if depth > 1:
             print()
@@ -122,8 +123,10 @@ def _render_callees_text(data: Dict[str, Any]) -> None:
         calls = match.get('calls', [])
         print(f"  {file_path}:{line}  {target}")
         if calls:
+            references = {r['callee'] for r in match.get('references', [])}
             for callee in calls:
-                print(f"    → {callee}")
+                suffix = ' (includes JSX reference)' if callee in references else ''
+                print(f"    → {callee}{suffix}")
         else:
             print(f"    (no calls detected)")
         print()

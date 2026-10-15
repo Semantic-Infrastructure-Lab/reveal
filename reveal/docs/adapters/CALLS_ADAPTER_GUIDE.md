@@ -136,7 +136,11 @@ JSX component uses are typed source references, not runtime invocation proof.
 `relationship: jsx_reference`, with `reference_lines`; an expression that is also
 called has `call_and_jsx_reference`. Intrinsic tags and template strings contribute
 no component edge. Named render functions and `memo`/`forwardRef` function values
-retain their existing owners. Class-field initializer references keep class
+retain their existing owners, including named function expressions whose inner
+name differs from the wrapped variable. The nearest tracked function owns nested
+callback references; a deferred body without a tracked owner is marked
+`<anonymous>` and excluded from module callers. Only references outside deferred
+bodies belong to `<module>`. Class-field initializer references keep class
 source ownership but are outside caller navigation; render methods remain indexed. Imported aliases are resolved through the shared
 name-resolution seam. Callees and trace use the same references; text labels them
 `JSX reference`. Dynamic render scheduling, Angular/HTML strings and Vue/Svelte
@@ -538,8 +542,7 @@ reveal 'calls://.?target=fn'       # use project root for full coverage
 
 **Top-level callers:** Python, JS/TS, PHP and Ruby source files include a synthetic
 `<module>` caller for calls outside named functions/methods, including script loops
-and Ruby DSL blocks. Caller JSON carries `caller_kind: module`, the first call's
-`line` and every matching `call_lines` location. Counts are unique caller scopes;
+and Ruby DSL blocks. Caller JSON carries `caller_kind: module`, scope `line: 1` and every matching `call_lines` location. Counts are unique caller scopes;
 several sites in one module remain one caller. Deferred function bodies retain
 their own scope. Class-body initializers, extensionless Ruby DSL files and other
 languages' top-level code remain outside this relationship scope and are disclosed.

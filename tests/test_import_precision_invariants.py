@@ -161,7 +161,8 @@ def test_middle_damage_retains_known_claims_and_discloses_at_result_boundary(tmp
             assert answer['metadata']['files_failed_count'] == 1
             assert {row['module'] for rows in answer['files'].values() for row in rows} == expected
         else:
-            assert 'partial' in (output.stdout + output.stderr).lower() or 'error' in (output.stdout + output.stderr).lower()
+            assert '1 file(s) parsed with errors' in output.stdout + output.stderr
+            assert 'imports may be incomplete' in output.stdout + output.stderr
 
 
 def test_middle_damage_guard_rejects_a_deliberately_lost_import(tmp_path, monkeypatch):

@@ -147,13 +147,6 @@ def create_element_dict(
 
 
 _MODULE_CALL_FAMILIES = frozenset({'python', 'js', 'php', 'ruby'})
-_MODULE_DEFERRED_KINDS = frozenset({
-    'function_definition', 'function_declaration', 'method_declaration',
-    'method', 'singleton_method', 'lambda', 'lambda_expression',
-    'arrow_function', 'function_expression', 'anonymous_function',
-    'generator_function', 'generator_function_declaration',
-    'class', 'class_definition', 'class_declaration', 'module',
-})
 
 
 def module_call_sites(file_path: str, analyzer) -> List[Dict[str, Any]]:
@@ -161,7 +154,7 @@ def module_call_sites(file_path: str, analyzer) -> List[Dict[str, Any]]:
     from ...conventions import family_for_path
     from ...registry import language_for_extension
     from ...core import get_tree, _zero_arg
-    from ...core.nav_calls import range_calls
+    from ...core.nav_calls import range_calls, DEFERRED_SCOPE_KINDS
     if family_for_path(file_path) not in _MODULE_CALL_FAMILIES:
         return []
     language = language_for_extension(Path(file_path).suffix)
@@ -175,7 +168,7 @@ def module_call_sites(file_path: str, analyzer) -> List[Dict[str, Any]]:
     implicit = analyzer._implicit_call_nodes(root) if hasattr(analyzer, '_implicit_call_nodes') else ()
     # Python's root node is 'module'; only children are excluded by range_calls.
     return range_calls(root, 1, _zero_arg(root, 'end_position').row + 1, text,
-                       implicit_nodes=implicit, skip_kinds=_MODULE_DEFERRED_KINDS)
+                       implicit_nodes=implicit, skip_kinds=DEFERRED_SCOPE_KINDS, include_jsx=True)
 
 
 def call_sources(file_struct: Dict[str, Any]):

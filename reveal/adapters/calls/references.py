@@ -189,7 +189,7 @@ def non_python_referenced_names(
 
 def jsx_component_references(analyzer, elements):
     """Typed component uses attributed through the analyzer's existing function owners."""
-    from ...core.nav_calls import jsx_reference_hit
+    from ...core.nav_calls import jsx_reference_hit, is_deferred_scope
     tree = analyzer.tree
     if tree is None:
         return []
@@ -206,23 +206,24 @@ def jsx_component_references(analyzer, elements):
             continue
         parent = _zero_arg(node, 'parent')
         owner = None
+        deferred_line = None
         while parent is not None:
             kind = _zero_arg(parent, 'kind')
-            if kind in ('class_declaration', 'class'):
+            if kind in ('class_declaration', 'class', 'abstract_class_declaration'):
                 # Class field initializers retain their source owner; they are not module callers.
                 owner = {'name': analyzer._get_node_name(parent) or '<class>',
                          'line': _zero_arg(parent, 'start_position').row + 1}
                 break
-            if kind in ('function_declaration', 'function_expression', 'arrow_function', 'method_definition'):
-                name = analyzer._get_node_name(parent)
-                if not name:
-                    name = value_names.get((_zero_arg(parent, 'start_byte'), _zero_arg(parent, 'end_byte')))
+            if is_deferred_scope(parent):
+                name = value_names.get((_zero_arg(parent, 'start_byte'), _zero_arg(parent, 'end_byte')))
+                name = name or analyzer._get_node_name(parent)
                 line = _zero_arg(parent, 'start_position').row + 1
+                deferred_line = deferred_line or line
                 matches = [e for e in by_name.get(name, []) if e['line'] <= line < e['line'] + max(e['line_count'], 1)]
                 if matches:
                     owner = min(matches, key=lambda e: e['line_count'])
                     break
             parent = _zero_arg(parent, 'parent')
-        references.append({**reference, 'owner': owner['name'] if owner else '<module>',
-                           'owner_line': owner['line'] if owner else 1})
+        references.append({**reference, 'owner': owner['name'] if owner else '<anonymous>' if deferred_line else '<module>',
+                           'owner_line': owner['line'] if owner else deferred_line or 1})
     return references

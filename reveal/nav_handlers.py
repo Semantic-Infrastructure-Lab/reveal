@@ -183,7 +183,7 @@ def _nav_calls(ctx: _NavCtx) -> None:
     # None (flag absent).  _parse_line_range handles 'FULL' via its fallback.
     from_line, to_line = _parse_line_range(ctx.args.calls, ctx.func_start, ctx.func_end)
     calls = range_calls(ctx.func_node, from_line, to_line, ctx.get_text,
-                        implicit_nodes=_implicit_nodes(ctx))
+                        implicit_nodes=_implicit_nodes(ctx), include_jsx=True)
     if ctx.as_json:
         _nav_json('calls', ctx.analyzer.path, ctx.element, from_line, to_line, calls)
     else:

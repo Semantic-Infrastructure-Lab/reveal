@@ -28,6 +28,14 @@ def test_component_and_contract_answers_are_independent(tmp_path, compiler_oracl
         matrix.check_file(path, ['jsx'], TOOLCHAIN)
 
 
+def test_intrinsic_and_template_text_have_no_reveal_component_edges(tmp_path):
+    path = tmp_path / 'Angular.tsx'
+    path.write_text('const template = "<Button/>";\nfunction App(){return <div><my-widget/><Custom-Element/></div>;}\n', encoding='utf-8')
+    assert matrix.analyze_file(str(path))['jsx_references'] == []
+    path.write_text('function App(){return <Button/>;}\n', encoding='utf-8')
+    assert matrix.analyze_file(str(path))['jsx_references'][0]['callee'] == 'Button'
+
+
 def test_intrinsic_and_template_text_do_not_become_component_edges(tmp_path, compiler_oracle):
     path = tmp_path / 'Angular.tsx'
     path.write_text('const template = "<Button/>";\nfunction App(){return <div><my-widget/><Custom-Element/></div>;}\n', encoding='utf-8')

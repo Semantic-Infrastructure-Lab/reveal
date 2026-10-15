@@ -37,7 +37,8 @@ class CallResolver:
         from ..ast.call_graph import build_alias_map
         if caller_file not in self._alias_maps:
             self._alias_maps[caller_file] = build_alias_map(caller_file)
-        tail = self._alias_maps[caller_file].get(tail, tail)
+        if '.' not in call:
+            tail = self._alias_maps[caller_file].get(tail, tail)
         family = _lang_family(caller_file)
         candidates = [d for d in self.index.get(tail, [])
                       if not family or _lang_family(d['file']) == family]

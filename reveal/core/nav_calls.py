@@ -12,6 +12,20 @@ from .callees import callee_name_from_node, extract_by_kind, is_misparsed_call, 
 from reveal.utils.lines import split_lines
 
 
+DEFERRED_SCOPE_KINDS = frozenset({
+    'function_definition', 'function_declaration', 'method_declaration',
+    'method_definition', 'method', 'singleton_method', 'lambda', 'lambda_expression',
+    'arrow_function', 'function_expression', 'anonymous_function',
+    'generator_function', 'generator_function_declaration',
+    'class', 'class_definition', 'class_declaration', 'abstract_class_declaration', 'module',
+})
+
+
+def is_deferred_scope(node: Any, kinds: frozenset = DEFERRED_SCOPE_KINDS) -> bool:
+    """Call and reference collectors share the scope boundary policy."""
+    return _zero_arg(node, 'kind') in kinds
+
+
 def jsx_reference_hit(node: Any, get_text: Callable) -> Optional[Dict[str, Any]]:
     """One component-use reference; paired closing tags and intrinsic tags are excluded."""
     if _zero_arg(node, 'kind') not in ('jsx_self_closing_element', 'jsx_opening_element'):
@@ -28,6 +42,7 @@ def jsx_reference_hit(node: Any, get_text: Callable) -> Optional[Dict[str, Any]]
 
 def _generic_call_hits(
     node: Any, call_node_types: frozenset, get_text: Callable, from_line: int, to_line: int,
+    *, include_jsx: bool = False,
 ) -> List[Dict[str, Any]]:
     # GDScript's 'attribute_call' is deliberately excluded here even
     # though it's now a CALL_NODE_TYPES member (added for treesitter.py's
@@ -41,7 +56,7 @@ def _generic_call_hits(
     # (caught by test_calls_ignores_bare_property_access_in_chain
     # regressing to ['x.field.method', 'method'] instead of
     # ['x.field.method']).
-    reference = jsx_reference_hit(node, get_text)
+    reference = jsx_reference_hit(node, get_text) if include_jsx else None
     if reference is not None and from_line <= reference['line'] <= to_line:
         return [reference]
     line = _zero_arg(node, 'start_position').row + 1
@@ -199,9 +214,11 @@ def range_calls(
     call_node_types: Optional[frozenset] = None,
     implicit_nodes: Sequence[Any] = (),
     skip_kinds: frozenset = frozenset(),
+    include_jsx: bool = False,
 ) -> List[Dict[str, Any]]:
     """Return call sites within a line range.
 
+    JSX references are opt-in; effect consumers receive actual calls only.
     `implicit_nodes` are call sites that are not call-expression nodes (Ruby's
     paren-less `helper`), supplied by the analyzer's `_implicit_call_nodes`
     hook so this path agrees with structure/calls:// (BACK-1299).
@@ -222,10 +239,11 @@ def range_calls(
         line = _zero_arg(node, 'start_position').row + 1
         if _zero_arg(node, 'end_position').row + 1 < from_line or line > to_line:
             continue
-        if _zero_arg(node, 'kind') in skip_kinds:
+        if is_deferred_scope(node, skip_kinds):
             continue
         children = _children(node)
-        results.extend(_generic_call_hits(node, call_node_types, get_text, from_line, to_line))
+        results.extend(_generic_call_hits(node, call_node_types, get_text, from_line, to_line,
+                                          include_jsx=include_jsx))
         results.extend(_dart_selector_hits(children, get_text, from_line, to_line))
         results.extend(_zig_suffix_hits(node, children, get_text, from_line, to_line))
         results.extend(_gdscript_attribute_hits(node, children, get_text, from_line, to_line))
@@ -236,7 +254,7 @@ def range_calls(
         parent = _zero_arg(node, 'parent')
         skipped = False
         while parent is not None and skip_kinds:
-            if _zero_arg(parent, 'kind') in skip_kinds:
+            if is_deferred_scope(parent, skip_kinds):
                 skipped = True
                 break
             parent = _zero_arg(parent, 'parent')
