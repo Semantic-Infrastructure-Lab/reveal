@@ -175,19 +175,24 @@ def module_call_sites(file_path: str, analyzer) -> List[Dict[str, Any]]:
                        implicit_nodes=implicit, skip_kinds=DEFERRED_SCOPE_KINDS, include_jsx=True)
 
 
+def _owner_call_lines(file_struct: Dict[str, Any], elem: Dict[str, Any]) -> Dict[str, List[int]]:
+    """callee -> lines of its calls inside *elem*, for the names the element also renders."""
+    lines: Dict[str, set] = {}
+    for site in file_struct.get('jsx_call_sites', []):
+        if site['owner'] == elem.get('name') and site['owner_line'] == elem.get('line'):
+            lines.setdefault(site['callee'], set()).add(site['line'])
+    return {callee: sorted(found) for callee, found in lines.items()}
+
+
 def call_sources(file_struct: Dict[str, Any]):
     """Call/reference projection shared by callers, callees and trace."""
     refs = file_struct.get('jsx_references', [])
     for elem in file_struct.get('elements', []):
         references = [r for r in refs if r['owner'] == elem.get('name') and r['owner_line'] == elem.get('line')]
         if references:
-            call_lines: Dict[str, List[int]] = {}
-            for site in file_struct.get('jsx_call_sites', []):
-                if site['owner'] == elem.get('name') and site['owner_line'] == elem.get('line'):
-                    call_lines.setdefault(site['callee'], []).append(site['line'])
             yield {**elem, 'calls': list(dict.fromkeys([*elem.get('calls', []), *(r['callee'] for r in references)])),
                    'references': references, 'reference_only_calls': [r['callee'] for r in references if r['callee'] not in elem.get('calls', [])],
-                   'call_lines': {callee: sorted(set(lines)) for callee, lines in call_lines.items()}}
+                   'call_lines': _owner_call_lines(file_struct, elem)}
         else:
             yield elem
     sites = [s for s in file_struct.get('module_call_sites', []) if s.get('relationship') != 'jsx_reference']
