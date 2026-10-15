@@ -2,6 +2,7 @@
 import ast
 import importlib.util
 import json
+import re
 import subprocess
 import shutil
 import sys
@@ -500,26 +501,71 @@ def test_swapped_extra_and_improvement_require_reviewed_baseline():
 
 # --- Oracle independence (BACK-1840 F9): the oracles must not depend on the resolver they measure. ---
 
+REVEAL_NAMES = {'reveal', 'reveal-cli', 'reveal_cli'}  # the package, its PyPI name, and its module spelling
+_QUOTED = r'''(['"`])([^'"`\n]+)\1'''
+_COMMENTS = re.compile(r'/\*.*?\*/|(?:^|(?<=\s))//[^\n]*', re.S)
+_JS_IMPORTS = [re.compile(r'\brequire\s*\(\s*' + _QUOTED), re.compile(r'\bimport\s*\(\s*' + _QUOTED),
+               re.compile(r'\bimport\s+(?:[^\'"`;()]*?\bfrom\s+)?' + _QUOTED)]
+_GO_IMPORT_BLOCK = re.compile(r'^\s*import\s*\((.*?)^\s*\)', re.S | re.M)
+_GO_IMPORT_LINE = re.compile(r'^\s*import\s+(?:[\w.]+\s+)?"([^"\n]+)"', re.M)
+_GO_IMPORT_SPEC = re.compile(r'^\s*(?:[\w.]+\s+)?"([^"\n]+)"', re.M)
+_SHELL_JS = re.compile(r'''\b(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\(\s*(['"`])reveal\1'''
+                       r'''|\bexec(?:Sync)?\s*\(\s*['"`]reveal\b|['"`]-m['"`]\s*,\s*['"`]reveal['"`]''')
+_SHELL_GO = re.compile(r'\bexec\.Command(?:Context)?\(\s*(?:\w+\s*,\s*)?"reveal"|"-m"\s*,\s*"reveal"')
+_PY_PROCESS_CALLS = {'run', 'Popen', 'call', 'check_call', 'check_output', 'system', 'popen', 'spawnlp', 'spawnvp',
+                     'execlp', 'execvp', 'import_module', '__import__'}
+
+
+def _mentions_reveal_command(node: ast.AST) -> bool:
+    """A string under a process/import call that is or starts with a reveal invocation, or a '-m', 'reveal' pair."""
+    for child in ast.walk(node):
+        if isinstance(child, ast.Constant) and isinstance(child.value, str):
+            words = child.value.split()
+            if words and words[0] in REVEAL_NAMES:
+                return True
+        if isinstance(child, (ast.List, ast.Tuple)):
+            values = [e.value for e in child.elts if isinstance(e, ast.Constant)]
+            if any(a == '-m' and b in REVEAL_NAMES for a, b in zip(values, values[1:])):
+                return True
+    return False
+
+
 def oracle_imports(source: str, language: str) -> list[str]:
-    """Names the oracle source imports, as the predicate recognises them."""
-    import re
+    """Names the oracle source imports, in the forms the predicate recognises."""
     names: list[str] = []
     if language == 'python':
         tree = ast.parse(source)
         names += [alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names]
         names += [node.module or '' for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
     elif language == 'js':
-        for expression in re.findall(r'\brequire\s*\(([^)]*)\)', source):
-            names.extend(re.findall(r'[\'"]([^\'"]+)[\'"]', expression))
+        code = _COMMENTS.sub(' ', source)
+        names += [m.group(2) for pattern in _JS_IMPORTS for m in pattern.finditer(code)]
     elif language == 'go':
-        for block in re.findall(r'\bimport\s*\((.*?)\)', source, re.S):
-            names.extend(re.findall(r'"([^"\n]+)"', block))
+        code = _COMMENTS.sub(' ', source)
+        for block in _GO_IMPORT_BLOCK.findall(code):
+            names += _GO_IMPORT_SPEC.findall(block)
+        names += _GO_IMPORT_LINE.findall(code)
     return names
 
 
+def _names_reveal(name: str) -> bool:
+    """Any path or dotted segment spelled like Reveal; `revealjs` is a different package."""
+    return any(part.lower() in REVEAL_NAMES for part in re.split(r'[/.]', name))
+
+
+def shells_out_to_reveal(source: str, language: str) -> bool:
+    if language == 'python':
+        return any(isinstance(node, ast.Call) and _mentions_reveal_command(node)
+                   and getattr(node.func, 'attr', getattr(node.func, 'id', '')) in _PY_PROCESS_CALLS
+                   for node in ast.walk(ast.parse(source)))
+    pattern = _SHELL_JS if language == 'js' else _SHELL_GO
+    return bool(pattern.search(_COMMENTS.sub(' ', source)))
+
+
 def depends_on_reveal(source: str, language: str) -> bool:
-    return any('reveal' in name.lower().split('/') or name.split('.')[0] == 'reveal'
-               for name in oracle_imports(source, language))
+    """True when the oracle imports Reveal (any spelling) or runs it as a subprocess."""
+    return (any(_names_reveal(name) for name in oracle_imports(source, language))
+            or shells_out_to_reveal(source, language))
 
 
 ORACLE_PLANTS = [
