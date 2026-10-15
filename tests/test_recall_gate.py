@@ -617,3 +617,29 @@ def test_oracles_never_depend_on_reveal(language, path):
     # Positive control per file: a file whose imports all go unrecognised must fail, not borrow another's.
     assert oracle_imports(source, language), f'{path}: the predicate recognised no import'
     assert not depends_on_reveal(source, language)
+
+
+# --- partial_files is gated (BACK-1840 F10): more partially parsed files is a regression, fewer is not. ---
+
+def _committed_baseline() -> dict:
+    return json.loads((Path(__file__).resolve().parent / 'corpus' / 'recall_baseline.json').read_text(encoding='utf-8'))
+
+
+@pytest.mark.parametrize('key,raised', [('c', 310), ('go-client_golang', 5)])
+def test_more_partial_files_than_baseline_is_a_regression(key, raised):
+    baseline = _committed_baseline()
+    assert baseline[key]['partial_files'] < raised  # perturbation really is an increase
+    current = json.loads(json.dumps(baseline))
+    assert gate.regressions(current, baseline) == []  # unperturbed control: the committed baseline passes
+    current[key]['partial_files'] = raised
+    failures = gate.regressions(current, baseline)
+    assert any(f.startswith(f'{key}: partial_files') for f in failures), failures
+
+
+@pytest.mark.parametrize('key,lowered', [('c', 0), ('c-curl', 217)])
+def test_fewer_partial_files_than_baseline_is_not_a_regression(key, lowered):
+    baseline = _committed_baseline()
+    assert lowered < baseline[key]['partial_files']
+    current = json.loads(json.dumps(baseline))
+    current[key]['partial_files'] = lowered
+    assert gate.regressions(current, baseline) == []
