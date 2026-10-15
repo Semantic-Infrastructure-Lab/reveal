@@ -1045,6 +1045,7 @@ def _print_grep_output(file_results: List[dict]) -> None:
 def _print_text_summary(
     files_checked: int, files_with_issues: int, total_issues: int, directory: Path, config,
     files_errored: int = 0, files_degraded: int = 0, scan_disclosures: Optional[List[str]] = None,
+    scan_incomplete: bool = False,
 ) -> None:
     """Print text summary with breadcrumbs.
 
@@ -1063,6 +1064,10 @@ def _print_text_summary(
         scan_disclosures: BACK-1051 — one-line skip reasons from any
             scan-capped rule (I002, D005) whose project-wide index build was
             truncated. See _check_report's matching parameter.
+        scan_incomplete: the capped/skipped/partly unparsed rule-wide scans among
+            *scan_disclosures* (the part that makes the exit code 3). The verdict
+            says "scan incomplete" exactly when the exit code does (BACK-1826); a
+            language gap alone stays a note above a ✅.
     """
     print(f"\n{'='*60}")
     print(f"Checked {files_checked} files")
@@ -1074,8 +1079,10 @@ def _print_text_summary(
         print(f"⚠️  {reason}")
     if total_issues > 0:
         print(f"Found {total_issues} issue{'s' if total_issues != 1 else ''} in {files_with_issues} file{'s' if files_with_issues != 1 else ''}")
-    elif files_errored or files_degraded or scan_disclosures:
+    elif files_errored or files_degraded or scan_incomplete:
         print("⚠️  No findings in the checked population; scan incomplete")
+    elif scan_disclosures:
+        print("✅ No issues found (some rules skip these languages; see notes above)")
     else:
         print("✅ No issues found")
 
@@ -1262,6 +1269,7 @@ def _text_check(files: List[Path], directory: Path, collection: 'FileCollectionR
             len(files), tally.files_with_issues, tally.total_issues, directory, config,
             files_errored=tally.files_errored, files_degraded=tally.files_degraded,
             scan_disclosures=disclosures,
+            scan_incomplete=bool(get_scan_disclosures(files, select, ignore)),
         )
 
     return tally, result, render_text, artifact

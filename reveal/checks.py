@@ -156,15 +156,17 @@ def _detections_json(path: str, result: dict) -> str:
 
 
 def _emit_detections(path: str, output_format: str, detections: List[Any],
-                     rendered: List[Any], no_group: bool = False, **result_fields: Any) -> dict:
+                     rendered: List[Any], no_group: bool = False,
+                     scan_incomplete: bool = False, **result_fields: Any) -> dict:
     """Print a single-file check's result through the subcommand seam and return it.
 
     JSON gets its envelope there, text/grep are rendered by it, and a --max-items cut
     is disclosed once after the render (BACK-1702). *rendered* is *detections* after
     --max-items; grep prints every detection, as it always has, so its result carries
     no cut. *result_fields* are _detections_result's (parse_degraded, rule_errors,
-    no_snippets, max_snippet_chars, total_available, disclosures). The returned result
-    is the one for *rendered*, which --also-json writes.
+    no_snippets, max_snippet_chars, total_available, disclosures). *scan_incomplete*
+    only selects the text verdict (BACK-1826). The returned result is the one for
+    *rendered*, which --also-json writes.
     """
     from argparse import Namespace
     from reveal.cli.routing.subcommand import emit_subcommand_result
@@ -184,6 +186,7 @@ def _emit_detections(path: str, output_format: str, detections: List[Any],
                 no_snippets=result_fields.get('no_snippets', False),
                 max_snippet_chars=result_fields.get('max_snippet_chars'),
                 disclosures=result_fields.get('disclosures'),
+                scan_incomplete=scan_incomplete,
             )
 
     emit_subcommand_result(printed, Namespace(format=output_format), name='check', source=path,
@@ -210,6 +213,7 @@ def _format_detections_text(
     no_snippets: bool = False,
     max_snippet_chars: Optional[int] = None,
     disclosures: Optional[List[str]] = None,
+    scan_incomplete: bool = False,
 ) -> None:
     """Format detections as human-readable text.
 
@@ -230,6 +234,10 @@ def _format_detections_text(
             omitting it (BACK-1181). Ignored when no_snippets.
         disclosures: Rules that skipped this file's language (BACK-1466),
             printed before the verdict so a ✅ can't read as a full check.
+        scan_incomplete: True when the exit code is 3 for a reason other than this
+            file's parse (a capped/skipped or partly unparsed project-wide scan). The
+            verdict says "scan incomplete" exactly when the exit code does (BACK-1826);
+            a language gap alone is a note, not an incomplete scan.
     """
     for err in rule_errors or []:
         print(f"{path}: ⚠️  rule {err['rule']} crashed and did not run — {err['error']}")
@@ -240,8 +248,12 @@ def _format_detections_text(
         if parse_degraded:
             print(f"{path}: ⚠️  file did not parse cleanly — results may be incomplete or incorrect")
         else:
-            verdict = ("⚠️  No findings in the checked population; scan incomplete"
-                       if rule_errors or disclosures else "✅ No issues found")
+            if rule_errors or scan_incomplete:
+                verdict = "⚠️  No findings in the checked population; scan incomplete"
+            elif disclosures:
+                verdict = "✅ No issues found (some rules skip this language; see notes above)"
+            else:
+                verdict = "✅ No issues found"
             print(f"{path}: {verdict}")
         return
 
@@ -371,7 +383,7 @@ def run_pattern_detection(
         path, output_format, detections, rendered_detections, no_group=no_group,
         parse_degraded=parse_degraded, rule_errors=rule_errors, no_snippets=no_snippets,
         max_snippet_chars=max_snippet_chars, total_available=total_available,
-        disclosures=disclosures,
+        disclosures=disclosures, scan_incomplete=bool(scan_disclosures),
     )
 
     # BACK-1248: --also-json on a single file. Built from the same detections

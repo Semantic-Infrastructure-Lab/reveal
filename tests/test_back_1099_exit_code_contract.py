@@ -254,3 +254,48 @@ class TestUnreadableFile:
             result = _run_reveal_direct("--stdin", "--check", "--format", "json")
         assert result.returncode == 3
         assert "not readable, skipping" in result.stderr
+
+
+class TestUnparsedSiblingInProjectWideIndex:
+    """BACK-1826: a clean file whose project has an unparsable sibling exits 3 when a
+    project-wide rule (I002/D005/T006 index) ran, because the sibling is missing from
+    the index and a no-cycle / no-duplicate answer may be wrong. File-local rules alone
+    keep 0/1. Text and exit code must agree."""
+
+    @staticmethod
+    def _project(tmp_path: Path) -> Path:
+        (tmp_path / ".git").mkdir()
+        _write_py(tmp_path, "broken.py", "def foo(:\n    pass\n")
+        return _write_py(tmp_path, "clean.py", "def f():\n    return 1\n")
+
+    def test_project_wide_rule_with_unparsed_sibling_exits_3(self, tmp_path):
+        clean = self._project(tmp_path)
+        result = _run_reveal_direct("check", str(clean))
+        assert result.returncode == 3
+        assert "scan incomplete" in result.stdout
+
+    def test_file_local_rules_only_keep_exit_zero(self, tmp_path):
+        clean = self._project(tmp_path)
+        result = _run_reveal_direct("check", str(clean), "--select", "E501")
+        assert result.returncode == 0
+        assert "scan incomplete" not in result.stdout
+
+    def test_clean_project_without_broken_sibling_exits_zero(self, tmp_path):
+        (tmp_path / ".git").mkdir()
+        clean = _write_py(tmp_path, "clean.py", "def f():\n    return 1\n")
+        result = _run_reveal_direct("check", str(clean))
+        assert result.returncode == 0
+        assert "scan incomplete" not in result.stdout
+
+    def test_clean_non_python_file_says_ok_not_incomplete(self, tmp_path):
+        """F-TEXT-1: T006's Python-only note is a language gap, exit 0 -- so the verdict
+        may not claim an incomplete scan."""
+        (tmp_path / ".git").mkdir()
+        js = tmp_path / "a.js"
+        js.write_text("function f() { return 1 }\n", encoding="utf-8")
+        for target in (js, tmp_path):
+            result = _run_reveal_direct("check", str(target))
+            assert result.returncode == 0, result.stdout
+            assert "W-CAP-1" in result.stdout
+            assert "scan incomplete" not in result.stdout
+            assert "No issues found" in result.stdout
