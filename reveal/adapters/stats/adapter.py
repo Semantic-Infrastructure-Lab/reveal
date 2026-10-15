@@ -304,7 +304,8 @@ class StatsAdapter(ResourceAdapter):
         else:
             all_stats = [_analyze_file_worker(a) for a in args]
 
-        self._analysis_failures = [s for s in all_stats if is_failure(s)]
+        self._analysis_failures = [s for s in all_stats
+                                   if is_failure(s) or s and s.get('parse_degraded')]
         return [
             s for s in all_stats
             if s and not is_failure(s) and matches_filters(
@@ -355,7 +356,13 @@ class StatsAdapter(ResourceAdapter):
     def _disclose_failures(self, result: dict) -> None:
         """One meta warning naming the files whose analysis raised: they are not in the
         totals, and without this the totals read as the whole tree (BACK-1614)."""
-        failed = sorted(f['path'] for f in self._analysis_failures)
+        degraded = [s for s in self._analysis_failures if s.get('parse_degraded')]
+        if degraded:
+            note_warning(result, {
+                'type': 'parse_degraded', 'count': len(degraded),
+                'message': f"{len(degraded)} file(s) did not parse cleanly; statistics may be incomplete",
+            })
+        failed = sorted(f['path'] for f in self._analysis_failures if is_failure(f))
         if not failed:
             return
         shown = [to_relative_display(f, self.path) for f in failed[:5]]
@@ -512,6 +519,8 @@ class StatsAdapter(ResourceAdapter):
                     result_type='stats_file', source=self.path,
                     error=f"analysis failed: {file_stats['analysis_failed']}"))  # type: ignore[index]
             result = aggregate_stats([file_stats] if file_stats else [], self.path)
+            self._analysis_failures = [file_stats] if file_stats and file_stats.get('parse_degraded') else []
+            self._disclose_failures(result)
             result.update(
                 contract_version=CONTRACT_VERSION,
                 type='stats_file',

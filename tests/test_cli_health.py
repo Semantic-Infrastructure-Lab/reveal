@@ -79,7 +79,7 @@ class TestCheckTarget(unittest.TestCase):
 
     def test_uri_routes_to_check_uri(self):
         args = Namespace(select=None)
-        with patch('reveal.cli.commands.health._check_uri', return_value=(0, 'ok')) as mock:
+        with patch('reveal.cli.commands.health._check_uri', return_value=HealthResult(0, 'ok')) as mock:
             result = _check_target('ssl://example.com', args)
             code, summary = result.exit_code, result.summary
             mock.assert_called_once()
@@ -145,7 +145,7 @@ class TestCheckCode(unittest.TestCase):
     @patch('subprocess.run')
     def test_critical_returns_2(self, mock_run):
         data = {'total': 1, 'detections': [
-            {'severity': 'error', 'rule': 'B001'},
+            {'severity': 'critical', 'rule': 'B001'},
         ]}
         mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(data))
         result = _check_code(Path('/tmp'), Namespace(select=None))
@@ -242,28 +242,31 @@ class TestCheckUri(unittest.TestCase):
 
     @patch('subprocess.run')
     def test_returncode_0_is_healthy(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0, stdout='', stderr='')
-        code, summary = _check_uri('ssl', 'ssl://example.com', Namespace())
+        mock_run.return_value = MagicMock(returncode=0, stdout='{}', stderr='')
+        result = _check_uri('ssl', 'ssl://example.com', Namespace())
+        code, summary = result.exit_code, result.summary
         self.assertEqual(code, 0)
         self.assertIn('healthy', summary)
 
     @patch('subprocess.run')
     def test_returncode_1_is_warning(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=1, stdout='cert expires soon', stderr='')
-        code, summary = _check_uri('ssl', 'ssl://example.com', Namespace())
+        mock_run.return_value = MagicMock(returncode=1, stdout='{}', stderr='')
+        result = _check_uri('ssl', 'ssl://example.com', Namespace())
+        code, summary = result.exit_code, result.summary
         self.assertEqual(code, 1)
         self.assertIn('ssl', summary)
 
     @patch('subprocess.run')
     def test_returncode_2_is_critical(self, mock_run):
         mock_run.return_value = MagicMock(returncode=2, stdout='', stderr='connection refused')
-        code, summary = _check_uri('ssl', 'ssl://example.com', Namespace())
+        result = _check_uri('ssl', 'ssl://example.com', Namespace())
+        code, summary = result.exit_code, result.summary
         self.assertEqual(code, 2)
         self.assertIn('critical', summary)
 
     @patch('subprocess.run')
     def test_unknown_scheme_passes_no_flags(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0, stdout='', stderr='')
+        mock_run.return_value = MagicMock(returncode=0, stdout='{}', stderr='')
         _check_uri('custom', 'custom://host', Namespace())
         cmd = mock_run.call_args[0][0]
         self.assertIn('custom://host', cmd)
@@ -272,7 +275,7 @@ class TestCheckUri(unittest.TestCase):
     def test_subprocess_called_with_timeout(self, mock_run):
         # A hung remote host (ssl://, mysql://, domain://) must not block this
         # call forever -- matches _check_code's timeout=120 posture.
-        mock_run.return_value = MagicMock(returncode=0, stdout='', stderr='')
+        mock_run.return_value = MagicMock(returncode=0, stdout='{}', stderr='')
         _check_uri('ssl', 'ssl://example.com', Namespace())
         self.assertEqual(mock_run.call_args.kwargs.get('timeout'), 120)
 
@@ -280,7 +283,8 @@ class TestCheckUri(unittest.TestCase):
     def test_timeout_expired_returns_critical(self, mock_run):
         import subprocess
         mock_run.side_effect = subprocess.TimeoutExpired(cmd='reveal', timeout=120)
-        code, summary = _check_uri('ssl', 'ssl://example.com', Namespace())
+        result = _check_uri('ssl', 'ssl://example.com', Namespace())
+        code, summary = result.exit_code, result.summary
         self.assertEqual(code, 2)
         self.assertIn('timed out', summary)
 

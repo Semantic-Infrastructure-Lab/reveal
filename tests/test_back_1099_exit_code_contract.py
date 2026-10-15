@@ -33,6 +33,7 @@ pytestmark = pytest.mark.component
 
 
 def _write_py(tmp_path: Path, name: str, code: str) -> Path:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     p = tmp_path / name
     p.write_text(code, encoding="utf-8")
     return p
@@ -93,7 +94,7 @@ class TestSingleFileCheckExitCode:
         """The headline claim from the audit doc: previously both exited 0
         with byte-identical stdout shape. Exit codes must now differ."""
         broken = _write_py(tmp_path, "broken.py", "def foo(:\n    pass\n")
-        clean = _write_py(tmp_path, "clean.py", "def f():\n    return 1\n")
+        clean = _write_py(tmp_path / "clean-project", "clean.py", "def f():\n    return 1\n")
         broken_result = _run_reveal_direct("check", str(broken), "--format", "json")
         clean_result = _run_reveal_direct("check", str(clean), "--format", "json")
         assert broken_result.returncode != clean_result.returncode
@@ -204,7 +205,7 @@ class TestStdinCheckExitCode:
 
     def test_syntax_error_and_clean_file_are_no_longer_indistinguishable(self, tmp_path):
         broken = _write_py(tmp_path, "broken.py", "def foo(:\n    pass\n")
-        clean = _write_py(tmp_path, "clean.py", "def f():\n    return 1\n")
+        clean = _write_py(tmp_path / "clean-project", "clean.py", "def f():\n    return 1\n")
         broken_result = self._run_stdin_check(broken)
         clean_result = self._run_stdin_check(clean)
         assert broken_result.returncode != clean_result.returncode

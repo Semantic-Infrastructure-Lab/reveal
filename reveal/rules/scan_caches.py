@@ -32,6 +32,12 @@ def rule_will_run(code: str, select, ignore) -> bool:
     return any(r.code == code for r in rules)
 
 
+def _project_roots(directory: Path, files, find_root):
+    """Resolve each reached root once, using the rule's own root policy."""
+    return dict.fromkeys(root for path in files or [directory]
+                         if (root := find_root(path.resolve())) is not None)
+
+
 def _i002_preload(directory: Path, select, ignore, files: Optional[List[Path]] = None) -> dict:
     """Build the I002 import graph in the main process before spawning workers.
 
@@ -60,11 +66,8 @@ def _i002_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
         if not rule_will_run("I002", select, ignore):
             return {}
         from .imports.I002 import I002, _find_project_root, _graph_cache
-        sample = files[0] if files else directory
-        root = _find_project_root(sample.resolve())
-        if root is None:  # standalone file in the temp dir/$HOME: nothing to index
-            return {}
-        I002()._build_import_graph(root)   # populates _graph_cache in main process
+        for root in _project_roots(directory, files, _find_project_root):
+            I002()._build_import_graph(root)
         return dict(_graph_cache)          # plain dict is picklable
     except Exception:
         # Documented fallback: workers build the index themselves, as they would
@@ -109,12 +112,9 @@ def _d005_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
         if not rule_will_run("D005", select, ignore):
             return {}
         from .duplicates.D005 import D005, _build_index, _find_project_root, _project_index
-        sample = files[0] if files else directory
-        root = _find_project_root(sample.resolve())
-        if root is None:  # standalone file in the temp dir/$HOME: nothing to index
-            return {}
-        if root not in _project_index:
-            _project_index[root] = _build_index(root, D005())
+        for root in _project_roots(directory, files, _find_project_root):
+            if root not in _project_index:
+                _project_index[root] = _build_index(root, D005())
         return dict(_project_index)
     except Exception:
         # Documented fallback: workers build the index themselves, as they would
@@ -239,7 +239,7 @@ def get_scan_budgets(files: List[Path], select, ignore) -> List[dict]:
             if rule_will_run(code, select, ignore) for row in budgets(files)]
 
 
-def get_scan_disclosures() -> List[str]:
+def get_scan_disclosures(files: Optional[List[Path]] = None, select=None, ignore=None) -> List[str]:
     """BACK-1051: collect every capped-scan disclosure recorded in this
     process by rules with a shared-index/graph scan ceiling (I002, D005, T006).
     Call only after the check run has completed (serial or parallel) —
@@ -252,4 +252,6 @@ def get_scan_disclosures() -> List[str]:
     from .imports.I002 import get_scan_disclosures as i002_disclosures
     from .duplicates.D005 import get_scan_disclosures as d005_disclosures
     from .types.T006 import get_scan_disclosures as t006_disclosures
-    return [*i002_disclosures(), *d005_disclosures(), *t006_disclosures()]
+    return [message for code, collect in [('I002', i002_disclosures),
+                                         ('D005', d005_disclosures), ('T006', t006_disclosures)]
+            if rule_will_run(code, select, ignore) for message in collect(files)]

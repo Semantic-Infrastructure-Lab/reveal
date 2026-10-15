@@ -138,13 +138,14 @@ def _check_target(target: str, args: Namespace):
     # URI-based routing
     if '://' in target:
         scheme = target.split('://')[0]
-        return HealthResult(*_check_uri(scheme, target, args))
+        return _check_uri(scheme, target, args)
 
     # Local path routing
     path = Path(target)
     if path.exists():
         if path.suffix.lower() in ('.conf',):
-            return HealthResult(*_check_nginx(path, args))
+            code, summary = _check_nginx(path, args)
+            return HealthResult(code, summary, 'failed' if 'cannot read' in summary else 'ok')
         return _check_code(path, args)
 
     print(f"  ⚠  {target}: not found", file=sys.stderr)
@@ -211,7 +212,9 @@ def _read_code_report(data: dict, candidates: int) -> CodeReport:
                             summary.get('files_errored', 0), summary.get('files_degraded', 0),
                             entries, summary.get('scan_disclosures', []))
     else:
-        report = CodeReport(data['total'], 1, 0, 0, data['detections'], data.get('scan_disclosures', []))
+        report = CodeReport(data['total'], 1, int(bool(data.get('errors'))),
+                            int(bool(data.get('warning'))), data['detections'],
+                            data.get('scan_disclosures', []))
     counts = (report.total, report.checked, report.errors, report.degraded)
     if not all(type(n) is int and n >= 0 for n in counts):
         raise ValueError('invalid check counts')
@@ -237,15 +240,18 @@ def _code_result(data: dict, returncode: int, accounting: dict) -> HealthResult:
                   'returned': report.checked, 'exact': accounting['exact'] and not changed,
                   'analyzed_files': report.checked - report.errors,
                   'failed_files': report.errors, 'degraded_files': report.degraded}
-    if report.errors or returncode >= 2 and not report.degraded:
+    if report.errors or returncode < 0:
         return HealthResult(2, f'code: check failed ({report.errors} errored files, exit {returncode})',
                             'failed', accounting)
     incomplete = _incomplete_code_result(data, report, accounting, changed)
     if incomplete is not None:
         return incomplete
-    critical = sum(1 for d in report.detections if d.get('severity') in ('error', 'high', 'critical'))
-    if critical:
-        return HealthResult(2, f'code: {report.total} violations ({critical} critical)', 'ok', accounting)
+    if returncode >= 2:
+        return HealthResult(2, f'code: check failed (exit {returncode})', 'failed', accounting)
+    high = sum(1 for d in report.detections if d.get('severity') == 'high')
+    critical = sum(1 for d in report.detections if d.get('severity') == 'critical')
+    if high or critical:
+        return HealthResult(2, f'code: {report.total} violations ({high} high, {critical} critical)', 'ok', accounting)
     if report.total:
         return HealthResult(1, f'code: {report.total} violations', 'ok', accounting)
     if returncode:
@@ -269,7 +275,7 @@ def _incomplete_code_result(data: dict, report: CodeReport, accounting: dict,
     return None
 
 
-def _check_uri(scheme: str, uri: str, args: Namespace):
+def _check_uri(scheme: str, uri: str, args: Namespace) -> HealthResult:
     """Run URI-adapter health check."""
     import subprocess
 
@@ -280,7 +286,7 @@ def _check_uri(scheme: str, uri: str, args: Namespace):
         'stats': [],
     }
     flags = _URI_FLAGS.get(scheme, [])
-    cmd = ['reveal', uri] + flags + ['--only-failures']
+    cmd = ['reveal', uri] + flags + ['--only-failures', '--format=json']
 
     # Hard outer ceiling independent of what any individual adapter promises
     # internally -- this is the one health-check path reachable straight from
@@ -290,17 +296,32 @@ def _check_uri(scheme: str, uri: str, args: Namespace):
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, encoding='utf-8', errors='replace')
     except subprocess.TimeoutExpired:
-        return 2, f"{scheme}: timed out"
-    combined = (result.stdout + result.stderr).strip()
+        return HealthResult(2, f"{scheme}: timed out", 'failed')
+    return _uri_health_result(scheme, result.returncode, result.stdout)
 
-    if result.returncode == 2:
-        return 2, f"{scheme}: critical failure"
-    elif result.returncode == 1:
-        lines = [l for l in combined.splitlines() if l.strip()]  # boundary-ok: splitlines -- subprocess output
-        summary = lines[0] if lines else "warning"
-        return 1, f"{scheme}: {summary}"
-    else:
-        return 0, f"{scheme}: healthy"
+
+def _uri_health_result(scheme: str, returncode: int, output: str) -> HealthResult:
+    """A failed child is failed; a partial or unavailable answer cannot be clean."""
+    import json
+    if returncode < 0 or returncode >= 2:
+        return HealthResult(2, f"{scheme}: critical failure (exit {returncode})", 'failed')
+    try:
+        data = json.loads(output)
+        if not isinstance(data, dict):
+            raise ValueError('expected an object')
+        outcome = outcome_of(data)
+        if outcome == 'failed':
+            return HealthResult(1, f"{scheme}: {data['error']}", 'failed')
+        if outcome == 'not_applicable':
+            return HealthResult(1, f"{scheme}: not applicable", 'not_applicable')
+        meta = data.get('meta') or {}
+        if not isinstance(meta, dict):
+            raise ValueError('invalid metadata')
+        if meta.get('errors') or meta.get('warnings') or data.get('warnings') or returncode:
+            return HealthResult(1, f"{scheme}: incomplete or warning result", 'partial')
+        return HealthResult(0, f"{scheme}: healthy", 'ok')
+    except (ValueError, TypeError):
+        return HealthResult(2, f"{scheme}: malformed check results", 'failed')
 
 
 def _check_nginx(path: Path, args: Namespace):

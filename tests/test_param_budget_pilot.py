@@ -106,7 +106,7 @@ def test_scan_policy_keeps_scope_and_lower_bound_counts():
 
 @pytest.mark.parametrize('maximum,cycle_limit,returned,total,exact,analyzed', [
     ('1', '0', 1, 2, False, 0),
-    ('20', '1', 3, 3, True, 0),
+    ('20', '1', 3, 3, False, 0),
     ('20', '0', 3, 3, True, 3),
 ])
 def test_i002_scan_accounting_distinguishes_discovery_and_analysis(
@@ -122,7 +122,8 @@ def test_i002_scan_accounting_distinguishes_discovery_and_analysis(
     budget = graph.scan_budget
     assert budget == {'scope': 'scan', 'limit': int(maximum), 'total': total,
                       'returned': returned, 'exact': exact,
-                      'cycle_limit': int(cycle_limit), 'analyzed_files': analyzed}
+                      'cycle_limit': int(cycle_limit), 'analyzed_files': analyzed,
+                      'skipped': analyzed == 0}
     assert bool(graph.scan_skipped_reason) == (analyzed == 0)
     assert I002()._build_import_graph(tmp_path).scan_budget == budget
 

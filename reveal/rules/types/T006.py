@@ -269,10 +269,12 @@ def _build_index(project_root: Path) -> Dict[str, Any]:
     return {'typeddicts': resolve_typeddicts(raw), 'dict_aliases': aliases}
 
 
-def get_scan_disclosures() -> List[str]:
+def get_scan_disclosures(files: Optional[List[Path]] = None) -> List[str]:
     """One-line reasons for every project whose cross-module TypedDict scan
     was skipped by the file-count ceiling. Mirrors D005/I002."""
-    return list(_project_skip_reasons.values())
+    roots = {_find_project_root(path.resolve()) for path in files} if files is not None else None
+    return [message for root, message in _project_skip_reasons.items()
+            if roots is None or root in roots]
 
 
 def _clear_index() -> None:

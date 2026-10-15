@@ -101,6 +101,8 @@ def analyze_file(file_path: Path, calculate_file_stats_func) -> Optional[Dict[st
 
         # Calculate statistics (analyzer has content)
         stats = calculate_file_stats_func(file_path, structure_dict, analyzer.content)
+        if structure_dict.get('_has_errors'):
+            stats['parse_degraded'] = True
 
         # Release large buffers immediately; don't wait for GC.
         # During directory scans (stats://, overview) hundreds of analyzers are

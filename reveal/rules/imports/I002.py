@@ -222,6 +222,7 @@ def _tree_fingerprint(directory: Path) -> Optional[str]:
         cycle_budget = ScanBudget(_cycle_detection_max_files() or None)
         cycle_limit = cycle_budget.limit
         hasher = hashlib.sha256()
+        hasher.update(f"limits:{max_files}:{cycle_limit}\0".encode('ascii'))
         # Bind the digest to the exact extension set that selected the files —
         # if support changes, the same tree fingerprints differently.
         hasher.update(("\x00".join(sorted(supported))).encode("utf-8", "replace"))
@@ -286,7 +287,7 @@ def get_scan_budgets(files: List[Path]) -> List[Dict[str, Any]]:
             and any(path.resolve().is_relative_to(directory) for path in files)]
 
 
-def get_scan_disclosures() -> List[str]:
+def get_scan_disclosures(files: Optional[List[Path]] = None) -> List[str]:
     """BACK-1051: one-line skip reasons for every capped/truncated graph
     currently in ``_graph_cache`` (the same process-local cache
     ``_build_import_graph`` populates and ``scan_caches._i002_preload``
@@ -295,8 +296,11 @@ def get_scan_disclosures() -> List[str]:
     scan present its empty cycle list as a clean "no circular dependencies
     found" -- the exact silent-skip symptom that motivated this ticket.
     """
+    roots = {_find_project_root(path.resolve()) for path in files} if files is not None else None
     disclosures = []
     for directory, graph in _graph_cache.items():
+        if roots is not None and directory not in roots:
+            continue
         if graph.scan_skipped_reason:
             disclosures.append(graph.scan_skipped_reason)
         lost = set(graph.lost_files)
@@ -499,7 +503,7 @@ class I002(BaseRule):
         cycle_budget = ScanBudget(_cycle_detection_max_files() or None)
         cycle_limit = cycle_budget.limit
         if cycle_limit and len(source_files) > cycle_limit:
-            self._record_scan_budget(budget, len(source_files), analyzed=0)
+            self._record_scan_budget(budget, len(source_files), analyzed=0, skipped=True)
             reason = (
                 f"I002: import-graph scan of {directory} found {len(source_files)} "
                 f"source files (over the {cycle_limit}-file cycle-detection "
@@ -540,13 +544,16 @@ class I002(BaseRule):
         return all_imports, failed_files, lost_files, None
 
     def _record_scan_budget(self, budget: ScanBudget, count: int, *,
-                            capped: bool = False, analyzed: int) -> None:
+                            capped: bool = False, analyzed: int, skipped: bool = False) -> None:
         self._scan_budget_metadata = {
             **asdict(budget.accounting(count, capped)),
             'limit': budget.limit,
             'cycle_limit': _cycle_detection_max_files(),
             'analyzed_files': analyzed,
+            'skipped': capped or skipped,
         }
+        if skipped:
+            self._scan_budget_metadata['exact'] = False
 
     def _resolve_graph_dependencies(self, graph: ImportGraph, directory: Path) -> None:
         """Phase 2: resolve import statements to files through the shared

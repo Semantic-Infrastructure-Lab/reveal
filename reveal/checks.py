@@ -240,7 +240,9 @@ def _format_detections_text(
         if parse_degraded:
             print(f"{path}: ⚠️  file did not parse cleanly — results may be incomplete or incorrect")
         else:
-            print(f"{path}: ✅ No issues found")
+            verdict = ("⚠️  No findings in the checked population; scan incomplete"
+                       if rule_errors or disclosures else "✅ No issues found")
+            print(f"{path}: {verdict}")
         return
 
     count = len(detections)
@@ -338,7 +340,9 @@ def run_pattern_detection(
     parse_degraded = structure_parse_degraded(structure)
     # BACK-1466: the same rule/language gaps recursive check discloses (W-CAP-1
     # T006, W-CAP-2 I001) -- without them a single-file ✅ claims more than ran.
-    disclosures = capability_disclosures([path], select, ignore)
+    from reveal.rules.scan_caches import get_scan_disclosures
+    scan_disclosures = get_scan_disclosures([Path(path)], select, ignore)
+    disclosures = scan_disclosures + capability_disclosures([path], select, ignore)
 
     # Apply severity filter if requested
     if severity_arg:
@@ -390,7 +394,7 @@ def run_pattern_detection(
         print_breadcrumbs('quality-check', path, file_type=file_type, config=config,
                          detections=detections)
 
-    degraded = parse_degraded or bool(rule_errors)
+    degraded = parse_degraded or bool(rule_errors) or bool(scan_disclosures)
     return len(detections), degraded
 
 

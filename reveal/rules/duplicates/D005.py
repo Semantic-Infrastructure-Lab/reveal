@@ -149,13 +149,17 @@ def _clear_index() -> None:
     _project_skip_reasons.clear()
 
 
-def get_scan_disclosures() -> List[str]:
+def get_scan_disclosures(files: Optional[List[Path]] = None) -> List[str]:
     """BACK-1051: one-line skip reasons for every project root whose D005
     cross-file scan was skipped by the file-count ceiling. Mirrors
     I002.get_scan_disclosures()."""
-    details = [message for index in _project_index.values()
+    roots = {_find_project_root(path.resolve()) for path in files} if files is not None else None
+    details = [message for root, index in _project_index.items()
+               if roots is None or root in roots
                for message in getattr(index, 'disclosures', [])]
-    return list(dict.fromkeys([*_project_skip_reasons.values(), *details]))
+    skipped = [message for root, message in _project_skip_reasons.items()
+               if roots is None or root in roots]
+    return list(dict.fromkeys([*skipped, *details]))
 
 
 def get_scan_budgets(files: List[Path]) -> List[Dict[str, Any]]:

@@ -168,6 +168,14 @@ reveal health --all
 | `1` | Warnings (non-critical issues) |
 | `2` | Failures (action required) |
 
+JSON records an `outcome` for each file, directory or URI target. A completed
+answer is `ok` (findings still determine its exit code); a capped, skipped or
+degraded answer is `partial`/`skipped` (exit 1); an inapplicable target is
+`not_applicable` (exit 1). Child errors, signals, timeouts and malformed successful
+answers are `failed` and can never report healthy. A single degraded source file
+and a directory containing it both warn with exit 1. `high` and `critical`
+findings retain separate labels and both require action (exit 2).
+
 ### Examples
 
 ```bash
@@ -649,7 +657,7 @@ reveal deps . --format json          # Machine-readable for CI
 
 ## reveal check — Quality Rule Engine
 
-Run 55 built-in quality rules against a file or directory (79 including internal self-check rules, shown with `--all`). Covers bugs, complexity, imports, maintainability, security, types, and more. Exit code 1 = issues found.
+Run 55 built-in quality rules against a file or directory (79 including internal self-check rules, shown with `--all`). Covers bugs, complexity, imports, maintainability, security, types, and more. Exit codes: 0 = complete and clean, 1 = findings, 2 = usage error, 3 = incomplete analysis (including capped or skipped rule-wide scans). `--exit-zero` overrides scan exits while retaining diagnostics.
 
 ### Usage
 

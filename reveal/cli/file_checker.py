@@ -531,7 +531,7 @@ def _apply_severity_filter(detections: list, severity: Optional[str]) -> list:
 
 def check_exit_code(
     total_issues: int, files_errored: int = 0, files_degraded: int = 0,
-    exit_zero: bool = False,
+    exit_zero: bool = False, *, scan_incomplete: bool = False,
 ) -> int:
     """Compute `reveal check`'s process exit code (BACK-1099's contract).
 
@@ -542,7 +542,7 @@ def check_exit_code(
     3 = incomplete scan: one or more files could not be checked at all
         (files_errored -- analyzer/parse pipeline raised) or were checked
         against a degraded/error-recovery parse (files_degraded) or a rule
-        itself raised. Takes priority over 1 even when issues were also
+        itself raised, or a rule-wide scan was capped/skipped. Takes priority over 1 even when issues were also
         found, because a degraded scan means the issue *count* itself may
         be wrong or incomplete -- see
         internal-docs/design/EXIT_CODE_CONTRACT.md.
@@ -562,7 +562,7 @@ def check_exit_code(
     """
     if exit_zero:
         return 0
-    if files_errored or files_degraded:
+    if files_errored or files_degraded or scan_incomplete:
         return 3
     return 1 if total_issues > 0 else 0
 
@@ -938,6 +938,7 @@ def _check_report(
     ignore: Optional[List[str]] = None,
     scan_disclosures: Optional[List[str]] = None,
     exit_zero: bool = False,
+    scan_incomplete: bool = False,
 ) -> dict:
     """check's result as plain data; the subcommand seam (emit_subcommand_result /
     subcommand_json) adds the Output Contract envelope (BACK-1545).
@@ -978,7 +979,8 @@ def _check_report(
         "files_degraded": tally.files_degraded,
         "total_issues": tally.total_issues,
         "exit_code": check_exit_code(
-            tally.total_issues, tally.files_errored, tally.files_degraded, exit_zero=exit_zero),
+            tally.total_issues, tally.files_errored, tally.files_degraded, exit_zero=exit_zero,
+            scan_incomplete=scan_incomplete),
         "scan_disclosures": scan_disclosures or [],
         "items_truncated": budget.truncated,
     }
@@ -1072,6 +1074,8 @@ def _print_text_summary(
         print(f"⚠️  {reason}")
     if total_issues > 0:
         print(f"Found {total_issues} issue{'s' if total_issues != 1 else ''} in {files_with_issues} file{'s' if files_with_issues != 1 else ''}")
+    elif files_errored or files_degraded or scan_disclosures:
+        print("⚠️  No findings in the checked population; scan incomplete")
     else:
         print("✅ No issues found")
 
@@ -1149,10 +1153,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     # file exited 0 identically to an all-clean directory).
     from .routing.ledger import complete
     complete(args)  # the exit code is the result: the flag ledger still reports
-    sys.exit(check_exit_code(
-        tally.total_issues, tally.files_errored, tally.files_degraded,
-        exit_zero=getattr(args, 'exit_zero', False),
-    ))
+    sys.exit(result['summary']['exit_code'])
 
 
 def _rule_filters(args: 'Namespace') -> tuple:
@@ -1166,7 +1167,7 @@ def _scan_disclosures(files: List[Path], select, ignore) -> List[str]:
     """Everything the run could not fully check, rule-wide: a capped scan
     (BACK-1051) and rules a language skips (BACK-1466). Read after the scan --
     the caps are recorded by it. [] claims the scan was complete."""
-    return get_scan_disclosures() + capability_disclosures(files, select, ignore)
+    return get_scan_disclosures(files, select, ignore) + capability_disclosures(files, select, ignore)
 
 
 def _report_for(files: List[Path], collection: 'FileCollectionResult', args: 'Namespace',
@@ -1180,6 +1181,7 @@ def _report_for(files: List[Path], collection: 'FileCollectionResult', args: 'Na
             scope=collection.to_scope_census() if file_results is not None else None,
             select=select, ignore=ignore, scan_disclosures=disclosures,
             exit_zero=getattr(args, 'exit_zero', False),
+            scan_incomplete=bool(get_scan_disclosures(files, select, ignore)),
         )
         result['summary']['scan_budgets'] = [
             {**row, 'root': as_spelled(row['root'], getattr(args, 'path', '.') or '.')}
