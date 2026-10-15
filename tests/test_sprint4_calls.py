@@ -143,6 +143,27 @@ def test_jsx_in_test_and_hook_callbacks_belongs_to_the_enclosing_element(tmp_pat
     assert {'beforeEach', 'it(renders)', 'Panel'} <= mounts
 
 
+def test_callback_that_computes_a_value_does_not_make_the_value_the_owner(tmp_path):
+    """BACK-1832: the framework matrix's compiler oracle disagreed on Excalidraw HelpDialog: a JSX use
+    inside `const keys = list.map(cb)` was credited to `keys`, a computed value, not to the component."""
+    (tmp_path / 'k.tsx').write_text(
+        'function Key() { return null }\n'
+        'const Shortcut = ({ list }) => {\n'
+        '  const keys = list.map((k) => (\n'
+        '    <Key />\n'
+        '  ));\n'
+        '  const onPick = useCallback(() => <Key />, []);\n'
+        '  return keys;\n'
+        '};\n'
+        'const Wrapped = React.memo(() => <Key />);\n'
+        'const Forwarded = forwardRef((p, ref) => <Key />);\n', encoding='utf-8')
+    refs = {r['line']: r['owner'] for r in analyze_file(str(tmp_path / 'k.tsx'))['jsx_references']}
+    assert refs[4] == 'Shortcut' and refs[6] == 'Shortcut'    # unnamed callbacks inherit the component
+    assert refs[9] == 'Wrapped' and refs[10] == 'Forwarded'    # component wrappers still name their function
+    callers = {r['caller'] for r in find_callers(str(tmp_path), 'Key')['levels'][0]['callers']}
+    assert 'keys' not in callers and 'onPick' not in callers and 'Shortcut' in callers
+
+
 def test_module_graph_keeps_jsx_dependency_with_no_tracked_owner(tmp_path):
     # BACK-1831: <Button/> sits in a deferred body passed to register(), with no enclosing
     # element, so the use is <anonymous>. The file-to-file edge must not depend on that.

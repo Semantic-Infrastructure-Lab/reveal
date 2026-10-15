@@ -1778,16 +1778,27 @@ The [matrix runner](scripts/framework_matrix.py) independently compares TypeScri
 5.9.3/Node 22.14.0 compiler JSX opening/self-closing nodes and interfaces, Python
 `ast` ABC declarations, and standard-library JSON keys against Reveal's existing
 AST, contracts and configuration owners. Exact name/line multisets are compared
-for JSX tag extraction and contracts; 13 selected JSX references also compare
-their owning scope against the compiler's syntax tree. JSON compares top-level
+for JSX tag extraction and contracts; the owning scope of every JSX reference in
+four of the files is compared against the compiler's syntax tree (BACK-1832). JSON compares top-level
 key multisets. No corpus code
 runs. Source pin mismatches, missing files/tools, parse failures, empty selected
 checks, zero positive populations and missing/extra answers fail.
 
-All seven selected files passed locally: **103 JSX tag extractions, 13 selected
-owner scopes, 10 interfaces, one Python ABC and 14 configuration keys**, with no
-missing/extra answers. Owner checks cover Dagster Dialog's 12 references and
-React Router BrowserRouter's one class-render reference. This is a bounded
+All seven selected files passed locally: **103 JSX tag extractions, 103 owner
+scopes, 10 interfaces, one Python ABC and 14 configuration keys**, with no
+missing/extra answers. Owner checks cover Excalidraw HelpDialog's 87 references,
+Dagster Button's three and Dialog's 12, and React Router BrowserRouter's one
+class-render reference. The oracle names an owner for every use: the nearest named
+function, method or class (a function value is named by its variable, through
+`memo`/`forwardRef`/`Object.assign`); an unnamed callback inherits the named scope
+above it, or is `<anonymous>`; outside every function it is `<module>`; test-framework
+blocks take Reveal's `it(title)` element label. It previously dropped every use it
+could not name, and the tree before BACK-1829 still passed. A fixture of those hard shapes
+now fails on the trees before BACK-1829 and before the BACK-1832 callback fix; the
+first run of the full comparison found a real wrong owner (Excalidraw HelpDialog line
+110, credited to a `.map` result variable instead of `Shortcut`). Not covered: the
+BACK-1830 shapes (`memo(fn, areEqual)` with an inline comparator, `Object.assign`
+around `forwardRef`) and class-field arrows. This is a bounded
 source comparison, not whole-project component or import recall. The 103 tag
 checks alone do not validate owner attribution, import aliases, callers,
 callees or trace output.
@@ -1800,7 +1811,7 @@ key fails the matrix controls.
 `test.yml` does not install the optional TypeScript compiler, so its oracle
 fixtures skip there. The scheduled `recall.yml` workflow installs the compiler
 but currently runs only `test_recall_gate.py` and `test_fetch_corpus.py` in its
-control step; the framework tests are not yet a CI control. The local 13-owner
+control step; the framework tests are not yet a CI control. The local owner
 comparison used TypeScript 5.9.3 and Node 22.14.0.
 
 Angular decorator/class structure is available, but template strings produce no

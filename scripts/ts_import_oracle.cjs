@@ -12,21 +12,43 @@ if (ts.version !== config.typescript_version || process.versions.node !== config
 if (input.mode === 'jsx' || input.mode === 'interfaces') {
   const references = [], protocols = [];
   const bindingName = declaration => declaration && ts.isIdentifier(declaration.name) ? declaration.name.text : null;
+  // Component wrappers the owner rule looks through: memo(fn), React.memo(fn, areEqual), forwardRef(fn).
+  const isWrapperCall = (call, fn) => ts.isCallExpression(call) && call.arguments[0] === fn &&
+      /^(React\.)?(memo|forwardRef)$/.test(call.expression.getText());
+  // Owner = nearest enclosing function-like or class with a name of its own (BACK-1832). A function
+  // value is named by its variable, through any wrapper chain and Object.assign(...) around it. An
+  // unnamed callback (test blocks, hooks, array callbacks) belongs to the nearest named scope above
+  // it; with none it is '<anonymous>', and a use outside every function is '<module>'.
   const scopeOwner = node => {
+    let anonymous = false;
     for (let current = node.parent; current; current = current.parent) {
       if (ts.isFunctionDeclaration(current) || ts.isMethodDeclaration(current) ||
           ts.isGetAccessorDeclaration(current) || ts.isSetAccessorDeclaration(current)) {
-        return current.name ? current.name.getText() : null;
+        if (current.name) return current.name.getText();
+        anonymous = true;
+      } else if (ts.isArrowFunction(current) || ts.isFunctionExpression(current)) {
+        let value = current, holder = current.parent;
+        while (holder && (isWrapperCall(holder, value) ||
+               (ts.isCallExpression(holder) && holder.arguments[0] === value && /^Object\.assign$/.test(holder.expression.getText())))) {
+          value = holder; holder = holder.parent;
+        }
+        const name = holder && ts.isVariableDeclaration(holder) && holder.initializer === value ? bindingName(holder) : null;
+        if (name) return name;
+        // Test-framework blocks are named elements in Reveal (`it(renders)`, `beforeEach`): the
+        // callback is picked here from the syntax tree, only the label follows Reveal's convention.
+        const call = current.parent;
+        if (call && ts.isCallExpression(call) && call.arguments.includes(current) &&
+            /^(describe|it|test|beforeEach|afterEach|beforeAll|afterAll)$/.test(call.expression.getText())) {
+          const title = call.arguments[0];
+          return title && title !== current && ts.isStringLiteralLike(title)
+            ? `${call.expression.getText()}(${title.text})` : call.expression.getText();
+        }
+        anonymous = true;
+      } else if (ts.isClassDeclaration(current)) {
+        return current.name ? current.name.text : '<class>';
       }
-      if (ts.isArrowFunction(current) || ts.isFunctionExpression(current)) {
-        let holder = current.parent;
-        if (holder && ts.isCallExpression(holder) && holder.arguments.includes(current) &&
-            /^(memo|forwardRef)$/.test(holder.expression.getText())) holder = holder.parent;
-        return holder && ts.isVariableDeclaration(holder) ? bindingName(holder) : null;
-      }
-      if (ts.isClassDeclaration(current)) return current.name ? current.name.text : null;
     }
-    return '<module>';
+    return anonymous ? '<anonymous>' : '<module>';
   };
   for (const file of input.importers) {
     const source = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);

@@ -4,8 +4,8 @@ version: 1
 toolchain: {typescript_version: 5.9.3, node_version: 22.14.0}
 cases:
   - {id: excalidraw-button, corpus: tsx, file: packages/excalidraw/components/Button.tsx, checks: [interfaces]}
-  - {id: excalidraw-dialog, corpus: tsx, file: packages/excalidraw/components/HelpDialog.tsx, checks: [jsx]}
-  - {id: dagster-button, corpus: mixed-dagster, file: js_modules/ui-components/src/components/Button.tsx, checks: [jsx, interfaces]}
+  - {id: excalidraw-dialog, corpus: tsx, file: packages/excalidraw/components/HelpDialog.tsx, checks: [jsx, jsx-owner]}
+  - {id: dagster-button, corpus: mixed-dagster, file: js_modules/ui-components/src/components/Button.tsx, checks: [jsx, jsx-owner, interfaces]}
   - {id: dagster-dialog, corpus: mixed-dagster, file: js_modules/ui-components/src/components/Dialog.tsx, checks: [jsx, jsx-owner, interfaces]}
   - {id: dagster-server-context, corpus: mixed-dagster, file: python_modules/dagster/dagster/_core/execution/context/op_execution_context.py, checks: [python-abcs]}
   - {id: dagster-config, corpus: mixed-dagster, file: js_modules/ui-components/package.json, checks: [json-config]}

@@ -46,6 +46,38 @@ def test_compiler_scope_owner_sample_catches_wrong_reveal_owner(tmp_path, compil
         matrix.check_file(path, ['jsx-owner'], TOOLCHAIN)
 
 
+def test_compiler_scope_owner_covers_callbacks_wrappers_and_test_blocks(tmp_path, compiler_oracle):
+    """BACK-1832: the owner check used to drop every use the oracle could not name, which left only the
+    easy shapes. Each of these is a shape the owner rule had to be fixed for (BACK-1829, BACK-1832)."""
+    path = tmp_path / 'Shapes.tsx'
+    path.write_text(
+        'function Key() { return null }\n'
+        'const Plain = () => <Key/>;\n'                                                   # 2: variable arrow
+        'const Memo = React.memo(() => <Key/>);\n'                                        # 3: wrapper, qualified
+        'const Fwd = forwardRef((p, ref) => <Key/>);\n'                                   # 4: wrapper
+        'const List = ({ xs }) => {\n'
+        '  const keys = xs.map((x) => (\n'
+        '    <Key/>\n'                                                                    # 7: callback computing a value
+        '  ));\n'
+        '  const pick = useCallback(() => { return <Key/>; }, []);\n'                     # 9: hook callback
+        '  return xs.filter((x) => xs.some((y) => <Key/>));\n'                            # 10: nested callbacks
+        '};\n'
+        'class Panel { render() { return <Key/>; } }\n'                                   # 12: method
+        'describe("w", () => {\n'
+        '  it("renders", () => {\n'
+        '    run(<Key/>);\n'                                                              # 15: innermost test block
+        '  });\n'
+        '});\n'
+        'export default function () { return <Key/>; }\n'                                  # 18: unnamed default export
+        'register(<Key/>);\n',                                                            # 19: module level
+        encoding='utf-8')
+    answer = matrix.check_file(path, ['jsx-owner'], TOOLCHAIN)['jsx-owner']
+    assert answer['expected'] == answer['actual'] == 10
+    owners = {r['line']: r['owner'] for r in matrix._compiler_answer(path, TOOLCHAIN, 'jsx')['references']}
+    assert owners == {2: 'Plain', 3: 'Memo', 4: 'Fwd', 7: 'List', 9: 'List', 10: 'List',
+                      12: 'render', 15: 'it(renders)', 18: '<anonymous>', 19: '<module>'}
+
+
 def test_intrinsic_and_template_text_have_no_reveal_component_edges(tmp_path):
     path = tmp_path / 'Angular.tsx'
     path.write_text('const template = "<Button/>";\nfunction App(){return <div><my-widget/><Custom-Element/></div>;}\n', encoding='utf-8')

@@ -196,6 +196,24 @@ def _smallest_containing(elements: List[Dict[str, Any]], line: int):
     return min(matches, key=lambda e: e['line_count']) if matches else None
 
 
+_COMPONENT_WRAPPER = re.compile(r'(?:React\.)?(?:memo|forwardRef)')
+
+
+def _is_binding_name(analyzer, function_node) -> bool:
+    """Whether a function value takes the name of the variable it is assigned to.
+
+    BACK-1832: `const keys = list.map((k) => <Key/>)` outlines `keys` as a function, but a
+    callback to an ordinary call computes a value and owns nothing, so its JSX belongs to
+    the scope above. Only the component wrappers (memo, forwardRef) pass their function's name on.
+    """
+    arguments = _zero_arg(function_node, 'parent')
+    if arguments is None or _zero_arg(arguments, 'kind') != 'arguments':
+        return True
+    call = _zero_arg(arguments, 'parent')
+    callee = call.child_by_field_name('function') if call is not None else None
+    return callee is not None and bool(_COMPONENT_WRAPPER.fullmatch(analyzer._get_node_text(callee)))
+
+
 def _jsx_owner(analyzer, node, by_name, value_names, elements):
     """(owner element or None, line of the innermost deferred scope or None) for one JSX use."""
     from ...core.nav_calls import is_deferred_scope
@@ -208,7 +226,8 @@ def _jsx_owner(analyzer, node, by_name, value_names, elements):
             return {'name': analyzer._get_node_name(parent) or '<class>',
                     'line': _zero_arg(parent, 'start_position').row + 1}, deferred_line
         if is_deferred_scope(parent):
-            name = value_names.get((_zero_arg(parent, 'start_byte'), _zero_arg(parent, 'end_byte')))
+            name = value_names.get((_zero_arg(parent, 'start_byte'), _zero_arg(parent, 'end_byte'))) \
+                if _is_binding_name(analyzer, parent) else None
             name = name or analyzer._get_node_name(parent)
             line = _zero_arg(parent, 'start_position').row + 1
             deferred_line = deferred_line or line
