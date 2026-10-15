@@ -214,7 +214,9 @@ def _index_callee(
     index.setdefault(bare, []).append(record)
     if bare != callee:
         index.setdefault(callee, []).append(record)
-    canonical = alias_map.get(bare)
+    # An import alias renames a bare call only: after ``from m import helper as h``, ``h()`` is
+    # ``m.helper`` but ``o.h()`` is still a method called h (BACK-1820's rule in resolve.py).
+    canonical = alias_map.get(bare) if bare == callee else None
     if canonical and canonical != bare:
         index.setdefault(canonical, []).append(record)
 
