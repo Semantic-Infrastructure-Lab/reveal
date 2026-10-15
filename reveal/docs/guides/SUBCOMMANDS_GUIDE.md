@@ -657,7 +657,7 @@ reveal deps . --format json          # Machine-readable for CI
 
 ## reveal check — Quality Rule Engine
 
-Run 55 built-in quality rules against a file or directory (79 including internal self-check rules, shown with `--all`). Covers bugs, complexity, imports, maintainability, security, types, and more. Exit codes: 0 = complete and clean, 1 = findings, 2 = usage error, 3 = incomplete analysis (including capped or skipped rule-wide scans). `--exit-zero` overrides scan exits while retaining diagnostics.
+Run 55 built-in quality rules against a file or directory (79 including internal self-check rules, shown with `--all`). Covers bugs, complexity, imports, maintainability, security, types, and more. Exit codes: 0 = complete and clean, 1 = findings, 2 = usage error, 3 = incomplete analysis (including capped or skipped rule-wide scans, and a file that did not parse inside a project-wide rule's index, even when the file you checked is clean). A rule that does not apply to a file's language is a printed note and does not change the exit code. `--exit-zero` overrides scan exits while retaining diagnostics.
 
 ### Usage
 
