@@ -102,7 +102,7 @@ def test_text_preserves_mixed_relationship_and_reference_locations(tmp_path):
     (tmp_path / 'App.tsx').write_text('function Button(){return null;}\n'
                                     'function App(){\n Button();\n return <Button/>;\n}\n', encoding='utf-8')
     callers = _run_reveal_direct('calls://' + str(tmp_path) + '?target=Button')
-    assert 'calls and JSX reference to' in callers.stdout and '[lines 4]' in callers.stdout
+    assert 'calls and JSX reference to' in callers.stdout and '[call line 3, JSX line 4]' in callers.stdout
     callees = _run_reveal_direct('calls://' + str(tmp_path) + '?callees=App')
     assert 'Button (includes JSX reference)' in callees.stdout
 
