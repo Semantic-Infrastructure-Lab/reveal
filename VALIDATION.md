@@ -1956,18 +1956,23 @@ excluded by the documented policy. B006 labels follow caught exceptions through
 assertions and checked thread/callback state; debug-only logs remain non-reporting.
 I001's false claim was a name used in a quoted local type annotation. The
 criteria and individual reasons remain reviewable, including the uncertain case.
-B006's reviewed synthetic swallows now report 7/7 Python, 4/4 Java and 5/5
-JavaScript cases. On four pinned real populations, the final B006 sets changed
-Celery 37→13 and remained exactly 181 Guava and 43 Excalidraw. The three.js "three"
-counts `src/` only (751 files); the full pinned three.js tree (4,386 files) goes
-66→69, three regained, two of them false positives. None of the 17 previously
-removed false positives returned on those populations, but that holds in part by
-construction: five names in B006's reporting-callee allowlist (`setAppState`,
-`setErrorMessage`, `updateScene`, `updateMagicGeneration`, `immediateFailedFuture`)
-exist only to hold back reviewed corpus cases. Corpora outside the four were not
-measured by this pilot; the Sprint 4 review found new false positives on vscode,
-WordPress JS, dagster and full three.js (BACK-1835). PHP, C# and Kotlin have no
-forwarding recognition at all, so their synthetic broad catches producing one
+B006 decides whether a handler forwards the exception by the callee's role and by whether the
+exception's content flows into the call, not by a list of callee names (BACK-1835). Its reviewed
+synthetic swallows report 7/7 Python, 4/4 Java and 5/5 JavaScript cases, and so do the Sprint 4
+review's wider computations (`hasattr`, `callable`, `JSON.stringify`, `Objects.nonNull`, a
+predicate-named helper); the corresponding forwarding, response, callback and assertion shapes stay
+silent in Python, JavaScript/TypeScript and Java. Measured on the pinned corpora (language-pack 1.22.1;
+the head tree reproduces the review's 1.20.0 figures exactly): Celery 13 (unchanged), Guava 181→163,
+Excalidraw 43→41, full three.js 69→66, dagster 55→53, WordPress JS 708→683 and VS Code `src/` 951→868,
+which is the Sprint 1 set in each of the last three. The removed detections are expected-exception test
+assertions (`assertThat(caught).isEqualTo(...)`, `expect(e).toBeInstanceOf(Error)`), error forwarding
+into responses, callbacks and `postMessage`, and console calls. None of the 17 false positives Sprint 1
+removed from Celery, Guava, three.js `src/` and Excalidraw returned, with no corpus-specific name in the
+rule; across the full pinned corpora one Sprint 1 removal returned, `TDSLoader.js:836`
+(`this.debugMessage(e + ...)`, a debug-level log, which the review read as a true swallow). Known
+remaining gaps are tracked in BACK-1836 (Python name-only and assertion-shape exemptions, return-position
+payloads in JavaScript and Java such as `return err` and `return { error: err }`, JavaScript `err()`).
+PHP, C# and Kotlin have no forwarding recognition at all, so their synthetic broad catches producing one
 finding each is not a measurement of the forwarding direction (BACK-1698).
 
 After artifacts: [sample](tests/corpus/rule_precision_sample.json),

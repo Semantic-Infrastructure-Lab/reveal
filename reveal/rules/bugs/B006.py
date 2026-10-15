@@ -47,6 +47,7 @@ from typing import List, Dict, Any, Optional, Sequence
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin, TreeSitterParsingMixin
+from . import _exception_flow as flow
 from ...core import node_children, _zero_arg
 from ...registry import JS_TS_LANGUAGES, extensions_for_languages, language_for_extension
 
@@ -167,29 +168,10 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
     # doesn't become a blanket escape hatch for actually-silent handlers.
     _ERROR_FIELD_NAMES = frozenset({'error', 'status', 'parse_error', 'failed'})
 
-    # BACK-1430: handing the caught exception to a callee (``listener.onFailure(e)``,
-    # ``reject(e)``) discloses it -- the callee reports or handles it. Recognized
-    # narrowly: the caught variable is an argument of a direct, returned
-    # or awaited call -- bare, or wrapped only when the callee is in
-    # _REPORTING_CALLEES -- and the callee does not announce a non-disclosure. A debug-level
-    # log call, a container store (collecting without reading) and a discard-named
-    # callee keep the handler silent, preserving the policy above.
-    _NON_DISCLOSING_CALLEES = frozenset({
-        'debug', 'trace', 'info', 'notice', 'verbose', 'log', 'fine', 'finer', 'finest', 'd', 'v', 'i',
-        'add', 'addAll', 'addFirst', 'addLast', 'append', 'push', 'put', 'offer', 'insert', 'extend',
-        'set', 'compareAndSet', 'update',
-        'requireNonNull', 'checkNotNull', 'identity', 'setattr', 'delattr',
-        'str', 'repr', 'String', 'valueOf', 'format',
-        'remove', 'removeAll', 'delete', 'pop', 'put_nowait', 'increment', 'decrement',
-        'isinstance', 'bool', 'len', 'getattr', 'hash', 'id', 'type', 'dict',
-        'isNull', 'hashCode', 'ofNullable', 'Boolean', 'Number', 'resolve', 'isArray',
-    })
-    _DISCARD_CALLEE_PREFIXES = ('ignore', 'swallow', 'suppress', 'discard')
-    _REPORTING_CALLEES = frozenset({
-        'report', 'onFailure', 'onError', 'reject', 'fail', 'retry', 'setState',
-        'setAppState', 'setErrorMessage', 'updateScene', 'updateMagicGeneration',
-        'immediateFailedFuture', 'record', 'notify', 'emit',
-    })
+    # BACK-1430, BACK-1835: handing the caught exception to an effect-shaped call discloses it
+    # (``listener.onFailure(e)``, ``res.json({error: e.message})``, an assertion on it); computing a
+    # value from it does not.  The callee's role and the flow of the exception's content into the
+    # call decide -- see _exception_flow.py -- not a list of names.
 
     # Pattern to detect explanatory comments near pass statement
     COMMENT_PATTERN = re.compile(r'#\s*\w+')
@@ -478,22 +460,6 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         return (isinstance(stmt, ast.Return) and caught is not None
                 and isinstance(stmt.value, ast.Name) and stmt.value.id == caught)
 
-    @classmethod
-    def _forwards_exception(cls, callee: Optional[str], bare_args: List[str], caught: Optional[str],
-                            wrapped_args: Sequence[str] = ()) -> bool:
-        """A direct exception argument is forwarded unless the callee computes on it.
-
-        Wrapped occurrences need a reporting-shaped callee; inspecting an
-        exception to calculate a value does not make the failure visible.
-        """
-        if not caught or not callee:
-            return False
-        if callee in cls._NON_DISCLOSING_CALLEES:
-            return False
-        if callee.lower().startswith(cls._DISCARD_CALLEE_PREFIXES):
-            return False
-        return caught in bare_args or (caught in wrapped_args and callee in cls._REPORTING_CALLEES)
-
     @staticmethod
     def _py_executed_nodes(root):
         """Handler expressions, excluding bodies that need a later invocation."""
@@ -505,19 +471,10 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             yield node
             stack.extend(ast.iter_child_nodes(node))
 
-    def _py_forwards_exception(self, value, caught: Optional[str]) -> bool:
+    @staticmethod
+    def _py_forwards_exception(value, caught: Optional[str]) -> bool:
         """Recognize direct, returned or awaited forwarding, including wrapped args."""
-        if isinstance(value, ast.Await):
-            value = value.value
-        if not isinstance(value, ast.Call):
-            return False
-        func = value.func
-        callee = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else None
-        operands = [*value.args, *(kw.value for kw in value.keywords)]
-        bare_names = [arg.id for arg in operands if isinstance(arg, ast.Name)]
-        names = [node.id for arg in operands for node in self._py_executed_nodes(arg)
-                 if isinstance(node, ast.Name)]
-        return self._forwards_exception(callee, bare_names, caught, names)
+        return flow.py_forwards(value, caught)
 
     def _handler_nodes(self, root):
         """Executed catch nodes, excluding nested callable/class scopes."""
@@ -910,38 +867,14 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         return self._java_forwards_exception(node, block, content_bytes)
 
     def _java_forwards_exception(self, node, block, content_bytes: bytes) -> bool:
-        """True if a direct/returned/awaited call gets the caught
-        exception as an argument (``listener.onFailure(e);``, BACK-1430)."""
+        """True if a direct/returned/awaited call hands the caught exception on
+        (``listener.onFailure(e);``, BACK-1430; role and flow, BACK-1835)."""
         param = next((c for c in node_children(node) if _zero_arg(c, 'kind') == 'catch_formal_parameter'), None)
         ident = next((c for c in node_children(param) if _zero_arg(c, 'kind') == 'identifier'), None) if param else None
         caught = self._ts_node_text(ident, content_bytes) if ident else None
-        for call in self._forwarding_calls(block, 'method_invocation'):
-            args = next((c for c in node_children(call) if _zero_arg(c, 'kind') == 'argument_list'), None)
-            bare = [self._ts_node_text(a, content_bytes) for a in node_children(args)
-                    if _zero_arg(a, 'kind') == 'identifier'] if args else []
-            names = [self._ts_node_text(a, content_bytes) for a in self._handler_nodes(args)
-                     if _zero_arg(a, 'kind') == 'identifier'] if args else []
-            if self._forwards_exception(self._java_call_name(call, content_bytes), bare, caught, names):
-                return True
-            if self._java_nested_reporting_call(call, caught, content_bytes):
-                return True
-        return False
-
-    def _java_nested_reporting_call(self, call, caught: Optional[str], content_bytes: bytes) -> bool:
-        if not caught:
-            return False
-        for nested in self._handler_nodes(call):
-            if nested is call or _zero_arg(nested, 'kind') != 'method_invocation':
-                continue
-            if self._java_call_name(nested, content_bytes) not in self._REPORTING_CALLEES:
-                continue
-            args = next((c for c in node_children(nested)
-                         if _zero_arg(c, 'kind') == 'argument_list'), None)
-            if args and any(_zero_arg(arg, 'kind') == 'identifier'
-                            and self._ts_node_text(arg, content_bytes) == caught
-                            for arg in node_children(args)):
-                return True
-        return False
+        text = lambda n: self._ts_node_text(n, content_bytes)
+        return any(flow.ts_forwards(call, caught, text)
+                   for call in self._forwarding_calls(block, 'method_invocation'))
 
     def _java_call_name(self, node, content_bytes: bytes) -> Optional[str]:
         """Extract a `method_invocation`'s callee name.
@@ -1023,32 +956,21 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
                     return True
                 if prop_text in self._JS_VISIBLE_METHODS:
                     return True
+            elif _zero_arg(callee, 'kind') == 'subscript_expression':
+                # console['log'](...) is the same always-emitted call as console.log(...)
+                members = node_children(callee)
+                if members and self._ts_node_text(members[0], content_bytes) == 'console':
+                    return True
         return self._js_forwards_exception(node, block, content_bytes)
 
     def _js_forwards_exception(self, node, block, content_bytes: bytes) -> bool:
-        """True if a direct/returned/awaited call gets the caught
-        exception as an argument (``reject(e);``, ``this.onError(e);``, BACK-1430)."""
+        """True if a direct/returned/awaited call hands the caught exception on
+        (``reject(e);``, ``this.onError(e);``, BACK-1430; role and flow, BACK-1835)."""
         param = next((c for c in node_children(node) if _zero_arg(c, 'kind') == 'identifier'), None)
         caught = self._ts_node_text(param, content_bytes) if param else None
-        for call in self._forwarding_calls(block, 'call_expression'):
-            children = node_children(call)
-            callee = children[0] if children else None
-            if callee is None:
-                continue
-            if _zero_arg(callee, 'kind') == 'member_expression':
-                callee = next((c for c in node_children(callee)
-                               if _zero_arg(c, 'kind') == 'property_identifier'), None)
-            name = self._ts_node_text(callee, content_bytes) if callee is not None else None
-            args = next((c for c in children if _zero_arg(c, 'kind') == 'arguments'), None)
-            bare = [self._ts_node_text(a, content_bytes) for a in node_children(args)
-                    if _zero_arg(a, 'kind') == 'identifier'] if args else []
-            names = [self._ts_node_text(a, content_bytes) for a in self._handler_nodes(args)
-                     if _zero_arg(a, 'kind') == 'identifier'] if args else []
-            if self._forwards_exception(name, bare, caught, names):
-                return True
-        return False
-
-    # ── PHP (BACK-1011) ──────────────────────────────────────────────────────
+        text = lambda n: self._ts_node_text(n, content_bytes)
+        return any(flow.ts_forwards(call, caught, text)
+                   for call in self._forwarding_calls(block, 'call_expression'))
 
     def _check_php(self, file_path: str, content: str) -> List[Detection]:
         """Check PHP source for silent broad `catch` clauses."""

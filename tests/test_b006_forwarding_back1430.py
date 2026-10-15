@@ -2,12 +2,10 @@
 
 The dominant Java listener style is ``catch (Exception e) { listener.onFailure(e); }``:
 the exception object itself is delivered to the code that reports or handles it,
-so the handler is not silent.  The recognition is deliberately narrow (see
-``B006._forwards_exception``): the caught variable must be an argument of a
-direct, returned or awaited call (a wrapped argument counts only for a callee in
-``_REPORTING_CALLEES``), and the callee must not be a debug-level log
-call, a container store or a name that announces a discard.  Those keep the
-debug-only / swallow policy from the developer guidelines (item 3).
+so the handler is not silent.  What counts is decided by the callee's role and by whether the
+exception's content flows into the call (``reveal/rules/bugs/_exception_flow.py``, BACK-1835): a
+debug-level log call, a container store, a name that announces a discard and a computation of the
+exception keep the debug-only / swallow policy from the developer guidelines (item 3).
 """
 
 import pytest
@@ -62,7 +60,7 @@ class TestForwardingIsDisclosure:
 
 
 class TestOtherwiseStillFlagged:
-    """Negative controls: nothing here hands the exception to a reporting callee."""
+    """Negative controls: nothing here hands the exception to an effect-shaped callee."""
 
     def test_python_callback_given_something_else(self, tmp_path):
         assert _py(tmp_path, ["handler.on_failure('failed')"]) == 1
