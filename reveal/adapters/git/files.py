@@ -15,6 +15,12 @@ from reveal.utils.lines import normalize_newlines, split_lines
 
 logger = logging.getLogger(__name__)
 
+# Seconds a `git diff` child may run before it is abandoned. The git subprocess calls
+# elsewhere in the tree use 30 (utils/gitignore.py _GIT_TIMEOUT_S, `git ls-files`), 10
+# (adapters/pack.py, cli/commands/review.py) and 5 (utils/provenance.py); none exist
+# in adapters/git/. A whole-commit diff is the heavy one, so it takes 30 (BACK-1762).
+_GIT_DIFF_TIMEOUT_S = 30
+
 _LINE_RANGE_RE = re.compile(r'^[Ll](\d+)-[Ll]?(\d+)$')
 
 _BLAME_NOISE_RE = re.compile(
@@ -171,7 +177,8 @@ def get_file_diff(
                empty_tree, str(commit.id), '--', subpath]
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, errors='replace', encoding='utf-8')
+        result = subprocess.run(cmd, capture_output=True, text=True, errors='replace', encoding='utf-8',
+                                timeout=_GIT_DIFF_TIMEOUT_S)
     except FileNotFoundError as e:
         # BACK-1166: match _check_pygit2()'s style of actionable guidance
         # instead of letting a raw errno bubble up through main.py's
@@ -179,6 +186,10 @@ def get_file_diff(
         raise ValueError(
             "git:// diff requires the 'git' binary on PATH\n\n"
             "Install git: https://git-scm.com/downloads"
+        ) from e
+    except subprocess.TimeoutExpired as e:
+        raise ValueError(
+            f"git:// diff timed out after {_GIT_DIFF_TIMEOUT_S}s running 'git diff' on {subpath}"
         ) from e
     diff_text = result.stdout
 
@@ -406,7 +417,8 @@ def _commit_diff_contains(
     if subpath:
         cmd += ['--', subpath]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, errors='replace', encoding='utf-8')
+        result = subprocess.run(cmd, capture_output=True, text=True, errors='replace', encoding='utf-8',
+                                timeout=_GIT_DIFF_TIMEOUT_S)
         # The diff is file content: split at \n as git does, or a U+2028/NEL/form feed on a
         # changed line hides the rest of it from the search (BACK-1731).
         for line in split_lines(result.stdout):
