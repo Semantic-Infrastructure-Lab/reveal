@@ -114,3 +114,30 @@ def test_private_reference_fields_do_not_leak_into_ast_or_uncalled(tmp_path):
     ast_result = _run_reveal_direct('ast://' + str(tmp_path), '--format', 'json')
     for result in (json.loads(ast_result.stdout), find_uncalled(str(tmp_path))):
         assert all(not ({'jsx_references', 'module_call_sites'} & set(row)) for row in records(result))
+
+
+def test_jsx_in_test_and_hook_callbacks_belongs_to_the_enclosing_element(tmp_path):
+    """BACK-1829: unnamed callbacks (describe/it/beforeEach, hooks) own their JSX, as for calls."""
+    (tmp_path / 'w.test.tsx').write_text(
+        'function Widget() { return null }\n'
+        'function mount(x) { return x }\n'
+        'describe("w", () => {\n'
+        '  beforeEach(() => { mount(<Widget />); });\n'
+        '  it("renders", () => {\n'
+        '    mount(<Widget />);\n'
+        '  });\n'
+        '});\n'
+        'function Panel() {\n'
+        '  useEffect(() => { mount(<Widget />); }, []);\n'
+        '  return null;\n'
+        '}\n'
+        'register({ perform: () => <Widget /> });\n', encoding='utf-8')
+    refs = {r['line']: r['owner'] for r in analyze_file(str(tmp_path / 'w.test.tsx'))['jsx_references']}
+    assert refs[4] == 'beforeEach' and refs[6] == 'it(renders)'     # the smallest element, not describe(w)
+    assert refs[10] == 'Panel'                                       # a named function still wins
+    assert refs[13] == '<anonymous>'                                 # no enclosing element: disclosed, not guessed
+    callers = {r['caller'] for r in find_callers(str(tmp_path), 'Widget')['levels'][0]['callers']}
+    assert {'beforeEach', 'it(renders)', 'Panel'} <= callers
+    # Positive control: an ordinary call on the same lines is credited to the same elements.
+    mounts = {r['caller'] for r in find_callers(str(tmp_path), 'mount')['levels'][0]['callers']}
+    assert {'beforeEach', 'it(renders)', 'Panel'} <= mounts

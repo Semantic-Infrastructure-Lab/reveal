@@ -138,7 +138,9 @@ called has `call_and_jsx_reference`. Intrinsic tags and template strings contrib
 no component edge. Named render functions and `memo`/`forwardRef` function values
 retain their existing owners, including named function expressions whose inner
 name differs from the wrapped variable. The nearest tracked function owns nested
-callback references; a deferred body without a tracked owner is marked
+callback references, and an unnamed callback (`it`, `describe`, `beforeEach`, hooks)
+belongs to the smallest tracked element that contains it, as call sites do; a deferred
+body with no tracked element around it is marked
 `<anonymous>` and excluded from module callers. Only references outside deferred
 bodies belong to `<module>`. Class-field initializer references keep class
 source ownership but are outside caller navigation; render methods remain indexed. Imported aliases are resolved through the shared
