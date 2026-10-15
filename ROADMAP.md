@@ -358,8 +358,9 @@ These gates run continuously alongside the steps above:
   Passing means no regression against each scoped baseline; it does not establish
   runtime resolution or component-reference correctness. The separate local
   [mixed-framework matrix](VALIDATION.md#bounded-mixed-framework-source-matrix-2026-10-14)
-  checks selected component, contract and configuration answers. Remote execution of the
-  expanded scheduled corpus workflow remains unverified.
+  checks selected component, contract and configuration answers. The expanded scheduled
+  corpus workflow is remotely qualified at the revision recorded in
+  [VALIDATION.md](VALIDATION.md#bounded-reliability-corpus-loops-2026-10-14).
 - BACK-1096: cross-subsystem invariants. Registry-wide import recovery, citation and
   copy/rename controls now run without external corpora. Slice 2 added structure invariants
   over 31 analyzers and agreement tests between subsystems (stats vs M101 vs ast line counts,

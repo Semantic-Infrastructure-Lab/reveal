@@ -1854,6 +1854,13 @@ recall and precision, reject unexpected zero results, and fail deliberate lost-e
 controls. Reports identify the implementation through Git HEAD, tracked-diff and
 untracked-file digests plus Python/grammar versions. The scheduled workflow now includes separate import and caller steps and retains both reports, including failed comparisons. Remote qualification requires a successful run of the exact revision; a local pass alone does not qualify the runner.
 
+The expanded import/caller workflow passed on `b12fcef49c159dbd12f9dd05aa17e04a61096105` in
+[run 38660795370](https://github.com/Semantic-Infrastructure-Lab/reveal/actions/runs/38660795370):
+all 12 import populations matched their reviewed baselines, the caller population
+ retained 1,046/1,046 relationships with zero extras, and measurement controls passed. Reports identify
+ Python 3.12.15, tree-sitter 0.25.2 and language-pack 1.21.0;
+the runner used GCC 13.3.0, Go 1.21.5 and Node 22.14.0.
+
 Complementary adversarial controls in
 [test_import_precision_invariants.py](tests/test_import_precision_invariants.py)
 place recoverable syntax damage between independently known imports and functions
