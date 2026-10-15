@@ -715,6 +715,12 @@ def test_check_and_hotspots_complete_quickly(lang):
             [sys.executable, "-m", "reveal.main", str(_lang_dir(lang)), flag],
             capture_output=True, text=True, encoding='utf-8', timeout=30, env=env,
         )
-        assert result.returncode in (0, 1), (
+        # rc 3 is the disclosed "scan incomplete" outcome (BACK-1824): the cap of 3
+        # files is deliberately exceeded, so I002 must say so rather than hang or crash.
+        assert result.returncode in (0, 1, 3), (
             f"{lang} {flag}: unexpected crash (rc={result.returncode}): {result.stderr}"
         )
+        if result.returncode == 3:
+            assert 'exceeded 3 source files' in result.stderr, (
+                f"{lang} {flag}: exit 3 without a scan-cap disclosure: {result.stderr}"
+            )

@@ -1,8 +1,8 @@
 """BACK-1550: a text list cut below what the result holds says how many it left out."""
 from pathlib import Path
 
-from reveal.adapters import deps, overview
-from reveal.rendering.adapters import architecture
+from reveal.adapters import overview
+from reveal.rendering.adapters import architecture, deps
 from reveal.adapters.git.renderer import GitRenderer
 from reveal.utils.query_control import omitted_line
 

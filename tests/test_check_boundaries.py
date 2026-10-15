@@ -138,7 +138,6 @@ def test_display_path_not_flagged(src, rel):
     "def g():\n    try:\n        f()\n    except Exception as e:\n        return False",
     "try:\n    f()\nexcept Exception as e:\n    log.debug('x', e)",
     "def g():\n    try:\n        f()\n    except Exception as e:\n        return str(e)",
-    "def g():\n    try:\n        f()\n    except Exception as e:\n        pass\n        return e",
     "def g():\n    try:\n        f()\n    except Exception:\n        return [1]",
     "def g():\n    try:\n        f()\n    except Exception:\n        x = 1\n        return x",
     "def g():\n    try:\n        f()\n    except Exception:\n        return frozenset()",
@@ -154,6 +153,9 @@ def test_silent_except_flagged(src):
     "try:\n    import yaml\nexcept Exception:\n    yaml = None",
     "try:\n    import yaml\nexcept Exception:\n    pass",
     "try:\n    f()\nexcept Exception:  # boundary-ok: silent-except -- a cache miss\n    pass",
+    # BACK-1810: handing the caught exception back to the caller is disclosure
+    # (test_b006_forwarding_back1430.test_caught_exception_returned_to_caller).
+    "def g():\n    try:\n        f()\n    except Exception as e:\n        pass\n        return e",
 ])
 def test_silent_except_not_flagged(src):
     assert 'silent-except' not in _hits(src)
