@@ -521,7 +521,9 @@ Periods are `YYYY-MM` for `bucket=month` and ISO week `YYYY-Www` for
 `bucket=week`, sorted chronologically ascending. `author_count` per bucket
 counts distinct authors (by email, falling back to name) active in that
 period — not the same as `distinct_author_count`, which is the total across
-all buckets.
+all buckets. `source_type` is `"file"` for a file, `"directory"` for a
+directory (the same value the flat `?type=history` list gives it) and
+`"repository"` for `git://.`.
 
 **Query parameters**:
 - `?bucket=week|month` (required to activate timeline mode)
