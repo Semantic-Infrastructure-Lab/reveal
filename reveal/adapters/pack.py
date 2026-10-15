@@ -1,11 +1,8 @@
 """pack:// adapter - token-budgeted context snapshot for LLM consumption.
 
-Scan/rank/render logic lives here (BACK-901/BACK-961); `cli/commands/pack.py`
-is a thin argparse shim over this adapter. The reveal_pack MCP tool imports
-five of these internal functions directly (_parse_budget, _get_changed_files,
-_collect_candidates, _apply_budget, _format_pack_result) rather than going
-through run_pack — all five keep their exact names/signatures, re-exported
-from cli/commands/pack.py, so the MCP tool is untouched by this refactor.
+Scan/rank logic lives here; presentation lives in rendering/adapters/pack.py.
+The CLI shim and reveal_pack MCP tool retain their existing scan helpers and
+MCP string-formatter interface through cli/commands/pack.py.
 """
 
 import io
@@ -20,7 +17,7 @@ from reveal.registry import get_code_extensions
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..conventions import conventions_for_path
-from ..utils import print_json_result
+from ..rendering.adapters.pack import PackRenderer
 from ..utils.path_utils import DISPLAY, _walk_code_files, classify_path_provenance, to_posix
 from ..utils.query import parse_query_params
 from ..utils.query_parser import split_exclude_param
@@ -287,43 +284,6 @@ def _tiered_content(file_info: Dict[str, Any]) -> Tuple[str, str, Optional[str]]
             logger.warning('Structure analysis failed for %s: %s', path, e)
             return 'structure', '', f'structure analysis failed: {type(e).__name__}: {e}'
     return 'name_only', '', None
-
-
-def _emit_content_section(selected: List[Dict[str, Any]]) -> None:
-    """Emit tiered content for each selected file.
-
-    Three tiers based on priority and change status:
-    - **Changed files** → full raw content (see exactly what changed)
-    - **Non-changed, priority >= 2** → reveal structure (function signatures, imports)
-    - **Non-changed, priority < 2** → name-only listing (preserve token budget)
-    """
-    print()
-    print('━' * 70)
-    print('CONTENT  (changed=full · key files=structure · low priority=names)')
-    print('━' * 70)
-
-    name_only: List[Dict[str, Any]] = []
-
-    for file_info in selected:
-        rel = file_info['relative']
-        content_type, content, error = _tiered_content(file_info)
-        if content_type == 'name_only':
-            # Tier 3: name only — deferred to summary to save tokens
-            name_only.append(file_info)
-            continue
-        # Tier 0 (changed): full raw content. Tier 1/2: reveal structure.
-        print(f'\n── {rel}  ◀ CHANGED (full content) ──' if content_type == 'full' else f'\n── {rel} ──')
-        if error:
-            print(f'[{error}]')
-        elif content.strip():
-            print(content, end='' if content.endswith('\n') else '\n')
-        else:
-            print('[empty]' if content_type == 'full' else '[no structure analysis available]')
-
-    if name_only:
-        print('\n── Low-priority files (selected, structure omitted) ──')
-        for file_info in name_only:
-            print(f'  {file_info["relative"]}')
 
 
 def _collect_file_contents(selected: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -648,242 +608,6 @@ def _count_lines(path: Path) -> int:
         return 0
 
 
-def _format_architecture_brief(selected: List[Dict[str, Any]]) -> List[str]:
-    """Format a concise architecture hint derived from fan-in and priority."""
-    entry_points = [
-        f['relative'] for f in selected
-        if not f.get('changed') and f.get('priority', 0) >= 8
-    ]
-    core = sorted(
-        [f for f in selected if f.get('fan_in', 0) >= 5],
-        key=lambda f: -f.get('fan_in', 0),
-    )[:5]
-
-    lines = ['── Architecture Hint ──']
-    if entry_points:
-        lines.append(f"Entry points:      {', '.join(entry_points)}")
-    if core:
-        abstractions = '  '.join(
-            f"{f['relative']}({f['fan_in']})" for f in core
-        )
-        lines.append(f"Core abstractions: {abstractions}")
-    if not entry_points and not core and selected:
-        top = sorted(selected, key=lambda f: -f.get('priority', 0))[:3]
-        lines.append(f"Top files:         {', '.join(f['relative'] for f in top)}")
-    lines.append('')
-    return lines
-
-
-def _render_architecture_brief(selected: List[Dict[str, Any]]) -> None:
-    """Print a concise architecture hint derived from fan-in and priority."""
-    for line in _format_architecture_brief(selected):
-        print(line)
-
-
-def _print_pack_header(
-    path: Path,
-    meta: Dict[str, Any],
-    budget_tokens: Optional[int],
-    budget_lines: Optional[int],
-) -> None:
-    budget_desc = (f"~{budget_tokens} tokens" if budget_tokens else f"{budget_lines} lines")
-    since = meta.get('since')
-    since_desc = f"  [since {since}]" if since else ""
-    print(f"Pack: {path}  [{budget_desc} budget]{since_desc}")
-    if since:
-        print(f"Changed files:  {meta.get('changed_files_count', 0)} (boosted to top priority)")
-    print(f"Selected {meta['selected']} of {meta['total_candidates']} files "
-          f"(~{meta['used_tokens_approx']} tokens, {meta['used_lines']} lines)")
-    print()
-
-
-def _print_pack_file_groups(
-    selected: List[Dict[str, Any]],
-    meta: Dict[str, Any],
-    verbose: bool,
-    architecture: bool,
-) -> None:
-    since = meta.get('since')
-    if architecture:
-        _render_architecture_brief(selected)
-
-    changed = [f for f in selected if f.get('changed')]
-    high = [f for f in selected if not f.get('changed') and f['priority'] >= 8]
-    medium = [f for f in selected if not f.get('changed') and 2 <= f['priority'] < 8]
-    low = [f for f in selected if not f.get('changed') and f['priority'] < 2]
-
-    for label, group in [
-        (f"── Changed files (since {since}) ──", changed),
-        ("── Entry points / focus files ──", high),
-        ("── Key modules ──", medium),
-        ("── Other files ──", low),
-    ]:
-        if group:
-            print(label)
-            for f in group:
-                _print_file_line(f, verbose)
-            print()
-
-
-def _render_pack(
-    path: Path,
-    selected: List[Dict[str, Any]],
-    meta: Dict[str, Any],
-    verbose: bool,
-    budget_tokens: Optional[int],
-    budget_lines: Optional[int],
-    architecture: bool = False,
-) -> None:
-    """Render pack output as text."""
-    _print_pack_header(path, meta, budget_tokens, budget_lines)
-    if not selected:
-        print("No files fit within budget.")
-        return
-    _print_pack_file_groups(selected, meta, verbose, architecture)
-    if meta['skipped'] > 0:
-        print(f"[{meta['skipped']} files excluded — exceeded budget]")
-
-
-def _print_file_line(f: Dict[str, Any], verbose: bool) -> None:
-    """Print one file entry."""
-    rel = f['relative']
-    tokens = f['tokens_approx']
-    lines = f['lines']
-    if verbose:
-        print(f"  {rel:50} {tokens:5} tokens  {lines:4} lines")
-    else:
-        print(f"  {rel}")
-
-
-def _format_file_line(f: Dict[str, Any]) -> str:
-    """Format one file entry as a string (verbose form, for MCP / string consumers)."""
-    return f"  {f['relative']:50} {f['tokens_approx']:5} tokens  {f['lines']:4} lines"
-
-
-def _format_pack_header(
-    path: Path,
-    meta: Dict[str, Any],
-    budget_tokens: Optional[int],
-    budget_lines: Optional[int],
-    since_error: Optional[str],
-) -> List[str]:
-    """Format the pack header (budget + since + selected counts) as lines."""
-    since_val = meta.get('since')
-    budget_desc = f"~{budget_tokens} tokens" if budget_tokens else f"{budget_lines} lines"
-    since_desc = f"  [since {since_val}]" if since_val else ""
-    lines = [f"Pack: {path}  [{budget_desc} budget]{since_desc}"]
-    if since_val:
-        lines.append(f"Changed files:  {meta.get('changed_files_count', 0)} (boosted to top priority)")
-    if since_error:
-        lines.append(f"Warning: --since: {since_error}")
-    lines.append(
-        f"Selected {meta['selected']} of {meta['total_candidates']} files "
-        f"(~{meta['used_tokens_approx']} tokens, {meta['used_lines']} lines)"
-    )
-    lines.append("")
-    return lines
-
-
-def _format_pack_file_groups(selected: List[Dict[str, Any]], meta: Dict[str, Any]) -> List[str]:
-    """Format the tiered file listing (changed/high/medium/low) as lines."""
-    since_val = meta.get('since')
-    groups = [
-        (f"── Changed files (since {since_val}) ──",
-         [f for f in selected if f.get('changed')]),
-        ("── Entry points / focus files ──",
-         [f for f in selected if not f.get('changed') and f['priority'] >= 8]),
-        ("── Key modules ──",
-         [f for f in selected if not f.get('changed') and 2 <= f['priority'] < 8]),
-        ("── Other files ──",
-         [f for f in selected if not f.get('changed') and f['priority'] < 2]),
-    ]
-    lines: List[str] = []
-    for header, files in groups:
-        if files:
-            lines.append(header)
-            lines.extend(_format_file_line(f) for f in files)
-            lines.append("")
-    if meta['skipped'] > 0:
-        lines.append(f"[{meta['skipped']} files excluded — exceeded budget]")
-    return lines
-
-
-def _format_pack_content(selected: List[Dict[str, Any]]) -> List[str]:
-    """Format the per-file content section (changed=full, key=structure, low=names)."""
-    content_data = _collect_file_contents(selected)
-    lines = [
-        "",
-        "━" * 70,
-        "CONTENT  (changed=full · key files=structure · low priority=names)",
-        "━" * 70,
-    ]
-    name_only: List[str] = []
-    for entry in content_data:
-        if entry['content_type'] == 'name_only':
-            name_only.append(entry['file'])
-            continue
-        marker = "  ◀ CHANGED (full content)" if entry['content_type'] == 'full' else ""
-        lines.append(f"\n── {entry['file']}{marker} ──")
-        if entry.get('error'):
-            lines.append(f"[{entry['error']}]")
-        else:
-            empty = "[empty]" if entry['content_type'] == 'full' else "[no structure analysis available]"
-            lines.append(entry['content'].rstrip() if entry['content'].strip() else empty)
-    if name_only:
-        lines.append("\n── Low-priority files (selected, structure omitted) ──")
-        lines.extend(f"  {f}" for f in name_only)
-    return lines
-
-
-def _format_pack_result(
-    path: Path,
-    selected: List[Dict[str, Any]],
-    meta: Dict[str, Any],
-    budget_tokens: Optional[int],
-    budget_lines: Optional[int],
-    since_error: Optional[str] = None,
-    content: bool = True,
-    architecture: bool = False,
-) -> str:
-    """Render pack output as a string (for MCP / non-stdout consumers).
-
-    Unlike :func:`_render_pack` (which prints), this returns the full result
-    as a single string suitable for returning from an MCP tool call.
-    """
-    lines = _format_pack_header(path, meta, budget_tokens, budget_lines, since_error)
-    if not selected:
-        lines.append("No files fit within budget.")
-    else:
-        if architecture:
-            lines.extend(_format_architecture_brief(selected))
-        lines.extend(_format_pack_file_groups(selected, meta))
-    if content and selected:
-        lines.extend(_format_pack_content(selected))
-    return "\n".join(lines)
-
-
-class PackRenderer:
-    """Renderer for pack:// results."""
-
-    @staticmethod
-    def render_structure(result: Dict[str, Any], format: str = 'text',
-                          verbose: bool = False, architecture: bool = False,
-                          content: bool = False) -> None:
-        if format == 'json':
-            print_json_result(result)
-            return
-        # verbose from query (?verbose) takes precedence over caller arg (BACK-1379)
-        verbose = result.get('verbose', verbose)
-        path = Path(result['path'])
-        selected = result['files']
-        meta = result['meta']
-        _render_pack(path, selected, meta, verbose,
-                     meta.get('budget_tokens'), meta.get('budget_lines'),
-                     architecture=architecture)
-        if content:
-            _emit_content_section(selected)
-
-
 @register_adapter('pack')
 @register_renderer(PackRenderer)
 class PackAdapter(ResourceAdapter):
@@ -894,14 +618,7 @@ class PackAdapter(ResourceAdapter):
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
-    # BACK-1379: render_structure() already has a real verbose branch (per-file
-    # token/line breakdown, see _render_pack) but handle_uri never forwards a
-    # verbose= kwarg through the URI path (only ACCEPTS_TOP renderers get kwargs
-    # forwarded, and this isn't one) -- so --verbose was a silent no-op on
-    # pack://, even though it already worked on the `pack` CLI subcommand. Same
-    # fix as imports:// (BACK-1361): declare the flag, read it back out of the
-    # query in get_structure(), and have render_structure prefer
-    # result['verbose'] over its own kwarg default.
+    # Carry URI verbose through the result; the renderer also accepts CLI options.
     CLI_QUERY_FLAGS = {'verbose': 'verbose', 'respect_gitignore': 'respect_gitignore=false'}
 
     def __init__(self, resource: str, query: Optional[str] = None):
@@ -1050,6 +767,8 @@ class PackAdapter(ResourceAdapter):
             'since': since,
             'files': selected,
         }
+        if architecture:
+            report['architecture'] = True
         if emit_content:
             report['content'] = _collect_file_contents(selected)
         # BACK-1379: carry ?verbose through the result dict since handle_uri

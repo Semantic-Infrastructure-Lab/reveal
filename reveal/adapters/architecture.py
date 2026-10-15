@@ -23,10 +23,9 @@ from reveal.reveal_types import CONTRACT_VERSION
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..conventions import conventions_for_path
 from ..registry import language_for_extension
-from ..utils import print_json_result
+from ..rendering.adapters.architecture import ArchitectureRenderer
 from ..utils.path_utils import is_test_path
 from ..utils.query import parse_query_params
-from ..rendering.base import print_omitted
 from ..utils.results import ResultBuilder
 
 logger = logging.getLogger(__name__)
@@ -288,100 +287,11 @@ def _build_next_commands(
     return cmds
 
 
-def _render_entry_points(entry_points: List[Dict], top: int, base_path: Path) -> None:
-    if not entry_points:
-        return
-    print(f"Entry Points  ({len(entry_points)} active)")
-    for ep in entry_points[:top]:
-        rel = _relpath(ep['file'], base_path)
-        print(f"  {rel:<54}  fan-out {ep['fan_out']}")
-    print_omitted(len(entry_points), top)
-    print()
-
-
 def _is_reexport_file(file_str: str) -> bool:
     """Barrel/re-export files (`__init__.py`, `index.ts`, `mod.rs`, `doc.go`) hold
     no logic of their own, so they must not dominate 'Core Abstractions' (BACK-1287)."""
     name = Path(file_str).name
     return name in conventions_for_path(name).reexport_files
-
-
-def _render_core_abstractions(core: List[Dict], top: int, base_path: Path) -> None:
-    candidates = [e for e in core if e.get('fan_in', 0) > 0 and not _is_reexport_file(e['file'])]
-    ranked = candidates[:top]
-    if not ranked:
-        return
-    print("Core Abstractions  (most imported)")
-    for e in ranked:
-        rel = _relpath(e['file'], base_path)
-        print(f"  {rel:<54}  fan-in {e['fan_in']}")
-    print_omitted(len(candidates), len(ranked))
-    print()
-
-
-def _render_components(components: List[Dict], top: int, base_path: Path) -> None:
-    if not components:
-        return
-    print(f"Components  ({len(components)} directories)")
-    for c in components[:top]:
-        rel = _relpath(c['component'], base_path)
-        cohesion = c['cohesion']
-        bar = '█' * int(cohesion * 10) + '░' * (10 - int(cohesion * 10))
-        print(f"  {rel:<44}  {cohesion:.2f}  {bar}  {c['files']} files")
-    print_omitted(len(components), top)
-    print()
-
-
-def _render_risks(risks: List[Dict]) -> None:
-    if not risks:
-        return
-    print(f"Risks  ({len(risks)} found)")
-    for r in risks:
-        detail = r.get('detail', '')
-        suffix = f"  ({detail})" if detail else ''
-        print(f"  ⚠ {r['description']}{suffix}")
-    print()
-
-
-def _render_next_commands(commands: List[str]) -> None:
-    if not commands:
-        return
-    print("Next Commands")
-    for cmd in commands:
-        print(f"  {cmd}")
-
-
-def _render_brief(report: Dict[str, Any], top: int, base_path: Path, no_imports: bool = False) -> None:
-    path = report['path']
-    facts = report['facts']
-
-    print(f"Architecture Brief: {path}\n")
-
-    from reveal.adapters.imports import coverage_warning_line, detect_autoload_regime, autoload_regime_warning
-    warning = coverage_warning_line(report.get('unsupported_extensions', {}))
-    if warning:
-        print(f"{warning}\n")
-
-    _render_entry_points(facts.get('entry_points', []), top, base_path)
-    _render_core_abstractions(facts.get('core_abstractions', []), top, base_path)
-    _render_components(facts.get('components', []), top, base_path)
-    _render_risks(report.get('risks', []))
-    _render_next_commands(report.get('next_commands', []))
-
-    if not no_imports:
-        # BACK-1245: on a detected convention-autoloading framework, the
-        # generic caveat below understates the problem by an order of
-        # magnitude (the whole app is loaded that way, not just some
-        # plugins/registries) -- print the framework-specific warning too.
-        regime = detect_autoload_regime(base_path)
-        if regime:
-            print(f"\n{autoload_regime_warning(regime)}")
-        print("\nNote: static imports only — dynamically loaded files (plugins, registries) may appear as entry points.")
-    # The JSON's meta.warnings (partial parses, failed sub-scans) had no text
-    # rendering, so `architecture` stated a brief over files it couldn't fully
-    # read without saying so (BACK-1598). Same block overview prints.
-    from ..utils.warning_render import render_meta_warnings
-    render_meta_warnings(report, heading="Caveats")
 
 
 def _is_test_file(file_str: str) -> bool:
@@ -453,20 +363,6 @@ def _relativize_risks(risks: List[Dict[str, Any]], base_path: Path) -> None:
             risk['file'] = rel(risk['file'])
         if risk.get('representative'):
             risk['representative'] = rel(risk['representative'])
-
-
-class ArchitectureRenderer:
-    """Renderer for architecture:// results."""
-
-    ACCEPTS_TOP = True  # render_structure(top=) is fed by handle_uri (--all/--verbose BACK-1379, ?top=N BACK-1606)
-
-    @staticmethod
-    def render_structure(result: Dict[str, Any], format: str = 'text',
-                          top: int = 5, no_imports: bool = False) -> None:
-        if format == 'json':
-            print_json_result(result)
-            return
-        _render_brief(result, top, Path(result['path']), no_imports=no_imports)
 
 
 @register_adapter('architecture')
@@ -590,6 +486,8 @@ class ArchitectureAdapter(ResourceAdapter):
             'unsupported_extensions': imports_data.get('unsupported_extensions', {}),
             'scope': _run_scope(self, path),
         }
+        if no_imports:
+            report['no_imports'] = True
         _relativize_architecture_paths(report, path)
 
         meta = self.composed_meta()

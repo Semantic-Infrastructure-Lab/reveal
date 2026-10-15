@@ -1,7 +1,8 @@
 """reveal architecture — targeted architectural brief for a directory.
 
 Thin argparse shim over the architecture:// adapter (BACK-901/BACK-957);
-brief scan/render logic lives in reveal/adapters/architecture.py. The
+brief scanning lives in reveal/adapters/architecture.py and rendering in
+reveal/rendering/adapters/architecture.py. The
 `--against <ref>` git-diff branch stays here — it delegates to the dedicated
 reveal.diff.architecture_diff module and has its own contract/tests
 independent of the main brief. Internal names are re-exported here for
@@ -15,23 +16,17 @@ from pathlib import Path
 
 from reveal.adapters.architecture import (  # noqa: F401 - re-exported for back-compat
     ArchitectureAdapter,
-    ArchitectureRenderer,
     _build_next_commands,
     _compute_risks,
     _format_imports_data,
     _is_test_file,
     _relpath,
-    _render_brief,
-    _render_components,
-    _render_core_abstractions,
-    _render_entry_points,
-    _render_next_commands,
-    _render_risks,
     _run_combined_analysis,
     _run_complex_functions,
     _run_imports_analysis,
     _run_scope,
 )
+from ...rendering.adapters.architecture import ArchitectureRenderer
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
 from ..routing.subcommand import emit_subcommand_result
 

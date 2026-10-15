@@ -1,0 +1,57 @@
+{
+  "source": {
+    "id": "python-celery",
+    "sha": "17b895bad43aab73fca37609ae9b93be6cc1c6e1",
+    "repo": "https://github.com/celery/celery.git"
+  },
+  "implementation": {
+    "head": "6896f1470154478af86106db6fdd654b7a62f22b",
+    "tracked_diff_sha256": "41fbbf2827aff23533071b0dbf30ed1aae2734fe5a8f88e0a7e8186cf7ebda45",
+    "untracked_sha256": "97f8357c1bcfd739f057986754c0607f40af6f7bf89ff5c3ee20a2d0d09cf2c0",
+    "tree_sitter": "0.25.2",
+    "language_pack": "1.21.0"
+  },
+  "rules": {
+    "D001": {
+      "sample_counts": {
+        "tp": 17,
+        "fp": 3
+      },
+      "sample_size": 20,
+      "estimated_population": 144.00000000000003,
+      "weighted_decidable_precision": 0.7443181818181819,
+      "weighted_precision_bounds": [
+        0.7443181818181819,
+        0.7443181818181819
+      ]
+    },
+    "B006": {
+      "sample_counts": {
+        "tp": 7,
+        "fp": 12,
+        "uncertain": 1
+      },
+      "sample_size": 20,
+      "estimated_population": 37.00000000000001,
+      "weighted_decidable_precision": 0.271047227926078,
+      "weighted_precision_bounds": [
+        0.25482625482625476,
+        0.3146718146718146
+      ]
+    },
+    "I001": {
+      "sample_counts": {
+        "fp": 1,
+        "tp": 2
+      },
+      "sample_size": 3,
+      "estimated_population": 3.0,
+      "weighted_decidable_precision": 0.6666666666666666,
+      "weighted_precision_bounds": [
+        0.6666666666666666,
+        0.6666666666666666
+      ]
+    }
+  },
+  "interpretation": "Stratum-weighted pilot estimates on emitted claims only; bounds cover uncertain labels, not sampling error. No recall or runtime correctness claim."
+}

@@ -1,11 +1,9 @@
 """reveal pack — token-budgeted context snapshot for LLM consumption.
 
-Thin argparse shim over the pack:// adapter (BACK-901/BACK-961); scan/rank/
-render logic lives in reveal/adapters/pack.py. Internal names are
-re-exported here for backward compatibility with existing callers/tests —
-including the reveal_pack MCP tool, which imports five of these functions
-directly (_parse_budget, _get_changed_files, _collect_candidates,
-_apply_budget, _format_pack_result) and is untouched by this refactor.
+Thin argparse shim over the pack:// adapter. Scan/rank logic lives in
+reveal/adapters/pack.py; presentation lives in rendering/adapters/pack.py.
+Scan helpers and the MCP string formatter retain their existing interfaces
+through this module for reveal_pack and existing callers.
 """
 
 import sys
@@ -16,7 +14,6 @@ import argparse
 
 from reveal.adapters.pack import (  # noqa: F401 - re-exported for back-compat
     PackAdapter,
-    PackRenderer,
     _apply_budget,
     _build_pack_import_graph,
     _collect_candidates,
@@ -24,23 +21,15 @@ from reveal.adapters.pack import (  # noqa: F401 - re-exported for back-compat
     _compute_graph_relevance,
     _compute_priority,
     _count_lines,
-    _emit_content_section,
     _fetch_fan_in,
-    _format_file_line,
-    _format_pack_content,
-    _format_pack_file_groups,
-    _format_pack_header,
-    _format_pack_result,
     _get_changed_files,
     _get_file_raw_content,
     _get_file_structure,
     _parse_budget,
-    _print_file_line,
-    _print_pack_file_groups,
-    _print_pack_header,
-    _render_architecture_brief,
-    _render_pack,
     _walk_files,
+)
+from ...rendering.adapters.pack import (  # noqa: F401 - MCP helper re-export
+    PackRenderer, _format_pack_result,
 )
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
 from ..routing.subcommand import emit_subcommand_result

@@ -233,10 +233,10 @@ def init_scan_caches(caches: dict) -> None:
 
 def get_scan_budgets(files: List[Path], select, ignore) -> List[dict]:
     """Numeric source accounting for reached shared indexes, independent of paging."""
-    if not rule_will_run('I002', select, ignore):
-        return []
     from .imports.I002 import get_scan_budgets as i002_budgets
-    return i002_budgets(files)
+    from .duplicates.D005 import get_scan_budgets as d005_budgets
+    return [row for code, budgets in [('I002', i002_budgets), ('D005', d005_budgets)]
+            if rule_will_run(code, select, ignore) for row in budgets(files)]
 
 
 def get_scan_disclosures() -> List[str]:

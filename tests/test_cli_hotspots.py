@@ -16,12 +16,12 @@ from reveal.adapters.hotspots import (
     _build_test_name_index,
     _is_covered,
     _provenance_for_file,
-    _render_file_hotspots,
-    _render_function_hotspots,
-    _render_report,
-    _render_summary,
     _run_file_hotspots,
     _run_function_hotspots,
+)
+from reveal.rendering.adapters.hotspots import (
+    HotspotsRenderer, _render_file_hotspots, _render_function_hotspots,
+    _render_report, _render_summary,
 )
 from reveal.utils.results import note_truncation
 from reveal.cli.commands.hotspots import (
@@ -231,7 +231,9 @@ class TestRenderFileHotspots(unittest.TestCase):
     def _capture(self, hotspots, top=10):
         buf = StringIO()
         with patch('sys.stdout', buf):
-            _render_file_hotspots(hotspots, top)
+            body = _render_file_hotspots(hotspots, top)
+            if body:
+                print("\n".join(body))
         return buf.getvalue()
 
     def test_empty_produces_no_output(self):
@@ -275,7 +277,9 @@ class TestRenderFunctionHotspots(unittest.TestCase):
     def _capture(self, fns):
         buf = StringIO()
         with patch('sys.stdout', buf):
-            _render_function_hotspots(fns)
+            body = _render_function_hotspots(fns)
+            if body:
+                print("\n".join(body))
         return buf.getvalue()
 
     def test_empty_produces_no_output(self):
@@ -308,7 +312,9 @@ class TestRenderSummary(unittest.TestCase):
     def _capture(self, file_hotspots, fn_hotspots):
         buf = StringIO()
         with patch('sys.stdout', buf):
-            _render_summary(file_hotspots, fn_hotspots)
+            body = _render_summary(file_hotspots, fn_hotspots)
+            if body:
+                print("\n".join(body))
         return buf.getvalue()
 
     def test_critical_files_mention_in_summary(self):
@@ -333,7 +339,9 @@ class TestRenderReport(unittest.TestCase):
     def _capture(self, report, top=10):
         buf = StringIO()
         with patch('sys.stdout', buf):
-            _render_report(report, top)
+            body = _render_report(report, top)
+            if body:
+                print("\n".join(body))
         return buf.getvalue()
 
     def test_no_hotspots_shows_clean_message(self):
@@ -530,7 +538,9 @@ class TestRenderFunctionHotspotsWithCoverage(unittest.TestCase):
     def _capture(self, fns, test_index=None):
         buf = StringIO()
         with patch('sys.stdout', buf):
-            _render_function_hotspots(fns, test_index=test_index)
+            body = _render_function_hotspots(fns, test_index=test_index)
+            if body:
+                print("\n".join(body))
         return buf.getvalue()
 
     def test_no_index_shows_no_coverage_indicators(self):
@@ -802,7 +812,9 @@ class TestMultiLanguageTestIndex(unittest.TestCase):
         fn = _fn_hotspot('foo', 12)
         fn['has_test_hint'] = None
         with redirect_stdout(buf):
-            _render_function_hotspots([fn], test_index=set())
+            body = _render_function_hotspots([fn], test_index=set())
+            if body:
+                print("\n".join(body))
         self.assertIn('❔', buf.getvalue())
 
 

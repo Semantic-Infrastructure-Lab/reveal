@@ -25,15 +25,28 @@ import ast
 import hashlib
 import logging
 import os
+from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
 from ...utils.pyparse import parse_python
-from ...utils.path_utils import EVIDENCE, _walk_code_files, cross_file_scan_root
+from ...utils.query_control import ScanBudget
+from ...utils.path_utils import EVIDENCE, _walk_code_files, cross_file_scan_root, to_posix
 
 logger = logging.getLogger(__name__)
+
+class LiteralIndex(dict):
+    """The existing literal mapping plus its picklable source-scan accounting."""
+
+    def __init__(self, budget: ScanBudget, admitted: int, capped: bool = False):
+        super().__init__()
+        self.scan_budget = {**asdict(budget.accounting(admitted, capped)),
+                            'limit': budget.limit, 'analyzed_files': 0,
+                            'failed_files': 0, 'skipped': capped}
+        self.disclosures: List[str] = []
+
 
 # ── Module-level cache ────────────────────────────────────────────────────────
 # project_root → {canonical_key → [(abs_file_path, lineno, var_name), ...]}
@@ -140,7 +153,16 @@ def get_scan_disclosures() -> List[str]:
     """BACK-1051: one-line skip reasons for every project root whose D005
     cross-file scan was skipped by the file-count ceiling. Mirrors
     I002.get_scan_disclosures()."""
-    return list(_project_skip_reasons.values())
+    details = [message for index in _project_index.values()
+               for message in getattr(index, 'disclosures', [])]
+    return list(dict.fromkeys([*_project_skip_reasons.values(), *details]))
+
+
+def get_scan_budgets(files: List[Path]) -> List[Dict[str, Any]]:
+    """Accounting follows the same cached artifact that workers receive."""
+    return [{'rule': 'D005', 'root': root, **index.scan_budget}
+            for root, index in _project_index.items() if isinstance(index, LiteralIndex)
+            and any(path.resolve().is_relative_to(root) for path in files)]
 
 
 # ── Rule ──────────────────────────────────────────────────────────────────────
@@ -177,6 +199,9 @@ class D005(BaseRule, ASTParsingMixin):
         except SyntaxError:
             return []
 
+        return self._literals_from_tree(tree)
+
+    def _literals_from_tree(self, tree: ast.Module) -> List[Tuple[str, int, str, frozenset]]:
         results = []
         seen_keys: set = set()  # deduplicate within file
 
@@ -259,7 +284,9 @@ def _build_index(
     projects) is skipped without materializing the full list or parsing a
     single file, so an interactive --check never stalls.
     """
-    ceiling = _max_project_files()
+    budget = ScanBudget(_max_project_files())
+    ceiling = budget.limit
+    _project_skip_reasons.pop(project_root, None)
     py_files: List[Path] = []
     # The evidence walk (BACK-1578): noise, gitignored and REVEAL_IGNORE'd files are not
     # the project's literals, --exclude narrows the report and not the index. It judges
@@ -270,7 +297,7 @@ def _build_index(
         if p.suffix != '.py':
             continue
         py_files.append(p)
-        if len(py_files) > ceiling:
+        if ceiling is not None and len(py_files) > ceiling:
             reason = (
                 f"D005: project root {project_root} exceeds {ceiling} .py files; "
                 "skipping cross-file scan (set REVEAL_D005_MAX_FILES to raise "
@@ -278,16 +305,22 @@ def _build_index(
             )
             logger.warning(reason)
             _project_skip_reasons[project_root] = reason
-            return {}
+            index = LiteralIndex(budget, ceiling, capped=True)
+            index.disclosures.append(reason)
+            return index
 
-    index: Dict[str, List[Tuple[str, int, str]]] = {}
+    index = LiteralIndex(budget, len(py_files))
 
     for py_file in py_files:
         try:
             content = py_file.read_text(encoding='utf-8', errors='ignore')
-        except OSError:
+            tree = parse_python(content)
+        except (OSError, ValueError, SyntaxError) as exc:
+            index.scan_budget['failed_files'] += 1
+            index.disclosures.append(f'D005: {to_posix(py_file)} was not analyzed ({type(exc).__name__}); cross-file results may be incomplete')
             continue
-        for key, line, var_name, _ in rule.extract_file_literals(str(py_file), content):
+        index.scan_budget['analyzed_files'] += 1
+        for key, line, var_name, _ in rule._literals_from_tree(tree):
             index.setdefault(key, []).append((str(py_file), line, var_name))
 
     return index

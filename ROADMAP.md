@@ -338,9 +338,9 @@ What landed, and when, is in CHANGELOG `[0.130.0]` and `internal-docs/RESOLVED_L
    forms, and `review` is the one remaining boundary site; the ~379 remaining broad
    handlers are decided: one solo pass, run when no parallel agents are active, one subsystem per slice), BACK-916 (one
    rendering layer: patches, nginx://, the nginx file-flag handlers, surface://, overview://,
-   testability://, deps and contracts return their output; next are pack, architecture and
-   hotspots, one renderer per slice) and BACK-1052 (shared scan policy now used by depends
-   and I002; D005, health and broader defaults/environment policy remain).
+   testability://, deps, contracts, pack, architecture and hotspots return their output; remaining
+   inline/adapter rendering and shared capture/JSON ownership stay open) and BACK-1052 (shared scan policy now used by depends,
+   I002, D005 and health; broader defaults/environment policy remains).
 4. **One seam per concern.** The parser, path, root-finder and walker seams are done. Open:
    BACK-1054 (import resolution: imports and depends share scope and dispatch; depends'
    indexing/fallback and extraction-cache ownership remain; I002 already uses the service).

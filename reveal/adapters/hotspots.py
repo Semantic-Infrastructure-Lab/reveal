@@ -16,8 +16,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..conventions import LanguageConventions, conventions_for, family_for_path
 from ..defaults import TEST_DIR_NAMES, VENDOR_DIR_NAMES
-from ..utils.formatting import cwd_path
-from ..utils import print_json_result
+from ..rendering.adapters.hotspots import HotspotsRenderer
 from ..utils.path_utils import EVIDENCE, resolve_project_root, walk_tree
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
@@ -67,6 +66,7 @@ def _run_file_hotspots(adapter: 'HotspotsAdapter', path: Path, top: int) -> List
     extra: Dict[str, Any] = {'exclude': list(_patterns)} if _patterns else {}
     data = adapter.compose(StatsAdapter, str(path), default={}, hotspots=True, top=top,
                            cut_as=('file_hotspots', 'raise ?top=N'), **extra)
+    adapter.stats_summary = data.get('summary', {})
     return cast(List[Dict[str, Any]], data.get('hotspots', []))
 
 
@@ -179,127 +179,6 @@ def _is_covered(name: str, loc: str, test_index: Set[str]) -> bool:
     )
 
 
-def _render_file_hotspots(hotspots: List[Dict[str, Any]], top: int, root: str = '') -> None:
-    if not hotspots:
-        return
-    print(f"\nFile hotspots (top {min(len(hotspots), top)} by severity):")
-    for h in hotspots:
-        name = h.get('file', '?')
-        quality = h.get('quality_score', '?')
-        score = h.get('hotspot_score', 0)
-        issues = h.get('issues', [])
-        details = h.get('details', {})
-        lines = details.get('lines', '')
-
-        # Quality indicator
-        if isinstance(quality, (int, float)):
-            if quality < 70:
-                icon = '❌'
-            elif quality < 85:
-                icon = '⚠️ '
-            else:
-                icon = '💡'
-        else:
-            icon = '  '
-
-        lines_str = f"  {lines}L" if lines else ''
-        print(f"  {icon} {name}")
-        print(f"      quality: {quality}/100  score: {score}{lines_str}")
-        if issues:
-            print(f"      issues: {', '.join(issues)}")
-
-        # Suggest next command
-        print(f"      → reveal {cwd_path(root, name)}")
-
-
-def _render_function_hotspots(fns: List[Dict[str, Any]], test_index: Optional[Set[str]] = None) -> None:
-    if not fns:
-        return
-    has_coverage_info = test_index is not None
-    print("\nComplex functions:")
-    if has_coverage_info:
-        print("  (✅ = test found  ⚪ = no test found  ❔ = unknown for this language)")
-    for fn in fns:
-        name = fn.get('name', '?')
-        cx = fn.get('complexity', '?')
-        loc = fn.get('file', '')
-        line = fn.get('line', '')
-        line_count = fn.get('line_count', '')
-
-        if isinstance(cx, int) and cx >= 20:
-            icon = '❌'
-        elif isinstance(cx, int) and cx >= 15:
-            icon = '⚠️ '
-        else:
-            icon = '💡'
-
-        if has_coverage_info:
-            hint = fn.get('has_test_hint', ...)
-            if hint is None:
-                cov = '❔'  # language has no known test convention (BACK-1276)
-            elif hint is ...:
-                cov = '✅' if _is_covered(name, loc, test_index) else '⚪'  # type: ignore[arg-type]
-            else:
-                cov = '✅' if hint else '⚪'
-            cov_str = f' {cov}'
-        else:
-            cov_str = ''
-
-        loc_str = f"  {loc}" if loc else ''
-        lc_str = f"  ({line_count}L)" if line_count else ''
-        print(f"  {icon}{cov_str} {name}  complexity: {cx}{lc_str}{loc_str}:{line}")
-
-
-def _render_summary(file_hotspots: List[Dict[str, Any]], fn_hotspots: List[Dict[str, Any]]) -> None:
-    critical_files = sum(1 for h in file_hotspots if h.get('quality_score', 100) < 70)
-    critical_fns = sum(1 for f in fn_hotspots if f.get('complexity', 0) > 20)
-    total = len(file_hotspots) + len(fn_hotspots)
-
-    print()
-    if critical_files or critical_fns:
-        parts = []
-        if critical_files:
-            parts.append(f"{critical_files} critical file(s)")
-        if critical_fns:
-            parts.append(f"{critical_fns} critical function(s)")
-        print(f"Summary: {total} hotspot(s) — {', '.join(parts)} need immediate attention ❌")
-    else:
-        print(f"Summary: {total} hotspot(s) — no critical issues, review when convenient ⚠️")
-    print()
-
-
-def _render_report(report: Dict[str, Any], top: int, test_index: Optional[Set[str]] = None) -> None:
-    """Render hotspots as human-readable text."""
-    path = report['path']
-    file_hotspots = report['file_hotspots']
-    fn_hotspots = report['function_hotspots']
-
-    print()
-    print(f"Hotspots: {path}")
-    print("━" * 50)
-
-    if not file_hotspots and not fn_hotspots:
-        print("\nNo hotspots found ✅  Code quality looks good.")
-        print()
-        return
-
-    _render_file_hotspots(file_hotspots, top, root=path)
-    _render_function_hotspots(fn_hotspots, test_index=test_index)
-    _render_summary(file_hotspots, fn_hotspots)
-
-
-class HotspotsRenderer:
-    """Renderer for hotspots:// results."""
-
-    @staticmethod
-    def render_structure(result: Dict[str, Any], format: str = 'text',
-                          top: int = 10, test_index: Optional[Set[str]] = None) -> None:
-        if format == 'json':
-            print_json_result(result)
-            return
-        _render_report(result, top, test_index=test_index)
-
-
 @register_adapter('hotspots')
 @register_renderer(HotspotsRenderer)
 class HotspotsAdapter(ResourceAdapter):
@@ -320,6 +199,7 @@ class HotspotsAdapter(ResourceAdapter):
         # its coverage overlay, but it must never appear in the JSON contract
         # (only the per-function `has_test_hint` boolean derived from it does).
         self.test_index: Optional[Set[str]] = None
+        self.stats_summary: Dict[str, Any] = {}
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -398,6 +278,7 @@ class HotspotsAdapter(ResourceAdapter):
         functions_only = str(self.query_params.get('functions_only', False)).lower() == 'true'
         files_only = str(self.query_params.get('files_only', False)).lower() == 'true'
 
+        self.stats_summary = {}
         file_hotspots: List[Dict[str, Any]] = [] if functions_only else _run_file_hotspots(self, path, top)
         fn_hotspots: List[Dict[str, Any]] = [] if files_only else _run_function_hotspots(self, path, min_cx, top)
 
@@ -429,6 +310,7 @@ class HotspotsAdapter(ResourceAdapter):
             'path': str(path),
             'file_hotspots': file_hotspots,
             'function_hotspots': fn_hotspots,
+            'summary': self.stats_summary,
         }
 
         meta = self.composed_meta()

@@ -1,7 +1,8 @@
 """reveal hotspots — identify high-complexity, low-quality files and functions.
 
-Thin argparse shim over the hotspots:// adapter (BACK-901/BACK-955); scan/
-render logic lives in reveal/adapters/hotspots.py. Internal names are
+Thin argparse shim over the hotspots:// adapter (BACK-901/BACK-955); scanning
+lives in reveal/adapters/hotspots.py and rendering in
+reveal/rendering/adapters/hotspots.py. Internal names are
 re-exported here for backward compatibility with existing callers/tests.
 """
 
@@ -13,17 +14,13 @@ from pathlib import Path
 
 from reveal.adapters.hotspots import (  # noqa: F401 - re-exported for back-compat
     HotspotsAdapter,
-    HotspotsRenderer,
     _build_test_name_index,
     _camel_to_snake,
     _is_covered,
-    _render_file_hotspots,
-    _render_function_hotspots,
-    _render_report,
-    _render_summary,
     _run_file_hotspots,
     _run_function_hotspots,
 )
+from ...rendering.adapters.hotspots import HotspotsRenderer
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
 from ..routing.ledger import complete
 from ..routing.subcommand import emit_subcommand_result

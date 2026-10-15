@@ -22,6 +22,7 @@ from reveal.cli.commands.health import (
     _render_results,
     _print_usage_and_exit,
     run_health,
+    HealthResult,
 )
 
 # BACK-1149: exercises reveal.main's CLI entry point via conftest's _run_reveal_direct/subprocess
@@ -71,14 +72,16 @@ class TestCheckTarget(unittest.TestCase):
 
     def test_nonexistent_path_returns_1(self):
         args = Namespace(select=None)
-        code, summary = _check_target('/nonexistent/path/xyz', args)
+        result = _check_target('/nonexistent/path/xyz', args)
+        code, summary = result.exit_code, result.summary
         self.assertEqual(code, 1)
         self.assertIn('not found', summary)
 
     def test_uri_routes_to_check_uri(self):
         args = Namespace(select=None)
         with patch('reveal.cli.commands.health._check_uri', return_value=(0, 'ok')) as mock:
-            code, summary = _check_target('ssl://example.com', args)
+            result = _check_target('ssl://example.com', args)
+            code, summary = result.exit_code, result.summary
             mock.assert_called_once()
             self.assertEqual(code, 0)
 
@@ -87,14 +90,16 @@ class TestCheckTarget(unittest.TestCase):
             conf_path = f.name
         args = Namespace(select=None)
         with patch('reveal.cli.commands.health._check_nginx', return_value=(0, 'nginx: healthy')) as mock:
-            code, _ = _check_target(conf_path, args)
+            result = _check_target(conf_path, args)
+            code, _ = result.exit_code, result.summary
             mock.assert_called_once()
 
     def test_directory_routes_to_code_check(self):
         with tempfile.TemporaryDirectory() as d:
             args = Namespace(select=None)
-            with patch('reveal.cli.commands.health._check_code', return_value=(0, 'code: healthy')) as mock:
-                code, summary = _check_target(d, args)
+            with patch('reveal.cli.commands.health._check_code', return_value=HealthResult(0, 'code: healthy')) as mock:
+                result = _check_target(d, args)
+                code, summary = result.exit_code, result.summary
                 mock.assert_called_once()
                 self.assertEqual(code, 0)
 
@@ -109,7 +114,7 @@ class TestCheckCode(unittest.TestCase):
         # Prevent _check_code from walking real directories during these unit tests.
         # Tests that specifically exercise the file-count guard patch this themselves.
         self._collect_patcher = patch(
-            'reveal.cli.file_checker.collect_files_to_check', return_value=FileCollectionResult(files=[])
+            'reveal.cli.file_checker.collect_files_to_check', return_value=FileCollectionResult(files=[Path('sample.py')])
         )
         self._collect_patcher.start()
 
@@ -118,30 +123,33 @@ class TestCheckCode(unittest.TestCase):
 
     @patch('subprocess.run')
     def test_healthy_returns_0(self, mock_run):
-        data = {'total_violations': 0, 'violations': []}
+        data = {'total': 0, 'detections': []}
         mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(data))
-        code, summary = _check_code(Path('/tmp'), Namespace(select=None))
+        result = _check_code(Path('/tmp'), Namespace(select=None))
+        code, summary = result.exit_code, result.summary
         self.assertEqual(code, 0)
         self.assertIn('healthy', summary)
 
     @patch('subprocess.run')
     def test_warnings_returns_1(self, mock_run):
-        data = {'total_violations': 2, 'violations': [
+        data = {'total': 2, 'detections': [
             {'severity': 'warning', 'rule': 'C001'},
             {'severity': 'warning', 'rule': 'C002'},
         ]}
         mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(data))
-        code, summary = _check_code(Path('/tmp'), Namespace(select=None))
+        result = _check_code(Path('/tmp'), Namespace(select=None))
+        code, summary = result.exit_code, result.summary
         self.assertEqual(code, 1)
         self.assertIn('2', summary)
 
     @patch('subprocess.run')
     def test_critical_returns_2(self, mock_run):
-        data = {'total_violations': 1, 'violations': [
+        data = {'total': 1, 'detections': [
             {'severity': 'error', 'rule': 'B001'},
         ]}
         mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(data))
-        code, summary = _check_code(Path('/tmp'), Namespace(select=None))
+        result = _check_code(Path('/tmp'), Namespace(select=None))
+        code, summary = result.exit_code, result.summary
         self.assertEqual(code, 2)
         self.assertIn('critical', summary)
 
@@ -153,7 +161,8 @@ class TestCheckCode(unittest.TestCase):
         whenever returncode == 0, masking a `reveal check` output-format
         regression as passing)."""
         mock_run.return_value = MagicMock(returncode=0, stdout='')
-        code, summary = _check_code(Path('/tmp'), Namespace(select=None))
+        result = _check_code(Path('/tmp'), Namespace(select=None))
+        code, summary = result.exit_code, result.summary
         self.assertEqual(code, 2)
         self.assertNotIn('healthy', summary)
 
@@ -161,7 +170,8 @@ class TestCheckCode(unittest.TestCase):
     def test_nonzero_returncode_returns_1(self, mock_run):
         # stdout must be non-empty but unparseable to trigger the except branch
         mock_run.return_value = MagicMock(returncode=1, stdout='not valid json')
-        code, summary = _check_code(Path('/tmp'), Namespace(select=None))
+        result = _check_code(Path('/tmp'), Namespace(select=None))
+        code, summary = result.exit_code, result.summary
         self.assertEqual(code, 1)
 
     @patch('subprocess.run')
@@ -169,7 +179,8 @@ class TestCheckCode(unittest.TestCase):
         """A crashed `reveal check` subprocess (traceback on stderr, empty stdout)
         must not be reported as healthy (BACK-853)."""
         mock_run.return_value = MagicMock(returncode=1, stdout='')
-        code, summary = _check_code(Path('/tmp'), Namespace(select=None))
+        result = _check_code(Path('/tmp'), Namespace(select=None))
+        code, summary = result.exit_code, result.summary
         self.assertEqual(code, 1)
         self.assertIn('failed', summary)
 
@@ -178,7 +189,8 @@ class TestCheckCode(unittest.TestCase):
         """A successful subprocess exit with output that doesn't parse as the
         expected JSON shape is an unknown state, not "healthy"."""
         mock_run.return_value = MagicMock(returncode=0, stdout='not valid json')
-        code, summary = _check_code(Path('/tmp'), Namespace(select=None))
+        result = _check_code(Path('/tmp'), Namespace(select=None))
+        code, summary = result.exit_code, result.summary
         self.assertEqual(code, 2)
         self.assertNotIn('healthy', summary)
 
@@ -200,7 +212,8 @@ class TestCheckCode(unittest.TestCase):
                 'reveal.cli.file_checker.collect_files_to_check',
                 return_value=FileCollectionResult(files=fake_files),
             ), patch('subprocess.run') as mock_run:
-                code, summary = _check_code(Path(d), Namespace(select=None))
+                result = _check_code(Path(d), Namespace(select=None))
+                code, summary = result.exit_code, result.summary
             # subprocess must NOT have been called
             mock_run.assert_not_called()
         self.assertEqual(code, 1)
@@ -386,7 +399,7 @@ class TestRunHealth(unittest.TestCase):
                 run_health(args)
         self.assertEqual(ctx.exception.code, 1)
 
-    @patch('reveal.cli.commands.health._check_target', return_value=(0, 'code: healthy'))
+    @patch('reveal.cli.commands.health._check_target', return_value=HealthResult(0, 'code: healthy'))
     def test_single_target_exits_0(self, mock_check):
         with tempfile.TemporaryDirectory() as d:
             args = self._args([d])
@@ -396,7 +409,7 @@ class TestRunHealth(unittest.TestCase):
                     run_health(args)
             self.assertEqual(ctx.exception.code, 0)
 
-    @patch('reveal.cli.commands.health._check_target', return_value=(2, 'code: critical'))
+    @patch('reveal.cli.commands.health._check_target', return_value=HealthResult(2, 'code: critical'))
     def test_critical_exits_2(self, mock_check):
         with tempfile.TemporaryDirectory() as d:
             args = self._args([d])
@@ -405,7 +418,7 @@ class TestRunHealth(unittest.TestCase):
                     run_health(args)
             self.assertEqual(ctx.exception.code, 2)
 
-    @patch('reveal.cli.commands.health._check_target', return_value=(0, 'code: healthy'))
+    @patch('reveal.cli.commands.health._check_target', return_value=HealthResult(0, 'code: healthy'))
     def test_json_format(self, mock_check):
         with tempfile.TemporaryDirectory() as d:
             args = self._args([d], fmt='json')
@@ -418,7 +431,7 @@ class TestRunHealth(unittest.TestCase):
             self.assertIn('overall_exit', data)
 
     @patch('reveal.cli.commands.health._detect_targets', return_value=['.'])
-    @patch('reveal.cli.commands.health._check_target', return_value=(0, 'code: healthy'))
+    @patch('reveal.cli.commands.health._check_target', return_value=HealthResult(0, 'code: healthy'))
     def test_health_all_flag_uses_detected_targets(self, mock_check, mock_detect):
         args = self._args([], health_all=True)
         with redirect_stdout(io.StringIO()):
@@ -426,7 +439,7 @@ class TestRunHealth(unittest.TestCase):
                 run_health(args)
         mock_detect.assert_called_once()
 
-    @patch('reveal.cli.commands.health._check_target', side_effect=[(1, 'warn'), (2, 'fail')])
+    @patch('reveal.cli.commands.health._check_target', side_effect=[HealthResult(1, 'warn'), HealthResult(2, 'fail')])
     def test_multiple_targets_max_exit_code(self, mock_check):
         args = self._args(['./a', './b'])
         with redirect_stdout(io.StringIO()):
@@ -436,7 +449,7 @@ class TestRunHealth(unittest.TestCase):
 
     @patch(
         'reveal.cli.commands.health._check_target',
-        side_effect=[PermissionError("Permission denied: '/x/.gitignore'"), (0, 'code: healthy')],
+        side_effect=[PermissionError("Permission denied: '/x/.gitignore'"), HealthResult(0, 'code: healthy')],
     )
     def test_one_target_raising_does_not_crash_others(self, mock_check):
         """A single target raising (e.g. permission-denied file scan) must not

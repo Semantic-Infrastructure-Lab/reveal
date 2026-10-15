@@ -238,6 +238,7 @@ class StatsAdapter(ResourceAdapter):
             extra_known_keys={'sort', 'limit', 'offset', 'exclude', 'respect_gitignore'},
         )
         self._analysis_failures: list = []
+        self._excluded_by_extension: Dict[str, int] = {}
 
     def _merge_query_params(self, hotspots, code_only, min_lines, max_lines,
                            min_complexity, max_complexity, min_functions,
@@ -267,9 +268,12 @@ class StatsAdapter(ResourceAdapter):
         exclude_patterns = split_exclude_param(exclude_param) or None
         respect_gitignore = respect_gitignore_param(self.query_params)
 
+        self._analysis_failures = []
+        self._excluded_by_extension = {}
         files = list(find_analyzable_files(
             self.path, code_only=code_only,
             respect_gitignore=respect_gitignore, exclude_patterns=exclude_patterns,
+            excluded_by_extension=self._excluded_by_extension,
         ))
         if not files:
             return []
@@ -364,6 +368,20 @@ class StatsAdapter(ResourceAdapter):
             'message': (f"{len(failed)} file(s) failed analysis and are not counted: "
                         f"{', '.join(shown)}{more}"),
         })
+
+    def _disclose_exclusions(self, result: dict) -> None:
+        """Keep the unsupported population in numeric summaries and composed warnings."""
+        excluded = dict(sorted(self._excluded_by_extension.items()))
+        count = sum(excluded.values())
+        result['summary'].update(excluded=count, excluded_by_extension=excluded)
+        if count:
+            note_warning(result, {
+                'type': 'unsupported_extensions', 'count': count,
+                'excluded_by_extension': excluded,
+                'message': (f"{count} file(s) excluded because no analyzer is registered: "
+                            + ', '.join(f'{ext} ({n})' for ext, n in excluded.items())
+                            + '; totals describe only the analyzed population'),
+            })
 
     def _add_truncation_metadata(self, result: dict, displayed: int, total: int) -> None:
         """Record a ?limit/?offset cut of the files list (note_truncation, BACK-1059)."""
@@ -520,6 +538,7 @@ class StatsAdapter(ResourceAdapter):
         note_warning(result, unknown_sort_field_warning(
             self.result_control.sort_field, dir_file_stats, field_value, SORT_FIELDS))
         self._disclose_failures(result)
+        self._disclose_exclusions(result)
 
         # Add hotspots if requested
         if hotspots:

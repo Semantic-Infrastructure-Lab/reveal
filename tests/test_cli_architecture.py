@@ -16,16 +16,14 @@ from reveal.adapters.architecture import (
     _compute_risks,
     _is_test_file,
     _relpath,
-    _render_brief,
-    _render_components,
-    _render_core_abstractions,
-    _render_entry_points,
-    _render_next_commands,
-    _render_risks,
     _run_combined_analysis,
     _run_complex_functions,
     _run_imports_analysis,
     _run_scope,
+)
+from reveal.rendering.adapters.architecture import (
+    _render_brief, _render_components, _render_core_abstractions,
+    _render_entry_points, _render_next_commands, _render_risks,
 )
 from reveal.cli.commands.architecture import (
     create_architecture_parser,
@@ -60,7 +58,9 @@ def _args(**kwargs):
 def _capture(fn, *args, **kwargs):
     buf = StringIO()
     with patch('sys.stdout', buf):
-        fn(*args, **kwargs)
+        body = fn(*args, **kwargs)
+        if isinstance(body, list) and body:
+            print("\n".join(body))
     return buf.getvalue()
 
 
@@ -495,7 +495,7 @@ class TestRunArchitecture(unittest.TestCase):
         args = _args(path='.', no_imports=True)
         with patch('reveal.adapters.architecture._run_complex_functions', return_value=[]):
             with patch('reveal.adapters.architecture._run_imports_analysis') as mock_imports:
-                with patch('reveal.adapters.architecture._render_brief'):
+                with patch('reveal.rendering.adapters.architecture._render_brief', return_value=[]):
                     run_architecture(args)
         mock_imports.assert_not_called()
 

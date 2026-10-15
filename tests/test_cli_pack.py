@@ -22,11 +22,12 @@ from reveal.cli.commands.pack import (
     _get_changed_files,
     _get_file_structure,
     _get_file_raw_content,
-    _emit_content_section,
     _collect_file_contents,
-    _render_pack,
-    _print_file_line,
     run_pack,
+)
+
+from reveal.rendering.adapters.pack import (
+    pack_text, _format_file_line, _format_pack_content, _format_architecture_brief,
 )
 
 # BACK-1149: exercises reveal.main's CLI entry point via conftest's _run_reveal_direct/subprocess
@@ -708,7 +709,7 @@ class TestApplyBudget(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# _render_pack and _print_file_line (output smoke tests)
+# Returned inventory and file-line formatting
 # ---------------------------------------------------------------------------
 
 class TestRenderPack(unittest.TestCase):
@@ -725,79 +726,48 @@ class TestRenderPack(unittest.TestCase):
         }
 
     def test_render_no_crash_empty(self):
-        import io
-        from contextlib import redirect_stdout
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            _render_pack(Path("/tmp"), [], {'selected': 0, 'total_candidates': 0,
-                          'used_tokens_approx': 0, 'used_lines': 0, 'skipped': 0,
-                          'budget_tokens': 2000, 'budget_lines': None},
-                         verbose=False, budget_tokens=2000, budget_lines=None)
-        self.assertIn("No files fit", buf.getvalue())
+        out = pack_text(Path("/tmp"), [], {'selected': 0, 'total_candidates': 0,
+                      'used_tokens_approx': 0, 'used_lines': 0, 'skipped': 0,
+                      'budget_tokens': 2000, 'budget_lines': None},
+                     verbose=False, budget_tokens=2000, budget_lines=None)
+        self.assertIn("No files fit", out)
 
     def test_render_shows_selected_count(self):
-        import io
-        from contextlib import redirect_stdout
         candidates = [self._make_candidate("main.py", priority=10.0)]
         meta = {'selected': 1, 'total_candidates': 1, 'used_tokens_approx': 100,
                 'used_lines': 10, 'skipped': 0, 'budget_tokens': 2000, 'budget_lines': None}
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            _render_pack(Path("/tmp"), candidates, meta, verbose=False, budget_tokens=2000, budget_lines=None)
-        out = buf.getvalue()
+        out = pack_text(Path("/tmp"), candidates, meta, verbose=False, budget_tokens=2000, budget_lines=None)
         self.assertIn("Selected 1", out)
 
     def test_render_verbose_shows_token_count(self):
-        import io
-        from contextlib import redirect_stdout
         candidates = [self._make_candidate("app.py", tokens=42, priority=1.0)]
         meta = {'selected': 1, 'total_candidates': 1, 'used_tokens_approx': 42,
                 'used_lines': 10, 'skipped': 0, 'budget_tokens': 2000, 'budget_lines': None}
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            _render_pack(Path("/tmp"), candidates, meta, verbose=True, budget_tokens=2000, budget_lines=None)
-        self.assertIn("42", buf.getvalue())
+        out = pack_text(Path("/tmp"), candidates, meta, verbose=True, budget_tokens=2000, budget_lines=None)
+        self.assertIn("42", out)
 
     def test_render_skipped_message(self):
-        import io
-        from contextlib import redirect_stdout
         candidates = [self._make_candidate("app.py")]
         meta = {'selected': 1, 'total_candidates': 2, 'used_tokens_approx': 100,
                 'used_lines': 10, 'skipped': 1, 'budget_tokens': 2000, 'budget_lines': None}
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            _render_pack(Path("/tmp"), candidates, meta, verbose=False, budget_tokens=2000, budget_lines=None)
-        self.assertIn("excluded", buf.getvalue())
+        out = pack_text(Path("/tmp"), candidates, meta, verbose=False, budget_tokens=2000, budget_lines=None)
+        self.assertIn("excluded", out)
 
     def test_line_budget_description(self):
-        import io
-        from contextlib import redirect_stdout
         meta = {'selected': 0, 'total_candidates': 0, 'used_tokens_approx': 0,
                 'used_lines': 0, 'skipped': 0, 'budget_tokens': None, 'budget_lines': 500}
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            _render_pack(Path("/tmp"), [], meta, verbose=False, budget_tokens=None, budget_lines=500)
-        self.assertIn("500 lines", buf.getvalue())
+        out = pack_text(Path("/tmp"), [], meta, verbose=False, budget_tokens=None, budget_lines=500)
+        self.assertIn("500 lines", out)
 
     def test_print_file_line_verbose(self):
-        import io
-        from contextlib import redirect_stdout
         f = {'relative': 'src/app.py', 'tokens_approx': 77, 'lines': 15}
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            _print_file_line(f, verbose=True)
-        out = buf.getvalue()
+        out = _format_file_line(f, verbose=True)
         self.assertIn("77", out)
         self.assertIn("src/app.py", out)
 
     def test_print_file_line_not_verbose(self):
-        import io
-        from contextlib import redirect_stdout
         f = {'relative': 'src/app.py', 'tokens_approx': 77, 'lines': 15}
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            _print_file_line(f, verbose=False)
-        out = buf.getvalue()
+        out = _format_file_line(f, verbose=False)
         self.assertIn("src/app.py", out)
         self.assertNotIn("77", out)
 
@@ -1037,18 +1007,13 @@ class TestGetChangedFiles(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# _render_pack: --since display
+# Returned inventory: --since display
 # ---------------------------------------------------------------------------
 
 class TestRenderPackSince(unittest.TestCase):
 
     def _capture(self, selected, meta, verbose=False, budget_tokens=2000, budget_lines=None):
-        import io
-        from contextlib import redirect_stdout
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            _render_pack(Path('src/'), selected, meta, verbose, budget_tokens, budget_lines)
-        return buf.getvalue()
+        return pack_text(Path('src/'), selected, meta, verbose, budget_tokens, budget_lines)
 
     def _meta(self, **kwargs):
         base = {
@@ -1223,7 +1188,7 @@ class TestRunPackSince(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Content emission: _get_file_structure, _emit_content_section,
+# Content formatting: _get_file_structure, _format_pack_content,
 # _collect_file_contents, run_pack --content
 # ---------------------------------------------------------------------------
 
@@ -1308,7 +1273,7 @@ class TestGetFileRawContent(unittest.TestCase):
         self.assertIsInstance(result, str)
 
 
-class TestEmitContentSection(unittest.TestCase):
+class TestFormatContentSection(unittest.TestCase):
 
     def _make_file_infos(self, files):
         """Build minimal file info dicts for testing.
@@ -1323,73 +1288,49 @@ class TestEmitContentSection(unittest.TestCase):
         return infos
 
     def test_emits_content_header(self):
-        import io
-        from contextlib import redirect_stdout
         with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
             f.write("x = 1\n")
             fpath = f.name
         infos = self._make_file_infos([(fpath, 'x.py', False)])
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            _emit_content_section(infos)
-        output = buf.getvalue()
+        output = "\n".join(_format_pack_content(infos)) + "\n"
         self.assertIn('CONTENT', output)
         self.assertIn('x.py', output)
 
     def test_changed_file_gets_tag(self):
-        import io
-        from contextlib import redirect_stdout
         with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
             f.write("def foo(): pass\n")
             fpath = f.name
         infos = self._make_file_infos([(fpath, 'foo.py', True, 20.0)])
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            _emit_content_section(infos)
-        self.assertIn('CHANGED', buf.getvalue())
+        out = "\n".join(_format_pack_content(infos)) + "\n"
+        self.assertIn('CHANGED', out)
 
     def test_changed_file_gets_full_content_not_structure(self):
-        import io
-        from contextlib import redirect_stdout
         with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
             f.write("def secret_impl():\n    return 42\n")
             fpath = f.name
         infos = self._make_file_infos([(fpath, 'impl.py', True, 20.0)])
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            _emit_content_section(infos)
-        output = buf.getvalue()
+        output = "\n".join(_format_pack_content(infos)) + "\n"
         # Full content includes the actual implementation body
         self.assertIn('return 42', output)
         self.assertIn('full content', output)
 
     def test_low_priority_file_shown_as_name_only(self):
-        import io
-        from contextlib import redirect_stdout
         with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
             f.write("x = 1\n")
             fpath = f.name
         infos = self._make_file_infos([(fpath, 'misc.py', False, 0.0)])
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            _emit_content_section(infos)
-        output = buf.getvalue()
+        output = "\n".join(_format_pack_content(infos)) + "\n"
         self.assertIn('misc.py', output)
         self.assertIn('Low-priority', output)
         # Should NOT include file content (just name)
         self.assertNotIn('x = 1', output)
 
     def test_high_priority_non_changed_gets_structure(self):
-        import io
-        from contextlib import redirect_stdout
         with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
             f.write("def authenticate(): pass\n")
             fpath = f.name
         infos = self._make_file_infos([(fpath, 'auth.py', False, 10.0)])
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            _emit_content_section(infos)
-        output = buf.getvalue()
+        output = "\n".join(_format_pack_content(infos)) + "\n"
         self.assertIn('auth.py', output)
         # Should NOT have 'full content' tag
         self.assertNotIn('full content', output)
@@ -1397,16 +1338,11 @@ class TestEmitContentSection(unittest.TestCase):
         self.assertNotIn('Low-priority', output)
 
     def test_unknown_file_type_shows_fallback_message(self):
-        import io
-        from contextlib import redirect_stdout
         with tempfile.NamedTemporaryFile(suffix='.xyzunknownext', mode='w', delete=False) as f:
             f.write("no analyzer here\n")
             fpath = f.name
         infos = self._make_file_infos([(fpath, 'mystery.xyzunknownext', False)])
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            _emit_content_section(infos)
-        output = buf.getvalue()
+        output = "\n".join(_format_pack_content(infos)) + "\n"
         self.assertIn('mystery.xyzunknownext', output)
         # Either structure output or fallback message — no crash
         self.assertIn('\n', output)
@@ -1643,13 +1579,7 @@ class TestFetchFanIn(unittest.TestCase):
 class TestRenderArchitectureBrief(unittest.TestCase):
 
     def _capture(self, selected):
-        import io
-        from contextlib import redirect_stdout
-        from reveal.cli.commands.pack import _render_architecture_brief
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            _render_architecture_brief(selected)
-        return buf.getvalue()
+        return "\n".join(_format_architecture_brief(selected))
 
     def test_shows_entry_points(self):
         selected = [

@@ -15,16 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Pinned-source rule precision pilot retains stratified claims, independent TP/FP/uncertain labels and reproducible weighted reports; the scheduled corpus workflow also runs the accepted Python caller baseline (BACK-1796, BACK-1797).
 - Optional Go import regression measurement uses a pinned client_golang corpus and the native Go parser; the same runner supports a bounded local Python caller baseline with implementation provenance (BACK-1461, BACK-1518, BACK-1096).
 - Calls, callees and trace share source-attributed module callers and typed JSX component references, with scope warnings and source lines (BACK-1778, BACK-1784).
 - Scheduled JS/TS/TSX import recall uses a pinned independent compiler oracle; a separate bounded mixed-framework matrix verifies components, contracts and configuration (BACK-1783, BACK-1785).
 
 ### Changed
-- `deps` and `contracts` return text through the shared rendering boundary and capped-section accounting (BACK-916).
+- `deps`, `contracts`, `pack`, `architecture` and `hotspots` return text through the shared rendering boundary and capped-section accounting (BACK-916).
 - I002 uses shared scan policy and reports candidate/analysis counts separately from presentation cuts, preserving its existing thresholds (BACK-1052).
 - Stdin schema-validation batches return one envelope with per-file outcomes and consistent error/usage exits (BACK-1714).
 
 ### Fixed
+- Health reads current file/directory check reports, preserving real violations and failed/partial outcomes instead of defaulting them to healthy. D005 and health expose scan counts separately from presentation cuts; stats exclusions survive composed hotspots/overview results (BACK-1793, BACK-1794, BACK-1795).
 - MCP configuration discovery and merged values refresh between serialized tool requests, so edits to `.reveal.yaml` take effect without restarting the server (BACK-1572).
 - Nginx fleet gaps exit consistently across text/JSON; touched rendering paths preserve diagnostics and disclose omitted items (BACK-1758).
 - B006 rejects nested uncalled forwarding and non-reporting sinks; imports/I002 disk cache keys include target-only index changes (BACK-1734, BACK-1755).

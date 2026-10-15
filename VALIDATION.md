@@ -1830,7 +1830,7 @@ than removing them from the metric: external-test/generator files can import the
 own directory's package, whose buildless fan-out includes the importer itself.
 This does not establish build-selected or runtime dependency resolution.
 
-The same runner has an optional local `--signal calls` mode. Its first population
+The same runner has a separately scoped `--signal calls` mode. Its first population
 is the existing pinned celery corpus, `celery/utils/`, using Python's standard AST
 to derive bare-name caller relationships independently. All **1,046 expected
 relationships** agree (**100% recall and precision**). The scope is function/method
@@ -1848,12 +1848,11 @@ python scripts/recall_gate.py --signal calls --corpus-root ~/.cache/reveal-corpu
 ```
 
 Go must be on PATH at the pinned version. Import baselines remain in
-[recall_baseline.json](tests/corpus/recall_baseline.json); the local callers baseline
+[recall_baseline.json](tests/corpus/recall_baseline.json); the callers baseline
 is [calls_baseline.json](tests/corpus/calls_baseline.json). Both compare populations,
 recall and precision, reject unexpected zero results, and fail deliberate lost-edge
 controls. Reports identify the implementation through Git HEAD, tracked-diff and
-untracked-file digests plus Python/grammar versions. Remote runner qualification of the expanded Go workflow remains unverified. Callers mode
-is local only and is not added to the scheduled import workflow.
+untracked-file digests plus Python/grammar versions. The scheduled workflow now includes separate import and caller steps and retains both reports, including failed comparisons. Remote qualification of the expanded workflow remains outstanding until its exact revision runs successfully.
 
 Complementary adversarial controls in
 [test_import_precision_invariants.py](tests/test_import_precision_invariants.py)
@@ -1861,6 +1860,54 @@ place recoverable syntax damage between independently known imports and function
 in Python, JavaScript, TypeScript and C. Earlier and later claims survive, while
 analysis and text/JSON results disclose partial parsing. These fixtures establish
 containment for this input family; they are not real-corpus recall measurements.
+
+## Rule precision pilot (2026-10-14)
+
+The pinned Celery repository (`17b895bad43aab73fca37609ae9b93be6cc1c6e1`) supplies
+144 D001, 37 B006 and three I001 emitted claims in a 507-file check. Five
+non-Python files parsed partially and one generated Python file was skipped;
+the sample excludes those records, which contain no selected-rule claims.
+The retained population summary discloses these limits. Sampling is deterministic
+within rule × top-level directory strata, with 20 claims per rule or all claims
+when fewer exist. D002's advisory candidate ranking was inspected during selection
+and is outside this pilot's binary claim criteria.
+
+| Rule | Reviewed TP / FP / uncertain | Stratum-weighted precision on decidable claims |
+|---|---|---|
+| D001 | 17 / 3 / 0 | 74.43% |
+| B006 | 7 / 12 / 1 | 27.10% |
+| I001 | 2 / 1 / 0 (all three claims) | 66.67% |
+
+These are scoped pilot estimates from one source review, not population-wide
+accuracy claims. Weighting accounts for unequal sampling of source and test
+strata. B006's uncertain-label bounds are 25.48–31.47%; these bounds describe
+label uncertainty **only**, not sampling error. Recall, runtime semantics,
+refactoring value and appropriate default rule selection were not measured.
+D001 labels distinguish real body duplication—including intentional abstract
+hooks and test fixtures—from decorated pass-only bodies that should have been
+excluded by the documented policy. B006 labels follow caught exceptions through
+assertions and checked thread/callback state; debug-only logs remain non-reporting.
+I001's false claim is a name used in a quoted local type annotation. The criteria
+and individual reasons remain reviewable, including the uncertain case.
+
+Artifacts: [sample](tests/corpus/rule_precision_sample.json),
+[labels and criteria](tests/corpus/rule_precision_labels.json),
+[report](tests/corpus/rule_precision_report.json), and
+[runner](scripts/rule_precision.py). Source-file hashes, exact corpus pin,
+Python/parser versions and Reveal working-tree digests identify the measurement.
+The failure controls reject missing labels, missing/zero populations, changed
+source, unsupported verdicts and deliberate claim loss. Labels are maintained by
+source review and are never inferred automatically from a passing rule run.
+
+```bash
+python scripts/fetch_corpus.py python-celery
+python scripts/rule_precision.py sample --corpus-root ~/.cache/reveal-corpus --output /tmp/rule-sample.json
+python scripts/rule_precision.py score --corpus-root ~/.cache/reveal-corpus --sample tests/corpus/rule_precision_sample.json --labels tests/corpus/rule_precision_labels.json --output /tmp/rule-precision.json
+```
+
+A new sample is reviewed before replacing the committed labels; the scoring
+command verifies the committed source hashes and pin. No baseline is rewritten
+by scheduled execution.
 
 ## Re-running this yourself
 

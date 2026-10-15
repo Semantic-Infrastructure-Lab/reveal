@@ -4,8 +4,11 @@ import logging
 import argparse
 import sys
 from argparse import Namespace
+from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import List
+from typing import List, Optional
+from ...utils.query_control import ScanBudget, BudgetAccounting
+from ...utils.results import outcome_of
 from ..global_flags import add_gitignore_arguments, rule_patterns
 from ..routing.ledger import complete
 from ..routing.subcommand import emit_subcommand_result
@@ -93,6 +96,15 @@ def _detect_targets() -> List[str]:
     return ['.']
 
 
+@dataclass(frozen=True)
+class HealthResult:
+    """One target's status and source accounting, carried to both output formats."""
+    exit_code: int
+    summary: str
+    outcome: str = 'ok'
+    scan_budget: Optional[dict] = None
+
+
 def run_health(args: Namespace) -> None:
     """Run unified health check across all specified targets."""
     targets = args.targets
@@ -106,13 +118,12 @@ def run_health(args: Namespace) -> None:
 
     for target in targets:
         try:
-            exit_code, summary = _check_target(target, args)
+            result = _check_target(target, args)
         except Exception as exc:
             # Visible via the 'summary' field appended to results below.
-            exit_code, summary = 2, f"error: {exc}"
-        results.append({'target': target, 'exit_code': exit_code, 'summary': summary})
-        if exit_code > overall_exit:
-            overall_exit = exit_code
+            result = HealthResult(2, f"error: {exc}", "failed")
+        results.append({'target': target, **asdict(result)})
+        overall_exit = max(overall_exit, result.exit_code)
 
     emit_subcommand_result({'results': results, 'overall_exit': overall_exit}, args,
                            name='health', source=','.join(targets), source_type='multi',
@@ -127,17 +138,17 @@ def _check_target(target: str, args: Namespace):
     # URI-based routing
     if '://' in target:
         scheme = target.split('://')[0]
-        return _check_uri(scheme, target, args)
+        return HealthResult(*_check_uri(scheme, target, args))
 
     # Local path routing
     path = Path(target)
     if path.exists():
         if path.suffix.lower() in ('.conf',):
-            return _check_nginx(path, args)
+            return HealthResult(*_check_nginx(path, args))
         return _check_code(path, args)
 
     print(f"  ⚠  {target}: not found", file=sys.stderr)
-    return 1, f"not found: {target}"
+    return HealthResult(1, f"not found: {target}", "failed")
 
 
 # Maximum supported files before health bails and tells the user to run reveal check directly.
@@ -146,49 +157,116 @@ def _check_target(target: str, args: Namespace):
 _HEALTH_MAX_FILES = 5000
 
 
-def _check_code(path: Path, args: Namespace):
-    """Run code quality health check."""
+def _check_code(path: Path, args: Namespace) -> HealthResult:
+    """Use the same scan policy and the actual check result shapes."""
     import subprocess
-    # Guard: count files before spawning subprocess.  Running reveal check on a large
-    # tree (>5000 files) can exhaust memory because the subprocess buffers all JSON
-    # output and the parent captures it all via capture_output=True.
-    if path.is_dir():
-        from reveal.cli.file_checker import collect_files_to_check
-        files = collect_files_to_check(path.resolve()).files
-        if len(files) > _HEALTH_MAX_FILES:
-            return 1, (
-                f"code: skipped — {len(files)} files exceeds health check limit "
-                f"({_HEALTH_MAX_FILES}). Use `reveal check {path}` directly."
-            )
+    import json
+    from reveal.cli.file_checker import collect_files_to_check
+    from reveal.utils.gitignore import gitignore_enabled
+    budget = ScanBudget(_HEALTH_MAX_FILES)
+    count = len(collect_files_to_check(path.resolve()).files) if path.is_dir() else 1
+    skipped = count > _HEALTH_MAX_FILES
+    accounting = {**asdict(BudgetAccounting('scan', count, 0 if skipped else count)), 'limit': budget.limit,
+                  'analyzed_files': 0, 'skipped': skipped}
+    if skipped:
+        return HealthResult(1,
+            f"code: skipped — {count} files exceeds health check limit "
+            f"({_HEALTH_MAX_FILES}). Use `reveal check {path}` directly.", 'skipped', accounting)
     select = getattr(args, 'select', None) or 'B,S,I,C'
     cmd = ['reveal', 'check', str(path), f'--select={select}', '--only-failures', '--format=json']
-    from reveal.utils.gitignore import gitignore_enabled
     if not gitignore_enabled():
-        cmd.append('--no-gitignore')  # the child counts the same file set as the guard above
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, encoding='utf-8', errors='replace')
-    output = result.stdout.strip()
-
+        cmd.append('--no-gitignore')
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120,
+                            encoding='utf-8', errors='replace')
     try:
-        import json
-        if not output:
-            raise ValueError("empty output from `reveal check` subprocess")
-        data = json.loads(output)
-        violations = data.get('total_violations', 0)
-        critical = sum(1 for v in data.get('violations', []) if v.get('severity') == 'error')
-        if critical > 0:
-            return 2, f"code: {violations} violations ({critical} critical)"
-        elif violations > 0:
-            return 1, f"code: {violations} violations"
-        else:
-            return 0, "code: healthy"
-    except Exception as e:
+        data = json.loads(result.stdout)
+        return _code_result(data, result.returncode, accounting)
+    except (ValueError, TypeError, KeyError) as exc:
         if result.returncode != 0:
-            return 1, "code: check failed"
-        # Subprocess exited 0 but its output didn't parse as the expected
-        # JSON shape (or was empty) — that's an unknown state, not a clean
-        # bill of health. Reporting "healthy" here would silently mask a
-        # `reveal check` regression as passing.
-        return 2, f"code: could not parse check results ({e})"
+            return HealthResult(1, 'code: check failed', 'failed', accounting)
+        return HealthResult(2, f'code: could not parse check results ({exc})',
+                            'failed', accounting)
+
+
+@dataclass(frozen=True)
+class CodeReport:
+    total: int
+    checked: int
+    errors: int
+    degraded: int
+    detections: list
+    disclosures: list
+
+
+def _read_code_report(data: dict, candidates: int) -> CodeReport:
+    """Normalize the two current check envelopes; reject unknown or malformed shapes."""
+    summary = data.get('summary')
+    if isinstance(summary, dict):
+        total = summary['total_issues']
+        files = data.get('files', [])
+        if not isinstance(files, list) or not all(isinstance(f, dict) for f in files):
+            raise ValueError('invalid file results')
+        entries = [d for file in files for d in file.get('detections', [])]
+        report = CodeReport(total, summary.get('files_checked', candidates),
+                            summary.get('files_errored', 0), summary.get('files_degraded', 0),
+                            entries, summary.get('scan_disclosures', []))
+    else:
+        report = CodeReport(data['total'], 1, 0, 0, data['detections'], data.get('scan_disclosures', []))
+    counts = (report.total, report.checked, report.errors, report.degraded)
+    if not all(type(n) is int and n >= 0 for n in counts):
+        raise ValueError('invalid check counts')
+    if (not isinstance(report.detections, list)
+            or not all(isinstance(d, dict) for d in report.detections)
+            or not isinstance(report.disclosures, list) or report.errors > report.checked):
+        raise ValueError('invalid detections, disclosures or failed-file count')
+    return report
+
+
+def _code_result(data: dict, returncode: int, accounting: dict) -> HealthResult:
+    """Interpret a validated answer before allowing a clean health result."""
+    if not isinstance(data, dict):
+        raise ValueError('check result is not an object')
+    if outcome_of(data) == 'failed':
+        return HealthResult(2, f"code: check failed ({data['error']})", 'failed', accounting)
+    if outcome_of(data) == 'not_applicable':
+        return HealthResult(1, 'code: check not applicable', 'not_applicable', accounting)
+    report = _read_code_report(data, accounting['total'])
+    changed = report.checked != accounting['returned']
+    accounting = {**accounting, 'preflight_files': accounting['total'],
+                  'total': max(accounting['total'], report.checked),
+                  'returned': report.checked, 'exact': accounting['exact'] and not changed,
+                  'analyzed_files': report.checked - report.errors,
+                  'failed_files': report.errors, 'degraded_files': report.degraded}
+    if report.errors or returncode >= 2 and not report.degraded:
+        return HealthResult(2, f'code: check failed ({report.errors} errored files, exit {returncode})',
+                            'failed', accounting)
+    incomplete = _incomplete_code_result(data, report, accounting, changed)
+    if incomplete is not None:
+        return incomplete
+    critical = sum(1 for d in report.detections if d.get('severity') in ('error', 'high', 'critical'))
+    if critical:
+        return HealthResult(2, f'code: {report.total} violations ({critical} critical)', 'ok', accounting)
+    if report.total:
+        return HealthResult(1, f'code: {report.total} violations', 'ok', accounting)
+    if returncode:
+        return HealthResult(2, f'code: check failed (exit {returncode})', 'failed', accounting)
+    return HealthResult(0, 'code: healthy', 'ok', accounting)
+
+
+def _incomplete_code_result(data: dict, report: CodeReport, accounting: dict,
+                            changed: bool) -> Optional[HealthResult]:
+    """Retain child scope disclosures before judging violation severity."""
+    meta = data.get('meta') or {}
+    if not isinstance(meta, dict):
+        raise ValueError('invalid check metadata')
+    if report.checked == 0:
+        return HealthResult(1, 'code: no applicable files were checked', 'not_applicable', accounting)
+    if changed or report.degraded or report.disclosures or meta.get('errors') or meta.get('warnings'):
+        notices = [*report.disclosures, *(['file population changed between preflight and check'] if changed else [])]
+        detail = '; '.join(str(d) for d in notices)
+        return HealthResult(1, f'code: incomplete check ({report.total} violations, {report.degraded} degraded files)'
+                            + (f' — {detail}' if detail else ''), 'partial', accounting)
+    return None
 
 
 def _check_uri(scheme: str, uri: str, args: Namespace):
@@ -250,6 +328,10 @@ def _render_results(results: list) -> None:
         icon = '✅' if exit_code == 0 else '⚠️ ' if exit_code == 1 else '❌'
         print(f"  {icon}  {r['target']}")
         print(f"       {r['summary']}")
+        budget = r.get('scan_budget')
+        if budget:
+            total = str(budget['total']) if budget['exact'] else f"at least {budget['total']}"
+            print(f"       Scan: {total} candidate files, {budget['analyzed_files']} analyzed; limit {budget['limit']}")
     print()
 
     overall = max((r['exit_code'] for r in results), default=0)

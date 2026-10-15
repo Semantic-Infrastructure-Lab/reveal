@@ -8,7 +8,7 @@ the oracle over the configured importer population, builds Reveal's dependency g
 the same scan root, and compares fan-in edges for every oracle target. Recall or precision
 below the committed baseline, a changed population, an oracle or Reveal side that measured
 nothing, or a missing corpus all fail; nothing is reported as a clean zero.
-The default signal is imports; --signal calls runs optional local Python caller baselines.
+The default signal is imports; --signal calls runs the separate pinned Python caller baseline, locally or in the scheduled workflow.
 """
 from __future__ import annotations
 
