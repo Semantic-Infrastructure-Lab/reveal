@@ -573,7 +573,7 @@ def _subscript_name(container, analyzer) -> str:
     """Last dotted segment of the subscripted name: ``typing.Literal[...]`` -> ``Literal``."""
     named = container if _zero_arg(container, 'kind') == 'subscript' else _zero_arg(container, 'parent')
     head = _children(named)[0]
-    return analyzer._get_node_text(head).rsplit('.', 1)[-1].strip()
+    return str(analyzer._get_node_text(head)).rsplit('.', 1)[-1].strip()
 
 
 def _is_forward_reference(string_node, analyzer) -> bool:
