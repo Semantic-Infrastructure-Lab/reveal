@@ -5,7 +5,7 @@ Reads the same per-function score `ast://` and `stats://` report (BACK-1081), fo
 every language, so one function has one number across commands. That score counts
 boolean operators and ternaries as decisions, like radon, lizard and SonarQube;
 Python's `mccabe`/Ruff C901 does not, so Python scores here run higher than Ruff's.
-A line-count heuristic is the fallback for analyzers that report no score.
+A keyword count (reveal.complexity.fallback_complexity, shared with ast:// and stats://) is the fallback for analyzers that report no score.
 """
 
 from typing import List, Dict, Any, Optional
