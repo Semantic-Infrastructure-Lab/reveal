@@ -41,7 +41,7 @@ class TestSingleFileCheck:
     def test_text_discloses_i001_and_t006_before_the_verdict(self, java_file, capsys):
         out = _check(java_file, "text", capsys)
         lines = out.splitlines()
-        verdict = next(i for i, line in enumerate(lines) if "No issues found" in line)
+        verdict = next(i for i, line in enumerate(lines) if "scan incomplete" in line)
         w_cap_2 = next(i for i, line in enumerate(lines) if "W-CAP-2" in line)
         w_cap_1 = next(i for i, line in enumerate(lines) if "W-CAP-1" in line)
         assert w_cap_1 < verdict and w_cap_2 < verdict
@@ -69,7 +69,7 @@ class TestMcpRevealCheck:
     def test_file_result_carries_disclosures(self, java_file):
         from reveal.mcp_server import reveal_check
         out = reveal_check(str(java_file))
-        assert "W-CAP-2" in out and out.rstrip().endswith("No issues found.")
+        assert "W-CAP-2" in out and out.rstrip().endswith("scan incomplete.")
 
     def test_directory_result_carries_disclosures(self, java_file):
         from reveal.mcp_server import reveal_check
@@ -92,7 +92,7 @@ class TestDepsSkippedChecks:
 
     @staticmethod
     def _render(report):
-        from reveal.adapters.deps import _render_deps
+        from reveal.rendering.adapters.deps import _render_deps
         buf = StringIO()
         with patch("sys.stdout", buf):
             print("\n".join(_render_deps(report, top=10)))

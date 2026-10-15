@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 from ..base import BaseRenderer
 from ...utils import print_json_result
 from ...utils.results import outcome_of
+from ...utils.warning_render import meta_warning_lines
 
 _SURFACE_LABELS = {
     'cli': 'CLI commands / arguments',
@@ -173,6 +174,18 @@ def surface_text(report: Dict[str, Any], top: Optional[int] = None) -> str:
 
 class SurfaceRenderer(BaseRenderer):
     """Renderer for surface:// results."""
+    RENDERS_META_WARNINGS = True
+
+    @classmethod
+    def _body(cls, result: Dict[str, Any], top: Optional[int] = None) -> str:
+        meta = result.get('meta') or {}
+        # Coverage and parser diagnostics are already printed above the inventory.
+        inline = {'W-SURFACE-1', 'W-SURFACE-2', 'W-SURFACE-3'}
+        remaining = {**result, 'meta': {**meta, 'warnings': [
+            warning for warning in meta.get('warnings', [])
+            if warning.get('code') not in inline]}}
+        diagnostics = meta_warning_lines(remaining)
+        return surface_text(result, top) + ('\n'.join(diagnostics) + '\n' if diagnostics else '')
 
     @classmethod
     def render_structure(cls, result: Dict[str, Any], format: str = 'text',
@@ -182,8 +195,8 @@ class SurfaceRenderer(BaseRenderer):
             return None
         if outcome_of(result) == 'failed':
             return super().render_structure(result, format)
-        return surface_text(result, top)
+        return cls._body(result, top)
 
     @classmethod
     def _render_text(cls, result: Dict[str, Any]) -> str:
-        return surface_text(result)
+        return cls._body(result)

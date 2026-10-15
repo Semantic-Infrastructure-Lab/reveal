@@ -14,16 +14,13 @@ from reveal.adapters.deps import (
     DepsAdapter,
     _analyse_imports,
     _local_package_names,
-    _render_circular,
-    _render_deps,
-    _render_external_packages,
-    _render_next_steps,
-    _render_summary,
-    _render_top_importers,
-    _render_unused,
     _run_base,
     _run_circular,
     _run_unused,
+)
+from reveal.rendering.adapters.deps import (
+    _render_circular, _render_deps, _render_external_packages,
+    _render_next_steps, _render_summary, _render_top_importers, _render_unused,
 )
 from reveal.cli.commands.deps import (
     create_deps_parser,

@@ -2,8 +2,8 @@
 
 Thin argparse shim over the pack:// adapter. Scan/rank logic lives in
 reveal/adapters/pack.py; presentation lives in rendering/adapters/pack.py.
-Scan helpers and the MCP string formatter retain their existing interfaces
-through this module for reveal_pack and existing callers.
+Scan helpers and the MCP string formatter remain available here for
+reveal_pack and existing callers; text rendering belongs to PackRenderer.
 """
 
 import sys

@@ -1,8 +1,8 @@
 """reveal contracts — contract and seam inventory for a codebase.
 
 Thin argparse shim over the contracts:// adapter (BACK-905); scan/render
-logic lives in reveal/adapters/contracts.py. Internal names are re-exported
-here for backward compatibility with existing callers/tests.
+logic lives in reveal/adapters/contracts.py and text rendering in
+reveal/rendering/adapters/contracts.py.
 """
 
 import argparse
@@ -37,9 +37,6 @@ from reveal.adapters.contracts import (  # noqa: F401 - re-exported for back-com
     _scan_contracts_ruby,
     _scan_contracts_rust,
     _scan_contracts_ts,
-)
-from reveal.rendering.adapters.contracts import (  # noqa: F401 - compatibility exports
-    _LANGUAGE_LABELS, _LANGUAGE_RENDER_ORDER, _no_contracts_hint, _render_contract_groups, _render_group, _render_report
 )
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
 from ..routing.subcommand import emit_subcommand_result

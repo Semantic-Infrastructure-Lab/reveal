@@ -55,13 +55,15 @@ class _Answered(Exception):
 
 class UriUsageError(Exception):
     """The query is malformed before any adapter is chosen: no ``://``, an unknown scheme.
-    handle_uri prints it on stderr and exits 1, like argparse (BACK-1553 decision);
-    resolve_uri raises it, so a batch records it and goes on."""
+    handle_uri prints it on stderr and exits 1 by default; input values with a
+    declared CLI usage contract may use exit 2. resolve_uri raises it so a batch
+    records the error and goes on."""
 
-    def __init__(self, message: str, hint: str = ''):
+    def __init__(self, message: str, hint: str = '', exit_code: int = 1):
         super().__init__(message)
         self.message = message
         self.hint = hint
+        self.exit_code = exit_code
 
 
 def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
@@ -246,7 +248,7 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace',
         print(f"Error: {e.message}", file=sys.stderr)
         if e.hint:
             print(e.hint, file=sys.stderr)
-        sys.exit(1)
+        sys.exit(e.exit_code)
 
 
 def resolve_uri(uri: str, args: 'Namespace', consumed: Iterable[str] = ()) -> Answer:
@@ -259,6 +261,20 @@ def resolve_uri(uri: str, args: 'Namespace', consumed: Iterable[str] = ()) -> An
     with _dispatch(uri, None, args, consumed) as (adapter_class, scheme, resource, args):
         return resolve_adapter(adapter_class, _renderer_class_of(scheme), scheme, resource,
                                None, args)
+
+
+def _validate_display_limit(scheme: str, resource: str) -> None:
+    """Apply the deps/architecture top policy before an adapter or renderer runs."""
+    if scheme not in ('deps', 'architecture') or '?' not in resource:
+        return
+    from ...utils.query_parser import nonnegative_display_limit, parse_query_params
+    params = parse_query_params(resource.partition('?')[2])
+    if 'top' not in params:
+        return
+    try:
+        nonnegative_display_limit(params['top'])
+    except (TypeError, ValueError) as exc:
+        raise UriUsageError(str(exc), exit_code=2) from None
 
 
 @contextmanager
@@ -323,6 +339,7 @@ def _dispatch(uri: str, element: Optional[str], args: 'Namespace',
     # a value already in the URI wins over the flag.
     resource = _inject_exclude_flag(resource, scheme, args)
     resource = inject_query_flags(resource, scheme, args)
+    _validate_display_limit(scheme, resource)
 
     # Look up adapter from registry
     from ...adapters.base import get_adapter_class, list_supported_schemes

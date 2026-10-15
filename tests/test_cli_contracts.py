@@ -23,11 +23,11 @@ from reveal.cli.commands.contracts import (
     _is_dataclass,
     _is_protocol,
     _is_typeddict,
-    _render_report,
     _scan_contracts,
     create_contracts_parser,
     run_contracts,
 )
+from reveal.rendering.adapters.contracts import _render_report
 
 # BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
 pytestmark = pytest.mark.component

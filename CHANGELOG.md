@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `deps`, `contracts`, `pack`, `architecture` and `hotspots` return text through the shared rendering boundary and capped-section accounting (BACK-916).
+- Renderer migration details (BACK-1811–BACK-1814): pack's top-file and core-abstraction lists disclose omitted items in CLI/MCP text, and `pack://` text now honors `content` and `architecture`; `architecture://?no_imports=true` omits its static-imports note. JSON adds hotspots `summary`, architecture `no_imports`, and pack `architecture`; hotspots text states the McCabe complexity caveat. Negative deps/architecture `top` values now give usage errors, and hotspots/surface no longer misstate or duplicate scan diagnostics.
 - I002 uses shared scan policy and reports candidate/analysis counts separately from presentation cuts, preserving its existing thresholds (BACK-1052).
 - Stdin schema-validation batches return one envelope with per-file outcomes and consistent error/usage exits (BACK-1714).
 

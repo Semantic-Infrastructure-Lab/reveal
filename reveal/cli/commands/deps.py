@@ -1,8 +1,8 @@
 """reveal deps — dependency health dashboard.
 
 Thin argparse shim over the deps:// adapter (BACK-901/BACK-956); scan/render
-logic lives in reveal/adapters/deps.py. Internal names are re-exported here
-for backward compatibility with existing callers/tests.
+logic lives in reveal/adapters/deps.py and text rendering in
+reveal/rendering/adapters/deps.py.
 """
 
 import argparse
@@ -16,13 +16,6 @@ from reveal.adapters.deps import (  # noqa: F401 - re-exported for back-compat
     DepsRenderer,
     _analyse_imports,
     _local_package_names,
-    _render_circular,
-    _render_deps,
-    _render_external_packages,
-    _render_next_steps,
-    _render_summary,
-    _render_top_importers,
-    _render_unused,
     _run_base,
     _run_circular,
     _run_unused,
@@ -30,6 +23,7 @@ from reveal.adapters.deps import (  # noqa: F401 - re-exported for back-compat
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
 from ..routing.ledger import complete
 from ..routing.subcommand import emit_subcommand_result
+from reveal.utils.query_parser import nonnegative_display_limit
 
 
 def create_deps_parser() -> argparse.ArgumentParser:
@@ -59,7 +53,7 @@ def create_deps_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--top',
         metavar='N',
-        type=int,
+        type=nonnegative_display_limit,
         default=10,
         help='Number of items to show in each section (default: 10)'
     )

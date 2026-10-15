@@ -2,8 +2,8 @@
 
 Thin argparse shim over the hotspots:// adapter (BACK-901/BACK-955); scanning
 lives in reveal/adapters/hotspots.py and rendering in
-reveal/rendering/adapters/hotspots.py. Internal names are
-re-exported here for backward compatibility with existing callers/tests.
+reveal/rendering/adapters/hotspots.py. Scan helpers remain available here
+for existing callers.
 """
 
 import argparse

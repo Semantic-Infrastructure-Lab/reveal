@@ -415,7 +415,7 @@ class ArchitectureAdapter(ResourceAdapter):
             'description': 'Targeted architectural brief (entry points, core abstractions, risks, next commands)',
             'uri_syntax': 'architecture://<path>?top=5&no_imports=true',
             'query_params': {
-                'top': {'type': 'integer', 'description': 'Number of items to show per section', 'examples': ['top=10']},
+                'top': {'type': 'integer', 'minimum': 0, 'description': 'Number of items to show per section', 'examples': ['top=10']},
                 'no_imports': {'type': 'boolean', 'description': 'Skip import graph analysis', 'examples': ['no_imports=true']},
             },
             'elements': {},

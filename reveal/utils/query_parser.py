@@ -154,6 +154,14 @@ def whole_number(value: Any) -> int:
     return int(value)
 
 
+def nonnegative_display_limit(value: Any) -> int:
+    """Shared CLI/URI policy for bounded display sections; zero shows none."""
+    limit = whole_number(value)
+    if limit < 0:
+        raise ValueError('top must be nonnegative')
+    return limit
+
+
 @dataclass(frozen=True)
 class ParamSpec:
     """One declared query parameter; read explicitly where its value is applied.

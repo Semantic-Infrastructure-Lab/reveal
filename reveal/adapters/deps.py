@@ -22,16 +22,7 @@ from ..analyzers.imports.classify import (
 from ..conventions import family_for_path
 from ..utils.path_utils import _language_for_path
 from ..utils.query import parse_query_params
-from ..rendering.adapters.deps import (  # noqa: F401 - compatibility exports
-    DepsRenderer,
-    _render_summary,
-    _render_external_packages,
-    _render_circular,
-    _render_unused,
-    _render_top_importers,
-    _render_next_steps,
-    _render_deps,
-)
+from ..rendering.adapters.deps import DepsRenderer
 from ..utils.results import ResultBuilder
 
 # BACK-1190: the stdlib list, local-package heuristic, and classifier itself
@@ -250,7 +241,7 @@ class DepsAdapter(ResourceAdapter):
             'description': 'Dependency health dashboard (external packages, circular deps, unused imports)',
             'uri_syntax': 'deps://<path>?top=10&no_unused=true&no_circular=true',
             'query_params': {
-                'top': {'type': 'integer', 'description': 'Number of items to show per section', 'examples': ['top=15']},
+                'top': {'type': 'integer', 'minimum': 0, 'description': 'Number of items to show per section', 'examples': ['top=15']},
                 'no_unused': {'type': 'boolean', 'description': 'Skip the unused-imports section', 'examples': ['no_unused=true']},
                 'no_circular': {'type': 'boolean', 'description': 'Skip the circular-dependencies section', 'examples': ['no_circular=true']},
             },

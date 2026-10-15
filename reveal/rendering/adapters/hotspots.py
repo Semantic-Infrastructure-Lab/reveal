@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Set
 from ..base import BaseRenderer
 from ...utils.formatting import cwd_path
 from ...utils.results import outcome_of
+from ...utils.warning_render import meta_warning_lines
 
 def _render_file_hotspots(hotspots: List[Dict[str, Any]], top: int, root: str='') -> List[str]:
     lines: List[str] = []
@@ -101,7 +102,11 @@ def _render_report(report: Dict[str, Any], top: int, test_index: Optional[Set[st
     lines.append('━' * 50)
     if not file_hotspots and (not fn_hotspots):
         meta = report.get('meta') or {}
-        incomplete = meta.get('errors') or meta.get('warnings')
+        advisory_types = {'complexity_is_unweighted', 'test_convention_unknown'}
+        incomplete = (meta.get('errors') or
+                      any(w.get('type') not in advisory_types
+                          for w in meta.get('warnings', [])) or
+                      report.get('summary', {}).get('total_files', 0) == 0)
         lines.append('\nNo hotspots found in the analyzed population.' if incomplete
                      else '\nNo hotspots found ✅  Code quality looks good.')
         lines.append('')
@@ -113,13 +118,22 @@ def _render_report(report: Dict[str, Any], top: int, test_index: Optional[Set[st
 
 
 class HotspotsRenderer(BaseRenderer):
+    RENDERS_META_WARNINGS = True
+
+    @classmethod
+    def _body(cls, result: Dict[str, Any], top: int,
+              test_index: Optional[Set[str]] = None) -> str:
+        diagnostics = meta_warning_lines(result)
+        return ('\n'.join(_render_report(result, top, test_index)) + '\n' +
+                ('\n'.join(diagnostics) + '\n' if diagnostics else ''))
+
     @classmethod
     def render_structure(cls, result: Dict[str, Any], format: str = 'text',
                          top: int = 10, test_index: Optional[Set[str]] = None) -> Optional[str]:
         if format == 'json' or outcome_of(result) == 'failed':
             return super().render_structure(result, format)
-        return '\n'.join(_render_report(result, top, test_index)) + '\n'
+        return cls._body(result, top, test_index)
 
     @classmethod
     def _render_text(cls, result: Dict[str, Any]) -> str:
-        return '\n'.join(_render_report(result, 10)) + '\n'
+        return cls._body(result, 10)

@@ -5,8 +5,8 @@ brief scanning lives in reveal/adapters/architecture.py and rendering in
 reveal/rendering/adapters/architecture.py. The
 `--against <ref>` git-diff branch stays here — it delegates to the dedicated
 reveal.diff.architecture_diff module and has its own contract/tests
-independent of the main brief. Internal names are re-exported here for
-backward compatibility with existing callers/tests.
+independent of the main brief. Scan helpers remain available here for
+existing callers.
 """
 import argparse
 import sys
@@ -29,6 +29,7 @@ from reveal.adapters.architecture import (  # noqa: F401 - re-exported for back-
 from ...rendering.adapters.architecture import ArchitectureRenderer
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
 from ..routing.subcommand import emit_subcommand_result
+from reveal.utils.query_parser import nonnegative_display_limit
 
 
 def create_architecture_parser() -> argparse.ArgumentParser:
@@ -63,7 +64,7 @@ def create_architecture_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--top',
         metavar='N',
-        type=int,
+        type=nonnegative_display_limit,
         default=5,
         help='Number of items to show per section (default: 5)',
     )
