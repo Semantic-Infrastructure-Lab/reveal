@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `check`'s "scan incomplete" verdict now matches its exit code: a language gap such as T006's Python-only note prints `✅ No issues found (some rules skip this language; see notes above)` and exits 0, while a project-wide rule (I002/D005/T006) that could not index a sibling file stays exit 3. Same for the MCP `reveal_check` text (BACK-1826).
 - I002 uses shared scan policy and reports candidate/analysis counts separately from presentation cuts, preserving its existing thresholds (BACK-1052).
 - Stdin schema-validation batches return one envelope with per-file outcomes and consistent error/usage exits (BACK-1714).
+- Functions without a tree-sitter complexity get one keyword-count estimate in `ast://`, `stats://` and C901 (`reveal.complexity.fallback_complexity`); one 36-line fixture function read 5, 73 and 49 in the three and now reads 49 in each. `stats://` no longer skips such functions (BACK-1519).
+- calls:// callers text names each kind of site (`[call line 3, JSX line 4]`; JSON adds `call_lines`), callees text labels a name that is only rendered `(JSX reference)`, a `<module>` caller's `line` is its first call line in callers and callees alike, and `--sideeffects --transitive` labels a render-only hop `via App → <Child/> (JSX render)` (BACK-1834).
+- The recall gate fails when a corpus's `partial_files` rises over the baseline, and lists a side without the field under `notes` as not compared (BACK-1840).
 
 ### Fixed
 - B006 decides forwarding by the callee's role and by whether the exception's content flows into the call instead of a list of callee names: reporting calls, responses, callbacks and test assertions that receive it (`res.status(500).json({error: e.message})`, `assertThat(e).isEqualTo(x)`, `expect(e).toBeInstanceOf(Error)`) are disclosure in Python, JavaScript/TypeScript and Java, and computations of it (`hasattr(e, ...)`, `Objects.nonNull(e)`, `JSON.stringify(e)`) are not; `console['log'](...)` counts as a console call. On VS Code `src/`, WordPress JS and dagster this removes the 83, 25 and 2 detections Sprint 4 had restored (BACK-1835).
@@ -40,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP configuration discovery and merged values refresh between serialized tool requests, so edits to `.reveal.yaml` take effect without restarting the server (BACK-1572).
 - Nginx fleet gaps exit consistently across text/JSON; touched rendering paths preserve diagnostics and disclose omitted items (BACK-1758).
 - B006 rejects nested uncalled forwarding and non-reporting sinks; imports/I002 disk cache keys include target-only index changes (BACK-1734, BACK-1755).
+- I001 no longer counts strings inside `Literal[...]` or `Annotated[...]` metadata as uses of an import, and counts `typing.Optional["X"]`-style forward references it used to miss. D001/D002 start a function body after its whole signature: decorated pass-only hooks with multi-line signatures are no longer duplicates, and annotated Java duplicates are found (BACK-1837).
+- `overview://` records a refused repository (e.g. a `safe.directory` ownership refusal) as a composed error instead of treating it as "not in a repo" for its git-root check (BACK-1691).
 
 ## [0.131.0] - 2026-10-07 (sessions azure-glaze-1005, doroxa-1005, fierce-current-1005, divine-giant-1005, prairie-sirocco-1005, monsoonal-downdraft-1005, vivid-gleam-1005, beige-chroma-1006, glossy-fresco-1006, roaring-zephyr-1006, elliptical-blackhole-1006, awakened-banshee-1006, chrome-chroma-1007, contracting-cargo-1007, merging-parsec-1007, coastal-steam-1007, togupevi-1007)
 
