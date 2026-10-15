@@ -1,7 +1,7 @@
 """Function-body helpers shared by the duplicate-detection rules (D001, D002)."""
 
 import re
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 from reveal.utils.lines import split_lines
 
 
@@ -24,16 +24,43 @@ def extract_function_body(func: Dict[str, Any], content: str) -> str:
     if start > len(lines) or end > len(lines):
         return ""
 
-    # Python structure records can start at a decorator. Find the definition
-    # before slicing, so its signature is never mistaken for body content.
-    definition = start - 1
-    if lines[definition].lstrip().startswith('@'):
-        for index in range(start, end):
-            if re.match(r'^\s*(?:async\s+)?def\s+', lines[index]):
-                definition = index
-                break
+    definition = _signature_end(lines, start - 1, end)
+    if definition is None:
+        definition = _definition_line(lines, start - 1, end)
     body_lines = lines[definition + 1:end]
     return '\n'.join(body_lines) if body_lines else ""
+
+
+_STRING_LITERAL = re.compile(r"""'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*\"""")
+_LINE_COMMENT = re.compile(r'\s*(?:#|//).*$')
+
+
+def _signature_end(lines: List[str], first: int, last: int) -> Optional[int]:
+    """Index of the line that closes the signature, or None when none is found.
+
+    Structure records start at the first decorator/annotation line (Python
+    ``@task(...)``, Java ``@Override``), so the signature can sit several lines
+    below. The signature closes on the first line, counting from ``first``, that
+    ends outside every ``(``/``[`` with ``:`` (Python) or ``{`` (brace languages).
+    One rule, no per-language branches (BACK-1837).
+    """
+    depth = 0
+    for index in range(first, min(last, len(lines))):
+        code = _LINE_COMMENT.sub('', _STRING_LITERAL.sub('""', lines[index])).rstrip()
+        depth += sum(code.count(c) for c in '([') - sum(code.count(c) for c in ')]')
+        if depth <= 0 and code.endswith((':', '{')):
+            return index
+    return None
+
+
+def _definition_line(lines: List[str], first: int, last: int) -> int:
+    """Fallback when no ``:``/``{`` terminator closes the signature (one-line
+    ``def f(): ...``, Ruby ``def``): the Python ``def`` after any decorators, else ``first``."""
+    if lines[first].lstrip().startswith('@'):
+        for index in range(first + 1, last):
+            if re.match(r'^\s*(?:async\s+)?def\s+', lines[index]):
+                return index
+    return first
 
 
 # One statement that does nothing but hand back (or be) an empty value. Case-insensitive

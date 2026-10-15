@@ -116,3 +116,25 @@ def test_body_excludes_multiline_signature():
     content = PY_HOOKS
     func = {'line': 1, 'line_end': 6}
     assert _bodies.extract_function_body(func, content).strip() == "pass"
+
+
+def test_java_annotation_on_signature_line():
+    content = "class A {\n    @Override public int a(int x) {\n        return x;\n    }\n}\n"
+    body = _bodies.extract_function_body({'line': 2, 'line_end': 4}, content)
+    assert body.strip().splitlines()[0].strip() == "return x;"
+
+
+def test_typescript_decorated_method_body_starts_after_brace():
+    content = "class A {\n    @Input()\n    a(x: number): number {\n        return x;\n    }\n}\n"
+    body = _bodies.extract_function_body({'line': 2, 'line_end': 5}, content)
+    assert body.strip().splitlines()[0].strip() == "return x;"
+
+
+def test_one_line_def_without_terminator_keeps_old_behaviour():
+    content = "@dec\ndef f(x): return x\n"
+    assert _bodies.extract_function_body({'line': 1, 'line_end': 2}, content) == ""
+
+
+def test_colon_inside_parentheses_does_not_close_signature():
+    content = "def f(\n    a: int,\n    b: dict = {'k': 1},\n) -> int:\n    return a\n"
+    assert _bodies.extract_function_body({'line': 1, 'line_end': 5}, content) == "    return a"
