@@ -26,6 +26,7 @@ from reveal.adapters.surface import (  # noqa: F401 - re-exported for back-compa
     _scan_surface,
     _supported_coverage_languages,
 )
+from reveal.utils.query_parser import cli_display_limit
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
 from ..routing.subcommand import emit_subcommand_result
 
@@ -65,7 +66,7 @@ def create_surface_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--top',
         metavar='N',
-        type=int,
+        type=cli_display_limit,
         default=None,
         help='Show only the top N entries per surface type (default: all)'
     )

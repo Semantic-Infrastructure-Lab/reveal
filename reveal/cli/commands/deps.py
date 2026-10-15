@@ -23,7 +23,7 @@ from reveal.adapters.deps import (  # noqa: F401 - re-exported for back-compat
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
 from ..routing.ledger import complete
 from ..routing.subcommand import emit_subcommand_result
-from reveal.utils.query_parser import nonnegative_display_limit
+from reveal.utils.query_parser import cli_display_limit
 
 
 def create_deps_parser() -> argparse.ArgumentParser:
@@ -53,7 +53,7 @@ def create_deps_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--top',
         metavar='N',
-        type=nonnegative_display_limit,
+        type=cli_display_limit,
         default=10,
         help='Number of items to show in each section (default: 10)'
     )

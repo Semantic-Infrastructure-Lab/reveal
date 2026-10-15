@@ -154,12 +154,28 @@ def whole_number(value: Any) -> int:
     return int(value)
 
 
-def nonnegative_display_limit(value: Any) -> int:
-    """Shared CLI/URI policy for bounded display sections; zero shows none."""
-    limit = whole_number(value)
+def nonnegative_display_limit(value: Any, name: str = 'top') -> int:
+    """The one parser for a display limit (``--top`` / ``?top=``); zero shows none.
+
+    '3', 3 and '3.0' are accepted (``whole_number``'s rule); 1.5, 'abc' and -1 raise a
+    ValueError that names the parameter, the rule and the offending value.
+    """
+    try:
+        limit = whole_number(float(value) if isinstance(value, str) else value)
+    except (TypeError, ValueError, OverflowError):
+        limit = -1
     if limit < 0:
-        raise ValueError('top must be nonnegative')
+        raise ValueError(f"{name} must be a non-negative integer (got {str(value)!r})")
     return limit
+
+
+def cli_display_limit(value: str) -> int:
+    """argparse ``type=`` for ``--top``: the shared parser, with the flag's own name in the message."""
+    import argparse
+    try:
+        return nonnegative_display_limit(value, name='--top')
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
 
 
 @dataclass(frozen=True)

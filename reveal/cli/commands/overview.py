@@ -40,6 +40,7 @@ from reveal.adapters.overview import (  # noqa: F401 - re-exported for back-comp
     _run_scope,
     _run_stats,
 )
+from reveal.utils.query_parser import cli_display_limit
 from reveal.cli.routing.flag_specs import exclude_fragment, inject_query_flags
 from ..global_flags import add_exclude_argument, add_gitignore_arguments
 from ..routing.subcommand import emit_subcommand_result
@@ -80,7 +81,7 @@ def create_overview_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--top',
         metavar='N',
-        type=int,
+        type=cli_display_limit,
         default=5,
         help='Number of items to show in each section (default: 5)'
     )

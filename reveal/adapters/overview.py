@@ -334,7 +334,7 @@ class OverviewAdapter(ResourceAdapter):
             'description': 'One-glance codebase dashboard (languages, quality, hotspots, architecture, recent activity)',
             'uri_syntax': 'overview://<path>?top=5&no_git=true&no_imports=true&exclude=pat&respect_gitignore=true',
             'query_params': {
-                'top': {'type': 'integer', 'description': 'Number of items to show per section', 'examples': ['top=10']},
+                'top': {'type': 'integer', 'minimum': 0, 'description': 'Number of items to show per section', 'examples': ['top=10']},
                 'no_git': {'type': 'boolean', 'description': 'Skip the recent git activity section', 'examples': ['no_git=true']},
                 'no_imports': {'type': 'boolean', 'description': 'Skip import graph analysis (architecture section)', 'examples': ['no_imports=true']},
                 'exclude': {'type': 'string', 'description': 'Comma-separated glob patterns to exclude from the stats/hotspots and scope sections (BACK-1042)', 'examples': ['exclude=dist/*,*.min.js']},

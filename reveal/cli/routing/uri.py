@@ -263,9 +263,10 @@ def resolve_uri(uri: str, args: 'Namespace', consumed: Iterable[str] = ()) -> An
                                None, args)
 
 
-def _validate_display_limit(scheme: str, resource: str) -> None:
-    """Apply the deps/architecture top policy before an adapter or renderer runs."""
-    if scheme not in ('deps', 'architecture') or '?' not in resource:
+def _validate_display_limit(renderer_class: Optional[type], resource: str) -> None:
+    """Reject a bad ``?top=`` before an adapter or renderer runs, for every renderer
+    that declares ACCEPTS_TOP (the declaration _render_structure_top_kwargs also reads)."""
+    if getattr(renderer_class, 'ACCEPTS_TOP', False) is not True or '?' not in resource:
         return
     from ...utils.query_parser import nonnegative_display_limit, parse_query_params
     params = parse_query_params(resource.partition('?')[2])
@@ -273,7 +274,7 @@ def _validate_display_limit(scheme: str, resource: str) -> None:
         return
     try:
         nonnegative_display_limit(params['top'])
-    except (TypeError, ValueError) as exc:
+    except ValueError as exc:
         raise UriUsageError(str(exc), exit_code=2) from None
 
 
@@ -339,8 +340,6 @@ def _dispatch(uri: str, element: Optional[str], args: 'Namespace',
     # a value already in the URI wins over the flag.
     resource = _inject_exclude_flag(resource, scheme, args)
     resource = inject_query_flags(resource, scheme, args)
-    _validate_display_limit(scheme, resource)
-
     # Look up adapter from registry
     from ...adapters.base import get_adapter_class, list_supported_schemes
     # Import adapters package to trigger all registrations (single source of truth)
@@ -351,6 +350,8 @@ def _dispatch(uri: str, element: Optional[str], args: 'Namespace',
         schemes = ', '.join(f"{s}://" for s in list_supported_schemes())
         raise UriUsageError(f"Unsupported URI scheme: {scheme}://",
                             f"Supported schemes: {schemes}")
+    from ...adapters.base import get_renderer_class
+    _validate_display_limit(get_renderer_class(scheme), resource)
 
     # BACK-1385: sort=/limit=/offset= typed on an adapter that cannot receive them would be glued
     # onto its resource ("Element '?limit=2' not found"). Strip them with the same warning every
