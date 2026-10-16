@@ -546,10 +546,16 @@ def test_connect_failure_stays_catchable_as_exception():
 
 
 def test_connect_does_not_relabel_a_bug():
+    """A TypeError is what a wrong argument to pymysql.connect would raise.
+
+    (RuntimeError is not a bug here: pymysql raises it when `cryptography` is
+    missing for sha256/caching_sha2 auth, and that is reported as a connection
+    failure.)
+    """
     conn = MySQLConnection("mysql://u:p@db.example.com")
     with patch('reveal.adapters.mysql.connection.pymysql') as fake:
-        fake.connect.side_effect = BUG
-        with pytest.raises(RuntimeError, match="bug in reply parsing"):
+        fake.connect.side_effect = TypeError("bug in connect arguments")
+        with pytest.raises(TypeError, match="bug in connect arguments"):
             conn.get_connection()
 
 
