@@ -185,28 +185,35 @@ def instantiate_adapter(adapter_class: type, scheme: str, resource: str):
             raise ValueError(f"No analyzer found for file: {resource}")
         return analyzer_class(resource)
 
+    # A class that inherits object.__init__ takes no arguments (its signature reads
+    # (self, *args, **kwargs), and the resource would be refused with a TypeError)
+    if adapter_class.__init__ is object.__init__:  # type: ignore[misc]
+        return adapter_class()
+
     # Try to determine constructor signature
     try:
         sig = inspect.signature(adapter_class.__init__)  # type: ignore[misc]
-        params = list(sig.parameters.keys())
-
-        # Remove 'self' from params
-        if 'self' in params:
-            params.remove('self')
-
-        # If no parameters (like EnvAdapter), instantiate without args
-        if not params:
-            return adapter_class()
-
-        # Otherwise, pass the resource string
-        return adapter_class(resource)
-
-    except Exception:
-        # Fallback: try with resource, then without
+    except (ValueError, TypeError):
+        # No introspectable signature (ValueError: none; TypeError: not a supported
+        # callable): try with the resource, then without
         try:
             return adapter_class(resource)
         except TypeError:
             return adapter_class()
+
+    params = list(sig.parameters.keys())
+
+    # Remove 'self' from params
+    if 'self' in params:
+        params.remove('self')
+
+    # If no parameters (like EnvAdapter), instantiate without args
+    if not params:
+        return adapter_class()
+
+    # Otherwise, pass the resource string. A constructor's own error is the answer: it ran
+    # once, with the arguments its signature asked for (BACK-1059).
+    return adapter_class(resource)
 
 
 def find_analyzable_files(directory: Path) -> Iterator[Path]:

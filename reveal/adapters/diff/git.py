@@ -188,7 +188,7 @@ def resolve_git_adapter(resource: str) -> Dict[str, Any]:
         # For repository/ref views, return as-is
         return git_result
 
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- re-raised at once as the documented ValueError with the cause chained; the body runs GitAdapter and an arbitrary analyzer, and callers (diff resolution) report a ValueError as the failed comparison
         raise ValueError(f"Failed to resolve git:// adapter URI: {e}") from e
 
 
@@ -312,7 +312,7 @@ def resolve_git_directory(git_ref: str, dir_path: str) -> Dict[str, Any]:
             continue
         try:
             struct = _fetch_and_analyze_git_file(git_ref, file_path)
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- one blob that the analyzer (arbitrary per-language parser code) or the blob read cannot handle must not end a whole-tree comparison; logged at warning naming the file and ref
             logger.warning(f"Skipping {file_path}@{git_ref} in directory scan: {e}")
             continue
         if not struct:
