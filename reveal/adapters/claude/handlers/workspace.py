@@ -1,14 +1,41 @@
 """Workspace resource handlers for the claude:// adapter — plans, memory, agents, hooks."""
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 from datetime import datetime
 from reveal.reveal_types import CONTRACT_VERSION
 
-from ....utils.results import ResultBuilder
+from ....utils.results import ResultBuilder, note_warning
 from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
+
+# What reading one entry of a directory written by another program can raise: the file
+# vanished or is unreadable (OSError), or its mtime is not a representable date
+# (ValueError/OverflowError from datetime.fromtimestamp). Anything else is a bug.
+_ENTRY_ERRORS = (OSError, ValueError, OverflowError)
+
+
+def skipped_entries_warning(field: str, skipped: Iterable[Tuple[Path, BaseException]],
+                            consequence: str = "they are missing from the list"
+                            ) -> Optional[Dict[str, Any]]:
+    """One ``entries_skipped`` meta warning for entries a list skipped because they
+    could not be read (BACK-1059); None when nothing was skipped. *field* names the
+    list, *consequence* says what is missing from the result."""
+    items = sorted((p.name, type(e).__name__) for p, e in skipped)
+    if not items:
+        return None
+    names = [name for name, _ in items[:5]]
+    more = f" and {len(items) - len(names)} more" if len(items) > len(names) else ''
+    causes = ', '.join(sorted({cause for _, cause in items}))
+    return {
+        'type': 'entries_skipped',
+        'field': field,
+        'count': len(items),
+        'files': names,
+        'message': f"{len(items)} {field} skipped, unreadable ({causes}) -- {consequence}: "
+                   f"{', '.join(names)}{more}",
+    }
 
 
 def _resolve_md_resource(directory: Path, name: str) -> Union[Path, List[str], None]:
@@ -74,7 +101,7 @@ def get_plans(plans_dir: Path, resource: str, query_params: Dict[str, Any]) -> D
         plan_path = resolved
         try:
             content = plan_path.read_text(encoding='utf-8', errors='replace')
-        except Exception as e:
+        except OSError as e:
             return {**base, 'type': 'claude_plan', 'error': str(e), 'name': plan_name}
         stat = plan_path.stat()
         return {
@@ -93,6 +120,7 @@ def get_plans(plans_dir: Path, resource: str, query_params: Dict[str, Any]) -> D
     search = query_params.get('search', '').lower()
     all_files = sorted(plans_dir.glob('*.md'), key=lambda p: p.stat().st_mtime, reverse=True)
     plans = []
+    skipped: List[Tuple[Path, BaseException]] = []
     for plan_file in all_files:
         try:
             stat = plan_file.stat()
@@ -115,17 +143,19 @@ def get_plans(plans_dir: Path, resource: str, query_params: Dict[str, Any]) -> D
                 'size_kb': round(stat.st_size / 1024, 1),
                 'title': title,
             })
-        except Exception as e:
+        except _ENTRY_ERRORS as e:
             logger.warning("skipping unreadable plan %s: %s", plan_file, e)
-            continue
+            skipped.append((plan_file, e))
 
-    return {
+    result = {
         **base,
         'plans': plans,
         'total': len(all_files),
         'displayed': len(plans),
         'search': search or None,
     }
+    note_warning(result, skipped_entries_warning('plans', skipped))
+    return result
 
 
 def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, Any]) -> Dict[str, Any]:
@@ -147,6 +177,7 @@ def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, A
                 'error': f'Projects dir not found: {conversation_base}'}
 
     memories = []
+    skipped: List[Tuple[Path, BaseException]] = []
     for project_dir in sorted(conversation_base.iterdir()):
         if not project_dir.is_dir():
             continue
@@ -173,17 +204,19 @@ def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, A
                     'size_bytes': stat.st_size,
                     'path': str(mem_file),
                 })
-            except Exception as e:
+            except _ENTRY_ERRORS as e:
                 logger.warning("skipping unreadable memory file %s: %s", mem_file, e)
-                continue
+                skipped.append((mem_file, e))
 
-    return {
+    result = {
         **base,
         'memories': memories,
         'total': len(memories),
         'filter_project': filter_project or None,
         'search': search or None,
     }
+    note_warning(result, skipped_entries_warning('memory', skipped))
+    return result
 
 
 def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) -> Dict[str, Any]:
@@ -209,7 +242,7 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
         agent_path = resolved
         try:
             content = agent_path.read_text(encoding='utf-8', errors='replace')
-        except Exception as e:
+        except OSError as e:
             return {**base, 'type': 'claude_agent', 'error': str(e), 'name': agent_name}
         stat = agent_path.stat()
         fm = _parse_agent_frontmatter(content)
@@ -233,6 +266,7 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
     search = query_params.get('search', '').lower()
     all_files = sorted(agents_dir.glob('*.md'), key=lambda p: p.stat().st_mtime, reverse=True)
     agents = []
+    skipped: List[Tuple[Path, BaseException]] = []
     for agent_file in all_files:
         try:
             content = agent_file.read_text(encoding='utf-8', errors='replace')
@@ -248,17 +282,19 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
                 'tools': fm.get('tools', []),
                 'model': fm.get('model', ''),
             })
-        except Exception as e:
+        except _ENTRY_ERRORS as e:
             logger.warning("skipping unreadable agent file %s: %s", agent_file, e)
-            continue
+            skipped.append((agent_file, e))
 
-    return {
+    result = {
         **base,
         'agents': agents,
         'total': len(all_files),
         'displayed': len(agents),
         'search': search or None,
     }
+    note_warning(result, skipped_entries_warning('agents', skipped))
+    return result
 
 
 def get_hooks(hooks_dir: Path, resource: str) -> Dict[str, Any]:
@@ -285,7 +321,7 @@ def get_hooks(hooks_dir: Path, resource: str) -> Dict[str, Any]:
             # Single script file directly under hooks/
             try:
                 content = event_path.read_text(encoding='utf-8', errors='replace')
-            except Exception as e:
+            except OSError as e:
                 return {**base, 'type': 'claude_hooks', 'error': str(e), 'event': event_name}
             stat = event_path.stat()
             is_exec = bool(stat.st_mode & 0o111)
@@ -301,6 +337,7 @@ def get_hooks(hooks_dir: Path, resource: str) -> Dict[str, Any]:
             }
         # Directory: list scripts within it
         scripts = []
+        skipped: List[Tuple[Path, BaseException]] = []
         for script in sorted(event_path.iterdir()):
             try:
                 stat = script.stat()
@@ -312,13 +349,16 @@ def get_hooks(hooks_dir: Path, resource: str) -> Dict[str, Any]:
                     'executable': is_exec,
                     'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
                 })
-            except Exception as e:
+            except _ENTRY_ERRORS as e:
                 logger.warning("skipping unreadable hook script %s: %s", script, e)
-                continue
-        return {**base, 'event': event_name, 'kind': 'directory', 'scripts': scripts}
+                skipped.append((script, e))
+        result = {**base, 'event': event_name, 'kind': 'directory', 'scripts': scripts}
+        note_warning(result, skipped_entries_warning('hook scripts', skipped))
+        return result
 
     # claude://hooks — list all event types
     hooks = []
+    skipped: List[Tuple[Path, BaseException]] = []
     for entry in sorted(hooks_dir.iterdir(), key=lambda p: p.name):
         try:
             stat = entry.stat()
@@ -341,12 +381,14 @@ def get_hooks(hooks_dir: Path, resource: str) -> Dict[str, Any]:
                     'script_count': script_count,
                     'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
                 })
-        except Exception as e:
+        except _ENTRY_ERRORS as e:
             logger.warning("skipping unreadable hook entry %s: %s", entry, e)
-            continue
+            skipped.append((entry, e))
 
-    return {
+    result = {
         **base,
         'hooks': hooks,
         'total': len(hooks),
     }
+    note_warning(result, skipped_entries_warning('hook entries', skipped))
+    return result

@@ -3,7 +3,7 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, date as _date
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.utils.lines import split_lines
@@ -11,11 +11,17 @@ from reveal.utils.lines import split_lines
 from ..analysis import search_sessions_for_term, get_files_touched
 from ....utils.parallel import grep_files as _grep_files, worker_lost_warning
 from ....utils.results import ResultBuilder, note_warning
+from .workspace import skipped_entries_warning
 
 logger = logging.getLogger(__name__)
 
 _BOILERPLATE_PREFIXES = ('# Session Continuation Context',)
 _BADGE_RE = re.compile(r'session badge\s+"([^"]+)"')
+
+# Scanning the projects directory fails in these ways: it or a session file is gone or
+# unreadable (OSError), or a file's mtime is not a representable date (ValueError,
+# OverflowError from datetime.fromtimestamp). Anything else is a bug.
+_SCAN_ERRORS = (OSError, ValueError, OverflowError)
 
 
 def _extract_text_from_content(content: Any) -> str:
@@ -241,7 +247,7 @@ def list_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Dict
                 continue
             sessions.extend(_collect_sessions_from_dir(project_dir))
         sessions.sort(key=lambda x: x['modified'], reverse=True)  # type: ignore[arg-type, return-value]
-    except Exception as e:
+    except _SCAN_ERRORS as e:
         base['error'] = str(e)
 
     if name_filter:
@@ -289,7 +295,7 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
         for project_dir in conversation_base.iterdir():
             if project_dir.is_dir():
                 all_sessions.extend(_collect_sessions_from_dir(project_dir))
-    except Exception as e:
+    except _SCAN_ERRORS as e:
         return ResultBuilder.create(
             result_type='claude_cross_session_search',
             source=str(conversation_base),
@@ -405,7 +411,7 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
         for project_dir in conversation_base.iterdir():
             if project_dir.is_dir():
                 all_sessions.extend(_collect_sessions_from_dir(project_dir))
-    except Exception as e:
+    except _SCAN_ERRORS as e:
         return {**_error_base, 'error': str(e)}
 
     if since:
@@ -417,18 +423,22 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
     candidates = [s for s in all_sessions if s['path'] in matched_path_strs]
 
     results = []
+    skipped: List[Tuple[Path, BaseException]] = []
     for session in candidates:
         try:
             entry = _extract_session_ops(session, file_path)
             if entry:
                 results.append(entry)
-        except Exception as e:
+        # One session file written by another program (any shape; get_files_touched does
+        # not validate message shapes) must not end the cross-session search; the skipped
+        # session is named in meta.warnings below.
+        except Exception as e:  # boundary-ok: broad-except -- per-session isolation, skip is disclosed in meta.warnings
             logger.warning("skipping unparseable session %s: %s", session.get('path'), e)
-            continue
+            skipped.append((Path(session['path']), e))
 
     results.sort(key=lambda x: x['modified'], reverse=True)
 
-    return ResultBuilder.create(
+    result = ResultBuilder.create(
         result_type='claude_file_sessions',
         source=str(conversation_base),
         source_type='directory',
@@ -441,6 +451,9 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
             'sessions': results,
         }
     )
+    note_warning(result, skipped_entries_warning(
+        'sessions', skipped, "they were not checked, so matches may be missing"))
+    return result
 
 
 def get_chain(

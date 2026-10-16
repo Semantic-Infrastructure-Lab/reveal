@@ -77,6 +77,8 @@ def get_history(claude_home: Path, query_params: Dict[str, Any]) -> Dict[str, An
                     obj = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if not isinstance(obj, dict):
+                    continue  # valid JSON that is not an entry: skipped like a malformed line
                 total += 1
 
                 prompt = obj.get('display', '')
@@ -102,7 +104,9 @@ def get_history(claude_home: Path, query_params: Dict[str, Any]) -> Dict[str, An
                     'timestamp': ts_iso,
                     'session_id': session_id,
                 })
-    except Exception as e:
+    # absent/unreadable file (OSError), or a timestamp that is not a representable
+    # date (ValueError/OverflowError); a bug in reveal is not one of them
+    except (OSError, ValueError, OverflowError) as e:
         return {**base, 'total_entries': total, 'match_count': 0, 'entries': [],
                 'error': str(e)}
 
@@ -130,7 +134,7 @@ def get_settings(claude_home: Path, query_params: Dict[str, Any]) -> Dict[str, A
     try:
         with open(settings_path, 'r', encoding='utf-8') as fh:
             data = json.load(fh)
-    except Exception as e:
+    except (OSError, ValueError) as e:  # unreadable, not UTF-8 or not JSON (JSONDecodeError is a ValueError)
         return {**base, 'error': str(e), 'settings': {}}
 
     key = query_params.get('key', '')
@@ -196,7 +200,7 @@ def get_config(claude_json: Path, query_params: Dict[str, Any]) -> Dict[str, Any
 
     try:
         data = json.loads(claude_json.read_text(encoding='utf-8', errors='replace'))
-    except Exception as e:
+    except (OSError, ValueError) as e:  # unreadable or not JSON
         return {**base, 'error': str(e), 'projects': [], 'flags': {}}
 
     # ?key=dotpath — drill into a specific value

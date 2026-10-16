@@ -133,7 +133,7 @@ def get_config(codex_home: Path, query_params: Optional[Dict[str, Any]] = None) 
         with open(config_path, 'rb') as fh:
             parsed = tomllib.load(fh)
         masked = redact_secrets(parsed)
-    except Exception as exc:
+    except (OSError, ValueError) as exc:  # unreadable, not UTF-8, or invalid TOML (TOMLDecodeError is a ValueError)
         return {**base, 'config': {}, 'error': str(exc)}
 
     key = (query_params.get('key') or '').strip()
