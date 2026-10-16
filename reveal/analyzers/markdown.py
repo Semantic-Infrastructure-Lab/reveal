@@ -923,13 +923,12 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
             return result
 
-        except yaml.YAMLError as e:
-            # Malformed YAML - return None (graceful degradation)
+        except (yaml.YAMLError, ValueError, RecursionError) as e:
+            # Malformed YAML - return None (graceful degradation). ValueError: safe_load's
+            # constructors reject a well-formed scalar with an impossible value
+            # (`date: 2001-02-30`, `n: !!int 1e999`); RecursionError: deeply nested flow
+            # collections.
             logging.debug(f"Failed to parse YAML frontmatter: {e}")
-            return None
-        except Exception as e:
-            # Any other error - graceful degradation
-            logging.debug(f"Unexpected error parsing frontmatter: {e}")
             return None
 
     def _normalize_related_entry(self, entry: Any) -> Optional[str]:
@@ -1015,7 +1014,9 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 tracker.file_count = next_tracker.file_count
                 tracker.truncated = next_tracker.truncated
             return result
-        except Exception as e:
+        except (OSError, ValueError) as e:
+            # MarkdownAnalyzer(path) stats and reads the file (OSError) and rejects one over
+            # MAX_INPUT_SIZE (ValueError). The failure is returned in the entry's 'error'.
             logging.debug(f"Failed to analyze related file {resolved}: {e}")
             return {'path': rel_path, 'resolved_path': str(resolved), 'exists': True, 'error': str(e), 'headings': [], 'related': []}
 

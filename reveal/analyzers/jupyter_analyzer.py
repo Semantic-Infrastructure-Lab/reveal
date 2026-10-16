@@ -20,11 +20,19 @@ class JupyterAnalyzer(FileAnalyzer):
         self.metadata = {}
 
         try:
-            self.notebook_data = json.loads(self.content)
-            self.cells = self.notebook_data.get('cells', [])
-            self.metadata = self.notebook_data.get('metadata', {})
-        except Exception as e:
+            # ValueError covers json.JSONDecodeError; json.loads also raises RecursionError
+            # on a deeply nested document.
+            data = json.loads(self.content)
+        except (ValueError, RecursionError) as e:
             self.parse_error = str(e)
+            return
+        if not isinstance(data, dict):
+            # Valid JSON that is not a notebook object (a list, a string, a number).
+            self.parse_error = f"not a notebook: top-level JSON value is a {type(data).__name__}, expected an object"
+            return
+        self.notebook_data = data
+        self.cells = data.get('cells', [])
+        self.metadata = data.get('metadata', {})
 
     def _get_cell_first_line(self, source: Any) -> str:
         """Extract and truncate first line from cell source.

@@ -13,7 +13,8 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 # Try to import BeautifulSoup4 - required for HTML parsing
 try:
-    from bs4 import BeautifulSoup
+    from bs4 import BeautifulSoup, FeatureNotFound
+    from bs4.builder import ParserRejectedMarkup
     BS4_AVAILABLE = True
 except ImportError:
     BS4_AVAILABLE = False
@@ -40,8 +41,9 @@ class HTMLAnalyzer(FileAnalyzer):
         # Try lxml first (faster), fallback to html.parser (stdlib)
         try:
             self.soup = BeautifulSoup(self.content, 'lxml')
-        except Exception as e:
-            # lxml not installed or parsing failed, use stdlib parser
+        except (FeatureNotFound, ParserRejectedMarkup) as e:
+            # FeatureNotFound: lxml not installed. ParserRejectedMarkup: bs4's wrapper for
+            # lxml refusing the markup (etree.ParserError, UnicodeDecodeError, LookupError).
             logging.debug(f"lxml parser not available for {path}, using html.parser: {e}")
             self.soup = BeautifulSoup(self.content, 'html.parser')
 

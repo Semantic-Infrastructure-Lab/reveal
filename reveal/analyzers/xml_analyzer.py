@@ -247,7 +247,7 @@ class XmlAnalyzer(FileAnalyzer):
                 message='Failed to parse XML file',
                 _has_errors=True,
             )
-        except Exception as e:
+        except RecursionError as e:  # _count_elements/_max_depth recurse once per nesting level
             logger.debug(f"Error analyzing XML {self.path}: {e}")
             return ResultBuilder.create_error(
                 result_type='xml_structure',

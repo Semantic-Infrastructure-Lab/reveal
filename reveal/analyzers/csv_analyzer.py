@@ -92,8 +92,19 @@ class CsvAnalyzer(FileAnalyzer):
             sniffer = csv.Sniffer()
             sample = '\n'.join(content.split('\n')[:5])  # First 5 lines
             dialect = sniffer.sniff(sample)
+            # The sniffer can return a delimiter csv.reader refuses: '\x00' or an empty
+            # string (TypeError), or the quote character '"' (a file of quoted single
+            # values; ValueError on 3.14, accepted before). Ask csv.reader itself, so the
+            # fallback below covers whatever the running interpreter rejects, and refuse
+            # '"' everywhere so the result does not depend on the interpreter.
+            try:
+                csv.reader([], delimiter=dialect.delimiter)
+            except (TypeError, ValueError) as e:
+                raise csv.Error(f"sniffed an unusable delimiter {dialect.delimiter!r}: {e}") from e
+            if dialect.delimiter == '"':
+                raise csv.Error("sniffed the quote character as the delimiter")
             return dialect.delimiter
-        except Exception as e:
+        except csv.Error as e:  # Sniffer.sniff raises csv.Error when it cannot pick a delimiter
             logger.debug("csv sniffer failed for %s (%s: %s); falling back to extension heuristic", self.path, type(e).__name__, e)
             # Fallback: check file extension
             if str(self.path).endswith('.tsv'):
@@ -214,7 +225,7 @@ class CsvAnalyzer(FileAnalyzer):
                 confidence=1.0,
             )
 
-        except Exception as e:
+        except csv.Error as e:  # csv.reader: field over the field-size limit, NUL byte (before 3.11)
             logger.debug(f"Error parsing CSV {self.path}: {e}")
             return ResultBuilder.create_error(
                 result_type='csv_structure',
