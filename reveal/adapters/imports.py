@@ -903,15 +903,13 @@ def _extract_one_file(fp_str: str, want_structure: bool):
             symbols = symbols | extractor.extract_exports(fp)
         extraction = extractor.analysis
     if want_structure:
-        try:
-            from .ast.analysis import analyze_file
-            structure = analyze_file(fp_str)
-        except Exception:
-            # Intentional silence: structure is a separate, optional add-on
-            # (only requested via collect_structures=True) -- unlike
-            # imports/symbols above, its failure doesn't affect this file's
-            # unused-import/cycle results, so it degrades to None quietly.
-            structure = None
+        # Structure is a separate add-on (only requested via collect_structures=True).
+        # analyze_file catches every analysis failure itself, warns on stderr and returns
+        # None, so nothing is caught here: an exception that still escapes (a failed
+        # import, a bug) must not read as "this file has no structure" (BACK-1059). In a
+        # pool worker it fails the chunk, which _extract_files records per file.
+        from .ast.analysis import analyze_file
+        structure = analyze_file(fp_str)
     return fp_str, imports, symbols, structure, extraction
 
 
@@ -1204,7 +1202,7 @@ class ImportsAdapter(ResourceAdapter):
             for chunk, future in zip(chunks, futures):
                 try:
                     rows = future.result()
-                except Exception as e:  # each lost file carries the error; files_failed discloses it
+                except Exception as e:  # boundary-ok: broad-except -- future.result() re-raises whatever the worker raised: BrokenProcessPool when it died, or any exception an extractor threw on one file of the chunk; the chunk's files are recorded as failed extractions (_lost_extraction carries the cause) and reach files_failed and the partial-parse warning
                     rows = [(fp_str, None, None, None, _lost_extraction(e)) for fp_str in chunk]
                 for fp_str, imports, symbols, structure, extraction in rows:
                     yield Path(fp_str), imports, symbols, structure, extraction
