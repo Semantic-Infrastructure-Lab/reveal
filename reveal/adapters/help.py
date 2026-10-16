@@ -1264,7 +1264,7 @@ class HelpAdapter(ResourceAdapter):
         """
         try:
             help_data = adapter_class.get_help()
-        except Exception as e:  # one broken adapter must not take down the listing; name it
+        except Exception as e:  # boundary-ok: broad-except -- get_help() is adapter code of unknown shape, including user plugins loaded from .reveal/adapters; one broken adapter must not take down the listing, and its entry names the failure
             return f"(help unavailable: {type(e).__name__}: {e})"
         return str(help_data.get('description', '')) if help_data else ''
 
@@ -1360,7 +1360,7 @@ class HelpAdapter(ResourceAdapter):
                 help_data['scheme'] = scheme  # Ensure scheme is included
                 self._add_related_next(help_data, scheme)
             return help_data  # type: ignore[no-any-return]
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- get_help() is adapter code of unknown shape, including user plugins loaded from .reveal/adapters; the failure is returned as the result's error
             return {
                 'scheme': scheme,
                 'error': 'Help generation failed',
@@ -1410,7 +1410,7 @@ class HelpAdapter(ResourceAdapter):
             return
         try:
             adapter_help = adapter_class.get_help()
-        except Exception as e:  # the guide still renders; say what is missing from it
+        except Exception as e:  # boundary-ok: broad-except -- get_help() is adapter code of unknown shape, including user plugins; the guide still renders and the warning names what is missing from it
             logger.warning("help://%s: see_also not shown, %s.get_help() failed: %s",
                            topic, adapter_class.__name__, e)
             return
@@ -1905,7 +1905,7 @@ class HelpAdapter(ResourceAdapter):
                 'message': f'Could not find {filename}',
                 'next': ['reveal help://'],
             }
-        except Exception as e:
+        except (OSError, UnicodeDecodeError) as e:  # reading the guide file; a bug in the rendering above propagates
             return {
                 'type': 'static_guide',
                 'topic': topic,
@@ -2025,7 +2025,7 @@ class HelpAdapter(ResourceAdapter):
             try:
                 if cls.get_schema():
                     schemes.append(scheme)
-            except Exception as e:  # not a usable menu entry, but not a silent omission either
+            except Exception as e:  # boundary-ok: broad-except -- get_schema() is adapter code of unknown shape, including user plugins; one broken adapter must not empty the menu, and the omission is logged as a warning naming it
                 logger.warning("%s:// left out of the schema menu: get_schema() failed: %s",
                                scheme, e)
         return sorted(schemes)
@@ -2311,7 +2311,7 @@ class HelpAdapter(ResourceAdapter):
             if section == 'full':
                 return schema_data  # type: ignore[no-any-return]
             return self._summarize_schema(adapter_name, schema_data)
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- get_schema() is adapter code of unknown shape, including user plugins loaded from .reveal/adapters; the failure is returned as the result's error
             return {
                 'type': 'adapter_schema',
                 'adapter': adapter_name,
