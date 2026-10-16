@@ -3,7 +3,7 @@
 from ...reveal_types import StructureItem
 import logging
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from reveal.complexity import fallback_complexity
 from reveal.utils.lines import split_lines
 
@@ -68,7 +68,9 @@ def _get_check_thresholds(file_path: Optional[Path]) -> tuple:
         long_threshold = c902.THRESHOLD_ERROR if c902 else 100
         depth_threshold = c905.MAX_DEPTH if c905 else 4
         return long_threshold, depth_threshold
-    except Exception:
+    except Exception as e:  # boundary-ok: broad-except -- config resolution loads the project's .reveal.yaml and instantiates rule classes (YAML, OSError, and rule-constructor failures that this module cannot enumerate); the default thresholds apply and the reason is logged at warning
+        logger.warning("Rule config for %s could not be resolved, using the default "
+                       "long-function and nesting thresholds: %s", file_path, e)
         return 100, 4
 
 
@@ -212,26 +214,29 @@ def _count_check_issues(
     file_path: Path,
     structure: Dict[str, Any],
     content: str,
-) -> Dict[str, int]:
+) -> Tuple[Dict[str, int], List[str]]:
     """Run check rules and count detections by severity.
 
     Reuses already-computed structure and content — no re-parsing.
 
     Returns:
-        Dict with counts for 'critical', 'high', 'medium', 'low'
+        (counts, failed): counts for 'critical', 'high', 'medium', 'low', and the rules that
+        could not run (their codes; 'all rules' when the run itself failed). A failure makes
+        the counts a lower bound, which the caller records in the file's stats (BACK-1059).
     """
+    counts: Dict[str, int] = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
+    rule_errors: List[Dict[str, str]] = []
     try:
         from ...rules import RuleRegistry
-        detections = RuleRegistry.check_file(str(file_path), structure, content)
-        counts: Dict[str, int] = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
+        detections = RuleRegistry.check_file(str(file_path), structure, content, errors=rule_errors)
         for d in detections:
             sev = d.severity.value if d.severity else 'medium'
             if sev in counts:
                 counts[sev] += 1
-        return counts
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- check_file() loads the project's .reveal.yaml and runs every registered rule, plugin rules included (arbitrary code); one file's failed rule run must not drop its other statistics, and it is recorded as check_rules_failed in the file's stats
         logger.warning(f"Check rules failed for {file_path}, counting as 0 issues: {e}")
-        return {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
+        return counts, ['all rules']
+    return counts, sorted({err['rule'] for err in rule_errors})
 
 
 def calculate_file_stats(
@@ -268,7 +273,7 @@ def calculate_file_stats(
     metrics = extract_complexity_metrics(functions, content, file_path)
 
     # Run check rules using already-computed structure + content (no re-parsing)
-    check_issue_counts = _count_check_issues(file_path, structure, content)
+    check_issue_counts, check_rules_failed = _count_check_issues(file_path, structure, content)
 
     # Calculate quality score
     quality_score = calculate_quality_score(
@@ -284,7 +289,7 @@ def calculate_file_stats(
     # Get display path
     file_display = get_file_display_path_func(file_path)
 
-    return {
+    stats = {
         'file': file_display,
         'lines': {
             'total': total_lines,
@@ -314,3 +319,6 @@ def calculate_file_stats(
             'deep_nesting': metrics['deep_nesting'],
         }
     }
+    if check_rules_failed:
+        stats['check_rules_failed'] = check_rules_failed
+    return stats

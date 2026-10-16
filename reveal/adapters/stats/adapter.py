@@ -39,7 +39,7 @@ def _pool_results(executor, args: list) -> list:
     for a, future in zip(args, futures):
         try:
             results.append(future.result())
-        except Exception as e:  # the failure record below is the disclosure
+        except Exception as e:  # boundary-ok: broad-except -- future.result() re-raises whatever the worker raised (arbitrary analyzer and rule code) or BrokenProcessPool; the failure record below goes to _analysis_failures and the run's analysis_failed warning
             results.append({'analysis_failed': f"{type(e).__name__}: {e}", 'path': a[0]})
     return results
 
@@ -219,11 +219,9 @@ class StatsAdapter(ResourceAdapter):
         # Legacy parameters (min_lines, max_lines, etc.) are handled via query_params
         self.query_filters = []
         if filter_query and any(op in filter_query for op in ['>', '<', '!=', '~=', '..']):
-            try:
-                self.query_filters = parse_query_filters(filter_query)
-            except Exception:
-                # If parsing fails, fall back to empty filters (legacy params will be used)
-                self.query_filters = []
+            # No fallback to "no filters": that would answer an unfiltered query as if it
+            # were the filtered one (BACK-1059). A ValueError here fails the query.
+            self.query_filters = parse_query_filters(filter_query)
 
         # Load quality scoring config (with defaults)
         self._quality_config = get_quality_config(self.path)
@@ -305,7 +303,8 @@ class StatsAdapter(ResourceAdapter):
             all_stats = [_analyze_file_worker(a) for a in args]
 
         self._analysis_failures = [s for s in all_stats
-                                   if is_failure(s) or s and s.get('parse_degraded')]
+                                   if is_failure(s) or s and (s.get('parse_degraded')
+                                                              or s.get('check_rules_failed'))]
         return [
             s for s in all_stats
             if s and not is_failure(s) and matches_filters(
@@ -361,6 +360,16 @@ class StatsAdapter(ResourceAdapter):
             note_warning(result, {
                 'type': 'parse_degraded', 'count': len(degraded),
                 'message': f"{len(degraded)} file(s) did not parse cleanly; statistics may be incomplete",
+            })
+        rules_failed = sorted(s['file'] for s in self._analysis_failures if s.get('check_rules_failed'))
+        if rules_failed:
+            shown = rules_failed[:5]
+            more = f" and {len(rules_failed) - len(shown)} more" if len(rules_failed) > len(shown) else ''
+            note_warning(result, {
+                'type': 'check_rules_failed', 'count': len(rules_failed), 'files': shown,
+                'message': (f"{len(rules_failed)} file(s) had check rules that could not run; their "
+                            f"check-issue counts and quality scores are lower bounds: "
+                            f"{', '.join(shown)}{more}"),
             })
         failed = sorted(f['path'] for f in self._analysis_failures if is_failure(f))
         if not failed:
@@ -460,7 +469,7 @@ class StatsAdapter(ResourceAdapter):
                 for display, repo_rel in display_to_repo_rel.items()
                 if repo_rel in counts_by_repo_rel
             }
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- churn is an optional scoring signal built from pygit2 repository discovery plus a history walk (GitError, KeyError, OSError, and whatever a damaged repository adds); the reason is stored in _churn_disclosure and surfaces as a meta warning
             self._churn_disclosure = (
                 f"churn scoring failed: {e} "
                 "(hotspot ranking used complexity/size only)"

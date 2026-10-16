@@ -115,7 +115,7 @@ def analyze_file(file_path: Path, calculate_file_stats_func) -> Optional[Dict[st
 
         return cast(Dict[str, Any], stats)
 
-    except Exception as e:  # any analyzer, any file: one failure must not stop a repo-wide scan
+    except Exception as e:  # boundary-ok: broad-except -- any analyzer, any file: one failure must not stop a repo-wide scan; the returned analysis_failed record is counted and named in the run's analysis_failed warning
         return {'analysis_failed': f"{type(e).__name__}: {e}", 'path': str(file_path)}
 
 

@@ -21,8 +21,9 @@ pytestmark = pytest.mark.component
 class TestStatsAdapterExceptionHandling:
     """Test exception handling in StatsAdapter."""
 
-    def test_query_filter_parsing_exception_fallback(self):
-        """parse_query_filters exception should fall back to empty filters."""
+    def test_query_filter_parsing_failure_fails_the_query(self):
+        """parse_query_filters exception fails the query (BACK-1059): empty filters would
+        answer a filtered query with the unfiltered result."""
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a minimal test directory
             test_file = Path(tmpdir) / "test.py"
@@ -32,9 +33,8 @@ class TestStatsAdapterExceptionHandling:
             with patch('reveal.adapters.stats.adapter.parse_query_filters') as mock_parse:
                 mock_parse.side_effect = ValueError("Invalid filter syntax")
 
-                # Should not raise exception - should fall back to empty filters
-                adapter = StatsAdapter(tmpdir, query="lines>5")
-                assert adapter.query_filters == []
+                with pytest.raises(ValueError, match="Invalid filter syntax"):
+                    StatsAdapter(tmpdir, query="lines>5")
 
     def test_sorting_type_error_fallback(self):
         """Sorting TypeError should fall back to unsorted list."""
