@@ -1,3 +1,15 @@
 # Task ids whose feat/fix/perf commits are internal work a user never sees, so CHANGELOG
 # has no entry for them (scripts/check_changelog_coverage.py). One per line: id, then why.
 # Clear this list at each release: it only names work since the last tag.
+BACK-1872 perf: parse reuse and the D005 literal disk cache; output unchanged, only faster
+BACK-1873 perf: I002 cycle search once per graph; output unchanged
+BACK-1874 perf: shared statement-level index for B005/B006/B007/D005; output unchanged
+BACK-1875 perf: accessors hoisted out of the shared tree walkers; output unchanged
+BACK-1878 perf: project-root memo per start directory; output unchanged
+BACK-1880 perf: one cached kind index per tree for the tree-sitter rules; output unchanged
+BACK-1865 perf: internal walker speedup; output unchanged
+BACK-1866 perf: internal speedup; output unchanged
+BACK-1867 perf: ast name/type queries measure only the files they touch; output unchanged
+BACK-1868 perf: internal speedup; output unchanged
+BACK-1869 perf: duplicate-body extraction splits a file's lines once; output unchanged
+BACK-1870 perf: adapters and heavy libraries import on first use (reveal --version 0.46 -> 0.19 s); output unchanged
