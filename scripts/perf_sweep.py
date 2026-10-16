@@ -50,6 +50,7 @@ COMMANDS = {
     'imports': (['imports://{t}'], {0}),
     'depends': (['depends://{t}'], {0}),
     'ast-name': (['ast://{t}?name=parse'], {0}),
+    'ast-typed': (['ast://{t}?type=function&name=parse'], {0}),
     'uncalled': (['calls://{t}?uncalled'], {0}),
     'check-rules': (['check', '{t}', '--select', 'B001,B003,B006,M104'], {0, 1}),
     'stats': (['stats://{t}'], {0}),
@@ -93,11 +94,15 @@ def child_env(src: Path, mode: str, workers: int) -> dict:
     return env
 
 
-def run_once(argv: list, env: dict, timeout: float) -> dict:
-    """Run one command in its own process group; return rc, timings, digest."""
+def run_once(argv: list, env: dict, timeout: float, src: Path) -> dict:
+    """Run one command in its own process group; return rc, timings, digest.
+
+    The child runs *in* ``src``: ``python -m`` puts the current directory first on sys.path, so
+    any other cwd with a ``reveal`` package in it would shadow ``--src`` and time the wrong code.
+    """
     before = resource.getrusage(resource.RUSAGE_CHILDREN)
     t0 = time.perf_counter()
-    proc = subprocess.Popen([sys.executable, '-m', 'reveal', *argv], env=env, cwd=str(REPO_ROOT),
+    proc = subprocess.Popen([sys.executable, '-m', 'reveal', *argv], env=env, cwd=str(src),
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
     timed_out = False
     try:
@@ -135,8 +140,8 @@ def sweep_cell(corpus, cmd_name, mode, rep, args, src, sha) -> dict:
         return row
     env = child_env(src, mode, args.workers)
     if mode == 'warm':
-        run_once(argv, env, args.timeout)
-    res = run_once(argv, env, args.timeout)
+        run_once(argv, env, args.timeout, src)
+    res = run_once(argv, env, args.timeout, src)
     row.update(res, load1_after=os.getloadavg()[0], elapsed_s=res['wall_s'], exit_code=res['rc'])
     row['cpu_s'] = round(res['user_s'] + res['sys_s'], 3)
     row['ok'] = (not res['timed_out']) and res['rc'] in allowed

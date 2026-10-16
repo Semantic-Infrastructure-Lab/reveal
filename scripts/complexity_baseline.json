@@ -20,7 +20,6 @@
  "threshold": 21,
  "watch": {
   "reveal/adapters/ast/analysis.py::call_sources": 20,
-  "reveal/adapters/ast/analysis.py::create_element_dict": 19,
   "reveal/adapters/ast/call_graph.py::build_class_attribute_aliases": 16,
   "reveal/adapters/ast/filtering.py::matches_filters": 20,
   "reveal/adapters/ast/nav_effects.py::collect_effects_transitive": 21,

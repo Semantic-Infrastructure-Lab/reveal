@@ -49,7 +49,8 @@ def parse_recovered_warning(structures: Sequence[Dict[str, Any]]) -> Optional[Wa
     }
 
 
-def try_add_file_structure(file_path: str, structures: StructureList) -> None:
+def try_add_file_structure(file_path: str, structures: StructureList, outline: bool = False,
+                           needle: Optional[str] = None) -> None:
     """Analyze file and add its structure to list if successful; a failure is recorded
     in ``structures.skipped`` (and warned on stderr, as before).
 
@@ -57,7 +58,7 @@ def try_add_file_structure(file_path: str, structures: StructureList) -> None:
         file_path: Path to file to analyze
         structures: List to append structure to
     """
-    structure, failure = analyze_file_outcome(file_path)
+    structure, failure = analyze_file_outcome(file_path, outline, needle)
     if failure:
         _warn_failed(file_path, failure)
         structures.skipped.append((file_path, failure))
@@ -85,7 +86,7 @@ def analysis_skipped_warning(skipped: List[Tuple[str, str]], base: Optional[Path
     }
 
 
-def collect_structures(path: str) -> StructureList:
+def collect_structures(path: str, outline: bool = False, needle: Optional[str] = None) -> StructureList:
     """Collect structure data from file(s).
 
     Args:
@@ -99,14 +100,14 @@ def collect_structures(path: str) -> StructureList:
     path_obj = Path(path)
 
     if path_obj.is_file():
-        try_add_file_structure(str(path_obj), structures)
+        try_add_file_structure(str(path_obj), structures, outline, needle)
     elif path_obj.is_dir():
         # The shared walk (BACK-1223): well-known non-project dirs, what git ignores
         # (BACK-1386; --no-gitignore turns that off), REVEAL_IGNORE and --exclude. Its own
         # os.walk also skipped *.egg-info, which holds packaging metadata, no code files.
         for fp in _walk_code_files(path_obj):
             if is_code_file(fp):
-                try_add_file_structure(str(fp), structures)
+                try_add_file_structure(str(fp), structures, outline, needle)
 
     return structures
 
@@ -134,12 +135,38 @@ def is_code_file(path: Path) -> bool:
     return path.suffix.lower() in get_code_extensions()
 
 
+def _add_function_metrics(element: Dict[str, Any], category: str, item: StructureItem, line: int,
+                          line_count: int, analyzer, symbol_map: Optional[Dict[str, Any]]) -> None:
+    """Complexity, depth and call-graph fields of a function-like element, in place."""
+    # Add complexity for functions/methods (and 'tests' — currently only Zig's
+    # TestDecl blocks, which now carry 'calls' too; see zig.py/BACK-660 follow-on).
+    if category not in ('functions', 'methods', 'tests'):
+        return
+    # Use complexity from item if available (tree-sitter calculated)
+    # Otherwise calculate with heuristic
+    element['complexity'] = item.get('complexity') or fallback_complexity(
+        {'line': line, 'line_end': line + line_count - 1 if line_count else line,
+         'line_count': line_count},
+        getattr(analyzer, 'content', ''))
+    element['depth'] = item.get('depth', 0)
+    # Propagate call graph fields (Phase 1 data from tree-sitter)
+    calls = item.get('calls', [])
+    element['calls'] = calls
+    element['called_by'] = item.get('called_by', [])
+    # Phase 3: resolve calls against import symbol map
+    if symbol_map is not None and calls:
+        resolved = resolve_callees(calls, symbol_map)
+        if any('resolved_file' in entry for entry in resolved):
+            element['resolved_calls'] = resolved
+
+
 def create_element_dict(
     file_path: str,
     category: str,
     item: StructureItem,
     analyzer,
     symbol_map: Optional[Dict[str, Any]] = None,
+    metrics: bool = True,
 ) -> Dict[str, Any]:
     """Create element dict from analyzer item.
 
@@ -151,6 +178,8 @@ def create_element_dict(
         symbol_map: Optional import-symbol map from build_symbol_map() for
             cross-file call resolution.  When provided, functions/methods gain
             a ``resolved_calls`` field alongside the plain ``calls`` list.
+        metrics: False for an outline item (BACK-1867), which carries no complexity, depth
+            or calls: leave those fields out rather than computing a fallback.
 
     Returns:
         Element dict with standardized fields
@@ -188,25 +217,8 @@ def create_element_dict(
         if item.get(flag):
             element[flag] = cast(Dict[str, Any], item)[flag]
 
-    # Add complexity for functions/methods (and 'tests' — currently only Zig's
-    # TestDecl blocks, which now carry 'calls' too; see zig.py/BACK-660 follow-on).
-    if category in ('functions', 'methods', 'tests'):
-        # Use complexity from item if available (tree-sitter calculated)
-        # Otherwise calculate with heuristic
-        element['complexity'] = item.get('complexity') or fallback_complexity(
-            {'line': line, 'line_end': line + line_count - 1 if line_count else line,
-             'line_count': line_count},
-            getattr(analyzer, 'content', ''))
-        element['depth'] = item.get('depth', 0)
-        # Propagate call graph fields (Phase 1 data from tree-sitter)
-        calls = item.get('calls', [])
-        element['calls'] = calls
-        element['called_by'] = item.get('called_by', [])
-        # Phase 3: resolve calls against import symbol map
-        if symbol_map is not None and calls:
-            resolved = resolve_callees(calls, symbol_map)
-            if any('resolved_file' in entry for entry in resolved):
-                element['resolved_calls'] = resolved
+    if metrics:
+        _add_function_metrics(element, category, item, line, line_count, analyzer, symbol_map)
 
     return element
 
@@ -294,10 +306,62 @@ def analyze_file(file_path: str) -> Optional[Dict[str, Any]]:
     return structure
 
 
-def analyze_file_outcome(file_path: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+def _release_buffers(analyzer) -> None:
+    """Free large per-file buffers held by the analyzer so directory scans (ast://, overview)
+    don't accumulate memory proportional to all files."""
+    analyzer.lines = []
+    analyzer.content = ''
+    if hasattr(analyzer, '_content_bytes'):
+        analyzer._content_bytes = None
+
+
+def _flatten_structure(file_path: str, structure: Dict[str, Any], analyzer, outline: bool) -> Dict[str, Any]:
+    """A file's structure as the ``{'file', 'elements', ...}`` dict the ast:// and calls://
+    adapters share. An outline carries no metrics, so it skips the symbol map too."""
+    result: Dict[str, Any] = {'file': file_path, 'elements': []}
+    if structure.get('_has_errors'):
+        result['parse_recovered'] = True  # BACK-1847: the tree has syntax it could not read
+
+    # Build import symbol map for cross-file call resolution (Phase 3).
+    # build_symbol_map is cheap for already-parsed files (import extractor caches).
+    try:
+        symbol_map: Optional[Dict[str, Any]] = None if outline else build_symbol_map(file_path)
+    except Exception as e:  # boundary-ok: broad-except -- cross-file call resolution is an optional enrichment run through per-language import extractors (arbitrary parser code); without it calls stay unresolved but the file's own structure is still right, and the failure is logged at warning
+        logger.warning("cross-file call resolution failed for %s: %s", file_path, e)
+        symbol_map = None
+
+    for category, items in structure.items():
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            result['elements'].append(create_element_dict(
+                file_path, category, cast(StructureItem, item), analyzer, symbol_map,
+                metrics=not outline))
+    return result
+
+
+def _add_call_sites(result: Dict[str, Any], file_path: str, analyzer) -> None:
+    """Module-level and JSX call sites, for the adapters that read them (full scans only)."""
+    result['module_call_sites'] = module_call_sites(file_path, analyzer)
+    from ...conventions import family_for_path
+    if family_for_path(file_path) == 'js':
+        from ..calls.references import jsx_component_references, jsx_owner_call_sites
+        result['jsx_references'] = jsx_component_references(analyzer, result['elements'])
+        result['jsx_call_sites'] = jsx_owner_call_sites(analyzer, result['elements'], result['jsx_references'])
+
+
+def analyze_file_outcome(file_path: str, outline: bool = False,
+                         needle: Optional[str] = None) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """``(structure, failure)`` for one file: *failure* is ``"ErrorType: message"`` when
     the analysis raised, None when it ran (structure None then means no analyzer or an
-    empty structure, not a failure)."""
+    empty structure, not a failure).
+
+    ``outline=True`` (BACK-1867) builds the cheap form: elements located by name, line and
+    decorators, with no metrics, calls, imports, call sites or symbol map. It is only for
+    deciding which files a query touches; ``needle`` records whether that text occurs in the
+    file (``name_in_text``), for the imports an outline leaves out."""
     from ...registry import get_analyzer
 
     try:
@@ -306,47 +370,19 @@ def analyze_file_outcome(file_path: str) -> Tuple[Optional[Dict[str, Any]], Opti
             return None, None
 
         analyzer = analyzer_class(file_path)
-        structure = analyzer.get_structure()
+        structure = analyzer.get_outline() if outline else analyzer.get_structure()
         if not structure:
-            return None, None
+            # An outline leaves out imports, so an empty one may be an import-only file that a
+            # full scan counts. Such a file has no functions to measure: take it whole.
+            return analyze_file_outcome(file_path) if outline else (None, None)
 
-        # Flatten all elements from structure
-        result: Dict[str, Any] = {'file': file_path, 'elements': []}
-        if structure.get('_has_errors'):
-            result['parse_recovered'] = True  # BACK-1847: the tree has syntax it could not read
-
-        # Build import symbol map for cross-file call resolution (Phase 3).
-        # build_symbol_map is cheap for already-parsed files (import extractor caches).
-        try:
-            symbol_map: Optional[Dict[str, Any]] = build_symbol_map(file_path)
-        except Exception as e:  # boundary-ok: broad-except -- cross-file call resolution is an optional enrichment run through per-language import extractors (arbitrary parser code); without it calls stay unresolved but the file's own structure is still right, and the failure is logged at warning
-            logger.warning("cross-file call resolution failed for %s: %s", file_path, e)
-            symbol_map = None
-
-        for category, items in structure.items():
-            if not isinstance(items, list):
-                continue
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                element = create_element_dict(
-                    file_path, category, cast(StructureItem, item), analyzer, symbol_map)
-                result['elements'].append(element)
-
-        result['module_call_sites'] = module_call_sites(file_path, analyzer)
-        from ...conventions import family_for_path
-        if family_for_path(file_path) == 'js':
-            from ..calls.references import jsx_component_references, jsx_owner_call_sites
-            result['jsx_references'] = jsx_component_references(analyzer, result['elements'])
-            result['jsx_call_sites'] = jsx_owner_call_sites(analyzer, result['elements'], result['jsx_references'])
-
-        # Free large per-file buffers held by the analyzer so directory scans
-        # (ast://, overview) don't accumulate memory proportional to all files.
-        analyzer.lines = []
-        analyzer.content = ''
-        if hasattr(analyzer, '_content_bytes'):
-            analyzer._content_bytes = None
-
+        result = _flatten_structure(file_path, structure, analyzer, outline)
+        if outline:
+            if needle is not None:
+                result['name_in_text'] = needle in getattr(analyzer, 'content', '')
+        else:
+            _add_call_sites(result, file_path, analyzer)
+        _release_buffers(analyzer)
         return result, None
 
     except Exception as e:  # boundary-ok: broad-except -- any analyzer, any file: one file that cannot be analyzed must not end a directory scan; the failure is returned to the caller, which records the file (StructureList.skipped, ImportAnalysis.structure_failures) so its result can disclose the omission (BACK-1856)

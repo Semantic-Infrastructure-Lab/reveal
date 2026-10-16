@@ -81,3 +81,16 @@ def test_high_load_skips_the_run_instead_of_timing_it(args, monkeypatch):
     args.max_load_frac = 0.0
     row = _cell(args)
     assert row["status"] == "skipped_load" and not row["ok"]
+
+
+def test_src_is_the_code_that_runs_not_the_scripts_own_checkout(args, tmp_path):
+    """A child run from the wrong cwd imports that cwd's `reveal`, so --src timed the wrong code
+    (found by A/B-ing a checkout against itself)."""
+    fake = tmp_path / "fake_src"
+    (fake / "reveal").mkdir(parents=True)
+    (fake / "reveal" / "__init__.py").write_text("", encoding="utf-8")
+    (fake / "reveal" / "__main__.py").write_text("print('fake-src-marker')\n", encoding="utf-8")
+    real = ps.sweep_cell("t", "structure", "cold", 0, args, ps.REPO_ROOT, "sha")
+    faked = ps.sweep_cell("t", "structure", "cold", 0, args, fake, "sha")
+    assert faked["ok"] and faked["out_bytes"] == len("fake-src-marker\n")
+    assert real["out_bytes"] != faked["out_bytes"]

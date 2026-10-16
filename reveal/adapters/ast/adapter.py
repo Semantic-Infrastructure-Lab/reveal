@@ -13,8 +13,11 @@ from .queries import (
     extract_builtins_param as _extract_builtins_param,
     extract_reveal_type_param as _extract_reveal_type_param,
 )
-from .analysis import analysis_skipped_warning, collect_structures, parse_recovered_warning
-from .filtering import apply_filters, matches_decorator, find_unknown_filter_keys
+from .analysis import (
+    analysis_skipped_warning, analyze_file_outcome, collect_structures, parse_recovered_warning,
+    StructureList, try_add_file_structure,
+)
+from .filtering import apply_filters, matches_decorator, find_unknown_filter_keys, outline_plan
 from .help import get_help as _get_help, get_schema as _get_schema
 from .renderer import AstRenderer
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
@@ -254,6 +257,29 @@ class AstAdapter(ResourceAdapter):
         """
         return matches_decorator(decorators, condition)
 
+    def _collect_structures(self) -> StructureList:
+        """Every scanned file's structure, built in full only where the query can match.
+
+        A name/type query is answered from the cheap outline of each file (BACK-1560); only
+        the files it touches are then analyzed in full, with their complexity, calls and
+        call sites. The elements returned are the ones a full scan would return, in the same
+        order (BACK-1867). Queries the outline cannot decide take the full scan.
+        """
+        query = cast(Dict[str, Any], self.query)
+        eligible, needle = outline_plan(query, self.result_control.sort_field)
+        if not eligible:
+            return collect_structures(self.path)
+        outline = collect_structures(self.path, outline=True, needle=needle)
+        structures = StructureList()
+        structures.skipped.extend(outline.skipped)
+        for struct in outline:
+            hit_in_text = struct.pop('name_in_text', False)
+            if apply_filters([struct], query) or hit_in_text:
+                try_add_file_structure(struct['file'], structures)  # a failure is skipped, as in a full scan
+            else:
+                structures.append(struct)
+        return structures
+
     def get_structure(self, structures: Optional[List[Dict[str, Any]]] = None, **kwargs) -> Dict[str, Any]:
         """Get filtered AST structure based on query.
 
@@ -279,7 +305,7 @@ class AstAdapter(ResourceAdapter):
         # Collect all structures from path (file or directory), unless the
         # caller already collected them (see `structures` param docstring above)
         if structures is None:
-            structures = collect_structures(self.path)
+            structures = self._collect_structures()
 
         filtered = apply_filters(structures, self.query)
 

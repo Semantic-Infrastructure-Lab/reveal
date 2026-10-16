@@ -2,7 +2,7 @@
 
 import re
 from fnmatch import fnmatch
-from typing import Dict, List, Any, Set, cast
+from typing import Dict, List, Any, Set, Tuple, cast
 from ...reveal_types import ASTElement
 from ...utils.query import compare_values
 
@@ -80,6 +80,40 @@ def apply_filters(structures: List[Dict[str, Any]], query: Dict[str, Any]) -> Li
                 results.append(element)
 
     return results
+
+
+# Sort keys an outline element already carries; any other (complexity, calls, ...) needs the metrics.
+OUTLINE_SORT_FIELDS = (None, '', 'name', 'line', 'file')
+
+
+def outline_plan(query: Dict[str, Any], sort_field: Any) -> Tuple[bool, Any]:
+    """``(eligible, needle)``: can *query* pick its files from an outline (BACK-1867)?
+
+    An outline (``get_outline()``) locates every function, class and method by name but omits
+    metrics, calls and imports, so a query is eligible only when nothing it asks for lives in
+    what is omitted: filter keys limited to ``name`` and ``type``, no import in play, and no
+    sort on a metric. Import elements are named by their text, so an untyped exact ``name==X``
+    could still match one; *needle* is then X and a file whose text lacks it cannot. An
+    untyped glob drops imports itself (``apply_filters``). Anything else is not eligible and
+    takes the full path, so the answer never differs from it.
+    """
+    if sort_field not in OUTLINE_SORT_FIELDS or 'name' not in query or set(query) - {'name', 'type'}:
+        return False, None
+    name = query['name']
+    if 'type' in query:
+        cond = normalize_type_condition(query['type'])
+        if cond.get('op') == '==' and isinstance(cond.get('value'), str):
+            kinds = [cond['value']]
+        elif cond.get('op') == 'in' and isinstance(cond.get('value'), list):
+            kinds = list(cond['value'])
+        else:
+            return False, None
+        return ('imports' not in kinds), None
+    if name.get('op') == 'glob':
+        return True, None
+    if name.get('op') == '==' and isinstance(name.get('value'), str):
+        return True, name['value']
+    return False, None
 
 
 def matches_filters(element: ASTElement, query: Dict[str, Any]) -> bool:
