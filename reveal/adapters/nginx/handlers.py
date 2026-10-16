@@ -21,6 +21,11 @@ from reveal.utils.lines import split_lines
 if TYPE_CHECKING:
     from argparse import Namespace
 
+# What the cert loaders/checkers can still raise: load_certificate_from_file
+# documents FileNotFoundError (OSError) and ValueError; check_ssl_health turns
+# network and TLS failures into a 'failure' result itself, leaving a bad
+# hostname (ValueError) or a stray socket error (OSError).
+_CERT_CHECK_ERRORS = (OSError, ValueError)
 
 _SEVERITY_ORDER = {'HIGH': 0, 'MEDIUM': 1, 'LOW': 2, 'INFO': 3}
 _SEVERITY_LABEL = {
@@ -190,7 +195,7 @@ def _fetch_acme_ssl_data(rows: list, check_ssl_health) -> list:
             results.append({**r, 'ssl_status': ssl_result.get('status', 'unknown'),
                             'ssl_days': leaf.get('days_until_expiry'),
                             'ssl_not_after': leaf.get('not_after', '')})
-        except Exception as exc:
+        except _CERT_CHECK_ERRORS as exc:
             results.append({**r, 'ssl_status': 'error', 'ssl_days': None,
                             'ssl_not_after': str(exc)[:60], 'error': str(exc)})
     return results
@@ -447,7 +452,7 @@ def _load_disk_cert(cert_path: str, load_certificate_from_file) -> dict:
             'serial': disk_leaf.serial_number,
             'not_after': disk_leaf.not_after,
         }
-    except Exception as exc:
+    except _CERT_CHECK_ERRORS as exc:
         return {'status': f"error: {str(exc)[:40]}", 'expiry': None, 'serial': None, 'not_after': None}
 
 
@@ -469,7 +474,7 @@ def _load_live_cert(domain: str, check_ssl_health) -> dict:
             'serial': leaf_data.get('serial_number'),
             'not_after': not_after,
         }
-    except Exception as exc:
+    except _CERT_CHECK_ERRORS as exc:
         return {'status': f"error: {str(exc)[:40]}", 'expiry': None, 'serial': None, 'not_after': None}
 
 

@@ -471,7 +471,7 @@ def _check_upstream_reachability(upstream_def: Dict[str, Any]) -> List[Dict[str,
             sock.close()
             reachable = True
             error = None
-        except Exception as e:
+        except (OSError, ValueError, OverflowError) as e:  # refused/timeout/DNS failure; ValueError for an unencodable host; OverflowError for a port outside 0-65535
             reachable = False
             error = str(e)
 
