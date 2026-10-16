@@ -342,8 +342,9 @@ What landed, and when, is in CHANGELOG `[0.130.0]` and `internal-docs/RESOLVED_L
    or read, or a config that could not load, now reaches the result instead of a log line for
    ast://, imports, review, calls://, trace://, contracts://, testability://, diff:// on a git
    directory, markdown:// reads, xlsx sheets, the git content search, the DNS checks and
-   config loading. What is open is the rest of that class: nav `--transitive` effects
-   (BACK-1861), the DNS record listing (BACK-1862) and a few rare sites (BACK-1857). Also open: BACK-916 (one
+   record listing, nav `--transitive` effects and config loading. What is open is the rest of
+   that class: `contracts` coverage still counts a failed file as analyzed (BACK-1863) and a
+   few rare sites (BACK-1857). Also open: BACK-916 (one
    rendering layer: patches, nginx://, the nginx file-flag handlers, surface://, overview://,
    testability://, deps, contracts, pack, architecture and hotspots return their output; remaining
    inline/adapter rendering and shared capture/JSON ownership stay open) and BACK-1052 (shared scan policy now used by depends,
