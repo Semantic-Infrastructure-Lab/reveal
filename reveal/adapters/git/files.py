@@ -409,6 +409,7 @@ def _commit_diff_contains(
     """
     global _content_search_error
     import subprocess
+    import pygit2
     repo_root = repo.workdir.rstrip('/\\') if repo.workdir else '.'
     if commit.parents:
         cmd = ['git', '-C', repo_root, 'diff',
@@ -430,7 +431,9 @@ def _commit_diff_contains(
                     and pattern in line):
                 return True
         return False
-    except Exception as e:
+    # What the body can raise: the git subprocess (OSError: git missing; SubprocessError:
+    # TimeoutExpired) and the commit's parent lookup (GitError, KeyError on a missing object).
+    except (OSError, subprocess.SubprocessError, pygit2.GitError, KeyError) as e:
         logger.warning("pattern search failed for commit %s: %s", commit.id, e)
         _content_search_error = (
             f"content-pattern search degraded: {e} "
@@ -479,7 +482,7 @@ def _file_has_no_named_elements(path: str, subpath: str) -> bool:
             return True
         structure = analyzer_class(file_path).get_structure()
         return not structure.get('functions') and not structure.get('classes')
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- the get_analyzer()/get_structure() pair runs per-language parser code on the working-tree file (OSError/ValueError are the known failures, the rest cannot be bounded here); the fallback only decides which stderr hint blame prints, and the failure is logged at warning
         logger.warning("could not determine named elements for %s: %s", subpath, e)
         return False
 
@@ -860,7 +863,7 @@ def get_element_line_range(element_name: str, path: str, subpath: str) -> Option
 
         return None
 
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- the get_analyzer()/get_structure() pair runs per-language parser code on the working-tree file (OSError/ValueError are the known failures, the rest cannot be bounded here); the caller then prints 'Element ... not found, showing full file blame' and this prints the failure to stderr
         # Log error for debugging but don't fail the whole blame operation
         print(f"Warning: Failed to get element range: {e}", file=sys.stderr)
         return None
@@ -871,30 +874,31 @@ def commit_touches_file(
     commit: 'pygit2.Commit',
     filepath: str
 ) -> bool:
-    """Check if a commit modified a specific file."""
+    """Check if a commit modified a specific file.
+
+    A repository that cannot be read (pygit2.GitError: a missing tree, a corrupt object)
+    raises: answering False would drop the commit from a history or ownership walk, which
+    then reads as complete (BACK-1059). The history walk turns the error into its
+    "history walk failed" ValueError.
+    """
+    # Get file at this commit
+    tree = commit.tree
     try:
-        # Get file at this commit
-        tree = commit.tree
-        try:
-            entry = tree[filepath]
-            current_oid = entry.id
-        except KeyError:
-            # File doesn't exist in this commit
-            return False
+        entry = tree[filepath]
+        current_oid = entry.id
+    except KeyError:
+        # File doesn't exist in this commit
+        return False
 
-        # Check parents
-        if not commit.parents:
-            # Initial commit - file exists, so it was added
+    # Check parents
+    if not commit.parents:
+        # Initial commit - file exists, so it was added
+        return True
+
+    for parent in commit.parents:
+        if _parent_has_different_file(parent, filepath, current_oid):
             return True
-
-        for parent in commit.parents:
-            if _parent_has_different_file(parent, filepath, current_oid):
-                return True
-        return False
-
-    except Exception as e:
-        logger.warning("could not determine if commit %s touched %s: %s", commit.id, filepath, e)
-        return False
+    return False
 
 
 def _parent_has_different_file(parent, filepath: str, current_oid) -> bool:
@@ -917,15 +921,11 @@ def commit_touches_path(
     comparing it against the parent's subtree oid detects any change beneath it.
     `path` of None/'' means the whole repository (any change vs parent).
     """
-    try:
-        if not path:
-            if not commit.parents:
-                return True
-            return any(commit.tree.id != p.tree.id for p in commit.parents)
-        return commit_touches_file(repo, commit, path)
-    except Exception as e:
-        logger.warning("could not determine if commit %s touched %s: %s", commit.id, path, e)
-        return False
+    if not path:
+        if not commit.parents:
+            return True
+        return any(commit.tree.id != p.tree.id for p in commit.parents)
+    return commit_touches_file(repo, commit, path)
 
 
 def _get_element_content_at_commit(
@@ -936,19 +936,27 @@ def _get_element_content_at_commit(
 ) -> Optional[str]:
     """Extract the text of a named element from a file at a specific commit.
 
-    Returns None if the file or element doesn't exist at that commit.
+    Returns None if the file or element doesn't exist at that commit. A repository that
+    cannot be read (a tree entry whose blob is missing, pygit2.GitError) raises: None would
+    read as "the element was absent at this commit" in an element history (BACK-1059).
     """
     import tempfile
     from pathlib import Path
+    import pygit2
 
     try:
-        tree = commit.tree
-        entry = tree[filepath]
+        entry = commit.tree[filepath]
+    except KeyError:
+        return None
+    try:
         blob = cast('pygit2.Blob', repo[entry.id])
-        # The analyzer's line numbers count a lone \r as a break; the slice must too (BACK-1736).
-        content = normalize_newlines(blob.data.decode('utf-8', errors='replace'))
-        file_lines = split_lines(content)
+    except KeyError as exc:  # repo[oid] raises KeyError for an object the repository lacks
+        raise pygit2.GitError(f"blob {entry.id} of {filepath} is missing from the repository") from exc
+    # The analyzer's line numbers count a lone \r as a break; the slice must too (BACK-1736).
+    content = normalize_newlines(blob.data.decode('utf-8', errors='replace'))
+    file_lines = split_lines(content)
 
+    try:
         suffix = Path(filepath).suffix or '.txt'
         with tempfile.NamedTemporaryFile(mode='w', newline='', suffix=suffix, delete=False,
                                          encoding='utf-8') as f:
@@ -976,9 +984,7 @@ def _get_element_content_at_commit(
         finally:
             os.unlink(tmp_path)
 
-    except KeyError:
-        return None
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- get_structure() is per-language parser code run on an old revision of the file, which this module cannot bound (OSError/ValueError are the known ones); logged below, and the element counts as absent at that commit
         logger.warning(
             f"Failed to extract {element_name!r} from {filepath!r} at "
             f"{commit.short_id}: {e}"

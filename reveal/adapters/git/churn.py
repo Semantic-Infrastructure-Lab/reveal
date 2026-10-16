@@ -33,7 +33,7 @@ def _churn_fingerprint(
     """
     try:
         workdir = repo.workdir or str(repo.path)
-    except Exception:  # boundary-ok: silent-except -- None means "walk uncached", the same answer
+    except Exception:  # boundary-ok: silent-except -- None means "walk uncached", the same answer; boundary-ok: broad-except -- the workdir only seeds the cache key (repo.workdir/repo.path are pygit2 attributes whose failure modes this module cannot enumerate), and the fallback computes the identical churn counts, so no result depends on it
         return None
     hasher = hashlib.sha256()
     hasher.update(str(workdir).encode("utf-8", "replace"))

@@ -122,11 +122,11 @@ def test_commit_touches_path_of_an_unreadable_tree_raises(tmp_path):
     path, trees, repo = _make_repo(tmp_path)
     _drop_object(repo, trees[0])
     repo = _reopen(path)
-    head = repo[repo.head.target]
+    second = repo[repo.head.target].parents[0]  # its parent is the commit whose tree is gone
     with pytest.raises(pygit2.GitError):
-        files.commit_touches_path(repo, head.parents[0], 'a.txt')
+        files.commit_touches_path(repo, second, 'a.txt')
     with pytest.raises(pygit2.GitError):
-        files.commit_touches_file(repo, head, 'a.txt')
+        files.commit_touches_file(repo, second, 'a.txt')
 
 
 def test_commit_touches_file_of_a_path_absent_from_the_commit_is_false(tmp_path):

@@ -349,11 +349,9 @@ class GitAdapter(ResourceAdapter):
         filter_query = '&'.join(filter_parts)
         self.query_filters = []
         if filter_query:
-            try:
-                self.query_filters = parse_query_filters(filter_query)
-            except Exception:
-                # If parsing fails, fall back to empty filters
-                self.query_filters = []
+            # No fallback to "no filters": that would answer an unfiltered query as if it
+            # were the filtered one (BACK-1059). A ValueError here fails the query.
+            self.query_filters = parse_query_filters(filter_query)
 
     def __init__(self, resource: Optional[str] = None, ref: Optional[str] = None,
                  subpath: Optional[str] = None, query: Optional[Dict[str, str]] = None,

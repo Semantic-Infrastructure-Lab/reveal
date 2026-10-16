@@ -1,6 +1,5 @@
 """Git reference, branch, and tag handling."""
 
-import logging
 from datetime import datetime
 from typing import Dict, Any, List, cast, TYPE_CHECKING
 from reveal.reveal_types import CONTRACT_VERSION
@@ -10,8 +9,6 @@ from .commits import disclose_timeline_cut, timeline_fields
 
 if TYPE_CHECKING:
     import pygit2
-
-logger = logging.getLogger(__name__)
 
 
 def get_ref_structure(
@@ -111,6 +108,8 @@ def get_ref_timeline(
 
 def get_head_info(repo: 'pygit2.Repository') -> Dict[str, Any]:
     """Get HEAD information."""
+    import pygit2
+
     if repo.is_empty or repo.head_is_unborn:
         return {'branch': None, 'commit': None, 'detached': False}
 
@@ -120,11 +119,10 @@ def get_head_info(repo: 'pygit2.Repository') -> Dict[str, Any]:
             'commit': str(repo.head.target)[:7],
             'detached': repo.head_is_detached,
         }
-    except Exception as e:
-        # Same shape as a genuinely empty/unborn repo (line 92) — log so a
-        # corrupted-HEAD failure isn't indistinguishable from a fresh repo.
-        logger.warning(f"Failed to read HEAD info: {e}")
-        return {'branch': None, 'commit': None, 'detached': False}
+    except (pygit2.GitError, KeyError) as e:
+        # A HEAD that exists but cannot be read (e.g. a corrupt branch ref) is a failure;
+        # the empty-repo shape above would read as "a repository with no commits" (BACK-1059).
+        raise ValueError(f"Cannot read HEAD: {e}") from e
 
 
 def _get_branch_info(repo, branch_name) -> 'Dict[str, Any] | None':
