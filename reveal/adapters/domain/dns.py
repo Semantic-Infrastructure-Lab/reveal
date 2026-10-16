@@ -225,7 +225,7 @@ def check_mx_records(domain: str) -> Dict[str, Any]:
             'severity': 'medium',
             'details': {'mx_records': mx_records},
         }
-    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.exception.DNSException):
+    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
         return {
             'name': 'mx_records',
             'status': 'failure',
@@ -234,13 +234,15 @@ def check_mx_records(domain: str) -> Dict[str, Any]:
             'message': 'No MX records — domain cannot receive email',
             'severity': 'high',
         }
-    except OSError as e:
+    except _DNS_ERRORS as e:
+        # A timeout, SERVFAIL or malformed name is not "no record": say the lookup failed
+        # (BACK-1850). NoAnswer/NXDOMAIN above are the genuine absence.
         return {
             'name': 'mx_records',
             'status': 'warning',
             'value': 'Check failed',
             'threshold': 'MX configured',
-            'message': f'MX check failed: {e}',
+            'message': f'MX check failed: lookup error ({type(e).__name__}: {e}), so the record is neither confirmed present nor absent',
             'severity': 'medium',
         }
 
@@ -299,7 +301,7 @@ def check_spf_record(domain: str) -> Dict[str, Any]:
             'severity': 'medium',
             'details': {'spf_record': record},
         }
-    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.exception.DNSException):
+    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
         return {
             'name': 'spf_record',
             'status': 'failure',
@@ -308,13 +310,15 @@ def check_spf_record(domain: str) -> Dict[str, Any]:
             'message': 'No SPF record — domain is open to email spoofing',
             'severity': 'high',
         }
-    except OSError as e:
+    except _DNS_ERRORS as e:
+        # A timeout, SERVFAIL or malformed name is not "no record": say the lookup failed
+        # (BACK-1850). NoAnswer/NXDOMAIN above are the genuine absence.
         return {
             'name': 'spf_record',
             'status': 'warning',
             'value': 'Check failed',
             'threshold': 'SPF present',
-            'message': f'SPF check failed: {e}',
+            'message': f'SPF check failed: lookup error ({type(e).__name__}: {e}), so the record is neither confirmed present nor absent',
             'severity': 'medium',
         }
 
@@ -382,7 +386,7 @@ def check_dmarc_record(domain: str) -> Dict[str, Any]:
             'severity': 'medium',
             'details': {'dmarc_record': record, 'policy': policy},
         }
-    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.exception.DNSException):
+    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
         return {
             'name': 'dmarc_record',
             'status': 'failure',
@@ -391,13 +395,15 @@ def check_dmarc_record(domain: str) -> Dict[str, Any]:
             'message': 'No DMARC record — spoofed emails reach inboxes undetected',
             'severity': 'medium',
         }
-    except OSError as e:
+    except _DNS_ERRORS as e:
+        # A timeout, SERVFAIL or malformed name is not "no record": say the lookup failed
+        # (BACK-1850). NoAnswer/NXDOMAIN above are the genuine absence.
         return {
             'name': 'dmarc_record',
             'status': 'warning',
             'value': 'Check failed',
             'threshold': 'DMARC present',
-            'message': f'DMARC check failed: {e}',
+            'message': f'DMARC check failed: lookup error ({type(e).__name__}: {e}), so the record is neither confirmed present nor absent',
             'severity': 'medium',
         }
 
