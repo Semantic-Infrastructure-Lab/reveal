@@ -186,7 +186,7 @@ def _run_and_capture(fn, *args, capture_stderr: bool = True, **kwargs) -> str:
             fn(*args, **kwargs)
         except SystemExit as e:
             exit_code = e.code
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # boundary-ok: broad-except -- a tool function is arbitrary adapter code; the message is returned to the MCP client as the tool error
             exc_msg = str(exc)
         finally:
             sys.stdout = old_stdout

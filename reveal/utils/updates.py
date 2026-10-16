@@ -88,5 +88,5 @@ def check_for_updates():
         cache_file.write_text(datetime.now().isoformat(), encoding='utf-8')
         _print_update_notice(latest_version, __version__)
 
-    except Exception:  # boundary-ok: silent-except -- runs on every command for every user; a failed check means no notice, never a failed command
+    except Exception:  # boundary-ok: broad-except -- runs on every command for every user; a failed update check means no notice, never a failed command  # boundary-ok: silent-except -- same
         pass

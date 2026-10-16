@@ -119,7 +119,7 @@ def run_health(args: Namespace) -> None:
     for target in targets:
         try:
             result = _check_target(target, args)
-        except Exception as exc:
+        except Exception as exc:  # boundary-ok: broad-except -- one target's failure becomes a failed HealthResult (exit 2, 'error: ...') in the summary; it must not end the other targets
             # Visible via the 'summary' field appended to results below.
             result = HealthResult(2, f"error: {exc}", "failed")
         results.append({'target': target, **asdict(result)})

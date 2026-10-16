@@ -581,7 +581,7 @@ def _file_entry_json(path: Path, fast: bool) -> dict:
             entry['language'] = analyzer.type_name
         else:
             entry['size'] = os.stat(path).st_size
-    except Exception as e:  # the entry says why it has no lines/size, rather than omitting them
+    except Exception as e:  # boundary-ok: broad-except -- an analyzer is arbitrary per-language code; the tree entry carries the error text instead of lines or size
         entry['error'] = f'{type(e).__name__}: {e}'
     return entry
 
@@ -664,6 +664,6 @@ def _get_file_info(path: Path, fast: bool = False) -> str:
             size = format_size(stat.st_size)
             return f"{path.name} ({size})"
 
-    except Exception:
+    except Exception:  # boundary-ok: broad-except -- display label only: the file name alone is the correct fallback, and the structured tree entry carries the error
         # If anything fails, just show filename
         return path.name

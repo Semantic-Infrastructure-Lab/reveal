@@ -108,7 +108,7 @@ def _extract_structure(path: Path) -> Dict[str, Any]:
         return {}
     try:
         return analyzer_class(str(path)).get_structure()
-    except Exception as exc:
+    except Exception as exc:  # boundary-ok: broad-except -- an analyzer is arbitrary per-language code; the failure is logged at warning and the file contributes an empty structure
         logger.warning("structure extraction failed for %s: %s", path, exc)
         return {}
 
@@ -323,7 +323,7 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
         raw_eps = adapter._format_entrypoints().get('entries', [])
         entry_points = [e['file'] for e in raw_eps if _is_reportable_entry_point(e)]
         unsupported_extensions = adapter.get_metadata().get('unsupported_extensions', {})
-    except Exception as exc:
+    except Exception as exc:  # boundary-ok: broad-except -- imports analysis over a whole tree runs arbitrary analyzers; failure is logged at warning and the diff section is empty
         logger.warning("imports analysis failed for %s: %s", root, exc)
 
     # BACK-984: _run_complex_functions composes AstAdapter via

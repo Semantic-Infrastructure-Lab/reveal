@@ -84,7 +84,7 @@ def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
         return call()
     except NotApplicableError as e:
         _decline(scheme, resource, e.reason, adapter_class)
-    except Exception as e:  # not silent: the query ends as a failed result (_fail)
+    except Exception as e:  # boundary-ok: broad-except -- the router's boundary for every adapter: the query ends as a failed result via _fail, exit 1
         logger.debug('%s:// adapter call raised', scheme, exc_info=True)
         _fail(scheme, resource, _exception_message(e), adapter_class=adapter_class)
 
@@ -219,10 +219,10 @@ def _parse_text_frontmatter(text: str) -> Optional[dict]:
     if not end_match:
         return None
     yaml_content = text[3:end_match.start() + 3]
+    import yaml
     try:
-        import yaml
         data = yaml.safe_load(yaml_content)
-    except Exception as e:
+    except yaml.YAMLError as e:
         raise ValueError(f"frontmatter block found but failed to parse as YAML: {e}") from e
     if not isinstance(data, dict):
         return None

@@ -50,7 +50,7 @@ def _extract_decorators_from_file(file_path: str):
         decorators_found = _collect_decorator_counts(structure)
         return (decorators_found, len(decorators_found) > 0)
 
-    except Exception as e:  # one file must not stop the scan; it is named, not dropped unseen
+    except Exception as e:  # boundary-ok: broad-except -- one file's analyzer failure must not stop the scan; it is named at warning
         logger.warning("decorator stats: %s skipped (%s: %s)", file_path, type(e).__name__, e)
         return None
 

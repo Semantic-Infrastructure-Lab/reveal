@@ -133,7 +133,7 @@ def _get_structural_elements(path: str) -> List[Dict[str, Any]]:
         if analyzer_class is None:
             return []
         structure = analyzer_class(path).get_outline()
-    except Exception as e:  # one file's analyzer failure must not stop a grep; its hits stay, ungrouped
+    except Exception as e:  # boundary-ok: broad-except -- one file's analyzer failure must not stop a grep; its hits stay, ungrouped, and the warning names the file
         logger.warning("--grep: %s hits shown without their enclosing element (%s: %s)",
                        path, type(e).__name__, e)
         return []

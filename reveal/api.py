@@ -145,7 +145,7 @@ def element(
                     result = analyzer.extract_element(elem_type, name)
                     if result is not None:
                         return result
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- public element() returns None on a miss; a failing analyzer is logged at warning with the path and name rather than raised into the caller's lookup loop
         logger.warning("element() structure lookup failed for %s %r: %s", path, name, e)
 
     # Last resort: try common types in order.
@@ -271,7 +271,7 @@ def check(
         try:
             analyzer = analyzer_class(path_str)
             structure_data = analyzer.get_structure()
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- public check() skips one file's structure and says so at warning; an analyzer is arbitrary per-language code
             logger.warning("check() get_structure failed for %s: %s", path_str, e)
 
     return RuleRegistry.check_file(

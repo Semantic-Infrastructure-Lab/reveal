@@ -141,9 +141,12 @@ class TestParseSyntax:
 class TestExtractionRouting:
     """Test _extract_by_syntax routes to correct extractors."""
 
-    def test_route_to_ordinal_extraction(self):
+    def test_route_to_ordinal_extraction(self, tmp_path):
         """Test routing to ordinal extraction."""
+        source = tmp_path / "f.py"
+        source.write_text("def func1():\n    pass\n\n\n\n", encoding="utf-8")
         analyzer = Mock()
+        analyzer.path = source  # a real path: _read_lines no longer swallows open(Mock) (BACK-1059)
         analyzer.get_structure.return_value = {'functions': [
             {'name': 'func1', 'line': 1, 'line_end': 5}
         ]}

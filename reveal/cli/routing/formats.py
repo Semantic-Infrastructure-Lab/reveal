@@ -27,7 +27,7 @@ def declared_output_formats(adapter_class: Any) -> Optional[Tuple[str, ...]]:
         return DEFAULT_OUTPUT_FORMATS
     try:
         help_data = get_help()
-    except Exception as e:  # a broken help dict must not block output; it is a bug, so say so
+    except Exception as e:  # boundary-ok: broad-except -- get_help() is adapter code; a broken help dict must not block output and is logged at warning
         logger.warning("%s.get_help() failed (%s); output format not checked",
                        getattr(adapter_class, '__name__', adapter_class), e)
         return None

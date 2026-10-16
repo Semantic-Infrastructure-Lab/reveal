@@ -48,7 +48,7 @@ def _log_perf(start: float, argv_snapshot: List[str], exit_code: int) -> None:
             peak_rss_kb = ru_self.ru_maxrss + ru_children.ru_maxrss
             if sys.platform == 'darwin':
                 peak_rss_kb //= 1024  # macOS reports ru_maxrss in bytes, not KB
-    except Exception:
+    except Exception:  # boundary-ok: broad-except -- peak-RSS telemetry sidecar: a platform without resource usage reports no peak
         peak_rss_kb = None
 
     record = {
@@ -240,7 +240,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     except SystemExit as e:
         exit_code = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
         raise
-    except BaseException:
+    except BaseException:  # boundary-ok: broad-except -- records the exit code for telemetry and re-raises; nothing is swallowed
         exit_code = 1
         raise
     finally:
@@ -388,7 +388,7 @@ def _handle_at_file(file_path: str, args):
     try:
         with open(path, 'r', encoding='utf-8') as f:
             lines = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-    except Exception as e:
+    except (OSError, ValueError) as e:  # unreadable or not UTF-8
         print(f"Error reading {file_path}: {e}", file=sys.stderr)
         sys.exit(1)
 

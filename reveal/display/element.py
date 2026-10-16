@@ -410,7 +410,7 @@ def _print_available_names(analyzer):
             max_names = 10
             suffix = f" (and {len(available) - max_names} more)" if len(available) > max_names else ""
             print(f"Available: {', '.join(available[:max_names])}{suffix}", file=sys.stderr)
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- display hint only; the failure is printed as a warning on stderr
         print(f"Warning: could not list available names: {e}", file=sys.stderr)
 
 
@@ -418,7 +418,7 @@ def _print_did_you_mean(analyzer, element: str):
     """Suggest the closest element names for a mistyped one (stderr)."""
     try:
         close = difflib.get_close_matches(element, _available_names(analyzer), n=3, cutoff=0.6)
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- display hint only; the failure is printed as a warning on stderr
         print(f"Warning: could not suggest similar names: {e}", file=sys.stderr)
         return
     if close:
@@ -775,7 +775,7 @@ def _extract_line_range(analyzer, start_line: int, end_line: int):
             'line_end': end_line,
             'source': source,
         }
-    except Exception as e:
+    except (OSError, ValueError) as e:  # unreadable or not UTF-8
         print(f"Warning: could not extract lines {start_line}-{end_line} from {to_posix(analyzer.path)}: {e}",
               file=sys.stderr)
         return None
@@ -821,7 +821,7 @@ def _get_analyzer_structure(analyzer):
     try:
         structure = analyzer.get_structure()
         return structure if structure else None
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- an analyzer is arbitrary per-language code; the failure is printed as a warning on stderr
         print(f"Warning: could not get structure for {getattr(analyzer, 'path', '<unknown>')}: {e}",
               file=sys.stderr)
         return None
@@ -942,7 +942,7 @@ def _read_lines(path, start_line, end_line):
         if start_line < 1 or end_line > len(lines):
             return None
         return ''.join(lines[start_line - 1:end_line]).rstrip('\n')
-    except Exception as e:
+    except (OSError, ValueError) as e:  # unreadable or not UTF-8
         print(f"Warning: could not read lines {start_line}-{end_line} from {to_posix(path)}: {e}", file=sys.stderr)
         return None
 
@@ -967,7 +967,7 @@ def _next_element_line(analyzer, after_line: int) -> Optional[int]:
             for line in [listed_item_line(item)]
             if line and line > after_line
         ]
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- display hint only; the failure is printed as a warning on stderr
         print(f"Warning: could not find the next element: {e}", file=sys.stderr)
         return None
     return min(starts) if starts else None

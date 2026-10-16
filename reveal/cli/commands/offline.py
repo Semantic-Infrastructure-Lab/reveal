@@ -54,14 +54,14 @@ def run_offline(args: Namespace) -> None:
         print(f"Downloading {len(names)} grammar(s): {', '.join(names)}")
         try:
             count = grammars.download(names)
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- top-level command: any download failure is printed to stderr and exits 1
             print(f"❌ Download failed: {e}", file=sys.stderr)
             sys.exit(1)
     else:
         print("Downloading all tree-sitter grammars (this may take a while)...")
         try:
             count = grammars.download_all()
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- top-level command: any download failure is printed to stderr and exits 1
             print(f"❌ Download failed: {e}", file=sys.stderr)
             sys.exit(1)
 

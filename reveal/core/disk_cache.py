@@ -129,7 +129,7 @@ def build_fingerprint() -> Optional[str]:
             for rel, st in _package_files(package, recursive):
                 hasher.update(f"{rel}\0{st.st_mtime_ns}\0{st.st_size}\0".encode("utf-8", "replace"))
         return hasher.hexdigest()[:12]
-    except Exception as e:
+    except (OSError, ImportError, ValueError) as e:  # stat/walk failure, or a package find_spec cannot resolve
         # Fail open: an unstat-able package means no trustworthy key, so this
         # process runs uncached (correct, slower) rather than risk a stale hit.
         logger.debug("disk cache disabled for this process, build fingerprint failed: %s", e)
@@ -163,7 +163,7 @@ def get(namespace: str, key: str) -> Optional[Any]:
             return None
         with open(path, "rb") as fh:
             return pickle.load(fh)
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- pickle.load of a stale or corrupt entry can raise anything (UnpicklingError, EOFError, AttributeError, ImportError); a miss is correct
         # Corrupt/truncated/incompatible entry, or unreadable dir — treat as a
         # miss. Never let a bad cache surface as an error or a wrong answer.
         logger.debug("disk cache read of %s/%s treated as a miss: %s", namespace, key, e)
@@ -196,7 +196,7 @@ def put(namespace: str, key: str, value: Any, max_entries: Optional[int] = None)
             with os.fdopen(fd, "wb") as fh:
                 pickle.dump(value, fh, protocol=pickle.HIGHEST_PROTOCOL)
             os.replace(tmp_name, str(target))
-        except Exception:
+        except Exception:  # boundary-ok: broad-except -- cleans up the temp file on any failure mid-write and re-raises; nothing is swallowed
             # Clean up the temp file on any failure mid-write.
             try:
                 os.unlink(tmp_name)
@@ -204,7 +204,7 @@ def put(namespace: str, key: str, value: Any, max_entries: Optional[int] = None)
                 pass
             raise
         _prune(ns_dir, max_entries if max_entries is not None else _MAX_ENTRIES_PER_NAMESPACE)
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- pickle.dump of an arbitrary value can raise anything besides OSError; the cache degrades to uncached, never to a wrong answer
         # Read-only home, disk full, race — degrade to no caching.
         logger.debug("disk cache write of %s/%s skipped: %s", namespace, key, e)
         return
@@ -243,7 +243,7 @@ def _prune(ns_dir: Path, max_entries: int) -> None:
                 stale.unlink()
             except OSError:
                 pass
-    except Exception as e:
+    except OSError as e:
         logger.debug("disk cache prune of %s skipped: %s", ns_dir, e)
         return
 
@@ -273,7 +273,7 @@ def _prune_builds(current: Path) -> None:
         siblings.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         for stale in siblings[_MAX_BUILDS - 1:]:
             shutil.rmtree(stale, ignore_errors=True)
-    except Exception as e:
+    except OSError as e:
         # Best-effort housekeeping: an unpruned dir costs disk, never correctness.
         logger.debug("disk cache build-dir prune skipped: %s", e)
         return

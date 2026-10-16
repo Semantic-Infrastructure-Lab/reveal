@@ -128,7 +128,7 @@ def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore):
         for future in as_completed(futures):
             try:
                 yield future.result()
-            except Exception as e:
+            except Exception as e:  # boundary-ok: broad-except -- a lost file (worker died, BrokenProcessPool or any worker exception) becomes an errored file in the report (BACK-1681)
                 # A lost file (its worker died, BrokenProcessPool) is an errored file:
                 # it stays in the report, counts in files_errored and exits 3
                 # (BACK-1681). The report line is the one disclosure.
@@ -401,7 +401,7 @@ def check_and_report_file(
 
         return issue_count
 
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- one file's analyzer or rule failure must not end a recursive sweep; it is logged at warning with the path
         logging.warning("check: skipped %s — %s: %s", file_path, type(e).__name__, e)
         return 0
 
@@ -470,7 +470,7 @@ def check_and_collect_file(
 
         return len(detections), detections, status
 
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- one file's analyzer or rule failure becomes that file's error status (exit 3), reported in the check output
         logging.warning("check: skipped %s — %s: %s", file_path, type(e).__name__, e)
         return 0, [], {"status": "error", "detail": f"{type(e).__name__}: {e}"}
 
@@ -794,7 +794,7 @@ def _results_in_sorted_order(sorted_files: List[Path], directory: Path, select, 
         try:
             for file_path, *rest in _run_parallel_streaming(sorted_files, directory, select, ignore):
                 results_by_file[file_path] = tuple(rest)
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- a pool that fails to start falls back to checking the rest serially, logged at warning
             # The pool itself failed (e.g. startup) -- the generator raises when
             # iterated, not when created. Check what it did not deliver serially.
             logging.warning("check: parallel run failed (%s: %s); checking the rest serially",

@@ -89,7 +89,7 @@ def _scan_one(args: tuple) -> Path | None:
         else:
             data_lower = data.lower()
             return path if all(n in data_lower for n in needles) else None
-    except Exception as e:
+    except OSError as e:
         logger.warning("grep_file_worker failed for %s: %s", path, e)
         return None
 
@@ -187,7 +187,7 @@ def grep_files(
             try:
                 if future.result() is not None:
                     matches.append(path)
-            except Exception as e:  # the warning below is the disclosure
+            except Exception as e:  # boundary-ok: broad-except -- future.result() re-raises whatever the worker raised; the lost file is reported by the warning below
                 lost.append((path, e))
     if lost:
         logger.warning("grep_files: %d file(s) not scanned, a pool worker died (%s: %s): %s%s",

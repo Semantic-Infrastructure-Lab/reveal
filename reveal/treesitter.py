@@ -582,7 +582,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             # at the end moves no byte offset of the content before it.
             source = self.content + '\n' if getattr(self, '_ends_with_newline', False) else self.content
             self.tree = get_tree(self.language, source)  # warns before a first-use grammar fetch (BACK-979)
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- a grammar or parse failure is recorded in parse_error and warned once per language; structure degrades to empty
             self.parse_error = str(e)
             if self.language not in _warned_failed_languages:
                 _warned_failed_languages.add(self.language)
@@ -793,7 +793,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return []
         try:
             statements = extractor.extract_imports(path)
-        except Exception as e:  # never let an extractor failure hide the rest of the outline
+        except Exception as e:  # boundary-ok: broad-except -- an extractor is arbitrary per-language code and must not hide the rest of the outline (follow-up: disclose beyond debug, BACK-1059)
             logger.debug("imports extractor failed for %s: %s", path, e)
             return []
         return [{'line': st.line_number, 'content': (st.source_line or st.module_name).strip()}

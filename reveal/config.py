@@ -536,7 +536,7 @@ class RevealConfig:
             with open(pyproject, 'rb') as f:
                 data = tomllib.load(f)
             return data.get('tool', {}).get('reveal')
-        except Exception as e:
+        except (OSError, ValueError) as e:  # unreadable, or tomllib.TOMLDecodeError / UnicodeDecodeError
             logger.debug(f"Failed to load {pyproject}: {e}")
             return None
 
@@ -595,7 +595,7 @@ class RevealConfig:
                 return {}
             cls._validate_config_schema(config, path)
             return cast(Dict[str, Any], config)
-        except Exception as e:
+        except (OSError, ValueError, yaml.YAMLError) as e:  # unreadable, not UTF-8, or not YAML
             logger.error(f"Failed to load config {path}: {e}")
             return None
 
@@ -937,7 +937,7 @@ def _try_load_yaml_file(path: Path) -> Optional[Dict[str, Any]]:
         with open(path, encoding='utf-8') as f:
             loaded = yaml.safe_load(f)
             return cast(Dict[str, Any], loaded) if loaded is not None else None
-    except Exception as e:
+    except (OSError, ValueError, yaml.YAMLError) as e:  # unreadable, not UTF-8, or not YAML
         # A malformed config file must not look identical to "no config file
         # here" — the caller silently falls through to its default otherwise.
         logger.warning(f"Failed to load config file {path}: {e}")
@@ -1024,7 +1024,7 @@ def _write_user_config(config: Dict[str, Any], success_message: str) -> bool:
             yaml.dump(config, f, default_flow_style=False)
         print(f"{success_message} in {config_path}")
         return True
-    except Exception as e:
+    except (OSError, yaml.YAMLError) as e:
         print(f"Failed to update config: {e}", file=sys.stderr)
         return False
 

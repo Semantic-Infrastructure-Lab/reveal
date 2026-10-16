@@ -133,7 +133,7 @@ def _load_plugin_file(plugin_file: Path) -> None:
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             logger.debug('Loaded plugin: %s', plugin_file)
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- a user plugin is arbitrary code; the failure is logged at warning with the plugin name and the rest still load
         logger.warning('Plugin load failed (%s): %s', plugin_file.name, e)
 
 

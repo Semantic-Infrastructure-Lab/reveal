@@ -224,7 +224,7 @@ def _run_diff(git_range: str) -> Dict[str, Any]:
         adapter = DiffAdapter(resource)
         data = adapter.get_structure()
         return {'status': 'ok', 'data': data}
-    except Exception as e:  # any diff failure falls back to the file list, and says why
+    except Exception as e:  # boundary-ok: broad-except -- any structural-diff failure falls back to the changed-file list and the error text is reported in structural_diff_error
         structural_error = f'{type(e).__name__}: {e}'
 
     # Fallback: git for changed file list
@@ -240,7 +240,7 @@ def _run_diff(git_range: str) -> Dict[str, Any]:
         files = [f for f in result.stdout.splitlines() if f.strip()]  # boundary-ok: splitlines -- git subprocess stdout
         return {'status': 'ok', 'changed_files': files, 'count': len(files),
                 'structural_diff_error': structural_error}
-    except Exception:
+    except Exception:  # boundary-ok: broad-except -- git or a malformed range makes the changed-file fallback unavailable; the status 'unavailable' is what the report shows
         return {'status': 'unavailable'}
 
 
@@ -292,7 +292,7 @@ def _run_check(path: Optional[Path], select: str,
                     'message': d.get('message', ''),
                 })
         return violations
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- the lint pass runs arbitrary rules; failure is printed and appended to the report's errors
         print(f"Warning: lint check failed, skipping: {e}", file=sys.stderr)
         errors.append(f"quality check failed: {e}")
         return []
@@ -331,13 +331,13 @@ def _run_hotspots(path: Optional[Path],
                                 if w.get('type') not in RESULT_CONTROL_WARNINGS)
                 found = data.get('hotspots', data.get('files', [])) or []
                 hotspots.extend(_as_hotspot(h) for h in found)
-            except Exception as e:
+            except Exception as e:  # boundary-ok: broad-except -- one target's hotspot analysis failure is printed and recorded as an analysis_failed warning, the other targets still run
                 print(f"Warning: hotspot analysis failed for {target}, skipping: {e}", file=sys.stderr)
                 continue
         hotspots = [h for h in hotspots if not _is_perfect_quality(h)]
         hotspots.sort(key=_hotspot_score, reverse=True)
         return hotspots
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- the hotspot section runs the stats adapter; failure is printed and the section is empty
         print(f"Warning: hotspot analysis failed, skipping: {e}", file=sys.stderr)
         return []
 
@@ -392,12 +392,12 @@ def _run_complexity(path: Optional[Path],
                 data = adapter.get_structure()
                 found = data.get('results', data.get('elements', [])) or []
                 results.extend(found)
-            except Exception as e:
+            except Exception as e:  # boundary-ok: broad-except -- one target's complexity analysis failure is printed, the other targets still run
                 print(f"Warning: complexity analysis failed for {target}, skipping: {e}", file=sys.stderr)
                 continue
         results.sort(key=lambda r: r.get('complexity', 0) or 0, reverse=True)
         return results
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- the complexity section runs the ast adapter; failure is printed and the section is empty
         print(f"Warning: complexity analysis failed, skipping: {e}", file=sys.stderr)
         return []
 
@@ -431,7 +431,7 @@ def _changed_files(git_range: str) -> List[Path]:
             if candidate.is_file():
                 files.append(candidate.resolve())
         return files
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError, ValueError) as e:
         print(f"Warning: could not determine changed files for {git_range!r}: {e}", file=sys.stderr)
         return []
 
