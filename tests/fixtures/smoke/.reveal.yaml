@@ -1,0 +1,3 @@
+# Pin the scan root here: without it the nearest marker is the repo root, so check/hotspots
+# index the whole checkout while other xdist workers create and delete files in it (BACK-1842).
+root: true

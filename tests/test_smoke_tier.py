@@ -103,11 +103,21 @@ def _assert_sane(result, desc: str) -> None:
     """Smoke bar: no crash, no unhandled traceback. Not "correct output" —
     that's the full conformance matrix's job for languages that earn it."""
     assert result.returncode in (0, 1), (
-        f"{desc}: unexpected crash (rc={result.returncode}): {result.stderr}"
+        f"{desc}: unexpected crash (rc={result.returncode}):\n"
+        f"stderr: {result.stderr}\nstdout: {result.stdout[-2000:]}"
     )
     assert "Traceback (most recent call last)" not in result.stderr, (
         f"{desc}: unhandled exception:\n{result.stderr}"
     )
+
+
+def test_fixture_scan_root_is_the_smoke_dir():
+    """BACK-1842: check/hotspots on a fixture must not index the whole repo, which other
+    xdist workers mutate mid-scan (a vanished sibling = scan incomplete, rc 3)."""
+    from reveal.utils.path_utils import cross_file_scan_root
+
+    for lang in LANGUAGES:
+        assert cross_file_scan_root(_sample_path(lang).resolve()) == FIXTURES_DIR.resolve()
 
 
 def test_outline_lists_functions(lang):
