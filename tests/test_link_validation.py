@@ -751,16 +751,29 @@ class TestL002Extended(unittest.TestCase):
         self.assertEqual(len(detections), 0)
 
     @patch('urllib.request.urlopen')
-    def test_future_exception_treated_as_broken(self, mock_urlopen):
-        """Exception in future.result() treated as broken (line 87-88)."""
-        mock_urlopen.side_effect = Exception("unexpected")
+    def test_future_exception_is_unavailable_not_broken(self, mock_urlopen):
+        """An unexpected exception in future.result() is a validator bug, not a broken
+        link: no detection, an unavailable outcome (BACK-1059; was: reported broken)."""
+        mock_urlopen.side_effect = RuntimeError("unexpected")
         links = [{'text': 'Bad', 'url': 'https://example.com/bad', 'line': 1}]
         structure = {'links': links}
         path = os.path.join(self.temp_dir, "doc.md")
         with self.assertLogs('reveal.rules.links.L002', level='WARNING') as logs:
             detections = self.rule.check(path, structure, "")
         self.assertIn('unexpected', logs.output[0])
+        self.assertEqual(detections, [])
+        self.assertEqual([o['status'] for o in self.rule.outcomes], ['unavailable'])
+        self.assertEqual(self.rule.outcomes[0]['subject'], path)
+
+    @patch('urllib.request.urlopen')
+    def test_future_network_error_still_treated_as_broken(self, mock_urlopen):
+        """A network failure is an expected result of checking a link: reported broken."""
+        mock_urlopen.side_effect = OSError("connection reset")
+        links = [{'text': 'Bad', 'url': 'https://example.com/bad', 'line': 1}]
+        path = os.path.join(self.temp_dir, "doc.md")
+        detections = self.rule.check(path, {'links': links}, "")
         self.assertEqual(len(detections), 1)
+        self.assertEqual(self.rule.outcomes, [])
 
     @patch('urllib.request.urlopen')
     def test_head_non_2xx_returns_broken(self, mock_urlopen):
@@ -816,7 +829,7 @@ class TestL002Extended(unittest.TestCase):
     @patch('urllib.request.urlopen')
     def test_get_request_generic_exception(self, mock_urlopen):
         """GET request generic exception (lines 159-160)."""
-        mock_urlopen.side_effect = Exception("broken")
+        mock_urlopen.side_effect = OSError("broken")
         with self.assertLogs('reveal.rules.links.L002', level='WARNING') as logs:
             result = self.rule._try_get_request('https://example.com')
         self.assertIn('broken', logs.output[0])

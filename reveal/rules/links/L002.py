@@ -4,6 +4,7 @@ Detects external links in Markdown files that return HTTP errors (404, 403, etc.
 This rule requires network access and may be slower than L001.
 """
 
+import http.client
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Optional, Tuple
@@ -88,9 +89,12 @@ class L002(BaseRule):
                 text, url, line_num = future_to_link[future]
                 try:
                     is_broken, reason, status = future.result()
-                except Exception as exc:
+                except Exception as exc:  # boundary-ok: broad-except -- the network errors a link check can expect are already handled in _is_broken_link, so what reaches here is a bug in the validator; one link must not end the file's other links, and it is recorded as this rule's unavailable outcome (not reported as a broken link it never confirmed)
                     logger.warning("Link validation worker failed for %s: %s", url, exc)
-                    is_broken, reason, status = True, "validation_error", None
+                    self.unavailable(
+                        f"link {url} (line {line_num}) could not be validated: "
+                        f"{type(exc).__name__}: {exc}", file_path)
+                    continue
 
                 if is_broken:
                     message = f"{self.message}: {url}"
@@ -145,7 +149,7 @@ class L002(BaseRule):
             if isinstance(e.reason, socket.timeout):
                 return (True, "timeout", None)
             return (True, "connection_error", None)
-        except (OSError, ValueError) as e:
+        except (OSError, ValueError, http.client.HTTPException) as e:
             logger.debug(f"Error checking {url}: {e}")
             return (True, "validation_error", None)
 
@@ -171,7 +175,9 @@ class L002(BaseRule):
 
         except HTTPError as e:
             return (True, "http_error", e.code)
-        except Exception as exc:
+        except (OSError, ValueError, http.client.HTTPException) as exc:
+            # URLError, socket/ssl errors (OSError); a malformed URL (ValueError);
+            # a malformed HTTP reply (BadStatusLine, IncompleteRead, ...: HTTPException).
             logger.warning("GET link validation failed for %s: %s", url, exc)
             return (True, "validation_error", None)
 

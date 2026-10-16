@@ -22,6 +22,7 @@ except ImportError:
     import tomli as tomllib  # Python < 3.11 fallback
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base_mixins import toml_table
 from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
@@ -139,31 +140,39 @@ class M103(BaseRule):
         return None
 
     def _extract_pyproject_version(self, pyproject_path: Path) -> Optional[str]:
-        """Extract version from pyproject.toml."""
+        """Extract version from pyproject.toml.
+
+        An unreadable or unparsable pyproject.toml is recorded as this rule's
+        unavailable outcome (the versions could not be compared), not as "no version".
+        """
         try:
             content = pyproject_path.read_text(encoding='utf-8')
             data = tomllib.loads(content)
+        except (OSError, ValueError) as e:
+            # unreadable file, bad encoding (UnicodeDecodeError), invalid TOML (TOMLDecodeError)
+            logger.warning(f"M103: error reading {pyproject_path}: {e}")
+            self.unavailable(
+                f"pyproject.toml could not be read, versions not compared: "
+                f"{type(e).__name__}: {e}", str(pyproject_path))
+            return None
 
-            # Check [project] section (PEP 621)
-            version = data.get('project', {}).get('version')
-            if version:
-                return str(version)
+        # Check [project] section (PEP 621)
+        version = toml_table(data, 'project').get('version')
+        if version:
+            return str(version)
 
-            # Check [tool.poetry] section (Poetry)
-            version = data.get('tool', {}).get('poetry', {}).get('version')
-            if version:
-                return str(version)
+        # Check [tool.poetry] section (Poetry)
+        version = toml_table(data, 'tool', 'poetry').get('version')
+        if version:
+            return str(version)
 
-            # Fallback: regex for version = "X.Y.Z"
-            match = re.search(
-                r'^version\s*=\s*["\']([0-9]+\.[0-9]+\.[0-9]+(?:[.-][\w.]+)?)["\']',
-                content,
-                re.MULTILINE
-            )
-            if match:
-                return match.group(1)
-
-        except Exception as e:
-            logger.warning(f"M103: error reading pyproject.toml: {e}")
+        # Fallback: regex for version = "X.Y.Z"
+        match = re.search(
+            r'^version\s*=\s*["\']([0-9]+\.[0-9]+\.[0-9]+(?:[.-][\w.]+)?)["\']',
+            content,
+            re.MULTILINE
+        )
+        if match:
+            return match.group(1)
 
         return None

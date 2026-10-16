@@ -152,7 +152,7 @@ class L001(BaseRule):
             refs.append({'text': m.group(1), 'url': url, 'line': i})
         return refs
 
-    def _extract_anchors_from_markdown(self, file_path: Path) -> List[str]:
+    def _extract_anchors_from_markdown(self, file_path: Path) -> Optional[List[str]]:
         """Extract valid anchor IDs from markdown headings.
 
         Results are cached by file path so the tree-sitter parse runs once per
@@ -164,7 +164,9 @@ class L001(BaseRule):
             file_path: Path to markdown file
 
         Returns:
-            List of anchor IDs (e.g., ['my-heading', 'another-section'])
+            List of anchor IDs (e.g., ['my-heading', 'another-section']), or None when the
+            headings could not be read (recorded as this rule's unavailable outcome: the
+            file's anchors are unknown, so a link to one is neither broken nor confirmed)
         """
         if file_path in _anchor_cache:
             return _anchor_cache[file_path]
@@ -177,9 +179,12 @@ class L001(BaseRule):
 
             analyzer = analyzer_class(str(file_path))
             headings = analyzer._extract_headings()
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- the markdown analyzer reads and tree-sitter-parses an arbitrary linked file (native binding, no enumerable error set); one unreadable target must not end the run, and it is recorded as this rule's unavailable outcome with the target as subject
             logger.warning(f"Failed to extract headings from {file_path}: {e}")
-            return []
+            self.unavailable(
+                f"headings could not be read, anchors unchecked: {type(e).__name__}: {e}",
+                str(file_path))
+            return None
 
         anchors = self._headings_to_anchors(headings)
         _anchor_cache[file_path] = anchors
@@ -199,7 +204,7 @@ class L001(BaseRule):
         if source_file:
             source_path = Path(source_file)
             valid_anchors = self._extract_anchors_from_markdown(source_path)
-            if anchor not in valid_anchors:
+            if valid_anchors is not None and anchor not in valid_anchors:
                 return (True, "anchor_not_found")
         return (False, "")
 
@@ -250,7 +255,7 @@ class L001(BaseRule):
         # Validate anchor if present
         if anchor:
             valid_anchors = self._extract_anchors_from_markdown(target)
-            if anchor not in valid_anchors:
+            if valid_anchors is not None and anchor not in valid_anchors:
                 return (True, "anchor_not_found")
 
         return (False, "")

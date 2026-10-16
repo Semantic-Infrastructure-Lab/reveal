@@ -84,8 +84,11 @@ class M105(BaseRule):
         for source in wiring_sources:
             try:
                 main_content_parts.append(source.read_text(encoding='utf-8', errors='replace'))
-            except Exception as e:
+            except OSError as e:     # errors='replace' rules out decode errors
                 logger.warning(f"Could not read {source}: {e}")
+                self.unavailable(
+                    f"wiring source could not be read, handlers' wiring unchecked against it: "
+                    f"{type(e).__name__}: {e}", str(source))
         main_content = '\n'.join(main_content_parts)
         if not main_content:
             return detections

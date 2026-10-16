@@ -14,6 +14,7 @@ except ImportError:
     import tomli as tomllib  # Python < 3.11 fallback
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base_mixins import toml_table
 from ...registry import extensions_for_languages
 from reveal.utils.lines import split_lines
 
@@ -158,29 +159,28 @@ class U502(BaseRule):
         urls: Set[str] = set()
 
         try:
-            content = pyproject_path.read_text(encoding='utf-8')
-            data = tomllib.loads(content)
+            data = tomllib.loads(pyproject_path.read_text(encoding='utf-8'))
+        except (OSError, ValueError) as e:
+            # unreadable file, bad encoding (UnicodeDecodeError), invalid TOML (TOMLDecodeError).
+            # Not cached: the failure is recorded for every file checked while it lasts,
+            # and a fixed pyproject.toml is picked up on the next one.
+            logger.warning(f"Error reading {pyproject_path}: {e}")
+            self.unavailable(
+                f"pyproject.toml could not be read, URLs not compared: "
+                f"{type(e).__name__}: {e}", str(pyproject_path))
+            return urls
 
-            # Check [project.urls] section
-            project_urls = data.get('project', {}).get('urls', {})
-            for key, url in project_urls.items():
+        # Check [project.urls] section and [tool.poetry.urls] (Poetry projects)
+        for urls_table in (toml_table(data, 'project', 'urls'), toml_table(data, 'tool', 'poetry', 'urls')):
+            for key, url in urls_table.items():
                 if isinstance(url, str) and 'github.com' in url.lower():
                     urls.add(url)
 
-            # Check [tool.poetry.urls] section (Poetry projects)
-            poetry_urls = data.get('tool', {}).get('poetry', {}).get('urls', {})
-            for key, url in poetry_urls.items():
-                if isinstance(url, str) and 'github.com' in url.lower():
-                    urls.add(url)
-
-            # Check homepage, repository fields
-            for field in ['homepage', 'repository', 'documentation']:
-                url = data.get('project', {}).get(field, '')
-                if isinstance(url, str) and 'github.com' in url.lower():
-                    urls.add(url)
-
-        except Exception as e:
-            logger.warning(f"Error reading pyproject.toml: {e}")
+        # Check homepage, repository fields
+        for field in ['homepage', 'repository', 'documentation']:
+            url = toml_table(data, 'project').get(field, '')
+            if isinstance(url, str) and 'github.com' in url.lower():
+                urls.add(url)
 
         _canonical_url_cache[pyproject_path] = urls
         return urls

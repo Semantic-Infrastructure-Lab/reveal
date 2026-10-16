@@ -50,45 +50,47 @@ class M501(BaseRule):
         """
         detections: List[Detection] = []
 
-        try:
-            # Skip intentional scaffold/template paths
-            normalized = file_path.replace("\\", "/")
-            for fragment in _SKIP_PATH_FRAGMENTS:
-                if fragment in normalized:
-                    return detections
+        # Skip intentional scaffold/template paths
+        normalized = file_path.replace("\\", "/")
+        for fragment in _SKIP_PATH_FRAGMENTS:
+            if fragment in normalized:
+                return detections
 
-            # Optional: load per-rule ignore patterns from config
-            # .reveal.yaml:
-            #   rules:
-            #     M501:
-            #       ignore_patterns: ["remove in v", "intentional"]
-            ignore_patterns: List[str] = self.get_threshold("ignore_patterns", []) or []
+        # Optional: load per-rule ignore patterns from config
+        # .reveal.yaml:
+        #   rules:
+        #     M501:
+        #       ignore_patterns: ["remove in v", "intentional"]
+        ignore_patterns = self.get_threshold("ignore_patterns", []) or []
+        if not isinstance(ignore_patterns, list) or not all(isinstance(p, str) for p in ignore_patterns):
+            # a string would be iterated per character, a number would raise: the user's
+            # setting cannot be applied, so the file is not scanned with a wrong one
+            return self.unavailable(
+                f"rules.M501.ignore_patterns must be a list of strings, got {ignore_patterns!r}",
+                file_path)
 
-            for lineno, line in enumerate(split_lines(content), start=1):
-                m = _MARKER_RE.search(line)
-                if not m:
-                    continue
+        for lineno, line in enumerate(split_lines(content), start=1):
+            m = _MARKER_RE.search(line)
+            if not m:
+                continue
 
-                marker = m.group(1).upper()
-                context = line.strip()
+            marker = m.group(1).upper()
+            context = line.strip()
 
-                # Apply ignore patterns — skip if any pattern matches the line
-                if any(pat.lower() in context.lower() for pat in ignore_patterns):
-                    continue
+            # Apply ignore patterns — skip if any pattern matches the line
+            if any(pat.lower() in context.lower() for pat in ignore_patterns):
+                continue
 
-                detections.append(self.create_detection(
-                    file_path=file_path,
-                    line=lineno,
-                    message=f"{self.message}: {marker}",
-                    column=m.start() + 1,
-                    suggestion=(
-                        f"Resolve or track this {marker} in your issue tracker, "
-                        f"then remove the comment."
-                    ),
-                    context=context,
-                ))
-
-        except Exception as e:
-            logger.warning(f"M501 check failed on {file_path}: {e}")
+            detections.append(self.create_detection(
+                file_path=file_path,
+                line=lineno,
+                message=f"{self.message}: {marker}",
+                column=m.start() + 1,
+                suggestion=(
+                    f"Resolve or track this {marker} in your issue tracker, "
+                    f"then remove the comment."
+                ),
+                context=context,
+            ))
 
         return detections

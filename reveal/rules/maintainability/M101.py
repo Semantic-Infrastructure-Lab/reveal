@@ -46,70 +46,71 @@ class M101(BaseRule):
         """
         detections: List[Detection] = []
 
+        path = Path(file_path)
+
+        # Count lines
+        line_count = len(split_lines(content))
+
+        # Get file size; a file that cannot be stat'ed (removed since it was read,
+        # permission) is measured from the content that was read
         try:
-            path = Path(file_path)
+            size_bytes = path.stat().st_size
+        except OSError:
+            size_bytes = len(content)
 
-            # Count lines
-            line_count = len(split_lines(content))
+        # Human-readable size
+        if size_bytes < 1024:
+            size_str = f"{size_bytes}B"
+        elif size_bytes < 1024**2:
+            size_str = f"{size_bytes/1024:.1f}KB"
+        else:
+            size_str = f"{size_bytes/1024**2:.1f}MB"
 
-            # Get file size
-            size_bytes = path.stat().st_size if path.exists() else len(content)
+        # Estimate token cost (rough heuristic: 1 char ≈ 0.75 tokens)
+        est_tokens = int(size_bytes * 0.75)
 
-            # Human-readable size
-            if size_bytes < 1024:
-                size_str = f"{size_bytes}B"
-            elif size_bytes < 1024**2:
-                size_str = f"{size_bytes/1024:.1f}KB"
-            else:
-                size_str = f"{size_bytes/1024**2:.1f}MB"
+        # Count functions and classes if structure available
+        context_parts = [f"{line_count} lines", size_str]
+        if structure:
+            func_count = len(structure.get('functions', []))
+            class_count = len(structure.get('classes', []))
+            if func_count:
+                context_parts.append(f"{func_count} functions")
+            if class_count:
+                context_parts.append(f"{class_count} classes")
 
-            # Estimate token cost (rough heuristic: 1 char ≈ 0.75 tokens)
-            est_tokens = int(size_bytes * 0.75)
+        context = ", ".join(context_parts)
 
-            # Count functions and classes if structure available
-            context_parts = [f"{line_count} lines", size_str]
-            if structure:
-                func_count = len(structure.get('functions', []))
-                class_count = len(structure.get('classes', []))
-                if func_count:
-                    context_parts.append(f"{func_count} functions")
-                if class_count:
-                    context_parts.append(f"{class_count} classes")
+        # Determine severity and message
+        if line_count > self.THRESHOLD_ERROR:
+            severity = Severity.HIGH
+            msg = f"{self.message} ({line_count:,} lines, {size_str})"
+            suggestion = (
+                f"Split this {line_count:,}-line file into smaller, focused modules. "
+                f"Files >{self.THRESHOLD_ERROR} lines are hard to navigate and maintain. "
+                f"LLM cost: ~{est_tokens:,} tokens to load entire file. "
+                f"Use 'reveal {path.name}' (structure view) instead of reading full content."
+            )
+        elif line_count > self.THRESHOLD_WARN:
+            severity = Severity.MEDIUM
+            msg = f"File is getting large ({line_count:,} lines, consider splitting at {self.THRESHOLD_ERROR:,})"
+            suggestion = (
+                f"This file is getting large. Consider splitting if it grows beyond {self.THRESHOLD_ERROR:,} lines. "
+                f"Use reveal's progressive disclosure: structure → outline → specific functions. "
+                f"Estimated LLM cost: ~{est_tokens:,} tokens."
+            )
+        else:
+            return detections
 
-            context = ", ".join(context_parts)
+        detections.append(self.create_detection(
+            file_path=file_path,
+            line=1,
+            message=msg,
+            column=1,
+            suggestion=suggestion,
+            context=context,
+            severity=severity,
+        ))
 
-            # Determine severity and message
-            if line_count > self.THRESHOLD_ERROR:
-                severity = Severity.HIGH
-                msg = f"{self.message} ({line_count:,} lines, {size_str})"
-                suggestion = (
-                    f"Split this {line_count:,}-line file into smaller, focused modules. "
-                    f"Files >{self.THRESHOLD_ERROR} lines are hard to navigate and maintain. "
-                    f"LLM cost: ~{est_tokens:,} tokens to load entire file. "
-                    f"Use 'reveal {path.name}' (structure view) instead of reading full content."
-                )
-            elif line_count > self.THRESHOLD_WARN:
-                severity = Severity.MEDIUM
-                msg = f"File is getting large ({line_count:,} lines, consider splitting at {self.THRESHOLD_ERROR:,})"
-                suggestion = (
-                    f"This file is getting large. Consider splitting if it grows beyond {self.THRESHOLD_ERROR:,} lines. "
-                    f"Use reveal's progressive disclosure: structure → outline → specific functions. "
-                    f"Estimated LLM cost: ~{est_tokens:,} tokens."
-                )
-            else:
-                return detections
-
-            detections.append(self.create_detection(
-                file_path=file_path,
-                line=1,
-                message=msg,
-                column=1,
-                suggestion=suggestion,
-                context=context,
-                severity=severity,
-            ))
-
-        except Exception as e:
-            logger.warning(f"M101 check failed on {file_path}: {e}")
 
         return detections
