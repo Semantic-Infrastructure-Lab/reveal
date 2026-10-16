@@ -877,7 +877,7 @@ class CpanelAdapter(ResourceAdapter):
                         try:
                             ssl_result = check_ssl_health(row['domain'], warn_days=30,
                                                           critical_days=7)
-                            leaf = ssl_result.get('leaf', {})
+                            leaf = ssl_result.get('certificate', {})
                             enriched = {**row,
                                         'ssl_status': ssl_result.get('status', 'unknown'),
                                         'ssl_days': leaf.get('days_until_expiry'),

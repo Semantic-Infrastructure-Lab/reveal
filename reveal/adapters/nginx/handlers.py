@@ -191,7 +191,7 @@ def _fetch_acme_ssl_data(rows: list, check_ssl_health) -> list:
     for r in rows:
         try:
             ssl_result = check_ssl_health(r['domain'], warn_days=30, critical_days=7)
-            leaf = ssl_result.get('leaf', {})
+            leaf = ssl_result.get('certificate', {})
             results.append({**r, 'ssl_status': ssl_result.get('status', 'unknown'),
                             'ssl_days': leaf.get('days_until_expiry'),
                             'ssl_not_after': leaf.get('not_after', '')})
@@ -460,7 +460,7 @@ def _load_live_cert(domain: str, check_ssl_health) -> dict:
     """Fetch live cert via network. Returns dict with status/expiry/serial/not_after keys."""
     try:
         ssl_result = check_ssl_health(domain, warn_days=30, critical_days=7)
-        leaf_data = ssl_result.get('leaf', {})
+        leaf_data = ssl_result.get('certificate', {})
         not_after = None
         not_after_str = leaf_data.get('not_after', '')
         if not_after_str:
