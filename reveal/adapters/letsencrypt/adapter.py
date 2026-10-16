@@ -49,7 +49,7 @@ def _load_cert_info(cert_path: Path) -> Optional[Dict[str, Any]]:
             'is_expired': leaf.is_expired,
             'issuer': leaf.issuer_name,
         }
-    except Exception as exc:
+    except (OSError, ValueError) as exc:  # unreadable file, or load_certificate_from_file's ValueError for an unparseable one
         return {
             'name': cert_path.parent.name,
             'cert_path': str(cert_path),

@@ -45,6 +45,12 @@ CPANEL_USERDATA_DIR = "/var/cpanel/userdata"
 CPANEL_SSL_DIR = "/var/cpanel/ssl/apache_tls"
 NGINX_USER_CONF_DIR = "/etc/nginx/conf.d/users"
 
+# What the cert loaders/checkers can still raise: load_certificate_from_file
+# documents FileNotFoundError (OSError) and ValueError; check_ssl_health turns
+# network and TLS failures into a 'failure' result itself, leaving a bad
+# hostname (ValueError) or a stray socket error (OSError).
+_CERT_CHECK_ERRORS = (OSError, ValueError)
+
 # Non-domain files that may appear in the userdata directory (cache, metadata, etc.)
 _USERDATA_ARTIFACT_EXTENSIONS = ('.cache', '.yaml', '.json', '.lock', '.tmp', '.db', '.bak', '.log')
 
@@ -284,7 +290,7 @@ def _get_disk_cert_status(domain: str) -> Dict[str, Any]:
             'serial_number': leaf.serial_number,
             'common_name': leaf.common_name,
         }
-    except Exception as exc:
+    except _CERT_CHECK_ERRORS as exc:  # unreadable file, or load_certificate_from_file's ValueError for an unparseable one
         return {'status': 'error', 'cert_path': cert_path, 'error': str(exc)[:80]}
 
 
@@ -320,7 +326,7 @@ def _get_live_cert_status(domain: str) -> Dict[str, Any]:
             'live_not_after': cert.get('not_after', '')[:10] if cert.get('not_after') else None,
             'live_serial': cert.get('serial_number'),
         }
-    except Exception as exc:
+    except _CERT_CHECK_ERRORS as exc:
         return {'live_status': 'error', 'live_error': str(exc)[:80], 'error': str(exc)[:80]}
 
 
@@ -876,7 +882,7 @@ class CpanelAdapter(ResourceAdapter):
                                         'ssl_status': ssl_result.get('status', 'unknown'),
                                         'ssl_days': leaf.get('days_until_expiry'),
                                         'ssl_not_after': leaf.get('not_after', '')}
-                        except Exception as exc:
+                        except _CERT_CHECK_ERRORS as exc:
                             enriched = {**row, 'ssl_status': 'error', 'ssl_days': None,
                                         'ssl_not_after': str(exc)[:60]}
                         acl_fail = enriched['acl_status'] == 'denied'
@@ -890,7 +896,7 @@ class CpanelAdapter(ResourceAdapter):
                     }
                 else:
                     nginx_audit = {'domain_count': 0, 'has_failures': False, 'domains': []}
-            except Exception as exc:
+            except (OSError, ValueError) as exc:  # unreadable nginx conf (UnicodeDecodeError is a ValueError) or an os.stat failure in the ACL walk
                 nginx_audit = {'error': str(exc), 'has_failures': False, 'domains': []}
 
         # Use summary (not raw certs) so --dns-verified exclusions are respected

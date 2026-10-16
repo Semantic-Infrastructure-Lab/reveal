@@ -1408,7 +1408,7 @@ class TestGetLiveCertStatus:
     def test_live_check_failure(self):
         """Returns live_status=error on network exception."""
         from reveal.adapters.cpanel.adapter import _get_live_cert_status
-        with patch('reveal.adapters.ssl.certificate.check_ssl_health', side_effect=Exception('Connection refused')):
+        with patch('reveal.adapters.ssl.certificate.check_ssl_health', side_effect=ConnectionRefusedError('Connection refused')):
             result = _get_live_cert_status('example.com')
             assert result['live_status'] == 'error'
             assert 'Connection refused' in result['live_error']
