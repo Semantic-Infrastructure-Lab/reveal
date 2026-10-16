@@ -356,7 +356,7 @@ class LanguageExtractor(ABC):
                     path_str,
                 )
             return analyzer
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- one file's analyzer (tree-sitter load, file read, grammar) must not end the graph build; parse_failed + diagnostics['parse'] disclose it to every consumer
             self.parse_failed = True
             self.analysis.diagnostics['parse'] = {'status': 'unavailable', 'reason': str(e)}
             logger.debug(

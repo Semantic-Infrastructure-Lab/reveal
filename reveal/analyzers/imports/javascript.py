@@ -329,13 +329,14 @@ def _load_workspace_package_globs(workspace_root: Path) -> List[str]:
 
     pnpm_file = workspace_root / 'pnpm-workspace.yaml'
     if pnpm_file.exists():
+        import yaml
         try:
-            import yaml
             data = yaml.safe_load(pnpm_file.read_text(encoding='utf-8', errors='replace'))
-        except Exception:
-            # Intentional silence: a malformed pnpm-workspace.yaml just means
-            # workspace-glob resolution degrades to none -- not a parse
-            # failure of any JS/TS source file.
+        except (OSError, yaml.YAMLError, ValueError) as e:
+            # An unreadable or malformed pnpm-workspace.yaml just means workspace-glob
+            # resolution degrades to none -- not a parse failure of any JS/TS source file.
+            # ValueError: safe_load rejects an impossible scalar value (`d: 2001-02-30`).
+            logger.warning("Ignoring %s, workspace packages not resolved: %s", pnpm_file, e)
             data = None
         if isinstance(data, dict):
             packages = data.get('packages')

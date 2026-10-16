@@ -438,10 +438,9 @@ class GoExtractor(LanguageExtractor):
                 line = line.strip()
                 if line.startswith('module '):
                     return line.split()[1]
-        except Exception as e:
-            # Intentional silence: a malformed/unreadable go.mod just means
-            # module-relative import resolution degrades to best-effort --
-            # not a parse failure of any Go source file.
+        except (OSError, UnicodeDecodeError) as e:
+            # An unreadable or non-UTF-8 go.mod just means module-relative import
+            # resolution degrades to best-effort -- not a parse failure of any Go source file.
             logger.debug("_get_module_name failed for %s: %s", module_root, e)
             return None
 

@@ -87,7 +87,10 @@ class PythonExtractor(LanguageExtractor):
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 source_lines = f.readlines()
-        except Exception:  # noqa: BLE001
+        except (OSError, UnicodeDecodeError):
+            # The tree was built from this file (decoded with the base class's fallback
+            # encodings); a strict-UTF-8 re-read of a latin-1 file lands here. Without the
+            # lines, `# noqa` comments are not seen.
             source_lines = []
 
         imports = []
