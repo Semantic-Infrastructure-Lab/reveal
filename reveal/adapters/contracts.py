@@ -442,6 +442,11 @@ def _scan_contracts_ruby(
         classes.extend(scanned['classes'])
         unparsed.extend(scanned.get(UNPARSED_KEY, []))
 
+    # A module is a mixin contract when it defines instance methods or something includes
+    # or extends it; `module Billing` that only wraps classes and constants is a namespace.
+    used = {_base_tail(b) for c in classes for b in c['bases']}
+    modules = [m for m in modules if m.pop('defines_methods', True) or m['name'] in used]
+
     implementations = [] if abstract_only else [c for c in classes if c['bases']]
     contract_names: Set[str] = {m['name'] for m in modules}
 

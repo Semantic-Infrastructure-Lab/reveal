@@ -1262,6 +1262,42 @@ class TestScanContractsRuby(unittest.TestCase):
         self.assertEqual(len(report['protocols']), 1)
         self.assertEqual(report['protocols'][0]['name'], 'Greetable')
 
+    def test_namespace_module_is_not_a_mixin(self):
+        """BACK-1414: `module Billing` that only wraps classes and constants was listed
+        as a mixin next to the real ones, and `def self.x` utilities are not mixins."""
+        self._write_rb('billing.rb', '''\
+            module Billing
+              VERSION = 1
+              class Invoice; end
+
+              module Taxable
+                def tax; 2; end
+              end
+
+              module Util
+                def self.helper; end
+              end
+            end
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        self.assertEqual([m['name'] for m in report['protocols']], ['Taxable'])
+        self.assertEqual(report['total_contracts'], 1)
+        self.assertNotIn('defines_methods', report['protocols'][0])
+
+    def test_negative_control_a_method_less_module_that_is_included_stays(self):
+        self._write_rb('marker.rb', '''\
+            module Marker
+            end
+
+            class Thing
+              include Marker
+            end
+        ''')
+        report = _scan_contracts(Path(self.tmp))
+        (marker,) = report['protocols']
+        self.assertEqual(marker['name'], 'Marker')
+        self.assertEqual([i['name'] for i in marker['implementations']], ['Thing'])
+
     def test_including_class_classified_as_dataclass(self):
         self._write_rb('user.rb', '''\
             module Greetable

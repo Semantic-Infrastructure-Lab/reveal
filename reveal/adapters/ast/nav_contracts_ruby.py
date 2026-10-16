@@ -76,6 +76,14 @@ def _declared_name(node: Any, content_bytes: bytes) -> Optional[str]:
     return None
 
 
+def _defines_instance_methods(module_node: Any) -> bool:
+    """True when the module body directly holds a ``def`` (not ``def self.x``)."""
+    for child in _children(module_node):
+        if _zero_arg(child, 'kind') == 'body_statement':
+            return any(_zero_arg(c, 'kind') == 'method' for c in _children(child))
+    return False
+
+
 def _process_module(node: Any, file_path: str, content_bytes: bytes,
                      modules: List[Dict[str, Any]]) -> None:
     name = _declared_name(node, content_bytes)
@@ -91,6 +99,9 @@ def _process_module(node: Any, file_path: str, content_bytes: bytes,
         'implementations': [],
         'category': 'modules',
         'is_abstract': False,
+        # Consumed (and removed) by the contracts scanner: a module that defines no
+        # instance methods is a namespace unless something includes it (BACK-1414).
+        'defines_methods': _defines_instance_methods(node),
     })
 
 
