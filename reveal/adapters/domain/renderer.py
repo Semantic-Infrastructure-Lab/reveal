@@ -26,9 +26,13 @@ class DomainRenderer(TypeDispatchRenderer):
             print(f"  Error: {dns['error']}")
             return
 
+        failed = dns.get('lookup_failed') or {}
+
         # Nameservers
         ns_list = dns.get('nameservers', [])
-        if ns_list:
+        if 'ns' in failed:
+            print(f"  Nameservers: lookup failed ({failed['ns']})")
+        elif ns_list:
             ns_display = ', '.join(ns_list[:2])
             if len(ns_list) > 2:
                 ns_display += f" (+{len(ns_list) - 2} more)"
@@ -38,9 +42,15 @@ class DomainRenderer(TypeDispatchRenderer):
 
         # A Records
         a_records = dns.get('a_records', [])
-        print(f"  A Records:   {', '.join(a_records) if a_records else 'None'}")
+        if 'a' in failed:
+            print(f"  A Records:   lookup failed ({failed['a']})")
+        else:
+            print(f"  A Records:   {', '.join(a_records) if a_records else 'None'}")
 
         # MX Records
+        if 'mx' in failed:
+            print(f"  MX Records:  \u2753 Lookup failed ({failed['mx']})")
+            return
         mx_icon = '\u2705' if dns.get('has_mx') else '\u274c'
         print(f"  MX Records:  {mx_icon} {'Configured' if dns.get('has_mx') else 'None'}")
 
@@ -123,6 +133,7 @@ class DomainRenderer(TypeDispatchRenderer):
             return
 
         print(f"\nDNS Records for {domain}:\n")
+        failed = result.get('lookup_failed') or {}
 
         # Order: NS, A, AAAA, MX, TXT, CNAME, SOA
         record_order = ['ns', 'a', 'aaaa', 'mx', 'txt', 'cname', 'soa']
@@ -134,6 +145,13 @@ class DomainRenderer(TypeDispatchRenderer):
                 for value in values:
                     print(f"  \u2022 {value}")
                 print()
+
+        for record_type in record_order:
+            if record_type in failed:
+                print(f"{record_type.upper()} lookup failed: {failed[record_type]} "
+                      f"(not the same as no record)")
+        if failed:
+            print()
 
         # Next steps
         if result.get('next_steps'):

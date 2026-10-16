@@ -19,14 +19,26 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-def get_dns_records(domain: str) -> Dict[str, List[str]]:
+
+class DnsRecords(Dict[str, List[str]]):
+    """Record type -> values, plus ``failed``: record type -> cause for every lookup that
+    errored (timeout, SERVFAIL, bad name). Such a type maps to ``[]`` like a genuinely
+    absent one, so only ``failed`` tells "none" from "could not look it up" (BACK-1862)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.failed: Dict[str, str] = {}
+
+
+def get_dns_records(domain: str) -> DnsRecords:
     """Fetch DNS records for domain (A, AAAA, MX, TXT, NS, CNAME).
 
     Args:
         domain: Domain name to query
 
     Returns:
-        Dict mapping record types to lists of values
+        Dict mapping record types to lists of values; ``.failed`` names the types whose
+        lookup errored rather than came back empty
 
     Raises:
         ImportError: If dnspython is not installed
@@ -34,7 +46,7 @@ def get_dns_records(domain: str) -> Dict[str, List[str]]:
     if not HAS_DNSPYTHON:
         raise ImportError('dnspython is required for DNS operations. Install with: pip install "reveal-cli[dns]"')
 
-    records = {}
+    records = DnsRecords()
     record_types = ['A', 'AAAA', 'MX', 'TXT', 'NS', 'CNAME', 'SOA']
 
     for record_type in record_types:
@@ -45,8 +57,12 @@ def get_dns_records(domain: str) -> Dict[str, List[str]]:
                 records[record_type.lower()] = [f"{rdata.preference} {rdata.exchange}" for rdata in answers]  # type: ignore[attr-defined]
             else:
                 records[record_type.lower()] = [str(rdata) for rdata in answers]
-        except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.exception.DNSException):
+        except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
             records[record_type.lower()] = []
+        except dns.exception.DNSException as e:
+            # Timeout / NoNameservers / bad name: not the absence of a record (BACK-1862)
+            records[record_type.lower()] = []
+            records.failed[record_type.lower()] = f'{type(e).__name__}: {e}'.rstrip(': ')
 
     return records
 
@@ -70,12 +86,16 @@ def get_dns_summary(domain: str) -> Dict[str, Any]:
 
     try:
         records = get_dns_records(domain)
-        return {
+        summary: Dict[str, Any] = {
             'nameservers': records.get('ns', []),
             'a_records': records.get('a', []),
             'has_mx': len(records.get('mx', [])) > 0,
             'mx_records': records.get('mx', []),
         }
+        failed = getattr(records, 'failed', None)
+        if failed:
+            summary['lookup_failed'] = dict(failed)
+        return summary
     except _DNS_ERRORS as e:
         return {
             'error': str(e),

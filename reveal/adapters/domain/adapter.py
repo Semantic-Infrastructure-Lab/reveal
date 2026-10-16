@@ -417,6 +417,7 @@ _SCHEMA_OUTPUT_TYPES = [
             'dns': {'type': 'object', 'properties': {
                 'nameservers': {'type': 'array'}, 'a_records': {'type': 'array'},
                 'has_mx': {'type': 'boolean'}, 'error': {'type': ['string', 'null']},
+                'lookup_failed': {'type': 'object'},
             }},
             'ssl': {'type': 'object'},
             'next_steps': {'type': 'array'},
@@ -664,6 +665,8 @@ class DomainAdapter(ResourceAdapter):
                     'a_records': dns_summary.get('a_records', []),
                     'has_mx': dns_summary.get('has_mx', False),
                     'error': dns_summary.get('error'),
+                    **({'lookup_failed': dns_summary['lookup_failed']}
+                       if dns_summary.get('lookup_failed') else {}),
                 },
                 'ssl': ssl_summary,
                 'whois': whois_summary,
@@ -749,6 +752,7 @@ class DomainAdapter(ResourceAdapter):
                 'type': 'domain_dns_records',
                 'domain': self.domain,
                 'records': records,
+                **({'lookup_failed': dict(records.failed)} if records.failed else {}),
                 'next_steps': [
                     f"Check DNS propagation: reveal domain://{self.domain} --check",
                     f"View SSL certificate: reveal ssl://{self.domain}",
