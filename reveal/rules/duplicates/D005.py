@@ -26,6 +26,7 @@ import hashlib
 import logging
 import os
 from dataclasses import asdict
+from ...core import disk_cache
 from ...utils.request_cache import register_validated_cache
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
@@ -290,6 +291,32 @@ class D005(BaseRule, ASTParsingMixin):
 
 # ── Index builder ─────────────────────────────────────────────────────────────
 
+_LITERALS_NAMESPACE = 'd005_literals'
+_LITERALS_CACHE_MAX_FILES = 100_000
+
+
+def _file_literals(py_file: Path, rule: D005) -> List[Tuple[str, int, str, frozenset]]:
+    """One file's literal clusters; the disk cache answers for an unchanged file (BACK-1872).
+
+    The extraction reads only that file, so the key is the file's identity (path, mtime_ns,
+    size) plus the size threshold the extraction depends on; the cache's build fingerprint
+    covers a change to this code. A file that fails to read or parse raises and is never
+    cached, so its disclosure is re-derived on every run.
+    """
+    path_str = os.path.abspath(str(py_file))
+    stat = os.stat(path_str)
+    key = hashlib.sha256(
+        f'{path_str}\0{stat.st_mtime_ns}\0{stat.st_size}\0{rule.MIN_LITERAL_SIZE}'.encode('utf-8', 'replace')
+    ).hexdigest()
+    cached = disk_cache.get(_LITERALS_NAMESPACE, key)
+    if isinstance(cached, list):
+        return cached
+    content = py_file.read_text(encoding='utf-8', errors='ignore')
+    literals = rule._literals_from_tree(parse_python(content))
+    disk_cache.put(_LITERALS_NAMESPACE, key, literals, max_entries=_LITERALS_CACHE_MAX_FILES)
+    return literals
+
+
 def _build_index(
     project_root: Path, rule: D005
 ) -> Dict[str, List[Tuple[str, int, str]]]:
@@ -329,14 +356,13 @@ def _build_index(
 
     for py_file in py_files:
         try:
-            content = py_file.read_text(encoding='utf-8', errors='ignore')
-            tree = parse_python(content)
+            literals = _file_literals(py_file, rule)
         except (OSError, ValueError, SyntaxError) as exc:
             index.scan_budget['failed_files'] += 1
             index.disclosures.append(f'D005: {to_posix(py_file)} was not analyzed ({type(exc).__name__}); cross-file results may be incomplete')
             continue
         index.scan_budget['analyzed_files'] += 1
-        for key, line, var_name, _ in rule._literals_from_tree(tree):
+        for key, line, var_name, _ in literals:
             index.setdefault(key, []).append((str(py_file), line, var_name))
 
     return index
