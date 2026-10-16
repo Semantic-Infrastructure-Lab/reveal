@@ -41,11 +41,6 @@ except ImportError:
     except ImportError:
         tomllib = None
 
-try:
-    import jsonschema
-except ImportError:
-    jsonschema = None
-
 logger = logging.getLogger(__name__)
 
 
@@ -588,7 +583,9 @@ class RevealConfig:
     @classmethod
     def _validate_config_schema(cls, config: Dict[str, Any], path: Path) -> None:
         """Validate config against schema if jsonschema is available (warns, never raises)."""
-        if not jsonschema:
+        try:
+            import jsonschema  # deferred: ~25 ms, and only a run that finds a config file validates
+        except ImportError:
             return
         try:
             jsonschema.validate(config, CONFIG_SCHEMA)

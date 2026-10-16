@@ -21,23 +21,24 @@ if TYPE_CHECKING:
 
 # Nginx handlers — canonical location is adapters/nginx/handlers.py. They return a
 # FlagOutput; the _handle_* names below write it out (BACK-916), the helpers re-export.
-from .adapters.nginx import handlers as _nginx_handlers
-from .adapters.nginx.handlers import (  # noqa: F401 — re-exported for backward compat
-    FlagOutput,
-    _format_acl_col,
-    _format_acme_ssl_col,
-    _fetch_acme_ssl_data,
-    _resolve_log_path,
-    _load_disk_cert,
-    _load_live_cert,
-    _cert_match_label,
-    _format_disk_col,
-    _format_live_col,
-    _format_match_col,
-)
+# Resolved on first use (module __getattr__): importing the nginx package pulls in the
+# ssl adapter and `cryptography`, which no other command needs at startup (BACK-1870).
+if TYPE_CHECKING:
+    from .adapters.nginx.handlers import FlagOutput
+
+_NGINX_FLAG_HANDLERS = frozenset({
+    '_handle_domain_extraction', '_handle_acme_roots_extraction', '_handle_check_acl',
+    '_handle_validate_nginx_acme', '_handle_global_audit', '_handle_check_conflicts',
+    '_handle_diagnose', '_handle_cpanel_certs', '_handle_extract_option',
+})
+_NGINX_REEXPORTS = frozenset({
+    'FlagOutput', '_format_acl_col', '_format_acme_ssl_col', '_fetch_acme_ssl_data',
+    '_resolve_log_path', '_load_disk_cert', '_load_live_cert', '_cert_match_label',
+    '_format_disk_col', '_format_live_col', '_format_match_col',
+})
 
 
-def _write_flag_output(output: FlagOutput) -> None:
+def _write_flag_output(output: 'FlagOutput') -> None:
     """The one place an nginx flag handler's stdout, stderr and exit code leave the process."""
     if output.err:
         print(output.stderr, end='', file=sys.stderr)  # boundary-ok: print -- the flag-output seam
@@ -56,15 +57,22 @@ def _emitting(build):
     return handler
 
 
-_handle_domain_extraction = _emitting(_nginx_handlers._handle_domain_extraction)
-_handle_acme_roots_extraction = _emitting(_nginx_handlers._handle_acme_roots_extraction)
-_handle_check_acl = _emitting(_nginx_handlers._handle_check_acl)
-_handle_validate_nginx_acme = _emitting(_nginx_handlers._handle_validate_nginx_acme)
-_handle_global_audit = _emitting(_nginx_handlers._handle_global_audit)
-_handle_check_conflicts = _emitting(_nginx_handlers._handle_check_conflicts)
-_handle_diagnose = _emitting(_nginx_handlers._handle_diagnose)
-_handle_cpanel_certs = _emitting(_nginx_handlers._handle_cpanel_certs)
-_handle_extract_option = _emitting(_nginx_handlers._handle_extract_option)
+def _nginx_flag_handler(name: str):
+    """A _handle_* flag handler looked up on this module: a bare global name would not
+    reach __getattr__, and a patched module attribute is still honoured."""
+    return getattr(sys.modules[__name__], name)
+
+
+def __getattr__(name: str):
+    if name in _NGINX_FLAG_HANDLERS or name in _NGINX_REEXPORTS:
+        from .adapters.nginx import handlers
+        value = getattr(handlers, name)
+        if name in _NGINX_FLAG_HANDLERS:
+            value = _emitting(value)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # Nav handlers — canonical location is reveal/nav_handlers.py (BACK-306).
 # Re-exported for backward compat with tests that import from file_handler.
@@ -313,31 +321,31 @@ def _dispatch_special_flags(analyzer, path: str, output_format: str, args, confi
     continue.
     """
     if getattr(args, 'extract', None):
-        _handle_extract_option(analyzer, args.extract.lower(), args=args)
+        _nginx_flag_handler('_handle_extract_option')(analyzer, args.extract.lower(), args=args)
         return True
 
     if getattr(args, 'check_acl', False):
-        _handle_check_acl(analyzer)
+        _nginx_flag_handler('_handle_check_acl')(analyzer)
         return True
 
     if getattr(args, 'validate_nginx_acme', False):
-        _handle_validate_nginx_acme(analyzer, args)
+        _nginx_flag_handler('_handle_validate_nginx_acme')(analyzer, args)
         return True
 
     if getattr(args, 'global_audit', False):
-        _handle_global_audit(analyzer, args)
+        _nginx_flag_handler('_handle_global_audit')(analyzer, args)
         return True
 
     if getattr(args, 'check_conflicts', False):
-        _handle_check_conflicts(analyzer)
+        _nginx_flag_handler('_handle_check_conflicts')(analyzer)
         return True
 
     if getattr(args, 'cpanel_certs', False):
-        _handle_cpanel_certs(analyzer, args=args)
+        _nginx_flag_handler('_handle_cpanel_certs')(analyzer, args=args)
         return True
 
     if getattr(args, 'diagnose', False):
-        _handle_diagnose(analyzer, log_path=getattr(args, 'log_path', None))
+        _nginx_flag_handler('_handle_diagnose')(analyzer, log_path=getattr(args, 'log_path', None))
         return True
 
     if getattr(args, 'validate_schema', None):

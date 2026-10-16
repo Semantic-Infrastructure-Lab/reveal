@@ -3,7 +3,6 @@
 import re
 import logging
 from typing import Dict, List, Any, Optional, cast
-from soupsieve.util import SelectorSyntaxError
 
 from ..base import FileAnalyzer
 from ..registry import register
@@ -11,13 +10,29 @@ from ..structure_options import StructureOptions
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
-# Try to import BeautifulSoup4 - required for HTML parsing
-try:
-    from bs4 import BeautifulSoup, FeatureNotFound
-    from bs4.builder import ParserRejectedMarkup
-    BS4_AVAILABLE = True
-except ImportError:
-    BS4_AVAILABLE = False
+# BeautifulSoup4 is required for HTML parsing. It is imported when the first HTML file is
+# analyzed, not at startup: bs4 and soupsieve cost ~30 ms that most runs never use (BACK-1870).
+BeautifulSoup: Any = None
+FeatureNotFound: Any = None
+ParserRejectedMarkup: Any = None
+
+
+def _ensure_bs4() -> None:
+    """Bind the bs4 names on first use; a name already bound (a test double) is kept."""
+    global BeautifulSoup, FeatureNotFound, ParserRejectedMarkup
+    if None not in (BeautifulSoup, FeatureNotFound, ParserRejectedMarkup):
+        return
+    try:
+        import bs4
+        from bs4.builder import ParserRejectedMarkup as _rejected
+    except ImportError as exc:
+        raise ImportError(
+            "BeautifulSoup4 is required for HTML analysis. "
+            "Install with: pip install beautifulsoup4"
+        ) from exc
+    BeautifulSoup = BeautifulSoup or bs4.BeautifulSoup
+    FeatureNotFound = FeatureNotFound or bs4.FeatureNotFound
+    ParserRejectedMarkup = ParserRejectedMarkup or _rejected
 
 
 @register('.html', '.htm', name='HTML', icon='', category='doc')
@@ -31,11 +46,7 @@ class HTMLAnalyzer(FileAnalyzer):
     def __init__(self, path: str):
         super().__init__(path)
 
-        if not BS4_AVAILABLE:
-            raise ImportError(
-                "BeautifulSoup4 is required for HTML analysis. "
-                "Install with: pip install beautifulsoup4"
-            )
+        _ensure_bs4()
 
         # Parse HTML with BeautifulSoup
         # Try lxml first (faster), fallback to html.parser (stdlib)
@@ -730,6 +741,7 @@ class HTMLAnalyzer(FileAnalyzer):
 
         # Try as CSS selector first (if it looks like one)
         if selector.startswith('.') or selector.startswith('#') or ' ' in selector or '>' in selector:
+            from soupsieve.util import SelectorSyntaxError  # bs4 is loaded: self.soup exists
             try:
                 element = self.soup.select_one(selector)
             except SelectorSyntaxError:

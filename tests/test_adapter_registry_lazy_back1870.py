@@ -78,3 +78,38 @@ def test_package_attribute_returns_the_registered_class():
 def test_unknown_scheme_is_none_and_loads_nothing_extra():
     from reveal.adapters.registry import get_adapter_class
     assert get_adapter_class('nope') is None
+
+
+def test_startup_imports_none_of_the_optional_heavy_libraries():
+    loaded = json.loads(_run(
+        "import sys, json\n"
+        "import reveal.main\n"
+        "print(json.dumps(sorted({m.split('.')[0] for m in sys.modules} & "
+        "{'cryptography', 'bs4', 'soupsieve', 'jsonschema', 'dns', 'pygit2'})))"))
+    assert loaded == []
+
+
+def test_file_handler_resolves_nginx_names_on_first_use():
+    from reveal import file_handler
+    from reveal.adapters.nginx import handlers
+    assert file_handler.FlagOutput is handlers.FlagOutput
+    assert file_handler._format_acl_col is handlers._format_acl_col
+    emitting = file_handler._handle_diagnose
+    assert emitting.__name__ == handlers._handle_diagnose.__name__
+    assert file_handler._handle_diagnose is emitting  # cached, not rebuilt per access
+    with pytest.raises(AttributeError):
+        file_handler._not_a_handler
+
+
+@pytest.mark.parametrize('flag', [
+    ['--check-acl'], ['--check-conflicts'], ['--extract', 'domains'], ['--validate-nginx-acme'],
+    ['--global-audit'], ['--cpanel-certs'], ['--diagnose'],
+])
+def test_every_lazy_nginx_flag_handler_runs_from_the_cli(flag):
+    """_dispatch_special_flags calls the handlers by bare name: a module __getattr__ cannot
+    serve those, so each flag must reach its handler without a NameError."""
+    from pathlib import Path
+    conf = Path(__file__).parent / 'fixtures' / 'formats' / 'nginx' / 'nginx.conf'
+    out = subprocess.run([sys.executable, '-m', 'reveal', str(conf), *flag], capture_output=True,
+                         text=True, encoding='utf-8', env=_env())
+    assert 'Traceback' not in out.stderr and 'NameError' not in out.stderr, out.stderr
