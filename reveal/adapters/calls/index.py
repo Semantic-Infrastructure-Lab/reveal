@@ -12,6 +12,7 @@ per directory when any file changes (simple and correct).
 import os
 import re
 from collections import OrderedDict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, Iterator, List, Optional, Set, Tuple
 
@@ -1004,6 +1005,109 @@ def _drop_referenced(entries: List[Dict[str, Any]],
             if _bare_callee_name(e['name']) not in referenced.get(_lang_family(e['file']), ())]
 
 
+@dataclass
+class _UncalledScope:
+    """What an uncalled-symbol exclusion needs from the whole scan (BACK-1533)."""
+    called_names: Set[str]
+    file_lines: Dict[str, List[str]]
+    extra_implicit_decorators: Any
+    cpp_overrides: Set[str]
+    only_functions: bool
+    include_test_framework: bool
+
+
+class _UncalledCandidate:
+    """One definition under test, with the facts the exclusions share, computed once."""
+
+    def __init__(self, elem: Dict[str, Any], file_path: str, category: str, name: str) -> None:
+        self.elem = elem
+        self.file_path = file_path
+        self.category = category
+        self.name = name
+        self.bare_name = _bare_callee_name(name)
+        self.decorator_names = _get_decorator_names(elem)
+        self.is_method = _is_method_elem(elem, self.decorator_names)
+        self.line_no = elem.get('line', 0)
+        self.family = _lang_family(file_path)
+
+
+def _x_test_block(c: _UncalledCandidate, s: _UncalledScope) -> bool:
+    # Zig test blocks are unambiguously entry points (BACK-663): category says it all.
+    return (c.category == 'tests' or bool(c.elem.get('is_test_callback'))) and not s.include_test_framework
+
+
+def _x_accessor(c: _UncalledCandidate, s: _UncalledScope) -> bool:
+    return bool(c.elem.get('accessor'))  # BACK-1286: runs on property access, never a call
+
+
+def _x_trait_impl(c: _UncalledCandidate, s: _UncalledScope) -> bool:
+    return bool(c.elem.get('trait_impl'))  # BACK-1291: dispatched through the trait
+
+
+def _x_implicit(c: _UncalledCandidate, s: _UncalledScope) -> bool:
+    return _is_implicit_element(
+        c.name, c.is_method, c.decorator_names, s.only_functions, s.extra_implicit_decorators,
+        lang_family=c.family,
+    )
+
+
+def _x_called(c: _UncalledCandidate, s: _UncalledScope) -> bool:
+    # BACK-1390: definitions can be qualified (C++ `Foo::run`, Lua `M:run`) while call
+    # sites index under the bare name (`f.run()` -> `run`).
+    return c.name in s.called_names or c.bare_name in s.called_names
+
+
+def _x_noqa(c: _UncalledCandidate, s: _UncalledScope) -> bool:
+    return bool(c.line_no) and _has_noqa_uncalled(c.file_path, c.line_no, s.file_lines)
+
+
+def _x_c_family_hook(c: _UncalledCandidate, s: _UncalledScope) -> bool:
+    return c.family == 'c' and (
+        c.bare_name in s.cpp_overrides
+        or (c.bare_name in _GODOT_GDCLASS_HOOKS and _uses_gdclass(c.file_path, s.file_lines))
+    )
+
+
+def _x_test_entry_point(c: _UncalledCandidate, s: _UncalledScope) -> bool:
+    # Before the constructor check: `TEST(Suite, Name) {` has a constructor's shape.
+    return not s.include_test_framework and _is_test_entry_point(
+        c.name, c.file_path, c.line_no, c.decorator_names, s.file_lines)
+
+
+def _x_constructor_or_override(c: _UncalledCandidate, s: _UncalledScope) -> bool:
+    return bool(c.line_no) and (
+        _is_constructor_definition(c.name, c.family, c.file_path, c.line_no, s.file_lines)
+        or _is_override_definition(c.name, c.family, c.file_path, c.line_no,
+                                   c.elem.get('signature', ''), s.file_lines)
+    )
+
+
+# Evaluated in order; the first that holds names why a definition is not reported. The order
+# is behavior (the test-entry-point check must precede the constructor check), and the
+# per-reason counts are the result's `excluded_by_reason`, so an over-eager exclusion shows
+# up as a number instead of silently shrinking the list.
+_UNCALLED_EXCLUSIONS: Tuple[Tuple[str, Any], ...] = (
+    ('test_block', _x_test_block),
+    ('accessor', _x_accessor),
+    ('trait_impl', _x_trait_impl),
+    ('implicit', _x_implicit),
+    ('called', _x_called),
+    ('noqa', _x_noqa),
+    ('c_family_hook', _x_c_family_hook),
+    ('test_entry_point', _x_test_entry_point),
+    ('constructor_or_override', _x_constructor_or_override),
+)
+_TEST_ENTRYPOINT_REASONS = ('test_block', 'test_entry_point')
+
+
+def _uncalled_exclusion(candidate: _UncalledCandidate, scope: _UncalledScope) -> Optional[str]:
+    """The name of the first exclusion that applies to *candidate*, or None to report it."""
+    for reason, applies in _UNCALLED_EXCLUSIONS:
+        if applies(candidate, scope):
+            return reason
+    return None
+
+
 def find_uncalled(
     path: str,
     only_functions: bool = False,
@@ -1041,8 +1145,8 @@ def find_uncalled(
 
     Returns:
         Dict with ``path``, ``total_defined``, ``total_uncalled``,
-        ``test_entrypoints_excluded``, and ``entries`` (list of uncalled
-        symbols).
+        ``test_entrypoints_excluded``, ``excluded_by_reason`` (definition count per
+        named exclusion, BACK-1533), and ``entries`` (list of uncalled symbols).
     """
     from ...utils.path_utils import provenance_for_display_path
     path_obj = Path(path)
@@ -1064,8 +1168,13 @@ def find_uncalled(
     extra_implicit_decorators = _project_entry_point_decorators(directory)
     cpp_overrides = _cpp_override_names(structures, file_lines)
 
+    scope = _UncalledScope(
+        called_names=called_names, file_lines=file_lines,
+        extra_implicit_decorators=extra_implicit_decorators, cpp_overrides=cpp_overrides,
+        only_functions=only_functions, include_test_framework=include_test_framework,
+    )
     total_defined = 0
-    test_entrypoints_excluded = 0
+    excluded_by_reason: Dict[str, int] = {}
     entries = []
 
     for file_struct in structures:
@@ -1081,60 +1190,17 @@ def find_uncalled(
                 continue
 
             total_defined += 1
-
-            # Zig test blocks are unambiguously entry points (BACK-663) — no
-            # per-language name/decorator heuristic needed the way pytest's
-            # test_-prefix convention requires one, category says it all.
-            if (category == 'tests' or elem.get('is_test_callback')) and not include_test_framework:
-                test_entrypoints_excluded += 1
-                continue
-            # BACK-1286: get/set accessors run on property access, never a call.
-            if elem.get('accessor'):
-                continue
-            # BACK-1291: trait-impl methods are dispatched through the trait.
-            if elem.get('trait_impl'):
-                continue
-
-            decorator_names = _get_decorator_names(elem)
-            is_method = _is_method_elem(elem, decorator_names)
-
-            line_no = elem.get('line', 0)
-            if _is_implicit_element(
-                name, is_method, decorator_names, only_functions, extra_implicit_decorators,
-                lang_family=_lang_family(file_path),
-            ):
-                continue
-            # BACK-1390: definitions can be qualified (C++ `Foo::run`, Lua `M:run`)
-            # while call sites index under the bare name (`f.run()` -> `run`).
-            if name in called_names or _bare_callee_name(name) in called_names:
-                continue
-            if line_no and _has_noqa_uncalled(file_path, line_no, file_lines):
-                continue
-            family = _lang_family(file_path)
-            if family == 'c' and (
-                _bare_callee_name(name) in cpp_overrides
-                or (_bare_callee_name(name) in _GODOT_GDCLASS_HOOKS
-                    and _uses_gdclass(file_path, file_lines))
-            ):
-                continue
-            # Before the constructor check: `TEST(Suite, Name) {` has a constructor's shape.
-            if not include_test_framework and _is_test_entry_point(
-                name, file_path, line_no, decorator_names, file_lines
-            ):
-                test_entrypoints_excluded += 1
-                continue
-            if line_no and (
-                _is_constructor_definition(name, family, file_path, line_no, file_lines)
-                or _is_override_definition(name, family, file_path, line_no,
-                                           elem.get('signature', ''), file_lines)
-            ):
+            candidate = _UncalledCandidate(elem, file_path, category, name)
+            reason = _uncalled_exclusion(candidate, scope)
+            if reason:
+                excluded_by_reason[reason] = excluded_by_reason.get(reason, 0) + 1
                 continue
 
             entries.append({
                 'name': name,
                 'file': file_path,
-                'line': line_no,
-                'category': 'methods' if is_method else 'functions',
+                'line': candidate.line_no,
+                'category': 'methods' if candidate.is_method else 'functions',
                 'is_private': name.startswith('_'),
                 # BACK-1258: a dead-code listing is exactly where vendored and
                 # test code costs the reader most -- measured 15.5% vendor or
@@ -1156,7 +1222,9 @@ def find_uncalled(
         'path': path,
         'total_defined': total_defined,
         'total_uncalled': total_uncalled,
-        'test_entrypoints_excluded': test_entrypoints_excluded,
+        'test_entrypoints_excluded': sum(
+            excluded_by_reason.get(r, 0) for r in _TEST_ENTRYPOINT_REASONS),
+        'excluded_by_reason': excluded_by_reason,
         'entries': entries,
     }, structures.skipped)
 

@@ -6,7 +6,6 @@
   "reveal/adapters/ast/nav_surface_ts.py::_process_call": 32,
   "reveal/adapters/ast/nav_varflow.py::VarFlowWalker._walk_call": 24,
   "reveal/adapters/ast/surface_rules.py::_call_fields": 23,
-  "reveal/adapters/calls/index.py::find_uncalled": 30,
   "reveal/adapters/claude/handlers/post_process.py::_post_process_session_list": 22,
   "reveal/adapters/depends.py::DependsAdapter._format_file_dependents": 22,
   "reveal/adapters/depends.py::DependsAdapter._index_one_file": 25,
