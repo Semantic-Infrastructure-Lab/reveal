@@ -671,3 +671,52 @@ class TestCollectMatchingFilesGenerator(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# ---- BACK-1416: a symlink whose target holds the link is a loop, said so and not followed
+
+import sys  # noqa: E402
+
+needs_symlinks = pytest.mark.skipif(sys.platform == 'win32',
+                                    reason='creating a symlink needs a privilege on Windows')
+
+
+@pytest.fixture
+def looped(tmp_path):
+    (tmp_path / 'pkg' / 'sub').mkdir(parents=True)
+    (tmp_path / 'pkg' / 'sub' / 'mod.py').write_text('x = 1\n', encoding='utf-8')
+    (tmp_path / 'pkg' / 'sub' / 'back').symlink_to('..')   # back -> pkg: pkg contains itself
+    return tmp_path / 'pkg'
+
+
+@needs_symlinks
+def test_a_symlink_loop_is_marked_and_not_walked_again(looped):
+    text = show_directory_tree(str(looped), depth=6)
+    assert 'back/ -> ..  (symlink loop, not followed)' in text
+    assert text.count('mod.py') == 1, 'the loop printed the same files again under back/'
+
+
+@needs_symlinks
+def test_a_symlink_loop_in_json_carries_the_link_and_no_children(looped):
+    sub = show_directory_tree_json(str(looped), depth=6)['entries'][0]
+    assert sub['name'] == 'sub'
+    (back,) = [e for e in sub['children'] if e['name'] == 'back']
+    assert back == {'name': 'back', 'type': 'dir', 'children': [], 'symlink_loop': '..'}
+
+
+@needs_symlinks
+def test_a_looping_symlink_adds_no_phantom_entries_to_the_count(looped):
+    hidden = display_filter(looped)
+    assert _count_entries(looped, 6, hidden) == 3   # sub, mod.py, back
+
+
+@needs_symlinks
+def test_negative_control_a_symlink_to_a_directory_elsewhere_is_still_followed(tmp_path):
+    elsewhere = tmp_path / 'elsewhere'
+    elsewhere.mkdir()
+    (elsewhere / 'inner.py').write_text('y = 2\n', encoding='utf-8')
+    root = tmp_path / 'root'
+    root.mkdir()
+    (root / 'link').symlink_to(elsewhere)
+    text = show_directory_tree(str(root), depth=4)
+    assert 'inner.py' in text and 'symlink loop' not in text

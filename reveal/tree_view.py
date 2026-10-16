@@ -284,6 +284,23 @@ def show_directory_tree(path: str, options: Optional[TreeViewOptions] = None, **
     return '\n'.join(lines)
 
 
+def _symlink_loop(entry: Path) -> Optional[str]:
+    """The link text of a directory symlink whose target holds the link itself, else None.
+
+    ``back -> ..`` makes the tree contain itself; following it prints the same directories
+    again under ``back/``, bounded only by the depth limit (BACK-1416). Other directory
+    symlinks are followed as before.
+    """
+    try:
+        if not entry.is_symlink():
+            return None
+        target = entry.resolve()
+        parent = entry.parent.resolve()
+        return os.readlink(entry) if target == parent or target in parent.parents else None
+    except OSError:
+        return None
+
+
 def _count_entries(path: Path, depth: int, hidden: Hidden) -> int:
     """Count total entries in directory tree (fast, no analysis)."""
     count, _ = _count_entries_with_suppressed(path, depth, hidden)
@@ -313,7 +330,7 @@ def _count_entries_with_suppressed(path: Path, depth: int, hidden: Hidden) -> Tu
 
     count = len(kept)
     for entry, is_dir in kept:
-        if is_dir:
+        if is_dir and _symlink_loop(entry) is None:
             sub_count, sub_suppressed = _count_entries_with_suppressed(entry, depth - 1, hidden)
             count += sub_count
             suppressed += sub_suppressed
@@ -448,6 +465,11 @@ def _process_dir_entry(entry: Path, lines: List[str], prefix: str, connector: st
     Returns:
         Number of entries added (always 1 for directories)
     """
+    loop = _symlink_loop(entry)
+    if loop is not None:
+        lines.append(f"{prefix}{connector}{entry.name}/ -> {loop}  (symlink loop, not followed)")
+        context['count'] += 1
+        return 1
     lines.append(f"{prefix}{connector}{entry.name}/")
     context['count'] += 1
     _walk_directory(entry, lines, prefix + extension, depth - 1, fast, context, hidden)
@@ -623,6 +645,13 @@ def _walk_directory_json(path: Path, depth: int = 3, fast: bool = False,
             context['count'] += 1
             dir_entry_count += 1
         elif entry.is_dir():
+            loop = _symlink_loop(entry)
+            if loop is not None:
+                result.append({'name': entry.name, 'type': 'dir', 'children': [],
+                               'symlink_loop': loop})
+                context['count'] += 1
+                dir_entry_count += 1
+                continue
             children = _walk_directory_json(entry, depth - 1, fast, context, hidden)
             result.append({'name': entry.name, 'type': 'dir', 'children': children})
             context['count'] += 1
