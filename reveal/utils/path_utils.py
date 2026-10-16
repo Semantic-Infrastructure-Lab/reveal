@@ -465,14 +465,25 @@ _STATIC_UNSAFE_ROOTS = (
 
 
 def _unsafe_scan_roots() -> frozenset:
-    """Realpath'd set of unsafe roots, derived fresh (temp/home can be patched).
+    """Realpath'd set of unsafe roots.
 
-    Not cached: ``tempfile.gettempdir()`` and ``Path.home()`` are read at call
-    time so tests can monkeypatch them to simulate other platforms, and the
-    cost (realpath of ~13 paths) is trivial next to the walks it guards.
+    ``tempfile.gettempdir()`` and ``Path.home()`` are read at call time so tests
+    can monkeypatch them to simulate other platforms; the realpath work is
+    memoized on those two values (BACK-1878: rebuilt 24x per file in stats://).
     """
+    try:
+        home = str(Path.home())
+    except (OSError, RuntimeError, ValueError):
+        home = None
+    return _unsafe_scan_roots_for(tempfile.gettempdir(), home)
+
+
+@functools.lru_cache(maxsize=8)
+def _unsafe_scan_roots_for(temp_dir: str, home: Optional[str]) -> frozenset:
     roots = set()
-    for base in (tempfile.gettempdir(), str(Path.home())):
+    for base in (temp_dir, home):
+        if base is None:
+            continue
         try:
             roots.add(os.path.realpath(base))
         except (OSError, RuntimeError, ValueError):
@@ -1120,6 +1131,19 @@ def search_parents_within_ceiling(
     reach an unrelated ancestor repo (BACK-515's failure mode) instead of
     relying on the caller to reject the result after the fact.
     """
+    for ancestor in _ceiling_ancestors(start, max_depth):
+        if condition(ancestor):
+            return ancestor
+    return None
+
+
+def _ceiling_ancestors(start: Path, max_depth: int = 20) -> Iterator[Path]:
+    """Yield *start*'s directory and its parents, stopping before the ceiling.
+
+    The ceiling (see :func:`search_parents_within_ceiling`) is checked lazily, one
+    level at a time, so a caller that stops at the first match pays no further
+    ``realpath``/``stat``.
+    """
     current = start if start.is_dir() else start.parent
     depth = 0
     try:
@@ -1129,19 +1153,51 @@ def search_parents_within_ceiling(
 
     while current != current.parent and depth < max_depth:
         if is_unsafe_scan_root(current):
-            return None
+            return
         if start_dev is not None:
             try:
                 if os.stat(current).st_dev != start_dev:
-                    return None
+                    return
             except OSError:
-                return None
-        if condition(current):
-            return current
+                return
+        yield current
         current = current.parent
         depth += 1
 
-    return None
+
+class _SharedClimb:
+    """One lazy ceiling-bounded climb that several marker searches replay.
+
+    ``resolve_project_root`` looks for three different markers from the same
+    start; each used to redo the ceiling checks on every ancestor. Iterating this
+    object yields the same ancestors as :func:`_ceiling_ancestors`, computing each
+    level once and only as far as the deepest search has needed.
+    """
+
+    def __init__(self, start: Path) -> None:
+        self._source = _ceiling_ancestors(start)
+        self._seen: List[Path] = []
+
+    def __iter__(self) -> Iterator[Path]:
+        index = 0
+        while True:
+            if index < len(self._seen):
+                yield self._seen[index]
+            else:
+                try:
+                    nxt = next(self._source)
+                except StopIteration:
+                    return
+                self._seen.append(nxt)
+                yield nxt
+            index += 1
+
+    def first(self, condition: Callable[[Path], bool]) -> Optional[Path]:
+        """The nearest ancestor satisfying *condition*, as search_parents_within_ceiling."""
+        for ancestor in self:
+            if condition(ancestor):
+                return ancestor
+        return None
 
 
 def find_project_root(
@@ -1378,13 +1434,14 @@ def resolve_project_root(
     """
     if root_override is not None:
         return root_override
+    climb = _SharedClimb(target_path)
     if honor_reveal_root:
-        reveal_root = search_parents_within_ceiling(target_path, _has_reveal_root_marker)
+        reveal_root = climb.first(_has_reveal_root_marker)
         if reveal_root is not None:
             return reveal_root
-    vcs_root = search_parents_within_ceiling(target_path, _has_vcs_marker)
+    vcs_root = climb.first(_has_vcs_marker)
     if use_package_markers:
-        package_root = search_parents_within_ceiling(target_path, _has_package_marker)
+        package_root = climb.first(_has_package_marker)
         if package_root is not None and _within_repo(package_root, vcs_root):
             if (package_root / 'package.json').exists():
                 workspace_root = search_parents_within_ceiling(
