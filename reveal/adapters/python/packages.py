@@ -76,9 +76,9 @@ def get_package_details(package_name: str) -> Dict[str, Any]:
     Returns:
         Dict with package details or error
     """
-    try:
-        import importlib.metadata
+    import importlib.metadata
 
+    try:
         dist = importlib.metadata.distribution(package_name)
         metadata = dist.metadata
 
@@ -105,5 +105,10 @@ def get_package_details(package_name: str) -> Dict[str, Any]:
             result["editable_conflict"] = conflict
 
         return result
-    except Exception as e:
+    except importlib.metadata.PackageNotFoundError as e:
         return {"error": f"Package not found: {package_name}", "details": str(e)}
+    except Exception as e:  # boundary-ok: broad-except -- distribution metadata is parsed from third-party METADATA files and the editable-conflict check scans site-packages; neither failure set can be enumerated, and the result is an error naming the real exception
+        return {
+            "error": f"Failed to read metadata of {package_name}: {type(e).__name__}",
+            "details": str(e),
+        }

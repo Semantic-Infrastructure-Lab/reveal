@@ -228,6 +228,9 @@ def check_stale_bytecode() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
 
     cwd = Path.cwd()
     bytecode_result = check_bytecode(str(cwd))
+    if bytecode_result.get("status") == "error":
+        # An unreadable tree is not a clean one: run_doctor records the check as failed
+        raise OSError(bytecode_result["error"])
     if bytecode_result.get("status") == "issues_found":
         stale = [i for i in bytecode_result["issues"] if i["type"] == "stale_bytecode"]
         if stale:
@@ -366,14 +369,12 @@ def _find_editable_shadows(site_packages_dirs):
 
 def check_editable_conflicts() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Check for duplicate/conflicting editable .pth files."""
-    try:
-        import site
-        site_packages_dirs = site.getsitepackages() + [site.getusersitepackages()]
-        issues, recommendations = _find_editable_packages(site_packages_dirs)
-        warnings = _find_editable_shadows(site_packages_dirs)
-    except Exception:
-        return [], [], []  # package introspection is best-effort
-
+    import site
+    # No fallback to "no conflicts": run_doctor records a check that raises as failed, and
+    # an empty answer would read as a verified clean install (BACK-1059).
+    site_packages_dirs = site.getsitepackages() + [site.getusersitepackages()]
+    issues, recommendations = _find_editable_packages(site_packages_dirs)
+    warnings = _find_editable_shadows(site_packages_dirs)
     return issues, warnings, recommendations
 
 
@@ -449,7 +450,7 @@ def run_doctor(detect_venv_func) -> Dict[str, Any]:
     for name, check, kinds in checks:
         try:
             results = check()
-        except Exception as e:  # one broken check must not stop the rest, and must not read as clean
+        except Exception as e:  # boundary-ok: broad-except -- each check introspects the live interpreter (site-packages, importlib.metadata, the cwd), which can raise anything; one broken check must not stop the rest, and it is recorded in checks_failed and a warning so it never reads as clean
             failed.append(name)
             found['warnings'].append({
                 "category": "doctor",

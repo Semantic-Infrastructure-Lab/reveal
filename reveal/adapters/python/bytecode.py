@@ -124,7 +124,7 @@ def check_bytecode(root_path: str = ".") -> Dict[str, Any]:
                     issue = _check_pyc_file(Path(dirpath) / name)
                     if issue:
                         issues.append(issue)
-    except Exception as e:
+    except OSError as e:  # the walk and the stat calls on each .pyc and its source
         return {"error": f"Failed to scan for bytecode issues: {str(e)}", "status": "error"}
 
     return {

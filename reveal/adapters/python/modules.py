@@ -26,7 +26,7 @@ def find_module_import_location(module_name: str) -> Dict[str, Any]:
             return {"import_location": None, "status": "not_found"}
     except (ImportError, ModuleNotFoundError, ValueError):
         return {"import_location": None, "status": "not_found"}
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- find_spec() imports the parent packages of a dotted name, i.e. arbitrary installed code that can raise anything; reported as status "error" with the message
         return {"import_location": None, "status": "error", "error": str(e)}
 
 
