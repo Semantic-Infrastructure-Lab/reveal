@@ -117,3 +117,15 @@ def test_zero_arg_getter_falls_back_per_call_for_unclassifiable_classes():
     fake = mock.Mock()
     fake.kind = 'identifier'
     assert zero_arg_getter(type(fake), 'kind')(fake) == _zero_arg(fake, 'kind') == 'identifier'
+
+
+def test_find_uncalled_collects_structures_once_back1868(tmp_path):
+    """find_uncalled used to build every file's structure twice (once itself, once in build_callers_index)."""
+    from reveal.adapters.calls import index as calls_index
+
+    (tmp_path / "m.py").write_text("def used():\n    return 1\n\ndef dead():\n    return used()\n", encoding="utf-8")
+    calls_index._INDEX_CACHE.clear()
+    with mock.patch.object(calls_index, "collect_structures", wraps=calls_index.collect_structures) as spy:
+        result = calls_index.find_uncalled(str(tmp_path))
+    assert spy.call_count == 1
+    assert [e["name"] for e in result["entries"]] == ["dead"]

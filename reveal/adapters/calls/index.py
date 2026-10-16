@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, Iterator, List, Optional, Set, Tuple
 
-from ..ast.analysis import collect_structures, is_code_file, call_sources, unattributed_references
+from ..ast.analysis import StructureList, collect_structures, is_code_file, call_sources, unattributed_references
 from ...utils.pyparse import parse_python
 from ..ast.call_graph import (
     ClassAliasSpan, build_alias_map, build_class_attribute_aliases, build_symbol_map, class_attribute_alias,
@@ -390,7 +390,12 @@ def _disclose_skipped(result: Dict[str, Any], skipped: List[Tuple[str, str]]) ->
     return result
 
 
-def build_callers_index(path: str) -> CallersIndex:
+def _structures_or_collect(structures: Optional[StructureList], directory: Path) -> StructureList:
+    """The caller's already-collected structures, else collect them (BACK-1868)."""
+    return collect_structures(str(directory)) if structures is None else structures
+
+
+def build_callers_index(path: str, structures: Optional[StructureList] = None) -> CallersIndex:
     """Return project-level callers index for *path* (file or directory).
 
     The index maps each callee name to a list of caller records::
@@ -408,6 +413,10 @@ def build_callers_index(path: str) -> CallersIndex:
 
     Args:
         path: File or directory to index.
+        structures: ``collect_structures(<the directory>)`` the caller already
+            holds, used instead of collecting again on a cache miss (BACK-1868:
+            ``find_uncalled`` built every file's structure twice). Must come from
+            the same directory and scope as *path*.
 
     Returns:
         Inverted call graph dict (callee → list of caller dicts).
@@ -428,7 +437,7 @@ def build_callers_index(path: str) -> CallersIndex:
         return _INDEX_CACHE[dir_str][1]
 
     # Build index
-    structures = collect_structures(str(directory))
+    structures = _structures_or_collect(structures, directory)
     index = CallersIndex()
     index.skipped = list(structures.skipped)
 
@@ -1158,13 +1167,13 @@ def find_uncalled(
     # NOT dead code).
     file_filter: Optional[str] = str(path_obj.resolve()) if is_file else None
 
-    called_names: Set[str] = set(build_callers_index(path).keys())
+    structures = collect_structures(str(directory))
+    called_names: Set[str] = set(build_callers_index(path, structures).keys())
     # BACK-1265: union in names used without a direct call expression --
     # module-level calls and callbacks passed by reference. See
     # _python_referenced_names for why both were invisible to the index.
     called_names |= _python_referenced_names(directory)
     file_lines: Dict[str, List[str]] = {}
-    structures = collect_structures(str(directory))
     extra_implicit_decorators = _project_entry_point_decorators(directory)
     cpp_overrides = _cpp_override_names(structures, file_lines)
 
