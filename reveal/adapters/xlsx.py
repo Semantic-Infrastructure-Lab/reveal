@@ -3,6 +3,7 @@
 import logging
 import re
 import base64
+import binascii
 import csv
 import io
 import struct
@@ -11,7 +12,7 @@ import xml.etree.ElementTree as ET
 import zlib as _zlib
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Set
+from typing import Dict, Any, Optional, List, Set, Tuple, Type
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..analyzers.office.openxml import XlsxAnalyzer
 from ..utils import print_json_result
@@ -32,6 +33,20 @@ DEFAULT_SHEET_ROWS = 100
 # unsupported-compression member (RuntimeError, NotImplementedError) and I/O (OSError).
 # Anything else is a bug in this module and propagates (BACK-1614).
 _PART_ERRORS = (zipfile.BadZipFile, _zlib.error, EOFError, ET.ParseError, RuntimeError, OSError)
+
+# What opening the archive and reading its XML can raise beyond one part's errors: a member
+# stored with a compression zipfile cannot decode (NotImplementedError) or an LZMA member
+# that is damaged (lzma.LZMAError, which zipfile lets through; bz2 raises OSError).
+# Used by the whole-view handlers; a bug in this module is not in the list (BACK-1059).
+_DECOMPRESS_ERRORS: Tuple[Type[BaseException], ...]
+try:
+    from lzma import LZMAError as _LZMAError
+    _DECOMPRESS_ERRORS = (_LZMAError,)
+except ImportError:  # a Python built without liblzma: zipfile itself cannot read LZMA members
+    _DECOMPRESS_ERRORS = ()
+_ARCHIVE_ERRORS: Tuple[Type[BaseException], ...] = _PART_ERRORS + (NotImplementedError,) + _DECOMPRESS_ERRORS
+# The DataMashup blob is base64 around a streaming zip that is walked with struct.unpack_from.
+_POWERQUERY_ERRORS: Tuple[Type[BaseException], ...] = _ARCHIVE_ERRORS + (binascii.Error, struct.error)
 
 
 class XlsxRenderer:
@@ -1122,7 +1137,7 @@ class XlsxAdapter(ResourceAdapter):
         # found (the "no power query present" case is already handled
         # above), so a decode failure here is a genuine corruption/format
         # bug, not an absence. Let it propagate to the caller's own
-        # except Exception, which reports it via ResultBuilder.create_error
+        # except _POWERQUERY_ERRORS, which reports it via ResultBuilder.create_error
         # instead of silently degrading to a clean-looking empty result.
         binary = base64.b64decode(blob_b64)
 
@@ -1495,7 +1510,7 @@ class XlsxAdapter(ResourceAdapter):
                         self._note_unreadable_part('xl/workbook.xml', e)
 
                 return result if result else None
-        except Exception as e:
+        except _ARCHIVE_ERRORS as e:
             logger.warning("powerpivot banner build failed for %s: %s", self.file_path, e)
             self.record_composed_error('_build_powerpivot_banner', self.file_path, e)
             return None
@@ -1542,7 +1557,7 @@ class XlsxAdapter(ResourceAdapter):
                     data=data,
                     **self._meta_fields(),
                 )
-        except Exception as e:
+        except _POWERQUERY_ERRORS as e:
             return ResultBuilder.create_error(
                 result_type='xlsx_powerquery',
                 source=self.file_path,
@@ -1594,7 +1609,7 @@ class XlsxAdapter(ResourceAdapter):
                     source=self.file_path,
                     data={'file': self.file_display, 'ranges': ranges},
                 )
-        except Exception as e:
+        except _ARCHIVE_ERRORS as e:
             return ResultBuilder.create_error(
                 result_type='xlsx_names',
                 source=self.file_path,
@@ -1653,7 +1668,7 @@ class XlsxAdapter(ResourceAdapter):
                     source=self.file_path,
                     data={'file': self.file_display, 'mode': mode, 'connections': connections},
                 )
-        except Exception as e:
+        except _ARCHIVE_ERRORS as e:
             return ResultBuilder.create_error(
                 result_type='xlsx_connections',
                 source=self.file_path,
@@ -1694,7 +1709,7 @@ class XlsxAdapter(ResourceAdapter):
                     pbixray_error: Optional[Exception] = None
                     try:
                         tier2 = self._parse_pbixray()
-                    except Exception as e:  # pbixray is third-party: any failure falls back, disclosed
+                    except Exception as e:  # boundary-ok: broad-except -- pbixray is a third-party package (not in this repo) whose failure set is not bounded; the fallback is disclosed as a part_unreadable warning and, for measures/dax, in the result's message
                         tier2, pbixray_error = None, e
                         self._note_unreadable_part(model_path, e)
                     if tier2 is not None:
@@ -1722,7 +1737,7 @@ class XlsxAdapter(ResourceAdapter):
                     data=data,
                     **self._meta_fields(),
                 )
-        except Exception as e:
+        except _ARCHIVE_ERRORS as e:
             return ResultBuilder.create_error(
                 result_type='xlsx_powerpivot',
                 source=self.file_path,
