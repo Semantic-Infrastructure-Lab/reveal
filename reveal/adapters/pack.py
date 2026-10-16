@@ -119,10 +119,14 @@ def _get_changed_files(path: Path, since_ref: str) -> Tuple[Set[str], Optional[s
     return changed, None
 
 
-def _build_pack_import_graph(path: Path) -> Tuple[Optional[Any], Set[Path]]:
+def _build_pack_import_graph(
+    path: Path, failures: Optional[List[str]] = None,
+) -> Tuple[Optional[Any], Set[Path]]:
     """Build reveal's multi-language import/dependency graph for *path*.
 
-    Returns ``(graph, scanned_files)``, or ``(None, set())`` on any failure.
+    Returns ``(graph, scanned_files)``, or ``(None, set())`` on any failure, and
+    appends the failure's ``Type: message`` to *failures* when given, so the caller
+    can say the signal it asked for is missing.
     Shared by ``_fetch_fan_in`` (--architecture) and ``_compute_graph_relevance``
     (--focus, BACK-833) so there is exactly one lazy-import/build site for
     ``ImportsAdapter`` in this module.
@@ -132,25 +136,29 @@ def _build_pack_import_graph(path: Path) -> Tuple[Optional[Any], Set[Path]]:
         adapter = ImportsAdapter(resource=str(path))
         adapter._build_graph(adapter._target_path)
         return adapter.analysis.graph, adapter.analysis.scanned_files
-    except Exception:
-        # Documented fallback: fan-in/relevance are additive scoring signals,
-        # not required for a pack to succeed — callers treat a missing graph as 0.
+    except Exception as e:  # boundary-ok: broad-except -- the import graph is an optional ranking signal built by the whole imports walk (tree-sitter parsing of every file, resolution; failure set not bounded) and a pack is still useful without it; the failure is returned in `failures` and shown as meta.relevance_warning
+        logger.warning('pack: import graph for %s failed: %s', path, e)
+        if failures is not None:
+            failures.append(f'{type(e).__name__}: {e}')
         return None, set()
 
 
-def _fetch_fan_in(path: Path) -> Dict[str, int]:
+def _fetch_fan_in(path: Path, failures: Optional[List[str]] = None) -> Dict[str, int]:
     """Return {abs_path: fan_in} for all files under *path* via ImportsAdapter.
 
-    Returns empty dict on any failure — callers treat missing entries as fan_in=0.
+    Returns empty dict on any failure — callers treat missing entries as fan_in=0
+    (the failure is appended to *failures* when given).
     """
-    graph, scanned_files = _build_pack_import_graph(path)
+    graph, scanned_files = _build_pack_import_graph(path, failures)
     if graph is None:
         return {}
     all_files = scanned_files | set(graph.files.keys()) | set(graph.reverse_deps.keys())
     return {str(f): len(graph.reverse_deps.get(f, set())) for f in all_files}
 
 
-def _compute_graph_relevance(path: Path, focus: Optional[str]) -> Dict[str, float]:
+def _compute_graph_relevance(
+    path: Path, focus: Optional[str], failures: Optional[List[str]] = None,
+) -> Dict[str, float]:
     """Personalized-PageRank relevance score per file, seeded from --focus (BACK-833).
 
     Builds reveal's own multi-language import/dependency graph (the same one
@@ -169,7 +177,7 @@ def _compute_graph_relevance(path: Path, focus: Optional[str]) -> Dict[str, floa
     """
     if not focus:
         return {}
-    graph, scanned_files = _build_pack_import_graph(path)
+    graph, scanned_files = _build_pack_import_graph(path, failures)
     if graph is None:
         return {}
 
@@ -280,7 +288,7 @@ def _tiered_content(file_info: Dict[str, Any]) -> Tuple[str, str, Optional[str]]
     if file_info.get('priority', _STRUCTURE_THRESHOLD) >= _STRUCTURE_THRESHOLD:
         try:
             return 'structure', _get_file_structure(path), None
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- the analyzer runs on an arbitrary user file in any of reveal's languages (tree-sitter, custom parsers; failure set not bounded) and one file must not abort the pack; the entry carries `error` and a warning is logged
             logger.warning('Structure analysis failed for %s: %s', path, e)
             return 'structure', '', f'structure analysis failed: {type(e).__name__}: {e}'
     return 'name_only', '', None
@@ -739,10 +747,19 @@ class PackAdapter(ResourceAdapter):
         if since:
             changed_files, self.since_error = _get_changed_files(path, since)
 
-        fan_in_scores = _fetch_fan_in(path) if architecture else None
-        graph_relevance_scores = _compute_graph_relevance(path, focus) if focus else {}
+        graph_failures: List[str] = []
+        fan_in_scores = _fetch_fan_in(path, graph_failures) if architecture else None
+        graph_relevance_scores = _compute_graph_relevance(path, focus, graph_failures) if focus else {}
 
-        if not architecture and not focus:
+        if graph_failures:
+            # The signal was asked for and could not be built: without this, every file
+            # reads as fan-in 0 / relevance 0 and the ranking looks computed.
+            asked = ' and '.join(n for n, on in (('fan-in', architecture), ('graph-relevance', bool(focus))) if on)
+            self.relevance_warning = (
+                f"{asked} not computed, the import graph failed ({'; '.join(dict.fromkeys(graph_failures))}) "
+                "-- files are ranked by filename/entry-point heuristics and recency only"
+            )
+        elif not architecture and not focus:
             self.relevance_warning = (
                 "fan-in and graph-relevance signals were not computed (pass "
                 "--architecture and/or --focus to enable) -- files are "
