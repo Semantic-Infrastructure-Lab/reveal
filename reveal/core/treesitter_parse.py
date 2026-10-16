@@ -14,6 +14,7 @@ so a test that patches ``tree_sitter_language_pack.get_parser`` reaches every ca
 in ``reveal/core/treesitter*.py``.
 """
 
+import functools
 import logging
 from typing import Any, Dict, Iterable, Set
 
@@ -103,7 +104,18 @@ def get_parser(language: str, *, announce_fetch: bool = True) -> Any:
 
 def get_tree(language: str, source: str) -> Any:
     """Parse *source* as *language*. Raises ``GrammarUnavailable`` when there is no
-    parser; a tree with ERROR nodes is still a tree (see ``tree_has_recovery_artifacts``)."""
+    parser; a tree with ERROR nodes is still a tree (see ``tree_has_recovery_artifacts``).
+
+    The last few parses are memoized: the per-file rules (B006, M104, ...) each ask for
+    the same file's tree in turn, and every one used to parse it again (BACK-1872: 432
+    parses for 216 files on a warm ``stats://``). Trees are never edited, so sharing
+    one is safe; a failed lookup raises and is not cached.
+    """
+    return _parse_recent(language, source)
+
+
+@functools.lru_cache(maxsize=4)
+def _parse_recent(language: str, source: str) -> Any:
     return ts_parse(get_parser(language), source)
 
 
