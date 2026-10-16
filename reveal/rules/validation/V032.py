@@ -26,6 +26,7 @@ external user code -- this is reveal's own release hygiene, not a rule for
 user codebases.
 """
 
+import http.client
 import logging
 import os
 import subprocess
@@ -107,7 +108,9 @@ class V032(BaseRule):
             )
             with urllib.request.urlopen(req, timeout=_PYPI_TIMEOUT_SECONDS) as response:
                 return json.loads(response.read().decode('utf-8'))['info']['version']
-        except Exception as e:
+        except (OSError, http.client.HTTPException, ValueError, KeyError, TypeError) as e:
+            # OSError: URLError/HTTPError/timeouts/TLS; HTTPException: truncated reply;
+            # ValueError: bad JSON or UTF-8; KeyError/TypeError: reply is not {"info": {"version": ...}}
             logger.debug("V032.py: skipped after %s: %s", type(e).__name__, e)
             self.unavailable(f"required input unavailable: {type(e).__name__}: {e}")
             return None

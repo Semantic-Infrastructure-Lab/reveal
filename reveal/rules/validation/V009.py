@@ -259,7 +259,7 @@ class V009(BaseRule):
                 self.unavailable("required input unavailable")
                 return None
 
-        except Exception as e:
+        except ValueError as e:  # a link that is not a valid path (e.g. embedded NUL)
             logger.debug("V009.py: skipped after %s: %s", type(e).__name__, e)
             self.unavailable(f"required input unavailable: {type(e).__name__}: {e}")
             return None

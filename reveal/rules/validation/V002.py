@@ -73,7 +73,7 @@ class V002(BaseRule):
         """
         try:
             content = analyzer_file.read_text(encoding='utf-8')
-        except Exception as e:
+        except (OSError, UnicodeDecodeError) as e:
             # Skip files we can't read
             logger.debug("V002.py: skipped after %s: %s", type(e).__name__, e)
             self.unavailable(f"required input unavailable: {type(e).__name__}: {e}")

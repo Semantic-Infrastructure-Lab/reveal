@@ -96,24 +96,21 @@ class V014(BaseRule):
 
     def _estimate_tokens(self, agent_help_path: Path) -> Optional[int]:
         """Rough chars/4 token estimate of AGENT_HELP.md's body (frontmatter stripped)."""
+        from reveal.adapters.help import _strip_frontmatter
         try:
-            from reveal.adapters.help import _strip_frontmatter
             content = agent_help_path.read_text(encoding='utf-8')
-            body = _strip_frontmatter(content)
-            return len(body) // self._CHARS_PER_TOKEN
-        except Exception as e:
-            logger.warning(f"V014: failed to read/strip {agent_help_path}: {e}")
+        except (OSError, UnicodeDecodeError) as e:
+            logger.warning(f"V014: failed to read {agent_help_path}: {e}")
             self.unavailable(f"required input unavailable: {type(e).__name__}: {e}")
             return None
+        body = _strip_frontmatter(content)
+        return len(body) // self._CHARS_PER_TOKEN
 
     def _check_frontmatter(self, agent_help_path: Path, actual: int,
                             low: float, high: float) -> List[Detection]:
-        try:
-            from reveal.adapters.markdown.files import extract_frontmatter
-            fm = extract_frontmatter(agent_help_path) or {}
-        except Exception as e:
-            logger.warning(f"V014: failed to extract frontmatter from {agent_help_path}: {e}")
-            return self.unavailable(f"prerequisite failed: {type(e).__name__}: {e}")
+        # extract_frontmatter reports an unreadable or malformed block as None itself
+        from reveal.adapters.markdown.files import extract_frontmatter
+        fm = extract_frontmatter(agent_help_path) or {}
         raw = fm.get('help_token_estimate')
         if raw is None:
             return []
@@ -133,7 +130,7 @@ class V014(BaseRule):
         detections = []
         try:
             lines = agent_help_path.read_text(encoding='utf-8').split('\n')
-        except Exception as e:
+        except (OSError, UnicodeDecodeError) as e:
             logger.warning(f"V014: failed to read {agent_help_path}: {e}")
             return self.unavailable(f"prerequisite failed: {type(e).__name__}: {e}")
         for i, line in enumerate(lines, 1):
@@ -157,7 +154,7 @@ class V014(BaseRule):
         detections = []
         try:
             lines = help_py_path.read_text(encoding='utf-8').split('\n')
-        except Exception as e:
+        except (OSError, UnicodeDecodeError) as e:
             logger.warning(f"V014: failed to read {help_py_path}: {e}")
             return self.unavailable(f"prerequisite failed: {type(e).__name__}: {e}")
         for i, line in enumerate(lines, 1):

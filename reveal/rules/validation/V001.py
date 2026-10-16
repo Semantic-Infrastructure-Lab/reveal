@@ -54,6 +54,8 @@ class V001(BaseRule):
         # Get all analyzers and static help
         analyzers = self._get_analyzers(reveal_root)
         static_help = self._get_static_help(reveal_root)
+        if static_help is None:
+            return []  # _get_static_help already recorded why
 
         # Run validation checks
         detections: List[Detection] = []
@@ -126,11 +128,12 @@ class V001(BaseRule):
 
         return analyzers
 
-    def _get_static_help(self, reveal_root: Path) -> Dict[str, str]:
+    def _get_static_help(self, reveal_root: Path) -> Optional[Dict[str, str]]:
         """Extract STATIC_HELP dict from help.py.
 
         Returns:
-            Dict mapping topic name to help file path
+            Dict mapping topic name to help file path; None (outcome recorded as
+            unavailable) when help.py exists but cannot be read
         """
         help_file = reveal_root / 'adapters' / 'help.py'
         if not help_file.exists():
@@ -144,9 +147,10 @@ class V001(BaseRule):
 
             return self._parse_dict_entries(dict_content)
 
-        except Exception as e:
+        except (OSError, UnicodeDecodeError) as e:
             logger.warning("V001.py: skipped after %s: %s", type(e).__name__, e)
-            return {}
+            self.unavailable(f"required input unavailable: {type(e).__name__}: {e}", help_file.as_posix())
+            return None
 
     def _find_static_help_dict(self, content: str) -> Optional[str]:
         """Find STATIC_HELP dict content using regex.

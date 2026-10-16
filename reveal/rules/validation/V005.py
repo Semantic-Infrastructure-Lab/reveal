@@ -49,6 +49,8 @@ class V005(BaseRule):
 
         # Get STATIC_HELP dict from help.py
         static_help = self._get_static_help(reveal_root)
+        if static_help is None:
+            return detections  # _get_static_help already recorded why
 
         if not static_help:
             detections.append(self.create_detection(
@@ -79,8 +81,12 @@ class V005(BaseRule):
 
         return detections
 
-    def _get_static_help(self, reveal_root: Path) -> Dict[str, str]:
-        """Extract STATIC_HELP dict from help.py."""
+    def _get_static_help(self, reveal_root: Path) -> Optional[Dict[str, str]]:
+        """Extract STATIC_HELP dict from help.py.
+
+        Returns None (outcome recorded as unavailable) when help.py exists but
+        cannot be read; {} when it was read and holds no STATIC_HELP entries.
+        """
         help_file = reveal_root / 'adapters' / 'help.py'
         if not help_file.exists():
             return {}
@@ -111,9 +117,10 @@ class V005(BaseRule):
 
             return static_help
 
-        except Exception as e:
+        except (OSError, UnicodeDecodeError) as e:
             logger.warning("V005.py: skipped after %s: %s", type(e).__name__, e)
-            return {}
+            self.unavailable(f"required input unavailable: {type(e).__name__}: {e}", help_file.as_posix())
+            return None
 
     def _find_line_in_static_help(self, reveal_root: Path, topic: str) -> int:
         """Find line number of topic in STATIC_HELP dict."""

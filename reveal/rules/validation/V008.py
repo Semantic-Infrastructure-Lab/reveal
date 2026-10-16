@@ -84,11 +84,11 @@ class V008(BaseRule):
         try:
             content = analyzer_path.read_text(encoding='utf-8')
             tree = parse_python(content, str(analyzer_path))
-            return self._find_get_structure_violations(tree, analyzer_path)
-        except Exception as e:
+        except (OSError, UnicodeDecodeError, SyntaxError, ValueError) as e:
             # Don't fail the check if we can't parse the file
             logger.debug("V008.py: skipped after %s: %s", type(e).__name__, e)
             return self.unavailable(f"prerequisite failed: {type(e).__name__}: {e}")
+        return self._find_get_structure_violations(tree, analyzer_path)
 
     def _find_get_structure_violations(
         self, tree: ast.AST, analyzer_path: Path

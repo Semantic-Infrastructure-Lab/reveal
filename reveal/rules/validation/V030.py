@@ -56,7 +56,7 @@ class V030(BaseRule):
 
         try:
             lines = readme_path.read_text(encoding='utf-8').split('\n')
-        except Exception as e:
+        except (OSError, UnicodeDecodeError) as e:
             return self.unavailable(f"V030: failed to read {readme_path}: {e}")
 
         actual = self._count_supported_languages()
@@ -96,7 +96,7 @@ class V030(BaseRule):
             listing = list_supported_languages()
             match = re.search(r'Total:\s*(\d+)\s+languages?\s+supported', listing)
             return int(match.group(1)) if match else None
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- list_supported_languages() imports and introspects every analyzer (arbitrary import-time failures); recorded as an unavailable outcome
             logger.warning(f"V030: failed to count supported languages: {e}")
             self.unavailable(f"required input unavailable: {type(e).__name__}: {e}")
             return None

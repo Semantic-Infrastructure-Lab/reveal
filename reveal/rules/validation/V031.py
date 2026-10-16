@@ -99,7 +99,7 @@ class V031(BaseRule):
 
         try:
             doc_lines = doc_path.read_text(encoding='utf-8').split('\n')
-        except Exception as e:
+        except (OSError, UnicodeDecodeError) as e:
             return self.unavailable(f"V031: failed to read {doc_path}: {e}")
 
         doc_cells_by_language = self._parse_table(doc_lines)

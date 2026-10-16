@@ -114,7 +114,7 @@ class V015(BaseRule):
                     continue
                 count += self._count_category_rules(category_dir)
             return count
-        except Exception as e:
+        except OSError as e:  # find_reveal_root (cwd), iterdir and glob are the only I/O
             logger.warning(f"V015: failed to count registered rules: {e}")
             self.unavailable(f"required input unavailable: {type(e).__name__}: {e}")
             return None
@@ -142,7 +142,7 @@ class V015(BaseRule):
                     claims.append((i, count, is_minimum))
 
             return claims
-        except Exception as e:
+        except (OSError, UnicodeDecodeError) as e:
             logger.warning(f"V015: failed to read {readme_file}: {e}")
             self.unavailable(f'prerequisite failed: {type(e).__name__}: {e}')
             return []

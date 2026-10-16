@@ -155,25 +155,20 @@ class V023(BaseRule):
         if not scheme:
             return []
 
-        # Try to get adapter class and test its output
-        try:
-            adapter_class = get_adapter_class(scheme)
-            if not adapter_class:
-                return []
+        # get_adapter_class contains plugin-load failures itself (a warning) and the
+        # pattern check is string/regex work, so nothing here is an expected failure.
+        adapter_class = get_adapter_class(scheme)
+        if not adapter_class:
+            return []
 
-            # Try to get sample output from get_structure()
-            # We can't fully instantiate, but we can check the method exists
-            if not hasattr(adapter_class, 'get_structure'):
-                return []
+        # We can't fully instantiate, but we can check the method exists
+        if not hasattr(adapter_class, 'get_structure'):
+            return []
 
-            # Check code for required fields being set
-            detections.extend(self._check_output_code_patterns(
-                file_path, content, 'get_structure'
-            ))
-
-        except Exception as e:
-            # If we can't import/test, skip runtime checks
-            logger.debug("V023.py: skipped after %s: %s", type(e).__name__, e)
+        # Check code for required fields being set
+        detections.extend(self._check_output_code_patterns(
+            file_path, content, 'get_structure'
+        ))
 
         return detections
 

@@ -129,8 +129,9 @@ class V027(BaseRule):
 
             try:
                 schema = _ADAPTER_REGISTRY[scheme].get_schema()
-            except Exception as e:
+            except Exception as e:  # boundary-ok: broad-except -- get_schema() is adapter code of unknown shape; one adapter must not end the scan of the rest, and it is recorded as an unavailable outcome for that scheme
                 logger.warning(f"V027: get_schema() failed for {scheme}://: {e}")
+                self.unavailable(f"get_schema() failed: {type(e).__name__}: {e}", f"{scheme}://")
                 continue
             query_params: Dict[str, Any] = schema.get('query_params') or {}
 

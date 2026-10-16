@@ -108,7 +108,7 @@ class V021(BaseRule):
             return None
         try:
             file_content = analyzer_file.read_text(encoding='utf-8')
-        except Exception as e:
+        except (OSError, UnicodeDecodeError) as e:
             logger.debug("V021.py: skipped after %s: %s", type(e).__name__, e)
             self.unavailable(f"required input unavailable: {type(e).__name__}: {e}")
             return None

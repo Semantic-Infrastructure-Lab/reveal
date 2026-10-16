@@ -104,18 +104,20 @@ class V003(BaseRule):
         results: List[Detection] = []
         try:
             content = ctx.analyzer_path.read_text(encoding='utf-8')
-            has_get_structure = (
-                'def get_structure' in content or
-                'TreeSitterAnalyzer' in content or
-                'FileAnalyzer' in content
-            )
-            if not has_get_structure:
-                results.append(self._create_missing_structure_detection(ctx))
-            if is_structured and not self._check_hierarchy_support(content):
-                line_num = self._find_class_line(content)
-                results.append(self._create_missing_outline_detection(ctx, line_num))
-        except Exception as e:  # skip unanalyzable files (import errors, syntax errors, etc.)
+        except (OSError, UnicodeDecodeError) as e:
             logger.debug("V003.py: skipped after %s: %s", type(e).__name__, e)
+            return self.unavailable(
+                f"required input unavailable: {type(e).__name__}: {e}", ctx.analyzer_path.as_posix())
+        has_get_structure = (
+            'def get_structure' in content or
+            'TreeSitterAnalyzer' in content or
+            'FileAnalyzer' in content
+        )
+        if not has_get_structure:
+            results.append(self._create_missing_structure_detection(ctx))
+        if is_structured and not self._check_hierarchy_support(content):
+            line_num = self._find_class_line(content)
+            results.append(self._create_missing_outline_detection(ctx, line_num))
         return results
 
     def _create_missing_structure_detection(

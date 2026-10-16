@@ -51,7 +51,7 @@ class V018(BaseRule):
             from ...adapters.base import list_supported_schemes, list_renderer_schemes
             adapters = set(list_supported_schemes())
             renderers = set(list_renderer_schemes())
-        except Exception as e:
+        except ImportError as e:
             return self.unavailable(f"V018: failed to import adapter/renderer registries: {e}")
 
         # Check for adapters without renderers

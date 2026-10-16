@@ -83,6 +83,7 @@ class V019(BaseRule):
             detection = self._test_resource_init(scheme, adapter_class, adapter_file)
             if detection:
                 detections.append(detection)
+            self.completed(scheme + ": init")
 
         return detections
 
@@ -123,7 +124,7 @@ class V019(BaseRule):
                 ),
                 context="No-arg initialization raises ValueError instead of TypeError"
             )
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- the probe's job is to classify ANY exception adapter __init__ raises on no-arg init; the finding returned below is the disclosure
             # VIOLATION: Crashed with unexpected exception
             exception_type = type(e).__name__
             return self.create_detection(
@@ -194,7 +195,7 @@ class V019(BaseRule):
             # Override severity for this specific case
             detection.severity = Severity.MEDIUM
             return detection
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- the probe classifies ANY exception adapter __init__ raises on resource init: AttributeError is a finding, the rest are environmental and recorded as not_applicable below
             # AttributeError suggests adapter is accessing attributes that don't exist
             if isinstance(e, AttributeError):
                 return self.create_detection(
@@ -212,7 +213,10 @@ class V019(BaseRule):
                     context="Resource initialization crashes with AttributeError"
                 )
 
-            # Other exceptions might be OK (e.g., file not found, database connection)
+            # Other exceptions might be OK (e.g., file not found, database connection):
+            # the probe's made-up resource string cannot be judged, so say it was not probed.
+            self.not_applicable(
+                f"resource init needs a real resource: {type(e).__name__}", scheme + ": resource init")
             return None
 
     def get_description(self) -> str:

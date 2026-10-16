@@ -210,8 +210,9 @@ class V016(BaseRule):
                     continue
                 analyzer = analyzer_class(file_path_str)
                 structure = analyzer.get_structure()
-            except Exception as e:
+            except Exception as e:  # boundary-ok: broad-except -- one adapter file the analyzer cannot parse must not end the scan of the others; recorded as an unavailable outcome with the file as subject
                 logger.warning("V016.py: skipped after %s: %s", type(e).__name__, e)
+                self.unavailable(f"adapter analysis failed: {type(e).__name__}: {e}", to_posix(py_file))
                 continue
 
             if not self._is_adapter_file(structure, content):

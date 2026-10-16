@@ -5,7 +5,6 @@ particularly for finding and working with reveal's installation directory.
 """
 
 import ast
-import logging
 import os
 import re
 from pathlib import Path
@@ -15,8 +14,6 @@ from ...utils.path_utils import to_posix
 
 if TYPE_CHECKING:
     from ..base import BaseRule
-
-logger = logging.getLogger(__name__)
 
 
 # Docs that carry *current* adapter/language count claims. Deliberately excludes
@@ -67,11 +64,10 @@ def scan_doc_for_counts(doc_path: Path,
     Version-history lines are skipped. Each pattern must capture the integer in
     group 1.
     """
-    try:
-        lines = doc_path.read_text(encoding='utf-8').split('\n')
-    except Exception as e:
-        logger.warning("utils.py: skipped after %s: %s", type(e).__name__, e)
-        return []
+    # No handler: a [] here reads as "this doc claims no count", and this helper has no
+    # outcome channel. An unreadable doc raises, and RuleRegistry.check_file reports the
+    # calling rule (V012/V013/V029) as failed.
+    lines = doc_path.read_text(encoding='utf-8').split('\n')
     compiled = [re.compile(p, re.IGNORECASE) for p in patterns]
     claims: List[Tuple[int, int]] = []
     for i, line in enumerate(lines, 1):

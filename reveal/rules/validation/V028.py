@@ -71,9 +71,9 @@ class V028(BaseRule):
         for yaml_path in sorted(help_data_dir.glob('*.yaml')):
             try:
                 data = yaml.safe_load(yaml_path.read_text(encoding='utf-8'))
-            except Exception as e:
-                # A malformed yaml is a different rule's problem, not ours.
+            except (OSError, ValueError, yaml.YAMLError) as e:  # ValueError covers UnicodeDecodeError and PyYAML's bad-timestamp errors
                 logger.debug("V028.py: skipped after %s: %s", type(e).__name__, e)
+                self.unavailable(f"required input unavailable: {type(e).__name__}: {e}", to_posix(yaml_path))
                 continue
             if not isinstance(data, dict):
                 continue

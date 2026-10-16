@@ -174,7 +174,7 @@ class V020(BaseRule):
             _ = result
             self.completed(scheme + ": element")
             return None
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- the probe's job is to report ANY exception get_element raises for a missing element; the finding returned below is the disclosure
             exception_type = type(e).__name__
             return self.create_detection(
                 file_path=str(adapter_file),
@@ -206,14 +206,14 @@ class V020(BaseRule):
             pass
         except ValueError:
             return None
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- adapter __init__ is arbitrary adapter code (any exception, e.g. missing config or service); recorded as an unavailable outcome naming the adapter
             self.unavailable(f"adapter initialization failed: {type(e).__name__}: {e}", getattr(adapter_class, "__name__", type(adapter_class).__name__))
             return None
         try:
             return adapter_class('.')
         except (TypeError, ValueError):
             return None
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- adapter __init__ is arbitrary adapter code (any exception, e.g. missing config or service); recorded as an unavailable outcome naming the adapter
             self.unavailable(f"adapter initialization failed: {type(e).__name__}: {e}", getattr(adapter_class, "__name__", type(adapter_class).__name__))
             return None
 
