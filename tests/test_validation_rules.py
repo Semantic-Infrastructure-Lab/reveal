@@ -207,9 +207,11 @@ class TestV001HelpDocumentation(unittest.TestCase):
             with patch.object(Path, 'read_text', side_effect=IOError('Permission denied')):
                 static_help = self.rule._get_static_help(reveal_root)
 
-                # Should return empty dict on exception
-                self.assertEqual(len(static_help), 0)
-                self.assertIsInstance(static_help, dict)
+                # help.py exists but cannot be read: None (not {} -- an empty dict
+                # reads as "no topics" and check() then reports every analyzer as
+                # missing help), and the rule records an unavailable outcome (BACK-1059)
+                self.assertIsNone(static_help)
+                self.assertEqual([o['status'] for o in self.rule.outcomes], ['unavailable'])
 
 
 class TestV002AnalyzerRegistration(unittest.TestCase):
