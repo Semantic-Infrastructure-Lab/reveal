@@ -4000,6 +4000,7 @@ def _lazy_import_heavy():
     M501:
       ignore_patterns: ["remove in v", "intentional"]
   ```
+- `ignore_patterns` must be a list of strings; any other value is reported as an `unavailable` rule outcome (the file is not scanned) rather than applied wrongly
 
 ---
 
