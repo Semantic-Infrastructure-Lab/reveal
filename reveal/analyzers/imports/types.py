@@ -134,6 +134,7 @@ class ImportGraph:
         """Add a dependency edge: from_file imports to_file."""
         self.dependencies[from_file].add(to_file)
         self.reverse_deps[to_file].add(from_file)
+        self.__dict__.pop('_cycles_by_file', None)
 
     def find_cycles(self) -> List[List[Path]]:
         """Find all circular dependencies using DFS.
@@ -180,6 +181,24 @@ class ImportGraph:
                 dfs(file_path)
 
         return cycles
+
+    def cycles_by_file(self) -> Dict[Path, List[List[Path]]]:
+        """Cycles from find_cycles() indexed by member file, computed once per graph.
+
+        The cycle search is a property of the whole graph, so per-file callers
+        (I002 runs once per file) share one search instead of repeating it
+        (BACK-1873). Each file's list keeps find_cycles() order. Not a dataclass
+        field, so it never enters the pickled disk-cache entry; add_dependency
+        drops it.
+        """
+        index = self.__dict__.get('_cycles_by_file')
+        if index is None:
+            index = {}
+            for cycle in self.find_cycles():
+                for member in set(cycle):
+                    index.setdefault(member, []).append(cycle)
+            self.__dict__['_cycles_by_file'] = index
+        return index
 
     def find_cycle_groups(self) -> List[List[Path]]:
         """Find circular dependency groups using Tarjan's SCC algorithm.

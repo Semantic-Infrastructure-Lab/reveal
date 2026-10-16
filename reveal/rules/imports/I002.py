@@ -372,14 +372,9 @@ class I002(BaseRule):
                 return detections
             graph = self._build_import_graph(scan_root)
 
-            # Find all cycles in the graph
-            cycles = graph.find_cycles()
-
-            # Filter to cycles involving this specific file
-            relevant_cycles = [
-                cycle for cycle in cycles
-                if target_path in cycle
-            ]
+            # Cycles involving this specific file; the graph-wide search runs
+            # once per graph, not once per file (BACK-1873)
+            relevant_cycles = graph.cycles_by_file().get(target_path, [])
 
             # Create detection for each relevant cycle
             for cycle in relevant_cycles:
