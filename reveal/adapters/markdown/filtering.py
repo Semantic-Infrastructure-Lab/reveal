@@ -18,7 +18,12 @@ def matches_body_contains(path: Path, terms: List[str]) -> bool:
         True if all terms are found in the body text
     """
     from . import files
-    body = files.read_body_text(path).lower()
+    return body_has_terms(files.read_body_text(path), terms)
+
+
+def body_has_terms(body: str, terms: List[str]) -> bool:
+    """True if every term is in *body* (case-insensitive)."""
+    body = body.lower()
     return all(term.lower() in body for term in terms)
 
 

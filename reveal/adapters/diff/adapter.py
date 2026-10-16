@@ -164,7 +164,8 @@ class DiffAdapter(ResourceAdapter):
             source=f"{self.left_uri} vs {self.right_uri}",
             source_type='runtime',
             contract_version=CONTRACT_VERSION,
-            warnings=self._uncompared_warnings(diff_result) or None,
+            warnings=(self._uncompared_warnings(diff_result)
+                      + self._skipped_warnings(left_struct, right_struct)) or None,
             data={
                 'left': extract_metadata(left_struct, self.left_uri),
                 'right': extract_metadata(right_struct, self.right_uri),
@@ -197,6 +198,26 @@ class DiffAdapter(ResourceAdapter):
                                 "or inside a body below the change thresholds. Compare the text "
                                 "to see it"),
                 })
+        return warnings
+
+    def _skipped_warnings(self, left_struct: Dict[str, Any], right_struct: Dict[str, Any]) -> list:
+        """Files a git directory side could not analyze: they are in neither side's element
+        lists, so a file skipped on one side only reads as added or removed (BACK-1854)."""
+        warnings = []
+        for side, uri, struct in (('left', self.left_uri, left_struct),
+                                  ('right', self.right_uri, right_struct)):
+            skipped = struct.get('skipped_files') or {}
+            if not skipped:
+                continue
+            names = sorted(skipped)
+            shown = ', '.join(names[:5]) + (f" and {len(names) - 5} more" if len(names) > 5 else '')
+            warnings.append({
+                'type': 'analysis_failed', 'field': side, 'count': len(names), 'files': names[:5],
+                'message': (f"{len(names)} file(s) in {uri} could not be analyzed "
+                            f"({', '.join(sorted({c.split(':', 1)[0] for c in skipped.values()}))}) -- "
+                            f"their elements are missing from the {side} side, so the diff may show "
+                            f"them as added or removed: {shown}"),
+            })
         return warnings
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:

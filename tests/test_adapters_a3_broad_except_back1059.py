@@ -500,3 +500,18 @@ def test_ast_analysis_logs_when_import_resolution_fails_and_keeps_the_structure(
         result = analysis.analyze_file(str(tmp_path / 'a.py'))
     assert result and 'f' in [e['name'] for e in result['elements']]
     assert 'injected' in caplog.text
+
+
+def test_content_pattern_search_discloses_a_git_diff_that_exited_nonzero(tmp_path, monkeypatch):
+    """BACK-1854: a failed `git diff` is empty stdout, which read as "pattern not found"."""
+    from reveal.adapters.git import files
+    path, _trees, _repo = _make_repo(tmp_path)
+    repo = _reopen(path)
+    head = repo[repo.head.target]
+    files._reset_content_search_error()
+    monkeypatch.setattr(subprocess, 'run', lambda *a, **k: subprocess.CompletedProcess(
+        a, 128, stdout='', stderr='fatal: bad object\n'))
+    assert files._commit_diff_contains(repo, head, '', 'return') is False
+    disclosure = files.get_content_search_disclosure()
+    assert 'degraded' in disclosure and 'exited 128' in disclosure and 'bad object' in disclosure
+    files._reset_content_search_error()

@@ -3,6 +3,8 @@
 BACK-1856 put the failure on ``StructureList.skipped`` and into ast:// and imports; these
 consumers only read the list, so the file was a stderr line and the answer read complete.
 """
+from pathlib import Path
+
 import pytest
 
 from reveal.adapters.ast import analysis
@@ -55,7 +57,7 @@ def test_calls_cached_index_keeps_its_skipped_files(tree):
     first = build_callers_index(str(tree))
     again = build_callers_index(str(tree))
     assert again is first
-    assert [f.rsplit('/', 1)[-1] for f, _ in again.skipped] == ['bad.py']
+    assert [Path(f).name for f, _ in again.skipped] == ['bad.py']
 
 
 def test_calls_clean_tree_has_no_analysis_warning(tmp_path):

@@ -4,10 +4,10 @@ import logging
 import re
 import yaml
 from pathlib import Path
-from typing import Dict, Any, Optional, List, cast
+from typing import Dict, Any, Optional, List, Tuple, cast
 
 from ...registry import get_markdown_extensions
-from ...utils.path_utils import _walk_code_files, to_posix
+from ...utils.path_utils import _walk_code_files, to_posix, to_relative_display
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,46 @@ def find_markdown_files(base_path: Path) -> List[Path]:
                   if fp.name.lower().endswith(md_exts))
 
 
+def unreadable_warning(unreadable: List[Tuple[str, str]], consequence: str,
+                       base: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+    """One ``unreadable_files`` meta warning for markdown files that could not be read
+    (BACK-1854); None when none failed. *consequence* says what is missing."""
+    if not unreadable:
+        return None
+    paths = sorted(unreadable)
+    shown = [to_relative_display(f, base) if base else to_posix(f) for f, _ in paths[:5]]
+    more = f" and {len(paths) - len(shown)} more" if len(paths) > len(shown) else ''
+    causes = ', '.join(sorted({cause.split(':', 1)[0] for _, cause in paths}))
+    return {
+        'type': 'unreadable_files',
+        'count': len(paths),
+        'files': shown,
+        'message': f"{len(paths)} file(s) could not be read ({causes}) -- {consequence}: "
+                   f"{', '.join(shown)}{more}",
+    }
+
+
+def read_body_outcome(path: Path) -> Tuple[str, Optional[str]]:
+    """``(body, failure)``: the body text of a markdown file (content after frontmatter), or
+    ``('', "ErrorType: message")`` when the file could not be read -- an empty body that
+    means "unreadable", which a caller must not treat as "contains nothing" (BACK-1854)."""
+    try:
+        content = path.read_text(encoding='utf-8')
+    except (OSError, UnicodeDecodeError) as e:
+        logger.warning(f"Failed to read {path}, treating body as empty: {e}")
+        return '', f"{type(e).__name__}: {e}"
+
+    if not content.startswith('---'):
+        return content, None
+
+    end_match = re.search(r'\n---\s*\n', content[3:])
+    if not end_match:
+        return content, None
+
+    body_start = 3 + end_match.end()
+    return content[body_start:], None
+
+
 def read_body_text(path: Path) -> str:
     """Read the body text of a markdown file (content after frontmatter).
 
@@ -45,27 +85,20 @@ def read_body_text(path: Path) -> str:
         path: Path to markdown file
 
     Returns:
-        Body text as string, or full content if no frontmatter
+        Body text as string, or full content if no frontmatter; '' when the file cannot be
+        read (use read_body_outcome to tell that from an empty body)
     """
-    try:
-        content = path.read_text(encoding='utf-8')
-    except (OSError, UnicodeDecodeError) as e:
-        logger.warning(f"Failed to read {path}, treating body as empty: {e}")
-        return ''
-
-    if not content.startswith('---'):
-        return content
-
-    end_match = re.search(r'\n---\s*\n', content[3:])
-    if not end_match:
-        return content
-
-    body_start = 3 + end_match.end()
-    return content[body_start:]
+    return read_body_outcome(path)[0]
 
 
 def extract_internal_links(path: Path, base_path: Path) -> List[str]:
-    """Extract internal markdown links from a file, returning relative paths.
+    """``extract_internal_links_outcome`` without the failure: [] for an unreadable file."""
+    return extract_internal_links_outcome(path, base_path)[0]
+
+
+def extract_internal_links_outcome(path: Path, base_path: Path) -> Tuple[List[str], Optional[str]]:
+    """``(links, failure)``: internal markdown links from a file as relative paths;
+    ``([], "ErrorType: message")`` when the file could not be read (BACK-1854).
 
     Scans for ``[text](url)`` patterns.  Skips external links (http/https/mailto)
     and anchor-only links (#section).  Resolves each URL relative to the source
@@ -83,7 +116,7 @@ def extract_internal_links(path: Path, base_path: Path) -> List[str]:
         content = path.read_text(encoding='utf-8')
     except (OSError, UnicodeDecodeError) as e:
         logger.warning(f"Failed to read {path}, reporting no internal links: {e}")
-        return []
+        return [], f"{type(e).__name__}: {e}"
 
     # [text](url) — grab the URL portion
     pattern = re.compile(r'\[([^\]]*)\]\(([^)\s]+)[^)]*\)')
@@ -125,7 +158,7 @@ def extract_internal_links(path: Path, base_path: Path) -> List[str]:
             seen.add(rel_str)
             results.append(rel_str)
 
-    return sorted(results)
+    return sorted(results), None
 
 
 def extract_frontmatter(path: Path) -> Optional[Dict[str, Any]]:

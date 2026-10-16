@@ -422,6 +422,12 @@ def _commit_diff_contains(
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, errors='replace', encoding='utf-8',
                                 timeout=_GIT_DIFF_TIMEOUT_S)
+        if result.returncode != 0:
+            # A diff that did not run is empty output, which reads as "pattern not found"
+            # (BACK-1854): say it was not searched.
+            detail = split_lines((result.stderr or '').strip())
+            raise subprocess.SubprocessError(
+                f"git diff exited {result.returncode}" + (f": {detail[-1]}" if detail else ''))
         # The diff is file content: split at \n as git does, or a U+2028/NEL/form feed on a
         # changed line hides the rest of it from the search (BACK-1731).
         for line in split_lines(result.stdout):

@@ -306,6 +306,7 @@ def resolve_git_directory(git_ref: str, dir_path: str) -> Dict[str, Any]:
     # Every element category any file has, not only functions/classes/imports (BACK-1732).
     aggregated: Dict[str, list] = {'functions': [], 'classes': [], 'imports': []}
     file_count = 0
+    skipped: Dict[str, str] = {}
 
     for file_path in file_paths:
         if not get_analyzer(file_path, allow_fallback=False):
@@ -314,6 +315,7 @@ def resolve_git_directory(git_ref: str, dir_path: str) -> Dict[str, Any]:
             struct = _fetch_and_analyze_git_file(git_ref, file_path)
         except Exception as e:  # boundary-ok: broad-except -- one blob that the analyzer (arbitrary per-language parser code) or the blob read cannot handle must not end a whole-tree comparison; logged at warning naming the file and ref
             logger.warning(f"Skipping {file_path}@{git_ref} in directory scan: {e}")
+            skipped[file_path] = f"{type(e).__name__}: {e}"
             continue
         if not struct:
             continue
@@ -333,4 +335,7 @@ def resolve_git_directory(git_ref: str, dir_path: str) -> Dict[str, Any]:
         'ref': git_ref,
         'path': dir_path,
         'file_count': file_count,
+        # A dict, not a list: every list-valued key is an element category to compare.
+        # A file skipped on one side reads as added/removed on the other (BACK-1854).
+        **({'skipped_files': skipped} if skipped else {}),
     }

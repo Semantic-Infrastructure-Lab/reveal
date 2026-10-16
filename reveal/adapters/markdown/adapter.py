@@ -299,12 +299,13 @@ class MarkdownQueryAdapter(ResourceAdapter):
             queue of frontmatter problems when ?lint is specified.
         """
         if self.link_graph:
-            result = operations.build_link_graph(self.base_path)
+            result = dict(operations.build_link_graph(self.base_path))
             return ResultBuilder.create(
                 result_type='markdown_link_graph',
                 source=str(self.base_path),
                 source_type='directory',
                 contract_version=CONTRACT_VERSION,
+                warnings=self._unreadable_warnings(result, "their links are missing from the graph"),
                 data=result,
             )
 
@@ -324,6 +325,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
                 result_type='markdown_backlinks',
                 source=self.base_path,
                 contract_version=CONTRACT_VERSION,
+                warnings=self._unreadable_warnings(result, "links from them are missing, so backlinks may be incomplete"),
                 data=result,
             )
 
@@ -339,6 +341,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
                 result_type='markdown_aggregate',
                 source=str(self.base_path),
                 contract_version=CONTRACT_VERSION,
+                warnings=self._unreadable_warnings(result, "their bodies were not searched, so counts may be low"),
                 data=result,
             )
 
@@ -358,6 +361,13 @@ class MarkdownQueryAdapter(ResourceAdapter):
         for item in result.get('results', []):
             item['path'] = as_spelled(item['path'], self.spelling)
         return result
+
+    def _unreadable_warnings(self, result: Dict[str, Any], consequence: str) -> list:
+        """The ``unreadable_files`` warning for the files in *result* that could not be read,
+        consuming the carrier key so it is not also data (BACK-1854)."""
+        warning = files.unreadable_warning(
+            [tuple(item) for item in result.pop('unreadable_files', [])], consequence, self.base_path)
+        return [warning] if warning else []
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get frontmatter from a specific file.

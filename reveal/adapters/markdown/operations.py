@@ -4,7 +4,7 @@ import hashlib
 import stat as stat_module
 from collections import Counter
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 from . import files, filtering, results
 from ...core import disk_cache
@@ -55,6 +55,7 @@ def get_structure(
 
     matched_results = []
     seen_fields = set()
+    unreadable: List[Tuple[str, str]] = []
 
     # Build results for matching files
     for path in candidates:
@@ -63,8 +64,14 @@ def get_structure(
             seen_fields.update(frontmatter.keys())
         if not filtering.matches_all_filters(frontmatter, filters, query_filters):
             continue
-        if body_contains and not filtering.matches_body_contains(path, body_contains):
-            continue
+        if body_contains:
+            body, failure = files.read_body_outcome(path)
+            if failure:
+                # grep_files matched its bytes; an empty body would drop it as "no match".
+                unreadable.append((str(path), failure))
+                continue
+            if not filtering.body_has_terms(body, body_contains):
+                continue
         result = results.build_result_item(path, frontmatter, extra_fields)
         if body_contains:
             score_info = filtering.score_body_match(path, body_contains)
@@ -112,6 +119,8 @@ def get_structure(
     note_warning(response, unknown_sort_field_warning(result_control.sort_field, matched_results))
     note_warning(response, worker_lost_warning(
         lost, "they were not searched, so matches may be missing", base_path))  # BACK-1754
+    note_warning(response, files.unreadable_warning(
+        unreadable, "their bodies were not searched, so matches may be missing", base_path))  # BACK-1854
 
     # Add hint when filter matches very few files (likely front matter mismatch)
     results.add_low_match_rate_hint(response, len(all_files), total_matches, filters)
@@ -150,13 +159,19 @@ def aggregate_field_values(
     counts: Counter = Counter()
     matched = 0
     missing = 0
+    unreadable: List[Tuple[str, str]] = []
 
     for path in candidates:
         frontmatter = files.extract_frontmatter(path)
         if not filtering.matches_all_filters(frontmatter, filters, query_filters):
             continue
-        if body_contains and not filtering.matches_body_contains(path, body_contains):
-            continue
+        if body_contains:
+            body, failure = files.read_body_outcome(path)
+            if failure:
+                unreadable.append((str(path), failure))
+                continue
+            if not filtering.body_has_terms(body, body_contains):
+                continue
         matched += 1
         value = (frontmatter or {}).get(field)
         if value is None:
@@ -173,13 +188,16 @@ def aggregate_field_values(
         for val, cnt in counts.most_common()
     ]
 
-    return {
+    result: Dict[str, Any] = {
         'field': field,
         'total_files': len(all_files),
         'matched_files': matched,
         'files_missing_field': missing,
         'aggregate': aggregate,
     }
+    if unreadable:
+        result['unreadable_files'] = [list(item) for item in unreadable]  # BACK-1854
+    return result
 
 
 def _link_graph_fingerprint(base_path: Path, all_files: List[Path]) -> Optional[str]:
@@ -254,12 +272,15 @@ def build_link_graph(base_path: Path) -> Dict[str, Any]:
 
     # Map relative-path-string → list of relative-path-string targets
     forward: Dict[str, List[str]] = {}
+    unreadable: List[List[str]] = []
     for md_path in all_files:
         try:
             rel = str(md_path.resolve().relative_to(base_resolved)).replace('\\', '/')
         except ValueError:
             continue
-        forward[rel] = files.extract_internal_links(md_path, base_path)
+        forward[rel], failure = files.extract_internal_links_outcome(md_path, base_path)
+        if failure:
+            unreadable.append([rel, failure])
 
     # Build reverse index
     reverse: Dict[str, List[str]] = {k: [] for k in forward}
@@ -292,6 +313,8 @@ def build_link_graph(base_path: Path) -> Dict[str, Any]:
         'nodes': nodes,
         'isolated': isolated,
     }
+    if unreadable:
+        graph['unreadable_files'] = unreadable  # BACK-1854: cached with the graph, so a hit still says it
     if fingerprint is not None:
         disk_cache.put(_LINK_GRAPH_CACHE_NAMESPACE, fingerprint, graph)
     return graph
@@ -323,6 +346,14 @@ def get_backlinks(base_path: Path, target: str) -> Dict[str, Any]:
             total_files — number of markdown files scanned
     """
     graph = build_link_graph(base_path)
+    result = _lookup_backlinks(graph, target)
+    if graph.get('unreadable_files'):
+        result['unreadable_files'] = graph['unreadable_files']  # BACK-1854
+    return result
+
+
+def _lookup_backlinks(graph: Dict[str, Any], target: str) -> Dict[str, Any]:
+    """The backlinks answer for *target* from a built link *graph* (see get_backlinks)."""
     target_norm = target.strip().lstrip('./')
 
     node = next((n for n in graph['nodes'] if n['file'] == target_norm), None)

@@ -255,6 +255,8 @@ class TestResolveGitDirectory:
                            side_effect=RuntimeError('git exploded')):
                     result = resolve_git_directory('HEAD', 'dir')
         assert result['file_count'] == 0
+        # BACK-1854: the skipped file is recorded (a dict: a list-valued key is an element category)
+        assert result['skipped_files'] == {'dir/file.py': 'RuntimeError: git exploded'}
 
     def test_skips_empty_struct(self, git_repo):
         mock_cls = MagicMock()
