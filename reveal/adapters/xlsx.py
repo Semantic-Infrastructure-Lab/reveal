@@ -38,15 +38,15 @@ _PART_ERRORS = (zipfile.BadZipFile, _zlib.error, EOFError, ET.ParseError, Runtim
 # stored with a compression zipfile cannot decode (NotImplementedError) or an LZMA member
 # that is damaged (lzma.LZMAError, which zipfile lets through; bz2 raises OSError).
 # Used by the whole-view handlers; a bug in this module is not in the list (BACK-1059).
-_DECOMPRESS_ERRORS: Tuple[Type[BaseException], ...]
+_DECOMPRESS_ERRORS: Tuple[Type[Exception], ...]
 try:
     from lzma import LZMAError as _LZMAError
     _DECOMPRESS_ERRORS = (_LZMAError,)
 except ImportError:  # a Python built without liblzma: zipfile itself cannot read LZMA members
     _DECOMPRESS_ERRORS = ()
-_ARCHIVE_ERRORS: Tuple[Type[BaseException], ...] = _PART_ERRORS + (NotImplementedError,) + _DECOMPRESS_ERRORS
+_ARCHIVE_ERRORS: Tuple[Type[Exception], ...] = _PART_ERRORS + (NotImplementedError,) + _DECOMPRESS_ERRORS
 # The DataMashup blob is base64 around a streaming zip that is walked with struct.unpack_from.
-_POWERQUERY_ERRORS: Tuple[Type[BaseException], ...] = _ARCHIVE_ERRORS + (binascii.Error, struct.error)
+_POWERQUERY_ERRORS: Tuple[Type[Exception], ...] = _ARCHIVE_ERRORS + (binascii.Error, struct.error)
 
 
 class XlsxRenderer:
