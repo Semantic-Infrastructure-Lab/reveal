@@ -16,6 +16,15 @@ logger = logging.getLogger(__name__)
 _ENTRY_ERRORS = (OSError, ValueError, OverflowError)
 
 
+def _mtime(path: Path) -> float:
+    """Sort key: a file's mtime, 0 for one that vanished between the glob and the sort
+    (it then lists last and the per-file read that follows reports it; BACK-1851)."""
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def skipped_entries_warning(field: str, skipped: Iterable[Tuple[Path, BaseException]],
                             consequence: str = "they are missing from the list"
                             ) -> Optional[Dict[str, Any]]:
@@ -118,7 +127,7 @@ def get_plans(plans_dir: Path, resource: str, query_params: Dict[str, Any]) -> D
         return {**base, 'plans': [], 'total': 0, 'error': f'Plans directory not found: {plans_dir}'}
 
     search = query_params.get('search', '').lower()
-    all_files = sorted(plans_dir.glob('*.md'), key=lambda p: p.stat().st_mtime, reverse=True)
+    all_files = sorted(plans_dir.glob('*.md'), key=_mtime, reverse=True)
     plans = []
     skipped: List[Tuple[Path, BaseException]] = []
     for plan_file in all_files:
@@ -188,7 +197,7 @@ def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, A
         if not memory_dir.is_dir():
             continue
         for mem_file in sorted(memory_dir.glob('*.md'),
-                               key=lambda p: p.stat().st_mtime, reverse=True):
+                               key=_mtime, reverse=True):
             try:
                 content = mem_file.read_text(encoding='utf-8', errors='replace')
                 if search and search not in content.lower():
@@ -264,7 +273,7 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
                 'error': f'Agents directory not found: {agents_dir}'}
 
     search = query_params.get('search', '').lower()
-    all_files = sorted(agents_dir.glob('*.md'), key=lambda p: p.stat().st_mtime, reverse=True)
+    all_files = sorted(agents_dir.glob('*.md'), key=_mtime, reverse=True)
     agents = []
     skipped: List[Tuple[Path, BaseException]] = []
     for agent_file in all_files:
