@@ -16,10 +16,11 @@ def test_config_schema_is_itself_valid():
 
 def test_invalid_config_still_warns_with_the_schema_message(caplog):
     bad = {'profiles': 'not-a-mapping', 'plugins': 3}
+    path = Path('x') / '.reveal.yaml'
     with caplog.at_level(logging.WARNING, logger='reveal.config'):
-        RevealConfig._validate_config_schema(bad, Path('x/.reveal.yaml'))
+        RevealConfig._validate_config_schema(bad, path)
     msgs = [r.getMessage() for r in caplog.records]
-    assert any(m.startswith('Invalid config in x/.reveal.yaml: ') for m in msgs), msgs
+    assert any(m.startswith(f'Invalid config in {path}: ') for m in msgs), msgs
 
 
 def test_valid_config_is_silent(caplog):
