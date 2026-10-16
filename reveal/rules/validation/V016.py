@@ -20,6 +20,9 @@ from ...utils.path_utils import to_posix
 
 logger = logging.getLogger(__name__)
 
+# Infrastructure modules under adapters/ that define no adapter of their own.
+_NON_ADAPTER_FILES = ('__init__.py', 'base.py', 'registry.py')
+
 
 class V016(BaseRule):
     """Verify all adapters implement get_help() for discoverability.
@@ -84,8 +87,8 @@ class V016(BaseRule):
         if 'adapters' not in path.parts or 'tests' in path.parts:
             return []
 
-        # Skip __init__.py and base.py
-        if path.name in ['__init__.py', 'base.py']:
+        # Skip non-adapter files
+        if path.name in _NON_ADAPTER_FILES:
             return []
 
         # Check if file defines adapter class
@@ -197,8 +200,8 @@ class V016(BaseRule):
 
         # boundary-ok: walker -- V-series: reveal's own source
         for py_file in sorted(adapters_dir.rglob('*.py')):
-            # Skip __init__.py and base.py (same logic as check())
-            if py_file.name in ('__init__.py', 'base.py'):
+            # Skip non-adapter files (same logic as check())
+            if py_file.name in _NON_ADAPTER_FILES:
                 continue
 
             file_path_str = str(py_file)

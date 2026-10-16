@@ -155,6 +155,7 @@ def test_html_parser_bug_propagates(tmp_path, monkeypatch):
 ])
 def test_html_lxml_rejection_still_falls_back_to_html_parser(tmp_path, monkeypatch, rejection):
     path = _write(tmp_path / 'a.html', '<p>x</p>')
+    html_mod._ensure_bs4()
     real = html_mod.BeautifulSoup
     parsers = []
 

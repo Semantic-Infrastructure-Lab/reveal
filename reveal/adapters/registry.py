@@ -33,7 +33,7 @@ BUILTIN_SCHEMES = (
 _OPTIONAL_SCHEMES = frozenset({'git'})
 
 
-class _AdapterRegistry(Dict[str, type]):
+class _SchemeRegistry(Dict[str, type]):
     """Scheme -> adapter class, filled on demand.
 
     A lookup of one shipped scheme (``[]``, ``get``, ``in``) imports that adapter's
@@ -121,7 +121,7 @@ def _import_adapter_module(scheme: str) -> None:
 
 
 # Scheme → adapter class mapping populated by @register_adapter decorators.
-_ADAPTER_REGISTRY: Dict[str, type] = _AdapterRegistry()
+_ADAPTER_REGISTRY: Dict[str, type] = _SchemeRegistry()
 _adapter_plugins_loaded: bool = False
 
 # Scheme → renderer class mapping populated by @register_renderer decorators.
