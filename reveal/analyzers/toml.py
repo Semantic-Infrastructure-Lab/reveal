@@ -19,6 +19,11 @@ from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
 
+def _is_filler(line: str) -> bool:
+    """A blank or comment-only line."""
+    return not line.strip() or line.lstrip().startswith('#')
+
+
 @register('.toml', name='TOML', icon='', category='config')
 class TomlAnalyzer(TreeSitterAnalyzer):
     """TOML file analyzer using tree-sitter for robust parsing.
@@ -43,6 +48,7 @@ class TomlAnalyzer(TreeSitterAnalyzer):
         section_name = self._extract_table_name(node)
         section_info: Dict[str, Any] = {
             'line_start': _zero_arg(node, 'start_position').row + 1,
+            'line_end': self._find_section_end_line(node),
             'name': section_name,
         }
         if outline:
@@ -89,16 +95,14 @@ class TomlAnalyzer(TreeSitterAnalyzer):
         return ''
 
     def _find_section_end_line(self, node) -> int:
-        """Return end line for a section node (stops at next table or EOF)."""
-        end_line = _zero_arg(node, 'end_position').row + 1
-        for sibling in _children(tree_root(self.tree)):
-            if _zero_arg(sibling, 'start_position').row <= _zero_arg(node, 'start_position').row:
-                continue
-            if _zero_arg(sibling, 'kind') in ['table', 'table_array_element']:
-                return _zero_arg(sibling, 'start_position').row
-            if _zero_arg(sibling, 'kind') == 'pair':
-                end_line = max(end_line, _zero_arg(sibling, 'end_position').row + 1)
-        return end_line
+        """Last line of a table: its final key, without the blank and comment lines that
+        precede the next table (tree-sitter ends a table at column 0 of the next one)."""
+        end = _zero_arg(node, 'end_position')
+        last = end.row if end.column == 0 else end.row + 1
+        first = _zero_arg(node, 'start_position').row + 1
+        while last > first and _is_filler(self.lines[last - 1]):
+            last -= 1
+        return last
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract a TOML section by name."""

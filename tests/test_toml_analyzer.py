@@ -212,3 +212,42 @@ def test_ast_query_reports_toml_section_lines(tmp_path):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+_SECTIONS = '[widget]\nname = "x"\nv = 1\n\n# about helper\n[helper]\nk = 1\n\n[[arr]]\nz = 2\n'
+
+
+def _sections(tmp_path, text=_SECTIONS):
+    f = tmp_path / 'd.toml'
+    f.write_text(text, encoding='utf-8')
+    return f, {s['name']: s for s in TomlAnalyzer(str(f)).get_structure()['sections']}
+
+
+def test_sections_carry_a_line_end_that_stops_at_the_last_key(tmp_path):
+    """BACK-1416: sections had no line_end, so ast:// said '[0 lines]'; and the end must not
+    run into the blank/comment lines in front of the next table, or past the end of the file."""
+    _, sections = _sections(tmp_path)
+    assert {n: (s['line_start'], s['line_end']) for n, s in sections.items()} == {
+        'widget': (1, 3), 'helper': (6, 7), 'arr': (9, 10)}
+
+
+def test_ast_query_reports_the_section_length(tmp_path):
+    from reveal.adapters.ast import AstAdapter
+    f, _ = _sections(tmp_path)
+    results = AstAdapter(str(f), '').get_structure()['results']
+    assert [(r['name'], r['line'], r['line_count']) for r in results] == [
+        ('widget', 1, 3), ('helper', 6, 2), ('arr', 9, 2)]
+
+
+def test_outline_and_element_extraction_agree_on_where_a_section_ends(tmp_path):
+    f, sections = _sections(tmp_path)
+    analyzer = TomlAnalyzer(str(f))
+    for name, section in sections.items():
+        element = analyzer.extract_element('section', name)
+        assert (element['line_start'], element['line_end']) == (
+            section['line_start'], section['line_end']), name
+
+
+def test_a_section_without_a_trailing_newline_ends_on_its_last_key(tmp_path):
+    _, sections = _sections(tmp_path, '[a]\nk = 1')
+    assert sections['a']['line_end'] == 2

@@ -204,7 +204,7 @@
  "reveal/analyzers/office/openxml.py::arg-type": 1,
  "reveal/analyzers/office/openxml.py::return-value": 3,
  "reveal/analyzers/protobuf.py::return-value": 1,
- "reveal/analyzers/toml.py::no-any-return": 2,
+ "reveal/analyzers/toml.py::no-any-return": 1,
  "reveal/analyzers/toml.py::return-value": 1,
  "reveal/analyzers/xml_analyzer.py::return-value": 3,
  "reveal/analyzers/xml_analyzer.py::typeddict-unknown-key": 1,
