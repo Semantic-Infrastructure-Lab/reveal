@@ -1,5 +1,6 @@
 """SSL certificate fetching and analysis."""
 
+import http.client
 import socket
 import ssl
 from dataclasses import dataclass
@@ -11,6 +12,23 @@ from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.backends import default_backend
 
 from ...utils.severity import filter_by_severity
+
+# Named failures of a live TLS check: socket and TLS errors (OSError covers
+# ssl.SSLError, socket.timeout, socket.gaierror), a bad hostname or an
+# unparseable certificate (ValueError covers ssl.CertificateError and
+# UnicodeError), and a reply http.client cannot parse (the --probe-http leg).
+# check_ssl_health turns these into a 'failure' result; callers that wrap it
+# catch the same set.
+SSL_CHECK_ERRORS = (OSError, ValueError, http.client.HTTPException)
+
+# cryptography's named failures while reading a certificate: undecodable DER
+# (ValueError) and the x509 errors it raises lazily on a malformed version,
+# a duplicated extension or a SAN entry type it does not know. None of these
+# subclasses ValueError except the first.
+_CERT_PARSE_ERRORS = (
+    ValueError, x509.InvalidVersion, x509.DuplicateExtension,
+    x509.UnsupportedGeneralNameType,
+)
 
 
 @dataclass
@@ -264,6 +282,9 @@ class SSLFetcher:
 
         Returns:
             Certificate dict matching ssl.getpeercert() format
+
+        Raises:
+            ValueError: The bytes are not a parseable DER certificate.
         """
         try:
             cert = x509.load_der_x509_certificate(binary_cert, default_backend())
@@ -307,17 +328,10 @@ class SSLFetcher:
             if sig_algo:
                 result['signatureAlgorithm'] = sig_algo
             return result
-        except Exception:
-            # If parsing fails, return empty dict (will use fallback dates)
-            return {
-                'subject': (),
-                'issuer': (),
-                'notBefore': '',
-                'notAfter': '',
-                'serialNumber': '',
-                'version': 0,
-                'subjectAltName': (),
-            }
+        except _CERT_PARSE_ERRORS as e:
+            # Not an empty cert: an empty dict reaches _parse_certificate as
+            # "expires now" and reads as a certificate that just expired.
+            raise ValueError(f"Could not parse certificate: {e}") from e
 
     def _parse_cert_date(self, date_str: str) -> datetime:
         """Parse certificate date string.
@@ -705,7 +719,7 @@ def check_ssl_health(
 
         return result
 
-    except Exception as e:
+    except SSL_CHECK_ERRORS as e:
         return _build_ssl_health_error_result(host, port, e, advanced)
 
 
@@ -729,7 +743,7 @@ def _check_tls_version(host: str, port: int, timeout: float) -> Tuple[Dict[str, 
         return {'name': 'tls_version', 'status': status, 'value': tls_version,
                 'threshold': 'TLS 1.2+', 'message': message, 'severity': 'medium',
                 'cipher_name': cipher_name, 'cipher_bits': cipher_bits}, failed
-    except Exception as e:
+    except (OSError, ValueError) as e:  # connect/handshake errors, or a bad hostname
         return {'name': 'tls_version', 'status': 'warning', 'value': 'Unknown',
                 'threshold': 'TLS 1.2+', 'message': f'Could not determine TLS version: {e}',
                 'severity': 'low'}, False
@@ -939,7 +953,7 @@ def load_certificate_from_file(path: str) -> Tuple[CertificateInfo, List[Certifi
                     )
                 )
                 certs.append(fetcher._parse_certificate(cert_dict))
-            except Exception as exc:
+            except ValueError as exc:  # load_pem and _parse_binary_cert both raise ValueError
                 raise ValueError(f"Failed to parse PEM block in {path}: {exc}") from exc
 
         return certs[0], certs[1:]
@@ -950,7 +964,7 @@ def load_certificate_from_file(path: str) -> Tuple[CertificateInfo, List[Certifi
             cert_dict = fetcher._parse_binary_cert(data)
             leaf = fetcher._parse_certificate(cert_dict)
             return leaf, []
-        except Exception as exc:
+        except ValueError as exc:  # _parse_binary_cert raises ValueError on undecodable DER
             raise ValueError(f"Failed to parse certificate file {path}: {exc}") from exc
 
 

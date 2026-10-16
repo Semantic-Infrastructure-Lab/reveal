@@ -5,7 +5,10 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from ..base import AdapterFlag, ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
-from .certificate import SSLFetcher, CertificateInfo, check_ssl_health, load_certificate_from_file
+from .certificate import (
+    SSL_CHECK_ERRORS, SSLFetcher, CertificateInfo, check_ssl_health,
+    load_certificate_from_file,
+)
 from .probe import probe_http_redirect
 from .renderer import SSLRenderer
 from reveal.analyzers.nginx import NginxAnalyzer
@@ -737,7 +740,7 @@ class SSLAdapter(ResourceAdapter):
         for path in paths:
             try:
                 scanned.append((path, extract(NginxAnalyzer(path))))
-            except Exception as e:  # one bad config must not hide the others' results
+            except Exception as e:  # boundary-ok: broad-except -- NginxAnalyzer parses arbitrary user nginx configs and its failure set is not bounded; one bad file must not hide the others' results, and each failure is returned in `skipped` as {file, error} (BACK-1614)
                 skipped.append({'file': path, 'error': f'{type(e).__name__}: {e}'})
         return scanned, skipped
 
@@ -1020,7 +1023,7 @@ class SSLAdapter(ResourceAdapter):
         # Get SSL cert for this domain
         try:
             cert_result = check_ssl_health(domain, 443)
-        except Exception as e:
+        except SSL_CHECK_ERRORS as e:
             issues = [{
                 'type': 'connection_error',
                 'message': f'Could not connect to {domain}: {e}',
