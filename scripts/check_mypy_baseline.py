@@ -37,8 +37,12 @@ def run_mypy() -> collections.Counter:
     # FORCE_COLOR/MYPY_FORCE_COLOR make mypy colour even captured output, which no line
     # matches: the count read 0 and the ratchet passed ("616 fewer errors"). Plain output only.
     env = {k: v for k, v in os.environ.items() if k not in ("FORCE_COLOR", "MYPY_FORCE_COLOR")}
+    # The cache lives under the CI cache root, not in the checkout: a read-only check must not
+    # write .mypy_cache/ into a tree other sessions share (BACK-1616).
+    cache_dir = Path(os.environ.get("REVEAL_CI_VENV_ROOT", Path.home() / ".cache" / "reveal-ci")) / "mypy"
     proc = subprocess.run([sys.executable, "-m", "mypy", "reveal", "--no-error-summary",
-                           "--no-pretty", "--show-error-codes", "--no-color-output"],
+                           "--no-pretty", "--show-error-codes", "--no-color-output",
+                           "--cache-dir", str(cache_dir)],
                           cwd=REPO, capture_output=True, text=True, encoding="utf-8", env=env)
     if proc.returncode not in (0, 1) or (proc.returncode == 1 and not proc.stdout.strip()):
         sys.exit(f"mypy failed to run:\n{proc.stderr or proc.stdout}")
