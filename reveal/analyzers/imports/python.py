@@ -83,15 +83,10 @@ class PythonExtractor(LanguageExtractor):
         if not analyzer:
             return []
 
-        # Read source lines for noqa comment detection
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                source_lines = f.readlines()
-        except (OSError, UnicodeDecodeError):
-            # The tree was built from this file (decoded with the base class's fallback
-            # encodings); a strict-UTF-8 re-read of a latin-1 file lands here. Without the
-            # lines, `# noqa` comments are not seen.
-            source_lines = []
+        # The lines the tree was built from (decoded with the base class's fallback encodings,
+        # BOM and newlines normalized): a strict-UTF-8 re-read of a latin-1 file lost every
+        # `# noqa` comment (BACK-1857).
+        source_lines = list(analyzer.lines)
 
         imports = []
         for node in analyzer._find_nodes_by_type('import_statement'):

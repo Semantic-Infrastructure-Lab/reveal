@@ -18,6 +18,7 @@ from .ast.analysis import analysis_skipped_warning
 from .ast.surface_matrix import UNPARSED_KEY
 from ..registry import JS_TS_LANGUAGES, _is_cpp_header_content, extensions_for_languages
 from ..utils.path_utils import (
+    _language_for_path,
     _walk_code_files,
     assess_language_coverage,
     detect_non_python_language,
@@ -123,6 +124,12 @@ def _with_analysis_skipped(report: Dict[str, Any], skipped: List[Tuple[str, str]
     into the ``analysis_failed`` warning (BACK-1860). Absent when nothing failed."""
     if skipped:
         report['analysis_skipped'] = [list(item) for item in skipped]
+        coverage = report.get('coverage')
+        if coverage:
+            # A supported-language file that failed analysis was not analyzed (BACK-1863).
+            supported = _supported_coverage_languages()
+            failed = sum(1 for f, _ in skipped if _language_for_path(Path(f)) in supported)
+            report['coverage'] = {**coverage, 'analyzed_files': max(0, coverage['analyzed_files'] - failed)}
     return report
 
 

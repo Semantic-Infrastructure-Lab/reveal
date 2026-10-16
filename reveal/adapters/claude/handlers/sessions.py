@@ -177,7 +177,12 @@ def _collect_sessions_from_dir(project_dir: Path) -> List[Dict[str, Any]]:
             session_name = file_stem
         else:
             session_name = dir_name
-        stat = jsonl_file.stat()
+        try:
+            stat = jsonl_file.stat()
+        except FileNotFoundError:
+            # Deleted between the glob and the stat: not a session any more, and it must not
+            # end the listing for every session after it (BACK-1851).
+            continue
         sessions.append({
             'session': session_name,
             'path': str(jsonl_file),
