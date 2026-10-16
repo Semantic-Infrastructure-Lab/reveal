@@ -1,8 +1,16 @@
 """Function-body helpers shared by the duplicate-detection rules (D001, D002)."""
 
+import functools
 import re
 from typing import Any, Dict, List, Optional
 from reveal.utils.lines import split_lines
+
+
+@functools.lru_cache(maxsize=4)
+def _file_lines(content: str) -> List[str]:
+    """``split_lines(content)``, shared across a file's functions (BACK-1869: the caller asks
+    once per function, and the re-split was ~17% of a warm ``stats://`` run). Read-only."""
+    return split_lines(content)
 
 
 def extract_function_body(func: Dict[str, Any], content: str) -> str:
@@ -20,7 +28,7 @@ def extract_function_body(func: Dict[str, Any], content: str) -> str:
     if start == 0 or end == 0:
         return ""
 
-    lines = split_lines(content)
+    lines = _file_lines(content)
     if start > len(lines) or end > len(lines):
         return ""
 

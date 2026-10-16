@@ -129,3 +129,19 @@ def test_find_uncalled_collects_structures_once_back1868(tmp_path):
         result = calls_index.find_uncalled(str(tmp_path))
     assert spy.call_count == 1
     assert [e["name"] for e in result["entries"]] == ["dead"]
+
+
+def test_extract_function_body_splits_a_file_once_back1869():
+    """D001/D002 ask for every function body of one file; the file used to be re-split per function."""
+    from reveal.rules.duplicates import _bodies
+
+    content = "def a():\n    return 1\n\ndef b():\n    return 2\n"
+    _bodies._file_lines.cache_clear()
+    with mock.patch.object(_bodies, "split_lines", wraps=_bodies.split_lines) as spy:
+        bodies = [
+            _bodies.extract_function_body({'line': 1, 'line_end': 2}, content),
+            _bodies.extract_function_body({'line': 4, 'line_end': 5}, content),
+            _bodies.extract_function_body({'line': 1, 'line_end': 2}, content),
+        ]
+    assert bodies == ["    return 1", "    return 2", "    return 1"]
+    assert spy.call_count == 1
