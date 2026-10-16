@@ -85,7 +85,9 @@ class SchemaLoader:
         except yaml.YAMLError as e:
             logger.error(f"Failed to parse YAML in {schema_path}: {e}")
             return None
-        except Exception as e:
+        except (OSError, ValueError) as e:
+            # OSError: unreadable path; ValueError: bad UTF-8 or a YAML value PyYAML
+            # cannot construct (e.g. the date 2024-13-45), which is not a YAMLError
             logger.error(f"Failed to load schema {schema_path}: {e}")
             return None
 
@@ -147,6 +149,11 @@ class SchemaLoader:
               - validation_rules
               - constraints
         """
+        # A schema file holding a scalar or list is valid YAML but not a schema
+        if not isinstance(schema, dict):
+            logger.error(f"Schema must be a mapping, got {type(schema).__name__}")
+            return False
+
         # Required: name field
         if 'name' not in schema:
             logger.error("Schema missing required 'name' field")
