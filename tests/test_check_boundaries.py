@@ -144,7 +144,8 @@ def test_display_path_not_flagged(src, rel):
     "try:\n    f()\nexcept Exception:\n    count = 0",
 ])
 def test_silent_except_flagged(src):
-    assert set(_hits(src)) == {'silent-except'}
+    # these broad handlers are also counted by broad-except (BACK-1059); this pins the other gate
+    assert set(_hits(src)) - {'broad-except'} == {'silent-except'}
 
 
 @pytest.mark.parametrize('src', [
@@ -315,3 +316,25 @@ def test_splitlines_flagged(src):
 ])
 def test_splitlines_not_flagged(src):
     assert 'splitlines' not in _hits(src)
+
+
+@pytest.mark.parametrize('handler', [
+    'except Exception as e:\n    raise RuntimeError("x") from e',
+    'except (OSError, Exception) as e:\n    raise RuntimeError("x") from e',
+    'except BaseException:\n    raise',
+])
+def test_broad_except_flagged_even_when_the_failure_is_surfaced(handler):
+    """BACK-1059: silent-except counts hidden failures; broad-except counts unjustified breadth."""
+    hits = _hits('try:\n    f()\n' + handler)
+    assert hits['broad-except'] == [3]
+    assert 'silent-except' not in hits
+
+
+@pytest.mark.parametrize('src', [
+    'try:\n    f()\nexcept OSError as e:\n    raise RuntimeError("x") from e',
+    'try:\n    f()\nexcept Exception:  # boundary-ok: broad-except -- a hostile file must not end the run\n    raise',
+    'try:\n    f()\nexcept Exception as e:  # noqa: BLE001 - read_text can raise encoding errors\n    raise e',
+    'try:\n    import foo\nexcept Exception:\n    foo = None',
+])
+def test_broad_except_not_flagged(src):
+    assert 'broad-except' not in _hits(src)

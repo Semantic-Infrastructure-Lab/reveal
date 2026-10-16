@@ -68,6 +68,15 @@ Rules (home = where the concern is allowed to live):
     B006 policy. Bare catches and optional-import probes retain boundary-specific
     handling; boundary-ok markers require a concrete reason.
 
+``broad-except`` (BACK-1059)
+    A handler that catches ``Exception``/``BaseException`` (alone or in a tuple) with no stated
+    reason. A broad catch is legitimate only at a boundary that must not take the run down
+    (a rule over a hostile file, optional telemetry, a plugin import); there it names why:
+    ``# boundary-ok: broad-except -- <why>`` or ``# noqa: BLE001 - <why>`` on the ``except``
+    line. Everywhere else, narrow it to the expected errors and surface the failure through
+    the outcome seam. ``silent-except`` (above) stays the stricter gate on handlers that
+    hide the failure; this one counts the handlers nobody justified.
+
 ``splitlines`` (BACK-1722)
     ``.splitlines()`` on anything. ``str.splitlines()`` ends a line at form feed, vertical tab,
     FS/GS/RS, NEL and U+2028/U+2029 as well as at ``\\n``, so every line number after a GNU C
@@ -148,6 +157,12 @@ RULES: Dict[str, Dict[str, Any]] = {
                'a swallowed failure reads as a clean empty result',
         'home': (),
     },
+    'broad-except': {
+        'task': 'BACK-1059',
+        'fix': 'narrow to the expected errors and surface the failure as an outcome; at a real '
+               'boundary state why: # boundary-ok: broad-except -- <why>',
+        'home': (),
+    },
     'splitlines': {
         'task': 'BACK-1722',
         'fix': 'split file content with reveal.utils.lines.split_lines (a line ends at \\n only); '
@@ -221,6 +236,11 @@ def _has_double_star(arg: ast.AST) -> bool:
 def _kw_true(call: ast.Call, name: str) -> bool:
     return any(k.arg == name and isinstance(k.value, ast.Constant) and k.value.value is True
                for k in call.keywords)
+
+
+def _is_broad(handler: ast.ExceptHandler) -> bool:
+    caught = handler.type.elts if isinstance(handler.type, ast.Tuple) else [handler.type]
+    return any(isinstance(t, ast.Name) and t.id in ('Exception', 'BaseException') for t in caught)
 
 
 def _is_type_checking(test: ast.AST) -> bool:
@@ -327,6 +347,8 @@ class _Scanner(ast.NodeVisitor):
             if not probe and (handler.type is None or
                               self.silent_rule.is_silent_handler(handler, self.lines, self.parent_map)):
                 self._add('silent-except', handler)
+            if not probe and _is_broad(handler) and 'BLE001 -' not in self.lines[handler.lineno - 1]:
+                self._add('broad-except', handler)
         self.generic_visit(node)
 
     visit_TryStar = visit_Try
