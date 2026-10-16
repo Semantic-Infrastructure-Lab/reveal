@@ -9,6 +9,7 @@ Both formats share the same fundamental structure:
 This base class provides shared infrastructure for both format families.
 """
 
+import lzma
 import zipfile
 import zlib
 import xml.etree.ElementTree as ET
@@ -28,7 +29,9 @@ MAX_COMPRESSION_RATIO = 1000  # Flag suspicious compression ratios
 #   zipfile.BadZipFile       bad header, CRC mismatch (zipfile docs)
 #   KeyError                 ZipFile.getinfo/read of a name the archive does not hold
 #   ValueError               _safe_read's own size and compression-ratio guards
-#   OSError                  file cannot be opened/read; the bz2 and lzma decompressors raise it
+#   OSError                  file cannot be opened/read; the bz2 decompressor raises it
+#   lzma.LZMAError           damaged LZMA member: zipfile lets it through and it is NOT an OSError
+#                            (found by the xlsx corrupt-LZMA control, BACK-1059)
 #   RuntimeError             encrypted member (zipfile docs); NotImplementedError (unsupported
 #                            compression method) and RecursionError are subclasses
 #   EOFError, zlib.error     truncated or corrupt deflate stream
@@ -37,7 +40,7 @@ MAX_COMPRESSION_RATIO = 1000  # Flag suspicious compression ratios
 # AttributeError/TypeError are deliberately absent: they would be bugs in this code.
 _ARCHIVE_PART_ERRORS = (
     zipfile.BadZipFile, KeyError, ValueError, OSError, RuntimeError,
-    EOFError, zlib.error, ET.ParseError, LookupError,
+    EOFError, zlib.error, lzma.LZMAError, ET.ParseError, LookupError,
 )
 
 

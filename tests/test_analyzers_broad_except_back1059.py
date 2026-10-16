@@ -9,6 +9,7 @@ also holds negative controls: the expected error still takes the old path.
 import csv
 import json
 import logging
+import lzma
 import struct
 import zipfile
 from pathlib import Path
@@ -256,6 +257,7 @@ def test_office_part_read_bug_propagates(tmp_path, reader):
     RuntimeError("File 'word/document.xml' is encrypted, password required"),
     EOFError('Compressed file ended before the end-of-stream marker was reached'),
     OSError('read error'),
+    lzma.LZMAError('Corrupt input data'),  # zipfile lets it through; not an OSError
 ], ids=lambda f: type(f).__name__)
 @pytest.mark.parametrize('reader', ['_read_xml', '_read_part'], ids=['read_xml', 'read_part'])
 def test_office_part_the_archive_cannot_deliver_is_still_none(tmp_path, reader, failure):
