@@ -683,3 +683,27 @@ fun afterFunction(): Int {
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def _kotlin_bases(tmp_path, source):
+    path = tmp_path / 'W.kt'
+    path.write_text(source, encoding='utf-8')
+    return {c['name']: c['bases'] for c in KotlinAnalyzer(str(path)).get_structure()['classes']}
+
+
+def test_qualified_supertype_is_named_by_its_own_last_segment(tmp_path):
+    """BACK-1414: `java.io.Serializable` came back as 'java', so contracts never linked the
+    class to an interface called Serializable. Type arguments still do not leak in."""
+    bases = _kotlin_bases(
+        tmp_path, 'class W : java.io.Serializable, a.b.Gen<String>, Other<Int>, plain.Thing() {}\n')
+    assert bases == {'W': ['Serializable', 'Gen', 'Other', 'Thing']}
+
+
+def test_qualified_supertype_links_to_its_interface_in_contracts(tmp_path):
+    from reveal.adapters.contracts import ContractsAdapter
+    (tmp_path / 'W.kt').write_text(
+        'package demo\n\nclass W : demo.Shape\n\ninterface Shape\n', encoding='utf-8')
+    result = ContractsAdapter(str(tmp_path)).get_structure()
+    groups = list(result['by_language'].values()) if 'by_language' in result else [result]
+    (shape,) = [p for group in groups for p in group['protocols'] if p['name'] == 'Shape']
+    assert [x['name'] for x in shape['implementations']] == ['W']

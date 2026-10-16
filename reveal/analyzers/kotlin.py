@@ -312,9 +312,11 @@ class KotlinAnalyzer(TreeSitterAnalyzer):
         return None
 
     def _kotlin_first_type_identifier(self, user_type) -> Optional[str]:
-        # Take only the leading type_identifier (the base name); skip nested
-        # type_arguments so a generic supertype List<Foo> yields 'List', not 'Foo'.
-        for child in _children(user_type):
+        # The type's own name: the LAST direct type_identifier, so a qualified supertype
+        # java.io.Serializable yields 'Serializable' (not 'java', which broke the
+        # implementer -> interface link in contracts, BACK-1414). Type arguments are
+        # separate nodes, so List<Foo> still yields 'List', not 'Foo'.
+        for child in reversed(_children(user_type)):
             if _zero_arg(child, 'kind') == 'type_identifier':
                 text = self._get_node_text(child).strip()
                 if text:

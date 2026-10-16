@@ -442,3 +442,28 @@ extension Circle {
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def _swift_bases(tmp_path, source):
+    path = tmp_path / 'W.swift'
+    path.write_text(source, encoding='utf-8')
+    return {c['name']: c['bases'] for c in SwiftAnalyzer(str(path)).get_structure()['classes']}
+
+
+def test_qualified_conformance_is_named_by_its_own_last_segment(tmp_path):
+    """BACK-1414: `Swift.Codable` came back as 'Swift'."""
+    assert _swift_bases(tmp_path, 'struct W: Swift.Codable, Equatable {}\n'
+                                  'class I: Foundation.NSObject, MyProto {}\n') == {
+        'W': ['Codable', 'Equatable'], 'I': ['NSObject', 'MyProto']}
+
+
+def test_enum_raw_type_is_not_a_conformance(tmp_path):
+    """BACK-1414: `enum Kind: String` listed String as something Kind conforms to."""
+    bases = _swift_bases(tmp_path, 'enum Kind: String, Codable { case a }\nenum N: Int { case x }\n'
+                                   'enum P: MyProto { case y }\n')
+    assert bases == {'Kind': ['Codable'], 'N': [], 'P': ['MyProto']}
+
+
+def test_negative_control_a_struct_conforming_to_string_keeps_it(tmp_path):
+    """Only an enum has a raw type: `struct S: String` names a real (if odd) conformance."""
+    assert _swift_bases(tmp_path, 'struct S: String {}\n') == {'S': ['String']}

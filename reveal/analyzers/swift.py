@@ -8,6 +8,13 @@ from ..registry import register
 from ..treesitter import TreeSitterAnalyzer, _NAME_KINDS
 
 
+# The types an enum may use as its raw type (Swift reference: Enumerations, Raw Values).
+_SWIFT_RAW_TYPES = frozenset({
+    'String', 'Character', 'Int', 'Int8', 'Int16', 'Int32', 'Int64', 'UInt', 'UInt8', 'UInt16',
+    'UInt32', 'UInt64', 'Float', 'Double', 'Float16', 'Float80', 'CGFloat',
+})
+
+
 @register('.swift', name='Swift', icon='🦅')
 class SwiftAnalyzer(TreeSitterAnalyzer):
     """Analyze Swift source files.
@@ -119,12 +126,19 @@ class SwiftAnalyzer(TreeSitterAnalyzer):
             name = self._swift_specifier_name(child)
             if name:
                 names.append(name)
+        # `enum Kind: String, Codable`: a leading builtin raw-value type is the enum's raw
+        # type, not a protocol it conforms to, so it is no base (BACK-1414).
+        is_enum = any(_zero_arg(c, 'kind') == 'enum' for c in _children(node))
+        if is_enum and names and names[0] in _SWIFT_RAW_TYPES:
+            names = names[1:]
         return names
 
     def _swift_specifier_name(self, specifier) -> Optional[str]:
         for child in _children(specifier):
             if _zero_arg(child, 'kind') == 'user_type':
-                for sub in _children(child):
+                # The LAST type_identifier is the type's own name: Swift.Codable is
+                # 'Codable', not 'Swift' (BACK-1414).
+                for sub in reversed(_children(child)):
                     if _zero_arg(sub, 'kind') == 'type_identifier':
                         text = self._get_node_text(sub).strip()
                         if text:
