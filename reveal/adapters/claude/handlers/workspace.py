@@ -33,7 +33,7 @@ def skipped_entries_warning(field: str, skipped: Iterable[Tuple[Path, BaseExcept
         'field': field,
         'count': len(items),
         'files': names,
-        'message': f"{len(items)} {field} skipped, unreadable ({causes}) -- {consequence}: "
+        'message': f"{len(items)} {field} entries skipped, unreadable ({causes}) -- {consequence}: "
                    f"{', '.join(names)}{more}",
     }
 
@@ -358,7 +358,7 @@ def get_hooks(hooks_dir: Path, resource: str) -> Dict[str, Any]:
 
     # claude://hooks — list all event types
     hooks = []
-    skipped: List[Tuple[Path, BaseException]] = []
+    skipped = []  # typed at the directory branch above
     for entry in sorted(hooks_dir.iterdir(), key=lambda p: p.name):
         try:
             stat = entry.stat()
