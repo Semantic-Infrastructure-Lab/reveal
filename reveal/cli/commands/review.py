@@ -126,13 +126,17 @@ def run_review(args: Namespace) -> None:
 
     # Step 5: Complexity
     print("  Scanning complexity…", file=sys.stderr)
-    _add_top_section(report, 'complexity', _run_complexity(path, files=changed_files),
+    complexity_warnings: List[Dict[str, Any]] = []
+    _add_top_section(report, 'complexity',
+                     _run_complexity(path, files=changed_files, warnings=complexity_warnings),
                      "see all: reveal 'ast://<path>?complexity>10&sort=-complexity'")
+    if complexity_warnings:
+        report.setdefault('meta', {}).setdefault('warnings', []).extend(complexity_warnings)
 
     if errors:
         report['errors'] = errors
     report['overall_status'], report['exit_code'] = _review_outcome(
-        violations, errors, hotspots_incomplete=_lost_hotspot_files(report),
+        violations, errors, analysis_incomplete=_lost_analysis(report),
         scan_incomplete=bool(scan_disclosures))
 
     # Render
@@ -159,23 +163,24 @@ def _add_top_section(report: Dict[str, Any], name: str, ranked: List[Dict[str, A
     note_truncation(report, name, min(len(ranked), _SECTION_TOP), len(ranked), 'limit', hint=hint)
 
 
-def _lost_hotspot_files(report: Dict[str, Any]) -> bool:
-    """True when the hotspot step could not analyze a file (BACK-1738)."""
+def _lost_analysis(report: Dict[str, Any]) -> bool:
+    """True when the hotspot or complexity step could not analyze a target (BACK-1738,
+    BACK-1852)."""
     return any(w.get('type') == 'analysis_failed'
                for w in report.get('meta', {}).get('warnings', []))
 
 
 def _review_outcome(violations: List[Dict[str, Any]], errors: List[str],
-                    hotspots_incomplete: bool = False,
+                    analysis_incomplete: bool = False,
                     scan_incomplete: bool = False) -> tuple:
     """(overall_status, exit_code): fail/2 on a blocking-severity issue,
     incomplete/3 when the quality pass could not check everything (so an
     empty violation list is not proof of a clean change), a rule-wide scan was
-    capped, skipped or partly unparsed (BACK-1824), or the hotspot step
-    could not rank every file (Scott, 2026-10-07), warn/1, pass/0."""
+    capped, skipped or partly unparsed (BACK-1824), or the hotspot or
+    complexity step could not analyze every file (Scott, 2026-10-07), warn/1, pass/0."""
     if any(v.get('severity') in BLOCKING_SEVERITIES for v in violations):
         return 'fail', 2
-    if errors or hotspots_incomplete or scan_incomplete:
+    if errors or analysis_incomplete or scan_incomplete:
         return 'incomplete', 3
     if violations:
         return 'warn', 1
@@ -333,12 +338,14 @@ def _run_hotspots(path: Optional[Path],
                 hotspots.extend(_as_hotspot(h) for h in found)
             except Exception as e:  # boundary-ok: broad-except -- one target's hotspot analysis failure is printed and recorded as an analysis_failed warning, the other targets still run
                 print(f"Warning: hotspot analysis failed for {target}, skipping: {e}", file=sys.stderr)
+                warnings.append(_analysis_failed('hotspots', target, e))
                 continue
         hotspots = [h for h in hotspots if not _is_perfect_quality(h)]
         hotspots.sort(key=_hotspot_score, reverse=True)
         return hotspots
-    except Exception as e:  # boundary-ok: broad-except -- the hotspot section runs the stats adapter; failure is printed and the section is empty
+    except Exception as e:  # boundary-ok: broad-except -- the hotspot section runs the stats adapter; failure is printed, recorded as an analysis_failed warning, and the section is empty
         print(f"Warning: hotspot analysis failed, skipping: {e}", file=sys.stderr)
+        warnings.append(_analysis_failed('hotspots', None, e))
         return []
 
 
@@ -374,13 +381,25 @@ def _hotspot_score(h: Dict[str, Any]) -> float:
     return 0.0
 
 
+def _analysis_failed(step: str, target: Optional[Path], error: BaseException) -> Dict[str, Any]:
+    """The ``analysis_failed`` caveat for a review step that raised on *target* (the
+    whole step when None): its results are missing, which the report must say (BACK-1852)."""
+    where = f"{step}: {target}" if target is not None else step
+    return {'type': 'analysis_failed', 'count': 1,
+            'message': f"{where}: {type(error).__name__}: {error}"}
+
+
 def _run_complexity(path: Optional[Path],
-                    files: Optional[List[Path]] = None) -> List[Dict[str, Any]]:
+                    files: Optional[List[Path]] = None,
+                    warnings: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
     """Run complexity analysis.
 
     When `files` is given (a diff-scoped review), only those files' functions are
-    considered, then merged and ranked globally.
+    considered, then merged and ranked globally. A target whose analysis raised is
+    appended to `warnings` as an analysis_failed caveat, as `_run_hotspots` does.
     """
+    if warnings is None:
+        warnings = []
     try:
         from reveal.adapters.ast.adapter import AstAdapter
         targets = files if files is not None else ([path] if path is not None else [])
@@ -390,15 +409,21 @@ def _run_complexity(path: Optional[Path],
                 # limit=1000000 as ast's --all: no auto-cap, so the section's total is real.
                 adapter = AstAdapter(str(target), 'complexity>10&sort=-complexity&limit=1000000')
                 data = adapter.get_structure()
+                # A file ast:// could not analyze is missing from `found` (BACK-1856).
+                warnings.extend({**w, 'message': f"complexity: {w.get('message', '')}"}
+                                for w in collect_meta_warnings(data)
+                                if w.get('type') == 'analysis_failed')
                 found = data.get('results', data.get('elements', [])) or []
                 results.extend(found)
-            except Exception as e:  # boundary-ok: broad-except -- one target's complexity analysis failure is printed, the other targets still run
+            except Exception as e:  # boundary-ok: broad-except -- one target's complexity analysis failure is printed and recorded as an analysis_failed warning, the other targets still run
                 print(f"Warning: complexity analysis failed for {target}, skipping: {e}", file=sys.stderr)
+                warnings.append(_analysis_failed('complexity', target, e))
                 continue
         results.sort(key=lambda r: r.get('complexity', 0) or 0, reverse=True)
         return results
-    except Exception as e:  # boundary-ok: broad-except -- the complexity section runs the ast adapter; failure is printed and the section is empty
+    except Exception as e:  # boundary-ok: broad-except -- the complexity section runs the ast adapter; failure is printed, recorded as an analysis_failed warning, and the section is empty
         print(f"Warning: complexity analysis failed, skipping: {e}", file=sys.stderr)
+        warnings.append(_analysis_failed('complexity', None, e))
         return []
 
 
@@ -557,7 +582,7 @@ def _render_complexity_section(complex_fns: list) -> None:
 
 
 def _render_recommendation(violations: list, errors: Optional[List[str]] = None,
-                           hotspots_incomplete: bool = False,
+                           analysis_incomplete: bool = False,
                            scan_incomplete: bool = False) -> None:
     blocking = sum(1 for v in violations if v.get('severity') in BLOCKING_SEVERITIES)
     print()
@@ -567,9 +592,9 @@ def _render_recommendation(violations: list, errors: Optional[List[str]] = None,
         for e in errors:
             print(f"⚠️  {e}")
         print("Recommendation: Review incomplete — the quality check did not cover every file. ⚠️")
-    elif hotspots_incomplete:
-        print("Recommendation: Review incomplete — the hotspot ranking is missing the files "
-              "named under Caveats. ⚠️")
+    elif analysis_incomplete:
+        print("Recommendation: Review incomplete — the hotspot or complexity analysis is missing "
+              "the targets named under Caveats. ⚠️")
     elif scan_incomplete:
         print("Recommendation: Review incomplete — a project-wide scan was capped, skipped or "
               "partly unparsed (see the warnings above). ⚠️")
@@ -598,5 +623,5 @@ def _render_report(report: Dict[str, Any], verbose: bool) -> None:
     render_meta_warnings(report, heading="Caveats:")
     for reason in report.get('scan_disclosures', []):
         print(f"⚠️  {reason}")
-    _render_recommendation(violations, report.get('errors'), _lost_hotspot_files(report),
+    _render_recommendation(violations, report.get('errors'), _lost_analysis(report),
                            scan_incomplete)

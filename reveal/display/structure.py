@@ -419,6 +419,8 @@ def _enrich_structure(structure: Dict[str, Any], file_path: str) -> Dict[str, An
     for category, items in structure.items():
         if category == '_has_errors':  # published as meta.parse_recovered (BACK-1729)
             continue
+        if category == '_imports_failed':  # published as a meta warning (BACK-1852)
+            continue
         # A cut is the envelope's meta.warnings entry (_render_json_output), not also the
         # structure's; a meta that held only cuts (a tree-sitter result's) goes.
         if category == 'meta' and isinstance(items, dict):
@@ -497,8 +499,9 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
         }
     elif outcome_of(structure) == 'failed':  # the analyzer's own parser failed (BACK-1590)
         result['error'] = structure['error']
-    if truncations_of(structure):
-        cast(Dict[str, Any], result['meta'])['warnings'] = truncations_of(structure)
+    warnings = truncations_of(structure) + _imports_failed_warnings(structure)
+    if warnings:
+        cast(Dict[str, Any], result['meta'])['warnings'] = warnings
     if _parse_recovered(structure):
         cast(Dict[str, Any], result['meta'])['parse_recovered'] = True
     coverage = outline_coverage(structure, analyzer.lines)
@@ -649,6 +652,16 @@ PARSE_RECOVERY_NOTICE = ("⚠️  Parse recovered from syntax tree-sitter could 
                          "incomplete or wrong (a grammar gap or a real syntax error).")
 
 
+def _imports_failed_warnings(structure: Any) -> List[Dict[str, Any]]:
+    """The imports extractor raised, so the outline's imports are missing, not absent
+    (BACK-1852): one ``imports_failed`` warning carrying the cause."""
+    cause = structure.get('_imports_failed') if isinstance(structure, dict) else None
+    if not cause:
+        return []
+    return [{'type': 'imports_failed', 'message': f"imports could not be extracted ({cause}) -- "
+             "the outline's imports list is empty because of the failure, not because the file has none"}]
+
+
 def _parse_recovered(structure: Any) -> bool:
     """The parse went through with errors (`_has_errors`) rather than failing outright."""
     return (isinstance(structure, dict) and bool(structure.get('_has_errors'))
@@ -663,6 +676,9 @@ def _print_coverage_warning(analyzer: FileAnalyzer, structure: Dict[str, List[Di
     if _parse_recovered(structure):
         print()
         print(PARSE_RECOVERY_NOTICE)
+    for warning in _imports_failed_warnings(structure):
+        print()
+        print(f"⚠️  {warning['message']}")
     coverage = outline_coverage(structure, analyzer.lines)
     if coverage:
         print()

@@ -518,6 +518,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         self._tree_parsed: bool = False  # tree is parsed lazily, see `tree` property
         self._node_cache: Optional[Dict[str, List[Any]]] = None  # None = unbuilt; {} = built but empty
         self._content_bytes: Optional[bytes] = None
+        self._imports_failure: Optional[str] = None  # BACK-1852: set when the imports extractor raised
         self.parse_error: Optional[str] = None  # BACK-979: set when _parse_tree()'s except branch fires
         self._outline_only: bool = False  # set only for the duration of get_outline()
 
@@ -686,6 +687,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
         structure: Dict[str, Any] = {}
         if not self._outline_only:
             structure['imports'] = self._extract_imports()
+            if self._imports_failure:
+                structure['_imports_failed'] = self._imports_failure
         functions = self._extract_functions()
         if not self._outline_only:
             callers_index = build_callers_index(functions)
@@ -793,8 +796,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return []
         try:
             statements = extractor.extract_imports(path)
-        except Exception as e:  # boundary-ok: broad-except -- an extractor is arbitrary per-language code and must not hide the rest of the outline (follow-up: disclose beyond debug, BACK-1059)
+        except Exception as e:  # boundary-ok: broad-except -- an extractor is arbitrary per-language code and must not hide the rest of the outline; the failure is kept in _imports_failure, which _get_or_build_structure publishes as structure['_imports_failed'] so the outline says its imports are missing (BACK-1852)
             logger.debug("imports extractor failed for %s: %s", path, e)
+            self._imports_failure = f"{type(e).__name__}: {e}"
             return []
         return [{'line': st.line_number, 'content': (st.source_line or st.module_name).strip()}
                 for st in statements]
