@@ -83,9 +83,7 @@ def compute_status(self) -> str:
         if root is None:
             return detections
 
-        for node in self._ts_walk(root):
-            if _zero_arg(node, 'kind') != 'property_declaration':
-                continue
+        for node in self._ts_nodes_of_kind(root, 'property_declaration'):
 
             accessor_list = next(
                 (c for c in node_children(node) if _zero_arg(c, 'kind') == 'accessor_list'), None
@@ -138,9 +136,7 @@ def compute_status(self) -> str:
 
         content_bytes = content.encode('utf-8')
 
-        for node in self._ts_walk(root):
-            if _zero_arg(node, 'kind') != 'getter':
-                continue
+        for node in self._ts_nodes_of_kind(root, 'getter'):
 
             function_body = next(
                 (c for c in node_children(node) if _zero_arg(c, 'kind') == 'function_body'), None
@@ -213,9 +209,7 @@ def compute_status(self) -> str:
 
         content_bytes = content.encode('utf-8')
 
-        for node in self._ts_walk(root):
-            if _zero_arg(node, 'kind') != 'property_declaration':
-                continue
+        for node in self._ts_nodes_of_kind(root, 'property_declaration'):
 
             computed_property = next(
                 (c for c in node_children(node) if _zero_arg(c, 'kind') == 'computed_property'), None

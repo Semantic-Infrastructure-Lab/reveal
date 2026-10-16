@@ -6,10 +6,12 @@ to reduce boilerplate and ensure consistent behavior.
 
 import ast
 import functools
+import heapq
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from ..core import _zero_arg
+from ..core import _zero_arg, iter_tree
+from ..core.treesitter_compat import zero_arg_getter
 from ..utils.pyparse import parse_python
 
 logger = logging.getLogger(__name__)
@@ -64,6 +66,47 @@ def _cached_ast_parse(content: str, file_path: str) -> Optional[ast.AST]:
         # which records the rule as failed instead of clean.
         logger.warning(f"AST parse failed for {file_path}: {e}")
         return None
+
+
+@functools.lru_cache(maxsize=4)
+def _kind_buckets(root: Any) -> Dict[str, Tuple[List[Any], List[int]]]:
+    """Every node of a tree-sitter tree grouped by kind, in one pre-order pass.
+
+    Maps kind -> (nodes, pre-order ordinals). Keyed by the root node (nodes compare and
+    hash by identity of the underlying node), so every rule that parsed the same file
+    through `_cached_treesitter_parse` shares one pass instead of each walking the whole
+    tree to find its own few kinds (BACK-1880). Callers must not mutate the lists.
+    """
+    kind_of = zero_arg_getter(type(root), 'kind')
+    buckets: Dict[str, Tuple[List[Any], List[int]]] = {}
+    for ordinal, node in enumerate(iter_tree(root)):
+        kind = kind_of(node)
+        entry = buckets.get(kind)
+        if entry is None:
+            buckets[kind] = entry = ([], [])
+        entry[0].append(node)
+        entry[1].append(ordinal)
+    return buckets
+
+
+def kind_nodes(root: Any, *kinds: str) -> List[Any]:
+    """The nodes of `root` whose kind is one of `kinds`, in document (pre-order) order.
+
+    The same nodes, in the same order, as filtering `iter_tree(root)` by kind. Read-only:
+    a single kind returns the shared bucket itself.
+    """
+    if root is None:
+        return []
+    buckets = _kind_buckets(root)
+    if len(kinds) == 1:
+        entry = buckets.get(kinds[0])
+        return entry[0] if entry is not None else []
+    found = [buckets[k] for k in dict.fromkeys(kinds) if k in buckets]
+    if len(found) <= 1:
+        return found[0][0] if found else []
+    merged = heapq.merge(*(zip(nodes_ordinals[1], nodes_ordinals[0]) for nodes_ordinals in found),
+                         key=lambda pair: pair[0])
+    return [node for _, node in merged]
 
 
 class ASTParsingMixin:
@@ -175,6 +218,11 @@ class TreeSitterParsingMixin:
             return on parse failure).
         """
         return self._parse_treesitter(content, file_path, language), []
+
+    def _ts_nodes_of_kind(self, root, *kinds: str) -> list:
+        """The nodes of `root` of the given kind(s), document order, from the shared
+        per-tree kind index. Use instead of `_ts_walk` plus a kind test. Read-only."""
+        return kind_nodes(root, *kinds)
 
     def _ts_walk(self, root) -> list:
         """Return every node in the tree rooted at `root`, pre-order.

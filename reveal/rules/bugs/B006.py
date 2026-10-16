@@ -785,9 +785,7 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             return detections
 
         content_bytes = content.encode('utf-8')
-        for node in self._ts_walk(root):
-            if _zero_arg(node, 'kind') != 'catch_clause':
-                continue
+        for node in self._ts_nodes_of_kind(root, 'catch_clause'):
             if not self._cs_is_broad_catch(node, content_bytes):
                 continue
             if self._cs_has_visible_signal(node, content_bytes):
@@ -869,9 +867,7 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             return detections
 
         content_bytes = content.encode('utf-8')
-        for node in self._ts_walk(root):
-            if _zero_arg(node, 'kind') != 'catch_clause':
-                continue
+        for node in self._ts_nodes_of_kind(root, 'catch_clause'):
             if not self._java_is_broad_catch(node, content_bytes):
                 continue
             if self._java_has_visible_signal(node, content_bytes):
@@ -971,9 +967,7 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             return detections
 
         content_bytes = content.encode('utf-8')
-        for node in self._ts_walk(root):
-            if _zero_arg(node, 'kind') != 'catch_clause':
-                continue
+        for node in self._ts_nodes_of_kind(root, 'catch_clause'):
             if self._js_has_visible_signal(node, content_bytes):
                 continue
             if any(_zero_arg(d, 'kind') == 'comment' for d in self._ts_walk(node)):
@@ -1075,9 +1069,7 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             return detections
 
         content_bytes = content.encode('utf-8')
-        for node in self._ts_walk(root):
-            if _zero_arg(node, 'kind') != 'catch_clause':
-                continue
+        for node in self._ts_nodes_of_kind(root, 'catch_clause'):
             if not self._php_is_broad_catch(node, content_bytes):
                 continue
             if self._php_has_visible_signal(node, content_bytes):
@@ -1158,9 +1150,7 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             return detections
 
         content_bytes = content.encode('utf-8')
-        for node in self._ts_walk(root):
-            if _zero_arg(node, 'kind') != 'catch_block':
-                continue
+        for node in self._ts_nodes_of_kind(root, 'catch_block'):
             if not self._kotlin_is_broad_catch(node, content_bytes):
                 continue
             if self._kotlin_has_visible_signal(node, content_bytes):
@@ -1243,9 +1233,7 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             return detections
 
         content_bytes = content.encode('utf-8')
-        for node in self._ts_walk(root):
-            if _zero_arg(node, 'kind') != 'catch_block':
-                continue
+        for node in self._ts_nodes_of_kind(root, 'catch_block'):
             if not self._swift_is_broad_catch(node, content_bytes):
                 continue
             if self._swift_has_visible_signal(node, content_bytes):
@@ -1324,9 +1312,7 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             return detections
 
         content_bytes = content.encode('utf-8')
-        for node in self._ts_walk(root):
-            if _zero_arg(node, 'kind') != 'catch_clause':
-                continue
+        for node in self._ts_nodes_of_kind(root, 'catch_clause'):
             if not self._cpp_is_broad_catch(node, content_bytes):
                 continue
             if self._cpp_has_visible_signal(node, content_bytes):

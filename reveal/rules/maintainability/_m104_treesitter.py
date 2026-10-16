@@ -18,7 +18,8 @@ M104's own `_extract_list_values` + `ast.Assign` walk produces for Python.
 
 from typing import Any, Iterator, List, Optional, Tuple
 
-from ...core.treesitter_compat import iter_tree, node_children, _zero_arg
+from ...core.treesitter_compat import node_children, _zero_arg
+from ..base_mixins import kind_nodes
 
 _QUOTE_CHARS = '"\'`'
 
@@ -67,9 +68,7 @@ _JS_STRING_KINDS = frozenset({'string', 'number'})
 
 
 def _extract_js(root: Any, content_bytes: bytes) -> Iterator[Tuple[str, int, str, List[str]]]:
-    for node in iter_tree(root):
-        if _kind(node) != 'variable_declarator':
-            continue
+    for node in kind_nodes(root, 'variable_declarator'):
         name_node = _find_child(node, 'identifier')
         array_node = _find_child(node, 'array')
         if name_node is None or array_node is None:
@@ -89,9 +88,7 @@ _GO_COLLECTION_TYPE_KINDS = frozenset({'slice_type', 'array_type'})
 
 
 def _extract_go(root: Any, content_bytes: bytes) -> Iterator[Tuple[str, int, str, List[str]]]:
-    for node in iter_tree(root):
-        if _kind(node) not in _GO_DECL_KINDS:
-            continue
+    for node in kind_nodes(root, *_GO_DECL_KINDS):
         name_node = _find_child(node, 'identifier')
         if name_node is None:
             # short_var_declaration's left side is an expression_list wrapping
@@ -126,9 +123,7 @@ _RUST_LITERAL_KINDS = frozenset({
 
 
 def _extract_rust(root: Any, content_bytes: bytes) -> Iterator[Tuple[str, int, str, List[str]]]:
-    for node in iter_tree(root):
-        if _kind(node) not in _RUST_DECL_KINDS:
-            continue
+    for node in kind_nodes(root, *_RUST_DECL_KINDS):
         name_node = _find_child(node, 'identifier')
         if name_node is None:
             continue
@@ -162,9 +157,7 @@ _JAVA_COLLECTION_METHODS = frozenset({
 
 
 def _extract_java(root: Any, content_bytes: bytes) -> Iterator[Tuple[str, int, str, List[str]]]:
-    for node in iter_tree(root):
-        if _kind(node) != 'variable_declarator':
-            continue
+    for node in kind_nodes(root, 'variable_declarator'):
         name_node = _find_child(node, 'identifier')
         if name_node is None:
             continue

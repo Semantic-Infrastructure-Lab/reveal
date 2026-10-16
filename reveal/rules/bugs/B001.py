@@ -98,9 +98,7 @@ class B001(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             return detections
 
         content_bytes = content.encode('utf-8')
-        for node in self._ts_walk(root):
-            if _zero_arg(node, 'kind') != 'catch_clause':
-                continue
+        for node in self._ts_nodes_of_kind(root, 'catch_clause'):
             if any(_zero_arg(c, 'kind') == 'catch_declaration' for c in node_children(node)):
                 continue
 
@@ -127,9 +125,7 @@ class B001(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
             return detections
 
         content_bytes = content.encode('utf-8')
-        for node in self._ts_walk(root):
-            if _zero_arg(node, 'kind') != 'catch_clause':
-                continue
+        for node in self._ts_nodes_of_kind(root, 'catch_clause'):
             param_list = next(
                 (c for c in node_children(node) if _zero_arg(c, 'kind') == 'parameter_list'), None
             )
