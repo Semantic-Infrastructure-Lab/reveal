@@ -252,6 +252,7 @@ def _nav_sideeffects(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import (  # noqa: I006
         collect_effects, collect_effects_transitive, render_effects, render_effects_transitive,
     )
+    from .adapters.ast.nav_effects import skipped_files_note  # noqa: I006
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
     language = getattr(ctx.analyzer, 'language', None)
     transitive = getattr(ctx.args, 'transitive', False)
@@ -280,9 +281,14 @@ def _nav_sideeffects(ctx: _NavCtx) -> None:
              **({'hop': e['hop'], 'chain': e['chain']} if transitive else {})}
             for e in effects if e['kind'] is not None
         ]
-        _nav_json('sideeffects', ctx.analyzer.path, ctx.element, from_line, to_line, findings)
+        note = skipped_files_note(effects.skipped) if transitive else None
+        _nav_json('sideeffects', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
+                  warnings=[note] if note else None)
     elif transitive:
         print(render_effects_transitive(effects, ctx.element, depth))
+        note = skipped_files_note(effects.skipped)
+        if note:
+            print(f'Warning: {note}')
     else:
         print(render_effects(effects, from_line, to_line))
 
@@ -349,6 +355,7 @@ def _nav_boundary(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import (  # noqa: I006
         collect_boundary, collect_boundary_transitive, render_boundary, render_boundary_transitive,
     )
+    from .adapters.ast.nav_effects import skipped_files_note  # noqa: I006
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
     language = getattr(ctx.analyzer, 'language', None)
     transitive = getattr(ctx.args, 'transitive', False)
@@ -381,7 +388,9 @@ def _nav_boundary(ctx: _NavCtx) -> None:
                 **({'hop': e['hop'], 'chain': e['chain']} if transitive else {})}
                for e in boundary['effects'] if e['kind'] is not None]
         )
-        _nav_json('boundary', ctx.analyzer.path, ctx.element, from_line, to_line, findings)
+        note = skipped_files_note(boundary.get('skipped') or []) if transitive else None
+        _nav_json('boundary', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
+                  warnings=[note] if note else None)
     elif transitive:
         print(render_boundary_transitive(boundary, ctx.element, from_line, to_line, depth))
     else:

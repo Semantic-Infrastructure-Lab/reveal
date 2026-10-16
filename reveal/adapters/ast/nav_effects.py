@@ -1954,6 +1954,24 @@ def _resolve_definition_node(file_path: str, name: str, analyzer_cache: Dict[str
     return end_node, start, end, analyzer._get_node_text, getattr(analyzer, 'language', None)
 
 
+class EffectList(List[Dict[str, Any]]):
+    """The effects ``collect_effects_transitive`` found, plus ``skipped``: ``(file, cause)``
+    for every file whose structure analysis raised. An effect behind such a file cannot
+    be followed, so a list without it reads as "no further effects" (BACK-1861)."""
+
+    def __init__(self, *args: Any) -> None:
+        super().__init__(*args)
+        self.skipped: List[Tuple[str, str]] = []
+
+
+def skipped_files_note(skipped: Sequence[Tuple[str, str]]) -> Optional[str]:
+    """The disclosure line for files a --transitive walk could not analyze; None if none."""
+    from .analysis import analysis_skipped_warning  # noqa: I006
+    warning = analysis_skipped_warning(
+        list(skipped), consequence="calls into them were not followed, so their effects are missing")
+    return warning['message'] if warning else None
+
+
 def collect_effects_transitive(
     path: str,
     root_name: str,
@@ -1963,7 +1981,7 @@ def collect_effects_transitive(
     get_text: Callable,
     language: Optional[str] = None,
     depth: int = 2,
-) -> List[Dict[str, Any]]:
+) -> EffectList:
     """Follow calls into project-local helpers, classifying effects across hops.
 
     Hop 0 is the entry function's own body (identical to collect_effects). Each
@@ -1987,11 +2005,12 @@ def collect_effects_transitive(
     for e in hop0:
         e['hop'] = 0
         e['chain'] = [root_name]
-    results: List[Dict[str, Any]] = list(hop0)
+    results = EffectList(hop0)
 
     path_obj = Path(path)
     directory = path_obj if path_obj.is_dir() else path_obj.parent
     structures = collect_structures(str(directory))
+    results.skipped = list(structures.skipped)
     forward = _build_forward_index(structures, include_builtins=False)
 
     root_family = _lang_family(path) if path else ''

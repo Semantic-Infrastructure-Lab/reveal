@@ -6,6 +6,7 @@ from .nav_effects import (
     collect_effects_transitive,
     format_effect_target,
     render_effects_transitive,
+    skipped_files_note,
 )
 
 
@@ -123,7 +124,10 @@ def collect_boundary_transitive(
         language=language, depth=depth,
     )
     classified = [e for e in effects if e['kind'] is not None]
-    return {'inputs': inputs, 'superglobals': superglobals, 'effects': classified}
+    result: Dict[str, Any] = {'inputs': inputs, 'superglobals': superglobals, 'effects': classified}
+    if effects.skipped:
+        result['skipped'] = [list(item) for item in effects.skipped]
+    return result
 
 
 def render_boundary_transitive(
@@ -143,5 +147,9 @@ def render_boundary_transitive(
         sections.append(f'{header}\n' + '\n'.join(f'  {line}' for line in body.split('\n')))
     else:
         sections.append(f'{header}\n  none in {root_name} or its callees')
+
+    note = skipped_files_note(result.get('skipped') or [])
+    if note:
+        sections.append(f'Warning: {note}')
 
     return '\n\n'.join(sections)
