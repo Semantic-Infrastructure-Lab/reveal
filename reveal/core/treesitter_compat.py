@@ -206,9 +206,10 @@ def iter_tree(node):
     yields only `node`'s own subtree even when `node` is not the tree root.
     """
     cursor = node.walk()
+    node_of = zero_arg_getter(type(cursor), 'node')  # BACK-1875: once per walk, not per node
     reached_root = False
     while not reached_root:
-        yield _zero_arg(cursor, 'node')
+        yield node_of(cursor)
         if cursor.goto_first_child():
             continue
         if cursor.goto_next_sibling():

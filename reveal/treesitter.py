@@ -1390,8 +1390,15 @@ class TreeSitterAnalyzer(FileAnalyzer):
             # the identical node sequence in document order, so each kind's
             # bucket is byte-identical to the old `stack=[root]; pop; push
             # reversed(children)` walk (verified over 557K real nodes).
-            for node in _iter_tree(tree_root(self.tree)):
-                cache.setdefault(_zero_arg(node, 'kind'), []).append(node)
+            root = tree_root(self.tree)
+            kind_of = zero_arg_getter(type(root), 'kind')  # BACK-1875: once per walk
+            for node in _iter_tree(root):
+                kind = kind_of(node)
+                bucket = cache.get(kind)
+                if bucket is None:
+                    cache[kind] = [node]
+                else:
+                    bucket.append(node)
 
             # Write completed node_cache back to this thread's cache.
             parse_cache = _get_parse_cache()
@@ -2209,6 +2216,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # the stack entry; the getter is resolved once per walk (all nodes share
         # a class), not once per read.
         kind_of = zero_arg_getter(type(func_node), 'kind')
+        child_count_of = zero_arg_getter(type(func_node), 'child_count')
         stack: List[Tuple[Any, Optional[str], int, str]] = []
         for child in _children(func_node):
             child_kind = kind_of(child)
@@ -2229,7 +2237,10 @@ class TreeSitterAnalyzer(FileAnalyzer):
             if kind in FUNCTION_NODE_TYPES and self._function_scope_has_own_entry(node):
                 continue
 
-            children = [(child, kind_of(child)) for child in _children(node)]
+            children = []
+            for i in range(child_count_of(node)):
+                child = node.child(i)
+                children.append((child, kind_of(child)))
             # BACK-760 (Dart): a nested named local function
             # (`local_function_declaration > lambda_expression >
             # function_signature, function_body`) is the ONE shape in this
