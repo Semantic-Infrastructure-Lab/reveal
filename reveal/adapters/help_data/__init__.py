@@ -67,7 +67,7 @@ class HelpDataLoader:
         except yaml.YAMLError as e:
             logger.error(f"Failed to parse YAML in {help_file}: {e}")
             return None
-        except Exception as e:
+        except (OSError, ValueError) as e:  # unreadable file; ValueError covers UnicodeDecodeError
             logger.error(f"Failed to load help data {help_file}: {e}")
             return None
 

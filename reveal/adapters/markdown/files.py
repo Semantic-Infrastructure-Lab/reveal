@@ -49,7 +49,7 @@ def read_body_text(path: Path) -> str:
     """
     try:
         content = path.read_text(encoding='utf-8')
-    except Exception as e:
+    except (OSError, UnicodeDecodeError) as e:
         logger.warning(f"Failed to read {path}, treating body as empty: {e}")
         return ''
 
@@ -81,7 +81,7 @@ def extract_internal_links(path: Path, base_path: Path) -> List[str]:
     """
     try:
         content = path.read_text(encoding='utf-8')
-    except Exception as e:
+    except (OSError, UnicodeDecodeError) as e:
         logger.warning(f"Failed to read {path}, reporting no internal links: {e}")
         return []
 
@@ -159,7 +159,7 @@ def extract_frontmatter_diagnostic(path: Path) -> Dict[str, Any]:
     """
     try:
         content = path.read_text(encoding='utf-8')
-    except Exception as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         return {'frontmatter': None, 'status': 'missing', 'error': f'unreadable: {exc}'}
 
     if not content.startswith('---'):

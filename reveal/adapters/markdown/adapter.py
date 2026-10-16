@@ -279,11 +279,9 @@ class MarkdownQueryAdapter(ResourceAdapter):
         has_new_operators = filter_query and any(op in filter_query for op in ['>', '<', '!=', '~=', '..', '=='])
 
         if has_new_operators:
-            try:
-                self.query_filters = parse_query_filters(filter_query)
-            except Exception:
-                # If parsing fails, fall back to empty filters
-                self.query_filters = []
+            # No fallback to "no filters": that would answer an unfiltered query as if it
+            # were the filtered one (BACK-1059). A ValueError here fails the query.
+            self.query_filters = parse_query_filters(filter_query)
 
         # Keep legacy filter parsing for backward compatibility
         # Only use legacy parsing if there are no new operators

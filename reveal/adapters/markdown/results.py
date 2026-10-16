@@ -95,9 +95,15 @@ def apply_sorting(results: List[Dict[str, Any]], sort_field: str, sort_descendin
             key=lambda item: create_sort_key(item, sort_field, sort_descending),
             reverse=sort_descending
         )
-    except Exception:
-        # If sorting fails, continue without sorting
-        return results
+    except TypeError:
+        # Values of different types (a YAML number next to a string, a date next to text)
+        # cannot be compared. Order them as text, as utils/query_control._apply_sorting does;
+        # returning the input order would read as sorted (BACK-1059).
+        def text_key(item: Dict[str, Any]) -> tuple:
+            rank, value = create_sort_key(item, sort_field, sort_descending)
+            return rank, str(value)
+
+        return sorted(results, key=text_key, reverse=sort_descending)
 
 
 def apply_pagination(results: List[Dict[str, Any]], offset: int, limit: Optional[int]) -> List[Dict[str, Any]]:
