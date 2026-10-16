@@ -221,10 +221,12 @@ def test_offline_ssl_actual_failed_views_are_quiet(element, monkeypatch, capsys)
 def test_offline_mysql_actual_slow_log_failure_is_quiet(monkeypatch, capsys):
     from reveal.adapters.mysql import MySQLAdapter
     from reveal.adapters.mysql.renderer import MySQLRenderer
+    pymysql = pytest.importorskip('pymysql')
     adapter = object.__new__(MySQLAdapter)
 
     def unavailable(*args, **kwargs):
-        raise RuntimeError('recorded inaccessible slow log')
+        # a driver error, which is what an inaccessible slow log raises (BACK-1059)
+        raise pymysql.err.ProgrammingError('recorded inaccessible slow log')
 
     monkeypatch.setattr(adapter, '_execute_query', unavailable)
     result = adapter._get_slow_queries()
