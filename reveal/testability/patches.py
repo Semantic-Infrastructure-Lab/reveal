@@ -13,7 +13,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 from ..utils.path_utils import _walk_code_files, is_test_basename_for_language, to_posix
 from ..utils.pyparse import parse_python
 from ..core.treesitter_compat import _zero_arg, suppress_treesitter_warnings, tree_root
-from ..core.treesitter_parse import get_tree
+from ..core.treesitter_parse import GrammarUnavailable, get_tree
 from ..registry import JS_TS_LANGUAGES, extensions_for_languages, js_ts_grammar
 
 suppress_treesitter_warnings()
@@ -260,7 +260,7 @@ def _scan_file_ts(file_path: Path) -> List[PatchUse]:
     src_bytes = source.encode('utf-8', errors='replace')
     try:
         root = tree_root(get_tree(js_ts_grammar(file_path.suffix), source))
-    except Exception as exc:
+    except GrammarUnavailable as exc:
         logger.warning('tree-sitter parse failed for %s: %s', file_path, exc)
         return []
 
