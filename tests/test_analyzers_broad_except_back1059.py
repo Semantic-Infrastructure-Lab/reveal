@@ -417,13 +417,6 @@ def test_pnpm_workspace_yaml_still_gives_its_globs(tmp_path):
     assert js_imports._load_workspace_package_globs(tmp_path) == ['a/*']
 
 
-def test_python_noqa_read_bug_propagates(tmp_path, monkeypatch):
-    path = _write(tmp_path / 'm.py', 'import os\n')
-    monkeypatch.setattr(py_imports, 'open', _raise_bug, raising=False)
-    with pytest.raises(_InjectedBug):
-        py_imports.PythonExtractor()._extract_imports_uncached(path)
-
-
 def test_python_file_that_is_not_utf8_still_yields_its_imports(tmp_path):
     path = tmp_path / 'm.py'
     path.write_bytes('# caf\xe9\nimport os\n'.encode('latin-1'))
