@@ -556,10 +556,12 @@ def test_m103_unreadable_pyproject_is_unavailable(tmp_path, monkeypatch):
 
 
 def test_m103_parser_bug_escapes(tmp_path, monkeypatch):
-    import tomllib
+    import importlib
     from reveal.rules.maintainability.M103 import M103
     init = _version_project(tmp_path, '[project]\nversion = "2.0.0"\n')
-    monkeypatch.setattr(tomllib, 'loads', _boom)
+    # the module's own tomllib alias: stdlib tomllib, or tomli on Python < 3.11
+    monkeypatch.setattr(importlib.import_module('reveal.rules.maintainability.M103').tomllib,
+                        'loads', _boom)
     with pytest.raises(RuntimeError, match='boom'):
         M103().check(str(init), None, init.read_text(encoding='utf-8'))
 
