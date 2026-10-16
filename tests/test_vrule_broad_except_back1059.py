@@ -34,6 +34,7 @@ from reveal.rules.validation.V014 import V014 as V014Rule
 from reveal.rules.validation.V015 import V015 as V015Rule
 from reveal.rules.validation.V016 import V016 as V016Rule
 from reveal.rules.validation.V018 import V018 as V018Rule
+from reveal.rules.validation.V019 import V019 as V019Rule
 from reveal.rules.validation.V021 import V021 as V021Rule
 from reveal.rules.validation.V023 import V023 as V023Rule
 from reveal.rules.validation.V027 import V027 as V027Rule
@@ -710,3 +711,36 @@ def test_ts_scan_bug_escapes(tmp_path, monkeypatch):
     monkeypatch.setattr(patches, 'get_tree', broken)
     with pytest.raises(RuntimeError, match='boom'):
         patches._scan_file_ts(src)
+
+
+# --- V019: resource-init probe (boundary kept, environmental skip now an outcome) --
+
+class _NeedsRealResource:
+    def __init__(self, resource=None):
+        if resource is not None:
+            raise FileNotFoundError(f'no such resource: {resource}')
+
+
+class _ReadsMissingAttribute:
+    def __init__(self, resource=None):
+        if resource is not None:
+            self.missing.attribute
+
+
+def test_v019_resource_init_needing_a_real_resource_is_not_applicable(tmp_path):
+    rule = V019Rule()
+    adapter_file = tmp_path / 'zzz.py'
+    adapter_file.write_text('class Z:\n    def __init__(self):\n        pass\n', encoding='utf-8')
+    assert rule._test_resource_init('zzz', _NeedsRealResource, adapter_file) is None
+    assert _statuses(rule) == ['skipped']
+    assert rule.outcomes[0]['subject'] == 'zzz: resource init'
+    assert 'FileNotFoundError' in rule.outcomes[0]['reason']
+
+
+def test_v019_attribute_error_is_still_a_finding_control(tmp_path):
+    rule = V019Rule()
+    adapter_file = tmp_path / 'zzz.py'
+    adapter_file.write_text('class Z:\n    def __init__(self):\n        pass\n', encoding='utf-8')
+    found = rule._test_resource_init('zzz', _ReadsMissingAttribute, adapter_file)
+    assert found is not None and 'AttributeError' in found.message
+    assert rule.outcomes == []
