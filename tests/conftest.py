@@ -438,6 +438,7 @@ def _disk_cache_marker(request, monkeypatch):
 # fixture loudly, so renames cannot silently drop a cache from the sweep.
 _MODULE_CACHES = (
     ('reveal.config', '_path_resolve_cache'),
+    ('reveal.utils.path_utils', '_marker_root_cache'),
     ('reveal.rules.imports.I002', '_graph_cache'),
     ('reveal.rules.imports.I003', '_config_cache'),
     ('reveal.rules.imports._dep_reconciliation', '_scan_cache'),

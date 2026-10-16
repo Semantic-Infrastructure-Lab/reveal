@@ -23,6 +23,7 @@ from ..defaults import (
     MINIFIED_FILENAME_RE,
     DisplayDefaults,
 )
+from .request_cache import register_request_cache
 from ..registry import _is_cpp_header_content, display_name_for_extension, language_for_extension, LANGUAGE_DISPLAY_NAMES
 
 
@@ -1434,7 +1435,29 @@ def resolve_project_root(
     """
     if root_override is not None:
         return root_override
-    climb = _SharedClimb(target_path)
+    start = target_path if target_path.is_dir() else target_path.parent
+    key = (start, honor_reveal_root, use_package_markers, use_vcs)
+    try:
+        root = _marker_root_cache[key]
+    except KeyError:
+        root = _marker_root_cache[key] = _marker_root(
+            start, honor_reveal_root, use_package_markers, use_vcs)
+    if root is None and python_init_chain:
+        return python_package_top(target_path)
+    return root
+
+
+# start directory + tier flags -> marker-based root (or None). Every file in a
+# directory resolves to the same root, so a scan over N files in one directory
+# climbed N times (BACK-1878). Cleared per request in a long-lived server
+# (register_request_cache below); a one-shot CLI run is its own request.
+_marker_root_cache: Dict[Tuple[Path, bool, bool, bool], Optional[Path]] = {}
+
+
+def _marker_root(start: Path, honor_reveal_root: bool, use_package_markers: bool,
+                 use_vcs: bool) -> Optional[Path]:
+    """Tiers 0-2 of :func:`resolve_project_root` (the marker climbs), from directory *start*."""
+    climb = _SharedClimb(start)
     if honor_reveal_root:
         reveal_root = climb.first(_has_reveal_root_marker)
         if reveal_root is not None:
@@ -1452,9 +1475,10 @@ def resolve_project_root(
             return package_root
     if use_vcs and vcs_root is not None:
         return vcs_root
-    if python_init_chain:
-        return python_package_top(target_path)
     return None
+
+
+register_request_cache(__name__, _marker_root_cache.clear)
 
 
 def cross_file_scan_root(file_path: Path, **resolve_kwargs: Any) -> Optional[Path]:

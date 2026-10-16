@@ -60,3 +60,30 @@ def test_climb_stops_at_the_unsafe_ceiling(tmp_path, monkeypatch):
     # the ceiling is pkg/: nothing at or above it may be returned
     assert resolve_project_root(deep / "m.py") is None
     assert _SharedClimb(deep / "m.py").first(_has_vcs_marker) is None
+
+
+def test_marker_root_memoized_per_directory_and_cleared_per_request(tmp_path):
+    root, deep = _tree(tmp_path)
+    (deep / "n.py").write_text("y = 2\n", encoding="utf-8")
+    path_utils._marker_root_cache.clear()
+    first = resolve_project_root(deep / "m.py")
+    assert resolve_project_root(deep / "n.py") == first
+    assert len(path_utils._marker_root_cache) == 1  # two files, one directory, one climb
+    # a different tier flag is a different answer, not a stale hit
+    assert resolve_project_root(deep / "m.py", use_package_markers=False) == root
+    assert first == root / "pkg"
+    # the per-request reset drops it, so a marker added mid-session is seen next request
+    (deep / ".git").mkdir()
+    from reveal.utils.request_cache import reset_request_caches
+    reset_request_caches()
+    assert resolve_project_root(deep / "m.py", use_package_markers=False) == deep
+
+
+def test_python_init_chain_still_applies_when_no_marker(tmp_path):
+    pkg = tmp_path / "solo" / "inner"
+    pkg.mkdir(parents=True)
+    (pkg.parent / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "m.py").write_text("x = 1\n", encoding="utf-8")
+    assert resolve_project_root(pkg / "m.py", honor_reveal_root=False, use_vcs=False,
+                                use_package_markers=False, python_init_chain=True) == pkg.parent
