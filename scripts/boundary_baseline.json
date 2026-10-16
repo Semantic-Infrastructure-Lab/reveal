@@ -1,26 +1,6 @@
 {
  "argv": {},
- "broad-except": {
-  "reveal/adapters/ast/analysis.py": 2,
-  "reveal/adapters/ast/surface_facts.py": 1,
-  "reveal/adapters/diff/git.py": 2,
-  "reveal/adapters/diff/resolution.py": 1,
-  "reveal/adapters/git/adapter.py": 1,
-  "reveal/adapters/git/churn.py": 1,
-  "reveal/adapters/git/files.py": 6,
-  "reveal/adapters/git/refs.py": 1,
-  "reveal/adapters/help_data/__init__.py": 1,
-  "reveal/adapters/markdown/adapter.py": 1,
-  "reveal/adapters/markdown/files.py": 3,
-  "reveal/adapters/markdown/results.py": 1,
-  "reveal/adapters/python/bytecode.py": 1,
-  "reveal/adapters/python/doctor.py": 2,
-  "reveal/adapters/python/modules.py": 1,
-  "reveal/adapters/python/packages.py": 1,
-  "reveal/adapters/stats/adapter.py": 3,
-  "reveal/adapters/stats/analysis.py": 1,
-  "reveal/adapters/stats/metrics.py": 2
- },
+ "broad-except": {},
  "display-path": {},
  "exit": {
   "reveal/adapters/cpanel/renderer.py": 1,
