@@ -51,6 +51,7 @@ COMMANDS = {
     'depends': (['depends://{t}'], {0}),
     'ast-name': (['ast://{t}?name=parse'], {0}),
     'uncalled': (['calls://{t}?uncalled'], {0}),
+    'check-rules': (['check', '{t}', '--select', 'B001,B003,B006,M104'], {0, 1}),
     'stats': (['stats://{t}'], {0}),
     'overview': (['overview://{t}'], {0}),
     'hotspots': (['hotspots://{t}'], {0}),

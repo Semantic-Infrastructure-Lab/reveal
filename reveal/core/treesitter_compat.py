@@ -37,6 +37,7 @@ Related Issues:
 import inspect
 import operator
 import re
+import threading
 import warnings
 from typing import List, Optional, Tuple
 
@@ -268,6 +269,11 @@ def node_next_sibling(node):
 # the pinned floor) and ==1.12.5 (property/bytes) in isolated venvs.
 
 
+_ROOT_MEMO: dict = {}
+_ROOT_MEMO_LOCK = threading.Lock()
+_ROOT_MEMO_MAX = 8
+
+
 def tree_root(tree):
     """Return a parsed Tree's root node, across the 1.12.5 method→property change.
 
@@ -275,8 +281,22 @@ def tree_root(tree):
     property from 1.12.5 on (use it directly). Accessing the attribute is
     side-effect-free either way — only a plain method reference is returned
     pre-1.12.5, never invoked, until `_zero_arg` checks `callable()`.
+
+    The same tree always yields the same root object: on the 1.8.1 binding every access builds
+    a new wrapper that neither hashes nor compares equal to the last, so anything keyed on the
+    root (the rules' kind index, BACK-1880) was rebuilt once per rule instead of once per tree
+    (2.00 builds per file). The memo holds the tree, so its id cannot be reused while cached.
     """
-    return _zero_arg(tree, 'root_node')
+    with _ROOT_MEMO_LOCK:
+        entry = _ROOT_MEMO.get(id(tree))
+        if entry is not None and entry[0] is tree:
+            return entry[1]
+    root = _zero_arg(tree, 'root_node')
+    with _ROOT_MEMO_LOCK:
+        if len(_ROOT_MEMO) >= _ROOT_MEMO_MAX:
+            _ROOT_MEMO.pop(next(iter(_ROOT_MEMO)), None)
+        _ROOT_MEMO[id(tree)] = (tree, root)
+    return root
 
 
 def ts_parse(parser, source):
