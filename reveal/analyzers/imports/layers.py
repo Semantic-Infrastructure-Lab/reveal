@@ -30,6 +30,10 @@ from ...utils.path_utils import to_posix
 logger = logging.getLogger(__name__)
 
 
+class LayerConfigError(ValueError):
+    """The architecture.layers configuration is unusable; the message names where."""
+
+
 @dataclass
 class LayerRule:
     """Defines architectural layer constraints."""
@@ -130,11 +134,17 @@ class LayerConfig:
     layers: List[LayerRule]
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any]) -> "LayerConfig":
+    def from_dict(cls, config_dict: Dict[str, Any], source: str = ".reveal.yaml") -> "LayerConfig":
         """Load layer configuration from dictionary.
 
         Args:
             config_dict: Dictionary from .reveal.yaml
+            source: Where the dictionary came from (the config file path), named in errors
+
+        Raises:
+            LayerConfigError: architecture or layers is not the expected shape, or a layer
+                definition is not a mapping. A bad layer is never skipped: a rule that
+                silently does not apply reads as an architecture that passes.
 
         Returns:
             LayerConfig instance
@@ -155,22 +165,28 @@ class LayerConfig:
         """
         layers = []
 
+        if not isinstance(config_dict, dict):
+            raise LayerConfigError(f"{source}: expected a mapping at the top level, got {type(config_dict).__name__}")
+
         # Navigate to architecture.layers
         arch = config_dict.get("architecture", {})
+        if not isinstance(arch, dict):
+            raise LayerConfigError(f"{source}: 'architecture' must be a mapping, got {type(arch).__name__}")
         layer_defs = arch.get("layers", [])
+        if not isinstance(layer_defs, list):
+            raise LayerConfigError(f"{source}: 'architecture.layers' must be a list, got {type(layer_defs).__name__}")
 
-        for layer_def in layer_defs:
-            try:
-                layer = LayerRule(
-                    name=layer_def.get("name", "unnamed"),
-                    paths=layer_def.get("paths", []),
-                    allow_imports=layer_def.get("allow_imports", []),
-                    deny_imports=layer_def.get("deny_imports", []),
+        for index, layer_def in enumerate(layer_defs):
+            if not isinstance(layer_def, dict):
+                raise LayerConfigError(
+                    f"{source}: architecture.layers[{index}] must be a mapping, got {type(layer_def).__name__}"
                 )
-                layers.append(layer)
-            except Exception as e:
-                logger.warning(f"Failed to load layer definition: {e}")
-                continue
+            layers.append(LayerRule(
+                name=layer_def.get("name", "unnamed"),
+                paths=layer_def.get("paths", []),
+                allow_imports=layer_def.get("allow_imports", []),
+                deny_imports=layer_def.get("deny_imports", []),
+            ))
 
         return cls(layers=layers)
 
@@ -195,6 +211,34 @@ class LayerConfig:
         return None
 
 
+def _nearest_reveal_yaml(start_path: Path) -> Optional[Path]:
+    """The .reveal.yaml nearest to *start_path*, walking up the directory tree."""
+    current = start_path if start_path.is_dir() else start_path.parent
+    while current != current.parent:
+        config_file = current / ".reveal.yaml"
+        if config_file.exists():
+            return config_file
+        current = current.parent
+    return None
+
+
+def _load_yaml_layers(config_file: Path) -> Optional[LayerConfig]:
+    """Read layer rules straight from one .reveal.yaml.
+
+    Raises:
+        LayerConfigError: the file cannot be read or parsed, or its layers are malformed;
+            the message names *config_file*.
+    """
+    import yaml
+
+    try:
+        with open(config_file, encoding='utf-8') as f:
+            config_dict = yaml.safe_load(f)
+    except (OSError, yaml.YAMLError, ValueError) as e:  # ValueError: UnicodeDecodeError, impossible scalars
+        raise LayerConfigError(f"{config_file}: cannot read layer configuration: {e}") from e
+    return LayerConfig.from_dict(config_dict, source=str(config_file)) if config_dict else None
+
+
 def load_layer_config(start_path: Path) -> Optional[LayerConfig]:
     """Load layer configuration using unified config system.
 
@@ -206,42 +250,31 @@ def load_layer_config(start_path: Path) -> Optional[LayerConfig]:
 
     Returns:
         LayerConfig if found, None otherwise
+
+    Raises:
+        LayerConfigError: layer configuration exists but is unusable; the message names
+            the config file.
     """
     try:
         # Use unified config system (supports precedence, walk-up, etc.)
         from reveal.config import RevealConfig
 
-        config = RevealConfig.get(start_path)
-        layers_list = config.get_layers()
-
-        if not layers_list:
-            return None
-
-        # Convert to LayerConfig format
-        config_dict = {'architecture': {'layers': layers_list}}
-        return LayerConfig.from_dict(config_dict)
-
-    except Exception as e:
-        logger.debug(f"Failed to load layer config from unified config: {e}")
+        layers_list = RevealConfig.get(start_path).get_layers()
+    except Exception as e:  # boundary-ok: broad-except -- RevealConfig.get/get_layers span config discovery, schema validation and merging; any failure there falls back to reading the nearest .reveal.yaml directly, which raises LayerConfigError naming the file if it is bad
+        logger.warning(f"Unified config load failed for {start_path} ({type(e).__name__}: {e}); reading the nearest .reveal.yaml directly")
 
         # Fallback to old direct loading for backwards compatibility
         # This ensures existing .reveal.yaml files still work during migration
-        import yaml
+        config_file = _nearest_reveal_yaml(start_path)
+        return _load_yaml_layers(config_file) if config_file else None
 
-        def _load_yaml_config(config_file: Path) -> Optional[LayerConfig]:
-            try:
-                with open(config_file, encoding='utf-8') as f:
-                    config_dict = yaml.safe_load(f)
-                return LayerConfig.from_dict(config_dict) if config_dict else None
-            except Exception as load_error:
-                logger.warning(f"Failed to load .reveal.yaml from {config_file}: {load_error}")
-                return None
-
-        current = start_path if start_path.is_dir() else start_path.parent
-        while current != current.parent:
-            config_file = current / ".reveal.yaml"
-            if config_file.exists():
-                return _load_yaml_config(config_file)
-            current = current.parent
-
+    if not layers_list:
         return None
+
+    # Convert to LayerConfig format. The merged config does not remember which file a layer
+    # came from, so a malformed layer names the nearest .reveal.yaml as the place to look.
+    nearest = _nearest_reveal_yaml(start_path)
+    return LayerConfig.from_dict(
+        {'architecture': {'layers': layers_list}},
+        source=f"layer configuration for {start_path} (nearest {nearest or '.reveal.yaml'})",
+    )

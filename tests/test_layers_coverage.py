@@ -196,12 +196,12 @@ class TestLayerConfigFromDict:
         config = LayerConfig.from_dict({})
         assert config.layers == []
 
-    def test_bad_layer_def_is_skipped(self):
-        """Lines 169–171 — invalid layer_def (not a dict) triggers exception → skipped."""
+    def test_bad_layer_def_fails_instead_of_being_skipped(self):
+        """BACK-1059 — a layer_def that is not a dict raises, naming the entry; a skipped
+        layer is a rule that silently does not apply."""
         config_dict = {'architecture': {'layers': ['not-a-dict']}}
-        config = LayerConfig.from_dict(config_dict)
-        # Bad entry skipped, no crash
-        assert config.layers == []
+        with pytest.raises(ValueError, match=r'layers\[0\]'):
+            LayerConfig.from_dict(config_dict)
 
 
 class TestLoadLayerConfig:
