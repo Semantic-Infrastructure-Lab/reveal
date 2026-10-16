@@ -155,7 +155,11 @@ def test_xlsx_banner_corrupt_lzma_member_is_disclosed(tmp_path):
     adapter = _adapter(_xlsx(tmp_path), None)
     adapter.file_path = _lzma_member_corrupt(tmp_path)
     assert adapter._build_powerpivot_banner() is None
-    assert adapter.composed_meta()['errors']
+    # BACK-1853: the damaged member is a part-level failure like malformed XML, so it reads as
+    # part_unreadable (the old path let it escape to the archive-level composed error).
+    meta = adapter.composed_meta()
+    assert {w['file'] for w in meta['warnings'] if w['type'] == 'part_unreadable'} == {
+        'xl/connections.xml', 'xl/workbook.xml'}
 
 
 def test_xlsx_pbixray_failure_still_falls_back_and_is_disclosed(tmp_path, monkeypatch):

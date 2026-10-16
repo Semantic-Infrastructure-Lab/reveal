@@ -10,7 +10,7 @@ All are ZIP archives containing XML files following the ECMA-376 standard.
 
 import re
 import xml.etree.ElementTree as ET
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from ...registry import register
 from ...utils import format_size
 from ...utils.path_utils import to_posix
@@ -238,6 +238,8 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
     def __init__(self, path: str):
         super().__init__(path)
         self.shared_strings: List[str] = []
+        # (sheet, why) for the sheets the last search_all_sheets could not read (BACK-1853).
+        self.unsearched_sheets: List[Tuple[str, str]] = []
         self._load_shared_strings()
 
     def _load_shared_strings(self) -> None:
@@ -405,7 +407,12 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
         header = f"Sheet: {sheet_name}"
         if dim:
             header += f" ({dim})"
-        header += f"\nRows: {sheet_info.get('rows', 0)}, Cols: {sheet_info.get('cols', 0)}"
+        unread = self._unread_reason(sheet_info)
+        if unread:
+            # Rows: 0, Cols: 0 is what an empty sheet says; an unreadable one is not empty (BACK-1853).
+            header += f"\nNot read: {unread} -- its rows and columns are unknown, not zero"
+        else:
+            header += f"\nRows: {sheet_info.get('rows', 0)}, Cols: {sheet_info.get('cols', 0)}"
         if sheet_info.get('formulas'):
             header += f", Formulas: {sheet_info['formulas']}"
 
@@ -422,6 +429,15 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
             'line_end': idx + 1 + len(lines),
             'source': source,
         }
+
+    @staticmethod
+    def _unread_reason(sheet_info: Dict[str, Any]) -> str:
+        """Why ``_analyze_sheet`` could not read a sheet, or '' when it did."""
+        if sheet_info.get('parse_failed'):
+            return 'corrupt or malformed XML'
+        if sheet_info.get('too_large'):
+            return f"the sheet part is too large to parse ({sheet_info.get('size_mb')} MB)"
+        return ''
 
     def _sheets(self) -> List[tuple]:
         """``(index, name, part path)`` for each sheet, in workbook order."""
@@ -574,6 +590,7 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
             in sheet-then-row order.
         """
         results: List[Dict[str, Any]] = []
+        self.unsearched_sheets = []
         if self.content_tree is None:
             return results
 
@@ -589,6 +606,10 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
             sheet_path = f'xl/worksheets/sheet{idx + 1}.xml'
             sheet_tree = self._read_xml(sheet_path)
             if sheet_tree is None:
+                # Not searched is not "no match" (BACK-1853); a missing part is not a sheet.
+                unread = self._unread_reason(self._analyze_sheet(sheet_path, sheet_name))
+                if unread or sheet_path in self.parts:
+                    self.unsearched_sheets.append((sheet_name, unread or 'unreadable'))
                 continue
 
             for row_elem in sheet_tree.iter(f'{{{xl}}}row'):

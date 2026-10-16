@@ -28,23 +28,29 @@ logger = logging.getLogger(__name__)
 # Rows the sheet view shows when ?limit= is not set; ?format=csv exports every row (BACK-1608).
 DEFAULT_SHEET_ROWS = 100
 
-# What reading one part of the workbook zip can raise: a corrupt or truncated member
-# (BadZipFile, zlib.error, EOFError), malformed XML (ParseError), an encrypted or
-# unsupported-compression member (RuntimeError, NotImplementedError) and I/O (OSError).
-# Anything else is a bug in this module and propagates (BACK-1614).
-_PART_ERRORS = (zipfile.BadZipFile, _zlib.error, EOFError, ET.ParseError, RuntimeError, OSError)
-
 # What opening the archive and reading its XML can raise beyond one part's errors: a member
 # stored with a compression zipfile cannot decode (NotImplementedError) or an LZMA member
 # that is damaged (lzma.LZMAError, which zipfile lets through; bz2 raises OSError).
-# Used by the whole-view handlers; a bug in this module is not in the list (BACK-1059).
 _DECOMPRESS_ERRORS: Tuple[Type[Exception], ...]
 try:
     from lzma import LZMAError as _LZMAError
     _DECOMPRESS_ERRORS = (_LZMAError,)
 except ImportError:  # a Python built without liblzma: zipfile itself cannot read LZMA members
     _DECOMPRESS_ERRORS = ()
-_ARCHIVE_ERRORS: Tuple[Type[Exception], ...] = _PART_ERRORS + (NotImplementedError,) + _DECOMPRESS_ERRORS
+
+# What reading one part of the workbook zip can raise: a corrupt or truncated member
+# (BadZipFile, zlib.error, EOFError), malformed XML (ParseError), an encrypted or
+# unsupported-compression member (RuntimeError, NotImplementedError), a damaged LZMA member
+# and I/O (OSError). The part-level handlers lacked LZMAError, so a damaged LZMA member
+# crashed them instead of reading as part_unreadable (BACK-1853); NotImplementedError is a
+# RuntimeError subclass and is listed so that is visible.
+# Anything else is a bug in this module and propagates (BACK-1614, BACK-1059).
+_PART_ERRORS: Tuple[Type[Exception], ...] = (
+    zipfile.BadZipFile, _zlib.error, EOFError, ET.ParseError, RuntimeError, NotImplementedError,
+    OSError,
+) + _DECOMPRESS_ERRORS
+# Opening the archive raises the same set; the whole-view handlers keep their own name.
+_ARCHIVE_ERRORS: Tuple[Type[Exception], ...] = _PART_ERRORS
 # The DataMashup blob is base64 around a streaming zip that is walked with struct.unpack_from.
 _POWERQUERY_ERRORS: Tuple[Type[Exception], ...] = _ARCHIVE_ERRORS + (binascii.Error, struct.error)
 
@@ -1014,10 +1020,19 @@ class XlsxAdapter(ResourceAdapter):
             'sheet_results': sheet_results,
         }
 
+        unsearched = list(getattr(self.analyzer, 'unsearched_sheets', []))
         result = ResultBuilder.create(
             contract_version=CONTRACT_VERSION,
             result_type='xlsx_search',
             source=self.file_path or Path('unknown'),
+            warnings=[{
+                'type': 'sheets_unsearched', 'count': len(unsearched),
+                'files': [name for name, _ in unsearched[:5]],
+                'message': (f"{len(unsearched)} sheet(s) could not be read and were not searched, so "
+                            "matches may be missing: "
+                            + ', '.join(f"{name} ({why})" for name, why in unsearched[:5])
+                            + (f" and {len(unsearched) - 5} more" if len(unsearched) > 5 else '')),
+            }] if unsearched else None,
             data=result_data
         )
         note_truncation(result, 'matches', len(matches), len(found), 'limit', hint='raise ?limit=N')
