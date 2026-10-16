@@ -47,7 +47,8 @@ def _run(*args: str):
 
 def _assert_sane(result, desc: str) -> None:
     assert result.returncode in (0, 1), (
-        f"{desc}: unexpected crash (rc={result.returncode}): {result.stderr}"
+        f"{desc}: unexpected crash (rc={result.returncode}): {result.stderr}\n"
+        f"stdout tail: {result.stdout[-2000:]}"
     )
     assert "Traceback (most recent call last)" not in result.stderr, (
         f"{desc}: unhandled exception:\n{result.stderr}"
