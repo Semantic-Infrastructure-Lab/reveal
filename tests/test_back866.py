@@ -80,7 +80,7 @@ class TestLinkGraphCache:
         def _boom(*a, **k):
             raise AssertionError("disk cache miss: extract_internal_links was re-run")
 
-        monkeypatch.setattr(files, "extract_internal_links", _boom)
+        monkeypatch.setattr(files, "extract_internal_links_outcome", _boom)
         cached = operations.build_link_graph(base)
         assert cached == fresh
 
@@ -121,13 +121,13 @@ class TestLinkGraphCache:
 
         monkeypatch.setenv("REVEAL_DISK_CACHE", "0")
         calls = []
-        orig = files.extract_internal_links
+        orig = files.extract_internal_links_outcome
 
         def _spy(*a, **k):
             calls.append(1)
             return orig(*a, **k)
 
-        monkeypatch.setattr(files, "extract_internal_links", _spy)
+        monkeypatch.setattr(files, "extract_internal_links_outcome", _spy)
         operations.build_link_graph(base)
         assert calls, "kill switch should force a live scan, not serve the cache"
 
@@ -138,7 +138,7 @@ class TestLinkGraphCache:
         def _boom(*a, **k):
             raise AssertionError("get_backlinks should reuse the cached graph")
 
-        monkeypatch.setattr(files, "extract_internal_links", _boom)
+        monkeypatch.setattr(files, "extract_internal_links_outcome", _boom)
         result = operations.get_backlinks(base, "b.md")
         assert result['found'] is True
         assert result['linked_by'] == ['a.md']
