@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Dict, Any, List, Optional
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
-from .connection import MySQLConnection
+from .connection import MYSQL_ERRORS, MySQLConnection
 from .health import HealthMetrics
 from .performance import PerformanceAnalyzer
 from .replication import ReplicationMonitor
@@ -467,7 +467,7 @@ class MySQLAdapter(ResourceAdapter):
 
             return {'role': 'Standalone'}
 
-        except Exception as e:
+        except MYSQL_ERRORS as e:
             return {'role': 'Unknown', 'error': str(e)}
 
     def _build_storage_info(self) -> Dict[str, Any]:
@@ -818,7 +818,7 @@ class MySQLAdapter(ResourceAdapter):
                 'summary': summary,
                 'top_queries': slow_queries,
             }
-        except Exception as e:
+        except MYSQL_ERRORS as e:
             return {
                 'type': 'slow_queries',
                 'error': str(e),

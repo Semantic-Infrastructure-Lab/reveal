@@ -1,5 +1,6 @@
 """MySQL connection management and credential resolution."""
 
+import configparser
 import os
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, cast
@@ -9,8 +10,21 @@ try:
     import pymysql
     import pymysql.cursors
     PYMYSQL_AVAILABLE = True
+    _DRIVER_ERRORS: tuple = (pymysql.err.MySQLError,)
 except ImportError:
     PYMYSQL_AVAILABLE = False
+    _DRIVER_ERRORS = ()
+
+
+class MySQLConnectionError(Exception):
+    """get_connection() could not open the connection (message carries the hint)."""
+
+
+# What a query through MySQLConnection can fail with: the driver's own errors
+# (pymysql.err.MySQLError: access denied, unknown table, lost connection), a
+# socket error, or MySQLConnectionError from get_connection(). Bound once at
+# import so a test that patches the `pymysql` name does not change it.
+MYSQL_ERRORS = (*_DRIVER_ERRORS, OSError, MySQLConnectionError)
 
 
 class MySQLConnection:
@@ -116,7 +130,7 @@ class MySQLConnection:
             pymysql connection object
 
         Raises:
-            Exception: Connection errors
+            MySQLConnectionError: The connection could not be opened
         """
         if self._connection:
             return self._connection
@@ -146,14 +160,16 @@ class MySQLConnection:
         try:
             self._connection = pymysql.connect(**connection_params)
             return self._connection
-        except Exception as e:
+        except (*_DRIVER_ERRORS, OSError, RuntimeError, ValueError, configparser.Error) as e:
+            # RuntimeError: pymysql needs `cryptography` for sha256/caching_sha2 auth;
+            # ValueError: a malformed port/host; configparser.Error: a broken ~/.my.cnf
             host_display = self.host or 'localhost'
             port_display = self.port or 3306
-            raise Exception(
+            raise MySQLConnectionError(
                 f"Failed to connect to MySQL at {host_display}:{port_display}\n"
                 f"Error: {str(e)}\n"
                 f"Hint: Set MYSQL_* env vars or configure ~/.my.cnf"
-            )
+            ) from e
 
     def convert_decimals(self, obj) -> Any:
         """Convert Decimal, datetime, and bytes objects for JSON serialization."""
@@ -267,12 +283,14 @@ class MySQLConnection:
             )
             assert ps_status is not None, "Failed to query performance_schema status"
             ps_enabled = bool(ps_status['enabled'])
-        except Exception:
-            # If query fails, assume disabled
+        except MYSQL_ERRORS as e:
+            # The query failed (privilege, old server, lost connection): report
+            # disabled, with the reason so it does not read as a measured "off"
             return {
                 'enabled': False,
                 'counters_reset_detected': False,
                 'likely_reset_time': None,
+                'error': f'performance_schema status query failed: {e}',
             }
 
         if not ps_enabled:
@@ -294,12 +312,13 @@ class MySQLConnection:
                 FROM performance_schema.events_statements_summary_by_digest
                 WHERE TIMER_START > 0
             """)
-        except Exception:
-            # If query fails (table doesn't exist, etc), assume no reset
+        except MYSQL_ERRORS as e:
+            # The digest table is missing or unreadable: assume no reset, say why
             return {
                 'enabled': True,
                 'counters_reset_detected': False,
                 'likely_reset_time': None,
+                'error': f'performance_schema digest query failed: {e}',
             }
 
         if not oldest_event or not oldest_event.get('oldest_timestamp'):

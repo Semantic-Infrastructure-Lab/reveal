@@ -1489,7 +1489,8 @@ class TestMySQLConnectionPerformanceSchemaStatus(unittest.TestCase):
     def test_performance_schema_query_failure(self):
         """Test graceful handling when performance_schema query fails."""
         # Simulate query failure
-        self.conn.execute_single = Mock(side_effect=Exception("Table doesn't exist"))
+        import pymysql
+        self.conn.execute_single = Mock(side_effect=pymysql.err.ProgrammingError(1146, "Table doesn't exist"))
 
         result = self.conn.get_performance_schema_status()
 
