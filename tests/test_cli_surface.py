@@ -2556,3 +2556,22 @@ def test_every_js_ts_module_extension_is_scanned(tmp_path, ext):
     assert [e['name'] for e in report['surfaces']['env']] == ['HOST']
     assert ext in _INTERFACE_FAMILY_EXTENSIONS
     assert get_analyzer(f"x{ext}", allow_fallback=False) is not None
+
+
+# ---- BACK-1419: the text view says whether a network/db/sdk entry was found by an import or a call
+
+def test_surface_text_says_call_for_a_call_found_entry():
+    report = {'path': 'x', 'total': 2, 'surfaces': {
+        'network': [{'type': 'import', 'name': 'requests', 'file': 'b.py', 'line': 1},
+                    {'type': 'call', 'name': 'URLSession.shared.dataTask', 'file': 'a.swift', 'line': 4}]}}
+    out = surface_text(report)
+    assert '  import requests  b.py:1' in out
+    assert '  call URLSession.shared.dataTask  a.swift:4' in out
+    assert 'import URLSession' not in out
+    assert 'Network I/O (imports and calls) (2):' in out
+
+
+def test_surface_text_import_entries_without_a_type_still_read_as_imports():
+    report = {'path': 'x', 'total': 1, 'surfaces': {
+        'db': [{'name': 'sqlite3', 'file': 'b.py', 'line': 2}]}}
+    assert '  import sqlite3  b.py:2' in surface_text(report)

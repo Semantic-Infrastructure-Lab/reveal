@@ -12,9 +12,9 @@ _SURFACE_LABELS = {
     'http': 'HTTP routes',
     'mcp': 'MCP tool registrations',
     'env': 'Environment variables',
-    'network': 'Network I/O (imports)',
-    'db': 'Database / storage (imports)',
-    'sdk': 'External SDK (imports)',
+    'network': 'Network I/O (imports and calls)',
+    'db': 'Database / storage (imports and calls)',
+    'sdk': 'External SDK (imports and calls)',
     'fs': 'Filesystem writes',
     'subprocess': 'Subprocess / shell execution',
 }
@@ -88,6 +88,11 @@ def _by_dir(rows: List[Dict[str, Any]], top: Optional[int]) -> List[str]:
     return lines
 
 
+def _found_by(entry: Dict[str, Any]) -> str:
+    """How a network/db/sdk entry was found: 'call' (Swift URLSession...) or 'import' (BACK-1419)."""
+    return 'call' if entry.get('type') == 'call' else 'import'
+
+
 def _entry(surface_type: str, entry: Dict[str, Any]) -> Optional[str]:
     file_path = entry.get('file', '')
     line = entry.get('line', '')
@@ -119,7 +124,7 @@ def _entry(surface_type: str, entry: Dict[str, Any]) -> Optional[str]:
     if surface_type in ('mcp', 'env', 'subprocess'):
         return f"  {name}{loc}"
     if surface_type in ('network', 'db', 'sdk'):
-        return f"  import {name}{loc}"
+        return f"  {_found_by(entry)} {name}{loc}"
     if surface_type == 'fs':
         target = entry.get('target', '?')
         if target and target != '?':
