@@ -338,9 +338,12 @@ What landed, and when, is in CHANGELOG `[0.130.0]` and `internal-docs/RESOLVED_L
    `Exception` without a reason to 0: each now narrows to what its body raises, or states why
    it is a boundary (`# boundary-ok: broad-except -- <why>`) and still discloses the failure.
    `reveal check` leaves through the subcommand seam in both its directory and single-file
-   forms, and `review` is the one remaining boundary site. What is open is disclosure: places
-   that log or print a dropped result without putting it in the result (BACK-1852,
-   BACK-1856, BACK-1857). Also open: BACK-916 (one
+   forms, and `review` is the one remaining boundary site. A file that could not be analyzed
+   or read, or a config that could not load, now reaches the result instead of a log line for
+   ast://, imports, review, calls://, trace://, contracts://, testability://, diff:// on a git
+   directory, markdown:// reads, xlsx sheets, the git content search, the DNS checks and
+   config loading. What is open is the rest of that class: nav `--transitive` effects
+   (BACK-1861), the DNS record listing (BACK-1862) and a few rare sites (BACK-1857). Also open: BACK-916 (one
    rendering layer: patches, nginx://, the nginx file-flag handlers, surface://, overview://,
    testability://, deps, contracts, pack, architecture and hotspots return their output; remaining
    inline/adapter rendering and shared capture/JSON ownership stay open) and BACK-1052 (shared scan policy now used by depends,
