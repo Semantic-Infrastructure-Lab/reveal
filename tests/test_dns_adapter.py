@@ -173,7 +173,7 @@ class TestGetDnsSummary:
         with patch('reveal.adapters.domain.dns.HAS_DNSPYTHON', True):
             from reveal.adapters.domain.dns import get_dns_summary
 
-            with patch('reveal.adapters.domain.dns.get_dns_records', side_effect=Exception('DNS error')):
+            with patch('reveal.adapters.domain.dns.get_dns_records', side_effect=OSError('DNS error')):
                 result = get_dns_summary('example.com')
 
                 assert 'error' in result
@@ -446,7 +446,7 @@ class TestCheckDnsPropagation:
             import reveal.adapters.domain.dns
 
             # Mock dns.resolver.resolve to raise exception
-            with patch.object(reveal.adapters.domain.dns.dns.resolver, 'resolve', side_effect=Exception('DNS error')):
+            with patch.object(reveal.adapters.domain.dns.dns.resolver, 'resolve', side_effect=reveal.adapters.domain.dns.dns.exception.DNSException('DNS error')):
                 result = check_dns_propagation('example.com')
 
                 assert result['name'] == 'dns_propagation'

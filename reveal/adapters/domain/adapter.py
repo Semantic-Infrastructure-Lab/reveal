@@ -9,7 +9,7 @@ from .dns import (
     check_email_dns, check_ns_authority,
 )
 from .renderer import DomainRenderer
-from ..ssl.certificate import check_ssl_health
+from ..ssl.certificate import SSL_CHECK_ERRORS, check_ssl_health
 from ...utils.results import ResultBuilder
 from ...utils.severity import filter_by_severity
 from reveal.reveal_types import CONTRACT_VERSION
@@ -117,10 +117,11 @@ def _check_ssl_certificate(domain: str, advanced: bool = False) -> Dict[str, Any
             error_msg = ssl_check.get('error', 'No SSL certificate found')
             return _build_ssl_failure_result(error_msg, value='No certificate')
 
-    except Exception as e:
+    except SSL_CHECK_ERRORS as e:
         return _build_ssl_failure_result(f'SSL check failed: {e}')
 
 
+import http.client as _http_client
 import urllib.request as _urllib_request
 import urllib.error as _urllib_error
 import ssl as _ssl_module
@@ -181,7 +182,8 @@ def _follow_redirect_chain(url: str, max_redirects: int = 5) -> Dict[str, Any]:
                 return result
         except _urllib_error.URLError as e:
             return {'status': None, 'chain': chain, 'error': str(e.reason), 'final_url': current}
-        except Exception as e:
+        except (OSError, ValueError, _http_client.HTTPException) as e:
+            # socket/TLS errors, a malformed URL, or a reply http.client cannot parse
             return {'status': None, 'chain': chain, 'error': str(e), 'final_url': current}
 
     return {'status': None, 'chain': chain, 'error': 'Too many redirects', 'final_url': current}
@@ -778,7 +780,7 @@ class DomainAdapter(ResourceAdapter):
 
         try:
             w = whois.whois(self.domain)
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- python-whois runs per-TLD regex parsers over free-text registry replies and its failure set is unbounded (PywhoisError, socket errors, parser Attribute/IndexError); the failure is returned as the result's 'error'
             return {
                 'type': 'domain_whois',
                 'domain': self.domain,
@@ -838,7 +840,7 @@ class DomainAdapter(ResourceAdapter):
                     f"Advanced SSL checks: reveal ssl://{self.domain} --check-advanced",
                 ],
             }
-        except Exception as e:
+        except SSL_CHECK_ERRORS as e:
             return {
                 'type': 'domain_ssl_status',
                 'domain': self.domain,
@@ -967,7 +969,7 @@ class DomainAdapter(ResourceAdapter):
                 'health_status': ssl_check['status'],
                 'error': ssl_check.get('error'),
             }
-        except Exception as e:
+        except SSL_CHECK_ERRORS as e:
             return {
                 'has_certificate': False,
                 'days_until_expiry': None,

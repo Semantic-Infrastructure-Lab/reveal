@@ -8,8 +8,13 @@ try:
     import dns.resolver
     import dns.exception
     HAS_DNSPYTHON = True
+    # Every named failure of a resolver call: dnspython's own errors (NoAnswer,
+    # NXDOMAIN, Timeout, NoNameservers, bad names -- all DNSException) and the
+    # socket errors of the plain gethostbyname() lookups made beside them.
+    _DNS_ERRORS: tuple = (dns.exception.DNSException, OSError)
 except ImportError:
     HAS_DNSPYTHON = False
+    _DNS_ERRORS = (OSError,)
 
 
 logger = logging.getLogger(__name__)
@@ -71,7 +76,7 @@ def get_dns_summary(domain: str) -> Dict[str, Any]:
             'has_mx': len(records.get('mx', [])) > 0,
             'mx_records': records.get('mx', []),
         }
-    except Exception as e:
+    except _DNS_ERRORS as e:
         return {
             'error': str(e),
             'nameservers': [],
@@ -179,7 +184,7 @@ def check_nameserver_response(domain: str) -> Dict[str, Any]:
             'message': f'Nameservers respond ({len(nameservers)} found)',
             'severity': 'medium',
         }
-    except Exception as e:
+    except _DNS_ERRORS as e:
         return {
             'name': 'nameserver_response',
             'status': 'failure',
@@ -229,7 +234,7 @@ def check_mx_records(domain: str) -> Dict[str, Any]:
             'message': 'No MX records — domain cannot receive email',
             'severity': 'high',
         }
-    except Exception as e:
+    except OSError as e:
         return {
             'name': 'mx_records',
             'status': 'warning',
@@ -303,7 +308,7 @@ def check_spf_record(domain: str) -> Dict[str, Any]:
             'message': 'No SPF record — domain is open to email spoofing',
             'severity': 'high',
         }
-    except Exception as e:
+    except OSError as e:
         return {
             'name': 'spf_record',
             'status': 'warning',
@@ -386,7 +391,7 @@ def check_dmarc_record(domain: str) -> Dict[str, Any]:
             'message': 'No DMARC record — spoofed emails reach inboxes undetected',
             'severity': 'medium',
         }
-    except Exception as e:
+    except OSError as e:
         return {
             'name': 'dmarc_record',
             'status': 'warning',
@@ -466,7 +471,7 @@ def check_dns_propagation(domain: str) -> Dict[str, Any]:
                 resolver.nameservers = [ns_ip]
                 answers = resolver.resolve(domain, 'A')
                 a_record_responses[nameserver] = sorted([str(rdata) for rdata in answers])
-            except Exception as e:
+            except _DNS_ERRORS as e:
                 logger.warning("DNS propagation check failed for %s: %s", nameserver, e)
                 a_record_responses[nameserver] = f"Error: {e}"
 
@@ -500,7 +505,7 @@ def check_dns_propagation(domain: str) -> Dict[str, Any]:
                     'responses': a_record_responses,
                 },
             }
-    except Exception as e:
+    except _DNS_ERRORS as e:
         return {
             'name': 'dns_propagation',
             'status': 'failure',
@@ -545,7 +550,7 @@ def _query_ns_for_ns_records(ns_hostname: str, domain: str) -> Dict[str, Any]:
     except dns.exception.Timeout:
         result['status'] = 'no_response'
         result['error'] = 'Query timed out'
-    except Exception as e:
+    except _DNS_ERRORS as e:
         result['status'] = 'query_failed'
         result['error'] = str(e)
 
@@ -585,7 +590,7 @@ def check_ns_authority(domain: str) -> Dict[str, Any]:
     try:
         ns_answers = dns.resolver.resolve(domain, 'NS')
         registered_nameservers = sorted(str(rr).rstrip('.').lower() for rr in ns_answers)
-    except Exception as e:
+    except _DNS_ERRORS as e:
         return {
             'type': 'domain_ns_audit',
             'domain': domain,
