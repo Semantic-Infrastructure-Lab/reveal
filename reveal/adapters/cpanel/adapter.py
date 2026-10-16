@@ -897,7 +897,7 @@ class CpanelAdapter(ResourceAdapter):
                 else:
                     nginx_audit = {'domain_count': 0, 'has_failures': False, 'domains': []}
             except (OSError, ValueError) as exc:  # unreadable nginx conf (UnicodeDecodeError is a ValueError) or an os.stat failure in the ACL walk
-                nginx_audit = {'error': str(exc), 'has_failures': False, 'domains': []}
+                nginx_audit = {'error': str(exc), 'has_failures': True, 'domains': []}  # the audit did not run: not a pass (BACK-1857)
 
         # Use summary (not raw certs) so --dns-verified exclusions are respected
         ssl_has_failures = any(k != 'ok' and v > 0 for k, v in ssl_data.get('summary', {}).items())

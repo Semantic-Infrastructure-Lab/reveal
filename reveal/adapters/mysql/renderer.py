@@ -5,6 +5,18 @@ import sys
 from reveal.rendering import TypeDispatchRenderer
 
 
+def _performance_schema_text(ps_status: dict) -> str:
+    """The status line: a failed status query is "unknown (<why>)", never a measured
+    "disabled" (BACK-1857); a failed reset check keeps the enabled state it did read."""
+    error = ps_status.get('error')
+    enabled = bool(ps_status.get('enabled'))
+    if error and not enabled:
+        return f"unknown ({error})"
+    if error:
+        return f"enabled ({error})"
+    return 'enabled' if enabled else 'disabled'
+
+
 class MySQLRenderer(TypeDispatchRenderer):
     """Renderer for MySQL adapter results.
 
@@ -143,7 +155,7 @@ class MySQLRenderer(TypeDispatchRenderer):
         print("MySQL Index Usage")
         print(f"Measurement basis: {result['measurement_basis']} (since {result['measurement_start_time']})")
         ps_status = result['performance_schema_status']
-        print(f"Performance Schema: {'enabled' if ps_status.get('enabled') else 'disabled'}")
+        print(f"Performance Schema: {_performance_schema_text(ps_status)}")
         print()
 
         most_used = result['most_used']
