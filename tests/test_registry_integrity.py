@@ -133,29 +133,15 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
                     f"{scheme}:// adapter class is not callable"
                 )
 
-    def test_adapters_init_imports_match_registration(self):
-        """Check that adapters/__init__.py imports all registered adapters.
+    def test_builtin_schemes_match_registration(self):
+        """registry.BUILTIN_SCHEMES (the lazy loader's table) is exactly the set of
+        production adapters, so a new adapter cannot be registered yet never imported
+        (BACK-1870)."""
+        from reveal.adapters.registry import BUILTIN_SCHEMES
 
-        This ensures that adapters are loaded on import, not just via lazy loading.
-        """
-        # Get all registered production adapters (excludes test-only adapters)
-        registered_schemes = self._get_production_adapters()
-
-        # Read adapters/__init__.py
-        init_file = Path(__file__).parent.parent / 'reveal' / 'adapters' / '__init__.py'
-        init_content = init_file.read_text(encoding='utf-8')
-
-        # Find all imports (from .xyz import XyzAdapter)
-        import_pattern = r'from \.\w+ import \w+Adapter'
-        imports = re.findall(import_pattern, init_content)
-
-        # We should have at least as many imports as registered schemes
-        # (Some adapters might be in subdirectories)
-        self.assertGreaterEqual(
-            len(imports), len(registered_schemes),
-            f"adapters/__init__.py has {len(imports)} imports but "
-            f"{len(registered_schemes)} schemes are registered. "
-            f"Missing imports?"
+        self.assertEqual(
+            sorted(self._get_production_adapters()), sorted(BUILTIN_SCHEMES),
+            "add the new adapter's scheme to registry.BUILTIN_SCHEMES",
         )
 
 

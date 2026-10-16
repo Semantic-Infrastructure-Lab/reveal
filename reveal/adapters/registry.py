@@ -2,25 +2,136 @@
 
 Adapters register via @register_adapter('scheme') decorator.
 Renderers register via @register_renderer(RendererClass) decorator.
+A shipped adapter's module is imported on first lookup of its scheme (BACK-1870),
+so a command that uses one adapter does not import the other thirty-four; anything
+that enumerates the registry imports them all.
 Plugin adapters outside the reveal package tree are auto-discovered from
 <cwd>/.reveal/adapters/ and ~/.reveal/adapters/ on first get_adapter_class() call.
 """
 
 from __future__ import annotations
 
+import importlib
 import logging
 import sys
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+# The adapters reveal ships, in registration order; each is the module
+# reveal.adapters.<scheme>. tests/test_adapter_registry_lazy_back1870.py checks this
+# tuple against what a full import registers, so it cannot drift.
+BUILTIN_SCHEMES = (
+    'env', 'ast', 'claude', 'diff', 'ssl', 'domain', 'help', 'imports', 'json',
+    'markdown', 'mysql', 'python', 'reveal', 'sqlite', 'stats', 'xlsx', 'cpanel',
+    'autossl', 'letsencrypt', 'nginx', 'calls', 'classify', 'depends', 'patches',
+    'codex', 'surface', 'contracts', 'hotspots', 'deps', 'architecture', 'git',
+    'overview', 'testability', 'trace', 'pack',
+)
+# Absent without their optional dependency; every other import failure is a bug.
+_OPTIONAL_SCHEMES = frozenset({'git'})
+
+
+class _AdapterRegistry(Dict[str, type]):
+    """Scheme -> adapter class, filled on demand.
+
+    A lookup of one shipped scheme (``[]``, ``get``, ``in``) imports that adapter's
+    module; iteration, ``keys``/``values``/``items``, ``len`` and ``copy`` import all
+    of them first, then list them in BUILTIN_SCHEMES order. Registering is a plain
+    ``__setitem__`` and loads nothing.
+    """
+
+    _all_loaded = False
+    _loading_all = False
+
+    def _has(self, scheme: str) -> bool:
+        return super().__contains__(scheme)
+
+    def _load(self, scheme: Any) -> None:
+        if (self._all_loaded or not isinstance(scheme, str)
+                or scheme not in BUILTIN_SCHEMES or self._has(scheme)):
+            return
+        _import_adapter_module(scheme)
+
+    def load_all(self) -> None:
+        if self._all_loaded or self._loading_all:
+            return
+        self._loading_all = True
+        try:
+            for scheme in BUILTIN_SCHEMES:
+                if not self._has(scheme):
+                    _import_adapter_module(scheme)
+            # Canonical order, whatever order lookups happened to load them in.
+            registered = dict(super().items())
+            ordered = {s: registered.pop(s) for s in BUILTIN_SCHEMES if s in registered}
+            ordered.update(registered)
+            super().clear()
+            super().update(ordered)
+            self._all_loaded = True
+        finally:
+            self._loading_all = False
+
+    def __missing__(self, scheme: Any) -> type:
+        self._load(scheme)
+        if not self._has(scheme):
+            raise KeyError(scheme)
+        return super().__getitem__(scheme)
+
+    def get(self, scheme: Any, default: Any = None) -> Any:
+        self._load(scheme)
+        return super().get(scheme, default)
+
+    def __contains__(self, scheme: object) -> bool:
+        self._load(scheme)
+        return super().__contains__(scheme)
+
+    def __iter__(self):
+        self.load_all()
+        return super().__iter__()
+
+    def __len__(self) -> int:
+        self.load_all()
+        return super().__len__()
+
+    def keys(self):
+        self.load_all()
+        return super().keys()
+
+    def values(self):
+        self.load_all()
+        return super().values()
+
+    def items(self):
+        self.load_all()
+        return super().items()
+
+    def copy(self):
+        self.load_all()
+        return super().copy()
+
+
+def _import_adapter_module(scheme: str) -> None:
+    try:
+        importlib.import_module(f'reveal.adapters.{scheme}')
+    except ImportError:
+        if scheme not in _OPTIONAL_SCHEMES:
+            raise
+        logger.debug('Optional adapter %s unavailable', scheme, exc_info=True)
+
+
 # Scheme → adapter class mapping populated by @register_adapter decorators.
-_ADAPTER_REGISTRY: Dict[str, type] = {}
+_ADAPTER_REGISTRY: Dict[str, type] = _AdapterRegistry()
 _adapter_plugins_loaded: bool = False
 
 # Scheme → renderer class mapping populated by @register_renderer decorators.
+# Read it through get_renderer_class / list_renderer_schemes, which load the adapter first.
 _RENDERER_REGISTRY: Dict[str, type] = {}
+
+
+def load_all_adapters() -> None:
+    """Import every shipped adapter (registers each scheme and renderer)."""
+    _ADAPTER_REGISTRY.load_all()  # type: ignore[attr-defined]
 
 
 def _load_adapter_plugin_dir(plugin_dir: Path) -> None:
@@ -187,9 +298,12 @@ def register_renderer(renderer_class):
 
 def get_renderer_class(scheme: str) -> Optional[type]:
     """Get renderer class for a URI scheme."""
-    return _RENDERER_REGISTRY.get(scheme.lower())
+    scheme = scheme.lower()
+    _ADAPTER_REGISTRY._load(scheme)  # type: ignore[attr-defined]
+    return _RENDERER_REGISTRY.get(scheme)
 
 
 def list_renderer_schemes() -> list:
     """Get list of schemes with registered renderers."""
+    load_all_adapters()
     return sorted(_RENDERER_REGISTRY.keys())
