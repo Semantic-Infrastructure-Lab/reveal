@@ -39,9 +39,14 @@ def _expected(root, kinds):
     return [n for n in iter_tree(root) if _zero_arg(n, 'kind') in kinds]
 
 
+def _key(node):
+    # Node.id is absent from the 1.8.1 binding; kind + byte span identifies a node
+    return tuple(_zero_arg(node, a) for a in ('kind', 'start_byte', 'end_byte'))
+
+
 def _problem(root, kinds, got):
     want = _expected(root, kinds)
-    if [n.id for n in got] != [n.id for n in want]:
+    if [_key(n) for n in got] != [_key(n) for n in want]:
         return f'{kinds}: got {len(got)} nodes, iter_tree filter gives {len(want)} (or order differs)'
     return None
 
