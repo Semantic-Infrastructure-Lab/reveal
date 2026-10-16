@@ -351,6 +351,9 @@ class RevealConfig:
         """
         self._config = merged_config
         self._project_root = project_root or Path.cwd()
+        # (config file, why) for each file that exists but could not be loaded, so its
+        # settings are NOT in this config; ``check`` discloses them (BACK-1857).
+        self.load_failures: List[Tuple[str, str]] = []
         self._overrides = self._parse_overrides()
 
     def _parse_overrides(self) -> List[Override]:
@@ -406,10 +409,12 @@ class RevealConfig:
             project_root = start_path
 
         # Load and merge configs
-        merged = cls._load_and_merge(start_path, cli_overrides, no_config)
+        failures: List[Tuple[str, str]] = []
+        merged = cls._load_and_merge(start_path, cli_overrides, no_config, failures)
 
         # Create instance
         instance = cls(merged, project_root)
+        instance.load_failures = failures
 
         # Cache it
         if not no_config:
@@ -467,8 +472,12 @@ class RevealConfig:
     def _load_and_merge(cls,
                         start_path: Path,
                         cli_overrides: Optional[Dict[str, Any]] = None,
-                        no_config: bool = False) -> Dict[str, Any]:
+                        no_config: bool = False,
+                        failures: Optional[List[Tuple[str, str]]] = None) -> Dict[str, Any]:
         """Load all configs and merge with precedence rules.
+
+        *failures* collects ``(path, why)`` for each config file that exists but could not
+        be loaded (BACK-1857).
 
         Precedence (high to low):
         1. CLI overrides
@@ -487,28 +496,29 @@ class RevealConfig:
 
             if custom_config_path:
                 # Load only the specified config file
-                custom_config = cls._load_file(Path(custom_config_path))
+                custom_config, why = cls._load_file_outcome(Path(custom_config_path), failures)
                 if custom_config:
                     configs.append(custom_config)
-                else:
+                elif why is None:
                     logger.warning(
                         f"REVEAL_CONFIG specified but file not found: {custom_config_path}"
                     )
             else:
                 # Normal config discovery
                 # 1. System config
-                system_config = cls._load_file(Path('/etc/reveal/config.yaml'))
+                system_config, _why = cls._load_file_outcome(Path('/etc/reveal/config.yaml'), failures)
                 if system_config:
                     configs.append(system_config)
 
                 # 2. User config
                 user_config_path = cls._get_user_config_path()
-                user_config = cls._load_file(user_config_path) if user_config_path.exists() else None
+                user_config = cls._load_file_outcome(user_config_path, failures)[0] \
+                    if user_config_path.exists() else None
                 if user_config:
                     configs.append(user_config)
 
                 # 3. Project configs (walk up from start_path)
-                project_configs = cls._discover_project_configs(start_path)
+                project_configs = cls._discover_project_configs(start_path, failures)
                 configs.extend(reversed(project_configs))  # Reverse so nearest is last
 
             # 4. Environment variables (always loaded, even with REVEAL_CONFIG)
@@ -528,8 +538,10 @@ class RevealConfig:
         return merged
 
     @classmethod
-    def _try_load_pyproject_reveal(cls, pyproject: Path) -> Optional[Dict[str, Any]]:
-        """Load [tool.reveal] section from a pyproject.toml, returning None on error."""
+    def _try_load_pyproject_reveal(cls, pyproject: Path,
+                                   failures: Optional[List[Tuple[str, str]]] = None) -> Optional[Dict[str, Any]]:
+        """Load [tool.reveal] section from a pyproject.toml, returning None on error (which
+        is recorded in *failures*: an unreadable pyproject.toml hides its [tool.reveal])."""
         if not pyproject.exists() or not tomllib:
             return None
         try:
@@ -538,10 +550,13 @@ class RevealConfig:
             return data.get('tool', {}).get('reveal')
         except (OSError, ValueError) as e:  # unreadable, or tomllib.TOMLDecodeError / UnicodeDecodeError
             logger.debug(f"Failed to load {pyproject}: {e}")
+            if failures is not None:
+                failures.append((str(pyproject), f"{type(e).__name__}: {e}"))
             return None
 
     @classmethod
-    def _discover_project_configs(cls, start_path: Path) -> List[Dict[str, Any]]:
+    def _discover_project_configs(cls, start_path: Path,
+                                  failures: Optional[List[Tuple[str, str]]] = None) -> List[Dict[str, Any]]:
         """Walk up directory tree finding .reveal.yaml files.
 
         Returns:
@@ -554,13 +569,13 @@ class RevealConfig:
             # Check .reveal.yaml first
             config_file = current / '.reveal.yaml'
             if config_file.exists():
-                config = cls._load_file(config_file)
+                config, _why = cls._load_file_outcome(config_file, failures)
                 if config:
                     configs.append(config)
                 if config and config.get('root'):
                     break
 
-            pyproject_config = cls._try_load_pyproject_reveal(current / 'pyproject.toml')
+            pyproject_config = cls._try_load_pyproject_reveal(current / 'pyproject.toml', failures)
             if pyproject_config:
                 configs.append(pyproject_config)
             if pyproject_config and pyproject_config.get('root'):
@@ -582,22 +597,40 @@ class RevealConfig:
 
     @classmethod
     def _load_file(cls, path: Path) -> Optional[Dict[str, Any]]:
-        """Load and validate a config file."""
+        """Load and validate a config file; None when absent or unloadable."""
+        return cls._load_file_outcome(path)[0]
+
+    @classmethod
+    def _load_file_outcome(cls, path: Path,
+                           failures: Optional[List[Tuple[str, str]]] = None
+                           ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """``(config, failure)``: *failure* is why a file that exists could not be loaded
+        (also appended to *failures*), None when it loaded or is simply absent. A caller must
+        not read a None config with a failure as "no config here" (BACK-1857)."""
         if not path.exists():
-            return None
+            return None, None
         if not yaml:
             logger.warning(f"PyYAML not installed, cannot load {path}")
-            return None
-        try:
-            with open(path, encoding='utf-8') as f:
-                config = yaml.safe_load(f)
-            if config is None:
-                return {}
-            cls._validate_config_schema(config, path)
-            return cast(Dict[str, Any], config)
-        except (OSError, ValueError, yaml.YAMLError) as e:  # unreadable, not UTF-8, or not YAML
-            logger.error(f"Failed to load config {path}: {e}")
-            return None
+            why = 'PyYAML is not installed'
+        else:
+            try:
+                with open(path, encoding='utf-8') as f:
+                    config = yaml.safe_load(f)
+                if config is None:
+                    return {}, None
+                if not isinstance(config, dict):
+                    # _validate_config_schema only warns; a list or scalar here crashed every
+                    # layer that goes on to call .get() on it.
+                    raise ValueError(f"top level must be a mapping, not {type(config).__name__}")
+                cls._validate_config_schema(config, path)
+                return cast(Dict[str, Any], config), None
+            except (OSError, ValueError, yaml.YAMLError) as e:  # unreadable, not UTF-8, or not YAML
+                logger.error(f"Failed to load config {path}: {e}")
+                first_line = str(e).split('\n', 1)[0]
+                why = f"{type(e).__name__}: {first_line}".rstrip(': ')
+        if failures is not None:
+            failures.append((str(path), why))
+        return None, why
 
     @classmethod
     def _get_user_config_path(cls) -> Path:

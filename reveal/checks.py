@@ -78,7 +78,21 @@ def capability_disclosures(files, select, ignore) -> List[str]:
     recursive ``check`` and by the MCP tool, so none of them can print a bare
     "no issues" the others already know is unearned (BACK-1466)."""
     return (_python_only_rule_disclosures(files, select, ignore)
-            + _i001_not_checked_disclosures(files, select, ignore))
+            + _i001_not_checked_disclosures(files, select, ignore)
+            + _config_load_disclosures(files))
+
+
+def _config_load_disclosures(files) -> List[str]:
+    """Config files that exist for *files* but could not be loaded (BACK-1857): their rule
+    selection, ignores and thresholds were not applied, and the run otherwise reads as a
+    check under the user's own settings. One note per file, whichever file reached it."""
+    from .config import RevealConfig
+    failures: dict = {}
+    for directory in sorted({Path(f).parent for f in files}):
+        for path, why in RevealConfig.get(directory).load_failures:
+            failures.setdefault(path, why)
+    return [f"config {path} could not be loaded ({why}): its settings were not applied, "
+            "so this run used the defaults for them" for path, why in sorted(failures.items())]
 
 
 def parse_error_suffix(position: Optional[Tuple[int, int]]) -> str:
@@ -262,7 +276,7 @@ def _format_detections_text(
             if rule_errors or scan_incomplete:
                 verdict = "⚠️  No findings in the checked population; scan incomplete"
             elif disclosures:
-                verdict = "✅ No issues found (some rules skip this language; see notes above)"
+                verdict = "✅ No issues found (see the notes above)"
             else:
                 verdict = "✅ No issues found"
             print(f"{path}: {verdict}")

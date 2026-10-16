@@ -79,7 +79,7 @@ class I007(BaseRule):
             shown = ', '.join(result.skipped[:3])
             more = f" (+{len(result.skipped) - 3} more)" if len(result.skipped) > 3 else ''
             self.unavailable(
-                f"{len(result.skipped)} source file(s) could not be scanned for imports "
+                f"{len(result.skipped)} source file(s) could not be fully scanned for imports "
                 f"({shown}{more}); dependencies reported as unused may be used there",
                 str(manifest_path))
 

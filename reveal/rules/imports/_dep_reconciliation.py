@@ -50,8 +50,9 @@ logger = logging.getLogger(__name__)
 # shape tools like ``deptry``/``pipreqs`` maintain), not exhaustive: absence
 # from this table means "no signal", not "confirmed no mismatch" -- an
 # unlisted mismatch stays a false negative (silently not flagged), never a
-# false positive, matching BACK-1189's "under-classify rather than guess"
-# stance for both directions.
+# false positive from the table itself, matching BACK-1189's "under-classify
+# rather than guess" stance for both directions. (A source file that did not
+# parse can still hide a use: it is reported as skipped, BACK-1857.)
 # ---------------------------------------------------------------------------
 PY_DIST_TO_IMPORT_ALIASES = {
     'pillow': 'pil',
@@ -138,8 +139,9 @@ def _scan_project_imports_uncached(
     import graph; `_scan_project_imports` caches it per (root, extensions, normalize,
     sep) while the tree is unchanged.
 
-    A file whose extraction raises is recorded in ``skipped`` (sorted), not dropped:
-    its imports are missing from ``names``, which the caller must disclose.
+    A file whose extraction raises, or whose parse recovered from errors, is recorded in
+    ``skipped`` (sorted), not dropped: its imports are missing from (or only partly in)
+    ``names``, which the caller must disclose.
     """
     names: Set[str] = set()
     skipped: Set[str] = set()
@@ -156,7 +158,10 @@ def _scan_project_imports_uncached(
             skipped.add(str(file_path))
             continue
         if getattr(extractor, 'parse_failed', False):
-            continue
+            # A recovery parse still yields the imports before the error (BACK-1460), so
+            # they count, but the file may hold more it could not see: an unused
+            # dependency may be used there, which the rule must say (BACK-1857).
+            skipped.add(str(file_path))
         for stmt in imports:
             if getattr(stmt, 'is_relative', False) or getattr(stmt, 'level', 0) > 0:
                 continue

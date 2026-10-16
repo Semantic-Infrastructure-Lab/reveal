@@ -136,3 +136,33 @@ class TestI007Rust:
 def test_i007_help_and_schema_are_reasonable():
     assert I007.code == 'I007'
     assert set(I007.file_patterns) == {'pyproject.toml', 'requirements.txt', 'Cargo.toml'}
+
+
+class TestI007UnparsableSource:
+    """BACK-1857: a source file that did not parse may be the one using a dependency."""
+
+    @staticmethod
+    def _scan(tmp_path, monkeypatch, parse_failed):
+        from types import SimpleNamespace
+        from reveal.rules.imports import _dep_reconciliation as dr
+
+        (tmp_path / 'broken.py').write_text('import requests\n', encoding='utf-8')
+
+        class Extractor:
+            def __init__(self):
+                self.parse_failed = parse_failed
+
+            def extract_imports(self, _path):
+                return [SimpleNamespace(module_name='requests', is_relative=False, level=0)]
+
+        monkeypatch.setattr(dr, 'get_extractor', lambda _path: Extractor())
+        return dr._scan_project_imports_uncached(tmp_path, frozenset({'.py'}), str.lower, '.')
+
+    def test_a_file_that_did_not_parse_is_disclosed_and_its_imports_still_count(self, tmp_path, monkeypatch):
+        scan = self._scan(tmp_path, monkeypatch, parse_failed=True)
+        assert scan.names == frozenset({'requests'}), 'the imports before the error are real'
+        assert [Path(p).name for p in scan.skipped] == ['broken.py']
+
+    def test_a_file_that_parsed_skips_nothing(self, tmp_path, monkeypatch):
+        scan = self._scan(tmp_path, monkeypatch, parse_failed=False)
+        assert scan.names == frozenset({'requests'}) and scan.skipped == ()
