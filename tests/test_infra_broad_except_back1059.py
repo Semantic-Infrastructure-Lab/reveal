@@ -75,11 +75,13 @@ def test_email_checks_report_oserror_as_check_failed(check):
 
 
 @pytest.mark.parametrize("check", ['check_mx_records', 'check_spf_record', 'check_dmarc_record'])
-def test_email_checks_still_map_dns_errors_to_missing(check):
-    """Negative control: a DNSException is "no record", not "check failed"."""
+def test_email_checks_still_map_an_absent_record_to_missing(check):
+    """Negative control: NoAnswer is "no record", not "check failed". Any other
+    DNSException is a failed lookup (BACK-1850)."""
     with _resolve(dns_exception.DNSException()):
-        result = getattr(dns_mod, check)('example.com')
-    assert result['status'] == 'failure'
+        assert getattr(dns_mod, check)('example.com')['status'] == 'warning'
+    with _resolve(dns_mod.dns.resolver.NoAnswer()):
+        assert getattr(dns_mod, check)('example.com')['status'] == 'failure'
 
 
 @pytest.mark.parametrize("check", ['check_mx_records', 'check_spf_record', 'check_dmarc_record'])
