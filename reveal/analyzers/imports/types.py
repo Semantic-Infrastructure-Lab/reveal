@@ -63,6 +63,9 @@ class ImportAnalysis:
     # The subset of files_failed lost to a dead pool worker rather than parsed with errors
     # (BACK-1753); includes code files with no import extractor (BACK-1752).
     files_lost: List[Path] = field(default_factory=list)
+    # (file, "ErrorType: message") for files whose structure analysis raised under
+    # collect_structures=True: absent from the structures, disclosed (BACK-1856).
+    structure_failures: List[Tuple[str, str]] = field(default_factory=list)
     diagnostics: Dict[str, Any] = field(default_factory=dict)
     extractions: Dict[Path, ImportExtraction] = field(default_factory=dict)
 

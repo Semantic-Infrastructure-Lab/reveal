@@ -209,17 +209,20 @@ def test_imports_structure_bug_propagates(tmp_path, monkeypatch):
     """_extract_one_file no longer turns an escaped analysis bug into 'no structure'."""
     f = tmp_path / 'a.py'
     f.write_text('def f():\n    return 1\n', encoding='utf-8')
-    monkeypatch.setattr('reveal.adapters.ast.analysis.analyze_file', _raise_bug)
+    monkeypatch.setattr('reveal.adapters.ast.analysis.analyze_file_outcome', _raise_bug)
     with pytest.raises(_InjectedBug):
         _extract_one_file(str(f), True)
 
 
 def test_imports_structure_none_is_still_none(tmp_path, monkeypatch):
-    """Control: analyze_file's own 'could not analyze' (None) still yields structure None."""
+    """Control: analyze_file_outcome's own 'could not analyze' still yields structure None,
+    with the failure carried alongside (BACK-1856)."""
     f = tmp_path / 'a.py'
     f.write_text('def f():\n    return 1\n', encoding='utf-8')
-    monkeypatch.setattr('reveal.adapters.ast.analysis.analyze_file', lambda _p: None)
-    assert _extract_one_file(str(f), True)[3] is None
+    monkeypatch.setattr('reveal.adapters.ast.analysis.analyze_file_outcome',
+                        lambda _p: (None, 'ValueError: x'))
+    row = _extract_one_file(str(f), True)
+    assert row[3] is None and row[5] == 'ValueError: x'
 
 
 def test_imports_structure_collected_for_a_real_file(tmp_path):

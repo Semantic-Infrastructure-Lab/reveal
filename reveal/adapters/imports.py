@@ -880,11 +880,11 @@ def _extract_one_file(fp_str: str, want_structure: bool):
 
     Module-level and picklable so it runs unchanged under a
     `ProcessPoolExecutor` (fork *or* spawn). Returns
-    `(fp_str, imports_or_None, symbols_or_None, structure_or_None, extraction)`:
+    `(fp_str, imports_or_None, symbols_or_None, structure_or_None, extraction, structure_failure_or_None)`:
     `imports`/`symbols` are None when the file has no import extractor (mirrors
     the serial path only populating them for extractable files); `structure`
-    is None when not requested or when analysis raised (mirrors the serial
-    `collect_structure`'s try/except-to-None). Import extraction errors are NOT
+    is None when not requested or when analysis raised (`structure_failure` then
+    names the error). Import extraction errors are NOT
     swallowed here — the serial path lets them propagate too. `extraction.parse_failed` is True
     when the extractor had one (i.e. the file's language IS supported) but
     tree-sitter could not parse it (`extractor.parse_failed`, BACK-982) — such
@@ -893,7 +893,7 @@ def _extract_one_file(fp_str: str, want_structure: bool):
     treat it the same as a genuinely-clean file.
     """
     fp = Path(fp_str)
-    imports = symbols = structure = None
+    imports = symbols = structure = structure_failure = None
     extraction = None
     extractor = get_extractor(fp)
     if extractor is not None:
@@ -904,13 +904,13 @@ def _extract_one_file(fp_str: str, want_structure: bool):
         extraction = extractor.analysis
     if want_structure:
         # Structure is a separate add-on (only requested via collect_structures=True).
-        # analyze_file catches every analysis failure itself, warns on stderr and returns
-        # None, so nothing is caught here: an exception that still escapes (a failed
-        # import, a bug) must not read as "this file has no structure" (BACK-1059). In a
-        # pool worker it fails the chunk, which _extract_files records per file.
-        from .ast.analysis import analyze_file
-        structure = analyze_file(fp_str)
-    return fp_str, imports, symbols, structure, extraction
+        # analyze_file_outcome catches an analysis failure itself and returns it, so it
+        # reaches the run's analysis_failed warning instead of reading as "this file has
+        # no structure"; an exception that still escapes (a failed import, a bug) fails
+        # the chunk, which _extract_files records per file (BACK-1059, BACK-1856).
+        from .ast.analysis import analyze_file_outcome
+        structure, structure_failure = analyze_file_outcome(fp_str)
+    return fp_str, imports, symbols, structure, extraction, structure_failure
 
 
 def _extract_chunk(job: Tuple[List[str], bool]) -> list:
@@ -1076,10 +1076,14 @@ class ImportsAdapter(ResourceAdapter):
         rather than get_structure (overview, architecture): files parsed with errors
         (parse_failure_warning) and files a dead pool worker took down
         (worker_lost_warning), each under its own cause."""
+        from .ast.analysis import analysis_skipped_warning
         lost = set(self.analysis.files_lost)
         parse_failed = [str(fp) for fp in self.analysis.files_failed if fp not in lost]
         warnings = [parse_failure_warning(parse_failed, base),
-                    worker_lost_warning([str(fp) for fp in lost], base)]
+                    worker_lost_warning([str(fp) for fp in lost], base),
+                    analysis_skipped_warning(
+                        self.analysis.structure_failures, base,
+                        "their functions and classes are missing from the complexity and structure results")]
         return [w for w in warnings if w]
 
     def get_metadata(self) -> Dict[str, Any]:
@@ -1170,7 +1174,8 @@ class ImportsAdapter(ResourceAdapter):
         return imports, symbols
 
     def _extract_files(self, candidates: List[Path], want_structure: bool):
-        """Yield ``(Path, imports_or_None, symbols_or_None, structure_or_None, extraction)``
+        """Yield ``(Path, imports_or_None, symbols_or_None, structure_or_None, extraction,
+        structure_failure_or_None)``
         per candidate file, in candidate order.
 
         Fans the independent per-file extraction out across processes when the
@@ -1184,8 +1189,7 @@ class ImportsAdapter(ResourceAdapter):
         workers = _parallel_worker_count(len(candidates))
         if workers <= 1:
             for fp in candidates:
-                fp_str, imports, symbols, structure, extraction = _extract_one_file(str(fp), want_structure)
-                yield fp, imports, symbols, structure, extraction
+                yield (fp, *_extract_one_file(str(fp), want_structure)[1:])
             return
 
         from concurrent.futures import ProcessPoolExecutor
@@ -1203,9 +1207,9 @@ class ImportsAdapter(ResourceAdapter):
                 try:
                     rows = future.result()
                 except Exception as e:  # boundary-ok: broad-except -- future.result() re-raises whatever the worker raised: BrokenProcessPool when it died, or any exception an extractor threw on one file of the chunk; the chunk's files are recorded as failed extractions (_lost_extraction carries the cause) and reach files_failed and the partial-parse warning
-                    rows = [(fp_str, None, None, None, _lost_extraction(e)) for fp_str in chunk]
-                for fp_str, imports, symbols, structure, extraction in rows:
-                    yield Path(fp_str), imports, symbols, structure, extraction
+                    rows = [(fp_str, None, None, None, _lost_extraction(e), None) for fp_str in chunk]
+                for fp_str, *rest in rows:
+                    yield (Path(fp_str), *rest)
 
     @staticmethod
     def _discover_candidate_files(
@@ -1242,8 +1246,9 @@ class ImportsAdapter(ResourceAdapter):
         unextractable: Dict[str, int] = {}
         failed_files: List[Path] = []
         lost_files: List[Path] = []
+        structure_failures: List[Tuple[str, str]] = []
 
-        for fp, imports, symbols, structure, extraction in self._extract_files(candidates, collect_structures):
+        for fp, imports, symbols, structure, extraction, structure_failure in self._extract_files(candidates, collect_structures):
             if extraction is not None and extraction.worker_lost:
                 # Lost before its extractor ran, so "no import extractor" is unknown for
                 # it: failed either way, never silently unsupported (BACK-1752).
@@ -1267,6 +1272,8 @@ class ImportsAdapter(ResourceAdapter):
                     unextractable[ext] = unextractable.get(ext, 0) + 1
             if collect_structures and structure:
                 structures.append(structure)
+            if structure_failure:
+                structure_failures.append((str(fp), structure_failure))
             if on_file_processed:
                 on_file_processed(fp)
 
@@ -1275,6 +1282,7 @@ class ImportsAdapter(ResourceAdapter):
         self._structures = structures
         self.analysis.files_failed = failed_files
         self.analysis.files_lost = lost_files
+        self.analysis.structure_failures = structure_failures
         return all_imports
 
     def _resolve_dependencies(self, target_path: Path, file_index: Dict[str, List[Path]]) -> None:

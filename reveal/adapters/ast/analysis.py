@@ -4,39 +4,80 @@
 import logging
 import sys
 from pathlib import Path
-from typing import Dict, List, Any, Optional, cast
+from typing import Dict, List, Any, Optional, Tuple, cast
 
 from ...complexity import fallback_complexity
-from ...reveal_types import StructureItem
-from ...utils.path_utils import _walk_code_files
+from ...reveal_types import StructureItem, WarningEntry
+from ...utils.path_utils import _walk_code_files, to_posix, to_relative_display
 from .call_graph import build_symbol_map, resolve_callees
 
 logger = logging.getLogger(__name__)
 
 
 
-def try_add_file_structure(file_path: str, structures: List[Dict[str, Any]]) -> None:
-    """Analyze file and add its structure to list if successful.
+def _warn_failed(file_path: str, failure: str) -> None:
+    """The per-file stderr line; the disclosure that reaches a result is the caller's
+    (StructureList.skipped, ImportAnalysis.structure_failures)."""
+    print(f"Warning: Failed to analyze {file_path}: {failure}", file=sys.stderr)
+
+
+class StructureList(List[Dict[str, Any]]):
+    """The structures ``collect_structures`` found, plus ``skipped``: ``(file, cause)``
+    for every file whose analysis failed. A plain list read as "these are all the
+    files", which a file missing for a failure also satisfies (BACK-1856)."""
+
+    def __init__(self, *args: Any) -> None:
+        super().__init__(*args)
+        self.skipped: List[Tuple[str, str]] = []
+
+
+def try_add_file_structure(file_path: str, structures: StructureList) -> None:
+    """Analyze file and add its structure to list if successful; a failure is recorded
+    in ``structures.skipped`` (and warned on stderr, as before).
 
     Args:
         file_path: Path to file to analyze
         structures: List to append structure to
     """
-    structure = analyze_file(file_path)
+    structure, failure = analyze_file_outcome(file_path)
+    if failure:
+        _warn_failed(file_path, failure)
+        structures.skipped.append((file_path, failure))
     if structure:
         structures.append(structure)
 
 
-def collect_structures(path: str) -> List[Dict[str, Any]]:
+def analysis_skipped_warning(skipped: List[Tuple[str, str]], base: Optional[Path] = None,
+                             consequence: str = "they are missing from the result"
+                             ) -> Optional[WarningEntry]:
+    """One ``analysis_failed`` meta warning for files whose structure analysis raised
+    (BACK-1856); None when nothing failed. *consequence* says what is missing."""
+    if not skipped:
+        return None
+    paths = sorted(skipped)
+    shown = [to_relative_display(f, base) if base else to_posix(f) for f, _ in paths[:5]]
+    more = f" and {len(paths) - len(shown)} more" if len(paths) > len(shown) else ''
+    causes = ', '.join(sorted({cause.split(':', 1)[0] for _, cause in paths}))
+    return {
+        'type': 'analysis_failed',
+        'count': len(paths),
+        'files': shown,
+        'message': f"{len(paths)} file(s) could not be analyzed ({causes}) -- {consequence}: "
+                   f"{', '.join(shown)}{more}",
+    }
+
+
+def collect_structures(path: str) -> StructureList:
     """Collect structure data from file(s).
 
     Args:
         path: File or directory path
 
     Returns:
-        List of structure dicts with file metadata
+        StructureList of structure dicts with file metadata; ``.skipped`` names the
+        files whose analysis failed
     """
-    structures: List[Dict[str, Any]] = []
+    structures = StructureList()
     path_obj = Path(path)
 
     if path_obj.is_file():
@@ -220,23 +261,36 @@ def unattributed_references(file_struct: Dict[str, Any]) -> List[Dict[str, Any]]
 def analyze_file(file_path: str) -> Optional[Dict[str, Any]]:
     """Analyze a single file and extract structure.
 
+    A failure is warned on stderr and returns None, like a file with no analyzer; a
+    caller that must tell the two apart uses ``analyze_file_outcome``.
+
     Args:
         file_path: Path to file
 
     Returns:
         Dict with file structure, or None if analysis fails
     """
+    structure, failure = analyze_file_outcome(file_path)
+    if failure:
+        _warn_failed(file_path, failure)
+    return structure
+
+
+def analyze_file_outcome(file_path: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """``(structure, failure)`` for one file: *failure* is ``"ErrorType: message"`` when
+    the analysis raised, None when it ran (structure None then means no analyzer or an
+    empty structure, not a failure)."""
     from ...registry import get_analyzer
 
     try:
         analyzer_class = get_analyzer(file_path)
         if not analyzer_class:
-            return None
+            return None, None
 
         analyzer = analyzer_class(file_path)
         structure = analyzer.get_structure()
         if not structure:
-            return None
+            return None, None
 
         # Flatten all elements from structure
         result: Dict[str, Any] = {'file': file_path, 'elements': []}
@@ -273,8 +327,7 @@ def analyze_file(file_path: str) -> Optional[Dict[str, Any]]:
         if hasattr(analyzer, '_content_bytes'):
             analyzer._content_bytes = None
 
-        return result
+        return result, None
 
-    except Exception as e:  # boundary-ok: broad-except -- any analyzer, any file: one file that cannot be analyzed must not end a directory scan; the failure is printed to stderr naming the file (callers of collect_structures have no result to carry a warning)
-        print(f"Warning: Failed to analyze {file_path}: {e}", file=sys.stderr)
-        return None
+    except Exception as e:  # boundary-ok: broad-except -- any analyzer, any file: one file that cannot be analyzed must not end a directory scan; the failure is returned to the caller, which records the file (StructureList.skipped, ImportAnalysis.structure_failures) so its result can disclose the omission (BACK-1856)
+        return None, f"{type(e).__name__}: {e}"
