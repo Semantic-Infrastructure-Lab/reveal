@@ -34,6 +34,7 @@ from ..base_mixins import ASTParsingMixin
 from ..imports import STDLIB_MODULES
 from ...analyzers.imports.javascript import JavaScriptExtractor
 from ...utils.path_utils import python_package_top
+from ...utils.pyparse import statement_index
 
 
 class B005(BaseRule, ASTParsingMixin):
@@ -146,12 +147,28 @@ class B005(BaseRule, ASTParsingMixin):
                 )
             return False
 
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Try):
-                if any(_handler_catches_import_error(h) for h in node.handlers):
-                    for child in ast.walk(ast.Module(body=node.body, type_ignores=[])):
-                        if isinstance(child, (ast.Import, ast.ImportFrom)):
-                            optional_lines.add(child.lineno)
+        statements, parents = statement_index(tree)
+        covers: Dict[int, bool] = {}  # id(Try) -> catches ImportError
+
+        def _try_covers(try_node: ast.Try) -> bool:
+            if id(try_node) not in covers:
+                covers[id(try_node)] = any(_handler_catches_import_error(h)
+                                           for h in try_node.handlers)
+            return covers[id(try_node)]
+
+        # An import is optional when, anywhere above it, it sits in the *body* of a
+        # try whose handlers catch ImportError (its handlers and `else` do not count).
+        for node in statements:
+            if not isinstance(node, (ast.Import, ast.ImportFrom)):
+                continue
+            child: ast.AST = node
+            parent: Optional[ast.AST] = parents.get(node)
+            while parent is not None:
+                if (isinstance(parent, ast.Try) and any(child is s for s in parent.body)
+                        and _try_covers(parent)):
+                    optional_lines.add(node.lineno)
+                    break
+                child, parent = parent, parents.get(parent)
 
         return optional_lines
 
@@ -180,7 +197,7 @@ class B005(BaseRule, ASTParsingMixin):
         optional_lines = self._find_optional_import_lines(tree)
         file_dir = Path(file_path).parent
         project_root = self._find_project_root(file_dir)
-        for node in self._ast_walk(tree):
+        for node in statement_index(tree)[0]:
             if getattr(node, 'lineno', None) in optional_lines:
                 continue
             if isinstance(node, ast.Import):

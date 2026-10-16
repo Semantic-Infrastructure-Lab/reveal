@@ -32,7 +32,7 @@ from typing import Dict, List, Any, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
-from ...utils.pyparse import parse_python
+from ...utils.pyparse import parse_python, statement_index
 from ...utils.query_control import ScanBudget
 from ...utils.path_utils import EVIDENCE, _walk_code_files, cross_file_scan_root, scan_roots, to_posix
 
@@ -221,7 +221,7 @@ class D005(BaseRule, ASTParsingMixin):
         results = []
         seen_keys: set = set()  # deduplicate within file
 
-        for node in ast.walk(tree):
+        for node in statement_index(tree)[0]:
             if not isinstance(node, ast.Assign):
                 continue
             col_node = _resolve_collection(node.value)

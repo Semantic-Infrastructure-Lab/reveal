@@ -48,7 +48,7 @@ from pathlib import Path
 from typing import Any, Dict, FrozenSet, Iterable, Iterator, List, Optional, Set, Tuple
 
 from ..utils.path_utils import WalkPurpose, _walk_code_files
-from ..utils.pyparse import parse_python
+from ..utils.pyparse import parse_python, statement_index
 
 _TypeAliasStmt = getattr(ast, 'TypeAlias', None)  # `type X = ...`, Python 3.12+
 
@@ -92,7 +92,7 @@ def collect_dict_analysis(path: str) -> Tuple[List[Dict[str, Any]], List[Dict[st
     raw_typeddicts: Dict[str, List[Dict[str, Any]]] = {}
     for file_path, tree in trees:
         collect_typeddict_definitions(tree, file_path, raw_typeddicts)
-        for node in ast.walk(tree):
+        for node in statement_index(tree)[0]:
             if isinstance(node, _FuncNode):
                 usages.extend(function_dict_usages(node, file_path, ctx))
     usages.sort(key=lambda x: (-x['key_count'], -x['access_count'], x['file'], x['line']))
@@ -451,7 +451,7 @@ def collect_typeddict_definitions(
     """Record every class (a potential TypedDict or TypedDict base) and every
     functional `X = TypedDict('X', ...)` in `tree` into `raw`, keyed by bare
     name. resolve_typeddicts() decides which classes really are TypedDicts."""
-    for node in ast.walk(tree):
+    for node in statement_index(tree)[0]:
         if isinstance(node, ast.ClassDef):
             raw.setdefault(node.name, []).append({
                 'name': node.name, 'file': file_path, 'line': node.lineno,

@@ -40,6 +40,7 @@ from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
+from ...utils.pyparse import statement_index
 
 
 class B007(BaseRule, ASTParsingMixin):
@@ -73,25 +74,26 @@ class B007(BaseRule, ASTParsingMixin):
         if tree is None:
             return detections
 
-        parent_map: Dict[ast.AST, ast.AST] = {}
-        for parent in ast.walk(tree):
-            for child in ast.iter_child_nodes(parent):
-                parent_map[child] = parent
+        statements, parent_map = statement_index(tree)
 
-        for node in ast.walk(tree):
+        # Handlers grouped by their nearest enclosing function — a nested function's
+        # own handlers are checked against the nested function's own adapter-param
+        # status separately, not inherited from the outer scope. Built on the first
+        # adapter function, so a file without one never pays for it.
+        handlers_by_function: Optional[Dict[int, List[ast.ExceptHandler]]] = None
+
+        for node in statements:
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             if self._adapter_param_name(node, parent_map) is None:
                 continue
-            for sub in ast.walk(node):
-                if not isinstance(sub, ast.ExceptHandler):
-                    continue
-                # Only handlers whose nearest enclosing function is this one —
-                # a nested function's own handlers are checked against the
-                # nested function's own adapter-param status separately, not
-                # inherited from the outer scope.
-                if self._nearest_enclosing_function(sub, parent_map) is not node:
-                    continue
+            if handlers_by_function is None:
+                handlers_by_function = {}
+                for handler in statements:
+                    if isinstance(handler, ast.ExceptHandler):
+                        owner = self._nearest_enclosing_function(handler, parent_map)
+                        handlers_by_function.setdefault(id(owner), []).append(handler)
+            for sub in handlers_by_function.get(id(node), ()):
                 detection = self._check_handler(sub, file_path, content)
                 if detection:
                     detections.append(detection)

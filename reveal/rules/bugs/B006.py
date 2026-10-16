@@ -50,6 +50,7 @@ from ..base_mixins import ASTParsingMixin, TreeSitterParsingMixin
 from . import _exception_flow as flow
 from ...core import node_children, _zero_arg
 from ...registry import JS_TS_LANGUAGES, extensions_for_languages, language_for_extension
+from ...utils.pyparse import statement_index
 
 
 class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
@@ -213,14 +214,12 @@ class B006(BaseRule, ASTParsingMixin, TreeSitterParsingMixin):
         # Split content into lines for comment checking
         lines = content.split('\n')
 
-        # Build parent map so handlers can walk up to the enclosing function
-        parent_map: Dict[ast.AST, ast.AST] = {}
-        for parent in ast.walk(tree):
-            for child in ast.iter_child_nodes(parent):
-                parent_map[child] = parent
+        # Handlers walk up to their enclosing function through the statement-level
+        # parent map every rule on this tree shares (BACK-1874)
+        statements, parent_map = statement_index(tree)
 
-        # Walk the AST looking for problematic exception handlers
-        for node in self._ast_walk(tree):
+        # Walk the statements looking for problematic exception handlers
+        for node in statements:
             if isinstance(node, ast.ExceptHandler):
                 detection = self._check_handler(node, file_path, content, lines, parent_map)
                 if detection:

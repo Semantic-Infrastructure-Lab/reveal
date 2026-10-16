@@ -1,11 +1,13 @@
-"""`ast.parse` for Python source newer than the running interpreter (BACK-1394)."""
+"""`ast.parse` for Python source newer than the running interpreter (BACK-1394), and the
+shared per-tree statement index every rule asks instead of walking the tree again (BACK-1874)."""
 
 import ast
 import io
 import re
 import tokenize
 import warnings
-from typing import List, Optional, Tuple
+from collections import deque
+from typing import Dict, List, Optional, Tuple
 from reveal.utils.lines import split_lines
 
 # PEP 750 template-string prefixes; a 3.13 tokenizer reads `t"..."` as NAME + STRING.
@@ -15,6 +17,14 @@ _STRING_STARTS = {tokenize.STRING} | (
 _OPEN, _CLOSE = ('(', '[', '{'), (')', ']', '}')
 
 _Edit = Tuple[int, int, int, str]  # (row, col, chars replaced, replacement)
+
+# The node kinds a statement list can hold. A statement, an `except` clause and a `case`
+# arm are only ever children of one another or of the module, never of an expression
+# (lambdas and comprehensions hold expressions only), so a walk that descends through
+# these skips every expression node and still finds every `Assign`, `ClassDef`, `Try`,
+# `Import` or `ExceptHandler` in the tree.
+_STATEMENT_LIKE = (ast.stmt, ast.excepthandler, ast.match_case)
+_STATEMENT_INDEX_ATTR = '_reveal_statement_index'
 
 
 def parse_python(source: str, filename: str = '<unknown>') -> ast.Module:
@@ -109,3 +119,36 @@ def _parenthesize_except(tokens: List[tokenize.TokenInfo], start: int) -> List[_
             return [(tokens[start].start[0], tokens[start].start[1], 0, '('),
                     (tok.start[0], tok.start[1], 0, ')')]
     return []
+
+
+def statement_index(tree: ast.AST) -> Tuple[List[ast.AST], Dict[ast.AST, ast.AST]]:
+    """The statement-level nodes of `tree` and their parents, built once per tree.
+
+    Returns `(nodes, parents)`: `nodes` holds every statement, `except` clause and `case`
+    arm (not the root) in the order `ast.walk` yields them, and `parents` maps each of
+    them to its parent node (the root included). Expression nodes are neither visited
+    nor keyed. A rule that looks for one statement kind filters `nodes` with
+    `isinstance`; one that climbs from a handler or a function to its enclosing scopes
+    reads `parents`. The index is kept on the tree object, so every rule that receives
+    the same cached tree shares one pass. Callers must not mutate either result.
+    """
+    cached: Optional[Tuple[List[ast.AST], Dict[ast.AST, ast.AST]]] = getattr(
+        tree, _STATEMENT_INDEX_ATTR, None)
+    if cached is not None:
+        return cached
+    nodes: List[ast.AST] = []
+    parents: Dict[ast.AST, ast.AST] = {}
+    queue = deque([tree])
+    while queue:
+        node = queue.popleft()
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, _STATEMENT_LIKE):
+                parents[child] = node
+                nodes.append(child)
+                queue.append(child)
+    index = (nodes, parents)
+    try:
+        setattr(tree, _STATEMENT_INDEX_ATTR, index)
+    except AttributeError:  # a tree type without a __dict__: still correct, just not shared
+        pass
+    return index
