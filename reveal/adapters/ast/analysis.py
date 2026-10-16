@@ -1,6 +1,7 @@
 """File analysis and structure extraction for AST adapter."""
 
 
+import logging
 import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional, cast
@@ -9,6 +10,8 @@ from ...complexity import fallback_complexity
 from ...reveal_types import StructureItem
 from ...utils.path_utils import _walk_code_files
 from .call_graph import build_symbol_map, resolve_callees
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -242,7 +245,8 @@ def analyze_file(file_path: str) -> Optional[Dict[str, Any]]:
         # build_symbol_map is cheap for already-parsed files (import extractor caches).
         try:
             symbol_map: Optional[Dict[str, Any]] = build_symbol_map(file_path)
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # boundary-ok: broad-except -- cross-file call resolution is an optional enrichment run through per-language import extractors (arbitrary parser code); without it calls stay unresolved but the file's own structure is still right, and the failure is logged at warning
+            logger.warning("cross-file call resolution failed for %s: %s", file_path, e)
             symbol_map = None
 
         for category, items in structure.items():
@@ -271,7 +275,6 @@ def analyze_file(file_path: str) -> Optional[Dict[str, Any]]:
 
         return result
 
-    except Exception as e:
-        # Skip files we can't analyze
+    except Exception as e:  # boundary-ok: broad-except -- any analyzer, any file: one file that cannot be analyzed must not end a directory scan; the failure is printed to stderr naming the file (callers of collect_structures have no result to carry a warning)
         print(f"Warning: Failed to analyze {file_path}: {e}", file=sys.stderr)
         return None
