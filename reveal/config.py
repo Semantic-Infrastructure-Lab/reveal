@@ -587,10 +587,12 @@ class RevealConfig:
             import jsonschema  # deferred: ~25 ms, and only a run that finds a config file validates
         except ImportError:
             return
-        try:
-            jsonschema.validate(config, CONFIG_SCHEMA)
-        except jsonschema.ValidationError as e:
-            logger.warning(f"Invalid config in {path}: {e.message}")
+        # jsonschema.validate() re-checks CONFIG_SCHEMA against the metaschema on every
+        # call (~20 ms, once per config file); the schema is ours and tests check it once.
+        validator = jsonschema.validators.validator_for(CONFIG_SCHEMA)(CONFIG_SCHEMA)
+        error = jsonschema.exceptions.best_match(validator.iter_errors(config))
+        if error is not None:
+            logger.warning(f"Invalid config in {path}: {error.message}")
 
     @classmethod
     def _load_file(cls, path: Path) -> Optional[Dict[str, Any]]:
