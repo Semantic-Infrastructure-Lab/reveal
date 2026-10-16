@@ -1,5 +1,6 @@
 """Tree-sitter based analyzer for multi-language support."""
 
+import bisect
 import functools
 import hashlib
 import logging
@@ -21,7 +22,7 @@ from .core import suppress_treesitter_warnings
 from .core import node_children as _children
 from .core import node_next_sibling as _next_sibling
 from .core import iter_tree as _iter_tree
-from .core.treesitter_compat import _zero_arg, first_error_position, tree_has_recovery_artifacts
+from .core.treesitter_compat import _zero_arg, first_error_position, tree_has_recovery_artifacts, zero_arg_getter
 from .core import tree_root
 from .core.node_taxonomy import (
     DEF_NODES as _DEF_NODES,
@@ -517,6 +518,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         self._tree: Optional[Any] = None
         self._tree_parsed: bool = False  # tree is parsed lazily, see `tree` property
         self._node_cache: Optional[Dict[str, List[Any]]] = None  # None = unbuilt; {} = built but empty
+        self._line_index: Optional[Tuple[List[int], List[int], List[Any]]] = None  # BACK-1866, see _non_code_index
         self._content_bytes: Optional[bytes] = None
         self._imports_failure: Optional[str] = None  # BACK-1852: set when the imports extractor raised
         self.parse_error: Optional[str] = None  # BACK-979: set when _parse_tree()'s except branch fires
@@ -1045,6 +1047,24 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """
         return None
 
+    def _non_code_index(self) -> Tuple[List[int], List[int], List[Any]]:
+        """(blank rows, comment start rows, comment nodes), each sorted by row.
+
+        Built once per analyzer so `_code_line_count` bisects to a function's
+        rows instead of rescanning every line and comment per function
+        (BACK-1866: O(functions x comments) was ~9% of a cold dir-scale run).
+        """
+        if self._line_index is None:
+            blank_rows = [row for row, line in enumerate(self.lines) if not line.strip()]
+            self._find_nodes_by_type('comment')  # ensure the node-kind cache is built
+            found: List[Tuple[int, Any]] = []
+            for kind, nodes in (self._node_cache or {}).items():
+                if 'comment' in kind:
+                    found.extend((_zero_arg(n, 'start_position').row, n) for n in nodes)
+            found.sort(key=lambda pair: pair[0])
+            self._line_index = (blank_rows, [row for row, _ in found], [n for _, n in found])
+        return self._line_index
+
     def _code_line_count(self, body_node, line_start: int, line_end: int) -> int:
         """Lines that carry real code, excluding blank lines and lines
         consumed entirely by a comment or a leading docstring.
@@ -1059,19 +1079,12 @@ class TreeSitterAnalyzer(FileAnalyzer):
         threshold-relevant length instead.
         """
         lo, hi = line_start - 1, line_end - 1  # 0-indexed, inclusive
-        non_code_rows: Set[int] = {
-            row for row in range(lo, min(hi, len(self.lines) - 1) + 1)
-            if not self.lines[row].strip()
-        }
-
-        self._find_nodes_by_type('comment')  # ensure the node-kind cache is built
-        for kind, nodes in (self._node_cache or {}).items():
-            if 'comment' not in kind:
-                continue
-            for comment_node in nodes:
-                row = _zero_arg(comment_node, 'start_position').row
-                if lo <= row <= hi:
-                    self._mark_non_code_rows(comment_node, non_code_rows)
+        blank_rows, comment_rows, comment_nodes = self._non_code_index()
+        non_code_rows: Set[int] = set(
+            blank_rows[bisect.bisect_left(blank_rows, lo):bisect.bisect_right(blank_rows, hi)]
+        )
+        for i in range(bisect.bisect_left(comment_rows, lo), bisect.bisect_right(comment_rows, hi)):
+            self._mark_non_code_rows(comment_nodes[i], non_code_rows)
 
         docstring = self._leading_docstring_node(body_node)
         if docstring is not None:
@@ -2133,6 +2146,22 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """
         return True
 
+    def _occluded_body_starts(self, children) -> Optional[Set[int]]:
+        """Start bytes of function bodies that are disjoint siblings of their signature.
+
+        `children` is a node's `(child, kind)` pairs. None when no sibling is a
+        FUNCTION_NODE_TYPES node with a paired body (every language but Dart).
+        """
+        occluded: Optional[Set[int]] = None
+        for sibling, sibling_kind in children:
+            if sibling_kind in FUNCTION_NODE_TYPES:
+                paired_body = self._function_end_node(sibling)
+                if paired_body is not sibling:
+                    if occluded is None:
+                        occluded = set()
+                    occluded.add(_zero_arg(paired_body, 'start_byte'))
+        return occluded
+
     def _complexity_depth_and_calls(self, func_node) -> Tuple[int, int, List[str]]:
         """Compute complexity, nesting depth, and callee names in one subtree walk.
 
@@ -2176,16 +2205,19 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # intentionally NOT reversed (matching the retired calls-only walker's
         # top-level seed; only the recursive step reverses) so `calls` order
         # is unchanged.
-        stack = [
-            (child, None, 1 if _zero_arg(child, 'kind') in _NESTING_TYPES else 0)
-            for child in _children(func_node)
-        ]
+        # BACK-1865: every node's kind is read once, when it is pushed, and rides
+        # the stack entry; the getter is resolved once per walk (all nodes share
+        # a class), not once per read.
+        kind_of = zero_arg_getter(type(func_node), 'kind')
+        stack: List[Tuple[Any, Optional[str], int, str]] = []
+        for child in _children(func_node):
+            child_kind = kind_of(child)
+            stack.append((child, None, 1 if child_kind in _NESTING_TYPES else 0, child_kind))
         while stack:
-            node, parent_kind, depth = stack.pop()
+            node, parent_kind, depth, kind = stack.pop()
             if depth > max_depth:
                 max_depth = depth
 
-            kind = _zero_arg(node, 'kind')
             if kind in CALL_NODE_TYPES:
                 name = self._get_callee_name(node)
                 if name and name not in seen_calls:
@@ -2197,7 +2229,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             if kind in FUNCTION_NODE_TYPES and self._function_scope_has_own_entry(node):
                 continue
 
-            children = _children(node)
+            children = [(child, kind_of(child)) for child in _children(node)]
             # BACK-760 (Dart): a nested named local function
             # (`local_function_declaration > lambda_expression >
             # function_signature, function_body`) is the ONE shape in this
@@ -2219,21 +2251,13 @@ class TreeSitterAnalyzer(FileAnalyzer):
             # same node) for every other language's FUNCTION_NODE_TYPES
             # shape, so this exclusion costs nothing and changes nothing
             # for them.
-            occluded_bodies = None
-            for sibling in children:
-                if _zero_arg(sibling, 'kind') in FUNCTION_NODE_TYPES:
-                    paired_body = self._function_end_node(sibling)
-                    if paired_body is not sibling:
-                        if occluded_bodies is None:
-                            occluded_bodies = set()
-                        occluded_bodies.add(_zero_arg(paired_body, 'start_byte'))
+            occluded_bodies = self._occluded_body_starts(children)
 
-            for child in reversed(children):
+            for child, child_kind in reversed(children):
                 if occluded_bodies is not None and _zero_arg(child, 'start_byte') in occluded_bodies:
                     continue
-                child_kind = _zero_arg(child, 'kind')
                 child_depth = depth + 1 if child_kind in _NESTING_TYPES else depth
-                stack.append((child, kind, child_depth))
+                stack.append((child, kind, child_depth, child_kind))
 
         for name in self._implicit_calls_in_function(func_node):
             if name not in seen_calls:

@@ -148,6 +148,24 @@ def _resolve_accessor(cls, name):
     return None
 
 
+def zero_arg_getter(cls, name):
+    """A one-argument callable equal to `lambda o: _zero_arg(o, name)` for
+    instances of `cls`, with the (class, name) resolution done once.
+
+    A hot walk reads one accessor on millions of nodes that all share a class;
+    `_zero_arg` repeats the cache lookup per node (BACK-1865). Resolve here once
+    per walk and call the result in the loop. A class that can't be classified
+    (a Mock) gets the per-call path, exactly as `_zero_arg` does.
+    """
+    getter = _ACCESSORS.get((cls, name))
+    if getter is None:
+        getter = _resolve_accessor(cls, name)
+        if getter is None:
+            return lambda obj: _zero_arg_uncached(obj, name)
+        _ACCESSORS[cls, name] = getter
+    return getter
+
+
 def _zero_arg_uncached(obj, name):
     """_zero_arg's per-call resolution, for objects whose class can't be classified."""
     try:
