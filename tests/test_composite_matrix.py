@@ -45,10 +45,18 @@ def _run(*args: str):
     return _run_reveal_direct(*args)
 
 
+def _i002_state() -> str:
+    """What I002 holds in this process, for a failure message (BACK-1881: a review of a
+    fixture dir sometimes reports I002 parse errors under the OUTER repo root)."""
+    from reveal.rules.imports import I002
+    keys = sorted(str(k) for k in I002._graph_cache)
+    return f"I002._graph_cache keys: {keys}"
+
+
 def _assert_sane(result, desc: str) -> None:
     assert result.returncode in (0, 1), (
         f"{desc}: unexpected crash (rc={result.returncode}): {result.stderr}\n"
-        f"stdout tail: {result.stdout[-2000:]}"
+        f"stdout tail: {result.stdout[-2000:]}\n{_i002_state()}"
     )
     assert "Traceback (most recent call last)" not in result.stderr, (
         f"{desc}: unhandled exception:\n{result.stderr}"
