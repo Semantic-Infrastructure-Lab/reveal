@@ -15,8 +15,8 @@ def test_analysis_failed_names_step_target_and_cause():
 
 def test_per_target_complexity_failure_is_a_warning(tmp_path, monkeypatch):
     good, bad = tmp_path / 'good.py', tmp_path / 'bad.py'
-    good.write_text('def f():\n    return 1\n')
-    bad.write_text('def g():\n    return 1\n')
+    good.write_text('def f():\n    return 1\n', encoding='utf-8')
+    bad.write_text('def g():\n    return 1\n', encoding='utf-8')
     from reveal.adapters.ast import adapter as ast_adapter
     real_cls = ast_adapter.AstAdapter
 
@@ -34,7 +34,7 @@ def test_per_target_complexity_failure_is_a_warning(tmp_path, monkeypatch):
 
 
 def test_ast_skipped_file_reaches_review_caveats(tmp_path, monkeypatch):
-    (tmp_path / 'a.py').write_text('def f():\n    return 1\n')
+    (tmp_path / 'a.py').write_text('def f():\n    return 1\n', encoding='utf-8')
     def boom(file_path, *args, **kwargs):
         raise ValueError('synthetic')
 
@@ -51,7 +51,7 @@ def test_complexity_failure_makes_review_incomplete():
 
 
 def test_clean_complexity_run_adds_no_warning(tmp_path):
-    (tmp_path / 'a.py').write_text('def f():\n    return 1\n')
+    (tmp_path / 'a.py').write_text('def f():\n    return 1\n', encoding='utf-8')
     warnings = []
     review._run_complexity(tmp_path, warnings=warnings)
     assert warnings == []
@@ -60,7 +60,7 @@ def test_clean_complexity_run_adds_no_warning(tmp_path):
 @pytest.fixture
 def go_file(tmp_path):
     f = tmp_path / 'ts.go'
-    f.write_text('package main\nimport "fmt"\nfunc main() { fmt.Println("x") }\n')
+    f.write_text('package main\nimport "fmt"\nfunc main() { fmt.Println("x") }\n', encoding='utf-8')
     return f
 
 

@@ -13,8 +13,8 @@ from reveal.adapters.imports import ImportsAdapter, _extract_one_file
 
 @pytest.fixture
 def tree(tmp_path, monkeypatch):
-    (tmp_path / 'ok.py').write_text('def a():\n    return 1\n')
-    (tmp_path / 'bad.py').write_text('def b():\n    return 2\n')
+    (tmp_path / 'ok.py').write_text('def a():\n    return 1\n', encoding='utf-8')
+    (tmp_path / 'bad.py').write_text('def b():\n    return 2\n', encoding='utf-8')
     real = analysis.create_element_dict
 
     def boom(file_path, *args, **kwargs):
@@ -33,7 +33,7 @@ def _analysis_failed(warnings):
 def test_outcome_separates_failure_from_no_analyzer(tree):
     structure, failure = analysis.analyze_file_outcome(str(tree / 'bad.py'))
     assert structure is None and failure == 'ValueError: synthetic analyzer bug'
-    (tree / 'notes.unknownext').write_text('x')
+    (tree / 'notes.unknownext').write_text('x', encoding='utf-8')
     assert analysis.analyze_file_outcome(str(tree / 'notes.unknownext')) == (None, None)
     structure, failure = analysis.analyze_file_outcome(str(tree / 'ok.py'))
     assert structure and failure is None
@@ -55,7 +55,7 @@ def test_ast_query_warns_about_the_skipped_file(tree):
 
 
 def test_clean_tree_has_no_analysis_warning(tmp_path):
-    (tmp_path / 'ok.py').write_text('def a():\n    return 1\n')
+    (tmp_path / 'ok.py').write_text('def a():\n    return 1\n', encoding='utf-8')
     result = AstAdapter(str(tmp_path), 'complexity>0').get_structure()
     assert not _analysis_failed(result['meta']['warnings'])
 
