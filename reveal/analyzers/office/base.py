@@ -10,6 +10,7 @@ This base class provides shared infrastructure for both format families.
 """
 
 import zipfile
+import zlib
 import xml.etree.ElementTree as ET
 import logging
 from pathlib import Path
@@ -22,6 +23,22 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 MAX_XML_PART_SIZE = 50 * 1024 * 1024  # 50 MB per XML part
 MAX_COMPRESSION_RATIO = 1000  # Flag suspicious compression ratios
+
+# What reading one archive member and parsing it as XML raises on a damaged or hostile file:
+#   zipfile.BadZipFile       bad header, CRC mismatch (zipfile docs)
+#   KeyError                 ZipFile.getinfo/read of a name the archive does not hold
+#   ValueError               _safe_read's own size and compression-ratio guards
+#   OSError                  file cannot be opened/read; the bz2 and lzma decompressors raise it
+#   RuntimeError             encrypted member (zipfile docs); NotImplementedError (unsupported
+#                            compression method) and RecursionError are subclasses
+#   EOFError, zlib.error     truncated or corrupt deflate stream
+#   ET.ParseError            malformed XML in the part
+#   LookupError              ET.fromstring(bytes) with an unknown encoding in the XML declaration
+# AttributeError/TypeError are deliberately absent: they would be bugs in this code.
+_ARCHIVE_PART_ERRORS = (
+    zipfile.BadZipFile, KeyError, ValueError, OSError, RuntimeError,
+    EOFError, zlib.error, ET.ParseError, LookupError,
+)
 
 
 class ZipXMLAnalyzer(FileAnalyzer):
@@ -92,7 +109,7 @@ class ZipXMLAnalyzer(FileAnalyzer):
             self.parse_error = f"Invalid ZIP archive: {e}"
         except ET.ParseError as e:
             self.parse_error = f"Invalid XML content: {e}"
-        except Exception as e:
+        except _ARCHIVE_PART_ERRORS as e:
             self.parse_error = f"Error opening document: {e}"
 
     @staticmethod
@@ -127,7 +144,7 @@ class ZipXMLAnalyzer(FileAnalyzer):
         try:
             xml_content = self._safe_read(part_path)
             return ET.fromstring(xml_content)
-        except Exception as e:
+        except _ARCHIVE_PART_ERRORS as e:
             logging.warning(f"Failed to read/parse XML part {part_path}: {e}")
             return None
 
@@ -137,7 +154,7 @@ class ZipXMLAnalyzer(FileAnalyzer):
             return None
         try:
             return self._safe_read(part_path)
-        except Exception as e:
+        except _ARCHIVE_PART_ERRORS as e:
             logging.warning(f"Failed to read part {part_path}: {e}")
             return None
 
@@ -195,10 +212,10 @@ class ZipXMLAnalyzer(FileAnalyzer):
                         'size': info.file_size,
                         'type': ext[1:].upper(),
                     })
-                except Exception as e:
-                    # One bad zip entry shouldn't drop the rest of the media list.
-                    logging.debug(f"Failed to extract media info for {part}: {e}")
-                    pass
+                except KeyError as e:
+                    # getinfo of a name namelist() just returned; one bad zip entry
+                    # shouldn't drop the rest of the media list.
+                    logging.warning(f"Failed to extract media info for {part}: {e}")
         return media
 
     def get_metadata(self) -> Dict[str, Any]:
@@ -234,7 +251,8 @@ class ZipXMLAnalyzer(FileAnalyzer):
         if self.archive:
             try:
                 self.archive.close()
-            except Exception as e:
-                # __del__ during interpreter shutdown: nothing left to raise to, log and move on.
+            except OSError as e:
+                # ZipFile.close() closes the underlying file object. Nothing can receive an
+                # exception from __del__; any other type goes to the interpreter's
+                # unraisable-exception report instead of being swallowed here.
                 logging.debug(f"Failed to close archive {self.path}: {e}")
-                pass
