@@ -187,7 +187,7 @@
   "reveal/rules/validation/V040.py::find_offenders": 21,
   "reveal/rules/validation/V041.py::is_bare_text_io": 16,
   "reveal/testability/patches.py::group_patches": 20,
-  "reveal/treesitter.py::TreeSitterAnalyzer._complexity_depth_and_calls": 21,
+  "reveal/treesitter.py::TreeSitterAnalyzer._complexity_depth_and_calls": 18,
   "reveal/treesitter.py::TreeSitterAnalyzer._find_identifier_in_tree": 17,
   "reveal/utils/gitignore.py::_segment_regex": 18,
   "reveal/utils/parallel.py::grep_files": 17,
