@@ -33,7 +33,7 @@ import logging
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, FrozenSet, Set
+from typing import Callable, FrozenSet, NamedTuple, Set, Tuple
 
 from ...analyzers.imports.base import get_extractor
 from ...utils.path_utils import EVIDENCE, _walk_code_files
@@ -80,6 +80,22 @@ PY_DIST_TO_IMPORT_ALIASES = {
 PY_IMPORT_TO_DIST_ALIASES = {v: k for k, v in PY_DIST_TO_IMPORT_ALIASES.items()}
 
 
+class ProjectImports(NamedTuple):
+    """What a project-wide import scan found: the imported identifiers, and the source
+    files whose imports could not be extracted (their imports are missing from *names*)."""
+    names: FrozenSet[str]
+    skipped: Tuple[str, ...]
+
+
+class DeclaredUnused(NamedTuple):
+    """Declared-but-never-imported names, and the files the scan could not read.
+
+    A skipped file may be the one that imports a reported name, so a non-empty
+    *skipped* means *unused* can contain false positives (I007 reports it)."""
+    unused: FrozenSet[str]
+    skipped: Tuple[str, ...]
+
+
 def _fold_hyphen_underscore(name: str) -> str:
     """Rust crate-identifier convention: ``Cargo.toml``'s ``my-crate`` is
     ``use``d as ``my_crate``. A plain module-level function (not a lambda)
@@ -91,7 +107,7 @@ def _fold_hyphen_underscore(name: str) -> str:
 @lru_cache(maxsize=64)
 def _scan_project_imports(
     root: Path, extensions: FrozenSet[str], normalize: Callable[[str], str], sep: str
-) -> FrozenSet[str]:
+) -> ProjectImports:
     """Every normalized top-level module/crate identifier imported anywhere
     (absolute imports only -- relative ones are unambiguously intra-project
     and carry no dependency signal) by a file with one of *extensions* under
@@ -99,8 +115,12 @@ def _scan_project_imports(
     import scan, the same cost class as I002's cached project-wide import
     graph, and paid at most once per process for a given project (I007 only
     triggers on a manifest file, typically one per project per `check` run).
+
+    A file whose extraction raises is recorded in ``skipped`` (sorted), not dropped:
+    its imports are missing from ``names``, which the caller must disclose.
     """
     names: Set[str] = set()
+    skipped: Set[str] = set()
     for file_path in _walk_code_files(root, purpose=EVIDENCE):
         if file_path.suffix.lower() not in extensions:
             continue
@@ -109,8 +129,9 @@ def _scan_project_imports(
             continue
         try:
             imports = extractor.extract_imports(file_path)
-        except Exception as e:
-            logger.warning("_dep_reconciliation.py: skipped after %s: %s", type(e).__name__, e)
+        except Exception as e:  # boundary-ok: broad-except -- the extractor walks tree-sitter nodes of arbitrary user source (native binding, no enumerable error set); one file must not end the project scan, and the file is returned in ProjectImports.skipped for the rule to report
+            logger.warning("_dep_reconciliation.py: skipped %s after %s: %s", file_path, type(e).__name__, e)
+            skipped.add(str(file_path))
             continue
         if getattr(extractor, 'parse_failed', False):
             continue
@@ -120,7 +141,7 @@ def _scan_project_imports(
             top_level = stmt.module_name.split(sep)[0]
             if top_level:
                 names.add(normalize(top_level))
-    return frozenset(names)
+    return ProjectImports(frozenset(names), tuple(sorted(skipped)))
 
 
 def _raw_python_external_names(project_root: Path) -> FrozenSet[str]:
@@ -135,23 +156,23 @@ def _raw_python_external_names(project_root: Path) -> FrozenSet[str]:
     return frozenset(names)
 
 
-def python_declared_unused(project_root: Path) -> FrozenSet[str]:
+def python_declared_unused(project_root: Path) -> DeclaredUnused:
     """Declared external dependency names (raw manifest spelling) never
     imported anywhere under *project_root* (I007)."""
     from ...analyzers.imports.python import _normalize_dist_name
 
     raw_names = _raw_python_external_names(project_root)
     if not raw_names:
-        return frozenset()
-    imported = _scan_project_imports(project_root, frozenset({'.py'}), _normalize_dist_name, '.')
+        return DeclaredUnused(frozenset(), ())
+    scan = _scan_project_imports(project_root, frozenset({'.py'}), _normalize_dist_name, '.')
     unused = set()
     for raw_name in raw_names:
         norm = _normalize_dist_name(raw_name)
         alias = PY_DIST_TO_IMPORT_ALIASES.get(norm)
-        if norm in imported or (alias and alias in imported):
+        if norm in scan.names or (alias and alias in scan.names):
             continue
         unused.add(raw_name)
-    return frozenset(unused)
+    return DeclaredUnused(frozenset(unused), scan.skipped)
 
 
 def _raw_rust_dependency_names(crate_root: Path) -> FrozenSet[str]:
@@ -174,7 +195,7 @@ def _raw_rust_dependency_names(crate_root: Path) -> FrozenSet[str]:
     return frozenset(names)
 
 
-def rust_declared_unused(crate_root: Path) -> FrozenSet[str]:
+def rust_declared_unused(crate_root: Path) -> DeclaredUnused:
     """Declared [dependencies]/[dev-dependencies]/[build-dependencies] crate
     names (Cargo.toml key spelling, hyphens intact) never ``use``d anywhere
     under *crate_root* (I007)."""
@@ -182,9 +203,9 @@ def rust_declared_unused(crate_root: Path) -> FrozenSet[str]:
 
     raw_names = _raw_rust_dependency_names(crate_root)
     if not raw_names:
-        return frozenset()
+        return DeclaredUnused(frozenset(), ())
     _, external_identifiers = _rust_crate_inventory(crate_root)
-    used_identifiers = _scan_project_imports(
+    scan = _scan_project_imports(
         crate_root, frozenset({'.rs'}), _fold_hyphen_underscore, '::'
     )
     unused = set()
@@ -192,6 +213,6 @@ def rust_declared_unused(crate_root: Path) -> FrozenSet[str]:
         identifier = raw_name.replace('-', '_')
         if identifier not in external_identifiers:
             continue  # a path/workspace dep _rust_crate_inventory classified as local
-        if identifier not in used_identifiers:
+        if identifier not in scan.names:
             unused.add(raw_name)
-    return frozenset(unused)
+    return DeclaredUnused(frozenset(unused), scan.skipped)

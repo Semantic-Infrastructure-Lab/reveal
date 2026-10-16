@@ -72,8 +72,9 @@ class I008(BaseRule):
                 return self._check_python(path)
             if ext == '.rs':
                 return self._check_rust(path)
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- the extractors and manifest inventories read arbitrary user files and call tree-sitter (no enumerable error set); one file must not end the run, and it is recorded as this rule's unavailable outcome with the file as subject
             logger.warning(f"I008: failed to analyze {file_path}: {e}")
+            return self.unavailable(f"import analysis failed: {type(e).__name__}: {e}", file_path)
         return []
 
     def _extractor_imports(self, path: Path):

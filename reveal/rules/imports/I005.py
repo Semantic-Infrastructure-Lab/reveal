@@ -16,11 +16,7 @@ logger = logging.getLogger(__name__)
 
 def _initialize_file_patterns():
     """Get all supported file extensions from registered extractors."""
-    try:
-        return list(get_all_extensions())
-    except Exception:
-        # Fallback to common extensions if registry not yet initialized
-        return ['.py', '.js', '.go', '.rs', '.ts', '.tsx']
+    return list(get_all_extensions())
 
 
 class I005(BaseRule):
@@ -77,22 +73,26 @@ class I005(BaseRule):
         if path.exists():
             extractor = get_extractor(path)
             if extractor:
+                extracted: List[Any] = []
                 try:
-                    stmt_imports = extractor.extract_imports(path)
-                    for stmt in stmt_imports:
+                    for stmt in extractor.extract_imports(path):
                         if stmt.is_type_checking:
                             continue
                         normalized = ' '.join(stmt.source_line.split()).lower() if stmt.source_line else None
                         if not normalized:
                             continue
-                        import_occurrences[normalized].append((stmt.line_number, stmt.source_line.strip()))
+                        extracted.append((normalized, stmt.line_number, stmt.source_line.strip()))
+                    for normalized, line_number, source in extracted:
+                        import_occurrences[normalized].append((line_number, source))
                     used_extractor = True
-                except Exception as e:
+                except Exception as e:  # boundary-ok: broad-except -- the extractor walks tree-sitter nodes of arbitrary user source (native binding, no enumerable error set); one file must not end the run, the fallback below still checks it from the structure, and the degraded path is recorded as this rule's unavailable outcome
                     # A real extractor crash must not look identical to "no
-                    # extractor for this language" — log it so a silent accuracy
-                    # regression is at least visible, even though we still fall
-                    # back to the structure-dict path below.
+                    # extractor for this language". Nothing from the failed pass is
+                    # kept (the fallback would count the same import twice).
                     logger.warning(f"I005: import extractor failed for {file_path}: {e}")
+                    self.unavailable(
+                        f"import extractor failed ({type(e).__name__}: {e}); "
+                        f"checked from the structure's import list instead", file_path)
 
         if not used_extractor:
             # Fallback: use structure dict (non-Python files, non-existent paths, or extractor failure)

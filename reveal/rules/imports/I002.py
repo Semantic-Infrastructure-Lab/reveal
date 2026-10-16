@@ -109,7 +109,7 @@ def _extract_imports_for_file(fp_str: str) -> tuple:
     try:
         imports = list(extractor.extract_imports(fp))
         return imports, extractor.parse_failed
-    except Exception:
+    except Exception:  # boundary-ok: broad-except -- the extractor walks tree-sitter nodes of arbitrary user source (native binding, no enumerable error set); one file must not end the scan, and the failed flag below is reported by get_scan_disclosures
         # Intentional silence here: the `True` failed-flag IS the visible
         # signal, surfaced as a logger.warning by the caller once per graph
         # build (_build_import_graph) rather than once per file here.
@@ -136,7 +136,7 @@ def _extract_in_pool(file_strs: List[str], workers: int, results: Dict[str, tupl
         for fp_str, future in zip(file_strs, submit_each(executor, _extract_imports_for_file, file_strs)):
             try:
                 results[fp_str] = future.result()
-            except Exception as e:  # recorded as a failed file; disclosed below
+            except Exception as e:  # boundary-ok: broad-except -- future.result() re-raises whatever broke the worker or its pickled result (BrokenProcessPool, unpickling errors of any type); each such file is recorded as a failed, lost file and disclosed below and by get_scan_disclosures
                 results[fp_str] = ([], True)
                 lost.append(e)
                 if lost_files is not None:
@@ -251,6 +251,8 @@ def _tree_fingerprint(directory: Path) -> Optional[str]:
         hasher.update(fingerprint.encode('ascii'))
         return hasher.hexdigest()
     except Exception:  # boundary-ok: silent-except -- None means "skip the cache, build directly", not a lost result
+        # boundary-ok: broad-except -- the digest is only a cache key over stat() and the
+        # resolution fingerprint; any failure builds the graph uncached, so the result is unchanged.
         # Intentional silence: None means "skip the cache, build directly" --
         # not a lost result. See the docstring above.
         return None
@@ -322,11 +324,7 @@ def get_scan_disclosures(files: Optional[List[Path]] = None) -> List[str]:
 # Initialize file patterns from all registered extractors at module load time
 def _initialize_file_patterns():
     """Get all supported file extensions from registered extractors."""
-    try:
-        return list(get_all_extensions())
-    except Exception:
-        # Fallback to common extensions if registry not yet initialized
-        return ['.py', '.js', '.go', '.rs']
+    return list(get_all_extensions())
 
 
 class I002(BaseRule):
@@ -399,9 +397,10 @@ class I002(BaseRule):
                     context=f"Import cycle: {cycle_str}"
                 ))
 
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- graph building runs the extractors over arbitrary user source (native tree-sitter, no enumerable error set); one file must not end the run, and it is recorded as this rule's unavailable outcome with the file as subject
             logger.warning(f"I002: failed to analyze {file_path}: {e}")
-            return detections
+            return self.unavailable(
+                f"circular-dependency analysis failed: {type(e).__name__}: {e}", file_path)
 
         return detections
 
@@ -527,7 +526,7 @@ class I002(BaseRule):
         if workers > 1:
             try:
                 _extract_in_pool(file_strs, workers, results, lost_strs)
-            except Exception as e:
+            except Exception as e:  # boundary-ok: broad-except -- starting a process pool fails with platform-specific types (OSError, NotImplementedError, RuntimeError, ImportError); the files the pool did not deliver run serially, so the graph is complete, and the warning below says so
                 # The pool itself could not run (restricted/forbidden-fork
                 # environments); a worker that dies inside a running pool is
                 # handled per file in _extract_in_pool and never lands here.

@@ -17,11 +17,7 @@ logger = logging.getLogger(__name__)
 # Initialize file patterns from all registered extractors at module load time
 def _initialize_file_patterns():
     """Get all supported file extensions from registered extractors."""
-    try:
-        return list(get_all_extensions())
-    except Exception:
-        # Fallback to common extensions if registry not yet initialized
-        return ['.py', '.js', '.go', '.rs']
+    return list(get_all_extensions())
 
 
 class I001(BaseRule):
@@ -97,9 +93,9 @@ class I001(BaseRule):
             exports = set()
             if hasattr(extractor, 'extract_exports'):
                 exports = extractor.extract_exports(path)
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- the extractors walk tree-sitter nodes of arbitrary user source in several languages (native binding, no enumerable error set); one file must not end the run, and it is recorded as this rule's unavailable outcome with the file as subject
             logger.warning(f"I001: failed to analyze {file_path}: {e}")
-            return detections
+            return self.unavailable(f"import extraction failed: {type(e).__name__}: {e}", file_path)
 
         # BACK-982: a parse failure makes extract_symbols() return an empty
         # set indistinguishable from "genuinely uses nothing" -- comparing

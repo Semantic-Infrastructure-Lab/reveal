@@ -28,11 +28,13 @@ from ...analyzers.imports.resolver import resolve_python_import
 
 logger = logging.getLogger(__name__)
 
-# Module-level cache: directory_path -> (layer_config, project_root)
+# Module-level cache: directory_path -> (layer_config, project_root, load_error)
 # All files in the same directory resolve to the same .reveal.yaml, so we
 # only need to walk + parse once per unique directory (typically 1 parse total
-# when all files share the same project root config).
-_config_cache: Dict[Path, Tuple[Optional[Any], Optional[Path]]] = {}
+# when all files share the same project root config). load_error is the reason a
+# .reveal.yaml was found but could not be used (None when it loaded or none exists);
+# it is cached with the config so every file under it reports it, not only the first.
+_config_cache: Dict[Path, Tuple[Optional[Any], Optional[Path], Optional[str]]] = {}
 
 
 class I003(BaseRule):
@@ -87,10 +89,15 @@ class I003(BaseRule):
 
         # Load layer configuration and find project root
         try:
-            layer_config, project_root = self._load_config_and_find_root(path)
-        except Exception as e:
+            layer_config, project_root, load_error = self._load_config_and_find_root(path)
+        except (ImportError, OSError) as e:
+            # PyYAML missing, or the directory walk hit an unreadable path
             logger.warning(f"I003: failed to load layer config for {file_path}: {e}")
-            return detections
+            return self.unavailable(
+                f"layer config lookup failed: {type(e).__name__}: {e}", file_path)
+
+        if load_error:
+            return self.unavailable(load_error, file_path)
 
         # No layer config found - skip this file
         if not layer_config or not layer_config.layers:
@@ -99,9 +106,9 @@ class I003(BaseRule):
         # Extract imports from the file
         try:
             imports = extract_python_imports(path)
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- the extractor walks tree-sitter nodes of arbitrary user source (native binding, no enumerable error set); one file must not end the run, and it is recorded as this rule's unavailable outcome with the file as subject
             logger.warning(f"I003: failed to extract imports from {file_path}: {e}")
-            return detections
+            return self.unavailable(f"import extraction failed: {type(e).__name__}: {e}", file_path)
 
         # Check each import against layer rules
         for import_stmt in imports:
@@ -113,7 +120,8 @@ class I003(BaseRule):
 
         return detections
 
-    def _load_config_and_find_root(self, start_path: Path) -> tuple[Optional[Any], Optional[Path]]:
+    def _load_config_and_find_root(
+            self, start_path: Path) -> tuple[Optional[Any], Optional[Path], Optional[str]]:
         """Load layer config and return it along with project root.
 
         Uses a module-level cache keyed by directory so all files in the same
@@ -123,7 +131,8 @@ class I003(BaseRule):
             start_path: Starting path for search
 
         Returns:
-            Tuple of (layer_config, project_root) where project_root is where .reveal.yaml was found
+            Tuple of (layer_config, project_root, load_error) where project_root is where
+            .reveal.yaml was found and load_error says why a found .reveal.yaml was unusable
         """
         cache_key = start_path if start_path.is_dir() else start_path.parent
         if cache_key in _config_cache:
@@ -132,23 +141,27 @@ class I003(BaseRule):
         import yaml
 
         current = cache_key
-        result: tuple[Optional[Any], Optional[Path]] = (None, None)
+        result: tuple[Optional[Any], Optional[Path], Optional[str]] = (None, None, None)
 
         def _try_load(config_file: Path):
+            """(config, root) on success, (None, None) for an empty file, or an error string."""
             try:
                 from ...analyzers.imports import LayerConfig
                 with open(config_file, encoding='utf-8') as f:
                     config_dict = yaml.safe_load(f)
                 return (LayerConfig.from_dict(config_dict), config_file.parent) if config_dict else None
-            except Exception as e:
-                logger.warning(f"Failed to load .reveal.yaml from {config_file}: {e}")
-                return None
+            except Exception as e:  # boundary-ok: broad-except -- a user-authored .reveal.yaml of any shape reaches LayerConfig.from_dict, which does unguarded .get()/iteration on it (AttributeError/TypeError on foreign data) next to yaml and file errors; the reason is returned and reported as the rule's unavailable outcome for every file under it
+                return f"layer config {config_file} could not be used: {type(e).__name__}: {e}"
 
         while current != current.parent:
             config_file = current / ".reveal.yaml"
             if config_file.exists():
                 loaded = _try_load(config_file)
-                result = loaded if loaded is not None else result
+                if isinstance(loaded, str):
+                    logger.warning(f"I003: {loaded}")      # once per directory, like the cache
+                    result = (None, None, loaded)
+                elif loaded is not None:
+                    result = (loaded[0], loaded[1], None)
                 break
             current = current.parent
 
@@ -173,8 +186,11 @@ class I003(BaseRule):
                 suggestion=self._create_suggestion(layer_name, layer_config),
                 context=f"Import: {import_stmt.module_name}",
             )
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- the resolver runs over arbitrary import strings and layer matching runs user-authored globs (no enumerable error set); one import must not end the file, and it is recorded as this rule's unavailable outcome with file:line as subject
             logger.warning(f"I003: error checking import {import_stmt.module_name} in {file_path}: {e}")
+            self.unavailable(
+                f"import {import_stmt.module_name} could not be checked: {type(e).__name__}: {e}",
+                f"{file_path}:{import_stmt.line_number}")
             return None
 
     def _create_suggestion(self, layer_name: str, config) -> str:

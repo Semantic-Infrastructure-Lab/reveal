@@ -67,6 +67,9 @@ class N007(BaseRule):
 
             ocsp_result = self._check_ocsp_url(cert_path)
 
+            if ocsp_result == 'unparsable':
+                self.unavailable(f"certificate {cert_path} is not a parsable PEM certificate", file_path)
+
             if ocsp_result == 'missing':
                 detections.append(self.create_detection(
                     file_path=file_path,
@@ -75,12 +78,14 @@ class N007(BaseRule):
                     suggestion="Remove ssl_stapling or replace with a cert that includes an AIA/OCSP URL.",
                     context=f"ssl_certificate {cert_path};"
                 ))
-            # 'present' → no issue; 'unreadable' → skip (cert may be on another host)
+            # 'present' → no issue; 'unreadable' → skip (cert may be on another host);
+            # 'unparsable' → recorded as an unavailable outcome above
 
         return detections
 
     def _check_ocsp_url(self, cert_path: str) -> str:
-        """Return 'present', 'missing', or 'unreadable'."""
+        """Return 'present', 'missing', 'unreadable' (no such file here: the cert may live
+        on another host) or 'unparsable' (the file is there but is not a certificate)."""
         try:
             with open(cert_path, 'rb') as fh:
                 cert_data = fh.read()
@@ -106,14 +111,18 @@ class N007(BaseRule):
                     return 'present' if has_ocsp else 'missing'
                 except x509.ExtensionNotFound:
                     return 'missing'
+                except (x509.DuplicateExtension, x509.UnsupportedGeneralNameType):
+                    return 'unparsable'   # a certificate cryptography will not read
             except ImportError:
                 # cryptography not available — fall back to string scan of DER
                 # OCSP URIs in the AIA extension always start with "http"
                 # The OID for id-ad-ocsp is 1.3.6.1.5.5.7.48.1
                 # encoded as \x30\x25\x30\x23\x06\x08\x2b... but a string scan is reliable enough
                 return 'present' if b'http' in cert and b'ocsp' in cert.lower() else 'missing'
-        except Exception:  # boundary-ok: silent-except -- returns the 'unreadable' marker the rule reports
-            return 'unreadable'
+        except ValueError:
+            # ssl.PEM_cert_to_DER_cert (bad PEM framing / base64: binascii.Error is a
+            # ValueError) and x509.load_der_x509_certificate (malformed DER)
+            return 'unparsable'
 
     def _find_directive_line(self, block: str, block_start: int, directive: str) -> int:
         """Return absolute line number of the first occurrence of a directive."""

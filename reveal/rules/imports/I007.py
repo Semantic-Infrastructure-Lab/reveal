@@ -68,9 +68,20 @@ class I007(BaseRule):
             if path.name == 'Cargo.toml':
                 return self._check_rust(path)
             return self._check_python(path)
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- manifest parsing and the project-wide import scan read arbitrary user files and call tree-sitter extractors (no enumerable error set); one manifest must not end the run, and it is recorded as this rule's unavailable outcome with the manifest as subject
             logger.warning(f"I007: failed to analyze {file_path}: {e}")
-            return []
+            return self.unavailable(f"dependency analysis failed: {type(e).__name__}: {e}", str(path))
+
+    def _note_skipped_sources(self, result, manifest_path: Path) -> None:
+        """Source files whose imports could not be extracted may be the ones that use a
+        dependency reported as unused: record that the answer can contain false positives."""
+        if result.skipped:
+            shown = ', '.join(result.skipped[:3])
+            more = f" (+{len(result.skipped) - 3} more)" if len(result.skipped) > 3 else ''
+            self.unavailable(
+                f"{len(result.skipped)} source file(s) could not be scanned for imports "
+                f"({shown}{more}); dependencies reported as unused may be used there",
+                str(manifest_path))
 
     def _check_python(self, manifest_path: Path) -> List[Detection]:
         # requirements.txt and pyproject.toml are unioned into one inventory
@@ -78,7 +89,9 @@ class I007(BaseRule):
         # same project so a dependency isn't flagged twice.
         if manifest_path.name == 'requirements.txt' and (manifest_path.parent / 'pyproject.toml').exists():
             return []
-        unused = python_declared_unused(manifest_path.parent)
+        result = python_declared_unused(manifest_path.parent)
+        self._note_skipped_sources(result, manifest_path)
+        unused = result.unused
         return [
             self.create_detection(
                 file_path=str(manifest_path),
@@ -91,7 +104,9 @@ class I007(BaseRule):
         ]
 
     def _check_rust(self, manifest_path: Path) -> List[Detection]:
-        unused = rust_declared_unused(manifest_path.parent)
+        result = rust_declared_unused(manifest_path.parent)
+        self._note_skipped_sources(result, manifest_path)
+        unused = result.unused
         return [
             self.create_detection(
                 file_path=str(manifest_path),
