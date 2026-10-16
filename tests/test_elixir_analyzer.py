@@ -183,3 +183,20 @@ class TestElixirAnalyzerRegistration:
         analyzer_class = get_analyzer(test_path)
 
         assert analyzer_class == ElixirAnalyzer
+
+
+_SIGNATURES = (
+    'defmodule M do\n  def run(x, y), do: x + y\n  def walk(a) do\n    a\n  end\n  def zero do\n    1\n  end\n'
+    '  defp guarded(n) when n > 0, do: n\n  defmacro m(a, b),\n    do: a\n  defguard is_pos(n) when n > 0\n'
+    '  defdelegate other(x), to: Foo\n  def multi(a,\n            b) do\n    {a, b}\n  end\nend\n')
+
+
+def test_signature_is_the_head_never_the_body(tmp_path):
+    """BACK-1416: `def run(x, y), do: x + y` rendered as 'run(x, y), do: x + y' and the block
+    form as 'walk(a) do a end' -- the body leaked into the signature."""
+    path = tmp_path / 'm.ex'
+    path.write_text(_SIGNATURES, encoding='utf-8')
+    functions = ElixirAnalyzer(str(path)).get_structure()['functions']
+    assert {f['name']: f['signature'] for f in functions} == {
+        'run': '(x, y)', 'walk': '(a)', 'zero': '', 'guarded': '(n) when n > 0', 'm': '(a, b)',
+        'is_pos': '(n) when n > 0', 'other': '(x)', 'multi': '(a, b)'}

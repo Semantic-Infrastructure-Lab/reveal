@@ -16,7 +16,7 @@ from ..reveal_types import StructureItem
 from ..core import node_children as _children
 from ..core.treesitter_compat import _zero_arg
 from ..registry import register
-from ..treesitter import TreeSitterAnalyzer
+from ..treesitter import TreeSitterAnalyzer, _one_line_signature
 from ..utils.results import ResultBuilder
 
 # Macro calls that define a callable. Module-shaped macros are handled
@@ -134,6 +134,27 @@ class ElixirAnalyzer(TreeSitterAnalyzer):
                     'source': source,
                 }
         return super().extract_element(element_type, name)
+
+    def _get_signature(self, node) -> str:
+        """``(params)`` or ``(params) when guard`` of a def: the head in the call's
+        ``arguments``, never the body that follows it (``, do: expr`` / ``do ... end``)."""
+        if self._elixir_call_keyword(node) not in _ELIXIR_DEF_KEYWORDS:
+            return super()._get_signature(node)
+        args = next((c for c in _children(node) if _zero_arg(c, 'kind') == 'arguments'), None)
+        target = next(iter(_children(args)), None) if args is not None else None
+        if target is None:
+            return ''
+        guard = ''
+        if _zero_arg(target, 'kind') == 'binary_operator':
+            parts = _children(target)
+            if len(parts) >= 3 and self._get_node_text(parts[1]).strip() == 'when':
+                guard = ' when ' + self._get_node_text(parts[-1])
+                target = parts[0]
+        params = ''
+        if _zero_arg(target, 'kind') == 'call':
+            call_args = next((c for c in _children(target) if _zero_arg(c, 'kind') == 'arguments'), None)
+            params = self._get_node_text(call_args) if call_args is not None else ''
+        return _one_line_signature(params + guard)
 
     def _elixir_call_keyword(self, call_node) -> Optional[str]:
         """The leading macro name of a ``call`` node (``def``, ``defmodule``, …),
