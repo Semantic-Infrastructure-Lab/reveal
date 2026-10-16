@@ -63,7 +63,7 @@ def _run_scope(adapter: 'ArchitectureAdapter', path: Path) -> Dict[str, Any]:
     sibling-adapter site in this file."""
     try:
         return scope_dict_for_path(path)
-    except Exception as exc:
+    except Exception as exc:  # boundary-ok: broad-except -- the scope census is an optional report section whose callee chain (directory walk, gitignore, language sniffing in utils/path_utils) is not bounded; a failing census must not end the report, and it is recorded in meta.errors with confidence 0 by record_composed_error and logged
         logger.warning("scope census failed for %s: %s", path, exc)
         adapter.record_composed_error('scope_dict_for_path', path, exc)
         return {}
@@ -81,7 +81,7 @@ def _run_imports_analysis(adapter: 'ArchitectureAdapter', path: Path) -> Dict[st
         if warnings:
             adapter.fold_meta({'warnings': warnings})
         return _format_imports_data(importer, path)
-    except Exception as exc:
+    except Exception as exc:  # boundary-ok: broad-except -- composition seam that bypasses compose() for the shared ImportsAdapter walk; the sibling adapter's failure set is not bounded (parse, resolution, pool), and a failure is recorded in meta.errors with confidence 0 by record_composed_error, exactly what compose() does
         adapter.record_composed_error('ImportsAdapter', path, exc)
         return {}
 
@@ -145,7 +145,7 @@ def _run_combined_analysis(adapter: 'ArchitectureAdapter', path: Path, limit: in
         if warnings:
             adapter.fold_meta({'warnings': warnings})
         imports_data = _format_imports_data(importer, path)
-    except Exception as exc:
+    except Exception as exc:  # boundary-ok: broad-except -- composition seam that bypasses compose() for the shared ImportsAdapter walk; the sibling adapter's failure set is not bounded (parse, resolution, pool), and a failure is recorded in meta.errors with confidence 0 by record_composed_error, exactly what compose() does
         adapter.record_composed_error('ImportsAdapter', path, exc)
 
     if not graph_built:
@@ -160,7 +160,7 @@ def _run_combined_analysis(adapter: 'ArchitectureAdapter', path: Path, limit: in
         # attributed-failure treatment as the ImportsAdapter branch (BACK-984).
         data = AstAdapter(str(path), f'complexity>9&sort=-complexity&limit={limit}').get_structure(structures=structures)
         complex_fns = data.get('results', data.get('elements', []))
-    except Exception as exc:
+    except Exception as exc:  # boundary-ok: broad-except -- composition seam that bypasses compose() to reuse the shared walk's structures; the sibling adapter's failure set is not bounded, and a failure is recorded in meta.errors with confidence 0 by record_composed_error, exactly what compose() does
         adapter.record_composed_error('AstAdapter', path, exc)
         complex_fns = []
 

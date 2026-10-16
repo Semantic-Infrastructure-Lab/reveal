@@ -354,7 +354,7 @@ class ResourceAdapter(ABC):
         try:
             child = adapter_cls(str(resource), query)
             result = child.get_structure()
-        except Exception as exc:
+        except Exception as exc:  # boundary-ok: broad-except -- this is the composition seam: the child is any adapter (constructor and get_structure, including user plugins) and its failure set is not bounded; one failing section must not end the composite, and the failure is recorded in meta.errors with confidence 0 by record_composed_error and logged
             self.record_composed_error(child_name, resource, exc)
             return default
 

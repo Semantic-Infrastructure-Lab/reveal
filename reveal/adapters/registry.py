@@ -41,7 +41,7 @@ def _load_adapter_plugin_dir(plugin_dir: Path) -> None:
             sys.modules[module_name] = mod
             spec.loader.exec_module(mod)
             logger.debug('Loaded adapter plugin: %s', plugin_dir.name)
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- importing a user-supplied plugin runs arbitrary code (SyntaxError, ImportError, anything its module body raises); one bad plugin must not stop reveal or the other plugins, and the warning names the plugin
         logger.warning('Adapter plugin load failed (%s): %s', plugin_dir.name, e)
 
 
