@@ -374,7 +374,22 @@ def _dir_cache_key(directory: Path) -> Any:
         return ('unreadable', str(directory))
 
 
-def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
+class CallersIndex(Dict[str, List[Dict[str, Any]]]):
+    """The callers index plus ``skipped``: ``(file, cause)`` for every file whose
+    analysis failed, so the cached index keeps saying what it is missing (BACK-1860)."""
+
+    skipped: List[Tuple[str, str]]
+
+
+def _disclose_skipped(result: Dict[str, Any], skipped: List[Tuple[str, str]]) -> Dict[str, Any]:
+    """Carry the files whose analysis failed on *result* as ``analysis_skipped`` for the
+    adapter to turn into an ``analysis_failed`` warning (BACK-1860). Absent when none."""
+    if skipped:
+        result['analysis_skipped'] = [list(item) for item in skipped]
+    return result
+
+
+def build_callers_index(path: str) -> CallersIndex:
     """Return project-level callers index for *path* (file or directory).
 
     The index maps each callee name to a list of caller records::
@@ -413,7 +428,8 @@ def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
 
     # Build index
     structures = collect_structures(str(directory))
-    index: Dict[str, List[Dict[str, Any]]] = {}
+    index = CallersIndex()
+    index.skipped = list(structures.skipped)
 
     for file_struct in structures:
         file_path = file_struct.get('file', '')
@@ -518,13 +534,14 @@ def find_callees(
                 'reference_only_calls': elem.get('reference_only_calls', []),
             })
 
-    return {
+    result: Dict[str, Any] = {
         'target': target,
         'query': 'callees',
         'matches': matches,
         'total_calls': sum(len(m['calls']) for m in matches),
         '_builtins_hidden': builtins_hidden,
     }
+    return _disclose_skipped(result, structures.skipped)
 
 
 def _build_forward_index(
@@ -652,14 +669,14 @@ def find_callees_recursive(
     total_resolved = sum(sum(1 for e in lvl['callees'] if e['resolved']) for lvl in levels)
     total_unresolved = sum(sum(1 for e in lvl['callees'] if not e['resolved']) for lvl in levels)
 
-    return {
+    return _disclose_skipped({
         'root': root,
         'query': 'callees_recursive',
         'depth': depth,
         'levels': levels,
         'total_resolved': total_resolved,
         'total_unresolved': total_unresolved,
-    }
+    }, structures.skipped)
 
 
 def find_callers(
@@ -704,6 +721,7 @@ def find_callers(
         'total_callers': total,
         'levels': levels,
     }
+    _disclose_skipped(result, index.skipped)
 
     if total == 0:
         parent = str(Path(path).parent)
@@ -1133,14 +1151,14 @@ def find_uncalled(
     if top > 0:
         entries = entries[:top]
 
-    return {
+    return _disclose_skipped({
         'query': 'uncalled',
         'path': path,
         'total_defined': total_defined,
         'total_uncalled': total_uncalled,
         'test_entrypoints_excluded': test_entrypoints_excluded,
         'entries': entries,
-    }
+    }, structures.skipped)
 
 
 def rank_by_callers(
@@ -1215,13 +1233,13 @@ def rank_by_callers(
     # Honor an explicit top; the reported 'top' is the number actually shown.
     shown = min(top, len(entries)) if top > 0 else len(entries)
 
-    return {
+    return _disclose_skipped({
         'query': 'rank_callers',
         'path': path,
         'top': shown,
         'total_unique_callees': len(entries),
         'entries': entries[:shown],
-    }
+    }, index.skipped)
 
 
 def _unattributed_sources(file_struct: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -1317,11 +1335,11 @@ def build_module_dependency_graph(
         node_set.add(e['to'])
     nodes = sorted(node_set)
 
-    return {
+    return _disclose_skipped({
         'query': 'module_graph',
         'path': dir_str,
         'nodes': nodes,
         'edges': edges,
         'total_nodes': len(nodes),
         'total_edges': len(edges),
-    }
+    }, structures.skipped)

@@ -372,7 +372,7 @@ class CallsAdapter(ResourceAdapter):
                 source=self.path,
                 contract_version=CONTRACT_VERSION,
                 data=result_data,
-                **_call_graph_meta(self.path),
+                **_call_graph_meta(self.path, skipped=result_data.pop('analysis_skipped', ())),
             )
 
         if rank == 'callers':
@@ -390,7 +390,7 @@ class CallsAdapter(ResourceAdapter):
                 source=self.path,
                 contract_version=CONTRACT_VERSION,
                 data=result_data,
-                **_call_graph_meta(self.path),
+                **_call_graph_meta(self.path, skipped=result_data.pop('analysis_skipped', ())),
             )
             # BACK-1543: 'top'/'total_unique_callees' said it; the marker is what gets printed.
             note_truncation(result, 'entries', len(result_data['entries']),
@@ -415,7 +415,7 @@ class CallsAdapter(ResourceAdapter):
                 source=self.path,
                 contract_version=CONTRACT_VERSION,
                 data=result_data,
-                **_call_graph_meta(self.path, uncalled=True),
+                **_call_graph_meta(self.path, uncalled=True, skipped=result_data.pop('analysis_skipped', ())),
             )
             note_truncation(result, 'entries', len(result_data['entries']),
                             result_data['total_uncalled'], 'limit', hint='raise ?top=N')
@@ -436,7 +436,7 @@ class CallsAdapter(ResourceAdapter):
                 source=self.path,
                 contract_version=CONTRACT_VERSION,
                 data=result_data,
-                **_call_graph_meta(self.path),
+                **_call_graph_meta(self.path, skipped=result_data.pop('analysis_skipped', ())),
             )
 
         if not target and not callees_target:
@@ -467,7 +467,7 @@ class CallsAdapter(ResourceAdapter):
                 source=self.path,
                 contract_version=CONTRACT_VERSION,
                 data=result_data,
-                **_call_graph_meta(self.path),
+                **_call_graph_meta(self.path, skipped=result_data.pop('analysis_skipped', ())),
             )
 
         depth = int(self.query_params.get('depth', '1'))
@@ -485,5 +485,5 @@ class CallsAdapter(ResourceAdapter):
             source=self.path,
             contract_version=CONTRACT_VERSION,
             data=result_data,
-            **_call_graph_meta(self.path),
+            **_call_graph_meta(self.path, skipped=result_data.pop('analysis_skipped', ())),
         )

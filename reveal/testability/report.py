@@ -21,9 +21,20 @@ def build_testability_report(
     include_unresolved: bool = False,
 ) -> Dict[str, Any]:
     """Build the composed testability pressure report."""
+    from ..adapters.ast.analysis import analysis_skipped_warning
+
     patches = scan_patches(test_paths)
     patch_groups = group_patches(patches, group_by='target', min_count=min_patches)
     profiles = collect_boundary_profiles(src_path)
+
+    warnings: List[Any] = [
+        {'code': 'W-TESTABILITY-1', 'message': 'Static target resolution is best-effort.'},
+        {'code': 'W-TESTABILITY-2', 'message': 'Patch pressure is advisory; mocking external boundaries can be correct.'},
+    ]
+    failed = analysis_skipped_warning(
+        profiles.skipped, None, "their boundary hotspots are missing from the report")  # BACK-1860
+    if failed:
+        warnings.append(failed)
 
     profile_rows = _rank_profiles(src_path, profiles, patch_groups, min_categories)
     target_rows = _rank_targets(src_path, patch_groups, profiles, include_unresolved)
@@ -49,10 +60,7 @@ def build_testability_report(
         'meta': {
             'parse_mode': 'python_ast',
             'confidence': 0.75,
-            'warnings': [
-                {'code': 'W-TESTABILITY-1', 'message': 'Static target resolution is best-effort.'},
-                {'code': 'W-TESTABILITY-2', 'message': 'Patch pressure is advisory; mocking external boundaries can be correct.'},
-            ],
+            'warnings': warnings,
             'errors': [],
         },
     }

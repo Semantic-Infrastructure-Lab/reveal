@@ -14,6 +14,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .surface import _supported_coverage_languages, _unparsed_note
+from .ast.analysis import analysis_skipped_warning
 from .ast.surface_matrix import UNPARSED_KEY
 from ..registry import JS_TS_LANGUAGES, _is_cpp_header_content, extensions_for_languages
 from ..utils.path_utils import (
@@ -117,6 +118,14 @@ _CONTRACT_LANGUAGES: Tuple[Tuple[str, Callable[[Path], bool]], ...] = (
 )
 
 
+def _with_analysis_skipped(report: Dict[str, Any], skipped: List[Tuple[str, str]]) -> Dict[str, Any]:
+    """``analysis_skipped`` on *report* when files failed to analyze; get_structure turns it
+    into the ``analysis_failed`` warning (BACK-1860). Absent when nothing failed."""
+    if skipped:
+        report['analysis_skipped'] = [list(item) for item in skipped]
+    return report
+
+
 def _scan_contracts(
     path: Path,
     abstract_only: bool = False,
@@ -166,11 +175,14 @@ def _scan_contracts(
     # one pass — 'ts' and 'python' both consume it, so compute it once, lazily
     # (skip entirely for repos where neither is active, e.g. pure Go/Rust).
     structures_cache: List[Dict[str, Any]] = []
+    analysis_skipped: List[Tuple[str, str]] = []  # BACK-1860: files whose analysis raised
 
     def _structures() -> List[Dict[str, Any]]:
         if not structures_cache:
             from reveal.adapters.ast.analysis import collect_structures
-            structures_cache.extend(collect_structures(str(path)))
+            collected = collect_structures(str(path))
+            structures_cache.extend(collected)
+            analysis_skipped.extend(collected.skipped)
         return structures_cache
 
     def _run(name: str) -> Dict[str, Any]:
@@ -189,7 +201,7 @@ def _scan_contracts(
     if len(active) == 1:
         result = _run(active[0])
         result['coverage'] = coverage_dict
-        return result
+        return _with_analysis_skipped(result, analysis_skipped)
 
     by_language = {name: _run(name) for name in active}
     report = {
@@ -203,7 +215,7 @@ def _scan_contracts(
     # channel, so the key is present only when one of them ran.
     if any('unparsed_files' in g for g in by_language.values()):
         report['unparsed_files'] = sorted(f for g in by_language.values() for f in g.get('unparsed_files', []))
-    return report
+    return _with_analysis_skipped(report, analysis_skipped)
 
 
 def _scan_contracts_python(
@@ -881,12 +893,16 @@ class ContractsAdapter(ResourceAdapter):
         report = _scan_contracts(Path(self.path), abstract_only=abstract_only, show_implementations=show_implementations)
         report['impls_cap'] = impls_cap  # the text view's per-contract cap; the lists themselves are whole
 
-        warnings = []
+        warnings: List[Any] = []
         coverage_warning = report.get('coverage', {}).get('warning', '')
         if coverage_warning:
             warnings.append({'code': 'W-CONTRACTS-1', 'message': coverage_warning})
         if report.get('unparsed_files'):
             warnings.append({'code': 'W-CONTRACTS-2', 'message': _unparsed_note(report['unparsed_files'])})
+        failed = analysis_skipped_warning(
+            report.pop('analysis_skipped', []), None, "their contracts are missing from the result")
+        if failed:
+            warnings.append(failed)
 
         return ResultBuilder.create(
             result_type='contracts',

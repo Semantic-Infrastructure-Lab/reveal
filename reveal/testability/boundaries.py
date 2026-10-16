@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 
 @dataclass(frozen=True)
@@ -55,14 +55,22 @@ _EFFECT_CATEGORY = {
 _MUTATION_TAILS = {'append', 'extend', 'update', 'setdefault', 'pop', 'remove', 'clear', 'add'}
 
 
-def collect_boundary_profiles(path: str) -> List[BoundaryProfile]:
+class BoundaryProfiles(List[BoundaryProfile]):
+    """The profiles found, plus ``skipped``: ``(file, cause)`` for every file whose
+    analysis failed, so a report can say its profiles are incomplete (BACK-1860)."""
+
+    skipped: List[Tuple[str, str]]
+
+
+def collect_boundary_profiles(path: str) -> BoundaryProfiles:
     """Collect conservative boundary profiles for functions under path."""
     from reveal.adapters.ast.analysis import collect_structures
 
     from reveal.registry import language_for_extension
 
     structures = collect_structures(path)
-    profiles: List[BoundaryProfile] = []
+    profiles = BoundaryProfiles()
+    profiles.skipped = list(structures.skipped)
     imports_by_file = _imports_by_file(structures)
 
     for file_struct in structures:

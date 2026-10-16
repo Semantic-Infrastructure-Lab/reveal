@@ -34,13 +34,18 @@ def _build_trace(path: str, root: str, depth: int) -> Dict[str, Any]:
     reported each other's callees. `root` may be `path/to/file.py:name` to pick
     one definition; an ambiguous bare name traces each definition separately.
     """
-    from reveal.adapters.ast.analysis import collect_structures
+    from reveal.adapters.ast.analysis import analysis_skipped_warning, collect_structures
 
-    index = _definition_index(collect_structures(path))
+    structures = collect_structures(path)
+    index = _definition_index(structures)
     file_filter, root_name = _split_root(root)
     roots = [d for d in index.get(root_name, []) if _path_matches(d['file'], file_filter)]
 
     warnings: List[str] = []
+    failed = analysis_skipped_warning(
+        structures.skipped, None, "their functions are missing from the trace")  # BACK-1860
+    if failed:
+        warnings.append(failed['message'])
     if len(roots) > 1:
         where = ', '.join(f"{_relpath(d['file'], path)}:{d['line']}" for d in roots[:5])
         more = f" (+{len(roots) - 5} more)" if len(roots) > 5 else ''

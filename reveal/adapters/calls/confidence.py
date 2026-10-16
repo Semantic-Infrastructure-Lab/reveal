@@ -12,7 +12,7 @@ numbers come from (reveal's own VALIDATION.md oracle recall figures).
 """
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Sequence, Tuple
 
 from ...analyzers._capability_table import calls_extraction_confidence
 from ...defaults import (
@@ -23,6 +23,7 @@ from ...defaults import (
     CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB,
 )
 from ...utils.path_utils import census_for_path
+from ..ast.analysis import analysis_skipped_warning
 
 # Capability metadata for v1.1 contract (BACK-307).
 # Call-graph analysis is static — these limitations are universal across queries.
@@ -70,7 +71,8 @@ def language_census(path: str) -> Dict[str, int]:
         return {}
 
 
-def build_meta(path: str, *, uncalled: bool = False) -> Dict[str, Any]:
+def build_meta(path: str, *, uncalled: bool = False,
+               skipped: Sequence[Tuple[str, str]] = ()) -> Dict[str, Any]:
     """Per-request calls:// meta kwargs (BACK-1198).
 
     Replaces the prior flat ``confidence: 0.85`` (identical for a language
@@ -105,7 +107,7 @@ def build_meta(path: str, *, uncalled: bool = False) -> Dict[str, Any]:
     # W-CALLS-2..4 (MRO, importlib, eval/exec) are Python concepts: printed on a
     # C or PHP scan they described a failure mode that does not exist there
     # (BACK-1391). Kept when the language is unknown.
-    warnings = list(_CALL_GRAPH_WARNINGS if dominant in ('python', '') else _CALL_GRAPH_WARNINGS[:1])
+    warnings: List[Any] = list(_CALL_GRAPH_WARNINGS if dominant in ('python', '') else _CALL_GRAPH_WARNINGS[:1])
     warnings[0] = {'code': 'W-CALLS-1', 'message': f'Dynamic dispatch ({vocab}) is not resolved.'}
     warnings.append({'code': 'W-CALLS-7', 'message': (
         'Top-level caller scopes are indexed for Python, JS/TS, PHP and Ruby source files; '
@@ -123,6 +125,12 @@ def build_meta(path: str, *, uncalled: bool = False) -> Dict[str, Any]:
             'code': 'W-CALLS-6',
             'message': f'Excludes {implicit_vocab} (implicitly invoked, not statically reachable).',
         })
+
+    # BACK-1860: files whose analysis raised are missing from every answer below.
+    failed = analysis_skipped_warning(
+        list(skipped), None, "callers, callees and uncalled results cannot include them")
+    if failed:
+        warnings.append(failed)
 
     return {
         'parse_mode': 'tree_sitter_full',
