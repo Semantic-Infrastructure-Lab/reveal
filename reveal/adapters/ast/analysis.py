@@ -4,7 +4,7 @@
 import logging
 import sys
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple, cast
+from typing import Dict, List, Any, Optional, Sequence, Tuple, cast
 
 from ...complexity import fallback_complexity
 from ...reveal_types import StructureItem, WarningEntry
@@ -29,6 +29,24 @@ class StructureList(List[Dict[str, Any]]):
     def __init__(self, *args: Any) -> None:
         super().__init__(*args)
         self.skipped: List[Tuple[str, str]] = []
+
+
+def parse_recovered_warning(structures: Sequence[Dict[str, Any]]) -> Optional[WarningEntry]:
+    """One ``parse_recovered`` meta warning for files whose syntax tree-sitter recovered
+    from (BACK-1847): their elements are what survived, so the list may be incomplete.
+    None when every file parsed cleanly."""
+    paths = sorted(s['file'] for s in structures if s.get('parse_recovered'))
+    if not paths:
+        return None
+    shown = [to_posix(f) for f in paths[:5]]
+    more = f" and {len(paths) - len(shown)} more" if len(paths) > len(shown) else ''
+    return {
+        'type': 'parse_recovered',
+        'count': len(paths),
+        'files': shown,
+        'message': f"{len(paths)} file(s) contain syntax tree-sitter could not read; their "
+                   f"elements may be incomplete or wrong: {', '.join(shown)}{more}",
+    }
 
 
 def try_add_file_structure(file_path: str, structures: StructureList) -> None:
@@ -294,6 +312,8 @@ def analyze_file_outcome(file_path: str) -> Tuple[Optional[Dict[str, Any]], Opti
 
         # Flatten all elements from structure
         result: Dict[str, Any] = {'file': file_path, 'elements': []}
+        if structure.get('_has_errors'):
+            result['parse_recovered'] = True  # BACK-1847: the tree has syntax it could not read
 
         # Build import symbol map for cross-file call resolution (Phase 3).
         # build_symbol_map is cheap for already-parsed files (import extractor caches).

@@ -13,7 +13,7 @@ from .queries import (
     extract_builtins_param as _extract_builtins_param,
     extract_reveal_type_param as _extract_reveal_type_param,
 )
-from .analysis import analysis_skipped_warning, collect_structures
+from .analysis import analysis_skipped_warning, collect_structures, parse_recovered_warning
 from .filtering import apply_filters, matches_decorator, find_unknown_filter_keys
 from .help import get_help as _get_help, get_schema as _get_schema
 from .renderer import AstRenderer
@@ -149,6 +149,7 @@ def _query_warnings(structures: List[Dict[str, Any]], filtered: List[Dict[str, A
         dict(_COMPLEXITY_IS_UNWEIGHTED) if 'complexity' in query else None,
         analysis_skipped_warning(getattr(structures, 'skipped', []), None,
                                  "no result can include them"),  # BACK-1856
+        parse_recovered_warning(structures),  # BACK-1847
     ]
     return cast(List[WarningEntry], [w for w in warnings if w])
 
