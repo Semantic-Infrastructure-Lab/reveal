@@ -202,3 +202,13 @@ def test_module_graph_keeps_jsx_dependency_with_no_tracked_owner(tmp_path):
     assert ('actions.tsx', 'ui.tsx') in edges
     # Control: an import with no use stays out of the graph.
     assert ('unused.tsx', 'ui.tsx') not in edges
+
+
+def test_same_named_functions_on_one_line_share_an_owner_known_limit(tmp_path):
+    """BACK-1830 F8, a documented limit: an owner is (name, line), so two functions both
+    named f on one line cannot be told apart and each is credited with both uses. Remove
+    this test when owner identity carries more than the line."""
+    src = tmp_path / 'a.jsx'
+    src.write_text('function f(){return <X/>}; function f(){return <Y/>};\n', encoding='utf-8')
+    refs = analyze_file(str(src))['jsx_references']
+    assert [(r['callee'], r['owner'], r['owner_line']) for r in refs] == [('X', 'f', 1), ('Y', 'f', 1)]

@@ -154,7 +154,8 @@ names each kind of site: `[call line 3, JSX line 4]` (JSON: `call_lines` and `re
 and `[lines 5, 6]` for a name that is only called more than once. `--sideeffects --transitive` follows a
 render-only reference as a hop (rendering a child runs it) and labels it `(JSX render)`; the `chain` of
 the JSON findings ends in `<Child/>`. Dynamic render scheduling, Angular/HTML strings and Vue/Svelte
-navigation remain outside this relationship model. The existing conservative
+navigation remain outside this relationship model. Known limit: a scope is identified by its name and line, so two same-named functions
+on one line (minified or generated code) are one scope and share each other's JSX references. The existing conservative
 `uncalled` suppression remains separate from caller attribution.
 
 The `calls://` adapter builds a **project-level callers index** from all code files under the given path:
