@@ -27,7 +27,7 @@ def collect_boundary(
     get_text: Callable,
     language: Optional[str] = None,
     implicit_nodes: Sequence[Any] = (),
-) -> Dict[str, List[Dict[str, Any]]]:
+) -> Dict[str, Any]:
     """Collect INPUTS, ENVIRONMENT, and EFFECTS for a boundary report.
 
     Returns a dict with three keys:
@@ -108,7 +108,7 @@ def collect_boundary_transitive(
     get_text: Callable,
     language: Optional[str] = None,
     depth: int = 2,
-) -> Dict[str, List[Dict[str, Any]]]:
+) -> Dict[str, Any]:
     """Collect INPUTS, ENVIRONMENT, and transitive EFFECTS for a boundary report.
 
     Same three-section contract as collect_boundary, but EFFECTS follows calls
@@ -131,7 +131,7 @@ def collect_boundary_transitive(
 
 
 def render_boundary_transitive(
-    result: Dict[str, List[Dict[str, Any]]],
+    result: Dict[str, Any],
     root_name: str,
     from_line: int,
     to_line: int,

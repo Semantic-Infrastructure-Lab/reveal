@@ -252,7 +252,7 @@ def _nav_sideeffects(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import (  # noqa: I006
         collect_effects, collect_effects_transitive, render_effects, render_effects_transitive,
     )
-    from .adapters.ast.nav_effects import skipped_files_note  # noqa: I006
+    from .adapters.ast.nav_effects import EffectList, skipped_files_note  # noqa: I006
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
     language = getattr(ctx.analyzer, 'language', None)
     transitive = getattr(ctx.args, 'transitive', False)
@@ -268,10 +268,10 @@ def _nav_sideeffects(ctx: _NavCtx) -> None:
             language=language, depth=depth,
         )
     else:
-        effects = collect_effects(
+        effects = EffectList(collect_effects(
             ctx.func_node, from_line, to_line, ctx.get_text, language=language,
             implicit_nodes=_implicit_nodes(ctx),
-        )
+        ))
 
     if ctx.as_json:
         findings = [
@@ -285,10 +285,9 @@ def _nav_sideeffects(ctx: _NavCtx) -> None:
         _nav_json('sideeffects', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
                   warnings=[note] if note else None)
     elif transitive:
-        print(render_effects_transitive(effects, ctx.element, depth))
         note = skipped_files_note(effects.skipped)
-        if note:
-            print(f'Warning: {note}')
+        print(render_effects_transitive(effects, ctx.element, depth)
+              + (f'\n\nWarning: {note}' if note else ''))
     else:
         print(render_effects(effects, from_line, to_line))
 
