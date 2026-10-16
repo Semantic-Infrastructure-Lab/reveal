@@ -332,11 +332,15 @@ What landed, and when, is in CHANGELOG `[0.130.0]` and `internal-docs/RESOLVED_L
    effect on the fixture, was resolved 2026-10-06 (every known-silent pair now shows its effect),
    and a flag that reads no element refuses a second path instead of dropping it.
 3. **The result contract.** One failed result and one cut marker are in place for the URI
-   router, the subcommands and the file view. Open: typed outcomes at adapter and
-   analyzer boundaries; broad handlers now disclose or narrow, both silent-handler gates at
-   0; `reveal check` leaves through the subcommand seam in both its directory and single-file
-   forms, and `review` is the one remaining boundary site; the ~379 remaining broad
-   handlers are decided: one solo pass, run when no parallel agents are active, one subsystem per slice), BACK-916 (one
+   router, the subcommands and the file view. BACK-1059 (typed outcomes at adapter and
+   analyzer boundaries) has landed its main parts: both silent-handler gates and the
+   `broad-except` ratchet are 0. On 2026-10-15 the ratchet went from 246 handlers that caught
+   `Exception` without a reason to 0: each now narrows to what its body raises, or states why
+   it is a boundary (`# boundary-ok: broad-except -- <why>`) and still discloses the failure.
+   `reveal check` leaves through the subcommand seam in both its directory and single-file
+   forms, and `review` is the one remaining boundary site. What is open is disclosure: places
+   that log or print a dropped result without putting it in the result (BACK-1852,
+   BACK-1856, BACK-1857). Also open: BACK-916 (one
    rendering layer: patches, nginx://, the nginx file-flag handlers, surface://, overview://,
    testability://, deps, contracts, pack, architecture and hotspots return their output; remaining
    inline/adapter rendering and shared capture/JSON ownership stay open) and BACK-1052 (shared scan policy now used by depends,
