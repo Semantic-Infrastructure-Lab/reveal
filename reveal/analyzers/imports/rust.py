@@ -19,6 +19,7 @@ from ...core.treesitter_compat import _zero_arg
 logger = logging.getLogger(__name__)
 
 from .types import ImportStatement
+from ...utils.request_cache import register_request_cache
 from .base import ImportsDiskCache, LanguageExtractor, nearest_marker_dir, register_extractor
 
 try:
@@ -756,3 +757,7 @@ __all__ = [
     'RustExtractor',
     'extract_rust_imports',  # deprecated
 ]
+
+
+# Manifest inventory: reset at every host request so an edited manifest is re-read (BACK-1572).
+register_request_cache(__name__, _rust_crate_inventory.cache_clear)

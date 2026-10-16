@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from reveal.utils.lines import split_lines
+from reveal.utils.request_cache import register_request_cache
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,9 @@ logger = logging.getLogger(__name__)
 # _extract_anchors_from_markdown re-runs the full tree-sitter markdown parse;
 # without caching it is called once per anchor link in a file (O(n) parses per file).
 _anchor_cache: Dict[Path, List[str]] = {}
+# Cheap to rebuild (one markdown parse per target), so reset at every host request: a
+# linked file edited between requests must not keep its old anchors (BACK-1572).
+register_request_cache(__name__, _anchor_cache.clear)
 
 
 class L001(BaseRule):

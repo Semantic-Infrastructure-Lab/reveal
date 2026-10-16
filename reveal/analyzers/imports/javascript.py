@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Set, Optional, Tuple
 
 from .types import ImportStatement
+from ...utils.request_cache import register_request_cache
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
 from ...registry import JS_TS_LANGUAGES, extensions_for_languages
 from ...core import node_children as _children
@@ -1270,3 +1271,14 @@ __all__ = [
     'JavaScriptExtractor',
     'extract_js_imports',  # deprecated
 ]
+
+
+def _reset_manifest_caches() -> None:
+    _TSCONFIG_FIND_CACHE.clear()
+    _TSCONFIG_ALIAS_CACHE.clear()
+    _WORKSPACE_PACKAGES_CACHE.clear()
+
+
+# tsconfig/workspace manifests: reset at every host request so an added or edited
+# manifest is re-read (BACK-1572).
+register_request_cache(__name__, _reset_manifest_caches)

@@ -31,12 +31,12 @@ from __future__ import annotations
 
 import logging
 
-from functools import lru_cache
 from pathlib import Path
-from typing import Callable, FrozenSet, NamedTuple, Set, Tuple
+from typing import Callable, Dict, FrozenSet, NamedTuple, Set, Tuple
 
 from ...analyzers.imports.base import get_extractor
 from ...utils.path_utils import EVIDENCE, _walk_code_files
+from ...utils.request_cache import register_validated_cache
 
 logger = logging.getLogger(__name__)
 
@@ -100,21 +100,43 @@ def _fold_hyphen_underscore(name: str) -> str:
     """Rust crate-identifier convention: ``Cargo.toml``'s ``my-crate`` is
     ``use``d as ``my_crate``. A plain module-level function (not a lambda)
     so its identity is stable across calls -- required for
-    ``_scan_project_imports``'s ``lru_cache`` to actually hit."""
+    ``_scan_project_imports``'s cache to actually hit."""
     return name.replace('-', '_')
 
 
-@lru_cache(maxsize=64)
+# {root: {(extensions, normalize, sep): scan}}. A project scan is expensive, so it lives
+# while its root's tree is unchanged (request_cache.register_validated_cache, BACK-1572):
+# a long-lived MCP host must not answer from the imports it saw on the first request.
+_scan_cache: Dict[Path, Dict[Tuple[FrozenSet[str], Callable[[str], str], str], ProjectImports]] = {}
+
+
 def _scan_project_imports(
+    root: Path, extensions: FrozenSet[str], normalize: Callable[[str], str], sep: str
+) -> ProjectImports:
+    """The cached `_scan_project_imports_uncached` for (root, extensions, normalize, sep)."""
+    scans = _scan_cache.setdefault(root, {})
+    key = (extensions, normalize, sep)
+    if key not in scans:
+        scans[key] = _scan_project_imports_uncached(root, extensions, normalize, sep)
+    return scans[key]
+
+
+def _evict_root(root: Path) -> None:
+    _scan_cache.pop(root, None)
+
+
+register_validated_cache(__name__, _scan_cache, _evict_root)
+
+
+def _scan_project_imports_uncached(
     root: Path, extensions: FrozenSet[str], normalize: Callable[[str], str], sep: str
 ) -> ProjectImports:
     """Every normalized top-level module/crate identifier imported anywhere
     (absolute imports only -- relative ones are unambiguously intra-project
     and carry no dependency signal) by a file with one of *extensions* under
-    *root*. Cached per (root, extensions, normalize, sep): a full-project
-    import scan, the same cost class as I002's cached project-wide import
-    graph, and paid at most once per process for a given project (I007 only
-    triggers on a manifest file, typically one per project per `check` run).
+    *root*. A full-project import scan, the same cost class as I002's project-wide
+    import graph; `_scan_project_imports` caches it per (root, extensions, normalize,
+    sep) while the tree is unchanged.
 
     A file whose extraction raises is recorded in ``skipped`` (sorted), not dropped:
     its imports are missing from ``names``, which the caller must disclose.

@@ -25,6 +25,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...analyzers.imports.python import extract_python_imports
 from ...analyzers.imports.resolver import resolve_python_import
+from ...utils.request_cache import register_request_cache
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,9 @@ logger = logging.getLogger(__name__)
 # .reveal.yaml was found but could not be used (None when it loaded or none exists);
 # it is cached with the config so every file under it reports it, not only the first.
 _config_cache: Dict[Path, Tuple[Optional[Any], Optional[Path], Optional[str]]] = {}
+# One YAML parse per directory is cheap: reset at every host request, so an edited
+# .reveal.yaml is not served from the first request's parse (BACK-1572).
+register_request_cache(__name__, _config_cache.clear)
 
 
 class I003(BaseRule):

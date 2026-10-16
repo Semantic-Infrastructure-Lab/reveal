@@ -65,6 +65,7 @@ from ...registry import extensions_for_languages
 from .base import ImportsDiskCache, LanguageExtractor, nearest_marker_dir, register_extractor
 from .file_index import basename_index, load_path_manifests
 from .types import ImportStatement
+from ...utils.request_cache import register_request_cache
 from reveal.utils.lines import split_lines
 
 # Cross-invocation disk cache (BACK-626, extending BACK-625): same
@@ -3103,3 +3104,7 @@ __all__ = [
     'GDScriptImportExtractor',
     'LuaImportExtractor',
 ]
+
+
+# Manifest inventory: reset at every host request so an edited manifest is re-read (BACK-1572).
+register_request_cache(__name__, _ruby_gem_inventory.cache_clear)

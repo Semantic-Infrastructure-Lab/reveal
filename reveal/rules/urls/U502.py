@@ -16,6 +16,7 @@ except ImportError:
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import toml_table
 from ...registry import extensions_for_languages
+from ...utils.request_cache import register_request_cache
 from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,16 @@ logger = logging.getLogger(__name__)
 # Module-level caches: keyed by directory (for pyproject lookup) and by pyproject path
 _pyproject_dir_cache: Dict[Path, Optional[Path]] = {}
 _canonical_url_cache: Dict[Path, Set[str]] = {}
+
+
+def _reset_request_caches() -> None:
+    _pyproject_dir_cache.clear()
+    _canonical_url_cache.clear()
+
+
+# Reset at every host request: a pyproject.toml added or edited between requests changes
+# both lookups (BACK-1572).
+register_request_cache(__name__, _reset_request_caches)
 
 
 class U502(BaseRule):

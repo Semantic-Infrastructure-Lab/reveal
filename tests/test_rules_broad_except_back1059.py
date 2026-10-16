@@ -185,7 +185,7 @@ def test_i007_skipped_source_file_is_disclosed(tmp_path, monkeypatch):
     from reveal.rules.imports import _dep_reconciliation as dep
     from reveal.rules.imports.I007 import I007
     manifest = _dep_project(tmp_path)
-    dep._scan_project_imports.cache_clear()
+    dep._scan_cache.clear()
     real = dep.get_extractor
 
     def flaky(fp):
@@ -196,7 +196,7 @@ def test_i007_skipped_source_file_is_disclosed(tmp_path, monkeypatch):
     monkeypatch.setattr(dep, 'get_extractor', flaky)
     rule = I007()
     detections = rule.check(str(manifest), None, '')
-    dep._scan_project_imports.cache_clear()
+    dep._scan_cache.clear()
     assert [d.context for d in detections] == ['declared dependency never imported: foo']
     unavailable = _unavailable(rule)
     assert len(unavailable) == 1 and 'a.py' in unavailable[0]['reason'], rule.outcomes
@@ -206,10 +206,10 @@ def test_i007_all_files_scanned_has_no_outcome(tmp_path):
     from reveal.rules.imports import _dep_reconciliation as dep
     from reveal.rules.imports.I007 import I007
     manifest = _dep_project(tmp_path)
-    dep._scan_project_imports.cache_clear()
+    dep._scan_cache.clear()
     rule = I007()
     assert rule.check(str(manifest), None, '') == []           # foo is imported by a.py
-    dep._scan_project_imports.cache_clear()
+    dep._scan_cache.clear()
     assert rule.outcomes == []
 
 
