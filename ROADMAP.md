@@ -343,8 +343,8 @@ What landed, and when, is in CHANGELOG `[0.130.0]` and `internal-docs/RESOLVED_L
    ast://, imports, review, calls://, trace://, contracts://, testability://, diff:// on a git
    directory, markdown:// reads, xlsx sheets, the git content search, the DNS checks and
    record listing, nav `--transitive` effects and config loading. What is open is the rest of
-   that class: `contracts` coverage still counts a failed file as analyzed (BACK-1863) and a
-   few rare sites (BACK-1857). Also open: BACK-916 (one
+   that class: a few rare sites (BACK-1857); `contracts` coverage no longer counts a file whose
+   analysis raised as analyzed. Also open: BACK-916 (one
    rendering layer: patches, nginx://, the nginx file-flag handlers, surface://, overview://,
    testability://, deps, contracts, pack, architecture and hotspots return their output; remaining
    inline/adapter rendering and shared capture/JSON ownership stay open) and BACK-1052 (shared scan policy now used by depends,
@@ -386,8 +386,8 @@ These gates run continuously alongside the steps above:
 - Dead pool workers: a dead worker must cost only its own files, never the run. `check`,
   `stats://`, `imports://`, I002 and `grep_files` hand work out through one helper
   (`utils.parallel.submit_each`). A lost file is disclosed as lost (`worker_lost`) in each of
-  them, and in the architecture view, markdown `body-contains` and claude `?search=`;
-  `claude://` file-touch search (`track_file_sessions`) does not show them yet.
+  them, and in the architecture view, markdown `body-contains`, claude `?search=` and
+  `claude://files/` file-touch search (`track_file_sessions`).
 
 **Working rules while the track runs:**
 - A fix in one of these classes goes through the shared seam. It must not add another

@@ -458,6 +458,9 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
     )
     note_warning(result, skipped_entries_warning(
         'sessions', skipped, "they were not checked, so matches may be missing"))
+    note_warning(result, worker_lost_warning(
+        matched_paths.lost, "they were not searched, so matches may be missing",
+        conversation_base))  # BACK-1757
     return result
 
 
