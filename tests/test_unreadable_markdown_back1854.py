@@ -72,3 +72,13 @@ def test_clean_tree_has_no_unreadable_warning(tmp_path):
     (tmp_path / 'good.md').write_text('---\ntitle: good\n---\nthe needle\n', encoding='utf-8')
     for query in ('body-contains=needle', 'link-graph', 'backlinks=good.md', 'aggregate=title'):
         assert not _unreadable(MarkdownQueryAdapter(str(tmp_path), query).get_structure())
+
+
+def test_an_impossible_frontmatter_date_is_malformed_not_a_failed_query(tmp_path):
+    """BACK-1855: `date: 2001-02-30` raised ValueError out of safe_load and ended the query."""
+    (tmp_path / 'ok.md').write_text('---\ntitle: ok\n---\nbody\n', encoding='utf-8')
+    (tmp_path / 'bad.md').write_text('---\ntitle: bad\ndate: 2001-02-30\n---\nbody\n', encoding='utf-8')
+    diagnostic = md_files.extract_frontmatter_diagnostic(tmp_path / 'bad.md')
+    assert diagnostic['status'] == 'malformed' and 'out of range' in diagnostic['error']
+    result = MarkdownQueryAdapter(str(tmp_path), 'title=ok').get_structure()
+    assert [Path(r['path']).name for r in result['results']] == ['ok.md']

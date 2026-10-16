@@ -206,7 +206,9 @@ def extract_frontmatter_diagnostic(path: Path) -> Dict[str, Any]:
 
     try:
         result = yaml.safe_load(yaml_content)
-    except yaml.YAMLError as exc:
+    except (yaml.YAMLError, ValueError, RecursionError) as exc:
+        # ValueError: safe_load builds a date as it parses, so `date: 2001-02-30` raises it
+        # (not a YAMLError) and used to end the whole query over one document (BACK-1855).
         return {'frontmatter': None, 'status': 'malformed', 'error': str(exc)}
 
     if result is None:

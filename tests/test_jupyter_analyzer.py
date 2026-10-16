@@ -371,3 +371,30 @@ class TestJupyterAnalyzer(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestMalformedNotebookShape:
+    """BACK-1855: valid JSON of the wrong shape is an error result, not a traceback."""
+
+    @pytest.mark.parametrize('body, expected', [
+        ('{"cells": 5}', "'cells' is a int"),
+        ('{"cells": [9]}', 'cells[0] is a int'),
+        ('{"cells": [{"cell_type": "code"}, "x"]}', 'cells[1] is a str'),
+        ('{"cells": [], "metadata": 3}', "'metadata' is a int"),
+    ])
+    def test_wrong_shape_is_a_parse_error(self, tmp_path, body, expected):
+        from reveal.analyzers.jupyter_analyzer import JupyterAnalyzer
+        path = tmp_path / 'bad.ipynb'
+        path.write_text(body, encoding='utf-8')
+        analyzer = JupyterAnalyzer(str(path))
+        assert expected in analyzer.parse_error
+        result = analyzer.get_structure()
+        assert result.get('error') and result['_has_errors'] is True
+
+    def test_a_real_notebook_is_unaffected(self, tmp_path):
+        from reveal.analyzers.jupyter_analyzer import JupyterAnalyzer
+        path = tmp_path / 'ok.ipynb'
+        path.write_text('{"cells": [{"cell_type": "code", "source": "x = 1", "execution_count": 1}],'
+                        ' "metadata": {}}', encoding='utf-8')
+        analyzer = JupyterAnalyzer(str(path))
+        assert analyzer.parse_error is None and len(analyzer.get_structure()['cells']) == 1

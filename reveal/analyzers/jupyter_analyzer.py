@@ -30,9 +30,24 @@ class JupyterAnalyzer(FileAnalyzer):
             # Valid JSON that is not a notebook object (a list, a string, a number).
             self.parse_error = f"not a notebook: top-level JSON value is a {type(data).__name__}, expected an object"
             return
+        cells = data.get('cells', [])
+        metadata = data.get('metadata', {})
+        # Valid JSON of the wrong shape ({"cells": 5}, {"cells": [9]}) crashed get_structure
+        # with a TypeError/AttributeError instead of reading as not a notebook (BACK-1855).
+        if not isinstance(cells, list):
+            self.parse_error = f"not a notebook: 'cells' is a {type(cells).__name__}, expected a list"
+            return
+        bad = next((i for i, cell in enumerate(cells) if not isinstance(cell, dict)), None)
+        if bad is not None:
+            self.parse_error = (f"not a notebook: cells[{bad}] is a {type(cells[bad]).__name__}, "
+                                "expected an object")
+            return
+        if not isinstance(metadata, dict):
+            self.parse_error = f"not a notebook: 'metadata' is a {type(metadata).__name__}, expected an object"
+            return
         self.notebook_data = data
-        self.cells = data.get('cells', [])
-        self.metadata = data.get('metadata', {})
+        self.cells = cells
+        self.metadata = metadata
 
     def _get_cell_first_line(self, source: Any) -> str:
         """Extract and truncate first line from cell source.
