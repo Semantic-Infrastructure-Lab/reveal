@@ -202,6 +202,9 @@ def get_config(claude_json: Path, query_params: Dict[str, Any]) -> Dict[str, Any
         data = json.loads(claude_json.read_text(encoding='utf-8', errors='replace'))
     except (OSError, ValueError) as e:  # unreadable or not JSON
         return {**base, 'error': str(e), 'projects': [], 'flags': {}}
+    if not isinstance(data, dict):  # valid JSON of another shape: .get below would raise (BACK-1857)
+        return {**base, 'error': f'{claude_json} is not a JSON object (top-level {type(data).__name__})',
+                'projects': [], 'flags': {}}
 
     # ?key=dotpath — drill into a specific value
     key = query_params.get('key', '').strip()

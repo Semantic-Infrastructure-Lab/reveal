@@ -27,3 +27,12 @@ def test_full_audit_nginx_error_is_a_failure(_exists, _domains):
         result = CpanelAdapter('cpanel://myuser/full-audit').get_structure()
     assert result['nginx']['error'] == 'conf unreadable'
     assert result['has_failures'] is True
+
+
+def test_claude_config_with_top_level_array_is_an_error_result(tmp_path):
+    from reveal.adapters.claude.handlers.system import get_config
+    f = tmp_path / '.claude.json'
+    f.write_text('[1, 2]', encoding='utf-8')
+    result = get_config(f, {})
+    assert 'not a JSON object' in result['error'] and 'list' in result['error']
+    assert result['projects'] == []
