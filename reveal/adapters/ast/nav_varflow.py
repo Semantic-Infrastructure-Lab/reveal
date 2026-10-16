@@ -145,6 +145,25 @@ _ASSIGN_SHAPES: Dict[str, _AssignShape] = {
 }
 
 
+# Subscript kinds whose container and index are grammar fields (Python, JS/TS). Other
+# grammars (PHP, Kotlin, Swift, Dart...) are positional or nested and keep the whole-target walk.
+_FIELDED_SUBSCRIPTS = {
+    'subscript': ('value', 'subscript'),
+    'subscript_expression': ('object', 'index'),
+}
+
+
+def _fielded_subscript_parts(node: Any) -> Optional[tuple]:
+    """(container, index) of ``container[index]`` when the grammar names both, else None."""
+    fields = _FIELDED_SUBSCRIPTS.get(_zero_arg(node, 'kind'))
+    if fields is None:
+        return None
+    container = node.child_by_field_name(fields[0])
+    if container is None:
+        return None
+    return container, node.child_by_field_name(fields[1])
+
+
 def resolve_assignment_sides(n: Any, ntype: str) -> tuple:
     """Return (left, right) nodes for an assignment/augmented-assignment node.
 
@@ -381,9 +400,7 @@ class VarFlowWalker:
                 # the operator is just the unnamed middle child token.
                 is_augmented = True
         if left:
-            if is_augmented:
-                self.walk(left, 'READ')
-            self.walk(left, 'WRITE')
+            self._walk_assignment_target(left, is_augmented)
         if right:
             self.walk(right, 'READ')
         processed = {
@@ -393,6 +410,23 @@ class VarFlowWalker:
         for child in _children(n):
             if (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) not in processed:
                 self.walk(child, c)
+
+    def _walk_assignment_target(self, left: Any, is_augmented: bool) -> None:
+        """The target of an assignment: a WRITE, but for ``container[index] = v`` the
+        container is read and mutated and the index is only read -- walking the whole
+        target as a WRITE listed ``k`` as written and hid that ``_cache`` was needed
+        and changed (BACK-1408)."""
+        parts = _fielded_subscript_parts(left)
+        if parts is None:
+            if is_augmented:
+                self.walk(left, 'READ')
+            self.walk(left, 'WRITE')
+            return
+        container, index = parts
+        self.walk(container, 'READ')
+        self.walk(container, 'WRITE')
+        if index is not None:
+            self.walk(index, 'READ')
 
     def _walk_decl_shape(self, n: Any, shape: _DeclShape) -> None:
         """Declaration-with-initializer: declared name is a WRITE, initializer is a READ.
