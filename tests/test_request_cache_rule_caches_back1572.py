@@ -4,6 +4,8 @@ Both were reproduced stale (Sprint 4 review F-STALE-1): they outlived a request,
 second ``reveal_check`` in the same process answered from the tree as it was first seen.
 A request here is reset -> evaluate -> seal, the order mcp_server.request() uses.
 """
+import os
+import time
 from pathlib import Path
 
 from reveal.analyzers.imports.generic import _ruby_gem_inventory
@@ -52,7 +54,13 @@ def test_i007_scan_sees_an_import_removed_between_requests(tmp_path):
 
 
 def test_i007_scan_is_reused_while_the_tree_is_unchanged(tmp_path, monkeypatch):
-    (tmp_path / 'app.py').write_text('import requests\n', encoding='utf-8')
+    src = tmp_path / 'app.py'
+    src.write_text('import requests\n', encoding='utf-8')
+    # A file whose mtime is not before the request start is never stamped (it may predate an
+    # edit), and a just-written file on Windows' coarse clock is not: age it so the test
+    # measures reuse, not the clock.
+    aged = time.time_ns() - 60_000_000_000
+    os.utime(src, ns=(aged, aged))
     assert _imported(tmp_path) == {'requests'}
     calls = []
     real = dep._walk_code_files

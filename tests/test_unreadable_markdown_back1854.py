@@ -79,6 +79,6 @@ def test_an_impossible_frontmatter_date_is_malformed_not_a_failed_query(tmp_path
     (tmp_path / 'ok.md').write_text('---\ntitle: ok\n---\nbody\n', encoding='utf-8')
     (tmp_path / 'bad.md').write_text('---\ntitle: bad\ndate: 2001-02-30\n---\nbody\n', encoding='utf-8')
     diagnostic = md_files.extract_frontmatter_diagnostic(tmp_path / 'bad.md')
-    assert diagnostic['status'] == 'malformed' and 'out of range' in diagnostic['error']
+    assert diagnostic['status'] == 'malformed' and 'range' in diagnostic['error']  # 3.14 words it 'must be in range'
     result = MarkdownQueryAdapter(str(tmp_path), 'title=ok').get_structure()
     assert [Path(r['path']).name for r in result['results']] == ['ok.md']
