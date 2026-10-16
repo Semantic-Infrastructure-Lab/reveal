@@ -158,11 +158,15 @@ class RuleRegistry:
         # Register before exec so the module can reference itself (dataclasses,
         # pickling, and typing.get_type_hints all look it up in sys.modules).
         sys.modules[module_name] = module
+        executed = False
         try:
             spec.loader.exec_module(module)
-        except BaseException:
-            sys.modules.pop(module_name, None)
-            raise
+            executed = True
+        finally:
+            # Unregister a module whose top-level code failed (any exception,
+            # SystemExit included); the exception itself propagates unchanged.
+            if not executed:
+                sys.modules.pop(module_name, None)
         return module
 
     @classmethod
@@ -379,7 +383,7 @@ class RuleRegistry:
                     f"rule class named {expected_class_name}"
                 )
 
-        except Exception as e:
+        except Exception as e:  # boundary-ok: broad-except -- rule modules in the user/project rule dirs run arbitrary top-level code, so one broken plugin must not stop the others loading; logged at error with traceback naming the file
             logger.error(
                 f"Failed to import rule from {module_file}: {e}",
                 exc_info=True
@@ -714,7 +718,7 @@ class RuleRegistry:
                 logger.debug(
                     f"Rule {rule_class.code} found {num_issues} issues in {file_path}"
                 )
-            except Exception as e:
+            except Exception as e:  # boundary-ok: broad-except -- rule.check runs rules (including user plugins) over arbitrary files; one failing rule must not end the run, and it is recorded as a failed rule in coverage and the errors list, and logged at error with traceback
                 _record_coverage(coverage, rule_class.code, "failed", f"{type(e).__name__}: {e}")
                 logger.error(
                     f"Rule {rule_class.code} failed on {file_path}: {e}",

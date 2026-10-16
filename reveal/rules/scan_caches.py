@@ -15,10 +15,31 @@ import the CLI layer (it carried its own I002-only copy until BACK-1437).
 
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from . import RuleRegistry
 from ..utils.path_utils import scan_roots
+from ..utils.request_cache import register_request_cache
+
+# Rule code -> why its shared-index preload failed in this process. A failed preload falls
+# back to every worker building the index itself, and a scan cap a worker hits never
+# reaches the parent that renders the summary (BACK-1051), so the failure is itself a scan
+# disclosure (get_scan_disclosures), which makes the run incomplete (exit 3).
+_preload_failures: Dict[str, str] = {}
+
+
+def _clear_preload_failures() -> None:
+    _preload_failures.clear()
+
+
+register_request_cache(__name__, _clear_preload_failures)
+
+
+def _record_preload_failure(code: str, error: BaseException) -> None:
+    """Warn, and remember for get_scan_disclosures, that *code*'s preload failed."""
+    _preload_failures[code] = f"{type(error).__name__}: {error}"
+    logging.warning("shared-index preload failed; workers will build it "
+                    "themselves", exc_info=True)
 
 
 def rule_will_run(code: str, select, ignore) -> bool:
@@ -69,11 +90,8 @@ def _i002_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
         for root in _project_roots(directory, files, _find_project_root):
             I002()._build_import_graph(root)
         return dict(_graph_cache)          # plain dict is picklable
-    except Exception:
-        # Documented fallback: workers build the index themselves, as they would
-        # with no preload at all.
-        logging.warning("shared-index preload failed; workers will build it "
-                        "themselves", exc_info=True)
+    except Exception as e:  # boundary-ok: broad-except -- the preload is an optimisation over a rule-owned index builder (tree-sitter extraction, filesystem walks; no enumerable error set); the documented fallback is that workers build the index themselves, and the failure is recorded as a scan disclosure so the run is not reported complete
+        _record_preload_failure("I002", e)
         return {}
 
 
@@ -116,11 +134,8 @@ def _d005_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
             if root not in _project_index:
                 _project_index[root] = _build_index(root, D005())
         return dict(_project_index)
-    except Exception:
-        # Documented fallback: workers build the index themselves, as they would
-        # with no preload at all.
-        logging.warning("shared-index preload failed; workers will build it "
-                        "themselves", exc_info=True)
+    except Exception as e:  # boundary-ok: broad-except -- the preload is an optimisation over a rule-owned index builder (tree-sitter extraction, filesystem walks; no enumerable error set); the documented fallback is that workers build the index themselves, and the failure is recorded as a scan disclosure so the run is not reported complete
+        _record_preload_failure("D005", e)
         return {}
 
 
@@ -148,11 +163,8 @@ def _t006_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
             if root not in _project_index:
                 _project_index[root] = _build_index(root)
         return dict(_project_index)
-    except Exception:
-        # Documented fallback: workers build the index themselves, as they would
-        # with no preload at all.
-        logging.warning("shared-index preload failed; workers will build it "
-                        "themselves", exc_info=True)
+    except Exception as e:  # boundary-ok: broad-except -- the preload is an optimisation over a rule-owned index builder (tree-sitter extraction, filesystem walks; no enumerable error set); the documented fallback is that workers build the index themselves, and the failure is recorded as a scan disclosure so the run is not reported complete
+        _record_preload_failure("T006", e)
         return {}
 
 
@@ -192,11 +204,8 @@ def _m102_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
         for root in _project_roots(directory, eligible, _project_root) if eligible else ():
             rule._collect_all_imports(root)   # populates _import_cache
         return dict(_import_cache)
-    except Exception:
-        # Documented fallback: workers build the index themselves, as they would
-        # with no preload at all.
-        logging.warning("shared-index preload failed; workers will build it "
-                        "themselves", exc_info=True)
+    except Exception as e:  # boundary-ok: broad-except -- the preload is an optimisation over a rule-owned index builder (tree-sitter extraction, filesystem walks; no enumerable error set); the documented fallback is that workers build the index themselves, and the failure is recorded as a scan disclosure so the run is not reported complete
+        _record_preload_failure("M102", e)
         return {}
 
 
@@ -216,6 +225,7 @@ def preload_scan_caches(files: List[Path], directory: Path, select, ignore) -> d
     place to register, not one more copy-pasted preload/init pair wired by
     hand into every parallel entry point.
     """
+    _preload_failures.clear()
     return {
         'I002': _i002_preload(directory, select, ignore, files),
         'D005': _d005_preload(directory, select, ignore, files),
@@ -253,6 +263,12 @@ def get_scan_disclosures(files: Optional[List[Path]] = None, select=None, ignore
     from .imports.I002 import get_scan_disclosures as i002_disclosures
     from .duplicates.D005 import get_scan_disclosures as d005_disclosures
     from .types.T006 import get_scan_disclosures as t006_disclosures
-    return [message for code, collect in [('I002', i002_disclosures),
-                                         ('D005', d005_disclosures), ('T006', t006_disclosures)]
-            if rule_will_run(code, select, ignore) for message in collect(files)]
+    messages = [message for code, collect in [('I002', i002_disclosures),
+                                             ('D005', d005_disclosures), ('T006', t006_disclosures)]
+                if rule_will_run(code, select, ignore) for message in collect(files)]
+    for code, reason in sorted(_preload_failures.items()):
+        if rule_will_run(code, select, ignore):
+            messages.append(
+                f"{code}: shared-index preload failed ({reason}); workers built the index "
+                "themselves, so a scan cap they hit is not reported and results may be incomplete")
+    return messages

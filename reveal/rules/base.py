@@ -330,8 +330,11 @@ class BaseRule(ABC):
             try:
                 from reveal.config import RevealConfig
                 self._config = RevealConfig.get()
-            except Exception as e:
-                logger.debug(f"Failed to load config: {e}")
+            except Exception as e:  # boundary-ok: broad-except -- RevealConfig.get merges user YAML of any shape (deep_merge/override parsing raise TypeError/KeyError/AttributeError on foreign data) and a rule must still run, on its defaults; the warning says so
+                logger.warning(
+                    f"{self.code}: could not load reveal config ({type(e).__name__}: {e}); "
+                    f"using this rule's built-in defaults"
+                )
                 # Return a mock config that always uses defaults
 
                 class MockConfig:

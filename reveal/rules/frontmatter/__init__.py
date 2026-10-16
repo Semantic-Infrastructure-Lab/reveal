@@ -123,7 +123,7 @@ def safe_eval_validation(check: str, context: Dict[str, Any]) -> bool:
         eval_context = {**context, **safe_builtins}
         result = eval(check, {"__builtins__": {}}, eval_context)
         return bool(result)
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- eval of a schema author's expression over arbitrary front-matter values: any exception (TypeError on a type mismatch, NameError, SyntaxError...) means the check did not hold, and F005 reports that as a violation (False is never read as pass)
         # Debug-level logging to avoid confusing users
         # (exceptions are expected when types don't match)
         logger.debug(f"Validation check skipped due to error: {check} - {e}")

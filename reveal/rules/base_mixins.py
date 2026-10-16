@@ -7,12 +7,24 @@ to reduce boilerplate and ensure consistent behavior.
 import ast
 import functools
 import logging
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from ..core import _zero_arg
 from ..utils.pyparse import parse_python
 
 logger = logging.getLogger(__name__)
+
+
+def toml_table(data: Any, *keys: str) -> Dict[str, Any]:
+    """The nested TOML table at *keys*; {} when a level is absent or not a table.
+
+    pyproject.toml is foreign data: ``project = 3`` is valid TOML, and chained
+    ``.get()`` calls on it raise AttributeError. Rules reading a manifest go through here.
+    """
+    node = data
+    for key in keys:
+        node = node.get(key) if isinstance(node, dict) else None
+    return node if isinstance(node, dict) else {}
 
 
 @functools.lru_cache(maxsize=4)
@@ -27,7 +39,7 @@ def _cached_treesitter_parse(content: str, file_path: str, language: str):
     from ..core import get_tree, tree_root
     try:
         return tree_root(get_tree(language, content))
-    except Exception as e:
+    except Exception as e:  # boundary-ok: broad-except -- Parser.parse is a native binding whose error types are not enumerable from Python; the caller skips the file and the warning names it and the language
         logger.warning(f"tree-sitter parse failed for {file_path} ({language}): {e}")
         return None
 
@@ -45,7 +57,11 @@ def _cached_ast_parse(content: str, file_path: str) -> Optional[ast.AST]:
     except SyntaxError as e:
         logger.warning(f"AST parse failed (syntax error) for {file_path}: {e}")
         return None
-    except Exception as e:
+    except (ValueError, RecursionError, MemoryError) as e:
+        # ast.parse: null bytes / over-long literals (ValueError, UnicodeEncodeError),
+        # nesting deeper than the parser's stack (RecursionError), memory exhaustion.
+        # Anything else is a bug in parse_python and escapes to RuleRegistry.check_file,
+        # which records the rule as failed instead of clean.
         logger.warning(f"AST parse failed for {file_path}: {e}")
         return None
 

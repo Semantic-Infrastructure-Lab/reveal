@@ -440,6 +440,8 @@ _MODULE_CACHES = (
     ('reveal.config', '_path_resolve_cache'),
     ('reveal.rules.imports.I002', '_graph_cache'),
     ('reveal.rules.imports.I003', '_config_cache'),
+    ('reveal.rules.imports._dep_reconciliation', '_scan_project_imports'),
+    ('reveal.rules.scan_caches', '_preload_failures'),
     ('reveal.rules.links.L001', '_anchor_cache'),
     ('reveal.rules.maintainability.M102', '_import_cache'),
     ('reveal.rules.urls.U502', '_pyproject_dir_cache'),
