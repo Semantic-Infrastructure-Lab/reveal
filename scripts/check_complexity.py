@@ -11,6 +11,11 @@ its score in ``scripts/complexity_baseline.json``. A frozen function may not sco
 and no new function may cross the threshold. A function that got simpler (or dropped under
 the threshold) must be locked in with ``--update-baseline``, so each score only ever falls.
 
+A second, lower bound (``WATCH_LIMIT``) freezes every function above it the same way, so a
+function cannot grow from 12 to 21 unseen: it fails the moment it passes its frozen score,
+long before it reaches the C901 threshold. Both bounds share one baseline file and one
+``--update-baseline``.
+
 The score is the one C901 and ``ast://`` report: the analyzer's per-function
 ``complexity``. The threshold is read from ``.reveal.yaml`` alone -- not through
 RevealConfig, which merges user config and ``REVEAL_C901_THRESHOLD`` and so would make
@@ -38,6 +43,7 @@ ROOT = Path(__file__).resolve().parent.parent
 BASELINE = ROOT / 'scripts' / 'complexity_baseline.json'
 CONFIG = ROOT / '.reveal.yaml'
 TREE = 'reveal'
+WATCH_LIMIT = 15   # second bound; 174 functions sat above it when it was added (BACK-1616)
 
 sys.path.insert(0, str(ROOT))
 
@@ -101,7 +107,7 @@ def _excess(scores: Dict[str, int], limit: int) -> int:
 
 
 def _summary(scores: Dict[str, int], limit: int) -> str:
-    return (f'{len(scores)} functions over C901 threshold {limit}, '
+    return (f'{len(scores)} functions over {limit}, '
             f'total excess {_excess(scores, limit)}')
 
 
@@ -116,15 +122,42 @@ def _refusal(base: Dict[str, int], now: Dict[str, int], limit: int) -> List[str]
     return reasons
 
 
+def _regressions_and_stale(label: str, base: Dict[str, int], now: Dict[str, int],
+                           limit: int) -> List[str]:
+    """Printable problems for one bound; empty when `now` is no worse than `base`."""
+    regressions, stale = compare(base, now)
+    lines = []
+    if regressions:
+        lines.append(f'Functions got more complex ({label} may only fall):')
+        lines += [f'  {key}: {"new" if b is None else b} -> {n}' for key, b, n in regressions]
+        lines.append('  fix: split the function, or move the added branch behind a shared seam '
+                     '(BACK-1512). A moved/renamed function: --update-baseline accepts it.')
+    if stale:
+        lines.append(f'Functions got simpler but the baseline still allows the old score ({label}):')
+        lines += [f'  {key}: {b} -> {"under the bound" if n is None else n}' for key, b, n in stale]
+        lines.append('Lock in the improvement: python scripts/check_complexity.py --update-baseline')
+    return lines
+
+
+def _write_baseline(limit: int, now: Dict[str, int], watch_limit: int,
+                    watch: Dict[str, int]) -> None:
+    BASELINE.write_text(json.dumps(
+        {'threshold': limit, 'functions': now, 'watch_threshold': watch_limit, 'watch': watch},
+        indent=1, sort_keys=True) + '\n', encoding='utf-8')
+
+
 def main(argv: List[str]) -> int:
     limit = threshold()
+    watch_limit = min(WATCH_LIMIT, limit)
     stored = json.loads(BASELINE.read_text(encoding='utf-8')) if BASELINE.exists() else {}
     base: Dict[str, int] = stored.get('functions', {})
     base_limit = stored.get('threshold', limit)
-    now = scan(limit)
+    base_watch: Dict[str, int] = stored.get('watch', {})
+    watch = scan(watch_limit)
+    now = {k: s for k, s in watch.items() if s > limit}
 
     if '-v' in argv:
-        for key, score in sorted(now.items(), key=lambda kv: -kv[1]):
+        for key, score in sorted(watch.items(), key=lambda kv: -kv[1]):
             print(f'{score:4}  {key}')
 
     if base_limit != limit and '--update-baseline' not in argv:
@@ -138,31 +171,28 @@ def main(argv: List[str]) -> int:
                   'that drops frozen functions without simplifying them')
             return 1
         reasons = _refusal(base, now, limit) if stored and limit == base_limit else []
+        if 'watch' in stored and stored.get('watch_threshold') == watch_limit:
+            reasons += _refusal(base_watch, watch, watch_limit)
         if reasons:
             print('refusing to raise the baseline; simplify these first:')
             for reason in reasons:
                 print(f'  {reason}')
             return 1
-        BASELINE.write_text(json.dumps({'threshold': limit, 'functions': now},
-                                       indent=1, sort_keys=True) + '\n', encoding='utf-8')
-        print(f'baseline written: {_summary(now, limit)}')
+        _write_baseline(limit, now, watch_limit, watch)
+        print(f'baseline written: {_summary(now, limit)}; {_summary(watch, watch_limit)}')
         return 0
 
-    regressions, stale = compare(base, now)
-    if regressions:
-        print('Functions got more complex (C901 score over the threshold may only fall):')
-        for key, b, n in regressions:
-            print(f'  {key}: {"new" if b is None else b} -> {n}')
-        print('  fix: split the function, or move the added branch behind a shared seam '
-              '(BACK-1512). A moved/renamed function: --update-baseline accepts it.')
-    if stale:
-        print('Functions got simpler but the baseline still allows the old score:')
-        for key, b, n in stale:
-            print(f'  {key}: {b} -> {"under threshold" if n is None else n}')
-        print('Lock in the improvement: python scripts/check_complexity.py --update-baseline')
-    if regressions or stale:
+    problems = _regressions_and_stale(f'C901 score over {limit}', base, now, limit)
+    if stored.get('watch_threshold') != watch_limit:
+        problems.append(f'the baseline has no watch bound at {watch_limit}. Take one: '
+                        'python scripts/check_complexity.py --update-baseline')
+    else:
+        problems += _regressions_and_stale(f'score over {watch_limit}', base_watch, watch,
+                                           watch_limit)
+    if problems:
+        print('\n'.join(problems))
         return 1
-    print(f'complexity ratchet OK ({_summary(now, limit)})')
+    print(f'complexity ratchet OK ({_summary(now, limit)}; {_summary(watch, watch_limit)})')
     return 0
 
 

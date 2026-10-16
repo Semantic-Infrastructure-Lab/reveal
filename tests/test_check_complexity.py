@@ -46,13 +46,16 @@ def ratchet(tmp_path, monkeypatch):
     monkeypatch.setattr(cc, 'BASELINE', baseline)
     state = {'limit': 21, 'found': {}}
     monkeypatch.setattr(cc, 'threshold', lambda: state['limit'])
-    monkeypatch.setattr(cc, 'scan', lambda limit: state['found'])
+    monkeypatch.setattr(cc, 'scan', lambda limit: {k: v for k, v in state['found'].items() if v > limit})
 
-    def run(found, base=None, argv=(), limit=21, base_limit=21):
+    def run(found, base=None, argv=(), limit=21, base_limit=21, watch=None):
+        """`base` freezes the C901 bound; `watch` (default: every `base` entry) the lower one."""
         state['found'], state['limit'] = found, limit
         if base is not None:
-            baseline.write_text(json.dumps({'threshold': base_limit, 'functions': base}),
-                                encoding='utf-8')
+            stored = {'threshold': base_limit, 'functions': base}
+            if watch is not False:
+                stored.update(watch_threshold=cc.WATCH_LIMIT, watch=base if watch is None else watch)
+            baseline.write_text(json.dumps(stored), encoding='utf-8')
         return cc.main(list(argv))
     run.stored = lambda: json.loads(baseline.read_text(encoding='utf-8'))
     return run
@@ -76,7 +79,7 @@ def test_main_fails_when_a_new_function_crosses_the_threshold(ratchet, capsys):
 def test_main_fails_on_stale_baseline_so_scores_only_fall(ratchet, capsys):
     assert ratchet({}, {'a': 25}) == 1
     out = capsys.readouterr().out
-    assert 'under threshold' in out and '--update-baseline' in out
+    assert 'under the bound' in out and '--update-baseline' in out
 
 
 def test_main_fails_when_the_threshold_changed(ratchet, capsys):
@@ -86,7 +89,8 @@ def test_main_fails_when_the_threshold_changed(ratchet, capsys):
 
 def test_update_baseline_lowers_scores(ratchet):
     assert ratchet({'a': 23}, {'a': 25}, ['--update-baseline']) == 0
-    assert ratchet.stored() == {'threshold': 21, 'functions': {'a': 23}}
+    assert ratchet.stored() == {'threshold': 21, 'functions': {'a': 23}, 'watch_threshold': cc.WATCH_LIMIT,
+                                'watch': {'a': 23}}
 
 
 def test_update_baseline_accepts_a_move_that_does_not_add_complexity(ratchet):
@@ -107,3 +111,38 @@ def test_update_baseline_refuses_to_raise(ratchet, found):
 def test_update_baseline_refuses_a_higher_threshold(ratchet):
     assert ratchet({}, {'a': 25}, ['--update-baseline'], limit=30) == 1
     assert ratchet.stored()['threshold'] == 21
+
+
+def test_a_function_growing_below_the_threshold_is_caught_by_the_watch_bound(ratchet, capsys):
+    """BACK-1616: 12 -> 21 used to pass; now it fails once it passes its frozen score above WATCH_LIMIT."""
+    assert ratchet({'warm': 19}, {}, watch={'warm': 17}) == 1
+    assert 'warm: 17 -> 19' in capsys.readouterr().out
+
+
+def test_a_function_crossing_the_watch_bound_is_new(ratchet, capsys):
+    assert ratchet({'warm': 16}, {}, watch={}) == 1
+    assert 'warm: new -> 16' in capsys.readouterr().out
+
+
+def test_a_function_under_the_watch_bound_is_not_tracked(ratchet):
+    assert ratchet({'cool': cc.WATCH_LIMIT}, {}, watch={}) == 0
+
+
+def test_the_watch_bound_also_locks_in_improvements(ratchet, capsys):
+    assert ratchet({'warm': 16}, {}, watch={'warm': 18}) == 1
+    assert 'warm: 18 -> 16' in capsys.readouterr().out
+
+
+def test_a_baseline_without_a_watch_bound_asks_to_take_one(ratchet, capsys):
+    assert ratchet({}, {}, watch=False) == 1
+    assert 'no watch bound' in capsys.readouterr().out
+
+
+def test_update_baseline_takes_the_watch_bound_from_an_old_baseline(ratchet):
+    assert ratchet({'warm': 18}, {}, ['--update-baseline'], watch=False) == 0
+    assert ratchet.stored()['watch'] == {'warm': 18}
+
+
+def test_update_baseline_refuses_to_raise_the_watch_bound(ratchet):
+    assert ratchet({'warm': 19}, {}, ['--update-baseline'], watch={'warm': 17}) == 1
+    assert ratchet.stored()['watch'] == {'warm': 17}
