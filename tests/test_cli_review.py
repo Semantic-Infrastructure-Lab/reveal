@@ -300,7 +300,7 @@ class TestChangedFiles(unittest.TestCase):
         mock_run.return_value = MagicMock(returncode=1, stdout='')
         self.assertEqual(_changed_files('x..y'), [])
 
-    @patch('reveal.cli.commands.review.subprocess.run', side_effect=Exception("no git"))
+    @patch('reveal.cli.commands.review.subprocess.run', side_effect=FileNotFoundError("no git"))
     def test_exception_returns_empty(self, _mock):
         self.assertEqual(_changed_files('x..y'), [])
 
