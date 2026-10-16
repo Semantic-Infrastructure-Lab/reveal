@@ -14,6 +14,7 @@ import reveal.analyzers  # noqa: F401  (registers every analyzer)
 from reveal.adapters.ast import AstAdapter
 from reveal.adapters.stats import StatsAdapter
 from reveal.cli.file_checker import check_and_collect_file
+from reveal.config import RevealConfig
 from reveal.registry import get_analyzer
 from reveal.rules import RuleRegistry
 
@@ -41,8 +42,14 @@ SOURCES = {
 
 @pytest.fixture(autouse=True)
 def isolated(monkeypatch):
+    # RevealConfig caches the merged config per project root, env overrides included:
+    # without the clear, threshold 0 outlives the monkeypatch and every later C901 test
+    # in this xdist worker sees "max: 0".
     monkeypatch.setenv('REVEAL_MAX_WORKERS', '1')
     monkeypatch.setenv('REVEAL_C901_THRESHOLD', '0')
+    RevealConfig._cache.clear()
+    yield
+    RevealConfig._cache.clear()
 
 
 def _structure_complexity(path):
