@@ -52,12 +52,15 @@ def test_method_ordinal_keeps_manual_name_and_span(method):
     assert _extract_ordinal_element(analyzer, 1, 'function') == expected
 
 
-@pytest.mark.parametrize('ordinal,name,source', [
-    (1, 'first', 'def first; 1; end'),
-    (2, 'second', 'def self.second; 2; end'),
+@pytest.mark.parametrize('receiver', ['', 'self.'], ids=['instance', 'singleton'])
+@pytest.mark.parametrize('ordinal,name,value', [
+    (1, 'first', 1),
+    (2, 'second', 2),
 ])
-def test_inline_ordinal_excludes_assignment_and_adjacent_method(tmp_path, ordinal, name, source):
-    analyzer = _analyzer(tmp_path, 'seed = 1; def first; 1; end; def self.second; 2; end\n')
+def test_inline_ordinal_excludes_assignment_and_adjacent_method(tmp_path, receiver, ordinal, name, value):
+    analyzer = _analyzer(tmp_path,
+        f'seed = 1; def {receiver}first; 1; end; def {receiver}second; 2; end\n')
+    source = f'def {receiver}{name}; {value}; end'
     expected = {'name': name, 'line_start': 1, 'line_end': 1, 'source': source}
     assert _extract_by_name(analyzer, name) == expected
     assert _extract_ordinal_element(analyzer, ordinal, 'function') == expected
