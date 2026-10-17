@@ -81,7 +81,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses')._replace(declared_adapter='contracts'),
     'deps':         _spec('deps',
                      'reveal deps [path]',
-                     'Dependency health: external packages, circular deps, unused imports'),
+                     'Dependency health: external packages, circular deps, unused imports')._replace(declared_adapter='deps'),
     'dev':          _spec('dev',
                      'reveal dev <command>',
                      'Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config',

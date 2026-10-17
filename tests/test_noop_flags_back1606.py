@@ -43,7 +43,7 @@ def test_query_top_reaches_the_renderer(tmp_path, renderer):
 
 
 def test_no_query_top_leaves_the_renderer_default(tmp_path):
-    assert _render_structure_top_kwargs(DepsRenderer, Namespace(), DepsAdapter(str(tmp_path))) == {}
+    assert _render_structure_top_kwargs(DepsRenderer, Namespace(), DepsAdapter(str(tmp_path))) == {'top': 10}
 
 
 def test_all_still_wins_over_query_top(tmp_path):

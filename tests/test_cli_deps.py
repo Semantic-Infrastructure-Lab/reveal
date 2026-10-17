@@ -1,6 +1,7 @@
 """Tests for reveal deps subcommand."""
 
 import json
+import copy
 import sys
 import unittest
 from argparse import Namespace
@@ -128,9 +129,9 @@ class TestCreateDepsParser(unittest.TestCase):
         parser = create_deps_parser()
         args = parser.parse_args([])
         self.assertEqual(args.path, '.')
-        self.assertEqual(args.top, 10)
-        self.assertFalse(args.no_unused)
-        self.assertFalse(args.no_circular)
+        self.assertNotIn('top', vars(args))
+        self.assertNotIn('no_unused', vars(args))
+        self.assertNotIn('no_circular', vars(args))
 
     def test_path_positional(self):
         parser = create_deps_parser()
@@ -140,7 +141,7 @@ class TestCreateDepsParser(unittest.TestCase):
     def test_top_flag(self):
         parser = create_deps_parser()
         args = parser.parse_args(['--top', '20'])
-        self.assertEqual(args.top, 20)
+        self.assertEqual(args.top, '20')  # The declared binder owns conversion.
 
     def test_no_unused_flag(self):
         parser = create_deps_parser()
@@ -155,7 +156,7 @@ class TestCreateDepsParser(unittest.TestCase):
     def test_summary_only_flag_default_false(self):
         parser = create_deps_parser()
         args = parser.parse_args([])
-        self.assertFalse(args.summary_only)
+        self.assertNotIn('summary_only', vars(args))
 
     def test_summary_only_flag(self):
         parser = create_deps_parser()
@@ -589,20 +590,31 @@ _UNUSED_DATA = json.loads(_UNUSED_JSON)['unused']
 class TestRunDeps(unittest.TestCase):
 
     def _patch_runners(self, base=None, circular=None, unused=None):
-        """Return context managers patching all three data collectors."""
-        base_val = base if base is not None else _BASE_DATA
-        circ_val = circular if circular is not None else _CIRCULAR_DATA
-        unused_val = unused if unused is not None else _UNUSED_DATA
+        """Observe the real collectors against complete recorded child responses."""
+        base_val = copy.deepcopy(base if base is not None else _BASE_DATA)
+        circ_val = copy.deepcopy(circular if circular is not None else _CIRCULAR_DATA)
+        unused_val = {'unused': copy.deepcopy(unused if unused is not None else _UNUSED_DATA)}
+        base_val.setdefault('files', {})
+        circ_val.setdefault('cycles', [])
+        circ_val.setdefault('count', len(circ_val['cycles']))
+        unused_val['count'] = len(unused_val['unused'])
+        for payload in (base_val, circ_val, unused_val):
+            payload.setdefault('metadata', {}).update(files_failed_count=0, files_lost_count=0)
+        def recorded(original, payload):
+            def collect(adapter, path):
+                with patch('reveal.adapters.deps.ImportsAdapter.get_structure', return_value=payload):
+                    return original(adapter, path)
+            return collect
         return (
-            patch('reveal.adapters.deps._run_base', return_value=base_val),
-            patch('reveal.adapters.deps._run_circular', return_value=circ_val),
-            patch('reveal.adapters.deps._run_unused', return_value=unused_val),
+            patch('reveal.adapters.deps._run_base', side_effect=recorded(_run_base, base_val)),
+            patch('reveal.adapters.deps._run_circular', side_effect=recorded(_run_circular, circ_val)),
+            patch('reveal.adapters.deps._run_unused', side_effect=recorded(_run_unused, unused_val)),
         )
 
-    def test_nonexistent_path_exits_1(self):
+    def test_nonexistent_path_exits_2(self):
         with self.assertRaises(SystemExit) as ctx:
             run_deps(_args(path='/no/such/xyz'))
-        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(ctx.exception.code, 2)
 
     def test_json_format_outputs_valid_json(self):
         import tempfile
@@ -739,7 +751,7 @@ class TestRunDeps(unittest.TestCase):
                 buf = StringIO()
                 with patch('sys.stdout', buf):
                     with self.assertRaises(SystemExit) as ctx:
-                        run_deps(_args(path=tmp))
+                        run_deps(_args(path=tmp, fail_on='findings'))
                 self.assertEqual(ctx.exception.code, 1)
 
     def test_empty_data_no_crash(self):

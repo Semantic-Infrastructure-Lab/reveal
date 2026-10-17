@@ -22,9 +22,10 @@ from ..analyzers.imports.classify import (
 )
 from ..conventions import family_for_path
 from ..utils.path_utils import _language_for_path
-from ..utils.query import parse_query_params
+from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec, nonnegative_display_limit, param_schema
+from ..utils.query_binding import bind_declared_params, boolean_value
 from ..rendering.adapters.deps import DepsRenderer
-from ..utils.results import AnalysisCompleteness, ExecutionFacts, ResultBuilder, merge_execution_facts
+from ..utils.results import AnalysisCompleteness, ExecutionFacts, ResultBuilder, merge_execution_facts, result_execution_facts
 
 # BACK-1190: the stdlib list, local-package heuristic, and classifier itself
 # now live in reveal/analyzers/imports/classify.py -- shared with
@@ -114,6 +115,96 @@ def _component_state(name: str, result: Dict[str, Any], counts: Optional[Tuple[i
     if any(counts) or meta.get('errors') or missing:
         return AnalysisCompleteness.INCOMPLETE
     return AnalysisCompleteness.COMPLETE
+
+
+def _deps_top(value: Any) -> int:
+    if isinstance(value, bool):
+        raise ValueError('top requires a whole number, not a bare boolean')
+    return nonnegative_display_limit(value)
+
+
+_TOP = ParamSpec('top', 'integer', 'Items per text section (JSON retains all)', 10,
+                 _deps_top, ('top=15',), minimum=0, zero_policy='no text entries',
+                 role='presentation', cli=CliBinding(('--top',), metavar='N'))
+_NO_UNUSED = ParamSpec('no_unused', 'boolean', 'Skip unused-import analysis', False,
+                       boolean_value, ('no_unused=true',), role='analysis',
+                       cli=CliBinding(('--no-unused',), action='store_true'))
+_NO_CIRCULAR = ParamSpec('no_circular', 'boolean', 'Skip circular-dependency analysis', False,
+                         boolean_value, ('no_circular=true',), role='analysis',
+                         cli=CliBinding(('--no-circular',), action='store_true'))
+_SUMMARY_ONLY = ParamSpec('summary_only', 'boolean', 'Primary JSON only: replace base.files with counts',
+                          False, boolean_value, ('summary_only=true',), role='presentation',
+                          cli=CliBinding(('--summary-only',), action='store_true'))
+
+
+def _summarize_base_files(result: dict) -> dict:
+    """Replace the full base import map with its counts after execution facts exist."""
+    base = result.get('base')
+    if not isinstance(base, dict) or not isinstance(base.get('files'), dict):
+        return result
+    files = base['files']
+    summary = {key: value for key, value in base.items() if key != 'files'}
+    summary['total_files'] = len(files)
+    summary['total_imports'] = sum(len(value) for value in files.values())
+    return {**result, 'base': summary}
+
+
+def _finding_count_valid(value: Any, state: str) -> bool:
+    return (value is None and state == 'failed') or (type(value) is int and value >= 0)
+
+
+def _component_proof_error(component: Any, finding: Any = 0) -> Optional[str]:
+    if not isinstance(component, dict):
+        return 'Required component record is missing or malformed'
+    state = component.get('completeness')
+    if state not in ('complete', 'incomplete', 'failed'):
+        return 'Required component completeness is missing or malformed'
+    if 'files_failed_count' not in component or 'files_lost_count' not in component:
+        return 'Required component failed/lost counts are missing'
+    failed, lost = component.get('files_failed_count'), component.get('files_lost_count')
+    known_counts = type(failed) is int and type(lost) is int and 0 <= lost <= failed
+    unknown_counts = failed is None and lost is None and state == 'failed'
+    if not known_counts and not unknown_counts:
+        return 'Required component failed/lost counts are missing or malformed'
+    if not _finding_count_valid(finding, state):
+        return 'Required findings count is missing or malformed'
+    if state == 'complete' and failed:
+        return 'Complete component contradicts missing-input counts'
+    return None
+
+
+def _deps_component_keys_error(analysis: Dict[str, Any], skipped: Any) -> Optional[str]:
+    if not isinstance(skipped, list) or any(name not in ('circular', 'unused') for name in skipped):
+        return 'Deps skipped-component evidence is malformed'
+    if len(set(skipped)) != len(skipped):
+        return 'Deps skipped-component evidence is duplicated'
+    components, findings = analysis.get('components'), analysis.get('findings')
+    required = {'base', 'circular', 'unused'} - set(skipped)
+    if not isinstance(components, dict) or set(components) != required:
+        return 'Deps answer missing exact required component evidence'
+    if not isinstance(findings, dict) or set(findings) != required - {'base'}:
+        return 'Deps answer missing exact required findings evidence'
+    return None
+
+
+def _deps_proof_error(result: Any) -> Optional[str]:
+    if not isinstance(result, dict):
+        return 'Required deps answer is malformed'
+    analysis = result.get('analysis')
+    if not isinstance(analysis, dict) or type(analysis.get('complete')) is not bool:
+        return 'Deps answer missing required completeness evidence'
+    error = _deps_component_keys_error(analysis, result.get('skipped'))
+    if error:
+        return error
+    components, findings = analysis['components'], analysis['findings']
+    for name, component in components.items():
+        error = _component_proof_error(component, findings.get(name, 0))
+        if error:
+            return f'{name}: {error}'
+    complete = all(component['completeness'] == 'complete' for component in components.values())
+    if analysis['complete'] != complete:
+        return 'Deps aggregate completeness contradicts required component evidence'
+    return None
 
 
 def _relativize_deps_paths(
@@ -258,6 +349,11 @@ class DepsAdapter(ResourceAdapter):
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # --no-gitignore (BACK-1386)
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
+    RESULT_TYPE = 'deps_scan'
+    FINDINGS_POLICIES = ('none', 'findings')
+    DEFAULT_FAIL_ON = 'none'
+    RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
+    PARAM_SPECS = (_TOP, _NO_UNUSED, _NO_CIRCULAR, _SUMMARY_ONLY)
 
     def _record_component(self, name: str, result: Any) -> None:
         """Retain required evidence before the unused child becomes a plain list."""
@@ -280,10 +376,40 @@ class DepsAdapter(ResourceAdapter):
             count = len(result[field]) if _valid_component_payload(name, result, require_count=False) else None
             self.__dict__.setdefault('_deps_findings', {})[name] = count
 
-    def __init__(self, resource: str, query: Optional[str] = None):
+    def __init__(self, resource: str, query: Optional[str] = None, *, params: Optional[Dict[str, Any]] = None):
         self.path = str(Path(resource).expanduser())
-        self.query_params = parse_query_params(query or '', coerce=True)
+        if params is not None:
+            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
+                self.PARAM_SPECS, params, transport='typed')
+        else:
+            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
         self._warn_unknown_query_params(self.query_params)  # BACK-507
+
+    @staticmethod
+    def answer_requirement_error(result, expected_type, prior_facts=None):
+        return _deps_proof_error(result)
+
+    @staticmethod
+    def execution_facts(result):
+        if _deps_proof_error(result):
+            return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
+        analysis = result['analysis']
+        facts = merge_execution_facts(*(ExecutionFacts(AnalysisCompleteness(component['completeness']))
+                                        for component in analysis['components'].values()))
+        meta = result.get('meta') or {}
+        missing = bool(meta.get('errors')) or any(
+            warning.get('type') in ('partial_parse', 'worker_lost', 'analysis_failed', 'parse_recovered')
+            for warning in meta.get('warnings', []))
+        if missing:
+            facts = merge_execution_facts(facts, ExecutionFacts(AnalysisCompleteness.INCOMPLETE))
+        return result_execution_facts(
+            result, completeness=facts.completeness,
+            findings=any(count is not None and count > 0 for count in analysis['findings'].values()))
+
+    def post_process(self, result, args):
+        if getattr(args, 'format', 'text') == 'json' and _SUMMARY_ONLY.read(self.query_params):
+            return _summarize_base_files(result)
+        return result
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -324,11 +450,9 @@ class DepsAdapter(ResourceAdapter):
             'adapter': 'deps',
             'description': 'Dependency health dashboard (external packages, circular deps, unused imports)',
             'uri_syntax': 'deps://<path>?top=10&no_unused=true&no_circular=true',
-            'query_params': {
-                'top': {'type': 'integer', 'minimum': 0, 'description': 'Number of items to show per section', 'examples': ['top=15']},
-                'no_unused': {'type': 'boolean', 'description': 'Skip the unused-imports section', 'examples': ['no_unused=true']},
-                'no_circular': {'type': 'boolean', 'description': 'Skip the circular-dependencies section', 'examples': ['no_circular=true']},
-            },
+            'resource': DepsAdapter.RESOURCE_SPEC.schema(),
+            'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none', 'findings']},
+            'query_params': param_schema(DepsAdapter.PARAM_SPECS),
             'elements': {},
             'supports_batch': False,
             'supports_advanced': False,
@@ -377,8 +501,8 @@ class DepsAdapter(ResourceAdapter):
 
     def _get_structure(self) -> Dict[str, Any]:
         path = Path(self.path)
-        no_unused = str(self.query_params.get('no_unused', False)).lower() == 'true'
-        no_circular = str(self.query_params.get('no_circular', False)).lower() == 'true'
+        no_unused = _NO_UNUSED.read(self.query_params)
+        no_circular = _NO_CIRCULAR.read(self.query_params)
 
         base = _run_base(self, path)
         circular = {} if no_circular else _run_circular(self, path)

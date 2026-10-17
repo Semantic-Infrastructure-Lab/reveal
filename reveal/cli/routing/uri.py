@@ -1256,6 +1256,11 @@ def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace', adapte
     from here, and forwarding blind would either crash them or silently change
     behavior nobody asked this ticket to touch.
     """
+    if getattr(renderer_class, 'ACCEPTS_TOP', False) is True and (
+            peek(args, 'all', False) or peek(args, 'verbose', False)):
+        mark(args, 'all', 'verbose')
+        from ...adapters.overview import UNLIMITED_TOP
+        return {'top': UNLIMITED_TOP}
     declarations = getattr(type(adapter), 'PARAM_SPECS', ())
     if isinstance(declarations, tuple):
         for spec in declarations:
@@ -1263,10 +1268,6 @@ def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace', adapte
                 return {'top': spec.read(adapter.query_params)}
     if getattr(renderer_class, 'ACCEPTS_TOP', False) is not True:
         return {}
-    if peek(args, 'all', False) or peek(args, 'verbose', False):
-        mark(args, 'all', 'verbose')
-        from ...adapters.overview import UNLIMITED_TOP
-        return {'top': UNLIMITED_TOP}
     params = getattr(adapter, 'query_params', None)
     if isinstance(params, dict) and params.get('top') is not None:
         return {'top': adapter.int_param('top', 0)}
