@@ -10,7 +10,7 @@ from ...conventions import FAMILY_BY_LANGUAGE, conventions_for
 from .nav_varflow import all_var_flow
 from .node_taxonomy import (
     CATCH_NODES, ELIF_NODES, ELSE_NODES, EXCEPT_NODES, GATE_NODES, IF_NODES,
-    exit_label, is_rust_try_operator,
+    exit_label, is_rust_try_operator, zig_catch_parts,
 )
 from ...core import node_children as _children
 from ...core.treesitter_compat import _zero_arg
@@ -425,9 +425,27 @@ def render_mutations(
 _GATE_NODE_TYPES: frozenset = GATE_NODES
 
 
+def _branch_parts(node: Any):
+    """Condition and selected bodies, including Zig's fieldless prefix shape."""
+    condition = node.child_by_field_name('condition')
+    consequence = node.child_by_field_name('consequence')
+    if consequence is None:
+        consequence = node.child_by_field_name('body')
+    alternative = node.child_by_field_name('alternative')
+    if _zero_arg(node, 'kind') in ('IfStatement', 'IfExpr'):
+        children = _children(node)
+        prefix = next((c for c in children if _zero_arg(c, 'kind') == 'IfPrefix'), None)
+        if prefix is not None:
+            condition = next((c for c in _children(prefix) if _zero_arg(c, 'is_named')), None)
+            bodies = [c for c in children if _zero_arg(c, 'is_named') and not _same_span(c, prefix)]
+            consequence = bodies[0] if bodies else None
+            alternative = bodies[1] if len(bodies) > 1 else None
+    return condition, consequence, alternative
+
+
 def _get_condition(node: Any, get_text: Callable) -> Optional[Dict[str, Any]]:
     """Extract condition text + line from a control-flow node."""
-    cond = node.child_by_field_name('condition')
+    cond, _, _ = _branch_parts(node)
     if cond is None:
         # PHP: condition is a parenthesized_expression positional child
         for child in _children(node):
@@ -466,10 +484,7 @@ def _branch_gates(node: Any, gates: List[Dict[str, Any]], get_text: Callable):
     taxonomy for all three shapes rather than interpreting source keywords.
     """
     condition = _get_condition(node, get_text)
-    alternative = node.child_by_field_name('alternative')
-    consequence = node.child_by_field_name('consequence')
-    if consequence is None:
-        consequence = node.child_by_field_name('body')
+    _, consequence, alternative = _branch_parts(node)
     remaining = gates + [dict(condition, text=f'not ({condition["text"]})')] if condition else gates
     for child in _children(node):
         kind = _zero_arg(child, 'kind')
@@ -488,13 +503,47 @@ def _branch_gates(node: Any, gates: List[Dict[str, Any]], get_text: Callable):
             yield child, gates
 
 
+
+def _try_children(node: Any, gates: List[Dict[str, Any]]):
+    """Dart's sibling handler headers own only their next block, not finally.
+
+    Other try_statement grammars nest their handler body inside the clause;
+    those children pass through to the normal handler dispatch unchanged.
+    """
+    header = None
+    for child in _children(node):
+        kind = _zero_arg(child, 'kind')
+        if kind == 'on' or (kind == 'catch_clause' and
+                            child.child_by_field_name('body') is None):
+            if header is None:
+                header = child
+        context = gates
+        if kind == 'block' and header is not None:
+            context = gates + [{'line': _zero_arg(header, 'start_position').row + 1,
+                                'text': 'on exception'}]
+            header = None
+        yield child, context
+
+
 def _gated_children(node: Any, gates: List[Dict[str, Any]], get_text: Callable):
     """Child contexts for branch selection, loops and exception handlers."""
     kind = _zero_arg(node, 'kind')
     if (kind in IF_NODES | ELIF_NODES and _zero_arg(node, 'is_named') and
-            (node.child_by_field_name('consequence') is not None or
-             node.child_by_field_name('body') is not None)):
+            _branch_parts(node)[1] is not None):
         yield from _branch_gates(node, gates, get_text)
+        return
+
+    catch = zig_catch_parts(node)
+    if catch is not None:
+        header, handler = catch
+        context = gates + [{'line': _zero_arg(header, 'start_position').row + 1,
+                            'text': 'on exception'}]
+        for child in _children(node):
+            yield child, context if _same_span(child, handler) else gates
+        return
+
+    if kind == 'try_statement':
+        yield from _try_children(node, gates)
         return
 
     context = gates

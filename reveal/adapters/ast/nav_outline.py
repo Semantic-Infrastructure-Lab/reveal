@@ -19,6 +19,7 @@ from .node_taxonomy import (  # noqa: F401 — re-exported for nav.py/back-compa
     exit_label,
     opens_scope,
     scope_label,
+    zig_catch_parts,
 )
 from reveal.utils.lines import split_lines
 
@@ -35,6 +36,9 @@ def _node_label(node: Any, get_text: Callable, keyword: Optional[str] = None) ->
     """
     if keyword is None:
         keyword = scope_label(node, _zero_arg(node, 'kind'))
+    catch = zig_catch_parts(node)
+    if catch is not None:
+        node = catch[0]
     first_line = split_lines(get_text(node))[0].strip().rstrip(':').rstrip('{').strip()
     lower = first_line.lower()
     kw_lower = keyword.lower()
@@ -61,11 +65,13 @@ def _make_item(
     # name) or a Kotlin/Swift jump wrapper (exit_label names it by its keyword).
     node_kind = _zero_arg(node, 'kind')
     resolved = keyword or scope_label(node, node_kind)
+    catch = zig_catch_parts(node)
+    start_node = catch[0] if catch is not None else node
     return {
         'type': _zero_arg(node, 'kind'),
         'keyword': resolved,
         'label': _node_label(node, get_text, keyword=resolved),
-        'line_start': _zero_arg(node, 'start_position').row + 1,
+        'line_start': _zero_arg(start_node, 'start_position').row + 1,
         'line_end': _zero_arg(node, 'end_position').row + 1,
         'depth': depth,
         'is_exit': is_exit,
@@ -129,6 +135,8 @@ def _collect_outline(
         ctype = _zero_arg(child, 'kind')
         if not _zero_arg(child, 'is_named'):
             continue
+        if _collect_zig_catch(child, depth, items, get_text, max_depth):
+            continue
         if ctype in FUNCTION_TYPES:
             items.append(_make_item(child, depth, get_text))
             if depth < max_depth:
@@ -165,6 +173,8 @@ def _collect_scope_interior(
         ctype = _zero_arg(child, 'kind')
         if not _zero_arg(child, 'is_named'):
             continue
+        if _collect_zig_catch(child, scope_depth + 1, items, get_text, max_depth):
+            continue
         if ctype in FUNCTION_TYPES:
             items.append(_make_item(child, scope_depth + 1, get_text))
             if scope_depth + 1 < max_depth:
@@ -187,6 +197,23 @@ def _collect_scope_interior(
         else:
             if scope_depth < max_depth:
                 _collect_outline(child, scope_depth + 1, items, get_text, max_depth)
+
+
+def _collect_zig_catch(
+    node: Any, depth: int, items: List[Dict[str, Any]], get_text: Callable, max_depth: int,
+) -> bool:
+    """Keep the normal operand outside the catch scope in the existing walk."""
+    catch = zig_catch_parts(node)
+    if catch is None:
+        return False
+    header, handler = catch
+    for child in _children(node):
+        if _zero_arg(child, 'end_byte') <= _zero_arg(header, 'start_byte'):
+            _collect_outline(child, depth, items, get_text, max_depth)
+    items.append(_make_item(node, depth, get_text))
+    if depth < max_depth:
+        _collect_outline(handler, depth + 1, items, get_text, max_depth)
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -272,7 +299,10 @@ def _find_ancestors(
             depth += 1
 
     node_kind = _zero_arg(node, 'kind')
-    if _zero_arg(node, 'is_named') and (opens_scope(node, node_kind) or node_kind in FUNCTION_TYPES):
+    catch = zig_catch_parts(node)
+    catch_start = _zero_arg(catch[0], 'start_position').row + 1 if catch is not None else start
+    if (_zero_arg(node, 'is_named') and catch_start <= line_no and
+            (opens_scope(node, node_kind) or node_kind in FUNCTION_TYPES)):
         condition = None
         if _zero_arg(node, 'kind') in GATE_NODES:
             from .nav_exits import _get_condition  # noqa: PLC0415 — avoid import-time cost for non-JSON callers
@@ -282,7 +312,7 @@ def _find_ancestors(
             'type': _zero_arg(node, 'kind'),
             'keyword': scope_label(node, node_kind),
             'label': _node_label(node, get_text),
-            'line_start': start,
+            'line_start': catch_start,
             'line_end': end,
             'depth': depth,
             'condition': condition,

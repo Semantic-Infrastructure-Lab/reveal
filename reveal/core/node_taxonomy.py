@@ -44,7 +44,7 @@ IF_MODIFIER_NODES: frozenset = frozenset({'if_modifier', 'unless_modifier'})
 LOOP_MODIFIER_NODES: frozenset = frozenset({'while_modifier', 'until_modifier'})  # BACK-1528
 MODIFIER_NODES: frozenset = IF_MODIFIER_NODES | LOOP_MODIFIER_NODES
 IF_NODES: frozenset = frozenset({
-    'if_statement', 'if_expression', 'if', 'IfStatement', 'unless',
+    'if_statement', 'if_expression', 'if', 'IfStatement', 'IfExpr', 'unless',
 }) | IF_MODIFIER_NODES
 # Lua's `elseif`/`else` arms are elseif_statement/else_statement: in no
 # family, so --outline put their bodies under the IF (BACK-1530).
@@ -52,11 +52,9 @@ ELIF_NODES: frozenset = frozenset({
     'elif_clause', 'elseif_clause', 'elseif_statement', 'elsif', 'else_if_clause',
 })
 ELSE_NODES: frozenset = frozenset({'else_clause', 'else', 'else_statement'})
-# Zig's IfStatement (BACK-431 Issue G smoke-tier audit) has no AST fields at
-# all — unlike every other IF_NODES member, `_walk_if_while`'s
-# 'condition'/'body' field lookup silently no-ops for it, so it's kept out
-# of nav_varflow's IF_WHILE_NODES; it still counts for --outline/--ifmap
-# (SCOPE_NODES/KEYWORD_LABEL), which only match on node kind.
+# Zig's IfStatement/IfExpr have no AST fields: nav_exits routes their
+# IfPrefix and positional bodies explicitly; nav_varflow conservatively
+# walks their children without a READ/COND label.
 # Ruby block `until cond ... end` is a named `until` (its keyword token is an
 # anonymous `until`, skipped by the outline walkers); labeled WHILE so --loopmap
 # keeps it, and the label text still reads "until ..." (BACK-1528).
@@ -71,9 +69,10 @@ WHILE_NODES: frozenset = frozenset({
 # Bash `for ((i=0; i<n; i++))` (`c_style_for_statement`) has C's
 # initializer/condition/update/body fields, like C's for_statement here: neither
 # has 'left'/'right', so _walk_for walks it as plain children (BACK-1528).
+# Zig ForStatement is likewise fieldless, with ForPrefix/BlockExpr children.
 FOR_NODES: frozenset = frozenset({
     'for_statement', 'foreach_statement', 'for_in_statement', 'for',
-    'c_style_for_statement',
+    'c_style_for_statement', 'ForStatement',
 })
 # Rust `for x in y { }` — 'pattern'/'value' fields, not 'left'/'right' (BACK-430).
 FOR_EXPRESSION_NODES: frozenset = frozenset({'for_expression'})
@@ -554,7 +553,7 @@ IF_WHILE_NODES: frozenset = IF_NODES | ELIF_NODES | WHILE_NODES
 
 
 KEYWORD_LABEL: Dict[str, str] = {
-    'if_statement': 'IF', 'if': 'IF', 'if_expression': 'IF', 'IfStatement': 'IF',
+    'if_statement': 'IF', 'if': 'IF', 'if_expression': 'IF', 'IfStatement': 'IF', 'IfExpr': 'IF',
     'if_modifier': 'IF', 'unless': 'UNLESS', 'unless_modifier': 'UNLESS',
     'elif_clause': 'ELIF', 'elseif_clause': 'ELIF', 'elseif_statement': 'ELIF',
     'elsif': 'ELIF', 'else_if_clause': 'ELIF',
@@ -562,7 +561,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'for_statement': 'FOR', 'for': 'FOR', 'for_expression': 'FOR',
     'foreach_statement': 'FOR', 'for_in_statement': 'FOR',
     'enhanced_for_statement': 'FOR', 'for_range_loop': 'FOR',
-    'c_style_for_statement': 'FOR',
+    'c_style_for_statement': 'FOR', 'ForStatement': 'FOR',
     'while_statement': 'WHILE', 'while': 'WHILE', 'while_expression': 'WHILE',
     'until': 'WHILE', 'while_modifier': 'WHILE', 'until_modifier': 'WHILE',
     'loop_expression': 'LOOP',
@@ -670,6 +669,22 @@ def is_do_block(node: Any) -> bool:
                         for c in node_children(node)))
 
 
+def zig_catch_parts(node: Any) -> Optional[tuple[Any, Any]]:
+    """Zig catch's operator/header and handler, excluding its normal operand.
+
+    BinaryExpr also represents ordinary arithmetic: only BitwiseOp with an
+    actual catch token opens a handler. Payload, when present, is in BitwiseOp.
+    """
+    if _zero_arg(node, 'kind') != 'BinaryExpr':
+        return None
+    children = node_children(node)
+    for index, child in enumerate(children[:-1]):
+        if (_zero_arg(child, 'kind') == 'BitwiseOp' and
+                any(_zero_arg(token, 'kind') == 'catch' for token in node_children(child))):
+            return child, children[index + 1]
+    return None
+
+
 def scope_label(node: Any, kind: str) -> str:
     """The keyword --outline/--scope/--loopmap/--catchmap print for a scope node.
 
@@ -678,6 +693,8 @@ def scope_label(node: Any, kind: str) -> str:
     are the CATCHes), not a DO loop."""
     if kind == 'do_statement' and is_do_block(node):
         return 'TRY'
+    if zig_catch_parts(node) is not None:
+        return 'CATCH'
     return KEYWORD_LABEL.get(kind, kind.upper())
 
 
@@ -691,6 +708,8 @@ def opens_scope(node: Any, kind: str) -> bool:
       call (BACK-1530);
     - a `do` block with no catch (Swift `do { }`, Lua `do ... end`), which is a
       plain block like a bare `{ }` (BACK-1541)."""
+    if zig_catch_parts(node) is not None:
+        return True
     if kind not in SCOPE_NODES:
         return False
     if kind == 'do_statement' and is_do_block(node):
