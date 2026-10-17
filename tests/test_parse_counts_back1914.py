@@ -316,8 +316,88 @@ def test_full_command_result_changes_cannot_hide_behind_equal_totals(ledger):
         qualify_snapshots([report] * 4 + [changed])
 
 
-@pytest.mark.parametrize('parser', ['python.ast', 'tree-sitter', 'tree-sitter-language-pack'])
+@pytest.mark.parametrize('parser', ['python.ast', 'tree-sitter-language-pack'])
 def test_parser_versions_must_be_nonempty_strings(ledger, parser):
     ledger[0]['metadata']['parser_versions'][parser] = None
     with pytest.raises(ValueError, match='metadata'):
         snapshot(ledger)
+
+
+def test_bundled_tree_sitter_distribution_absence_is_explicit(ledger):
+    ledger[0]['metadata']['parser_versions']['tree-sitter'] = None
+    assert snapshot(ledger)['parser_versions']['tree-sitter'] is None
+    ledger[0]['metadata']['parser_versions'].pop('tree-sitter')
+    with pytest.raises(ValueError, match='metadata'):
+        snapshot(ledger)
+
+
+@pytest.mark.parametrize('field,value', [('platform', None), ('implementation', 42)])
+def test_child_runtime_fields_require_nonempty_strings(ledger, field, value):
+    ledger[0]['metadata']['runtime'][field] = value
+    with pytest.raises(ValueError, match='metadata'):
+        snapshot(ledger)
+
+
+def test_only_exact_corpus_path_prefix_is_normalized(tmp_path):
+    from scripts.check_parse_counts import _normalize_result
+    corpus = tmp_path / 'corpus'
+    source = {'source': str(corpus), 'file': (corpus / 'first.ts').as_posix(),
+              'outside': str(corpus) + '-outside', 'order': ['second.ts', 'first.ts']}
+    assert _normalize_result(source, corpus) == {
+        'source': '<corpus>', 'file': '<corpus>/first.ts',
+        'outside': str(corpus) + '-outside', 'order': ['second.ts', 'first.ts']}
+
+
+def test_real_subprocess_duplicate_build_fails_without_changing_answer(tmp_path, monkeypatch):
+    import shutil
+    from scripts import check_parse_counts as gate
+    manifest = json.loads(gate.MANIFEST.read_text(encoding='utf-8'))
+    corpus = tmp_path / 'corpus'
+    shutil.copytree(gate.ROOT / manifest['corpus'], corpus)
+    first_run, second_run = tmp_path / 'clean', tmp_path / 'duplicate'
+    first_run.mkdir()
+    second_run.mkdir()
+    spec = manifest['commands']['surface']
+    clean = gate.run_once(spec, corpus, manifest['targets'], first_run)
+    injection = '''    from reveal.core import treesitter_parse as tp
+    original = tp._parse_recent
+    injected = False
+    def duplicate(language, source):
+        global injected
+        tree = original(language, source)
+        if not injected:
+            injected = True
+            original.__wrapped__(language, source)
+        return tree
+    duplicate.cache_clear = original.cache_clear
+    tp._parse_recent = duplicate
+'''
+    bootstrap = gate._BOOTSTRAP.replace('    from reveal.main import main\n',
+                                        injection + '    from reveal.main import main\n')
+    monkeypatch.setattr(gate, '_BOOTSTRAP', bootstrap)
+    duplicate = gate.run_once(spec, corpus, manifest['targets'], second_run)
+    assert duplicate['command_outcome'] == clean['command_outcome']
+    assert duplicate['totals']['artifact'] == clean['totals']['artifact'] + 1
+    assert duplicate['totals']['attempt'] == clean['totals']['attempt'] + 1
+    errors = gate.compare_snapshots(clean, duplicate)
+    assert len(errors) == 2
+    assert any('artifact' in error for error in errors)
+    assert any('attempt' in error for error in errors)
+
+
+def test_more_shared_reuse_can_lower_builds_without_outcome_ceiling(ledger):
+    audit, root, targets = ledger
+    second = root / 'second.py'
+    second.write_text('x = 1\n', encoding='utf-8')
+    targets['second.py'] = deepcopy(targets['config.py'])
+    other = deepcopy(audit['events'])
+    for event in other:
+        event.update(request_id=2, filename=second.resolve().as_posix())
+    audit['events'].extend(other)
+    baseline = snapshot(ledger)
+    current_audit = deepcopy(audit)
+    current_audit['events'] = current_audit['events'][:5] + current_audit['events'][-1:]
+    current_audit['events'][-1]['outcome'] = 'cached'
+    current = audit_snapshot(current_audit, os.getpid(), root, targets)
+    assert current['totals']['artifact'] == baseline['totals']['artifact'] - 1
+    assert compare_snapshots(baseline, current) == []
