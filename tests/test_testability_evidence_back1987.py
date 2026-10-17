@@ -182,3 +182,21 @@ def test_policy_exclusions_stay_outside_patch_failure_evidence(tmp_path):
     assert len(result) == 1
     assert result.skipped == []
     assert result.recovered_files == []
+
+
+@pytest.mark.parametrize('filename,source', [
+    ('ok.test.ts', 'test("x",()=>{});\n'),
+    ('test_bad.py', 'def broken(:\n'),
+])
+def test_patches_empty_text_describes_available_observations(tmp_path, filename, source):
+    target = _write(tmp_path / filename, source)
+    result = _run_reveal_direct(f'patches://{target}', '--format', 'text')
+    assert result.returncode == 0
+    if target.suffix == '.py':
+        assert 'No patch pressure groups in the available observations.' in result.stdout
+        assert 'No patch pressure groups found.' not in result.stdout
+    else:
+        assert 'No patch pressure groups found.' in result.stdout
+        assert 'available observations' not in result.stdout
+    assert 'JS/TS (jest/vitest)' in result.stdout
+    assert ('could not be analyzed' in result.stdout) == (target.suffix == '.py')
