@@ -199,7 +199,8 @@ def test_complete_findings_gate_survives_summary_and_field_projection(project, t
                  '--fields', 'base', '--fail-on', 'findings')
     assert result.returncode == 1, result.stderr
     answer = json.loads(result.stdout)
-    assert set(answer) == {'base'}
+    assert answer['type'] == 'deps_scan'
+    assert 'analysis' not in answer and 'unused' not in answer and 'circular' not in answer
     assert answer['base']['total_files'] == 2 and 'files' not in answer['base']
 
 
