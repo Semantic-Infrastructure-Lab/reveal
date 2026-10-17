@@ -174,6 +174,8 @@ def _render_deps(report: Dict[str, Any], top: int) -> List[str]:
     cycles = circular.get('cycles', [])
     evidence = report.get('analysis', {})
     cycle_count = evidence.get('findings', {}).get('circular', circular.get('count', 0))
+    if cycle_count is None:
+        cycle_count = 0  # Layout only; JSON retains unknown evidence and the failed label.
 
     lines.append("")
     lines.append(f"Dependencies: {path_str}")

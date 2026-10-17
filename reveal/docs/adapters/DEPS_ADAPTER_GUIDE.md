@@ -60,7 +60,8 @@ imports and findings. Circular text reports incomplete or unavailable analysis
 instead of claiming there were no cycles.
 
 `analysis.findings` retains full circular-group and unused-import counts before
-text caps or JSON summary projection. Explicitly skipped checks are omitted from
+text caps or JSON summary projection; a missing or malformed findings array has
+an unknown (`null`) count rather than a measured zero. Explicitly skipped checks are omitted from
 these required components and counts. Diagnostic path lists can be capped at 50;
 their exact counts and cut notes remain available. Unsupported languages,
 unused-detection limitations, unknown warnings and confidence alone do not make

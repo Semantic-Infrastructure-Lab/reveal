@@ -275,6 +275,10 @@ class DepsAdapter(ResourceAdapter):
         record = {'completeness': state.value, 'files_failed_count': counts[0] if counts else None,
                   'files_lost_count': counts[1] if counts else None, 'diagnostics': diagnostics}
         self.__dict__.setdefault('_deps_components', {})[name] = record
+        if name != 'base':
+            field = 'cycles' if name == 'circular' else 'unused'
+            count = len(result[field]) if _valid_component_payload(name, result, require_count=False) else None
+            self.__dict__.setdefault('_deps_findings', {})[name] = count
 
     def __init__(self, resource: str, query: Optional[str] = None):
         self.path = str(Path(resource).expanduser())
@@ -366,6 +370,7 @@ class DepsAdapter(ResourceAdapter):
 
     def _clear_request_evidence(self) -> None:
         self._deps_components: Dict[str, Dict[str, Any]] = {}
+        self._deps_findings: Dict[str, Optional[int]] = {}
         self._composed_errors = []
         self._composed_warnings = []
         self._composed_confidences = []
@@ -397,13 +402,8 @@ class DepsAdapter(ResourceAdapter):
                 self._record_component(name, {})
         facts = merge_execution_facts(*(ExecutionFacts(AnalysisCompleteness(record['completeness']))
                                         for record in components.values()))
-        findings = {}
-        if not no_circular:
-            findings['circular'] = len(circular.get('cycles', []))
-        if not no_unused:
-            findings['unused'] = len(unused)
         report['analysis'] = {'complete': facts.completeness is AnalysisCompleteness.COMPLETE,
-                              'components': components, 'findings': findings}
+                              'components': components, 'findings': self._deps_findings}
 
         meta = self.composed_meta()
         return ResultBuilder.create(
