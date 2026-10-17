@@ -222,3 +222,22 @@ def target(open):
     result = collect_boundary(inner, 2, 2, text, 'python')
     assert {d['var'] for d in result['inputs']} == {'open'}
     assert result.get('builtins', []) == []
+
+
+@pytest.mark.parametrize('params,body,expected', [
+    ('y = fallback', 'y', {'fallback'}),
+    ('{y = fallback, z: a = other}, b = seed', 'y+a+b+free', {'fallback', 'other', 'seed', 'free'}),
+])
+def test_javascript_parameter_defaults_are_outer_reads(params, body, expected):
+    scope, text, end = parsed('javascript', f'function target() {{\n const f = ({params}) => {body};\n consume(f);\n}}')
+    assert {d['var'] for d in collect_deps(scope, 1, end, text)} == expected | {'consume'}
+
+
+@pytest.mark.parametrize('code,expected', [
+    ('def target():\n    consume(y)\n    f = lambda y: y + free\n', {'consume', 'y', 'free'}),
+    ('def target():\n    f = lambda y: (lambda z: y + z + free)\n    consume(y, z, f)\n', {'consume', 'y', 'z', 'free'}),
+    ('def target():\n    values = [y for y in y]\n    consume(values)\n', {'consume', 'y'}),
+])
+def test_nested_and_earlier_external_reads_keep_owners(code, expected):
+    scope, text, end = parsed('python', code)
+    assert {d['var'] for d in collect_deps(scope, 1, end, text)} == expected
