@@ -335,9 +335,16 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
         imports_state = 'failed'
 
     complexity_owner = ArchitectureAdapter(str(root))
-    complex_fns = _run_complex_functions(complexity_owner, root, top_n * 4)
+    try:
+        complex_fns = _run_complex_functions(complexity_owner, root, top_n * 4)
+    except Exception as exc:  # boundary-ok: broad-except -- the existing child helper postprocesses arbitrary analyzer output outside compose; retain any failure at this required component boundary
+        complexity_owner.record_composed_error('AstAdapter', root, exc)
+        complex_fns = []
     complexity_meta = complexity_owner.composed_meta() or {}
     complexity_state = _complexity_state(complexity_meta)
+    for kind in ('warnings', 'errors'):
+        if kind in complexity_meta:
+            complexity_meta[kind] = [dict(entry, component='complexity') for entry in complexity_meta[kind]]
     owner.fold_meta(complexity_meta)
 
     return {
@@ -558,40 +565,63 @@ def run_architecture_diff(
     analysis = {'complete': complete, 'basis': 'snapshots', 'snapshots': states,
                 'unsupported_extensions': {'base': base_raw['unsupported_extensions'],
                                            'head': head_raw['unsupported_extensions']}}
+    confidences = {side: (raw.get('meta') or {}).get('confidence')
+                   for side, raw in (('base', base_raw), ('head', head_raw))}
+    analysis['confidence'] = confidences
+    supplied = [value for value in confidences.values() if value is not None]
+    confidence = min(supplied) if supplied else None
     deltas = diff_snapshots(base_snapshot, head_snapshot, top_n) if complete else None
     return _comparison_report(path, base_ref, head_ref, deltas, analysis,
-                              [*base_meta, *_snapshot_meta(head_raw, 'head')])
+                              [*base_meta, *_snapshot_meta(head_raw, 'head')], confidence=confidence)
+
+
+def _diagnostic_path(value: str, root: Path) -> str:
+    from ..utils.path_utils import to_posix
+    displayed, prefix = to_posix(value), to_posix(root).rstrip('/')
+    if displayed == prefix:
+        return '.'
+    return displayed[len(prefix) + 1:] if displayed.startswith(prefix + '/') else displayed
+
+
+def _diagnostic_message(message: str, root: Path) -> str:
+    from ..utils.path_utils import to_posix
+    spellings = {str(root), to_posix(root), repr(root), repr(str(root))[1:-1]}
+    for spelling in sorted(spellings, key=len, reverse=True):
+        message = message.replace(spelling, '.')
+    return message
 
 
 def _snapshot_meta(raw: Dict[str, Any], side: str) -> List[Tuple[str, Dict[str, Any]]]:
-    """Attribute diagnostics and remove the temporary materialization spelling."""
-    from ..utils.path_utils import to_relative_display
+    """Attribute diagnostics and remove known materialization path spellings."""
     root = raw['root']
     entries = []
     for kind in ('warnings', 'errors'):
         for entry in (raw.get('meta') or {}).get(kind, []):
-            entry = dict(entry, snapshot=side)
+            entry = dict(entry, snapshot=side, component=entry.get('component', 'imports'))
             if entry.get('file'):
-                entry['file'] = to_relative_display(entry['file'], root)
+                entry['file'] = _diagnostic_path(entry['file'], root)
             if entry.get('files'):
-                entry['files'] = [to_relative_display(file, root) for file in entry['files']]
-            entry['message'] = f"{side}: {entry.get('message', '')}".replace(str(root), '.')
+                entry['files'] = [_diagnostic_path(file, root) for file in entry['files']]
+            entry['message'] = f"{side}: {_diagnostic_message(entry.get('message', ''), root)}"
             entries.append((kind, entry))
     return entries
 
 
 def _comparison_report(path: Path, base_ref: str, head_ref: str, deltas: Optional[Dict[str, Any]],
-                       analysis: Dict[str, Any], diagnostics: List[Tuple[str, Dict[str, Any]]]) -> Dict[str, Any]:
+                       analysis: Dict[str, Any], diagnostics: List[Tuple[str, Dict[str, Any]]],
+                       *, confidence: Optional[float] = None) -> Dict[str, Any]:
     from ..utils.results import ResultBuilder
-    data = {'base_ref': base_ref, 'head_ref': head_ref, 'path': str(path),
+    from ..utils.path_utils import to_posix
+    from ..reveal_types import CONTRACT_VERSION
+    data = {'base_ref': base_ref, 'head_ref': head_ref, 'path': to_posix(path),
             'deltas': deltas, 'analysis': analysis}
     if not analysis['complete']:
         data['error'] = 'Architecture comparison unavailable: required snapshot evidence is incomplete'
     return ResultBuilder.create(
-        result_type='architecture_diff', source=path, data=data,
+        result_type='architecture_diff', source=to_posix(path), data=data, contract_version=CONTRACT_VERSION,
         warnings=[entry for kind, entry in diagnostics if kind == 'warnings'] or None,
         errors=[entry for kind, entry in diagnostics if kind == 'errors'] or None,
-        confidence=0.0 if not analysis['complete'] else None,
+        confidence=0.0 if not analysis['complete'] else confidence,
     )
 
 
@@ -601,12 +631,10 @@ def render_diff_brief(report: Dict[str, Any]) -> None:
     JSON is the primary contract (design doc: "JSON-first, no verdict") —
     this is a convenience summary for terminal use, not a demand.
     """
+    from ..utils.warning_render import render_meta_warnings
+    render_meta_warnings(report)
     if report.get('error'):
-        print(report['error'])
-        for side, components in report['analysis']['snapshots'].items():
-            for component, state in components.items():
-                if state != 'complete':
-                    print(f'  {side} {component}: {state}')
+        _render_unavailable(report)
         return
     deltas = report['deltas']
     print(f"Architecture Diff: {report['path']}")
@@ -652,6 +680,14 @@ def render_diff_brief(report: Dict[str, Any]) -> None:
             print(f"  + {f}")
         for f in eps['removed']:
             print(f"  - {f}")
+
+
+def _render_unavailable(report: Dict[str, Any]) -> None:
+    print('Architecture comparison unavailable: required snapshot evidence is incomplete')
+    for side, components in report['analysis']['snapshots'].items():
+        for component, state in components.items():
+            if state != 'complete':
+                print(f'  {side} {component}: {state}')
 
 
 def _signed(value: Optional[float]) -> str:
