@@ -33,7 +33,7 @@ help_category: ai_guides
 
 Guides >200 lines show the first section by default (progressive disclosure). Append `/full` to get the complete guide.
 
-**Entry order:** start with `reveal --agent-help`, then use `reveal help://quick` to choose a tool, then `reveal help://<topic>` for its details. Use `--help` for the raw flag listing.
+**Entry order:** start with `reveal --agent-help`, then use `reveal help://quick` to choose a tool, then `reveal 'help://<topic>'` for its details. Use `--help` for the raw flag listing.
 
 ---
 
