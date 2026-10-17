@@ -66,6 +66,18 @@ concrete types satisfying that contract, capped at 5 in text output (`?impls=N` 
 methods but no `ABC`/`Protocol` base — a heuristic net for contracts that
 don't use the formal markers.
 
+## Analysis Evidence
+
+Recovered parses retain their extracted contracts and remain analyzed inputs.
+When recovery occurs, `recovered_files` and a `parse_recovered` warning identify
+those files. Failed supported inputs reduce `coverage.analyzed_files` once per
+distinct file; warnings and `meta.errors` retain the consuming scanner's exact
+failure cause. A separate shared analysis failure does not invalidate a successful
+native contract scan. Empty and unsupported inventories remain nonfatal.
+
+These disclosures preserve the current contracts exit policy. They do not yet
+adopt the declared execution policy used by direct surface and architecture.
+
 ## Good Review Questions
 
 - Are there more implementers than expected for a contract meant to be
