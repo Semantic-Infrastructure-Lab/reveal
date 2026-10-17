@@ -4,6 +4,7 @@ import re as _re  # noqa: F401 — imported for use by query_eval, kept here for
 import sys
 from contextlib import contextmanager
 from contextvars import ContextVar
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Mapping, Optional, Set, TextIO, Tuple, Union
 
@@ -80,7 +81,13 @@ class QueryParams(Dict[str, Any]):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._reads = query_key_recorder()
-        self._normalized: Dict[str, Tuple[Any, Any]] = {}
+        self._normalized: Dict[str, Tuple[Any, Any, Any]] = {}
+
+    def set_normalized(self, spec: 'ParamSpec', value: Any) -> None:
+        """Remember one conversion; detect mutation without converting twice."""
+        self[spec.name] = value
+        snapshot = deepcopy(value) if isinstance(value, (list, tuple, dict)) else value
+        self._normalized[spec.name] = (spec, value, snapshot)
 
     def __setitem__(self, key: str, value: Any) -> None:
         self._normalized.pop(key, None)
@@ -267,6 +274,8 @@ class ParamSpec:
         if isinstance(params, QueryParams):
             normalized = params._normalized.get(self.name)
             if normalized is not None and normalized[0] is self and normalized[1] is raw:
+                if isinstance(raw, (list, tuple, dict)) and raw != normalized[2]:
+                    raise ValueError(f'Normalized {self.name} changed; rebind parameters before use')
                 return raw
         return self.validate(raw)
 

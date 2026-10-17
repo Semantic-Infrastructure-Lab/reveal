@@ -38,6 +38,8 @@ def encode_param_value(spec: ParamSpec, value: Any) -> str:
     if spec.uri_codec == 'percent':
         return quote(str(value), safe='')
     if spec.uri_codec == 'comma-percent':
+        if not isinstance(value, (list, tuple)):
+            raise ValueError('comma-percent values must be a list or tuple')
         items = list(value)
         if any(not isinstance(item, str) or not item for item in items):
             raise ValueError('comma-percent lists require nonempty string elements')
@@ -103,8 +105,7 @@ def bind_declared_params(specs: Iterable[ParamSpec], source: Union[str, Mapping[
                 raise ValueError(f'{spec.name} is required')
             continue
         value = _validate_binding(spec, supplied[spec.name], transport)
-        params[spec.name] = value
-        params._normalized[spec.name] = (spec, value)
+        params.set_normalized(spec, value)
     return params
 
 
