@@ -27,9 +27,9 @@ def test_percent_scalar_round_trip_is_exactly_once(binding, value):
     assert declaration.read(typed) == value
 
 
-def test_list_codec_splits_before_decoding_and_keeps_empty(binding):
+def test_list_codec_splits_before_decoding(binding):
     declaration = query.ParamSpec('paths', 'array', 'Paths', (), tuple, uri_codec='comma-percent')
-    values = ['a,b.py', '%26', ' a ', '', 'x&y', '雪?z']
+    values = ['a,b.py', '%26', ' a ', 'x&y', '雪?z']
     encoded = binding.encode_param_value(declaration, values)
     assert encoded == ','.join(quote(value, safe='') for value in values)
     params = binding.bind_declared_params((declaration,), 'paths='+encoded, transport='uri')
@@ -112,6 +112,9 @@ def test_resource_raw_existing_path_wins_then_decodes_once(binding, tmp_path):
     assert binding.bind_resource_path(declaration, encoded_literal, transport='uri') == str(raw)
     raw.rmdir()
     assert binding.bind_resource_path(declaration, str(raw), transport='uri') == str(decoded)
+    import sys
+    if sys.platform == 'win32':
+        return  # Windows cannot represent '?' in a filename.
     question = tmp_path / 'what?,part'
     question.mkdir()
     encoded = str(tmp_path / quote(question.name, safe=''))
@@ -127,3 +130,48 @@ def test_existing_raw_query_and_fixed_flags_negative_control():
     assert dict(query.parse_query_params('x=%26+&x=a=b')) == {'x': 'a=b'}
     assert query.split_exclude_param(query.join_exclude_patterns(['a,b', '%26'])) == ['a,b', '%26']
     assert query.parse_query_filters('name=a%26b')[0].value == 'a%26b'
+
+
+def test_comma_list_empty_population_and_empty_member_rejection(binding):
+    declaration = query.ParamSpec('paths', 'array', 'Paths', (), tuple, uri_codec='comma-percent')
+    assert binding.encode_param_value(declaration, []) == ''
+    assert declaration.read(binding.bind_declared_params((declaration,), 'paths=', transport='uri')) == ()
+    with pytest.raises(ValueError, match='empty|nonempty'):
+        binding.encode_param_value(declaration, [''])
+    with pytest.raises(ValueError, match='empty'):
+        binding.bind_declared_params((declaration,), 'paths=a,,b', transport='uri')
+
+
+def test_normalized_metadata_invalidates_on_mutation_and_other_spec(binding):
+    declaration = query.ParamSpec('value', 'string', 'Add marker', '', lambda value: value+'!')
+    params = binding.bind_declared_params((declaration,), {'value': 'a'}, transport='typed')
+    copied = params.copy()
+    assert declaration.read(copied) == 'a!'
+    params['value'] = params['value']
+    assert declaration.read(params) == 'a!!'
+    params.update({'value': 'b'})
+    assert declaration.read(params) == 'b!'
+    other = query.ParamSpec('value', 'string', 'Other converter', '', lambda value: value+'?')
+    assert other.read(copied) == 'a!?'
+
+
+def test_resource_rejects_invalid_utf8_nul_and_preserves_malformed_percent(binding, tmp_path):
+    declaration = query.ResourceSpec(uri_codec='existing-path-first')
+    with pytest.raises(UnicodeDecodeError):
+        binding.bind_resource_path(declaration, str(tmp_path / '%FF'), transport='uri')
+    with pytest.raises(ValueError, match='NUL'):
+        binding.bind_resource_path(declaration, str(tmp_path / '%00'), transport='uri')
+    malformed = str(tmp_path / '%QZ')
+    assert binding.bind_resource_path(declaration, malformed, transport='uri') == malformed
+
+
+def test_resource_permission_failure_does_not_probe_another_resource(binding, monkeypatch):
+    from pathlib import Path
+
+    def denied(self, *args, **kwargs):
+        raise PermissionError('induced inaccessible resource')
+
+    monkeypatch.setattr(Path, 'stat', denied)
+    with pytest.raises(PermissionError, match='inaccessible'):
+        binding.bind_resource_path(query.ResourceSpec(uri_codec='existing-path-first'),
+                                   'literal%26', transport='uri')
