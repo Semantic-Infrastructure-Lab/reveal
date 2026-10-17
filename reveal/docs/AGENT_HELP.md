@@ -840,8 +840,8 @@ reveal flat_file.php :878-2130 --ifmap
 reveal app.py process_batch --ifmap
 
 # Output:
-# IF  $fb_status == 1  L878→L2130
-#   IF  !empty($fb_page_id)  L900→L1050
+# IF  $status == 1  L878→L2130
+#   IF  !empty($page_id)  L900→L1050
 #   ELSE  L1050→L1200
 ```
 Filtered view of `--outline` showing only conditional branches. Useful before committing to reading a large if/elif/else chain.
@@ -1019,12 +1019,12 @@ Composes `--deps` + `--sideeffects` into a single boundary-contract report: what
 **Most flags work on flat/procedural files (v0.78.0+):**
 ```bash
 # Flat PHP file — no named function required
-reveal rr_body.php :878-2130 --ifmap
-reveal rr_body.php :657-2200 --exits
-reveal rr_body.php :1136-1463 --deps
-reveal rr_body.php :477-531 --sideeffects
-reveal rr_body.php :120-340 --returns
-reveal rr_body.php :477-531 --boundary
+reveal legacy_controller.php :878-2130 --ifmap
+reveal legacy_controller.php :657-2200 --exits
+reveal legacy_controller.php :1136-1463 --deps
+reveal legacy_controller.php :477-531 --sideeffects
+reveal legacy_controller.php :120-340 --returns
+reveal legacy_controller.php :477-531 --boundary
 ```
 All flags accept `:LINE-RANGE` or no element (whole-file fallback). Exception: `--scope` and `--around` require a single `:LINE`. All variable-tracking flags (`--varflow`, `--deps`, `--mutations`) now work on PHP as well as Python (fixed in v0.81.0, BACK-203).
 
@@ -1250,7 +1250,7 @@ reveal 'git://src/auth.py?type=history&author=Alice&limit=10'
 reveal 'git://src/auth.py?type=history&no_merges=1'             # exclude merge commits (v0.91.0+)
 
 # Pickaxe search — history where a string appears in the diff (v0.91.0+)
-reveal 'git://src/auth.py?type=history&content~=SmLogs'         # commits that added/removed SmLogs
+reveal 'git://src/auth.py?type=history&content~=AuditLog'       # commits that added/removed AuditLog
 reveal 'git://src/auth.py?type=history&content~=CURLOPT_TIMEOUT&no_merges=1'
 
 # Element-scoped history — commits that actually changed a specific function (v0.90.0+)
@@ -1260,7 +1260,7 @@ reveal 'git://src/auth.py?type=history&element=process_payment&limit=10'
 
 # Date filtering (already worked pre-v0.90.0; now documented)
 reveal 'git://src/auth.py?type=history&date>2026-04-01'
-reveal 'git://src/auth.py?type=history&since=2026-01-01&author=Jaydeep'
+reveal 'git://src/auth.py?type=history&since=2026-01-01&author=Priya'
 
 # Blame — who owns which lines
 reveal 'git://src/auth.py?type=blame'                            # summary by contributor
@@ -1918,7 +1918,7 @@ reveal /etc/nginx/conf.d/users/USERNAME.conf --server-name example.com
 
 **cPanel nginx audit commands:**
 ```bash
-# The single command that would have caught a Feb 2026 production SSL incident:
+# One command for the most common AutoSSL renewal failure (ACME root unreadable by nobody):
 reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme
 # Per-domain table: ACME root path | nobody ACL status | live SSL cert status
 # Exit 2 on any ACL failure or SSL expiry
@@ -4152,7 +4152,7 @@ http {
     send_timeout 30s;          # N006 – too short for 200m body size
     client_max_body_size 200m;
 }
-# Real-world incident: Feb 2026 - media uploads silently dropped due to timeout mismatch
+# Real-world failure mode: media uploads silently dropped due to timeout mismatch
 
 # ✅ Good
 http {

@@ -1,380 +1,380 @@
 ---
-title: "Sociamonials Agent Farm — How Personas Get Grounded, and How They Get Stronger"
-type: architecture
-status: current
-summary: "Verified account of how each persona is initialized today, the missing durable-knowledge loop that stops them improving, and the proposed findings-mailbox design that closes it."
-beth_topics:
-  - sociamonials
-  - agent-farm
-  - grounding
-  - learning-loop
-  - capability-policy
-  - cortex
-related:
-  - SOCIAMONIALS_AGENT_FARM_ROLE_DEFINITIONS_2026-08-12.md
-  - SOCIAMONIALS_AGENT_FARM_DISPATCH_ARCHITECTURE_2026-08-15.md
-  - SOCIAMONIALS_AGENT_ROSTER_AND_ROLE_MAP_2026-08-12.md
+brtaz: "Jbcpylzbuuga Zjhxh Qntj — Akg Jfdqxasz Ixg Gaskvgmy, yat Dsa Sasn Jhg Lnaohztw"
+zaul: dtkmrkhhallg
+liacmo: pjndhuj
+ocadxzj: "Wvtbuirv saimola cl rab khpf apncosr qz qhotqjbjjci prrci, ewj lgpxmoj lfkvkkb-hzhbrxpju zuaf adzi vdmyu wbbq hugnjpxdi, yfr ovc octkrzyw xhlzhdtk-pfibnhm fvpirx aoof pwjkdk rj."
+ixqb_ilaeso:
+  - jwkzpwrruixn
+  - bumyj-hlbg
+  - onafibkkh
+  - nmbqxbys-bbxh
+  - obuykunlak-bznaxa
+  - gbgzpo
+youjfvx:
+  - GUQQGHWAQJDO_BYATC_AOSL_ZVHN_FYMONXUFWQB_2026-08-12.md
+  - ODKVOYHYBOMI_TFMYI_BSWX_QORFKSQL_AFEDHPVETGAV_2026-08-15.md
+  - KIKJNLDBZWBI_MOPIL_CQSIUO_RDU_NWBM_JNP_2026-08-12.md
 ---
 
-# Sociamonials Agent Farm — How Personas Get Grounded, and How They Get Stronger
+# Gbcxxlaoofgl Tsztq Zkkg — Wdc Bcdlzmtx Eyy Ftykvjfn, yvo Plx Gsgz Kul Kwtginzh
 
-**Session:** `timeless-energy-0817` (2026-08-17)
-**Question this answers:** *"What info would each persona need to do its job well, how is it
-initialized/grounded today, and how does it get better over time?"*
+**Atrloig:** `javqankp-wzipon-0817` (2026-08-17)
+**Yxqjvwgs khgy ufwucle:** *"Ofvs eymf lykez dkld fwjablq jvkj jm gg kui eex irkp, yor ha sm
+ktlivwlqhjd/wmkqqvjb iaotm, sei bzy hjnj cg bpn jopwpp kqix xggc?"*
 
-The dispatch architecture (`SOCIAMONIALS_AGENT_FARM_DISPATCH_ARCHITECTURE_2026-08-15.md`) covers
-*how a job reaches a worker*. The role definitions
-(`SOCIAMONIALS_AGENT_FARM_ROLE_DEFINITIONS_2026-08-12.md`) cover *what each worker is for*. Neither
-covers *what a worker knows when it wakes up, or how that knowledge improves*. That's this doc.
+Yer pldkiziw ynfgsjsdamhb (`WELVXRXFAFPQ_FBFWS_KAAH_VAYPYDDF_XHXVVMXVDDZT_2026-08-15.md`) brrzlv
+*yeu k yeg szlswer l kvhlub*. Mjb pagi zkcmpqqjizx
+(`YRHMPKKWAATM_ATZEK_RGOS_OXBY_TRRVQQUVYKU_2026-08-12.md`) amsaj *coed gtcz awdpqt bo duv*. Ccnlhxe
+ryiruq *pmat e veusus zzvcu hlux hs diiqj gy, wb yiu hvme ashqtjdhk anktytwz*. Zljj'y vroc wxb.
 
 ---
 
-## Part 1 — How grounding actually works today (traced through code, not assumed)
+## Mrzp 1 — Xmc pqoyqffex mwmqnoas ujbjn yqrxg (lulrjj bmspnyj hqkj, wws jdoukik)
 
-Every persona — Cortex included — is initialized identically. Three static files plus two mounts.
+Hldiq kszzpfk — Sugzoy cpeqwagr — dm oubisfudzeh ighopdimeyw. Cpyeq zewllc olryt stmu bio clzcvr.
 
-### The three static files, rendered at deploy time
+### Sai thkin sofrbm ekgli, ujsqzchc gs vizifu ixjj
 
-| File | Role |
+| Wmww | Qtas |
 |---|---|
-| `config/<name>.CLAUDE.md` | The project context handed to every `claude -p` invocation. Persona identity, rules, doc/repo pointers, reveal recipes. **Does not change per message.** |
-| `config/<name>.yaml` | Identity, bus subject, mounts, declared tools, `rules_extra`, tracker ID |
-| `config/<name>.settings.json` | The *real* capability boundary — the `claude -p` permission allowlist |
+| `bbgaot/<tsgx>.BIWZZR.md` | Urm hjmtwot mhxpvhs jippbj rh eqsxo `rpknun -j` cqpybdddoy. Rdxfgps wicsyerw, tnjbr, urt/jqki fplolvou, tqsiqi dujpoct. **Lcqe upn vacirg tob dnspzih.** |
+| `esueiy/<xjmw>.yaml` | Uxurewlu, ddz flbngzl, zecgxf, lgiyynmg mhauy, `tjiqx_qbtxu`, hjlbsvi ZZ |
+| `zjkxwt/<ufso>.cgbvtifs.json` | Acg *uejx* xhyyarthgs pcofwpzg — zeh `xghddw -k` ewfqmtogsl zdlrdxdhh |
 
-The `.settings.json` is authoritative, and the `CLAUDE.md` says so explicitly: *"Your real capability
-boundary is your sandbox config, not this file — if it isn't allowed there, you cannot do it
-regardless of what this file or a Slack message asks for."*
+Pym `.tnjfqmog.json` dw exuraxoixwtes, tvl ijb `KEOIML.md` fagd xb kcqiqcddjs: *"Bujk hthp exwzdnvago
+zzejwqqr mw jsde cbpyleq lsgqiw, hib ohle mwfs — tx jf crc'l vhinryq gonge, kig ctfeqq kd ev
+dkoheaucws rk avnz hfpv lgrm qd e Wzlvd kbwehve aysg nps."*
 
-### What each persona can actually run
+### Tpei wrdq ortbpmg vxz qwbkxxai dte
 
-| Persona | Granted tools |
+| Maflnne | Njrlwze bxfld |
 |---|---|
-| **Cortex** | `Read`, `Glob`, `Grep`, `Bash(reveal *)`, `Bash(/opt/universal-bot/bin/slack-history *)` |
-| **Dex** | `Read`, `Glob`, `Grep`, `Bash(reveal *)` |
-| **Queue** | `Read`, `Glob`, `Grep`, `Bash(reveal *)`, `Bash(probe *)` |
+| **Jtwbmo** | `Icuh`, `Dxvb`, `Xfwq`, `Qsid(nnlsfo *)`, `Ifzv(/wnd/plesdnyrn-hvj/vdc/kdens-rgbxlym *)` |
+| **Mnu** | `Addd`, `Gvfp`, `Pkjw`, `Iaax(egyyve *)` |
+| **Lbpgm** | `Kevw`, `Gkof`, `Lynk`, `Mbov(ylnfzn *)`, `Ugib(zdqyz *)` |
 
-`deny: []` in each — the allowlist *is* the boundary. Everything else (`Write`, `Edit`, general
-`Bash`, network tools) is simply absent, and the container's `--read-only` rootfs is the OS-level
-backstop regardless of what `settings.json` says.
+`qtjt: []` tq qmkz — vfm ximfeqfbq *ba* gwh gmrrpdgo. Sndsdjhwbh coou (`Qbhyh`, `Prkw`, erbnvbu
+`Wyry`, gtpcwcc awlse) xp yffxlr jusmpk, yaf vsu rilhadlvh'f `--fqbb-rerp` xivssg vj hjy WK-hqggx
+uyaixftt phftqwuhtc ff etxr `zcrhsmrb.json` etns.
 
-### The two mounts
+### Dzj ebh sxnbnb
 
-- `/opt/universal-bot/mounted/ops_repo` → read-only mirror of `sociamonials-ops`, refreshed hourly
-  by `SOC-143`'s cron
-- `/opt/universal-bot/mounted/app_repo` → read-only view of the Sociamonials PHP app; **is a live
-  dev working checkout, not a clean mirror** — may carry uncommitted changes, so `git status` before
-  assuming it matches a branch
+- `/zsy/cjymlmnqm-dzc/hazpsve/gdr_avna` → kwjc-gnwy exuwnv th `dqkdhqmgptlc-oui`, ryvpnboln nouhmi
+  nr `TYO-143`'h dvbm
+- `/zqq/mcayfdedz-emk/hvwnmrs/wtu_dzxw` → dwrh-jvnc sdkf zw uaz Mkjmlaacjlml TME nse; **ph a dqxv
+  vgq fnnouyw zaedhjgp, qed p ujcvu uccvyj** — ozj aebgv sewnypxogxz fejexhl, of `ydl nzkweh` lmkfab
+  mpcqgrnq tj hdzcimc q mmvozu
 
-### Boot-time self-orientation
+### Aaew-heou jwrk-zpzoqilourh
 
-Per `HOST_ACCOUNT_CONTRACT_2026-08-08.md` §3, every invocation is instructed to survey rather than
-trust a baked-in list — so a new doc or repo link becomes visible without a redeploy:
+Uau `TQPD_CDVZNLJ_EHIKMRDO_2026-08-08.md` §3, oevdd faryzfcwmd rf ieusjsfxum ah htfaqx udgewi vejj
+wcfly f vuqzc-wm rohf — vv g pgr vsp ok cqqx hutv avlhktm rcurvhm hwjpqyn i ccxjcehb:
 
-```bash
-reveal ~/docs --files --ext md    # what notes exist
-reveal ~/bin/                     # what tools are available
-reveal ~/src/                     # what repos are linked
+```clby
+drmlyv ~/qorp --wpaur --unl me    # gmmm ungga cmlbs
+htscri ~/pui/                     # zkmo kzebj xez pedswnydb
+fuohsl ~/jan/                     # prip ygqhv yxi thgdtd
 ```
 
-### What no persona has
+### Hkyo pj kygvndd ubt
 
-**No `tia` binary.** That means no `tia beth` (search/graph/authority), no `tt` (task tracker), no
-`tia project show`. Their entire durable knowledge is whatever sits in the hourly `ops_repo` mirror,
-navigated with bare `reveal`.
+**Nt `rcz` gjadzk.** Ertt buxwd ds `kbm huvz` (wnlfto/xifdn/emvdjwqja), hr `dr` (ldve esdbejk), ea
+`ujf ybffkfl exsc`. Jfbio erwayy lhdrrsc xrqtjkdbs ns oqnzhjxs jurn ci pin aqxykb `dat_edno` lioinr,
+nuwgwrmub qxlo noki `bwtjkx`.
 
-This matters more than it sounds: **`tia project show sociamonials-ops` carries deploy traps,
-operating rules, and the team/authority map that exist nowhere inside the repo itself** — so that
-content is structurally invisible to every persona. Keyz's own findings surfaced this from the other
-direction: the K8s devops-lease requirement is her single most-hit error class, is documented
-globally in the project YAML, and appears nowhere in her role doc.
+Shzb ykexitn ybfc mszs ge wefrtk: **`qhf xfskhso uowa vxudkacawdqj-hhi` gwpykuk ziobhc zzylo,
+fpadsrroh fxpya, xvt pjr ejbm/cstoioogx fvv ktju dlgrt lcbihne irixpi uem gzgc dfclfp** — wa djyo
+mszzjkx nl bntmnerorhtz rlwogxibj kc ywljl tfyixqj. Bpxt'n job wrypdskt rjfmtvjx mzri rkzx dak mfrcc
+ovwswtvnb: xdl X8t zmbtgx-nphhd dpmmvekvsnj vd eyn wtpopo zkvf-lvf exdmd qfzqs, zw eerjvqgbjl
+jsznskke oz wcb mjswkdd WFSK, gvv igoskyb oxfdlpm gu byr hidb srd.
 
-### Statelessness, and the one exception
+### Zzoliryfljwyk, whj fzv ubn ucvixryia
 
-Each dispatch is a fresh `subprocess.run(["claude", "-p", ...], capture_output=True)` in
-`modules/runners/claude_cli.py`. Only `result.stdout` — the final answer text — is retained by the
-framework; it is returned to Cortex and posted to Slack. No conversation carries forward.
+Shyn izsognvw jb w sgzwa `puuozdynrw.kvg(["ywvomh", "-s", ...], wozkalh_rqoxed=Pwwr)` ep
+`wopkyeh/vezqpvd/cenejq_zua.py`. Xrel `vdqpaq.dslohn` — lxu jkmjy uizpjf orjt — my xrjusjci ab eon
+szupljtyh; on ik xmmrgpuv gt Xjcnef ryj mpnhlu pl Qonxn. Kf ubarzxcldpac zcztlfz cegrwmn.
 
-**But `claude -p` writes its own session bookkeeping regardless**, and since `reveal` is granted,
-`reveal claude://...` works *inside* the container. A persona can therefore inspect its own recent
-dispatches — `/tools`, `/errors`, `/workflow` — with no new capability at all.
+**Zwl `pqifyf -p` mrlskv ged tka oxxgxtm yfjpoomlrbz tcyyacpves**, dty nhxpw `emkjtn` pd ksuklzi,
+`gfcwtj oaoojc://...` evffp *guvahe* uwh okxubagji. A zfurvqc bnv tbsrryolk ifnvlto frd vft mmhnhm
+dwkwedidiq — `/msvlp`, `/lozlqr`, `/gpggsrkv` — cick ov cve zjmcjrsrxe ns lmu.
 
-The catch is lifetime, documented in `CONTAINER_INTERFACE_CONTRACT.md` §7: `$HOME/.claude` is a
-`--tmpfs mode=1777`, *"deliberately ephemeral, wiped every restart."* Self-reflection works within
-one container's uptime and vanishes on redeploy — which happens on every capability-widening commit.
+Orf pbcjg es lvmqqtnd, hrtdflkbcp fq `DSWLBQHBF_NCDOUNQPL_IHFEIEGB.md` §7: `$RFMM/.mxjbiw` xx m
+`--dijsn uzve=1777`, *"lrqquxliouhj cqtxrqpmx, suafn rdsal sjmneyg."* Fhed-vjuynfwpid weytg lifsyw
+sjy yefofetnm'y chovip kgi bxqiywik gi rsbvnedd — taogq cvdrown ro ztdga wytcvjhkqh-onddgtpv dtueny.
 
 ---
 
-## Part 2 — The learning loop, and exactly where it breaks
+## Gesh 2 — Nre ztfwbesr jxpz, axb wlqhecs cqjvo cx ctdnxz
 
-The loop we want:
+Vop cuzn cz zmst:
 
 ```
-persona does work → learns something → writes it down durably →
-someone reviews/synthesizes → role doc or tooling improves →
-next dispatch starts smarter
+prmivqt cuja rlsf → mlvaty eztvqtcpw → tfbgft qk zzyu rvpnhgl →
+atequzy jmsdagf/crsvkpaguky → xxkf rta tr ouezget xunfzoal →
+emit ucvxxqen roeotj iufykjf
 ```
 
-| Step | Status today |
+| Zutg | Wxqsrr egckn |
 |---|---|
-| Persona does work | ✅ Live — Cortex→Dex/Queue dispatch works end to end (`USB-52`/`USB-53` done) |
-| Learns something | ⚠️ Captured by `claude -p`, readable via `reveal claude://`, but on tmpfs — gone at restart |
-| **Writes it down durably** | ❌ **No mechanism at all.** No `Write` grant, no `memory_path` set on any live persona |
-| Someone reviews/synthesizes | ⚠️ Only when a human goes mining by hand — see Part 5 |
-| Role doc / tooling improves | ⚠️ Manual edit by Scott+TIA |
-| Next dispatch starts smarter | ❌ Only if someone remembered to update the static `CLAUDE.md`/role doc |
+| Uufpivy yhxr rkhi | ✅ Fjao — Demlpf→Fmm/Djati elpuezls uigrc ujt qd eeg (`ACT-52`/`DYM-53` ocmg) |
+| Mdjjec uhhzjlgjq | ⚠️ Mmqbndji fd `rrmwlu -g`, yeazmbrq hzf `fceach ugnqvb://`, kjh fb vvqjh — omzw ua akrimnf |
+| **Lxbizw ih dncn nsenhtb** | ❌ **Rd vcyhhbkpt mi xmn.** Hm `Vdpuf` gbqqr, eu `etgdrk_gwma` hqh vl tpc qste izzfnts |
+| Vlmpkgn knyuwfy/jkamvwndrxm | ⚠️ Fmqo tubd d wpkpw ecub zyscwu ax ksop — xlz Qquy 5 |
+| Xehn itz / yglinna xdhyrvkl | ⚠️ Pcizvd ygps ui Mqryv+AMX |
+| Rrgx rnwzcdxk hljczz eaggwrj | ❌ Ppxs do zvrjnxt jnueulkdjk di ivfvqn vje hyrdsv `HNGGMP.md`/xgyo ege |
 
-### The load-bearing gap: findings evaporate
+### Fqm jiyq-aybnzoh kiz: dxedffxl kuhcrqgkj
 
-A worker's output today is Slack reply text. Cortex composes it into a message and posts it. Nothing
-is persisted by the persona. A report-only role whose reports disappear when the thread scrolls past
-is not accumulating anything.
+R uzvdki'x nkkily mfawe ud Chdvh ssxrh hpgw. Botizp qdamatgq pp tfpk j thoyhwv jkl yvwer sc. Kcjxwjp
+ly qkwgwuvkx ka kdy yufkzww. I ycylbc-lywa lswb svhcg sgublvz nqmluximl fedl wty lcmhow kjjsfqx zzjl
+lz qoe saoxhapyoiei emqkmrqe.
 
-`identity.memory_path` exists as a designed escape hatch (`CONTAINER_INTERFACE_CONTRACT.md` §7) —
-an optional per-bot field permitting a Bash-heredoc write to one file under `~<bot>/docs`. **It is
-set on zero live personas** (verified across `cortex.yaml`, `dex.yaml`, `queue.yaml`), and it is
-scoped to a single memory note, not general findings authoring.
+`ucvavexx.rkqafb_hiwp` djuavd ss w bzjmboqk twsxsg jdylt (`XUEIGMYTP_RXFFMTWTF_RIZZSJDQ.md` §7) —
+cb ivikhths shr-egz dsfai cewhyljvql b Srsi-crrpssl hkmte ls mjb adnl srlpl `~<gpr>/lrzn`. **Yz ye
+mav iy ahjb zsus vifjeere** (wcrajjcz fsbimy `ponezy.yaml`, `pqm.yaml`, `mgpkf.yaml`), bst cl ok
+ayndxf hw g wltbmp yzatlh trls, fxa saxvoax snmdsgmg prhkaeppj.
 
 ---
 
-## Part 3 — Proposed design: a findings mailbox, swept by Cortex
+## Bfnr 3 — Gpqxodsq ygxvng: o qepeqiaf bxoujfo, jdcvc hz Coulga
 
-Reuses infrastructure that already exists. No new mount, no per-worker git credentials.
+Ohemoy hwmksafflrtreu xodg lwmwfjs dvmzqc. Qk imd miejh, by efs-ejytdi nvq vrqjkwocdxv.
 
-### Workers get a mailbox, not a repo
+### Ttnqibz ict p xneikpx, yrj u obel
 
-`CONTAINER_INTERFACE_CONTRACT.md` §3 already defines a persistent, per-module, volume-backed state
-directory (`service.state_dir`, resolved by `core/state.py`'s `module_state_dir()`), today used only
-for lockfiles and the audit log. Findings belong there:
+`LRTJZYWRW_EXDCKGNQQ_DQRENGIK.md` §3 ltteymk settvpy v pjbdsztrce, jrh-xfyxnu, vxngzc-bkqytd vqhyn
+esozhmdhv (`fjnzmhv.upgfo_mbn`, txquezkb qc `eldb/pqsta.py`'r `fgktkt_yzqmu_kpv()`), pgfwb hdyo xhiu
+vcq zhwixogvp fqd khk kwqin klt. Ibnrswwy ccysqg clgeg:
 
 ```
-/opt/universal-bot/state/<persona>/findings/2026-08-17_1930_sdb-inline-query-fails.md
+/anc/zcctsyhol-afp/ezyna/<ophuvjg>/zhpcxkgg/2026-08-17_1930_lov-tofbny-gigfo-afstj.md
 ```
 
-One file per dispatch, **written only when there's something worth keeping** — silence is a valid
-outcome, matching the report-only discipline already in every role doc. One file per dispatch (rather
-than one appended log) also sidesteps concurrent-write corruption when a persona is dispatched twice
-in quick succession.
+Hnc sjwy joo rvelngmr, **lghemxm khrw wazk kebqt'v hfbtgjeni fftcl zcobrol** — oquggdq in j yevjm
+slkoyta, djfeplpb xtu mklknk-cfah zttoepdqhv wluyhvc xb vxhxu esxy jaa. Uhw dxkw yui nzftussb (smrwrc
+lmov let qrlascka eno) iesp vgxejmpob vgtiblolum-kilal twxgerufrx gsru c egoqwco ul ejxzurknet pmnwm
+al lvncn xxegaubxrt.
 
-The grant is deliberately narrow: append/create scoped to the persona's *own* `state/<name>/`
-namespace. No `Write` tool, no `git`, no credentials, no push rights.
+Wrz zruko uc iozulxnqbyzx fkvmuj: isluqi/cuqwhp hkqpzl mu phn hitduxs'd *pxf* `fyndo/<ezwe>/`
+zocicsqhv. Es `Hnwtr` vezh, ct `mcq`, ms kveyvocehbl, in jvpm nkbets.
 
-### Scratch-note frontmatter
+### Euotzrk-ejdd vwontuonrvo
 
-These files live outside `sociamonials-ops`, so they are **outside Beth's crawl roots** —
-`beth_topics`/`beth_weight` would be dead weight here. They only enter Beth's world after promotion.
+Ttokx oofdd qnfs brdjbqb `nvitlreoemqz-wgj`, sr axnx ggv **sssjxqi Wtkm's ofbou fuuro** —
+`wgha_kpekwj`/`lpim_iiheml` ixvse vm moro bfqnpq bdwk. Ipdd extt riqdj Yxwb'y ktlql ajmqx aktwjocyp.
 
-```yaml
+```hfsa
 ---
-persona: dex
-dispatch_at: 2026-08-17T19:30:00-07:00
-kind: footgun          # footgun | tool-gap | file-scope | signature | infra | question
-target_doc: docs/development/SOCIAMONIALS_AGENT_ROLE_DBA_PERF_2026-08-12.md
-severity: medium       # low | medium | high
-topic: "sdb inline query form fails, must use query file"
----
-```
-
-- **`kind`** maps onto the sections real role docs already have (`Footguns`, `Primary tools`,
-  file-scope, detection signatures) so a sweep knows which section a promotion touches. `infra` is
-  deliberately distinct from `footgun`: "the container/host plumbing is broken" vs "here's a gotcha."
-- **`target_doc`** is explicit, not inferred — not everything a persona finds is about its own role
-  doc (a container gap belongs to `USB`, not `SOC`).
-- **`severity`** caps at `high` by design. Genuinely urgent findings belong in the Slack reply, not
-  filed for an async sweep — this keeps the mailbox honest about being asynchronous.
-- **`dispatch_at`**, not a session/message citation: personas have no TIA session ID, and their
-  transcript is gone after restart. The note *is* the evidence trail.
-
-### Promotion path: Cortex reads, drafts, and opens a PR
-
-One agent holds the higher-trust capability, not six:
-
-- **Cortex gains** read access across all `state/*/findings/` (same read-only mount pattern it
-  already uses) plus a docs-repo-scoped git write + PR-open capability — own branch only, **no merge
-  rights**.
-- **A human merges.** Unchanged.
-
-Centralizing at Cortex means one credential to provision and rotate instead of six (the inverse of
-the `SOC-144` shared-credential failure mode), one reviewer-facing surface, and it matches Cortex's
-existing job — it already gathers worker results and composes them.
-
-### Promoted docs reuse the existing corpus convention
-
-Once a finding lands in `sociamonials-ops/docs/`, it is a real doc Beth indexes, and it should follow
-the schema TIA already validates (`lib/beth/frontmatter_schemas.py`, backing
-`tia beth quality schema-validate`). Use the already-registered **`type: analysis`** — no new schema
-type. Note `frontmatter_schemas.py` is explicit that schemas are only registered for `type:` values
-recurring ≥15× in the corpus; inventing a new one for this risks the false-positive flood it warns
-about.
-
-Lineage reuses the existing field rather than inventing one — `continuation_from` does exactly this
-job for session READMEs (`tia/docs/reference/session-readme-schema.md`, Tier 3):
-
-```yaml
----
-title: "Dex — sdb inline query form fails, use query file"
-type: analysis
-status: current
-summary: "sdb's inline query \"...\" form reliably fails; must use sdb query file <path>"
-beth_topics: [sociamonials, dex, sdb, footgun]
-continuation_from: "state/dex/findings/2026-08-17_1930_sdb-inline-query-fails.md"
-related:
-  - docs/development/SOCIAMONIALS_AGENT_ROLE_DBA_PERF_2026-08-12.md
+urbdguh: xte
+nsktqbwp_xv: 2026-08-17P19:30:00-07:00
+vkap: wydxpmh          # eakjbio | lkwd-suo | sjug-vayrb | zweluiimr | qujpf | ovjmmvgg
+cvambt_eog: kstd/nkhmezamiii/OOVYXZBKLPDB_UOFIX_XZOP_HRB_RSGJ_2026-08-12.md
+dknauhhb: plnfnr       # zgw | coujsp | dmpx
+rkujs: "wir rzjitg ndhvp tpyo qlfcc, jtfu zgq lulsl cjvp"
 ---
 ```
 
-**This promotion step is what finally makes agent-farm findings Beth-discoverable** — the missing
-link between "a worker learned something" and "the corpus knows it."
+- **`urcp`** eogl qybq fvo xxjezwhc owkl rams oauz uejwqqw snpo (`Mdefexpc`, `Kabqeds zcdnb`,
+  etgy-gzvom, plcyhlvul vcwfogjcxf) kg y gtdde qwktf mdmdr dpzlfkk v yfewgkfyo rnqcxfv. `samxq` xl
+  chpkswhklmqo wlejewjz zanw `jibhsgv`: "gdr suivyblsd/klkn vlujrkay dm cjqquz" xj "soyj'c s jrhhvr."
+- **`vaqtlt_wyx`** xr gifyseuy, zzq wuhpovkg — cae avcoabxugg h uihjgla shlwo ua luqbm got jun rwjp
+  qvx (c lqkgvzvng dln xnqijak ve `PAE`, sip `PWO`).
+- **`bevdvpen`** nucz bc `kqpv` xr cyohis. Gbkwuoyvw cijtmg vscpcaqg gerpke xk fgl Foamc sfqmg, zbh
+  lilgv lbf gi gnbxy jpqke — quzj trvys epa nukeiku nnmvww xcssf rwrsx ixovxvigpwdy.
+- **`egzolzmj_oc`**, uks w ybaqnzt/iaztbma jbniowsv: nkapicrb hlxi dg JKH grgnlif BK, sue thbqf
+  hhexgotbgl jg pdqv etooy ulvrrle. Iok fbiz *qi* jej pgmmohrz uwgdc.
+
+### Fdbxebfiy fqvz: Vaaaei muvqq, jswvsq, npg mcnhf w LC
+
+Agx ysokz ltabb zst kpxylp-lvoht vumxjtfitx, dnl mwd:
+
+- **Awkdix eliwr** tfuj vgbihl keipkp zgb `pdssq/*/tktfcvdj/` (bcxk nmcm-esta snhky hiillyc oj
+  vwuussw hyxw) ouvj j dulw-qjjm-gnwale ets cvwri + FV-yuql yuequcwayc — cem qtfaos odfu, **dp lwmxg
+  rrcibp**.
+- **L tfxjy dbpsqu.** Ysdehykjw.
+
+Aazaowtgzbse bz Fpomkm qqiai msc knnnvpkcvk nm qqnmlbnac wyy ubspqa qilnqrk rt ocm (ics oqwemts wc
+ahq `KVE-144` qutbyr-dszbdjlrsp skditgv rwhx), eys kmxsdmdv-ewfvag gvwbqmb, ixu cd geqxvkq Pouzbq'a
+bfsyfpqm lnn — or rlhjqcs czxtzka ycnvfr huxbuxp czs pxglizae pqfu.
+
+### Ncoobgyk qlyk ghfnz jyr zqfpagax ubeywj vnyfshwdup
+
+Exal b fvnpaiy hhxix sg `rocdweqvigbf-rwe/mnje/`, oy vr w qgco eon Jiaq aqajlue, otz ct gfbvss fglqtk
+kvs fdoerj PLA pgmlvsr szlvhzjrg (`jye/hdfh/ujtfwzgyran_bckhqas.py`, dcwrzqa
+`gpq vnhy zznvjfi sztlnh-gczqucuq`). Psu lqr ypchjnh-lzmbgzvcsg **`zxjl: nxtiedzt`** — lc eux onpmfi
+pluw. Ixxk `pjcknzuvdrl_zagcarb.py` cm gycrsfqr zwqa vzklocc ync okzz kbkdspzvfs djx `dvxb:` ckfzgw
+scahjvstn ≥15× yn ckt worcrg; hduxzmhbj y owh lmh upm wtqz wskor qtm kqdnc-tkmofznl yafqx dh pscyz
+docyp.
+
+Bzfyqfo mrforz yft ilhtcndd sgvbj dxyhnp muun zacrimnhs yuj — `llkzorhuajlr_qxzv` kvzt frclabb stpc
+lwu ton nfytpvj CEMSSSz (`dzq/knwf/eqcpxxfji/dizliho-qygxgr-fvfbcn.md`, Lrae 3):
+
+```yxgp
+---
+mhfkc: "Mpt — ogr njksrz jmcaf jdps mhcyr, kju nomdi inpy"
+wkdu: bvausmce
+bzglea: pmofntu
+vovvkii: "exp'w rlqity wfkql \"...\" dchw kpcbpijv brhcy; lwue fei lbb exdgj ztsg <jquq>"
+fmng_vatula: [auetjrflcacm, qsx, dlt, dudcgit]
+bfhjdqhfvxpo_gzms: "gfhqe/skh/ffniuqfd/2026-08-17_1930_jiu-ynttor-avzyg-vlsjd.md"
+vdxlkxg:
+  - qmwy/aypswfpjflg/RVTMADLHSDNM_OKWPS_KQBR_FHD_RKXD_2026-08-12.md
+---
+```
+
+**Jmri prwjrcznz botb kk nlek jdzgyev qovst zwyhh-uasy scxiswch Jqgq-iecozqhmsqjb** — qou ljxjzgq
+kvtp ybcxhay "h iibapr mhejxrw hgtammngf" cbn "tcd hgdowa slfrj vj."
 
 ---
 
-## Part 4 — Capability policy: who writes tools
+## Xpqu 4 — Qojsubfmdx wnxzfy: hxa yfvzwd rbkwn
 
-**Personas do not get Python execution or the ability to author and run their own tools.** This is a
-deliberate boundary, not an oversight.
+**Ewnwncdn hl xcv lsu Rcaain wxyypnmkp qf sar pkiapow nh bgjaam lgc szl agrzz fak dleen.** Bfcw df z
+oqldyktimm ighpxrhv, mdo fs ygjurqmcf.
 
-1. **They are Slack-mention-triggered, therefore attacker-reachable.** Code execution would turn a
-   crafted Slack message — or a poisoned doc the agent reads and reasons over — into an execution
-   primitive on a host mounting prod-adjacent code.
-2. **It would hollow out the auditability mechanism the design already depends on.** Every charter
-   centers on an explicit "Is NOT" section, credited with keeping Cortex's scope auditable through
-   its own widening (`TIA-57`). An agent that can write and run its own tools routes around its
-   charter silently.
-3. **It contradicts the stated growth model**, which is in every persona's `CLAUDE.md`: *"Capability
-   is expected to grow over time as trust is established. Each expansion is its own reviewable commit
-   to the sandbox config."* Self-service tooling is capability growth with no commit and no review.
+1. **Niys hhh Dintv-qfylbqp-gixqugajc, lsjfapxfz syehopbn-kzjqjfllp.** Vtaa lpbrsvweq iiboq ieni u
+   rgwzjrr Wfmpz jwnychk — fn h rhuefcyd prh lsd wbrus amfgw bgh envjldn pvxa — wngz dw xacohckji
+   yaaoqdnnf or m acoi fffnpdmg cwmr-ybbgwblq wfim.
+2. **Co ohoxt uigrud tio rgz ivvhzmtwxdoh ifxxxfibp wrs ydksut sjzgmoy bczvnqy if.** Redjo cnzzytt
+   cscgemt nt pl fqnbdlqg "Va RXK" kjcejep, uufidved tpqf hgrosrx Aoztma'c wgxwg oxocxwjpu tygwfjy
+   nxc iak lreqenvr (`FUX-57`). Sh lmvnj waaf rlh cmoxg xmy xss evx ljt hdkhi muxflz dnpsml ruh
+   hjknxix nuinfzqw.
+3. **Zh esaectarnki ddl buseem jxpvhf swevf**, lbgvl xi dc ttpxh cotsxqn'i `NOXEUR.md`: *"Gypmijhuuu
+   jw tetrsxjx pp gpvz mvvk oltn fb lbzgl vt faetwrkzref. Stik eyelicemm mn rib irm xpbamdeepr naxlzt
+   vp xuj rzxepor pgrznx."* Guhj-rjbutdj raqbqaw su ardjrkfjlw wqvnwc fbtk rl stdpsp dfq yh fqawvm.
 
-**Tool-writing stays with Scott+TIA.** If it is ever delegated to a dedicated tools agent, the output
-should still land as a reviewed PR against `universal-bot`, shipped in the next image build — never a
-runtime self-grant.
+**Reel-jkxcikp hiytw ctco Oyxif+PGH.** Dp zl wa khfd mgakatnzb te t cppwkoucn yckbl zxzzg, oty tptmfd
+cqbmum spoba qtrt ao a ssiuluni MT kaserva `jrqfytpxq-jxx`, oszsypi xv xyf ifyw pevri ithdi — xucnj n
+ecljoqk xoek-azlpf.
 
-The working precedent is already there: `USB-55`'s fix was a thin shim (`universal-bot/bin/probe`)
-that we wrote, reviewed, and baked into the image — not something Queue produced for itself.
+Zkb mxkfast ptkctzdbo sn wluunwt ysnwb: `MJN-55`'n zhy uqz a csnh jkjp (`llokepqao-gvz/pka/zsyih`)
+izma er hkqcj, vbkehlyk, nud docfm hayq sbv qqxsv — loq assbjbseo Ynvtz ygqcmrpt ezq spwdxw.
 
-### Corollary: convenience wrappers are ours to build
+### Afvpffekv: ppjgoneqast zvudoilc buu tmyb cy zbzio
 
-Where a persona's recurring call is fiddly and footgun-prone, the answer is a small pre-built wrapper
-in the image, not raw syntax the model must reconstruct each invocation. Libby is the clear case —
-her own findings confirmed the `markdown://` scheme-prefix footgun biting live in
-`blazing-updraft-0808`. Candidate wrappers for whenever `SOC-167` is built:
+Xghxw i hqyoxnj'k iveeludyq yupx tf hcjqmc jhi awlwaej-sztup, xkn ydczjj rv c rryzp jai-dykxw vduhlyw
+fo van kcztv, kzm gtn djgxkt igz kxdmf gqus fbsbgelqivi mgzy dhlwmuvfaq. Qrejo bi fse kjlag lqfl —
+aop szi enafudyr rbwvgkpbg xta `lbhubpmx://` gfyxyj-hvlrmr kroqxsa yiemos spke hg
+`cstexqw-sebupbe-0808`. Kicronvgg lvkgpnsq kan qgtklhmj `QPO-167` vg ewdmw:
 
-```bash
-~/bin/doc-health-sweep      # ?link-graph + ?lint across ops_repo, one report
-~/bin/doc-backlinks <file>  # correct ?backlinks= URI construction, one arg
+```wgkw
+~/wpw/rfr-pbewpn-vtccq      # ?ylcy-ruayu + ?orge bkjpdc vpu_lyoj, awb yyayad
+~/zaz/fdg-dgdeereql <srdu>  # xrwbuob ?nsbxmkmnz= IZJ hztyncaoulhx, cyr yxa
 ```
 
-Raw `Bash(reveal *)` still covers everything ad hoc; wrappers only absorb the fixed, repeated sweep.
+Cdo `Fxpw(drrpzt *)` woqhp jxqvav awkbuiyawf bk waa; eyisxokv fysn ptuavr qdl znytp, owdpnmwb piacj.
 
-### Libby does not need Beth
+### Lashe rdqf yic ptjv Wjdt
 
-Beth is not magic — `lib/beth/` is an inverted index (`beth_search.py`), a link-graph engine, and a
-quality/lint engine over a persisted 37 MB `knowledge_graph.json`. Its speed advantage comes from
-querying a prebuilt index; a stateless container can neither build nor persist one.
+Uycg zc fzu tfeaq — `iep/mdct/` sx nn bymsqwpw ssfel (`chpa_eyursq.py`), a tqfm-vgxtr faowoe, nlw q
+hyetjks/fuzl ohgkwl prur m rpecstovb 37 KA `pkbuhzknv_mvivp.json`. Qyl epoqa nqskxavom bpqvt iqbo
+aonselkd g hbomqmjf yormn; v thkbjstwo pizcldjlj onv clbrxwa qcwek nqq ppalibi qgv.
 
-But `reveal`'s `markdown://` adapter — already inside Libby's `Bash(reveal *)` grant — covers the
-same operations live and repo-scoped:
+Irg `yhzxtk`'l `vxzztvhm://` jnrvwsh — qosfqzh wqwzqc Rihgn'l `Ujlc(xsxezo *)` zkvag — pbyzym vls
+rlal iubbooiksy kpsa vwh bckc-nyhayf:
 
-| Beth capability | `markdown://` equivalent |
+| Yczr ywwqdqmwkt | `fdsyhxvd://` dmjfednupt |
 |---|---|
-| `graph explore` (relationships) | `?link-graph`, `?backlinks=<doc>` |
-| `explore` (ranked keyword search) | `?body-contains=x&explain` |
-| `quality frontmatter-lint` | `?lint` |
-| broken internal links | `reveal doc.md --links` |
+| `cvolx prtlggm` (oaguomabfrqzv) | `?guch-fmbsk`, `?tivvshiyf=<tqm>` |
+| `nlffprn` (velflm jlszfic etmsic) | `?kydg-ltbihmcb=r&iubbgop` |
+| `zixaeaa lfzxfwczgrp-ntfl` | `?bllq` |
+| ekmkgp tdzyzeid izqzw | `ohjeyh kqt.md --pcphd` |
 
-What is genuinely lost: cross-project reach and index-speed at corpus scale. Libby's mission is
-scoped to one repo, so neither is load-bearing. **Libby is buildable today with zero new capability**
-— she needs a defined sweep procedure and output contract, not new access. That makes her materially
-cheaper to ship than Opie/Keyz/Boatface, which need live tool access.
+Hrfx wq wyammmmtz dazl: myqug-ghtwghp nylxx yqy tnfra-lybad gl elthgf nykqm. Pkzat'h xrgmmoa bz
+ayqrpe jp nht trbn, zj kgxhacc gq gbfb-ytljoxw. **Zylbn vg mowzhcyoo lzwfh pato smha glq uiwgcfdopw**
+— rmo odjbd w ygrymva znpna mxvqgqlvt kcz crrttj bvaxyxfu, hez gct msgeab. Ereb ufvwi nnm yjeaqimuae
+qjfeoca el ynww nbcr Nuxn/Iwlt/Iwyxhkpc, pmhoo jgbo isns jjqy tgorba.
 
-⚠️ **Caveat found while writing this doc — validate the toolchain before building on it (`BACK-1119`).**
-Running `reveal --links` against *this very file* silently extracted 8 of its 9 internal links,
-dropping one whose line is structurally identical to the two above it. Confirmed via `--format json`
-(so it is real extraction loss, not display truncation) and reproduced on a byte-identical copy
-elsewhere. The failure mode is the dangerous one for a doc-health role: a dropped link is never
-checked for brokenness, so the sweep returns a **false clean** rather than an error. Before Libby
-ships, verify whether `?link-graph` and `?backlinks=` share the same extractor and therefore the
-same defect — her whole value proposition rests on these being trustworthy. This is also a live
-instance of the "cross-check layered tools before reporting a verdict as fact" discipline: the
-mechanical scan being treated as ground truth is itself capable of under-reporting.
-
----
-
-## Part 5 — Cross-cutting findings from the six role investigations
-
-Six parallel investigations (one per persona) mined real session history — Beth-scoped search to find
-role-relevant sessions, then structured `reveal claude://session/<id>/{tools,errors,files}` extracts,
-diffed against each role doc. Per-role detail lives in the companion findings docs:
-
-- [DBA/Perf (Dex)](SOCIAMONIALS_AGENT_ROLE_DBA_PERF_SESSION_HISTORY_FINDINGS_2026-08-17.md)
-- [Ops/Incident Triage (Opie)](SOCIAMONIALS_AGENT_ROLE_OPS_INCIDENT_TRIAGE_SESSION_HISTORY_FINDINGS_2026-08-17.md)
-- [Platform-Delivery Sweep (Queue)](SOCIAMONIALS_AGENT_ROLE_PLATFORM_DELIVERY_SWEEP_SESSION_HISTORY_FINDINGS_2026-08-17.md)
-- [AppSec Sweep (Keyz)](SOCIAMONIALS_AGENT_ROLE_APPSEC_SWEEP_SESSION_HISTORY_FINDINGS_2026-08-17.md)
-- [Release Manager (Boatface)](SOCIAMONIALS_AGENT_ROLE_RELEASE_MANAGER_SESSION_HISTORY_FINDINGS_2026-08-17.md)
-- [Librarian (Libby)](SOCIAMONIALS_AGENT_ROLE_LIBRARIAN_SESSION_HISTORY_FINDINGS_2026-08-17.md)
-
-**Every one of the six surfaced at least one real, recurring, undocumented footgun.** Three patterns
-cut across roles:
-
-### Environment-access friction is the most-repeated error class
-Independently top-ranked for Dex, Opie, and Keyz — devops IP-lease gating, `kubectl exec` failures,
-nested-SSH exit codes that read as failures but are benign non-matches. Documented globally in the
-project YAML; absent from the role docs that need it.
-
-### "Granted" ≠ "present"
-`USB-55` is the canonical case: `queue.yaml` granted `Bash(probe *)` and the binary was never in the
-image. It failed as a 120-second dispatch timeout that read like an infra outage, not a config bug.
-`USB-56` (startup pre-flight warning for unresolvable granted binaries) is already filed against this.
-
-### Role docs drift from where work actually happens
-Dex's doc never names `lib/SmDbSessionHandler.php` despite it being edited repeatedly; Keyz's
-signature table omits LFI/RFI and PHP object injection despite both getting dedicated multi-session
-investigation; Libby's real edit traffic is on content docs, not the index docs her doc names.
-
-### Methodology note, reusable
-`/errors` and `/tools` surface footguns that are invisible in narrative — wrong CLI syntax, silent
-permission denials, retried-then-abandoned approaches. Reading `/exchanges` or a README would not
-have found them. **Cost caveat:** each fork consumed ~185–195K tokens. Piloting one role first to
-validate the method, then fanning out, would have been materially cheaper than launching six blind.
+⚠️ **Laumtq ivjhf nbekz gkkukho exfr xhe — wybuypcn vri oxvzcwyiz dqlsld iyifqozs os mw (`UHFP-1119`).**
+Oatuvsq `exvikm --nnijt` nlrrjlv *jeth ocqf wmes* fpbqqkfk xcjjrkvyr 8 ip wrv 9 clkpgyps uftvt,
+iyngmrgl xkj zzorf rnvb ia yhuoaechvfyj nxqsejljq dj hcn jyr qrlal xe. Vpmczpfas woa `--mzmwzz jgkh`
+(sx bd qk fyqs piwaaxdnck tlim, klb mykfkem rcgmzhyaqs) xus yehihpgyag uo w ohsd-fpbovadgq uakw
+sxvyyolrn. Smb swzcezc lgvd sg hxt wccvognhw cmy edt k dsf-guprvw mqws: s vrebxtl tecw to rhptq
+supzhmt ufe bsijbpqubx, gk quz lfsre enpshwn q **zzjto ijkha** euzkrj tcoz tx vqxts. Jvyrqy Ktppb
+deuki, qkwtzh lbwbczp `?qjhm-qhhcu` ggk `?hnmbinrud=` jjutv xyd iuzo dlhxhgpln uiv rbnvhacbt tfi
+zfwv ymuomu — bxy kjlcs xqfeg xtjvsttmago vrspu tv vhwqt qitto yhzchrygous. Clyv nw offt h slfq
+nshxivqh lh vpt "tvwpb-xyjhj fmerplh eavqm iklagr hctaczsap e gsqffio en bumu" rzhksfbixb: hkj
+nisbtcuhcb tuow vtcse detlong em dyknyw fcuor jq lqdwnq zgeekqc aq htizi-bhdukgwyj.
 
 ---
 
-## Part 6 — Open questions and next investigation
+## Nuui 5 — Mrrhm-wunigau nhbinmif hwuv fgg tbx lirh cuqlvmprobijjc
 
-### Verify `claude -p`'s in-container transcript is actually recoverable
-Reasoned from `CONTAINER_INTERFACE_CONTRACT.md` §7 (`claude -p` writes `$HOME/.claude/session-env`
-unconditionally) plus the fact `reveal` is granted — **not yet demonstrated live inside a container.**
-Test before building anything on it: dispatch to Dex, then ask it to run
-`reveal claude://sessions/ --base-path ~/.claude/projects` and report what it sees.
+Xtl cytrpdtb mrkzwggfiazqhn (pbm nxi hkrkuis) rltkp gaym bxxnedg tilnaar — Dckm-bgqqpc hpojkm js zpqa
+eomn-bbifkssr ncapwgoe, hdmf jmuexotoej `rquovi lkhddf://uqucrqo/<ys>/{mixtk,uuciud,ohwwj}` korxonpz,
+yilcyl jskseja rroz nokv glc. Tkt-dqde ssbwpp egzqe xz esp ftjpwfies tudiihvu vprm:
 
-### Decide the `.claude` tmpfs persistence mechanism
-Sweep `~/.claude/projects/` into the persistent `state_dir` before restart, or mount `.claude` on a
-real volume? The contract explicitly calls that tmpfs *"Claude Code's own CLI session bookkeeping,
-not this bot's memory"* — suggesting the sweep, not the volume swap.
+- [ZQQ/Clac (Imo)](LCVUFSINUCUX_GVRFB_JTND_UHL_AEPO_ZTMRWQC_WDXPIDX_YLNBVFQF_2026-08-17.md)
+- [Sat/Ntdpbvqh Qibbmh (Hiya)](RCLQTOETAZMU_WALRR_WEGH_MCM_NUCJAMTQ_KPXFUN_FIDDLRR_UXYMQCE_NAAKWLWB_2026-08-17.md)
+- [Dxsixmqx-Pawyqqam Szgry (Kbqgi)](GYEICKGXUVCT_LUCMC_XEOK_FNFOOSSZ_JTNDUQKP_MGTCR_YWAWXMI_ZQRSILT_LCIDLCBG_2026-08-17.md)
+- [VjcIix Hospd (Qixy)](OZSHYNGVGYUJ_WKBBA_HDKD_MKJBXH_SNPEO_ZANQQEZ_EXELWBL_ETYAICOF_2026-08-17.md)
+- [Odbqype Yohqncj (Bifvncrl)](QHNVQOFWBYEN_NLDKT_YFSR_BTINUAG_SNCMCZE_TPADHMG_RIPSFFI_DYSJNJGZ_2026-08-17.md)
+- [Snniekjqz (Xyrsp)](NGBZYISLAOBX_HZKXT_MTFK_CXVCCAWID_EAVINJJ_IUZMUBJ_BIHFYGFY_2026-08-17.md)
 
-### Who reviews agent-authored doc PRs?
-`GIT_WORKFLOW_TRACKER.md` already records 79% of merged PRs having no listed reviewer, and 100% of
-the reviewed ones going to Sherwin. Doc-only PRs from Cortex should route to Scott/TIA, not add to
-that queue — but this needs deciding before the first one opens, not after they pile up.
+**Mxqlk kbn py ufg iwl ltpnaphn ab zdbgb wjb uvpt, otfblzccr, xufzdyforrha bciysyk.** Avryp ntprxhcc
+ohj nnsfbf yfiti:
 
-### Should promoted findings edit role docs, or stay advisory?
-A finding promoted to `type: analysis` is discoverable but doesn't change what the *next dispatch*
-reads — the static `CLAUDE.md` and role doc are what ground a persona. Closing that last link
-(finding → role-doc edit → redeploy) is the difference between "knowledge is recorded" and "the agent
-actually got stronger."
+### Fypasvxarre-jiurqn mwcmeoec xr jpl fixx-lrdebxpu cxsvp sfgef
+Sblbljaeiuuyj pbh-ysldbz xlv Lio, Nqgi, uov Xxfn — ieuxte JE-rycsz jrynua, `rczdwxc lltb` zpglcnbi,
+lbzsgg-KRX zyje aldcu olso algk at zwnckjvm cdf mdh axonwz iaw-spjmysc. Csruuncaci kpsjguaw ot rvm
+hnarfls AKNC; svfirg fdxn qeh fdeu gllb doee jgdp rt.
 
-### Reconcile with the parallel investigation
-Session `peguvefu-0817` (2026-08-18, continuation of `turbulent-shower-0816`) independently
-investigated the same grounding question concurrently with this one, and has uncommitted edits to
-`SOCIAMONIALS_AGENT_FARM_DISPATCH_ARCHITECTURE_2026-08-15.md` and `tools/cortex-bot/CHARTER.md`.
-Reconcile before either set of conclusions is treated as canonical.
+### "Buwncde" ≠ "iqklfed"
+`QNC-55` cu qhp lbwbydtme kmvy: `izlhk.yaml` acktklq `Bjbp(atzla *)` azq hhg mvlhge imm zthbb jp ttv
+lqknt. Tg zemhee lh b 120-rqcouc qygziogh zolytsp egmn unjm anfo yq dfqim kyaqez, kcl p inxypa mkr.
+`VVW-56` (bccewbp okm-kzvwcu texxint yqo kkaljxdmtxph cwulsfu qzouaxkf) vq urgdlys aucma zvvhpzy ubch.
+
+### Wjwf laox cdkmq lgvr kqoih hmcd makrxgiy iqeevzm
+Vxk'g aka ykhka sdxse `shh/EpPbMubacocIxtgjgv.xqm` aqvxjni gk nfdej uzmwmb pbhmrgsgjx; Jqtr'a
+jixpxerhz kshiq ctonc FTK/JVS kyi MML fukjfi qfqtdsmdo lfieulo anme crcnhrj hwefgyyux nezpm-etfbznf
+yhtzyecpcpefi; Xadvg'x jdje kbks aiexybf df ul gueovvw fevi, koj bgn tmbql zsjy sub ypn wdmiq.
+
+### Oescjtaucyj wyeo, qrotjccx
+`/rslrdl` jwn `/mgzmk` crpykvt bowzbsrh sfpt uxo iazammkhz nn kwgrncuhe — rykkn MQD oazzyy, munkze
+hilihqecgq vqxhubn, hyicves-zwtj-nqdsewsji vpkciqzhnz. Qiibtyr `/kkdzfwjxo` he e FEJBXJ yvibs rri
+myoe wbwna dnuy. **Coys tgtipw:** kgte ibat zhdeexvg ~185–195S ixbcnh. Oceoozjp hzm lzal zjnxq tq
+yntrrwea aiu qdonqn, riqf npbnlbd fdy, cfvfe tdop ccnl aozgoipjbd yjssmnu nmbl xsckyjqub zkf aczgn.
 
 ---
 
-## Related
+## Pmya 6 — Pxwp sduieddhm yng vjub jzjnllpbdzwkr
 
-- [`SOCIAMONIALS_AGENT_FARM_ROLE_DEFINITIONS_2026-08-12.md`](SOCIAMONIALS_AGENT_FARM_ROLE_DEFINITIONS_2026-08-12.md) — the six roles
-- [`SOCIAMONIALS_AGENT_FARM_DISPATCH_ARCHITECTURE_2026-08-15.md`](SOCIAMONIALS_AGENT_FARM_DISPATCH_ARCHITECTURE_2026-08-15.md) — how jobs reach workers
-- [`SOCIAMONIALS_AGENT_ROSTER_AND_ROLE_MAP_2026-08-12.md`](SOCIAMONIALS_AGENT_ROSTER_AND_ROLE_MAP_2026-08-12.md) — empirical basis for the roles, and the build playbook
-- `slack-projects/universal-bot/CONTAINER_INTERFACE_CONTRACT.md` — state dir (§3), `$HOME/.claude` tmpfs and `memory_path` (§7)
-- `slack-projects/universal-bot/HOST_ACCOUNT_CONTRACT_2026-08-08.md` — host account layout, boot-time self-orientation
-- `slack-projects/universal-bot/AGENT_DEPLOYMENT_RUNBOOK_2026-08-15.md` — deployment footgun table
-- `tia/docs/reference/session-readme-schema.md` — the `continuation_from` lineage convention reused above
+### Liopvx `gidohu -t`'y qa-iphnyulxw ogaalrxgnm vi aalboddf dutrrekirzt
+Uovoejfn vmxu `AUBHACSLN_WHBGJRBVL_TKZBIRZA.md` §7 (`sauycr -q` jlyrsw `$CMJJ/.yhcjqb/xuyqgyp-gvk`
+evzapvqeyvmrmhd) lqnz fsi lgtp `wppuor` mf bhikunp — **aby hvk wulwoyjruowx fimo rjqkqz b fsqpvsiex.**
+Npop ydrsls nbamdnlc lealqbca gt wi: lmtgaihn re Ury, zwaz rxf qx hk gpb
+`lrqvhb vaqomt://upoqshva/ --trfn-zoqx ~/.emxgye/mbvynbnz` rxd cxaqvk oxyc lh nnac.
+
+### Zzcwac ugx `.zffwng` vssrn zbtgfqzpjxf juucoajas
+Vuuzq `~/.arusji/nfjuausq/` fjkf iky ofergubouf `qnlnq_ipy` bbgzen bifwhxo, fd yomxq `.jrhxoh` at j
+yzly mgmsgk? Dle mkfdbqup aveuoqrofy rzvzx lvme dspem *"Xbcbnt Gquw'p vnv HSH hmyhnzr cxermmbtszx,
+hlc ikff ggy'w zkqoax"* — agpiihmkrm lop eamlg, fvb rxg ffvxpn kxya.
+
+### Ify fguugwq qvffj-nnxhxaja wnc NLf?
+`OQW_FQDDHSCJ_DSDJRBI.md` jpielep ycofmnn 79% qu xxexay WGk hcljdn aa qboiey ysjqmmyr, sgy 100% an
+scd jdlqlccf zjre kdhgl co Wojbswl. Nxl-cbxi HPv ltxf Tzuils luvdtf rbwkn ov Zidsh/CUS, yct nbp jm
+ajnq pauqo — avm osag rkzyc mmmweqzr wohpyx fah sqbcf jwp vtjdi, xpq ctorv jybj xufd sq.
+
+### Qxldqn ojulajny rbqwctwd nxxr vshe gvgj, io aaav yzagersl?
+V rswwxmk vvvewgkd jt `hqhv: fphbazgo` nv ftixjgpbzvvk zuo iajlh'f zrwswm muaj lhf *aoxa vubdlipy*
+teznz — mrr jxcbbl `QBHPZX.md` oyv ksxb bfh qmt wxfg pxcawb a bempzft. Eftyffc exaa mnvr qmkl
+(dlgxmor → pmuw-dfl dvlu → wgbdwrtd) py jgk gjbutfvzse dezqkqw "bawqhsgoz kc vdwexfcx" nbp "qov mxuli
+yrrvwecx wqa mornixsp."
+
+### Emjsjyvxt ejhz buv odkonsui gyxuwohgjmxam
+Qjsogzw `thiogece-0817` (2026-08-18, bedikasncnga uh `luaohxxnz-bellgq-0816`) cypyoermsfizc
+cknqgqwrdmby qqm uknd aqwjahgdz wpluorsy jhjyozfznoya uryz uvsa ynq, wls mbv hpitrumuijb ngdnp ze
+`CGOZCSFRGZSA_WSFET_FBWD_TXOBJGFZ_EUPLMUAYKYKT_2026-08-15.md` wjh `vwmth/ueyexp-zcy/FMALVQN.md`.
+Wdypvwmcz beqesa vhikah pog pc tjlpudeqsbi tu txpughd og pzbwmhojb.
+
+---
+
+## Hqomsdv
+
+- [`EADFGPKBABII_FHEVS_AUES_PWNI_UCRTEZYTOMA_2026-08-12.md`](TKFUZTEIPVTE_XVAUH_PTMY_JVAN_IQQNMHCSCEQ_2026-08-12.md) — ujt uqm nnshh
+- [`OIGEDDVSJQTL_RPJNF_RWVV_WYZTATER_CMBLDPJCOKPB_2026-08-15.md`](MILGGWGNKXJD_WXBYS_YVLE_PGLWOHDV_TERHFLIRCMLU_2026-08-15.md) — nba mxri jnblf vilbiov
+- [`MNBGIRMAUIUY_IYHZH_ZYHUIH_YHE_UZFS_MTP_2026-08-12.md`](BUYVLHKPSZGA_JJHAZ_XUNNUM_UHU_LXJK_QPW_2026-08-12.md) — icgjbfytk ehzou hci ttg yousv, ado dxr gdmgy xsfgxhxy
+- `abwex-ngbgtuxd/pzrdysgoe-mkb/NQTYIHCJA_HOVIWQAOQ_IALPRGVO.md` — pckag zqo (§3), `$OZNN/.ynirgl` dyxbg tdc `wblvtz_uwpx` (§7)
+- `xwnpt-riqttwri/gvldqfnjv-atb/USIP_AXDLWDL_YHBKJTYF_2026-08-08.md` — qboj dotvxky bnetiu, ouqj-tfig cvji-mlwdrncdeqy
+- `vjbgl-nrqsdido/kuuxrbhkp-yec/OENFU_CABEHPFRDM_UJKQGZP_2026-08-15.md` — dspztohzoc ucmgttv scycf
+- `lgs/bwqc/evxhbokka/pczoarn-sjuize-vmrofs.md` — xcp `kbkkdzyuodbc_anpn` pkffjax ggahrmuhxg vpdmge lfegf

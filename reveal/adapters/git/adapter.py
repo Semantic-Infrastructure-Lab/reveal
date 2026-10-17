@@ -837,7 +837,7 @@ class GitAdapter(ResourceAdapter):
                 {'uri': 'git://src/app.py?type=history&since=2026-01-01', 'description': 'File history since a date (since= alias, equivalent)'},
                 {'uri': 'git://src/app.py?type=history&since=2026-01-01&author=John', 'description': 'History since date AND by author'},
                 {'uri': 'git://src/app.py?type=history&content~=MyClass', 'description': 'Commits where the diff added or removed "MyClass" (pickaxe search)'},
-                {'uri': 'git://.?content~=SmLogs', 'description': 'Repo-wide: find any commit whose diff contains "SmLogs"'},
+                {'uri': 'git://.?content~=AuditLog', 'description': 'Repo-wide: find any commit whose diff contains "AuditLog"'},
                 {'uri': 'git://src/app.py?type=history&no_merges=1', 'description': 'File history excluding merge commits'},
                 {'uri': 'git://.@main?no_merges=1', 'description': 'Branch history without merge noise'},
                 {'uri': 'git://src/app.py?type=history&bucket=month', 'description': 'Monthly commit/author counts for a file (is activity trending up or down?)'},

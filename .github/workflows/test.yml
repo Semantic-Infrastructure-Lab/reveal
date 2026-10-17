@@ -80,6 +80,8 @@ jobs:
 
       - name: Doc hygiene ratchet (broken links, internal-docs refs)
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        env:
+          REVEAL_PRIVATE_TERMS: ${{ secrets.REVEAL_PRIVATE_TERMS }}
         run: python scripts/check_doc_hygiene.py --baseline .github/doc_hygiene_baseline.txt
 
       - name: Lint workflow files (an invalid one fails at 0s on every push, BACK-1675)

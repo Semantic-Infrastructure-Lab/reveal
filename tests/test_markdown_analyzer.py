@@ -781,8 +781,10 @@ class TestMarkdownRegexFallback(unittest.TestCase):
 class TestBack1119LinkExtractionGap(unittest.TestCase):
     """BACK-1119: tree-sitter-markdown's inline grammar silently drops a real
     link node on some real-world documents -- no minimal repro was found, so
-    this uses the actual document that reproduced it (copied verbatim as a
-    fixture). _extract_links() must cross-check against the regex extractor
+    this uses the document that reproduced it, de-identified: every letter was
+    replaced with a random letter of the same case, and every other byte
+    (punctuation, digits, whitespace, line layout) is unchanged. The drop still
+    reproduces on the de-identified text (line 376). _extract_links() must cross-check against the regex extractor
     and fill any gap, so --links never silently under-reports (a dropped
     link is never checked for brokenness -- a false clean)."""
 
@@ -825,7 +827,7 @@ class TestBack1119LinkExtractionGap(unittest.TestCase):
         filled = links[376]
         self.assertEqual(
             filled['url'],
-            'SOCIAMONIALS_AGENT_ROSTER_AND_ROLE_MAP_2026-08-12.md',
+            'BUYVLHKPSZGA_JJHAZ_XUNNUM_UHU_LXJK_QPW_2026-08-12.md',
         )
         self.assertEqual(filled['type'], 'internal')
 

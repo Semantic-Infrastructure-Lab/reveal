@@ -6,9 +6,9 @@ reveal used to answer it with a pattern matcher over the scan root's
 - It dropped files git keeps. git never ignores a *tracked* file, but a pattern
   matcher cannot know tracked status (tia's ``**/env/`` dropped committed
   ``config/env/*``), and it read ``!pattern`` negations as plain patterns
-  (sociamonials-ops ``*.sql`` + ``!docs/database/procedures/*.sql`` dropped all
+  (a private ops repo's ``*.sql`` + ``!docs/database/procedures/*.sql`` dropped all
   six committed procedures). Measured: 19,292 tracked files dropped in tia,
-  6,204 in sociamonials-ops.
+  6,204 in that ops repo.
 - It kept files git ignores: nested ``.gitignore`` files, ``.git/info/exclude``
   and the global excludes file were never read.
 

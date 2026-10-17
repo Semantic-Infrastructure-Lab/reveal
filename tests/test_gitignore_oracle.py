@@ -79,7 +79,7 @@ def test_tracked_file_under_ignored_dir_is_kept(repo):
 
 
 def test_negation_reincludes(repo):
-    """sociamonials-ops: '*.sql' + '!docs/database/procedures/*.sql'."""
+    """A real ops repo: '*.sql' + '!docs/database/procedures/*.sql'."""
     _write(repo, '.gitignore', '*.sql\n!docs/database/procedures/*.sql\n')
     _write(repo, 'docs/database/procedures/sp_a.sql')
     _write(repo, 'dump.sql')
