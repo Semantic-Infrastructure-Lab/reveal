@@ -78,7 +78,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      help_guide=_SUBCOMMANDS_GUIDE),
     'contracts':    _spec('contracts',
                      'reveal contracts [path]',
-                     'Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses'),
+                     'Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses')._replace(declared_adapter='contracts'),
     'deps':         _spec('deps',
                      'reveal deps [path]',
                      'Dependency health: external packages, circular deps, unused imports'),

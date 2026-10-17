@@ -6,10 +6,7 @@ reveal/rendering/adapters/contracts.py.
 """
 
 import argparse
-import sys
 from argparse import Namespace
-from functools import partial
-from pathlib import Path
 
 from reveal.adapters.contracts import (  # noqa: F401 - re-exported for back-compat
     ContractsAdapter,
@@ -38,56 +35,15 @@ from reveal.adapters.contracts import (  # noqa: F401 - re-exported for back-com
     _scan_contracts_rust,
     _scan_contracts_ts,
 )
-from ..global_flags import add_exclude_argument, add_gitignore_arguments
-from ..routing.subcommand import emit_subcommand_result
 
 
 def create_contracts_parser() -> argparse.ArgumentParser:
-    from reveal.cli.parser import _build_global_options_parser
-    parser = argparse.ArgumentParser(
-        prog='reveal contracts',
-        parents=[_build_global_options_parser()],
-        description='Find contracts and architectural seams: ABCs, Protocols, TypedDicts, dataclasses, BaseModels.',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=(
-            "Examples:\n"
-            "  reveal contracts ./src          # All contracts in src/\n"
-            "  reveal contracts .              # Entire project\n"
-            "  reveal contracts . --format json\n"
-            "  reveal contracts . --abstract-only  # Only ABCs and Protocols\n"
-        )
-    )
-    parser.add_argument(
-        'path',
-        nargs='?',
-        default='.',
-        help='Directory to scan (default: current directory)'
-    )
-    parser.add_argument(
-        '--abstract-only',
-        action='store_true',
-        help='Show only ABCs and Protocols (skip TypedDicts, dataclasses, path-heuristic)'
-    )
-    parser.add_argument(
-        '--no-implementations',
-        action='store_true',
-        help='Skip showing which classes implement each contract'
-    )
-    add_exclude_argument(parser)
-    add_gitignore_arguments(parser)
-    return parser
+    """Compatibility import; the adapter declaration owns the parser."""
+    from ..routing.declared import create_declared_parser
+    return create_declared_parser('contracts')
 
 
 def run_contracts(args: Namespace) -> None:
-    path = Path(args.path)  # as the user named it, like the URI form (BACK-1366)
-    if not path.exists():
-        print(f"Error: path '{args.path}' does not exist", file=sys.stderr)
-        sys.exit(1)
-
-    abstract_only = getattr(args, 'abstract_only', False)
-    show_implementations = not getattr(args, 'no_implementations', False)
-
-    query = f'abstract_only={"true" if abstract_only else "false"}&implementations={"true" if show_implementations else "false"}'
-    result = ContractsAdapter(str(path), query).get_structure()
-    emit_subcommand_result(result, args, name='contracts', source=path, render=partial(
-        ContractsRenderer.render_structure, format=args.format))
+    """Compatibility import; both spellings use the declared runner."""
+    from ..routing.declared import run_declared_command
+    run_declared_command('contracts', args)

@@ -25,8 +25,9 @@ from ..utils.path_utils import (
     detect_non_python_language,
     to_posix,
 )
-from ..utils.query import parse_query_params
-from ..utils.query_parser import ParamSpec, param_schema, whole_number
+from ..utils.query_binding import bind_declared_params, boolean_value
+from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
+                                  nonnegative_display_limit, param_schema)
 from ..utils.results import ResultBuilder
 from ..rendering.adapters.contracts import ContractsRenderer
 
@@ -853,8 +854,23 @@ def _add_implementations(
 
 # Implementers listed under each contract in the text view; JSON always carries
 # them all. 0 lists every one (BACK-1384).
+def _contracts_impls(value: Any) -> int:
+    if isinstance(value, bool) or (isinstance(value, str) and 'e' in value.lower()):
+        raise ValueError('impls requires a non-negative whole number without scientific notation')
+    return nonnegative_display_limit(value, 'impls')
+
+
+_ABSTRACT_ONLY = ParamSpec(
+    'abstract_only', 'boolean', 'Show only ABCs and Protocols (skip TypedDicts, dataclasses, path-heuristic)',
+    False, boolean_value, ('abstract_only=true',), role='analysis',
+    cli=CliBinding(('--abstract-only',), action='store_true'))
+_IMPLEMENTATIONS = ParamSpec(
+    'implementations', 'boolean', 'Show which classes implement each contract', True,
+    boolean_value, ('implementations=false',), role='analysis',
+    cli=CliBinding(('--no-implementations',), action='store_false'))
 _IMPLS = ParamSpec('impls', 'integer', 'Implementers listed per contract in the text view (0 = all; JSON always has all)',
-                   5, whole_number, ('impls=20', 'impls=0'), minimum=0, zero_policy='all')
+                   5, _contracts_impls, ('impls=20', 'impls=0'), minimum=0, zero_policy='all',
+                   role='presentation', cli=CliBinding(('--impls',), metavar='N'))
 
 
 @register_adapter('contracts')
@@ -867,11 +883,32 @@ class ContractsAdapter(ResourceAdapter):
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # --no-gitignore (BACK-1386)
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
+    RESULT_TYPE = 'contracts'
+    FINDINGS_POLICIES = ('none',)
+    DEFAULT_FAIL_ON = 'none'
+    RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
+    PARAM_SPECS = (_ABSTRACT_ONLY, _IMPLEMENTATIONS, _IMPLS)
 
-    def __init__(self, resource: str, query: Optional[str] = None):
+    def __init__(self, resource: str, query: Optional[str] = None, *,
+                 params: Optional[Dict[str, Any]] = None):
         self.path = str(Path(resource).expanduser())
-        self.query_params = parse_query_params(query or '', coerce=True)
+        if params is not None:
+            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
+                self.PARAM_SPECS, params, transport='typed')
+        else:
+            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
         self._warn_unknown_query_params(self.query_params)  # BACK-507
+
+    @staticmethod
+    def execution_facts(result):
+        """Only the contracts producers identify missing required input evidence."""
+        from ..utils.results import AnalysisCompleteness, result_execution_facts
+        incomplete = isinstance(result, dict) and bool(
+            result.get('recovered_files') or result.get('unparsed_files') or
+            any(error.get('code') == 'E_CONTRACTS_ANALYSIS'
+                for error in (result.get('meta') or {}).get('errors', [])))
+        state = AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE
+        return result_execution_facts(result, completeness=state)
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -905,11 +942,10 @@ class ContractsAdapter(ResourceAdapter):
             'adapter': 'contracts',
             'description': 'Contract and architectural-seam scanner (ABCs, Protocols, interfaces, traits, mixins)',
             'uri_syntax': 'contracts://<path>?abstract_only=true&implementations=false',
-            'query_params': {
-                'abstract_only': {'type': 'boolean', 'description': 'Show only ABCs and Protocols (skip TypedDicts, dataclasses, path-heuristic)', 'examples': ['abstract_only=true']},
-                'implementations': {'type': 'boolean', 'description': 'Show which classes implement each contract. Default: true.', 'examples': ['implementations=false']},
-                **param_schema([_IMPLS]),
-            },
+            'resource': ContractsAdapter.RESOURCE_SPEC.schema(),
+            'execution_policy': {'default_fail_on': ContractsAdapter.DEFAULT_FAIL_ON,
+                                 'fail_on': list(ContractsAdapter.FINDINGS_POLICIES)},
+            'query_params': param_schema(ContractsAdapter.PARAM_SPECS),
             'elements': {},
             'supports_batch': False,
             'supports_advanced': False,
@@ -938,9 +974,8 @@ class ContractsAdapter(ResourceAdapter):
         }
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
-        abstract_only = bool(self.query_params.get('abstract_only') or False)
-        _impl_raw = self.query_params.get('implementations')
-        show_implementations = str(_impl_raw).lower() != 'false' if _impl_raw is not None else True
+        abstract_only = _ABSTRACT_ONLY.read(self.query_params)
+        show_implementations = _IMPLEMENTATIONS.read(self.query_params)
 
         impls_cap = _IMPLS.read(self.query_params)
 
@@ -969,7 +1004,7 @@ class ContractsAdapter(ResourceAdapter):
             for file, cause in skipped]
 
         return ResultBuilder.create(
-            result_type='contracts',
+            result_type=self.RESULT_TYPE,
             source=self.path,
             contract_version=CONTRACT_VERSION,
             parse_mode='ast+tree_sitter',
