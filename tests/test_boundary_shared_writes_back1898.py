@@ -78,7 +78,7 @@ def helper(key):
                                        '--format', 'json').stdout)
     assignments = [f for f in data['findings'] if f.get('via') == 'assignment']
     assert [(f['kind'], f['line'], f['callee'], f['hop'], f['chain']) for f in assignments] == [
-        ('global', 3, 'state[key]', 0, [])]
+        ('global', 3, 'state[key]', 0, ['root'])]
     assert any(f['kind'] == 'log' and f['hop'] == 1 for f in data['findings'])
     assert any('assignments only in the entry function' in w for w in data['warnings'])
     rendered = _run_reveal_direct(str(path), 'root', '--boundary', '--transitive').stdout
