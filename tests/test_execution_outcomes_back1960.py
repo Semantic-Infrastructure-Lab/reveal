@@ -92,7 +92,7 @@ def test_explicit_legacy_scan_override_is_scoped(state, failures, expected):
     ('COMPLETE', ('OUTPUT',), False, 3),
     ('COMPLETE', ('INVALID_REQUEST',), False, 2),
 ])
-def test_delivery_closure_cannot_erase_independent_facts(state, failures, findings, expected):
+def test_completed_child_cannot_erase_independent_facts(state, failures, findings, expected):
     assert results.execution_exit_code(
         results.merge_execution_facts(facts(state, failures=failures, findings=findings), facts()),
         fail_on='findings') == expected

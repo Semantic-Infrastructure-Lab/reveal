@@ -41,6 +41,8 @@ router exits nonzero for it. An adapter returns the error; it does not exit. A c
 recorded with ``note_truncation``, and the router prints it; a renderer does not.
 """
 
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Literal, Union
 
@@ -88,6 +90,119 @@ def outcome_of(result: Any) -> Outcome:
     if truncations_of(result):
         return 'truncated'
     return 'ok'
+
+
+class AnalysisCompleteness(Enum):
+    """Required analysis evidence, supplied by an operation's analysis owner."""
+
+    COMPLETE = 'complete'
+    INCOMPLETE = 'incomplete'
+    FAILED = 'failed'
+    NOT_APPLICABLE = 'not_applicable'
+
+
+class FailureCause(Enum):
+    """Semantic causes; exception classes or when a failure occurred do not decide."""
+
+    INVALID_REQUEST = 'invalid_request'
+    ANALYSIS = 'analysis'
+    OUTPUT = 'output'
+
+
+@dataclass(frozen=True)
+class ExecutionFacts:
+    """Opt-in execution evidence, independent of presentation and legacy outcomes.
+
+    Completeness is mandatory: an absent error or an empty answer cannot establish
+    it. Findings are adverse facts selected by the domain owner, never a generic
+    nonempty-list predicate. Optional exclusions and harmless warnings need no
+    failure fact. Delivery closure alone is not a required output failure.
+    """
+
+    completeness: AnalysisCompleteness
+    findings: bool = False
+    failures: frozenset[FailureCause] = frozenset()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.completeness, AnalysisCompleteness):
+            raise TypeError('completeness must be AnalysisCompleteness')
+        if type(self.findings) is not bool:
+            raise TypeError('findings must be an owner-supplied boolean')
+        failures = frozenset(self.failures)
+        if any(not isinstance(cause, FailureCause) for cause in failures):
+            raise TypeError('failures must contain FailureCause values')
+        object.__setattr__(self, 'failures', failures)
+
+
+def failure_execution_facts(cause: FailureCause) -> ExecutionFacts:
+    """Record a returned or caught failure after its owner classifies its cause.
+
+    A ValueError may describe invalid parameters or a failed content parser; the
+    caller must select the cause. Usage rejection and output failure do not by
+    themselves assert that analysis failed. Merge independent analysis evidence.
+    """
+    completeness = (AnalysisCompleteness.FAILED if cause is FailureCause.ANALYSIS
+                    else AnalysisCompleteness.COMPLETE)
+    return ExecutionFacts(completeness, failures=frozenset({cause}))
+
+
+def result_execution_facts(result: Any, *, completeness: AnalysisCompleteness,
+                           failure_cause: FailureCause = FailureCause.ANALYSIS,
+                           findings: bool = False) -> ExecutionFacts:
+    """Combine owner completeness with a returned answer's explicit outcome.
+
+    Per-file errors, recovered parses and scan caps require the domain owner's
+    completeness evidence. Warnings and presentation cuts are not reclassified.
+    A malformed required answer is an analysis failure, not empty success.
+    """
+    facts = ExecutionFacts(completeness, findings=findings)
+    if not isinstance(result, dict):
+        return merge_execution_facts(facts, failure_execution_facts(FailureCause.ANALYSIS))
+    outcome = outcome_of(result)
+    if outcome == 'failed':
+        return merge_execution_facts(facts, failure_execution_facts(failure_cause))
+    if outcome == 'not_applicable' and completeness is AnalysisCompleteness.COMPLETE:
+        return ExecutionFacts(AnalysisCompleteness.NOT_APPLICABLE, findings=findings)
+    return facts
+
+
+def merge_execution_facts(*facts: ExecutionFacts) -> ExecutionFacts:
+    """Aggregate semantic evidence before mapping it to any shell code."""
+    if not facts:
+        raise ValueError('aggregation requires explicit execution evidence')
+    states = {item.completeness for item in facts}
+    # Full failure and partial success stay distinct even though both map to 3.
+    for state in (AnalysisCompleteness.FAILED, AnalysisCompleteness.INCOMPLETE,
+                  AnalysisCompleteness.COMPLETE, AnalysisCompleteness.NOT_APPLICABLE):
+        if state in states:
+            return ExecutionFacts(
+                state, findings=any(item.findings for item in facts),
+                failures=frozenset(cause for item in facts for cause in item.failures))
+    raise ValueError('aggregation has no recognized completeness evidence')
+
+
+def execution_exit_code(facts: ExecutionFacts, *, fail_on: Literal['none', 'findings'] = 'none',
+                        legacy_scan_override: bool = False) -> int:
+    """Map opt-in D6 evidence; existing routers and outcome_of retain their policy.
+
+    Required output failure always survives the existing check scan override.
+    Only the legacy check caller may enable that temporary override: new ``none``
+    suppresses findings alone. Closed stdout alone adds no failure; independent
+    analysis, output, usage and findings facts still determine the verdict.
+    """
+    if fail_on not in ('none', 'findings'):
+        raise ValueError('unsupported findings gate')
+    if FailureCause.OUTPUT in facts.failures:
+        return 3
+    analysis_failed = (FailureCause.ANALYSIS in facts.failures or facts.completeness in
+                       (AnalysisCompleteness.INCOMPLETE, AnalysisCompleteness.FAILED))
+    if analysis_failed and not legacy_scan_override:
+        return 3
+    if FailureCause.INVALID_REQUEST in facts.failures:
+        return 2
+    if legacy_scan_override:
+        return 0
+    return int(fail_on == 'findings' and facts.findings)
 
 
 def note_truncation(result: Any, field: str, shown: int, total: int,
