@@ -80,6 +80,33 @@ class QueryParams(Dict[str, Any]):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._reads = query_key_recorder()
+        self._normalized: Dict[str, Tuple[Any, Any]] = {}
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        self._normalized.pop(key, None)
+        super().__setitem__(key, value)
+
+    def __delitem__(self, key: str) -> None:
+        self._normalized.pop(key, None)
+        super().__delitem__(key)
+
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        for key, value in dict(*args, **kwargs).items():
+            self[key] = value
+
+    def clear(self) -> None:
+        self._normalized.clear()
+        super().clear()
+
+    def __ior__(self, other: Any):
+        self.update(other)
+        return self
+
+    def popitem(self):
+        self._mark_all()
+        key, value = super().popitem()
+        self._normalized.pop(key, None)
+        return key, value
 
     def mark(self, *keys: str) -> None:
         """Count ``keys`` as used: applied, or already named in a warning."""
@@ -109,6 +136,7 @@ class QueryParams(Dict[str, Any]):
 
     def pop(self, key: str, *default: Any) -> Any:
         self.mark(key)
+        self._normalized.pop(key, None)
         return super().pop(key, *default)
 
     def setdefault(self, key: str, default: Any = None) -> Any:
@@ -133,6 +161,11 @@ class QueryParams(Dict[str, Any]):
 
     def copy(self) -> Dict[str, Any]:
         self._mark_all()
+        if self._normalized:
+            copied = QueryParams(dict.items(self))
+            copied._reads = self._reads
+            copied._normalized = self._normalized.copy()
+            return copied
         return dict(dict.items(self))
 
 
@@ -179,6 +212,32 @@ def cli_display_limit(value: str) -> int:
 
 
 @dataclass(frozen=True)
+class CliBinding:
+    """Typed argument binding, separate from legacy fixed query fragments."""
+    flags: Tuple[str, ...]
+    dest: Optional[str] = None
+    nargs: Optional[Union[str, int]] = None
+    required: bool = False
+    action: Optional[str] = None
+    metavar: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ResourceSpec:
+    """A positional resource is not a query parameter; transports keep their defaults."""
+    name: str = 'path'
+    cli_default: Optional[str] = '.'
+    uri_default: Optional[str] = '.'
+    required: bool = False
+    uri_codec: str = 'raw'
+
+    def schema(self) -> Dict[str, Any]:
+        return {'name': self.name, 'required': self.required,
+                'cli_default': self.cli_default, 'uri_default': self.uri_default,
+                'uri_codec': self.uri_codec}
+
+
+@dataclass(frozen=True)
 class ParamSpec:
     """One declared query parameter; read explicitly where its value is applied.
 
@@ -194,10 +253,25 @@ class ParamSpec:
     minimum: Optional[int] = None
     zero_policy: Optional[str] = None
     cli_flags: Tuple[Tuple[str, str], ...] = ()
+    choices: Tuple[Any, ...] = ()
+    role: Optional[str] = None
+    cli: Optional[CliBinding] = None
+    uri_codec: str = 'raw'
+    required: bool = False
 
     def read(self, params: Dict[str, Any]) -> Any:
         raw = params.get(self.name)
+        if isinstance(params, QueryParams):
+            normalized = params._normalized.get(self.name)
+            if normalized is not None and normalized[0] is self and normalized[1] is raw:
+                return raw
+        return self.validate(raw)
+
+    def validate(self, raw: Any) -> Any:
+        """Convert/check without claiming that the analysis applied the parameter."""
         if raw is None:
+            if self.required:
+                raise ValueError(f'{self.name} is required')
             value = self.default
         else:
             try:
@@ -205,8 +279,10 @@ class ParamSpec:
             except (TypeError, ValueError):
                 what = 'a whole number' if self.type == 'integer' else f'a valid {self.type}'
                 raise ValueError(f'{self.name} must be {what}, got {raw!r}') from None
-        if self.minimum is not None and value < self.minimum:
+        if self.minimum is not None and value is not None and value < self.minimum:
             raise ValueError(f'{self.name} must be >= {self.minimum}')
+        if self.choices and value not in self.choices:
+            raise ValueError(f'{self.name} must be one of {self.choices!r}, got {value!r}')
         return value
 
     def schema(self) -> Dict[str, Any]:
@@ -216,6 +292,19 @@ class ParamSpec:
             result['minimum'] = self.minimum
         if self.zero_policy is not None:
             result['zero_policy'] = self.zero_policy
+        if self.choices:
+            result['choices'] = list(self.choices)
+        if self.role is not None:
+            result['role'] = self.role
+        if self.cli is not None:
+            result['cli'] = {'flags': list(self.cli.flags), 'dest': self.cli.dest or self.name,
+                             'nargs': self.cli.nargs, 'required': self.cli.required,
+                             'action': self.cli.action, 'metavar': self.cli.metavar}
+            result['required'] = self.required
+            result['uri_codec'] = self.uri_codec
+        elif self.uri_codec != 'raw' or self.required:
+            result['required'] = self.required
+            result['uri_codec'] = self.uri_codec
         return result
 
 
