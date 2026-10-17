@@ -94,3 +94,67 @@ class ArchitectureRenderer(BaseRenderer):
     @classmethod
     def _render_text(cls, result: Dict[str, Any]) -> str:
         return cls.render_structure(result) or ''
+
+
+def architecture_diff_text(report: Dict[str, Any]) -> str:
+    """Compact human-readable rendering of an architecture_diff report.
+
+    JSON is the primary contract (design doc: "JSON-first, no verdict") —
+    this is a convenience summary for terminal use, not a demand.
+    """
+    lines = meta_warning_lines(report)
+    if report.get('error'):
+        lines.append('Architecture comparison unavailable: required snapshot evidence is incomplete')
+        for side, components in report['analysis']['snapshots'].items():
+            lines.extend(f'  {side} {component}: {state}' for component, state in components.items()
+                         if state != 'complete')
+        return '\n'.join(lines) + '\n'
+    deltas = report['deltas']
+    lines.append(f"Architecture Diff: {report['path']}")
+    lines.append(f"  {report['base_ref']} -> {report['head_ref']}\n")
+
+    fan_in = deltas['fan_in']
+    if fan_in:
+        lines.append(f"Fan-in changes ({len(fan_in)})")
+        for e in fan_in:
+            lines.append(f"  {e['file']:<54}  {e['base']} -> {e['head']}  ({_signed(e['change'])})")
+        lines.append('')
+
+    fan_out = deltas['fan_out']
+    if fan_out:
+        lines.append(f"Fan-out changes ({len(fan_out)})")
+        for e in fan_out:
+            lines.append(f"  {e['file']:<54}  {e['base']} -> {e['head']}  ({_signed(e['change'])})")
+        lines.append('')
+
+    cg = deltas['circular_groups']
+    if cg['introduced'] or cg['resolved']:
+        lines.append("Circular groups")
+        for group in cg['introduced']:
+            lines.append(f"  + introduced: {', '.join(group)}")
+        for group in cg['resolved']:
+            lines.append(f"  - resolved:   {', '.join(group)}")
+        lines.append('')
+
+    coupling = deltas['component_coupling']
+    if coupling:
+        lines.append(f"Component coupling changes ({len(coupling)})")
+        for c in coupling:
+            lines.append(f"  {c['component']:<44}  {c['base_cohesion']} -> {c['head_cohesion']}  ({_signed(c['change'])})")
+        lines.append('')
+
+    centroid = deltas['complexity_centroid']
+    lines.append(f"Complexity centroid (top {centroid['top_n']}): {centroid['base']} -> {centroid['head']}  ({_signed(centroid['change'])})")
+
+    eps = deltas['entry_points']
+    if eps['added'] or eps['removed']:
+        lines.append('\nEntry points')
+        lines.extend(f'  + {file}' for file in eps['added'])
+        lines.extend(f'  - {file}' for file in eps['removed'])
+    return '\n'.join(lines) + '\n'
+
+
+def _signed(value: Optional[float]) -> str:
+    if value is None:
+        return 'n/a'
+    return f'+{value}' if value > 0 else str(value)

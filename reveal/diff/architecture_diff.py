@@ -630,78 +630,9 @@ def _comparison_report(path: Path, base_ref: str, head_ref: str, deltas: Optiona
 
 
 def render_diff_brief(report: Dict[str, Any]) -> None:
-    """Compact human-readable rendering of an architecture_diff report.
-
-    JSON is the primary contract (design doc: "JSON-first, no verdict") —
-    this is a convenience summary for terminal use, not a demand.
-    """
-    from ..utils.warning_render import render_meta_warnings
-    render_meta_warnings(report)
-    if report.get('error'):
-        _render_unavailable(report)
-        return
-    deltas = report['deltas']
-    print(f"Architecture Diff: {report['path']}")
-    print(f"  {report['base_ref']} -> {report['head_ref']}\n")
-
-    fan_in = deltas['fan_in']
-    if fan_in:
-        print(f"Fan-in changes ({len(fan_in)})")
-        for e in fan_in:
-            print(f"  {e['file']:<54}  {e['base']} -> {e['head']}  ({_signed(e['change'])})")
-        print()
-
-    fan_out = deltas['fan_out']
-    if fan_out:
-        print(f"Fan-out changes ({len(fan_out)})")
-        for e in fan_out:
-            print(f"  {e['file']:<54}  {e['base']} -> {e['head']}  ({_signed(e['change'])})")
-        print()
-
-    cg = deltas['circular_groups']
-    if cg['introduced'] or cg['resolved']:
-        print("Circular groups")
-        for group in cg['introduced']:
-            print(f"  + introduced: {', '.join(group)}")
-        for group in cg['resolved']:
-            print(f"  - resolved:   {', '.join(group)}")
-        print()
-
-    coupling = deltas['component_coupling']
-    if coupling:
-        print(f"Component coupling changes ({len(coupling)})")
-        for c in coupling:
-            print(f"  {c['component']:<44}  {c['base_cohesion']} -> {c['head_cohesion']}  ({_signed(c['change'])})")
-        print()
-
-    centroid = deltas['complexity_centroid']
-    print(f"Complexity centroid (top {centroid['top_n']}): {centroid['base']} -> {centroid['head']}  ({_signed(centroid['change'])})")
-
-    _render_entry_points(deltas['entry_points'])
-
-
-def _render_entry_points(eps: Dict[str, List[str]]) -> None:
-    if eps['added'] or eps['removed']:
-        print("\nEntry points")
-        for f in eps['added']:
-            print(f"  + {f}")
-        for f in eps['removed']:
-            print(f"  - {f}")
-
-
-def _render_unavailable(report: Dict[str, Any]) -> None:
-    from ..rendering.base import emit_body
-    lines = ['Architecture comparison unavailable: required snapshot evidence is incomplete']
-    for side, components in report['analysis']['snapshots'].items():
-        lines.extend(f'  {side} {component}: {state}' for component, state in components.items()
-                     if state != 'complete')
-    emit_body('\n'.join(lines), report, _render_unavailable)
-
-
-def _signed(value: Optional[float]) -> str:
-    if value is None:
-        return 'n/a'
-    return f"+{value}" if value > 0 else str(value)
+    """Compatibility printer; the rendering owner returns the shared text body."""
+    from ..rendering.adapters.architecture import architecture_diff_text
+    print(architecture_diff_text(report), end='')
 
 
 __all__ = [
