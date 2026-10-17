@@ -117,6 +117,14 @@ def _count_key(event: dict, relative: str | None, variant: str | None, targets: 
     return json.dumps(key, sort_keys=True, separators=(',', ':'))
 
 
+def _validate_event_shape(event: dict) -> None:
+    choices = {'event': EVENTS, 'domain': ('fullsource', 'snippet', 'validation'),
+               'scope': ('target', 'external', 'unattributed')}
+    for field, values in choices.items():
+        if event[field] not in values:
+            raise ValueError(f'unknown audit {field}: {event[field]}')
+
+
 def audit_snapshot(audit: dict, root_pid: int, corpus: Path, targets: dict) -> dict:
     from reveal.utils.parse_audit import ParseCapture, ParseEvent
     _validate_header(audit, root_pid)
@@ -133,6 +141,7 @@ def audit_snapshot(audit: dict, root_pid: int, corpus: Path, targets: dict) -> d
     totals = dict.fromkeys(EVENTS, 0)
     coverage = set()
     for event in rows:
+        _validate_event_shape(event)
         if event['pid'] != root_pid:
             raise ValueError('non-root PID parser event; serial qualification failed')
         relative, variant = _target_identity(event, corpus, targets)
@@ -154,6 +163,25 @@ def _require_values(actual: dict, expected: dict) -> None:
             raise ValueError(f'command outcome {field}: {actual.get(field)!r} != {wanted!r}')
 
 
+def _validate_analysis_state(node: Any, allowed_warnings: list[str]) -> None:
+    """Inspect composed JSON metadata as well as the parent result envelope."""
+    if isinstance(node, list):
+        for child in node:
+            _validate_analysis_state(child, allowed_warnings)
+    elif isinstance(node, dict):
+        if node.get('error') or node.get('errors'):
+            raise ValueError(f'command reported errors: {node.get("error") or node["errors"]}')
+        if node.get('applicable') is False:
+            raise ValueError('command analysis was not applicable')
+        if any(node.get(key) for key in ('analysis_failed', 'parse_degraded', 'check_rules_failed')):
+            raise ValueError('command analysis was incomplete')
+        for warning in node.get('warnings', []):
+            if not isinstance(warning, dict) or warning.get('type') not in allowed_warnings:
+                raise ValueError(f'command warning is not qualified: {warning}')
+        for child in node.values():
+            _validate_analysis_state(child, allowed_warnings)
+
+
 def validate_command_output(status: int, stdout: str, spec: dict, target_count: int) -> dict:
     if status != spec['exit_code']:
         raise ValueError(f'command exit {status}, expected {spec["exit_code"]}')
@@ -164,8 +192,11 @@ def validate_command_output(status: int, stdout: str, spec: dict, target_count: 
     if not isinstance(result, dict) or result.get('type') != spec['type']:
         raise ValueError('command JSON type differs from manifest')
     meta = result.get('meta') or {}
-    if result.get('error') or meta.get('errors'):
-        raise ValueError(f'command reported errors: {result.get("error") or meta["errors"]}')
+    _validate_analysis_state(result, spec.get('allowed_warning_types', []))
+    if spec['type'] == 'check':
+        disclosures = result.get('summary', {}).get('scan_disclosures', [])
+        if disclosures != spec.get('allowed_scan_disclosures', []):
+            raise ValueError(f'command scan_disclosures not qualified: {disclosures}')
     summary = _outcome_summary(result, target_count)
     return {**summary, 'warnings': meta.get('warnings', [])}
 
@@ -181,8 +212,8 @@ def _outcome_summary(result: dict, target_count: int) -> dict:
     if kind == 'overview':
         summary = result.get('stats', {}).get('summary', {})
     if kind in ('overview', 'hotspots'):
-        _require_values(summary, {'total_files': target_count})
-        return {'total_files': target_count}
+        _require_values(summary, {'total_files': target_count, 'excluded': 0})
+        return {'total_files': target_count, 'excluded': 0}
     _require_values(result.get('scope', {}), {'total_code_files': target_count})
     if result.get('unparsed_files') or result.get('recovered_files') or result.get('unsupported_language'):
         raise ValueError('surface coverage is incomplete or degraded')
@@ -232,8 +263,11 @@ def run_once(spec: dict, corpus: Path, targets: dict, run_directory: Path) -> di
             process.kill()
             process.communicate(timeout=10)
             raise ValueError('command timed out before audit completion')
-        outcome = validate_command_output(process.returncode, stdout, spec, len(targets))
-        snapshot = audit_snapshot(load_audit(audit_path), process.pid, corpus, targets)
+        try:
+            outcome = validate_command_output(process.returncode, stdout, spec, len(targets))
+            snapshot = audit_snapshot(load_audit(audit_path), process.pid, corpus, targets)
+        except ValueError as error:
+            raise ValueError(f'{arguments}: {error}\nstdout:\n{stdout}\nstderr:\n{stderr}') from error
     snapshot['command_outcome'] = outcome
     snapshot['stderr'] = stderr.replace(str(corpus), '<corpus>')
     return snapshot
@@ -275,7 +309,8 @@ def measure(manifest: dict) -> dict:
                 shutil.copytree(corpus_source, corpus)
                 snapshots.append(run_once(spec, corpus, targets, run_directory))
             commands[name] = qualify_snapshots(snapshots)
-    return {'schema_version': 1, 'coverage_policy': COVERAGE, 'manifest': manifest, 'commands': commands}
+    return {'schema_version': 1, 'qualification_platform': sys.platform,
+            'coverage_policy': COVERAGE, 'manifest': manifest, 'commands': commands}
 
 
 def main() -> int:
@@ -293,6 +328,8 @@ def main() -> int:
             print(f'Qualified five fresh serial runs per command; candidate: {args.output}')
             return 0
         baseline = load_audit(BASELINE)
+        if baseline.get('qualification_platform') != sys.platform:
+            raise ValueError('platform is not qualified by this accepted baseline')
         if baseline.get('manifest') != manifest or baseline.get('coverage_policy') != COVERAGE:
             raise ValueError('accepted manifest/coverage policy changed; requalification required')
         errors = [f'{name}: {error}' for name, snapshot in current['commands'].items()

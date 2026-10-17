@@ -68,7 +68,10 @@
         "json"
       ],
       "exit_code": 0,
-      "type": "overview"
+      "type": "overview",
+      "allowed_warning_types": [
+        "complexity_is_unweighted"
+      ]
     },
     "hotspots": {
       "args": [
@@ -78,7 +81,10 @@
         "json"
       ],
       "exit_code": 0,
-      "type": "hotspots"
+      "type": "hotspots",
+      "allowed_warning_types": [
+        "complexity_is_unweighted"
+      ]
     },
     "check": {
       "args": [
@@ -88,7 +94,10 @@
         "json"
       ],
       "exit_code": 0,
-      "type": "check"
+      "type": "check",
+      "allowed_scan_disclosures": [
+        "W-CAP-1: T006 analyzes Python only; 2 file(s) in other languages were not checked by it: typescript (2)."
+      ]
     },
     "surface": {
       "args": [
