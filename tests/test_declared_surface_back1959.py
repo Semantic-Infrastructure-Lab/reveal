@@ -157,7 +157,7 @@ def test_sibling_uri_remains_unchanged(monkeypatch):
 
 
 @pytest.mark.parametrize('spelling', ['surface', 'uri'])
-@pytest.mark.parametrize('kind', ['returned', 'raised', 'postprocess', 'malformed'])
+@pytest.mark.parametrize('kind', ['returned', 'raised', 'postprocess', 'malformed', 'postprocess_malformed'])
 def test_required_failure_preserves_identity(project, monkeypatch, spelling, kind):
     from reveal.adapters.surface import SurfaceAdapter
     from reveal.utils.results import ResultBuilder
@@ -172,6 +172,8 @@ def test_required_failure_preserves_identity(project, monkeypatch, spelling, kin
         monkeypatch.setattr(SurfaceAdapter, 'post_process', staticmethod(lambda result, args:
                             ResultBuilder.create_error('surface_scan', 'proj', 'required input failed')),
                             raising=False)
+    elif kind == 'postprocess_malformed':
+        monkeypatch.setattr(SurfaceAdapter, 'post_process', staticmethod(lambda result, args: None), raising=False)
     else:
         monkeypatch.setattr(SurfaceAdapter, 'get_structure', lambda self, **kw: None)
     argv = ['surface', 'proj'] if spelling == 'surface' else ['surface://proj']
@@ -241,3 +243,53 @@ def test_tilde_uri_uses_one_resolved_path(project, monkeypatch):
     b = run('surface://~/proj', '--format', 'json', '--no-gitignore')
     assert a.returncode == b.returncode == 0
     assert json.loads(a.stdout) == json.loads(b.stdout)
+
+
+@pytest.mark.parametrize('incomplete,artifact_failure,expected', [
+    (False, False, 0), (True, False, 3), (False, True, 3),
+])
+def test_closed_pipe_preserves_independent_failures(project, incomplete, artifact_failure, expected):
+    import os
+    import subprocess
+    import sys
+    if incomplete:
+        (project / 'broken.py').write_text('def broken(:\n', encoding='utf-8')
+    argv = [sys.executable, '-m', 'reveal', 'surface', 'proj', '--no-gitignore']
+    if artifact_failure:
+        argv.extend(['--also-json', str(project)])
+    with subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          env=os.environ.copy()) as process:
+        process.stdout.close()
+        code = process.wait(timeout=30)
+        errors = process.stderr.read().decode('utf-8', errors='replace')
+    assert code == expected, errors
+    assert 'Traceback' not in errors
+
+
+@pytest.mark.parametrize('spelling', ['surface', 'uri'])
+def test_legitimate_decline_is_complete(project, monkeypatch, spelling):
+    from reveal.adapters.surface import SurfaceAdapter
+    from reveal.errors import NotApplicableError
+    def decline(self, **kwargs):
+        raise NotApplicableError('fixture not applicable')
+    monkeypatch.setattr(SurfaceAdapter, 'get_structure', decline)
+    argv = ['surface', 'proj'] if spelling == 'surface' else ['surface://proj']
+    result = run(*argv, '--format', 'json')
+    assert result.returncode == 0
+    answer = json.loads(result.stdout)
+    assert answer['type'] == 'surface_scan'
+    assert answer['applicable'] is False
+    assert answer['reason'] == 'fixture not applicable'
+
+
+def test_informational_warning_is_not_incomplete(project, monkeypatch):
+    from reveal.adapters.surface import SurfaceAdapter
+    original = SurfaceAdapter.get_structure
+    def warned(self, **kwargs):
+        answer = original(self, **kwargs)
+        answer['meta']['warnings'].append({'code': 'fixture_note', 'message': 'informational fixture note'})
+        return answer
+    monkeypatch.setattr(SurfaceAdapter, 'get_structure', warned)
+    result = run('surface', 'proj', '--no-gitignore')
+    assert result.returncode == 0
+    assert result.stdout.count('informational fixture note') == 1
