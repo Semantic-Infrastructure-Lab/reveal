@@ -117,16 +117,22 @@ def test_stdio_preserves_capture_origin_and_narrative(tmp_path, name, is_error, 
             assert hidden not in json.dumps(result.structured_content)
 
     _run(tmp_path, scenario, _CAPTURE_SERVER)
+    if hidden:
+        assert hidden in (tmp_path / 'server-stderr.txt').read_text(encoding='utf-8')
 
 
-def test_stdio_masks_exception_outside_capture(tmp_path):
+@pytest.mark.parametrize('exception_class,detail,public', [
+    ('RuntimeError', 'PRIVATE_OUTER_DETAIL', False),
+    ('PermissionError', 'PUBLIC_OUTER_DETAIL', True),
+])
+def test_stdio_masks_exception_outside_capture(tmp_path, exception_class, detail, public):
     path = tmp_path / 'demo.py'
     path.write_text('VALUE = 1\n', encoding='utf-8')
-    code = """
+    code = f"""
 from reveal import mcp_server, registry
 
 def broken(*args, **kwargs):
-    raise RuntimeError('PRIVATE_OUTER_DETAIL')
+    raise {exception_class}('{detail}')
 
 registry.get_analyzer = broken
 mcp_server.main()
@@ -140,10 +146,12 @@ mcp_server.main()
             result = await session.call_tool(tool, arguments)
             assert result.is_error
             assert _text(result).strip()
-            assert 'PRIVATE_OUTER_DETAIL' not in _text(result)
-            assert 'PRIVATE_OUTER_DETAIL' not in json.dumps(result.structured_content)
+            assert (detail in _text(result)) is public
+            assert detail not in json.dumps(result.structured_content)
 
     _run(tmp_path, scenario, code)
+    if not public:
+        assert detail in (tmp_path / 'server-stderr.txt').read_text(encoding='utf-8')
 
 
 def test_direct_capture_string_and_registered_controls(tmp_path):

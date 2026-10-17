@@ -819,7 +819,8 @@ class TestMcpToolErrorSignaling(unittest.TestCase):
 
     def test_registered_tool_raises_on_error_sentinel(self):
         fn = self._registered_fn('reveal_structure')
-        with self.assertRaises(ValueError) as ctx:
+        from mcp.server.mcpserver.exceptions import ToolError
+        with self.assertRaises(ToolError) as ctx:
             fn(path='/nonexistent/path/xyz')
         self.assertIn('path not found', str(ctx.exception))
 
@@ -852,7 +853,8 @@ class TestMcpToolErrorSignaling(unittest.TestCase):
         for tool_name, kwargs in cases.items():
             with self.subTest(tool=tool_name):
                 fn = self._registered_fn(tool_name)
-                with self.assertRaises(ValueError):
+                from mcp.server.mcpserver.exceptions import ToolError
+                with self.assertRaises(ToolError):
                     fn(**kwargs)
 
     def test_end_to_end_call_tool_sets_is_error(self):

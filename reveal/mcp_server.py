@@ -20,6 +20,7 @@ Configuration example (Claude Code settings.json):
 import functools
 import io
 import json
+import logging
 import os
 import sys
 import threading
@@ -28,6 +29,7 @@ from pathlib import Path
 
 try:
     from mcp.server import MCPServer
+    from mcp.server.mcpserver.exceptions import ToolError
     from mcp.types import ToolAnnotations
 except ImportError:
     # BACK-1247: `mcp` lives in its own dedicated extra (reveal-cli[mcp]),
@@ -177,7 +179,7 @@ def _run_and_capture(fn, *args, capture_stderr: bool = True, **kwargs) -> str:
     out_buf = io.StringIO()
     err_buf = io.StringIO()
     exit_code = None
-    exc_msg = None
+    captured_exception = None
     with _capture_lock:
         old_stdout, old_stderr = sys.stdout, sys.stderr
         sys.stdout = out_buf
@@ -186,8 +188,8 @@ def _run_and_capture(fn, *args, capture_stderr: bool = True, **kwargs) -> str:
             fn(*args, **kwargs)
         except SystemExit as e:
             exit_code = e.code
-        except Exception as exc:  # boundary-ok: broad-except -- a tool function is arbitrary adapter code; the message is returned to the MCP client as the tool error
-            exc_msg = str(exc)
+        except Exception as exc:  # boundary-ok: broad-except -- arbitrary adapter code; preserve origin for the registered boundary to mask crashes
+            captured_exception = exc
         finally:
             sys.stdout = old_stdout
             sys.stderr = old_stderr
@@ -195,8 +197,9 @@ def _run_and_capture(fn, *args, capture_stderr: bool = True, **kwargs) -> str:
     out = out_buf.getvalue()
     err = err_buf.getvalue().strip()
 
-    if exc_msg is not None:
-        return f"[reveal error: {exc_msg}]"
+    if captured_exception is not None:
+        return _tool_failure(str(captured_exception), public=isinstance(captured_exception, OSError),
+                             exception=captured_exception)
     if out.strip():
         if capture_stderr and err:
             return f"{out}\n[stderr: {err}]"
@@ -209,34 +212,40 @@ def _run_and_capture(fn, *args, capture_stderr: bool = True, **kwargs) -> str:
     return out
 
 
-# BACK-REVEAL-1: every reveal_* implementation below returns "[reveal error: ...]"
-# as a plain string on failure rather than raising -- kept exactly as-is so direct
-# Python callers (unit tests, in-process reuse) still get a string back, never a
-# raised exception. But an MCP client can't distinguish that from a successful
-# result: both arrive as isError=False. mcp_tool() registers a thin wrapper around
-# each function that re-raises reveal's own "[reveal error:" sentinel -- the MCP
-# SDK's tool.run() converts any exception raised from a tool body into
-# CallToolResult(is_error=True), which is exactly the protocol-level signal a
-# client needs. "[reveal exited with code N]" (the CLI exit-code passthrough in
-# _run_and_capture) is deliberately NOT covered: reveal's CLI commands use nonzero
-# exit for legitimate FAIL/issues-found verdicts (e.g. reveal_health's PASS/WARN/
-# FAIL), which is real tool output, not a call failure. Only "[reveal error:" is
-# ever emitted for an unambiguous input/execution problem (confirmed: it's the
-# exact prefix for every not-found/no-analyzer/unknown-flag/exception case across
-# all 10 tools, and never appears in a verdict).
-_ERROR_SENTINEL_PREFIX = "[reveal error:"
+# Error origin belongs to this owner, never to rendered/source text. Keep the
+# direct Python string contract while marking only failures authored here.
+class _ToolFailure(str):
+    public: bool
+    exception: Exception | None
+
+    def __new__(cls, message: str, *, public: bool = True,
+                exception: Exception | None = None):
+        result = super().__new__(cls, f"[reveal error: {message}]")
+        result.public = public
+        result.exception = exception
+        return result
 
 
-def _raise_if_error_sentinel(result: str) -> str:
-    if result.startswith(_ERROR_SENTINEL_PREFIX):
-        raise ValueError(result[1:-1] if result.endswith(']') else result)
+def _tool_failure(message: str, *, public: bool = True,
+                  exception: Exception | None = None) -> str:
+    return _ToolFailure(message, public=public, exception=exception)
+
+
+def _raise_if_tool_failure(result: str, tool_name: str) -> str:
+    if isinstance(result, _ToolFailure):
+        if result.public:
+            raise ToolError(result[1:-1])
+        exc = result.exception
+        if exc is not None:
+            logging.getLogger(__name__).error(
+                "Unexpected failure in MCP tool %s", tool_name,
+                exc_info=(type(exc), exc, exc.__traceback__))
+        raise ToolError(f"Internal error executing tool {tool_name}")
     return result
 
 
 def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = None):
-    """Like @mcp.tool(), but the registered tool re-raises reveal's error
-    sentinel (see above) while the module-level name stays the original,
-    string-returning function."""
+    """Register failures with explicit origin; retain direct Python strings."""
 
     def decorator(fn):
         @functools.wraps(fn)
@@ -256,7 +265,14 @@ def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = 
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
             _log_mcp_access(fn.__name__, kwargs)
-            return _raise_if_error_sentinel(request(*args, **kwargs))
+            try:
+                result = request(*args, **kwargs)
+            except OSError as exc:
+                raise ToolError(f"reveal error: {exc}") from None
+            except Exception:  # boundary-ok: broad-except -- SDK 2.0 exposes arbitrary exception details; mask at the registered tool boundary
+                logging.getLogger(__name__).exception("Unexpected failure in MCP tool %s", fn.__name__)
+                raise ToolError(f"Internal error executing tool {fn.__name__}") from None
+            return _raise_if_tool_failure(result, fn.__name__)
 
         mcp.tool(annotations=annotations, title=title)(wrapper)
         return request
@@ -290,7 +306,7 @@ def reveal_structure(path: str, depth: int = 3, ext: str = '', exclude: str = ''
 
     p = Path(path)
     if not p.exists():
-        return f"[reveal error: path not found: {path}]"
+        return _tool_failure(f"path not found: {path}")
 
     args = _default_args(path=str(p))
 
@@ -326,7 +342,7 @@ def reveal_structure(path: str, depth: int = 3, ext: str = '', exclude: str = ''
 
     analyzer_class = get_analyzer(str(p), allow_fallback=True)
     if not analyzer_class:
-        return f"[reveal error: no analyzer found for {path}]"
+        return _tool_failure(f"no analyzer found for {path}")
 
     analyzer = analyzer_class(str(p))
     return _run_and_capture(show_structure, analyzer, 'text', args)
@@ -350,21 +366,21 @@ def reveal_element(path: str, element: str) -> str:
 
     p = Path(path)
     if not p.exists():
-        return f"[reveal error: path not found: {path}]"
+        return _tool_failure(f"path not found: {path}")
 
     try:
         analyzer_class = get_analyzer(path, allow_fallback=True)
         if not analyzer_class:
-            return f"[reveal error: no analyzer found for {path}]"
+            return _tool_failure(f"no analyzer found for {path}")
 
         analyzer = analyzer_class(path)
         syntax = _parse_element_syntax(element)
         result = _extract_by_syntax(analyzer, element, syntax)
     except Exception as exc:  # noqa: BLE001 -- match every sibling tool's error shape
-        return f"[reveal error: {exc}]"
+        return _tool_failure(str(exc), public=isinstance(exc, OSError), exception=exc)
 
     if not result:
-        return f"[reveal error: element '{element}' not found in {path}]"
+        return _tool_failure(f"element '{element}' not found in {path}")
 
     line_start = result.get('line_start', 1)
     line_end = result.get('line_end', line_start)
@@ -438,7 +454,7 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
     elif flag in _NAV_VAR_NAME_FLAGS:
         if not flag_value:
             example = _NAV_VAR_NAME_FLAGS[flag]
-            return f"[reveal error: {flag} requires flag_value (variable name, e.g. '{example}')]"
+            return _tool_failure(f"{flag} requires flag_value (variable name, e.g. '{example}')")
         args = _default_args(**{flag: flag_value})
     elif flag == 'calls':
         args = _default_args(calls=flag_value or 'FULL')
@@ -446,11 +462,11 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
         try:
             n = int(flag_value) if flag_value else 20
         except ValueError:
-            return f"[reveal error: around requires an integer flag_value, got '{flag_value}']"
+            return _tool_failure(f"around requires an integer flag_value, got '{flag_value}'")
         args = _default_args(around=n)
     else:
         valid = sorted(_NAV_BOOLEAN_FLAGS | set(_NAV_VAR_NAME_FLAGS) | {'calls', 'around'})
-        return f"[reveal error: unknown nav flag '{flag}'. Valid flags: {valid}]"
+        return _tool_failure(f"unknown nav flag '{flag}'. Valid flags: {valid}")
 
     return _run_and_capture(handle_file, path, element, False, 'text', args)
 
@@ -556,7 +572,7 @@ def reveal_pack(
 
     p = Path(path)
     if not p.exists():
-        return f"[reveal error: {path}: not found]"
+        return _tool_failure(f"{path}: not found")
 
     budget_tokens, budget_lines = _parse_budget(str(budget))
     focus_val = focus or None
@@ -605,7 +621,7 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
 
     p = Path(path)
     if not p.exists():
-        return f"[reveal error: {path}: no such file or directory]"
+        return _tool_failure(f"{path}: no such file or directory")
 
     severity_filter = severity or None
     # BACK-1605: an unknown code is an error, as on the CLI, not a clean result.
@@ -614,7 +630,7 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
         select_list = parse_rule_patterns(select) or None
         ignore_list = parse_rule_patterns(ignore) or None
     except ValueError as e:
-        return f"[reveal error: {e}]"
+        return _tool_failure(f"{e}")
 
     if p.is_dir():
         directory = p.resolve()
@@ -739,7 +755,7 @@ def reveal_grep(path: str, pattern: str, ignore_case: bool = False) -> str:
 
     p = Path(path)
     if not p.exists():
-        return f"[reveal error: path not found: {path}]"
+        return _tool_failure(f"path not found: {path}")
 
     args = _default_args(ignore_case=ignore_case)
     if p.is_dir():
@@ -768,7 +784,7 @@ def reveal_trace(path: str, entry_point: str, depth: int = 2) -> str:
 
     p = Path(path)
     if not p.exists():
-        return f"[reveal error: path not found: {path}]"
+        return _tool_failure(f"path not found: {path}")
 
     args = _default_args(path=str(p), root=entry_point, depth=depth, format='text')
     return _run_and_capture(run_trace, args)
