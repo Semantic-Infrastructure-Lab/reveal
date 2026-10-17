@@ -159,6 +159,7 @@ class _AssignShape:
 _ASSIGN_SHAPES: Dict[str, _AssignShape] = {
     'assignment_statement': _AssignShape(missing_sides=_lua_assignment_sides),
     'assignment': _AssignShape(missing_sides=_positional_assignment_sides),
+    'AssignExpr': _AssignShape(missing_sides=_positional_assignment_sides),  # Zig
 }
 
 
