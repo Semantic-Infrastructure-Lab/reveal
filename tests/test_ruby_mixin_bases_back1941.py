@@ -105,3 +105,20 @@ def test_mixin_declines_do_not_become_outer_ancestry(analyzer):
 ])
 def test_nonmixin_sibling_scopes_keep_existing_bases(analyzer, name, expected):
     assert _class(analyzer, name)['bases'] == expected
+
+
+def test_qualified_mixin_names_require_constant_only_scopes(tmp_path):
+    path = tmp_path / 'qualified_mixins.rb'
+    path.write_text('''class Host < namespace::Parent
+  include factory()::Mixed
+  include namespace::Mixed
+  extend namespace::Nested::Mixed
+  include ::Global::Mixed, Namespaced::Mixed
+end
+''', encoding='utf-8')
+    instance = get_analyzer(str(path))(str(path))
+    assert not instance.has_parse_errors()
+    for _ in range(2):
+        assert _class(instance, 'Host')['bases'] == [
+            'namespace::Parent', '::Global::Mixed', 'Namespaced::Mixed',
+        ]
