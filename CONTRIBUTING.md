@@ -453,6 +453,49 @@ system `python3` -- the interpreter its baseline was built with; CI does not run
 `reveal reveal:// --check` (rule V039) is the local guard for the Windows path class (`str(path)` uses
 backslashes, so never split or compare paths as `'/'` strings).
 
+### Cold serial parser-count gate
+
+The primary Python 3.12 `ci-local.sh --no-tests` run includes
+`scripts/check_parse_counts.py`. It runs `overview --no-git`, `hotspots`, default
+`check`, and `surface --type env` five times each in fresh subprocesses. Each run
+copies the pinned three-file corpus, uses an empty user-config directory, disables
+Reveal's disk cache, and sets `REVEAL_MAX_WORKERS=1`. Complete root-PID audits and a
+child-launch observer are required. Unexpected errors, partial results, missing
+files, or changed full JSON answers fail qualification.
+
+The [manifest](scripts/parse_counts_manifest.json) identifies one Python file and
+two identical TypeScript files. It declares canonical UTF-8 text after universal
+newline decoding, plus the analyzer-content form that removes exactly one final
+LF. Their hashes/counts stay separate; identical TS inputs share an artifact per
+grammar and source form. Requests, owned attempts, successful artifacts, and
+failures are distinct. An owned TS attempt wraps `ts_parse`; it does not count
+native string/bytes retries inside that compatibility wrapper. Successful
+built/cached outcome frequencies remain evidence, while request/attempt/artifact/
+failure ceilings may only fall. Cached requests require an observed backing
+artifact, so fewer builds cannot conceal missing work.
+
+```bash
+python scripts/check_parse_counts.py
+python scripts/check_parse_counts.py --measure --output parser-counts-candidate.json
+```
+
+`--measure` writes a candidate, never updates the accepted
+[baseline](scripts/parse_counts_baseline.json). Review all five exact count vectors,
+full normalized JSON, coverage, and diagnostics before accepting a candidate.
+Only the copied corpus path prefix is normalized; other fields and list order
+remain intact. Runtime/parser versions are provenance: changed versions must pass
+five repeatable current runs and the same coverage, answer, and count checks.
+A missing version is rejected except an explicit null `tree-sitter` distribution
+version for a bundled binding; the language-pack version remains required.
+
+Initial evidence is Linux/CPython 3.12. This gate does not establish parallel or
+cross-command reuse, general grammar correctness, or native parsing totals.
+Startup/generated direct `ast.parse`, annotation/V-series bypasses, and native
+process launches outside Python audit/multiprocessing hooks are unqualified;
+they are not reported as zero. The pinned clean corpus does not qualify BOM or
+compatibility source rewrites. Observed snippet/validation/external seam events
+retain separate domains and are never silently discarded.
+
 **Test template:**
 
 ```python

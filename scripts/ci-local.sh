@@ -13,6 +13,8 @@
 #                             V-series self-validation (incl. the Windows/accessor/encoding/env rules V039-V042), shared-seam, complexity, doc-hygiene and B006 ratchets, which CI runs only on
 #                             ubuntu/3.12, plus the mypy ratchet (system python3, as the release gate
 #                             runs it -- CI does not); other legs run pytest + CLI basics, as CI does
+#   - parser counts        -> the primary leg also qualifies the bounded cold serial command fixture
+#                             (scripts/check_parse_counts.py), including with --no-tests
 #   - local caches/env     -> REVEAL_DISK_CACHE=0 (CI starts cold; keep ~/.reveal/cache out),
 #                             PYTHONPYCACHEPREFIX unset (stale bytecode), and XDG_CONFIG_HOME
 #                             pointed at an empty dir (no ~/.config/reveal user config)
@@ -236,6 +238,11 @@ if [[ $PRIMARY -eq 1 ]]; then
     step "Complexity ratchet"
     "$PY" scripts/check_complexity.py 2>&1 | tee -a "$LOG" | tail -20
     [[ ${PIPESTATUS[0]} -eq 0 ]] || fail "complexity ratchet (see scripts/check_complexity.py)"
+
+    # Five fresh serial runs of each pinned command, independent of RUN_TESTS.
+    step "Cold serial parser-count ratchet"
+    "$PY" scripts/check_parse_counts.py >>"$LOG" 2>&1 \
+        || fail "cold serial parser-count ratchet (see scripts/check_parse_counts.py)"
 
     # Bare --check, not --select V: also runs the general rules (C901, D001, E501, ...) over reveal's own source.
     step "Reveal self-validation (reveal:// --check)"
