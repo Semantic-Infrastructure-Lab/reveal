@@ -178,7 +178,7 @@ def test_manifest_hashes_and_variants_must_match_real_text(ledger):
         _verify_corpus(root, targets)
 
 
-@pytest.mark.parametrize('kind', ['overview', 'hotspots'])
+@pytest.mark.parametrize('kind', ['overview', 'hotspots', 'hotspots_scan'])
 @pytest.mark.parametrize('failure', ['parse_degraded', 'check_rules_failed', 'analysis_failed', 'truncated'])
 def test_partial_command_results_cannot_qualify(kind, failure):
     result = {'type': kind, 'summary': {'total_files': 3, 'excluded': 0},
@@ -482,3 +482,14 @@ def test_real_child_launch_cannot_hide_unreported_worker_parses(tmp_path, monkey
     monkeypatch.setattr(gate, '_BOOTSTRAP', bootstrap)
     with pytest.raises(ValueError, match='serial observer'):
         gate.run_once(manifest['commands']['surface'], corpus, manifest['targets'], run)
+
+
+@pytest.mark.parametrize('kind', ['hotspots', 'hotspots_scan'])
+def test_hotspots_identity_uses_owned_summary_coverage(kind):
+    result = {'type': kind, 'summary': {'total_files': 3, 'excluded': 0}, 'meta': {}}
+    spec = {'type': kind, 'exit_code': 0}
+    observed = validate_command_output(0, json.dumps(result), spec, 3)
+    assert observed['total_files'] == 3 and observed['excluded'] == 0
+    result['summary']['total_files'] = 2
+    with pytest.raises(ValueError, match='total_files'):
+        validate_command_output(0, json.dumps(result), spec, 3)
