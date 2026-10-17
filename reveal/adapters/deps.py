@@ -365,7 +365,7 @@ class DepsAdapter(ResourceAdapter):
             self._clear_request_evidence()
 
     def _clear_request_evidence(self) -> None:
-        self._deps_components = {}
+        self._deps_components: Dict[str, Dict[str, Any]] = {}
         self._composed_errors = []
         self._composed_warnings = []
         self._composed_confidences = []
