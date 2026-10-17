@@ -313,5 +313,7 @@ def test_malformed_file_fact_warning_names_the_parse_target(tmp_path, caplog):
         assert extract_file_facts(path.as_posix()) is None
     warning, = [record.message for record in caplog.records
                 if record.name == 'reveal.adapters.ast.surface_facts']
-    assert warning.endswith('invalid syntax (broken.py, line 1)')
+    # CPython strips the directory from a SyntaxError filename only at the platform separator,
+    # so a forward-slash path keeps its directory on Windows.
+    assert warning.endswith('broken.py, line 1)')
     assert '<unknown>' not in warning
