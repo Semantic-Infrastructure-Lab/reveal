@@ -1446,6 +1446,25 @@ every sample matched the published target and edge counts.
   external type whose simple name matches an in-tree class in another package (for
   example `org.apache.lucene.geo.GeoUtils` claimed as
   `org/elasticsearch/common/geo/GeoUtils.java`, and log4j's `Plugin` in 13 files).
+- **Restored Scala second corpus (BACK-1951, 2026-10-17):** the manifest now
+  pins `scala-cats-effect` to cats-effect v3.5.4,
+  `4fc56284b005ad8f00788780443ea1e9717cf9a8`. A fresh scoped member-import
+  measurement at Reveal `995e9850` found 24/24 file edges to one target, with
+  zero missing or extra edges, across 404 Scala files. The oracle is an
+  independent lexical scan for lowerCamelCase top-level objects and explicit
+  single-member imports; it is not a compiler-resolution oracle and excludes
+  selector lists and wildcard imports. The target declaration and all 28 import
+  occurrences contributing to the 24 distinct file edges were inspected in source.
+  Lexical brace matching does not parse ordinary strings or comments generally;
+  this result is qualified to the inspected population. The historical 24-edge
+  snapshot has a different importer and remains distinct.
+
+  Restore with `python scripts/fetch_corpus.py scala-cats-effect`. The existing
+  maintainer-internal `scala-member-import-oracle/build_oracle_corpus2.py` and
+  `diff_recall_full.py --checkout-root` run against that source; this corpus is
+  not yet part of the scheduled recall gate. The measurement used Python 3.12.15,
+  tree-sitter 0.25.2 and tree-sitter-language-pack 1.22.1. Missing/unreadable source,
+  an empty oracle and nonzero Reveal query exits fail the measurement.
 - **Historical import figures that cannot currently be re-run (BACK-1461):**
   - Original corpus clone not preserved: Go/client_golang, Ruby/solidus,
     Kotlin/kotlinx.coroutines, Scala/cats-effect, C#/Newtonsoft.Json, PHP/osCommerce,
