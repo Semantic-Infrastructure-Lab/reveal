@@ -113,3 +113,23 @@ class Plain:
     assert classes['Base']['bases'] == []
     assert classes['Inner']['bases'] == []
     assert classes['Plain']['bases'] == []
+
+
+@pytest.mark.parametrize('directive', [
+    '@tool', '@icon("res://icon.svg")', '@static_unload',
+    '@export_category("Group")', '@export_group("Group")', '@export_subgroup("Group")',
+    '@warning_ignore_start("unused_parameter")', '@warning_ignore_restore("unused_parameter")',
+])
+def test_gdscript_script_and_standalone_annotations_do_not_attach_to_function(tmp_path, directive):
+    structure = _structure(
+        tmp_path, GDScriptAnalyzer, 'gd', f'{directive}\nfunc plain():\n    pass\n')
+    assert structure['functions'][0]['decorators'] == []
+
+
+def test_gdscript_script_annotation_does_not_hide_following_rpc(tmp_path):
+    structure = _structure(tmp_path, GDScriptAnalyzer, 'gd', '''@tool
+@rpc("any_peer")
+func tagged():
+    pass
+''')
+    assert structure['functions'][0]['decorators'] == ['@rpc("any_peer")']
