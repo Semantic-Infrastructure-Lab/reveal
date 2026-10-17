@@ -241,11 +241,11 @@ subcommands:
       via:
       - declared-read
     respect_gitignore:
-      reason: 'pre-existing: OverviewAdapter.CLI_QUERY_FLAGS declares respect_gitignore,
-        forwarded via the shared inject_query_flags seam (BACK-1377)'
+      reason: 'The declared runner applies the existing global gitignore scope;
+        the retained PROBES entry proves ignored files change the population.'
       review: honored
       via:
-      - declared-read
+      - declared-global
     since:
       reason: --since is not declared on `reveal overview`'s own parser -- argparse
         rejects it loudly (unrecognized arguments), not a silent gap

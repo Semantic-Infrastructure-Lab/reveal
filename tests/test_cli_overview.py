@@ -86,6 +86,7 @@ _STATS_JSON = json.dumps({
         {'file': 'src/utils.py'},
         {'file': 'docs/README.md'},
         {'file': 'config.yaml'},
+        *[{'file': f'src/extra{n}.py'} for n in range(96)],
     ],
     'hotspots': [
         {
@@ -113,6 +114,7 @@ _GIT_JSON = json.dumps({
 })
 
 _AST_JSON = json.dumps({
+    'total_files': 2, 'total_results': 2, 'displayed_results': 2,
     'results': [
         {'name': 'complex_fn', 'complexity': 25, 'file': '/project/src/big.py', 'line': 50, 'line_count': 80},
         {'name': 'medium_fn', 'complexity': 14, 'file': '/project/src/other.py', 'line': 10, 'line_count': 40},
@@ -132,8 +134,9 @@ class TestCreateOverviewParser(unittest.TestCase):
         parser = create_overview_parser()
         args = parser.parse_args([])
         self.assertEqual(args.path, '.')
-        self.assertEqual(args.top, 5)
-        self.assertFalse(args.no_git)
+        self.assertNotIn('top', vars(args))
+        self.assertNotIn('no_git', vars(args))
+        self.assertEqual([spec.default for spec in OverviewAdapter.PARAM_SPECS], [5, False, False])
 
     def test_path_positional(self):
         parser = create_overview_parser()
@@ -143,7 +146,7 @@ class TestCreateOverviewParser(unittest.TestCase):
     def test_top_flag(self):
         parser = create_overview_parser()
         args = parser.parse_args(['--top', '10'])
-        self.assertEqual(args.top, 10)
+        self.assertEqual(args.top, '10')  # The declared binder normalizes after argparse.
 
     def test_all_flag(self):
         """BACK-1226: --all used to be a hard argparse error on this subcommand."""
@@ -318,9 +321,11 @@ class TestRunScope(unittest.TestCase):
         self.assertTrue(meta.get('errors'))
 
     def test_success_returns_scope_dict_untouched(self):
-        with patch('reveal.adapters.overview.scope_dict_for_path', return_value={'python': {}}):
+        scope = {'total_code_files': 1, 'languages': [{'language': 'Python', 'files': 1}],
+                 'skipped_gitignore': 0, 'skipped_no_analyzer': 0, 'skipped_dirs': 0}
+        with patch('reveal.adapters.overview.scope_dict_for_path', return_value=scope):
             result = _run_scope(self.adapter, Path('/project'))
-        self.assertEqual(result, {'python': {}})
+        self.assertIs(result, scope)
         self.assertIsNone(self.adapter.composed_meta())
 
 
@@ -439,7 +444,9 @@ class TestRunComplexFunctions(unittest.TestCase):
 
     @patch('reveal.adapters.overview.AstAdapter')
     def test_falls_back_to_elements_key(self, MockAdapter):
-        MockAdapter.return_value.get_structure.return_value = {'elements': [{'name': 'fn', 'complexity': 15}]}
+        MockAdapter.return_value.get_structure.return_value = {
+            'elements': [{'file': 'a.py', 'name': 'fn', 'complexity': 15}],
+            'total_files': 1, 'total_results': 1, 'displayed_results': 1}
         result = _run_complex_functions(self.adapter, Path('/project'), 5)
         self.assertEqual(result[0]['name'], 'fn')
 
@@ -688,6 +695,9 @@ _GIT_DATA = json.loads(_GIT_JSON)['history']
 _AST_DATA = json.loads(_AST_JSON)['results']
 
 _ARCH_DATA = {
+    'unsupported_extensions': {},
+    'metadata': {'files_failed_count': 0, 'files_failed': [], 'files_lost_count': 0,
+                 'files_lost': [], 'extraction_diagnostics': {}},
     'fan_in': [
         {'file': '/proj/src/base.py', 'fan_in': 12, 'fan_out': 3},
         {'file': '/proj/src/utils.py', 'fan_in': 8, 'fan_out': 2},
@@ -723,10 +733,10 @@ class TestRunOverview(unittest.TestCase):
             patch('reveal.adapters.overview._run_imports_analysis', return_value=arch_val),
         )
 
-    def test_nonexistent_path_exits_1(self):
+    def test_nonexistent_path_exits_2(self):
         with self.assertRaises(SystemExit) as ctx:
             run_overview(_args(path='/no/such/dir/xyz'))
-        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(ctx.exception.code, 2)
 
     def test_json_format_outputs_valid_json(self):
         import tempfile
@@ -828,7 +838,9 @@ class TestRunOverview(unittest.TestCase):
 
     def test_empty_data_no_crash(self):
         import tempfile
-        p_stats, p_git, p_ast, p_arch = self._patch_runners(stats={}, git=[], ast=[], arch={})
+        stats = {'summary': {key: 0 for key in _STATS_DATA['summary']}, 'files': [], 'hotspots': []}
+        arch = {**_ARCH_DATA, 'fan_in': [], 'entrypoints': [], 'components': [], 'circular_count': 0}
+        p_stats, p_git, p_ast, p_arch = self._patch_runners(stats=stats, git=[], ast=[], arch=arch)
         with p_stats, p_git, p_ast, p_arch:
             with tempfile.TemporaryDirectory() as tmp:
                 out = _capture(run_overview, _args(path=tmp))
@@ -912,6 +924,7 @@ class TestRunOverview(unittest.TestCase):
                 'complexity': 20, 'line': 1, 'line_count': 5,
             }]
             arch_data = {
+                'metadata': _ARCH_DATA['metadata'], 'unsupported_extensions': {},
                 'fan_in': [{'file': str(tmp_path / 'src' / 'base.py'), 'fan_in': 3, 'fan_out': 1}],
                 'entrypoints': [{'file': str(tmp_path / 'src' / 'main.py'), 'fan_out': 2}],
                 'components': [{
@@ -1081,6 +1094,7 @@ class TestRunImportsAnalysis(unittest.TestCase):
         instance._format_entrypoints.return_value = {'entries': [{'file': 'main.py', 'fan_out': 3}]}
         instance._format_components.return_value = {'components': [{'component': 'src', 'cohesion': 0.8, 'files': 4}]}
         instance._format_circular.return_value = {'count': 2}
+        instance.get_metadata.return_value = {**_ARCH_DATA['metadata'], 'unsupported_extensions': {}}
         result = _run_imports_analysis(self.adapter, Path('/proj'))
         self.assertEqual(result['fan_in'], [{'file': 'a.py', 'fan_in': 5, 'fan_out': 1}])
         self.assertEqual(result['entrypoints'], [{'file': 'main.py', 'fan_out': 3}])

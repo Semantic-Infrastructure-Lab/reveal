@@ -133,16 +133,16 @@ class TestHandleUriExclude:
     BACK-1034/BACK-1108."""
 
     def test_exclude_injected_for_overview_scheme(self):
+        """Legacy overview dispatch (API/batch) retains query injection."""
         mock_adapter_cls = MagicMock()
         mock_renderer_cls = MagicMock()
         mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
             with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
-                    from reveal.cli.routing import handle_uri
-                    args = _args(sort=None, exclude=['skip_me*'], base_path=None)
-                    handle_uri('overview://src', None, args)
-        resource_arg = mock_handler.call_args[0][2]
+                from reveal.cli.routing.uri import _dispatch
+                with _dispatch('overview://src', None,
+                               _args(sort=None, exclude=['skip_me*'], base_path=None), ()) as dispatch:
+                    resource_arg = dispatch[2]
         assert 'exclude=skip_me%2A' in resource_arg or 'exclude=skip_me*' in resource_arg
 
     def test_exclude_joins_multiple_patterns_with_comma(self):
@@ -164,11 +164,10 @@ class TestHandleUriExclude:
         mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
             with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
-                    from reveal.cli.routing import handle_uri
-                    args = _args(sort=None, exclude=['flag_pattern*'], base_path=None)
-                    handle_uri('overview://src?exclude=uri_pattern*', None, args)
-        resource_arg = mock_handler.call_args[0][2]
+                from reveal.cli.routing.uri import _dispatch
+                with _dispatch('overview://src?exclude=uri_pattern*', None,
+                               _args(sort=None, exclude=['flag_pattern*'], base_path=None), ()) as dispatch:
+                    resource_arg = dispatch[2]
         assert resource_arg.count('exclude=') == 1
         assert 'flag_pattern' not in resource_arg
 
@@ -289,11 +288,11 @@ class TestHandleUriStructuralFlagsWarning:
         with patch('reveal.adapters.base.get_adapter_class', return_value=adapter_cls):
             with patch('reveal.adapters.base.get_renderer_class', return_value=MagicMock(**{'exit_code.return_value': 0})):
                 from reveal.cli.routing import handle_uri
-                handle_uri('overview://.', None, args)
+                handle_uri('pack://.', None, args)
 
     def test_depth_warns_when_adapter_has_no_matching_param(self, capsys):
         self._dispatch(_StubAdapterNoStructuralParams, depth=1)
-        assert '--depth has no effect on overview://' in capsys.readouterr().err
+        assert '--depth has no effect on pack://' in capsys.readouterr().err
 
     def test_no_warning_when_adapter_declares_matching_param(self, capsys):
         self._dispatch(_StubAdapterWithDepthParam, depth=1)

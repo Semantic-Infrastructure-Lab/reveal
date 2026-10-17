@@ -1,8 +1,8 @@
 """BACK-1377: the overview subcommand and the overview:// URI form must turn the same
 CLI flags into the same adapter query.
 
-Characterization tests: they pin what `run_overview` hands to `OverviewAdapter` so the
-flag-injection logic can be shared with cli/routing/uri.py without changing behavior.
+Characterization tests inspect the shared typed handoff and established walk policy.
+Expansion flags reach the adapter through existing named forwarding.
 The differential (subcommand vs URI, real fixture tree) at the bottom is the guard that the
 two entry points stay in agreement.
 """
@@ -15,62 +15,81 @@ from unittest.mock import patch
 
 import pytest
 
-from reveal.adapters.overview import UNLIMITED_TOP
 from reveal.cli.commands.overview import create_overview_parser, run_overview
 from reveal.cli.routing.uri import _inject_exclude_flag
 
 
-def _query_sent(*argv):
-    """Parse `reveal overview <argv>` and return {key: value} of the adapter query."""
+def _bound_request(*argv):
+    """Observe the actual typed handoff, named expansion flags and walk policy."""
+    from reveal.utils.exclusions import active_exclusions
+    from reveal.utils.gitignore import respect_gitignore_param
+    from reveal.utils.query_parser import peek_query_items
+    from reveal.utils.results import ResultBuilder
+    from reveal.adapters.overview import OverviewAdapter
+    seen = {}
+    def observe(self, all=False, verbose=False, **kwargs):
+        seen.update(params=dict(peek_query_items(self.query_params)), all=all, verbose=verbose,
+                    excludes=list(active_exclusions()[1]), respect_gitignore=respect_gitignore_param({}))
+        return ResultBuilder.create('overview', '.', scope={
+            'total_code_files': 0, 'languages': [], 'skipped_gitignore': 0,
+            'skipped_no_analyzer': 0, 'skipped_dirs': 0}, data={
+            'stats': {'summary': {key: 0 for key in ('total_files', 'total_lines', 'total_code_lines',
+                'total_functions', 'total_classes', 'avg_complexity', 'avg_quality_score')},
+                'files': [], 'hotspots': []},
+            'complex_functions': [], 'git_log': [], 'architecture': {
+                'fan_in': [], 'entrypoints': [], 'components': [], 'circular_count': 0,
+                'unsupported_extensions': {}, 'metadata': {'files_failed_count': 0,
+                    'files_failed': [], 'files_lost_count': 0, 'files_lost': [], 'extraction_diagnostics': {}}}})
     args = create_overview_parser().parse_args(['.', '--format', 'json', *argv])
-    with patch('reveal.cli.commands.overview.OverviewAdapter') as adapter, \
-            patch('reveal.cli.commands.overview.OverviewRenderer'), \
+    with patch.object(OverviewAdapter, 'get_structure', observe), \
+            patch('reveal.config.RevealConfig.ignore_patterns', return_value=[]), \
             patch('reveal.utils.json_utils.attach_provenance', side_effect=lambda r: r):
-        adapter.return_value.get_structure.return_value = {'type': 'overview'}
         run_overview(args)
-    _path, query = adapter.call_args.args
-    return dict(pair.partition('=')[::2] for pair in query.split('&'))
+    return seen
 
 
 def test_defaults():
-    # respect_gitignore is only sent when it is turned off (the adapter's default is on), the
-    # same as the overview:// form -- the subcommand used to send respect_gitignore=true.
-    assert _query_sent() == {'top': '5', 'no_git': 'false', 'no_imports': 'false'}
+    request = _bound_request()
+    assert request['params'] == {}  # Declaration defaults are not submitted controls.
+    assert request['respect_gitignore'] is True
 
 
 @pytest.mark.parametrize('flag', ['--all', '--verbose'])
 def test_all_and_verbose_lift_the_top_cap(flag):
-    assert _query_sent(flag)['top'] == str(UNLIMITED_TOP)
+    request = _bound_request(flag)
+    assert request[flag[2:]] is True
+    assert 'top' not in request['params']  # Expansion is named forwarding, not URI injection.
 
 
 def test_top_is_honored_without_all():
-    assert _query_sent('--top', '2')['top'] == '2'
+    assert _bound_request('--top', '2')['params']['top'] == 2
 
 
 def test_no_gitignore_reaches_the_adapter():
-    assert _query_sent('--no-gitignore')['respect_gitignore'] == 'false'
+    assert _bound_request('--no-gitignore')['respect_gitignore'] is False
 
 
-def test_exclude_is_comma_joined_in_flag_order():
-    assert _query_sent('--exclude', 'dist/*', '--exclude', '*.min.js')['exclude'] == 'dist/*,*.min.js'
+def test_exclude_preserves_flag_order_in_walk_scope():
+    assert _bound_request('--exclude', 'dist/*', '--exclude', '*.min.js')['excludes'] == ['dist/*', '*.min.js']
 
 
 def test_no_exclude_sends_no_exclude_key():
-    assert 'exclude' not in _query_sent()
+    assert 'exclude' not in _bound_request()['params']
 
 
 def test_section_switches():
-    q = _query_sent('--no-git', '--no-imports')
-    assert (q['no_git'], q['no_imports']) == ('true', 'true')
+    q = _bound_request('--no-git', '--no-imports')['params']
+    assert (q['no_git'], q['no_imports']) == (True, True)
 
 
 @pytest.mark.parametrize('values', [['dist/*'], ['a', 'b/*', '*.min.js']])
-def test_uri_form_and_subcommand_share_the_exclude_format(values):
-    """overview://X --exclude ... and `overview X --exclude ...` must send the same value."""
+def test_uri_form_and_subcommand_preserve_the_same_exclude_values(values):
+    from reveal.utils.query_parser import split_exclude_param
     args = Namespace(exclude=values)
     with patch('reveal.utils.exclusions.set_active_exclusions'):
         uri = _inject_exclude_flag('overview://x?top=5', 'overview', args)
-    assert uri.partition('exclude=')[2] == _query_sent(*[t for v in values for t in ('--exclude', v)])['exclude']
+    assert split_exclude_param(uri.partition('exclude=')[2]) == values
+    assert _bound_request(*[t for v in values for t in ('--exclude', v)])['excludes'] == values
 
 
 # --- differential on a real tree: subcommand vs URI, the guard that they agree ---------

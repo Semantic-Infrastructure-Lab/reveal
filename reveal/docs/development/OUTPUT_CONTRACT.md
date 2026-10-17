@@ -414,10 +414,11 @@ apply after this legacy outcome handling:
 
 ## Declared execution policy
 
-Direct surface, architecture, contracts, deps and hotspots subcommands and their URI equivalents share declared
+Direct surface, architecture, contracts, deps, hotspots and overview subcommands and their URI equivalents share declared
 parameter binding and one answer/emission path. Surface retains `surface_scan`;
 architecture retains `architecture` or `architecture_diff` by resolved operation.
-Contracts retains `contracts`; deps retains `deps_scan`; hotspots retains `hotspots_scan`.
+Contracts retains `contracts`; deps retains `deps_scan`; hotspots retains `hotspots_scan`;
+overview retains `overview`.
 Their execution policy
 uses explicit completeness and failure causes from the analysis owner, independently
 of `outcome_of()`'s legacy rendering categories:
@@ -481,6 +482,18 @@ normalize consistently. Both transports' `--verbose` lifts caps. CLI `--all`
 remains rejected; URI `--all` preserves an explicit top. Default text findings
 now exit 0; explicit `--fail-on findings` restores the findings gate in either
 format and transport. Neither fields nor output cuts erase captured facts.
+
+Overview supports only `--fail-on none`. Stats, AST and scope are required, as is
+Imports unless explicitly skipped. Required payload validation happens before
+projection; failed/recovered analysis, check-rule failures and Imports input loss
+make execution incomplete. Optional Git absence, churn notices, unsupported
+languages, confidence and ranking cuts alone do not. Returned producer errors
+remain analysis failures even when labeled invalid request. Top5 affects analysis
+and text; whole decimal/scientific spellings normalize, invalid booleans/fractions
+reject. Both `--all` and `--verbose` override explicit top in both spellings.
+Without either, top0 retains all Stats hotspots but zero AST/Git results. The
+documented query-exclusion boundary remains: query exclude filters Stats/scope/
+Imports, while only global exclusions also filter AST complex functions.
 
 Human-primary `--also-json PATH` uses the same result as primary JSON. A requested
 artifact write failure is disclosed on stderr and in `meta.output_errors`, while the

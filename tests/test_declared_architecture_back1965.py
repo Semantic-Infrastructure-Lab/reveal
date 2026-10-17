@@ -410,7 +410,7 @@ def test_inaccessible_resource_is_canonical_analysis_failure(project, monkeypatc
 
 
 def test_legacy_subcommand_still_publishes_outer_scope(project, monkeypatch):
-    from reveal.cli.commands.overview import create_overview_parser
+    from reveal.cli.commands.pack import create_pack_parser
     from reveal.cli.routing import subcommand
     from reveal.utils.exclusions import scope_matcher
     original = subcommand.dispatch_scope
@@ -419,13 +419,13 @@ def test_legacy_subcommand_still_publishes_outer_scope(project, monkeypatch):
         calls.append((target, excludes))
         return original(target, excludes)
     monkeypatch.setattr(subcommand, 'dispatch_scope', scope)
-    parser = create_overview_parser()
+    parser = create_pack_parser()
     def legacy_runner(args):
         matcher = scope_matcher(project)
         assert matcher is not None
         assert matcher('b.py', False)
         assert not matcher('a.py', False)
-    subcommand.dispatch_subcommand('overview', parser, legacy_runner,
+    subcommand.dispatch_subcommand('pack', parser, legacy_runner,
                                   parser.parse_args(['proj', '--exclude', 'b.py']))
     assert calls == [('proj', ['b.py'])]
 

@@ -551,7 +551,7 @@ a single view.
 ### Usage
 
 ```
-reveal overview [PATH] [--top N] [--no-git]
+reveal overview [PATH] [--top N] [--no-git] [--no-imports] [--all] [--fail-on none]
 ```
 
 ### CLI Flags
@@ -561,6 +561,8 @@ reveal overview [PATH] [--top N] [--no-git]
 | `--top N` | Items to show per section (default: 5) |
 | `--no-git` | Skip the recent git activity section |
 | `--no-imports` | Skip the Architecture section (import graph analysis) |
+| `--all`, `--verbose` | Expand analysis and text rankings, overriding explicit top |
+| `--fail-on none` | Default and only policy; required failures still exit 3 |
 | `--format json` | Machine-readable output |
 
 ### Examples
@@ -572,6 +574,14 @@ reveal overview . --top 10           # 10 items per section
 reveal overview . --no-git           # Skip git history
 reveal overview . --format json      # Machine-readable output
 ```
+
+Direct `overview` and `overview://` return the same `overview` answer. Completed
+work exits 0; invalid resources/parameters exit 2; required child analysis or
+requested output failure exits 3. There is no adverse-findings gate. Whole-valued
+top spellings such as `3.0` and `3e0` normalize; negative values, fractions and
+booleans reject. With neither expansion flag, top0 retains all Stats hotspots but
+zero complex-function/Git entries. URI query exclusions preserve their existing
+Stats/scope/Imports scope; global `--exclude` also filters AST complex functions.
 
 ### See Also
 

@@ -36,11 +36,27 @@ reveal overview . --format json
 
 | Parameter | Values | Purpose |
 |-----------|--------|---------|
-| `top` | integer (default `5`) | Number of items shown per section. |
+| `top` | nonnegative whole number (default `5`) | Analysis and presentation cap; `3.0` and `3e0` normalize to 3. Fractions, booleans and negative values reject. |
 | `no_git` | `true`, `false` (default) | Skip the recent-git-activity section. |
 | `no_imports` | `true`, `false` (default) | Skip import graph analysis (architecture section). |
 | `exclude` | comma-separated glob patterns | Exclude matching files/directories from the `stats`/hotspots, `scope` and `architecture` sections (an excluded file stays resolvable as an import target). Does not affect `complex_functions`. |
 | `respect_gitignore` | `true` (default), `false` | Skip what git ignores, in every section (tracked files are never skipped; `false` or `--no-gitignore` includes ignored files). |
+
+`no_git` and `no_imports` accept strict boolean spellings: `true`/`yes`/`1` and
+`false`/`no`/`0`; bare presence is true and unrecognized values reject.
+`--all` or `--verbose` expands analysis and text rankings in both spellings,
+including when an explicit `top` was supplied. This corrects the URI form's
+previous analysis-only cap under those flags. Without either flag, `top=0`
+retains all Stats hotspots, zero complex functions and zero Git history entries;
+text rankings show no entries. The complete Stats `files` inventory remains
+available, as do the complete Imports rankings.
+
+Both spellings use fixed answer type `overview` and the same declared execution
+path. `--fail-on none` is the default and sole supported policy: a nonempty
+dashboard has no adverse-findings gate. Completed work exits 0, invalid parameters
+or missing resources exit 2, and required analysis or output failure exits 3.
+Unsupported `--fail-on findings` rejects with usage 2. Legacy stdin/mixed batches
+retain their separate policy and reject `--fail-on`.
 
 ## Reading The Output
 
@@ -68,8 +84,20 @@ Optional Stats churn warnings reach the overview Caveats section once.
 The quality pulse's average describes the analyzed population. Its critical and
 warning file counts describe the shown hotspot ranking, which may omit files
 outside `top`. No matches in that ranking are not an overall quality verdict.
-These evidence repairs preserve the existing overview exit policy; they do not
-introduce a findings gate or declared execution binding.
+Stats, AST and scope evidence are required; Imports is required unless
+`no_imports=true`. Missing or malformed required child payloads, failed check
+rules, failed/recovered parses and failed/lost Imports inputs make execution
+incomplete. Optional Git absence, churn notices, low confidence, unsupported
+extensions and ranking cuts do not independently make completed work fail.
+Operational Git failures remain failures when Git was requested. Child populations
+can differ legitimately, including on unsupported-language and excluded trees.
+
+Execution facts are retained before `--fields` projection and postprocessing.
+Human-primary `--also-json PATH` retains complete arrays; a failed artifact write
+exits 3. Primary JSON keeps its established `--also-json` no-op. Closed stdout
+alone retains exit 0 but cannot erase an independent analysis or output failure.
+Overview has no sliceable outer list: URI `--head` and `--max-items` disclose no
+effect, and generated CLI `--max-items` likewise leaves these arrays unchanged.
 
 ## Good Review Questions
 
