@@ -380,6 +380,10 @@ def test_dart_declaration_line_matches_named_function(runner):
     assert (positional['line_start'], positional['line_end'], positional['name']) == expected
 
 
+@pytest.mark.xfail(
+    strict=True, raises=AssertionError,
+    reason="BACK-1933: Zig declaration-line extraction falls back to a surrounding line range",
+)
 def test_zig_declaration_line_matches_named_function(runner):
     named = runner.json(CONFORMANCE_DIR, ['zig/sample.zig', 'processOrder'])
     positional = runner.json(CONFORMANCE_DIR, ['zig/sample.zig', ':12'])

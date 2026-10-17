@@ -1,0 +1,101 @@
+$ reveal zig/sample.zig
+File: sample.zig (889B, 39 lines)
+
+Imports (2):
+  :2      const std = @import("std");
+  :3      const unused = @import("builtin");
+
+Functions (4):
+  :5      validate(order)
+  :12     processOrder(order)
+  :27     run(order)
+  :33     run(self, items)
+
+[exit 0]
+
+$ reveal zig/sample.zig --outline
+File: sample.zig (889B, 39 lines)
+
+const std = @import("std"); (zig/sample.zig:2)
+const unused = @import("builtin"); (zig/sample.zig:3)
+validate(order) (zig/sample.zig:5)
+processOrder(order) (zig/sample.zig:12)
+run(order) (zig/sample.zig:27)
+run(self, items) (zig/sample.zig:33)
+
+[exit 0]
+
+$ reveal zig/sample.zig processOrder
+zig/sample.zig:12-25 | processOrder
+
+     12  fn processOrder(order: ?[]const u8) ?[]const u8 {
+     13      var result = validate(order) catch {
+     14          return null;
+     15      };
+     16      const file = std.fs.cwd().openFile("orders.log", .{}) catch {
+     17          return null;
+     18      };
+     19      defer file.close();
+     20      file.writeAll(result) catch {
+     21          return null;
+     22      };
+     23      result = result[0..];
+     24      return result;
+     25  }
+[exit 0]
+
+$ reveal zig/sample.zig :33-38
+zig/sample.zig:33-38 | lines:33-38
+
+     33      fn run(self: *Batch, items: []const i32) void {
+     34          for (items) |item| {
+     35              self.total = self.total + item;
+     36              cache.set(item);
+     37          }
+     38      }
+[exit 0]
+
+$ reveal zig/sample.zig :12-14
+zig/sample.zig:12-14 | lines:12-14
+
+     12  fn processOrder(order: ?[]const u8) ?[]const u8 {
+     13      var result = validate(order) catch {
+     14          return null;
+[exit 0]
+
+$ reveal zig/sample.zig :12
+zig/sample.zig:2-22 | lines:2-22
+
+      2  const std = @import("std");
+      3  const unused = @import("builtin");
+      4  
+      5  fn validate(order: ?[]const u8) ![]const u8 {
+      6      if (order == null) {
+      7          return error.EmptyOrder;
+      8      }
+      9      return order.?;
+     10  }
+     11  
+     12  fn processOrder(order: ?[]const u8) ?[]const u8 {
+     13      var result = validate(order) catch {
+     14          return null;
+     15      };
+     16      const file = std.fs.cwd().openFile("orders.log", .{}) catch {
+     17          return null;
+     18      };
+     19      defer file.close();
+     20      file.writeAll(result) catch {
+     21          return null;
+     22      };
+[exit 0]
+
+$ reveal zig/sample.zig --grep result
+Text search: zig/sample.zig  —  pattern: result
+4 hits in 1 element
+
+  processOrder()
+    13: var result = validate(order) catch {
+    20: file.writeAll(result) catch {
+    23: result = result[0..];
+    24: return result;
+[exit 0]

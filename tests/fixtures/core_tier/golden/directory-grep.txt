@@ -1,6 +1,6 @@
 $ reveal . --grep '= validate'
 Text search: .  —  pattern: = validate
-15 hits across 15 files
+16 hits across 16 files
 
 File: c/sample.c
   process_order()
@@ -61,6 +61,10 @@ File: scala/sample.scala
 File: typescript/sample.ts
   processOrder()
     14: let result = validate(order);
+
+File: zig/sample.zig
+  processOrder()
+    13: var result = validate(order) catch {
 [exit 0]
 
 $ reveal python --grep result

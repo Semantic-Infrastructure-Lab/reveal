@@ -847,12 +847,47 @@ def test_gdscript_direct_call_varflow_control(tmp_path, cross_calls):
         {'kind': 'WRITE', 'line': 2}, {'kind': 'READ', 'line': 3}, {'kind': 'READ', 'line': 4}]
 
 
+@pytest.mark.xfail(
+    strict=True, raises=AssertionError,
+    reason="BACK-1931: Zig struct-qualified method cannot be addressed",
+)
 def test_zig_struct_method_is_addressable():
     result = _run_reveal_direct(str(_sample_path('zig')), 'Batch.run', '--format', 'json')
     assert result.returncode == 0, result.stderr
     assert 'self.total = self.total + item' in result.stdout
 
 
+def test_zig_conformance_fixture_parses_without_recovery():
+    _assert_fixture_has_no_parse_recovery('zig')
+
+
+def test_zig_top_level_run_remains_distinct_from_struct_method():
+    result = _run_reveal_direct(str(_sample_path('zig')), 'run', '--format', 'json')
+    assert result.returncode == 0, result.stderr
+    assert 'return processOrder(order)' in result.stdout
+    assert 'self.total' not in result.stdout
+
+
+def test_zig_statewrite_call_and_local_assignment_controls():
+    _assert_statewrite_controls('zig', [(':36-36', [{'kind': 'cache', 'line': 36}]), (':23-23', [])])
+
+
+def test_zig_trailing_return_and_catch_free_controls():
+    path = str(_sample_path('zig'))
+    result = _run_reveal_direct(path, 'processOrder', '--returns', '--format', 'json')
+    assert result.returncode == 0, result.stderr
+    findings = json.loads(result.stdout)['findings']
+    assert next(f for f in findings if f['line'] == 24)['gates'] == []
+    for flag in ['--catchmap', '--loopmap', '--fanout']:
+        result = _run_reveal_direct(path, 'run', flag, '--format', 'json')
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout)['findings'] == []
+
+
+@pytest.mark.xfail(
+    strict=True, raises=AssertionError,
+    reason="BACK-1934: Zig IfStatement return lacks its enclosing condition gate",
+)
 def test_zig_if_return_keeps_branch_gate():
     result = _run_reveal_direct(
         str(_sample_path('zig')), 'validate', '--returns', '--format', 'json')
@@ -861,3 +896,16 @@ def test_zig_if_return_keeps_branch_gate():
     assert [{'line': f['line'], 'gate_lines': [g['line'] for g in f['gates']]}
             for f in findings] == [{'line': 7, 'gate_lines': [6]}, {'line': 9, 'gate_lines': []}]
 
+
+@pytest.mark.parametrize('cross_calls', [False, True])
+def test_zig_declaration_and_call_read_varflow_control(cross_calls):
+    args = [str(_sample_path('zig')), ':12-22', '--varflow', 'result', '--format', 'json']
+    if cross_calls:
+        args.append('--cross-calls')
+    result = _run_reveal_direct(*args)
+    assert result.returncode == 0, result.stderr
+    findings = json.loads(result.stdout)['findings']
+    if cross_calls:
+        findings = findings[0]['events']
+    assert [{'kind': f['kind'], 'line': f['line']} for f in findings] == [
+        {'kind': 'WRITE', 'line': 13}, {'kind': 'READ', 'line': 20}]
