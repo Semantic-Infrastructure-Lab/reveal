@@ -317,3 +317,14 @@ function target() {
 }
 ''')
     assert {d['var'] for d in collect_deps(scope, 1, end, text)} == {'captured', 'ready', 'tick', 'consume'}
+
+
+def test_js_loop_initializer_inner_parameter_is_not_loop_binding():
+    scope, text, end = parsed('javascript', '''\
+function target() {
+ for (let f = (y) => y + captured; ready; tick()) {
+   consume(y, f);
+ }
+}
+''')
+    assert {d['var'] for d in collect_deps(scope, 1, end, text)} == {'captured', 'ready', 'tick', 'consume', 'y'}
