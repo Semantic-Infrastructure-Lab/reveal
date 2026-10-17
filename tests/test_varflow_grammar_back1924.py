@@ -68,6 +68,7 @@ def test_gdscript_declaration_only_range_keeps_write_candidate(gdscript):
     events = all_var_flow(scope, 3, 3, text)
     assert set(events) == {'result', 'input'}
     assert events['result'][0]['kind'] == 'WRITE'
+    assert set(all_var_flow(scope, 7, 7, text)) == {'unread'}  # No type-name candidate.
 
 
 def test_gdscript_mutations_follow_initialization_and_reassignment(gdscript):
