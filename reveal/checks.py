@@ -101,6 +101,11 @@ def parse_error_suffix(position: Optional[Tuple[int, int]]) -> str:
     return f" (first error at line {position[0]}:{position[1]})" if position else ""
 
 
+def parse_error_description(position: Optional[Tuple[int, int]], reason: Optional[str] = None) -> str:
+    """An explicit source failure, otherwise the existing native-recovery description."""
+    return reason or f"file did not parse cleanly{parse_error_suffix(position)}"
+
+
 def _detections_result(
     path: str,
     detections: List[Any],
@@ -111,6 +116,7 @@ def _detections_result(
     max_snippet_chars: Optional[int] = None,
     total_available: Optional[int] = None,
     disclosures: Optional[List[str]] = None,
+    parse_error_reason: Optional[str] = None,
 ) -> dict:
     """The single-file check result as plain data; the subcommand seam
     (emit_subcommand_result / subcommand_json) adds the Output Contract envelope
@@ -127,6 +133,8 @@ def _detections_result(
         parse_degraded: True when the parser recovered from a syntax error
             (BACK-1084's structure['_has_errors']) -- detections for this file may be
             incomplete or wrong, not just "clean" (BACK-1083).
+        parse_error_reason: An analyzer's explicit source-invalidity reason, when
+            degradation is known without native parser recovery.
         rule_errors: Rules that raised during check() ({"rule", "error"})
             (BACK-1083).
         no_snippets: Omit each detection's `context` (code excerpt) field (BACK-1182).
@@ -162,7 +170,7 @@ def _detections_result(
                         cause='max_items')
     if parse_degraded:
         result['warning'] = (
-            f"file did not parse cleanly{parse_error_suffix(parse_error_at)}; "
+            f"{parse_error_description(parse_error_at, parse_error_reason)}; "
             "results may be incomplete or incorrect"
         )
     if rule_errors:
@@ -205,6 +213,7 @@ def _emit_detections(path: str, output_format: str, detections: List[Any],
                 path, rendered, no_group=no_group,
                 parse_degraded=result_fields.get('parse_degraded', False),
                 parse_error_at=result_fields.get('parse_error_at'),
+                parse_error_reason=result_fields.get('parse_error_reason'),
                 rule_errors=result_fields.get('rule_errors'),
                 no_snippets=result_fields.get('no_snippets', False),
                 max_snippet_chars=result_fields.get('max_snippet_chars'),
@@ -238,6 +247,7 @@ def _format_detections_text(
     max_snippet_chars: Optional[int] = None,
     disclosures: Optional[List[str]] = None,
     scan_incomplete: bool = False,
+    parse_error_reason: Optional[str] = None,
 ) -> None:
     """Format detections as human-readable text.
 
@@ -252,6 +262,8 @@ def _format_detections_text(
         no_group: Disable collapsing of repeated rules
         parse_degraded: True when the parser recovered from a syntax error —
             see _format_detections_json (BACK-1083).
+        parse_error_reason: An explicit invalid-source reason instead of the
+            generic recovery description.
         rule_errors: Rules that raised during check() — see _format_detections_json.
         no_snippets: Omit the 📝 code-excerpt line (BACK-1182).
         max_snippet_chars: Truncate the excerpt to N chars instead of
@@ -270,7 +282,7 @@ def _format_detections_text(
 
     if not detections:
         if parse_degraded:
-            print(f"{path}: ⚠️  file did not parse cleanly{parse_error_suffix(parse_error_at)}"
+            print(f"{path}: ⚠️  {parse_error_description(parse_error_at, parse_error_reason)}"
                   " — results may be incomplete or incorrect")
         else:
             if rule_errors or scan_incomplete:
@@ -284,7 +296,7 @@ def _format_detections_text(
 
     count = len(detections)
     if parse_degraded:
-        print(f"{path}: ⚠️  file did not parse cleanly{parse_error_suffix(parse_error_at)}"
+        print(f"{path}: ⚠️  {parse_error_description(parse_error_at, parse_error_reason)}"
               " — results below may be incomplete or incorrect")
     print(f"{path}: Found {count} issue{'s' if count != 1 else ''}\n")
 
@@ -415,6 +427,7 @@ def run_pattern_detection(
         path, output_format, detections, rendered_detections, no_group=no_group,
         parse_degraded=parse_degraded, rule_errors=rule_errors, no_snippets=no_snippets,
         parse_error_at=_analyzer_error_position(analyzer) if parse_degraded else None,
+        parse_error_reason=structure.get('error') if parse_degraded else None,
         max_snippet_chars=max_snippet_chars, total_available=total_available,
         disclosures=disclosures, scan_incomplete=bool(scan_disclosures),
     )

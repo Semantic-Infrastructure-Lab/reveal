@@ -5,7 +5,10 @@ from typing import List, Optional
 from ..core import node_children as _children
 from ..core.treesitter_compat import _zero_arg
 from ..registry import register
+from ..reveal_types import CONTRACT_VERSION
 from ..treesitter import TreeSitterAnalyzer
+from ..utils.path_utils import to_posix
+from ..utils.results import ResultBuilder
 
 
 @register('.py', '.pyi', name='Python', icon='')
@@ -15,6 +18,32 @@ class PythonAnalyzer(TreeSitterAnalyzer):
     Gets structure + extraction for FREE from TreeSitterAnalyzer!
     """
     language = 'python'
+
+    def _repeated_bom_error(self) -> Optional[str]:
+        """A second leading BOM is source, after FileAnalyzer consumed the encoding mark.
+
+        This checks the reader's normalization facts, not general Python syntax.
+        Tree-sitter accepts the extra mark, so native recovery cannot disclose it.
+        """
+        if self._detected_encoding == 'utf-8-sig' and self.content.startswith('\ufeff'):
+            return 'invalid Python source: unexpected U+FEFF after UTF-8 BOM (line 1:1)'
+        return None
+
+    def get_structure(self, **kwargs):
+        error = self._repeated_bom_error()
+        if error:
+            # Before the inherited cache/tree lookup: cached TS structure cannot
+            # establish Python source validity. get_outline also calls this owner.
+            return ResultBuilder.create_error(
+                result_type='python_structure', source=to_posix(self.path), error=error,
+                contract_version=CONTRACT_VERSION, _has_errors=True,
+            )
+        return super().get_structure(**kwargs)
+
+    def first_parse_error_position(self):
+        if self._repeated_bom_error():
+            return (1, 1)
+        return super().first_parse_error_position()
 
     def _leading_docstring_node(self, body_node):
         """The function's first statement, if it's a bare string literal
