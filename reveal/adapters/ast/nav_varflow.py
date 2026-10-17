@@ -654,7 +654,8 @@ class VarFlowWalker:
             binding = initializer if initializer is not None else left
             parts = [child for child in _children(n)
                      if binding is None or _start_pos(child) != _start_pos(binding)]
-            self._walk_bound_body(n, [binding] if binding is not None else [], parts)
+            self._walk_bound_body(n, [binding] if binding is not None else [], parts,
+                                  bind_initial_reads=True)
             return
         processed: set = set()
         if left:
@@ -670,16 +671,18 @@ class VarFlowWalker:
             if (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) not in processed:
                 self.walk(child, c)
 
-    def _walk_bound_body(self, n: Any, bindings: List[Any], body: List[Any]) -> None:
+    def _walk_bound_body(self, n: Any, bindings: List[Any], body: List[Any],
+                         *, bind_initial_reads: bool = False) -> None:
         """Keep inner bindings distinct from same-named reads in the caller."""
         start = len(self.events)
         for binding in bindings:
             self.walk(binding, 'WRITE')
         previous = self.binding_scope
-        if any(e['kind'] == 'WRITE' for e in self.events[start:]):
+        initial = [e for e in self.events[start:] if e.get('binding_scope') == previous]
+        if any(e['kind'] == 'WRITE' for e in initial):
             self.binding_scope = (_zero_arg(n, 'start_byte'), _zero_arg(n, 'end_byte'))
-            for event in self.events[start:]:
-                if event['kind'] == 'WRITE':
+            for event in initial:
+                if event['kind'] == 'WRITE' or bind_initial_reads:
                     event['binding_scope'] = self.binding_scope
         for child in body:
             self.walk(child, 'READ')
