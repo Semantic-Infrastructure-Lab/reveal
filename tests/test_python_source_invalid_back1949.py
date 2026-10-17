@@ -9,6 +9,7 @@ import json
 import pytest
 
 from conftest import _run_reveal_direct
+from reveal.adapters.ast import analysis
 from reveal.analyzers.python import PythonAnalyzer
 from reveal.treesitter import TreeSitterAnalyzer
 from reveal.utils.parse_audit import capture_parses
@@ -164,3 +165,47 @@ def test_ordinary_syntax_recovery_remains_recovery(tmp_path):
     warning = json.loads(checked.stdout)['warning']
     assert 'did not parse cleanly' in warning
     assert 'UTF-8 BOM' not in warning
+
+
+@pytest.mark.parametrize('outline', [False, True])
+def test_ast_failed_source_uses_omission_channel_and_releases_buffers(tmp_path, monkeypatch, outline):
+    path = _write(tmp_path)
+    released = []
+    original_release = analysis._release_buffers
+
+    def release(analyzer):
+        original_release(analyzer)
+        released.append((analyzer.content, analyzer.lines, analyzer._content_bytes))
+
+    monkeypatch.setattr(analysis, '_release_buffers', release)
+    assert analysis.analyze_file_outcome(str(path), outline=outline) == (None, REASON)
+    assert released == [('', [], None)]
+
+
+@pytest.mark.parametrize('query', ['', '?name=café'])
+def test_ast_query_discloses_repeated_bom_as_failure_not_recovery(tmp_path, query):
+    path = _write(tmp_path)
+    result = _run_reveal_direct(f'ast://{tmp_path}{query}', '--format', 'json')
+    payload = json.loads(result.stdout)
+    warnings = payload['meta']['warnings']
+    (warning,) = [w for w in warnings if w['type'] == 'analysis_failed']
+    assert warning['count'] == 1
+    assert warning['files'] == [path.as_posix()]
+    assert not [w for w in warnings if w['type'] == 'parse_recovered']
+    assert REASON in result.stderr
+
+
+def test_explicit_xml_failure_is_not_flattened_as_recovery(tmp_path):
+    path = tmp_path / 'broken.xml'
+    path.write_text('<root>', encoding='utf-8')
+    structure, failure = analysis.analyze_file_outcome(str(path))
+    assert structure is None
+    assert failure == 'XML parse error: no element found: line 1, column 6'
+
+
+def test_ast_ordinary_recovery_keeps_surviving_elements(tmp_path):
+    path = _write(tmp_path, count=0, source='def ok():\n    pass\ndef broken(:\n')
+    structure, failure = analysis.analyze_file_outcome(str(path))
+    assert failure is None
+    assert structure['parse_recovered'] is True
+    assert [(e['name'], e['line']) for e in structure['elements']] == [('ok', 1), ('broken', 3)]
