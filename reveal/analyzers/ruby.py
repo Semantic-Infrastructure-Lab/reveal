@@ -62,11 +62,24 @@ class RubyAnalyzer(TreeSitterAnalyzer):
             return []
         names = []
         for argument in _children(arguments):
-            if _zero_arg(argument, 'kind') in ('constant', 'scope_resolution'):
+            if self._is_literal_mixin_name(argument):
                 text = self._get_node_text(argument).strip()
                 if text:
                     names.append(text)
         return names
+
+    @staticmethod
+    def _is_literal_mixin_name(node) -> bool:
+        """Qualified mixins must contain constants, including each scope prefix."""
+        kind = _zero_arg(node, 'kind')
+        if kind == 'constant':
+            return True
+        if kind != 'scope_resolution':
+            return False
+        name = node.child_by_field_name('name')
+        scope = node.child_by_field_name('scope')
+        return (name is not None and _zero_arg(name, 'kind') == 'constant'
+                and (scope is None or RubyAnalyzer._is_literal_mixin_name(scope)))
 
     # ── Callee naming (BACK-915 slice 4) ──────────────────────────────────────
     # Reached via an explicit `self.language == 'ruby'` guard in
