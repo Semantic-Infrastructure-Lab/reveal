@@ -98,7 +98,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'Pre-download tree-sitter grammars for offline/air-gapped use'),
     'overview':     _spec('overview',
                      'reveal overview [path]',
-                     'One-glance dashboard: languages, quality, hotspots, recent git'),
+                     'One-glance dashboard: languages, quality, hotspots, recent git')._replace(declared_adapter='overview'),
     'pack':         _spec('pack',
                      'reveal pack <path>',
                      'Token-budgeted context snapshot for LLM consumption',

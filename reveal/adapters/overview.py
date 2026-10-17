@@ -8,9 +8,10 @@ every other capability follows.
 from __future__ import annotations
 
 import logging
+import math
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from reveal.capabilities import scope_dict_for_path
 from reveal.errors import NotApplicableError
@@ -24,7 +25,7 @@ from .stats import StatsAdapter
 from ..utils.exclusions import exclusion_scope
 from ..utils.gitignore import respect_gitignore_param
 from ..utils.path_utils import as_spelled, display_name_for_path
-from ..utils.query import parse_query_params
+from ..utils.query_binding import bind_declared_params, boolean_value
 from ..rendering.adapters.overview import (  # noqa: F401 -- the render helpers are re-exported
     OverviewRenderer,
     _NON_CODE_EXT_LABELS,
@@ -42,7 +43,9 @@ from ..rendering.adapters.overview import (  # noqa: F401 -- the render helpers 
     _render_overview,
     _render_quality_pulse,
 )
-from ..utils.query_parser import join_exclude_patterns, split_exclude_param
+from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
+                                  join_exclude_patterns, nonnegative_display_limit,
+                                  param_schema, split_exclude_param)
 from ..utils.results import ResultBuilder, note_truncation
 
 logger = logging.getLogger(__name__)
@@ -56,6 +59,160 @@ logger = logging.getLogger(__name__)
 # like an uncapped one, bounded by the actual repo/result size either way
 # (BACK-1226).
 UNLIMITED_TOP = 10**9
+
+
+def _object(value: Any, field: str) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError(f'{field} requires an object')
+    return value
+
+
+def _count(data: Dict[str, Any], field: str) -> int:
+    value = data.get(field)
+    if type(value) is not int or value < 0:
+        raise ValueError(f'{field} requires a non-negative integer count')
+    return value
+
+
+def _number(value: Any, field: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise ValueError(f'{field} requires a finite number')
+
+
+def _text(value: Any, field: str) -> None:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f'{field} requires a nonempty string')
+
+
+def _rows(data: Dict[str, Any], field: str) -> List[Dict[str, Any]]:
+    value = data.get(field)
+    if not isinstance(value, list) or any(not isinstance(row, dict) for row in value):
+        raise ValueError(f'{field} requires an array of objects')
+    return cast(List[Dict[str, Any]], value)
+
+
+def _validate_stats(data: Any) -> None:
+    data = _object(data, 'StatsAdapter answer')
+    summary = _object(data.get('summary'), 'stats.summary')
+    for field in ('total_files', 'total_lines', 'total_code_lines', 'total_functions', 'total_classes'):
+        _count(summary, field)
+    for field in ('avg_complexity', 'avg_quality_score'):
+        _number(summary.get(field), field)
+    files = _rows(data, 'files')
+    if len(files) != summary['total_files']:
+        raise ValueError('stats.files must retain the summary total_files inventory')
+    for entry in files:
+        _text(entry.get('file'), 'stats.files.file')
+    for hotspot in _rows(data, 'hotspots'):
+        _text(hotspot.get('file'), 'stats.hotspots.file')
+        _number(hotspot.get('quality_score'), 'stats.hotspots.quality_score')
+        issues = hotspot.get('issues')
+        if not isinstance(issues, list) or any(not isinstance(issue, str) for issue in issues):
+            raise ValueError('stats.hotspots.issues requires an array of strings')
+
+
+def _validate_functions(data: Dict[str, Any], field: str) -> None:
+    for function in _rows(data, field):
+        _text(function.get('file'), f'{field}.file')
+        _text(function.get('name'), f'{field}.name')
+        _count(function, 'complexity')
+
+
+def _validate_ast(data: Any) -> None:
+    data = _object(data, 'AstAdapter answer')
+    _validate_functions(data, 'results')
+    for field in ('total_files', 'total_results', 'displayed_results'):
+        _count(data, field)
+    if data['displayed_results'] != len(data['results']) or data['total_results'] < data['displayed_results']:
+        raise ValueError('AST result counts must cover the retained results')
+
+
+def _validate_scope(data: Any) -> None:
+    data = _object(data, 'scope census')
+    for field in ('total_code_files', 'skipped_gitignore', 'skipped_no_analyzer', 'skipped_dirs'):
+        _count(data, field)
+    languages = _rows(data, 'languages')
+    for language in languages:
+        _text(language.get('language'), 'scope.languages.language')
+        _count(language, 'files')
+    if sum(language['files'] for language in languages) != data['total_code_files']:
+        raise ValueError('scope language counts must sum to total_code_files')
+
+
+def _validate_import_rows(data: Any, field: str, kind: str) -> None:
+    for entry in _rows(_object(data, 'ImportsAdapter answer'), field):
+        _text(entry.get('component' if kind == 'components' else 'file'), f'{kind}.path')
+        if kind == 'components':
+            _count(entry, 'files')
+            _number(entry.get('cohesion'), 'components.cohesion')
+        else:
+            _count(entry, 'fan_out')
+            if kind == 'fan_in':
+                _count(entry, 'fan_in')
+
+
+def _validate_unsupported(unsupported: Any) -> None:
+    for extension, count in _object(unsupported, 'unsupported_extensions').items():
+        _text(extension, 'unsupported extension')
+        _count({'count': count}, 'count')
+
+
+def _validate_import_metadata(metadata: Any, unsupported: Any) -> None:
+    metadata = _object(metadata, 'architecture.metadata')
+    for field in ('files_failed', 'files_lost'):
+        count = _count(metadata, field+'_count')
+        paths = metadata.get(field)
+        if not isinstance(paths, list) or len(paths) != min(count, 50):
+            raise ValueError(f'{field} must retain the first 50 paths or the full smaller population')
+        for path in paths:
+            _text(path, field)
+    if metadata['files_lost_count'] > metadata['files_failed_count']:
+        raise ValueError('files_lost_count cannot exceed files_failed_count')
+    for path, causes in _object(metadata.get('extraction_diagnostics'), 'extraction_diagnostics').items():
+        _text(path, 'extraction_diagnostics path')
+        _object(causes, 'extraction_diagnostics causes')
+    _validate_unsupported(unsupported)
+
+
+def _validate_architecture(data: Any) -> None:
+    data = _object(data, 'architecture')
+    for field in ('fan_in', 'entrypoints', 'components'):
+        _validate_import_rows(data, field, field)
+    _count(data, 'circular_count')
+    _validate_import_metadata(data.get('metadata'), data.get('unsupported_extensions'))
+
+
+def _validate_git_log(data: Any) -> None:
+    data = _object(data, 'GitAdapter answer')
+    field = 'history' if 'history' in data else 'commits'
+    for commit in _rows(data, field):
+        _text(commit.get('hash'), 'git commit hash')
+        if not isinstance(commit.get('message'), str):
+            raise ValueError('git commit message requires a string')
+        if commit.get('timestamp') is not None:
+            _number(commit['timestamp'], 'git commit timestamp')
+
+
+def _required_child(adapter: 'OverviewAdapter', owner: type, path: Path,
+                    validate: Callable[[Any], None], **kwargs: Any) -> Dict[str, Any]:
+    # A unique fallback distinguishes an already-attributed compose failure from
+    # a child returning {}, which is missing evidence rather than empty success.
+    missing = object()
+    data = adapter.compose(owner, str(path), default=missing, **kwargs)
+    if data is missing or (isinstance(data, dict) and data.get('error')):
+        return {}
+    try:
+        validate(data)
+    except ValueError as exc:
+        adapter.record_composed_error(getattr(owner, '__name__', str(owner)), path, exc)
+        return {}
+    return cast(Dict[str, Any], data)
+
+
+def _overview_top(value: Any) -> int:
+    if isinstance(value, bool):
+        raise ValueError('top requires a non-negative whole number')
+    return nonnegative_display_limit(value)
 
 
 def without_internal_filter_warnings(meta: Optional[RevealMeta]) -> List[WarningEntry]:
@@ -89,7 +246,7 @@ def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int) -> Dict[str, An
     if exclude_patterns:
         query += f'&exclude={join_exclude_patterns(exclude_patterns)}'
     query += f'&respect_gitignore={"true" if adapter.respect_gitignore else "false"}'
-    stats = adapter.compose(StatsAdapter, str(path), default={}, query=query,
+    stats = _required_child(adapter, StatsAdapter, path, _validate_stats, query=query,
                             cut_as=('hotspots', 'raise ?top=N'))
     if stats.get('warnings'):
         adapter.fold_meta({'warnings': stats['warnings']})
@@ -116,11 +273,13 @@ def _run_scope(adapter: 'OverviewAdapter', path: Path) -> Dict[str, Any]:
     agrees with what stats/check actually skipped.
     """
     try:
-        return scope_dict_for_path(
+        scope = scope_dict_for_path(
             path,
             exclude_patterns=adapter.exclude_patterns,
             respect_gitignore=adapter.respect_gitignore,
         )
+        _validate_scope(scope)
+        return scope
     except Exception as exc:  # boundary-ok: broad-except -- the scope census is an optional report section whose callee chain (directory walk, gitignore, language sniffing in utils/path_utils) is not bounded; a failing census must not end the report, and it is recorded in meta.errors with confidence 0 by record_composed_error and logged
         logger.warning("scope census failed for %s: %s", path, exc)
         adapter.record_composed_error('scope_dict_for_path', path, exc)
@@ -140,7 +299,7 @@ def _resolve_git_root(path: Path) -> Optional[Path]:
     ``_git_root_or_disclose``.
     """
     try:
-        metadata = GitAdapter(path=str(path)).get_metadata()
+        metadata = _object(GitAdapter(path=str(path)).get_metadata(), 'Git metadata')
         root = metadata.get('path')
         return Path(root).resolve() if root else None
     except NotApplicableError:
@@ -173,7 +332,7 @@ def _run_git_log(adapter: 'OverviewAdapter', path: Path, limit: int) -> List[Dic
     result shapes differ by key: repo-root's ``refs.get_ref_structure()`` returns
     'history', a subpath's ``files.get_file_history()`` returns 'commits', so both are read.
     """
-    data = adapter.compose(GitAdapter, str(path), default={},
+    data = _required_child(adapter, GitAdapter, path, _validate_git_log,
                            query=f'type=history&limit={limit}',
                            cut_as=('git_log', 'raise ?top=N'))
     return data.get('history', data.get('commits', []))
@@ -181,7 +340,7 @@ def _run_git_log(adapter: 'OverviewAdapter', path: Path, limit: int) -> List[Dic
 
 def _run_complex_functions(adapter: 'OverviewAdapter', path: Path, limit: int) -> List[Dict[str, Any]]:
     """Fetch top complex functions via AstAdapter."""
-    data = adapter.compose(AstAdapter, str(path), default={},
+    data = _required_child(adapter, AstAdapter, path, _validate_ast,
                             query=f'complexity>9&sort=-complexity&limit={limit}',
                             cut_as=('complex_functions', 'raise ?top=N'))
     return data.get('results', data.get('elements', []))
@@ -225,6 +384,22 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path) -> Dict[str, A
         components = importer._format_components()
         circular = importer._format_circular()
         metadata = importer.get_metadata()
+        _validate_import_rows(fan_in, 'entries', 'fan_in')
+        _validate_import_rows(entrypoints, 'entries', 'entrypoints')
+        _validate_import_rows(components, 'components', 'components')
+        _count(_object(circular, 'circular imports'), 'count')
+        metadata = _object(metadata, 'ImportsAdapter metadata')
+        unsupported = metadata.get('unsupported_extensions', {})
+        _validate_unsupported(unsupported)
+        try:
+            _validate_import_metadata(metadata, unsupported)
+        except ValueError as exc:
+            # Retain independently valid rankings and coverage disclosure, but
+            # never fill unknown failure counts with fabricated zero evidence.
+            adapter.record_composed_error('ImportsAdapter', path, exc)
+            retained = {}
+        else:
+            retained = _imports_metadata(adapter, metadata)
         return {
             'fan_in': fan_in.get('entries', []),
             'entrypoints': entrypoints.get('entries', []),
@@ -235,8 +410,8 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path) -> Dict[str, A
             # unsupported-language repo (all fan_in/entrypoints/components
             # empty) renders as a blank Architecture section, which reads as
             # "nothing here" rather than "not analyzed".
-            'unsupported_extensions': metadata.get('unsupported_extensions', {}),
-            'metadata': _imports_metadata(adapter, metadata),
+            'unsupported_extensions': unsupported,
+            'metadata': retained,
         }
     except Exception as exc:  # boundary-ok: broad-except -- composition seam that bypasses compose() for the shared ImportsAdapter walk; the sibling adapter's failure set is not bounded (parse, resolution, pool), and a failure is recorded in meta.errors with confidence 0 by record_composed_error, exactly what compose() does
         adapter.record_composed_error('ImportsAdapter', path, exc)
@@ -324,9 +499,31 @@ class OverviewAdapter(ResourceAdapter):
     # (BACK-1543): overview://X --all printed "showing 5 of 387" complex functions.
     CLI_QUERY_FLAGS = {'all': 'top=1000000', 'respect_gitignore': 'respect_gitignore=false'}
 
-    def __init__(self, resource: str, query: Optional[str] = None):
+    RESULT_TYPE = 'overview'
+    FINDINGS_POLICIES = ('none',)
+    DEFAULT_FAIL_ON = 'none'
+    RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
+    PARAM_SPECS = (
+        ParamSpec('top', 'integer', 'Items per section; also limits Stats, AST and Git populations',
+                  5, _overview_top, minimum=0, role='analysis', examples=('top=10',),
+                  zero_policy='Stats hotspots: all; AST and Git: none; text rankings: none',
+                  cli=CliBinding(('--top',), metavar='N')),
+        ParamSpec('no_git', 'boolean', 'Skip repository discovery and recent Git activity',
+                  False, boolean_value, role='analysis', examples=('no_git=true',),
+                  cli=CliBinding(('--no-git',), action='store_true')),
+        ParamSpec('no_imports', 'boolean', 'Skip import graph analysis (architecture section)',
+                  False, boolean_value, role='analysis', examples=('no_imports=true',),
+                  cli=CliBinding(('--no-imports',), action='store_true')),
+    )
+
+    def __init__(self, resource: str, query: Optional[str] = None, *,
+                 params: Optional[Dict[str, Any]] = None):
         self.path = str(Path(resource).expanduser())
-        self.query_params = parse_query_params(query or '', coerce=True)
+        if params is not None:
+            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
+                self.PARAM_SPECS, params, transport='typed')
+        else:
+            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
         self._warn_unknown_query_params(self.query_params)  # BACK-507
         # BACK-1042
         exclude_param = self.query_params.get('exclude')
@@ -334,6 +531,45 @@ class OverviewAdapter(ResourceAdapter):
             split_exclude_param(exclude_param)
         )
         self.respect_gitignore: bool = respect_gitignore_param(self.query_params)
+
+    @staticmethod
+    def answer_requirement_error(result, expected_type, prior_facts=None):
+        # A canonical failed answer may lack section payloads. Enabled child
+        # collectors have already recorded those failures before projection.
+        if result.get('error') or result.get('meta', {}).get('errors'):
+            return None
+        try:
+            _validate_stats(result.get('stats'))
+            _validate_scope(result.get('scope'))
+            _validate_functions(result, 'complex_functions')
+            _rows(result, 'git_log')
+            architecture = _object(result.get('architecture'), 'architecture')
+            if architecture:  # {} is the existing intentional no_imports answer.
+                _validate_architecture(architecture)
+        except ValueError as exc:
+            return f'Overview missing required answer evidence: {exc}'
+        return None
+
+    @staticmethod
+    def execution_facts(result):
+        from ..utils.results import AnalysisCompleteness, FailureCause, result_execution_facts
+        meta = result.get('meta', {})
+        errors = meta.get('errors', [])
+        invalid_only = bool(errors) and all(error.get('code') == 'invalid_request' for error in errors)
+        required_warnings = {'analysis_failed', 'parse_recovered', 'parse_degraded',
+                             'partial_parse', 'worker_lost', 'check_rules_failed'}
+        missing = any(warning.get('type') in required_warnings for warning in meta.get('warnings', []))
+        architecture = result.get('architecture')
+        metadata = architecture.get('metadata') if isinstance(architecture, dict) else None
+        metadata = metadata if isinstance(metadata, dict) else {}
+        missing = missing or any(type(metadata.get(field)) is int and metadata[field] > 0
+                                 for field in ('files_failed_count', 'files_lost_count'))
+        incomplete = missing or (bool(errors) and not invalid_only)
+        state = AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE
+        if invalid_only and not incomplete:
+            state = AnalysisCompleteness.NOT_STARTED
+        return result_execution_facts(result, completeness=state,
+                                      failure_cause=FailureCause.INVALID_REQUEST if invalid_only else FailureCause.ANALYSIS)
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -357,17 +593,12 @@ class OverviewAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Static imports only for the architecture section — dynamically loaded files may appear as entry points.',
-                '?exclude= (BACK-1042) applies to the stats/hotspots and scope sections only — '
-                'the architecture (imports://) and complex_functions (ast://) sections do not yet honor it.',
+                '?exclude= applies to stats/hotspots, scope and the Imports architecture section. '
+                'Complex functions retain their existing scope; global --exclude also filters AST.',
                 'Every section skips what git ignores (tracked files are never skipped); '
                 'respect_gitignore=false / --no-gitignore includes it everywhere (BACK-1386).',
-                'BACK-1178: the CLI subcommand form (`reveal overview <path> --format '
-                'json`) and this URI form intentionally carry different '
-                'contract_version/meta envelopes — subcommand-form is frozen at '
-                'v1.0 with no meta block (BACK-906, backward-compat guarantee for '
-                'existing --format json consumers), URI-form is on v1.1 with a '
-                'meta block (confidence/warnings/errors, BACK-885/891). The '
-                'underlying data fields are otherwise the same.',
+                'Both spellings use the overview v1.1 answer and none-only execution policy. '
+                'Completed work exits 0; invalid requests exit 2; required analysis/output failures exit 3.',
             ],
             'see_also': [
                 'reveal overview <path> - CLI subcommand form',
@@ -381,11 +612,11 @@ class OverviewAdapter(ResourceAdapter):
             'adapter': 'overview',
             'description': 'One-glance codebase dashboard (languages, quality, hotspots, architecture, recent activity)',
             'uri_syntax': 'overview://<path>?top=5&no_git=true&no_imports=true&exclude=pat&respect_gitignore=true',
+            'resource': OverviewAdapter.RESOURCE_SPEC.schema(),
+            'execution': {'default_fail_on': 'none', 'fail_on': ['none']},
             'query_params': {
-                'top': {'type': 'integer', 'minimum': 0, 'description': 'Number of items to show per section', 'examples': ['top=10']},
-                'no_git': {'type': 'boolean', 'description': 'Skip the recent git activity section', 'examples': ['no_git=true']},
-                'no_imports': {'type': 'boolean', 'description': 'Skip import graph analysis (architecture section)', 'examples': ['no_imports=true']},
-                'exclude': {'type': 'string', 'description': 'Comma-separated glob patterns to exclude from the stats/hotspots and scope sections (BACK-1042)', 'examples': ['exclude=dist/*,*.min.js']},
+                **param_schema(OverviewAdapter.PARAM_SPECS),
+                'exclude': {'type': 'string', 'description': 'Comma-separated globs for stats/hotspots, scope and Imports; does not filter AST complex functions', 'examples': ['exclude=dist/*,*.min.js']},
                 'respect_gitignore': {'type': 'boolean', 'description': 'Respect .gitignore for the stats/hotspots and scope sections (default: true)', 'examples': ['respect_gitignore=false']},
             },
             'elements': {},
@@ -413,11 +644,13 @@ class OverviewAdapter(ResourceAdapter):
             ],
         }
 
-    def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+    def get_structure(self, all: bool = False, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
         path = Path(self.path)
-        top = self.int_param('top', 5)
-        no_git = str(self.query_params.get('no_git', False)).lower() == 'true'
-        no_imports = str(self.query_params.get('no_imports', False)).lower() == 'true'
+        top_spec, no_git_spec, no_imports_spec = self.PARAM_SPECS
+        requested_top = top_spec.read(self.query_params)
+        top = UNLIMITED_TOP if all or verbose else requested_top
+        no_git = no_git_spec.read(self.query_params)
+        no_imports = no_imports_spec.read(self.query_params)
 
         stats = _run_stats(self, path, top)
         git_root = None if no_git else _git_root_or_disclose(self, path)

@@ -31,6 +31,9 @@ def create_declared_parser(name: str) -> argparse.ArgumentParser:
         prog=f'reveal {name}', parents=[_build_global_options_parser()],
         description=adapter.get_help()['description'])
     add_declared_arguments(parser, adapter.PARAM_SPECS, adapter.RESOURCE_SPEC)
+    if name == 'overview':
+        parser.add_argument('--all', action='store_true',
+                            help='Show every entry in capped sections (same expansion as --verbose)')
     _add_universal_filter_flags(parser)
     add_exclude_argument(parser)
     add_gitignore_arguments(parser)
