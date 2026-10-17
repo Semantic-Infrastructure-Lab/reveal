@@ -264,15 +264,16 @@ def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = 
 
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
-            _log_mcp_access(fn.__name__, kwargs)
-            try:
-                result = request(*args, **kwargs)
-            except OSError as exc:
-                raise ToolError(f"reveal error: {exc}") from None
-            except Exception:  # boundary-ok: broad-except -- SDK 2.0 exposes arbitrary exception details; mask at the registered tool boundary
-                logging.getLogger(__name__).exception("Unexpected failure in MCP tool %s", fn.__name__)
-                raise ToolError(f"Internal error executing tool {fn.__name__}") from None
-            return _raise_if_tool_failure(result, fn.__name__)
+            with _capture_lock:
+                _log_mcp_access(fn.__name__, kwargs)
+                try:
+                    result = request(*args, **kwargs)
+                except OSError as exc:
+                    raise ToolError(f"reveal error: {exc}") from None
+                except Exception:  # boundary-ok: broad-except -- SDK 2.0 exposes arbitrary exception details; mask at the registered tool boundary
+                    logging.getLogger(__name__).exception("Unexpected failure in MCP tool %s", fn.__name__)
+                    raise ToolError(f"Internal error executing tool {fn.__name__}") from None
+                return _raise_if_tool_failure(result, fn.__name__)
 
         mcp.tool(annotations=annotations, title=title)(wrapper)
         return request
