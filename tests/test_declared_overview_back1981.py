@@ -104,7 +104,7 @@ def test_required_failure_survives_projection_and_postprocessing(project, monkey
             raise OSError('exact required '+kind+' failure')
         target = {'scope': 'reveal.adapters.overview.scope_dict_for_path',
                   'imports': 'reveal.adapters.imports.ImportsAdapter._build_graph',
-                  'check': 'reveal.adapters.stats.metrics.RuleRegistry.check_file',
+                  'check': 'reveal.rules.RuleRegistry.check_file',
                   'ast': 'reveal.adapters.ast.AstAdapter.get_structure',
                   'git': 'reveal.adapters.overview._resolve_git_root'}[kind]
         monkeypatch.setattr(target, fail)
