@@ -98,6 +98,9 @@ class BindingScope:
             return False
         node = event['node']
         path = list(_ancestors(node))
+        boundary = next((i for i, part in enumerate(path)
+                         if _zero_arg(part, 'kind') in _FUNCTIONS | _CLASSES | _ROOTS), len(path))
+        path = path[:boundary]
         # `var` hoists to the function; let/const remain in the nearest block.
         hoisted = self.language != 'python' and any(
             _zero_arg(part, 'kind') == 'variable_declaration' for part in path)
@@ -150,7 +153,7 @@ class BindingScope:
 
     def _explicit(self, scope: Any, name: str) -> Optional[str]:
         kinds = ('global_statement', 'nonlocal_statement', 'global_declaration')
-        for declaration in kind_nodes(scope, *kinds):
+        for declaration in kind_nodes(self.root, *kinds):
             owner = _owner(declaration, self.language)
             if owner is None or _span(owner) != _span(scope):
                 continue
