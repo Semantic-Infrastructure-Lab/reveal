@@ -60,6 +60,7 @@ class BoundaryProfiles(List[BoundaryProfile]):
     analysis failed, so a report can say its profiles are incomplete (BACK-1860)."""
 
     skipped: List[Tuple[str, str]]
+    recovered_files: List[str]
 
 
 def collect_boundary_profiles(path: str) -> BoundaryProfiles:
@@ -71,6 +72,7 @@ def collect_boundary_profiles(path: str) -> BoundaryProfiles:
     structures = collect_structures(path)
     profiles = BoundaryProfiles()
     profiles.skipped = list(structures.skipped)
+    profiles.recovered_files = [s['file'] for s in structures if s.get('parse_recovered')]
     imports_by_file = _imports_by_file(structures)
 
     for file_struct in structures:

@@ -21,7 +21,7 @@ def build_testability_report(
     include_unresolved: bool = False,
 ) -> Dict[str, Any]:
     """Build the composed testability pressure report."""
-    from ..adapters.ast.analysis import analysis_skipped_warning
+    from ..adapters.ast.analysis import analysis_skipped_warning, parse_recovered_warning
 
     patches = scan_patches(test_paths)
     patch_groups = group_patches(patches, group_by='target', min_count=min_patches)
@@ -35,6 +35,18 @@ def build_testability_report(
         profiles.skipped, None, "their boundary hotspots are missing from the report")  # BACK-1860
     if failed:
         warnings.append(failed)
+    failed_patches = analysis_skipped_warning(
+        patches.skipped, None, 'their patch uses are missing from the report')
+    if failed_patches:
+        warnings.append(failed_patches)
+    for files, consequence in (
+        (patches.recovered_files, 'Patch uses may be incomplete.'),
+        (profiles.recovered_files, 'Boundary profiles may be incomplete.'),
+    ):
+        recovered = parse_recovered_warning([{'file': f, 'parse_recovered': True} for f in files])
+        if recovered:
+            recovered['message'] += f' {consequence}'
+            warnings.append(recovered)
 
     profile_rows = _rank_profiles(src_path, profiles, patch_groups, min_categories)
     target_rows = _rank_targets(src_path, patch_groups, profiles, include_unresolved)

@@ -8,7 +8,7 @@ from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from ..utils.path_utils import _walk_code_files, is_test_basename_for_language, to_posix
 from ..utils.pyparse import parse_python
@@ -49,6 +49,21 @@ class PatchUse:
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
+
+
+class PatchUses(List[PatchUse]):
+    """Observed uses and local parser evidence; not proof of complete traversal."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.skipped: List[Tuple[str, str]] = []
+        self.recovered_files: List[str] = []
+
+    def merge(self, other: PatchUses) -> None:
+        """Retain a file's uses and diagnostics in the aggregate."""
+        self.extend(other)
+        self.skipped.extend(other.skipped)
+        self.recovered_files.extend(other.recovered_files)
 
 
 @dataclass(frozen=True)
@@ -123,14 +138,14 @@ def _file_matches(path: Path, extensions: Optional[Sequence[str]]) -> bool:
     return _is_ts_test_file(path)
 
 
-def scan_patches(paths: Sequence[str | Path]) -> List[PatchUse]:
+def scan_patches(paths: Sequence[str | Path]) -> PatchUses:
     """Scan Python and TypeScript test files for patch-like calls."""
-    uses: List[PatchUse] = []
+    uses = PatchUses()
     for file_path in iter_test_files(paths):
         if file_path.suffix == '.py':
-            uses.extend(_scan_file(file_path))
+            uses.merge(_scan_file(file_path))
         elif file_path.suffix in _TS_TEST_EXTENSIONS:
-            uses.extend(_scan_file_ts(file_path))
+            uses.merge(_scan_file_ts(file_path))
     return uses
 
 
@@ -235,7 +250,7 @@ def _ts_parse_callee(call_node, src_bytes: bytes) -> Optional[tuple]:
     return (ns, method)
 
 
-def scan_patches_ts(paths: Sequence[str | Path]) -> List[PatchUse]:
+def scan_patches_ts(paths: Sequence[str | Path]) -> PatchUses:
     """Scan TypeScript/JavaScript test files for jest/vi mock calls.
 
     Recognises:
@@ -244,27 +259,31 @@ def scan_patches_ts(paths: Sequence[str | Path]) -> List[PatchUse]:
       jest.fn() / vi.fn()                          → kind='jest.fn' / 'vi.fn'
       jest.replaceProperty(obj, 'prop', val)       → kind='jest.replaceProperty' / ...
     """
-    uses: List[PatchUse] = []
+    uses = PatchUses()
     for file_path in iter_test_files(paths, extensions=list(_TS_TEST_EXTENSIONS)):
-        uses.extend(_scan_file_ts(file_path))
+        uses.merge(_scan_file_ts(file_path))
     return uses
 
 
-def _scan_file_ts(file_path: Path) -> List[PatchUse]:
+def _scan_file_ts(file_path: Path) -> PatchUses:
     """Scan a single TypeScript/JS file for jest/vi mock calls (iterative DFS)."""
+    uses = PatchUses()
     try:
         source = file_path.read_text(encoding='utf-8', errors='replace')
-    except OSError:
-        return []
+    except OSError as exc:
+        uses.skipped.append((to_posix(file_path), f'{type(exc).__name__}: {exc}'))
+        return uses
 
     src_bytes = source.encode('utf-8', errors='replace')
     try:
         root = tree_root(get_tree(js_ts_grammar(file_path.suffix), source, filename=file_path))
     except GrammarUnavailable as exc:
         logger.warning('tree-sitter parse failed for %s: %s', file_path, exc)
-        return []
+        uses.skipped.append((to_posix(file_path), f'{type(exc).__name__}: {exc}'))
+        return uses
 
-    uses: List[PatchUse] = []
+    if _zero_arg(root, 'has_error'):
+        uses.recovered_files.append(to_posix(file_path))
     # Iterative DFS to avoid Python recursion-limit issues on large files
     stack = [root]
     while stack:
@@ -408,15 +427,16 @@ def group_patches(
     return groups
 
 
-def _scan_file(file_path: Path) -> List[PatchUse]:
+def _scan_file(file_path: Path) -> PatchUses:
+    uses = PatchUses()
     try:
         source = file_path.read_text(encoding='utf-8', errors='replace')
         tree = parse_python(source, str(file_path))
-    except (OSError, SyntaxError):
-        return []
+    except (OSError, SyntaxError) as exc:
+        uses.skipped.append((to_posix(file_path), f'{type(exc).__name__}: {exc}'))
+        return uses
 
     parents = _parent_map(tree)
-    uses: List[PatchUse] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue

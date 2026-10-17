@@ -72,7 +72,7 @@ class TestabilityAdapter(ResourceAdapter):
                 'Boundary fan-out hotspots: high-complexity boundary code with no patch coverage. '
                 'Categories come from each function\'s own calls, classified exactly as --sideeffects does, '
                 'in every language --sideeffects covers',
-                'Patch pressure is Python-only (mock.patch scan); JS/TS test suites get a pointer to patches:// instead',
+                'Patch pressure scans Python unittest.mock/monkeypatch and JS/TS jest/vitest tests',
             ],
             'notes': [
                 'Auto-detects tests/, test/, or spec/ under the source root (or its parent) when `tests` is omitted.',
@@ -118,7 +118,7 @@ class TestabilityAdapter(ResourceAdapter):
                 {'uri': 'testability://src', 'description': 'Testability report for src/', 'output_type': 'testability_report', 'task': 'quality'},
             ],
             'notes': [
-                'Patch-pressure detection is Python-only; JS/TS test suites see a note pointing at patches://.',
+                'Patch-pressure detection supports Python and recognized JavaScript/TypeScript test files.',
             ],
         }
 
@@ -151,21 +151,14 @@ class TestabilityAdapter(ResourceAdapter):
         # The tests dirs found were resolved; name them as the user named the target (BACK-1366).
         report['tests'] = [as_spelled(p, self.path) for p in test_paths]
 
-        # When no patches were found, check whether the test suite is
-        # non-Python (patch pressure is Python-only) so the renderer can
-        # explain the silence.
+        # A supported JS/TS suite can genuinely contain no recognized mock calls.
         if report.get('summary', {}).get('total_patch_uses', 0) == 0:
             lang = detect_non_python_language(test_paths[0])
-            if lang:
-                note = (
+            if lang and lang not in ('TypeScript', 'JavaScript'):
+                report['_patch_note'] = (
                     f'patch pressure not computed for {lang} test suites — '
-                    "`reveal testability`'s patch scan is Python-only (boundary hotspots below still apply)."
+                    'the patch scan supports Python and JavaScript/TypeScript tests '
+                    '(boundary hotspots below still apply).'
                 )
-                if lang in ('TypeScript', 'JavaScript'):
-                    note += (
-                        ' For JS/TS mock pressure use `reveal patches://<tests>` '
-                        '(jest/vitest supported).'
-                    )
-                report['_patch_note'] = note
 
         return report
