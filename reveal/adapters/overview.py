@@ -8,6 +8,7 @@ every other capability follows.
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -42,7 +43,7 @@ from ..rendering.adapters.overview import (  # noqa: F401 -- the render helpers 
     _render_quality_pulse,
 )
 from ..utils.query_parser import join_exclude_patterns, split_exclude_param
-from ..utils.results import ResultBuilder
+from ..utils.results import ResultBuilder, note_truncation
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,8 @@ def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int) -> Dict[str, An
     query += f'&respect_gitignore={"true" if adapter.respect_gitignore else "false"}'
     stats = adapter.compose(StatsAdapter, str(path), default={}, query=query,
                             cut_as=('hotspots', 'raise ?top=N'))
+    if stats.get('warnings'):
+        adapter.fold_meta({'warnings': stats['warnings']})
     # Each file's language as the scope census names it, while the file can be
     # read (`.h` is sniffed for C++); the text census counted by extension alone
     # and contradicted the JSON scope (BACK-1428).
@@ -140,18 +143,18 @@ def _resolve_git_root(path: Path) -> Optional[Path]:
         metadata = GitAdapter(path=str(path)).get_metadata()
         root = metadata.get('path')
         return Path(root).resolve() if root else None
-    except (ImportError, OSError, NotApplicableError):  # absent/unavailable git, or not a repo
+    except NotApplicableError:
         return None
 
 
 def _git_root_or_disclose(adapter: 'OverviewAdapter', path: Path) -> Optional[Path]:
-    """``_resolve_git_root``, with a refused repository recorded as a composed error (BACK-1691).
+    """Resolve optional Git, retaining operational failures as composed errors.
 
     Without it the git-root mismatch warning was skipped and nothing said why.
     """
     try:
         return _resolve_git_root(path)
-    except ValueError as exc:
+    except (ImportError, OSError, ValueError) as exc:
         adapter.record_composed_error('git_root', path, exc)
         return None
 
@@ -184,6 +187,22 @@ def _run_complex_functions(adapter: 'OverviewAdapter', path: Path, limit: int) -
     return data.get('results', data.get('elements', []))
 
 
+def _imports_metadata(adapter: 'OverviewAdapter', metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """Retain the import owner's diagnostic fields and its existing path caps."""
+    retained = {key: deepcopy(metadata[key]) for key in (
+        'files_failed_count', 'files_failed', 'files_lost_count', 'files_lost',
+        'extraction_diagnostics') if key in metadata}
+    disclosures: Dict[str, Any] = {}
+    for field in ('files_failed', 'files_lost'):
+        count = field + '_count'
+        if field in retained and count in retained:
+            note_truncation(disclosures, f'architecture.metadata.{field}',
+                            len(retained[field]), retained[count], 'auto_cap',
+                            hint=f'the first 50 by path; {count} is exact')
+    adapter.fold_meta(disclosures.get('meta'))
+    return retained
+
+
 def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path) -> Dict[str, Any]:
     """Build import graph once and return architectural data for overview.
 
@@ -195,7 +214,9 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path) -> Dict[str, A
         importer = ImportsAdapter(str(path))
         # BACK-1495: this call bypasses compose(), so --exclude has to be scoped here.
         with exclusion_scope(path if path.is_dir() else path.parent, adapter.exclude_patterns):
-            importer._build_graph(path)
+            # Match ImportsAdapter.get_structure's resolved analysis target;
+            # its metadata keys must not reinterpret a cwd-relative prefix.
+            importer._build_graph(path.resolve())
         warnings = importer.integrity_warnings(path)  # BACK-1598, BACK-1753
         if warnings:
             adapter.fold_meta({'warnings': warnings})
@@ -203,6 +224,7 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path) -> Dict[str, A
         entrypoints = importer._format_entrypoints()
         components = importer._format_components()
         circular = importer._format_circular()
+        metadata = importer.get_metadata()
         return {
             'fan_in': fan_in.get('entries', []),
             'entrypoints': entrypoints.get('entries', []),
@@ -213,11 +235,25 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path) -> Dict[str, A
             # unsupported-language repo (all fan_in/entrypoints/components
             # empty) renders as a blank Architecture section, which reads as
             # "nothing here" rather than "not analyzed".
-            'unsupported_extensions': importer.get_metadata().get('unsupported_extensions', {}),
+            'unsupported_extensions': metadata.get('unsupported_extensions', {}),
+            'metadata': _imports_metadata(adapter, metadata),
         }
     except Exception as exc:  # boundary-ok: broad-except -- composition seam that bypasses compose() for the shared ImportsAdapter walk; the sibling adapter's failure set is not bounded (parse, resolution, pool), and a failure is recorded in meta.errors with confidence 0 by record_composed_error, exactly what compose() does
         adapter.record_composed_error('ImportsAdapter', path, exc)
         return {'fan_in': [], 'entrypoints': [], 'components': [], 'circular_count': 0, 'unsupported_extensions': {}}
+
+
+def _relativize_import_diagnostics(metadata: Dict[str, Any], base_path: Path) -> None:
+    for field in ('files_failed', 'files_lost'):
+        if field in metadata:
+            # Imports' path lists retain the caller's cwd spelling; diagnostic
+            # keys are already relative to its target. Normalize only the lists.
+            metadata[field] = [_relpath(Path(file).absolute().as_posix(), base_path)
+                               for file in metadata[field]]
+    if 'extraction_diagnostics' in metadata:
+        metadata['extraction_diagnostics'] = {
+            _relpath(file, base_path): cause
+            for file, cause in metadata['extraction_diagnostics'].items()}
 
 
 def _relativize_paths(
@@ -232,6 +268,7 @@ def _relativize_paths(
     (analyst's filesystem layout/username) even after BACK-1194 fixed
     the text path. Mutates in place.
     """
+    _relativize_import_diagnostics(architecture.get('metadata', {}), base_path)
     for fn in complex_fns:
         if fn.get('file'):
             fn['file'] = _relpath(fn['file'], base_path)
@@ -383,13 +420,12 @@ class OverviewAdapter(ResourceAdapter):
         no_imports = str(self.query_params.get('no_imports', False)).lower() == 'true'
 
         stats = _run_stats(self, path, top)
-        git_log = [] if no_git else _run_git_log(self, path, top)
+        git_root = None if no_git else _git_root_or_disclose(self, path)
+        git_log = [] if git_root is None else _run_git_log(self, path, top)
         git_foreign_root: Optional[Path] = None
-        if git_log:
-            git_root = _git_root_or_disclose(self, path)
-            # Compare resolved: 'overview://.' at a repo root is not foreign to itself.
-            if git_root is not None and git_root.resolve() != path.resolve():
-                git_foreign_root = git_root
+        # Compare resolved: 'overview://.' at a repo root is not foreign to itself.
+        if git_log and git_root is not None and git_root.resolve() != path.resolve():
+            git_foreign_root = git_root
         complex_fns = _run_complex_functions(self, path, top)
         architecture = {} if no_imports else _run_imports_analysis(self, path)
         _relativize_paths(complex_fns, architecture, path)

@@ -143,11 +143,11 @@ def _render_quality_pulse(summary: Dict[str, Any], hotspots: List[Dict[str, Any]
     if avg_cx is not None and avg_cx > 0:
         parts.append(f"avg complexity {avg_cx:.1f}")
     if critical:
-        parts.append(f"{critical} critical file(s)")
+        parts.append(f"{critical} critical file(s) in shown ranking")
     elif warning:
-        parts.append(f"{warning} warning file(s)")
+        parts.append(f"{warning} warning file(s) in shown ranking")
     else:
-        parts.append("no hotspots")
+        parts.append("no critical or warning files in shown ranking")
 
     return [f"\nQuality   {icon} {' · '.join(parts)}"]
 
