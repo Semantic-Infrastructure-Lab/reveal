@@ -786,27 +786,39 @@ reveal domain://example.com --check
 
 **What it validates**: DNS records are consistent across all nameservers
 
-**Pass criteria**: All nameservers return consistent DNS records
+**Pass criteria**: Every queried nameserver responds successfully and returns the same A records
 
 **Warning scenarios**:
 - Inconsistent records across nameservers (propagation in progress)
-- Some nameservers slow to respond
+- One or more nameserver lookups fail, including when none respond. This is incomplete observation, not evidence of propagation in progress.
+- DNS support is unavailable because dnspython is not installed (check skipped)
 
 **Failure scenarios**:
-- Complete propagation failure
-- Conflicting records across nameservers
+- No authoritative nameservers found
+- The initial authoritative-nameserver lookup fails
 
 **Example result**:
 ```json
 {
   "name": "dns_propagation",
   "status": "warning",
-  "value": "Propagating",
-  "threshold": "Consistent records",
-  "message": "DNS records propagating (1/2 nameservers updated)",
-  "severity": "medium"
+  "value": "Partial",
+  "threshold": "Consistent",
+  "message": "Incomplete DNS observation: 1 of 2 nameservers responded; 1 lookup(s) failed; consistency could not be established",
+  "severity": "medium",
+  "details": {
+    "nameservers_checked": 2,
+    "nameservers_responded": 1,
+    "nameservers_failed": 1,
+    "responses": {
+      "ns1.example.com": ["192.0.2.1"],
+      "ns2.example.com": "Error: network unreachable"
+    }
+  }
 }
 ```
+
+`nameservers_checked` counts attempted nameservers. The responded and failed counts distinguish successful observations from lookup failures; `responses` retains each answer or error. Investigate failed lookups before retrying the consistency check. Subdomains retain the explicit `Skipped (subdomain)` pass because this check applies to the apex.
 
 **Performance note**: Propagation check queries all authoritative nameservers (slower than basic checks)
 
@@ -2025,7 +2037,7 @@ A: **domain://** focuses on DNS records, domain health, and registrar info. It p
 
 **Q: How do I check if my DNS changes have propagated?**
 
-A: Use `reveal domain://example.com --check`. The propagation check queries all authoritative nameservers and reports if records are consistent. Status "pass" = fully propagated, "warning" = propagation in progress.
+A: Use `reveal domain://example.com --check`. For an apex domain with DNS support installed, the propagation check passes only when all queried authoritative nameservers respond with consistent A records. A warning can mean observed disagreement, incomplete observation due to failed lookups, or skipped checking because dnspython is unavailable. Read the message and per-nameserver responses before inferring propagation progress. Subdomains are explicitly skipped.
 
 ---
 

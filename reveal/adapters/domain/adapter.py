@@ -356,6 +356,23 @@ def _calculate_check_summary(checks: List[Dict[str, Any]]) -> Dict[str, int]:
     }
 
 
+def _dns_propagation_next_steps(checks: List[Dict[str, Any]]) -> List[str]:
+    """Distinguish observed disagreement from unavailable DNS observations."""
+    next_steps = []
+    # DNS propagation warnings
+    for check in checks:
+        if check['name'] != 'dns_propagation' or check['status'] != 'warning':
+            continue
+        if check.get('details', {}).get('nameservers_failed', 0):
+            next_steps.append("Investigate failed nameserver lookups and retry the DNS consistency check")
+        elif check.get('value') == 'Skipped':
+            next_steps.append('Install DNS support: pip install "reveal-cli[dns]"')
+        else:
+            next_steps.append("DNS propagation in progress - wait and check again")
+
+    return next_steps
+
+
 def _generate_domain_next_steps(checks: List[Dict[str, Any]], domain: str) -> List[str]:
     """Generate contextual next steps based on check results.
 
@@ -373,9 +390,7 @@ def _generate_domain_next_steps(checks: List[Dict[str, Any]], domain: str) -> Li
         next_steps.append("Check DNS configuration with registrar")
         next_steps.append(f"View DNS records: reveal domain://{domain}/dns")
 
-    # DNS propagation warnings
-    if any(c['name'] == 'dns_propagation' and c['status'] == 'warning' for c in checks):
-        next_steps.append("DNS propagation in progress - wait and check again")
+    next_steps.extend(_dns_propagation_next_steps(checks))
 
     # SSL certificate issues
     if any(c['name'] == 'ssl_certificate' and c['status'] in ('failure', 'warning') for c in checks):

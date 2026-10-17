@@ -444,6 +444,37 @@ def check_email_dns(domain: str) -> List[Dict[str, Any]]:
     ]
 
 
+def _dns_propagation_result(nameservers: List[str], responses: Dict[str, List[str] | str]) -> Dict[str, Any]:
+    """Compare complete answers while retaining failed-observation evidence."""
+    # A failed lookup is not an observation of agreement or disagreement.
+    values = [v for v in responses.values() if isinstance(v, list)]
+    failed = len(nameservers) - len(values)
+    all_agree = not failed and len(set(tuple(v) for v in values)) == 1
+    if failed:
+        message = (f'Incomplete DNS observation: {len(values)} of {len(nameservers)} '
+                   f'nameservers responded; {failed} lookup(s) failed; '
+                   'consistency could not be established')
+    elif all_agree:
+        message = f'All {len(nameservers)} nameservers return consistent records'
+    else:
+        message = f'Inconsistent records across {len(nameservers)} nameservers (propagation in progress)'
+
+    return {
+        'name': 'dns_propagation',
+        'status': 'pass' if all_agree else 'warning',
+        'value': 'Complete' if all_agree else 'Partial',
+        'threshold': 'Consistent',
+        'message': message,
+        'severity': 'medium',
+        'details': {
+            'nameservers_checked': len(nameservers),
+            'nameservers_responded': len(values),
+            'nameservers_failed': failed,
+            'responses': responses,
+        },
+    }
+
+
 def check_dns_propagation(domain: str) -> Dict[str, Any]:
     """Check if all authoritative nameservers return same records.
 
@@ -501,36 +532,7 @@ def check_dns_propagation(domain: str) -> Dict[str, Any]:
                 logger.warning("DNS propagation check failed for %s: %s", nameserver, e)
                 a_record_responses[nameserver] = f"Error: {e}"
 
-        # Check if all agree
-        values = [v for v in a_record_responses.values() if not isinstance(v, str) or not v.startswith("Error")]
-        all_agree = len(set(tuple(v) if isinstance(v, list) else v for v in values)) == 1
-
-        if all_agree:
-            return {
-                'name': 'dns_propagation',
-                'status': 'pass',
-                'value': 'Complete',
-                'threshold': 'Consistent',
-                'message': f'All {len(nameservers)} nameservers return consistent records',
-                'severity': 'medium',
-                'details': {
-                    'nameservers_checked': len(nameservers),
-                    'responses': a_record_responses,
-                },
-            }
-        else:
-            return {
-                'name': 'dns_propagation',
-                'status': 'warning',
-                'value': 'Partial',
-                'threshold': 'Consistent',
-                'message': f'Inconsistent records across {len(nameservers)} nameservers (propagation in progress)',
-                'severity': 'medium',
-                'details': {
-                    'nameservers_checked': len(nameservers),
-                    'responses': a_record_responses,
-                },
-            }
+        return _dns_propagation_result(nameservers, a_record_responses)
     except _DNS_ERRORS as e:
         return {
             'name': 'dns_propagation',
