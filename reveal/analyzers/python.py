@@ -1,6 +1,6 @@
 """Python file analyzer - tree-sitter based."""
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from ..core import node_children as _children
 from ..core.treesitter_compat import _zero_arg
@@ -29,15 +29,15 @@ class PythonAnalyzer(TreeSitterAnalyzer):
             return 'invalid Python source: unexpected U+FEFF after UTF-8 BOM (line 1:1)'
         return None
 
-    def get_structure(self, **kwargs):
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         error = self._repeated_bom_error()
         if error:
             # Before the inherited cache/tree lookup: cached TS structure cannot
             # establish Python source validity. get_outline also calls this owner.
-            return ResultBuilder.create_error(
+            return cast(Dict[str, Any], ResultBuilder.create_error(
                 result_type='python_structure', source=to_posix(self.path), error=error,
                 contract_version=CONTRACT_VERSION, _has_errors=True,
-            )
+            ))
         return super().get_structure(**kwargs)
 
     def first_parse_error_position(self):
