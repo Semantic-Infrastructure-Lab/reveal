@@ -34,27 +34,43 @@ COVERAGE = (
     'rewrite qualified here). Full command JSON is retained; only the copied corpus prefix is normalized. '
     'A null tree-sitter distribution version explicitly means absent/bundled distribution; '
     'the language-pack version is still required. Runtime/version metadata must repeat across five current runs; historical versions are provenance, '
-    'not ceilings. Request/attempt/artifact/failure counts are ceilings; successful built/cached outcomes '
+    'not ceilings. A fresh-process serial observer rejects Python audited fork/subprocess/posix_spawn '
+    'launches and multiprocessing BaseProcess.start; native launches outside those hooks are not qualified. '
+    'Request/attempt/artifact/failure counts are ceilings; successful built/cached outcomes '
     'remain full ledger evidence without preventing improved reuse. New parser/domain/content '
     'request identities still fail the accepted ceilings.'
 )
 
 # SystemExit is caught INSIDE capture so validation runs even on a CLI findings exit.
 _BOOTSTRAP = '''
-import sys, json, platform
+import sys, json, platform, os
 from dataclasses import asdict
 from pathlib import Path
 from reveal.utils.parse_audit import capture_parses
 root, destination, targets, arguments = sys.argv[1:]
+launches = []
+def observe_launch(event, arguments):
+    if event in ('os.fork', 'subprocess.Popen', 'os.posix_spawn'):
+        launches.append({'event': event, 'pid': os.getpid()})
+        raise RuntimeError('serial observer forbids child process launch: ' + event)
+sys.addaudithook(observe_launch)
+from multiprocessing.process import BaseProcess
+def reject_worker_start(self, *args, **kwargs):
+    launches.append({'event': 'multiprocessing.BaseProcess.start', 'pid': os.getpid()})
+    raise RuntimeError('serial observer forbids multiprocessing worker launch')
+BaseProcess.start = reject_worker_start
+observer = {'enabled': True, 'complete': False, 'launches': launches}
 signal = None
 with capture_parses(root, targets=json.loads(targets)) as capture:
     capture.metadata['runtime'] = {'platform': sys.platform, 'implementation': platform.python_implementation()}
+    capture.metadata['serial_observer'] = observer
     from reveal.main import main
     sys.argv = ['reveal'] + json.loads(arguments)
     try:
         main()
     except SystemExit as error:
         signal = error
+observer['complete'] = True
 status = 0 if signal is None or signal.code is None else signal.code
 if not isinstance(status, int):
     status = 1
@@ -83,6 +99,14 @@ def _require_metadata_strings(values: dict, keys: tuple[str, ...]) -> None:
         raise ValueError(f'audit metadata requires nonempty strings: {keys}')
 
 
+def _validate_serial_observer(metadata: dict) -> None:
+    observer = metadata.get('serial_observer')
+    if not isinstance(observer, dict) or observer.get('enabled') is not True:
+        raise ValueError('serial observer missing or disabled')
+    if observer.get('complete') is not True or observer.get('launches') != []:
+        raise ValueError(f'serial observer incomplete or child launch observed: {observer}')
+
+
 def _validate_header(audit: dict, root_pid: int) -> None:
     if audit.get('schema_version') != 1 or audit.get('complete') is not True:
         raise ValueError('audit is not complete')
@@ -96,6 +120,7 @@ def _validate_header(audit: dict, root_pid: int) -> None:
     if versions['tree-sitter'] is not None:
         _require_metadata_strings(versions, ('tree-sitter',))
     _require_metadata_strings(metadata.get('runtime'), ('platform', 'implementation'))
+    _validate_serial_observer(metadata)
     if audit.get('exit_code') != 0:
         raise ValueError('audit reports command failure exit')
 
