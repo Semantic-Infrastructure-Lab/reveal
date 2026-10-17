@@ -303,3 +303,15 @@ def test_successful_artifact_can_precede_a_failed_request(tmp_path, monkeypatch)
     assert len(_events(capture, 'artifact')) == 1
     assert _events(capture, 'outcome')[0].outcome == 'failed'
     capture.validate()
+
+
+def test_malformed_file_fact_warning_names_the_parse_target(tmp_path, caplog):
+    from reveal.adapters.ast.surface_facts import extract_file_facts
+    path = tmp_path / 'broken.py'
+    path.write_text('def broken(:\n', encoding='utf-8')
+    with caplog.at_level('WARNING', logger='reveal.adapters.ast.surface_facts'):
+        assert extract_file_facts(path.as_posix()) is None
+    warning, = [record.message for record in caplog.records
+                if record.name == 'reveal.adapters.ast.surface_facts']
+    assert warning.endswith('invalid syntax (broken.py, line 1)')
+    assert '<unknown>' not in warning
