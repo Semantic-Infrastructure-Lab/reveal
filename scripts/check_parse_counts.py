@@ -33,7 +33,8 @@ COVERAGE = (
     'Pinned fullsource physical inputs must match a declared clean source variant (no BOM/compat '
     'rewrite qualified here). Full command JSON is retained; only the copied corpus prefix is normalized. '
     'A null tree-sitter distribution version explicitly means absent/bundled distribution; '
-    'the language-pack version is still required. Runtime/version metadata must repeat across five current runs; historical versions are provenance, '
+    'the language-pack version is still required. Runtime/version metadata must repeat across five '
+    'current runs; historical versions are provenance, '
     'not ceilings. A fresh-process serial observer rejects Python audited fork/subprocess/posix_spawn '
     'launches and multiprocessing BaseProcess.start; native launches outside those hooks are not qualified. '
     'Request/attempt/artifact/failure counts are ceilings; successful built/cached outcomes '
@@ -216,7 +217,8 @@ def audit_snapshot(audit: dict, root_pid: int, corpus: Path, targets: dict) -> d
     if coverage != set(targets):
         raise ValueError(f'target request coverage incomplete: {sorted(coverage)} != {sorted(targets)}')
     return {'parser_versions': audit['metadata']['parser_versions'],
-            'runtime': audit['metadata']['runtime'], 'coverage': sorted(coverage),
+            'runtime': audit['metadata']['runtime'],
+            'serial_observer': audit['metadata']['serial_observer'], 'coverage': sorted(coverage),
             'totals': totals, 'counts': dict(sorted(counts.items()))}
 
 
@@ -308,7 +310,7 @@ def qualify_snapshots(snapshots: list[dict]) -> dict:
 
 
 def compare_snapshots(baseline: dict, current: dict) -> list[str]:
-    errors = [f'{key} changed' for key in ('coverage', 'command_outcome', 'stderr')
+    errors = [f'{key} changed' for key in ('coverage', 'serial_observer', 'command_outcome', 'stderr')
               if baseline.get(key) != current.get(key)]
     for key, count in current['counts'].items():
         if json.loads(key)['event'] not in ('request', 'attempt', 'artifact', 'failure'):
