@@ -65,12 +65,14 @@ def test_required_component_exception_cannot_render_clean_deltas(tree, component
     assert result['deltas'] is None
     assert result['analysis']['snapshots'][side][component] == 'failed'
     assert result['meta']['errors']
+    assert all(e['component'] == component for e in result['meta']['errors'])
     serialized = json.dumps(result)
     assert 'reveal-archdiff-' not in serialized
     diff.render_diff_brief(result)
     text = capsys.readouterr().out
     assert 'comparison unavailable' in text.lower()
     assert 'Complexity centroid' not in text
+    assert 'injected required '+component+' failure' in text
 
 
 @pytest.mark.parametrize('kind', ['analysis_failed', 'parse_recovered'])
@@ -92,11 +94,24 @@ def test_information_and_ranking_cuts_are_not_missing_evidence(tree):
         {'type': 'complexity_is_unweighted', 'message': 'informational'},
         {'type': 'truncated', 'message': 'ranking cut', 'field': 'results',
          'shown': 2, 'total': 3, 'cause': 'limit'},
-    ]}}
+    ], 'confidence': 0.7}}
     with patch.object(AstAdapter, 'get_structure', return_value=child):
         result = diff.run_architecture_diff(src, ref)
     assert not result.get('error') and result['analysis']['complete']
     assert any(w['type'] == 'complexity_is_unweighted' for w in result['meta']['warnings'])
+    assert result['meta']['confidence'] == 0.7
+
+
+def test_complexity_helper_failure_is_canonical_and_visible(tree):
+    from reveal.adapters import architecture
+
+    repo, src, ref = tree
+    _dirty(src)
+    with patch.object(architecture, '_run_complex_functions', side_effect=OSError('injected helper I/O failure')):
+        result = diff.run_architecture_diff(src, ref)
+    assert result['error'] and result['deltas'] is None
+    assert result['analysis']['snapshots']['base']['complexity'] == 'failed'
+    assert result['meta']['errors'][0]['component'] == 'complexity'
 
 
 def test_returned_complexity_error_is_a_required_failure(tree):
