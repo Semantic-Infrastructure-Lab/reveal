@@ -8,8 +8,9 @@ other capability follows.
 from __future__ import annotations
 
 from collections import Counter
+from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -23,7 +24,7 @@ from ..conventions import family_for_path
 from ..utils.path_utils import _language_for_path
 from ..utils.query import parse_query_params
 from ..rendering.adapters.deps import DepsRenderer
-from ..utils.results import ResultBuilder
+from ..utils.results import AnalysisCompleteness, ExecutionFacts, ResultBuilder, merge_execution_facts
 
 # BACK-1190: the stdlib list, local-package heuristic, and classifier itself
 # now live in reveal/analyzers/imports/classify.py -- shared with
@@ -35,18 +36,84 @@ from ..utils.results import ResultBuilder
 
 def _run_base(adapter: 'DepsAdapter', path: Path) -> Dict[str, Any]:
     """Fetch base import map via ImportsAdapter."""
-    return adapter.compose(ImportsAdapter, str(path), default={})
+    result = adapter.compose(ImportsAdapter, str(path), default={})
+    adapter._record_component('base', result)
+    return result if isinstance(result, dict) and _valid_component_payload('base', result) else {}
 
 
 def _run_circular(adapter: 'DepsAdapter', path: Path) -> Dict[str, Any]:
     """Fetch circular dependency cycles via ImportsAdapter."""
-    return adapter.compose(ImportsAdapter, str(path), default={}, query='circular')
+    result = adapter.compose(ImportsAdapter, str(path), default={}, query='circular')
+    adapter._record_component('circular', result)
+    return result if isinstance(result, dict) and _valid_component_payload('circular', result) else {}
 
 
 def _run_unused(adapter: 'DepsAdapter', path: Path) -> List[Dict[str, Any]]:
     """Fetch unused imports via ImportsAdapter."""
     data = adapter.compose(ImportsAdapter, str(path), default={}, query='unused')
-    return data.get('unused', [])
+    adapter._record_component('unused', data)
+    return data['unused'] if _valid_component_payload('unused', data) else []
+
+
+def _valid_import_entries(entries: Any) -> bool:
+    return isinstance(entries, list) and all(isinstance(entry, dict) for entry in entries)
+
+
+def _valid_component_payload(name: str, result: Any) -> bool:
+    """Validate collections/counts consumed by the dashboard, not import internals."""
+    if not isinstance(result, dict):
+        return False
+    if name == 'base':
+        files = result.get('files')
+        return isinstance(files, dict) and all(_valid_import_entries(entries) for entries in files.values())
+    values = result.get('cycles' if name == 'circular' else 'unused')
+    if not isinstance(values, list):
+        return False
+    count = result.get('count')
+    if type(count) is not int or count != len(values):
+        return False
+    if name == 'circular':
+        return all(isinstance(cycle, list) and all(isinstance(file, str) for file in cycle)
+                   for cycle in values)
+    return _valid_import_entries(values)
+
+
+def _component_counts(metadata: Any) -> Optional[Tuple[int, int]]:
+    if not isinstance(metadata, dict):
+        return None
+    failed, lost = metadata.get('files_failed_count'), metadata.get('files_lost_count')
+    if type(failed) is not int or type(lost) is not int or not 0 <= lost <= failed:
+        return None
+    return failed, lost
+
+
+def _component_diagnostics(name: str, metadata: Any, meta: Dict[str, Any]) -> Dict[str, Any]:
+    diagnostics = {key: deepcopy(metadata[key])
+                   for key in ('files_failed', 'files_lost', 'extraction_diagnostics')
+                   if isinstance(metadata, dict) and key in metadata}
+    for warning in meta.get('warnings', []):
+        field = warning.get('field', '')
+        if warning.get('type') == 'truncated' and field.removeprefix('metadata.') in diagnostics:
+            target = f'analysis.components.{name}.diagnostics.{field.removeprefix("metadata.")}'
+            # compose folds the same entry: keep exact counts/cause and hint text.
+            warning['field'] = target
+            if isinstance(warning.get('message'), str):
+                warning['message'] = warning['message'].replace(field, target)
+    for key in ('warnings', 'errors'):
+        if meta.get(key):
+            diagnostics[key] = deepcopy(meta[key])
+    return diagnostics
+
+
+def _component_state(name: str, result: Dict[str, Any], counts: Optional[Tuple[int, int]],
+                     meta: Dict[str, Any]) -> AnalysisCompleteness:
+    if result.get('error') or counts is None or not _valid_component_payload(name, result):
+        return AnalysisCompleteness.FAILED
+    missing = any(w.get('type') in ('partial_parse', 'worker_lost', 'analysis_failed', 'parse_recovered')
+                  for w in meta.get('warnings', []))
+    if any(counts) or meta.get('errors') or missing:
+        return AnalysisCompleteness.INCOMPLETE
+    return AnalysisCompleteness.COMPLETE
 
 
 def _relativize_deps_paths(
@@ -192,6 +259,23 @@ class DepsAdapter(ResourceAdapter):
     CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # --no-gitignore (BACK-1386)
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
 
+    def _record_component(self, name: str, result: Any) -> None:
+        """Retain required evidence before the unused child becomes a plain list."""
+        result = result if isinstance(result, dict) else {}
+        metadata = result.get('metadata')
+        counts = _component_counts(metadata)
+        meta = result.get('meta') or {}
+        diagnostics = _component_diagnostics(name, metadata, meta)
+        state = _component_state(name, result, counts, meta)
+        if state is AnalysisCompleteness.FAILED:
+            self.__dict__.setdefault('_composed_errors', []).append({
+                'code': 'E_DEPS_COMPONENT', 'component': name,
+                'message': str(result.get('error') or 'Required imports payload or failed/lost input counts are missing or malformed'),
+            })
+        record = {'completeness': state.value, 'files_failed_count': counts[0] if counts else 0,
+                  'files_lost_count': counts[1] if counts else 0, 'diagnostics': diagnostics}
+        self.__dict__.setdefault('_deps_components', {})[name] = record
+
     def __init__(self, resource: str, query: Optional[str] = None):
         self.path = str(Path(resource).expanduser())
         self.query_params = parse_query_params(query or '', coerce=True)
@@ -276,6 +360,17 @@ class DepsAdapter(ResourceAdapter):
         }
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+        self._deps_components = {}
+        try:
+            return self._get_structure()
+        finally:
+            self._deps_components = {}
+            # A request that fails before construction must not contaminate reuse.
+            self._composed_errors = []
+            self._composed_warnings = []
+            self._composed_confidences = []
+
+    def _get_structure(self) -> Dict[str, Any]:
         path = Path(self.path)
         no_unused = str(self.query_params.get('no_unused', False)).lower() == 'true'
         no_circular = str(self.query_params.get('no_circular', False)).lower() == 'true'
@@ -294,6 +389,21 @@ class DepsAdapter(ResourceAdapter):
             # off must not read as a clean one ({} rendered "✅ no circular deps").
             'skipped': [name for name, off in (('circular', no_circular), ('unused', no_unused)) if off],
         }
+
+        components = self._deps_components
+        required = ['base', *[name for name in ('circular', 'unused') if name not in report['skipped']]]
+        for name in required:
+            if name not in components:
+                self._record_component(name, {})
+        facts = merge_execution_facts(*(ExecutionFacts(AnalysisCompleteness(record['completeness']))
+                                        for record in components.values()))
+        findings = {}
+        if not no_circular:
+            findings['circular'] = circular.get('count', 0)
+        if not no_unused:
+            findings['unused'] = len(unused)
+        report['analysis'] = {'complete': facts.completeness is AnalysisCompleteness.COMPLETE,
+                              'components': components, 'findings': findings}
 
         meta = self.composed_meta()
         return ResultBuilder.create(
