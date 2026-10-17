@@ -317,16 +317,21 @@ class SurfaceAdapter(ResourceAdapter):
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     PARAM_SPECS = (
         ParamSpec('type', 'string', 'Filter to one surface type', '', str,
+                  examples=('type=env',),
                   choices=('', *CATEGORIES), role='analysis', cli=CliBinding(('--type',), metavar='TYPE')),
         ParamSpec('source_only', 'boolean', 'Exclude test files and directories', False, boolean_value,
+                  examples=('source_only=true',),
                   role='analysis', cli=CliBinding(('--source-only',), action='store_true')),
         ParamSpec('by', 'string', 'Group entries by directory', '', str,
+                  examples=('by=dir',),
                   choices=('', 'dir'), role='analysis', cli=CliBinding(('--by',))),
         ParamSpec('depth', 'integer', 'Directory rollup depth (0 = full directory)', 0,
                   lambda value: _surface_limit(value, 'depth'), minimum=0,
+                  examples=('depth=2',),
                   zero_policy='full directory', role='analysis', cli=CliBinding(('--depth',), metavar='N')),
         ParamSpec('top', 'integer', 'Text entries per category (omitted = all; JSON stays complete)', None,
                   lambda value: _surface_limit(value, 'top'), minimum=0,
+                  examples=('top=20', 'top=0'),
                   zero_policy='no text entries', role='presentation', cli=CliBinding(('--top',), metavar='N')),
     )
 
