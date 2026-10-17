@@ -6,6 +6,7 @@ from tree_sitter_language_pack import get_parser
 
 from conftest import _run_reveal_direct
 from reveal.complexity import calculate_complexity_and_depth
+from reveal.registry import get_analyzer
 from reveal.adapters.ast.nav_exits import collect_exits, collect_gate_chains
 from reveal.adapters.ast.nav_loops import collect_fanout, collect_loops
 from reveal.adapters.ast.nav_outline import element_outline, scope_chain
@@ -143,12 +144,21 @@ def test_zig_catch_outline_starts_at_operator_and_excludes_operand_scope():
         (4, [{'line': 3, 'text': 'on exception'}])]
 
 
-@pytest.mark.parametrize('source,expected', [
-    ('fn f(items: []const i32) void { for (items) |item| {consume(item);} }', (2, 1)),
-    ('fn f(a: bool, b: bool) i32 { const x = if (a) if (b) 1 else 2 else 3; return x; }', (3, 2)),
-    ('fn f(a: i32) i32 { return a + 1; }', (1, 0)),
+@pytest.mark.parametrize('language,source,expected', [
+    ('zig', 'fn f(items: []const i32) void { for (items) |item| {consume(item);} }', (2, 1)),
+    ('zig', 'fn f(a: bool, b: bool) i32 { const x = if (a) if (b) 1 else 2 else 3; return x; }', (3, 2)),
+    ('zig', 'fn f(a: bool) i32 { if (a) {return 1;} return 2; }', (2, 1)),
+    ('zig', 'fn f(a: i32) i32 { return a + 1; }', (1, 0)),
+    ('ruby', 'def f(a)\n if a\n  return 1\n end\n return 2\nend', (2, 2)),
+    ('ruby', 'def f(xs)\n for x in xs\n  for y in xs\n   consume(y)\n  end\n end\nend', (3, 3)),
 ])
-def test_zig_shared_control_flow_family_metrics(source, expected):
-    tree, root, text = _parse('zig', source)
+def test_shared_control_flow_family_metrics(tmp_path, language, source, expected):
+    tree, root, text = _parse(language, source)
     assert calculate_complexity_and_depth(root) == expected
     assert calculate_complexity_and_depth(root) == expected
+    path = tmp_path / ('control.zig' if language == 'zig' else 'control.rb')
+    path.write_text(source, encoding='utf-8')
+    analyzer = get_analyzer(str(path))(str(path))
+    node = next(iter(analyzer._find_nodes_by_type('Decl' if language == 'zig' else 'method')))
+    assert calculate_complexity_and_depth(node) == expected
+    assert analyzer._complexity_depth_and_calls(node)[:2] == expected
