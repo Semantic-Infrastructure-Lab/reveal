@@ -227,3 +227,11 @@ def test_actually_empty_excluded_scope_is_complete_with_supplied_zero_confidence
     assert result['analysis']['confidence'] == {'base': 0.0, 'head': 0.0}
     assert result['meta']['confidence'] == 0.0
     assert result['deltas'] == diff._empty_deltas(20)
+
+
+def test_diagnostic_normalization_keeps_distinct_path_with_same_prefix(tmp_path):
+    root = tmp_path/'snapshot'
+    sibling = str(root)+'-other'
+    message = f'Keep {sibling}; resource {root}'
+    normalized = diff._diagnostic_message(message, root)
+    assert normalized == f'Keep {sibling}; resource .'
