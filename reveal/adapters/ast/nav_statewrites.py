@@ -28,6 +28,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional
 
 from ...core import node_children as _children
+from ...core.callees.dart import MEMBER_SELECTORS as _DART_MEMBER_SELECTORS
 from ...core.treesitter_compat import _zero_arg
 from .nav_bindings import BindingScope
 from .nav_effects import collect_effects
@@ -42,6 +43,7 @@ _ASSIGNMENT_NODES: frozenset = frozenset({
     # --statewrites while simple `@count = 1` (assignment) worked. Found via
     # discourse deep-conformance dogfooding.
     'operator_assignment',
+    'AssignExpr',  # Zig: assignment and non-assignment expressions share this wrapper.
 })
 
 # _MEMBER_ACCESS_NODES: promoted to node_taxonomy.MEMBER_ACCESS_NODES
@@ -95,9 +97,35 @@ def _subscript_kind(base_text: str) -> Optional[str]:
     return None
 
 
+def _dart_member_target(left: Any) -> bool:
+    children = _children(left)
+    if not children or _zero_arg(children[-1], 'kind') not in _DART_MEMBER_SELECTORS:
+        return False
+    # The same selector wrapper also contains index_selector for a[0].
+    return any(_zero_arg(child, 'kind') == 'identifier' for child in _children(children[-1]))
+
+
+def _zig_member_target(left: Any) -> bool:
+    children = _children(left)
+    if _zero_arg(left, 'kind') == 'ErrorUnionExpr':
+        return len(children) == 1 and _zig_member_target(children[0])
+    if _zero_arg(left, 'kind') != 'SuffixExpr':
+        return False
+    if not children or _zero_arg(children[-1], 'kind') != 'FieldOrFnCall':
+        return False
+    # SuffixExpr also holds bare locals, indexing and calls. Only a final
+    # field segment is a member store; a call segment owns FnCallArguments.
+    kinds = {_zero_arg(child, 'kind') for child in _children(children[-1])}
+    return 'IDENTIFIER' in kinds and 'FnCallArguments' not in kinds
+
+
 def _target_kind(left: Any, get_text: Callable) -> Optional[str]:
     """Classify an assignment's left-hand target, or None if not state-relevant."""
     ltype = _zero_arg(left, 'kind')
+    if ltype in ('ErrorUnionExpr', 'SuffixExpr'):
+        return _member_kind(get_text(left)) if _zig_member_target(left) else None
+    if ltype == 'assignable_expression':
+        return _member_kind(get_text(left)) if _dart_member_target(left) else None
     if ltype == 'directly_assignable_expression':
         # BACK-478 Finding 2: Kotlin/Swift wrap every assignment target in
         # this node — a bare reassignment (`total = ...`) and a member
@@ -132,7 +160,7 @@ def _target_kind(left: Any, get_text: Callable) -> Optional[str]:
 
 
 def _assignment_targets(left: Any) -> List[Any]:
-    """Unwrap Go's `expression_list` assignment-target wrapper.
+    """Unwrap Go/Lua assignment-target lists without losing multiassign targets.
 
     Go's assignment_statement always wraps its 'left' field in an
     expression_list (to support multi-assign `a, b = 1, 2`) even for a
@@ -140,8 +168,9 @@ def _assignment_targets(left: Any) -> List[Any]:
     cross-language pass: `b.Total = ...` was silently invisible to
     --statewrites because `left.kind()` was 'expression_list', never
     matching _MEMBER_ACCESS_NODES/_SUBSCRIPT_NODES directly.
+    Lua uses variable_list for the same single/multiple-target role.
     """
-    if _zero_arg(left, 'kind') == 'expression_list':
+    if _zero_arg(left, 'kind') in ('expression_list', 'variable_list'):
         return [c for c in _children(left) if _zero_arg(c, 'is_named')]
     return [left]
 
