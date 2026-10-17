@@ -109,7 +109,7 @@
         "json"
       ],
       "exit_code": 0,
-      "type": "surface"
+      "type": "surface_scan"
     }
   },
   "content_identity": "Canonical UTF-8 text after universal-newline decoding; analyzer-content removes exactly one final LF. Each declared variant retains a distinct parser-input hash and the canonical original-source hash."
