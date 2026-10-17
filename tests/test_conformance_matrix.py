@@ -34,7 +34,7 @@ EXPECTED = yaml.safe_load((FIXTURES_DIR / "expected.yaml").read_text(encoding="u
 EXTENSIONS = {
     "python": "py", "c": "c", "cpp": "cpp", "csharp": "cs", "go": "go",
     "java": "java", "javascript": "js", "rust": "rs", "typescript": "ts",
-    "kotlin": "kt", "swift": "swift", "ruby": "rb", "php": "php", "lua": "lua", "dart": "dart", "scala": "scala", "gdscript": "gd",
+    "kotlin": "kt", "swift": "swift", "ruby": "rb", "php": "php", "lua": "lua", "dart": "dart", "scala": "scala", "gdscript": "gd", "zig": "zig",
 }
 
 LANGUAGES = sorted(EXPECTED.keys())
@@ -84,7 +84,11 @@ def test_outline_lists_all_functions(lang):
     # opening brace (`name(args) -> Type { [N lines...`) — match anything
     # between the args and the `[N lines` marker rather than assuming either
     # shape (found via BACK-477-successor fixture work, Kotlin/Swift matrix).
-    found = set(re.findall(r"^(?:[│├└─\s]*)(\w+)\([^)]*\)[^\[\n]*\[\d+ lines?", out, re.MULTILINE))
+    # Zig's outline omits the line-count trailer and ends at its source
+    # location; accept that established form while retaining function identity.
+    found = set(re.findall(
+        r"^(?:[│├└─\s]*)(\w+)\([^)]*\)(?:[^\[\n]*\[\d+ lines?| \([^\n]+:\d+\)$)",
+        out, re.MULTILINE))
     expected_functions = set(EXPECTED[lang]["outline_functions"])
     assert expected_functions <= found, (
         f"{lang}: expected functions {expected_functions} not all found in outline: {found}\n{out}"
@@ -841,3 +845,9 @@ def test_gdscript_direct_call_varflow_control(tmp_path, cross_calls):
         findings = findings[0]['events']
     assert [{'kind': f['kind'], 'line': f['line']} for f in findings] == [
         {'kind': 'WRITE', 'line': 2}, {'kind': 'READ', 'line': 3}, {'kind': 'READ', 'line': 4}]
+
+
+def test_zig_struct_method_is_addressable():
+    result = _run_reveal_direct(str(_sample_path('zig')), 'Batch.run', '--format', 'json')
+    assert result.returncode == 0, result.stderr
+    assert 'self.total = self.total + item' in result.stdout

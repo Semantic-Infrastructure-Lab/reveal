@@ -746,3 +746,47 @@ gdscript:
     test_varflow_declaration_is_write_not_read: "BACK-1924: GDScript method-call argument read is absent"
     test_cross_calls_varflow_json_does_not_crash: "BACK-1924: GDScript method-call argument read is absent"
     test_mutations_finds_read_after_write: "BACK-1925: GDScript initialized variable declaration is not a mutation write"
+
+# BACK-1926: manually derived from zig/sample.zig, not captured CLI output.
+zig:
+  entry_function: processOrder
+  outline_functions: [validate, processOrder, run]
+  calls_validate_callers:
+  - {line: 12, function: processOrder}
+  imports_unused:
+    not_supported: true  # @import extraction exists; no unused-name analysis
+  varflow_result:
+  - {kind: WRITE, line: 13}
+  - {kind: READ, line: 20}
+  - {kind: WRITE, line: 23}
+  - {kind: READ, line: 23}
+  - {kind: READ, line: 24}
+  sideeffects:
+  - {line: 16, kind: file}  # openFile is classified; untyped writeAll/close are not
+  exits:
+  - {kind: RETURN, line: 14}
+  - {kind: RETURN, line: 17}
+  - {kind: RETURN, line: 21}
+  - {kind: RETURN, line: 24}
+  ifmap:
+    not_supported: true  # processOrder handles errors with catch, no bare if
+  catchmap:
+  - {keyword: CATCH, line_start: 13}
+  - {keyword: CATCH, line_start: 16}
+  - {keyword: CATCH, line_start: 20}
+  mutations_probe: {range: "13-13", var: result, next_read_line: 20}
+  returns:
+  - {line: 14, gate_lines: [13]}
+  - {line: 17, gate_lines: [16]}
+  - {line: 21, gate_lines: [20]}
+  - {line: 24, gate_lines: []}
+  batch_element: ":33-38"  # struct-qualified extraction is pinned separately
+  loopmap:
+  - {keyword: FOR, line_start: 34}
+  fanout_effects:
+  - {line: 36, kind: cache}
+  statewrites:
+  - {kind: field, line: 35}
+  - {kind: cache, line: 36}
+  decorators: {target: processOrder, category: functions, not_supported: true}  # no annotation syntax
+  bases: {target: processOrder, category: functions, not_supported: true}  # no class inheritance
