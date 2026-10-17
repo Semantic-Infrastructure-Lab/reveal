@@ -401,3 +401,18 @@ def test_more_shared_reuse_can_lower_builds_without_outcome_ceiling(ledger):
     current = audit_snapshot(current_audit, os.getpid(), root, targets)
     assert current['totals']['artifact'] == baseline['totals']['artifact'] - 1
     assert compare_snapshots(baseline, current) == []
+
+
+def test_new_failed_attempt_cannot_hide_behind_fewer_success_artifacts(ledger):
+    audit = ledger[0]
+    attempt, artifact = deepcopy(audit['events'][1:3])
+    attempt['attempt_id'] = artifact['attempt_id'] = 2
+    audit['events'][3:3] = [attempt, artifact]
+    baseline = snapshot(ledger)
+    audit['events'][2].update(event='failure', error='SyntaxError')
+    current = snapshot(ledger)
+    assert current['totals']['attempt'] == baseline['totals']['attempt']
+    assert current['totals']['artifact'] == baseline['totals']['artifact'] - 1
+    assert current['totals']['failure'] == 1
+    errors = compare_snapshots(baseline, current)
+    assert len(errors) == 1 and 'failure' in errors[0]
