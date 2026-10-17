@@ -134,3 +134,11 @@ func tagged():
     pass
 ''')
     assert structure['functions'][0]['decorators'] == ['@rpc("any_peer")']
+
+
+def test_gdscript_ambiguous_abstract_is_not_assigned_to_function(tmp_path):
+    structure = _structure(tmp_path, GDScriptAnalyzer, 'gd', '''@abstract
+func plain():
+    pass
+''')
+    assert structure['functions'][0]['decorators'] == []
