@@ -1,5 +1,6 @@
 """Architecture comparisons require symmetric scope and complete snapshots."""
 import json
+from pathlib import PureWindowsPath
 from unittest.mock import patch
 
 import pytest
@@ -187,3 +188,30 @@ def test_unsupported_language_scope_is_nonfatal(tree):
     with patch.object(ImportsAdapter, 'get_metadata', metadata):
         result = diff.run_architecture_diff(src, ref)
     assert result['analysis']['complete'] and not result.get('error')
+
+
+def test_fast_and_scanned_results_use_current_contract_version(tree):
+    from reveal.reveal_types import CONTRACT_VERSION
+
+    repo, src, ref = tree
+    fast = diff.run_architecture_diff(src, ref)
+    _dirty(src)
+    scanned = diff.run_architecture_diff(src, ref)
+    assert fast['contract_version'] == scanned['contract_version'] == CONTRACT_VERSION
+
+
+def test_windows_style_diagnostic_roots_and_display_are_stable():
+    root = PureWindowsPath('C:/Users/fixture/Temp/reveal-archdiff-test')
+    spellings = (str(root), root.as_posix(), repr(str(root))[1:-1], repr(root))
+    for spelling in spellings:
+        raw = {'root': root, 'meta': {'errors': [{
+            'message': f'AstAdapter({spelling}) failed: preserved cause',
+            'file': str(root/'nested'/'a.py'),
+        }]}}
+        entry = diff._snapshot_meta(raw, 'base')[0][1]
+        assert entry['file'] == 'nested/a.py'
+        assert 'reveal-archdiff-test' not in entry['message']
+        assert 'preserved cause' in entry['message']
+    result = diff._comparison_report(root, 'base', 'HEAD', diff._empty_deltas(20),
+                                     {'complete': True}, [])
+    assert result['path'] == root.as_posix()
