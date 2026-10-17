@@ -43,9 +43,7 @@ def _render_summary(analysis: Dict[str, Any], cycle_count: int, unused_count: in
         health_parts.append("— unused imports not checked (--no-unused)")
     elif unused_count:
         health_parts.append(f"⚠️  {unused_count} unused import(s)")
-    for name, label in (('base', 'base import'), ('unused', 'unused import')):
-        if name not in skipped:
-            health_parts.extend(_component_disclosure(label, components.get(name)))
+    health_parts.extend(_inventory_disclosures(components, skipped))
 
     lines.append(f"\nSummary   {' · '.join(parts)}")
     if health_parts:
@@ -78,6 +76,14 @@ def _component_disclosure(label: str, evidence: Optional[Dict[str, Any]]) -> Lis
         return []
     status = 'unavailable' if state == 'failed' else 'incomplete'
     return [f"⚠ {label} analysis {status}"]
+
+
+def _inventory_disclosures(components: Dict[str, Any], skipped: List[str]) -> List[str]:
+    parts = []
+    for name, label in (('base', 'base import'), ('unused', 'unused import')):
+        if name not in skipped:
+            parts.extend(_component_disclosure(label, components.get(name)))
+    return parts
 
 
 def _render_external_packages(analysis: Dict[str, Any], top: int) -> List[str]:
