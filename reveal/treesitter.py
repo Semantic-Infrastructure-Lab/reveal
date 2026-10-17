@@ -347,6 +347,7 @@ ALL_ELEMENT_NODE_TYPES = (
     'function_signature',    # Dart signature, paired body via element_span
     'Decl',                  # Zig function; unnamed variable/import wrappers are skipped
     'constructor_definition',  # GDScript _init
+    'method', 'singleton_method',  # Ruby instance/class methods
 )
 
 

@@ -77,16 +77,8 @@ ruby/sample.rb:9-11 | lines:9-11
 [exit 0]
 
 $ reveal ruby/sample.rb :9
-ruby/sample.rb:1-19 | lines:1-19
+ruby/sample.rb:9-21 | process_order
 
-      1  # Conformance fixture (BACK-422 Tier 1) — Ruby
-      2  require "json" # unused on purpose -- documented gap, no unused-import detection
-      3  
-      4  def validate(order)
-      5    raise ArgumentError, "empty order" if order.nil?
-      6    order
-      7  end
-      8  
       9  def process_order(order)
      10    result = validate(order)
      11    count = 0
@@ -98,6 +90,8 @@ ruby/sample.rb:1-19 | lines:1-19
      17      return result.upcase
      18    rescue StandardError
      19      return nil
+     20    end
+     21  end
 [exit 0]
 
 $ reveal ruby/sample.rb --grep result

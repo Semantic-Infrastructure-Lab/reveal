@@ -659,7 +659,8 @@ def _element_nodes(analyzer):
         for node in analyzer._find_definitions(node_type):
             # These newly supported kinds can also wrap non-functions (Zig
             # imports/variables). Keep legacy anonymous elements extractable.
-            if node_type in ('Decl', 'function_signature', 'constructor_definition') and not analyzer._get_node_name(node):
+            if node_type in ('Decl', 'function_signature', 'constructor_definition',
+                             'method', 'singleton_method') and not analyzer._get_node_name(node):
                 continue
             yield node
 
