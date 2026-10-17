@@ -54,7 +54,9 @@ def test_container_type_fact_reads_declared_type_wrapper(analyzer, name, kind):
     _, container = analyzer._extract_var_name_and_container(declaration)
     assert container is not None
     assert analyzer._is_correct_container_type(container, kind)
-    assert not analyzer._is_correct_container_type(container, 'struct' if kind != 'struct' else 'enum')
+    for other in ('struct', 'enum', 'union'):
+        if other != kind:
+            assert not analyzer._is_correct_container_type(container, other)
 
 
 @pytest.mark.parametrize('name,members', [
