@@ -45,7 +45,7 @@ _DECISION_TYPES = frozenset({
     # Loops (each iteration is a branch). for-each variants share this role:
     # C#/PHP foreach_statement, JS/TS for_in_statement, Java
     # enhanced_for_statement, Rust for_expression (BACK-431).
-    'for_statement', 'for_expression', 'for',
+    'for_statement', 'for_expression', 'for', 'ForStatement',
     'foreach_statement', 'for_in_statement', 'enhanced_for_statement',
     'while_statement', 'while_expression', 'while',
     'until',
@@ -178,9 +178,9 @@ def _is_default_arm(arm) -> bool:
 
 
 _NESTING_TYPES = frozenset({
-    'if_statement', 'if_expression', 'if', 'IfStatement',
+    'if_statement', 'if_expression', 'if', 'IfStatement', 'IfExpr',
     'unless',  # Ruby block `unless … end` nests; the modifiers (MODIFIER_NODES) do not
-    'for_statement', 'for_expression', 'for',
+    'for_statement', 'for_expression', 'for', 'ForStatement',
     'foreach_statement', 'for_in_statement', 'enhanced_for_statement',
     'c_style_for_statement',
     'while_statement', 'while_expression', 'while', 'until',
@@ -250,6 +250,7 @@ _KEYWORD_PAIRS = frozenset({
     ('c_style_for_statement', 'for'),
     # Zig: `IfStatement`/`IfExpr` wrap an `IfPrefix` that holds the bare `if` token.
     ('IfPrefix', 'if'),
+    ('ForPrefix', 'for'),
 })
 
 
@@ -289,6 +290,12 @@ def is_decision(kind: str, parent_kind, node=None, node_text=None) -> bool:
     return kind == 'case' and parent_kind in _CASE_TOKEN_PARENTS
 
 
+def is_nesting(kind: str, parent_kind: Optional[str]) -> bool:
+    """Count Zig's wrapper once, retaining bare Ruby if/for nesting."""
+    return kind in _NESTING_TYPES and not (
+        parent_kind in ('IfPrefix', 'ForPrefix') and (parent_kind, kind) in _KEYWORD_PAIRS)
+
+
 def calculate_complexity_and_depth(node, is_opaque=None, node_text=None) -> tuple:
     """Compute cyclomatic complexity and max nesting depth in one iterative pass.
 
@@ -304,8 +311,6 @@ def calculate_complexity_and_depth(node, is_opaque=None, node_text=None) -> tupl
     Returns:
         (complexity, depth) where complexity = decision_count + 1
     """
-    nesting_types = _NESTING_TYPES
-
     decision_count = 0
     max_depth = 0
 
@@ -321,7 +326,7 @@ def calculate_complexity_and_depth(node, is_opaque=None, node_text=None) -> tupl
             child_type = _zero_arg(child, 'kind')
             if is_decision(child_type, n_type, child, node_text):
                 decision_count += 1
-            child_depth = depth + 1 if child_type in nesting_types else depth
+            child_depth = depth + 1 if is_nesting(child_type, n_type) else depth
             stack.append((child, child_type, child_depth))
 
     return decision_count + 1, max_depth
