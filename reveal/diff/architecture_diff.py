@@ -268,7 +268,8 @@ def _fast_exit_possible(repo, base_commit, subpath: str) -> bool:
         return False
 
     try:
-        status = repo.status()
+        from ..utils.gitignore import gitignore_enabled
+        status = repo.status(ignored=not gitignore_enabled())
     except pygit2.GitError:
         return False
 
@@ -282,7 +283,7 @@ def _fast_exit_possible(repo, base_commit, subpath: str) -> bool:
 # ── Snapshot extraction (reuses architecture.py + imports.py unmodified) ───
 
 def _is_reportable_entry_point(entry: Dict[str, Any]) -> bool:
-    from reveal.cli.commands.architecture import _is_test_file
+    from reveal.adapters.architecture import _is_test_file
 
     return (
         entry.get('fan_out', 0) > 0
@@ -304,7 +305,7 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
     report needs). Complexity still comes straight from architecture.py's
     _run_complex_functions(), unmodified.
     """
-    from reveal.cli.commands.architecture import _run_complex_functions
+    from reveal.adapters.architecture import _run_complex_functions
     from reveal.adapters.architecture import ArchitectureAdapter
     from reveal.adapters.imports import ImportsAdapter
 
@@ -313,6 +314,8 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
     components: List[Dict[str, Any]] = []
     entry_points: List[str] = []
     unsupported_extensions: Dict[str, int] = {}
+    owner = ArchitectureAdapter(str(root))
+    imports_state = 'complete'
 
     try:
         adapter = ImportsAdapter(str(root))
@@ -322,20 +325,25 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
         components = adapter._format_components().get('components', [])
         raw_eps = adapter._format_entrypoints().get('entries', [])
         entry_points = [e['file'] for e in raw_eps if _is_reportable_entry_point(e)]
-        unsupported_extensions = adapter.get_metadata().get('unsupported_extensions', {})
-    except Exception as exc:  # boundary-ok: broad-except -- imports analysis over a whole tree runs arbitrary analyzers; failure is logged at warning and the diff section is empty
-        logger.warning("imports analysis failed for %s: %s", root, exc)
+        metadata = adapter.get_metadata()
+        unsupported_extensions = metadata.get('unsupported_extensions', {})
+        owner.fold_meta({'warnings': adapter.integrity_warnings(root)})
+        if adapter.analysis.files_failed or adapter.analysis.files_lost:
+            imports_state = 'incomplete'
+    except Exception as exc:  # boundary-ok: broad-except -- whole-tree import analysis runs arbitrary analyzers; retain the attributed failure and reject comparison rather than treating empty facts as evidence
+        owner.record_composed_error('ImportsAdapter', root, exc)
+        imports_state = 'failed'
 
-    # BACK-984: _run_complex_functions composes AstAdapter via
-    # ResourceAdapter.compose(), which needs an adapter instance to attribute
-    # a sub-scan failure to. This snapshot function isn't itself an adapter
-    # method, so it carries its own throwaway ArchitectureAdapter for that —
-    # its composed_meta() isn't consulted here; this diff has its own
-    # contract/tests (BACK-435 area), unaffected by this internal plumbing.
-    complex_fns = _run_complex_functions(ArchitectureAdapter(str(root)), root, top_n * 4)
+    complexity_owner = ArchitectureAdapter(str(root))
+    complex_fns = _run_complex_functions(complexity_owner, root, top_n * 4)
+    complexity_meta = complexity_owner.composed_meta() or {}
+    complexity_state = _complexity_state(complexity_meta)
+    owner.fold_meta(complexity_meta)
 
     return {
         'root': root,
+        'completeness': {'imports': imports_state, 'complexity': complexity_state},
+        'meta': owner.composed_meta(),
         'fan_in_out': fan_in_out,
         'circular_groups': circular_groups,
         'components': components,
@@ -343,6 +351,15 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
         'complex_fns': complex_fns,
         'unsupported_extensions': unsupported_extensions,
     }
+
+
+def _complexity_state(meta: Dict[str, Any]) -> str:
+    if meta.get('errors'):
+        return 'failed'
+    missing = {'analysis_failed', 'parse_recovered'}
+    if any(w.get('type') in missing for w in meta.get('warnings', [])):
+        return 'incomplete'
+    return 'complete'
 
 
 def _relpath_or_none(file_str: str, root: Path) -> Optional[str]:
@@ -521,27 +538,61 @@ def run_architecture_diff(
 
     base_commit = _resolve_commit(repo, base_ref)
 
-    deltas: Dict[str, Any]
     if _fast_exit_possible(repo, base_commit, subpath):
-        deltas = _empty_deltas(top_n)
-    else:
-        cache = StructureCache()
-        with materialize_ref(repo, base_ref, subpath, cache=cache) as base_root:
+        return _comparison_report(path, base_ref, head_ref, _empty_deltas(top_n),
+                                  {'complete': True, 'basis': 'identical_tree', 'snapshots': {}}, [])
+
+    from ..utils.exclusions import remapped_exclusion_scope
+    from ..utils.gitignore import gitignore_scope
+    cache = StructureCache()
+    with materialize_ref(repo, base_ref, subpath, cache=cache) as base_root:
+        with remapped_exclusion_scope(path, base_root), gitignore_scope(False):
             base_raw = _snapshot(base_root, top_n)
-            base_snapshot = _normalize_snapshot(base_raw, top_n)
+        base_snapshot = _normalize_snapshot(base_raw, top_n)
+        base_meta = _snapshot_meta(base_raw, 'base')
 
-        head_raw = _snapshot(path, top_n)
-        head_snapshot = _normalize_snapshot(head_raw, top_n)
+    head_raw = _snapshot(path, top_n)
+    head_snapshot = _normalize_snapshot(head_raw, top_n)
+    states = {'base': base_raw['completeness'], 'head': head_raw['completeness']}
+    complete = all(state == 'complete' for components in states.values() for state in components.values())
+    analysis = {'complete': complete, 'basis': 'snapshots', 'snapshots': states,
+                'unsupported_extensions': {'base': base_raw['unsupported_extensions'],
+                                           'head': head_raw['unsupported_extensions']}}
+    deltas = diff_snapshots(base_snapshot, head_snapshot, top_n) if complete else None
+    return _comparison_report(path, base_ref, head_ref, deltas, analysis,
+                              [*base_meta, *_snapshot_meta(head_raw, 'head')])
 
-        deltas = diff_snapshots(base_snapshot, head_snapshot, top_n)
 
-    return {
-        'type': 'architecture_diff',
-        'base_ref': base_ref,
-        'head_ref': head_ref,
-        'path': str(path),
-        'deltas': deltas,
-    }
+def _snapshot_meta(raw: Dict[str, Any], side: str) -> List[Tuple[str, Dict[str, Any]]]:
+    """Attribute diagnostics and remove the temporary materialization spelling."""
+    from ..utils.path_utils import to_relative_display
+    root = raw['root']
+    entries = []
+    for kind in ('warnings', 'errors'):
+        for entry in (raw.get('meta') or {}).get(kind, []):
+            entry = dict(entry, snapshot=side)
+            if entry.get('file'):
+                entry['file'] = to_relative_display(entry['file'], root)
+            if entry.get('files'):
+                entry['files'] = [to_relative_display(file, root) for file in entry['files']]
+            entry['message'] = f"{side}: {entry.get('message', '')}".replace(str(root), '.')
+            entries.append((kind, entry))
+    return entries
+
+
+def _comparison_report(path: Path, base_ref: str, head_ref: str, deltas: Optional[Dict[str, Any]],
+                       analysis: Dict[str, Any], diagnostics: List[Tuple[str, Dict[str, Any]]]) -> Dict[str, Any]:
+    from ..utils.results import ResultBuilder
+    data = {'base_ref': base_ref, 'head_ref': head_ref, 'path': str(path),
+            'deltas': deltas, 'analysis': analysis}
+    if not analysis['complete']:
+        data['error'] = 'Architecture comparison unavailable: required snapshot evidence is incomplete'
+    return ResultBuilder.create(
+        result_type='architecture_diff', source=path, data=data,
+        warnings=[entry for kind, entry in diagnostics if kind == 'warnings'] or None,
+        errors=[entry for kind, entry in diagnostics if kind == 'errors'] or None,
+        confidence=0.0 if not analysis['complete'] else None,
+    )
 
 
 def render_diff_brief(report: Dict[str, Any]) -> None:
@@ -550,6 +601,13 @@ def render_diff_brief(report: Dict[str, Any]) -> None:
     JSON is the primary contract (design doc: "JSON-first, no verdict") —
     this is a convenience summary for terminal use, not a demand.
     """
+    if report.get('error'):
+        print(report['error'])
+        for side, components in report['analysis']['snapshots'].items():
+            for component, state in components.items():
+                if state != 'complete':
+                    print(f'  {side} {component}: {state}')
+        return
     deltas = report['deltas']
     print(f"Architecture Diff: {report['path']}")
     print(f"  {report['base_ref']} -> {report['head_ref']}\n")

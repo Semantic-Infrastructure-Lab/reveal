@@ -826,7 +826,9 @@ def walk_filter(
     # itself (not a second glob-matching path) since it already relativizes
     # correctly against the discovered project root.
     from ..config import RevealConfig  # deferred: cli/config cycle
-    config = RevealConfig.get(start_path=path)
+    from .exclusions import policy_path
+    logical_root = policy_path(path)
+    config = RevealConfig.get(start_path=logical_root)
     from .gitignore import gitignore_filter
     gi = gitignore_filter(path, respect_gitignore)
     skip_patterns = list(exclude_patterns or []) if purpose.honor_exclude else []
@@ -835,7 +837,7 @@ def walk_filter(
     from .exclusions import dir_is_excluded, path_is_excluded, scope_matcher
     all_noise = purpose.noise == 'all'
     # Matchers on the path relative to *path*: the root is resolved once, not every path.
-    ignored_by_config = config.ignore_matcher(path)
+    ignored_by_config = config.ignore_matcher(logical_root)
     in_scope = scope_matcher(path) if purpose.honor_exclude else None
 
     def by_shape(p: Path, is_dir: bool) -> Optional[str]:
@@ -851,7 +853,7 @@ def walk_filter(
     def by_config(p: Path, rel: Optional[str], is_dir: bool) -> bool:
         if ignored_by_config is not None and rel is not None:
             return ignored_by_config(rel, is_dir)
-        return config.should_ignore(p, is_dir)
+        return config.should_ignore(policy_path(p), is_dir)
 
     def by_exclude(p: Path, rel: Optional[str], is_dir: bool) -> bool:
         if skip_patterns and should_skip_file(p.relative_to(path) / '_' if is_dir

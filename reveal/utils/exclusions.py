@@ -25,6 +25,7 @@ from typing import Callable, List, Optional, Tuple
 
 _ACTIVE_ROOT: Optional[Path] = None
 _ACTIVE_PATTERNS: Tuple[str, ...] = ()
+_POLICY_PATHS: Tuple[Tuple[Path, Path], ...] = ()
 # Set when a walk actually checks a path against the active scope. The flag ledger
 # (BACK-1514) counts --exclude as used only then: publishing a scope for an adapter that
 # never walks (sqlite://, json://) applied nothing.
@@ -54,6 +55,33 @@ def exclusions_consulted() -> bool:
 def active_exclusions() -> Tuple[Optional[Path], Tuple[str, ...]]:
     """Current (root, patterns). Patterns is empty when no scope is active."""
     return _ACTIVE_ROOT, _ACTIVE_PATTERNS
+
+
+def policy_path(path: Path) -> Path:
+    """Logical source path for exclusion/config policy only, never filesystem I/O."""
+    if not _POLICY_PATHS:
+        return Path(path)
+    resolved = Path(path).resolve()
+    for physical, logical in _POLICY_PATHS:
+        try:
+            relative = resolved.relative_to(physical)
+        except ValueError:
+            continue
+        return logical / relative
+    return resolved
+
+
+@contextmanager
+def remapped_exclusion_scope(source_root: Path, materialized_root: Path):
+    """Apply live source policy to a physical snapshot, preserving nested scopes."""
+    global _POLICY_PATHS
+    previous = _POLICY_PATHS
+    logical = policy_path(Path(source_root).resolve())
+    _POLICY_PATHS = ((Path(materialized_root).resolve(), logical), *previous)
+    try:
+        yield
+    finally:
+        _POLICY_PATHS = previous
 
 
 def dispatch_scope(target: str, exclude: Optional[List[str]]) -> Tuple[Optional[Path], List[str]]:
@@ -107,7 +135,8 @@ def scope_matcher(root: Path) -> Optional[Callable[[str, bool], bool]]:
     walk_root: Optional[Path] = None
     scope_root: Optional[Path] = None
     try:
-        walk_root, scope_root = Path(root).resolve(), Path(_ACTIVE_ROOT).resolve()
+        walk_root = policy_path(Path(root).resolve())
+        scope_root = policy_path(Path(_ACTIVE_ROOT).resolve())
     except OSError:
         pass  # neither resolves: nothing can be matched against the scope
     to_scope = _to_scope_relative(walk_root, scope_root)
@@ -145,7 +174,8 @@ def _to_scope_relative(walk_root: Optional[Path],
 def _relative_to_scope(path: Path) -> Optional[Path]:
     """Path relative to the active scope root, or None if outside/unavailable."""
     try:
-        return Path(path).resolve().relative_to(Path(_ACTIVE_ROOT).resolve())
+        return policy_path(Path(path).resolve()).relative_to(
+            policy_path(Path(_ACTIVE_ROOT).resolve()))
     except (ValueError, OSError):
         return None
 
