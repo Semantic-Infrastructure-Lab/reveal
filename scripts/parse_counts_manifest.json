@@ -8,7 +8,17 @@
         "treesitter:python"
       ],
       "sha256": "c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1",
-      "bytes": 237
+      "bytes": 237,
+      "variants": {
+        "canonical": {
+          "sha256": "c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1",
+          "bytes": 237
+        },
+        "analyzer-content": {
+          "sha256": "51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace",
+          "bytes": 236
+        }
+      }
     },
     "first.ts": {
       "parsers": [
@@ -16,7 +26,17 @@
         "treesitter:tsx"
       ],
       "sha256": "6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471",
-      "bytes": 120
+      "bytes": 120,
+      "variants": {
+        "canonical": {
+          "sha256": "6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471",
+          "bytes": 120
+        },
+        "analyzer-content": {
+          "sha256": "efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495",
+          "bytes": 119
+        }
+      }
     },
     "second.ts": {
       "parsers": [
@@ -24,7 +44,17 @@
         "treesitter:tsx"
       ],
       "sha256": "6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471",
-      "bytes": 120
+      "bytes": 120,
+      "variants": {
+        "canonical": {
+          "sha256": "6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471",
+          "bytes": 120
+        },
+        "analyzer-content": {
+          "sha256": "efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495",
+          "bytes": 119
+        }
+      }
     }
   },
   "repeats": 5,
@@ -73,5 +103,5 @@
       "type": "surface"
     }
   },
-  "content_identity": "UTF-8 text after universal-newline decoding; SHA256/bytes match parser-seam source text, not raw file bytes."
+  "content_identity": "Canonical UTF-8 text after universal-newline decoding; analyzer-content removes exactly one final LF. Each declared variant retains a distinct parser-input hash and the canonical original-source hash."
 }

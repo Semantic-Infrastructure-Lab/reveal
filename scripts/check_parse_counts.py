@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from dataclasses import asdict
 from hashlib import sha256
 import json
 import os
@@ -79,7 +78,7 @@ def _validate_header(audit: dict, root_pid: int) -> None:
         raise ValueError('audit reports command failure exit')
 
 
-def _target_identity(event: dict, corpus: Path, targets: dict) -> str | None:
+def _target_identity(event: dict, corpus: Path, targets: dict) -> tuple[str | None, str | None]:
     filename = event['filename']
     relative = None
     if filename is not None:
@@ -89,25 +88,32 @@ def _target_identity(event: dict, corpus: Path, targets: dict) -> str | None:
     if event['scope'] != 'target':
         if relative in targets:
             raise ValueError('target was mislabeled as external')
-        return relative
+        return relative, None
     if relative not in targets:
         raise ValueError('unknown target attribution')
     expected = targets[relative]
     if event['parser'] not in expected['parsers']:
         raise ValueError(f'unexpected target parser: {relative}: {event["parser"]}')
-    if event['domain'] == 'fullsource' and (
-            event['source_hash'] != expected['sha256'] or event['source_length'] != expected['bytes']):
-        raise ValueError(f'target content identity differs from manifest: {relative}')
-    return relative
+    variant = None
+    if event['domain'] == 'fullsource':
+        variants = expected.get('variants', {'canonical': expected})
+        variant = next((label for label, identity in variants.items()
+                        if event['source_hash'] == identity['sha256']
+                        and event['source_length'] == identity['bytes']), None)
+        if variant is None:
+            raise ValueError(f'target content identity differs from declared variants: {relative}')
+    return relative, variant
 
 
-def _count_key(event: dict, relative: str | None) -> str:
+def _count_key(event: dict, relative: str | None, variant: str | None, targets: dict) -> str:
     # External paths are retained, never silently treated as target or excluded.
     filename = relative if event['scope'] == 'target' else event['filename']
     key = {field: event[field] for field in (
         'event', 'parser', 'domain', 'scope', 'source_hash', 'source_length',
         'parsed_hash', 'phase', 'outcome', 'error')}
     key['filename'] = filename
+    key['source_variant'] = variant
+    key['original_source_hash'] = targets[relative]['sha256'] if event['scope'] == 'target' else None
     return json.dumps(key, sort_keys=True, separators=(',', ':'))
 
 
@@ -129,12 +135,12 @@ def audit_snapshot(audit: dict, root_pid: int, corpus: Path, targets: dict) -> d
     for event in rows:
         if event['pid'] != root_pid:
             raise ValueError('non-root PID parser event; serial qualification failed')
-        relative = _target_identity(event, corpus, targets)
+        relative, variant = _target_identity(event, corpus, targets)
         if event['event'] == 'outcome' and event['outcome'] == 'failed':
             raise ValueError('failed parser outcome')
         if event['event'] == 'request' and event['scope'] == 'target' and event['domain'] == 'fullsource':
             coverage.add(relative)
-        counts[_count_key(event, relative)] += 1
+        counts[_count_key(event, relative, variant, targets)] += 1
         totals[event['event']] += 1
     if coverage != set(targets):
         raise ValueError(f'target request coverage incomplete: {sorted(coverage)} != {sorted(targets)}')
@@ -233,15 +239,24 @@ def run_once(spec: dict, corpus: Path, targets: dict, run_directory: Path) -> di
     return snapshot
 
 
+def _source_identity(source: str) -> dict:
+    encoded = source.encode('utf-8', 'surrogatepass')
+    return {'sha256': sha256(encoded).hexdigest(), 'bytes': len(encoded)}
+
+
 def _verify_corpus(corpus: Path, targets: dict) -> None:
     actual = {path.relative_to(corpus).as_posix() for path in corpus.rglob('*') if path.is_file()}
     if actual != set(targets):
         raise ValueError('corpus file set differs from manifest')
     for name, expected in targets.items():
         text = (corpus / name).read_text(encoding='utf-8')
-        source = text.encode('utf-8', 'surrogatepass')
-        _require_values({'sha256': sha256(source).hexdigest(), 'bytes': len(source)},
-                        {key: expected[key] for key in ('sha256', 'bytes')})
+        canonical = _source_identity(text)
+        _require_values(canonical, {key: expected[key] for key in ('sha256', 'bytes')})
+        variants = {'canonical': canonical}
+        if text.endswith('\n'):
+            variants['analyzer-content'] = _source_identity(text[:-1])
+        if expected.get('variants', variants) != variants:
+            raise ValueError(f'declared source variants differ from corpus: {name}')
 
 
 def measure(manifest: dict) -> dict:

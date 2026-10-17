@@ -132,3 +132,36 @@ def test_equal_content_target_requests_can_share_one_ts_artifact(tmp_path):
     assert report['totals'] == {'request': 2, 'attempt': 1, 'artifact': 1,
                                 'failure': 0, 'outcome': 2}
     assert report['coverage'] == ['first.ts', 'second.ts']
+
+
+@pytest.mark.parametrize('source', ['x = 1', 'x = 1\n'])
+def test_only_declared_source_transform_is_accepted(tmp_path, source):
+    from scripts.check_parse_counts import _source_identity
+    canonical = 'x = 1\n\n'
+    path = tmp_path / 'config.py'
+    path.write_text(canonical, encoding='utf-8')
+    identity = _source_identity(canonical)
+    targets = {'config.py': {**identity, 'parsers': ['python.ast'], 'variants': {
+        'canonical': identity, 'analyzer-content': _source_identity(canonical[:-1])}}}
+    with capture_parses(tmp_path, targets=['config.py']) as capture:
+        with parse_request('python.ast', source, path, 'fullsource'):
+            with parse_attempt(source, 'original'):
+                pass
+    audit = {'schema_version': 1, 'complete': True, 'exit_code': 0,
+             'metadata': capture.metadata, 'events': [asdict(e) for e in capture.events]}
+    if source == canonical[:-1]:
+        report = audit_snapshot(audit, os.getpid(), tmp_path, targets)
+        assert {json.loads(key)['source_variant'] for key in report['counts']} == {'analyzer-content'}
+        assert {json.loads(key)['original_source_hash'] for key in report['counts']} == {identity['sha256']}
+    else:
+        with pytest.raises(ValueError, match='declared variants'):
+            audit_snapshot(audit, os.getpid(), tmp_path, targets)
+
+
+def test_manifest_hashes_and_variants_must_match_real_text(ledger):
+    from scripts.check_parse_counts import _verify_corpus
+    _, root, targets = ledger
+    _verify_corpus(root, targets)
+    targets['config.py']['sha256'] = '0' * 64
+    with pytest.raises(ValueError, match='sha256'):
+        _verify_corpus(root, targets)
