@@ -8,7 +8,7 @@ Functions (4):
   :4      validate(order) [6 lines, depth:2]
   :11     processOrder(order) [10 lines, depth:2]
   :22     run(order) [3 lines, depth:0]
-  :27     run(items) [6 lines, depth:2]
+  :27     Batch.run(items) [6 lines, depth:2]
 
 [exit 0]
 

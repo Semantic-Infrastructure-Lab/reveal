@@ -53,9 +53,11 @@ class LuaAnalyzer(TreeSitterAnalyzer):
             return self._get_node_text(target_node).rsplit('.', 1)[-1]
         return None
 
-    def _lua_table_field_name_value(self, field_node) -> Tuple[Optional[Any], Optional[Any]]:
+    def _lua_table_field_name_value(
+        self, field_node, value_kind: str = 'function_definition',
+    ) -> Tuple[Optional[Any], Optional[Any]]:
         """Return (name_node, value_node) for a Lua table-constructor `field`
-        whose key is a LITERAL identifier (`{ key = function() end }`), or
+        with a literal key and requested value kind (a function by default), or
         (None, None) for a computed key (`{ [expr] = function() end }`) or a
         positional value (no key at all).
 
@@ -76,9 +78,19 @@ class LuaAnalyzer(TreeSitterAnalyzer):
             return None, None
         name_node = kids[0]
         value_node = next(
-            (c for c in kids if _zero_arg(c, 'kind') == 'function_definition'), None
+            (c for c in kids if _zero_arg(c, 'kind') == value_kind), None
         )
         return (name_node, value_node) if value_node else (None, None)
+
+    def _lua_assignment_pairs(self, statement) -> List[Tuple[Any, Any]]:
+        """Pair positional assignment targets and values before filtering functions."""
+        children = _children(statement)
+        targets = next((c for c in children if _zero_arg(c, 'kind') == 'variable_list'), None)
+        values = next((c for c in children if _zero_arg(c, 'kind') == 'expression_list'), None)
+        if targets is None or values is None:
+            return []
+        return list(zip([c for c in _children(targets) if _zero_arg(c, 'is_named')],
+                        [c for c in _children(values) if _zero_arg(c, 'is_named')]))
 
     def _lua_named_function_values(self) -> List[Tuple[str, Any]]:
         """(name, function_definition node) for every function literal bound to a name.
@@ -91,18 +103,9 @@ class LuaAnalyzer(TreeSitterAnalyzer):
 
         # `local NAME = function...` / `NAME = function...` / `M.k = function...`
         for stmt in self._find_nodes_by_type('assignment_statement'):
-            kids = _children(stmt)
-            try:
-                eq_idx = next(i for i, c in enumerate(kids) if _zero_arg(c, 'kind') == '=')
-            except StopIteration:
-                continue
-            targets = [c for c in kids[:eq_idx] if _zero_arg(c, 'kind') == 'variable_list']
-            values = [c for c in kids[eq_idx + 1:] if _zero_arg(c, 'kind') == 'expression_list']
-            if not targets or not values:
-                continue
-            target_nodes = [c for c in _children(targets[0]) if _zero_arg(c, 'kind') in self._LUA_ASSIGN_TARGET_KINDS]
-            value_nodes = [c for c in _children(values[0]) if _zero_arg(c, 'kind') == 'function_definition']
-            for target_node, value_node in zip(target_nodes, value_nodes):
+            for target_node, value_node in self._lua_assignment_pairs(stmt):
+                if _zero_arg(value_node, 'kind') != 'function_definition':
+                    continue
                 name = self._lua_function_expr_name(target_node)
                 if name:
                     found.append((name, value_node))
@@ -135,27 +138,46 @@ class LuaAnalyzer(TreeSitterAnalyzer):
         function-value shapes (BACK-758) — the lookup counterpart to
         `_extract_language_specific_functions` above.
         """
-        for stmt in self._find_nodes_by_type('assignment_statement'):
-            kids = _children(stmt)
-            try:
-                eq_idx = next(i for i, c in enumerate(kids) if _zero_arg(c, 'kind') == '=')
-            except StopIteration:
-                continue
-            targets = [c for c in kids[:eq_idx] if _zero_arg(c, 'kind') == 'variable_list']
-            values = [c for c in kids[eq_idx + 1:] if _zero_arg(c, 'kind') == 'expression_list']
-            if not targets or not values:
-                continue
-            target_nodes = [c for c in _children(targets[0]) if _zero_arg(c, 'kind') in self._LUA_ASSIGN_TARGET_KINDS]
-            value_nodes = [c for c in _children(values[0]) if _zero_arg(c, 'kind') == 'function_definition']
-            for target_node, value_node in zip(target_nodes, value_nodes):
-                if self._lua_function_expr_name(target_node) == name:
-                    return value_node
+        return next((node for found_name, node in self._lua_named_function_values()
+                     if found_name == name), None)
 
-        for field in self._find_nodes_by_type('field'):
-            name_node, value_node = self._lua_table_field_name_value(field)
-            if name_node and value_node and self._get_node_text(name_node) == name:
-                return value_node
+    def _lua_binding_path(self, node) -> Optional[str]:
+        """Literal assignment/table-field path; computed and call-derived owners decline."""
+        parent = _zero_arg(node, 'parent')
+        kind = _zero_arg(parent, 'kind') if parent is not None else None
+        if kind == 'expression_list':
+            statement = _zero_arg(parent, 'parent')
+            span = (_zero_arg(node, 'start_byte'), _zero_arg(node, 'end_byte'))
+            for target, value in self._lua_assignment_pairs(statement):
+                if ((_zero_arg(value, 'start_byte'), _zero_arg(value, 'end_byte')) == span
+                        and _zero_arg(target, 'kind') in self._LUA_ASSIGN_TARGET_KINDS):
+                    return self._get_node_text(target)
+        elif kind == 'field':
+            name, value = self._lua_table_field_name_value(parent, _zero_arg(node, 'kind'))
+            if name is not None and value is not None:
+                owner = self._lua_binding_path(_zero_arg(parent, 'parent'))
+                if owner:
+                    return f'{owner}.{self._get_node_text(name)}'
         return None
+
+    def _function_value_owner(self, node) -> Optional[str]:
+        """Owner of a Lua declaration or named literal through the resolver's value hook."""
+        kind = _zero_arg(node, 'kind')
+        if kind == 'function_declaration':
+            name = node.child_by_field_name('name')
+            path = self._get_node_text(name).replace(':', '.') if name is not None else None
+        elif kind == 'function_definition':
+            path = self._lua_binding_path(node)
+        else:
+            path = None
+        return path.rpartition('.')[0] or None if path else None
+
+    def _find_named_function_values(self, name: str) -> List[Any]:
+        """All matching bound literals and qualified declarations; never first-only."""
+        declarations = [node for node in self._find_nodes_by_type('function_declaration')
+                        if self._get_node_name(node) == name and self._function_value_owner(node)]
+        return declarations + [node for found_name, node in self._lua_named_function_values()
+                               if found_name == name]
 
     # ── Node naming (BACK-918/BACK-915) ─────────────────────────────────────
     def _name_via_dot_index(self, kids) -> Optional[str]:

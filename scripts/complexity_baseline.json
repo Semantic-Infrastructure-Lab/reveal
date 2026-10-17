@@ -127,8 +127,6 @@
   "reveal/analyzers/imports/python.py::_parse_pyproject_dependency_names": 16,
   "reveal/analyzers/imports/service.py::resolve_graph": 17,
   "reveal/analyzers/imports/unused.py::unused_entries": 16,
-  "reveal/analyzers/lua.py::LuaAnalyzer._find_named_language_specific_function": 21,
-  "reveal/analyzers/lua.py::LuaAnalyzer._lua_named_function_values": 20,
   "reveal/analyzers/markdown.py::MarkdownAnalyzer._extract_related": 16,
   "reveal/analyzers/nginx.py::NginxAnalyzer.extract_ssl_domains": 21,
   "reveal/checks.py::_format_detections_text": 21,

@@ -81,6 +81,46 @@ class ZigAnalyzer(TreeSitterAnalyzer):
                     return self._get_node_text(next_sib)
         return None
 
+    def _function_value_owner(self, node) -> Optional[str]:
+        """Owner for qualified declaration candidates through the function-value hook."""
+        if _zero_arg(node, 'kind') != 'Decl' or self._find_fn_proto(node) is None:
+            return None
+        parts: List[str] = []
+        parent = _zero_arg(node, 'parent')
+        while parent is not None:
+            if _zero_arg(parent, 'kind') == 'ContainerDecl':
+                name, declaration = self._container_binding(parent)
+                if not name:
+                    return None  # Anonymous/call-derived containers do not inherit an outer owner.
+                parts.insert(0, name)
+                parent = declaration
+            elif _zero_arg(parent, 'kind') == 'Decl' and self._find_fn_proto(parent) is not None:
+                break  # A local named container belongs to its binding, not its enclosing function.
+            parent = _zero_arg(parent, 'parent')
+        return '.'.join(parts) or None
+
+    def _container_binding(self, container) -> tuple:
+        """The declaration binding this exact container, not an enclosing type."""
+        declaration = _zero_arg(container, 'parent')
+        while declaration is not None and _zero_arg(declaration, 'kind') != 'Decl':
+            declaration = _zero_arg(declaration, 'parent')
+        if declaration is None:
+            return None, None
+        variable = self._find_var_decl_in_node(declaration)
+        if variable is None:
+            return None, None
+        name, value = self._extract_var_name_and_container(variable)
+        if value is None or (
+                _zero_arg(value, 'start_byte'), _zero_arg(value, 'end_byte')) != (
+                _zero_arg(container, 'start_byte'), _zero_arg(container, 'end_byte')):
+            return None, None
+        return name, declaration
+
+    def _find_named_function_values(self, name: str) -> List[Any]:
+        """All named methods in verified containers, including declaration nodes."""
+        return [node for node in self._find_nodes_by_type('Decl')
+                if self._get_node_name(node) == name and self._function_value_owner(node)]
+
     def _get_param_name(self, param_decl) -> Optional[str]:
         """Get the identifier name from a ParamDecl node, or None."""
         for p in _children(param_decl):
@@ -197,8 +237,14 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         for var_child in _children(var_decl):
             if _zero_arg(var_child, 'kind') == 'IDENTIFIER':
                 var_name = self._get_node_text(var_child)
-            elif _zero_arg(var_child, 'kind') == 'ContainerDecl':
-                container_decl = var_child
+            candidate = var_child
+            while _zero_arg(candidate, 'kind') in ('ErrorUnionExpr', 'SuffixExpr'):
+                children = _children(candidate)
+                if len(children) != 1:
+                    break
+                candidate = children[0]
+            if _zero_arg(candidate, 'kind') == 'ContainerDecl':
+                container_decl = candidate
 
         return var_name, container_decl
 
