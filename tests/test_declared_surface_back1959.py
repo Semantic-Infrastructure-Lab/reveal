@@ -157,7 +157,7 @@ def test_sibling_uri_remains_unchanged(monkeypatch):
 
 
 @pytest.mark.parametrize('spelling', ['surface', 'uri'])
-@pytest.mark.parametrize('kind', ['returned', 'raised', 'postprocess', 'malformed', 'postprocess_malformed', 'empty', 'bare_error', 'wrong_error_type'])
+@pytest.mark.parametrize('kind', ['returned', 'raised', 'postprocess', 'malformed', 'postprocess_malformed', 'empty', 'bare_error', 'wrong_error_type', 'invalid_scope'])
 def test_required_failure_preserves_identity(project, monkeypatch, spelling, kind):
     from reveal.adapters.surface import SurfaceAdapter
     from reveal.utils.results import ResultBuilder
@@ -172,6 +172,11 @@ def test_required_failure_preserves_identity(project, monkeypatch, spelling, kin
         monkeypatch.setattr(SurfaceAdapter, 'post_process', staticmethod(lambda result, args:
                             ResultBuilder.create_error('surface_scan', 'proj', 'required input failed')),
                             raising=False)
+    elif kind == 'invalid_scope':
+        def invalid_scope(self, **kwargs):
+            return {'contract_version': '1.1', 'type': 'surface_scan', 'source': 'proj',
+                    'source_type': 'directory', 'scope': ['invalid']}
+        monkeypatch.setattr(SurfaceAdapter, 'get_structure', invalid_scope)
     elif kind == 'empty':
         monkeypatch.setattr(SurfaceAdapter, 'get_structure', lambda self, **kw: {})
     elif kind == 'bare_error':
@@ -189,6 +194,7 @@ def test_required_failure_preserves_identity(project, monkeypatch, spelling, kin
     answer = json.loads(result.stdout)
     assert answer['type'] == 'surface_scan'
     assert answer['error']
+    assert isinstance(answer.get('scope', {}), dict)
     assert 'Traceback' not in result.stderr
 
 
