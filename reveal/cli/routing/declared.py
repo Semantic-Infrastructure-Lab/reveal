@@ -231,11 +231,11 @@ def _repair_declared_answer(result, path, expected_type, requirement_error):
     from ...utils.results import ResultBuilder
     required = RevealResult.__required_keys__
     original = result if isinstance(result, dict) else {}
-    error = requirement_error or original.get('error') or 'Adapter returned an invalid required answer envelope'
+    error = original.get('error') or requirement_error or 'Adapter returned an invalid required answer envelope'
     fields = required | {'meta', 'scope'}
     data = {key: value for key, value in original.items() if key not in fields}
     data['error'] = error
-    meta = _repair_answer_meta(original.get('meta'), error)
+    meta = _repair_answer_meta(original.get('meta'), requirement_error or error)
     return ResultBuilder.create(
         expected_type, to_posix(path), contract_version=CONTRACT_VERSION,
         source_type='directory' if Path(path).is_dir() else 'file',
