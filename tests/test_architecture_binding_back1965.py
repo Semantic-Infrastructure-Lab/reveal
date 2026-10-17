@@ -132,3 +132,12 @@ def test_valid_trust_frame_is_preserved_exactly():
     result = ResultBuilder.create('architecture', '.', meta=metadata)
     assert qualify_declared_answer(result, ArchitectureAdapter, '.') is result
     assert result['meta'] == metadata
+
+
+def test_missing_proof_repair_preserves_original_failure_detail():
+    from reveal.cli.routing.declared import qualify_declared_answer
+    from reveal.utils.results import ResultBuilder
+    result = ResultBuilder.create_error('architecture_diff', '.', 'original input failure')
+    repaired = qualify_declared_answer(result, ArchitectureAdapter, '.', 'architecture_diff')
+    assert repaired['error'] == 'original input failure'
+    assert any('completeness evidence' in e['message'] for e in repaired['meta']['errors'])
