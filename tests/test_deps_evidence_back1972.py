@@ -244,3 +244,31 @@ def test_clean_and_skipped_circular_text_remain_unchanged(tmp_path, monkeypatch)
     assert 'nothing to check for cycles' in clean
     assert 'circular deps not checked (--no-circular)' in skipped
     assert 'analysis incomplete' not in clean + skipped
+
+
+@pytest.mark.parametrize('component,field', [('circular', 'cycles'), ('unused', 'unused')])
+@pytest.mark.parametrize('value', [None, 7])
+def test_unusable_finding_array_is_unknown_not_zero(tmp_path, monkeypatch, component, field, value):
+    result = child(component)
+    result[field] = value
+    install(monkeypatch, component, result)
+    answer = DepsAdapter(str(tmp_path)).get_structure()
+    assert answer['analysis']['findings'][component] is None
+
+
+@pytest.mark.parametrize('component,field', [('circular', 'cycles'), ('unused', 'unused')])
+@pytest.mark.parametrize('count', [0, 7])
+def test_usable_finding_array_has_exact_count_despite_invalid_count_proof(tmp_path, monkeypatch, component, field, count):
+    result = child(component)
+    result[field] = [['a.py', 'b.py']] if component == 'circular' else [{'file': 'a.py', 'module': 'os'}]
+    result['count'] = count
+    install(monkeypatch, component, result)
+    answer = DepsAdapter(str(tmp_path)).get_structure()
+    assert answer['analysis']['findings'][component] == 1
+    assert len(answer['circular']['cycles'] if component == 'circular' else answer['unused']) == 1
+
+
+def test_valid_empty_findings_are_measured_zero(tmp_path, monkeypatch):
+    install(monkeypatch)
+    answer = DepsAdapter(str(tmp_path)).get_structure()
+    assert answer['analysis']['findings'] == {'circular': 0, 'unused': 0}
