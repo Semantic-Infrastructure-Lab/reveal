@@ -306,6 +306,7 @@ class SurfaceAdapter(ResourceAdapter):
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
     RESULT_TYPE = 'surface_scan'
     FINDINGS_POLICIES = ('none',)
+    DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     PARAM_SPECS = (
         ParamSpec('type', 'string', 'Filter to one surface type', '', str,
@@ -331,6 +332,15 @@ class SurfaceAdapter(ResourceAdapter):
         else:
             self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
         self._warn_unknown_query_params(self.query_params)  # BACK-507
+
+    @staticmethod
+    def execution_facts(result):
+        """The scan owner supplies completeness; scope limitations are not failures."""
+        from ..utils.results import AnalysisCompleteness, result_execution_facts
+        incomplete = isinstance(result, dict) and bool(
+            result.get('unparsed_files') or result.get('recovered_files'))
+        state = AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE
+        return result_execution_facts(result, completeness=state)
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -368,6 +378,8 @@ class SurfaceAdapter(ResourceAdapter):
             'description': 'External-boundary surface scanner (CLI, HTTP, env, network, fs, subprocess)',
             'uri_syntax': 'surface://<path>?type=env&source_only=true',
             'resource': SurfaceAdapter.RESOURCE_SPEC.schema(),
+            'execution_policy': {'default_fail_on': SurfaceAdapter.DEFAULT_FAIL_ON,
+                                 'fail_on': list(SurfaceAdapter.FINDINGS_POLICIES)},
             'query_params': param_schema(SurfaceAdapter.PARAM_SPECS),
             'elements': {},
             'supports_batch': False,

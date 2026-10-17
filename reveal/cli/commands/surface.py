@@ -6,12 +6,8 @@ backward compatibility with existing callers/tests.
 """
 
 import argparse
-import sys
 from argparse import Namespace
-from functools import partial
-from pathlib import Path
 
-from reveal.adapters.ast.surface_matrix import CATEGORIES
 from reveal.adapters.surface import (  # noqa: F401 - re-exported for back-compat
     SurfaceAdapter,
     SurfaceRenderer,
@@ -26,88 +22,15 @@ from reveal.adapters.surface import (  # noqa: F401 - re-exported for back-compa
     _scan_surface,
     _supported_coverage_languages,
 )
-from reveal.utils.query_parser import cli_display_limit
-from ..global_flags import add_exclude_argument, add_gitignore_arguments
-from ..routing.subcommand import emit_subcommand_result
 
 
 def create_surface_parser() -> argparse.ArgumentParser:
-    from reveal.cli.parser import _build_global_options_parser
-    parser = argparse.ArgumentParser(
-        prog='reveal surface',
-        parents=[_build_global_options_parser()],
-        description='Map every external surface the system touches: CLI, HTTP routes, env vars, network, filesystem writes.',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=(
-            "Examples:\n"
-            "  reveal surface ./src                    # All surfaces in src/\n"
-            "  reveal surface .                        # Entire project\n"
-            "  reveal surface . --top 20               # Top 20 entries per category\n"
-            "  reveal surface . --format json\n"
-            "  reveal surface . --type env             # Only env vars\n"
-            "  reveal surface . --source-only          # Production code only (exclude tests)\n"
-            "  reveal surface . --source-only --type sdk  # SDK egress, production only\n"
-            "  reveal surface . --by dir --depth 2     # Which layers touch which boundary kinds\n"
-        )
-    )
-    parser.add_argument(
-        'path',
-        nargs='?',
-        default='.',
-        help='Directory to scan (default: current directory)'
-    )
-    parser.add_argument(
-        '--type',
-        metavar='TYPE',
-        default='',
-        choices=CATEGORIES,  # BACK-1504: a typo must not read as "0 entries"
-        help=f"Filter to one surface type: {', '.join(CATEGORIES)}"
-    )
-    parser.add_argument(
-        '--top',
-        metavar='N',
-        type=cli_display_limit,
-        default=None,
-        help='Show only the top N entries per surface type (default: all)'
-    )
-    parser.add_argument(
-        '--source-only',
-        action='store_true',
-        default=False,
-        help='Exclude test files and directories from the scan (test_*.py, *_test.py, conftest.py, tests/, __tests__/, *.test.ts, *.spec.ts, etc.)'
-    )
-    parser.add_argument(
-        '--by',
-        choices=['dir'],
-        default='',
-        help='Group entries: dir = per-directory counts by category (which layer owns which boundary)'
-    )
-    parser.add_argument(
-        '--depth',
-        metavar='N',
-        type=int,
-        default=0,
-        help='With --by dir: roll directories up to their first N path segments (default 0: full directory)'
-    )
-    add_exclude_argument(parser)
-    add_gitignore_arguments(parser)
-    return parser
+    """Compatibility import; the adapter declaration owns the parser."""
+    from ..routing.declared import create_declared_parser
+    return create_declared_parser('surface')
 
 
 def run_surface(args: Namespace) -> None:
-    path = Path(args.path)  # as the user named it, like the URI form (BACK-1366)
-    if not path.exists():
-        print(f"Error: path '{args.path}' does not exist", file=sys.stderr)
-        sys.exit(1)
-
-    type_filter = getattr(args, 'type', '')
-    top = getattr(args, 'top', None)
-    source_only = getattr(args, 'source_only', False)
-
-    by = getattr(args, 'by', '')
-    depth = getattr(args, 'depth', 0)
-
-    query = f'type={type_filter}&source_only={"true" if source_only else "false"}&by={by}&depth={depth}'
-    result = SurfaceAdapter(str(path), query).get_structure()
-    emit_subcommand_result(result, args, name='surface', source=path, render=partial(
-        SurfaceRenderer.render_structure, format=args.format, top=top))
+    """Compatibility import; both public spellings use the common runner."""
+    from ..routing.declared import run_declared_command
+    run_declared_command('surface', args)

@@ -163,7 +163,7 @@ def emit_declared_result(result, args, scheme, render, facts, **render_kwargs) -
     from ...utils.results import (FailureCause, execution_exit_code,
                                  failure_execution_facts, merge_execution_facts)
     from .uri import announce_outcome
-    policy = getattr(args, 'fail_on', None) or 'none'
+    policy = getattr(args, 'fail_on', None) or declared_adapter_class(scheme).DEFAULT_FAIL_ON
     result = attach_provenance(result)
     announce_outcome(result, f'{scheme}://')
     try:

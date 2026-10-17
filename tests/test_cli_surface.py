@@ -115,8 +115,8 @@ class TestCreateSurfaceParser(unittest.TestCase):
         parser = create_surface_parser()
         args = parser.parse_args([])
         self.assertEqual(args.path, '.')
-        self.assertEqual(args.type, '')
-        self.assertIsNone(args.top)
+        self.assertFalse(hasattr(args, 'type'))
+        self.assertFalse(hasattr(args, 'top'))
 
     def test_type_flag(self):
         parser = create_surface_parser()
@@ -126,7 +126,7 @@ class TestCreateSurfaceParser(unittest.TestCase):
     def test_top_flag(self):
         parser = create_surface_parser()
         args = parser.parse_args(['--top', '20'])
-        self.assertEqual(args.top, 20)
+        self.assertEqual(args.top, '20')
 
 
 class TestClassifiers(unittest.TestCase):
@@ -938,13 +938,13 @@ class TestRenderReport(unittest.TestCase):
 
 class TestRunSurface(unittest.TestCase):
 
-    def test_nonexistent_path_exits_1(self):
+    def test_nonexistent_path_exits_2(self):
         parser = create_surface_parser()
         args = parser.parse_args(['/nonexistent/path'])
         args.format = 'text'
         with self.assertRaises(SystemExit) as cm:
             run_surface(args)
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(cm.exception.code, 2)
 
     def test_json_format(self):
         with tempfile.TemporaryDirectory() as d:
@@ -1396,7 +1396,7 @@ class TestSourceOnly(unittest.TestCase):
     def test_source_only_default_false(self):
         parser = create_surface_parser()
         args = parser.parse_args(['.'])
-        self.assertFalse(args.source_only)
+        self.assertFalse(hasattr(args, 'source_only'))
 
     def test_source_only_excludes_tests_dir(self):
         _write(self.tmp, 'app.py', 'import os\nDB = os.getenv("PROD_KEY")\n')
@@ -2534,9 +2534,9 @@ class TestSurfaceByDir(unittest.TestCase):
 
     def test_cli_flags(self):
         args = create_surface_parser().parse_args(['x', '--by', 'dir', '--depth', '2'])
-        self.assertEqual((args.by, args.depth), ('dir', 2))
+        self.assertEqual((args.by, args.depth), ('dir', '2'))
         with self.assertRaises(SystemExit):
-            create_surface_parser().parse_args(['x', '--by', 'file'])
+            run_surface(create_surface_parser().parse_args(['x', '--by', 'file']))
 
 
 if __name__ == '__main__':

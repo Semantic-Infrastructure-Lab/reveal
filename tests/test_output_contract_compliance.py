@@ -90,6 +90,7 @@ from reveal.adapters import base as adapters_base
 from reveal.cli.defaults import _default_args
 from reveal.cli.invocation import COMMANDS
 from reveal.cli.routing import subcommand as subcommand_seam
+from reveal.cli.routing import uri as uri_seam
 from reveal.cli.routing.uri import handle_uri
 from reveal.main import main
 from reveal.reveal_types import CONTRACT_VERSION
@@ -428,6 +429,11 @@ class _Harness:
             with self._hermetic(), redirect_stdout(out), redirect_stderr(err), \
                     pytest.MonkeyPatch.context() as mp:
                 mp.setattr(subcommand_seam, 'outcome_of', recording_outcome_of)
+                original_announce = uri_seam.announce_outcome
+                def recording_announce(result, label):
+                    results.append(result)
+                    return original_announce(result, label)
+                mp.setattr(uri_seam, 'announce_outcome', recording_announce)
                 try:
                     main(['reveal', name, *argv])
                 except SystemExit as exc:
@@ -702,7 +708,7 @@ def test_subcommand_result_leaves_through_the_seam(harness, name):
     for fmt in ('json', 'text'):
         _, _, err, results = harness.run_subcommand(name, *argv, '--format', fmt)
         assert results, (
-            f'reveal {name} --format {fmt} printed its result without emit_subcommand_result '
+            f'reveal {name} --format {fmt} bypassed its shared result emitter '
             f'(cli/routing/subcommand.py), so a failed or cut answer goes unreported. '
             f'stderr: {err[-300:]}')
     # The envelope (BACK-906) under the subcommand's own name, conforming to the same
@@ -710,7 +716,9 @@ def test_subcommand_result_leaves_through_the_seam(harness, name):
     _, out, _, _ = harness.run_subcommand(name, *argv, '--format', 'json')
     payload = json.loads(out)
     assert [f for f in _REQUIRED_FIELDS if f not in payload] == []
-    assert payload['type'] == name
+    declared = COMMANDS[name].declared_adapter
+    expected = adapters_base.get_adapter_class(declared).RESULT_TYPE if declared else name
+    assert payload['type'] == expected
     if name in FIXTURE_URIS:
         _, twin, _ = harness.run_fixture(name)
         assert payload['contract_version'] == twin['contract_version'], (

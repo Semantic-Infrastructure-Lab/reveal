@@ -25,7 +25,7 @@ def project(tmp_path, monkeypatch):
 
 
 def run(*args):
-    return _run_reveal_direct(*args, '--no-breadcrumbs')
+    return _run_reveal_direct(*args)
 
 
 def assert_equal_answers(left, right):
