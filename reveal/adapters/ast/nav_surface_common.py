@@ -42,6 +42,8 @@ def scan_file_with_grammar(
     prepare: Optional[Callable[[str], str]] = None,
     scan: str = 'surface',
     disclose_recovery: bool = True,
+    *,
+    on_error: Optional[Callable[[str, Exception], None]] = None,
 ) -> Dict[str, Any]:
     """Read, parse and scan one file for a tree-sitter surface or contracts scanner
     (BACK-1045, BACK-1588).
@@ -50,8 +52,8 @@ def scan_file_with_grammar(
     the Python scanner does, so the report says it contributed nothing; the per-language
     copies of this returned empty lists, which counted it as clean. *prepare* rewrites
     the source before the parse (C++ macro class modifiers). *scan* names the scanner
-    in the log line. The contracts scanners pass disclose_recovery=False: their report
-    has no recovered-parse channel (BACK-1480 is surface's)."""
+    in the log line. An optional callback retains the exact failure for a caller
+    without changing the failure shape for callers that omit it."""
     try:
         source = Path(file_path).read_text(errors='replace', encoding='utf-8')
         if prepare is not None:
@@ -59,6 +61,8 @@ def scan_file_with_grammar(
         tree = get_tree(grammar, source, filename=file_path)
     except Exception as e:  # noqa: BLE001 - unreadable file, GrammarUnavailable, or a parser error
         logger.warning("%s scan (%s) failed to parse %s: %s", scan, label, file_path, e)
+        if on_error is not None:
+            on_error(file_path, e)
         return {**{k: [] for k in keys}, UNPARSED_KEY: [file_path]}
     result = scan_tree(tree, file_path, source.encode('utf-8'))
     return disclose_parse_recovery(tree, file_path, result) if disclose_recovery else result

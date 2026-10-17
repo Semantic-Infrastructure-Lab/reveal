@@ -22,7 +22,7 @@ blank. Reaching `.h`-declared classes is a follow-on tied to the broader
 `.h`→C-vs-C++ classification question (matrix footnote 2), not a silent gap here.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from .nav_surface_common import (
     _get_text, _get_line, normalize_cpp_macro_class_modifiers, scan_file_with_grammar,
 )
@@ -34,12 +34,13 @@ from reveal.core.treesitter_compat import _zero_arg
 _EMPTY_KEYS = ('classes',)
 
 
-def scan_file_contracts_cpp(file_path: str) -> Dict[str, List[Any]]:
+def scan_file_contracts_cpp(file_path: str, *,
+                             on_error: Optional[Callable[[str, Exception], None]] = None) -> Dict[str, List[Any]]:
     """Parse one C++ file → {'classes': [...]}; a file that can't be parsed is
     listed under UNPARSED_KEY (BACK-1588)."""
     return scan_file_with_grammar(file_path, 'cpp', 'C++', _scan_tree, _EMPTY_KEYS,
                                   prepare=normalize_cpp_macro_class_modifiers,
-                                  scan='contracts', disclose_recovery=False)
+                                  scan='contracts', on_error=on_error)
 
 
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Any]]:

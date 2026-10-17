@@ -8,6 +8,7 @@ capability follows (BACK-901). Same treatment as surface.py (BACK-904).
 from __future__ import annotations
 
 from pathlib import Path
+from functools import partial
 from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
 from reveal.reveal_types import CONTRACT_VERSION
@@ -15,7 +16,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .surface import _supported_coverage_languages, _unparsed_note
 from .ast.analysis import analysis_skipped_warning
-from .ast.surface_matrix import UNPARSED_KEY
+from .ast.surface_matrix import RECOVERED_KEY, UNPARSED_KEY
 from ..registry import JS_TS_LANGUAGES, _is_cpp_header_content, extensions_for_languages
 from ..utils.path_utils import (
     _language_for_path,
@@ -119,18 +120,36 @@ _CONTRACT_LANGUAGES: Tuple[Tuple[str, Callable[[Path], bool]], ...] = (
 )
 
 
-def _with_analysis_skipped(report: Dict[str, Any], skipped: List[Tuple[str, str]]) -> Dict[str, Any]:
-    """``analysis_skipped`` on *report* when files failed to analyze; get_structure turns it
-    into the ``analysis_failed`` warning (BACK-1860). Absent when nothing failed."""
-    if skipped:
-        report['analysis_skipped'] = [list(item) for item in skipped]
-        coverage = report.get('coverage')
-        if coverage:
-            # A supported-language file that failed analysis was not analyzed (BACK-1863).
-            supported = _supported_coverage_languages()
-            failed = sum(1 for f, _ in skipped if _language_for_path(Path(f)) in supported)
-            report['coverage'] = {**coverage, 'analyzed_files': max(0, coverage['analyzed_files'] - failed)}
+def _record_scan_error(skipped: List[Tuple[str, str]], file: str, exc: Exception) -> None:
+    skipped.append((to_posix(file), f'{type(exc).__name__}: {exc}'))
+
+
+def _with_analysis_skipped(report: Dict[str, Any], skipped: List[Tuple[str, str]], *,
+                           recovered: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Merge input evidence once; failed coverage counts files, never channels."""
+    causes: Dict[str, Set[str]] = {}
+    for file, cause in [*report.get('analysis_skipped', []), *skipped]:
+        causes.setdefault(to_posix(file), set()).add(cause)
+    if causes:
+        report['analysis_skipped'] = [[file, '; '.join(sorted(values))]
+                                      for file, values in sorted(causes.items())]
+    if 'unparsed_files' in report:
+        report['unparsed_files'] = sorted(set(to_posix(file) for file in report['unparsed_files']))
+    recovered_files = set(to_posix(file) for file in [*report.get('recovered_files', []), *(recovered or [])])
+    if recovered_files:
+        report['recovered_files'] = sorted(recovered_files)
+    coverage = report.get('coverage')
+    if coverage:
+        supported = _supported_coverage_languages()
+        failed = set(causes) | set(report.get('unparsed_files', []))
+        count = sum(_language_for_path(Path(file)) in supported for file in failed)
+        report['coverage'] = {**coverage, 'analyzed_files': max(0, coverage['analyzed_files'] - count)}
     return report
+
+
+def _uses_shared_structures(file: str) -> bool:
+    path = Path(file)
+    return _is_python_file(path) or _is_interface_family_file(path)
 
 
 def _scan_contracts(
@@ -182,14 +201,21 @@ def _scan_contracts(
     # one pass — 'ts' and 'python' both consume it, so compute it once, lazily
     # (skip entirely for repos where neither is active, e.g. pure Go/Rust).
     structures_cache: List[Dict[str, Any]] = []
-    analysis_skipped: List[Tuple[str, str]] = []  # BACK-1860: files whose analysis raised
+    analysis_skipped: List[Tuple[str, str]] = []
+    recovered_files: List[str] = []
+    structures_loaded = False
 
     def _structures() -> List[Dict[str, Any]]:
-        if not structures_cache:
+        nonlocal structures_loaded
+        if not structures_loaded:
             from reveal.adapters.ast.analysis import collect_structures
             collected = collect_structures(str(path))
+            structures_loaded = True
             structures_cache.extend(collected)
-            analysis_skipped.extend(collected.skipped)
+            analysis_skipped.extend((file, cause) for file, cause in collected.skipped
+                                    if _uses_shared_structures(file))
+            recovered_files.extend(item['file'] for item in collected
+                                   if item.get('parse_recovered') and _uses_shared_structures(item['file']))
         return structures_cache
 
     def _run(name: str) -> Dict[str, Any]:
@@ -208,9 +234,12 @@ def _scan_contracts(
     if len(active) == 1:
         result = _run(active[0])
         result['coverage'] = coverage_dict
-        return _with_analysis_skipped(result, analysis_skipped)
+        return _with_analysis_skipped(result, analysis_skipped, recovered=recovered_files)
 
     by_language = {name: _run(name) for name in active}
+    for group in by_language.values():
+        analysis_skipped.extend(group.pop('analysis_skipped', []))
+        recovered_files.extend(group.get('recovered_files', []))
     report = {
         'path': str(path),
         'total_contracts': sum(g['total_contracts'] for g in by_language.values()),
@@ -222,7 +251,7 @@ def _scan_contracts(
     # channel, so the key is present only when one of them ran.
     if any('unparsed_files' in g for g in by_language.values()):
         report['unparsed_files'] = sorted(f for g in by_language.values() for f in g.get('unparsed_files', []))
-    return _with_analysis_skipped(report, analysis_skipped)
+    return _with_analysis_skipped(report, analysis_skipped, recovered=recovered_files)
 
 
 def _scan_contracts_python(
@@ -436,11 +465,14 @@ def _scan_contracts_ruby(
     modules: List[Dict[str, Any]] = []
     classes: List[Dict[str, Any]] = []
     unparsed: List[str] = []
+    recovered: List[str] = []
+    skipped: List[Tuple[str, str]] = []
     for file_path in _collect_files(path, _is_ruby_file):
-        scanned = scan_file_contracts_ruby(str(file_path))
+        scanned = scan_file_contracts_ruby(str(file_path), on_error=partial(_record_scan_error, skipped))
         modules.extend(scanned['modules'])
         classes.extend(scanned['classes'])
         unparsed.extend(scanned.get(UNPARSED_KEY, []))
+        recovered.extend(scanned.get(RECOVERED_KEY, []))
 
     # A module is a mixin contract when it defines instance methods or something includes
     # or extends it; `module Billing` that only wraps classes and constants is a namespace.
@@ -453,7 +485,7 @@ def _scan_contracts_ruby(
     if show_implementations:
         _add_implementations(classes, contract_names, modules)
 
-    return {
+    return _with_analysis_skipped({
         'path': str(path),
         'total_contracts': len(modules),
         'abcs': [],
@@ -465,7 +497,7 @@ def _scan_contracts_ruby(
         'unsupported_language': '',
         'unparsed_files': _unparsed_files(unparsed),
         '_ruby_mode': True,
-    }
+    }, skipped, recovered=recovered)
 
 
 def _scan_contracts_go(
@@ -494,11 +526,14 @@ def _scan_contracts_go(
     structs: List[Dict[str, Any]] = []
     struct_methods: Dict[str, Dict[str, Dict[str, Any]]] = {}
     unparsed: List[str] = []
+    recovered: List[str] = []
+    skipped: List[Tuple[str, str]] = []
     for file_path in _collect_files(path, _is_go_file):
-        scanned = scan_file_contracts_go(str(file_path))
+        scanned = scan_file_contracts_go(str(file_path), on_error=partial(_record_scan_error, skipped))
         interfaces.extend(scanned['interfaces'])
         structs.extend(scanned['structs'])
         unparsed.extend(scanned.get(UNPARSED_KEY, []))
+        recovered.extend(scanned.get(RECOVERED_KEY, []))
         for m in scanned['methods']:
             struct_methods.setdefault(m['recv'], {})[m['name']] = m
 
@@ -553,7 +588,7 @@ def _scan_contracts_go(
             if ifaces:
                 implementers.append({**struct, 'bases': sorted(ifaces)})
 
-    return {
+    return _with_analysis_skipped({
         'path': str(path),
         'total_contracts': len(interfaces),
         'abcs': [],
@@ -565,7 +600,7 @@ def _scan_contracts_go(
         'unsupported_language': '',
         'unparsed_files': _unparsed_files(unparsed),
         '_go_mode': True,
-    }
+    }, skipped, recovered=recovered)
 
 
 def _scan_contracts_rust(
@@ -584,11 +619,14 @@ def _scan_contracts_rust(
     traits: List[Dict[str, Any]] = []
     impls: List[Dict[str, Any]] = []
     unparsed: List[str] = []
+    recovered: List[str] = []
+    skipped: List[Tuple[str, str]] = []
     for file_path in _collect_files(path, _is_rust_file):
-        scanned = scan_file_contracts_rust(str(file_path))
+        scanned = scan_file_contracts_rust(str(file_path), on_error=partial(_record_scan_error, skipped))
         traits.extend(scanned['interfaces'])
         impls.extend(scanned['impls'])
         unparsed.extend(scanned.get(UNPARSED_KEY, []))
+        recovered.extend(scanned.get(RECOVERED_KEY, []))
 
     for tr in traits:
         tr['bases'] = []
@@ -620,7 +658,7 @@ def _scan_contracts_rust(
         for rec in type_traits.values():
             implementers.append({**rec, 'bases': sorted(rec['bases'])})
 
-    return {
+    return _with_analysis_skipped({
         'path': str(path),
         'total_contracts': len(traits),
         'abcs': [],
@@ -632,7 +670,7 @@ def _scan_contracts_rust(
         'unsupported_language': '',
         'unparsed_files': _unparsed_files(unparsed),
         '_rust_mode': True,
-    }
+    }, skipped, recovered=recovered)
 
 
 def _scan_contracts_cpp(
@@ -651,10 +689,13 @@ def _scan_contracts_cpp(
 
     classes: List[Dict[str, Any]] = []
     unparsed: List[str] = []
+    recovered: List[str] = []
+    skipped: List[Tuple[str, str]] = []
     for file_path in _collect_files(path, _is_cpp_file):
-        scanned = scan_file_contracts_cpp(str(file_path))
+        scanned = scan_file_contracts_cpp(str(file_path), on_error=partial(_record_scan_error, skipped))
         classes.extend(scanned['classes'])
         unparsed.extend(scanned.get(UNPARSED_KEY, []))
+        recovered.extend(scanned.get(RECOVERED_KEY, []))
 
     contracts: List[Dict[str, Any]] = []
     contract_names: Set[str] = set()
@@ -680,7 +721,7 @@ def _scan_contracts_cpp(
                         'bases': sorted(impl_of),
                     })
 
-    return {
+    return _with_analysis_skipped({
         'path': str(path),
         'total_contracts': len(contracts),
         'abcs': [],
@@ -692,7 +733,7 @@ def _scan_contracts_cpp(
         'unsupported_language': '',
         'unparsed_files': _unparsed_files(unparsed),
         '_cpp_mode': True,
-    }
+    }, skipped, recovered=recovered)
 
 
 def _extract_all_classes(structures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -882,7 +923,8 @@ class ContractsAdapter(ResourceAdapter):
                             'total_contracts': {'type': 'integer'},
                             'abcs': {'type': 'array'},
                             'protocols': {'type': 'array'},
-                            'unparsed_files': {'type': 'array', 'description': 'Go/Rust/Ruby/C++ files that could not be parsed (no grammar) and contribute no entries'},
+                            'unparsed_files': {'type': 'array', 'description': 'Go/Rust/Ruby/C++ files that could not be read or parsed and contribute no entries'},
+                            'recovered_files': {'type': 'array', 'description': 'Files with recovered syntax; surviving contracts are retained but may be incomplete'},
                         },
                     },
                 },
@@ -911,10 +953,19 @@ class ContractsAdapter(ResourceAdapter):
             warnings.append({'code': 'W-CONTRACTS-1', 'message': coverage_warning})
         if report.get('unparsed_files'):
             warnings.append({'code': 'W-CONTRACTS-2', 'message': _unparsed_note(report['unparsed_files'])})
+        skipped = report.pop('analysis_skipped', [])
+        unparsed = set(report.get('unparsed_files', []))
         failed = analysis_skipped_warning(
-            report.pop('analysis_skipped', []), None, "their contracts are missing from the result")
+            [(file, cause) for file, cause in skipped if file not in unparsed],
+            None, "their contracts are missing from the result")
         if failed:
             warnings.append(failed)
+        recovered = report.get('recovered_files', [])
+        if recovered:
+            warnings.append({'type': 'parse_recovered', 'count': len(recovered), 'files': recovered,
+                             'message': f"{len(recovered)} file(s) contain recovered syntax; their contracts may be incomplete: {', '.join(recovered)}"})
+        errors = [{'code': 'E_CONTRACTS_ANALYSIS', 'file': file, 'message': cause}
+                  for file, cause in skipped]
 
         return ResultBuilder.create(
             result_type='contracts',
@@ -923,6 +974,6 @@ class ContractsAdapter(ResourceAdapter):
             parse_mode='ast+tree_sitter',
             confidence=0.7,
             warnings=warnings,
-            errors=[],
+            errors=errors,
             data=report,
         )

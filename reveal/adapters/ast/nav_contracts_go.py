@@ -30,7 +30,7 @@ promoted methods, which can still produce a false negative or false positive
 in the corners this text match doesn't resolve.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 from .nav_surface_common import _get_text, _get_line, scan_file_with_grammar
 
 from reveal.core import node_children as _children
@@ -40,7 +40,8 @@ from reveal.core.treesitter_compat import _zero_arg
 _EMPTY_KEYS = ('interfaces', 'structs', 'methods')
 
 
-def scan_file_contracts_go(file_path: str) -> Dict[str, List[Any]]:
+def scan_file_contracts_go(file_path: str, *,
+                             on_error: Optional[Callable[[str, Exception], None]] = None) -> Dict[str, List[Any]]:
     """Parse one Go file → {'interfaces', 'structs', 'methods'}.
 
     - interfaces: [{name, file, line, methods: [{name, params: [str], returns: [str]}], embeds: [str]}]
@@ -52,7 +53,7 @@ def scan_file_contracts_go(file_path: str) -> Dict[str, List[Any]]:
     that can't be parsed is listed under UNPARSED_KEY (BACK-1588).
     """
     return scan_file_with_grammar(file_path, 'go', 'Go', _scan_tree, _EMPTY_KEYS,
-                                  scan='contracts', disclose_recovery=False)
+                                  scan='contracts', on_error=on_error)
 
 
 def _scan_tree(tree: Any, file_path: str, content_bytes: bytes) -> Dict[str, List[Any]]:
