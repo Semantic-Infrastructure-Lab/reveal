@@ -851,3 +851,13 @@ def test_zig_struct_method_is_addressable():
     result = _run_reveal_direct(str(_sample_path('zig')), 'Batch.run', '--format', 'json')
     assert result.returncode == 0, result.stderr
     assert 'self.total = self.total + item' in result.stdout
+
+
+def test_zig_if_return_keeps_branch_gate():
+    result = _run_reveal_direct(
+        str(_sample_path('zig')), 'validate', '--returns', '--format', 'json')
+    assert result.returncode == 0, result.stderr
+    findings = json.loads(result.stdout)['findings']
+    assert [{'line': f['line'], 'gate_lines': [g['line'] for g in f['gates']]}
+            for f in findings] == [{'line': 7, 'gate_lines': [6]}, {'line': 9, 'gate_lines': []}]
+
