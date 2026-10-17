@@ -744,10 +744,6 @@ def test_check_and_hotspots_complete_quickly(lang):
             )
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError,
-    reason="BACK-1910: Lua table-qualified methods lose their owner and cannot be addressed",
-)
 def test_lua_table_method_is_addressable():
     """A table-qualified definition must remain distinct from the top-level run."""
     result = _run_reveal_direct(str(_sample_path('lua')), 'Batch.run', '--format', 'json')
@@ -848,10 +844,6 @@ def test_gdscript_direct_call_varflow_control(tmp_path, cross_calls):
         {'kind': 'WRITE', 'line': 2}, {'kind': 'READ', 'line': 3}, {'kind': 'READ', 'line': 4}]
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError,
-    reason="BACK-1931: Zig struct-qualified method cannot be addressed",
-)
 def test_zig_struct_method_is_addressable():
     result = _run_reveal_direct(str(_sample_path('zig')), 'Batch.run', '--format', 'json')
     assert result.returncode == 0, result.stderr
