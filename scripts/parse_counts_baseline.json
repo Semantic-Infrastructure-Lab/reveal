@@ -302,6 +302,13 @@
                 "provenance": null
               }
             ],
+            "metadata": {
+              "extraction_diagnostics": {},
+              "files_failed": [],
+              "files_failed_count": 0,
+              "files_lost": [],
+              "files_lost_count": 0
+            },
             "unsupported_extensions": {}
           },
           "complex_functions": [],
