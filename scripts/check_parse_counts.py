@@ -28,18 +28,21 @@ COVERAGE = (
     'Measured: owned parser-seam requests, wrapper/Python attempts, artifacts and outcomes; '
     'fullsource/snippet/validation and target/external/unattributed are distinct. '
     'Uninstrumented: third-party/generated/startup direct ast.parse, direct annotation '
-    'and V-series bypasses, native retries inside ts_parse. No parallel or cross-command claim.'
+    'and V-series bypasses, native retries inside ts_parse. No parallel or cross-command claim. '
+    'Runtime/version metadata must repeat across five current runs; historical versions are provenance, '
+    'not ceilings. New parser/domain/content/count identities still fail the accepted ceilings.'
 )
 
 # SystemExit is caught INSIDE capture so validation runs even on a CLI findings exit.
 _BOOTSTRAP = '''
-import sys, json
+import sys, json, platform
 from dataclasses import asdict
 from pathlib import Path
 from reveal.utils.parse_audit import capture_parses
 root, destination, targets, arguments = sys.argv[1:]
 signal = None
 with capture_parses(root, targets=json.loads(targets)) as capture:
+    capture.metadata['runtime'] = {'platform': sys.platform, 'implementation': platform.python_implementation()}
     from reveal.main import main
     sys.argv = ['reveal'] + json.loads(arguments)
     try:
@@ -74,6 +77,13 @@ def _validate_header(audit: dict, root_pid: int) -> None:
     metadata = audit.get('metadata', {})
     if metadata.get('pid') != root_pid or not metadata.get('parser_versions'):
         raise ValueError('audit root PID or parser metadata missing')
+    versions = metadata['parser_versions']
+    required = {'python.ast', 'tree-sitter', 'tree-sitter-language-pack'}
+    if not required.issubset(versions) or not versions['python.ast']:
+        raise ValueError('parser version metadata incomplete')
+    runtime = metadata.get('runtime') or {}
+    if not runtime.get('platform') or not runtime.get('implementation'):
+        raise ValueError('child runtime metadata incomplete')
     if audit.get('exit_code') != 0:
         raise ValueError('audit reports command failure exit')
 
@@ -153,7 +163,8 @@ def audit_snapshot(audit: dict, root_pid: int, corpus: Path, targets: dict) -> d
         totals[event['event']] += 1
     if coverage != set(targets):
         raise ValueError(f'target request coverage incomplete: {sorted(coverage)} != {sorted(targets)}')
-    return {'parser_versions': audit['metadata']['parser_versions'], 'coverage': sorted(coverage),
+    return {'parser_versions': audit['metadata']['parser_versions'],
+            'runtime': audit['metadata']['runtime'], 'coverage': sorted(coverage),
             'totals': totals, 'counts': dict(sorted(counts.items()))}
 
 
@@ -230,7 +241,7 @@ def qualify_snapshots(snapshots: list[dict]) -> dict:
 
 
 def compare_snapshots(baseline: dict, current: dict) -> list[str]:
-    errors = [f'{key} changed' for key in ('parser_versions', 'coverage', 'command_outcome', 'stderr')
+    errors = [f'{key} changed' for key in ('coverage', 'command_outcome', 'stderr')
               if baseline.get(key) != current.get(key)]
     for key, count in current['counts'].items():
         ceiling = baseline['counts'].get(key, 0)
@@ -328,8 +339,6 @@ def main() -> int:
             print(f'Qualified five fresh serial runs per command; candidate: {args.output}')
             return 0
         baseline = load_audit(BASELINE)
-        if baseline.get('qualification_platform') != sys.platform:
-            raise ValueError('platform is not qualified by this accepted baseline')
         if baseline.get('manifest') != manifest or baseline.get('coverage_policy') != COVERAGE:
             raise ValueError('accepted manifest/coverage policy changed; requalification required')
         errors = [f'{name}: {error}' for name, snapshot in current['commands'].items()
