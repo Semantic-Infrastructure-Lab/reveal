@@ -659,3 +659,42 @@ dart:
     test_decorators_extracted_for_annotated_construct: "BACK-1915: Dart class annotation is absent from decorators"
     test_returns_finds_gate_chains: "BACK-1916: Dart catch-handler return lacks an exception-context gate"
     test_statewrites_classifies_field_and_call: "BACK-1917: Dart this.total field assignment is not reported"
+
+# BACK-1919: manually derived from scala/sample.scala, not captured CLI output.
+scala:
+  entry_function: processOrder
+  outline_functions: [validate, processOrder, run, summarize]
+  calls_validate_callers:
+  - {line: 13, function: processOrder}
+  imports_unused:
+    not_supported: true  # Scala import extraction has no unused-name analysis
+  varflow_result:
+  - {kind: WRITE, line: 14}
+  - {kind: READ, line: 17}
+  - {kind: WRITE, line: 22}
+  - {kind: READ, line: 22}
+  - {kind: READ, line: 23}
+  sideeffects:
+  - {line: 16, kind: file}  # explicit new FileWriter taxonomy; untyped write/close are unclassified
+  exits:
+  - {kind: RETURN, line: 20}
+  - {kind: RETURN, line: 23}
+  ifmap:
+  - {keyword: CASE, line_start: 20}  # Scala catch handlers are pattern-matching branches
+  catchmap:
+  - {keyword: TRY, line_start: 15}
+  - {keyword: CATCH, line_start: 19}
+  mutations_probe: {range: "14-14", var: result, next_read_line: 17}
+  returns:
+  - {line: 20, gate_lines: [19]}
+  - {line: 23, gate_lines: []}
+  batch_element: Batch.run
+  loopmap:
+  - {keyword: FOR, line_start: 34}
+  fanout_effects:
+  - {line: 36, kind: cache}
+  statewrites:
+  - {kind: field, line: 35}
+  - {kind: cache, line: 36}
+  decorators: {target: Reporter, category: classes, expected: ['@deprecated("fixture", "1")']}
+  bases: {target: Reporter, category: classes, expected: ["Batch"]}

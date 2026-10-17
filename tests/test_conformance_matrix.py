@@ -34,7 +34,7 @@ EXPECTED = yaml.safe_load((FIXTURES_DIR / "expected.yaml").read_text(encoding="u
 EXTENSIONS = {
     "python": "py", "c": "c", "cpp": "cpp", "csharp": "cs", "go": "go",
     "java": "java", "javascript": "js", "rust": "rs", "typescript": "ts",
-    "kotlin": "kt", "swift": "swift", "ruby": "rb", "php": "php", "lua": "lua", "dart": "dart",
+    "kotlin": "kt", "swift": "swift", "ruby": "rb", "php": "php", "lua": "lua", "dart": "dart", "scala": "scala",
 }
 
 LANGUAGES = sorted(EXPECTED.keys())
