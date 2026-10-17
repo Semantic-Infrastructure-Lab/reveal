@@ -12,14 +12,16 @@
     },
     "first.ts": {
       "parsers": [
-        "treesitter:typescript"
+        "treesitter:typescript",
+        "treesitter:tsx"
       ],
       "sha256": "6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471",
       "bytes": 120
     },
     "second.ts": {
       "parsers": [
-        "treesitter:typescript"
+        "treesitter:typescript",
+        "treesitter:tsx"
       ],
       "sha256": "6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471",
       "bytes": 120
@@ -70,5 +72,6 @@
       "exit_code": 0,
       "type": "surface"
     }
-  }
+  },
+  "content_identity": "UTF-8 text after universal-newline decoding; SHA256/bytes match parser-seam source text, not raw file bytes."
 }
