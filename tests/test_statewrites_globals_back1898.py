@@ -127,3 +127,20 @@ def test_php_capture_reference_analysis_is_currently_declined(capture):
     content = source.encode('utf-8')
     text = lambda node: content[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8')
     assert collect_statewrites(func, 1, 1, text, 'php') == []
+
+
+@pytest.mark.parametrize(('definition', 'kind'), [
+    ('const f = function (key) { state[key] = 1; };', 'function_expression'),
+    ('function* f(key) { state[key] = 1; }', 'generator_function_declaration'),
+    ('const f = function* (key) { state[key] = 1; };', 'generator_function'),
+])
+def test_javascript_function_value_scope_shapes(definition, kind):
+    source = 'const state = {};\n' + definition
+    tree = ts_parse(ts.get_parser('javascript'), source)
+    root = tree_root(tree)
+    assert not _zero_arg(root, 'has_error')
+    func, = kind_nodes(root, kind)
+    content = source.encode('utf-8')
+    text = lambda node: content[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8')
+    assert collect_statewrites(func, 2, 2, text, 'javascript') == [
+        dict(kind='global', line=2, target='state[key]', via='assignment')]
