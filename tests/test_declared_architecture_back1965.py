@@ -317,3 +317,16 @@ def test_malformed_trust_frame_is_canonical_failure(project, monkeypatch, name, 
     assert any(e.get('code') == 'invalid_adapter_answer' for e in payload['meta']['errors'])
     if isinstance(bad, list) and bad and isinstance(bad[0], dict):
         assert bad[0] in payload['meta'][field]
+
+
+@pytest.mark.parametrize('keep_proof,expected', [(False, 3), (True, 2)])
+def test_postprocess_usage_cannot_hide_lost_required_proof(project, monkeypatch, keep_proof, expected):
+    def process(result, args):
+        if not keep_proof:
+            result.pop('analysis')
+        result['error'] = 'invalid entry'
+        result['meta'] = {'errors': [{'code': 'invalid_request', 'message': 'invalid entry'}]}
+        return result
+    monkeypatch.setattr(ArchitectureAdapter, 'post_process', staticmethod(process), raising=False)
+    answer = run('architecture://proj?against=HEAD', '--format', 'json')
+    assert answer.returncode == expected, answer.stderr
