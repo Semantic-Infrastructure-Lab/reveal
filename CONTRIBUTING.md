@@ -453,6 +453,20 @@ system `python3` -- the interpreter its baseline was built with; CI does not run
 `reveal reveal:// --check` (rule V039) is the local guard for the Windows path class (`str(path)` uses
 backslashes, so never split or compare paths as `'/'` strings).
 
+**Test template:**
+
+```python
+def test_lua_structure():
+    from reveal.analyzers.lua import LuaAnalyzer
+
+    content = "function greet() print('Hello') end"
+    analyzer = LuaAnalyzer('/tmp/test.lua', content)
+    structure = analyzer.get_structure()
+
+    assert 'functions' in structure
+    assert structure['functions'][0]['name'] == 'greet'
+```
+
 ### Cold serial parser-count gate
 
 The primary Python 3.12 `ci-local.sh --no-tests` run includes
@@ -495,20 +509,6 @@ process launches outside Python audit/multiprocessing hooks are unqualified;
 they are not reported as zero. The pinned clean corpus does not qualify BOM or
 compatibility source rewrites. Observed snippet/validation/external seam events
 retain separate domains and are never silently discarded.
-
-**Test template:**
-
-```python
-def test_lua_structure():
-    from reveal.analyzers.lua import LuaAnalyzer
-
-    content = "function greet() print('Hello') end"
-    analyzer = LuaAnalyzer('/tmp/test.lua', content)
-    structure = analyzer.get_structure()
-
-    assert 'functions' in structure
-    assert structure['functions'][0]['name'] == 'greet'
-```
 
 ---
 
