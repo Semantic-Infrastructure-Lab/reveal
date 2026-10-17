@@ -137,6 +137,40 @@ def test_unknown_gate_and_absent_aggregate_evidence_are_rejected():
         results.merge_execution_facts()
 
 
+@pytest.mark.parametrize('cause,expected', [('INVALID_REQUEST', 2), ('OUTPUT', 3)])
+def test_failure_without_analysis_does_not_claim_completed_analysis(cause, expected):
+    observed = results.failure_execution_facts(getattr(results.FailureCause, cause))
+    assert observed.completeness == results.AnalysisCompleteness.NOT_STARTED
+    assert results.execution_exit_code(observed) == expected
+
+
+def test_unattempted_required_analysis_is_not_a_legacy_scan_override():
+    observed = facts('NOT_STARTED')
+    assert results.execution_exit_code(observed) == 3
+    assert results.execution_exit_code(observed, legacy_scan_override=True) == 3
+    explicit_scan_failure = facts('NOT_STARTED', failures=('ANALYSIS',))
+    assert results.execution_exit_code(explicit_scan_failure, legacy_scan_override=True) == 0
+
+
+def test_unclassified_unattempted_child_cannot_disappear_in_aggregation():
+    with pytest.raises(ValueError, match='unclassified'):
+        results.merge_execution_facts(facts('NOT_STARTED'), facts())
+    with pytest.raises(ValueError, match='unclassified'):
+        results.merge_execution_facts(facts('NOT_STARTED'), facts(failures=('INVALID_REQUEST',)))
+    rejected = results.failure_execution_facts(results.FailureCause.INVALID_REQUEST)
+    merged = results.merge_execution_facts(rejected, facts())
+    assert merged.completeness == results.AnalysisCompleteness.COMPLETE
+    assert results.execution_exit_code(merged) == 2
+
+
+def test_returned_validation_error_preserves_unattempted_analysis():
+    observed = results.result_execution_facts(
+        {'error': 'invalid selector'}, completeness=results.AnalysisCompleteness.NOT_STARTED,
+        failure_cause=results.FailureCause.INVALID_REQUEST)
+    assert observed.completeness == results.AnalysisCompleteness.NOT_STARTED
+    assert results.execution_exit_code(observed) == 2
+
+
 @pytest.mark.parametrize('result,expected', [
     ({'meta': {'errors': [{'code': 'source_unparsed'}]}}, 'ok'),
     ({'error': 'required failure'}, 'failed'),
