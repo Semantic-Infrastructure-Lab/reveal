@@ -700,3 +700,43 @@ scala:
   bases: {target: Reporter, category: classes, expected: ["Batch"]}
   xfails:
     test_decorators_extracted_for_annotated_construct: "BACK-1920: Scala class annotation is absent from decorators"
+
+# BACK-1921: manually derived from gdscript/sample.gd, not captured CLI output.
+gdscript:
+  entry_function: processOrder
+  outline_functions: [validate, processOrder, run, summarize]
+  calls_validate_callers:
+  - {line: 12, function: processOrder}
+  imports_unused:
+    not_supported: true  # preload extraction exists; no unused-name analysis
+  varflow_result:
+  - {kind: WRITE, line: 13}
+  - {kind: "READ/COND", line: 14}
+  - {kind: READ, line: 17}
+  - {kind: WRITE, line: 18}
+  - {kind: READ, line: 18}
+  - {kind: READ, line: 19}
+  sideeffects:
+  - {line: 16, kind: file}
+  - {line: 17, kind: file}
+  exits:
+  - {kind: RETURN, line: 15}
+  - {kind: RETURN, line: 19}
+  ifmap:
+  - {keyword: IF, line_start: 14}
+  catchmap:
+    not_supported: true  # GDScript has no native try/catch syntax
+  mutations_probe: {range: "13-13", var: result, next_read_line: 14}
+  returns:
+  - {line: 15, gate_lines: [14]}
+  - {line: 19, gate_lines: []}
+  batch_element: Batch.run
+  loopmap:
+  - {keyword: FOR, line_start: 29}
+  fanout_effects:
+  - {line: 31, kind: cache}
+  statewrites:
+  - {kind: field, line: 30}
+  - {kind: cache, line: 31}
+  decorators: {target: run, category: functions, expected: ["@rpc"]}
+  bases: {target: Reporter, category: classes, expected: ["Batch"]}
