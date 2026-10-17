@@ -54,6 +54,11 @@ def test_exact_json_parity(project, cli, query, identity, provenance):
     assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)
     left, right = json.loads(a.stdout), json.loads(b.stdout)
     assert left['type'] == right['type'] == identity
+    if provenance:
+        assert left['execution']['command'] == ' '.join(
+            ['reveal', 'architecture', 'proj', *cli, '--format', 'json', *flags])
+        assert right['execution']['command'] == ' '.join(
+            ['reveal', 'architecture://proj' + query, '--format', 'json', *flags])
     equal_answers(left, right)
     assert 'has no effect' not in a.stderr + b.stderr
 
@@ -266,3 +271,15 @@ def test_closed_pipe_preserves_independent_failures(project, mode, incomplete, a
         errors = process.stderr.read().decode('utf-8', errors='replace')
     assert code == expected, errors
     assert 'Traceback' not in errors
+
+
+@pytest.mark.parametrize('incomplete', [False, True])
+def test_postprocess_projection_retains_preanalysis_facts(project, monkeypatch, incomplete):
+    if incomplete:
+        (project / 'broken.py').write_text('def broken(:\n', encoding='utf-8')
+    def project_answer(result, args):
+        return {key: value for key, value in result.items() if key != 'analysis'}
+    monkeypatch.setattr(ArchitectureAdapter, 'post_process', staticmethod(project_answer), raising=False)
+    result = run('architecture://proj?against=HEAD', '--format', 'json')
+    assert result.returncode == (3 if incomplete else 0), result.stderr
+    assert json.loads(result.stdout)['type'] == 'architecture_diff'

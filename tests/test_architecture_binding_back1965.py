@@ -69,3 +69,28 @@ def test_explicit_missing_evidence_taxonomy(warning, incomplete):
                                   warnings=[{'type': warning, 'message': 'producer evidence'}])
     facts = ArchitectureAdapter.execution_facts(result)
     assert (facts.completeness is AnalysisCompleteness.INCOMPLETE) is incomplete
+
+
+def test_explicit_diff_incompleteness_wins_over_invalid_request():
+    from reveal.utils.results import ResultBuilder, execution_exit_code
+    result = ResultBuilder.create(
+        'architecture_diff', '.', errors=[{'code': 'invalid_request', 'message': 'invalid input'}],
+        data={'analysis': {'complete': False}, 'error': 'required snapshot incomplete'})
+    assert execution_exit_code(ArchitectureAdapter.execution_facts(result), fail_on='none') == 3
+
+
+@pytest.mark.parametrize('analysis', [None, {}, {'complete': None}, {'complete': 'true'}])
+def test_diff_without_explicit_completeness_fails_closed(analysis):
+    from reveal.utils.results import ResultBuilder, execution_exit_code
+    data = {} if analysis is None else {'analysis': analysis}
+    result = ResultBuilder.create('architecture_diff', '.', data=data)
+    assert execution_exit_code(ArchitectureAdapter.execution_facts(result), fail_on='none') == 3
+
+
+def test_malformed_type_and_metadata_repair_is_a_required_failure():
+    from reveal.cli.routing.declared import qualify_declared_answer
+    from reveal.utils.results import ResultBuilder, execution_exit_code
+    wrong = ResultBuilder.create('wrong', '.', meta={'errors': None, 'warnings': None})
+    repaired = qualify_declared_answer(wrong, ArchitectureAdapter, '.', 'architecture_diff')
+    assert repaired['type'] == 'architecture_diff'
+    assert execution_exit_code(ArchitectureAdapter.execution_facts(repaired), fail_on='none') == 3
