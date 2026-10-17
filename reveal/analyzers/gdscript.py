@@ -29,9 +29,10 @@ class GDScriptAnalyzer(TreeSitterAnalyzer):
     # Godot 4.5 modules/gdscript/gdscript_parser.cpp registers these targets;
     # warning_ignore includes FUNCTION through CLASS_LEVEL. parse_program
     # flushes preceding annotations to the script at pure SCRIPT directives.
-    # Leave @abstract undecoded: it can target script, class or function.
+    # Decline @abstract ownership: it can target script, class or function,
+    # so earlier metadata must not cross it either.
     _FUNCTION_ANNOTATIONS = frozenset({'rpc', 'warning_ignore'})
-    _SCRIPT_ANNOTATIONS = frozenset({'tool', 'icon', 'static_unload'})
+    _ANNOTATION_BARRIERS = frozenset({'tool', 'icon', 'static_unload', 'abstract'})
 
     def _annotation_name(self, node) -> Optional[str]:
         return next((self._get_node_text(child) for child in _children(node)
@@ -47,7 +48,7 @@ class GDScriptAnalyzer(TreeSitterAnalyzer):
             kind = _zero_arg(sibling, 'kind')
             if kind == 'annotation':
                 name = self._annotation_name(sibling)
-                if name in self._SCRIPT_ANNOTATIONS:
+                if name in self._ANNOTATION_BARRIERS:
                     break
                 if name in self._FUNCTION_ANNOTATIONS:
                     decorators.insert(0, self._get_node_text(sibling))
