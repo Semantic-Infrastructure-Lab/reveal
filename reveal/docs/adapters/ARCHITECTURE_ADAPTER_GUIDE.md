@@ -39,7 +39,7 @@ reveal architecture src/ --against main
 
 | Parameter | Values | Purpose |
 |-----------|--------|---------|
-| `top` | integer (default `5`) | Number of items shown per section. |
+| `top` | integer (default `5`) | Section display cap; also bounds the complexity candidate population used by the analysis. |
 | `no_imports` | `true`, `false` (default) | Skip import graph analysis (entry points/core abstractions/cycles all come back empty; complexity-based risks still run). |
 
 ## Reading The Output
@@ -50,6 +50,23 @@ import (fan-in > 0). `facts.circular_groups` are import cycles. `risks`
 flags circular groups, high-complexity entry points (complexity ≥ 20), and
 load-bearing files (fan-in ≥ 8). `next_commands` suggests the next reveal
 invocation for each risk found.
+
+The ordinary report retains AST warnings, errors, confidence and ranking cuts in
+`meta`, including when imports and complexity share one walk. A display cut or
+an informational complexity caveat does not establish missing input.
+
+A git-ref comparison applies the same explicit exclusions and current project
+ignore policy to both snapshots. The base contains tracked files; the live head
+honors the selected gitignore policy. Use `--no-gitignore` to include ignored
+untracked head files.
+
+Diff JSON records in `analysis` whether it analyzed both snapshots or proved the
+trees identical. Snapshot comparisons disclose imports and complexity completeness
+for each side. If either required component fails or has missing
+input, the result retains attributed diagnostics and returns an `error` with
+`deltas: null`. Text says the comparison is unavailable. Empty deltas on a
+successful complete result mean no observed architectural change; unavailable
+deltas do not. Confidence remains a separate descriptive field.
 
 ## Good Review Questions
 

@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `git://` on a repository libgit2 refuses to open (e.g. a `safe.directory` ownership refusal) now fails with that reason from `get_metadata` too, instead of returning metadata with no path that callers read as "not a repository" (BACK-1845).
 
 ### Fixed
+- Architecture diffs apply exclusions and project ignore policy symmetrically, include eligible ignored inputs in fast-path checks, and disclose incomplete required snapshots with unavailable deltas. Ordinary architecture retains returned AST errors, warnings, confidence and ranking cuts from its shared walk (BACK-1966, BACK-1967).
 - DNS consistency checks require successful observations from every queried nameserver before claiming agreement. Lookup and resolver-setup failures retain earlier answers, attempted/responded/failed counts and explicit incomplete-observation warnings; next steps distinguish failed lookups and missing DNS support from observed disagreement (BACK-1964).
 - MySQL health consumes the performance producer's measured scan, thread-cache and disk-temp ratios instead of reading missing fields as zero. Configured threshold verdicts and full summaries now reflect those measurements; missing producer fields no longer become synthetic passes. Corrected the guide's metric projection and threshold example (BACK-1963).
 - `imports://` rejects an undeclared `?rank=` value with the list of accepted values instead of silently returning the unranked graph, even when another query mode takes priority (BACK-1908).
