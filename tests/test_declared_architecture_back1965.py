@@ -333,3 +333,51 @@ def test_postprocess_usage_cannot_hide_lost_required_proof(project, monkeypatch,
     monkeypatch.setattr(ArchitectureAdapter, 'post_process', staticmethod(process), raising=False)
     answer = run('architecture://proj?against=HEAD', '--format', 'json')
     assert answer.returncode == expected, answer.stderr
+
+
+@pytest.mark.parametrize('mode', ['ordinary', 'diff'])
+@pytest.mark.parametrize('phase', ['analysis', 'postprocess'])
+@pytest.mark.parametrize('bad_type', [[], {}])
+@pytest.mark.parametrize('transport', ['cli', 'uri'])
+@pytest.mark.parametrize('format', ['json', 'text'])
+def test_malformed_consumed_warning_type_is_required_failure(project, monkeypatch, mode, phase, bad_type, transport, format):
+    def inject(result):
+        result.setdefault('meta', {}).setdefault('warnings', []).append(
+            {'type': bad_type, 'message': 'retain malformed diagnostic detail'})
+        return result
+    original = ArchitectureAdapter.get_structure
+    if phase == 'analysis':
+        def answer(self, **kwargs):
+            return inject(original(self, **kwargs))
+        monkeypatch.setattr(ArchitectureAdapter, 'get_structure', answer)
+    else:
+        monkeypatch.setattr(ArchitectureAdapter, 'post_process', staticmethod(
+            lambda result, args: inject(result)), raising=False)
+    if transport == 'cli':
+        argv = ['architecture', 'proj', *(['--against', 'HEAD'] if mode == 'diff' else [])]
+    else:
+        argv = ['architecture://proj' + ('?against=HEAD' if mode == 'diff' else '')]
+    result = run(*argv, '--format', format)
+    assert result.returncode == 3, result.stderr
+    assert 'Traceback' not in result.stderr
+    if format == 'json':
+        payload = json.loads(result.stdout)
+        assert any(w.get('message') == 'retain malformed diagnostic detail' for w in payload['meta']['warnings'])
+        assert any(e.get('code') == 'invalid_adapter_answer' for e in payload['meta']['errors'])
+
+
+@pytest.mark.parametrize('name', ['architecture', 'surface'])
+@pytest.mark.parametrize('warning', [{'type': 'unknown_custom_warning', 'message': 'valid detail'},
+                                   {'code': 'custom_code', 'message': 'valid detail'}])
+def test_unknown_string_warning_and_absent_type_remain_valid(project, monkeypatch, name, warning):
+    from reveal.adapters.surface import SurfaceAdapter
+    owner = ArchitectureAdapter if name == 'architecture' else SurfaceAdapter
+    original = owner.get_structure
+    def answer(self, **kwargs):
+        result = original(self, **kwargs)
+        result.setdefault('meta', {}).setdefault('warnings', []).append(warning)
+        return result
+    monkeypatch.setattr(owner, 'get_structure', answer)
+    result = run(name + '://proj', '--format', 'json')
+    assert result.returncode == 0
+    assert warning in json.loads(result.stdout)['meta']['warnings']
