@@ -425,6 +425,46 @@ def render_mutations(
 _GATE_NODE_TYPES: frozenset = GATE_NODES
 
 
+def _positional_if_parts(node: Any):
+    """Dart's ordinary if header span and bodies, without guessing patterns."""
+    if (_zero_arg(node, 'kind') != 'if_statement' or
+            node.child_by_field_name('condition') is not None):
+        return None
+    children = [c for c in _children(node)
+                if _zero_arg(c, 'kind') not in ('comment', 'line_comment', 'block_comment')]
+    if [_zero_arg(c, 'kind') for c in children[:2]] != ['if', '(']:
+        return None
+    close = next((i for i, c in enumerate(children) if _zero_arg(c, 'kind') == ')'), None)
+    if close is None:
+        return None
+    condition, bodies = children[2:close], children[close + 1:]
+    if not condition or not all(_zero_arg(c, 'is_named') for c in condition):
+        return None
+    selected = _positional_if_bodies(node, bodies)
+    if selected is None:
+        return None
+    return condition[0], condition[-1], *selected
+
+
+def _positional_if_bodies(node: Any, bodies: List[Any]):
+    """Verify the positional tail agrees with the existing branch fields."""
+    if len(bodies) not in (1, 3) or not _zero_arg(bodies[0], 'is_named'):
+        return None
+    alternative = None
+    if len(bodies) == 3:
+        if _zero_arg(bodies[1], 'kind') != 'else' or not _zero_arg(bodies[2], 'is_named'):
+            return None
+        alternative = bodies[2]
+    expected = [node.child_by_field_name(field) for field in ('consequence', 'alternative')]
+    expected_spans = [(_zero_arg(c, 'start_byte'), _zero_arg(c, 'end_byte'))
+                      for c in expected if c is not None]
+    body_spans = [(_zero_arg(c, 'start_byte'), _zero_arg(c, 'end_byte'))
+                  for c in (bodies[0], alternative) if c is not None]
+    if body_spans != expected_spans:
+        return None
+    return bodies[0], alternative
+
+
 def _branch_parts(node: Any):
     """Condition and selected bodies, including Zig's fieldless prefix shape."""
     condition = node.child_by_field_name('condition')
@@ -446,7 +486,20 @@ def _branch_parts(node: Any):
 def _get_condition(node: Any, get_text: Callable) -> Optional[Dict[str, Any]]:
     """Extract condition text + line from a control-flow node."""
     cond, _, _ = _branch_parts(node)
+    positional = _positional_if_parts(node)
+    if positional is not None:
+        first, last, _, _ = positional
+        start = _zero_arg(first, 'start_byte') - _zero_arg(node, 'start_byte')
+        end = _zero_arg(last, 'end_byte') - _zero_arg(node, 'start_byte')
+        text = get_text(node).encode('utf-8')[start:end].decode('utf-8').strip()
+        line = _zero_arg(first, 'start_position').row + 1
+        return {'line': line, 'text': text[:57] + '...' if len(text) > 60 else text}
     if cond is None:
+        # An unrecognized Dart token header (for example if-case) must not
+        # inherit the PHP parenthesized-expression fallback below.
+        if (_zero_arg(node, 'kind') == 'if_statement' and
+                any(_zero_arg(c, 'kind') == '(' for c in _children(node))):
+            return None
         # PHP: condition is a parenthesized_expression positional child
         for child in _children(node):
             if _zero_arg(child, 'kind') == 'parenthesized_expression':
