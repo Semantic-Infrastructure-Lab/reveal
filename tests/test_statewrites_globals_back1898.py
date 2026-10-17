@@ -100,3 +100,30 @@ def test_python_nonlocal_mutation_and_rebinding():
 def test_unchanged_field_environment_session_siblings(language, rows):
     writes, source = _writes(language, 'sibling')
     assert writes == _expected(source, rows)
+
+
+def test_javascript_var_in_block_is_function_local():
+    assert _writes('javascript', 'hoisted')[0] == []
+
+
+def test_python_class_attribute_does_not_shadow_method_builtin():
+    from reveal.adapters.ast.nav_bindings import BindingScope
+    tree, func, text, source = _scope('python', 'builtin_method')
+    assert not BindingScope(func, text, 'python').has_explicit_binding('print')
+
+
+def test_implicit_closure_container_is_currently_declined():
+    # Only explicit nonlocal storage is classified in this bounded slice.
+    assert _writes('python', 'implicit_capture')[0] == []
+
+
+@pytest.mark.parametrize('capture', ['$state', '&$state'])
+def test_php_capture_reference_analysis_is_currently_declined(capture):
+    source = f'<?php $state=[]; $f=function () use ({capture}) {{ $state[1]=2; }};'
+    tree = ts_parse(ts.get_parser('php'), source)
+    root = tree_root(tree)
+    assert not _zero_arg(root, 'has_error')
+    func, = kind_nodes(root, 'anonymous_function')
+    content = source.encode('utf-8')
+    text = lambda node: content[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8')
+    assert collect_statewrites(func, 1, 1, text, 'php') == []

@@ -36,3 +36,14 @@ def enclosing():
         cell[key] = 2
         cell = {}
     return closure
+
+class BuiltinOwner:
+    print = lambda value: value
+    def builtin_method(self):
+        print('still builtin')
+
+def capture_owner():
+    captured = {}
+    def implicit_capture(key):
+        captured[key] = 1
+    return implicit_capture

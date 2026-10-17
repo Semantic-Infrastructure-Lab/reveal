@@ -22,3 +22,7 @@ function sibling() {
     this.field = 1;
     process.env.REVEAL_TEST_STATE = '1';
 }
+function hoisted(key, flag) {
+    if (flag) { var state = {}; }
+    state[key] = 1;
+}
