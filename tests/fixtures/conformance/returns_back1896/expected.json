@@ -1,0 +1,344 @@
+{
+  "python": {
+    "file": "python.py",
+    "gates": [
+      [
+        {
+          "line": 2,
+          "text": "a"
+        }
+      ],
+      [
+        {
+          "line": 2,
+          "text": "not (a)"
+        },
+        {
+          "line": 4,
+          "text": "b"
+        }
+      ],
+      [
+        {
+          "line": 2,
+          "text": "not (a)"
+        },
+        {
+          "line": 4,
+          "text": "not (b)"
+        }
+      ],
+      []
+    ],
+    "lines": [
+      3,
+      5,
+      7,
+      8
+    ]
+  },
+  "javascript": {
+    "file": "javascript.js",
+    "gates": [
+      [
+        {
+          "line": 2,
+          "text": "a"
+        }
+      ],
+      [
+        {
+          "line": 2,
+          "text": "not (a)"
+        },
+        {
+          "line": 4,
+          "text": "b"
+        }
+      ],
+      [
+        {
+          "line": 2,
+          "text": "not (a)"
+        },
+        {
+          "line": 4,
+          "text": "not (b)"
+        }
+      ],
+      []
+    ],
+    "lines": [
+      3,
+      5,
+      7,
+      9
+    ]
+  },
+  "go": {
+    "file": "go.go",
+    "gates": [
+      [
+        {
+          "line": 3,
+          "text": "a"
+        }
+      ],
+      [
+        {
+          "line": 3,
+          "text": "not (a)"
+        },
+        {
+          "line": 5,
+          "text": "b"
+        }
+      ],
+      [
+        {
+          "line": 3,
+          "text": "not (a)"
+        },
+        {
+          "line": 5,
+          "text": "not (b)"
+        }
+      ],
+      []
+    ],
+    "lines": [
+      4,
+      6,
+      8,
+      10
+    ]
+  },
+  "java": {
+    "file": "java.java",
+    "gates": [
+      [
+        {
+          "line": 3,
+          "text": "a"
+        }
+      ],
+      [
+        {
+          "line": 3,
+          "text": "not (a)"
+        },
+        {
+          "line": 5,
+          "text": "b"
+        }
+      ],
+      [
+        {
+          "line": 3,
+          "text": "not (a)"
+        },
+        {
+          "line": 5,
+          "text": "not (b)"
+        }
+      ],
+      []
+    ],
+    "lines": [
+      4,
+      6,
+      8,
+      10
+    ]
+  },
+  "rust": {
+    "file": "rust.rs",
+    "gates": [
+      [
+        {
+          "line": 2,
+          "text": "a"
+        }
+      ],
+      [
+        {
+          "line": 2,
+          "text": "not (a)"
+        },
+        {
+          "line": 4,
+          "text": "b"
+        }
+      ],
+      [
+        {
+          "line": 2,
+          "text": "not (a)"
+        },
+        {
+          "line": 4,
+          "text": "not (b)"
+        }
+      ],
+      []
+    ],
+    "lines": [
+      3,
+      5,
+      7,
+      9
+    ]
+  },
+  "ruby": {
+    "file": "ruby.rb",
+    "gates": [
+      [
+        {
+          "line": 2,
+          "text": "a"
+        }
+      ],
+      [
+        {
+          "line": 2,
+          "text": "not (a)"
+        },
+        {
+          "line": 4,
+          "text": "b"
+        }
+      ],
+      [
+        {
+          "line": 2,
+          "text": "not (a)"
+        },
+        {
+          "line": 4,
+          "text": "not (b)"
+        }
+      ],
+      []
+    ],
+    "lines": [
+      3,
+      5,
+      7,
+      9
+    ]
+  },
+  "php": {
+    "file": "php.php",
+    "gates": [
+      [
+        {
+          "line": 3,
+          "text": "$a"
+        }
+      ],
+      [
+        {
+          "line": 3,
+          "text": "not ($a)"
+        },
+        {
+          "line": 5,
+          "text": "$b"
+        }
+      ],
+      [
+        {
+          "line": 3,
+          "text": "not ($a)"
+        },
+        {
+          "line": 5,
+          "text": "not ($b)"
+        }
+      ],
+      []
+    ],
+    "lines": [
+      4,
+      6,
+      8,
+      10
+    ]
+  },
+  "c": {
+    "file": "c.c",
+    "gates": [
+      [
+        {
+          "line": 2,
+          "text": "a"
+        }
+      ],
+      [
+        {
+          "line": 2,
+          "text": "not (a)"
+        },
+        {
+          "line": 4,
+          "text": "b"
+        }
+      ],
+      [
+        {
+          "line": 2,
+          "text": "not (a)"
+        },
+        {
+          "line": 4,
+          "text": "not (b)"
+        }
+      ],
+      []
+    ],
+    "lines": [
+      3,
+      5,
+      7,
+      9
+    ]
+  },
+  "kotlin": {
+    "file": "kotlin.kt",
+    "gates": [
+      [
+        {
+          "line": 2,
+          "text": "a"
+        }
+      ],
+      [
+        {
+          "line": 2,
+          "text": "not (a)"
+        },
+        {
+          "line": 4,
+          "text": "b"
+        }
+      ],
+      [
+        {
+          "line": 2,
+          "text": "not (a)"
+        },
+        {
+          "line": 4,
+          "text": "not (b)"
+        }
+      ],
+      []
+    ],
+    "lines": [
+      3,
+      5,
+      7,
+      9
+    ]
+  }
+}
