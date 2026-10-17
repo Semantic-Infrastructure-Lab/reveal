@@ -346,6 +346,7 @@ ALL_ELEMENT_NODE_TYPES = (
     'anonymous_class',        # PHP anonymous class
     'function_signature',    # Dart signature, paired body via element_span
     'Decl',                  # Zig function; unnamed variable/import wrappers are skipped
+    'constructor_definition',  # GDScript _init
 )
 
 
