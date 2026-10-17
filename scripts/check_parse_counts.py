@@ -34,7 +34,7 @@ COVERAGE = (
     'rewrite qualified here). Full command JSON is retained; only the copied corpus prefix is normalized. '
     'A null tree-sitter distribution version explicitly means absent/bundled distribution; '
     'the language-pack version is still required. Runtime/version metadata must repeat across five current runs; historical versions are provenance, '
-    'not ceilings. Request/attempt/artifact counts are ceilings; successful built/cached outcomes '
+    'not ceilings. Request/attempt/artifact/failure counts are ceilings; successful built/cached outcomes '
     'remain full ledger evidence without preventing improved reuse. New parser/domain/content '
     'request identities still fail the accepted ceilings.'
 )
@@ -286,7 +286,7 @@ def compare_snapshots(baseline: dict, current: dict) -> list[str]:
     errors = [f'{key} changed' for key in ('coverage', 'command_outcome', 'stderr')
               if baseline.get(key) != current.get(key)]
     for key, count in current['counts'].items():
-        if json.loads(key)['event'] not in ('request', 'attempt', 'artifact'):
+        if json.loads(key)['event'] not in ('request', 'attempt', 'artifact', 'failure'):
             continue
         ceiling = baseline['counts'].get(key, 0)
         if count > ceiling:
