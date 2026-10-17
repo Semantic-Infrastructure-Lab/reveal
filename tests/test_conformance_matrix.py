@@ -885,10 +885,6 @@ def test_zig_trailing_return_and_catch_free_controls():
         assert json.loads(result.stdout)['findings'] == []
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError,
-    reason="BACK-1934: Zig IfStatement return lacks its enclosing condition gate",
-)
 def test_zig_if_return_keeps_branch_gate():
     result = _run_reveal_direct(
         str(_sample_path('zig')), 'validate', '--returns', '--format', 'json')

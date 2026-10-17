@@ -656,7 +656,6 @@ dart:
   decorators: {target: Reporter, category: classes, expected: ["@deprecated"]}
   bases: {target: Reporter, category: classes, expected: ["Batch"]}
   xfails:
-    test_returns_finds_gate_chains: "BACK-1916: Dart catch-handler return lacks an exception-context gate"
     test_statewrites_classifies_field_and_call: "BACK-1917: Dart this.total field assignment is not reported"
 
 # BACK-1919: manually derived from scala/sample.scala, not captured CLI output.
@@ -788,8 +787,4 @@ zig:
   xfails:
     test_varflow_declaration_is_write_not_read: "BACK-1927: Zig reassignment target is classified as a read"
     test_cross_calls_varflow_json_does_not_crash: "BACK-1927: Zig reassignment target is classified as a read"
-    test_catchmap_finds_try_catch: "BACK-1928: Zig catch handler contexts are absent"
-    test_returns_finds_gate_chains: "BACK-1928: Zig catch handler contexts are absent"
-    test_loopmap_finds_loop: "BACK-1929: Zig for loop is absent from loop traversal"
-    test_fanout_classifies_effect_inside_loop: "BACK-1929: Zig for loop is absent from loop traversal"
     test_statewrites_classifies_field_and_call: "BACK-1930: Zig self.total assignment is not reported"
