@@ -154,3 +154,90 @@ def test_sibling_uri_remains_unchanged(monkeypatch):
     result = run('env://REVEAL_D6_CONTROL', '--format', 'json')
     assert result.returncode == 0
     assert 'present' in result.stdout
+
+
+@pytest.mark.parametrize('spelling', ['surface', 'uri'])
+@pytest.mark.parametrize('kind', ['returned', 'raised', 'postprocess', 'malformed'])
+def test_required_failure_preserves_identity(project, monkeypatch, spelling, kind):
+    from reveal.adapters.surface import SurfaceAdapter
+    from reveal.utils.results import ResultBuilder
+    if kind == 'returned':
+        monkeypatch.setattr(SurfaceAdapter, 'get_structure', lambda self, **kw:
+                            ResultBuilder.create_error('surface_scan', 'proj', 'required input failed'))
+    elif kind == 'raised':
+        def fail(self, **kw):
+            raise OSError('required input failed')
+        monkeypatch.setattr(SurfaceAdapter, 'get_structure', fail)
+    elif kind == 'postprocess':
+        monkeypatch.setattr(SurfaceAdapter, 'post_process', staticmethod(lambda result, args:
+                            ResultBuilder.create_error('surface_scan', 'proj', 'required input failed')),
+                            raising=False)
+    else:
+        monkeypatch.setattr(SurfaceAdapter, 'get_structure', lambda self, **kw: None)
+    argv = ['surface', 'proj'] if spelling == 'surface' else ['surface://proj']
+    result = run(*argv, '--format', 'json', '--no-gitignore')
+    assert result.returncode == 3
+    answer = json.loads(result.stdout)
+    assert answer['type'] == 'surface_scan'
+    assert answer['error']
+    assert 'Traceback' not in result.stderr
+
+
+@pytest.mark.parametrize('spelling', ['surface', 'uri'])
+def test_projection_cannot_hide_incompleteness(project, spelling):
+    (project / 'broken.py').write_text('def broken(:\n', encoding='utf-8')
+    argv = ['surface', 'proj'] if spelling == 'surface' else ['surface://proj']
+    result = run(*argv, '--format', 'json', '--fields', 'total', '--no-gitignore')
+    assert result.returncode == 3
+    assert json.loads(result.stdout)['total'] > 0
+
+
+@pytest.mark.parametrize('special', ['--rules', '--discover', '--stdin'])
+def test_policy_cannot_be_smuggled_into_special_mode(project, special):
+    result = run(special, 'surface://proj', '--fail-on', 'none')
+    assert result.returncode == 2
+    assert '--fail-on' in result.stderr
+
+
+def test_uri_format_validation_precedes_analysis(project, monkeypatch):
+    from reveal.adapters.surface import SurfaceAdapter
+    def unexpected(self, **kwargs):
+        pytest.fail('unsupported format reached analysis')
+    monkeypatch.setattr(SurfaceAdapter, 'get_structure', unexpected)
+    result = run('surface://proj', '--format', 'grep')
+    assert result.returncode == 2
+    assert result.stdout == ''
+
+
+def test_render_output_failure_is_three(project, monkeypatch):
+    from reveal.rendering.adapters.surface import SurfaceRenderer
+    def fail(*args, **kwargs):
+        raise OSError('requested output failed')
+    monkeypatch.setattr(SurfaceRenderer, 'render_structure', fail)
+    result = run('surface', 'proj', '--no-gitignore')
+    assert result.returncode == 3
+    assert 'requested output failed' in result.stderr
+    assert 'Traceback' not in result.stderr
+
+
+def test_runtime_artifact_failure_preserves_primary_json(project, monkeypatch):
+    from reveal.utils import json_utils
+    def fail(*args, **kwargs):
+        raise OSError('injected artifact failure')
+    # A boundary injection verifies preservation if the artifact writer fails;
+    # the normal --format json no-op has a separate real CLI control above.
+    monkeypatch.setattr(json_utils, 'write_also_json', fail)
+    result = run('surface://proj', '--format', 'json', '--no-gitignore')
+    assert result.returncode == 3
+    answer = json.loads(result.stdout)
+    assert answer['total'] > 0
+    assert answer['meta']['output_errors'][0]['code'] == 'artifact_write_failed'
+
+
+def test_tilde_uri_uses_one_resolved_path(project, monkeypatch):
+    monkeypatch.setenv('HOME', str(project.parent))
+    monkeypatch.setenv('USERPROFILE', str(project.parent))
+    a = run('surface://' + project.as_posix(), '--format', 'json', '--no-gitignore')
+    b = run('surface://~/proj', '--format', 'json', '--no-gitignore')
+    assert a.returncode == b.returncode == 0
+    assert json.loads(a.stdout) == json.loads(b.stdout)
