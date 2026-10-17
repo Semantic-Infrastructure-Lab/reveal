@@ -123,9 +123,14 @@ def test_valid_source_preserves_unicode_extraction_and_parse_work(tmp_path, coun
     assert [(e.parser, e.domain) for e in capture.events if e.event == 'request'] == [
         ('treesitter:python', 'fullsource')]
     assert len([e for e in capture.events if e.event == 'artifact']) == 1
-    checked = _run_reveal_direct('check', path, '--select', 'B001', '--format', 'json')
+    with capture_parses(tmp_path) as checked_capture:
+        checked = _run_reveal_direct('check', path, '--select', 'B001', '--format', 'json')
     assert checked.returncode == 0
     assert json.loads(checked.stdout)['detections'] == []
+    assert [(e.parser, e.domain) for e in checked_capture.events
+            if e.event == 'request' and e.scope == 'target'] == [('python.ast', 'fullsource')]
+    assert len([e for e in checked_capture.events
+                if e.event == 'artifact' and e.scope == 'target']) == 1
     extracted = _run_reveal_direct(path, 'café', '--format', 'json')
     assert extracted.returncode == 0
     assert json.loads(extracted.stdout) == {
