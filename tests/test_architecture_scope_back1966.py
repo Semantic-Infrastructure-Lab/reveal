@@ -81,11 +81,12 @@ def test_explicit_ast_missing_evidence_is_incomplete(tree, kind):
     repo, src, ref = tree
     _dirty(src)
     child = {'results': [], 'meta': {'warnings': [{'type': kind, 'count': 1,
-                                                  'message': 'injected missing evidence'}]}}
+                                                  'message': 'injected missing evidence'}], 'confidence': 0.7}}
     with patch.object(AstAdapter, 'get_structure', return_value=child):
         result = diff.run_architecture_diff(src, ref)
     assert result['analysis']['snapshots']['base']['complexity'] == 'incomplete'
     assert result['error'] and result['deltas'] is None
+    assert result['meta']['confidence'] == 0.7
 
 
 def test_information_and_ranking_cuts_are_not_missing_evidence(tree):
@@ -215,3 +216,14 @@ def test_windows_style_diagnostic_roots_and_display_are_stable():
     result = diff._comparison_report(root, 'base', 'HEAD', diff._empty_deltas(20),
                                      {'complete': True}, [])
     assert result['path'] == root.as_posix()
+
+
+def test_actually_empty_excluded_scope_is_complete_with_supplied_zero_confidence(tree):
+    repo, src, ref = tree
+    _dirty(src)
+    with exclusion_scope(src, ['*.py']):
+        result = diff.run_architecture_diff(src, ref)
+    assert result['analysis']['complete'] and not result.get('error')
+    assert result['analysis']['confidence'] == {'base': 0.0, 'head': 0.0}
+    assert result['meta']['confidence'] == 0.0
+    assert result['deltas'] == diff._empty_deltas(20)
