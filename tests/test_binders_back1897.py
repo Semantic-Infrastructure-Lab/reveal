@@ -167,3 +167,58 @@ def test_builtin_classification_reaches_text_and_json(tmp_path):
         result = json.loads(proc.stdout)
         assert [(item['kind'], item['var']) for item in result['findings']] == [
             (kind, 'p'), ('builtin', 'print'), ('builtin', 'str')]
+
+
+def test_closure_local_writes_do_not_create_outer_mutations():
+    scope, text, end = parsed('javascript', '''\
+function target() {
+ const f = (y) => y + free;
+ consume(y, f);
+}
+''')
+    assert collect_mutations(scope, 2, 2, text) == [
+        {'var': 'f', 'last_write_line': 2, 'next_read_line': 3}]
+    assert [(e['kind'], e['line']) for e in var_flow(scope, 'y', 1, end, text)] == [
+        ('WRITE', 2), ('READ', 2), ('READ', 3)]
+
+
+def test_comprehension_iterables_and_filters_have_lexical_owners():
+    scope, text, end = parsed('python', '''\
+def target():
+    values = [y + z + free for y in y for z in y if z]
+    consume(y, z)
+''')
+    assert {d['var'] for d in collect_deps(scope, 1, end, text)} == {'consume', 'free', 'y', 'z'}
+    assert collect_mutations(scope, 2, 2, text) == []
+
+
+def test_python_closure_default_is_evaluated_in_outer_scope():
+    scope, text, end = parsed('python', '''\
+def target():
+    f = lambda y=seed: y + free
+    consume(f)
+''')
+    assert {d['var'] for d in collect_deps(scope, 1, end, text)} == {'seed', 'free', 'consume'}
+
+
+def test_catch_shadow_does_not_hide_outer_free_read():
+    scope, text, end = parsed('javascript', '''\
+function target() {
+ try { work(); } catch(err) { consume(err); }
+ consume(err);
+}
+''')
+    assert {d['var'] for d in collect_deps(scope, 1, end, text)} == {'work', 'consume', 'err'}
+    assert collect_mutations(scope, 2, 2, text) == []
+
+
+def test_enclosing_parameter_shadows_builtin():
+    scope, text, end = parsed('python', '''\
+def target(open):
+    f = lambda p: open(p)
+    consume(f)
+''')
+    inner = next(n for n in iter_tree(scope) if _zero_arg(n, 'kind') == 'lambda')
+    result = collect_boundary(inner, 2, 2, text, 'python')
+    assert {d['var'] for d in result['inputs']} == {'open'}
+    assert result.get('builtins', []) == []
