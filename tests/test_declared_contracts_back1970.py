@@ -289,3 +289,38 @@ def test_harmless_warning_does_not_make_completed_scan_fail(project, monkeypatch
         result = run(*argv, '--format', 'json', '--fail-on', 'none')
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout)['meta']['warnings'][-1]['message'] == 'harmless observation'
+
+
+@pytest.mark.parametrize('transport', ['cli', 'uri'])
+def test_inaccessible_contracts_resource_is_canonical_analysis_failure(project, monkeypatch, transport):
+    from pathlib import Path
+    stat = Path.stat
+    def inaccessible(self, *args, **kwargs):
+        if str(self) in ('proj', str(project)):
+            raise PermissionError('injected contracts access failure')
+        return stat(self, *args, **kwargs)
+    monkeypatch.setattr(Path, 'stat', inaccessible)
+    argv = ['contracts', 'proj'] if transport == 'cli' else ['contracts://proj']
+    result = run(*argv, '--format', 'json')
+    assert result.returncode == 3, result.stderr
+    answer = json.loads(result.stdout)
+    assert answer['type'] == 'contracts'
+    assert answer['meta']['errors'][0]['code'] == 'analysis'
+    assert 'injected contracts access failure' in answer['error']
+
+
+@pytest.mark.parametrize('provenance', [False, True])
+def test_flat_single_language_exact_parity_and_arrays(project, provenance):
+    (project/'contract.go').unlink()
+    flags = ['--provenance'] if provenance else []
+    left_argv = ['contracts', 'proj', '--format', 'json', *flags]
+    right_argv = ['contracts://proj', '--format', 'json', *flags]
+    a, b = run(*left_argv), run(*right_argv)
+    assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)
+    left, right = json.loads(a.stdout), json.loads(b.stdout)
+    assert 'by_language' not in left and 'by_language' not in right
+    assert len(left['abcs'][0]['implementations']) == 8
+    if provenance:
+        assert left['execution']['command'] == ' '.join(['reveal', *left_argv])
+        assert right['execution']['command'] == ' '.join(['reveal', *right_argv])
+    equal_answers(left, right)
