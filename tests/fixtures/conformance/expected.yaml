@@ -614,8 +614,6 @@ lua:
   - {kind: cache, line: 30}
   decorators: {target: processOrder, category: functions, not_supported: true}
   bases: {target: processOrder, category: functions, not_supported: true}
-  xfails:
-    test_statewrites_classifies_field_and_call: "BACK-1911: Lua table-field assignment target is not reported"
 
 # BACK-1913: manually derived from dart/sample.dart, not captured CLI output.
 dart:
@@ -655,8 +653,6 @@ dart:
   - {kind: cache, line: 33}
   decorators: {target: Reporter, category: classes, expected: ["@deprecated"]}
   bases: {target: Reporter, category: classes, expected: ["Batch"]}
-  xfails:
-    test_statewrites_classifies_field_and_call: "BACK-1917: Dart this.total field assignment is not reported"
 
 # BACK-1919: manually derived from scala/sample.scala, not captured CLI output.
 scala:
@@ -780,5 +776,3 @@ zig:
   - {kind: cache, line: 36}
   decorators: {target: processOrder, category: functions, not_supported: true}  # no annotation syntax
   bases: {target: processOrder, category: functions, not_supported: true}  # no class inheritance
-  xfails:
-    test_statewrites_classifies_field_and_call: "BACK-1930: Zig self.total assignment is not reported"
