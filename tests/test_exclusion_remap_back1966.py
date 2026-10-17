@@ -1,9 +1,6 @@
 """Logical policy paths never redirect physical reads or gitignore."""
-from pathlib import Path
-
 import pytest
 
-from reveal.config import RevealConfig
 from reveal.utils import exclusions as scope
 from reveal.utils.gitignore import gitignore_scope
 from reveal.utils.path_utils import ANALYSIS, walk_tree
