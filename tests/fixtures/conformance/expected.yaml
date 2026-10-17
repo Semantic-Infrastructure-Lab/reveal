@@ -736,10 +736,6 @@ gdscript:
   - {kind: cache, line: 31}
   decorators: {target: run, category: functions, expected: ["@rpc"]}
   bases: {target: Reporter, category: classes, expected: ["Batch"]}
-  xfails:
-    test_varflow_declaration_is_write_not_read: "BACK-1924: GDScript method-call argument read is absent"
-    test_cross_calls_varflow_json_does_not_crash: "BACK-1924: GDScript method-call argument read is absent"
-    test_mutations_finds_read_after_write: "BACK-1925: GDScript initialized variable declaration is not a mutation write"
 
 # BACK-1926: manually derived from zig/sample.zig, not captured CLI output.
 zig:
@@ -785,6 +781,4 @@ zig:
   decorators: {target: processOrder, category: functions, not_supported: true}  # no annotation syntax
   bases: {target: processOrder, category: functions, not_supported: true}  # no class inheritance
   xfails:
-    test_varflow_declaration_is_write_not_read: "BACK-1927: Zig reassignment target is classified as a read"
-    test_cross_calls_varflow_json_does_not_crash: "BACK-1927: Zig reassignment target is classified as a read"
     test_statewrites_classifies_field_and_call: "BACK-1930: Zig self.total assignment is not reported"
