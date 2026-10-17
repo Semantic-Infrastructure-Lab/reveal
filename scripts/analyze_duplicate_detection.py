@@ -8,10 +8,10 @@ Measures:
 """
 
 import sys
-sys.path.insert(0, '/home/scottsen/src/projects/reveal/external-git')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
-from pathlib import Path
 from reveal.rules.duplicates.D002 import D002
 from reveal.rules.duplicates._bodies import extract_function_body
 from reveal.analyzers.python import PythonAnalyzer
@@ -267,8 +267,8 @@ def measure_vector_quality():
 
 if __name__ == "__main__":
     # Find test files
-    tia_path = Path("/home/scottsen/src/tia")
-    test_files = list(tia_path.glob("lib/**/*.py"))[:50]  # Sample 50 files
+    source_root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent / "reveal"
+    test_files = list(source_root.glob("**/*.py"))[:50]  # Sample 50 files
 
     if test_files:
         analyze_similarity_distribution(test_files)

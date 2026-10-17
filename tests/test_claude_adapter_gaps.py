@@ -1591,10 +1591,10 @@ class TestScanJsonlForTitleBadge:
         p = self._write_jsonl(tmp_path, [
             {'type': 'assistant', 'message': {'content': [
                 {'type': 'tool_use', 'name': 'Bash',
-                 'input': {'command': 'some prefix\ntia session badge "peyton — live soak"\nsome suffix'}}
+                 'input': {'command': 'some prefix\ntia session badge "trading bot — live soak"\nsome suffix'}}
             ]}},
         ])
-        assert _scan_jsonl_for_title(p) == 'peyton — live soak'
+        assert _scan_jsonl_for_title(p) == 'trading bot — live soak'
 
     def test_non_bash_tool_use_ignored(self, tmp_path):
         from reveal.adapters.claude.handlers.sessions import _scan_jsonl_for_title
