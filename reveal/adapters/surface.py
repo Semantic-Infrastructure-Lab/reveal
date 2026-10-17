@@ -294,6 +294,13 @@ def _scan_surface(
     }
 
 
+def _surface_limit(value: Any, name: str) -> int:
+    """Numeric surface controls need a value; bare presence is not integer one."""
+    if isinstance(value, bool):
+        raise ValueError(f'{name} must be a non-negative integer, not a boolean')
+    return nonnegative_display_limit(value, name)
+
+
 @register_adapter('surface')
 @register_renderer(SurfaceRenderer)
 class SurfaceAdapter(ResourceAdapter):
@@ -316,10 +323,10 @@ class SurfaceAdapter(ResourceAdapter):
         ParamSpec('by', 'string', 'Group entries by directory', '', str,
                   choices=('', 'dir'), role='analysis', cli=CliBinding(('--by',))),
         ParamSpec('depth', 'integer', 'Directory rollup depth (0 = full directory)', 0,
-                  lambda value: nonnegative_display_limit(value, 'depth'), minimum=0,
+                  lambda value: _surface_limit(value, 'depth'), minimum=0,
                   zero_policy='full directory', role='analysis', cli=CliBinding(('--depth',), metavar='N')),
         ParamSpec('top', 'integer', 'Text entries per category (omitted = all; JSON stays complete)', None,
-                  lambda value: nonnegative_display_limit(value, 'top'), minimum=0,
+                  lambda value: _surface_limit(value, 'top'), minimum=0,
                   zero_policy='no text entries', role='presentation', cli=CliBinding(('--top',), metavar='N')),
     )
 
