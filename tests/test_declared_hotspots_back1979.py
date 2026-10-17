@@ -252,6 +252,7 @@ def test_legacy_batch_gate_boundary(project):
 
 @pytest.mark.parametrize('policy,expected', [('none', 0), ('findings', 1)])
 def test_uri_head_retains_preprojection_findings(project, policy, expected):
-    result = run('hotspots://proj', '--format', 'json', '--head', '0', '--fail-on', policy)
+    (project/'b.py').write_text((project/'a.py').read_text(encoding='utf-8'), encoding='utf-8')
+    result = run('hotspots://proj', '--format', 'json', '--head', '1', '--fail-on', policy)
     assert result.returncode == expected, result.stderr
-    assert json.loads(result.stdout)['function_hotspots'] == []
+    assert len(json.loads(result.stdout)['function_hotspots']) == 1
