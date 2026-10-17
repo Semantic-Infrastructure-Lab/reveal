@@ -656,7 +656,6 @@ dart:
   decorators: {target: Reporter, category: classes, expected: ["@deprecated"]}
   bases: {target: Reporter, category: classes, expected: ["Batch"]}
   xfails:
-    test_decorators_extracted_for_annotated_construct: "BACK-1915: Dart class annotation is absent from decorators"
     test_returns_finds_gate_chains: "BACK-1916: Dart catch-handler return lacks an exception-context gate"
     test_statewrites_classifies_field_and_call: "BACK-1917: Dart this.total field assignment is not reported"
 
@@ -698,8 +697,6 @@ scala:
   - {kind: cache, line: 36}
   decorators: {target: Reporter, category: classes, expected: ['@deprecated("fixture", "1")']}
   bases: {target: Reporter, category: classes, expected: ["Batch"]}
-  xfails:
-    test_decorators_extracted_for_annotated_construct: "BACK-1920: Scala class annotation is absent from decorators"
 
 # BACK-1921: manually derived from gdscript/sample.gd, not captured CLI output.
 gdscript:
@@ -741,8 +738,6 @@ gdscript:
   decorators: {target: run, category: functions, expected: ["@rpc"]}
   bases: {target: Reporter, category: classes, expected: ["Batch"]}
   xfails:
-    test_decorators_extracted_for_annotated_construct: "BACK-1922: GDScript rpc annotation is absent from decorators"
-    test_bases_reflects_real_inheritance: "BACK-1923: GDScript extends base is absent from bases"
     test_varflow_declaration_is_write_not_read: "BACK-1924: GDScript method-call argument read is absent"
     test_cross_calls_varflow_json_does_not_crash: "BACK-1924: GDScript method-call argument read is absent"
     test_mutations_finds_read_after_write: "BACK-1925: GDScript initialized variable declaration is not a mutation write"
