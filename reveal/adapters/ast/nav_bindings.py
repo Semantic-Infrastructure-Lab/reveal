@@ -164,9 +164,11 @@ class BindingScope:
     def _owned_binding(self, name: str, node: Any) -> bool:
         """A scoped WRITE binds only targets inside that lexical owner's span."""
         start, end = _span(node)
-        return any(binding is not None and binding[0] <= start and end <= binding[1]
-                   for event in self._events(name)
-                   for binding in [event.get('binding_scope')])
+        for event in self._events(name):
+            binding = event.get('binding_scope')
+            if binding is not None and binding[0] <= start and end <= binding[1]:
+                return True
+        return False
 
     def has_explicit_binding(self, name: str, at_node: Any = None) -> bool:
         """Whether a lexical declaration shadows e.g. a Python builtin."""
