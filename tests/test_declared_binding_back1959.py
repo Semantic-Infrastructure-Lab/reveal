@@ -175,3 +175,26 @@ def test_resource_permission_failure_does_not_probe_another_resource(binding, mo
     with pytest.raises(PermissionError, match='inaccessible'):
         binding.bind_resource_path(query.ResourceSpec(uri_codec='existing-path-first'),
                                    'literal%26', transport='uri')
+
+
+def test_mutated_normalized_list_cannot_skip_validation(binding):
+    calls = []
+
+    def convert(value):
+        calls.append(list(value))
+        return list(value)+['converted']
+
+    declaration = query.ParamSpec('paths', 'array', 'Paths', (), convert, uri_codec='comma-percent')
+    params = binding.bind_declared_params((declaration,), {'paths': ['a,b']}, transport='typed')
+    assert declaration.read(params) == ['a,b', 'converted']
+    assert len(calls) == 1
+    params['paths'].append('')
+    with pytest.raises(ValueError, match='changed|mutat'):
+        declaration.read(params)
+    assert len(calls) == 1
+
+
+def test_list_encoder_rejects_scalar_string(binding):
+    declaration = query.ParamSpec('paths', 'array', 'Paths', (), tuple, uri_codec='comma-percent')
+    with pytest.raises(ValueError, match='list|tuple'):
+        binding.encode_param_value(declaration, 'a,b')
