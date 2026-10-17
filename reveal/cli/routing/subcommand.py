@@ -53,7 +53,14 @@ def dispatch_subcommand(name: str, parser: ArgumentParser,
     ledger = FlagLedger(args, parser=parser, subcommand=name)
     args = ledger.track(args)
     target = peek(args, 'path') or peek(args, 'target')
-    walk_root, patterns = dispatch_scope(str(target) if target else '', peek(args, 'exclude'))
+    from ..invocation import COMMANDS
+    spec = COMMANDS.get(name)
+    if spec is not None and spec.declared_adapter:
+        # The qualified runner establishes scope after binding the operation,
+        # so inaccessible resources can retain their canonical failure answer.
+        walk_root, patterns = None, []
+    else:
+        walk_root, patterns = dispatch_scope(str(target) if target else '', peek(args, 'exclude'))
     try:
         with exclusion_scope(walk_root, patterns), ledger.dispatching(''):
             runner(args)

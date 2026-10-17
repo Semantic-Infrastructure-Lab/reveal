@@ -110,7 +110,13 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
                 from ...utils.results import FailureCause
                 _invalid_answer(adapter, name, path, str(exc), args, FailureCause.ANALYSIS, result_type=expected_type).emit()
                 return
-            root, excludes = dispatch_scope(path, peek(args, 'exclude'))
+            try:
+                root, excludes = dispatch_scope(path, peek(args, 'exclude'))
+            except OSError as exc:
+                from ...utils.results import FailureCause
+                _invalid_answer(adapter, name, path, str(exc), args, FailureCause.ANALYSIS,
+                                result_type=expected_type).emit()
+                return
             with exclusion_scope(root, excludes), gitignore_scope(respect):
                 _declared_answer(adapter, name, path, source, transport, args, expected_type).emit()
             complete(args)

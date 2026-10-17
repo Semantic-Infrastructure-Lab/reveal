@@ -474,6 +474,11 @@ transport defaults. Schema export and generated arguments use those declarations
 Global presentation, exclusions, gitignore and flag accounting retain their existing
 owners.
 
+Qualified declared subcommands retain the parser-aware flag ledger but establish
+their walk scope once inside the declared runner, after resolving the operation.
+An inaccessible resource during scope discovery produces its canonical analysis
+failure answer. Legacy subcommands retain their outer dispatch scope unchanged.
+
 `utils.query_binding.bind_declared_params()` accepts original typed values or a raw
 URI query. It validates without marking application; `ParamSpec.read()` marks actual
 use. Normalized reads do not rerun converters. Replacing a value invalidates its
