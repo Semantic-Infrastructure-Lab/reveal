@@ -6,7 +6,7 @@ import pytest
 
 from conftest import _run_reveal_direct
 from reveal.adapters.patches.adapter import PatchesAdapter
-from reveal.adapters.testability import TestabilityAdapter
+from reveal.adapters.testability import TestabilityAdapter as PressureAdapter
 from reveal.core.treesitter_parse import GrammarUnavailable
 from reveal.testability import patches
 from reveal.testability.boundaries import collect_boundary_profiles
@@ -165,7 +165,7 @@ def test_actual_output_discloses_failure_once_without_changing_legacy_exit(tmp_p
 def test_supported_ts_zero_does_not_claim_python_only(tmp_path):
     src = _write(tmp_path / 'src' / 'ok.ts', 'export const x=1;\n')
     tests = _write(tmp_path / 'tests' / 'ok.test.ts', 'test("x",()=>{});\n')
-    result = TestabilityAdapter(str(src.parent), f'tests={tests.parent}').get_structure()
+    result = PressureAdapter(str(src.parent), f'tests={tests.parent}').get_structure()
     assert result['summary']['total_patch_uses'] == 0
     assert '_patch_note' not in result
     assert not _warning(result, 'analysis_failed')
@@ -200,3 +200,66 @@ def test_patches_empty_text_describes_available_observations(tmp_path, filename,
         assert 'available observations' not in result.stdout
     assert 'JS/TS (jest/vitest)' in result.stdout
     assert ('could not be analyzed' in result.stdout) == (target.suffix == '.py')
+
+
+@pytest.mark.parametrize('owner', ['testability', 'patches'])
+@pytest.mark.parametrize('failure', ['read', 'grammar'])
+def test_output_read_and_grammar_failures_do_not_leak_into_next_call(tmp_path, monkeypatch, owner, failure):
+    src = _write(tmp_path / 'src' / 'ok.py', 'VALUE=1\n')
+    target = _write(tmp_path / 'tests' / 'ok.test.ts', 'vi.mock("./svc");\n')
+    adapter = (PressureAdapter(str(src.parent), f'tests={target.parent}&min_patches=1&include_unresolved=true')
+               if owner == 'testability' else PatchesAdapter(str(target.parent), 'min=1'))
+    real = Path.read_text
+
+    def denied(path, *args, **kwargs):
+        if path == target:
+            raise PermissionError('controlled unreadable test')
+        return real(path, *args, **kwargs)
+
+    def unavailable(*args, **kwargs):
+        raise GrammarUnavailable('typescript', ImportError('controlled missing grammar'))
+
+    with monkeypatch.context() as context:
+        if failure == 'read':
+            context.setattr(Path, 'read_text', denied)
+        else:
+            context.setattr(patches, 'get_tree', unavailable)
+        result = adapter.get_structure()
+    warning, = _warning(result, 'analysis_failed')
+    assert warning['count'] == 1
+    assert warning['files'] == [to_posix(target)]
+    assert ('PermissionError' if failure == 'read' else 'GrammarUnavailable') in warning['message']
+    again = adapter.get_structure()
+    assert not _warning(again, 'analysis_failed')
+    assert not _warning(again, 'parse_recovered')
+    assert (again['summary']['total_patch_uses'] if owner == 'testability' else again['total_uses']) == 1
+
+
+@pytest.mark.parametrize('scan', [patches.scan_patches, patches.scan_patches_ts])
+def test_aggregate_recovery_and_zero_reuse_is_fresh(tmp_path, scan):
+    target = _write(tmp_path / 'ok.test.ts', 'vi.mock("./svc");const broken=;\n')
+    first = scan([tmp_path])
+    assert len(first) == 1
+    assert first.recovered_files == [to_posix(target)]
+
+    target.write_text('test("x",()=>{});\n', encoding='utf-8')
+    again = scan([tmp_path])
+    assert again == []
+    assert again.skipped == again.recovered_files == []
+    assert first.recovered_files == [to_posix(target)]
+
+
+def test_gitignored_invalid_tests_are_policy_skips(tmp_path):
+    from reveal.utils.gitignore import gitignore_scope
+
+    _write(tmp_path / '.gitignore', 'test_ignored.py\n')
+    _write(tmp_path / 'test_good.py', 'from unittest.mock import patch\npatch("svc.ok")\n')
+    _write(tmp_path / 'test_ignored.py', 'def broken(:\n')
+    with gitignore_scope(True):
+        kept = patches.scan_patches([tmp_path])
+    assert len(kept) == 1
+    assert kept.skipped == kept.recovered_files == []
+    with gitignore_scope(False):
+        included = patches.scan_patches([tmp_path])
+    assert len(included) == 1
+    assert len(included.skipped) == 1

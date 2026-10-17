@@ -315,9 +315,8 @@ def test_one():
     assert 'Boundary Fan-Out Hotspots' in text
 
 
-def test_run_testability_ts_note_points_to_patches_adapter(tmp_path):
-    """BACK-543: TS suites get an accurate note pointing to patches://, not the
-    stale 'Jest/Vitest tracked in BACK-374' (support shipped; BACK resolved)."""
+def test_run_testability_ts_clean_zero_needs_no_unsupported_note(tmp_path):
+    """The joined scanner already supports JS/TS; zero mocks is a valid observation."""
     _write(tmp_path / 'src' / 'service.ts', 'export const f = () => 1;\n')
     _write(tmp_path / 'tests' / 'service.test.ts',
            "import { jest } from '@jest/globals';\nit('x', () => {});\n")
@@ -331,15 +330,12 @@ def test_run_testability_ts_note_points_to_patches_adapter(tmp_path):
     with patch('sys.stdout', out):
         run_testability(args)
     report = json.loads(out.getvalue())
-    note = report['_patch_note']
-    assert 'BACK-374' not in note
-    assert 'Python only' not in note
-    assert 'TypeScript' in note
-    assert 'patches://' in note
+    assert report['summary']['total_patch_uses'] == 0
+    assert '_patch_note' not in report
 
 
 def test_run_testability_note_unsupported_lang_has_no_patches_pointer(tmp_path):
-    """BACK-543: a genuinely unsupported language (Go) gets the Python-only note
+    """BACK-543: a genuinely unsupported language (Go) gets the unsupported note
     without misdirecting the user to patches:// (which is Python+TS only)."""
     _write(tmp_path / 'src' / 'service.go', 'package main\nfunc F() int { return 1 }\n')
     _write(tmp_path / 'tests' / 'service_test.go',

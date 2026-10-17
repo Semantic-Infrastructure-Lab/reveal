@@ -5,7 +5,8 @@ category: guide
 
 # patches:// Adapter Guide
 
-`patches://` scans Python tests for mock and monkeypatch pressure. It is a
+`patches://` scans Python and recognized JavaScript/TypeScript tests for mock and
+monkeypatch pressure. It is a
 review tool for finding test setup that repeatedly replaces the same production
 target, reaches into private helpers, or concentrates many patches in one test.
 
@@ -110,6 +111,11 @@ state, sleeps, environment reads, process exits, or mutation.
 - Language support is Python and TypeScript/JavaScript tests (`jest.mock`/`vi.mock` and
   `patch.object`-style calls); TypeScript/JavaScript scanning requires `tree_sitter_language_pack`.
 - Static target resolution is best-effort.
+- Local file read/parse failures and unavailable grammars are disclosed as
+  `analysis_failed` warnings. Recovered syntax is disclosed as `parse_recovered`;
+  usable patch observations remain available. Counts cover all recorded files,
+  with at most five paths shown per diagnostic. These local diagnostics do not
+  establish that every directory was successfully enumerated.
 - `patch.object(adapter, "name")` can identify the patched symbol but may not
   always know the concrete production module.
 - The adapter reports review signals, not CI-failing policy.

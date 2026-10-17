@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from reveal.adapters.base import ResourceAdapter, register_adapter, register_renderer
 from reveal.reveal_types import CONTRACT_VERSION
@@ -154,7 +154,7 @@ class PatchesAdapter(ResourceAdapter):
         groups = ranked[:limit] if limit > 0 else ranked
         targets = {p.target_qualname or p.target_raw for p in patches}
 
-        warnings = [{
+        warnings: List[Any] = [{
             'code': 'W-PATCHES-1',
             'message': 'Patch pressure is advisory; mocking external boundaries can be correct.',
         }]

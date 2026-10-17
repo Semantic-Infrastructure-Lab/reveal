@@ -43,7 +43,7 @@ Read the output as a ranked review queue:
 
 ## What It Finds
 
-`patches://` scans Python tests with AST parsing and detects:
+Both `patches://` and `reveal testability` scan Python tests with AST parsing and detect:
 
 - `@patch("pkg.mod.name")`
 - `patch("pkg.mod.name")`
@@ -134,7 +134,15 @@ best-effort. Do not treat the report as a precise runtime call graph.
 
 ## Limits
 
-- Initial language support is Python tests and Python production code.
+- Patch detection supports Python and recognized JavaScript/TypeScript test files.
+  Production profiles use the existing per-language structure analysis and boundary taxonomy.
+- Local test-file read/parse failures and unavailable JS/TS grammars appear as
+  `analysis_failed` warnings. Recovered tree-sitter syntax appears as
+  `parse_recovered` warnings; surviving observations remain in the report.
+  Production boundary-profile failures and recovered syntax are disclosed separately.
+  Diagnostic counts cover all recorded files; displayed path samples stop at five.
+- These diagnostics do not prove complete directory traversal: the shared walker can
+  omit a directory it cannot enumerate before a local scanner sees its files.
 - Dynamic patch targets are preserved but may have lower confidence.
 - Static target resolution is best-effort.
 - Project-specific boundary words may need future config.
