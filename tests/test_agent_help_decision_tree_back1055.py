@@ -37,4 +37,4 @@ def test_help_quick_routes_the_old_tree_intents():
     """Intents the removed tree carried live in help://quick now (e.g. --check, --grep)."""
     quick = HelpAdapter('').get_element('quick')
     uses = {e['use'] for e in quick['decision_tree']}
-    assert {'--check', '--grep', 'ast://', 'reveal FILE NAME'} <= uses
+    assert {'reveal check', '--grep', 'ast://', 'reveal FILE NAME'} <= uses

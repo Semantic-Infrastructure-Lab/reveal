@@ -1309,11 +1309,11 @@ class HelpAdapter(ResourceAdapter):
                 ),
                 'examples': [
                     {'uri': 'reveal /etc/nginx/nginx.conf', 'description': 'See all server blocks'},
-                    {'uri': 'reveal /etc/nginx/nginx.conf --check', 'description': 'Run N001-N007 rules'},
-                    {'uri': 'reveal /etc/nginx/conf.d/example.com.conf --check', 'description': 'Check a single vhost'},
+                    {'uri': 'reveal check /etc/nginx/nginx.conf', 'description': 'Run N001-N007 rules'},
+                    {'uri': 'reveal check /etc/nginx/conf.d/example.com.conf', 'description': 'Check a single vhost'},
                 ],
                 'cli_flags': [
-                    '--check                      # Run N001-N007 nginx quality rules',
+                    'reveal check <path>           # Run nginx quality rules',
                     '--diagnose                   # Audit nginx error log for ACME/SSL failures',
                     '--check-acl                  # Verify nginx ACL configuration',
                     '--validate-nginx-acme        # Validate ACME challenge paths',
@@ -1523,7 +1523,7 @@ class HelpAdapter(ResourceAdapter):
         {'want': 'search text or an identifier across many files (with enclosing-function context)',
          'use': '--grep', 'example': "reveal src/ --grep 'API_TIMEOUT'"},
         {'want': 'check a file or directory for quality issues (lint-style rules)',
-         'use': '--check', 'example': "reveal src/app.py --check"},
+         'use': 'reveal check', 'example': "reveal check src/app.py"},
         {'want': 'check import health / circular deps',
          'use': 'imports://', 'example': "reveal imports://src/"},
         {'want': 'compare files or git revisions',
@@ -1697,8 +1697,8 @@ class HelpAdapter(ResourceAdapter):
                     'example': "reveal src/auth.py  &&  reveal 'calls://src/?target=validate_token'",
                 },
                 {
-                    'adapters': ['diff', 'stats'],
-                    'description': 'PR review: what changed + quality impact',
+                    'adapters': ['pack', 'ast'],
+                    'description': 'PR review: changed context + complex functions',
                     'example': "reveal pack src/ --since main --content  &&  reveal 'ast://src/?complexity>10'",
                 },
                 {

@@ -273,7 +273,7 @@ Example Compliant Output:
 
 Validation:
   Run V023 validation rule to check compliance:
-    reveal reveal/adapters/myadapter.py --check --select V023
+    reveal check reveal/adapters/myadapter.py --select V023
 
 Documentation:
   Full specification: reveal help://output  (reveal/docs/development/OUTPUT_CONTRACT.md)
@@ -345,7 +345,7 @@ def handle_rules_list(version: str, show_all: bool = False, fmt: str = 'text'):
           "rules still run beyond them as best-effort.")
     if not show_all:
         print("(reveal's internal self-check rules are hidden — 'reveal --rules --all' includes them)")
-    print("\nUsage: reveal <file> --check --select B,S --ignore E501")
+    print("\nUsage: reveal check <file> --select B,S --ignore E501")
     sys.exit(0)
 
 

@@ -346,7 +346,7 @@ def get_help() -> Dict[str, Any]:
         'see_also': [
             'reveal help://env - Environment variable adapter',
             'reveal --agent-help - Agent usage patterns',
-            'reveal file.py --check - Code quality checks'
+            'reveal check file.py - Code quality checks'
         ]
     }
 ```

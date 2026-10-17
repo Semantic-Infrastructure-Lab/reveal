@@ -182,7 +182,7 @@ Examples:
 1. Implement detection logic in rule file
 2. Add test cases
 3. Run tests: `pytest tests/test_<code>_rule.py`
-4. Test manually: `reveal <file> --check --select=<prefix>`
+4. Test manually: `reveal check <file> --select=<prefix>`
 
 ## Template Structure
 
@@ -286,8 +286,8 @@ reveal file<extension> --outline
 reveal file<extension> function_name
 
 # Test rule (works immediately, no registration step)
-reveal file --check
-reveal file --check --select=<PREFIX>
+reveal check file
+reveal check file --select=<PREFIX>
 ```
 
 ## Best Practices
@@ -335,7 +335,7 @@ $ reveal scaffold adapter github github:// --force
 After scaffolding and implementing your component:
 
 1. **Run tests**: `pytest tests/ -v`
-2. **Check quality**: `reveal . --check`
+2. **Check quality**: `reveal check .`
 3. **Update docs**: Complete the generated documentation
 4. **Submit PR**: Include tests, docs, and examples
 

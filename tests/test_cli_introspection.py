@@ -329,7 +329,7 @@ class TestGetLanguageInfoDetailed(unittest.TestCase):
 
         self.assertIn("💡 Usage Examples:", result)
         self.assertIn("reveal file.py", result)
-        self.assertIn("--check", result)
+        self.assertIn("reveal check file.py", result)
         self.assertIn("--explain", result)
 
     def test_get_info_advertises_explain_file_not_stale_explain(self):

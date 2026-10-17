@@ -163,7 +163,7 @@ reveal nginx://app.example.com/config     # view raw config to verify
 ### Notes
 
 - **Upstream reachability** checks TCP connectivity only (3s timeout) — not HTTP response codes
-- **Remote servers**: nginx:// only works locally. For SSH-accessed nginx, use file-path form: `reveal /etc/nginx/conf.d/file.conf --check`
+- **Remote servers**: nginx:// only works locally. For SSH-accessed nginx, use file-path form: `reveal check /etc/nginx/conf.d/file.conf`
 - **SSL cert status**: `reveal ssl://domain --check` — nginx:// doesn't check cert validity, only config structure
 - **Running N001–N012 rules**: use `reveal check /path/to/nginx.conf`, not `nginx://`. Use `--select N004` to focus on one rule; `--ignore N011,E501` to suppress noise rules.
 
@@ -436,7 +436,7 @@ Suppress per-server: `# reveal:allow-no-rate-limit`
 On configs with many domains, suppress passing rules — see only actionable findings:
 
 ```bash
-reveal /etc/nginx/conf.d/users/myuser.conf --check --only-failures
+reveal check /etc/nginx/conf.d/users/myuser.conf --only-failures
 ```
 
 #### `--no-group`
@@ -444,7 +444,7 @@ reveal /etc/nginx/conf.d/users/myuser.conf --check --only-failures
 By default, if one rule fires ≥ 10 times in a file, results collapse to a summary line. `--no-group` expands all occurrences:
 
 ```bash
-reveal /etc/nginx/conf.d/users/myuser.conf --check --no-group
+reveal check /etc/nginx/conf.d/users/myuser.conf --no-group
 ```
 
 ---
@@ -674,7 +674,7 @@ reveal /etc/nginx/conf.d/users/myuser.conf --extract acme-roots
 reveal /etc/nginx/conf.d/users/myuser.conf --check-conflicts
 
 # Step 7: Are there problematic timeout settings?
-reveal /etc/nginx/conf.d/users/myuser.conf --check
+reveal check /etc/nginx/conf.d/users/myuser.conf
 ```
 
 ---

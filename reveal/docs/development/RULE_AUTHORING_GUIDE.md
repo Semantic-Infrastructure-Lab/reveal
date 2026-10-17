@@ -8,7 +8,7 @@ help_category: dev_guides
 # Reveal Custom Rule Authoring Guide
 
 **For anyone who wants a quality check reveal doesn't ship** — write a rule
-once, outside the reveal package, and it's picked up by every `reveal --check`
+once, outside the reveal package, and it's picked up by every `reveal check <path>`
 without registering it anywhere.
 
 This covers the two *external* discovery locations (user-global and
@@ -26,7 +26,7 @@ rules use the identical file layout and are discovered the same way.
 
 Project-local rules are anchored to the **project root**, not the current
 working directory — they're found identically whether reveal runs from the
-root or a subdirectory. Both locations are scanned on every `reveal --check`
+root or a subdirectory. Both locations are scanned on every `reveal check <path>`
 in addition to reveal's own built-in rules; there is no opt-in flag.
 
 ## The three requirements
@@ -49,7 +49,7 @@ verbosity):
 3. **Class name must equal the filename stem exactly.** `X001.py` must
    define `class X001(BaseRule)`. A file that matches the naming pattern but
    has no matching class logs `WARNING: File ... does not contain a valid
-   rule class named X001` — check `reveal --check -v` if a rule you wrote
+   rule class named X001` — check `reveal check <path> -v` if a rule you wrote
    doesn't show up in `reveal --rules`.
 
 ## Minimal example
@@ -84,7 +84,7 @@ class X999(BaseRule):
 Works immediately, no registration step:
 
 ```bash
-reveal sample.py --check --select=X
+reveal check sample.py --select=X
 # sample.py:1:1 ⚠️  X999 todo-marker-found: found TODO marker
 
 reveal --rules   # confirms X999 is discovered and lists its file-pattern coverage
@@ -112,7 +112,7 @@ loosely-typed rule:
 
 ```bash
 reveal --rules                 # is it discovered at all?
-reveal --check -v <file>       # -v surfaces the WARNING/ERROR logged by discovery
+reveal check -v <file>       # -v surfaces the WARNING/ERROR logged by discovery
 ```
 
 Most common causes, in order: file not inside a category subdirectory, class

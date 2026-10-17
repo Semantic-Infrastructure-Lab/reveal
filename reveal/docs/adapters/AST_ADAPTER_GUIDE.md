@@ -568,7 +568,7 @@ git diff --name-only | grep '\.py$' | \
   xargs -I{} reveal 'ast://{}?lines>50'
 
 # Run full quality checks on changed files
-git diff --name-only | xargs -I{} reveal {} --check
+git diff --name-only | xargs -I{} reveal check {}
 ```
 
 **Expected outcome**: Catch quality issues before they enter the codebase.

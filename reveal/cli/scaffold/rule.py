@@ -130,7 +130,7 @@ def scaffold_rule(
             f'1. Implement detection logic in {rule_file}',
             f'2. Add test cases to {test_file}',
             f'3. Run tests: pytest {test_file}',
-            f'4. Test manually: reveal <file> --check --select={prefix}',
+            f'4. Test manually: reveal check <file> --select={prefix}',
             f'5. Document examples in {doc_file}'
         ]
     }

@@ -203,7 +203,7 @@ reveal file.py --name auth --type function
 reveal file.py --name auth --type function --sort=-complexity
 
 # Step 4: Complex multi-condition query → switch to URI
-# (--search becomes ?name~=, rest maps cleanly)
+# (--name becomes ?name~=, rest maps cleanly)
 reveal 'ast://file.py?name~=auth&type=function&complexity>10&lines>20&sort=-complexity'
 
 # Step 5: Combine with cross-adapter patterns

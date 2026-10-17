@@ -30,14 +30,14 @@ For the full reference with output samples, see [`AGENT_HELP.md`](../AGENT_HELP.
 | `--varflow VAR` | Where is VAR read, written, or tested? |
 | `--varflow VAR --cross-calls` | Same, but follows VAR across function call boundaries |
 | `--narrow VAR` | How does VAR's type narrow through control-flow branches? |
-| `--deps` | What variables flow INTO this range? |
+| `--deps` | Candidate inputs (undefined reads; review bindings) |
 | `--mutations` (alias `--writes`) | What does this range write that's read later? |
 | `--sideeffects` | What DB/HTTP/FS/log/sleep calls fire here? |
 | `--loopmap` | What loops exist, and how are they nested? |
 | `--fanout` | Which loops make DB/HTTP/FS/log calls inside them? (N+1 / per-item fan-out review) |
-| `--statewrites` | What persistent/shared state does this mutate (field/env/session/cache/db/file writes)? |
+| `--statewrites` | Detected field/env/session/cache/db/file writes (module globals may be missed) |
 | `--keys VAR` | Which keys/properties of VAR are read, written, or tested (dict/object/array shape)? |
-| `--returns` | Each exit + the condition chain that gates it |
+| `--returns` | Exit sites with enclosing syntactic conditions (not a reachability proof) |
 | `--boundary` | One-shot contract: inputs + environment + effects |
 
 ---
@@ -67,10 +67,10 @@ reveal app.py :123 --around
 Planning to extract a block of lines into a new function?
 
 ```bash
-reveal file.py :120-340 --deps        # → these become parameters
-reveal file.py :120-340 --mutations   # → these become return values
+reveal file.py :120-340 --deps        # → candidate parameters; review bindings
+reveal file.py :120-340 --mutations   # → candidate return values
 reveal file.py :120-340 --exits       # → spot unexpected early exits
-reveal file.py :120-340 --boundary    # → unified view of all of the above
+reveal file.py :120-340 --boundary    # → inputs + environment + classified effects
 ```
 
 ---
@@ -83,7 +83,7 @@ Useful for WordPress, CodeIgniter, or any large flat PHP file.
 reveal legacy_handler.php :878-2130 --ifmap        # control-flow skeleton
 reveal legacy_handler.php :120-340 --boundary      # what does this slice consume + emit?
 reveal legacy_handler.php :120-340 --sideeffects   # which DB / curl / session calls fire?
-reveal legacy_handler.php :120-340 --returns       # each exit + the gates that lead to it
+reveal legacy_handler.php :120-340 --returns       # exits + reported syntactic conditions
 reveal legacy_handler.php :120-340 --varflow $userId  # where does $userId flow?
 ```
 
@@ -114,6 +114,10 @@ Different scope, different question.
 ---
 
 ## Known Limitations
+
+- `--returns` reports static syntactic gates; enclosing branch/handler conditions do not describe every preceding exit, loop iteration or runtime exception. Check source before making reachability claims.
+- `--deps` can include builtins and local with/except/catch/comprehension bindings as inputs. `--boundary` inherits this limitation; review candidates before extraction.
+- `--statewrites` may miss module-global assignments and writes such as `STATE[k] = v`. An empty result does not establish that shared state is untouched.
 
 - PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but classified as READ rather than WRITE.
 - Variable tracking is name-based; same-named variables in different scopes within a flat file may merge.

@@ -149,13 +149,13 @@ reveal diff://git://HEAD~1/src/:git://HEAD/src/
 
 ```bash
 # Run all checks
-reveal src/ --check
+reveal check src/
 
 # Security + bugs only (fast)
-reveal src/ --check --select B,S
+reveal check src/ --select B,S
 
 # Specific file
-reveal src/auth.py --check --select B,S
+reveal check src/auth.py --select B,S
 ```
 
 ### Review specific changes
@@ -580,12 +580,12 @@ reveal diff://git://main/.:git://HEAD/. --format json | \
 ```bash
 # Before: Capture current state
 reveal src/module.py function_name
-reveal src/module.py --check --select C
+reveal check src/module.py --select C
 reveal src/module.py --outline
 
 # After: Verify improvements
 reveal diff://git://HEAD/src/module.py:src/module.py
-reveal src/module.py --check
+reveal check src/module.py
 reveal 'imports://src?circular'
 ```
 
@@ -593,10 +593,10 @@ reveal 'imports://src?circular'
 
 ```bash
 # Check for duplicate code
-reveal src/ --check --select D
+reveal check src/ --select D
 
 # Specific duplication check
-reveal src/module.py --check --select D001,D002
+reveal check src/module.py --select D001,D002
 ```
 
 ### Trace call relationships
@@ -817,10 +817,10 @@ issues.
 
 ```bash
 # Check all link rules
-reveal docs/ --check --select L
+reveal check docs/ --select L
 
 # Fast check (internal links + routing only)
-reveal docs/ --check --select L001,L003
+reveal check docs/ --select L001,L003
 
 # Extract all links
 reveal README.md --links
@@ -1055,7 +1055,7 @@ reveal ssl://example.com --check
 # Exit code 0 = healthy, 1 = warning (<30 days), 2 = critical (<7 days)
 
 # Combine with nginx config analysis
-reveal /etc/nginx/nginx.conf --check  # N004 detects ACME path issues, N006 detects timeout mismatches
+reveal check /etc/nginx/nginx.conf  # N004 detects ACME path issues, N006 detects timeout mismatches
 
 # Batch output shows failure reason and expiry dates inline:
 # example.com    EXPIRED  3 days ago  (Jan 25, 2026)
@@ -1311,7 +1311,7 @@ reveal stats://src/ --format=json | jq '.quality_score'
 
 ```bash
 # Check multiple files
-find src/ -name "*.py" -print0 | xargs -0 -I {} reveal {} --check
+find src/ -name "*.py" -print0 | xargs -0 -I {} reveal check {}
 
 # Process all markdown
 fd -e md | reveal --stdin --validate-schema hugo
@@ -1361,7 +1361,7 @@ reveal cpanel://USERNAME/ssl --format=json | \
   sed 's/^/ssl:\/\//' | reveal --stdin --check-live
 
 # Quality check with severity filter (only high+)
-reveal src/ --check --severity high
+reveal check src/ --severity high
 
 # Full pipeline: extract domains → batch SSL → JSON → filter failures
 reveal nginx.conf --extract domains | sed 's/^/ssl:\/\//' | \
@@ -1501,7 +1501,7 @@ reveal nginx.conf server_myapp
 reveal nginx.conf --format=json | jq '.structure.upstreams'
 
 # Check for common issues
-reveal /etc/nginx/nginx.conf --check
+reveal check /etc/nginx/nginx.conf
 # N001: Duplicate backends
 # N002: SSL servers missing certificate directives
 # N003: Proxy locations missing X-Real-IP, X-Forwarded-For
@@ -1510,8 +1510,8 @@ reveal /etc/nginx/nginx.conf --check
 # N006: send_timeout too short for client_max_body_size (HIGH — silent uploads)
 
 # Large generated configs collapse repeated rules by default
-reveal ea-nginx.conf --check          # N003 x2,685 shown as one summary line
-reveal ea-nginx.conf --check --no-group  # expand all occurrences
+reveal check ea-nginx.conf          # N003 x2,685 shown as one summary line
+reveal check ea-nginx.conf --no-group  # expand all occurrences
 
 # Check nobody-user ACL access (cPanel ACME requirement)
 reveal /path/user.conf --check-acl

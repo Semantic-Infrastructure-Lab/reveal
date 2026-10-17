@@ -8,7 +8,7 @@ help_category: ai_guides
 # Reveal - AI Agent Reference
 **Version:** 0.131.0
 **Purpose:** Comprehensive guide for AI code assistants
-**Token Cost:** ~49,000 tokens
+**Token Cost:** estimated from rendered text by `help://` (characters / 4; not model tokenization)
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
 
 ---
@@ -33,13 +33,13 @@ help_category: ai_guides
 
 Guides >200 lines show the first section by default (progressive disclosure). Append `/full` to get the complete guide.
 
-`--help` lists flags, `--agent-help` gives task recipes, and `help://` goes one topic at a time.
+**Entry order:** start with `reveal --agent-help`, then use `reveal help://quick` to choose a tool, then `reveal help://<topic>` for its details. Use `--help` for the raw flag listing.
 
 ---
 
 ## Before You Read This
 
-**This is the start of a long reference (`reveal help://agent/full`, ~49,000 tokens). You do not need the rest upfront:** the table below covers the common tasks, and `reveal help://quick` routes everything else.
+**This is the start of a long reference (`reveal help://agent/full`). You do not need the rest upfront:** the table below covers the common tasks, and `reveal help://quick` routes everything else.
 
 **Quote every URI** (`reveal 'ast://src/?complexity>10'`): `>`, `<`, `&` and `|` are shell operators.
 
@@ -91,14 +91,14 @@ reveal 'help://schemas/<adapter>'  # Machine-readable adapter schema (preferred 
 reveal 'help://examples/<task>'    # Canonical query recipes per task category
 
 # This guide — comprehensive reference
-reveal --agent-help              # First sections of this file (~1,200 tokens); reveal help://agent/full for all
+reveal --agent-help              # First sections of this file (size estimated by help://); reveal help://agent/full for all
 
 # Raw flag/subcommand listing (different surface — argparse-generated)
 reveal --help                    # Global flags in full, specialized groups collapsed
 reveal --help-all                # Every flag, every subcommand, with one-liners
 ```
 
-**For agents: the canonical discovery recipe** is `reveal --discover` (full registry as JSON in one call) or, for a single adapter, `reveal 'help://schemas/<adapter>' --format=json`. Both return query params, operators, output type names, and example queries — generate valid queries from the schema rather than hardcoding URI syntax.
+**For machine-readable query construction:** use `reveal 'help://schemas/<adapter>' --format=json` for one adapter. `reveal --discover` provides the full registry when you need it. Generate query parameters from these schemas.
 
 `help://schemas/<adapter>` returns the discovery tier: every query param and
 operator, plus each output type's **name and description**. The full JSON-Schema
@@ -251,7 +251,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal health [path]` | Unified health: code rules + SSL + databases + DNS in one report | `reveal health --help` |
 | `reveal pack <path>` | Token-budgeted context snapshot for LLM consumption (use `--budget`, `--focus`, `--since`) | `reveal pack --help` |
 | `reveal dev <command>` | Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config | `reveal dev --help` |
-| `reveal scaffold <kind>` | Older alias of `reveal dev new-*` — prefer `reveal dev` for new work | `reveal scaffold --help` |
+| `reveal scaffold <kind>` | Older alias of `reveal dev new-*` — prefer `reveal dev` for new work (compatibility reference) | `reveal scaffold --help` |
 | `reveal offline` | Pre-download tree-sitter grammars for offline/air-gapped use | `reveal offline --help` |
 
 **Rule of thumb:**
@@ -320,9 +320,7 @@ reveal src/main.py --format=json | jq '.structure.functions[]? | select(.complex
 
 These answer different questions. The element-level mode is the entry point to all nav flags. See the "Navigate inside a function" task below.
 
-**Token impact:**
-- Traditional approach (read all files): ~5,000 tokens
-- With reveal: ~200 tokens (25x reduction)
+**Token impact:** depends on the target and selected output. See [BENCHMARKS.md](BENCHMARKS.md) for measured comparisons and their methodology.
 
 ---
 
@@ -453,7 +451,9 @@ reveal file.py --name get_repository
 reveal file.py --name get_repository --sort=-line_count
 ```
 
-**Scope of `--name`:** matches named code elements only — functions, classes, structs, imports. It does **not** search text content. For text search, use `--grep`. (`--search` is a deprecated alias for `--name`.)
+**Matching syntax:** `--name auth` uses a regular expression, like `ast://...?name~=auth`. URI `name=*auth*` uses a glob. Quote patterns containing shell operators.
+
+**Scope of `--name`:** matches named code elements only — functions, classes, structs, imports. It does **not** search text content. For text search, use `--grep`. (`--search` is a deprecated alias; it emits a replacement note.)
 
 ```bash
 reveal file.py --name LIVE_SIGNALS        # ← finds nothing (LIVE_SIGNALS is a variable)
@@ -518,11 +518,6 @@ reveal check src/ --profile security      # S001 secrets + link validity
 reveal check src/ --profile ci-strict     # all rules, strict thresholds
 reveal --profiles                          # list all profiles with rule sets
 
-# Legacy flag form (still works)
-reveal file.py --check
-reveal file.py --check --select B,S    # Bugs & security only
-reveal file.py --check --select C,E    # Complexity & errors only
-
 # Specific file types
 reveal check nginx.conf                # Nginx validation (N001-N012)
 reveal check Dockerfile                # Docker best practices (S701)
@@ -574,6 +569,8 @@ Quality Issues (3):
     except Exception: pass
     Suggestion: Log or re-raise — silent pass hides bugs
 ```
+
+**Compatibility:** normal file/directory checks use `reveal check <path>`. File-list batches still require `reveal --stdin --check`; `check` does not accept stdin. This batch form preserves per-file output and aggregate exit status. URI health checks also retain `--check`. The deprecated direct file flags `--check`/`--lint` emit a replacement note.
 
 **Pipeline usage:**
 ```bash
@@ -714,7 +711,7 @@ reveal app.py --head 5                 # First 5 functions
 reveal app.py --tail 5                 # Last 5 functions (where bugs cluster!)
 ```
 
-**Why tail is useful:** Technical debt and bugs often cluster at the end of files. Functions added later tend to be rushed or less reviewed.
+**Why tail is useful:** Inspect the final functions or headings when that is where your target context lies. Position alone does not establish code quality.
 
 **Advanced extraction:**
 ```bash
@@ -879,7 +876,9 @@ reveal flat_file.php :2928-3663 --flowto
 ```
 Verdict: `✓ CLEAR` (no exits), `~ CONDITIONAL` (only loop breaks/continues), `⚠ BLOCKED` (hard return/raise).
 
-**`--deps` → variables flowing INTO a range (v0.78.0+)**
+**`--deps` → candidate inputs to a range (v0.78.0+)**
+
+Undefined-read candidates can include builtins and locally bound names (with/except/catch targets and comprehension variables). Review bindings in source before treating the list as function parameters; `--boundary` inherits these input limits.
 ```bash
 reveal flat_file.php :1136-1463 --deps
 reveal app.py process_batch --deps --range 20-80
@@ -899,7 +898,7 @@ reveal app.py process_batch --mutations --range 20-80
 # RETURN chunk_upload_success          written L1455, next read L1466
 # RETURN is_rate_limit_error           written L1386, next read L1466
 ```
-Shows which variables the caller would need back — what would become return values if you extracted this block. Together with `--deps`, this is a full refactoring pre-flight.
+Suggests variables the caller may need back — what would become return values if you extracted this block. Together with `--deps`, this supplies candidates to review before extraction; it is not a complete refactoring contract.
 
 > `--writes` is an alias for `--mutations` — use whichever reads more naturally. Empty-result message says "No read-after-write hazards" with a `--varflow` hint.
 
@@ -965,7 +964,7 @@ reveal file.php :1-800 --statewrites
 # L193     field    self.ref
 # L196     field    self.subpath
 ```
-`--mutations` is local-variable/refactor oriented (read-after-write hazards) and `--sideeffects` is call oriented (plus an env property channel, BACK-644) — neither sees an assignment like `self.x = value`, `$obj->x = value`, or `this.x = value`. `--statewrites` classifies assignment targets that touch shared state: `field` (any member-access assignment target, any receiver), `env`/`session` (subscript writes to known superglobal bases — `os.environ[...]`, `process.env.X`, `$_SESSION[...]`, `$_COOKIE[...]`), plus `cache`/`db`/`file`/`env`/`session` writes already known to `--sideeffects`'s call taxonomy, merged in by kind. `db` inherits `--sideeffects`'s existing imprecision (query calls are included alongside true writes, since CRUD-verb detection isn't attempted) rather than a new classifier. True global-vs-local scope distinction and DB column/table extraction are out of scope for this flag. Works on PHP, Python, and JS/TS.
+`--mutations` is local-variable/refactor oriented (read-after-write hazards) and `--sideeffects` is call oriented (plus an env property channel, BACK-644) — neither sees an assignment like `self.x = value`, `$obj->x = value`, or `this.x = value`. `--statewrites` classifies assignment targets that touch shared state: `field` (any member-access assignment target, any receiver), `env`/`session` (subscript writes to known superglobal bases — `os.environ[...]`, `process.env.X`, `$_SESSION[...]`, `$_COOKIE[...]`), plus `cache`/`db`/`file`/`env`/`session` writes already known to `--sideeffects`'s call taxonomy, merged in by kind. `db` inherits `--sideeffects`'s existing imprecision (query calls are included alongside true writes, since CRUD-verb detection isn't attempted) rather than a new classifier. Module-global assignments and writes such as `STATE[k] = v` may be missed. DB column/table extraction is not provided; an empty result does not establish the absence of shared-state writes. Works on PHP, Python, and JS/TS.
 
 **`--keys VAR` → dynamic key/property access surface (BACK-439d)**
 ```bash
@@ -995,7 +994,7 @@ reveal flat_file.php :120-340 --returns
 #
 # RETURN    L340:  return true  [unconditional]
 ```
-For each exit point (return/raise/throw/die), shows the full condition chain that must be true to reach it. `[unconditional]` means the exit is reachable without any guard. Complements `--exits` (which locates exits) with path analysis (which conditions gate each one). Works on the same languages as `--sideeffects` (Python, PHP, JS/TS, Go, Rust, Java, Kotlin, C#, C, C++, Swift, Ruby).
+For exit points (return/raise/throw/die), reports enclosing syntactic conditions. This is static inspection, not a proof of reachability: enclosing branch/handler conditions do not describe every preceding exit, loop iteration or runtime exception. `[unconditional]` means no gate was reported, not that execution necessarily reaches the exit. Compare with `--ifmap`/`--catchmap` and source before drawing a path conclusion. Works on the same languages as `--sideeffects` (Python, PHP, JS/TS, Go, Rust, Java, Kotlin, C#, C, C++, Swift, Ruby).
 
 **`--boundary` → boundary contract: INPUTS / ENVIRONMENT / EFFECTS (v0.81.0+)**
 ```bash
@@ -1059,8 +1058,8 @@ reveal app.py process_batch --range 7-12      # full source of that branch only
 **Workflow — refactoring pre-flight (extract function):**
 ```bash
 # Planning to extract lines 1136-1463 into a function?
-reveal flat_file.php :1136-1463 --deps        # → these become parameters
-reveal flat_file.php :1136-1463 --mutations   # → these become return values
+reveal flat_file.php :1136-1463 --deps        # → candidate parameters; check bindings
+reveal flat_file.php :1136-1463 --mutations   # → candidate return values
 reveal flat_file.php :1136-1463 --exits       # → check for unexpected early exits
 ```
 
@@ -1195,7 +1194,7 @@ reveal review ./src             # Review a directory
 # Manual approach (more control)
 git diff --name-only | reveal --stdin --outline   # Structure of changed files
 git diff --name-only | grep "\.py$" | reveal --stdin --check  # Quality check
-reveal src/changed_file.py --check
+reveal check src/changed_file.py
 reveal src/changed_file.py changed_function
 ```
 
@@ -1302,37 +1301,32 @@ reveal 'git://.?type=ownership&limit=500'                      # cap the history
 
 ### Task: "Understand file relationships"
 
-**Pattern:**
+Use each view for its question:
+
 ```bash
-# See imports
-reveal app.py --format=json | jq '.structure.imports[]?'
+# Forward import graph: what modules does this tree import?
+reveal imports://src/
 
-# See class hierarchy
-reveal app.py --outline
+# Reverse imports: what depends on this module?
+reveal 'depends://src/database.py?depth=1'
 
-# Find what imports a module
-grep -r "import database" src/
+# Declared contracts and their implementations (for supported contract kinds)
+reveal contracts src/
 
-# See all functions in directory
-find src/ -name "*.py" | reveal --stdin --format=json | \
-  jq '.structure.functions[]? | {file, name, lines: .line_count}'
+# Rank modules by incoming import edges (fan-in)
+reveal 'imports://src/?rank=fan-in'
+
+# Named functions in the tree
+reveal 'ast://src/?type=function'
+
+# Module edges derived from calls, rather than imports
+reveal 'calls://src/?modules=true'
 ```
 
-**--outline flag:** Shows hierarchical structure (classes with their methods, nested functions, decorators).
-
-**Relationship analysis patterns:**
-```bash
-# Find all classes that inherit from Base
-grep -r "class.*Base" src/ | reveal --stdin --outline
-
-# Find files with many imports (coupling indicator)
-find src/ -name "*.py" | reveal --stdin --format=json | \
-  jq 'select(.structure.imports | length > 20) | .file'
-
-# Find intra-project imports (each import is {line, content, file})
-find src/ -name "*.py" | reveal --stdin --format=json | \
-  jq '.structure.imports[]? | select(.content | contains("src.")) | "\(.file):\(.line) \(.content)"'
-```
+For a class hierarchy within one file, use `reveal app.py --outline`.
+`contracts` lists implementers of detected contracts; it is not a general subclass search.
+Import and call graphs are static approximations with different scope and resolution rules;
+inspect their warnings and confirm important edges in source.
 
 ---
 
@@ -1537,7 +1531,7 @@ Output: one line per violation with file, line, and direction. Clean output = �
 
 **Scan root tip**: scan from the project root (not a subdirectory) when imports use absolute package paths (e.g. `from myapp.utils import x`). Scanning too deep causes the resolver to miss edges, producing false fan-in=0 entries.
 
-**Limitations:** Dynamic imports (`importlib.import_module`) and `TYPE_CHECKING`-only imports are not tracked (same as `imports://`). Results are conservative — false negatives possible, never false positives.
+**Limitations:** Dynamic imports (`importlib.import_module`) and `TYPE_CHECKING`-only imports are not tracked (same as `imports://`). Static resolution can miss edges or infer false edges, especially through name-based fallbacks. Confirm consequential relationships in source.
 
 **Interpreting absence of evidence:** `count: 0` from `depends://` means no *static* importer was found in the scanned path. Dynamic imports (plugin loaders, `importlib.import_module`, conditional lazy imports) are not tracked and will not appear here. Confirm a module is truly unused before deleting it if the codebase uses runtime import patterns.
 
@@ -1555,11 +1549,9 @@ reveal hotspots . --files-only     # Only file-level hotspots
 reveal hotspots . --min-complexity 15  # Raise complexity threshold
 reveal hotspots . --format json    # JSON for CI/scripting
 
-# Legacy stats:// form (still works)
-reveal stats://. --hotspots
 ```
 
-**Output:** Files ranked by quality score (worst first) + complex functions with cyclomatic complexity scores. Each function shows a test-coverage indicator: ✅ (a `test_<func>` function exists in `tests/`/`test/`/`spec/`, or a `test_<module>.py` file covers the module) or ⚪ (no test match found), or ❔ (no known test convention for the language — not a claim either way). Test matching follows each language's conventions (Go `_test.go` + `TestXxx`, Rust `#[test]`, JS/TS `*.test.*`/`*.spec.*`, JUnit `FooTest`/`testBar`). JSON output adds `has_test_hint: true/false/null` per function (`null` = no test convention known for that language).
+**Output:** Files ranked by quality score (worst first) + complex functions with cyclomatic complexity scores. Each function shows a test-name-match hint (not measured coverage): ✅ (a `test_<func>` function exists in `tests/`/`test/`/`spec/`, or a `test_<module>.py` file matches the module name) or ⚪ (no test match found), or ❔ (no known test convention for the language — not a claim either way). Test matching follows each language's conventions (Go `_test.go` + `TestXxx`, Rust `#[test]`, JS/TS `*.test.*`/`*.spec.*`, JUnit `FooTest`/`testBar`). JSON output adds `has_test_hint: true/false/null` per function (`null` = no test convention known for that language).
 
 **Use case:** Identify the 10 worst files in a codebase — start technical debt work here. Output is the same data `reveal review` uses to surface hotspots in PR reviews.
 
@@ -1712,7 +1704,6 @@ reveal dev inspect-config                      # Show effective .reveal.yaml res
 
 **Use case:** Reveal is intentionally extensible — when an agent needs to navigate a domain reveal doesn't yet understand (a custom DSL, a proprietary file format, an internal service), scaffold an adapter rather than hand-rolling parsing logic. The scaffolds include test stubs and follow the contract enforced by reveal's own quality rules.
 
-> Note: `reveal scaffold <kind>` is an older alias of `reveal dev new-*`. Both work; prefer `reveal dev` for new work — it's the maintained surface and adds `inspect-config`.
 
 ---
 
@@ -1792,10 +1783,10 @@ reveal 'diff://config.yaml:config_new.yaml'    # Works on any analyzer-supported
 **Pattern:**
 ```bash
 # Within-file: exact function duplicates (all languages)
-reveal file.py --check --select D001
+reveal check file.py --select D001
 
 # Cross-file: hardcoded literal clusters shared across 3+ files (Python)
-reveal src/ --check --select D005
+reveal check src/ --select D005
 
 # D001: Exact duplicates (hash-based, reliable) ✅
 # D005: Cross-file literal clusters (≥5 items, ≥3 files) ✅
@@ -1865,7 +1856,7 @@ reveal check ea-nginx.conf --no-group  # expand all occurrences
 # Add '# reveal: generated' to skip a file in recursive sweeps
 
 # Dockerfile
-reveal Dockerfile --check              # S701 rule
+reveal check Dockerfile              # S701 rule
 # - S701: Security best practices (USER directive, etc.)
 
 # YAML/TOML
@@ -1978,7 +1969,7 @@ S701: Running as root
 
 **Pattern:**
 ```bash
-# Certificate overview (~150 tokens)
+# Certificate overview
 reveal ssl://example.com
 
 # Health check with exit codes (0=pass, 1=warning, 2=critical)
@@ -2092,7 +2083,7 @@ reveal ssl://example.com --check --probe-http
 **Workflow: Nginx + SSL integration**
 ```bash
 # 1. Check nginx config for issues (N004 detects ACME path problems)
-reveal /etc/nginx/nginx.conf --check --select N
+reveal check /etc/nginx/nginx.conf --select N
 
 # 2. Check all SSL certificates from nginx
 reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check --only-failures
@@ -3057,7 +3048,7 @@ reveal /etc/nginx/sites-enabled/ --extract domains | \
 reveal cpanel://USERNAME/ssl --only-failures --check-live
 
 # Pattern detection with minimum severity filter
-reveal src/ --check --severity high
+reveal check src/ --severity high
 ```
 
 ### Pattern 1: Finding All High-Complexity Functions
@@ -3090,10 +3081,10 @@ find . -name "*.py" | reveal --stdin --check --select B,S > security_audit.txt
 
 # With context (show function names)
 find . -name "*.py" | while read f; do
-  issues=$(reveal "$f" --check --select S 2>/dev/null | grep -c "^  S")
+  issues=$(reveal check "$f" --select S 2>/dev/null | grep -c "^  S")
   if [ "$issues" -gt 0 ]; then
     echo "=== $f ($issues issues) ==="
-    reveal "$f" --check --select S
+    reveal check "$f" --select S
   fi
 done
 
@@ -3260,7 +3251,7 @@ reveal src/auth/handler.py
 reveal src/auth/handler.py authenticate_user
 
 # 4. Quality check (look for bugs)
-reveal src/auth/handler.py --check --select B,S
+reveal check src/auth/handler.py --select B,S
 
 # Output:
 # B003: @property 'options' is 18 lines (max 15) (line 52)
@@ -3290,7 +3281,7 @@ reveal src/processor.py --outline
 reveal src/processor.py process_request
 
 # 4. Check for other issues
-reveal src/processor.py --check
+reveal check src/processor.py
 
 # Output:
 # C901: High cyclomatic complexity (complexity: 15)
@@ -3356,7 +3347,7 @@ git diff --name-only main | grep "\.py$" | reveal --stdin --check
 # Output shows 3 files with issues
 
 # 4. Deep dive on specific file
-reveal src/auth.py --check
+reveal check src/auth.py
 
 # Output:
 # B003: @property too complex (>15 lines)
@@ -3452,7 +3443,7 @@ The message now includes line count — use it to decide whether `Read` is worth
    reveal check script.py            # exit 3 if it did not parse cleanly
    python -m py_compile script.py    # the language's own parser, for the exact error
    ```
-   (`--check --select E` only runs E501 line length — it does not report syntax errors.)
+   (`reveal check <path> --select E` only runs E501 line length — it does not report syntax errors.)
 
 2. **Unsupported language/extension**
    ```bash
@@ -4268,34 +4259,11 @@ server {
 
 ---
 
-## Performance Benchmarks
+## Measuring Performance
 
-**Directory traversal:**
-- 100 files: ~50ms
-- 1,000 files: ~200ms
-- 10,000 files: ~2s
+Measure the command on your own target; runtime and output size depend on the repository, languages, query and cache state. Published comparisons and methodology are in [BENCHMARKS.md](BENCHMARKS.md).
 
-**File structure parsing:**
-- Small file (<100 lines): ~5ms
-- Medium file (500 lines): ~15ms
-- Large file (2,000 lines): ~50ms
-
-**AST queries:**
-- Query across 1,000 files: ~100ms
-- Complex filter: ~150ms
-
-**Quality checks:**
-- Single file: +10-20ms
-- Batch (10 files): +100ms
-
-**Token costs (approximate):**
-- Directory structure (100 files): ~500 tokens
-- File structure (500 lines): ~50 tokens
-- Function extraction: ~20 tokens
-- JSON output: +30% tokens vs default
-
-**Diagnosing a slow run on your own machine/target** (the numbers above are
-representative, not a substitute for measuring the actual repo you're on):
+**Diagnosing a slow run:**
 - `reveal <any-command> --perf` appends one JSON line (`elapsed_s`,
   `peak_rss_kb`, `argv`, `exit_code`, `pid`, `ts`) to a perf log —
   `~/.reveal/perf.jsonl` by default, override the path with
@@ -4320,7 +4288,7 @@ representative, not a substitute for measuring the actual repo you're on):
 ### With Claude Code workflow
 ```bash
 # 1. Structure first (what you should do!)
-reveal unknown_file.py            # What's in here? (~100 tokens)
+reveal unknown_file.py            # What's in here?
 
 # 2. Then use Read tool on specific functions only
 # Don't use Read on entire large files
@@ -4385,9 +4353,9 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
 3. **Use AST queries** - Don't grep when you can query
    - `reveal 'ast://./src?name=*auth*'` vs `grep -r "def.*auth"`
    - Semantic search vs text search
-   - No false positives
+   - Structural matching reduces text-only noise; parser recovery and heuristics can still produce false matches
 
-4. **Quality checks built-in** - Use `--check` proactively
+4. **Quality checks built-in** - Use `reveal check <path>` proactively
    - Find bugs before they reach production
    - Security scanning in PR reviews
    - Complexity analysis for refactoring
@@ -4436,8 +4404,8 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
 | Extract at line | `reveal file.py 73` or `reveal file.py :73` |
 | Extract Nth element | `reveal file.py @3` |
 | Extract 2nd function | `reveal file.py function:2` |
-| Quality check | `reveal file.py --check` |
-| Security check only | `reveal file.py --check --select S` |
+| Quality check | `reveal check file.py` |
+| Security check only | `reveal check file.py --select S` |
 | Find hotspots | `reveal hotspots .` |
 | Find by name | `reveal 'ast://./src?name=*pattern*'` |
 | Find complex code | `reveal 'ast://./src?complexity>10'` |
@@ -4458,7 +4426,7 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
 | Nginx SSL check | `... --extract domains \| reveal --stdin --check` |
 | SSL failures only | `--check --only-failures` |
 | SSL expiring soon | `--check --expiring-within=30` |
-| Nginx config check | `reveal nginx.conf --check --select N` |
+| Nginx config check | `reveal check nginx.conf --select N` |
 | Nginx nobody ACL check | `reveal /path/user.conf --check-acl` |
 | Nginx ACME roots table | `reveal /path/user.conf --extract acme-roots` |
 | Nginx location conflicts | `reveal /path/user.conf --check-conflicts` |
@@ -4488,8 +4456,8 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
 ## Help System Overview
 
 **For AI agents (you):**
-- **Orientation** (`reveal --agent-help`) - First sections of this file (~1,200 tokens)
-- **Complete guide** (`reveal help://agent/full`) - This file in full (~49,000 tokens)
+- **Orientation** (`reveal --agent-help`) - First sections of this file (size estimated by help://)
+- **Complete guide** (`reveal help://agent/full`) - This file in full (size estimated by help://)
 - **Progressive help** (`reveal 'help://<topic>'`) - Low-token per-topic exploration
 
 **For humans:**
@@ -4499,7 +4467,7 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
   - `reveal help://python-guide` - Python adapter deep dive
   - `reveal help://tricks` - Cool tricks and hidden features
 
-**You don't need to explore help://** - this guide has everything you need. The examples above cover 95% of use cases.
+Start with `reveal --agent-help`, route through `reveal help://quick`, then load the relevant `help://<topic>`. Keep this full guide as a reference.
 
 ---
 
@@ -4550,9 +4518,9 @@ Run `reveal help://quick` for "which tool for which question". It is the routing
 
 ### Mistake 1: Reading files too early
 ```bash
-❌ cat file.py                 # 7,500 tokens
-✅ reveal file.py              # 100 tokens, shows structure
-✅ reveal file.py "func"       # 50 tokens, extract what you need
+❌ cat file.py                 # reads the entire file
+✅ reveal file.py              # shows structure
+✅ reveal file.py "func"       # extracts the selected element
 ```
 
 ### Mistake 2: Using grep for structured data

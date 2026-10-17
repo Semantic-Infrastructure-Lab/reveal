@@ -487,7 +487,7 @@ Adapters MUST comply with the Output Contract specification.
 
 **Command**:
 ```bash
-reveal --check reveal/adapters/myadapter.py
+reveal check reveal/adapters/myadapter.py
 ```
 
 **Implementation**: See `reveal/rules/validation/V023.py`
@@ -629,10 +629,10 @@ Use the V023 rule to check adapter output compliance:
 
 ```bash
 # Check a specific adapter implementation for contract compliance
-reveal --check reveal/adapters/myadapter.py --select V023
+reveal check reveal/adapters/myadapter.py --select V023
 
 # Check all adapters at once
-reveal --check reveal/adapters/ --select V023
+reveal check reveal/adapters/ --select V023
 ```
 
 ---
@@ -695,7 +695,7 @@ reveal --check reveal/adapters/ --select V023
 
 ## Implementation Status
 
-Run `reveal --check reveal/adapters/ --select V023` for a live compliance report. The static table that used to live here became stale faster than it could be maintained and was removed.
+Run `reveal check reveal/adapters/ --select V023` for a live compliance report. The static table that used to live here became stale faster than it could be maintained and was removed.
 
 Element results (`env://HOME`, `python://packages`, `reveal 'reveal://<file>' <element>`) carry the envelope too: the router fills in `contract_version`, `type` (the adapter's `ELEMENT_RESULT_TYPE`, else `<scheme>_element`), `source` and `source_type` around the adapter's own fields, which win. The directory and `--files` views answer `directory_tree` / `file_list` (BACK-1591).
 
@@ -739,7 +739,7 @@ validate_output(result, version='1.0')
 
 Or run V023 validation:
 ```bash
-reveal --check reveal/adapters/myadapter.py --select V023
+reveal check reveal/adapters/myadapter.py --select V023
 ```
 
 ---

@@ -99,7 +99,7 @@ table mirrors those groups; verified live against reveal-cli 0.129.0.
 **`--check` is universal; its own options are file-target-scoped** (`Quality
 checks` group):
 ```bash
---check / --lint              # Universal — run pattern detectors on any file/dir
+--check / --lint              # URI health checks; deprecated on direct file/dir targets (use reveal check <path>)
 --select / --ignore / --severity / --config / --explain / --rules
                                # Scoped to --check on a file/directory target
 ```
@@ -473,7 +473,7 @@ echo -e "cpanel://user1/ssl?dns-verified\ncpanel://user2/ssl" | reveal --stdin -
 **`ast://` already proves this pattern:**
 ```bash
 reveal 'ast://src?complexity>10&type=function&sort=-lines'
-# --search, --type, --sort are convenience shorthands for the same query params
+# --name, --type, --sort are convenience shorthands for the same query params
 ```
 
 ### Current state vs target

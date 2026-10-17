@@ -33,9 +33,9 @@ Examples:
   reveal doc.md --tail 3                 # Last 3 headings
 
   # Code quality checks (pattern detectors)
-  reveal main.py --check         # Run all quality checks
-  reveal main.py --check --select=B,S,I,C,M,T  # Select specific categories (B=Bugs, S=Security, I=Imports, C=Complexity, M=Maintainability, T=Types, R=Refactoring)
-  reveal Dockerfile --check      # Docker best practices
+  reveal check main.py         # Run all quality checks
+  reveal check main.py --select=B,S,I,C,M,T  # Select specific categories (B=Bugs, S=Security, I=Imports, C=Complexity, M=Maintainability, T=Types, R=Refactoring)
+  reveal check Dockerfile      # Docker best practices
 
   # Hierarchical outline (see structure as a tree!)
   reveal app.py --outline        # Classes with methods, nested structures
@@ -152,7 +152,7 @@ Discovery (find what reveal can do):
   reveal --discover           Dump full adapter registry as JSON (schemas, params)
   reveal help://              List help topics
   reveal help://<topic>       Read a topic (e.g. help://ast, help://schemas/ast)
-  reveal --agent-help         Agent orientation (~1,200 tokens; reveal help://agent/full for all)
+  reveal --agent-help         Agent orientation (task summary; reveal help://agent/full for all)
 
 Agents: reveal --agent-help  ·  Task routing: reveal help://quick
 '''
@@ -343,7 +343,7 @@ def _add_discovery_options(group) -> None:
     group.add_argument('--language-info', type=str, metavar='LANG',
                        help='Show detailed information about a language (e.g., --language-info python or --language-info .py)')
     group.add_argument('--agent-help', action='store_true',
-                       help='Agent orientation (~1,200 tokens; reveal help://agent/full for the complete task-pattern reference). Complements --help (raw flag listing).')
+                       help='Agent orientation (task summary; reveal help://agent/full for the complete task-pattern reference). Complements --help (raw flag listing).')
     group.add_argument('--discover', action='store_true',
                        help='Dump full adapter registry as JSON (schemas, output types, query params — for programmatic discovery)')
 
@@ -397,7 +397,7 @@ def _add_display_options(parser: argparse.ArgumentParser) -> None:
 def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
     """Add pattern detection (linting) options."""
     parser.add_argument('--check', '--lint', action='store_true',
-                        help='Run pattern detectors (code quality, security, complexity checks)')
+                        help='URI health checks; for code quality use reveal check <path> (direct file --check is deprecated; --stdin batches remain supported)')
     parser.add_argument('--config', type=str, metavar='FILE',
                         help='Configuration file to use (.reveal.yaml or pyproject.toml)')
     parser.add_argument('--select', type=rule_patterns, metavar='RULES',
@@ -442,7 +442,7 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--range', type=str, metavar='START-END',
                         help='Show semantic units in range (e.g., 10-20, 1-indexed; lines of an extracted element)')
     parser.add_argument('--name', '--search', dest='name', type=str, metavar='PATTERN',
-                        help='Filter structural output to named elements (functions, classes, headings) whose name matches PATTERN (regex). Does NOT search text content — use --grep for that. (--search is a deprecated alias)')
+                        help='Filter structural output to named elements (functions, classes, headings) whose name matches PATTERN (regex). Does NOT search text content — use --grep for that. (--search is a deprecated alias; emits a replacement note)')
     parser.add_argument('--grep', type=str, metavar='PATTERN',
                         help="Text search over file content: each matching line, grouped by enclosing structural element (heading, function, class). Accepts Python re syntax (e.g. 'foo|bar' for alternation, not the BRE '\\|'). Use --ignore-case / -i for case-insensitive search. The text view shows the first 100 hits; --all shows every hit, --max-items N sets the cap. On a directory, --ext limits the file types searched.")
     parser.add_argument('--ignore-case', '-i', dest='ignore_case', action='store_true',
@@ -517,7 +517,7 @@ def _add_code_analysis_options(parser: argparse.ArgumentParser) -> None:
                              'for N+1 query checks, per-item HTTP calls, and retry-safety review '
                              '(e.g., reveal file.py process_batch --fanout  or  reveal file.php :100-500 --fanout --format=json)')
     parser.add_argument('--statewrites', action='store_true',
-                        help='Show persistent/shared-state mutations: field writes (self.x=, $obj->x=, this.x=) plus '
+                        help='Show detected shared-state writes (module globals may be missed): field writes (self.x=, $obj->x=, this.x=) plus '
                              'cache/db/file/env/session writes — a mutation surface --mutations (local vars) and '
                              '--sideeffects (calls only) both miss '
                              '(e.g., reveal file.py process_order --statewrites  or  reveal file.php :1-800 --statewrites)')
@@ -537,7 +537,7 @@ def _add_code_analysis_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--calls', nargs='?', const='FULL', type=str, metavar='START-END',
                         help='Show call sites in a line range (e.g., reveal file.py myfunc --calls 89-120  or  reveal file.php :477-531 --calls)')
     parser.add_argument('--deps', action='store_true',
-                        help='Show variables that flow INTO a line range (potential function params) '
+                        help='Show candidate inputs to a line range (may include builtins/local bindings; review before extracting params) '
                              '(e.g., reveal file.php :1136-1463 --deps  or  reveal file.py myfunc --deps)')
     parser.add_argument('--mutations', action='store_true',
                         help='Show read-after-write hazards: variables written in a range and read after (potential return values). '
@@ -546,7 +546,7 @@ def _add_code_analysis_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--writes', action='store_true',
                         help='Alias for --mutations: show read-after-write hazards in a function or range')
     parser.add_argument('--returns', action='store_true',
-                        help='Show return/exit paths with their gate chains (conditions that must be true to reach each exit) '
+                        help='Show exit sites with syntactic gate chains (static approximation; verify branch and exception paths in source) '
                              '(e.g., reveal file.php processOrder --returns  or  reveal file.py myfunc --returns)')
     parser.add_argument('--ifmap', action='store_true',
                         help='Show branching skeleton (IF/ELIF/ELSE) for a function or line range '

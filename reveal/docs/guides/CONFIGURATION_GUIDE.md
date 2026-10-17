@@ -90,11 +90,11 @@ rules:
 
 # Env var adds C901 (merges with file config)
 $ export REVEAL_RULES_DISABLE="C901"
-$ reveal --check file.py
+$ reveal check file.py
 # Both E501 and C901 are disabled
 
 # CLI flag overrides everything
-$ reveal --check file.py --select=E501
+$ reveal check file.py --select=E501
 # Only E501 runs (env and file config ignored)
 ```
 
@@ -233,7 +233,7 @@ Skip all config files (use only defaults and env vars):
 
 ```bash
 export REVEAL_NO_CONFIG=1
-reveal --check file.py
+reveal check file.py
 ```
 
 #### `REVEAL_CONFIG`
@@ -241,7 +241,7 @@ Load a specific config file instead of discovery:
 
 ```bash
 export REVEAL_CONFIG=/path/to/custom-config.yaml
-reveal --check file.py
+reveal check file.py
 ```
 
 ### Rule Environment Variables
@@ -251,7 +251,7 @@ Comma-separated list of rules to disable:
 
 ```bash
 export REVEAL_RULES_DISABLE="E501,C901,D001"
-reveal --check file.py
+reveal check file.py
 ```
 
 #### `REVEAL_RULES_SELECT`
@@ -259,7 +259,7 @@ Comma-separated list of rules/categories to select:
 
 ```bash
 export REVEAL_RULES_SELECT="B,S,C901"
-reveal --check file.py
+reveal check file.py
 ```
 
 ### Output Environment Variables
@@ -269,7 +269,7 @@ Set output format:
 
 ```bash
 export REVEAL_FORMAT=json
-reveal --check file.py
+reveal check file.py
 ```
 
 ### Ignore Patterns
@@ -279,7 +279,7 @@ Comma-separated glob patterns to ignore:
 
 ```bash
 export REVEAL_IGNORE="*.min.js,vendor/**,node_modules/**"
-reveal --check file.py
+reveal check file.py
 ```
 
 Every command that walks a directory honors it -- `scheme://` URIs and the subcommands
@@ -300,7 +300,7 @@ Set complexity threshold for C901:
 
 ```bash
 export REVEAL_C901_THRESHOLD=20
-reveal --check file.py
+reveal check file.py
 ```
 
 #### `REVEAL_E501_MAX_LENGTH`
@@ -308,7 +308,7 @@ Set max line length for E501:
 
 ```bash
 export REVEAL_E501_MAX_LENGTH=120
-reveal --check file.py
+reveal check file.py
 ```
 
 #### `REVEAL_I002_MAX_FILES`
@@ -385,7 +385,7 @@ export REVEAL_RULES_DISABLE="E501,D001"
 export REVEAL_C901_THRESHOLD=20
 export REVEAL_IGNORE="*.min.js,vendor/**"
 
-reveal --check src/
+reveal check src/
 ```
 
 ### Disk cache
@@ -594,7 +594,7 @@ Usage in CI:
 
 ```bash
 export REVEAL_CONFIG=.reveal-strict.yaml
-reveal --check src/
+reveal check src/
 ```
 
 ### Example 4: Development vs Production
@@ -613,7 +613,7 @@ CI/Production (strict):
 export REVEAL_NO_CONFIG=1  # Ignore .reveal.yaml
 export REVEAL_C901_THRESHOLD=10
 export REVEAL_E501_MAX_LENGTH=100
-reveal --check src/
+reveal check src/
 ```
 
 ---
@@ -829,7 +829,7 @@ Legacy paths still supported with deprecation warning:
 - [AGENT_HELP.md](../AGENT_HELP.md) - Configuration mistakes to avoid
 - [README.md](../README.md) - Documentation hub
 - `reveal help://` - List all help topics
-- `reveal --check --help` - CLI usage
+- `reveal check --help` - CLI usage
 
 ---
 

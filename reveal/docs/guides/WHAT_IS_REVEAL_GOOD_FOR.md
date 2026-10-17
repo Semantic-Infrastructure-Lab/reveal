@@ -328,7 +328,7 @@ Reveal is unusually good when the problem crosses code and operations boundaries
 reveal health ./src ssl://api.example.com domain://example.com
 reveal ssl://api.example.com
 reveal domain://example.com
-reveal /etc/nginx/conf.d/users/myuser.conf --check
+reveal check /etc/nginx/conf.d/users/myuser.conf
 reveal /etc/nginx/conf.d/users/myuser.conf --validate-nginx-acme
 reveal autossl:///var/cpanel/logs/autossl/
 reveal letsencrypt:///etc/letsencrypt/live/

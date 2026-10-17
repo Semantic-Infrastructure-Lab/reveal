@@ -41,7 +41,7 @@ reveal 'git://.?message~=bug.*fix'
 
 ```bash
 # Search by name pattern
-reveal file.py --search connection
+reveal file.py --name connection
 # Equivalent to: reveal 'ast://file.py?name~=connection'
 
 # Filter by element type
@@ -54,7 +54,7 @@ reveal file.py --sort=-complexity         # Descending
 # Equivalent to: reveal 'ast://file.py?sort=complexity' or 'ast://file.py?sort=-complexity'
 
 # Combine flags
-reveal file.py --search test --type function --sort=-line_count
+reveal file.py --name test --type function --sort=-line_count
 # Equivalent to: reveal 'ast://file.py?name~=test&type=function&sort=-line_count'
 ```
 
@@ -82,7 +82,7 @@ reveal file.py --search test --type function --sort=-line_count
 
 | Task | Convenience Flag | URI Syntax |
 |------|-----------------|------------|
-| Find by name | `reveal file.py --search pattern` | `reveal 'ast://file.py?name~=pattern'` |
+| Find by name | `reveal file.py --name pattern` | `reveal 'ast://file.py?name~=pattern'` |
 | Filter type | `reveal file.py --type function` | `reveal 'ast://file.py?type=function'` |
 | Sort | `reveal file.py --sort complexity` | `reveal 'ast://file.py?sort=complexity'` |
 | Complex filter | ❌ (not supported) | `reveal 'ast://src/?complexity>10&lines>50&type=function&sort=-complexity'` |
@@ -93,16 +93,16 @@ Start simple (flags), escalate to URI syntax when needed:
 
 ```bash
 # Step 1: Simple search
-reveal file.py --search authenticate
+reveal file.py --name authenticate
 
 # Step 2: Add type filter
-reveal file.py --search authenticate --type function
+reveal file.py --name authenticate --type function
 
 # Step 3: Add sorting
-reveal file.py --search authenticate --type function --sort=-complexity
+reveal file.py --name authenticate --type function --sort=-complexity
 
 # Step 4: Need complex conditions? Use URI syntax
-# Note: --search <pattern> becomes ?name~=<pattern> in URI form (intentional rename)
+# Note: --name <pattern> becomes ?name~=<pattern> in URI form (intentional rename)
 reveal 'ast://file.py?name~=authenticate&type=function&complexity>10&lines>50&sort=-complexity'
 ```
 

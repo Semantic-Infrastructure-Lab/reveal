@@ -17,10 +17,10 @@ help_category: feature_guides
 
 ```bash
 # Find exact duplicate functions in a file
-reveal file.py --check --select D001
+reveal check file.py --select D001
 
 # Find all duplicates (includes experimental similarity detection)
-reveal file.py --check --select D
+reveal check file.py --select D
 
 # Find functions by naming patterns (cross-file)
 reveal 'ast://./src?name=*parse*'
@@ -46,7 +46,7 @@ Detects functions with identical implementations, even if:
 
 **Example:**
 ```bash
-$ reveal app.py --check --select D001
+$ reveal check app.py --select D001
 
 app.py: Found 1 issue
 
@@ -76,7 +76,7 @@ app.py:45:1 ⚠️  D001 Duplicate function detected: 'process_b' identical to '
 
 **Example output (with false positives):**
 ```bash
-$ reveal app.py --check --select D002
+$ reveal check app.py --select D002
 
 app.py: Found 5 issues
 
@@ -103,7 +103,7 @@ any cluster that spans `MIN_CLUSTER_FILES` (default 3) distinct files.
 
 ```bash
 # ✅ Flags literals duplicated across ≥3 files
-reveal ./src --check --select D005
+reveal check ./src --select D005
 ```
 
 Thresholds: `MIN_LITERAL_SIZE = 5` (items in the literal), `MIN_CLUSTER_FILES = 3`
@@ -128,7 +128,7 @@ independently — duplicates between `file_a.py` and `file_b.py` are not detecte
 
 ```bash
 # ❌ Per-file only — cross-file function duplicates not detected
-find src/ -name "*.py" | xargs -I {} reveal {} --check --select D001
+find src/ -name "*.py" | xargs -I {} reveal check {} --select D001
 ```
 
 **Why not implemented:** Requires a caching layer to store function-body hashes
@@ -230,9 +230,9 @@ Hotspots (Top 10 worst files):
 **4. Check each file individually:**
 ```bash
 # Check high-priority files for exact duplicates
-reveal src/processor.py --check --select D001
-reveal src/handlers.py --check --select D001
-reveal src/validators.py --check --select D001
+reveal check src/processor.py --select D001
+reveal check src/handlers.py --select D001
+reveal check src/validators.py --select D001
 ```
 
 **5. Pipeline approach (batch checking):**
@@ -315,7 +315,7 @@ File: src/schemas.py
 
 1. **Use D001 only** (D002 has too many false positives)
 ```bash
-reveal file.py --check --select D001
+reveal check file.py --select D001
 ```
 
 2. **Use AST queries for cross-file analysis**
@@ -330,7 +330,7 @@ reveal 'ast://./src?complexity>10&lines>50'
 
 4. **Batch check with scripts**
 ```bash
-find src/ -name "*.py" | xargs -I {} reveal {} --check --select D001
+find src/ -name "*.py" | xargs -I {} reveal check {} --select D001
 ```
 
 5. **Combine with stats for context**
@@ -343,22 +343,22 @@ reveal 'stats://./src' --hotspots
 1. **Don't use D002 yet** (false positive rate ~90%)
 ```bash
 # ❌ Avoid this
-reveal file.py --check --select D002
+reveal check file.py --select D002
 ```
 
 2. **Don't expect cross-file detection**
 ```bash
 # ❌ This won't find duplicates BETWEEN files
-reveal ./src --check --select D
+reveal check ./src --select D
 ```
 
 3. **Don't use `--check` without `--select D`**
 ```bash
 # ❌ Runs ALL rules (slow, noisy)
-reveal file.py --check
+reveal check file.py
 
 # ✅ Only duplicate detection
-reveal file.py --check --select D001
+reveal check file.py --select D001
 ```
 
 ---
@@ -456,7 +456,7 @@ A: Currently requires manual workflow:
 1. Use `reveal 'ast://./src?name=*pattern*'` to find similar names
 2. Use `reveal 'ast://./src?complexity>10'` to find complex functions
 3. Manually inspect candidate files
-4. Check each file with `reveal file.py --check --select D001`
+4. Check each file with `reveal check file.py --select D001`
 
 **Q: Why is D002 so bad?**
 A: The TF-weighted feature vectors are too coarse. Functions with similar structural patterns (loops, conditionals) score as 95%+ similar even when logic is completely different. See `DUPLICATE_DETECTION_OPTIMIZATION.md` for planned fixes.

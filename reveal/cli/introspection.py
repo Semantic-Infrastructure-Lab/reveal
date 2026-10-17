@@ -534,7 +534,7 @@ def _build_usage_examples(ext: str) -> List[str]:
         "💡 Usage Examples:",
         f"   reveal file{ext}              # Show structure",
         f"   reveal file{ext} MyClass      # Extract specific class",
-        f"   reveal file{ext} --check      # Run quality checks",
+        f"   reveal check file{ext}      # Run quality checks",
         f"   reveal file{ext} --explain-file    # Show how it's analyzed",
     ]
 
@@ -601,7 +601,7 @@ def get_capabilities(path: str) -> Dict[str, Any]:
             },
             "flags": {
                 "supported": ["--check", "--outline", "--head", "--tail"],
-                "examples": ["reveal file.py main", "reveal file.py --check"]
+                "examples": ["reveal file.py main", "reveal check file.py"]
             }
         }
     """
@@ -681,7 +681,7 @@ def get_capabilities(path: str) -> Dict[str, Any]:
     result["quality"] = {
         "available": len(rule_categories) > 0,
         "rule_categories": rule_categories,
-        "usage": "reveal <file> --check" if rule_categories else None,
+        "usage": "reveal check <file>" if rule_categories else None,
     }
 
     # Supported flags
