@@ -272,3 +272,48 @@ def test_valid_empty_findings_are_measured_zero(tmp_path, monkeypatch):
     install(monkeypatch)
     answer = DepsAdapter(str(tmp_path)).get_structure()
     assert answer['analysis']['findings'] == {'circular': 0, 'unused': 0}
+
+
+@pytest.mark.parametrize('state', ['incomplete', 'failed'])
+@pytest.mark.parametrize('findings', [0, 2])
+def test_unused_only_missing_evidence_is_visible_in_text(tmp_path, monkeypatch, state, findings):
+    from reveal.rendering.adapters.deps import deps_text
+    result = child('unused')
+    result.update(unused=[{'file': 'a.py', 'module': 'os'}] * findings, count=findings)
+    if state == 'incomplete':
+        result['metadata'].update(files_failed_count=1, files_lost_count=1)
+    else:
+        result['error'] = 'unused analysis inaccessible'
+    install(monkeypatch, 'unused', result)
+    answer = DepsAdapter(str(tmp_path)).get_structure()
+    text = deps_text(answer)
+    assert ('unused import analysis incomplete' if state == 'incomplete' else
+            'unused import analysis unavailable') in text
+    assert answer['analysis']['findings']['unused'] == findings
+    if findings:
+        assert '2 unused import(s)' in text
+
+
+@pytest.mark.parametrize('state', ['incomplete', 'failed'])
+def test_base_only_missing_evidence_is_visible_in_text(tmp_path, monkeypatch, state):
+    from reveal.rendering.adapters.deps import deps_text
+    result = child('base')
+    if state == 'incomplete':
+        result['metadata']['files_failed_count'] = 1
+    else:
+        result['error'] = 'base inventory inaccessible'
+    install(monkeypatch, 'base', result)
+    text = deps_text(DepsAdapter(str(tmp_path)).get_structure())
+    assert ('base import analysis incomplete' if state == 'incomplete' else
+            'base import analysis unavailable') in text
+
+
+def test_clean_and_explicitly_skipped_components_have_no_failure_label(tmp_path, monkeypatch):
+    from reveal.rendering.adapters.deps import deps_text
+    install(monkeypatch)
+    clean = deps_text(DepsAdapter(str(tmp_path)).get_structure())
+    install(monkeypatch, 'unused', OSError('must not run'))
+    skipped = deps_text(DepsAdapter(str(tmp_path), 'no_unused=true').get_structure())
+    assert 'unused imports not checked (--no-unused)' in skipped
+    assert 'analysis incomplete' not in clean + skipped
+    assert 'analysis unavailable' not in clean + skipped
