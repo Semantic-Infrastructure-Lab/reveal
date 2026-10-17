@@ -414,10 +414,10 @@ both forms (BACK-1544). A legacy subcommand's findings exit (`hotspots` exits 1 
 
 ## Declared execution policy
 
-Direct surface, architecture and contracts subcommands and their URI equivalents share declared
+Direct surface, architecture, contracts and deps subcommands and their URI equivalents share declared
 parameter binding and one answer/emission path. Surface retains `surface_scan`;
 architecture retains `architecture` or `architecture_diff` by resolved operation.
-Contracts retains `contracts`.
+Contracts retains `contracts`; deps retains `deps_scan`.
 Their execution policy
 uses explicit completeness and failure causes from the analysis owner, independently
 of `outcome_of()`'s legacy rendering categories:
