@@ -1,6 +1,7 @@
 """Deps binding retains owner proof and findings before presentation."""
 import copy
 import json
+import sys
 from pathlib import Path
 from urllib.parse import quote
 
@@ -222,7 +223,9 @@ def test_missing_and_inaccessible_resources_keep_canonical_identity(project, mon
     assert json.loads(result.stdout)['type'] == 'deps_scan'
 
 
-@pytest.mark.parametrize('name', ['space ,&=+é', 'literal%26', 'question?mark'])
+@pytest.mark.parametrize('name', ['space ,&=+é', 'literal%26',
+                                 pytest.param('question?mark', marks=pytest.mark.skipif(
+                                     sys.platform == 'win32', reason='Windows filenames cannot contain ?'))])
 def test_original_typed_paths_and_encoded_uri_paths_match(project, name):
     root = project.parent/name
     root.mkdir()
