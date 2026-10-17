@@ -5,6 +5,7 @@ import pytest
 from tree_sitter_language_pack import get_parser
 
 from conftest import _run_reveal_direct
+from reveal.complexity import calculate_complexity_and_depth
 from reveal.adapters.ast.nav_exits import collect_exits, collect_gate_chains
 from reveal.adapters.ast.nav_loops import collect_fanout, collect_loops
 from reveal.adapters.ast.nav_outline import element_outline, scope_chain
@@ -140,3 +141,14 @@ def test_zig_catch_outline_starts_at_operator_and_excludes_operand_scope():
     assert [f['keyword'] for f in scope_chain(root, 4, text)] == ['DEF', 'CATCH']
     assert [(f['line'], f['gates']) for f in collect_gate_chains(root, 3, 4, text)] == [
         (4, [{'line': 3, 'text': 'on exception'}])]
+
+
+@pytest.mark.parametrize('source,expected', [
+    ('fn f(items: []const i32) void { for (items) |item| {consume(item);} }', (2, 1)),
+    ('fn f(a: bool, b: bool) i32 { const x = if (a) if (b) 1 else 2 else 3; return x; }', (3, 2)),
+    ('fn f(a: i32) i32 { return a + 1; }', (1, 0)),
+])
+def test_zig_shared_control_flow_family_metrics(source, expected):
+    tree, root, text = _parse('zig', source)
+    assert calculate_complexity_and_depth(root) == expected
+    assert calculate_complexity_and_depth(root) == expected
