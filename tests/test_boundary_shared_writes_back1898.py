@@ -59,3 +59,28 @@ def test_boundary_explicit_nonlocal_effects():
 @pytest.mark.parametrize('language', ['python', 'javascript', 'php'])
 def test_boundary_local_container_control(language):
     assert _effects(language, 'parameter')[0]['effects'] == []
+
+
+def test_transitive_boundary_discloses_root_only_assignments(tmp_path):
+    import json
+    from conftest import _run_reveal_direct
+
+    path = tmp_path / 'shared.py'
+    path.write_text('''state = {}
+def root(key):
+    state[key] = 1
+    helper(key)
+def helper(key):
+    state[key] = 2
+    print(key)
+''', encoding='utf-8')
+    data = json.loads(_run_reveal_direct(str(path), 'root', '--boundary', '--transitive',
+                                       '--format', 'json').stdout)
+    assignments = [f for f in data['findings'] if f.get('via') == 'assignment']
+    assert [(f['kind'], f['line'], f['callee'], f['hop'], f['chain']) for f in assignments] == [
+        ('global', 3, 'state[key]', 0, [])]
+    assert any(f['kind'] == 'log' and f['hop'] == 1 for f in data['findings'])
+    assert any('assignments only in the entry function' in w for w in data['warnings'])
+    rendered = _run_reveal_direct(str(path), 'root', '--boundary', '--transitive').stdout
+    assert 'assignments only in the entry function' in rendered
+    assert 'state[key]()' not in rendered
