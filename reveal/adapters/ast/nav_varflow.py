@@ -21,6 +21,20 @@ _C_BARE_DECLARATORS = frozenset({
 })
 
 
+def _is_variable_identifier(node: Any, kind: str) -> bool:
+    """Variable terminals, including GDScript's declaration-only name leaf."""
+    if kind in ('identifier', 'variable_name', 'simple_identifier', 'IDENTIFIER',
+                'shorthand_property_identifier_pattern'):
+        return True
+    if kind != 'name':
+        return False
+    parent = _zero_arg(node, 'parent')
+    if parent is None or _zero_arg(parent, 'kind') != 'variable_statement':
+        return False
+    name = parent.child_by_field_name('name')
+    return name is not None and _start_pos(name) == _start_pos(node)
+
+
 @dataclass(frozen=True)
 class _DeclShape:
     """One grammar's declaration-with-initializer node shape (BACK-431 Issue C).
@@ -37,7 +51,7 @@ class _DeclShape:
     never has that field (Kotlin's fieldless `property_declaration`) or
     only sometimes does (C#'s valueless `variable_declarator`). positional
     names a method that owns the whole node when the grammar exposes no
-    fields at all (Dart/GDScript/Zig); write_field/read_field are unused
+    fields at all (Dart/Zig); write_field/read_field are unused
     in that case.
     """
 
@@ -75,9 +89,8 @@ _DECL_SHAPES: Dict[str, _DeclShape] = {
     # Dart `final x = f();` / `var x = f();` — no fields at all (BACK-431
     # Issue G smoke-tier audit).
     'initialized_variable_definition': _DeclShape(positional='_walk_dart_var_decl'),
-    # GDScript `var x = f()` — no fields; declared name is a 'name' leaf
-    # (BACK-431 Issue G smoke-tier audit).
-    'variable_statement': _DeclShape(positional='_walk_gdscript_var_decl'),
+    # GDScript's declared 'name' leaf and initializer are grammar fields.
+    'variable_statement': _DeclShape(write_field='name', read_field='value'),
     # Zig `const x = f();` / `var x = f();` — no fields at all (BACK-431
     # Issue G smoke-tier audit).
     'VarDecl': _DeclShape(positional='_walk_zig_var_decl'),
@@ -129,8 +142,8 @@ def _lua_assignment_sides(n: Any) -> tuple:
 
 
 def _positional_assignment_sides(n: Any) -> tuple:
-    """Kotlin/Swift reassignment (`x = expr`) parses as an `assignment` node
-    with POSITIONAL children (directly_assignable_expression, '=', <expr>)
+    """Kotlin/Swift (`assignment`) and Zig (`AssignExpr`) reassignment
+    have positional target/operator/value children
     and no 'left'/'right' fields — unlike Python/JS/TS/C# whose `assignment`/
     `assignment_expression` expose the fields (BACK-476). The declaration
     form (`var x = ...`) is handled separately via _DECL_SHAPES; this is only
@@ -203,6 +216,22 @@ def resolve_assignment_sides(n: Any, ntype: str) -> tuple:
     return left, right
 
 
+def _is_augmented_assignment(n: Any, ntype: str, get_text: Callable) -> bool:
+    """Operator detection for fielded and positional assignment grammars."""
+    if ntype in ('augmented_assignment', 'augmented_assignment_expression',
+                 'compound_assignment_expr'):
+        return True
+    op = n.child_by_field_name('operator')
+    if op is None and ntype == 'AssignExpr':
+        op = next((child for child in _children(n)
+                   if _zero_arg(child, 'kind') == 'AssignOp'), None)
+    if op is not None:
+        return bool(get_text(op) != '=')
+    # Go's assignment_statement has an unnamed middle operator token.
+    return bool(_zero_arg(n, 'child_count') == 3 and not _zero_arg(n.child(1), 'is_named')
+                and _zero_arg(n.child(1), 'kind') != '=')
+
+
 @dataclass
 class VarFlowWalker:
     """Recursive var-flow walker with write/condition context propagation.
@@ -243,8 +272,7 @@ class VarFlowWalker:
         _collect_identifier_names — direct --varflow queries reach var_flow()
         without going through that candidate pass, so the same "not a variable"
         knowledge has to be applied here too (BACK-431 feature-breadth pass)."""
-        if ntype in ('identifier', 'variable_name', 'simple_identifier', 'IDENTIFIER',
-                     'shorthand_property_identifier_pattern') and self.get_text(n) == self.var_name:
+        if _is_variable_identifier(n, ntype) and self.get_text(n) == self.var_name:
             pos = (_zero_arg(n, 'start_position').row, _zero_arg(n, 'start_position').column)
             if pos == self.own_name_pos:
                 return True
@@ -266,9 +294,8 @@ class VarFlowWalker:
             # --deps/--boundary's candidate-name pass; this mirrors that
             # exclusion for direct --varflow queries, which go straight to
             # var_flow() and never go through that candidate pass.
-            children = _children(n)
-            if children:
-                self.walk(children[0], c)
+            for child in _member_access_children(n):
+                self.walk(child, c)
             return True
 
         if ntype == 'SuffixExpr':
@@ -306,7 +333,7 @@ class VarFlowWalker:
         """Route a non-excluded node to its structural handler by grammar kind."""
         if ntype in ('assignment', 'augmented_assignment',
                      'assignment_expression', 'augmented_assignment_expression',
-                     'assignment_statement', 'compound_assignment_expr'):
+                     'assignment_statement', 'compound_assignment_expr', 'AssignExpr'):
             self._walk_assignment(n, ntype, c)
         elif ntype == 'named_expression':
             self._walk_named_expression(n)
@@ -410,19 +437,7 @@ class VarFlowWalker:
 
     def _walk_assignment(self, n: Any, ntype: str, c: str) -> None:
         left, right = resolve_assignment_sides(n, ntype)
-        is_augmented = ntype in ('augmented_assignment', 'augmented_assignment_expression',
-                                  'compound_assignment_expr')
-        if not is_augmented:
-            # Some grammars (e.g. C#) unify `=`/`+=`/etc. into one node kind
-            # and expose the operator as a field instead; detect it there.
-            op = n.child_by_field_name('operator')
-            if op is not None:
-                is_augmented = self.get_text(op) != '='
-            elif (_zero_arg(n, 'child_count') == 3 and not _zero_arg(n.child(1), 'is_named') and
-                    _zero_arg(n.child(1), 'kind') != '='):
-                # Go's assignment_statement has no 'operator' field at all —
-                # the operator is just the unnamed middle child token.
-                is_augmented = True
+        is_augmented = _is_augmented_assignment(n, ntype, self.get_text)
         if left:
             self._walk_assignment_target(left, is_augmented)
         if right:
@@ -574,24 +589,6 @@ class VarFlowWalker:
             for child in children[eq_idx + 1:]:
                 if (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) not in processed:
                     self.walk(child, 'READ')
-
-    def _walk_gdscript_var_decl(self, n: Any) -> None:
-        """GDScript `variable_statement` — 'name' leaf child is the declared
-        identifier, checked directly since it isn't in the generic terminal
-        identifier-match kinds."""
-        name = None
-        value = None
-        for child in _children(n):
-            if _zero_arg(child, 'kind') == 'name':
-                name = child
-            elif _zero_arg(child, 'kind') not in ('var', 'const', '='):
-                value = child
-        if name is not None and self.get_text(name) == self.var_name:
-            line = _zero_arg(name, 'start_position').row + 1
-            if self.from_line <= line <= self.to_line:
-                self.events.append({'kind': 'WRITE', 'line': line, 'node': name})
-        if value is not None:
-            self.walk(value, 'READ')
 
     def _walk_zig_var_decl(self, n: Any) -> None:
         """Zig `VarDecl` — no fields; name is the first IDENTIFIER child."""
@@ -1203,6 +1200,20 @@ def _register_skip_positions(node: Any, skip_positions: set, get_text: Callable)
         skip_positions.update(_start_pos(part) for part in iter_tree(skipped))
 
 
+def _member_access_children(node: Any) -> List[Any]:
+    """Member bases and any embedded GDScript method-call arguments."""
+    children = _children(node)
+    out = children[:1]
+    # GDScript puts a method call inside its attribute rather than a parent
+    # call node. Its arguments remain reads; its name is a member.
+    for child in children[1:]:
+        if _zero_arg(child, 'kind') == 'attribute_call':
+            arguments = child.child_by_field_name('arguments')
+            if arguments is not None:
+                out.append(arguments)
+    return out
+
+
 def _member_access_descent(node: Any) -> Optional[List[Any]]:
     """For a member-access-shaped node, return exactly the children to descend
     into (excluding the non-base member/method name), or None when `node` is
@@ -1216,8 +1227,7 @@ def _member_access_descent(node: Any) -> Optional[List[Any]]:
     kind = _zero_arg(node, 'kind')
     if kind in _MEMBER_ACCESS_KINDS:
         # `obj.field` / `obj:method()` — only the base object is a variable.
-        children = _children(node)
-        return children[:1]
+        return _member_access_children(node)
     if kind in ('unconditional_assignable_selector', 'conditional_assignable_selector'):
         # Dart's member access (`.member`/`?.member`) holds only the trailing
         # selector; the base is a preceding sibling already visited. Descend
@@ -1302,9 +1312,7 @@ def _collect_identifier_names(
         if _zero_arg(node, 'end_position').row + 1 < from_line or line > to_line:
             continue
         node_kind = _zero_arg(node, 'kind')
-        if (node_kind in ('identifier', 'variable_name', 'simple_identifier', 'IDENTIFIER',
-                     'shorthand_property_identifier_pattern') and
-                from_line <= line <= to_line):
+        if _is_variable_identifier(node, node_kind) and from_line <= line <= to_line:
             pos = (_zero_arg(node, 'start_position').row, _zero_arg(node, 'start_position').column)
             if pos not in skip_positions:
                 text = get_text(node)
