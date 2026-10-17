@@ -291,3 +291,29 @@ def test_fields_projection_retains_preanalysis_facts(project, incomplete):
         (project / 'broken.py').write_text('def broken(:\n', encoding='utf-8')
     result = run('architecture://proj?against=HEAD', '--format', 'json', '--fields', 'deltas')
     assert result.returncode == (3 if incomplete else 0), result.stderr
+
+
+@pytest.mark.parametrize('name,identity', [
+    ('architecture', 'architecture'), ('architecture', 'architecture_diff'), ('surface', 'surface_scan'),
+])
+@pytest.mark.parametrize('phase', ['analysis', 'postprocess'])
+@pytest.mark.parametrize('field', ['errors', 'warnings'])
+@pytest.mark.parametrize('bad', [None, 7, ['unusable'], [{'code': 'retained', 'message': 'valid diagnostic'}, 'unusable']])
+def test_malformed_trust_frame_is_canonical_failure(project, monkeypatch, name, identity, phase, field, bad):
+    from reveal.adapters.surface import SurfaceAdapter
+    from reveal.utils.results import ResultBuilder
+    owner = ArchitectureAdapter if name == 'architecture' else SurfaceAdapter
+    result = ResultBuilder.create(identity, 'proj', meta={field: bad},
+                                  data={'analysis': {'complete': True}} if identity == 'architecture_diff' else {})
+    if phase == 'analysis':
+        monkeypatch.setattr(owner, 'get_structure', lambda self, **kwargs: result)
+    else:
+        monkeypatch.setattr(owner, 'post_process', staticmethod(lambda before, args: result), raising=False)
+    query = '?against=HEAD' if identity == 'architecture_diff' else ''
+    answer = run(name + '://proj' + query, '--format', 'json')
+    assert answer.returncode == 3, answer.stderr
+    payload = json.loads(answer.stdout)
+    assert payload['type'] == identity
+    assert any(e.get('code') == 'invalid_adapter_answer' for e in payload['meta']['errors'])
+    if isinstance(bad, list) and bad and isinstance(bad[0], dict):
+        assert bad[0] in payload['meta'][field]

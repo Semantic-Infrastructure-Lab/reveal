@@ -122,3 +122,13 @@ def test_complete_comparison_with_only_usage_cause_remains_usage(with_error):
     result = ResultBuilder.create('architecture_diff', '.', data=data,
                                   errors=[{'code': 'invalid_request', 'message': 'invalid entry'}])
     assert execution_exit_code(ArchitectureAdapter.execution_facts(result), fail_on='none') == 2
+
+
+def test_valid_trust_frame_is_preserved_exactly():
+    from reveal.cli.routing.declared import qualify_declared_answer
+    from reveal.utils.results import ResultBuilder
+    metadata = {'errors': [{'code': 'real_error', 'message': 'preserve error'}],
+                'warnings': [{'type': 'real_warning', 'message': 'preserve warning'}], 'confidence': 0.2}
+    result = ResultBuilder.create('architecture', '.', meta=metadata)
+    assert qualify_declared_answer(result, ArchitectureAdapter, '.') is result
+    assert result['meta'] == metadata
