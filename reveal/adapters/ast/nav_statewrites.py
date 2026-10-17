@@ -7,16 +7,18 @@ GitRefResource._parse_and_initialize_attributes (reveal/adapters/git/adapter.py)
 which writes self.path/self.ref/self.subpath/self.query six times while both
 existing flags report clean.
 
-Two write shapes, both invisible to --mutations/--sideeffects:
+Assignment write shapes:
   field   -- assignment target is a member-access node (self.x=, $obj->x=,
              this.x=) — any receiver, not just self/this.
+  global/nonlocal -- a root resolves to a module binding or explicit global/nonlocal
+             declaration in Python/JS/PHP; local container writes stay local.
   env/session -- assignment target is a subscript on a known superglobal
              base ($_SESSION[...], os.environ[...], process.env[...]).
 
 Call-based writes (cache/db/file/env/session) are not reclassified here —
 they're collect_effects()'s existing taxonomy, merged in by kind. DB
-column/table extraction and true global-vs-local distinction are out of
-this slice (see design doc); 'db' inherits collect_effects()'s existing
+column/table extraction, implicit closure captures, PHP reference captures and
+alias/import resolution remain outside this slice; 'db' inherits collect_effects()'s existing
 imprecision (query calls are included alongside true writes) rather than
 inventing a separate CRUD-verb classifier.
 """
@@ -27,6 +29,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from ...core import node_children as _children
 from ...core.treesitter_compat import _zero_arg
+from .nav_bindings import BindingScope
 from .nav_effects import collect_effects
 from .nav_varflow import resolve_assignment_sides
 from .node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_NODES
@@ -149,6 +152,7 @@ def _walk_assignments(
     to_line: int,
     get_text: Callable,
     results: List[Dict[str, Any]],
+    bindings: BindingScope,
 ) -> None:
     start = _zero_arg(node, 'start_position').row + 1
     end = _zero_arg(node, 'end_position').row + 1
@@ -164,12 +168,14 @@ def _walk_assignments(
         if left is not None and from_line <= line <= to_line:
             for target in _assignment_targets(left):
                 kind = _target_kind(target, get_text)
+                if kind not in ('env', 'session'):
+                    kind = bindings.shared_write_kind(target) or kind
                 if kind:
                     results.append({
                         'kind': kind, 'line': line, 'target': get_text(target), 'via': 'assignment',
                     })
     for child in _children(node):
-        _walk_assignments(child, from_line, to_line, get_text, results)
+        _walk_assignments(child, from_line, to_line, get_text, results, bindings)
 
 
 def collect_statewrites(
@@ -181,7 +187,8 @@ def collect_statewrites(
 ) -> List[Dict[str, Any]]:
     """Return persistent/shared-state mutations in a line range, in line order."""
     results: List[Dict[str, Any]] = []
-    _walk_assignments(func_node, from_line, to_line, get_text, results)
+    _walk_assignments(func_node, from_line, to_line, get_text, results,
+                      BindingScope(func_node, get_text, language))
     for e in collect_effects(func_node, from_line, to_line, get_text, language):
         # Call sites only. collect_effects() grew a second, property-access
         # channel in BACK-644 (`os.environ['X']`, `process.env.FOO`), but an
