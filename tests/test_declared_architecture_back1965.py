@@ -320,8 +320,11 @@ def test_malformed_trust_frame_is_canonical_failure(project, monkeypatch, name, 
 
 
 @pytest.mark.parametrize('keep_proof,expected', [(False, 3), (True, 2)])
-def test_postprocess_usage_cannot_hide_lost_required_proof(project, monkeypatch, keep_proof, expected):
+@pytest.mark.parametrize('copy_result', [False, True])
+def test_postprocess_usage_cannot_hide_lost_required_proof(project, monkeypatch, keep_proof, expected, copy_result):
     def process(result, args):
+        if copy_result:
+            result = copy.deepcopy(result)
         if not keep_proof:
             result.pop('analysis')
         result['error'] = 'invalid entry'
