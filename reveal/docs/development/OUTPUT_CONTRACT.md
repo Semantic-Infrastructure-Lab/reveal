@@ -345,7 +345,7 @@ into the legacy exit code for adapters, in text and JSON alike (BACK-1059).
 Declared operations use the explicit policy below. The subcommands
 (`reveal overview`, `reveal hotspots`, ...) print their results through the same handling,
 `cli/routing/subcommand.emit_subcommand_result`, so a failed or cut answer reads the same in
-both forms (BACK-1544). A subcommand's findings exit (`hotspots`/`deps` exit 1 on findings,
+both forms (BACK-1544). A legacy subcommand's findings exit (`hotspots` exits 1 on findings,
 `check`'s 0/1/2/3) is its own and applies after:
 
 | Outcome | How the result says it | Exit | Build it with |
@@ -456,6 +456,18 @@ unsupported languages and harmless warnings remain complete. `abstract_only` and
 JSON arrays plus `impls_cap`. Its default is 5 and zero displays all implementers.
 `--impls 3.0` and `?impls=3.0` both mean 3; fractions, negative values, booleans and
 scientific notation are invalid. Boolean controls use strict declared conversion.
+
+Deps declares default `none` and supports `findings`, selected from complete,
+uncapped circular-group/unused-import counts. Its required `analysis` carrier
+retains exact requested components, completeness states, failed/lost counts and
+findings counts. Missing, malformed or contradictory proof cannot become success;
+returned producer errors remain analysis failures even if labeled invalid request.
+Skipped components are excluded from required work. Top and summary-only are
+presentation controls: top never shrinks JSON, and summary-only applies solely to
+primary JSON after execution facts exist. Text and human-primary artifacts retain
+the full map. Both spellings return `deps_scan`; `--fail-on findings` restores the
+previous text-mode findings gate. Whole-valued `top=3.0` and `top=1e2` are valid;
+CLI `--all` remains rejected, URI `--all` and both `--verbose` expand text only.
 
 Human-primary `--also-json PATH` uses the same result as primary JSON. A requested
 artifact write failure is disclosed on stderr and in `meta.output_errors`, while the

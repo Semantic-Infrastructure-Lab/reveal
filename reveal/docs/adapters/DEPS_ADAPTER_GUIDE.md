@@ -36,6 +36,24 @@ reveal deps . --format json
 | `top` | integer (default `10`) | Number of items shown per section in text output (JSON always returns all). |
 | `no_unused` | `true`, `false` (default) | Skip the unused-imports section. |
 | `no_circular` | `true`, `false` (default) | Skip the circular-dependencies section. |
+| `summary_only` | `true`, `false` (default) | Primary JSON only: replace `base.files` with `total_files`/`total_imports`; retain full evidence and findings. CLI: `--summary-only`. |
+
+`top=0` shows no text entries. Whole-valued numeric spellings such as `3.0`
+and `1e2` are accepted; fractions, negative values and bare booleans are invalid.
+Boolean controls reject malformed values. `--verbose` lifts the text cap in both
+forms. URI `--all` also lifts it; `reveal deps PATH --all` remains unsupported.
+
+Direct CLI and URI answers share the `deps_scan` identity. Their default findings
+policy is `--fail-on none`: completed analysis exits 0 even when circular groups or
+unused imports are present. Use `--fail-on findings` for the previous text-mode
+findings gate, now also available for JSON. A matching gate exits 1; invalid
+requests exit 2; required incomplete/failed analysis or output exits 3. `none`
+cannot suppress required failures. Mixed URI batches retain their legacy policy
+and reject explicit `--fail-on`.
+
+Summary projection applies only to primary `--format json`. Text remains full
+and reports that summary-only has no effect; a human-primary `--also-json PATH`
+artifact also retains the full map. Primary JSON keeps the existing mirror no-op.
 
 ## Reading The Output
 
@@ -66,7 +84,8 @@ an unknown (`null`) count rather than a measured zero. Explicitly skipped checks
 these required components and counts. Diagnostic path lists can be capped at 50;
 their exact counts and cut notes remain available. Unsupported languages,
 unused-detection limitations, unknown warnings and confidence alone do not make
-the analysis incomplete. This evidence does not change the current exit policy.
+the analysis incomplete. Execution facts are established before summary, fields
+or display cuts, so those projections cannot hide findings or missing evidence.
 
 ## Good Review Questions
 

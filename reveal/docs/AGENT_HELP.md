@@ -66,7 +66,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 - **Limit results:** `--limit N` becomes `?limit=N` on ast/markdown/json/git/stats and `?top=N` on hotspots/calls/depends/testability; elsewhere a note says it has no effect. `--head N` slices any list result.
 - **Scripting:** `--format json` puts JSON on stdout (warnings go to stderr); `--no-breadcrumbs` drops the next-step hints. A target that cannot render a `--format` value exits 2.
 - **Machine-readable discovery:** `reveal 'help://schemas/<adapter>'` gives one adapter's query params and output shape; `reveal --discover` gives every adapter's schema (query params, flags, output types, examples) as one JSON document (large: ~12,500 tokens); rules are `reveal --rules`.
-- **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete; `review` 0 pass, 1 warnings, 2 blocking issue or bad target, 3 incomplete; `deps`/`hotspots` exit 1 when they find something.
+- **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete; `review` 0 pass, 1 warnings, 2 blocking issue or bad target, 3 incomplete; `deps` defaults to no findings gate, with `--fail-on findings` for exit 1, usage 2 and incomplete/output failure 3; `hotspots` exits 1 when it finds something.
 
 ---
 
@@ -1643,7 +1643,7 @@ reveal deps . --format json        # Machine-readable for CI
 
 **Output:** Third-party package summary · health line (circular deps + unused imports) · top packages by usage · circular dependency cycles · unused imports with file:line · top importers.
 
-**Exit codes:** 0 (clean) · 1 (circular deps or unused imports found — CI-friendly gate).
+**Exit codes:** 0 (completed, default `--fail-on none`) · 1 (`--fail-on findings` matched circular groups or unused imports) · 2 (invalid request) · 3 (required analysis/output incomplete or failed). Gates use full counts before text or JSON projection.
 
 **Use case:** Before a release or major refactor — confirm no accidental circular imports crept in, surface unused imports to clean up, see dependency surface area at a glance.
 

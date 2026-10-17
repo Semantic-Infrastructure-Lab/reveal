@@ -235,7 +235,7 @@ reveal deps . --no-unused        # circular deps only
 reveal deps . --format json      # CI-friendly output
 ```
 
-**What you get:** `reveal overview` replaces the multi-command orientation sequence — file count, language breakdown, quality score, and recent git activity in one output. `reveal deps` surfaces structural debt that `reveal check` doesn't: import-level coupling and circular dependency cycles that accumulate quietly over time. Both exit 1 on actionable findings for CI use.
+**What you get:** `reveal overview` replaces the multi-command orientation sequence — file count, language breakdown, quality score, and recent git activity in one output. `reveal deps` surfaces structural debt that `reveal check` doesn't: import-level coupling and circular dependency cycles that accumulate quietly over time. Use `reveal deps . --fail-on findings` to exit 1 on circular groups or unused imports; its default reports findings without failing. Required incomplete analysis or output failures exit 3.
 
 ---
 

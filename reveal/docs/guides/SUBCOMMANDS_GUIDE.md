@@ -636,7 +636,7 @@ as entry points. High entry point counts often indicate dynamic loading patterns
 
 ## reveal deps — Dependency Health Dashboard
 
-Wraps `imports://` to give a one-pass dependency health summary: external
+Wraps three `imports://` queries to give a dependency health summary: external
 package count, circular dependency detection, unused imports, top importers.
 
 ### Usage
@@ -652,14 +652,23 @@ reveal deps [PATH] [--top N] [--no-unused] [--no-circular]
 | `--top N` | Top packages/importers to show (default: 10) |
 | `--no-unused` | Skip unused imports section (Health says "not checked"; JSON `skipped`) |
 | `--no-circular` | Skip circular dependency section (Health says "not checked", not ✅; JSON `skipped`) |
+| `--summary-only` | Primary JSON only: replace `base.files` with counts, keeping analysis/findings evidence |
+| `--fail-on none\|findings` | Default none; opt into the circular/unused findings gate |
 | `--format json` | Machine-readable output |
 
 ### Exit Codes
 
 | Code | Meaning |
 |------|---------|
-| 0 | No issues |
-| 1 | Circular deps or unused imports found |
+| 0 | Requested analysis completed; no enabled findings gate matched |
+| 1 | `--fail-on findings` matched circular groups or unused imports |
+| 2 | Invalid request/resource/parameter |
+| 3 | Required analysis or requested output failed or remained incomplete |
+
+Use `--fail-on findings` to retain the previous text-mode findings gate. Both
+spellings and formats now use this policy and `deps_scan` identity. Summary and
+text caps preserve full analysis/gate counts. `--verbose` expands text in both
+forms; `--all` remains available only on the URI form.
 
 ### Examples
 
@@ -668,6 +677,7 @@ reveal deps                          # Current directory
 reveal deps ./src                    # Specific directory
 reveal deps . --no-unused            # Skip unused imports
 reveal deps . --format json          # Machine-readable for CI
+reveal deps . --fail-on findings      # Gate on complete circular/unused findings
 ```
 
 ### See Also

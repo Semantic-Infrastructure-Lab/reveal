@@ -431,6 +431,11 @@ class DepsAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Composed entirely from imports:// — not an independent scan.',
+                'Default --fail-on none reports completed findings without failing; '
+                '--fail-on findings exits 1 for circular groups or unused imports. '
+                'Required analysis/output failures exit 3; invalid requests exit 2.',
+                'summary_only applies only to primary JSON; text and its JSON artifact retain base.files. '
+                'top affects text only (0 shows none); --verbose expands text, and URI --all also expands text.',
                 'Not depends:// (one character apart) — deps:// is a dashboard '
                 'over the whole tree; depends:// answers "who imports this one '
                 'module" for a single target.',
@@ -449,7 +454,7 @@ class DepsAdapter(ResourceAdapter):
         return {
             'adapter': 'deps',
             'description': 'Dependency health dashboard (external packages, circular deps, unused imports)',
-            'uri_syntax': 'deps://<path>?top=10&no_unused=true&no_circular=true',
+            'uri_syntax': 'deps://<path>?top=10&no_unused=true&no_circular=true&summary_only=true',
             'resource': DepsAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none', 'findings']},
             'query_params': param_schema(DepsAdapter.PARAM_SPECS),
