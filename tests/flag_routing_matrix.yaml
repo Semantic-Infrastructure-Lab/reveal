@@ -22,6 +22,7 @@ adapters:
       via: []
     verbose:
       via:
+      - structure-param
       - routing-special
   ast:
     all:

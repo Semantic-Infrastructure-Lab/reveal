@@ -225,11 +225,20 @@ def qualify_declared_answer(result, adapter_class, path: str, expected_type=None
     fields = required | {'meta', 'scope'}
     data = {key: value for key, value in original.items() if key not in fields}
     data['error'] = error
-    meta = original.get('meta')
-    meta = dict(meta) if isinstance(meta, dict) else {'warnings': []}
-    meta['errors'] = [*meta.get('errors', []), {'code': 'invalid_adapter_answer', 'message': error}]
+    meta = _repair_answer_meta(original.get('meta'), error)
     return ResultBuilder.create(
         expected_type, to_posix(path), contract_version=CONTRACT_VERSION,
         source_type='directory' if Path(path).is_dir() else 'file',
         meta=meta, scope=original.get('scope') if isinstance(original.get('scope'), dict) else None,
         data=data)
+
+
+def _repair_answer_meta(meta, error):
+    """Keep usable diagnostics when repairing a malformed required envelope."""
+    meta = dict(meta) if isinstance(meta, dict) else {'warnings': []}
+    errors = meta.get('errors')
+    meta['errors'] = [*(errors if isinstance(errors, list) else []),
+                      {'code': 'invalid_adapter_answer', 'message': error}]
+    if not isinstance(meta.get('warnings'), list):
+        meta['warnings'] = []
+    return meta

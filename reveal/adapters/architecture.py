@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from reveal.capabilities import scope_dict_for_path
 from reveal.reveal_types import CONTRACT_VERSION
@@ -376,6 +376,20 @@ def _architecture_ref(value: Any) -> str:
     return value
 
 
+def _architecture_completeness(result, meta, invalid_only):
+    from ..utils.results import AnalysisCompleteness
+    missing = {'analysis_failed', 'parse_recovered', 'partial_parse', 'worker_lost'}
+    missing_inputs = any(w.get('type') in missing for w in meta.get('warnings', []))
+    if invalid_only and 'analysis' not in result and not missing_inputs:
+        return AnalysisCompleteness.NOT_STARTED
+    incomplete = (bool(meta.get('errors')) and not invalid_only) or missing_inputs
+    if isinstance(result, dict) and result.get('type') == 'architecture_diff':
+        analysis = result.get('analysis')
+        complete = isinstance(analysis, dict) and analysis.get('complete') is True
+        incomplete = incomplete or not complete
+    return AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE
+
+
 @register_adapter('architecture')
 @register_renderer(ArchitectureRenderer)
 class ArchitectureAdapter(ResourceAdapter):
@@ -393,11 +407,12 @@ class ArchitectureAdapter(ResourceAdapter):
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     PARAM_SPECS = (
         ParamSpec('top', 'integer', 'Items per text section and complexity analysis population (top*4)',
-                  5, _architecture_top, minimum=0, role='analysis',
+                  5, _architecture_top, minimum=0, role='analysis', examples=('top=10',),
                   zero_policy='ordinary: no ranked complexity; diff: population 4',
                   cli=CliBinding(('--top',), metavar='N')),
         ParamSpec('no_imports', 'boolean', 'Skip ordinary import graph analysis', False,
-                  boolean_value, role='analysis', cli=CliBinding(('--no-imports',), action='store_true')),
+                  boolean_value, role='analysis', examples=('no_imports=true',),
+                  cli=CliBinding(('--no-imports',), action='store_true')),
         ParamSpec('against', 'string', 'Compare the live working tree against a git ref', None,
                   _architecture_ref, role='operation', uri_codec='percent',
                   cli=CliBinding(('--against',), metavar='REF')),
@@ -428,30 +443,31 @@ class ArchitectureAdapter(ResourceAdapter):
 
     @staticmethod
     def execution_facts(result):
-        from ..utils.results import (AnalysisCompleteness, FailureCause, failure_execution_facts,
+        from ..utils.results import (ExecutionFacts, FailureCause, failure_execution_facts,
                                      result_execution_facts)
         meta = result.get('meta', {}) if isinstance(result, dict) else {}
         errors = meta.get('errors', [])
-        if errors and all(error.get('code') == 'invalid_request' for error in errors):
-            return failure_execution_facts(FailureCause.INVALID_REQUEST)
-        missing = {'analysis_failed', 'parse_recovered', 'partial_parse', 'worker_lost'}
-        incomplete = bool(errors) or any(w.get('type') in missing for w in meta.get('warnings', []))
-        if isinstance(result, dict) and result.get('type') == 'architecture_diff':
-            incomplete = incomplete or result.get('analysis', {}).get('complete') is False
-        state = AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE
-        return result_execution_facts(result, completeness=state)
+        invalid_only = bool(errors) and all(error.get('code') == 'invalid_request' for error in errors)
+        state = _architecture_completeness(result, meta, invalid_only)
+        cause = FailureCause.INVALID_REQUEST if invalid_only else FailureCause.ANALYSIS
+        facts = result_execution_facts(result, completeness=state, failure_cause=cause)
+        if invalid_only and not facts.failures:
+            # Explicit owner usage diagnostics remain a cause even without a
+            # redundant top-level error; retain independent completeness facts.
+            return ExecutionFacts(state, failures=failure_execution_facts(cause).failures)
+        return facts
 
-    def _comparison(self, path: Path, against: str, top: int):
+    def _comparison(self, path: Path, against: str, top: int) -> Dict[str, Any]:
         from ..diff.architecture_diff import _open_repo, _resolve_commit, run_architecture_diff
         from ..utils.results import FailureCause
         try:
             repo = _open_repo(path.resolve())
             _resolve_commit(repo, against)
         except ValueError as exc:
-            return ResultBuilder.create(
+            return cast(Dict[str, Any], ResultBuilder.create(
                 'architecture_diff', self.path, contract_version=CONTRACT_VERSION,
                 errors=[{'code': FailureCause.INVALID_REQUEST.value, 'message': str(exc)}],
-                error=str(exc))
+                error=str(exc)))
         return run_architecture_diff(path, against, top_n=max(top, 1) * 4)
 
     @staticmethod

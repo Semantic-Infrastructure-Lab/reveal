@@ -124,13 +124,18 @@ def _reads_via_shared_seam(name, flag):
     CLI_QUERY_FLAGS declaration, not on anything visible in the subcommand's source."""
     own_rel = 'reveal/' + SUBCOMMANDS[name][0].split('reveal.', 1)[1].replace('.', '/') + '.py'
     src = (REVEAL_PKG.parent / own_rel).read_text(encoding='utf-8')
-    if 'inject_query_flags' not in src:
+    declared = bool(SUBCOMMANDS[name].declared_adapter)
+    if 'inject_query_flags' not in src and not declared:
         return False
     from reveal.adapters.base import get_adapter_class
     try:
         adapter_cls = get_adapter_class(name)
     except Exception:
         return False
+    if declared:
+        import inspect
+        # The declared runner uses the URI owner's named-argument forwarding.
+        return flag in inspect.signature(adapter_cls.get_structure).parameters
     return bool(getattr(adapter_cls, 'CLI_QUERY_FLAGS', {}).get(flag))
 
 

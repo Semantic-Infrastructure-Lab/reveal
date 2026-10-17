@@ -50,9 +50,9 @@ def test_default_is_not_a_path_adapter():
 
 
 @pytest.mark.parametrize('scheme', PATH_ADAPTERS)
-def test_missing_path_exits_1_with_error(scheme):
+def test_missing_path_exits_with_error(scheme):
     code, out, err = _run(f'{scheme}://nonexistent_zz_1321')
-    assert code == 1
+    assert code == (2 if scheme in ('architecture', 'surface') else 1)
     assert f'Error ({scheme}://): Path not found: nonexistent_zz_1321' in err
     assert out == ''
 
@@ -60,16 +60,16 @@ def test_missing_path_exits_1_with_error(scheme):
 @pytest.mark.parametrize('scheme', PATH_ADAPTERS)
 def test_missing_path_json_emits_error_envelope(scheme):
     code, out, _ = _run(f'{scheme}://nonexistent_zz_1321', format='json')
-    assert code == 1
+    assert code == (2 if scheme in ('architecture', 'surface') else 1)
     payload = json.loads(out)
     assert 'Path not found' in payload['error']
-    assert payload['type'] == scheme
+    assert payload['type'] == ('surface_scan' if scheme == 'surface' else scheme)
 
 
 def test_query_string_is_not_part_of_the_path():
     # 'nonexistent_zz?type=env' must be judged on 'nonexistent_zz' alone.
     code, _, err = _run('surface://nonexistent_zz_1321?type=env')
-    assert code == 1
+    assert code == 2
     assert 'Path not found: nonexistent_zz_1321\n' in err
 
 

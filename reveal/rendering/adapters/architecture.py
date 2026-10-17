@@ -151,12 +151,15 @@ def architecture_diff_text(report: Dict[str, Any]) -> str:
     centroid = deltas['complexity_centroid']
     lines.append(f"Complexity centroid (top {centroid['top_n']}): {centroid['base']} -> {centroid['head']}  ({_signed(centroid['change'])})")
 
-    eps = deltas['entry_points']
-    if eps['added'] or eps['removed']:
-        lines.append('\nEntry points')
-        lines.extend(f'  + {file}' for file in eps['added'])
-        lines.extend(f'  - {file}' for file in eps['removed'])
+    lines.extend(_diff_entry_point_lines(deltas['entry_points']))
     return '\n'.join(lines) + '\n'
+
+
+def _diff_entry_point_lines(eps: Dict[str, List[str]]) -> List[str]:
+    if not (eps['added'] or eps['removed']):
+        return []
+    return ['\nEntry points', *(f'  + {file}' for file in eps['added']),
+            *(f'  - {file}' for file in eps['removed'])]
 
 
 def _signed(value: Optional[float]) -> str:
