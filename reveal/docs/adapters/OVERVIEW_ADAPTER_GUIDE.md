@@ -48,8 +48,9 @@ reveal overview . --format json
 including when an explicit `top` was supplied. This corrects the URI form's
 previous analysis-only cap under those flags. Without either flag, `top=0`
 retains all Stats hotspots, zero complex functions and zero Git history entries;
-text rankings show no entries. The complete Stats `files` inventory remains
-available, as do the complete Imports rankings.
+top-controlled text rankings show no entries. Core abstractions keep their
+existing fixed five-entry text cap. The complete Stats `files` inventory remains
+available, as do the complete Imports rankings in JSON.
 
 Both spellings use fixed answer type `overview` and the same declared execution
 path. `--fail-on none` is the default and sole supported policy: a nonempty

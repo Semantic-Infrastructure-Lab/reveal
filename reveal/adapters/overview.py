@@ -392,7 +392,7 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path) -> Dict[str, A
         _validate_import_rows(components, 'components', 'components')
         _count(_object(circular, 'circular imports'), 'count')
         metadata = _object(metadata, 'ImportsAdapter metadata')
-        unsupported = metadata.get('unsupported_extensions', {})
+        unsupported = metadata.get('unsupported_extensions')
         _validate_unsupported(unsupported)
         try:
             _validate_import_metadata(metadata, unsupported)
