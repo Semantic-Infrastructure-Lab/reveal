@@ -342,11 +342,11 @@ Adapters MAY include additional fields beyond the contract. These fields:
 A result says what happened through two top-level fields and one kind of `meta.warnings`
 entry. `reveal.utils.results.outcome_of` is the one definition, and the URI router turns it
 into the legacy exit code for adapters, in text and JSON alike (BACK-1059).
-Declared operations use the explicit policy below. The subcommands
-(`reveal overview`, `reveal hotspots`, ...) print their results through the same handling,
-`cli/routing/subcommand.emit_subcommand_result`, so a failed or cut answer reads the same in
-both forms (BACK-1544). A legacy subcommand's findings exit (`hotspots` exits 1 on findings,
-`check`'s 0/1/2/3) is its own and applies after:
+Declared operations, including direct hotspots requests, use the explicit policy
+below. Legacy subcommands print their results through
+`cli/routing/subcommand.emit_subcommand_result`, so a failed or cut answer reads
+the same in both forms (BACK-1544). Their command-specific findings policies
+apply after this legacy outcome handling:
 
 | Outcome | How the result says it | Exit | Build it with |
 |---|---|---|---|

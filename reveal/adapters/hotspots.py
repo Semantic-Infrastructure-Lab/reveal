@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import re
 import math
+import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, cast
 
@@ -20,12 +20,10 @@ from ..utils.query_binding import bind_declared_params, boolean_value
 from ..utils.results import AnalysisCompleteness, ResultBuilder, result_execution_facts
 
 
-
 def _hotspots_top(value: Any) -> int:
     if isinstance(value, bool):
         raise ValueError('top requires a whole number, not a boolean')
     return nonnegative_display_limit(value)
-
 
 
 def _ranking_top(params: Dict[str, Any], verbose: bool) -> int:
@@ -34,6 +32,7 @@ def _ranking_top(params: Dict[str, Any], verbose: bool) -> int:
         from reveal.adapters.overview import UNLIMITED_TOP
         return UNLIMITED_TOP
     return top
+
 
 def _hotspots_min(value: Any) -> int:
     if isinstance(value, bool):
@@ -116,6 +115,7 @@ def _hotspots_proof_error(result: Any) -> Optional[str]:
     if type(summary.get('has_findings')) is not bool:
         return 'Required serious-findings evidence is missing or malformed'
     return None
+
 
 def _provenance_for_file(file_str: Optional[str], base_path: Path) -> Optional[str]:
     """Classify a hotspot entry's 'test'/'vendor'/'minified'/None provenance
