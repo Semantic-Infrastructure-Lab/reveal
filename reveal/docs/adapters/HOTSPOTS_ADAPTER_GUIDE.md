@@ -53,8 +53,29 @@ untested) for languages with no known test convention, and the result carries
 a `test_convention_unknown` warning.
 
 Text output shows a coverage overlay (✅ = test found, ⚪ = no test found, ❔ = unknown for this language)
-next to each complex function; this is recomputed from the same heuristic
-at render time and is not part of the JSON contract.
+next to each complex function, using its existing `has_test_hint` value in both
+invocation forms. The symbols themselves are presentation; the hint remains in JSON.
+
+`summary.has_findings` records whether the requested population contains a file
+with quality below 70 or a function with complexity above 20. File findings use
+all analyzed file scores before the composite ranking is cut; a high-ranked file
+can have a better quality score than a lower-ranked critical file. When critical
+findings fall outside the displayed rankings, text discloses that fact. Function
+ranking is descending by complexity, so its retained maximum preserves this
+predicate even when `top` cuts the list. `min_complexity` and the two only-flags
+still define the requested population. Both only-flags may coexist, leaving both
+rankings empty while retaining the statistics coverage scan.
+
+Empty rankings say that no hotspots were found in the requested analyzed
+population. This is a scoped observation rather than an overall quality verdict.
+Single-file requests support file ranking and disclose failed check rules just
+as directory requests do. Optional churn warnings survive composition without
+becoming adverse findings.
+
+The existing exit policy remains: direct CLI text exits 1 for these findings,
+including critical files outside its top ranking; CLI JSON and URI requests
+retain their existing exit behavior. This producer repair does not adopt the
+declared execution policy or add a `--fail-on` gate.
 
 ## Good Review Questions
 

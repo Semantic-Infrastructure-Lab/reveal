@@ -56,8 +56,9 @@ def test_hotspots_still_quiet_on_empty_function_population(no_function_tree):
     assert 'Filter key(s)' not in result.stdout + result.stderr
 
 
-# F4: the clean verdict under --functions-only is keyed on the coverage of the scan that ran.
+# F4 diagnostics remain; BACK-1974 keeps every empty-ranking statement scoped.
 CLEAN_VERDICT = 'No hotspots found ✅  Code quality looks good.'
+SCOPED_VERDICT = 'No hotspots found in the requested analyzed population.'
 
 
 @pytest.fixture(scope='module')
@@ -76,16 +77,19 @@ def syntax_tree(tmp_path_factory):
 
 
 @pytest.mark.parametrize('form', ['cli', 'uri'])
-def test_clean_functions_only_scan_prints_the_clean_verdict(clean_tree, form):
+def test_clean_functions_only_scan_prints_scoped_observation(clean_tree, form):
     args = (('hotspots', clean_tree, '--functions-only') if form == 'cli'
             else (f'hotspots://{clean_tree}?functions_only=true',))
     result = _run(*args)
     assert result.returncode == 0, result.stderr
-    assert CLEAN_VERDICT in result.stdout
+    assert SCOPED_VERDICT in result.stdout
+    assert CLEAN_VERDICT not in result.stdout
 
 
-def test_default_mode_clean_verdict_is_unchanged(clean_tree):
-    assert CLEAN_VERDICT in _run('hotspots', clean_tree).stdout
+def test_default_mode_empty_ranking_is_also_scoped(clean_tree):
+    result = _run('hotspots', clean_tree)
+    assert SCOPED_VERDICT in result.stdout
+    assert CLEAN_VERDICT not in result.stdout
 
 
 @pytest.mark.parametrize('form', ['cli', 'uri'])
