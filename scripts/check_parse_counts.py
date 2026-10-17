@@ -21,6 +21,7 @@ import tempfile
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 MANIFEST = ROOT / 'scripts' / 'parse_counts_manifest.json'
 BASELINE = ROOT / 'scripts' / 'parse_counts_baseline.json'
 EVENTS = ('request', 'attempt', 'artifact', 'failure', 'outcome')
@@ -29,8 +30,13 @@ COVERAGE = (
     'fullsource/snippet/validation and target/external/unattributed are distinct. '
     'Uninstrumented: third-party/generated/startup direct ast.parse, direct annotation '
     'and V-series bypasses, native retries inside ts_parse. No parallel or cross-command claim. '
-    'Runtime/version metadata must repeat across five current runs; historical versions are provenance, '
-    'not ceilings. New parser/domain/content/count identities still fail the accepted ceilings.'
+    'Pinned fullsource physical inputs must match a declared clean source variant (no BOM/compat '
+    'rewrite qualified here). Full command JSON is retained; only the copied corpus prefix is normalized. '
+    'A null tree-sitter distribution version explicitly means absent/bundled distribution; '
+    'the language-pack version is still required. Runtime/version metadata must repeat across five current runs; historical versions are provenance, '
+    'not ceilings. Request/attempt/artifact counts are ceilings; successful built/cached outcomes '
+    'remain full ledger evidence without preventing improved reuse. New parser/domain/content '
+    'request identities still fail the accepted ceilings.'
 )
 
 # SystemExit is caught INSIDE capture so validation runs even on a CLI findings exit.
@@ -71,19 +77,25 @@ def load_audit(path: Path) -> dict[str, Any]:
     return result
 
 
+def _require_metadata_strings(values: dict, keys: tuple[str, ...]) -> None:
+    if not isinstance(values, dict) or any(
+            not isinstance(values.get(key), str) or not values[key].strip() for key in keys):
+        raise ValueError(f'audit metadata requires nonempty strings: {keys}')
+
+
 def _validate_header(audit: dict, root_pid: int) -> None:
     if audit.get('schema_version') != 1 or audit.get('complete') is not True:
         raise ValueError('audit is not complete')
     metadata = audit.get('metadata', {})
-    if metadata.get('pid') != root_pid or not metadata.get('parser_versions'):
-        raise ValueError('audit root PID or parser metadata missing')
-    versions = metadata['parser_versions']
-    required = {'python.ast', 'tree-sitter', 'tree-sitter-language-pack'}
-    if not required.issubset(versions) or not versions['python.ast']:
-        raise ValueError('parser version metadata incomplete')
-    runtime = metadata.get('runtime') or {}
-    if not runtime.get('platform') or not runtime.get('implementation'):
-        raise ValueError('child runtime metadata incomplete')
+    if not isinstance(metadata, dict) or metadata.get('pid') != root_pid:
+        raise ValueError('audit root PID metadata missing')
+    versions = metadata.get('parser_versions')
+    _require_metadata_strings(versions, ('python.ast', 'tree-sitter-language-pack'))
+    if 'tree-sitter' not in versions:
+        raise ValueError('tree-sitter distribution metadata missing')
+    if versions['tree-sitter'] is not None:
+        _require_metadata_strings(versions, ('tree-sitter',))
+    _require_metadata_strings(metadata.get('runtime'), ('platform', 'implementation'))
     if audit.get('exit_code') != 0:
         raise ValueError('audit reports command failure exit')
 
@@ -135,6 +147,20 @@ def _validate_event_shape(event: dict) -> None:
             raise ValueError(f'unknown audit {field}: {event[field]}')
 
 
+def _validate_cold_work(rows: list[dict]) -> None:
+    built = set()
+    for event in rows:
+        identity = event['parser'], event['source_hash']
+        if event['event'] == 'artifact':
+            built.add(identity)
+        if event['event'] == 'outcome' and event['outcome'] == 'cached' and identity not in built:
+            raise ValueError('cold cached request has no earlier observed artifact')
+        if (event['scope'] == 'target' and event['domain'] == 'fullsource'
+                and event['event'] in ('attempt', 'artifact', 'failure')
+                and event['parsed_hash'] != event['source_hash']):
+            raise ValueError('unqualified physical input transformation in pinned clean corpus')
+
+
 def audit_snapshot(audit: dict, root_pid: int, corpus: Path, targets: dict) -> dict:
     from reveal.utils.parse_audit import ParseCapture, ParseEvent
     _validate_header(audit, root_pid)
@@ -147,6 +173,7 @@ def audit_snapshot(audit: dict, root_pid: int, corpus: Path, targets: dict) -> d
     except (TypeError, KeyError) as error:
         raise ValueError(f'invalid audit event: {error}') from error
     ParseCapture(corpus, events=events).validate()
+    _validate_cold_work(rows)
     counts: Counter = Counter()
     totals = dict.fromkeys(EVENTS, 0)
     coverage = set()
@@ -193,7 +220,21 @@ def _validate_analysis_state(node: Any, allowed_warnings: list[str]) -> None:
             _validate_analysis_state(child, allowed_warnings)
 
 
-def validate_command_output(status: int, stdout: str, spec: dict, target_count: int) -> dict:
+def _normalize_result(value: Any, corpus: Path | None) -> Any:
+    """Only invocation-root prefixes vary; retain all fields and list ordering."""
+    if isinstance(value, dict):
+        return {key: _normalize_result(child, corpus) for key, child in value.items()}
+    if isinstance(value, list):
+        return [_normalize_result(child, corpus) for child in value]
+    if isinstance(value, str) and corpus is not None:
+        for prefix in (str(corpus), corpus.as_posix()):
+            if value == prefix or value.startswith((prefix + '/', prefix + '\\')):
+                return '<corpus>' + value[len(prefix):]
+    return value
+
+
+def validate_command_output(status: int, stdout: str, spec: dict, target_count: int,
+                            corpus: Path | None = None) -> dict:
     if status != spec['exit_code']:
         raise ValueError(f'command exit {status}, expected {spec["exit_code"]}')
     try:
@@ -209,7 +250,8 @@ def validate_command_output(status: int, stdout: str, spec: dict, target_count: 
         if disclosures != spec.get('allowed_scan_disclosures', []):
             raise ValueError(f'command scan_disclosures not qualified: {disclosures}')
     summary = _outcome_summary(result, target_count)
-    return {**summary, 'warnings': meta.get('warnings', [])}
+    return {**summary, 'warnings': meta.get('warnings', []),
+            'result': _normalize_result(result, corpus)}
 
 
 def _outcome_summary(result: dict, target_count: int) -> dict:
@@ -244,6 +286,8 @@ def compare_snapshots(baseline: dict, current: dict) -> list[str]:
     errors = [f'{key} changed' for key in ('coverage', 'command_outcome', 'stderr')
               if baseline.get(key) != current.get(key)]
     for key, count in current['counts'].items():
+        if json.loads(key)['event'] not in ('request', 'attempt', 'artifact'):
+            continue
         ceiling = baseline['counts'].get(key, 0)
         if count > ceiling:
             errors.append(f'{key}: {ceiling} -> {count}')
@@ -275,7 +319,7 @@ def run_once(spec: dict, corpus: Path, targets: dict, run_directory: Path) -> di
             process.communicate(timeout=10)
             raise ValueError('command timed out before audit completion')
         try:
-            outcome = validate_command_output(process.returncode, stdout, spec, len(targets))
+            outcome = validate_command_output(process.returncode, stdout, spec, len(targets), corpus)
             snapshot = audit_snapshot(load_audit(audit_path), process.pid, corpus, targets)
         except ValueError as error:
             raise ValueError(f'{arguments}: {error}\nstdout:\n{stdout}\nstderr:\n{stderr}') from error
