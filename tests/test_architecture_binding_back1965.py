@@ -94,3 +94,20 @@ def test_malformed_type_and_metadata_repair_is_a_required_failure():
     repaired = qualify_declared_answer(wrong, ArchitectureAdapter, '.', 'architecture_diff')
     assert repaired['type'] == 'architecture_diff'
     assert execution_exit_code(ArchitectureAdapter.execution_facts(repaired), fail_on='none') == 3
+
+
+def test_schema_preserves_existing_parameter_examples():
+    params = ArchitectureAdapter.get_schema()['query_params']
+    assert params['top']['examples'] == ['top=10']
+    assert params['no_imports']['examples'] == ['no_imports=true']
+
+
+@pytest.mark.parametrize('identity', ['architecture', 'architecture_diff'])
+@pytest.mark.parametrize('warning', ['analysis_failed', 'partial_parse', 'worker_lost', 'parse_recovered'])
+def test_missing_evidence_wins_over_usage_without_analysis_record(identity, warning):
+    from reveal.utils.results import ResultBuilder, execution_exit_code
+    result = ResultBuilder.create(identity, '.',
+                                  errors=[{'code': 'invalid_request', 'message': 'invalid entry'}],
+                                  warnings=[{'type': warning, 'message': 'independent missing evidence'}],
+                                  error='invalid entry')
+    assert execution_exit_code(ArchitectureAdapter.execution_facts(result), fail_on='none') == 3
