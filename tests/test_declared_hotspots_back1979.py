@@ -47,6 +47,9 @@ def test_exact_json_parity(project, cli, query, provenance):
     left = run('hotspots', 'proj', *cli, '--format', 'json', *flags)
     right = run('hotspots://proj'+query, '--format', 'json', *flags)
     assert left.returncode == right.returncode == 0, (left.stderr, right.stderr)
+    if provenance:
+        assert json.loads(left.stdout)['execution']['command'] == ' '.join(['reveal', 'hotspots', 'proj', *cli, '--format', 'json', *flags])
+        assert json.loads(right.stdout)['execution']['command'] == ' '.join(['reveal', 'hotspots://proj'+query, '--format', 'json', *flags])
     equal_answers(json.loads(left.stdout), json.loads(right.stdout))
 
 
@@ -136,8 +139,8 @@ def test_required_outer_proof(project, monkeypatch, transport, phase, kind):
 
 @pytest.mark.parametrize('transport', ['cli', 'uri'])
 @pytest.mark.parametrize('policy,expected', [('none', 0), ('findings', 1)])
-def test_findings_survive_fields_head_budget(project, transport, policy, expected):
-    result = run(*argv(transport), '--format', 'json', '--fields', 'path', '--head', '0', '--budget', '100', '--fail-on', policy)
+def test_findings_survive_fields_and_item_budget(project, transport, policy, expected):
+    result = run(*argv(transport), '--format', 'json', '--fields', 'path', '--max-items', '0', '--fail-on', policy)
     assert result.returncode == expected, result.stderr
     assert 'summary' not in json.loads(result.stdout)
 
@@ -245,3 +248,10 @@ def test_real_closed_pipe(project, partial, artifact, policy, expected):
 def test_legacy_batch_gate_boundary(project):
     result = run('hotspots://proj', '--batch', '--fail-on', 'findings')
     assert result.returncode == 2 and not result.stdout
+
+
+@pytest.mark.parametrize('policy,expected', [('none', 0), ('findings', 1)])
+def test_uri_head_retains_preprojection_findings(project, policy, expected):
+    result = run('hotspots://proj', '--format', 'json', '--head', '0', '--fail-on', policy)
+    assert result.returncode == expected, result.stderr
+    assert json.loads(result.stdout)['function_hotspots'] == []
