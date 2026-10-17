@@ -193,6 +193,16 @@ def test_partial_real_analysis_wins_over_findings_and_projection(project, transp
     assert 'base' in json.loads(result.stdout)
 
 
+@pytest.mark.parametrize('transport', ['cli', 'uri'])
+def test_complete_findings_gate_survives_summary_and_field_projection(project, transport):
+    result = run(*argv(transport, '?summary_only=true', ['--summary-only']), '--format', 'json',
+                 '--fields', 'base', '--fail-on', 'findings')
+    assert result.returncode == 1, result.stderr
+    answer = json.loads(result.stdout)
+    assert set(answer) == {'base'}
+    assert answer['base']['total_files'] == 2 and 'files' not in answer['base']
+
+
 @pytest.mark.parametrize('query,cli', [('top=-1', ['--top', '-1']), ('top=1.5', ['--top', '1.5']),
                                     ('top=bad', ['--top', 'bad']), ('top', None),
                                     ('no_unused=bad', None), ('no_circular=bad', None), ('summary_only=bad', None)])
