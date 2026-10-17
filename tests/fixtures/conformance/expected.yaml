@@ -574,3 +574,43 @@ php:
   - {kind: cache, line: 39}
   decorators: {target: Reporter, category: classes, expected: ["#[Deprecated]"]}
   bases: {target: Reporter, category: classes, expected: ["Batch"]}
+
+# BACK-1162: manually derived from lua/sample.lua, not captured CLI output.
+lua:
+  entry_function: processOrder
+  outline_functions: [validate, processOrder, run]
+  calls_validate_callers:
+  - {line: 11, function: processOrder}
+  imports_unused:
+    not_supported: true  # require extraction exists; unused detection is not supported
+  varflow_result:
+  - {kind: WRITE, line: 12}
+  - {kind: "READ/COND", line: 13}
+  - {kind: READ, line: 17}
+  - {kind: WRITE, line: 18}
+  - {kind: READ, line: 18}
+  - {kind: READ, line: 19}
+  sideeffects:
+  - {line: 16, kind: file}
+  - {line: 17, kind: file}
+  exits:
+  - {kind: RETURN, line: 14}
+  - {kind: RETURN, line: 19}
+  ifmap:
+  - {keyword: IF, line_start: 13}
+  catchmap:
+    not_supported: true  # no native try/catch; pcall is a function call
+  mutations_probe: {range: "12-12", var: result, next_read_line: 13}
+  returns:
+  - {line: 14, gate_lines: [13]}
+  - {line: 19, gate_lines: []}
+  batch_element: ":27-32"  # table-method qualified extraction is pinned separately
+  loopmap:
+  - {keyword: FOR, line_start: 28}
+  fanout_effects:
+  - {line: 30, kind: cache}
+  statewrites:
+  - {kind: field, line: 29}
+  - {kind: cache, line: 30}
+  decorators: {target: processOrder, category: functions, not_supported: true}
+  bases: {target: processOrder, category: functions, not_supported: true}

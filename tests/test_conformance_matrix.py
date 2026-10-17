@@ -33,7 +33,7 @@ EXPECTED = yaml.safe_load((FIXTURES_DIR / "expected.yaml").read_text(encoding="u
 EXTENSIONS = {
     "python": "py", "c": "c", "cpp": "cpp", "csharp": "cs", "go": "go",
     "java": "java", "javascript": "js", "rust": "rs", "typescript": "ts",
-    "kotlin": "kt", "swift": "swift", "ruby": "rb", "php": "php",
+    "kotlin": "kt", "swift": "swift", "ruby": "rb", "php": "php", "lua": "lua",
 }
 
 LANGUAGES = sorted(EXPECTED.keys())
@@ -723,3 +723,10 @@ def test_check_and_hotspots_complete_quickly(lang):
             assert 'exceeded 3 source files' in result.stderr, (
                 f"{lang} {flag}: exit 3 without a scan-cap disclosure: {result.stderr}"
             )
+
+
+def test_lua_table_method_is_addressable():
+    """A table-qualified definition must remain distinct from the top-level run."""
+    result = _run_reveal_direct(str(_sample_path('lua')), 'Batch.run', '--format', 'json')
+    assert result.returncode == 0, result.stderr
+    assert 'Batch.total = Batch.total + item' in result.stdout
