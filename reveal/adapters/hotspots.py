@@ -49,6 +49,11 @@ def _relativize_hotspots_paths(file_hotspots: List[Dict[str, Any]], fn_hotspots:
             fn['file'] = rel(fn['file'])
 
 
+def _has_findings(qualities: Iterable[Any], complexities: Iterable[Any]) -> bool:
+    """The existing serious-hotspot predicate, independent of presentation."""
+    return any(quality < 70 for quality in qualities) or any(cx > 20 for cx in complexities)
+
+
 def _compose_stats(adapter: 'HotspotsAdapter', path: Path, **params: Any) -> Dict[str, Any]:
     """Run StatsAdapter through compose() and keep its summary as the scan's coverage record."""
     from reveal.adapters.stats import StatsAdapter
@@ -61,6 +66,12 @@ def _compose_stats(adapter: 'HotspotsAdapter', path: Path, **params: Any) -> Dic
     extra: Dict[str, Any] = {'exclude': list(_patterns)} if _patterns else {}
     data = adapter.compose(StatsAdapter, str(path), default={}, **params, **extra)
     adapter.stats_summary = data.get('summary', {})
+    if data.get('warnings'):
+        # Stats still returns optional churn disclosures outside its meta frame.
+        adapter.fold_meta({'warnings': data['warnings']})
+    if params.get('hotspots'):
+        adapter._file_findings = _has_findings(
+            (file.get('quality', {}).get('score', 100) for file in data.get('files', [])), ())
     return cast(Dict[str, Any], data)
 
 
@@ -208,6 +219,7 @@ class HotspotsAdapter(ResourceAdapter):
         # (only the per-function `has_test_hint` boolean derived from it does).
         self.test_index: Optional[Set[str]] = None
         self.stats_summary: Dict[str, Any] = {}
+        self._file_findings = False
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -288,11 +300,17 @@ class HotspotsAdapter(ResourceAdapter):
         files_only = str(self.query_params.get('files_only', False)).lower() == 'true'
 
         self.stats_summary = {}
+        self._file_findings = False
         file_hotspots: List[Dict[str, Any]] = [] if functions_only else _run_file_hotspots(self, path, top)
         fn_hotspots: List[Dict[str, Any]] = [] if files_only else _run_function_hotspots(self, path, min_cx, top)
         if functions_only:
             _record_function_scan_coverage(self, path)
 
+        # Stats' files are whole even when its ranking is cut. AST ranks by
+        # descending complexity with top >= 1, so a critical maximum survives.
+        has_findings = self._file_findings or _has_findings(
+            (entry.get('quality_score', 100) for entry in file_hotspots),
+            (fn.get('complexity', 0) for fn in fn_hotspots))
         _relativize_hotspots_paths(file_hotspots, fn_hotspots, path)
 
         # BACK-1195: mark each ranked entry with its provenance so a reader
@@ -321,7 +339,7 @@ class HotspotsAdapter(ResourceAdapter):
             'path': str(path),
             'file_hotspots': file_hotspots,
             'function_hotspots': fn_hotspots,
-            'summary': self.stats_summary,
+            'summary': {**self.stats_summary, 'has_findings': has_findings},
         }
 
         meta = self.composed_meta()

@@ -9,7 +9,7 @@ def _render_file_hotspots(hotspots: List[Dict[str, Any]], top: int, root: str=''
     lines: List[str] = []
     if not hotspots:
         return lines
-    lines.append(f'\nFile hotspots (top {min(len(hotspots), top)} by severity):')
+    lines.append(f'\nFile hotspots (top {len(hotspots)} by severity):')
     for h in hotspots:
         name = h.get('file', '?')
         quality = h.get('quality_score', '?')
@@ -35,12 +35,21 @@ def _render_file_hotspots(hotspots: List[Dict[str, Any]], top: int, root: str=''
     return lines
 
 
-def _render_function_hotspots(fns: List[Dict[str, Any]], test_index: Optional[Set[str]]=None) -> List[str]:
+def _coverage_marker(fn: Dict[str, Any], test_index: Optional[Set[str]]) -> str:
     from ...adapters.hotspots import _is_covered
+    hint = fn.get('has_test_hint', ...)
+    if hint is ...:
+        if test_index is None:
+            return ''
+        hint = _is_covered(fn.get('name', '?'), fn.get('file', ''), test_index)
+    return ' ' + ('❔' if hint is None else '✅' if hint else '⚪')
+
+
+def _render_function_hotspots(fns: List[Dict[str, Any]], test_index: Optional[Set[str]]=None) -> List[str]:
     lines: List[str] = []
     if not fns:
         return lines
-    has_coverage_info = test_index is not None
+    has_coverage_info = test_index is not None or any('has_test_hint' in fn for fn in fns)
     lines.append('\nComplex functions:')
     if has_coverage_info:
         lines.append('  (✅ = test found  ⚪ = no test found  ❔ = unknown for this language)')
@@ -56,24 +65,15 @@ def _render_function_hotspots(fns: List[Dict[str, Any]], test_index: Optional[Se
             icon = '⚠️ '
         else:
             icon = '💡'
-        if test_index is not None:
-            hint = fn.get('has_test_hint', ...)
-            if hint is None:
-                cov = '❔'
-            elif hint is ...:
-                cov = '✅' if _is_covered(name, loc, test_index) else '⚪'
-            else:
-                cov = '✅' if hint else '⚪'
-            cov_str = f' {cov}'
-        else:
-            cov_str = ''
+        cov_str = _coverage_marker(fn, test_index)
         loc_str = f'  {loc}' if loc else ''
         lc_str = f'  ({line_count}L)' if line_count else ''
         lines.append(f'  {icon}{cov_str} {name}  complexity: {cx}{lc_str}{loc_str}:{line}')
     return lines
 
 
-def _render_summary(file_hotspots: List[Dict[str, Any]], fn_hotspots: List[Dict[str, Any]]) -> List[str]:
+def _render_summary(file_hotspots: List[Dict[str, Any]], fn_hotspots: List[Dict[str, Any]],
+                    has_findings: bool = False) -> List[str]:
     lines: List[str] = []
     critical_files = sum((1 for h in file_hotspots if h.get('quality_score', 100) < 70))
     critical_fns = sum((1 for f in fn_hotspots if f.get('complexity', 0) > 20))
@@ -86,6 +86,8 @@ def _render_summary(file_hotspots: List[Dict[str, Any]], fn_hotspots: List[Dict[
         if critical_fns:
             parts.append(f'{critical_fns} critical function(s)')
         lines.append(f"Summary: {total} hotspot(s) — {', '.join(parts)} need immediate attention ❌")
+    elif has_findings:
+        lines.append(f'Summary: {total} hotspot(s) shown — critical findings exist outside the displayed rankings ❌')
     else:
         lines.append(f'Summary: {total} hotspot(s) — no critical issues, review when convenient ⚠️')
     lines.append('')
@@ -100,20 +102,16 @@ def _render_report(report: Dict[str, Any], top: int, test_index: Optional[Set[st
     lines.append('')
     lines.append(f'Hotspots: {path}')
     lines.append('━' * 50)
+    has_findings = report.get('summary', {}).get('has_findings', False)
     if not file_hotspots and (not fn_hotspots):
-        meta = report.get('meta') or {}
-        advisory_types = {'complexity_is_unweighted', 'test_convention_unknown'}
-        incomplete = (meta.get('errors') or
-                      any(w.get('type') not in advisory_types
-                          for w in meta.get('warnings', [])) or
-                      report.get('summary', {}).get('total_files', 0) == 0)
-        lines.append('\nNo hotspots found in the analyzed population.' if incomplete
-                     else '\nNo hotspots found ✅  Code quality looks good.')
+        lines.append('\nNo hotspots found in the requested analyzed population.')
+        if has_findings:
+            lines.extend(_render_summary(file_hotspots, fn_hotspots, has_findings))
         lines.append('')
         return lines
     lines.extend(_render_file_hotspots(file_hotspots, top, root=path))
     lines.extend(_render_function_hotspots(fn_hotspots, test_index=test_index))
-    lines.extend(_render_summary(file_hotspots, fn_hotspots))
+    lines.extend(_render_summary(file_hotspots, fn_hotspots, has_findings))
     return lines
 
 

@@ -107,17 +107,11 @@ def run_hotspots(args: Namespace) -> None:
     adapter = HotspotsAdapter(str(path), query)
     result = adapter.get_structure()
 
-    file_hotspots = result['file_hotspots']
-    fn_hotspots = result['function_hotspots']
-
     emit_subcommand_result(result, args, name='hotspots', source=path, render=partial(
         HotspotsRenderer.render_structure, format=args.format, top=top, test_index=adapter.test_index))
     if args.format == 'json':
         return  # the findings exit below applies to text/grep only, as it always has
 
-    # Exit with non-zero if there are serious hotspots (quality < 70 or complexity > 20)
-    serious_files = [h for h in file_hotspots if h.get('quality_score', 100) < 70]
-    serious_fns = [f for f in fn_hotspots if f.get('complexity', 0) > 20]
-    if serious_files or serious_fns:
+    if result['summary']['has_findings']:
         complete(args)  # a findings exit, not an error: the flag ledger still reports
         sys.exit(1)

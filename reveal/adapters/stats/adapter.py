@@ -476,6 +476,19 @@ class StatsAdapter(ResourceAdapter):
             )
             return None
 
+    def _add_hotspots(self, result: dict, file_stats: list) -> None:
+        """Rank the same analyzed population for file and directory requests."""
+        churn_counts = None
+        if self.query_params.get('churn', True) is not False:
+            churn_counts = self._compute_churn_counts(file_stats)
+            if self._churn_disclosure:
+                result.setdefault('warnings', []).append({
+                    'type': 'churn_unavailable',
+                    'message': self._churn_disclosure,
+                })
+        result['hotspots'] = self._top_hotspots(
+            result, identify_hotspots(file_stats, churn_counts=churn_counts))
+
     def get_structure(self,
                      hotspots: bool = False,
                      code_only: bool = False,
@@ -528,7 +541,8 @@ class StatsAdapter(ResourceAdapter):
                     result_type='stats_file', source=self.path,
                     error=f"analysis failed: {file_stats['analysis_failed']}"))  # type: ignore[index]
             result = aggregate_stats([file_stats] if file_stats else [], self.path)
-            self._analysis_failures = [file_stats] if file_stats and file_stats.get('parse_degraded') else []
+            self._analysis_failures = [file_stats] if file_stats and (
+                file_stats.get('parse_degraded') or file_stats.get('check_rules_failed')) else []
             self._disclose_failures(result)
             result.update(
                 contract_version=CONTRACT_VERSION,
@@ -536,6 +550,8 @@ class StatsAdapter(ResourceAdapter):
                 source=str(self.path),
                 source_type='file',
             )
+            if hotspots:
+                self._add_hotspots(result, [file_stats] if file_stats else [])
             if summary_only:
                 result.pop('files', None)
             return result
@@ -558,18 +574,8 @@ class StatsAdapter(ResourceAdapter):
         self._disclose_failures(result)
         self._disclose_exclusions(result)
 
-        # Add hotspots if requested
         if hotspots:
-            churn_counts = None
-            if self.query_params.get('churn', True) is not False:
-                churn_counts = self._compute_churn_counts(controlled_stats)
-                if self._churn_disclosure:
-                    result.setdefault('warnings', []).append({
-                        'type': 'churn_unavailable',
-                        'message': self._churn_disclosure,
-                    })
-            result['hotspots'] = self._top_hotspots(
-                result, identify_hotspots(controlled_stats, churn_counts=churn_counts))
+            self._add_hotspots(result, controlled_stats)
 
         if summary_only:
             result.pop('files', None)
