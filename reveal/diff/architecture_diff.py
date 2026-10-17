@@ -49,6 +49,7 @@ module's own docstrings below):
 from __future__ import annotations
 
 import logging
+import re
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -589,7 +590,8 @@ def _diagnostic_message(message: str, root: Path) -> str:
     from ..utils.path_utils import to_posix
     spellings = {str(root), to_posix(root), repr(root), repr(str(root))[1:-1]}
     for spelling in sorted(spellings, key=len, reverse=True):
-        message = message.replace(spelling, '.')
+        pattern = r"(?<![\w/\\.-])" + re.escape(spelling) + r"(?=$|[\s/\\'\"),;:])"
+        message = re.sub(pattern, '.', message)
     return message
 
 
