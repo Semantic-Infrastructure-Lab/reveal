@@ -159,6 +159,13 @@ def _run_combined_analysis(adapter: 'ArchitectureAdapter', path: Path, limit: in
         # extra kwarg), so this can't go through compose() either — same
         # attributed-failure treatment as the ImportsAdapter branch (BACK-984).
         data = AstAdapter(str(path), f'complexity>9&sort=-complexity&limit={limit}').get_structure(structures=structures)
+        from ..utils.results import echo_source, relabel_truncations
+        # Match compose(cut_as=...) while retaining the shared-walk structures.
+        echo_source(data, str(path))
+        relabel_truncations(data, 'complex_functions', 'raise ?top=N')
+        adapter.fold_meta(data.get('meta'))
+        if data.get('error'):
+            adapter.record_composed_error('AstAdapter', path, ValueError(str(data['error'])))
         complex_fns = data.get('results', data.get('elements', []))
     except Exception as exc:  # boundary-ok: broad-except -- composition seam that bypasses compose() to reuse the shared walk's structures; the sibling adapter's failure set is not bounded, and a failure is recorded in meta.errors with confidence 0 by record_composed_error, exactly what compose() does
         adapter.record_composed_error('AstAdapter', path, exc)
