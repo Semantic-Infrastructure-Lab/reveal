@@ -178,3 +178,18 @@ def test_recovered_evidence_does_not_contaminate_reused_adapter(tmp_path):
     assert typed(adapter.get_structure(), 'parse_recovered')
     source.write_text('export function main() { return 1; }\n', encoding='utf-8')
     assert not typed(adapter.get_structure(), 'parse_recovered')
+
+
+@pytest.mark.parametrize('references', [None, [None], [{}], [{'callee': 'helper', 'line': 2}, None]])
+def test_malformed_callable_references_keep_usable_calls_and_sibling_frames(tree, monkeypatch, references):
+    structures = analysis.collect_structures(str(tree))
+    main = next(element for element in structures[0]['elements'] if element.get('name') == 'main')
+    assert main['calls']
+    main['references'] = references
+    monkeypatch.setattr(analysis, 'collect_structures', lambda path: structures)
+    report = TraceAdapter(str(tree), 'from=main').get_structure()
+    assert report['frames'][0]['resolved']
+    assert any(frame['name'] == 'helper' and frame['resolved'] for frame in report['frames'])
+    assert report['meta']['errors'][0]['code'] == 'E_COMPOSE'
+    if isinstance(references, list) and isinstance(references[0], dict) and references[0].get('callee'):
+        assert report['frames'][0]['references'] == [references[0]]
