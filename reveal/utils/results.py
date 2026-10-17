@@ -99,6 +99,7 @@ class AnalysisCompleteness(Enum):
     INCOMPLETE = 'incomplete'
     FAILED = 'failed'
     NOT_APPLICABLE = 'not_applicable'
+    NOT_STARTED = 'not_started'
 
 
 class FailureCause(Enum):
@@ -139,10 +140,10 @@ def failure_execution_facts(cause: FailureCause) -> ExecutionFacts:
 
     A ValueError may describe invalid parameters or a failed content parser; the
     caller must select the cause. Usage rejection and output failure do not by
-    themselves assert that analysis failed. Merge independent analysis evidence.
+    themselves assert that analysis ran. Merge independent analysis evidence.
     """
     completeness = (AnalysisCompleteness.FAILED if cause is FailureCause.ANALYSIS
-                    else AnalysisCompleteness.COMPLETE)
+                    else AnalysisCompleteness.NOT_STARTED)
     return ExecutionFacts(completeness, failures=frozenset({cause}))
 
 
@@ -157,10 +158,13 @@ def result_execution_facts(result: Any, *, completeness: AnalysisCompleteness,
     """
     facts = ExecutionFacts(completeness, findings=findings)
     if not isinstance(result, dict):
-        return merge_execution_facts(facts, failure_execution_facts(FailureCause.ANALYSIS))
+        return ExecutionFacts(AnalysisCompleteness.FAILED, findings=findings,
+                              failures=frozenset({FailureCause.ANALYSIS}))
     outcome = outcome_of(result)
     if outcome == 'failed':
-        return merge_execution_facts(facts, failure_execution_facts(failure_cause))
+        failure = failure_execution_facts(failure_cause)
+        state = failure.completeness if failure_cause is FailureCause.ANALYSIS else completeness
+        return ExecutionFacts(state, findings=findings, failures=failure.failures)
     if outcome == 'not_applicable' and completeness is AnalysisCompleteness.COMPLETE:
         return ExecutionFacts(AnalysisCompleteness.NOT_APPLICABLE, findings=findings)
     return facts
@@ -170,10 +174,14 @@ def merge_execution_facts(*facts: ExecutionFacts) -> ExecutionFacts:
     """Aggregate semantic evidence before mapping it to any shell code."""
     if not facts:
         raise ValueError('aggregation requires explicit execution evidence')
+    if len(facts) > 1 and any(item.completeness is AnalysisCompleteness.NOT_STARTED
+                              and not item.failures for item in facts):
+        raise ValueError('cannot aggregate unclassified, unattempted analysis')
     states = {item.completeness for item in facts}
     # Full failure and partial success stay distinct even though both map to 3.
     for state in (AnalysisCompleteness.FAILED, AnalysisCompleteness.INCOMPLETE,
-                  AnalysisCompleteness.COMPLETE, AnalysisCompleteness.NOT_APPLICABLE):
+                  AnalysisCompleteness.COMPLETE, AnalysisCompleteness.NOT_APPLICABLE,
+                  AnalysisCompleteness.NOT_STARTED):
         if state in states:
             return ExecutionFacts(
                 state, findings=any(item.findings for item in facts),
@@ -193,6 +201,8 @@ def execution_exit_code(facts: ExecutionFacts, *, fail_on: Literal['none', 'find
     if fail_on not in ('none', 'findings'):
         raise ValueError('unsupported findings gate')
     if FailureCause.OUTPUT in facts.failures:
+        return 3
+    if facts.completeness is AnalysisCompleteness.NOT_STARTED and not facts.failures:
         return 3
     analysis_failed = (FailureCause.ANALYSIS in facts.failures or facts.completeness in
                        (AnalysisCompleteness.INCOMPLETE, AnalysisCompleteness.FAILED))
