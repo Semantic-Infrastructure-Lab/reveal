@@ -8,6 +8,7 @@ from conftest import _run_reveal_direct
 from reveal.adapters.ast.nav_exits import collect_exits, collect_gate_chains
 from reveal.adapters.ast.nav_outline import scope_chain
 from reveal.core.treesitter_compat import _zero_arg, tree_root, ts_parse
+from reveal.rules.base_mixins import kind_nodes
 
 pytestmark = pytest.mark.conformance
 
@@ -124,3 +125,14 @@ def test_dart_scope_condition_matches_gate_condition():
     findings = collect_gate_chains(root, 1, 999, text)
     assert findings[0]['gates'] == [{'line': 2, 'text': "probe('π')"}]
     assert next(f for f in scope_chain(root, 3, text) if f['keyword'] == 'IF')['condition'] == "probe('π')"
+
+
+def test_dart_pattern_header_declines_unsupported_positional_shape():
+    from reveal.adapters.ast.nav_exits import _branch_parts, _get_condition
+
+    source = 'int f(Object a) { if (a case int b) { return b; } return 0; }'
+    tree, root, text = _parse('dart', source)
+    node = kind_nodes(root, 'if_statement')[0]
+    # The anonymous case token needs pattern semantics, not an ordinary test.
+    assert _branch_parts(node)[0] is None
+    assert _get_condition(node, text) is None
