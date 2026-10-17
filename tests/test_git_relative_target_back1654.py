@@ -52,11 +52,11 @@ def test_target_outside_any_repo_is_not_applicable(parent, monkeypatch):
     assert 'norepo/x' in str(exc.value)
 
 
-def test_overview_outside_any_repo_discloses_git_failure(parent, monkeypatch):
+def test_overview_outside_any_repo_skips_optional_git(parent, monkeypatch):
     monkeypatch.chdir(parent)
     result = OverviewAdapter('norepo/x').get_structure()
     messages = [e['message'] for e in result['meta']['errors'] if e.get('code') == 'E_COMPOSE']
-    assert messages and 'norepo/x' in messages[0]
+    assert messages == []
     assert result['git_log'] == []
 
 

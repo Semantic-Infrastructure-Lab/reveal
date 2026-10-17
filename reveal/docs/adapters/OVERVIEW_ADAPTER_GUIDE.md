@@ -51,6 +51,26 @@ reveal overview . --format json
 `.git` of its own, `git_foreign_root` names the enclosing repo the history
 actually came from.
 
+`architecture.metadata` retains the Imports owner's `files_failed_count`,
+`files_failed`, `files_lost_count`, `files_lost`, and `extraction_diagnostics`
+when available. Counts are exact; each path list keeps the existing first 50
+paths, with truncation disclosed in parent metadata. Extraction causes are
+retained without that path-list cap. Paths and diagnostic keys are relative to
+the analysis target, using a resolved Imports build target while preserving the
+overview resource spelling. `architecture.unsupported_extensions` stays in its
+existing location.
+
+Git discovery happens before requesting history. A target outside any repository
+skips that optional section; operational dependency, I/O and repository-open
+failures remain attributed diagnostics. `no_git=true` skips discovery and history.
+Optional Stats churn warnings reach the overview Caveats section once.
+
+The quality pulse's average describes the analyzed population. Its critical and
+warning file counts describe the shown hotspot ranking, which may omit files
+outside `top`. No matches in that ranking are not an overall quality verdict.
+These evidence repairs preserve the existing overview exit policy; they do not
+introduce a findings gate or declared execution binding.
+
 ## Good Review Questions
 
 - Does the language breakdown match what you'd expect for this tree?

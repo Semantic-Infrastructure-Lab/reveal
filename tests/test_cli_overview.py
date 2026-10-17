@@ -412,10 +412,10 @@ class TestResolveGitRoot(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch('reveal.adapters.overview.GitAdapter')
-    def test_unopenable_repo_returns_none(self, MockAdapter):
+    def test_unopenable_repo_propagates_to_disclosure_owner(self, MockAdapter):
         MockAdapter.return_value.get_metadata.side_effect = OSError('fail')
-        result = _resolve_git_root(Path('/whatever'))
-        self.assertIsNone(result)
+        with self.assertRaisesRegex(OSError, 'fail'):
+            _resolve_git_root(Path('/whatever'))
 
     @patch('reveal.adapters.overview.GitAdapter')
     def test_unexpected_error_propagates(self, MockAdapter):
@@ -534,9 +534,9 @@ class TestRenderQualityPulse(unittest.TestCase):
         out = _capture(_render_quality_pulse, {'avg_quality_score': 70}, hotspots)
         self.assertIn('2 critical', out)
 
-    def test_no_hotspots_shows_no_hotspots(self):
+    def test_no_hotspots_scopes_claim_to_shown_ranking(self):
         out = _capture(_render_quality_pulse, {'avg_quality_score': 99}, [])
-        self.assertIn('no hotspots', out)
+        self.assertIn('no critical or warning files in shown ranking', out)
 
     def test_empty_summary_produces_no_output(self):
         out = _capture(_render_quality_pulse, {}, [])
@@ -887,15 +887,15 @@ class TestRunOverview(unittest.TestCase):
                 data = json.loads(buf.getvalue())
                 self.assertEqual(data['git_foreign_root'], enclosing_root.as_posix())  # '/' on every OS (BACK-1366)
 
-    def test_no_git_log_skips_root_resolution(self):
-        """Empty git_log (e.g. no_git or no history) shouldn't trigger a root lookup."""
+    def test_empty_git_log_still_discovers_root(self):
+        """Optional repository applicability is discovered before reading history."""
         import tempfile
         p_stats, p_git, p_ast, p_arch = self._patch_runners(git=[])
         with tempfile.TemporaryDirectory() as tmp:
             with p_stats, p_git, p_ast, p_arch, \
-                    patch('reveal.adapters.overview._resolve_git_root') as mock_resolve:
+                    patch('reveal.adapters.overview._resolve_git_root', return_value=Path(tmp)) as mock_resolve:
                 run_overview(_args(path=tmp))
-                mock_resolve.assert_not_called()
+                mock_resolve.assert_called_once_with(Path(tmp))
 
     def test_json_format_does_not_leak_absolute_paths(self):
         """BACK-1194 follow-up: get_structure()'s JSON path never routed
