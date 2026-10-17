@@ -3,6 +3,8 @@ from copy import deepcopy
 from dataclasses import asdict
 import json
 import os
+import platform
+import sys
 
 import pytest
 
@@ -11,6 +13,11 @@ from scripts.check_parse_counts import (
     audit_snapshot, compare_snapshots, load_audit, qualify_snapshots,
     validate_command_output,
 )
+
+
+def _metadata(capture):
+    return {**capture.metadata, 'runtime': {
+        'platform': sys.platform, 'implementation': platform.python_implementation()}}
 
 
 @pytest.fixture
@@ -26,7 +33,7 @@ def ledger(tmp_path):
     targets = {'config.py': {'parsers': ['python.ast'], 'sha256': request.source_hash,
                               'bytes': request.source_length}}
     audit = {'schema_version': 1, 'complete': True, 'exit_code': 0,
-             'metadata': capture.metadata, 'events': [asdict(e) for e in capture.events]}
+             'metadata': _metadata(capture), 'events': [asdict(e) for e in capture.events]}
     return audit, tmp_path, targets
 
 
@@ -63,7 +70,8 @@ def test_unqualified_evidence_is_rejected(ledger, fault):
     if fault == 'incomplete':
         audit['complete'] = False
     elif fault == 'worker':
-        audit['events'][1]['pid'] += 1
+        for event in audit['events']:
+            event['pid'] += 1
     elif fault == 'missing_outcome':
         audit['events'].pop()
     elif fault == 'unknown_target':
@@ -127,17 +135,19 @@ def test_equal_content_target_requests_can_share_one_ts_artifact(tmp_path):
     targets = {name: {'parsers': ['treesitter:typescript'], 'sha256': request.source_hash,
                       'bytes': request.source_length} for name in ('first.ts', 'second.ts')}
     audit = {'schema_version': 1, 'complete': True, 'exit_code': 0,
-             'metadata': capture.metadata, 'events': [asdict(e) for e in capture.events]}
+             'metadata': _metadata(capture), 'events': [asdict(e) for e in capture.events]}
     report = audit_snapshot(audit, os.getpid(), tmp_path, targets)
     assert report['totals'] == {'request': 2, 'attempt': 1, 'artifact': 1,
                                 'failure': 0, 'outcome': 2}
     assert report['coverage'] == ['first.ts', 'second.ts']
 
 
-@pytest.mark.parametrize('source', ['x = 1', 'x = 1\n'])
-def test_only_declared_source_transform_is_accepted(tmp_path, source):
+@pytest.mark.parametrize('operation', ['drop-two-LF', 'drop-one-LF', 'strip'])
+def test_only_declared_source_transform_is_accepted(tmp_path, operation):
     from scripts.check_parse_counts import _source_identity
-    canonical = 'x = 1\n\n'
+    canonical = 'x = 1  \n\n'
+    source = {'drop-two-LF': canonical[:-2], 'drop-one-LF': canonical[:-1],
+              'strip': canonical.strip()}[operation]
     path = tmp_path / 'config.py'
     path.write_text(canonical, encoding='utf-8')
     identity = _source_identity(canonical)
@@ -148,7 +158,7 @@ def test_only_declared_source_transform_is_accepted(tmp_path, source):
             with parse_attempt(source, 'original'):
                 pass
     audit = {'schema_version': 1, 'complete': True, 'exit_code': 0,
-             'metadata': capture.metadata, 'events': [asdict(e) for e in capture.events]}
+             'metadata': _metadata(capture), 'events': [asdict(e) for e in capture.events]}
     if source == canonical[:-1]:
         report = audit_snapshot(audit, os.getpid(), tmp_path, targets)
         assert {json.loads(key)['source_variant'] for key in report['counts']} == {'analyzer-content'}
@@ -236,3 +246,20 @@ def test_capture_environment_overrides_user_scan_controls(tmp_path, monkeypatch)
     assert environment['REVEAL_DISK_CACHE'] == '0'
     assert environment['XDG_CONFIG_HOME'] == str(tmp_path)
     assert 'REVEAL_IGNORE' not in environment
+
+
+def test_historical_runtime_versions_are_provenance_not_count_ceilings(ledger):
+    current = snapshot(ledger)
+    historical = deepcopy(current)
+    historical['parser_versions']['python.ast'] = '3.12.1'
+    historical['runtime'] = {'platform': 'another-platform', 'implementation': 'another-python'}
+    assert compare_snapshots(historical, current) == []
+    with pytest.raises(ValueError, match='repeat'):
+        qualify_snapshots([current] * 4 + [historical])
+
+
+@pytest.mark.parametrize('field', ['runtime', 'parser_versions'])
+def test_missing_child_runtime_metadata_rejects(ledger, field):
+    ledger[0]['metadata'].pop(field)
+    with pytest.raises(ValueError, match='metadata'):
+        snapshot(ledger)
