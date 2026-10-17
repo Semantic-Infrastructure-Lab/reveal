@@ -911,22 +911,23 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """Extract undecorated functions across all supported languages."""
         functions = []
 
-        for func_type in function_types:
-            nodes = self._find_nodes_by_type(func_type)
-            for node in nodes:
-                name = self._get_node_name(node)
-                if not name:
-                    continue
+        nodes = [node for kind in function_types for node in self._find_nodes_by_type(kind)]
+        # Line-only ordering cannot break ties between different definition kinds.
+        nodes.sort(key=lambda node: _zero_arg(node, 'start_byte'))
+        for node in nodes:
+            name = self._get_node_name(node)
+            if not name:
+                continue
 
-                line_start = _zero_arg(node, 'start_position').row + 1
-                if (line_start, name) in processed_funcs:
-                    continue  # Already processed as decorated
+            line_start = _zero_arg(node, 'start_position').row + 1
+            if (line_start, name) in processed_funcs:
+                continue  # Already processed as decorated
 
-                functions.append(self._build_function_dict(
-                    node=node,
-                    name=name,
-                    decorators=self._extract_decorators(node)
-                ))
+            functions.append(self._build_function_dict(
+                node=node,
+                name=name,
+                decorators=self._extract_decorators(node)
+            ))
 
         return functions
 
