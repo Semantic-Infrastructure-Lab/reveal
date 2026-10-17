@@ -40,7 +40,7 @@ def _cached_treesitter_parse(content: str, file_path: str, language: str):
     """
     from ..core import get_tree, tree_root
     try:
-        return tree_root(get_tree(language, content))
+        return tree_root(get_tree(language, content, filename=file_path))
     except Exception as e:  # boundary-ok: broad-except -- Parser.parse is a native binding whose error types are not enumerable from Python; the caller skips the file and the warning names it and the language
         logger.warning(f"tree-sitter parse failed for {file_path} ({language}): {e}")
         return None

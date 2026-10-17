@@ -16,9 +16,10 @@ in ``reveal/core/treesitter*.py``.
 
 import functools
 import logging
-from typing import Any, Dict, Iterable, Set
+from typing import Any, Dict, Iterable, Optional, Set
 
 from .treesitter_compat import ts_parse
+from ..utils.parse_audit import Domain, PathArg, capture_enabled, parse_attempt, parse_request
 
 logger = logging.getLogger(__name__)
 
@@ -102,21 +103,30 @@ def get_parser(language: str, *, announce_fetch: bool = True) -> Any:
     return parser
 
 
-def get_tree(language: str, source: str) -> Any:
+def get_tree(language: str, source: str, *, filename: Optional[PathArg] = None,
+             domain: Domain = 'fullsource') -> Any:
     """Parse *source* as *language*. Raises ``GrammarUnavailable`` when there is no
     parser; a tree with ERROR nodes is still a tree (see ``tree_has_recovery_artifacts``).
 
     The last few parses are memoized: the per-file rules (B006, M104, ...) each ask for
     the same file's tree in turn, and every one used to parse it again (BACK-1872: 432
     parses for 216 files on a warm ``stats://``). Trees are never edited, so sharing
-    one is safe; a failed lookup raises and is not cached.
+    one is safe; a failed lookup raises and is not cached. Optional filename/domain
+    attribution is observed only during capture and never enters the cache key.
     """
-    return _parse_recent(language, source)
+    if not capture_enabled():
+        return _parse_recent(language, source)
+    with parse_request(f'treesitter:{language}', source, filename, domain):
+        return _parse_recent(language, source)
 
 
 @functools.lru_cache(maxsize=4)
 def _parse_recent(language: str, source: str) -> Any:
-    return ts_parse(get_parser(language), source)
+    parser = get_parser(language)
+    if not capture_enabled():
+        return ts_parse(parser, source)
+    with parse_attempt(source, 'native'):
+        return ts_parse(parser, source)
 
 
 def has_grammar(language: str) -> bool:

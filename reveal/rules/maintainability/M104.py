@@ -214,7 +214,7 @@ class M104(BaseRule, ASTParsingMixin):
     def _check_treesitter(self, file_path: str, content: str, language: str) -> List[Detection]:
         """Check for hardcoded collection literals via tree-sitter (JS/TS/Go/Rust/Java)."""
         try:
-            tree = get_tree(language, content)
+            tree = get_tree(language, content, filename=file_path)
         except GrammarUnavailable:
             return []
         root = tree_root(tree)

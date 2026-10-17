@@ -258,7 +258,7 @@ class M102(BaseRule):
         # Check if this module is imported anywhere
         if not self._is_imported(module_name, all_imports, path, package_root):
             # Double-check: is this file empty or just has comments?
-            if self._has_meaningful_code(content):
+            if self._has_meaningful_code(content, file_path):
                 detections.append(self.create_detection(
                     file_path=file_path,
                     line=1,
@@ -395,10 +395,10 @@ class M102(BaseRule):
 
         return False
 
-    def _has_meaningful_code(self, content: str) -> bool:
+    def _has_meaningful_code(self, content: str, file_path: str = '<unknown>') -> bool:
         """Check if file has more than just comments and docstrings."""
         try:
-            tree = parse_python(content)
+            tree = parse_python(content, file_path)
             # Check for any non-trivial content
             for node in ast.walk(tree):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,

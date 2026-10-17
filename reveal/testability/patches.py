@@ -259,7 +259,7 @@ def _scan_file_ts(file_path: Path) -> List[PatchUse]:
 
     src_bytes = source.encode('utf-8', errors='replace')
     try:
-        root = tree_root(get_tree(js_ts_grammar(file_path.suffix), source))
+        root = tree_root(get_tree(js_ts_grammar(file_path.suffix), source, filename=file_path))
     except GrammarUnavailable as exc:
         logger.warning('tree-sitter parse failed for %s: %s', file_path, exc)
         return []

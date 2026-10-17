@@ -584,7 +584,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             # perfectly clean file (BACK-1500). Parse what is on disk; appending
             # at the end moves no byte offset of the content before it.
             source = self.content + '\n' if getattr(self, '_ends_with_newline', False) else self.content
-            self.tree = get_tree(self.language, source)  # warns before a first-use grammar fetch (BACK-979)
+            self.tree = get_tree(self.language, source, filename=self.path)  # warns before a first-use grammar fetch (BACK-979)
         except Exception as e:  # boundary-ok: broad-except -- a grammar or parse failure is recorded in parse_error and warned once per language; structure degrades to empty
             self.parse_error = str(e)
             if self.language not in _warned_failed_languages:

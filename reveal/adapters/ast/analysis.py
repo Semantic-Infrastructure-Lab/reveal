@@ -238,7 +238,7 @@ def module_call_sites(file_path: str, analyzer) -> List[Dict[str, Any]]:
     language = language_for_extension(Path(file_path).suffix)
     if language is None:
         return []
-    tree = getattr(analyzer, 'tree', None) or get_tree(language, analyzer.content)
+    tree = getattr(analyzer, 'tree', None) or get_tree(language, analyzer.content, filename=file_path)
     root = _zero_arg(tree, 'root_node')
     content = analyzer.content.encode('utf-8')
     def text(node):

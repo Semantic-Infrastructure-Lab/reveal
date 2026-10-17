@@ -112,7 +112,7 @@ class V021(BaseRule):
             logger.debug("V021.py: skipped after %s: %s", type(e).__name__, e)
             self.unavailable(f"required input unavailable: {type(e).__name__}: {e}")
             return None
-        if not self._imports_re_module(file_content):
+        if not self._imports_re_module(file_content, str(analyzer_file)):
             return None
         language_name = self._infer_language(analyzer_file, file_content)
         if not language_name or language_name not in self.TREE_SITTER_LANGUAGES:
@@ -147,10 +147,10 @@ class V021(BaseRule):
                 detections.append(detection)
         return detections
 
-    def _imports_re_module(self, content: str) -> bool:
+    def _imports_re_module(self, content: str, file_path: str = '<unknown>') -> bool:
         """Check if file imports the 're' module."""
         try:
-            tree = parse_python(content)
+            tree = parse_python(content, file_path, domain='validation')
             return any(
                 (isinstance(n, ast.Import) and any(a.name == 're' for a in n.names)) or
                 (isinstance(n, ast.ImportFrom) and n.module == 're')

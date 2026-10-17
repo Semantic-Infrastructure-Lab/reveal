@@ -2,7 +2,6 @@
 import ast
 import dataclasses
 from importlib.metadata import version
-from pathlib import Path
 
 import pytest
 
@@ -162,9 +161,10 @@ def test_duplicate_build_injection_is_visible_to_an_exact_ceiling(tmp_path, monk
         physical(language, source)
         return physical(language, source)
 
-    monkeypatch.setattr(tp, '_parse_recent', duplicate)
-    with capture_parses(tmp_path) as capture:
-        tp.get_tree('python', SOURCE, filename=tmp_path / 'a.py')
+    with monkeypatch.context() as scoped:
+        scoped.setattr(tp, '_parse_recent', duplicate)
+        with capture_parses(tmp_path) as capture:
+            tp.get_tree('python', SOURCE, filename=tmp_path / 'a.py')
     assert len(_events(capture, 'request')) == 1
     assert len(_events(capture, 'artifact')) == 2
     with pytest.raises(AssertionError):

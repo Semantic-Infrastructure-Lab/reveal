@@ -598,11 +598,11 @@ def facts_from_tree(tree: Any, content: bytes, language: str) -> List[Fact]:
     return _walk_tree(tree_root(tree), FactCollector(language, content))
 
 
-def extract_facts(source: str, language: str) -> List[Fact]:
+def extract_facts(source: str, language: str, *, filename: Optional[str] = None) -> List[Fact]:
     """Neutral facts for `source`, ordered by line. `language` is one of `LANGUAGES`."""
     if language == 'python':
-        return python_facts_from_ast(parse_python(source))
-    tree = get_tree(_LANGS[language].parser, source)
+        return python_facts_from_ast(parse_python(source, filename or '<unknown>'))
+    tree = get_tree(_LANGS[language].parser, source, filename=filename)
     return facts_from_tree(tree, source.encode('utf-8'), language)
 
 
@@ -612,7 +612,7 @@ def extract_file_facts(file_path: str) -> Optional[List[Fact]]:
     if language is None:
         return None
     try:
-        return extract_facts(Path(file_path).read_text(errors='replace', encoding='utf-8'), language)
+        return extract_facts(Path(file_path).read_text(errors='replace', encoding='utf-8'), language, filename=file_path)
     except Exception as e:  # boundary-ok: broad-except -- parses arbitrary user source in several languages through python's ast and tree-sitter (SyntaxError, ValueError, RecursionError, and parser-specific errors); no in-tree caller consumes the None, and the failure is logged at warning
         logger.warning("surface facts (%s) failed to parse %s: %s", language, file_path, e)
         return None

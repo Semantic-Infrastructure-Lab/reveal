@@ -56,7 +56,7 @@ def scan_file_with_grammar(
         source = Path(file_path).read_text(errors='replace', encoding='utf-8')
         if prepare is not None:
             source = prepare(source)
-        tree = get_tree(grammar, source)
+        tree = get_tree(grammar, source, filename=file_path)
     except Exception as e:  # noqa: BLE001 - unreadable file, GrammarUnavailable, or a parser error
         logger.warning("%s scan (%s) failed to parse %s: %s", scan, label, file_path, e)
         return {**{k: [] for k in keys}, UNPARSED_KEY: [file_path]}

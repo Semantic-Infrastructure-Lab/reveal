@@ -9,6 +9,7 @@ import warnings
 from collections import deque
 from typing import Dict, List, Optional, Tuple
 from reveal.utils.lines import split_lines
+from .parse_audit import Domain, PathArg, capture_enabled, parse_attempt, parse_request
 
 # PEP 750 template-string prefixes; a 3.13 tokenizer reads `t"..."` as NAME + STRING.
 _T_PREFIX = re.compile(r'(?:[tT][rR]?|[rR][tT])')
@@ -27,7 +28,8 @@ _STATEMENT_LIKE = (ast.stmt, ast.excepthandler, ast.match_case)
 _STATEMENT_INDEX_ATTR = '_reveal_statement_index'
 
 
-def parse_python(source: str, filename: str = '<unknown>') -> ast.Module:
+def parse_python(source: str, filename: PathArg = '<unknown>', *,
+                 domain: Domain = 'fullsource') -> ast.Module:
     """`ast.parse`, but a file using Python 3.14 syntax still parses on an older
     interpreter instead of raising SyntaxError.
 
@@ -45,20 +47,34 @@ def parse_python(source: str, filename: str = '<unknown>') -> ast.Module:
     file as 'utf-8': it is dropped, as CPython drops it when it runs the file
     (BACK-1729). Line numbers are unchanged; line-1 columns count from after it.
     """
+    if not capture_enabled():
+        return _parse_python(source, filename)
+    with parse_request('python.ast', source, filename, domain):
+        return _parse_python(source, filename)
+
+
+def _parse_python(source: str, filename: PathArg) -> ast.Module:
     if source.startswith('\ufeff'):
         source = source[1:]
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', SyntaxWarning)
         try:
-            return ast.parse(source, filename=filename)
+            return _parse_ast(source, filename, 'original')
         except SyntaxError as original:
             compat = downlevel_source(source)
             if compat is None:
                 raise
             try:
-                return ast.parse(compat, filename=filename)
+                return _parse_ast(compat, filename, 'compat')
             except SyntaxError:
                 raise original from None
+
+
+def _parse_ast(source: str, filename: PathArg, phase: str) -> ast.Module:
+    if not capture_enabled():
+        return ast.parse(source, filename=filename)
+    with parse_attempt(source, phase):
+        return ast.parse(source, filename=filename)
 
 
 def downlevel_source(source: str) -> Optional[str]:

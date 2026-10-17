@@ -83,7 +83,7 @@ class V008(BaseRule):
         """Check a single analyzer file for get_structure signature issues."""
         try:
             content = analyzer_path.read_text(encoding='utf-8')
-            tree = parse_python(content, str(analyzer_path))
+            tree = parse_python(content, str(analyzer_path), domain='validation')
         except (OSError, UnicodeDecodeError, SyntaxError, ValueError) as e:
             # Don't fail the check if we can't parse the file
             logger.debug("V008.py: skipped after %s: %s", type(e).__name__, e)

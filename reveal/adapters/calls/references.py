@@ -103,7 +103,7 @@ def _count_occurrences(file_path: str, family: str, names: Set[str], defined_her
     if not present:
         return
     try:
-        tree = get_tree(_parser_language(file_path, family), text)
+        tree = get_tree(_parser_language(file_path, family), text, filename=file_path)
     except Exception as e:  # noqa: BLE001 - unknown grammar or parse failure: skip the file
         logger.debug("referenced-names: cannot parse %s: %s", file_path, e)
         return

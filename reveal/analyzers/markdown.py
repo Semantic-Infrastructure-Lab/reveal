@@ -107,7 +107,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             import warnings
             warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
 
-            self._inline_tree = get_tree('markdown_inline', self.content)
+            self._inline_tree = get_tree('markdown_inline', self.content, filename=self.path)
             if cache_key is not None:
                 _inline_parse_cache[cache_key] = self._inline_tree
         except GrammarUnavailable:

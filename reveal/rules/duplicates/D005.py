@@ -212,7 +212,7 @@ class D005(BaseRule, ASTParsingMixin):
         Returns list of (canonical_key, lineno, var_name, value_frozenset).
         """
         try:
-            tree = parse_python(content)
+            tree = parse_python(content, file_path)
         except SyntaxError:
             return []
 
@@ -312,7 +312,7 @@ def _file_literals(py_file: Path, rule: D005) -> List[Tuple[str, int, str, froze
     if isinstance(cached, list):
         return cached
     content = py_file.read_text(encoding='utf-8', errors='ignore')
-    literals = rule._literals_from_tree(parse_python(content))
+    literals = rule._literals_from_tree(parse_python(content, path_str))
     disk_cache.put(_LITERALS_NAMESPACE, key, literals, max_entries=_LITERALS_CACHE_MAX_FILES)
     return literals
 
