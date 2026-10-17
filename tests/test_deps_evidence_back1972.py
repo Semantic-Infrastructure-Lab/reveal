@@ -179,3 +179,68 @@ def test_imports_response_has_no_deps_carrier(tmp_path):
     result = ImportsAdapter(str(tmp_path)).get_structure()
     assert 'analysis' not in result
     assert 'files' in result and result['metadata']['files_failed_count'] == 0
+
+
+@pytest.mark.parametrize('proof', [None, {}, {'files_failed_count': 'unknown', 'files_lost_count': 0},
+                                 {'files_failed_count': 1, 'files_lost_count': 2}])
+def test_invalid_count_proof_is_unknown_not_measured_zero(tmp_path, monkeypatch, proof):
+    result = child('unused')
+    result['metadata'] = proof
+    install(monkeypatch, 'unused', result)
+    record = DepsAdapter(str(tmp_path)).get_structure()['analysis']['components']['unused']
+    assert record['completeness'] == 'failed'
+    assert record['files_failed_count'] is None and record['files_lost_count'] is None
+
+
+def test_valid_zero_count_proof_is_retained(tmp_path, monkeypatch):
+    install(monkeypatch)
+    record = DepsAdapter(str(tmp_path)).get_structure()['analysis']['components']['unused']
+    assert record['completeness'] == 'complete'
+    assert record['files_failed_count'] == record['files_lost_count'] == 0
+
+
+def test_invalid_child_count_keeps_surviving_unused_entries(tmp_path, monkeypatch):
+    result = child('unused')
+    result.update(unused=[{'file': 'a.py', 'module': 'os'}], count=7)
+    install(monkeypatch, 'unused', result)
+    answer = DepsAdapter(str(tmp_path)).get_structure()
+    assert answer['analysis']['components']['unused']['completeness'] == 'failed'
+    assert len(answer['unused']) == answer['analysis']['findings']['unused'] == 1
+
+
+@pytest.mark.parametrize('state', ['incomplete', 'failed'])
+@pytest.mark.parametrize('cycles', [0, 2])
+def test_text_does_not_claim_clean_circular_analysis_without_proof(tmp_path, monkeypatch, state, cycles):
+    from reveal.rendering.adapters.deps import deps_text
+    result = child('circular')
+    result.update(cycles=[['a.py', 'b.py']] * cycles, count=cycles)
+    if state == 'incomplete':
+        result['metadata']['files_failed_count'] = 1
+    else:
+        result['error'] = 'cycle analysis unavailable'
+    install(monkeypatch, 'circular', result)
+    text = deps_text(DepsAdapter(str(tmp_path)).get_structure())
+    assert 'no circular deps' not in text
+    assert 'nothing to check for cycles' not in text
+    assert ('circular dependency analysis incomplete' if state == 'incomplete' else
+            'circular dependency analysis unavailable') in text
+    if cycles:
+        assert '2 circular dep(s)' in text
+
+
+def test_real_recovered_zero_imports_does_not_claim_nothing_to_check(tmp_path):
+    from reveal.rendering.adapters.deps import deps_text
+    (tmp_path/'a.py').write_text('def broken(\n', encoding='utf-8')
+    text = deps_text(DepsAdapter(str(tmp_path)).get_structure())
+    assert 'nothing to check for cycles' not in text
+    assert 'circular dependency analysis incomplete' in text
+
+
+def test_clean_and_skipped_circular_text_remain_unchanged(tmp_path, monkeypatch):
+    from reveal.rendering.adapters.deps import deps_text
+    install(monkeypatch)
+    clean = deps_text(DepsAdapter(str(tmp_path)).get_structure())
+    skipped = deps_text(DepsAdapter(str(tmp_path), 'no_circular=true').get_structure())
+    assert 'nothing to check for cycles' in clean
+    assert 'circular deps not checked (--no-circular)' in skipped
+    assert 'analysis incomplete' not in clean + skipped
