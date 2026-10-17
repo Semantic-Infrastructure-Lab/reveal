@@ -307,11 +307,17 @@ def collect_deps(
         in_range = [e for e in events if from_line <= e['line'] <= to_line]
         if not in_range:
             continue
-        first_in_range = min(in_range, key=lambda e: e['line'])
+        # A closure/comprehension binding must not suppress an outer read of
+        # the same spelling. Whole constructs own their parameters, while an
+        # extracted body still needs a parameter declared outside the range.
+        owned = {e.get('binding_scope') for e in in_range
+                 if e['kind'] == 'WRITE' and e.get('binding_scope') is not None}
+        visible = [e for e in in_range if e.get('binding_scope') not in owned]
+        if not visible:
+            continue
+        first_in_range = visible[0]
         if first_in_range['kind'].startswith('READ'):
-            first_write = next(
-                (e for e in in_range if e['kind'] == 'WRITE'), None
-            )
+            first_write = next((e for e in visible if e['kind'] == 'WRITE'), None)
             deps.append({
                 'var': var_name,
                 'first_read_line': first_in_range['line'],

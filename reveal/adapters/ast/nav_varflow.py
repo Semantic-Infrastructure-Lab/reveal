@@ -89,7 +89,20 @@ _DECL_SHAPES: Dict[str, _DeclShape] = {
     # site (BACK-431 tier A real-corpus dogfood audit).
     'enumerator': _DeclShape(positional='_walk_scala_enumerator'),
     # Go func literal: its parameters bind names inside the literal (BACK-1408).
-    'func_literal': _DeclShape(positional='_walk_func_literal'),
+    'func_literal': _DeclShape(positional='_walk_closure'),
+    'lambda': _DeclShape(positional='_walk_closure'),
+    'arrow_function': _DeclShape(positional='_walk_closure'),
+    'lambda_expression': _DeclShape(positional='_walk_closure'),
+    'closure_expression': _DeclShape(positional='_walk_closure'),
+    'lambda_literal': _DeclShape(positional='_walk_closure'),
+    'catch_clause': _DeclShape(positional='_walk_catch'),
+    'as_pattern': _DeclShape(write_field='alias'),
+    'for_in_clause': _DeclShape(write_field='left', read_field='right'),
+    'range_clause': _DeclShape(write_field='left', read_field='right'),
+    'list_comprehension': _DeclShape(positional='_walk_comprehension'),
+    'set_comprehension': _DeclShape(positional='_walk_comprehension'),
+    'dictionary_comprehension': _DeclShape(positional='_walk_comprehension'),
+    'generator_expression': _DeclShape(positional='_walk_comprehension'),
     # Java `x instanceof T name` / C# `x is T name`: `name` is a pattern binding
     # (BACK-1408). Without a binding, a plain walk of the children.
     'instanceof_expression': _DeclShape(positional='_walk_pattern_binding'),
@@ -199,6 +212,7 @@ class VarFlowWalker:
     get_text: Callable
     events: List[Dict[str, Any]] = field(default_factory=list)
     own_name_pos: Optional[tuple] = None
+    binding_scope: Optional[tuple] = None
 
     def walk(self, n: Any, c: str) -> None:
         ntype = _zero_arg(n, 'kind')
@@ -228,7 +242,10 @@ class VarFlowWalker:
             if pos == self.own_name_pos:
                 return True
             if self.from_line <= line <= self.to_line:
-                self.events.append({'kind': c, 'line': line, 'node': n})
+                event = {'kind': c, 'line': line, 'node': n}
+                if self.binding_scope is not None:
+                    event['binding_scope'] = self.binding_scope
+                self.events.append(event)
             return True
 
         if ntype in _MEMBER_ACCESS_KINDS:
@@ -439,8 +456,8 @@ class VarFlowWalker:
             getattr(self, shape.positional)(n)
             return
 
-        name = n.child_by_field_name(shape.write_field)
-        value = n.child_by_field_name(shape.read_field)
+        name = n.child_by_field_name(shape.write_field) if shape.write_field else None
+        value = n.child_by_field_name(shape.read_field) if shape.read_field else None
         if name is None and shape.missing_name:
             name = getattr(self, shape.missing_name)(n)
         if value is None and shape.missing_value:
@@ -616,10 +633,7 @@ class VarFlowWalker:
                 self.walk(child, 'READ')
 
     def _walk_named_expression(self, n: Any) -> None:
-        if _children(n):
-            self.walk(n.child(0), 'WRITE')
-            for child in _children(n)[1:]:
-                self.walk(child, 'READ')
+        self._walk_decl_shape(n, _DeclShape(write_field='name', read_field='value'))
 
     def _walk_for(self, n: Any, c: str, left_field: str = 'left', right_field: str = 'right') -> None:
         left = n.child_by_field_name(left_field)
@@ -639,27 +653,50 @@ class VarFlowWalker:
             if (_zero_arg(child, 'start_byte'), _zero_arg(child, 'end_byte')) not in processed:
                 self.walk(child, c)
 
-    def _walk_func_literal(self, n: Any) -> None:
-        """Go `func(x string, y int) error { ... }`: the literal's parameters are
-        bindings inside it, so their declaration sites are WRITEs, not reads of an
-        outer variable (BACK-1408: `rv`/`eventReceivedBesidesAdded` read as
-        undefined INPUTS of the enclosing function)."""
+    def _walk_bound_body(self, n: Any, bindings: List[Any], body: List[Any]) -> None:
+        """Keep inner bindings distinct from same-named reads in the caller."""
+        start = len(self.events)
+        for binding in bindings:
+            self.walk(binding, 'WRITE')
+        previous = self.binding_scope
+        if any(e['kind'] == 'WRITE' for e in self.events[start:]):
+            self.binding_scope = (_zero_arg(n, 'start_byte'), _zero_arg(n, 'end_byte'))
+            for event in self.events[start:]:
+                if event['kind'] == 'WRITE':
+                    event['binding_scope'] = self.binding_scope
+        for child in body:
+            self.walk(child, 'READ')
+        self.binding_scope = previous
+
+    def _walk_closure(self, n: Any) -> None:
+        """Parameters belong to the closure; captured reads keep their outer owner."""
         params = n.child_by_field_name('parameters')
-        param_names = set()
-        if params is not None:
-            for decl in _children(params):
-                for name in _children(decl):
-                    if _zero_arg(name, 'kind') == 'identifier':
-                        param_names.add(_start_pos(name))
-                        self.walk(name, 'WRITE')
-        for child in _children(n):
-            if params is not None and _start_pos(child) == _start_pos(params):
-                for decl in _children(params):
-                    for part in _children(decl):
-                        if _start_pos(part) not in param_names:
-                            self.walk(part, 'READ')
-            else:
-                self.walk(child, 'READ')
+        if params is None:
+            params = n.child_by_field_name('parameter')
+        if params is None:
+            params = next((c for c in _children(n)
+                           if _zero_arg(c, 'kind') == 'lambda_parameters'), None)
+        parts = [c for c in _children(n) if params is None or _start_pos(c) != _start_pos(params)]
+        self._walk_bound_body(n, [params] if params is not None else [], parts)
+
+    def _walk_comprehension(self, n: Any) -> None:
+        """Generators bind before the result expression, despite source order."""
+        clauses = [c for c in _children(n) if _zero_arg(c, 'kind') == 'for_in_clause']
+        rest = [c for c in _children(n) if _zero_arg(c, 'kind') != 'for_in_clause']
+        self._walk_bound_body(n, clauses, rest)
+
+    def _walk_catch(self, n: Any) -> None:
+        """JS, Java and PHP expose the catch target in different fields."""
+        binding = n.child_by_field_name('parameter')
+        if binding is None:
+            binding = n.child_by_field_name('name')
+        if binding is None:
+            parameter = next((c for c in _children(n)
+                              if _zero_arg(c, 'kind') == 'catch_formal_parameter'), None)
+            binding = parameter.child_by_field_name('name') if parameter is not None else None
+        body = n.child_by_field_name('body')
+        self._walk_bound_body(n, [binding] if binding is not None else [],
+                              [body] if body is not None else [])
 
     def _walk_pattern_binding(self, n: Any, skip: Collection[Any] = ()) -> None:
         """Java `x instanceof T name` / C# `x is T name`: `name` is a pattern
@@ -1112,6 +1149,7 @@ def _non_variable_children(node: Any, get_text: Callable) -> List[Any]:
         if found is not None:
             skipped.append(found)
     skipped.extend(_type_reference_children(node))
+    skipped.extend(c for c in _children(node) if _zero_arg(c, 'kind') == 'type')
     return skipped
 
 
