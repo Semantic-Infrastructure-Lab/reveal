@@ -84,7 +84,8 @@ def test_unused_only_lost_inputs_and_diagnostic_cap_survive_projection(tmp_path,
     warning, = [w for w in answer['meta']['warnings'] if w.get('type') == 'truncated']
     assert warning['field'] == 'analysis.components.unused.diagnostics.files_failed'
     assert warning['total'] == 73 and warning['shown'] == 50
-    assert warning['hint'] == 'first 50; count exact'
+    assert 'first 50; count exact' in warning['message']
+    assert warning['field'] in warning['message']
 
 
 @pytest.mark.parametrize('warning', ['partial_parse', 'worker_lost', 'analysis_failed', 'parse_recovered'])
