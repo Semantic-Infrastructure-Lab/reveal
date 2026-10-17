@@ -306,3 +306,14 @@ function target({signature}) {{
 }}
 ''')
     assert {d['var'] for d in collect_deps(scope, 1, end, text)} == expected
+
+
+def test_js_loop_initializer_closure_captures_lexical_binding():
+    scope, text, end = parsed('javascript', '''\
+function target() {
+ for (let y = () => y + captured; ready; tick()) {
+   consume(y);
+ }
+}
+''')
+    assert {d['var'] for d in collect_deps(scope, 1, end, text)} == {'captured', 'ready', 'tick', 'consume'}
