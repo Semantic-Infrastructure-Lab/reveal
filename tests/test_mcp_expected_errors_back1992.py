@@ -179,3 +179,72 @@ def test_unknown_adapter_remains_nonerror_stdio_result(tmp_path):
         assert 'Unsupported URI scheme' in _text(result)
 
     _run(tmp_path, scenario)
+
+
+def test_registered_crash_logging_cannot_enter_sibling_capture(tmp_path, monkeypatch):
+    import concurrent.futures
+    import logging
+    import threading
+    from reveal import mcp_server
+    from reveal.display import structure
+
+    path = tmp_path / 'demo.py'
+    path.write_text('VALUE = 1\n', encoding='utf-8')
+    probed = threading.Event()
+    entered = threading.Event()
+    release = threading.Event()
+    classification = threading.Event()
+    acquired = []
+    original = mcp_server._raise_if_tool_failure
+
+    class CurrentStderr(logging.Handler):
+        def emit(self, record):
+            print(self.format(record), file=sys.stderr)
+
+    handler = CurrentStderr()
+    logger = logging.getLogger(mcp_server.__name__)
+    logger.addHandler(handler)
+
+    def crash(*args):
+        raise RuntimeError('PRIVATE_CONCURRENT_DETAIL')
+
+    def classify(result, tool_name):
+        classification.set()
+        assert probed.wait(timeout=10)
+        if acquired[0]:
+            assert entered.wait(timeout=10)
+        try:
+            return original(result, tool_name)
+        finally:
+            release.set()
+
+    def sibling():
+        assert classification.wait(timeout=10)
+        got_lock = mcp_server._capture_lock.acquire(blocking=False)
+        acquired.append(got_lock)
+        if got_lock:
+            mcp_server._capture_lock.release()
+        probed.set()
+
+        def render():
+            entered.set()
+            assert release.wait(timeout=10)
+            print('sibling narrative')
+
+        return mcp_server._run_and_capture(render)
+
+    monkeypatch.setattr(structure, 'show_structure', crash)
+    monkeypatch.setattr(mcp_server, '_raise_if_tool_failure', classify)
+    registered = mcp_server.mcp._tool_manager._tools['reveal_structure'].fn
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            other = pool.submit(sibling)
+            failed = pool.submit(registered, path=str(path))
+            with pytest.raises(ToolError, match='Internal error'):
+                failed.result(timeout=15)
+            text = other.result(timeout=15)
+        assert text == 'sibling narrative\n'
+        assert acquired == [False]
+    finally:
+        release.set()
+        logger.removeHandler(handler)
