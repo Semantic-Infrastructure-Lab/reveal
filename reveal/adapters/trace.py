@@ -25,6 +25,112 @@ from ..utils.path_utils import to_posix
 from ..utils.results import ResultBuilder
 
 
+
+def _trace_problem(problems: List[Dict[str, str]], file: str, message: str) -> None:
+    """Local validation facts; TraceAdapter applies existing composition attribution."""
+    problems.append({'file': to_posix(file), 'message': message})
+
+
+def _trace_count(value: Any) -> bool:
+    return type(value) is int and value >= 0
+
+
+def _trace_strings(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) and item for item in value)
+
+
+def _trace_callable_valid(element: Dict[str, Any]) -> bool:
+    return (isinstance(element.get('name'), str) and bool(element['name'])
+            and _trace_count(element.get('line')) and _trace_strings(element.get('calls'))
+            and isinstance(element.get('signature', ''), str)
+            and _trace_strings(element.get('reference_only_calls', [])))
+
+
+def _trace_elements(values: Any, file: str, problems: List[Dict[str, str]]) -> List[Dict[str, Any]]:
+    if not isinstance(values, list):
+        _trace_problem(problems, file, 'Required trace elements collection is missing or malformed')
+        return []
+    usable = []
+    for element in values:
+        if not isinstance(element, dict) or not isinstance(element.get('category'), str):
+            _trace_problem(problems, file, 'Required trace element is malformed')
+        elif element['category'] in ('functions', 'methods', 'tests', 'modules') and not _trace_callable_valid(element):
+            _trace_problem(problems, file, 'Required trace callable name, line or calls are missing or malformed')
+        else:
+            usable.append(element)
+    return usable
+
+
+def _trace_site_valid(site: Any, owner: bool) -> bool:
+    if not isinstance(site, dict):
+        return False
+    valid = isinstance(site.get('callee'), str) and bool(site['callee']) and _trace_count(site.get('line'))
+    return valid and (not owner or (isinstance(site.get('owner'), str) and _trace_count(site.get('owner_line'))))
+
+
+def _trace_sites(file: Dict[str, Any], problems: List[Dict[str, str]]) -> None:
+    """Validate the script/JSX call fields consumed by call_sources, if present."""
+    for field in ('module_call_sites', 'jsx_references', 'jsx_call_sites'):
+        if field not in file:
+            continue
+        values = file[field]
+        if not isinstance(values, list):
+            _trace_problem(problems, file['file'], f'Trace {field} is malformed')
+            file[field] = []
+            continue
+        usable = [site for site in values if _trace_site_valid(site, field != 'module_call_sites')]
+        if len(usable) != len(values):
+            _trace_problem(problems, file['file'], f'Trace {field} contains malformed call evidence')
+        file[field] = usable
+
+
+def _trace_file(value: Any, path: str, problems: List[Dict[str, str]]) -> Optional[Dict[str, Any]]:
+    if not isinstance(value, dict) or not isinstance(value.get('file'), str) or not value['file']:
+        _trace_problem(problems, path, 'Required trace file identity is missing or malformed')
+        return None
+    file = dict(value)
+    file['elements'] = _trace_elements(file.get('elements'), file['file'], problems)
+    _trace_sites(file, problems)
+    if 'parse_recovered' in file and type(file['parse_recovered']) is not bool:
+        _trace_problem(problems, file['file'], 'Trace recovered-parse evidence is malformed')
+        file.pop('parse_recovered')
+    return file
+
+
+def _trace_skipped(values: Any, path: str, problems: List[Dict[str, str]]) -> List[Tuple[str, str]]:
+    if not isinstance(values, list):
+        _trace_problem(problems, path, 'Required trace skipped-input evidence is missing or malformed')
+        return []
+    usable = []
+    for entry in values:
+        if (isinstance(entry, (tuple, list)) and len(entry) == 2
+                and all(isinstance(value, str) and value for value in entry)):
+            usable.append((entry[0], entry[1]))
+        else:
+            _trace_problem(problems, path, 'Trace skipped-input entry is malformed')
+    return usable
+
+
+def _trace_collection(values: Any, path: str) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Retain usable input rows and structured evidence without collecting again."""
+    from .ast.analysis import StructureList, analysis_skipped_warning, parse_recovered_warning
+    structures = StructureList()
+    problems: List[Dict[str, str]] = []
+    if isinstance(values, list):
+        structures.skipped = _trace_skipped(getattr(values, 'skipped', None), path, problems)
+        for value in values:
+            file = _trace_file(value, path, problems)
+            if file is not None:
+                structures.append(file)
+    else:
+        _trace_problem(problems, path, 'Required trace structures collection is malformed')
+    warnings = [entry for entry in (
+        analysis_skipped_warning(structures.skipped, None, 'their functions are missing from the trace'),
+        parse_recovered_warning(structures),
+    ) if entry is not None]
+    meta = {'warnings': warnings, 'errors': problems} if warnings or problems else {}
+    return structures, meta
+
 def _build_trace(path: str, root: str, depth: int) -> Dict[str, Any]:
     """Build a trace report: a depth-first walk over *definitions* (file:line),
     frames in pre-order so each renders under its caller.
@@ -34,18 +140,14 @@ def _build_trace(path: str, root: str, depth: int) -> Dict[str, Any]:
     reported each other's callees. `root` may be `path/to/file.py:name` to pick
     one definition; an ambiguous bare name traces each definition separately.
     """
-    from reveal.adapters.ast.analysis import analysis_skipped_warning, collect_structures
+    from reveal.adapters.ast.analysis import collect_structures
 
-    structures = collect_structures(path)
+    structures, meta = _trace_collection(collect_structures(path), path)
     index = _definition_index(structures)
     file_filter, root_name = _split_root(root)
     roots = [d for d in index.get(root_name, []) if _path_matches(d['file'], file_filter)]
 
-    warnings: List[str] = []
-    failed = analysis_skipped_warning(
-        structures.skipped, None, "their functions are missing from the trace")  # BACK-1860
-    if failed:
-        warnings.append(failed['message'])
+    warnings: List[str] = [entry['message'] for entry in meta.get('warnings', [])]
     if len(roots) > 1:
         where = ', '.join(f"{_relpath(d['file'], path)}:{d['line']}" for d in roots[:5])
         more = f" (+{len(roots) - 5} more)" if len(roots) > 5 else ''
@@ -74,6 +176,7 @@ def _build_trace(path: str, root: str, depth: int) -> Dict[str, Any]:
         'warnings': warnings,
         'total_resolved': walker.resolved,
         'total_unresolved': walker.unresolved,
+        'meta': meta,
     }
 
 
@@ -317,6 +420,16 @@ def _relpath(file_str: str, base: str) -> str:
         return file_str
 
 
+
+def _render_trace_metadata(report: Dict[str, Any]) -> None:
+    """Existing strings remain inline; render every other diagnostic once."""
+    from ..utils.warning_render import render_meta_warnings
+    mirrored = set(report.get('warnings', []))
+    meta = dict(report.get('meta') or {})
+    meta['warnings'] = [entry for entry in meta.get('warnings', [])
+                        if entry.get('message') not in mirrored]
+    render_meta_warnings({'meta': meta})
+
 def _render_trace(report: Dict[str, Any]) -> None:
     root = report['root']
     path = report['path']
@@ -330,6 +443,7 @@ def _render_trace(report: Dict[str, Any]) -> None:
     print(f"Resolved: {total_r}  External/unresolved: {total_u}")
     for warning in report.get('warnings', []):
         print(f"⚠ {warning}")
+    _render_trace_metadata(report)
     print()
 
     if not frames:
@@ -367,6 +481,8 @@ def _render_trace(report: Dict[str, Any]) -> None:
 
 class TraceRenderer:
     """Renderer for trace:// results."""
+
+    RENDERS_META_WARNINGS = True
 
     @staticmethod
     def render_structure(result: Dict[str, Any], format: str = 'text') -> None:
@@ -463,10 +579,15 @@ class TraceAdapter(ResourceAdapter):
         depth = max(1, min(int(depth_raw) if depth_raw is not None else 2, 5))
 
         report = _build_trace(self.path, str(root), depth)
+        meta = report.pop('meta', {})
+        for problem in meta.pop('errors', []):
+            self.record_composed_error('collect_structures', problem['file'], ValueError(problem['message']))
+        self.fold_meta(meta)
 
         return ResultBuilder.create(
             result_type='trace',
             source=self.path,
             contract_version=CONTRACT_VERSION,
             data=report,
+            meta=self.composed_meta(),
         )
