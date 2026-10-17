@@ -237,29 +237,41 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         for var_child in _children(var_decl):
             if _zero_arg(var_child, 'kind') == 'IDENTIFIER':
                 var_name = self._get_node_text(var_child)
-            candidate = var_child
-            while _zero_arg(candidate, 'kind') in ('ErrorUnionExpr', 'SuffixExpr'):
-                children = _children(candidate)
-                if len(children) != 1:
-                    break
-                candidate = children[0]
+            candidate = self._unwrap_expression(var_child)
             if _zero_arg(candidate, 'kind') == 'ContainerDecl':
                 container_decl = candidate
 
         return var_name, container_decl
 
+    def _unwrap_expression(self, node):
+        """Unwrap only single-child expression shells; calls/operators remain intact."""
+        while _zero_arg(node, 'kind') in ('ErrorUnionExpr', 'SuffixExpr'):
+            children = _children(node)
+            if len(children) != 1:
+                break
+            node = children[0]
+        return node
+
     def _is_correct_container_type(self, container_decl, container_type: str) -> bool:
         """Check if ContainerDecl is of the specified type (struct/enum/union)."""
         for cont_child in _children(container_decl):
+            if _zero_arg(cont_child, 'kind') == 'ContainerDeclType':
+                children = _children(cont_child)
+                # The declared kind is first: union(enum) is a union, not an enum.
+                return bool(children and _zero_arg(children[0], 'kind') == container_type)
             if _zero_arg(cont_child, 'kind') == container_type:
                 return True
         return False
 
     def _extract_container_field_names(self, member) -> List[str]:
         """Extract field names from a ContainerField node."""
+        parent = _zero_arg(member, 'parent')
+        is_enum = parent is not None and self._is_correct_container_type(parent, 'enum')
         for field_child in _children(member):
-            if _zero_arg(field_child, 'kind') == 'IDENTIFIER':
-                return [self._get_node_text(field_child)]
+            candidate = self._unwrap_expression(field_child) if is_enum else field_child
+            if _zero_arg(candidate, 'kind') == 'IDENTIFIER':
+                name = self._get_node_text(candidate)
+                return [] if is_enum and name == '_' else [name]
         return []
 
     def _extract_fields_from_auto(self, cont_decl_auto) -> List[str]:
@@ -274,7 +286,9 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         """Extract member field names from a ContainerDecl."""
         members = []
         for cont_child in _children(container_decl):
-            if _zero_arg(cont_child, 'kind') == 'ContainerDeclAuto':
+            if _zero_arg(cont_child, 'kind') == 'ContainerField':
+                members.extend(self._extract_container_field_names(cont_child))
+            elif _zero_arg(cont_child, 'kind') == 'ContainerDeclAuto':
                 members.extend(self._extract_fields_from_auto(cont_child))
         return members
 
@@ -284,6 +298,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         """Build container information dictionary."""
         container_info: StructureItem = {
             'line': _zero_arg(decl_node, 'start_position').row + 1,
+            'line_end': _zero_arg(decl_node, 'end_position').row + 1,
             'name': var_name,
             'members': members,
         }

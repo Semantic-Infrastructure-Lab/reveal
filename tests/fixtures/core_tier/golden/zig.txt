@@ -11,6 +11,9 @@ Functions (4):
   :27     run(order)
   :33     run(self, items)
 
+Structs (1):
+  :31     Batch
+
 [exit 0]
 
 $ reveal zig/sample.zig --outline
@@ -21,7 +24,8 @@ const unused = @import("builtin"); (zig/sample.zig:3)
 validate(order) (zig/sample.zig:5)
 processOrder(order) (zig/sample.zig:12)
 run(order) (zig/sample.zig:27)
-run(self, items) (zig/sample.zig:33)
+Batch (zig/sample.zig:31)
+  └─ run(self, items) (line 33)
 
 [exit 0]
 
