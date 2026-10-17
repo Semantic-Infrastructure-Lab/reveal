@@ -84,13 +84,13 @@ def test_file_finding_survives_composite_rank_cut(controlled_rank, top, shown):
 
 
 @pytest.mark.parametrize('top', [1, 0])
-def test_legacy_text_exit_uses_uncapped_file_evidence(controlled_rank, top):
-    result = run('hotspots', 'proj', '--files-only', '--top', str(top))
+def test_explicit_findings_gate_uses_uncapped_file_evidence(controlled_rank, top):
+    result = run('hotspots', 'proj', '--files-only', '--top', str(top), '--fail-on', 'findings')
     assert result.returncode == 1, result.stderr
 
 
 @pytest.mark.parametrize('spelling', ['cli', 'uri'])
-def test_legacy_json_policy_stays_unchanged(controlled_rank, spelling):
+def test_default_json_policy_reports_without_gate(controlled_rank, spelling):
     argv = ['hotspots', 'proj', '--files-only', '--top', '1'] if spelling == 'cli' else [
         'hotspots://proj?files_only=true&top=1']
     result = run(*argv, '--format', 'json')
@@ -106,7 +106,7 @@ def test_actual_function_threshold_and_retained_max(tmp_path, branches, adverse,
     result = adapter.get_structure()
     assert result['function_hotspots'][0]['complexity'] == branches+1
     assert result['summary']['has_findings'] is adverse
-    text = run('hotspots', str(tmp_path), '--functions-only', '--top', str(top))
+    text = run('hotspots', str(tmp_path), '--functions-only', '--top', str(top), '--fail-on', 'findings')
     assert text.returncode == (1 if adverse else 0)
 
 

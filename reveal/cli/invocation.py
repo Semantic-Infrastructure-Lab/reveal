@@ -92,7 +92,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      ('text', 'json'), help_guide=_SUBCOMMANDS_GUIDE),
     'hotspots':     _spec('hotspots',
                      'reveal hotspots [path]',
-                     'High-complexity files and functions that need attention'),
+                     'High-complexity files and functions that need attention')._replace(declared_adapter='hotspots'),
     'offline':      _spec('offline',
                      'reveal offline',
                      'Pre-download tree-sitter grammars for offline/air-gapped use'),

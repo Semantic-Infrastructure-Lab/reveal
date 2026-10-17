@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import math
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, cast
 
@@ -13,9 +14,100 @@ from ..conventions import LanguageConventions, conventions_for, family_for_path
 from ..defaults import TEST_DIR_NAMES, VENDOR_DIR_NAMES
 from ..rendering.adapters.hotspots import HotspotsRenderer
 from ..utils.path_utils import EVIDENCE, resolve_project_root, walk_tree
-from ..utils.query import parse_query_params
-from ..utils.results import ResultBuilder
+from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
+                                  nonnegative_display_limit, param_schema, whole_number)
+from ..utils.query_binding import bind_declared_params, boolean_value
+from ..utils.results import AnalysisCompleteness, ResultBuilder, result_execution_facts
 
+
+
+def _hotspots_top(value: Any) -> int:
+    if isinstance(value, bool):
+        raise ValueError('top requires a whole number, not a boolean')
+    return nonnegative_display_limit(value)
+
+
+def _hotspots_min(value: Any) -> int:
+    if isinstance(value, bool):
+        raise ValueError('min_complexity requires a whole number, not a boolean')
+    try:
+        return whole_number(float(value) if isinstance(value, str) else value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError('min_complexity requires a whole number') from exc
+
+
+_TOP = ParamSpec('top', 'integer', 'Retained items per ranking (0 = all)', 10,
+                 _hotspots_top, ('top=20',), minimum=0, zero_policy='all',
+                 role='presentation', cli=CliBinding(('--top',), metavar='N'))
+_MIN_COMPLEXITY = ParamSpec('min_complexity', 'integer', 'Minimum complexity to analyze', 10,
+                            _hotspots_min, ('min_complexity=15',), role='analysis',
+                            cli=CliBinding(('--min-complexity',), metavar='N'))
+_FUNCTIONS_ONLY = ParamSpec('functions_only', 'boolean', 'Skip file rankings', False,
+                           boolean_value, ('functions_only=true',), role='analysis',
+                           cli=CliBinding(('--functions-only',), action='store_true'))
+_FILES_ONLY = ParamSpec('files_only', 'boolean', 'Skip function analysis', False,
+                       boolean_value, ('files_only=true',), role='analysis',
+                       cli=CliBinding(('--files-only',), action='store_true'))
+_COMPOSE_FAILED = object()
+_REQUIRED_WARNINGS = {'parse_degraded', 'check_rules_failed', 'analysis_failed', 'parse_recovered'}
+
+
+def _is_count(value: Any) -> bool:
+    return type(value) is int and value >= 0
+
+
+def _is_metric(value: Any) -> bool:
+    return type(value) is int or (type(value) is float and math.isfinite(value))
+
+
+def _rank_entries(values: Any, field: str) -> List[Dict[str, Any]]:
+    """Keep usable observations even when sibling proof is incomplete."""
+    if not isinstance(values, list):
+        return []
+    return [entry for entry in values if isinstance(entry, dict) and _is_metric(entry.get(field))]
+
+
+def _valid_rank(values: Any, field: str) -> bool:
+    return isinstance(values, list) and len(_rank_entries(values, field)) == len(values)
+
+
+def _stats_proof_valid(data: Any, ranking: bool) -> bool:
+    if not isinstance(data, dict) or not isinstance(data.get('summary'), dict):
+        return False
+    total = data['summary'].get('total_files')
+    if not _is_count(total):
+        return False
+    if not ranking:
+        return True
+    files = data.get('files')
+    if not isinstance(files, list) or len(files) != total:
+        return False
+    return (all(isinstance(entry, dict) and isinstance(entry.get('quality'), dict)
+                and _is_metric(entry['quality'].get('score')) for entry in files)
+            and _valid_rank(data.get('hotspots'), 'quality_score'))
+
+
+def _ast_proof_valid(data: Any) -> bool:
+    if not isinstance(data, dict) or not _valid_rank(data.get('results'), 'complexity'):
+        return False
+    counts = [data.get(key) for key in ('total_files', 'total_results', 'displayed_results')]
+    return (all(_is_count(count) for count in counts)
+            and counts[2] == len(data['results']) and counts[1] >= counts[2])
+
+
+def _hotspots_proof_error(result: Any) -> Optional[str]:
+    if not isinstance(result, dict):
+        return 'Required hotspots answer is malformed'
+    if not _valid_rank(result.get('file_hotspots'), 'quality_score'):
+        return 'Required file ranking is missing or malformed'
+    if not _valid_rank(result.get('function_hotspots'), 'complexity'):
+        return 'Required function ranking is missing or malformed'
+    summary = result.get('summary')
+    if not isinstance(summary, dict) or not _is_count(summary.get('total_files')):
+        return 'Required analyzed file coverage is missing or malformed'
+    if type(summary.get('has_findings')) is not bool:
+        return 'Required serious-findings evidence is missing or malformed'
+    return None
 
 def _provenance_for_file(file_str: Optional[str], base_path: Path) -> Optional[str]:
     """Classify a hotspot entry's 'test'/'vendor'/'minified'/None provenance
@@ -73,14 +165,23 @@ def _compose_stats(adapter: 'HotspotsAdapter', path: Path, **params: Any) -> Dic
     # for its function list (via ast://) but not its file list.
     _root, _patterns = active_exclusions()
     extra: Dict[str, Any] = {'exclude': list(_patterns)} if _patterns else {}
-    data = adapter.compose(StatsAdapter, str(path), default={}, **params, **extra)
-    adapter.stats_summary = data.get('summary', {})
+    data = adapter.compose(StatsAdapter, str(path), default=_COMPOSE_FAILED, **params, **extra)
+    if data is _COMPOSE_FAILED:
+        return {}
+    if not _stats_proof_valid(data, bool(params.get('hotspots'))) and not (isinstance(data, dict) and data.get('error')):
+        adapter.record_composed_error('StatsAdapter', str(path), ValueError('Required Stats coverage/ranking evidence is missing or malformed'))
+    if not isinstance(data, dict):
+        return {}
+    summary = data.get('summary')
+    adapter.stats_summary = summary if isinstance(summary, dict) else {}
     if data.get('warnings'):
         # Stats still returns optional churn disclosures outside its meta frame.
         adapter.fold_meta({'warnings': data['warnings']})
     if params.get('hotspots'):
         adapter._file_findings = _has_findings(
-            (file.get('quality', {}).get('score', 100) for file in data.get('files', [])), ())
+            (file['quality']['score'] for file in (data.get('files') if isinstance(data.get('files'), list) else [])
+             if isinstance(file, dict) and isinstance(file.get('quality'), dict)
+             and _is_metric(file['quality'].get('score'))), ())
     return cast(Dict[str, Any], data)
 
 
@@ -88,7 +189,7 @@ def _run_file_hotspots(adapter: 'HotspotsAdapter', path: Path, top: int) -> List
     """Fetch file-level hotspots via StatsAdapter."""
     data = _compose_stats(adapter, path, hotspots=True, top=top,
                           cut_as=('file_hotspots', 'raise ?top=N'))
-    return cast(List[Dict[str, Any]], data.get('hotspots', []))
+    return _rank_entries(data.get('hotspots'), 'quality_score')
 
 
 def _record_function_scan_coverage(adapter: 'HotspotsAdapter', path: Path) -> None:
@@ -104,9 +205,13 @@ def _run_function_hotspots(adapter: 'HotspotsAdapter', path: Path, min_complexit
     # BACK-984: '>=' directly, not the old '>{min_complexity - 1}' hack —
     # the filter parser supports it natively.
     query = f'complexity>={min_complexity}&sort=-complexity&limit={top}'
-    data = adapter.compose(AstAdapter, str(path), default={}, query=query,
+    data = adapter.compose(AstAdapter, str(path), default=_COMPOSE_FAILED, query=query,
                            cut_as=('function_hotspots', 'raise ?top=N'))
-    return cast(List[Dict[str, Any]], data.get('results', data.get('elements', [])))
+    if data is _COMPOSE_FAILED:
+        return []
+    if not _ast_proof_valid(data) and not (isinstance(data, dict) and data.get('error')):
+        adapter.record_composed_error('AstAdapter', str(path), ValueError('Required AST coverage/ranking evidence is missing or malformed'))
+    return _rank_entries(data.get('results', data.get('elements')), 'complexity') if isinstance(data, dict) else []
 
 
 def _camel_to_snake(name: str) -> str:
@@ -219,9 +324,19 @@ class HotspotsAdapter(ResourceAdapter):
     # default top=10 per ranking; --all lifts it (BACK-1229)
     CLI_QUERY_FLAGS = {'all': 'top=1000000', 'limit': 'top={value}', 'respect_gitignore': 'respect_gitignore=false'}  # top= caps each list (BACK-1496)
 
-    def __init__(self, resource: str, query: Optional[str] = None):
+    RESULT_TYPE = 'hotspots_scan'
+    FINDINGS_POLICIES = ('none', 'findings')
+    DEFAULT_FAIL_ON = 'none'
+    RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
+    PARAM_SPECS = (_TOP, _MIN_COMPLEXITY, _FUNCTIONS_ONLY, _FILES_ONLY)
+
+    def __init__(self, resource: str, query: Optional[str] = None, *, params: Optional[Dict[str, Any]] = None):
         self.path = str(Path(resource).expanduser())
-        self.query_params = parse_query_params(query or '', coerce=True)
+        if params is not None:
+            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
+                self.PARAM_SPECS, params, transport='typed')
+        else:
+            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
         self._warn_unknown_query_params(self.query_params)  # BACK-507
         # Populated by get_structure(); text rendering needs the raw set for
         # its coverage overlay, but it must never appear in the JSON contract
@@ -229,6 +344,21 @@ class HotspotsAdapter(ResourceAdapter):
         self.test_index: Optional[Set[str]] = None
         self.stats_summary: Dict[str, Any] = {}
         self._file_findings = False
+
+    @staticmethod
+    def answer_requirement_error(result, expected_type, prior_facts=None):
+        return _hotspots_proof_error(result)
+
+    @staticmethod
+    def execution_facts(result):
+        if _hotspots_proof_error(result):
+            return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
+        meta = result.get('meta') or {}
+        missing = bool(meta.get('errors')) or any(
+            warning.get('type') in _REQUIRED_WARNINGS for warning in meta.get('warnings', []))
+        return result_execution_facts(result,
+            completeness=AnalysisCompleteness.INCOMPLETE if missing else AnalysisCompleteness.COMPLETE,
+            findings=result['summary']['has_findings'])
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -265,12 +395,9 @@ class HotspotsAdapter(ResourceAdapter):
             'adapter': 'hotspots',
             'description': 'High-complexity, low-quality file and function scanner',
             'uri_syntax': 'hotspots://<path>?top=10&min_complexity=10',
-            'query_params': {
-                'top': {'type': 'integer', 'description': 'Number of hotspots to show per list (0 = all)', 'examples': ['top=20']},
-                'min_complexity': {'type': 'integer', 'description': 'Minimum cyclomatic complexity to report', 'examples': ['min_complexity=15']},
-                'functions_only': {'type': 'boolean', 'description': 'Skip file-level hotspots', 'examples': ['functions_only=true']},
-                'files_only': {'type': 'boolean', 'description': 'Skip function-level hotspots (and the test-index scan)', 'examples': ['files_only=true']},
-            },
+            'resource': HotspotsAdapter.RESOURCE_SPEC.schema(),
+            'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none', 'findings']},
+            'query_params': param_schema(HotspotsAdapter.PARAM_SPECS),
             'elements': {},
             'supports_batch': False,
             'supports_advanced': False,
@@ -296,20 +423,23 @@ class HotspotsAdapter(ResourceAdapter):
             ],
         }
 
-    def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+    def get_structure(self, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
         path = Path(self.path)
-        top = self.int_param('top', 10)
-        if top <= 0:
+        top = _TOP.read(self.query_params)
+        if verbose or top == 0:
             # BACK-1505: top=0 meant "show none" and then printed the ✅ clean
             # verdict -- a false all-clear. 0 means no cap, as it does for calls://.
             from reveal.adapters.overview import UNLIMITED_TOP
             top = UNLIMITED_TOP
-        min_cx = self.int_param('min_complexity', 10)
-        functions_only = str(self.query_params.get('functions_only', False)).lower() == 'true'
-        files_only = str(self.query_params.get('files_only', False)).lower() == 'true'
+        min_cx = _MIN_COMPLEXITY.read(self.query_params)
+        functions_only = _FUNCTIONS_ONLY.read(self.query_params)
+        files_only = _FILES_ONLY.read(self.query_params)
 
         self.stats_summary = {}
         self._file_findings = False
+        self._composed_errors = []
+        self._composed_warnings = []
+        self._composed_confidences = []
         file_hotspots: List[Dict[str, Any]] = [] if functions_only else _run_file_hotspots(self, path, top)
         fn_hotspots: List[Dict[str, Any]] = [] if files_only else _run_function_hotspots(self, path, min_cx, top)
         if functions_only:

@@ -97,7 +97,7 @@ def test_functions_only_discloses_a_parse_failure_and_is_not_clean(syntax_tree, 
     args = (('hotspots', syntax_tree, '--functions-only') if form == 'cli'
             else (f'hotspots://{syntax_tree}?functions_only=true',))
     result = _run(*args)
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 3, result.stderr
     assert '1 file(s) did not parse cleanly' in result.stdout
     assert CLEAN_VERDICT not in result.stdout
 

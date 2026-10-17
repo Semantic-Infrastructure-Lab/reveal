@@ -67,6 +67,14 @@ def _fn_hotspot(name, complexity, file='mod.py', line=10, line_count=20):
     }
 
 
+def _file_scan(values):
+    """A helper double must retain the coverage the real Stats call records."""
+    def scan(adapter, path, top):
+        adapter.stats_summary = {'total_files': len(values)}
+        return values
+    return scan
+
+
 class TestCreateHotspotsParser(unittest.TestCase):
     """Parser smoke tests."""
 
@@ -78,10 +86,8 @@ class TestCreateHotspotsParser(unittest.TestCase):
         parser = create_hotspots_parser()
         args = parser.parse_args([])
         self.assertEqual(args.path, '.')
-        self.assertEqual(args.top, 10)
-        self.assertEqual(args.min_complexity, 10)
-        self.assertFalse(args.functions_only)
-        self.assertFalse(args.files_only)
+        for name in ('top', 'min_complexity', 'functions_only', 'files_only'):
+            self.assertFalse(hasattr(args, name))  # Declared binder supplies defaults.
 
     def test_path_positional(self):
         parser = create_hotspots_parser()
@@ -91,12 +97,12 @@ class TestCreateHotspotsParser(unittest.TestCase):
     def test_top_flag(self):
         parser = create_hotspots_parser()
         args = parser.parse_args(['--top', '20'])
-        self.assertEqual(args.top, 20)
+        self.assertEqual(args.top, '20')
 
     def test_min_complexity_flag(self):
         parser = create_hotspots_parser()
         args = parser.parse_args(['--min-complexity', '15'])
-        self.assertEqual(args.min_complexity, 15)
+        self.assertEqual(args.min_complexity, '15')
 
     def test_functions_only_flag(self):
         parser = create_hotspots_parser()
@@ -372,16 +378,16 @@ class TestRunHotspots(unittest.TestCase):
         """Patch both internal helpers."""
         return (
             patch('reveal.adapters.hotspots._run_file_hotspots',
-                  return_value=file_hotspots or []),
+                  autospec=True, side_effect=_file_scan(file_hotspots or [])),
             patch('reveal.adapters.hotspots._run_function_hotspots',
                   return_value=fn_hotspots or []),
         )
 
-    def test_nonexistent_path_exits_1(self):
+    def test_nonexistent_path_exits_2(self):
         args = _args(path='/does/not/exist/at/all')
         with self.assertRaises(SystemExit) as ctx:
             run_hotspots(args)
-        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(ctx.exception.code, 2)
 
     def test_clean_code_exits_0(self, tmp_path=None):
         import tempfile, os
@@ -396,7 +402,7 @@ class TestRunHotspots(unittest.TestCase):
     def test_critical_file_exits_1(self):
         import tempfile
         with tempfile.TemporaryDirectory() as d:
-            args = _args(path=d)
+            args = _args(path=d, fail_on='findings')
             p1, p2 = self._make_run([_file_hotspot('bad.py', 60)], [])
             with p1, p2:
                 buf = StringIO()
@@ -408,7 +414,7 @@ class TestRunHotspots(unittest.TestCase):
     def test_critical_function_exits_1(self):
         import tempfile
         with tempfile.TemporaryDirectory() as d:
-            args = _args(path=d)
+            args = _args(path=d, fail_on='findings')
             p1, p2 = self._make_run([], [_fn_hotspot('fn', 25)])
             with p1, p2:
                 buf = StringIO()
@@ -446,7 +452,7 @@ class TestRunHotspots(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as d:
             args = _args(path=d, files_only=True)
-            with patch('reveal.adapters.hotspots._run_file_hotspots', return_value=[]):
+            with patch('reveal.adapters.hotspots._run_file_hotspots', autospec=True, side_effect=_file_scan([])):
                 with patch('reveal.adapters.hotspots._run_function_hotspots') as mock_fn:
                     buf = StringIO()
                     with patch('sys.stdout', buf):
@@ -587,7 +593,7 @@ class TestRunHotspotsTestCoverage(unittest.TestCase):
             Path(os.path.join(tests_dir, 'test_x.py')).write_text('def test_my_func(): pass\n')
             fn = _fn_hotspot('my_func', 15)
             args = _args(path=d, format='json')
-            with patch('reveal.adapters.hotspots._run_file_hotspots', return_value=[]):
+            with patch('reveal.adapters.hotspots._run_file_hotspots', autospec=True, side_effect=_file_scan([])):
                 with patch('reveal.adapters.hotspots._run_function_hotspots', return_value=[fn]):
                     buf = StringIO()
                     with patch('sys.stdout', buf):
@@ -606,7 +612,7 @@ class TestRunHotspotsTestCoverage(unittest.TestCase):
             )
             fn = _fn_hotspot('generate', 15, file='src/liquidity_sweep.py')
             args = _args(path=d, format='json')
-            with patch('reveal.adapters.hotspots._run_file_hotspots', return_value=[]):
+            with patch('reveal.adapters.hotspots._run_file_hotspots', autospec=True, side_effect=_file_scan([])):
                 with patch('reveal.adapters.hotspots._run_function_hotspots', return_value=[fn]):
                     buf = StringIO()
                     with patch('sys.stdout', buf):
@@ -618,7 +624,7 @@ class TestRunHotspotsTestCoverage(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as d:
             args = _args(path=d, files_only=True)
-            with patch('reveal.adapters.hotspots._run_file_hotspots', return_value=[]):
+            with patch('reveal.adapters.hotspots._run_file_hotspots', autospec=True, side_effect=_file_scan([])):
                 with patch('reveal.adapters.hotspots._build_test_name_index') as mock_idx:
                     buf = StringIO()
                     with patch('sys.stdout', buf):
@@ -737,7 +743,7 @@ class TestJsonFormatDoesNotLeakAbsolutePaths(unittest.TestCase):
             file_hotspots = [_file_hotspot('mod.py', quality=50)]
             fn_hotspots = [_fn_hotspot('big_fn', 25, file=f'{root}/pkg/mod.py')]
             args = _args(path=tmp, format='json')
-            with patch('reveal.adapters.hotspots._run_file_hotspots', return_value=file_hotspots):
+            with patch('reveal.adapters.hotspots._run_file_hotspots', autospec=True, side_effect=_file_scan(file_hotspots)):
                 with patch('reveal.adapters.hotspots._run_function_hotspots', return_value=fn_hotspots):
                     buf = StringIO()
                     with patch('sys.stdout', buf):
