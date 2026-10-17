@@ -61,6 +61,19 @@ def test_boundary_local_container_control(language):
     assert _effects(language, 'parameter')[0]['effects'] == []
 
 
+@pytest.mark.parametrize(('language', 'source', 'target'), [
+    ('python', "def root():\n    os.environ['X'] = os.environ['X'] + '1'\n", "os.environ['X']"),
+    ('javascript', "function root() { process.env.X = process.env.X + '1'; }", 'process.env.X'),
+])
+def test_boundary_same_target_rhs_read_survives_assignment_merge(language, source, target):
+    from test_binders_back1897 import parsed
+
+    scope, text, end = parsed(language, source)
+    result = collect_boundary(scope, 1, end, text, language)
+    effects = [e for e in result['effects'] if e['callee'] == target]
+    assert sorted(e['via'] for e in effects) == ['assignment', 'property']
+
+
 def test_transitive_boundary_discloses_root_only_assignments(tmp_path):
     import json
     from conftest import _run_reveal_direct
