@@ -285,6 +285,9 @@ def test_typed_binder_declaration_defaults_and_roles():
     from reveal.utils.query_binding import bind_declared_params
     from reveal.utils.query_parser import collect_query_keys
     specs = OverviewAdapter.PARAM_SPECS
+    schema = OverviewAdapter.get_schema()
+    assert schema['execution_policy'] == {'default_fail_on': 'none', 'fail_on': ['none']}
+    assert 'execution' not in schema
     assert [(s.name, s.role) for s in specs] == [('top', 'analysis'), ('no_git', 'analysis'), ('no_imports', 'analysis')]
     with collect_query_keys() as keys:
         params = bind_declared_params(specs, {}, transport='typed')

@@ -122,10 +122,11 @@ def _validate_functions(data: Dict[str, Any], field: str) -> None:
 
 def _validate_ast(data: Any) -> None:
     data = _object(data, 'AstAdapter answer')
-    _validate_functions(data, 'results')
-    for field in ('total_files', 'total_results', 'displayed_results'):
-        _count(data, field)
-    if data['displayed_results'] != len(data['results']) or data['total_results'] < data['displayed_results']:
+    field = 'results' if 'results' in data else 'elements'
+    _validate_functions(data, field)
+    for count_field in ('total_files', 'total_results', 'displayed_results'):
+        _count(data, count_field)
+    if data['displayed_results'] != len(data[field]) or data['total_results'] < data['displayed_results']:
         raise ValueError('AST result counts must cover the retained results')
 
 
@@ -611,7 +612,8 @@ class OverviewAdapter(ResourceAdapter):
             'description': 'One-glance codebase dashboard (languages, quality, hotspots, architecture, recent activity)',
             'uri_syntax': 'overview://<path>?top=5&no_git=true&no_imports=true&exclude=pat&respect_gitignore=true',
             'resource': OverviewAdapter.RESOURCE_SPEC.schema(),
-            'execution': {'default_fail_on': 'none', 'fail_on': ['none']},
+            'execution_policy': {'default_fail_on': OverviewAdapter.DEFAULT_FAIL_ON,
+                                 'fail_on': list(OverviewAdapter.FINDINGS_POLICIES)},
             'query_params': {
                 **param_schema(OverviewAdapter.PARAM_SPECS),
                 'exclude': {'type': 'string', 'description': 'Comma-separated globs for stats/hotspots, scope and Imports; does not filter AST complex functions', 'examples': ['exclude=dist/*,*.min.js']},
