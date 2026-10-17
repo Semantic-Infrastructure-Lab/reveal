@@ -67,8 +67,8 @@ def test_lua_duplicate_bare_names_keep_all_distinct_qualified_candidates(lua):
     assert nested is not None and nested.ambiguous
     assert [owner_path(lua, node) for node in nested.candidates] == ['Outer.Inner', 'Another.Inner']
     saved = resolve_bare_name(lua, 'save', (FUNCTION_NODE_TYPES,))
-    assert len(saved.candidates) == 2
-    assert [owner_path(lua, node) for node in saved.candidates] == ['Outer.Inner', 'Other']
+    assert len(saved.candidates) == 3
+    assert [owner_path(lua, node) for node in saved.candidates] == ['Outer.Inner', 'Other', 'Table.Inner']
 
 
 def test_lua_bare_names_and_unbound_callbacks_are_unchanged(lua):
@@ -78,6 +78,19 @@ def test_lua_bare_names_and_unbound_callbacks_are_unchanged(lua):
     assert 'return "top"' in result['source']
     assert resolve_path(lua, 'Missing.run') is None
     assert resolve_path(lua, 'invoke.value') is None
+
+
+def test_lua_assignment_positions_and_computed_fields_are_not_rebound(tmp_path):
+    analyzer = _analyzer(tmp_path, 'lua', '''local Left = {}
+Left.skip, Left.keep = 0, function(value) return value end
+local Dynamic = { [key] = function(value) return value end }
+''')
+    resolution = resolve_path(analyzer, 'Left.keep')
+    assert resolution is not None
+    assert owner_path(analyzer, resolution.node) == 'Left'
+    assert analyzer.element_span(resolution.node)['source'] == 'function(value) return value end'
+    assert resolve_path(analyzer, 'Left.skip') is None
+    assert resolve_path(analyzer, 'Dynamic.key') is None
 
 
 @pytest.fixture
