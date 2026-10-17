@@ -1,6 +1,6 @@
 $ reveal . --grep '= validate'
 Text search: .  —  pattern: = validate
-14 hits across 14 files
+15 hits across 15 files
 
 File: c/sample.c
   process_order()
@@ -13,6 +13,10 @@ File: cpp/sample.cpp
 File: dart/sample.dart
   processOrder()
     13: var result = validate(order);
+
+File: gdscript/sample.gd
+  processOrder()
+    13: var result = validate(order)
 
 File: go/sample.go
   processOrder()

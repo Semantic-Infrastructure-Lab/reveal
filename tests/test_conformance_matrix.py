@@ -805,3 +805,39 @@ def test_scala_conformance_fixture_parses_without_recovery():
 
 def test_scala_unannotated_class_has_no_decorators():
     assert _ast_record('scala', 'Batch', 'classes')['decorators'] == []
+
+
+def test_gdscript_conformance_fixture_parses_without_recovery():
+    _assert_fixture_has_no_parse_recovery('gdscript')
+
+
+def test_gdscript_unannotated_function_and_unbased_class_controls():
+    assert _ast_record('gdscript', 'validate', 'functions')['decorators'] == []
+    assert _ast_record('gdscript', 'Batch', 'classes')['bases'] == []
+
+
+def test_gdscript_assignment_mutation_has_later_read():
+    result = _run_reveal_direct(
+        str(_sample_path('gdscript')), ':18-18', '--mutations', '--format', 'json')
+    assert result.returncode == 0, result.stderr
+    findings = json.loads(result.stdout)['findings']
+    assert [{'var': f['var'], 'line': f['line'], 'next_read_line': f['next_read_line']}
+            for f in findings] == [{'var': 'result', 'line': 18, 'next_read_line': 19}]
+
+
+@pytest.mark.parametrize('cross_calls', [False, True])
+def test_gdscript_direct_call_varflow_control(tmp_path, cross_calls):
+    """Missing method-call arguments must not hide bare-call/declaration reads."""
+    path = tmp_path / 'control.gd'
+    path.write_text('func control():\n    var result = 1\n    consume(result)\n    return result\n',
+                    encoding='utf-8')
+    args = [str(path), 'control', '--varflow', 'result', '--format', 'json']
+    if cross_calls:
+        args.append('--cross-calls')
+    result = _run_reveal_direct(*args)
+    assert result.returncode == 0, result.stderr
+    findings = json.loads(result.stdout)['findings']
+    if cross_calls:
+        findings = findings[0]['events']
+    assert [{'kind': f['kind'], 'line': f['line']} for f in findings] == [
+        {'kind': 'WRITE', 'line': 2}, {'kind': 'READ', 'line': 3}, {'kind': 'READ', 'line': 4}]

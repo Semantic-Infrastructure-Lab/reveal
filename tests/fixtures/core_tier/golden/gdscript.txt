@@ -1,0 +1,91 @@
+$ reveal gdscript/sample.gd
+File: sample.gd (775B, 35 lines)
+
+Imports (3):
+  :2      extends Node
+  :4      preload("res://unused.gd")
+  :33     extends Batch
+
+Functions (5):
+  :6      validate(order) [5 lines, depth:2]
+  :12     processOrder(order) [8 lines, depth:2]
+  :22     run(order) [2 lines, depth:0]
+  :28     Batch.run(items) [4 lines, depth:2]
+  :34     Reporter.summarize() [2 lines, depth:0]
+
+Classes (2):
+  :25     Batch
+  :33     Reporter
+
+[exit 0]
+
+$ reveal gdscript/sample.gd --outline
+File: sample.gd (775B, 35 lines)
+
+extends Node (gdscript/sample.gd:2)
+preload("res://unused.gd") (gdscript/sample.gd:4)
+validate(order) [5 lines, depth:2] (gdscript/sample.gd:6)
+processOrder(order) [8 lines, depth:2] (gdscript/sample.gd:12)
+run(order) [2 lines, depth:0] (gdscript/sample.gd:22)
+Batch (gdscript/sample.gd:25)
+  └─ run(items) [4 lines, depth:2] (line 28)
+extends Batch (gdscript/sample.gd:33)
+Reporter (gdscript/sample.gd:33)
+  └─ summarize() [2 lines, depth:0] (line 34)
+
+[exit 0]
+
+$ reveal gdscript/sample.gd processOrder
+gdscript/sample.gd:12-19 | processOrder
+
+     12  func processOrder(order):
+     13      var result = validate(order)
+     14      if result == null:
+     15          return null
+     16      var file = FileAccess.open("user://orders.log", FileAccess.WRITE)
+     17      file.store_string(str(result))
+     18      result = result * 2
+     19      return result
+[exit 0]
+
+$ reveal gdscript/sample.gd Batch.run
+gdscript/sample.gd:28-31 | Batch.run
+
+     28      func run(items):
+     29          for item in items:
+     30              self.total = self.total + item
+     31              cache.set(item, item)
+[exit 0]
+
+$ reveal gdscript/sample.gd :12-14
+gdscript/sample.gd:12-14 | lines:12-14
+
+     12  func processOrder(order):
+     13      var result = validate(order)
+     14      if result == null:
+[exit 0]
+
+$ reveal gdscript/sample.gd :12
+gdscript/sample.gd:12-19 | processOrder
+
+     12  func processOrder(order):
+     13      var result = validate(order)
+     14      if result == null:
+     15          return null
+     16      var file = FileAccess.open("user://orders.log", FileAccess.WRITE)
+     17      file.store_string(str(result))
+     18      result = result * 2
+     19      return result
+[exit 0]
+
+$ reveal gdscript/sample.gd --grep result
+Text search: gdscript/sample.gd  —  pattern: result
+5 hits in 1 element
+
+  processOrder()
+    13: var result = validate(order)
+    14: if result == null:
+    17: file.store_string(str(result))
+    18: result = result * 2
+    19: return result
+[exit 0]
