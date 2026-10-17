@@ -368,10 +368,6 @@ def test_directory_grep_text_json_parity(runner):
     _assert_dir_grep_parity(_text(runner, CONFORMANCE_DIR, argv), runner.json(CONFORMANCE_DIR, argv))
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError,
-    reason="BACK-1918: Dart declaration-line extraction includes preceding imports and functions",
-)
 def test_dart_declaration_line_matches_named_function(runner):
     named = runner.json(CONFORMANCE_DIR, ['dart/sample.dart', 'processOrder'])
     positional = runner.json(CONFORMANCE_DIR, ['dart/sample.dart', ':12'])
@@ -380,10 +376,6 @@ def test_dart_declaration_line_matches_named_function(runner):
     assert (positional['line_start'], positional['line_end'], positional['name']) == expected
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError,
-    reason="BACK-1933: Zig declaration-line extraction falls back to a surrounding line range",
-)
 def test_zig_declaration_line_matches_named_function(runner):
     named = runner.json(CONFORMANCE_DIR, ['zig/sample.zig', 'processOrder'])
     positional = runner.json(CONFORMANCE_DIR, ['zig/sample.zig', ':12'])
