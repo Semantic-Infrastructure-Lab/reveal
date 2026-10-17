@@ -285,3 +285,21 @@ def test_artifact_cannot_forge_request_or_attempt_identity(tmp_path, field):
                          else event for event in capture.events]
     with pytest.raises(error):
         capture.validate()
+
+
+def test_successful_artifact_can_precede_a_failed_request(tmp_path, monkeypatch):
+    capture_parses, _ = _api()
+    physical = tp._parse_recent.__wrapped__
+
+    def failed_after_build(language, source):
+        physical(language, source)
+        raise RuntimeError('request failed after physical build')
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(tp, '_parse_recent', failed_after_build)
+        with pytest.raises(RuntimeError, match='after physical build'):
+            with capture_parses(tmp_path) as capture:
+                tp.get_tree('python', SOURCE, filename=tmp_path / 'a.py')
+    assert len(_events(capture, 'artifact')) == 1
+    assert _events(capture, 'outcome')[0].outcome == 'failed'
+    capture.validate()

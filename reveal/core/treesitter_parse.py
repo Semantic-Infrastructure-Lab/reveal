@@ -125,7 +125,7 @@ def _parse_recent(language: str, source: str) -> Any:
     parser = get_parser(language)
     if not capture_enabled():
         return ts_parse(parser, source)
-    with parse_attempt(source, 'native'):
+    with parse_attempt(source, 'compatibility-wrapper'):
         return ts_parse(parser, source)
 
 

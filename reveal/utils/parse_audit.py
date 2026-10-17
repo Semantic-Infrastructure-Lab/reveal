@@ -1,7 +1,8 @@
 """Opt-in, command-local attribution for owned full-source parser artifacts.
 
 This observes existing requests and builds; it retains neither source nor trees
-and changes no parser cache keys. Direct validation/snippet parser bypasses and
+and changes no parser cache keys. A tree-sitter attempt counts the compatibility
+wrapper call; its internal native string/bytes retries are excluded. Direct validation/snippet parser bypasses and
 third-party generated code are outside this owner, not counted as target work.
 """
 from __future__ import annotations
@@ -18,6 +19,7 @@ import sys
 from typing import Any, Iterable, Iterator, Literal, Optional, Union
 
 Domain = Literal['fullsource', 'snippet', 'validation']
+Outcome = Literal['built', 'cached', 'failed']
 PathArg = Union[str, os.PathLike[str]]
 
 
@@ -39,7 +41,7 @@ class ParseEvent:
     attempt_id: Optional[int] = None
     parsed_hash: Optional[str] = None
     phase: Optional[str] = None
-    outcome: Optional[Literal['built', 'cached', 'failed']] = None
+    outcome: Optional[Outcome] = None
     error: Optional[str] = None
 
 
@@ -73,7 +75,7 @@ class ParseCapture:
     def request(self, parser: str, source: str, filename: Optional[PathArg], domain: Domain) -> ParseEvent:
         if domain not in ('fullsource', 'snippet', 'validation'):
             raise ParseAttributionError(f'unknown parse domain: {domain!r}')
-        path = None if filename is None or str(filename).startswith('<') else Path(filename).resolve()
+        path = None if filename is None or str(filename) == '' or str(filename).startswith('<') else Path(filename).resolve()
         if path is None:
             scope: Literal['target', 'external', 'unattributed'] = 'unattributed'
         else:
@@ -104,6 +106,7 @@ class ParseCapture:
 
 
 def _validate_request(events: list[ParseEvent]) -> None:
+    _validate_event_identity(events)
     outcomes = [event for event in events if event.event == 'outcome']
     if len(outcomes) != 1:
         raise ParseAttributionError('each request requires exactly one outcome')
@@ -116,6 +119,8 @@ def _validate_request(events: list[ParseEvent]) -> None:
         raise ParseAttributionError('cached outcome with physical parse work')
     if outcome not in ('built', 'cached', 'failed'):
         raise ParseAttributionError('missing request outcome value')
+    if (outcome == 'failed') != (outcomes[0].error is not None):
+        raise ParseAttributionError('request outcome disagrees with failure')
     _validate_attempts(events, attempts)
 
 
@@ -127,8 +132,27 @@ def _validate_attempts(events: list[ParseEvent], attempts: list[ParseEvent]) -> 
     if any(event.attempt_id not in identifiers for event in completions):
         raise ParseAttributionError('parse completion without an attempt')
     for attempt in attempts:
-        if sum(event.attempt_id == attempt.attempt_id for event in completions) != 1:
+        finished = [event for event in completions if event.attempt_id == attempt.attempt_id]
+        if len(finished) != 1:
             raise ParseAttributionError('each parse attempt requires one artifact or failure')
+        terminal = finished[0]
+        if (terminal.parsed_hash, terminal.phase) != (attempt.parsed_hash, attempt.phase):
+            raise ParseAttributionError('parse completion disagrees with attempt identity')
+        if (terminal.event == 'failure') != (terminal.error is not None):
+            raise ParseAttributionError('parse completion disagrees with failure')
+
+
+def _request_identity(event: ParseEvent) -> tuple:
+    return (event.request_id, event.parser, event.domain, event.filename, event.scope,
+            event.source_hash, event.source_length, event.pid)
+
+
+def _validate_event_identity(events: list[ParseEvent]) -> None:
+    if events[0].event != 'request' or events[-1].event != 'outcome':
+        raise ParseAttributionError('request and outcome must bound the event sequence')
+    identity = _request_identity(events[0])
+    if any(_request_identity(event) != identity for event in events):
+        raise ParseAttributionError('event disagrees with request identity')
 
 
 @dataclass
@@ -184,7 +208,7 @@ def parse_request(parser: str, source: str, filename: Optional[PathArg], domain:
         yield
         complete = True
     finally:
-        outcome = ('built' if request.artifacts else 'cached') if complete else 'failed'
+        outcome: Outcome = ('built' if request.artifacts else 'cached') if complete else 'failed'
         error = sys.exc_info()[0]
         capture.events.append(replace(request.event, event='outcome', outcome=outcome,
                                       error=None if complete or error is None else error.__name__))
