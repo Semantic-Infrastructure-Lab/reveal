@@ -56,8 +56,9 @@ third-party/stdlib package usage counts and a "top importers" ranking from `base
 attributed diagnostics. Lost inputs are included in the failed count. Missing or
 malformed count evidence is `null`, with the component marked failed. A recovered
 parse or lost input makes required analysis incomplete while preserving surviving
-imports and findings. Circular text reports incomplete or unavailable analysis
-instead of claiming there were no cycles.
+imports and findings. Text reports incomplete or unavailable base, circular and
+unused analysis from these same component records. Circular text avoids claiming
+there were no cycles when its required evidence is missing.
 
 `analysis.findings` retains full circular-group and unused-import counts before
 text caps or JSON summary projection; a missing or malformed findings array has

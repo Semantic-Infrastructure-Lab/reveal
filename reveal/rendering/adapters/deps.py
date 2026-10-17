@@ -12,10 +12,11 @@ from ...utils.results import outcome_of
 def _render_summary(analysis: Dict[str, Any], cycle_count: int, unused_count: int,
                     meta: Optional[Dict[str, Any]] = None,
                     skipped: Optional[List[str]] = None,
-                    circular_evidence: Optional[Dict[str, Any]] = None) -> List[str]:
+                    components: Optional[Dict[str, Any]] = None) -> List[str]:
     lines: List[str] = []
     meta = meta or {}
     skipped = skipped or []
+    components = components or {}
     total_files = analysis['total_files']
     total_imports = analysis['total_imports']
     ext_pkgs = len(analysis['external_packages'])
@@ -37,11 +38,14 @@ def _render_summary(analysis: Dict[str, Any], cycle_count: int, unused_count: in
     if 'circular' in skipped:
         health_parts.append("— circular deps not checked (--no-circular)")
     else:
-        health_parts.extend(_circular_health(cycle_count, total_imports, circular_evidence))
+        health_parts.extend(_circular_health(cycle_count, total_imports, components.get('circular')))
     if 'unused' in skipped:
         health_parts.append("— unused imports not checked (--no-unused)")
     elif unused_count:
         health_parts.append(f"⚠️  {unused_count} unused import(s)")
+    for name, label in (('base', 'base import'), ('unused', 'unused import')):
+        if name not in skipped:
+            health_parts.extend(_component_disclosure(label, components.get(name)))
 
     lines.append(f"\nSummary   {' · '.join(parts)}")
     if health_parts:
@@ -58,15 +62,22 @@ def _render_summary(analysis: Dict[str, Any], cycle_count: int, unused_count: in
 
 def _circular_health(cycle_count: int, total_imports: int,
                      evidence: Optional[Dict[str, Any]]) -> List[str]:
-    state = evidence.get('completeness') if evidence else None
     parts = [f"❌ {cycle_count} circular dep(s)"] if cycle_count else []
-    if state in ('incomplete', 'failed'):
-        label = 'unavailable' if state == 'failed' else 'incomplete'
-        parts.append(f"⚠ circular dependency analysis {label}")
+    disclosure = _component_disclosure('circular dependency', evidence)
+    if disclosure:
+        parts.extend(disclosure)
     elif not cycle_count:
         parts.append("✅ no circular deps" if total_imports else
                      "— no imports found, so nothing to check for cycles")
     return parts
+
+
+def _component_disclosure(label: str, evidence: Optional[Dict[str, Any]]) -> List[str]:
+    state = evidence.get('completeness') if evidence else None
+    if state not in ('incomplete', 'failed'):
+        return []
+    status = 'unavailable' if state == 'failed' else 'incomplete'
+    return [f"⚠ {label} analysis {status}"]
 
 
 def _render_external_packages(analysis: Dict[str, Any], top: int) -> List[str]:
@@ -194,7 +205,7 @@ def _render_deps(report: Dict[str, Any], top: int) -> List[str]:
 
     skipped = report.get('skipped') or []
     lines += _render_summary(analysis, cycle_count, len(unused), base_meta, skipped=skipped,
-                             circular_evidence=evidence.get('components', {}).get('circular'))
+                             components=evidence.get('components'))
     # Per-language "not checked" is moot when --no-unused turned the check off.
     if 'unused' not in skipped:
         not_checked_note = unused_not_checked_line(base_meta.get('unused_not_checked_extensions') or {})
