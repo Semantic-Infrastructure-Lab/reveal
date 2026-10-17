@@ -224,4 +224,5 @@ def qualify_declared_answer(result, adapter_class, path: str):
     return ResultBuilder.create(
         adapter_class.RESULT_TYPE, to_posix(path), contract_version=CONTRACT_VERSION,
         source_type='directory' if Path(path).is_dir() else 'file',
-        meta=meta, scope=original.get('scope'), data=data)
+        meta=meta, scope=original.get('scope') if isinstance(original.get('scope'), dict) else None,
+        data=data)
