@@ -101,3 +101,27 @@ def test_structure_omits_noncontainer_call_and_anonymous_values(analyzer):
 
 def test_function_structure_remains_separate_from_container_fields(analyzer):
     assert [item['name'] for item in analyzer.get_structure()['functions']] == ['method', 'factory']
+
+
+@pytest.mark.parametrize('qualifier,kind,field,field_type,category', [
+    ('packed', 'struct', 'bit', 'u1', 'structs'),
+    ('extern', 'struct', 'value', 'u32', 'structs'),
+    ('extern', 'union', 'value', 'u32', 'unions'),
+])
+def test_qualifiers_stay_outside_declared_type_wrapper(
+    tmp_path, qualifier, kind, field, field_type, category,
+):
+    source = f'const Qualified = {qualifier} {kind} {{ {field}: {field_type} }};'
+    path = tmp_path / 'qualified.zig'
+    path.write_text(source + '\n', encoding='utf-8')
+    analyzer = get_analyzer(str(path))(str(path))
+    assert not analyzer.has_parse_errors()
+    structure = analyzer.get_structure()
+    assert structure[category] == [{
+        'name': 'Qualified', 'line': 1, 'line_end': 1, 'members': [field],
+    }]
+    for other in ('structs', 'enums', 'unions'):
+        if other != category:
+            assert not structure.get(other)
+    result = _extract_by_syntax(analyzer, 'Qualified', _parse_element_syntax('Qualified'))
+    assert result['source'] == source
