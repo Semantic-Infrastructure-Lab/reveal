@@ -34,15 +34,39 @@ class RubyAnalyzer(TreeSitterAnalyzer):
     # already renders its full 'A::B::C' text as one node).
 
     def _extract_class_bases(self, node) -> List[str]:
-        if _zero_arg(node, 'kind') != 'class':
+        if _zero_arg(node, 'kind') not in ('class', 'module'):
             return super()._extract_class_bases(node)
+        bases = []
         for child in _children(node):
             if _zero_arg(child, 'kind') == 'superclass':
                 for item in _children(child):
                     if _zero_arg(item, 'kind') in ('constant', 'scope_resolution'):
                         text = self._get_node_text(item).strip()
-                        return [text] if text else []
-        return []
+                        if text:
+                            bases.append(text)
+        body = node.child_by_field_name('body')
+        if body is not None:
+            for statement in _children(body):
+                bases.extend(self._literal_mixin_bases(statement))
+        return list(dict.fromkeys(bases))
+
+    def _literal_mixin_bases(self, node) -> List[str]:
+        """Direct receiverless include/extend dependencies; no runtime or MRO inference."""
+        if _zero_arg(node, 'kind') != 'call' or node.child_by_field_name('receiver') is not None:
+            return []
+        method = node.child_by_field_name('method')
+        if method is None or self._get_node_text(method) not in ('include', 'extend'):
+            return []
+        arguments = node.child_by_field_name('arguments')
+        if arguments is None:
+            return []
+        names = []
+        for argument in _children(arguments):
+            if _zero_arg(argument, 'kind') in ('constant', 'scope_resolution'):
+                text = self._get_node_text(argument).strip()
+                if text:
+                    names.append(text)
+        return names
 
     # ── Callee naming (BACK-915 slice 4) ──────────────────────────────────────
     # Reached via an explicit `self.language == 'ruby'` guard in
