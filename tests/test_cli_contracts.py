@@ -51,8 +51,8 @@ class TestCreateContractsParser(unittest.TestCase):
         parser = create_contracts_parser()
         args = parser.parse_args([])
         self.assertEqual(args.path, '.')
-        self.assertFalse(args.abstract_only)
-        self.assertFalse(args.no_implementations)
+        self.assertNotIn('abstract_only', vars(args))
+        self.assertNotIn('implementations', vars(args))
 
     def test_path_positional(self):
         parser = create_contracts_parser()
@@ -67,7 +67,7 @@ class TestCreateContractsParser(unittest.TestCase):
     def test_no_implementations_flag(self):
         parser = create_contracts_parser()
         args = parser.parse_args(['--no-implementations'])
-        self.assertTrue(args.no_implementations)
+        self.assertFalse(args.implementations)
 
 
 class TestClassifiers(unittest.TestCase):
@@ -416,13 +416,13 @@ class TestRenderReport(unittest.TestCase):
 
 class TestRunContracts(unittest.TestCase):
 
-    def test_nonexistent_path_exits_1(self):
+    def test_nonexistent_path_exits_usage_2(self):
         parser = create_contracts_parser()
         args = parser.parse_args(['/nonexistent/path'])
         args.format = 'text'
         with self.assertRaises(SystemExit) as cm:
             run_contracts(args)
-        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(cm.exception.code, 2)
 
     def test_json_format(self):
         with tempfile.TemporaryDirectory() as d:

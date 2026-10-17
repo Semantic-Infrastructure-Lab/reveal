@@ -872,9 +872,9 @@ def test_batch_answers_like_the_uri(harness, scheme):
         expected = _expected_batch_status(code, payload)
         assert entry['status'] == expected, (
             f"{uri}: --batch says {entry['status']!r}, the URI form exits {code} ({expected!r})")
-        if scheme in ('surface', 'architecture') and uri == _missing_uri(scheme):
+        if scheme in ('surface', 'architecture', 'contracts') and uri == _missing_uri(scheme):
             # Direct D6 adoption leaves mixed batches on their explicit legacy contract.
-            assert payload['type'] == ('surface_scan' if scheme == 'surface' else 'architecture')
+            assert payload['type'] == ('surface_scan' if scheme == 'surface' else scheme)
             assert payload['meta']['errors'][0]['code'] == 'invalid_request'
             legacy = copy.deepcopy(payload)
             legacy['type'] = scheme
