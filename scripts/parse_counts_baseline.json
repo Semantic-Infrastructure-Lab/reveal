@@ -176,7 +176,7 @@
             "total_functions": 3,
             "total_lines": 13
           },
-          "type": "hotspots"
+          "type": "hotspots_scan"
         },
         "total_files": 3,
         "warnings": [
@@ -685,7 +685,7 @@
           "json"
         ],
         "exit_code": 0,
-        "type": "hotspots"
+        "type": "hotspots_scan"
       },
       "overview": {
         "allowed_warning_types": [

@@ -81,7 +81,7 @@
         "json"
       ],
       "exit_code": 0,
-      "type": "hotspots",
+      "type": "hotspots_scan",
       "allowed_warning_types": [
         "complexity_is_unweighted"
       ]
