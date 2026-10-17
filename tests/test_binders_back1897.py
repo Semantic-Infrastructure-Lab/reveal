@@ -95,3 +95,75 @@ function target() {
         {'var': 'y', 'first_read_line': 3, 'first_write_line': None},
     ]
     assert collect_mutations(scope, 2, 4, text) == [{'var': 'f', 'last_write_line': 2, 'next_read_line': 5}]
+
+
+def test_python_builtins_are_classified_separately():
+    scope, text, end = parsed('python', '''\
+def target(p):
+    print(str(p))
+    return open(p), ValueError(p)
+''')
+    result = collect_boundary(scope, 1, end, text, 'python')
+    assert result['inputs'] == [{'var': 'p', 'first_read_line': 1, 'first_write_line': None}]
+    assert result.get('builtins') == [
+        {'var': 'print', 'first_read_line': 2, 'first_write_line': None, 'classification': 'builtin'},
+        {'var': 'str', 'first_read_line': 2, 'first_write_line': None, 'classification': 'builtin'},
+        {'var': 'ValueError', 'first_read_line': 3, 'first_write_line': None, 'classification': 'builtin'},
+        {'var': 'open', 'first_read_line': 3, 'first_write_line': None, 'classification': 'builtin'},
+    ]
+
+
+@pytest.mark.parametrize('prefix,signature', [
+    ('', 'open'),
+    ('open = custom\n', ''),
+    ('def open(p):\n    return p\n', ''),
+    ('from custom import open\n', ''),
+])
+def test_explicit_builtin_shadows_remain_inputs(prefix, signature):
+    scope, text, end = parsed('python', prefix + f'def target({signature}):\n    return open(path)\n')
+    # Select target when the negative control declares a same-named helper.
+    if prefix.startswith('def'):
+        root = _zero_arg(scope, 'parent')
+        scope = next(n for n in iter_tree(root) if _zero_arg(n, 'kind') == 'function_definition'
+                     and text(n.child_by_field_name('name')) == 'target')
+        end = _zero_arg(scope, 'end_position').row + 1
+    result = collect_boundary(scope, 1, end, text, 'python')
+    assert {d['var'] for d in result['inputs']} == {'open', 'path'}
+    assert result.get('builtins', []) == []
+
+
+@pytest.mark.parametrize('language,code,expected', [
+    ('javascript', 'function target() { console.log(free); }', {'console', 'free'}),
+    ('java', 'class A { void target() { log.info(free); }}', {'log', 'free'}),
+])
+def test_runtime_globals_are_not_guessed_builtins(language, code, expected):
+    scope, text, end = parsed(language, code)
+    result = collect_boundary(scope, 1, end, text, language)
+    assert {d['var'] for d in result['inputs']} == expected
+    assert result.get('builtins', []) == []
+
+
+def test_builtin_classification_reaches_text_and_json(tmp_path):
+    import json
+    from conftest import _run_reveal_direct
+    from reveal.adapters.ast.nav_boundary import render_boundary
+    from reveal.adapters.ast.nav_exits import render_deps
+
+    code = 'def target(p):\n    print(str(p))\n'
+    scope, text, end = parsed('python', code)
+    report = collect_boundary(scope, 1, end, text, 'python')
+    assert render_boundary(report, 1, end) == (
+        'INPUTS (undefined reads):\n  p                               first read L1\n\n'
+        'BUILTINS:\n  print                           first read L2\n'
+        '  str                             first read L2\n\n'
+        'EFFECTS:\n  none in L1–L2')
+    deps = collect_deps(scope, 1, end, text, language='python')
+    assert [line.split()[0] for line in render_deps(deps, 1, end).split('\n')] == ['PARAM', 'BUILTIN', 'BUILTIN']
+    path = tmp_path / 'binders.py'
+    path.write_text(code, encoding='utf-8')
+    for flag, kind in [('--deps', 'dep'), ('--boundary', 'input')]:
+        proc = _run_reveal_direct(str(path), 'target', flag, '--format', 'json')
+        assert proc.returncode == 0, proc.stderr
+        result = json.loads(proc.stdout)
+        assert [(item['kind'], item['var']) for item in result['findings']] == [
+            (kind, 'p'), ('builtin', 'print'), ('builtin', 'str')]
