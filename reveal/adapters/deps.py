@@ -439,8 +439,7 @@ class DepsAdapter(ResourceAdapter):
                 'Not depends:// (one character apart) — deps:// is a dashboard '
                 'over the whole tree; depends:// answers "who imports this one '
                 'module" for a single target.',
-                'Both forms use contract v1.1. The CLI result type is deps; '
-                'the URI result type is deps_scan. analysis retains required '
+                'Both forms use contract v1.1 and result type deps_scan. analysis retains required '
                 'component completeness and uncapped findings counts.',
             ],
             'see_also': [
