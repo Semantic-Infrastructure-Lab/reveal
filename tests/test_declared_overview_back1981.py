@@ -387,9 +387,12 @@ def test_returned_producer_error_facts_are_analysis_failure(project, with_error)
 
 @pytest.mark.parametrize('phase', ['answer', 'postprocess'])
 @pytest.mark.parametrize('skip', [False, True])
-def test_erased_architecture_is_valid_only_when_requested_skip(project, monkeypatch, phase, skip):
+@pytest.mark.parametrize('copied', [False, True])
+def test_erased_architecture_is_valid_only_when_requested_skip(project, monkeypatch, phase, skip, copied):
     original = OverviewAdapter.get_structure
     def erase(result):
+        if copied:
+            result = copy.deepcopy(result)
         result['architecture'] = {}
         return result
     if phase == 'answer':
@@ -402,3 +405,23 @@ def test_erased_architecture_is_valid_only_when_requested_skip(project, monkeypa
         answer = json.loads(result.stdout)
         if not skip:
             assert answer['error'] and any(e['code'] == 'invalid_adapter_answer' for e in answer['meta']['errors'])
+
+
+@pytest.mark.parametrize('skip', [False, True])
+def test_owner_answer_requirement_does_not_consume_bound_query(project, skip):
+    from reveal.utils.query_parser import collect_query_keys
+    result = OverviewAdapter(str(project), 'no_git=true'+('&no_imports=true' if skip else '')).get_structure()
+    with collect_query_keys() as keys:
+        adapter = OverviewAdapter(str(project), params={'no_imports': skip})
+        before = set(keys.used)
+        assert adapter.answer_requirement_error(result, 'overview') is None
+        assert keys.used == before
+
+
+def test_existing_static_sibling_hook_accepts_class_and_instance():
+    from reveal.adapters.architecture import ArchitectureAdapter
+    from reveal.cli.routing.declared import qualify_declared_answer
+    from reveal.utils.results import ResultBuilder
+    result = ResultBuilder.create('architecture_diff', '.', data={'analysis': {'complete': True}})
+    assert qualify_declared_answer(result, ArchitectureAdapter, '.', 'architecture_diff') is result
+    assert qualify_declared_answer(result, ArchitectureAdapter('.'), '.', 'architecture_diff') is result

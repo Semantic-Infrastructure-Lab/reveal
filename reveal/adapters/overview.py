@@ -45,7 +45,7 @@ from ..rendering.adapters.overview import (  # noqa: F401 -- the render helpers 
 )
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
                                   join_exclude_patterns, nonnegative_display_limit,
-                                  param_schema, split_exclude_param)
+                                  param_schema, peek_query_items, split_exclude_param)
 from ..utils.results import ResultBuilder, note_truncation
 
 logger = logging.getLogger(__name__)
@@ -75,7 +75,9 @@ def _count(data: Dict[str, Any], field: str) -> int:
 
 
 def _number(value: Any, field: str) -> None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f'{field} requires a finite number')
+    if isinstance(value, float) and not math.isfinite(value):
         raise ValueError(f'{field} requires a finite number')
 
 
@@ -532,8 +534,7 @@ class OverviewAdapter(ResourceAdapter):
         )
         self.respect_gitignore: bool = respect_gitignore_param(self.query_params)
 
-    @staticmethod
-    def answer_requirement_error(result, expected_type, prior_facts=None):
+    def answer_requirement_error(self, result, expected_type, prior_facts=None):
         # A canonical failed answer may lack section payloads. Enabled child
         # collectors have already recorded those failures before projection.
         if result.get('error') or result.get('meta', {}).get('errors'):
@@ -544,7 +545,8 @@ class OverviewAdapter(ResourceAdapter):
             _validate_functions(result, 'complex_functions')
             _rows(result, 'git_log')
             architecture = _object(result.get('architecture'), 'architecture')
-            if architecture:  # {} is the existing intentional no_imports answer.
+            no_imports = dict(peek_query_items(self.query_params)).get('no_imports', False)
+            if not no_imports or architecture:
                 _validate_architecture(architecture)
         except ValueError as exc:
             return f'Overview missing required answer evidence: {exc}'
@@ -552,10 +554,9 @@ class OverviewAdapter(ResourceAdapter):
 
     @staticmethod
     def execution_facts(result):
-        from ..utils.results import AnalysisCompleteness, FailureCause, result_execution_facts
+        from ..utils.results import AnalysisCompleteness, result_execution_facts
         meta = result.get('meta', {})
         errors = meta.get('errors', [])
-        invalid_only = bool(errors) and all(error.get('code') == 'invalid_request' for error in errors)
         required_warnings = {'analysis_failed', 'parse_recovered', 'parse_degraded',
                              'partial_parse', 'worker_lost', 'check_rules_failed'}
         missing = any(warning.get('type') in required_warnings for warning in meta.get('warnings', []))
@@ -564,12 +565,9 @@ class OverviewAdapter(ResourceAdapter):
         metadata = metadata if isinstance(metadata, dict) else {}
         missing = missing or any(type(metadata.get(field)) is int and metadata[field] > 0
                                  for field in ('files_failed_count', 'files_lost_count'))
-        incomplete = missing or (bool(errors) and not invalid_only)
+        incomplete = missing or bool(errors)
         state = AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE
-        if invalid_only and not incomplete:
-            state = AnalysisCompleteness.NOT_STARTED
-        return result_execution_facts(result, completeness=state,
-                                      failure_cause=FailureCause.INVALID_REQUEST if invalid_only else FailureCause.ANALYSIS)
+        return result_execution_facts(result, completeness=state)
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
