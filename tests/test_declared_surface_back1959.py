@@ -50,12 +50,17 @@ def assert_equal_answers(left, right):
 @pytest.mark.parametrize('provenance', [False, True])
 def test_parity(project, cli, query, provenance):
     extra = ['--provenance'] if provenance else []
-    a = run('surface', 'proj', *cli, '--format', 'json', '--no-gitignore', *extra)
-    b = run('surface://proj' + query, '--format', 'json', '--no-gitignore', *extra)
+    cli_argv = ['surface', 'proj', *cli, '--format', 'json', '--no-gitignore', *extra]
+    uri_argv = ['surface://proj' + query, '--format', 'json', '--no-gitignore', *extra]
+    a = run(*cli_argv)
+    b = run(*uri_argv)
     assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)
     left, right = json.loads(a.stdout), json.loads(b.stdout)
     assert left['type'] == right['type'] == 'surface_scan'
     assert left['total'] > 0
+    if provenance:
+        assert left['execution']['command'] == ' '.join(['reveal', *cli_argv])
+        assert right['execution']['command'] == ' '.join(['reveal', *uri_argv])
     assert_equal_answers(left, right)
     assert 'has no effect' not in a.stderr + b.stderr
 

@@ -2930,7 +2930,7 @@ reveal file.py --format text         # an explicit --format always wins
 
 `REVEAL_FORMAT` sets the default `--format` for every entry point — files, `uri://` adapters and subcommands (`reveal hotspots`, `reveal check`, …). An explicit `--format` on the command line overrides it.
 
-**Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `ast://`, `env://`, `markdown://` and `reveal check`; `typed` for a single file and `reveal check`. Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note). `--also-json PATH` works with `scheme://` URIs, `reveal check` and `reveal surface`, and exits 2 elsewhere; use `--format json` there.
+**Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `ast://`, `env://`, `markdown://` and `reveal check`; `typed` for a single file and `reveal check`. Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note). With human primary output, `--also-json PATH` works with supported `scheme://` URI requests, `reveal check`, and the five qualified subcommands: `surface`, `architecture`, `contracts`, `deps` and `hotspots`. Other subcommands reject it with exit 2; use `--format json` for their JSON output. Primary `--format json` retains the existing `--also-json` no-op.
 
 **Token budget flags (URI adapters — limits list fields like items/results/checks/commits):**
 ```bash
@@ -3666,9 +3666,9 @@ reveal deep_dir/
 | `reveal review` | pass | warn (`low`/`medium` findings only) | fail (any `high`/`critical` finding) **or** invalid target (unknown revision, not a git repo) | incomplete — a check crashed or skipped files |
 | `ssl://… --check`, `domain://… --check` | pass | warning (e.g. cert expiring <30 days) | critical/failure (expired, <7 days, DNS/HTTP failure) | — |
 | nginx `--validate-nginx-acme` / `--check-acl` / `--cpanel-certs`, `cpanel://USER/full-audit`, `nginx:// --audit` | pass | — | failure / gaps found | — |
-| `reveal deps`, `reveal hotspots` | complete without an enabled gate matching | explicit `--fail-on findings` matches | invalid request | incomplete analysis/output failure |
-| Direct `reveal surface` / `surface://` | completed inventory | — | invalid resource/parameter or unsupported gate | required analysis/output incomplete or failed |
-| Other commands given a path that doesn't exist | — | `Error: … not found` | — | — |
+| Direct `deps` / `hotspots` (subcommand or URI) | complete without an enabled gate matching | explicit `--fail-on findings` matches | invalid request | incomplete analysis/output failure |
+| Direct `surface` / `architecture` / `contracts` (subcommand or URI) | completed requested analysis | — | invalid resource/parameter or unsupported gate | required analysis/output incomplete or failed |
+| Other legacy commands given a path that doesn't exist | — | `Error: … not found` | — | — |
 | An argument the run would ignore: a path given to a mode that reads none (`reveal a.py --rules`, `--adapters`, `--languages`, `--list-schemas`, `--explain`, `--stdin`, ...), a second path given to a flag that reads no element (`reveal a.py b.py --check`, `reveal a.html b.html --metadata`, `--links`, `--typed`), an element beside `--section` (`reveal a.md b.md --section X`), `--stdin` beside `--section`, or `--stdin` beside `--decorator-stats`/`--explain-file`/`--capabilities`/`--show-ast` (those read one path; loop over the paths instead) | — | — | usage error: stderr names the flag and the ignored argument, nothing runs | — |
 
 `reveal review --format json` also carries the verdict in the payload (`overall_status` + `exit_code`), so a gate can read either the exit code or the JSON.
