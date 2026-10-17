@@ -22,7 +22,12 @@ class PatchesRenderer(BaseRenderer):
         lines.append('')
         groups = result.get('groups', [])
         if not groups:
-            lines.extend(['No patch pressure groups found.',
+            incomplete = any(w.get('type') in {'analysis_failed', 'parse_recovered'}
+                             for w in result.get('meta', {}).get('warnings', [])
+                             if isinstance(w, dict))
+            empty = ('No patch pressure groups in the available observations.' if incomplete
+                     else 'No patch pressure groups found.')
+            lines.extend([empty,
                 '  ⚠ Patch detection covers Python (unittest.mock) and '
                 "JS/TS (jest/vitest) test suites only — on any other language "
                 "this is 'not measured', not 'no patch pressure'."])
