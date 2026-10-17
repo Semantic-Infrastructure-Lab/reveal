@@ -630,11 +630,9 @@ class TestCheckMethod(unittest.TestCase):
         """Should return required fields in check result."""
         # Mock performance data
         mock_perf.return_value = {
-            'tuning_ratios': {
-                'table_scan_ratio': '5.2%',
-                'thread_cache_miss_rate': '2.1%',
-                'temp_tables_to_disk_ratio': '10.5%'
-            }
+            'full_table_scans': {'select_scan_ratio': '5.2%'},
+            'thread_cache_efficiency': {'miss_rate': '2.1%'},
+            'temp_tables': {'disk_ratio': '10.5%'},
         }
 
         # Mock SHOW queries
@@ -661,11 +659,9 @@ class TestCheckMethod(unittest.TestCase):
         """Should return pass status when all checks pass."""
         # Mock good performance data
         mock_perf.return_value = {
-            'tuning_ratios': {
-                'table_scan_ratio': '5.0%',
-                'thread_cache_miss_rate': '2.0%',
-                'temp_tables_to_disk_ratio': '10.0%'
-            }
+            'full_table_scans': {'select_scan_ratio': '5.0%'},
+            'thread_cache_efficiency': {'miss_rate': '2.0%'},
+            'temp_tables': {'disk_ratio': '10.0%'},
         }
 
         # Mock good status
@@ -690,11 +686,9 @@ class TestCheckMethod(unittest.TestCase):
         """Should return warning status when some checks warn."""
         # Mock warning-level performance
         mock_perf.return_value = {
-            'tuning_ratios': {
-                'table_scan_ratio': '15.0%',  # Warning level (10-25%)
-                'thread_cache_miss_rate': '2.0%',
-                'temp_tables_to_disk_ratio': '10.0%'
-            }
+            'full_table_scans': {'select_scan_ratio': '15.0%'},  # Warning level (10-25%)
+            'thread_cache_efficiency': {'miss_rate': '2.0%'},
+            'temp_tables': {'disk_ratio': '10.0%'},
         }
 
         mock_query.side_effect = [
@@ -719,11 +713,9 @@ class TestCheckMethod(unittest.TestCase):
         """Should return failure status when checks fail."""
         # Mock critical failure
         mock_perf.return_value = {
-            'tuning_ratios': {
-                'table_scan_ratio': '50.0%',  # Failure level (>25%)
-                'thread_cache_miss_rate': '30.0%',
-                'temp_tables_to_disk_ratio': '60.0%'
-            }
+            'full_table_scans': {'select_scan_ratio': '50.0%'},  # Failure level (>25%)
+            'thread_cache_efficiency': {'miss_rate': '30.0%'},
+            'temp_tables': {'disk_ratio': '60.0%'},
         }
 
         mock_query.side_effect = [
@@ -747,11 +739,9 @@ class TestCheckMethod(unittest.TestCase):
     def test_check_includes_all_checks(self, mock_query, mock_perf):
         """Should run all 7 health checks."""
         mock_perf.return_value = {
-            'tuning_ratios': {
-                'table_scan_ratio': '5%',
-                'thread_cache_miss_rate': '2%',
-                'temp_tables_to_disk_ratio': '10%'
-            }
+            'full_table_scans': {'select_scan_ratio': '5%'},
+            'thread_cache_efficiency': {'miss_rate': '2%'},
+            'temp_tables': {'disk_ratio': '10%'},
         }
 
         mock_query.side_effect = [
@@ -789,11 +779,9 @@ class TestCheckMethod(unittest.TestCase):
         """--severity trims the returned `checks` list (BACK-1205) but status/exit_code/
         summary stay computed from the full unfiltered set, same as --only-failures."""
         mock_perf.return_value = {
-            'tuning_ratios': {
-                'table_scan_ratio': '50.0%',  # failure
-                'thread_cache_miss_rate': '30.0%',  # failure
-                'temp_tables_to_disk_ratio': '10.0%'  # pass
-            }
+            'full_table_scans': {'select_scan_ratio': '50.0%'},  # failure
+            'thread_cache_efficiency': {'miss_rate': '30.0%'},  # failure
+            'temp_tables': {'disk_ratio': '10.0%'},  # pass
         }
         show_status_rows = [
             {'Variable_name': 'Threads_connected', 'Value': '195'},

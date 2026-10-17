@@ -979,7 +979,6 @@ class MySQLAdapter(ResourceAdapter):
         """
         # Get performance metrics
         performance = self._get_performance()
-        tuning_ratios = performance.get('tuning_ratios', {})
 
         # Get status and configuration variables
         status_vars = {row['Variable_name']: row['Value']
@@ -988,9 +987,9 @@ class MySQLAdapter(ResourceAdapter):
         variables = {row['Variable_name']: row['Value'] for row in vars_result}
 
         # Parse ratio metrics
-        table_scan_ratio = self._parse_percentage(tuning_ratios.get('table_scan_ratio', '0%'))
-        thread_cache_miss_rate = self._parse_percentage(tuning_ratios.get('thread_cache_miss_rate', '0%'))
-        temp_disk_ratio = self._parse_percentage(tuning_ratios.get('temp_tables_to_disk_ratio', '0%'))
+        table_scan_ratio = self._parse_percentage(performance['full_table_scans']['select_scan_ratio'])
+        thread_cache_miss_rate = self._parse_percentage(performance['thread_cache_efficiency']['miss_rate'])
+        temp_disk_ratio = self._parse_percentage(performance['temp_tables']['disk_ratio'])
 
         # Calculate connection metrics
         max_connections = int(variables.get('max_connections', 100))
