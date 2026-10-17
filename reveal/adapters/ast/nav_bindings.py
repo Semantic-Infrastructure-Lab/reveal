@@ -207,6 +207,10 @@ class BindingScope:
         return self._shared_root(target, name)
 
     def _shared_root(self, target: Any, name: str) -> Optional[str]:
+        owner = _owner(target, self.language)
+        if owner is not None and _zero_arg(owner, 'kind') in _CLASSES:
+            if self._declared(owner, name):
+                return None
         scopes = _FUNCTIONS | _ROOTS
         if self.language != 'python':
             scopes = scopes | {'statement_block', 'for_statement', 'for_in_statement', 'catch_clause'}
