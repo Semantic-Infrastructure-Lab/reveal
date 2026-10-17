@@ -1,11 +1,4 @@
-"""GDScript file analyzer - for Godot game engine scripts.
-
-Migrated from regex-based parsing to tree-sitter for robust AST extraction.
-Tree-sitter handles nested blocks, comments, and edge cases correctly.
-
-Previous implementation: 197 lines of regex patterns
-Current implementation: 15 lines using TreeSitterAnalyzer
-"""
+"""GDScript structure and navigation using tree-sitter and language-specific hooks."""
 
 from typing import List, Optional
 
@@ -19,11 +12,7 @@ from ..treesitter import TreeSitterAnalyzer
 
 @register('.gd', name='GDScript', icon='')
 class GDScriptAnalyzer(TreeSitterAnalyzer):
-    """GDScript file analyzer for Godot Engine.
-
-    Extracts classes, functions, signals, and variables using tree-sitter.
-    Full GDScript support in 3 lines - tree-sitter handles all parsing!
-    """
+    """Extract functions, inner classes, declared bases and supported annotations."""
     language = 'gdscript'
     IMPORTS_VIA_EXTRACTOR = True  # BACK-1089
     # Godot 4.5 modules/gdscript/gdscript_parser.cpp registers these targets;
@@ -58,14 +47,14 @@ class GDScriptAnalyzer(TreeSitterAnalyzer):
         return decorators
 
     def _extract_class_bases(self, node) -> List[str]:
-        """Read only this class's extends type, retaining qualified names."""
+        """Read this class's declared type or resource path without resolving it."""
         if _zero_arg(node, 'kind') != 'class_definition':
             return super()._extract_class_bases(node)
         return [self._get_node_text(base).strip()
                 for child in _children(node)
                 if _zero_arg(child, 'kind') == 'extends_statement'
                 for base in _children(child)
-                if _zero_arg(base, 'kind') == 'type']
+                if _zero_arg(base, 'kind') in ('type', 'string')]
 
     # ── Callee naming (BACK-915 slice 4) ──────────────────────────────────────
 
