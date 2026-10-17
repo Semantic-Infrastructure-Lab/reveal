@@ -193,3 +193,16 @@ def test_malformed_callable_references_keep_usable_calls_and_sibling_frames(tree
     assert report['meta']['errors'][0]['code'] == 'E_COMPOSE'
     if isinstance(references, list) and isinstance(references[0], dict) and references[0].get('callee'):
         assert report['frames'][0]['references'] == [references[0]]
+
+
+@pytest.mark.parametrize('renderer', [_render_trace, TraceRenderer.render_structure])
+def test_renderer_deduplicates_mirrored_errors_without_mutating_json(tree, renderer):
+    report = TraceAdapter(str(tree), 'from=main').get_structure()
+    report['warnings'] = ['exact mirrored error']
+    report['meta'] = {'errors': [{'code': 'E_COMPOSE', 'message': 'exact mirrored error'},
+                                {'code': 'E_COMPOSE', 'message': 'other required error'}]}
+    before = copy.deepcopy(report)
+    output = render(report, renderer)
+    assert output.count('exact mirrored error') == 1
+    assert output.count('other required error') == 1
+    assert report == before
