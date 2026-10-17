@@ -427,7 +427,7 @@ def run_pattern_detection(
         path, output_format, detections, rendered_detections, no_group=no_group,
         parse_degraded=parse_degraded, rule_errors=rule_errors, no_snippets=no_snippets,
         parse_error_at=_analyzer_error_position(analyzer) if parse_degraded else None,
-        parse_error_reason=structure.get('error') if parse_degraded else None,
+        parse_error_reason=structure.get('error'),  # rendered only when parse_degraded
         max_snippet_chars=max_snippet_chars, total_available=total_available,
         disclosures=disclosures, scan_incomplete=bool(scan_disclosures),
     )
