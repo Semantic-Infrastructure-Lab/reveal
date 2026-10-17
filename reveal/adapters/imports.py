@@ -1004,6 +1004,11 @@ class ImportsAdapter(ResourceAdapter):
         self._target_path: Optional[Path] = Path(path).resolve() if path else None
         self._query_params = parse_query_params(query or '')
         self._warn_unknown_query_params(self._query_params)  # BACK-507
+        # Validation is not application: a preceding query mode may take priority.
+        for key, value in self._query_params.peek_items():
+            if key == 'rank' and value not in _SCHEMA_QUERY_PARAMS['rank']['values']:
+                choices = ', '.join(_SCHEMA_QUERY_PARAMS['rank']['values'])
+                raise ValueError(f'rank must be one of: {choices}; got {value!r}')
         self._local_names_cache: Optional[frozenset] = None  # BACK-1190, lazy
         self._project_namespaces_cache: Optional[set] = None  # BACK-1234, lazy
 
