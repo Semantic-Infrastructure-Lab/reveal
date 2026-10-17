@@ -344,6 +344,8 @@ ALL_ELEMENT_NODE_TYPES = (
     'class_definition', 'class_declaration',
     'struct_item', 'struct_specifier', 'struct_declaration',
     'anonymous_class',        # PHP anonymous class
+    'function_signature',    # Dart signature, paired body via element_span
+    'Decl',                  # Zig function; unnamed variable/import wrappers are skipped
 )
 
 

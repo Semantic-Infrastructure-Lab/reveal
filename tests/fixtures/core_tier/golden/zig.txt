@@ -64,18 +64,8 @@ zig/sample.zig:12-14 | lines:12-14
 [exit 0]
 
 $ reveal zig/sample.zig :12
-zig/sample.zig:2-22 | lines:2-22
+zig/sample.zig:12-25 | processOrder
 
-      2  const std = @import("std");
-      3  const unused = @import("builtin");
-      4  
-      5  fn validate(order: ?[]const u8) ![]const u8 {
-      6      if (order == null) {
-      7          return error.EmptyOrder;
-      8      }
-      9      return order.?;
-     10  }
-     11  
      12  fn processOrder(order: ?[]const u8) ?[]const u8 {
      13      var result = validate(order) catch {
      14          return null;
@@ -87,6 +77,9 @@ zig/sample.zig:2-22 | lines:2-22
      20      file.writeAll(result) catch {
      21          return null;
      22      };
+     23      result = result[0..];
+     24      return result;
+     25  }
 [exit 0]
 
 $ reveal zig/sample.zig --grep result

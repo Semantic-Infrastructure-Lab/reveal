@@ -653,6 +653,17 @@ def _extract_hierarchical_element(analyzer, element: str):
     return _element_from_resolution(analyzer, resolution, element)
 
 
+def _element_nodes(analyzer):
+    """Indexed extraction candidates, excluding references and unnamed wrappers."""
+    for node_type in ALL_ELEMENT_NODE_TYPES:
+        for node in analyzer._find_definitions(node_type):
+            # These newly supported kinds can also wrap non-functions (Zig
+            # imports/variables). Keep legacy anonymous elements extractable.
+            if node_type in ('Decl', 'function_signature') and not analyzer._get_node_name(node):
+                continue
+            yield node
+
+
 def _extract_element_at_line(analyzer, target_line: int):
     """Find the element containing the target line.
 
@@ -678,17 +689,16 @@ def _extract_element_at_line(analyzer, target_line: int):
         return None
 
     best_match, best_span = None, None
-    for node_type in ALL_ELEMENT_NODE_TYPES:
-        for node in analyzer._find_nodes_by_type(node_type):
-            # The element's own span (decorators, Dart bodies), not the bare
-            # node's, so a decorator line finds its definition (BACK-1597).
-            span = analyzer.element_span(node)
-            if not (span['line_start'] <= target_line <= span['line_end']):
-                continue
-            if best_span is None or (
-                span['line_end'] - span['line_start'] < best_span['line_end'] - best_span['line_start']
-            ):
-                best_match, best_span = node, span
+    for node in _element_nodes(analyzer):
+        # The element's own span (decorators, Dart bodies), not the bare
+        # node's, so a decorator line finds its definition (BACK-1597).
+        span = analyzer.element_span(node)
+        if not (span['line_start'] <= target_line <= span['line_end']):
+            continue
+        if best_span is None or (
+            span['line_end'] - span['line_start'] < best_span['line_end'] - best_span['line_start']
+        ):
+            best_match, best_span = node, span
 
     if best_match is None or best_span is None:
         return None
@@ -923,12 +933,11 @@ def _build_element_from_item(analyzer, item: StructureItem, category: str, ordin
 
 def _get_source_for_item(analyzer, item, line_start, line_end):
     """Get source code for a structure item using tree-sitter if available."""
-    for node_type in ALL_ELEMENT_NODE_TYPES:
-        nodes = analyzer._find_nodes_by_type(node_type)
-        for node in nodes:
-            span = analyzer.element_span(node)
-            if span['line_start'] == line_start:
-                return span['source']
+    name = item.get('name')
+    for node in _element_nodes(analyzer):
+        span = analyzer.element_span(node)
+        if span['line_start'] == line_start and (not name or analyzer._get_node_name(node) == name):
+            return span['source']
 
     # Fallback to reading lines
     return _read_lines(analyzer.path, line_start, line_end)

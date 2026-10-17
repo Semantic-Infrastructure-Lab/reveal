@@ -69,18 +69,8 @@ dart/sample.dart:12-14 | lines:12-14
 [exit 0]
 
 $ reveal dart/sample.dart :12
-dart/sample.dart:2-22 | lines:2-22
+dart/sample.dart:12-22 | processOrder
 
-      2  import 'dart:io';
-      3  import 'dart:math' as unused_math;
-      4  
-      5  int validate(int order) {
-      6    if (order <= 0) {
-      7      throw ArgumentError('empty order');
-      8    }
-      9    return order;
-     10  }
-     11  
      12  int processOrder(int order) {
      13    var result = validate(order);
      14    try {
