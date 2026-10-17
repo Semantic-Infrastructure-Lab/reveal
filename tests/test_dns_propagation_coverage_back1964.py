@@ -59,6 +59,26 @@ def test_nameserver_hostname_resolution_failure_is_also_incomplete():
     assert 'no host address' in result['details']['responses']['ns1.example.com']
 
 
+def test_resolver_construction_failure_preserves_previous_observation():
+    resolver = MagicMock()
+    resolver.resolve.return_value = ['192.0.2.1']
+    error = dns_resolver.NoResolverConfiguration()
+    with patch.object(dns_checks, 'HAS_DNSPYTHON', True), \
+            patch.object(dns_checks.dns.resolver, 'resolve', return_value=['ns1.example.com.', 'ns2.example.com.']), \
+            patch.object(dns_checks.dns.resolver, 'Resolver', side_effect=[resolver, error]), \
+            patch.object(dns_checks.socket, 'gethostbyname', return_value='192.0.2.53'):
+        result = dns_checks.check_dns_propagation('example.com')
+    assert result['status'] == 'warning' and result['value'] == 'Partial'
+    assert result['details']['nameservers_responded'] == 1
+    assert result['details']['nameservers_failed'] == 1
+    assert result['details']['responses'] == {
+        'ns1.example.com': ['192.0.2.1'], 'ns2.example.com': f'Error: {error}',
+    }
+    assert 'Incomplete DNS observation' in result['message']
+    assert any('failed nameserver lookups' in step
+               for step in _generate_domain_next_steps([result], 'example.com'))
+
+
 @pytest.mark.parametrize('second,expected_status,expected_message', [
     (['192.0.2.1'], 'pass', 'All 2 nameservers return consistent records'),
     (['192.0.2.2'], 'warning', 'Inconsistent records across 2 nameservers (propagation in progress)'),
