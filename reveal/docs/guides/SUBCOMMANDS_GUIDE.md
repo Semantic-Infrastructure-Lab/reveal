@@ -381,7 +381,7 @@ Find all architectural contracts in a codebase: ABCs, Protocols, TypedDicts, `@d
 ### Usage
 
 ```
-reveal contracts [PATH] [--abstract-only] [--no-implementations] [--format FORMAT]
+reveal contracts [PATH] [--abstract-only] [--no-implementations] [--impls N] [--format FORMAT]
 ```
 
 ### CLI Flags
@@ -390,6 +390,9 @@ reveal contracts [PATH] [--abstract-only] [--no-implementations] [--format FORMA
 |------|-------------|
 | `--abstract-only` | Show only ABCs and Protocols; skip TypedDicts, dataclasses, path-heuristic |
 | `--no-implementations` | Skip showing which classes implement each contract |
+| `--impls N` | Implementers per contract in text (default 5; 0 displays all); JSON arrays remain complete |
+| `--also-json PATH` | Write the complete JSON result alongside text output |
+| `--fail-on none` | Default policy; required analysis/output failures still exit 3 |
 | `--format` | `text` (default), `json` |
 
 ### Examples
@@ -399,7 +402,17 @@ reveal contracts ./src               # All contracts in src/
 reveal contracts .                   # Entire project
 reveal contracts . --abstract-only   # Only ABCs and Protocols
 reveal contracts . --format json     # Machine-readable output
+reveal contracts . --impls 0          # Display every implementer
 ```
+
+Both spellings share declared controls and answers. `--no-implementations`
+matches `?implementations=false`; `--impls 3.0` matches `?impls=3.0` as 3.
+Boolean controls reject unrecognized values. Implementer limits reject booleans,
+negative/fractional values and scientific notation. Complete answers exit 0;
+invalid requests exit 2; required missing analysis or output failures exit 3.
+Recovery retains surviving contracts and exits 3. Empty/unsupported inventories
+remain complete. See [the adapter guide](../adapters/CONTRACTS_ADAPTER_GUIDE.md)
+for resource encoding and legacy batch boundaries.
 
 ### See Also
 

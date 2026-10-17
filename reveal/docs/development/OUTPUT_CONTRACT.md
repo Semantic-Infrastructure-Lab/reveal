@@ -414,9 +414,10 @@ both forms (BACK-1544). A subcommand's findings exit (`hotspots`/`deps` exit 1 o
 
 ## Declared execution policy
 
-Direct surface and architecture subcommands and their URI equivalents share declared
+Direct surface, architecture and contracts subcommands and their URI equivalents share declared
 parameter binding and one answer/emission path. Surface retains `surface_scan`;
 architecture retains `architecture` or `architecture_diff` by resolved operation.
+Contracts retains `contracts`.
 Their execution policy
 uses explicit completeness and failure causes from the analysis owner, independently
 of `outcome_of()`'s legacy rendering categories:
@@ -446,6 +447,15 @@ exit 3. Missing or malformed required comparison proof cannot become success or 
 masked by a later usage diagnostic. Supported equivalent requests share complete
 answers; the existing subcommand rejection of `--all` and URI text-only `--all`
 remain an explicit transport acceptance boundary.
+
+Contracts supports only `--fail-on none`. Its `recovered_files`, `unparsed_files`
+and producer-owned `E_CONTRACTS_ANALYSIS` errors establish incomplete execution;
+surviving arrays and diagnostics remain available. Empty inventories, disclosed
+unsupported languages and harmless warnings remain complete. `abstract_only` and
+`implementations` affect analysis; `impls` is presentation only and retains complete
+JSON arrays plus `impls_cap`. Its default is 5 and zero displays all implementers.
+`--impls 3.0` and `?impls=3.0` both mean 3; fractions, negative values, booleans and
+scientific notation are invalid. Boolean controls use strict declared conversion.
 
 Human-primary `--also-json PATH` uses the same result as primary JSON. A requested
 artifact write failure is disclosed on stderr and in `meta.output_errors`, while the

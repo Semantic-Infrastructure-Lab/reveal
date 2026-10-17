@@ -1743,11 +1743,23 @@ reveal env:// --format=grep                # Pipeable: one env://NAME:value line
 reveal contracts .                         # All architectural seams in a tree
 reveal contracts src/ --format=json        # Machine-readable, for diffing across versions
 reveal contracts src/services/             # Scope to a subsystem
+reveal contracts src/ --impls 0             # Display every implementer; JSON is always complete
 ```
 
 **What it finds:** Abstract base classes (ABC, ABCMeta), `typing.Protocol` definitions, `TypedDict` schemas, `@dataclass` declarations, NamedTuple classes — the structural contracts a codebase exposes between modules. In TypeScript/Java/C#/PHP/Swift/Kotlin it classifies interfaces (Swift protocols, Kotlin interfaces) as the contract, `abstract`-modifier classes as abstract contracts, and implementing classes as the types satisfying each; in Ruby, every `module` is a contract and any class with a direct `include`/`extend` (or a superclass) is an implementation; in Go, every `interface` is a contract and implementers are computed by structural method-set match (Go has no `implements` keyword — satisfaction is by method set, embedded interfaces resolved transitively); in Rust, every `trait` is a contract and implementers come from explicit `impl Trait for Type` blocks; in C++, every abstract class (≥1 pure virtual method) is a contract and subclasses (via inheritance) are its implementers (`.h`-header-declared classes not reached — warns honestly). *(Supported: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++. On other languages it returns an explicit "not supported" note rather than a silent zero.)*
 
 **Use case:** Before refactoring or extending a module, see the *interfaces* it ships rather than the implementation. Pairs well with `reveal architecture` (entry points + abstractions) and `reveal surface` (external boundaries) to build a 3-pass mental model: **architecture** → **contracts** → **surface**.
+
+Direct `reveal contracts` and `contracts://` share declarations and output.
+`--no-implementations` maps to `implementations=false`; `--impls N` is a text cap
+(default 5, zero all) and preserves full JSON arrays and `impls_cap`. Whole decimal
+`3.0` means 3; booleans, fractions, negative values and scientific notation are
+invalid limits. Boolean query values are validated strictly. Complete work exits
+0, invalid requests 2, required failed/incomplete analysis or output 3. Only
+`--fail-on none` is supported; it retains required failures. Empty/unsupported
+inventories remain complete. Text supports `--also-json PATH`; primary JSON keeps
+the mirror no-op. See [the adapter guide](adapters/CONTRACTS_ADAPTER_GUIDE.md) for
+resource encoding and legacy batch boundaries.
 
 ---
 
