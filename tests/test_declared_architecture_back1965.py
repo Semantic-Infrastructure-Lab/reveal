@@ -384,3 +384,26 @@ def test_unknown_string_warning_and_absent_type_remain_valid(project, monkeypatc
     result = run(name + '://proj', '--format', 'json')
     assert result.returncode == 0
     assert warning in json.loads(result.stdout)['meta']['warnings']
+
+
+@pytest.mark.parametrize('name,identity', [
+    ('architecture', 'architecture'), ('architecture', 'architecture_diff'), ('surface', 'surface_scan'),
+])
+@pytest.mark.parametrize('transport', ['cli', 'uri'])
+def test_inaccessible_resource_is_canonical_analysis_failure(project, monkeypatch, name, identity, transport):
+    from pathlib import Path
+    stat = Path.stat
+    def inaccessible(self, *args, **kwargs):
+        if str(self) in ('proj', str(project)):
+            raise PermissionError('injected resource access failure')
+        return stat(self, *args, **kwargs)
+    monkeypatch.setattr(Path, 'stat', inaccessible)
+    diff = identity == 'architecture_diff'
+    argv = [name, 'proj', *(['--against', 'HEAD'] if diff else [])] if transport == 'cli' else [
+        name + '://proj' + ('?against=HEAD' if diff else '')]
+    result = run(*argv, '--format', 'json')
+    assert result.returncode == 3, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload['type'] == identity
+    assert payload['meta']['errors'][0]['code'] == 'analysis'
+    assert 'injected resource access failure' in payload['error']
