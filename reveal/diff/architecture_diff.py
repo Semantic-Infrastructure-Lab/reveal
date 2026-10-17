@@ -52,11 +52,13 @@ import logging
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, cast
 
 from ..defaults import (
     AMBIGUOUS_SKIP_DIRECTORIES, SKIP_DIRECTORIES, VENV_DIR_NAMES, VENV_MARKERS,
 )
+
+from ..reveal_types import RevealMeta, WarningEntry
 
 logger = logging.getLogger(__name__)
 
@@ -340,12 +342,12 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
     except Exception as exc:  # boundary-ok: broad-except -- the existing child helper postprocesses arbitrary analyzer output outside compose; retain any failure at this required component boundary
         complexity_owner.record_composed_error('AstAdapter', root, exc)
         complex_fns = []
-    complexity_meta = complexity_owner.composed_meta() or {}
+    complexity_meta = cast(Dict[str, Any], complexity_owner.composed_meta() or {})
     complexity_state = _complexity_state(complexity_meta)
     for kind in ('warnings', 'errors'):
         if kind in complexity_meta:
             complexity_meta[kind] = [dict(entry, component='complexity') for entry in complexity_meta[kind]]
-    owner.fold_meta(complexity_meta)
+    owner.fold_meta(cast(RevealMeta, complexity_meta))
 
     return {
         'root': root,
@@ -617,12 +619,12 @@ def _comparison_report(path: Path, base_ref: str, head_ref: str, deltas: Optiona
             'deltas': deltas, 'analysis': analysis}
     if not analysis['complete']:
         data['error'] = 'Architecture comparison unavailable: required snapshot evidence is incomplete'
-    return ResultBuilder.create(
+    return cast(Dict[str, Any], ResultBuilder.create(
         result_type='architecture_diff', source=to_posix(path), data=data, contract_version=CONTRACT_VERSION,
-        warnings=[entry for kind, entry in diagnostics if kind == 'warnings'] or None,
-        errors=[entry for kind, entry in diagnostics if kind == 'errors'] or None,
-        confidence=0.0 if not analysis['complete'] else confidence,
-    )
+        warnings=cast(List[WarningEntry], [entry for kind, entry in diagnostics if kind == 'warnings']) or None,
+        errors=cast(List[WarningEntry], [entry for kind, entry in diagnostics if kind == 'errors']) or None,
+        confidence=confidence,
+    ))
 
 
 def render_diff_brief(report: Dict[str, Any]) -> None:
@@ -673,7 +675,10 @@ def render_diff_brief(report: Dict[str, Any]) -> None:
     centroid = deltas['complexity_centroid']
     print(f"Complexity centroid (top {centroid['top_n']}): {centroid['base']} -> {centroid['head']}  ({_signed(centroid['change'])})")
 
-    eps = deltas['entry_points']
+    _render_entry_points(deltas['entry_points'])
+
+
+def _render_entry_points(eps: Dict[str, List[str]]) -> None:
     if eps['added'] or eps['removed']:
         print("\nEntry points")
         for f in eps['added']:
@@ -683,11 +688,12 @@ def render_diff_brief(report: Dict[str, Any]) -> None:
 
 
 def _render_unavailable(report: Dict[str, Any]) -> None:
-    print('Architecture comparison unavailable: required snapshot evidence is incomplete')
+    from ..rendering.base import emit_body
+    lines = ['Architecture comparison unavailable: required snapshot evidence is incomplete']
     for side, components in report['analysis']['snapshots'].items():
-        for component, state in components.items():
-            if state != 'complete':
-                print(f'  {side} {component}: {state}')
+        lines.extend(f'  {side} {component}: {state}' for component, state in components.items()
+                     if state != 'complete')
+    emit_body('\n'.join(lines), report, _render_unavailable)
 
 
 def _signed(value: Optional[float]) -> str:
