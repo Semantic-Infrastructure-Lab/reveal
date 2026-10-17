@@ -35,10 +35,10 @@ For the full reference with output samples, see [`AGENT_HELP.md`](../AGENT_HELP.
 | `--sideeffects` | What DB/HTTP/FS/log/sleep calls fire here? |
 | `--loopmap` | What loops exist, and how are they nested? |
 | `--fanout` | Which loops make DB/HTTP/FS/log calls inside them? (N+1 / per-item fan-out review) |
-| `--statewrites` | Detected field/env/session/cache/db/file writes (module globals may be missed) |
+| `--statewrites` | Detected global/nonlocal/field/env/session/cache/db/file writes |
 | `--keys VAR` | Which keys/properties of VAR are read, written, or tested (dict/object/array shape)? |
 | `--returns` | Exit sites with enclosing syntactic conditions (not a reachability proof) |
-| `--boundary` | One-shot contract: inputs + environment + effects |
+| `--boundary` | One-shot contract: inputs + builtins + environment + effects |
 
 ---
 
@@ -116,8 +116,9 @@ Different scope, different question.
 ## Known Limitations
 
 - `--returns` reports static syntactic gates; enclosing branch/handler conditions do not describe every preceding exit, loop iteration or runtime exception. Check source before making reachability claims.
-- `--deps` can include builtins and local with/except/catch/comprehension bindings as inputs. `--boundary` inherits this limitation; review candidates before extraction.
-- `--statewrites` may miss module-global assignments and writes such as `STATE[k] = v`. An empty result does not establish that shared state is untouched.
+- `--deps` respects supported closure/with/except/catch/comprehension/range binders and preserves free captures and default-expression reads. Registered Python builtins remain visible as BUILTIN/JSON `kind: builtin`, separate from `--boundary` INPUTS. Explicit lexical shadows stay candidate inputs. Dynamic names and unsupported binding shapes still require source review.
+- `--statewrites` detects Python/JS module-bound container writes and explicit Python/PHP `global` assignments; explicit Python `nonlocal` writes are separate. PHP also recognizes `$GLOBALS`. Local/parameter containers stay local. Implicit enclosing-container captures without `nonlocal`, PHP reference captures, aliases, dynamic names, and imported-object resolution remain outside coverage. An empty result does not establish that shared state is untouched.
+- `--boundary` includes assignment writes in EFFECTS (JSON `via: assignment`). Under `--transitive`, call effects follow callees but assignment writes remain entry-function only; text and JSON warnings disclose this limit. Inputs/builtins/environment also remain entry-function scoped.
 
 - PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but classified as READ rather than WRITE.
 - Variable tracking is name-based; same-named variables in different scopes within a flat file may merge.

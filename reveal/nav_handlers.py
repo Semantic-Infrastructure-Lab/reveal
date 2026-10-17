@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .core import tree_root
 from reveal.utils.lines import split_lines
@@ -352,6 +352,15 @@ def _nav_returns(ctx: _NavCtx) -> None:
         print(render_gate_chains(chains, from_line, to_line))
 
 
+def _boundary_effect_finding(effect: Dict[str, Any], transitive: bool) -> Dict[str, Any]:
+    finding = {key: effect.get(key) for key in ('kind', 'line', 'callee', 'first_arg')}
+    if effect.get('via') == 'assignment':
+        finding['via'] = 'assignment'
+    if transitive:
+        finding.update(hop=effect['hop'], chain=effect['chain'])
+    return finding
+
+
 def _nav_boundary(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import (  # noqa: I006
         collect_boundary, collect_boundary_transitive, render_boundary, render_boundary_transitive,
@@ -386,10 +395,7 @@ def _nav_boundary(ctx: _NavCtx) -> None:
                for d in boundary.get('builtins', [])]
             + [{'kind': 'superglobal', 'var': d['var'], 'line': d['first_read_line']}
                for d in boundary['superglobals']]
-            + [{'kind': e['kind'], 'line': e['line'], 'callee': e['callee'],
-                'first_arg': e.get('first_arg'),
-                **({'via': 'assignment'} if e.get('via') == 'assignment' else {}),
-                **({'hop': e['hop'], 'chain': e['chain']} if transitive else {})}
+            + [_boundary_effect_finding(e, transitive)
                for e in boundary['effects'] if e['kind'] is not None]
         )
         note = skipped_files_note(boundary.get('skipped') or []) if transitive else None

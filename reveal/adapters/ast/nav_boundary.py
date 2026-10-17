@@ -1,3 +1,4 @@
+from collections import Counter
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from .nav_exits import collect_deps
@@ -22,6 +23,23 @@ _ASSIGNMENT_COVERAGE_NOTE = (
 )
 
 
+def _without_assignment_properties(
+    effects: List[Dict[str, Any]], assignments: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Remove one LHS property event per write, retaining same-line RHS reads."""
+    replaced = Counter((w['kind'], w['line'], w['callee']) for w in assignments)
+    kept = []
+    for effect in effects:
+        if effect['kind'] is None:
+            continue
+        key = (effect['kind'], effect['line'], effect['callee'])
+        if effect.get('via') == 'property' and effect.get('hop', 0) == 0 and replaced[key]:
+            replaced[key] -= 1
+        else:
+            kept.append(effect)
+    return kept
+
+
 def _boundary_effects(
     effects: List[Dict[str, Any]], scope_node: Any, from_line: int, to_line: int,
     get_text: Callable, language: Optional[str], root_name: Optional[str] = None,
@@ -33,10 +51,7 @@ def _boundary_effects(
         for w in collect_statewrites(scope_node, from_line, to_line, get_text, language)
         if w['via'] == 'assignment'
     ]
-    replaced = {(w['kind'], w['line'], w['callee']) for w in assignments}
-    classified = [e for e in effects if e['kind'] is not None and not (
-        e.get('via') == 'property' and e.get('hop', 0) == 0
-        and (e['kind'], e['line'], e['callee']) in replaced)]
+    classified = _without_assignment_properties(effects, assignments)
     if root_name is not None:
         for write in assignments:
             write.update(hop=0, chain=[root_name])

@@ -878,7 +878,7 @@ Verdict: `✓ CLEAR` (no exits), `~ CONDITIONAL` (only loop breaks/continues), `
 
 **`--deps` → candidate inputs to a range (v0.78.0+)**
 
-Undefined-read candidates can include builtins and locally bound names (with/except/catch targets and comprehension variables). Review bindings in source before treating the list as function parameters; `--boundary` inherits these input limits.
+Undefined reads are candidate inputs, not a complete extraction contract. Recognized binders include closure parameters, with/except/catch targets, comprehension targets, and range-loop variables. Closures, comprehensions, and catch bodies retain lexical ownership so their bindings do not hide genuine outer reads. Defaults remain outer reads. Other variable tracking remains name-based; same-named loop or flat-file bindings may merge. Python builtins from the registered vocabulary remain visible as `BUILTIN` (JSON `kind: builtin`); explicit lexical shadows remain candidate inputs. Other languages use only their registered builtin vocabulary. Review source for dynamic names, aliases, and unsupported binding shapes.
 ```bash
 reveal flat_file.php :1136-1463 --deps
 reveal app.py process_batch --deps --range 20-80
@@ -929,6 +929,8 @@ reveal app.py handle_request --boundary --transitive --depth 3
 ```
 Modifier for `--sideeffects` or `--boundary`: instead of only the entry function's own body, walks calls into project-local helper functions and reports their effects too — a real interprocedural blast-radius/agentic-exposure read, not just what's written inline. `--depth` controls how many call hops to follow (default 2, max 5). Stdlib/third-party calls are not followed (no source to walk); only project-local functions resolvable in the same codebase.
 
+`--boundary --transitive` follows classified call effects into callees, while assignment writes are collected only in the entry function. Text output and JSON warnings disclose this assignment coverage limit. Inputs, builtins, and environment reads also remain entry-function scoped.
+
 In JSX/TSX a component the function only renders (`return <Child/>`) is followed too, because rendering a child runs it. That hop is labelled: text prints `[hop 1] via App → <Child/> (JSX render)`, and `--format=json` carries `<Child/>` as the last `chain` entry instead of a bare name.
 
 **`--loopmap` → loop skeleton (FOR/WHILE/LOOP/DO) with nesting depth**
@@ -954,7 +956,7 @@ reveal file.php :100-500 --fanout --format=json
 ```
 Composes `--loopmap` + `--sideeffects`: for each loop, runs the same classified-call scan `--sideeffects` uses, scoped to just that loop's line range. Purpose-built for N+1 query checks, per-item HTTP fan-out, and retry-safety review — the busywork it removes is manually matching call line numbers back to loop ranges when loops are nested. A loop with no classified effects renders `(no classified side effects)`, not silence, so absence of a finding is visible as a finding.
 
-**`--statewrites` → persistent/shared-state mutation surface (field/env/session/cache/db/file)**
+**`--statewrites` → persistent/shared-state mutation surface (global/nonlocal/field/env/session/cache/db/file)**
 ```bash
 reveal file.py process_order --statewrites
 reveal file.php :1-800 --statewrites
@@ -964,7 +966,7 @@ reveal file.php :1-800 --statewrites
 # L193     field    self.ref
 # L196     field    self.subpath
 ```
-`--mutations` is local-variable/refactor oriented (read-after-write hazards) and `--sideeffects` is call oriented (plus an env property channel, BACK-644) — neither sees an assignment like `self.x = value`, `$obj->x = value`, or `this.x = value`. `--statewrites` classifies assignment targets that touch shared state: `field` (any member-access assignment target, any receiver), `env`/`session` (subscript writes to known superglobal bases — `os.environ[...]`, `process.env.X`, `$_SESSION[...]`, `$_COOKIE[...]`), plus `cache`/`db`/`file`/`env`/`session` writes already known to `--sideeffects`'s call taxonomy, merged in by kind. `db` inherits `--sideeffects`'s existing imprecision (query calls are included alongside true writes, since CRUD-verb detection isn't attempted) rather than a new classifier. Module-global assignments and writes such as `STATE[k] = v` may be missed. DB column/table extraction is not provided; an empty result does not establish the absence of shared-state writes. Works on PHP, Python, and JS/TS.
+`--mutations` is local-variable/refactor oriented (read-after-write hazards) and `--sideeffects` is call oriented (plus an env property channel, BACK-644) — neither sees an assignment like `self.x = value`, `$obj->x = value`, or `this.x = value`. `--statewrites` classifies assignment targets that touch shared state: `field` (any member-access assignment target, any receiver), `env`/`session` (subscript writes to known superglobal bases — `os.environ[...]`, `process.env.X`, `$_SESSION[...]`, `$_COOKIE[...]`), plus `cache`/`db`/`file`/`env`/`session` writes already known to `--sideeffects`'s call taxonomy, merged in by kind. `db` inherits `--sideeffects`'s existing imprecision (query calls are included alongside true writes, since CRUD-verb detection isn't attempted) rather than a new classifier. Module-bound container writes such as `STATE[k] = v` and explicit Python/PHP `global` assignments are classified as `global`; explicit Python `nonlocal` mutations and rebindings are `nonlocal`. Python/JS module bindings use lexical declarations, including JS function-hoisted `var` and block-local `let`/`const`; ordinary local containers and parameters stay local. PHP requires an explicit `global` declaration or `$GLOBALS`. Implicit enclosing-container captures without `nonlocal`, PHP reference captures, aliases, imported-object resolution, and dynamic names remain outside this analysis. DB column/table extraction is not provided; an empty result does not establish the absence of shared-state writes. Works on PHP, Python, and JS/TS.
 
 **`--keys VAR` → dynamic key/property access surface (BACK-439d)**
 ```bash
@@ -996,7 +998,7 @@ reveal flat_file.php :120-340 --returns
 ```
 For exit points (return/raise/throw/die), reports enclosing syntactic conditions. This is static inspection, not a proof of reachability: enclosing branch/handler conditions do not describe every preceding exit, loop iteration or runtime exception. `[unconditional]` means no gate was reported, not that execution necessarily reaches the exit. Compare with `--ifmap`/`--catchmap` and source before drawing a path conclusion. Works on the same languages as `--sideeffects` (Python, PHP, JS/TS, Go, Rust, Java, Kotlin, C#, C, C++, Swift, Ruby).
 
-**`--boundary` → boundary contract: INPUTS / ENVIRONMENT / EFFECTS (v0.81.0+)**
+**`--boundary` → boundary contract: INPUTS / BUILTINS / ENVIRONMENT / EFFECTS**
 ```bash
 reveal app.py process_order --boundary
 reveal flat_file.php handleRequest --boundary
@@ -1013,7 +1015,7 @@ reveal flat_file.php handleRequest --boundary
 #   db   L5       mysql_query("SELECT * FROM items WHERE user=" . $...)
 #   log  L6       error_log("Fetched page " . $page)
 ```
-Composes `--deps` + `--sideeffects` into a single boundary-contract report: what the code receives (INPUTS), what environment state it reads (ENVIRONMENT — PHP superglobals `$_GET`, `$_POST`, `$_SESSION`, etc.), and what it does to the world (EFFECTS). The ENVIRONMENT section is omitted when empty (Python files rarely have superglobals). The highest-value single-flag summary for understanding an unfamiliar code range.
+Composes `--deps`, `--sideeffects`, and assignment writes from `--statewrites` into a single boundary-contract report: what the code receives (INPUTS), what environment state it reads (ENVIRONMENT — PHP superglobals `$_GET`, `$_POST`, `$_SESSION`, etc.), and what it does to the world (EFFECTS). Unshadowed registered builtins appear separately in BUILTINS, omitted when empty; JSON uses findings with `kind: builtin`. Assignment effects include `via: assignment` and render their target without call parentheses. The ENVIRONMENT section is omitted when empty (Python files rarely have superglobals). The highest-value single-flag summary for understanding an unfamiliar code range.
 
 **Most flags work on flat/procedural files (v0.78.0+):**
 ```bash
