@@ -206,22 +206,32 @@ def emit_declared_result(result, args, scheme, render, facts, **render_kwargs) -
 
 
 
-def qualify_declared_answer(result, adapter_class, path: str, expected_type=None):
+def qualify_declared_answer(result, adapter_class, path: str, expected_type=None, prior_facts=None):
     """Keep required answers canonical before projections; malformed success is failure."""
-    from ...reveal_types import CONTRACT_VERSION, RevealResult
-    from ...utils.path_utils import to_posix
-    from ...utils.results import ResultBuilder
+    from ...reveal_types import RevealResult
     expected_type = expected_type or adapter_class.RESULT_TYPE
     required = RevealResult.__required_keys__
     valid = (isinstance(result, dict)
              and all(isinstance(result.get(key), str) and result[key] for key in required)
              and result.get('type') == expected_type
-             and isinstance(result.get('meta', {}), dict)
+             and _valid_answer_meta(result.get('meta', {}))
              and isinstance(result.get('scope', {}), dict))
+    requirement_error = None
     if valid:
-        return result
+        requirement = getattr(adapter_class, 'answer_requirement_error', None)
+        requirement_error = requirement(result, expected_type, prior_facts) if requirement else None
+        if requirement_error is None:
+            return result
+    return _repair_declared_answer(result, path, expected_type, requirement_error)
+
+
+def _repair_declared_answer(result, path, expected_type, requirement_error):
+    from ...reveal_types import CONTRACT_VERSION, RevealResult
+    from ...utils.path_utils import to_posix
+    from ...utils.results import ResultBuilder
+    required = RevealResult.__required_keys__
     original = result if isinstance(result, dict) else {}
-    error = original.get('error') or 'Adapter returned an invalid required answer envelope'
+    error = requirement_error or original.get('error') or 'Adapter returned an invalid required answer envelope'
     fields = required | {'meta', 'scope'}
     data = {key: value for key, value in original.items() if key not in fields}
     data['error'] = error
@@ -236,9 +246,19 @@ def qualify_declared_answer(result, adapter_class, path: str, expected_type=None
 def _repair_answer_meta(meta, error):
     """Keep usable diagnostics when repairing a malformed required envelope."""
     meta = dict(meta) if isinstance(meta, dict) else {'warnings': []}
-    errors = meta.get('errors')
-    meta['errors'] = [*(errors if isinstance(errors, list) else []),
+    meta['errors'] = [*_diagnostic_dicts(meta.get('errors')),
                       {'code': 'invalid_adapter_answer', 'message': error}]
-    if not isinstance(meta.get('warnings'), list):
-        meta['warnings'] = []
+    meta['warnings'] = _diagnostic_dicts(meta.get('warnings'))
     return meta
+
+
+def _diagnostic_dicts(entries):
+    return [entry for entry in entries if isinstance(entry, dict)] if isinstance(entries, list) else []
+
+
+def _valid_answer_meta(meta):
+    if not isinstance(meta, dict):
+        return False
+    return all(key not in meta or (isinstance(meta[key], list)
+                                  and all(isinstance(entry, dict) for entry in meta[key]))
+               for key in ('errors', 'warnings'))

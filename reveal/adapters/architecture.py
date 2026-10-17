@@ -435,6 +435,23 @@ class ArchitectureAdapter(ResourceAdapter):
         return 'architecture_diff' if 'against' in dict(peek_query_items(params)) else 'architecture'
 
     @staticmethod
+    def answer_requirement_error(result, expected_type, prior_facts=None):
+        from ..utils.results import AnalysisCompleteness, FailureCause
+        if expected_type != 'architecture_diff':
+            return None
+        analysis = result.get('analysis')
+        if isinstance(analysis, dict) and isinstance(analysis.get('complete'), bool):
+            return None
+        errors = result.get('meta', {}).get('errors', [])
+        invalid_only = bool(errors) and all(error.get('code') == 'invalid_request' for error in errors)
+        before_analysis = prior_facts is None or (
+            prior_facts.completeness is AnalysisCompleteness.NOT_STARTED
+            and prior_facts.failures == frozenset({FailureCause.INVALID_REQUEST}))
+        if invalid_only and 'analysis' not in result and before_analysis:
+            return None
+        return 'Architecture comparison missing required completeness evidence'
+
+    @staticmethod
     def validate_request(params, args):
         from ..cli.routing.ledger import peek
         supplied = dict(peek_query_items(params))

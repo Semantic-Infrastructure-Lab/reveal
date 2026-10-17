@@ -414,8 +414,10 @@ both forms (BACK-1544). A subcommand's findings exit (`hotspots`/`deps` exit 1 o
 
 ## Declared execution policy
 
-Direct `reveal surface` and `surface://` requests share declared parameter binding,
-canonical `surface_scan` identity and one answer/emission path. Their execution policy
+Direct surface and architecture subcommands and their URI equivalents share declared
+parameter binding and one answer/emission path. Surface retains `surface_scan`;
+architecture retains `architecture` or `architecture_diff` by resolved operation.
+Their execution policy
 uses explicit completeness and failure causes from the analysis owner, independently
 of `outcome_of()`'s legacy rendering categories:
 
@@ -434,6 +436,16 @@ facts are evaluated before field projections or presentation cuts. A returned or
 raised operational error retains the resolved `surface_scan` identity and exits 3;
 an invalid resource/parameter produces a structured error when JSON is requested.
 Unknown CLI options rejected by argparse still use stderr usage and empty stdout.
+
+Architecture also supports only `--fail-on none`. Ordinary scope census errors,
+import input loss and failed/recovered parses establish incomplete execution;
+ranking cuts, confidence alone and harmless warnings do not. Diff requires explicit
+`analysis.complete` evidence. Invalid-ref/non-repository requests rejected before
+analysis retain `architecture_diff` identity and exit 2; operational Git failures
+exit 3. Missing or malformed required comparison proof cannot become success or be
+masked by a later usage diagnostic. Supported equivalent requests share complete
+answers; the existing subcommand rejection of `--all` and URI text-only `--all`
+remain an explicit transport acceptance boundary.
 
 Human-primary `--also-json PATH` uses the same result as primary JSON. A requested
 artifact write failure is disclosed on stderr and in `meta.output_errors`, while the
@@ -471,7 +483,24 @@ item decoding and preserving plus signs. Comma-percent's empty query represents 
 empty list; empty list members are rejected. Existing raw queries, exclude and filter
 codecs are not globally reinterpreted.
 
-Surface resource binding preserves an existing literal path first. If it does not
+The binder also exposes source preparation separately from conversion. A mode-aware
+adapter's `result_type_for(params)` reads prepared parameter presence without
+consuming or converting values; the common runner carries that expected identity
+through validation and error construction. `validate_request(params, args)` checks
+operation-specific applicability before analysis.
+
+Required answer qualification runs before and after postprocessing. Generic trust
+frames allow optional `meta.errors`/`meta.warnings`; present fields must be lists of
+diagnostic dictionaries. Repair retains valid diagnostic dictionaries, drops
+unusable members and records `invalid_adapter_answer` as required failure.
+An optional adapter-owned `answer_requirement_error(result, expected_type,
+prior_facts=None)` returns a diagnostic or `None` after generic frame validation.
+The postprocess call receives immutable established execution facts, so copied and
+in-place transformations cannot hide previously required comparison proof. A pure
+usage rejection before analysis can legitimately lack that proof. Final field
+selection happens afterward and retains the established analysis facts.
+
+Surface and architecture resource binding preserves an existing literal path first. If it does not
 exist, a once-decoded existing path can resolve URI-escaped characters. If both paths
 exist, the literal path wins. The resolved path and raw query remain separate through
 validation, exclusions and construction, so a decoded question mark never becomes a

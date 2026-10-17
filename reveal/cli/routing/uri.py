@@ -1158,7 +1158,7 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
                                scheme_name, source, type(adapter))
         if facts_of is not None:
             from ...utils.results import merge_execution_facts
-            result = qualify_declared_answer(result, type(adapter), source, expected_type)
+            result = qualify_declared_answer(result, type(adapter), source, expected_type, prior_facts=facts)
             facts = merge_execution_facts(facts, facts_of(result))
 
     if source_path is None:
