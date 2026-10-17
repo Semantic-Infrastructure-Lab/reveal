@@ -107,3 +107,10 @@ def test_shared_elif_taxonomy_outline_and_condition_reads(language, variable):
     flow = _run_reveal_direct(path, '--varflow', variable, '--format', 'json')
     assert flow.returncode == 0, flow.stderr
     assert {'kind': 'READ/COND', 'line': expected['gates'][1][1]['line']} in json.loads(flow.stdout)['findings']
+
+
+def test_ruby_rescue_modifier_only_gates_handler_expression():
+    tree, root, text = _collect('ruby', 'def f\n raise("first") rescue raise("second")\nend')
+    assert [[g['text'] for g in f['gates']] for f in collect_gate_chains(root, 1, 999, text)] == [
+        [], ['on exception'],
+    ]
