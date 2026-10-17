@@ -241,3 +241,68 @@ def test_javascript_parameter_defaults_are_outer_reads(params, body, expected):
 def test_nested_and_earlier_external_reads_keep_owners(code, expected):
     scope, text, end = parsed('python', code)
     assert {d['var'] for d in collect_deps(scope, 1, end, text)} == expected
+
+
+@pytest.mark.parametrize('declaration', ['const', 'let'])
+@pytest.mark.parametrize('operator', ['of', 'in'])
+def test_js_lexical_loop_does_not_hide_outer_reads(declaration, operator):
+    scope, text, end = parsed('javascript', f'''\
+function target() {{
+ for ({declaration} y {operator} items) {{
+   const f = () => consume(y, captured);
+   f();
+ }}
+ consume(y);
+}}
+''')
+    assert collect_deps(scope, 1, end, text) == [
+        {'var': 'items', 'first_read_line': 2, 'first_write_line': None},
+        {'var': 'captured', 'first_read_line': 3, 'first_write_line': None},
+        {'var': 'consume', 'first_read_line': 3, 'first_write_line': None},
+        {'var': 'y', 'first_read_line': 6, 'first_write_line': None},
+    ]
+    assert collect_mutations(scope, 2, 5, text) == []
+    assert collect_deps(scope, 1, end, text) == collect_deps(scope, 1, end, text)
+
+
+@pytest.mark.parametrize('initializer', ['let y = seed', 'const y = seed'])
+def test_js_c_style_loop_lexical_initializer(initializer):
+    scope, text, end = parsed('javascript', f'''\
+function target() {{
+ for ({initializer}; y < limit; consume(y)) {{
+   consume(y, captured);
+ }}
+ consume(y);
+}}
+''')
+    assert {d['var'] for d in collect_deps(scope, 1, end, text)} == {'seed', 'limit', 'consume', 'captured', 'y'}
+    assert collect_mutations(scope, 2, 4, text) == []
+
+
+@pytest.mark.parametrize('loop', ['for (var y of items)', 'for (var y in items)',
+                                 'for (var y = items; y < limit; y++)'])
+def test_js_var_loop_remains_function_binding(loop):
+    scope, text, end = parsed('javascript', f'''\
+function target() {{
+ {loop} {{ consume(y); }}
+ consume(y);
+}}
+''')
+    expected = {'items', 'consume'} | ({'limit'} if 'limit' in loop else set())
+    assert {d['var'] for d in collect_deps(scope, 1, end, text)} == expected
+    assert collect_mutations(scope, 2, 2, text) == [
+        {'var': 'y', 'last_write_line': 2, 'next_read_line': 3}]
+
+
+@pytest.mark.parametrize('prefix,signature,expected', [
+    ('', 'y', {'y', 'items', 'consume'}),
+    (' const y = source;\n', '', {'source', 'items', 'consume'}),
+])
+def test_js_loop_shadow_preserves_parameter_or_local(prefix, signature, expected):
+    scope, text, end = parsed('javascript', f'''\
+function target({signature}) {{
+{prefix} for (const y of items) {{ consume(y); }}
+ consume(y);
+}}
+''')
+    assert {d['var'] for d in collect_deps(scope, 1, end, text)} == expected
