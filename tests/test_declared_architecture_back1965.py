@@ -274,12 +274,20 @@ def test_closed_pipe_preserves_independent_failures(project, mode, incomplete, a
 
 
 @pytest.mark.parametrize('incomplete', [False, True])
-def test_postprocess_projection_retains_preanalysis_facts(project, monkeypatch, incomplete):
+def test_postprocess_cannot_drop_required_comparison_proof(project, monkeypatch, incomplete):
     if incomplete:
         (project / 'broken.py').write_text('def broken(:\n', encoding='utf-8')
     def project_answer(result, args):
         return {key: value for key, value in result.items() if key != 'analysis'}
     monkeypatch.setattr(ArchitectureAdapter, 'post_process', staticmethod(project_answer), raising=False)
     result = run('architecture://proj?against=HEAD', '--format', 'json')
-    assert result.returncode == (3 if incomplete else 0), result.stderr
+    assert result.returncode == 3, result.stderr
     assert json.loads(result.stdout)['type'] == 'architecture_diff'
+
+
+@pytest.mark.parametrize('incomplete', [False, True])
+def test_fields_projection_retains_preanalysis_facts(project, incomplete):
+    if incomplete:
+        (project / 'broken.py').write_text('def broken(:\n', encoding='utf-8')
+    result = run('architecture://proj?against=HEAD', '--format', 'json', '--fields', 'deltas')
+    assert result.returncode == (3 if incomplete else 0), result.stderr
