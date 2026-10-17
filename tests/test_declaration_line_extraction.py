@@ -3,7 +3,7 @@
 import pytest
 
 from reveal.display.element import (
-    _extract_by_name, _extract_by_syntax, _extract_element_at_line,
+    _extract_by_name, _extract_by_syntax, _extract_element_at_line, _extract_ordinal_element,
     _parse_element_syntax,
 )
 from reveal.registry import get_analyzer
@@ -61,3 +61,25 @@ def test_blank_line_still_uses_context_window(analyzer):
     assert result['name'].startswith('lines:')
     assert result['line_start'] == 1
     assert 'first' in result['source'] and 'second' in result['source']
+
+
+@pytest.mark.parametrize('extension,source', [
+    ('dart', 'const value = 0; int first() {\n  return 1;\n}\n'),
+    ('zig', 'const value: u32 = 0; fn first() u32 {\n  return 1;\n}\n'),
+])
+def test_ordinal_source_keeps_exact_node_span(extension, source, tmp_path):
+    path = tmp_path / f'inline.{extension}'
+    path.write_text(source, encoding='utf-8')
+    analyzer = get_analyzer(str(path))(str(path))
+    assert not analyzer.has_parse_errors()
+    named = _extract_by_name(analyzer, 'first')
+    assert named['source'].startswith(('int first', 'fn first'))
+    assert _extract_ordinal_element(analyzer, 1, 'function') == named
+
+
+def test_c_type_mentions_are_not_containing_definitions(tmp_path):
+    path = tmp_path / 'reference.c'
+    path.write_text('struct Data { int value; };\n\nstruct Data *reference;\n', encoding='utf-8')
+    analyzer = get_analyzer(str(path))(str(path))
+    assert not analyzer.has_parse_errors()
+    assert _extract_element_at_line(analyzer, 3) is None
