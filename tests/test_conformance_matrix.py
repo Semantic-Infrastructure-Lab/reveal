@@ -34,7 +34,7 @@ EXPECTED = yaml.safe_load((FIXTURES_DIR / "expected.yaml").read_text(encoding="u
 EXTENSIONS = {
     "python": "py", "c": "c", "cpp": "cpp", "csharp": "cs", "go": "go",
     "java": "java", "javascript": "js", "rust": "rs", "typescript": "ts",
-    "kotlin": "kt", "swift": "swift", "ruby": "rb", "php": "php", "lua": "lua",
+    "kotlin": "kt", "swift": "swift", "ruby": "rb", "php": "php", "lua": "lua", "dart": "dart",
 }
 
 LANGUAGES = sorted(EXPECTED.keys())
@@ -84,7 +84,7 @@ def test_outline_lists_all_functions(lang):
     # opening brace (`name(args) -> Type { [N lines...`) — match anything
     # between the args and the `[N lines` marker rather than assuming either
     # shape (found via BACK-477-successor fixture work, Kotlin/Swift matrix).
-    found = set(re.findall(r"^(?:[│├└─\s]*)(\w+)\([^)]*\)[^\[\n]*\[\d+ lines", out, re.MULTILINE))
+    found = set(re.findall(r"^(?:[│├└─\s]*)(\w+)\([^)]*\)[^\[\n]*\[\d+ lines?", out, re.MULTILINE))
     expected_functions = set(EXPECTED[lang]["outline_functions"])
     assert expected_functions <= found, (
         f"{lang}: expected functions {expected_functions} not all found in outline: {found}\n{out}"

@@ -616,3 +616,42 @@ lua:
   bases: {target: processOrder, category: functions, not_supported: true}
   xfails:
     test_statewrites_classifies_field_and_call: "BACK-1911: Lua table-field assignment target is not reported"
+
+# BACK-1913: manually derived from dart/sample.dart, not captured CLI output.
+dart:
+  entry_function: processOrder
+  outline_functions: [validate, processOrder, run, summarize]
+  calls_validate_callers:
+  - {line: 12, function: processOrder}
+  imports_unused:
+    not_supported: true  # generic Dart import extraction has no unused-name analysis
+  varflow_result:
+  - {kind: WRITE, line: 13}
+  - {kind: READ, line: 16}
+  - {kind: WRITE, line: 20}
+  - {kind: READ, line: 20}
+  - {kind: READ, line: 21}
+  sideeffects:
+  - {line: 16, kind: file}  # File construction at 15 is deliberately declined by the taxonomy
+  exits:
+  - {kind: RETURN, line: 18}
+  - {kind: RETURN, line: 21}
+  ifmap:
+    not_supported: true  # processOrder uses try/catch, no bare if
+  catchmap:
+  - {keyword: TRY, line_start: 14}
+  - {keyword: CATCH, line_start: 17}
+  mutations_probe: {range: "13-13", var: result, next_read_line: 16}
+  returns:
+  - {line: 18, gate_lines: [17]}
+  - {line: 21, gate_lines: []}
+  batch_element: Batch.run
+  loopmap:
+  - {keyword: FOR, line_start: 31}
+  fanout_effects:
+  - {line: 33, kind: cache}
+  statewrites:
+  - {kind: field, line: 32}
+  - {kind: cache, line: 33}
+  decorators: {target: Reporter, category: classes, expected: ["@deprecated"]}
+  bases: {target: Reporter, category: classes, expected: ["Batch"]}
