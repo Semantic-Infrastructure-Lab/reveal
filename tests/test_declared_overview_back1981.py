@@ -352,3 +352,53 @@ def test_no_git_and_no_imports_skip_only_their_owners(project, monkeypatch):
     assert answer['architecture'] == {} and answer['git_log'] == []
     assert len(answer['complex_functions']) == 5 and answer['stats']['summary']['total_files'] == 7
     equal_answers(answer, json.loads(b.stdout))
+
+
+@pytest.mark.parametrize('phase', ['answer', 'postprocess'])
+@pytest.mark.parametrize('with_error', [False, True])
+def test_producer_error_label_cannot_reclassify_analysis_as_usage(project, monkeypatch, phase, with_error):
+    original = OverviewAdapter.get_structure
+    def observed(result):
+        result['meta']['errors'].append({'code': 'invalid_request', 'message': 'required producer failed'})
+        if with_error:
+            result['error'] = 'required producer failed'
+        return result
+    if phase == 'answer':
+        monkeypatch.setattr(OverviewAdapter, 'get_structure', lambda self, **kw: observed(original(self, **kw)))
+    else:
+        monkeypatch.setattr(OverviewAdapter, 'post_process', lambda self, result, args: observed(result), raising=False)
+    for argv in requests():
+        result = run(*argv, '--format', 'json')
+        assert result.returncode == 3, result.stderr
+        assert json.loads(result.stdout)['type'] == 'overview'
+
+
+@pytest.mark.parametrize('with_error', [False, True])
+def test_returned_producer_error_facts_are_analysis_failure(project, with_error):
+    from reveal.utils.results import AnalysisCompleteness, FailureCause
+    result = OverviewAdapter(str(project), 'no_git=true').get_structure()
+    result['meta']['errors'].append({'code': 'invalid_request', 'message': 'required producer failed'})
+    if with_error:
+        result['error'] = 'required producer failed'
+    facts = OverviewAdapter.execution_facts(result)
+    assert facts.completeness in (AnalysisCompleteness.INCOMPLETE, AnalysisCompleteness.FAILED)
+    assert FailureCause.INVALID_REQUEST not in facts.failures
+
+
+@pytest.mark.parametrize('phase', ['answer', 'postprocess'])
+@pytest.mark.parametrize('skip', [False, True])
+def test_erased_architecture_is_valid_only_when_requested_skip(project, monkeypatch, phase, skip):
+    original = OverviewAdapter.get_structure
+    def erase(result):
+        result['architecture'] = {}
+        return result
+    if phase == 'answer':
+        monkeypatch.setattr(OverviewAdapter, 'get_structure', lambda self, **kw: erase(original(self, **kw)))
+    else:
+        monkeypatch.setattr(OverviewAdapter, 'post_process', lambda self, result, args: erase(result), raising=False)
+    for argv in requests(['--no-imports'] if skip else [], '&no_imports=true' if skip else ''):
+        result = run(*argv, '--format', 'json')
+        assert result.returncode == (0 if skip else 3), result.stderr
+        answer = json.loads(result.stdout)
+        if not skip:
+            assert answer['error'] and any(e['code'] == 'invalid_adapter_answer' for e in answer['meta']['errors'])
