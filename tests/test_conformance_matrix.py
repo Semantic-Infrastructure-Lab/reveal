@@ -786,10 +786,22 @@ def test_dart_trailing_return_remains_unguarded():
     assert next(f for f in findings if f['line'] == 21)['gates'] == []
 
 
-@pytest.mark.parametrize('language', ['dart', 'lua'])
-def test_dart_and_lua_conformance_fixtures_parse_without_recovery(language):
+def _assert_fixture_has_no_parse_recovery(language):
     from reveal.core import get_tree, tree_root, _zero_arg
 
     source = _sample_path(language).read_text(encoding='utf-8')
     root = tree_root(get_tree(language, source))
     assert _zero_arg(root, 'has_error') is False, f'{language}: fixture requires parser recovery'
+
+
+@pytest.mark.parametrize('language', ['dart', 'lua'])
+def test_dart_and_lua_conformance_fixtures_parse_without_recovery(language):
+    _assert_fixture_has_no_parse_recovery(language)
+
+
+def test_scala_conformance_fixture_parses_without_recovery():
+    _assert_fixture_has_no_parse_recovery('scala')
+
+
+def test_scala_unannotated_class_has_no_decorators():
+    assert _ast_record('scala', 'Batch', 'classes')['decorators'] == []

@@ -698,3 +698,5 @@ scala:
   - {kind: cache, line: 36}
   decorators: {target: Reporter, category: classes, expected: ['@deprecated("fixture", "1")']}
   bases: {target: Reporter, category: classes, expected: ["Batch"]}
+  xfails:
+    test_decorators_extracted_for_annotated_construct: "BACK-1920: Scala class annotation is absent from decorators"

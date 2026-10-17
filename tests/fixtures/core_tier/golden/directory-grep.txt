@@ -1,6 +1,6 @@
 $ reveal . --grep '= validate'
 Text search: .  —  pattern: = validate
-13 hits across 13 files
+14 hits across 14 files
 
 File: c/sample.c
   process_order()
@@ -49,6 +49,10 @@ File: ruby/sample.rb
 File: rust/sample.rs
   process_order()
     14: let mut result = validate(order)?;
+
+File: scala/sample.scala
+  processOrder()
+    14: var result = validate(order)
 
 File: typescript/sample.ts
   processOrder()
