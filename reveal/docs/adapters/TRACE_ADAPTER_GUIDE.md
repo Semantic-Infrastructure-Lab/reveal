@@ -41,6 +41,19 @@ and neither the caller's own file nor its imports pick one; the frame lists
 them in `candidates` (text: `[ambiguous: N definitions -- a.py:3, ...]`) and
 is not expanded. `warnings` names ambiguous roots and callees.
 
+JSON also retains typed `meta.warnings` for `analysis_failed` and
+`parse_recovered`, including exact counts and up to five affected paths. Surviving
+frames describe the evidence that was available. Malformed collection rows carry
+attributed `E_COMPOSE` entries in `meta.errors`; valid sibling rows remain usable.
+Text prints mirrored legacy and typed diagnostics once. External/ambiguous calls
+and requested depth limits are separate observations, not failed input evidence.
+
+These evidence disclosures preserve the current exit policy: a surviving root
+can still return 0 with partial input, while an unknown root is rejected by the
+subcommand and remains an unresolved frame through URI invocation. Inspect the
+diagnostics before treating a trace as complete; declared execution binding is
+not part of this producer change.
+
 JSX component-reference frames carry `relationship: jsx_reference` (or
 `call_and_jsx_reference` when the symbol is also called) and text labels them
 `[JSX reference]`. Their parent retains source reference lines. Following these

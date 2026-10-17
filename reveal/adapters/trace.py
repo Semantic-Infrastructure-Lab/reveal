@@ -46,7 +46,27 @@ def _trace_callable_valid(element: Dict[str, Any]) -> bool:
             and _trace_strings(element.get('reference_only_calls', [])))
 
 
-def _trace_elements(values: Any, file: str, problems: List[Dict[str, str]]) -> List[Dict[str, Any]]:
+
+def _trace_callable_references(element: Dict[str, Any], file: str,
+                               problems: List[Dict[str, str]]) -> Dict[str, Any]:
+    if 'references' not in element:
+        return element
+    references = element['references']
+    usable = [] if not isinstance(references, list) else [
+        reference for reference in references if isinstance(reference, dict)
+        and isinstance(reference.get('callee'), str) and reference['callee']]
+    if not isinstance(references, list) or len(usable) != len(references):
+        _trace_problem(problems, file, 'Trace callable references are malformed')
+    return {**element, 'references': usable}
+
+def _trace_projection_calls_valid(element: Dict[str, Any], references: List[Dict[str, Any]]) -> bool:
+    matched = any(reference['owner'] == element.get('name')
+                  and reference['owner_line'] == element.get('line') for reference in references)
+    return not matched or _trace_strings(element.get('calls', []))
+
+
+def _trace_elements(values: Any, file: str, problems: List[Dict[str, str]],
+                    references: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     if not isinstance(values, list):
         _trace_problem(problems, file, 'Required trace elements collection is missing or malformed')
         return []
@@ -54,10 +74,16 @@ def _trace_elements(values: Any, file: str, problems: List[Dict[str, str]]) -> L
     for element in values:
         if not isinstance(element, dict) or not isinstance(element.get('category'), str):
             _trace_problem(problems, file, 'Required trace element is malformed')
-        elif element['category'] in ('functions', 'methods', 'tests', 'modules') and not _trace_callable_valid(element):
-            _trace_problem(problems, file, 'Required trace callable name, line or calls are missing or malformed')
-        else:
-            usable.append(element)
+            continue
+        if not _trace_projection_calls_valid(element, references):
+            _trace_problem(problems, file, 'Trace JSX projection consumes malformed element calls')
+            continue
+        if element['category'] in ('functions', 'methods', 'tests', 'modules'):
+            if not _trace_callable_valid(element):
+                _trace_problem(problems, file, 'Required trace callable name, line or calls are missing or malformed')
+                continue
+            element = _trace_callable_references(element, file, problems)
+        usable.append(element)
     return usable
 
 
@@ -89,8 +115,8 @@ def _trace_file(value: Any, path: str, problems: List[Dict[str, str]]) -> Option
         _trace_problem(problems, path, 'Required trace file identity is missing or malformed')
         return None
     file = dict(value)
-    file['elements'] = _trace_elements(file.get('elements'), file['file'], problems)
     _trace_sites(file, problems)
+    file['elements'] = _trace_elements(file.get('elements'), file['file'], problems, file.get('jsx_references', []))
     if 'parse_recovered' in file and type(file['parse_recovered']) is not bool:
         _trace_problem(problems, file['file'], 'Trace recovered-parse evidence is malformed')
         file.pop('parse_recovered')
@@ -426,8 +452,9 @@ def _render_trace_metadata(report: Dict[str, Any]) -> None:
     from ..utils.warning_render import render_meta_warnings
     mirrored = set(report.get('warnings', []))
     meta = dict(report.get('meta') or {})
-    meta['warnings'] = [entry for entry in meta.get('warnings', [])
-                        if entry.get('message') not in mirrored]
+    for field in ('warnings', 'errors'):
+        meta[field] = [entry for entry in meta.get(field, [])
+                       if entry.get('message') not in mirrored]
     render_meta_warnings({'meta': meta})
 
 def _render_trace(report: Dict[str, Any]) -> None:
@@ -589,5 +616,5 @@ class TraceAdapter(ResourceAdapter):
             source=self.path,
             contract_version=CONTRACT_VERSION,
             data=report,
-            meta=self.composed_meta(),
+            meta=dict(self.composed_meta() or {}) or None,
         )
