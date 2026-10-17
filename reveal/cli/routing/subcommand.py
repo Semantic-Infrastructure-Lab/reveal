@@ -55,6 +55,7 @@ def dispatch_subcommand(name: str, parser: ArgumentParser,
     target = peek(args, 'path') or peek(args, 'target')
     from ..invocation import COMMANDS
     spec = COMMANDS.get(name)
+    patterns: list[str]
     if spec is not None and spec.declared_adapter:
         # The qualified runner establishes scope after binding the operation,
         # so inaccessible resources can retain their canonical failure answer.
