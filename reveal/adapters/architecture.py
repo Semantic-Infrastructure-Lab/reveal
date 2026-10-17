@@ -1,14 +1,4 @@
-"""architecture:// adapter - targeted architectural brief for a directory.
-
-Answers: "What do I need to know before editing this code?" Composes imports
-graph, complexity data, and cycle analysis into facts + risks + next
-commands. Scan/render logic lives here (BACK-901/BACK-957);
-`cli/commands/architecture.py` is a thin argparse shim over this adapter
-(the `--against <ref>` git-diff branch stays in the CLI shim — it already
-delegates to the dedicated `reveal.diff.architecture_diff` module and has
-its own contract/tests, so folding it into this adapter would just be
-indirection without benefit).
-"""
+"""Architecture briefs and git comparisons through one declared adapter."""
 
 from __future__ import annotations
 
@@ -25,7 +15,9 @@ from ..conventions import conventions_for_path
 from ..registry import language_for_extension
 from ..rendering.adapters.architecture import ArchitectureRenderer
 from ..utils.path_utils import is_test_path
-from ..utils.query import parse_query_params
+from ..utils.query_binding import bind_declared_params, boolean_value
+from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
+                                  nonnegative_display_limit, param_schema, peek_query_items)
 from ..utils.results import ResultBuilder
 
 logger = logging.getLogger(__name__)
@@ -372,6 +364,18 @@ def _relativize_risks(risks: List[Dict[str, Any]], base_path: Path) -> None:
             risk['representative'] = rel(risk['representative'])
 
 
+def _architecture_top(value: Any) -> int:
+    if isinstance(value, bool):
+        raise ValueError('top requires an integer value')
+    return nonnegative_display_limit(value)
+
+
+def _architecture_ref(value: Any) -> str:
+    if not isinstance(value, str) or not value or '\x00' in value:
+        raise ValueError('against requires a nonempty git ref string')
+    return value
+
+
 @register_adapter('architecture')
 @register_renderer(ArchitectureRenderer)
 class ArchitectureAdapter(ResourceAdapter):
@@ -383,17 +387,79 @@ class ArchitectureAdapter(ResourceAdapter):
     CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # --no-gitignore (BACK-1386)
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
 
-    def __init__(self, resource: str, query: Optional[str] = None):
+    RESULT_TYPE = 'architecture'
+    FINDINGS_POLICIES = ('none',)
+    DEFAULT_FAIL_ON = 'none'
+    RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
+    PARAM_SPECS = (
+        ParamSpec('top', 'integer', 'Items per text section and complexity analysis population (top*4)',
+                  5, _architecture_top, minimum=0, role='analysis',
+                  zero_policy='ordinary: no ranked complexity; diff: population 4',
+                  cli=CliBinding(('--top',), metavar='N')),
+        ParamSpec('no_imports', 'boolean', 'Skip ordinary import graph analysis', False,
+                  boolean_value, role='analysis', cli=CliBinding(('--no-imports',), action='store_true')),
+        ParamSpec('against', 'string', 'Compare the live working tree against a git ref', None,
+                  _architecture_ref, role='operation', uri_codec='percent',
+                  cli=CliBinding(('--against',), metavar='REF')),
+        ParamSpec('verbose', 'boolean', 'Expand ordinary complexity analysis and text sections',
+                  False, boolean_value, role='analysis'),
+    )
+
+    def __init__(self, resource: str, query: Optional[str] = None, *,
+                 params: Optional[Dict[str, Any]] = None):
         self.path = str(Path(resource).expanduser())
-        self.query_params = parse_query_params(query or '', coerce=True)
-        self._warn_unknown_query_params(self.query_params)  # BACK-507
+        if params is not None:
+            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
+                self.PARAM_SPECS, params, transport='typed')
+        else:
+            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
+        self._warn_unknown_query_params(self.query_params)
+
+    @staticmethod
+    def result_type_for(params):
+        return 'architecture_diff' if 'against' in dict(peek_query_items(params)) else 'architecture'
+
+    @staticmethod
+    def validate_request(params, args):
+        from ..cli.routing.ledger import peek
+        supplied = dict(peek_query_items(params))
+        if 'against' in supplied and ('no_imports' in supplied or 'verbose' in supplied or peek(args, 'verbose', False)):
+            raise ValueError('architecture diff does not support no_imports or verbose')
+
+    @staticmethod
+    def execution_facts(result):
+        from ..utils.results import (AnalysisCompleteness, FailureCause, failure_execution_facts,
+                                     result_execution_facts)
+        meta = result.get('meta', {}) if isinstance(result, dict) else {}
+        errors = meta.get('errors', [])
+        if errors and all(error.get('code') == 'invalid_request' for error in errors):
+            return failure_execution_facts(FailureCause.INVALID_REQUEST)
+        missing = {'analysis_failed', 'parse_recovered', 'partial_parse', 'worker_lost'}
+        incomplete = bool(errors) or any(w.get('type') in missing for w in meta.get('warnings', []))
+        if isinstance(result, dict) and result.get('type') == 'architecture_diff':
+            incomplete = incomplete or result.get('analysis', {}).get('complete') is False
+        state = AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE
+        return result_execution_facts(result, completeness=state)
+
+    def _comparison(self, path: Path, against: str, top: int):
+        from ..diff.architecture_diff import _open_repo, _resolve_commit, run_architecture_diff
+        from ..utils.results import FailureCause
+        try:
+            repo = _open_repo(path.resolve())
+            _resolve_commit(repo, against)
+        except ValueError as exc:
+            return ResultBuilder.create(
+                'architecture_diff', self.path, contract_version=CONTRACT_VERSION,
+                errors=[{'code': FailureCause.INVALID_REQUEST.value, 'message': str(exc)}],
+                error=str(exc))
+        return run_architecture_diff(path, against, top_n=max(top, 1) * 4)
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
         return {
             'name': 'architecture',
             'description': 'Architectural brief for a directory: entry points, core abstractions, risks, and suggested next commands.',
-            'syntax': 'architecture://<path>[?top=5&no_imports=true]',
+            'syntax': 'architecture://<path>[?top=5&no_imports=true|against=REF]',
             'examples': [
                 {'uri': 'architecture://src', 'description': 'Brief for a subdirectory'},
                 {'uri': 'architecture://.?top=10', 'description': 'Top 10 items per section'},
@@ -407,7 +473,7 @@ class ArchitectureAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Static imports only — dynamically loaded files (plugins, registries) may appear as entry points.',
-                'For a git-ref diff (--against REF), use the CLI subcommand form: reveal architecture <path> --against <ref>.',
+                'Use --against REF or ?against=REF for git comparisons; diff rejects no_imports and verbose.',
             ],
             'see_also': [
                 'reveal architecture <path> - CLI subcommand form',
@@ -421,14 +487,14 @@ class ArchitectureAdapter(ResourceAdapter):
             'adapter': 'architecture',
             'description': 'Targeted architectural brief (entry points, core abstractions, risks, next commands)',
             'uri_syntax': 'architecture://<path>?top=5&no_imports=true',
-            'query_params': {
-                'top': {'type': 'integer', 'minimum': 0, 'description': 'Number of items to show per section', 'examples': ['top=10']},
-                'no_imports': {'type': 'boolean', 'description': 'Skip import graph analysis', 'examples': ['no_imports=true']},
-            },
+            'resource': ArchitectureAdapter.RESOURCE_SPEC.schema(),
+            'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none']},
+            'query_params': param_schema(ArchitectureAdapter.PARAM_SPECS),
             'elements': {},
             'supports_batch': False,
             'supports_advanced': False,
             'output_types': [
+                {'type': 'architecture_diff', 'description': 'Git comparison with explicit snapshot completeness'},
                 {
                     'type': 'architecture',
                     'description': 'Facts (entry points/core abstractions/components/cycles), risks, and next commands',
@@ -447,14 +513,21 @@ class ArchitectureAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Composed from imports:// (fan-in/fan-out/circular) and ast:// (complexity) — not an independent scan.',
-                'The --against <ref> diff mode is CLI-only (reveal.diff.architecture_diff), not part of this URI.',
+                'against selects architecture_diff; ordinary no_imports/verbose controls do not apply.',
             ],
         }
 
-    def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+    def get_structure(self, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
+        from argparse import Namespace
+        self.validate_request(self.query_params, Namespace(verbose=verbose))
         path = Path(self.path)
-        top = self.int_param('top', 5)
-        no_imports = str(self.query_params.get('no_imports', False)).lower() == 'true'
+        top_spec, no_imports_spec, against_spec, verbose_spec = self.PARAM_SPECS
+        if self.result_type_for(self.query_params) == 'architecture_diff':
+            return self._comparison(path, against_spec.read(self.query_params), top_spec.read(self.query_params))
+        verbose = verbose or verbose_spec.read(self.query_params)
+        from .overview import UNLIMITED_TOP
+        top = UNLIMITED_TOP if verbose else top_spec.read(self.query_params)
+        no_imports = no_imports_spec.read(self.query_params)
 
         if no_imports:
             complex_fns = _run_complex_functions(self, path, top * 4)
@@ -493,6 +566,8 @@ class ArchitectureAdapter(ResourceAdapter):
             'unsupported_extensions': imports_data.get('unsupported_extensions', {}),
             'scope': _run_scope(self, path),
         }
+        if verbose:
+            report['verbose'] = True
         if no_imports:
             report['no_imports'] = True
         _relativize_architecture_paths(report, path)

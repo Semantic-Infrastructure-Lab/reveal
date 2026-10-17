@@ -76,7 +76,7 @@ def run_declared_uri(uri: str, element: str | None, args, consumed=()) -> None:
 def _run_declared(name: str, args, path: str, source: Any, transport: str, consumed=()) -> None:
     from ...utils.exclusions import dispatch_scope, exclusion_scope
     from ...utils.gitignore import gitignore_scope, split_respect_gitignore
-    from ...utils.query_binding import bind_resource_path
+    from ...utils.query_binding import bind_resource_path, prepare_declared_params
     adapter = declared_adapter_class(name)
     from .formats import declared_output_formats, require_supported_format
     require_supported_format(args, declared_output_formats(adapter), f'{name}://')
@@ -98,58 +98,64 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
     dispatch = ledger.dispatching(query_resource) if ledger is not None else nullcontext()
     try:
         with dispatch:
+            source = prepare_declared_params(adapter.PARAM_SPECS, source, transport)
+            select_type = getattr(adapter, 'result_type_for', None)
+            expected_type = select_type(source) if select_type else adapter.RESULT_TYPE
             try:
                 path = bind_resource_path(adapter.RESOURCE_SPEC, os.path.expanduser(path), transport=transport)
             except ValueError as exc:
-                _invalid_answer(adapter, name, path, str(exc), args).emit()
+                _invalid_answer(adapter, name, path, str(exc), args, result_type=expected_type).emit()
                 return
             except OSError as exc:
                 from ...utils.results import FailureCause
-                _invalid_answer(adapter, name, path, str(exc), args, FailureCause.ANALYSIS).emit()
+                _invalid_answer(adapter, name, path, str(exc), args, FailureCause.ANALYSIS, result_type=expected_type).emit()
                 return
             root, excludes = dispatch_scope(path, peek(args, 'exclude'))
             with exclusion_scope(root, excludes), gitignore_scope(respect):
-                _declared_answer(adapter, name, path, source, transport, args).emit()
+                _declared_answer(adapter, name, path, source, transport, args, expected_type).emit()
             complete(args)
     finally:
         if ledger is not None and ledger.complete:
             ledger.report(name)
 
 
-def _declared_answer(adapter_class, name: str, path: str, source: Any, transport: str, args):
+def _declared_answer(adapter_class, name: str, path: str, source: Any, transport: str, args, expected_type: str):
     from ...adapters.factory import _canonical_init
-    from ...utils.query_binding import bind_declared_params
+    from ...utils.query_binding import bind_prepared_params
     from ...utils.path_utils import to_posix
     from ...utils.results import FailureCause
     from .uri import _answer, _call_adapter, _renderer_class_of, _structure_answer
     try:
-        params = bind_declared_params(adapter_class.PARAM_SPECS, source, transport=transport)
+        params = bind_prepared_params(adapter_class.PARAM_SPECS, source, transport=transport)
+        validate = getattr(adapter_class, 'validate_request', None)
+        if validate is not None:
+            validate(params, args)
         # stat distinguishes absence from inaccessible required work.
         Path(path).stat()
     except (FileNotFoundError, NotADirectoryError):
-        return _invalid_answer(adapter_class, name, path, f'Path not found: {to_posix(path)}', args)
+        return _invalid_answer(adapter_class, name, path, f'Path not found: {to_posix(path)}', args, result_type=expected_type)
     except ValueError as exc:
-        return _invalid_answer(adapter_class, name, path, str(exc), args)
+        return _invalid_answer(adapter_class, name, path, str(exc), args, result_type=expected_type)
     except OSError as exc:
-        return _invalid_answer(adapter_class, name, path, str(exc), args, FailureCause.ANALYSIS)
+        return _invalid_answer(adapter_class, name, path, str(exc), args, FailureCause.ANALYSIS, result_type=expected_type)
 
     def resolve():
         adapter = _call_adapter(lambda: _canonical_init(adapter_class, path, params=params),
                                 name, path, adapter_class)
         return _structure_answer(adapter, _renderer_class_of(name), args, name, path,
-                                 source_path=path, facts_of=adapter_class.execution_facts)
+                                 source_path=path, facts_of=adapter_class.execution_facts, expected_type=expected_type)
 
-    return _answer(resolve, name, args, result_type=adapter_class.RESULT_TYPE,
+    return _answer(resolve, name, args, result_type=expected_type,
                    source_path=path, facts_of=adapter_class.execution_facts)
 
 
-def _invalid_answer(adapter, name, path, message, args, cause=None):
+def _invalid_answer(adapter, name, path, message, args, cause=None, *, result_type=None):
     from ...reveal_types import CONTRACT_VERSION
     from ...utils.results import FailureCause, ResultBuilder, failure_execution_facts
     from .uri import Answer, _emit_result, _render_router_result
     cause = FailureCause.INVALID_REQUEST if cause is None else cause
     result = ResultBuilder.create(
-        adapter.RESULT_TYPE, path, contract_version=CONTRACT_VERSION,
+        (result_type or adapter.RESULT_TYPE), path, contract_version=CONTRACT_VERSION,
         source_type='unknown', errors=[{'code': cause.value, 'message': message}], error=message)
     facts = failure_execution_facts(cause)
     return Answer(result, 'router', lambda: _emit_result(
@@ -200,15 +206,16 @@ def emit_declared_result(result, args, scheme, render, facts, **render_kwargs) -
 
 
 
-def qualify_declared_answer(result, adapter_class, path: str):
+def qualify_declared_answer(result, adapter_class, path: str, expected_type=None):
     """Keep required answers canonical before projections; malformed success is failure."""
     from ...reveal_types import CONTRACT_VERSION, RevealResult
     from ...utils.path_utils import to_posix
     from ...utils.results import ResultBuilder
+    expected_type = expected_type or adapter_class.RESULT_TYPE
     required = RevealResult.__required_keys__
     valid = (isinstance(result, dict)
              and all(isinstance(result.get(key), str) and result[key] for key in required)
-             and result.get('type') == adapter_class.RESULT_TYPE
+             and result.get('type') == expected_type
              and isinstance(result.get('meta', {}), dict)
              and isinstance(result.get('scope', {}), dict))
     if valid:
@@ -219,10 +226,10 @@ def qualify_declared_answer(result, adapter_class, path: str):
     data = {key: value for key, value in original.items() if key not in fields}
     data['error'] = error
     meta = original.get('meta')
-    if not isinstance(meta, dict):
-        meta = {'errors': [{'code': 'invalid_adapter_answer', 'message': error}], 'warnings': []}
+    meta = dict(meta) if isinstance(meta, dict) else {'warnings': []}
+    meta['errors'] = [*meta.get('errors', []), {'code': 'invalid_adapter_answer', 'message': error}]
     return ResultBuilder.create(
-        adapter_class.RESULT_TYPE, to_posix(path), contract_version=CONTRACT_VERSION,
+        expected_type, to_posix(path), contract_version=CONTRACT_VERSION,
         source_type='directory' if Path(path).is_dir() else 'file',
         meta=meta, scope=original.get('scope') if isinstance(original.get('scope'), dict) else None,
         data=data)

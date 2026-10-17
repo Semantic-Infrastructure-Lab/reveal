@@ -1,18 +1,7 @@
-"""reveal architecture — targeted architectural brief for a directory.
+"""Compatibility imports for the declared architecture command."""
 
-Thin argparse shim over the architecture:// adapter (BACK-901/BACK-957);
-brief scanning lives in reveal/adapters/architecture.py and rendering in
-reveal/rendering/adapters/architecture.py. The
-`--against <ref>` git-diff branch stays here — it delegates to the dedicated
-reveal.diff.architecture_diff module and has its own contract/tests
-independent of the main brief. Scan helpers remain available here for
-existing callers.
-"""
 import argparse
-import sys
 from argparse import Namespace
-from functools import partial
-from pathlib import Path
 
 from reveal.adapters.architecture import (  # noqa: F401 - re-exported for back-compat
     ArchitectureAdapter,
@@ -27,101 +16,15 @@ from reveal.adapters.architecture import (  # noqa: F401 - re-exported for back-
     _run_scope,
 )
 from ...rendering.adapters.architecture import ArchitectureRenderer
-from ..global_flags import add_exclude_argument, add_gitignore_arguments
-from ..routing.subcommand import emit_subcommand_result
-from reveal.utils.query_parser import cli_display_limit
 
 
 def create_architecture_parser() -> argparse.ArgumentParser:
-    from reveal.cli.parser import _build_global_options_parser
-    parser = argparse.ArgumentParser(
-        prog='reveal architecture',
-        parents=[_build_global_options_parser()],
-        description=(
-            'Architectural brief for a directory: entry points, core abstractions, '
-            'risks, and suggested next commands.'
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=(
-            "Examples:\n"
-            "  reveal architecture src/              # Brief for a subdirectory\n"
-            "  reveal architecture .                 # Whole project\n"
-            "  reveal architecture src/ --format json  # Machine-readable output\n"
-            "  reveal architecture src/ --no-imports   # Skip import graph analysis\n"
-        ),
-    )
-    parser.add_argument(
-        'path',
-        nargs='?',
-        default='.',
-        help='Directory to analyze (default: current directory)',
-    )
-    parser.add_argument(
-        '--no-imports',
-        action='store_true',
-        help='Skip import graph analysis',
-    )
-    parser.add_argument(
-        '--top',
-        metavar='N',
-        type=cli_display_limit,
-        default=5,
-        help='Number of items to show per section (default: 5)',
-    )
-    parser.add_argument(
-        '--against',
-        metavar='REF',
-        default=None,
-        help=(
-            'Diff architecture against a git ref (branch, tag, or commit). '
-            'Base = REF (materialized read-only via git), head = the current '
-            'working tree. Deltas are only meaningful for graph-backed '
-            'languages (Python/JS/TS/Go/Rust/C/C++ today) — see BACK-487/488.'
-        ),
-    )
-    add_exclude_argument(parser)
-    add_gitignore_arguments(parser)
-    return parser
+    """Compatibility import; the adapter declaration owns the parser."""
+    from ..routing.declared import create_declared_parser
+    return create_declared_parser('architecture')
 
 
 def run_architecture(args: Namespace) -> None:
-    path = Path(args.path)  # as the user named it, like the URI form (BACK-1366)
-    if not path.exists():
-        print(f"Error: path '{args.path}' does not exist", file=sys.stderr)
-        sys.exit(1)
-
-    against = getattr(args, 'against', None)
-    if against:
-        _run_architecture_diff(path.resolve(), against, args)
-        return
-
-    # BACK-1362: --verbose was declared (inherited from the global options
-    # parser) but never read here, so it silently did nothing -- same
-    # "lift the default cap" meaning --verbose already has on overview/ast/
-    # hotspots URIs (BACK-1226/1379).
-    from reveal.adapters.overview import UNLIMITED_TOP
-    top = UNLIMITED_TOP if getattr(args, 'verbose', False) else args.top
-    no_imports = getattr(args, 'no_imports', False)
-
-    query = f'top={top}&no_imports={"true" if no_imports else "false"}'
-    result = ArchitectureAdapter(str(path), query).get_structure()
-    emit_subcommand_result(result, args, name='architecture', source=path, render=partial(
-        ArchitectureRenderer.render_structure, format=args.format, top=top, no_imports=no_imports))
-
-
-def _run_architecture_diff(path: Path, against: str, args: Namespace) -> None:
-    """BACK-441: `reveal architecture <path> --against <ref>` branch.
-
-    Delegates all diff logic to reveal.diff.architecture_diff — see that
-    module for the materialization + delta-computation implementation.
-    """
-    from reveal.diff.architecture_diff import run_architecture_diff, render_diff_brief
-
-    try:
-        report = run_architecture_diff(path, against, top_n=max(args.top, 1) * 4)
-    except ValueError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    emit_subcommand_result(report, args, name='architecture_diff', source=path,
-                           render=render_diff_brief)
+    """Compatibility import; both spellings use the declared runner."""
+    from ..routing.declared import run_declared_command
+    run_declared_command('architecture', args)

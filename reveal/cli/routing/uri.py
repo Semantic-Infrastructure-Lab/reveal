@@ -1133,7 +1133,8 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
 
 def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
                       scheme: Optional[str] = None, resource: Optional[str] = None, *,
-                      source_path: Optional[str] = None, facts_of: Optional[Callable] = None) -> Answer:
+                      source_path: Optional[str] = None, facts_of: Optional[Callable] = None,
+                      expected_type: Optional[str] = None) -> Answer:
     # Build adapter kwargs
     structure_kwargs = _build_adapter_kwargs(adapter, args, scheme, resource)
 
@@ -1144,7 +1145,7 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
 
     if facts_of is not None:
         from .declared import qualify_declared_answer
-        result = qualify_declared_answer(result, type(adapter), source)
+        result = qualify_declared_answer(result, type(adapter), source, expected_type)
     facts = facts_of(result) if facts_of is not None else None
 
     # Apply post-processing
@@ -1157,7 +1158,7 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
                                scheme_name, source, type(adapter))
         if facts_of is not None:
             from ...utils.results import merge_execution_facts
-            result = qualify_declared_answer(result, type(adapter), source)
+            result = qualify_declared_answer(result, type(adapter), source, expected_type)
             facts = merge_execution_facts(facts, facts_of(result))
 
     if source_path is None:

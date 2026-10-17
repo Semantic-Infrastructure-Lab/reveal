@@ -1,6 +1,7 @@
 """Architecture's ordinary and comparison operations share declared execution."""
 import copy
 import json
+import sys
 from urllib.parse import quote
 
 import pytest
@@ -146,8 +147,13 @@ def test_ordinary_missing_evidence_survives_projection(project, monkeypatch, kin
         assert result.returncode == 3, result.stderr
 
 
-def test_regular_file_and_encoded_resource(project):
-    target = project / 'literal?%26,é.py'
+@pytest.mark.parametrize('filename', [
+    'literal%26,é&=.py',
+    pytest.param('literal?%26,é.py', marks=pytest.mark.skipif(
+        sys.platform == 'win32', reason='Windows filenames cannot contain question marks')),
+])
+def test_regular_file_and_encoded_resource(project, filename):
+    target = project / filename
     target.write_text('import os\n', encoding='utf-8')
     a = run('architecture', str(target), '--format', 'json')
     b = run('architecture://' + quote(str(target), safe='/'), '--format', 'json')
@@ -158,3 +164,105 @@ def test_regular_file_and_encoded_resource(project):
 def test_comparison_guard_rejects_dropped_diagnostic():
     with pytest.raises(AssertionError):
         equal_answers({'meta': {'errors': [{'message': 'lost'}]}}, {'meta': {'errors': []}})
+
+
+@pytest.mark.parametrize('mode', ['ordinary', 'diff'])
+def test_invalid_request_text_and_artifact_failure(project, mode):
+    cli = ['--against', 'no-such-ref'] if mode == 'diff' else ['--top', '-1']
+    result = run('architecture', 'proj', *cli)
+    assert result.returncode == 2
+    assert 'Traceback' not in result.stderr
+    cli = ['--against', 'HEAD'] if mode == 'diff' else []
+    result = run('architecture', 'proj', *cli, '--also-json', str(project))
+    assert result.returncode == 3
+    assert 'artifact failed' in result.stderr
+    result = run('architecture', 'proj', *cli, '--format', 'json', '--also-json', str(project))
+    assert result.returncode == 0  # primary JSON keeps the existing mirror no-op
+    assert json.loads(result.stdout)['type'].startswith('architecture')
+
+
+@pytest.mark.parametrize('kind', ['operational', 'dependency', 'corrupt'])
+def test_git_operational_failures_are_required_analysis(project, monkeypatch, kind):
+    from reveal.diff import architecture_diff
+    pygit2 = pytest.importorskip('pygit2')
+    exc = {'operational': OSError('git unreadable'), 'dependency': ImportError('pygit2 unavailable'),
+           'corrupt': pygit2.GitError('corrupt object') }[kind]
+    def fail(path):
+        raise exc
+    monkeypatch.setattr(architecture_diff, '_open_repo', fail)
+    for argv in (['architecture', 'proj', '--against', 'HEAD'], ['architecture://proj?against=HEAD']):
+        result = run(*argv, '--format', 'json')
+        assert result.returncode == 3
+        assert json.loads(result.stdout)['type'] == 'architecture_diff'
+
+
+@pytest.mark.parametrize('flag', ['--verbose'])
+def test_ordinary_global_controls_have_exact_parity(project, flag):
+    a = run('architecture', 'proj', flag, '--format', 'json')
+    b = run('architecture://proj', flag, '--format', 'json')
+    assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)
+    equal_answers(json.loads(a.stdout), json.loads(b.stdout))
+
+
+@pytest.mark.parametrize('flags', [[], ['--exclude', 'b.py'], ['--no-gitignore']])
+def test_diff_actual_scope_and_fast_proof(project, flags):
+    # Dirty contents exercise snapshots; a restored tree exercises the unchanged proof.
+    for dirty in (True, False):
+        if not dirty:
+            (project / 'a.py').write_text('import os\n', encoding='utf-8')
+        a = run('architecture', 'proj', '--against', 'HEAD', '--format', 'json', *flags)
+        b = run('architecture://proj?against=HEAD', '--format', 'json', *flags)
+        assert a.returncode == b.returncode == 0
+        left, right = json.loads(a.stdout), json.loads(b.stdout)
+        equal_answers(left, right)
+        assert left['analysis']['complete']
+        if not flags and not dirty:
+            assert left['analysis']['basis'] == 'identical_tree'
+
+
+def test_all_keeps_existing_transport_boundary_and_analysis(project, monkeypatch):
+    seen = []
+    monkeypatch.setattr('reveal.adapters.architecture._run_combined_analysis',
+                        lambda adapter, path, limit: (seen.append(limit) or [], {}))
+    rejected = run('architecture', 'proj', '--all')
+    assert rejected.returncode == 2 and not rejected.stdout
+    assert 'unrecognized arguments: --all' in rejected.stderr
+    ordinary = run('architecture://proj', '--format', 'json')
+    expanded_text = run('architecture://proj', '--all', '--format', 'json')
+    assert ordinary.returncode == expanded_text.returncode == 0
+    assert json.loads(ordinary.stdout) == json.loads(expanded_text.stdout)
+    assert seen == [20, 20]
+
+
+@pytest.mark.parametrize('mode', ['ordinary', 'diff'])
+def test_runtime_artifact_failure_preserves_primary_json(project, monkeypatch, mode):
+    def fail(*args, **kwargs):
+        raise OSError('requested artifact failed')
+    monkeypatch.setattr('reveal.utils.json_utils.write_also_json', fail)
+    query = '?against=HEAD' if mode == 'diff' else ''
+    result = run('architecture://proj' + query, '--format', 'json')
+    assert result.returncode == 3
+    assert json.loads(result.stdout)['meta']['output_errors']
+
+
+@pytest.mark.parametrize('mode', ['ordinary', 'diff'])
+@pytest.mark.parametrize('incomplete,artifact_failure,expected', [
+    (False, False, 0), (True, False, 3), (False, True, 3),
+])
+def test_closed_pipe_preserves_independent_failures(project, mode, incomplete, artifact_failure, expected):
+    import os
+    import subprocess
+    if incomplete:
+        (project / 'broken.py').write_text('def broken(:\n', encoding='utf-8')
+    argv = [sys.executable, '-m', 'reveal', 'architecture', 'proj']
+    if mode == 'diff':
+        argv.extend(['--against', 'HEAD'])
+    if artifact_failure:
+        argv.extend(['--also-json', str(project)])
+    with subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          env=os.environ.copy()) as process:
+        process.stdout.close()
+        code = process.wait(timeout=30)
+        errors = process.stderr.read().decode('utf-8', errors='replace')
+    assert code == expected, errors
+    assert 'Traceback' not in errors

@@ -570,15 +570,16 @@ output. Designed for agent consumption and subdirectory targeting.
 ### Usage
 
 ```
-reveal architecture [PATH] [--top N] [--no-imports] [--format json]
+reveal architecture [PATH] [--top N] [--no-imports | --against REF] [--format json]
 ```
 
 ### CLI Flags
 
 | Flag | Description |
 |------|-------------|
-| `--top N` | Items to show per section (default: 5) |
+| `--top N` | Items per section and complexity analysis population (default: 5; ordinary `top*4`, diff `max(top,1)*4`) |
 | `--no-imports` | Skip import graph analysis |
+| `--against REF` | Return `architecture_diff` against a Git ref; rejects explicit no-imports/verbose |
 | `--format json` | Machine-readable output: `{path, facts, risks[], next_commands[]}` |
 
 ### Output Sections
@@ -596,7 +597,16 @@ reveal architecture src/            # Brief for a specific directory
 reveal architecture .               # Whole project
 reveal architecture src/ --format json  # Machine-readable for agents
 reveal architecture src/ --no-imports   # Skip import analysis (faster)
+reveal architecture src/ --against main --format json
+reveal 'architecture://src?against=main' --format json
 ```
+
+The two spellings share answers and support human output with `--also-json PATH`.
+Architecture exits 0 for completed answers, 2 for invalid requests and 3 for
+required analysis/output failure or missing evidence. `--fail-on none` retains
+required failures; no adverse-risk gate is declared. Ordinary verbose expands
+both analysis and text. See [the adapter guide](../adapters/ARCHITECTURE_ADAPTER_GUIDE.md)
+for URI encoding, scope and completeness rules.
 
 ### Notes
 

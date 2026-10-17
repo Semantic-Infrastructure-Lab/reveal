@@ -6,7 +6,7 @@ category: guide
 # architecture:// Adapter Guide
 
 `architecture://` answers "what do I need to know before editing this
-code?" for a directory: entry points, core abstractions, circular
+code?" for a directory or file: entry points, core abstractions, circular
 dependency groups, and risks — composed from `imports://` (fan-in/fan-out/
 cycles) and `ast://` (complexity), plus a suggested next commands list.
 
@@ -29,10 +29,11 @@ reveal architecture . --format json
 ```
 
 For a git-ref diff (what changed architecturally since a branch/tag/commit),
-use the CLI subcommand form — this is not part of the URI:
+use either spelling:
 
 ```bash
 reveal architecture src/ --against main
+reveal 'architecture://src?against=main'
 ```
 
 ## Query Parameters
@@ -41,6 +42,31 @@ reveal architecture src/ --against main
 |-----------|--------|---------|
 | `top` | integer (default `5`) | Section display cap; also bounds the complexity candidate population used by the analysis. |
 | `no_imports` | `true`, `false` (default) | Skip import graph analysis (entry points/core abstractions/cycles all come back empty; complexity-based risks still run). |
+| `against` | Nonempty Git ref | Select `architecture_diff`, comparing that ref with the live working tree. |
+| `verbose` | `true`, `false` (default) | Expand ordinary complexity analysis and text sections. Also available as `--verbose` on both spellings. |
+
+`top` must be a nonnegative integer. Ordinary analysis requests `top*4`
+complexity candidates; zero requests no ranked complexity. Diff preserves its
+existing population of `max(top,1)*4`, including a population of four at zero.
+Diff rejects explicitly supplied `no_imports` or `verbose`, even false values.
+URI `--all` remains a text-only cap override; the subcommand continues to reject
+`--all`. Exact parity applies to supported equivalent requests. Ordinary URI `--verbose` now
+expands analysis too, matching the subcommand; previously it expanded text only.
+
+The new URI `against` scalar decodes percent escapes once and preserves `+`.
+Encode a literal percent as `%25`, ampersand as `%26` and equals as `%3D`.
+Existing numeric/boolean parameters retain their raw codec with strict validation.
+For resource paths, an existing literal percent path wins; otherwise an encoded
+existing path is decoded once. Both empty resources default to the current directory.
+
+Both spellings return the same operation identity and support human output plus
+`--also-json PATH`. With primary `--format json`, `--also-json` retains its
+existing no-op behavior. Execution exits are 0 for complete answers, 2 for invalid
+requests, and 3 for required analysis or requested-output failure/incompleteness.
+Only `--fail-on none` is supported; risks do not establish a findings exit gate.
+It never suppresses missing required evidence. Scope census errors, import input
+loss and recovered/failed parses remain incomplete; harmless warnings, ranking
+cuts and documented unsupported-language scope remain successful.
 
 ## Reading The Output
 
@@ -89,4 +115,4 @@ deltas do not. Confidence remains a separate descriptive field.
 - `reveal help://schemas/architecture` - JSON schema
 - `reveal 'imports://<dir>'` - the fan-in/fan-out/circular data behind `facts`
 - `reveal 'ast://<dir>?complexity>20'` - the complexity data behind high-complexity-entry risks
-- `reveal architecture <path> --against <ref>` - git-ref diff mode (CLI-only)
+- `reveal architecture <path> --against <ref>` - git-ref diff mode

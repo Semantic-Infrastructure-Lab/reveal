@@ -70,7 +70,7 @@ _SUBCOMMANDS_GUIDE = 'guides/SUBCOMMANDS_GUIDE.md'
 COMMANDS: Dict[str, CommandSpec] = {
     'architecture': _spec('architecture',
                      'reveal architecture [path]',
-                     'Architectural brief: entry points, core abstractions, risks'),
+                     'Architectural brief: entry points, core abstractions, risks')._replace(declared_adapter='architecture'),
     'check':        _spec('check',
                      'reveal check <path>',
                      'Run quality rules on a file or directory',

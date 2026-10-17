@@ -43,14 +43,7 @@ except ImportError:
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _args(**kwargs):
-    defaults = {
-        'path': '.',
-        'top': 5,
-        'no_imports': False,
-        'format': 'text',
-        'verbose': False,
-        'against': None,
-    }
+    defaults = vars(create_architecture_parser().parse_args([]))
     defaults.update(kwargs)
     return Namespace(**defaults)
 
@@ -104,8 +97,9 @@ class TestCreateArchitectureParser(unittest.TestCase):
         parser = create_architecture_parser()
         args = parser.parse_args([])
         self.assertEqual(args.path, '.')
-        self.assertEqual(args.top, 5)
-        self.assertFalse(args.no_imports)
+        self.assertNotIn('top', vars(args))
+        self.assertEqual(ArchitectureAdapter.PARAM_SPECS[0].read({}), 5)
+        self.assertNotIn('no_imports', vars(args))
 
     def test_path_argument(self):
         parser = create_architecture_parser()
@@ -120,7 +114,7 @@ class TestCreateArchitectureParser(unittest.TestCase):
     def test_top_flag(self):
         parser = create_architecture_parser()
         args = parser.parse_args(['--top', '10'])
-        self.assertEqual(args.top, 10)
+        self.assertEqual(args.top, '10')  # conversion belongs to the declared binder
 
     def test_format_json(self):
         parser = create_architecture_parser()
@@ -130,7 +124,7 @@ class TestCreateArchitectureParser(unittest.TestCase):
     def test_against_defaults_to_none(self):
         parser = create_architecture_parser()
         args = parser.parse_args([])
-        self.assertIsNone(args.against)
+        self.assertNotIn('against', vars(args))
 
     def test_against_flag(self):
         parser = create_architecture_parser()

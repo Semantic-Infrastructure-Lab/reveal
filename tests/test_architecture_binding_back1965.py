@@ -47,3 +47,25 @@ def test_diff_population_preserves_existing_multiplier(tmp_path, monkeypatch, to
         values['top'] = top
     ArchitectureAdapter(str(tmp_path), params=values).get_structure()
     assert seen == [expected]
+
+
+@pytest.mark.parametrize('verbose', [False, True])
+def test_verbose_changes_analysis_but_all_does_not(tmp_path, monkeypatch, verbose):
+    from reveal.adapters.overview import UNLIMITED_TOP
+    seen = []
+    monkeypatch.setattr('reveal.adapters.architecture._run_combined_analysis',
+                        lambda adapter, path, limit: (seen.append(limit) or [], {}))
+    ArchitectureAdapter(str(tmp_path)).get_structure(verbose=verbose, all=True)
+    assert seen == [UNLIMITED_TOP * 4 if verbose else 20]
+
+
+@pytest.mark.parametrize('warning,incomplete', [
+    ('partial_parse', True), ('worker_lost', True), ('analysis_failed', True),
+    ('parse_recovered', True), ('complexity_is_unweighted', False), ('truncated', False),
+])
+def test_explicit_missing_evidence_taxonomy(warning, incomplete):
+    from reveal.utils.results import AnalysisCompleteness, ResultBuilder
+    result = ResultBuilder.create('architecture', '.', confidence=0.0,
+                                  warnings=[{'type': warning, 'message': 'producer evidence'}])
+    facts = ArchitectureAdapter.execution_facts(result)
+    assert (facts.completeness is AnalysisCompleteness.INCOMPLETE) is incomplete

@@ -1598,8 +1598,11 @@ reveal architecture src/ --against main  # Diff against a git ref (BACK-441)
 ```bash
 reveal architecture src/ --against main
 reveal architecture src/ --against v1.2.0 --format json
+reveal 'architecture://src?against=main' --format json
 ```
 Base = `REF` (materialized read-only via git, working tree untouched), head = the current working tree. Reports fan-in/fan-out deltas, circular-dependency groups introduced or resolved, component-coupling changes, complexity-centroid shift, and entry-point changes — "what did this branch actually change architecturally" instead of diffing file-by-file. Deltas are only meaningful for graph-backed languages (Python/JS/TS/Go/Rust/C/C++ today — see BACK-487/488).
+
+Both forms preserve `architecture_diff` identity on success and failure. Diff rejects explicit `no_imports`/`verbose`, including false URI values. `top` is an analysis population control: ordinary `top*4`, diff `max(top,1)*4`. Ordinary `--verbose` expands analysis and text on both forms; URI `--all` stays text-only. URI ref values percent-decode once and preserve plus; encode literal percent as `%25`. Architecture exits 0 for completed answers, 2 for invalid requests and 3 for required incomplete analysis/output failures. Only `--fail-on none` is supported, and it cannot suppress required failures. See [the adapter guide](adapters/ARCHITECTURE_ADAPTER_GUIDE.md) for encoding and evidence limits.
 
 **Use case:** Pre-edit orientation for a specific module. More targeted than `reveal overview` — works on subdirectories and produces a risks + next_commands structure agents can act on directly. `next_commands` tells the agent exactly what to look at next without further reasoning.
 

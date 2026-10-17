@@ -86,8 +86,13 @@ class ArchitectureRenderer(BaseRenderer):
     @classmethod
     def render_structure(cls, result: Dict[str, Any], format: str = 'text',
                          top: int = 5, no_imports: bool = False) -> Optional[str]:
+        if result.get('type') == 'architecture_diff' and 'analysis' in result and format != 'json':
+            return architecture_diff_text(result)
         if format == 'json' or outcome_of(result) == 'failed':
             return super().render_structure(result, format)
+        if result.get('verbose'):
+            from ...adapters.overview import UNLIMITED_TOP
+            top = UNLIMITED_TOP
         return '\n'.join(_render_brief(result, top, Path(result['path']),
                          result.get('no_imports', no_imports))) + '\n'
 

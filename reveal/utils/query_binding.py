@@ -57,7 +57,7 @@ def _decode_value(spec: ParamSpec, value: Any) -> Any:
     raise ValueError(f'Unknown URI codec {spec.uri_codec!r}')
 
 
-def _source_params(declarations: tuple[ParamSpec, ...],
+def prepare_declared_params(declarations: Iterable[ParamSpec],
                    source: Union[str, Mapping[str, Any]], transport: str) -> QueryParams:
     if transport == 'uri':
         if not isinstance(source, str):
@@ -97,7 +97,13 @@ def bind_declared_params(specs: Iterable[ParamSpec], source: Union[str, Mapping[
     Omitted controls remain omitted, so defaults do not become submitted flags.
     """
     declarations = tuple(specs)
-    params = _source_params(declarations, source, transport)
+    params = prepare_declared_params(declarations, source, transport)
+    return bind_prepared_params(declarations, params, transport=transport)
+
+
+def bind_prepared_params(declarations: Iterable[ParamSpec], params: QueryParams, *,
+                         transport: str) -> QueryParams:
+    """Convert a prepared source once, after its operation identity is resolved."""
     supplied = dict(peek_query_items(params))
     for spec in declarations:
         if spec.name not in supplied:

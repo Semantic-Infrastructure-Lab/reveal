@@ -38,7 +38,8 @@ def tree(tmp_path_factory):
 def _bad_value_message(result, value):
     assert result.returncode == 2, (result.returncode, result.stdout, result.stderr)
     err = result.stderr
-    assert 'top must be a non-negative integer' in err, err
+    assert ('top must be a non-negative integer' in err or
+            'top must be a whole number' in err), err
     assert f"'{value}'" in err, err
     assert 'invalid literal' not in err
     assert 'nonnegative_display_limit' not in err
@@ -87,6 +88,5 @@ def test_scheme_without_top_contract_keeps_ignoring_it(tree):
     stats = _run(f'stats://{tree}?top=-1')
     assert stats.returncode == 0
     assert "query param 'top' has no effect" in stats.stderr
-    surface = _run(f'surface://{tree}?top=-1')
-    assert surface.returncode == 0
-    assert "Unknown query param 'top'" in surface.stderr
+    # Surface now declares top; its earlier pilot rejects invalid values too.
+    _bad_value_message(_run(f'surface://{tree}?top=-1'), '-1')
