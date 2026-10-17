@@ -793,8 +793,9 @@ def test_dart_trailing_return_remains_unguarded():
 def _assert_fixture_has_no_parse_recovery(language):
     from reveal.core import get_tree, tree_root, _zero_arg
 
-    source = _sample_path(language).read_text(encoding='utf-8')
-    root = tree_root(get_tree(language, source))
+    path = _sample_path(language)
+    source = path.read_text(encoding='utf-8')
+    root = tree_root(get_tree(language, source, filename=path))
     assert _zero_arg(root, 'has_error') is False, f'{language}: fixture requires parser recovery'
 
 
