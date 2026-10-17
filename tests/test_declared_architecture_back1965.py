@@ -335,28 +335,31 @@ def test_postprocess_usage_cannot_hide_lost_required_proof(project, monkeypatch,
     assert answer.returncode == expected, answer.stderr
 
 
-@pytest.mark.parametrize('mode', ['ordinary', 'diff'])
+@pytest.mark.parametrize('mode', ['ordinary', 'diff', 'surface'])
 @pytest.mark.parametrize('phase', ['analysis', 'postprocess'])
 @pytest.mark.parametrize('bad_type', [[], {}])
 @pytest.mark.parametrize('transport', ['cli', 'uri'])
 @pytest.mark.parametrize('format', ['json', 'text'])
 def test_malformed_consumed_warning_type_is_required_failure(project, monkeypatch, mode, phase, bad_type, transport, format):
+    from reveal.adapters.surface import SurfaceAdapter
+    name = 'surface' if mode == 'surface' else 'architecture'
+    owner = SurfaceAdapter if mode == 'surface' else ArchitectureAdapter
     def inject(result):
         result.setdefault('meta', {}).setdefault('warnings', []).append(
             {'type': bad_type, 'message': 'retain malformed diagnostic detail'})
         return result
-    original = ArchitectureAdapter.get_structure
+    original = owner.get_structure
     if phase == 'analysis':
         def answer(self, **kwargs):
             return inject(original(self, **kwargs))
-        monkeypatch.setattr(ArchitectureAdapter, 'get_structure', answer)
+        monkeypatch.setattr(owner, 'get_structure', answer)
     else:
-        monkeypatch.setattr(ArchitectureAdapter, 'post_process', staticmethod(
+        monkeypatch.setattr(owner, 'post_process', staticmethod(
             lambda result, args: inject(result)), raising=False)
     if transport == 'cli':
-        argv = ['architecture', 'proj', *(['--against', 'HEAD'] if mode == 'diff' else [])]
+        argv = [name, 'proj', *(['--against', 'HEAD'] if mode == 'diff' else [])]
     else:
-        argv = ['architecture://proj' + ('?against=HEAD' if mode == 'diff' else '')]
+        argv = [name + '://proj' + ('?against=HEAD' if mode == 'diff' else '')]
     result = run(*argv, '--format', format)
     assert result.returncode == 3, result.stderr
     assert 'Traceback' not in result.stderr
