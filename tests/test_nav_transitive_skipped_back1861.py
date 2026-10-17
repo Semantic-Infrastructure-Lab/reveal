@@ -43,7 +43,7 @@ def test_text_names_the_skipped_file(tree, flag):
 @pytest.mark.parametrize('flag', ['--sideeffects', '--boundary'])
 def test_json_warns_about_the_skipped_file(tree, flag):
     data = json.loads(_nav(tree, flag, '--format', 'json').stdout)
-    (warning,) = data['warnings']
+    (warning,) = [w for w in data['warnings'] if 'could not be analyzed' in w]
     assert 'bad.py' in warning and 'ValueError' in warning
 
 
@@ -51,6 +51,11 @@ def test_json_warns_about_the_skipped_file(tree, flag):
 def test_nothing_skipped_adds_no_warning(tmp_path, flag):
     (tmp_path / 'ok.py').write_text('def a():\n    return b()\n\n\ndef b():\n    return 1\n', encoding='utf-8')
     result = _run_reveal_direct(str(tmp_path / 'ok.py'), 'a', flag, '--transitive', '--format', 'json')
-    assert json.loads(result.stdout)['warnings'] == []
+    warnings = json.loads(result.stdout)['warnings']
+    assert not any('could not be analyzed' in w for w in warnings)
+    if flag == '--sideeffects':
+        assert warnings == []
+    else:
+        assert len(warnings) == 1 and 'assignments only in the entry function' in warnings[0]
     text = _run_reveal_direct(str(tmp_path / 'ok.py'), 'a', flag, '--transitive').stdout
     assert 'could not be analyzed' not in text

@@ -1914,7 +1914,7 @@ def format_effect_target(effect: Dict[str, Any]) -> str:
     one — it renders bare (`process.env.FOO`).
     """
     target = effect['callee'] or '(unknown)'
-    if effect.get('via') in ('property', 'statement'):  # as written: no call parens
+    if effect.get('via') in ('property', 'statement', 'assignment'):  # as written: no call parens
         return target
     first_arg = effect.get('first_arg')
     if not first_arg:

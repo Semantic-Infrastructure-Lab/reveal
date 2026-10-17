@@ -1,6 +1,7 @@
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from .nav_exits import collect_deps
+from .nav_statewrites import collect_statewrites
 from .nav_effects import (
     collect_effects,
     collect_effects_transitive,
@@ -14,6 +15,32 @@ _PHP_SUPERGLOBALS = frozenset({
     '$_GET', '$_POST', '$_SESSION', '$_SERVER', '$_FILES',
     '$_COOKIE', '$_ENV', '$GLOBALS', '$_REQUEST',
 })
+
+_ASSIGNMENT_COVERAGE_NOTE = (
+    'Assignment coverage: assignments only in the entry function; '
+    'call effects follow project-local callees.'
+)
+
+
+def _boundary_effects(
+    effects: List[Dict[str, Any]], scope_node: Any, from_line: int, to_line: int,
+    get_text: Callable, language: Optional[str], root_name: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Merge assignment writes, retaining call effects and other property reads."""
+    assignments = [
+        dict(kind=w['kind'], line=w['line'], callee=w['target'], first_arg=None,
+             has_more_args=False, via='assignment')
+        for w in collect_statewrites(scope_node, from_line, to_line, get_text, language)
+        if w['via'] == 'assignment'
+    ]
+    replaced = {(w['kind'], w['line'], w['callee']) for w in assignments}
+    classified = [e for e in effects if e['kind'] is not None and not (
+        e.get('via') == 'property' and e.get('hop', 0) == 0
+        and (e['kind'], e['line'], e['callee']) in replaced)]
+    if root_name is not None:
+        for write in assignments:
+            write.update(hop=0, chain=[root_name])
+    return sorted(classified + assignments, key=lambda e: (e.get('hop', 0), e['line']))
 
 
 def _is_superglobal(var_name: str) -> bool:
@@ -34,7 +61,7 @@ def collect_boundary(
         inputs       -- deps that are neither builtins nor PHP superglobals
         builtins     -- known unshadowed language builtins
         superglobals -- deps that are PHP superglobals ($_GET, $_SESSION, etc.)
-        effects      -- classified side-effect call sites
+        effects      -- classified calls, property reads, and assignment writes
     """
     deps = collect_deps(scope_node, from_line, to_line, get_text, language=language)
     builtins = [d for d in deps if d.get('classification') == 'builtin']
@@ -43,7 +70,7 @@ def collect_boundary(
     superglobals = [d for d in deps if _is_superglobal(d['var'])]
     effects = collect_effects(scope_node, from_line, to_line, get_text, language,
                               implicit_nodes=implicit_nodes)
-    classified = [e for e in effects if e['kind'] is not None]
+    classified = _boundary_effects(effects, scope_node, from_line, to_line, get_text, language)
     return {'inputs': inputs, 'superglobals': superglobals, 'builtins': builtins, 'effects': classified}
 
 
@@ -92,7 +119,7 @@ def render_boundary(
     from_line: int,
     to_line: int,
 ) -> str:
-    """Render collect_boundary output as a three-section boundary contract."""
+    """Render inputs, optional builtins/environment, and effects."""
     sections = _render_boundary_header(result, from_line, to_line)
 
     effects = result['effects']
@@ -135,8 +162,10 @@ def collect_boundary_transitive(
         path, root_name, scope_node, from_line, to_line, get_text,
         language=language, depth=depth,
     )
-    classified = [e for e in effects if e['kind'] is not None]
+    classified = _boundary_effects(effects, scope_node, from_line, to_line, get_text,
+                                   language, root_name=root_name)
     result: Dict[str, Any] = {'inputs': inputs, 'superglobals': superglobals, 'builtins': builtins, 'effects': classified}
+    result['assignment_coverage_note'] = _ASSIGNMENT_COVERAGE_NOTE
     if effects.skipped:
         result['skipped'] = [list(item) for item in effects.skipped]
     return result
@@ -163,5 +192,7 @@ def render_boundary_transitive(
     note = skipped_files_note(result.get('skipped') or [])
     if note:
         sections.append(f'Warning: {note}')
+    if result.get('assignment_coverage_note'):
+        sections.append(result['assignment_coverage_note'])
 
     return '\n\n'.join(sections)

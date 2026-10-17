@@ -72,7 +72,8 @@ def root(key):
     helper(key)
 def helper(key):
     state[key] = 2
-    print(key)
+    import logging
+    logging.info(key)
 ''', encoding='utf-8')
     data = json.loads(_run_reveal_direct(str(path), 'root', '--boundary', '--transitive',
                                        '--format', 'json').stdout)

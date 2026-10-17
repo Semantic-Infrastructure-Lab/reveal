@@ -388,12 +388,14 @@ def _nav_boundary(ctx: _NavCtx) -> None:
                for d in boundary['superglobals']]
             + [{'kind': e['kind'], 'line': e['line'], 'callee': e['callee'],
                 'first_arg': e.get('first_arg'),
+                **({'via': 'assignment'} if e.get('via') == 'assignment' else {}),
                 **({'hop': e['hop'], 'chain': e['chain']} if transitive else {})}
                for e in boundary['effects'] if e['kind'] is not None]
         )
         note = skipped_files_note(boundary.get('skipped') or []) if transitive else None
+        warnings = [n for n in (note, boundary.get('assignment_coverage_note')) if n]
         _nav_json('boundary', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
-                  warnings=[note] if note else None)
+                  warnings=warnings)
     elif transitive:
         print(render_boundary_transitive(boundary, ctx.element, from_line, to_line, depth))
     else:
