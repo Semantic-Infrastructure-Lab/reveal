@@ -112,7 +112,7 @@ def _try_full_uri_init(adapter_class: type, scheme: str, resource: str,
         return None, e
 
 
-def _canonical_init(adapter_class: type, resource: str) -> Any:
+def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any] = None) -> Any:
     """Construct a canonically-migrated adapter directly (BACK-907).
 
     Canonical signature is __init__(self, resource='', query=None, **kwargs).
@@ -126,6 +126,9 @@ def _canonical_init(adapter_class: type, resource: str) -> Any:
     must stay empty so the adapter's own validation/fallback fires instead
     of misreading '.' as a literal path/host).
     """
+    if params is not None:
+        # Already-bound input keeps literal '?' paths out of URI serialization.
+        return adapter_class(resource, params=params)
     empty_default = getattr(adapter_class, 'CANONICAL_EMPTY_RESOURCE', '.')
     if resource and '?' in resource:
         path, query = resource.split('?', 1)

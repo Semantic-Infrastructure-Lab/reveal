@@ -36,7 +36,10 @@ from ..utils.path_utils import (
     is_test_basename_for_language,
     walk_tree,
 )
-from ..utils.query import parse_query_params
+from ..utils.query_parser import (
+    CliBinding, ParamSpec, QueryParams, ResourceSpec, nonnegative_display_limit, param_schema,
+)
+from ..utils.query_binding import bind_declared_params, boolean_value
 from .ast.surface_matrix import CATEGORIES, RECOVERED_KEY, UNPARSED_KEY, coverage_matrix
 from .ast.nav_surface_common import ROUTE_CLASSES_KEY, resolve_inherited_route_prefixes
 from .ast.nav_surface_rails import resolve_engine_mounts
@@ -301,10 +304,32 @@ class SurfaceAdapter(ResourceAdapter):
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # --no-gitignore (BACK-1386)
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
+    RESULT_TYPE = 'surface_scan'
+    FINDINGS_POLICIES = ('none',)
+    RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
+    PARAM_SPECS = (
+        ParamSpec('type', 'string', 'Filter to one surface type', '', str,
+                  choices=('', *CATEGORIES), role='analysis', cli=CliBinding(('--type',), metavar='TYPE')),
+        ParamSpec('source_only', 'boolean', 'Exclude test files and directories', False, boolean_value,
+                  role='analysis', cli=CliBinding(('--source-only',), action='store_true')),
+        ParamSpec('by', 'string', 'Group entries by directory', '', str,
+                  choices=('', 'dir'), role='analysis', cli=CliBinding(('--by',))),
+        ParamSpec('depth', 'integer', 'Directory rollup depth (0 = full directory)', 0,
+                  lambda value: nonnegative_display_limit(value, 'depth'), minimum=0,
+                  zero_policy='full directory', role='analysis', cli=CliBinding(('--depth',), metavar='N')),
+        ParamSpec('top', 'integer', 'Text entries per category (omitted = all; JSON stays complete)', None,
+                  lambda value: nonnegative_display_limit(value, 'top'), minimum=0,
+                  zero_policy='no text entries', role='presentation', cli=CliBinding(('--top',), metavar='N')),
+    )
 
-    def __init__(self, resource: str, query: Optional[str] = None):
+    def __init__(self, resource: str, query: Optional[str] = None, *,
+                 params: Optional[Dict[str, Any]] = None):
         self.path = str(Path(resource).expanduser())
-        self.query_params = parse_query_params(query or '', coerce=True)
+        if params is not None:
+            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
+                self.PARAM_SPECS, params, transport='typed')
+        else:
+            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
         self._warn_unknown_query_params(self.query_params)  # BACK-507
 
     @staticmethod
@@ -342,12 +367,8 @@ class SurfaceAdapter(ResourceAdapter):
             'adapter': 'surface',
             'description': 'External-boundary surface scanner (CLI, HTTP, env, network, fs, subprocess)',
             'uri_syntax': 'surface://<path>?type=env&source_only=true',
-            'query_params': {
-                'type': {'type': 'string', 'description': 'Filter to one surface type', 'examples': ['type=env']},
-                'source_only': {'type': 'boolean', 'description': 'Exclude test files/directories', 'examples': ['source_only=true']},
-                'by': {'type': 'string', 'description': "Group entries: 'dir' adds a by_dir rollup (counts per category per directory)", 'examples': ['by=dir']},
-                'depth': {'type': 'integer', 'description': 'With by=dir: keep only the first N path segments of each directory (0 = full directory)', 'examples': ['depth=2']},
-            },
+            'resource': SurfaceAdapter.RESOURCE_SPEC.schema(),
+            'query_params': param_schema(SurfaceAdapter.PARAM_SPECS),
             'elements': {},
             'supports_batch': False,
             'supports_advanced': False,
@@ -373,31 +394,12 @@ class SurfaceAdapter(ResourceAdapter):
         }
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
-        # BACK-1211: query_parser.coerce_value() turns a literal '0'/'1'
-        # value into bool regardless of field type -- str(True/False) would
-        # silently corrupt type_filter if a surface type were ever literally
-        # named '0' or '1'. Not a live bug (taxonomy names never are), but
-        # if that ever changes, follow PackAdapter.get_structure()'s
-        # isinstance(value, bool) recovery pattern for ?budget= (BACK-1180).
-        type_filter = str(self.query_params.get('type') or '')
-        _source_only_raw = self.query_params.get('source_only')
-        source_only = str(_source_only_raw).lower() == 'true' if _source_only_raw is not None else False
-
-        # BACK-1504: an unknown type used to filter everything out and report
-        # "Total surface entries: 0" -- a typo read as "touches no env vars".
-        if type_filter and type_filter not in CATEGORIES:
-            raise ValueError(f"surface: unknown type={type_filter!r} (supported: {', '.join(CATEGORIES)})")
-        by = str(self.query_params.get('by') or '')
-        if by not in ('', 'dir'):
-            raise ValueError(f"surface: unknown by={by!r} (supported: dir)")
-        # int() rather than str(): coerce_value() turns a literal 0/1 into bool
-        # (see BACK-1211 above), and int(True) == 1 recovers the number.
-        try:
-            depth = int(self.query_params.get('depth') or 0)
-        except (TypeError, ValueError):
-            raise ValueError(f"surface: depth must be an integer, got {self.query_params.get('depth')!r}")
-        if depth < 0:
-            raise ValueError("surface: depth must be >= 0")
+        applied = {spec.name: spec.read(self.query_params)
+                   for spec in self.PARAM_SPECS if spec.role == 'analysis'}
+        type_filter = applied['type']
+        source_only = applied['source_only']
+        by = applied['by']
+        depth = applied['depth']
 
         report = _scan_surface(Path(self.path), type_filter=type_filter, source_only=source_only,
                                by=by, depth=depth)
@@ -413,7 +415,7 @@ class SurfaceAdapter(ResourceAdapter):
                 report['recovered_files'], _count_error_region(report['surfaces']))})
 
         return ResultBuilder.create(
-            result_type='surface_scan',
+            result_type=self.RESULT_TYPE,
             source=self.path,
             contract_version=CONTRACT_VERSION,
             parse_mode='ast+tree_sitter',
