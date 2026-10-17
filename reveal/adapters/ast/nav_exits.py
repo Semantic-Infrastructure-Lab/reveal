@@ -293,6 +293,17 @@ def render_exits(
     return '\n'.join(lines)
 
 
+def _unbound_range_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Exclude inner-owned bindings without hiding same-spelled outer reads.
+
+    Whole closures own their parameters; an extracted body still needs a
+    parameter declared outside the selected range.
+    """
+    owned = {e.get('binding_scope') for e in events
+             if e['kind'] == 'WRITE' and e.get('binding_scope') is not None}
+    return [e for e in events if e.get('binding_scope') not in owned]
+
+
 def collect_deps(
     scope_node: Any,
     from_line: int,
@@ -312,12 +323,7 @@ def collect_deps(
         in_range = [e for e in events if from_line <= e['line'] <= to_line]
         if not in_range:
             continue
-        # A closure/comprehension binding must not suppress an outer read of
-        # the same spelling. Whole constructs own their parameters, while an
-        # extracted body still needs a parameter declared outside the range.
-        owned = {e.get('binding_scope') for e in in_range
-                 if e['kind'] == 'WRITE' and e.get('binding_scope') is not None}
-        visible = [e for e in in_range if e.get('binding_scope') not in owned]
+        visible = _unbound_range_events(in_range)
         if not visible:
             continue
         first_in_range = visible[0]

@@ -241,6 +241,9 @@ class VarFlowWalker:
         _collect_identifier_names — direct --varflow queries reach var_flow()
         without going through that candidate pass, so the same "not a variable"
         knowledge has to be applied here too (BACK-431 feature-breadth pass)."""
+        if ntype == 'type':
+            return True
+
         if ntype in ('identifier', 'variable_name', 'simple_identifier', 'IDENTIFIER',
                      'shorthand_property_identifier_pattern') and self.get_text(n) == self.var_name:
             pos = (_zero_arg(n, 'start_position').row, _zero_arg(n, 'start_position').column)
@@ -1170,7 +1173,6 @@ def _non_variable_children(node: Any, get_text: Callable) -> List[Any]:
         if found is not None:
             skipped.append(found)
     skipped.extend(_type_reference_children(node))
-    skipped.extend(c for c in _children(node) if _zero_arg(c, 'kind') == 'type')
     return skipped
 
 
@@ -1199,6 +1201,8 @@ def _member_access_descent(node: Any) -> Optional[List[Any]]:
     (BACK-431 feature-breadth pass); see the original inline comments preserved
     below for the exact source each idiom came from."""
     kind = _zero_arg(node, 'kind')
+    if kind == 'type':
+        return []
     if kind in _MEMBER_ACCESS_KINDS:
         # `obj.field` / `obj:method()` — only the base object is a variable.
         children = _children(node)

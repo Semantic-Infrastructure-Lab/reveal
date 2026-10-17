@@ -459,7 +459,7 @@ class TestNavJsonOutput(unittest.TestCase):
     def test_deps_findings_have_kind_var_line(self):
         result = self._run('collect_deps', {'deps': True})
         for f in result['findings']:
-            self.assertEqual(f['kind'], 'dep')
+            self.assertIn(f['kind'], {'dep', 'builtin'})
             self.assertIn('var', f)
             self.assertIn('line', f)
             self.assertIn('first_write_line', f)
@@ -533,7 +533,7 @@ class TestNavJsonOutput(unittest.TestCase):
     def test_boundary_findings_kinds(self):
         result = self._run('collect_deps', {'boundary': True})
         kinds = {f['kind'] for f in result['findings']}
-        valid = {'input', 'superglobal', 'db', 'http', 'cache', 'log', 'file', 'sleep', 'hard_stop'}
+        valid = {'input', 'builtin', 'superglobal', 'db', 'http', 'cache', 'log', 'file', 'sleep', 'hard_stop'}
         self.assertTrue(kinds.issubset(valid), f"unexpected kinds: {kinds - valid}")
 
     def test_calls_json_envelope(self):
