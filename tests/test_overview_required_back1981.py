@@ -101,7 +101,7 @@ def test_malformed_private_import_projection_is_attributed(project, owner, kind)
 
 
 @pytest.mark.parametrize('kind', ['empty', 'missing_count', 'boolean_count', 'lost_exceeds',
-                                 'paths', 'cause', 'unsupported'])
+                                 'paths', 'cause', 'unsupported', 'missing_unsupported'])
 def test_malformed_import_metadata_is_attributed(project, kind):
     original = ImportsAdapter.get_metadata
     def malformed(self):
@@ -118,6 +118,8 @@ def test_malformed_import_metadata_is_attributed(project, kind):
             data['files_failed'] = [None]
         elif kind == 'cause':
             data['extraction_diagnostics'] = []
+        elif kind == 'missing_unsupported':
+            data.pop('unsupported_extensions')
         else:
             data['unsupported_extensions'] = []
         return data
