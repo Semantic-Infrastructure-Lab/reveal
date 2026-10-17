@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "corpus": "tests/fixtures/parse_counts",
+  "targets": {
+    "config.py": {
+      "parsers": [
+        "python.ast",
+        "treesitter:python"
+      ],
+      "sha256": "c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1",
+      "bytes": 237
+    },
+    "first.ts": {
+      "parsers": [
+        "treesitter:typescript"
+      ],
+      "sha256": "6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471",
+      "bytes": 120
+    },
+    "second.ts": {
+      "parsers": [
+        "treesitter:typescript"
+      ],
+      "sha256": "6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471",
+      "bytes": 120
+    }
+  },
+  "repeats": 5,
+  "commands": {
+    "overview": {
+      "args": [
+        "overview",
+        "{corpus}",
+        "--no-git",
+        "--format",
+        "json"
+      ],
+      "exit_code": 0,
+      "type": "overview"
+    },
+    "hotspots": {
+      "args": [
+        "hotspots",
+        "{corpus}",
+        "--format",
+        "json"
+      ],
+      "exit_code": 0,
+      "type": "hotspots"
+    },
+    "check": {
+      "args": [
+        "check",
+        "{corpus}",
+        "--format",
+        "json"
+      ],
+      "exit_code": 0,
+      "type": "check"
+    },
+    "surface": {
+      "args": [
+        "surface",
+        "{corpus}",
+        "--type",
+        "env",
+        "--format",
+        "json"
+      ],
+      "exit_code": 0,
+      "type": "surface"
+    }
+  }
+}
