@@ -393,11 +393,8 @@ adapters:
       review: not-applicable
       via: []
     verbose:
-      reason: 'CLI_QUERY_FLAGS declares only ''all''; render_structure(result, format,
-        top, test_index) has no verbose param; confirmed live: ''Unknown query param
-        verbose'' warning (hotspots.py:296)'
-      review: not-applicable
-      via: []
+      via:
+      - structure-param
   imports:
     all:
       reason: ?rank= is unclamped by default (imports.py:207-210); the one real cap
@@ -550,6 +547,7 @@ adapters:
     all:
       via:
       - declared
+      - structure-param
       - routing-special
     respect_gitignore:
       via:
@@ -562,6 +560,7 @@ adapters:
       via: []
     verbose:
       via:
+      - structure-param
       - routing-special
   pack:
     all:
