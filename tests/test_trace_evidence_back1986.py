@@ -206,3 +206,21 @@ def test_renderer_deduplicates_mirrored_errors_without_mutating_json(tree, rende
     assert output.count('exact mirrored error') == 1
     assert output.count('other required error') == 1
     assert report == before
+
+
+@pytest.mark.parametrize('malformed', [True, False])
+def test_noncallable_jsx_projection_validates_only_consumed_calls(tree, monkeypatch, malformed):
+    structures = analysis.collect_structures(str(tree))
+    element = {'category': 'classes', 'name': 'Widget', 'line': 99}
+    if malformed:
+        element['calls'] = None
+    structures[0]['elements'].append(element)
+    structures[0]['jsx_references'] = [{'owner': 'Widget', 'owner_line': 99, 'callee': 'WidgetChild', 'line': 100}]
+    monkeypatch.setattr(analysis, 'collect_structures', lambda path: structures)
+    report = TraceAdapter(str(tree), 'from=main').get_structure()
+    assert report['frames'][0]['resolved']
+    assert any(frame['name'] == 'helper' and frame['resolved'] for frame in report['frames'])
+    errors = report.get('meta', {}).get('errors', [])
+    assert bool(errors) is malformed
+    if malformed:
+        assert errors[0]['code'] == 'E_COMPOSE'
