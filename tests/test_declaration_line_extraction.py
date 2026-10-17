@@ -63,18 +63,20 @@ def test_blank_line_still_uses_context_window(analyzer):
     assert 'first' in result['source'] and 'second' in result['source']
 
 
-@pytest.mark.parametrize('extension,source', [
-    ('dart', 'const value = 0; int first() {\n  return 1;\n}\n'),
-    ('zig', 'const value: u32 = 0; fn first() u32 {\n  return 1;\n}\n'),
+@pytest.mark.parametrize('extension,source,name,ordinal', [
+    ('dart', 'const value = 0; int first() {\n  return 1;\n}\n', 'first', 1),
+    ('zig', 'const value: u32 = 0; fn first() u32 {\n  return 1;\n}\n', 'first', 1),
+    ('dart', 'int first() { return 1; } int second() { return 2; }\n', 'second', 2),
+    ('zig', 'fn first() u32 { return 1; } fn second() u32 { return 2; }\n', 'second', 2),
 ])
-def test_ordinal_source_keeps_exact_node_span(extension, source, tmp_path):
+def test_ordinal_source_keeps_exact_node_span(extension, source, name, ordinal, tmp_path):
     path = tmp_path / f'inline.{extension}'
     path.write_text(source, encoding='utf-8')
     analyzer = get_analyzer(str(path))(str(path))
     assert not analyzer.has_parse_errors()
-    named = _extract_by_name(analyzer, 'first')
-    assert named['source'].startswith(('int first', 'fn first'))
-    assert _extract_ordinal_element(analyzer, 1, 'function') == named
+    named = _extract_by_name(analyzer, name)
+    assert named['source'].startswith((f'int {name}', f'fn {name}'))
+    assert _extract_ordinal_element(analyzer, ordinal, 'function') == named
 
 
 def test_c_type_mentions_are_not_containing_definitions(tmp_path):
@@ -83,3 +85,14 @@ def test_c_type_mentions_are_not_containing_definitions(tmp_path):
     analyzer = get_analyzer(str(path))(str(path))
     assert not analyzer.has_parse_errors()
     assert _extract_element_at_line(analyzer, 3) is None
+
+
+def test_php_anonymous_class_header_remains_extractable(tmp_path):
+    path = tmp_path / 'anonymous.php'
+    path.write_text('<?php\n$object = new class {\n    public function run() {}\n};\n', encoding='utf-8')
+    analyzer = get_analyzer(str(path))(str(path))
+    assert not analyzer.has_parse_errors()
+    assert _extract_element_at_line(analyzer, 2) == {
+        'name': 'element@2', 'line_start': 2, 'line_end': 4,
+        'source': 'class {\n    public function run() {}\n};',
+    }
