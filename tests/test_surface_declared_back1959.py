@@ -63,3 +63,23 @@ def test_surface_presentation_top_is_not_consumed_by_analysis(tmp_path):
         assert 'type' in log.used and 'top' not in log.used
         top = next(spec for spec in SurfaceAdapter.PARAM_SPECS if spec.name == 'top')
         assert top.read(adapter.query_params) == 0 and 'top' in log.used
+
+
+@pytest.mark.parametrize('name', ['depth', 'top'])
+@pytest.mark.parametrize('value', [True, False])
+def test_surface_numeric_controls_reject_boolean_values(tmp_path, name, value):
+    with pytest.raises(ValueError):
+        SurfaceAdapter(str(tmp_path), params={name: value})
+
+
+@pytest.mark.parametrize('name', ['depth', 'top'])
+def test_surface_numeric_controls_reject_bare_presence(tmp_path, name):
+    with pytest.raises(ValueError):
+        SurfaceAdapter(str(tmp_path), name)
+
+
+def test_shared_numeric_helper_boolean_policy_is_unchanged():
+    from reveal.utils.query_parser import nonnegative_display_limit
+
+    assert nonnegative_display_limit(True) == 1
+    assert nonnegative_display_limit(False) == 0
