@@ -45,6 +45,9 @@ def _pattern_names(node: Any, text: Callable) -> set[str]:
     name = node.child_by_field_name('name')
     if name is not None:
         return _pattern_names(name, text)
+    left = node.child_by_field_name('left')
+    if left is not None:
+        return _pattern_names(left, text)
     pattern = node.child_by_field_name('pattern')
     if pattern is not None:
         return _pattern_names(pattern, text)
@@ -77,7 +80,7 @@ class BindingScope:
     def _events(self, name: str) -> list[Any]:
         if name not in self._writes:
             end = _zero_arg(self.root, 'end_position').row + 1
-            self._writes[name] = [event['node'] for event in
+            self._writes[name] = [event for event in
                                   var_flow(self.root, name, 1, end, self.text)
                                   if event['kind'] == 'WRITE']
         return self._writes[name]
@@ -91,10 +94,16 @@ class BindingScope:
         return self._named_declaration(scope, name) or self._import_binding(scope, name)
 
     def _write_binding(self, event: Any, scope: Any, name: str) -> bool:
-        owner = _owner(event, self.language, block=self.language != 'python')
+        if event.get('binding_scope') is not None:
+            return False
+        node = event['node']
+        path = list(_ancestors(node))
+        # `var` hoists to the function; let/const remain in the nearest block.
+        hoisted = self.language != 'python' and any(
+            _zero_arg(part, 'kind') == 'variable_declaration' for part in path)
+        owner = _owner(node, self.language, block=self.language != 'python' and not hoisted)
         if owner is None or _span(owner) != _span(scope):
             return False
-        path = list(_ancestors(event))
         if self.language == 'python':
             # Container/member WRITE events mutate storage, but do not bind a name.
             assignment = next((i for i, part in enumerate(path)
@@ -152,6 +161,11 @@ class BindingScope:
     def has_explicit_binding(self, name: str, at_node: Any = None) -> bool:
         """Whether a lexical declaration shadows e.g. a Python builtin."""
         node = self.scope if at_node is None else at_node
+        start, end = _span(node)
+        for event in self._events(name):
+            binding = event.get('binding_scope')
+            if binding is not None and binding[0] <= start and end <= binding[1]:
+                return True
         for scope in _ancestors(node):
             if _zero_arg(scope, 'kind') not in _FUNCTIONS | _CLASSES | _ROOTS:
                 continue
