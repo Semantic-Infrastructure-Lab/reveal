@@ -407,3 +407,39 @@ def test_inaccessible_resource_is_canonical_analysis_failure(project, monkeypatc
     assert payload['type'] == identity
     assert payload['meta']['errors'][0]['code'] == 'analysis'
     assert 'injected resource access failure' in payload['error']
+
+
+def test_legacy_subcommand_still_publishes_outer_scope(project, monkeypatch):
+    from reveal.cli.commands.deps import create_deps_parser
+    from reveal.cli.routing import subcommand
+    from reveal.utils.exclusions import scope_matcher
+    original = subcommand.dispatch_scope
+    calls = []
+    def scope(target, excludes):
+        calls.append((target, excludes))
+        return original(target, excludes)
+    monkeypatch.setattr(subcommand, 'dispatch_scope', scope)
+    parser = create_deps_parser()
+    def legacy_runner(args):
+        matcher = scope_matcher(project)
+        assert matcher is not None
+        assert matcher('b.py', False)
+        assert not matcher('a.py', False)
+    subcommand.dispatch_subcommand('deps', parser, legacy_runner,
+                                  parser.parse_args(['proj', '--exclude', 'b.py']))
+    assert calls == [('proj', ['b.py'])]
+
+
+def test_declared_subcommand_establishes_scope_once(project, monkeypatch):
+    from reveal.cli.routing import subcommand
+    from reveal.utils import exclusions
+    original = exclusions.dispatch_scope
+    calls = []
+    def scope(target, excludes):
+        calls.append(target)
+        return original(target, excludes)
+    monkeypatch.setattr(subcommand, 'dispatch_scope', scope)
+    monkeypatch.setattr(exclusions, 'dispatch_scope', scope)
+    result = run('architecture', 'proj', '--format', 'json')
+    assert result.returncode == 0
+    assert calls == ['proj']
