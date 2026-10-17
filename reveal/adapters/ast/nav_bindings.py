@@ -4,17 +4,17 @@ from __future__ import annotations
 from typing import Any, Callable, Optional
 
 from ...core import node_children
+from ...core.node_taxonomy import CLASS_NODES, DEF_NODES, LAMBDA_NODES
 from ...core.treesitter_compat import _zero_arg
 from ...rules.base_mixins import kind_nodes
 from .nav_varflow import _declared_name_node, _MEMBER_ACCESS_KINDS, var_flow
 
 
-_FUNCTIONS = frozenset({
-    'function_definition', 'function_declaration', 'method_definition',
-    'method_declaration', 'arrow_function', 'function_expression', 'lambda',
-    'anonymous_function', 'generator_function_declaration', 'generator_function',
+# Anonymous/value-function shapes verified by the Python/JS/PHP fixtures.
+_FUNCTIONS = DEF_NODES | LAMBDA_NODES | frozenset({
+    'function_expression', 'anonymous_function', 'generator_function_declaration', 'generator_function',
 })
-_CLASSES = frozenset({'class_definition', 'class_declaration', 'class'})
+_CLASSES = CLASS_NODES
 _ROOTS = frozenset({'module', 'program'})
 
 
@@ -166,8 +166,11 @@ class BindingScope:
             binding = event.get('binding_scope')
             if binding is not None and binding[0] <= start and end <= binding[1]:
                 return True
+        scopes = _FUNCTIONS | _ROOTS
+        if _zero_arg(self.scope, 'kind') in _CLASSES:
+            scopes = scopes | _CLASSES
         for scope in _ancestors(node):
-            if _zero_arg(scope, 'kind') not in _FUNCTIONS | _CLASSES | _ROOTS:
+            if _zero_arg(scope, 'kind') not in scopes:
                 continue
             if self._explicit(scope, name) or self._declared(scope, name):
                 return True
