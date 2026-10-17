@@ -17,6 +17,7 @@ EXPECTED = json.loads((FIXTURES / 'expected.json').read_text(encoding='utf-8'))
 def _collect(language, source):
     tree = ts_parse(get_parser(language), source)
     root = tree_root(tree)
+    assert not _zero_arg(root, 'has_error'), source
     content = source.encode('utf-8')
     def text(node):
         return content[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8')
@@ -46,7 +47,7 @@ def test_branch_polarity_json_and_repeated_calls(language):
     ('python', 'def f(a):\n if a:\n  try:\n   return 1\n  except ValueError:\n   return 2\n  finally:\n   return 3\n return 4\n'),
     ('javascript', 'function f(a) {if(a) {try {return 1;} catch(e) {return 2;} finally {return 3;}} return 4;}'),
     ('java', 'class E { int f(boolean a) {if(a) {try {return 1;} catch(Exception e) {return 2;} finally {return 3;}} return 4;} }'),
-    ('kotlin', 'fun f(a: Boolean): Int {if(a) {try {return 1} catch(e: Exception) {return 2} finally {return 3}} return 4}'),
+    ('kotlin', 'fun f(a: Boolean): Int {if(a) {try {return 1} catch(e: Exception) {return 2} finally {return 3}}; return 4}'),
     ('php', '<?php function f($a) {if($a) {try {return 1;} catch(Exception $e) {return 2;} finally {return 3;}} return 4;}'),
     ('ruby', 'def f(a)\n if a\n  begin\n   return 1\n  rescue ArgumentError\n   return 2\n  ensure\n   return 3\n  end\n end\n return 4\nend'),
 ])
@@ -75,3 +76,34 @@ def test_ruby_unless_else_and_modifier_control():
     assert [[g['text'] for g in f['gates']] for f in collect_gate_chains(root, 1, 999, text)] == [
         ['unless a'], ['not (unless a)'], ['unless a'],
     ]
+
+
+@pytest.mark.parametrize('language', sorted(EXPECTED))
+def test_sibling_exits_and_positive_branch_controls(language):
+    expected = EXPECTED[language]
+    path = FIXTURES / expected['file']
+    source = path.read_text(encoding='utf-8')
+    tree, root, text = _collect(language, source)
+    findings = collect_gate_chains(root, 1, 999, text)
+    assert findings[0]['gates'] == expected['gates'][0]
+    assert findings[-1]['gates'] == []
+    result = _run_reveal_direct(path, '--exits', '--format', 'json')
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)['findings'] == collect_exits(root, 1, 999, text)
+    assert [f['line'] for f in collect_exits(root, 1, 999, text)] == expected['lines']
+
+
+@pytest.mark.parametrize('language,variable', [('ruby', 'b'), ('php', '$b')])
+def test_shared_elif_taxonomy_outline_and_condition_reads(language, variable):
+    expected = EXPECTED[language]
+    path = FIXTURES / expected['file']
+    outline = _run_reveal_direct(path, '--ifmap', '--format', 'json')
+    assert outline.returncode == 0, outline.stderr
+    assert [(f['keyword'], f['line_start']) for f in json.loads(outline.stdout)['findings']] == [
+        ('IF', expected['gates'][0][0]['line']),
+        ('ELIF', expected['gates'][1][1]['line']),
+        ('ELSE', expected['lines'][2] - 1),
+    ]
+    flow = _run_reveal_direct(path, '--varflow', variable, '--format', 'json')
+    assert flow.returncode == 0, flow.stderr
+    assert {'kind': 'READ/COND', 'line': expected['gates'][1][1]['line']} in json.loads(flow.stdout)['findings']
