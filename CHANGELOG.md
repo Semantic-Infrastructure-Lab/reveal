@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `git://` on a repository libgit2 refuses to open (e.g. a `safe.directory` ownership refusal) now fails with that reason from `get_metadata` too, instead of returning metadata with no path that callers read as "not a repository" (BACK-1845).
 
 ### Fixed
+- MySQL health consumes the performance producer's measured scan, thread-cache and disk-temp ratios instead of reading missing fields as zero. Configured threshold verdicts and full summaries now reflect those measurements; missing producer fields no longer become synthetic passes. Corrected the guide's metric projection and threshold example (BACK-1963).
 - `imports://` rejects an undeclared `?rank=` value with the list of accepted values instead of silently returning the unranked graph, even when another query mode takes priority (BACK-1908).
 - Indexed function extraction orders same-line definitions of different kinds by source position, so the numbering of ambiguous same-line elements no longer depends on node-type iteration order (BACK-1946).
 - GDScript `extends "res://..."` keeps the quoted resource path as the class base instead of dropping it (BACK-1948).

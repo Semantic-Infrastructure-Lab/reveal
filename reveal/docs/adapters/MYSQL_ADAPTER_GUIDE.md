@@ -342,7 +342,7 @@ Query Performance:
   Threads Running: 3
 
 DBA Tuning Ratios:
-  Table Scan Ratio: 12.5% (✅ PASS <25%)
+  Table Scan Ratio: 12.5% (⚠️ WARN; pass <10%, warning <25%)
     - Full table scans / queries ratio
     - Lower is better (use indexes instead of scans)
 
@@ -601,10 +601,10 @@ Health Check Results
 
 Status: ⚠️ WARNING
 Exit Code: 1
-Summary: 7 total, 5 passed, 2 warnings, 0 failures
+Summary: 7 total, 4 passed, 3 warnings, 0 failures
 
 Checks:
-  ✅ PASS - Table Scan Ratio: 12.5% (threshold: <10%)
+  ⚠️ WARN - Table Scan Ratio: 12.5% (threshold: <10%)
      Severity: high
 
   ✅ PASS - Thread Cache Miss Rate: 3.2% (threshold: <10%)
@@ -745,21 +745,21 @@ The `/performance` element includes industry-standard DBA tuning ratios:
 
 ```bash
 reveal mysql://localhost/performance --format=json | \
-  jq '.tuning_ratios'
+  jq '{table_scan_ratio: .full_table_scans.select_scan_ratio, thread_cache_miss_rate: .thread_cache_efficiency.miss_rate, temp_tables_to_disk_ratio: .temp_tables.disk_ratio}'
 ```
 
 **Returns**:
 ```json
 {
-  "table_scan_ratio": "12.5%",
-  "thread_cache_miss_rate": "3.2%",
-  "temp_tables_to_disk_ratio": "18.7%"
+  "table_scan_ratio": "12.50%",
+  "thread_cache_miss_rate": "3.20%",
+  "temp_tables_to_disk_ratio": "18.70%"
 }
 ```
 
 #### 1. Table Scan Ratio
 
-**Formula**: `(Handler_read_rnd_next + Handler_read_rnd) / (Handler_read_rnd_next + Handler_read_rnd + Handler_read_first + Handler_read_key + Handler_read_next)`
+**Formula**: `Select_scan / (Select_scan + Select_range) * 100` (zero when both counters are zero)
 
 **Interpretation**:
 - **<10%**: ✅ Excellent - Queries are using indexes
