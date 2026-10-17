@@ -57,8 +57,9 @@ is a claim we have not yet checked, **not** a claim it is broken.
 re-runnable row reproduces its published figure. A regression from mid-August to
 2026-09-23 (BACK-1460: a file with any tree-sitter parse error lost all its imports)
 had pulled C, C++, Zig, Python, Go, Kotlin and TSX below them (C/curl 47.04%, C++/Godot
-`core/` 55.79%); it is fixed. Sixteen corpus/oracle pairs can no longer be re-run
-(BACK-1461). Details are under
+`core/` 55.79%); it is fixed. That audit identified sixteen unavailable
+corpus/oracle pairs (BACK-1461); subsequent restorations and their distinct
+measurement populations are recorded under
 [Import/Dependency Recall → Results](#importdependency-recall).
 
 **How to read this table — three caveats that the ✅ marks do not carry:**
@@ -81,8 +82,9 @@ had pulled C, C++, Zig, Python, Go, Kotlin and TSX below them (C/curl 47.04%, C+
    recall (`calls://`) is now measured for all 18 (Python, TypeScript, Go,
    Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++, Scala, JS/TSX, Zig, C, Lua,
    GDScript, Dart — BACK-730, closed).
-   `surface`/`contracts` recall is now measured too (10 languages/
-   categories, BACK-719/791/815, see [Scope](#scope) below).
+   `surface`/`contracts` also has historical measurements (10 languages/
+   categories, BACK-719/791/815). Several second-corpus inputs are currently
+   unavailable; see the historical reproducibility qualification under [Scope](#scope).
    `patches://`/testability's call-site recall now has its first
    ground-truth measurements too — Python (BACK-972): all 10 real
    `unittest.mock`/pytest-`monkeypatch` call shapes measured 100% recall
@@ -1400,7 +1402,9 @@ actually closes the gap without introducing false positives.
 | C++ (overfit guard, BACK-709) | assimp (Open Asset Import Library — plugin/format-importer architecture, `code/AssetLib/<Format>/`, with relative parent-directory quoted includes, vs. Godot's flat engine-core monolith and root-relative `-iquote` convention) | Same per-directive isolated `g++ -H` oracle, unmodified | Full census, 250 targets, 707 edges | **100%** (no fix needed) | 50 (documented, oracle-scope) | None — still `.h`-dominant (728 `.h` vs 23 `.hpp`), re-exercising the BACK-675 extractor-family-scoping fix under a different directory shape. All 50 FPs spot-checked genuine: real `#include` edges from `test/`/`tools/`/`contrib/` files the oracle's importer scope deliberately excluded from ground truth |
 
 **Re-measured 2026-09-23 at `881ebd78` (BACK-1458) and 2026-09-24 at `8200a93b`
-(BACK-1460 fixed): all re-runnable rows reproduce; 16 cannot be re-run.** From 2026-08-28 (BACK-1214 made `depends://` report
+(BACK-1460 fixed): all then-re-runnable rows reproduced; 16 pairs were unavailable
+in that audit.** Subsequent restorations below are separate measurements unless
+their original population is verified. From 2026-08-28 (BACK-1214 made `depends://` report
 importer paths relative to its scan root) every import-recall harness silently measured
 0%, so these figures went unchecked for four weeks. The harnesses now map paths back and
 fail loudly when they measure nothing. Each loop was re-run at its published parameters;
@@ -1442,15 +1446,21 @@ every sample matched the published target and edge counts.
   external type whose simple name matches an in-tree class in another package (for
   example `org.apache.lucene.geo.GeoUtils` claimed as
   `org/elasticsearch/common/geo/GeoUtils.java`, and log4j's `Plugin` in 13 files).
-- **Cannot be re-run (BACK-1461):**
-  - Corpus clone not preserved: Go/client_golang, Ruby/solidus,
+- **Historical import figures that cannot currently be re-run (BACK-1461):**
+  - Original corpus clone not preserved: Go/client_golang, Ruby/solidus,
     Kotlin/kotlinx.coroutines, Scala/cats-effect, C#/Newtonsoft.Json, PHP/osCommerce,
     Swift/swift-collections.
-  - Oracle input not committed: TypeScript/VS Code (main + barrel), Java/Elasticsearch,
+  - Original oracle input not committed: TypeScript/VS Code (main + barrel), Java/Elasticsearch,
     C#/Jellyfin.
-  - No diff harness: Ruby/Discourse, Swift/Kickstarter.
+  - No independent import-edge diff harness for the published population:
+    Ruby/Discourse, Swift/Kickstarter. Swift's retained graph-count and SwiftPM
+    target-key probes do not supply an import-edge recall comparison.
 
   These figures stand as measured when published, but are not currently reproducible.
+  The restored Go/client_golang pin supplies a **new** native-toolchain baseline
+  in [Bounded reliability corpus loops](#bounded-reliability-corpus-loops-2026-10-14);
+  it does not restore the original snapshot or its measurement. The same distinction
+  applies to newer VS Code and Elasticsearch gate populations.
 
 **What this program found.** Each language got a baseline oracle loop, and
 every language has since had a second, deliberately differently-shaped corpus
@@ -2093,15 +2103,22 @@ without fetching or replacing them.
 
 What you can reproduce today:
 
-- **The corpora.** The available pinned real-world repos are listed in
+- **The manifest-listed corpora.** The available pinned real-world repos are listed in
   `tests/corpus/manifest.yaml`; `python scripts/fetch_corpus.py` materializes them
   (`--list` shows the manifest and cache state).
+  This does not restore every historical source or oracle population: see the
+  historical import exclusions under [Results](#results) and the historical
+  surface/contracts qualification under [Scope](#scope).
 - **The method.** Each row of the tables above names the oracle mechanism (a from-scratch
   regex/AST scan, a build-system manifest, a real preprocessor or toolchain) and the sample
   design, so a result can be re-derived and challenged line by line.
 - **The reveal side.** The measured commands (`depends://`, `imports://`, `--sideeffects`,
   `--boundary`, `calls://`) are ordinary reveal invocations; run them on the pinned corpus
   and compare against your own oracle.
+
+Available source and a documented method alone do not establish reproduction of
+a published figure; the original population, oracle inputs and comparison must
+also be available, or a new measurement must be identified separately.
 
 For provenance, the harness directories (maintainer-internal, unpublished) are:
 
@@ -2157,12 +2174,10 @@ clean or fixed-and-reverified, save a handful of documented,
 upstream-grammar-level residuals (Kotlin's BACK-738, Swift's BACK-742, C++'s
 BACK-745, C's BACK-756, and Dart's BACK-768), none fixable in reveal's Python
 extraction layer. This closes the full calls:// recall sweep BACK-730 opened.
-It does not yet cover recall for `surface` or `contracts` (BACK-719) — see
-`ROADMAP.md` for the forward plan.
+The historical surface/contracts extension is described below.
 
-**Update (calm-thaw-0724): `surface`/`contracts` recall is now a fully
-closed, second-corpus-verified program — the same confidence tier as
-import/side-effect/call-graph recall above.** BACK-719 closed `surface`'s
+**Historical update (calm-thaw-0724): `surface`/`contracts` recall completed
+its second-corpus verification program.** BACK-719 closed `surface`'s
 `cli`, `http`, `mcp`, and `contracts` (interfaces + structural implementers)
 against a first real corpus per language/category; BACK-791 then extended
 breadth to 9 more languages (Go, Rust, C++, Java, C#, PHP, Swift, Kotlin,
@@ -2197,3 +2212,15 @@ BACK-768). `surface`/`contracts` recall is no longer the newest, least-
 verified signal in this document — see `tt show BACK-815` for the full
 ten-slice rollup and `internal-docs/planning/dogfood-findings/http-routes-recall-oracle/README.md`'s
 "Second corpus (BACK-815)" section for the closing slice's detail.
+
+**Historical reproducibility qualification (2026-10-17, BACK-1954/BACK-1955):**
+the documented BACK-815 second-corpus source trees for C++/RocksDB,
+C#/command-line-api, Go/client_golang, Java/spring-boot-admin, Kotlin/ktor,
+PHP/composer, Ruby/rubygems, Rust/axum and Swift/swift-package-manager,
+plus Swift's Vapor api-template HTTP pilot, are currently absent from their
+documented locations and are not registered as restorable manifest inputs.
+Their recorded results and harnesses survive, but these historical measurements
+cannot currently be re-run. A new source pin requires a new measurement; it
+cannot inherit the historical recall or precision. This qualification is
+separate from the pinned [bounded mixed-framework matrix](#bounded-mixed-framework-source-matrix-2026-10-14)
+and does not change that matrix's population or results.
