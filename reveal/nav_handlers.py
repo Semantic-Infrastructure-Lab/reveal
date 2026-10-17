@@ -221,10 +221,12 @@ def _nav_exits(ctx: _NavCtx) -> None:
 def _nav_deps(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import collect_deps, render_deps  # noqa: I006
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
-    deps = collect_deps(ctx.func_node, from_line, to_line, ctx.get_text)
+    deps = collect_deps(ctx.func_node, from_line, to_line, ctx.get_text,
+                        language=getattr(ctx.analyzer, 'language', None))
     if ctx.as_json:
         findings = [
-            {'kind': 'dep', 'var': d['var'], 'line': d['first_read_line'],
+            {'kind': 'builtin' if d.get('classification') == 'builtin' else 'dep',
+             'var': d['var'], 'line': d['first_read_line'],
              'first_write_line': d['first_write_line']}
             for d in deps
         ]
@@ -380,6 +382,8 @@ def _nav_boundary(ctx: _NavCtx) -> None:
             [{'kind': 'input', 'var': d['var'], 'line': d['first_read_line'],
               'first_write_line': d['first_write_line']}
              for d in boundary['inputs']]
+            + [{'kind': 'builtin', 'var': d['var'], 'line': d['first_read_line']}
+               for d in boundary.get('builtins', [])]
             + [{'kind': 'superglobal', 'var': d['var'], 'line': d['first_read_line']}
                for d in boundary['superglobals']]
             + [{'kind': e['kind'], 'line': e['line'], 'callee': e['callee'],

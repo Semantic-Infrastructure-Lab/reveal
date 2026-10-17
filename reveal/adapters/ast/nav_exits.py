@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any, Callable, Collection, Dict, List, Optional
 
 from .nav_calls import _extract_callee
+from .nav_bindings import BindingScope
+from ...conventions import FAMILY_BY_LANGUAGE, conventions_for
 from .nav_varflow import all_var_flow
 from .node_taxonomy import (
     CATCH_NODES, ELIF_NODES, ELSE_NODES, EXCEPT_NODES, GATE_NODES, IF_NODES,
@@ -296,6 +298,7 @@ def collect_deps(
     from_line: int,
     to_line: int,
     get_text: Callable,
+    language: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Identify variables that flow INTO a line range (potential function parameters).
 
@@ -303,6 +306,8 @@ def collect_deps(
     """
     all_events = all_var_flow(scope_node, from_line, to_line, get_text)
     deps: List[Dict[str, Any]] = []
+    builtins = conventions_for(FAMILY_BY_LANGUAGE.get(language, language or '')).builtins
+    bindings = BindingScope(scope_node, get_text, language) if builtins else None
     for var_name, events in all_events.items():
         in_range = [e for e in events if from_line <= e['line'] <= to_line]
         if not in_range:
@@ -318,11 +323,15 @@ def collect_deps(
         first_in_range = visible[0]
         if first_in_range['kind'].startswith('READ'):
             first_write = next((e for e in visible if e['kind'] == 'WRITE'), None)
-            deps.append({
+            dep = {
                 'var': var_name,
                 'first_read_line': first_in_range['line'],
                 'first_write_line': first_write['line'] if first_write else None,
-            })
+            }
+            if var_name in builtins and bindings is not None and not bindings.has_explicit_binding(
+                    var_name, first_in_range['node']):
+                dep['classification'] = 'builtin'
+            deps.append(dep)
     deps.sort(key=lambda d: d['first_read_line'])
     return deps
 
@@ -374,8 +383,9 @@ def render_deps(
             if d['first_write_line'] is not None
             else '  (never written in range)'
         )
+        label = 'BUILTIN' if d.get('classification') == 'builtin' else 'PARAM'
         lines.append(
-            f'PARAM  {d["var"]:<30}  first read L{d["first_read_line"]}{write_info}'
+            f'{label}  {d["var"]:<30}  first read L{d["first_read_line"]}{write_info}'
         )
     return '\n'.join(lines)
 

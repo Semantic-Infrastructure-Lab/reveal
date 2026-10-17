@@ -30,18 +30,21 @@ def collect_boundary(
 ) -> Dict[str, Any]:
     """Collect INPUTS, ENVIRONMENT, and EFFECTS for a boundary report.
 
-    Returns a dict with three keys:
-        inputs       -- deps that are not PHP superglobals
+    Returns a dict with four keys:
+        inputs       -- deps that are neither builtins nor PHP superglobals
+        builtins     -- known unshadowed language builtins
         superglobals -- deps that are PHP superglobals ($_GET, $_SESSION, etc.)
         effects      -- classified side-effect call sites
     """
-    deps = collect_deps(scope_node, from_line, to_line, get_text)
-    inputs = [d for d in deps if not _is_superglobal(d['var'])]
+    deps = collect_deps(scope_node, from_line, to_line, get_text, language=language)
+    builtins = [d for d in deps if d.get('classification') == 'builtin']
+    inputs = [d for d in deps if not _is_superglobal(d['var'])
+              and d.get('classification') != 'builtin']
     superglobals = [d for d in deps if _is_superglobal(d['var'])]
     effects = collect_effects(scope_node, from_line, to_line, get_text, language,
                               implicit_nodes=implicit_nodes)
     classified = [e for e in effects if e['kind'] is not None]
-    return {'inputs': inputs, 'superglobals': superglobals, 'effects': classified}
+    return {'inputs': inputs, 'superglobals': superglobals, 'builtins': builtins, 'effects': classified}
 
 
 def _render_boundary_header(
@@ -66,6 +69,13 @@ def _render_boundary_header(
         sections.append('\n'.join(lines))
     else:
         sections.append(f'INPUTS (undefined reads):\n  none in L{from_line}–L{to_line}')
+
+    builtins = result.get('builtins', [])
+    if builtins:
+        lines = ['BUILTINS:']
+        for d in builtins:
+            lines.append(f'  {d["var"]:<30}  first read L{d["first_read_line"]}')
+        sections.append('\n'.join(lines))
 
     superglobals = result['superglobals']
     if superglobals:
@@ -116,15 +126,17 @@ def collect_boundary_transitive(
     BACK-545 added for --sideeffects). INPUTS/ENVIRONMENT stay intra-procedural
     since they describe the entry function's own signature, not its callees.
     """
-    deps = collect_deps(scope_node, from_line, to_line, get_text)
-    inputs = [d for d in deps if not _is_superglobal(d['var'])]
+    deps = collect_deps(scope_node, from_line, to_line, get_text, language=language)
+    builtins = [d for d in deps if d.get('classification') == 'builtin']
+    inputs = [d for d in deps if not _is_superglobal(d['var'])
+              and d.get('classification') != 'builtin']
     superglobals = [d for d in deps if _is_superglobal(d['var'])]
     effects = collect_effects_transitive(
         path, root_name, scope_node, from_line, to_line, get_text,
         language=language, depth=depth,
     )
     classified = [e for e in effects if e['kind'] is not None]
-    result: Dict[str, Any] = {'inputs': inputs, 'superglobals': superglobals, 'effects': classified}
+    result: Dict[str, Any] = {'inputs': inputs, 'superglobals': superglobals, 'builtins': builtins, 'effects': classified}
     if effects.skipped:
         result['skipped'] = [list(item) for item in effects.skipped]
     return result
