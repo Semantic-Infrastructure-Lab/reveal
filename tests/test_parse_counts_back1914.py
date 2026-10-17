@@ -165,3 +165,74 @@ def test_manifest_hashes_and_variants_must_match_real_text(ledger):
     targets['config.py']['sha256'] = '0' * 64
     with pytest.raises(ValueError, match='sha256'):
         _verify_corpus(root, targets)
+
+
+@pytest.mark.parametrize('kind', ['overview', 'hotspots'])
+@pytest.mark.parametrize('failure', ['parse_degraded', 'check_rules_failed', 'analysis_failed', 'truncated'])
+def test_partial_command_results_cannot_qualify(kind, failure):
+    result = {'type': kind, 'summary': {'total_files': 3, 'excluded': 0},
+              'stats': {'summary': {'total_files': 3, 'excluded': 0}},
+              'scope': {'total_code_files': 3},
+              'meta': {'warnings': [{'type': failure, 'message': 'partial analysis'}]}}
+    with pytest.raises(ValueError, match='warning'):
+        validate_command_output(0, json.dumps(result), {'type': kind, 'exit_code': 0}, 3)
+
+
+def test_nested_child_errors_and_unexpected_rule_exclusions_reject():
+    result = {'type': 'overview', 'stats': {'summary': {'total_files': 3},
+              'meta': {'errors': [{'message': 'child scan failed'}]}}, 'meta': {}}
+    with pytest.raises(ValueError, match='errors'):
+        validate_command_output(0, json.dumps(result), {'type': 'overview', 'exit_code': 0}, 3)
+    result = {'type': 'check', 'summary': {'files_checked': 3, 'total_issues': 0,
+              'files_errored': 0, 'files_degraded': 0, 'exit_code': 0,
+              'scan_disclosures': ['rule unavailable']}}
+    with pytest.raises(ValueError, match='scan_disclosures'):
+        validate_command_output(0, json.dumps(result), {'type': 'check', 'exit_code': 0}, 3)
+
+
+def test_unknown_non_target_domain_is_not_silently_excluded(ledger):
+    audit, root, _ = ledger
+    added = deepcopy(audit['events'])
+    for event in added:
+        event.update(request_id=2, scope='external', domain='mystery',
+                     filename=(root.parent / 'outside.py').as_posix())
+    audit['events'].extend(added)
+    with pytest.raises(ValueError, match='domain'):
+        snapshot(ledger)
+
+
+def test_subprocess_failure_preserves_stderr(ledger, monkeypatch):
+    from scripts import check_parse_counts as gate
+    _, root, targets = ledger
+    run = root / 'run'
+    run.mkdir()
+
+    class FailedProcess:
+        returncode = 1
+        pid = os.getpid()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def communicate(self, timeout):
+            return '{}', 'original failure'
+
+    monkeypatch.setattr(gate.subprocess, 'Popen', lambda *args, **kwargs: FailedProcess())
+    with pytest.raises(ValueError, match='original failure'):
+        gate.run_once({'args': ['check', '{corpus}'], 'type': 'check', 'exit_code': 0},
+                      root, targets, run)
+
+
+def test_capture_environment_overrides_user_scan_controls(tmp_path, monkeypatch):
+    from scripts.check_parse_counts import _environment
+    monkeypatch.setenv('REVEAL_IGNORE', '*.py')
+    monkeypatch.setenv('REVEAL_MAX_WORKERS', '8')
+    monkeypatch.setenv('REVEAL_DISK_CACHE', '1')
+    environment = _environment(tmp_path)
+    assert environment['REVEAL_MAX_WORKERS'] == '1'
+    assert environment['REVEAL_DISK_CACHE'] == '0'
+    assert environment['XDG_CONFIG_HOME'] == str(tmp_path)
+    assert 'REVEAL_IGNORE' not in environment
