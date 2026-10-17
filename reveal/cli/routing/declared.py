@@ -119,6 +119,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
 def _declared_answer(adapter_class, name: str, path: str, source: Any, transport: str, args):
     from ...adapters.factory import _canonical_init
     from ...utils.query_binding import bind_declared_params
+    from ...utils.path_utils import to_posix
     from ...utils.results import FailureCause
     from .uri import _answer, _call_adapter, _renderer_class_of, _structure_answer
     try:
@@ -126,7 +127,7 @@ def _declared_answer(adapter_class, name: str, path: str, source: Any, transport
         # stat distinguishes absence from inaccessible required work.
         Path(path).stat()
     except (FileNotFoundError, NotADirectoryError):
-        return _invalid_answer(adapter_class, name, path, f'Path not found: {path}', args)
+        return _invalid_answer(adapter_class, name, path, f'Path not found: {to_posix(path)}', args)
     except ValueError as exc:
         return _invalid_answer(adapter_class, name, path, str(exc), args)
     except OSError as exc:
@@ -192,7 +193,35 @@ def emit_declared_result(result, args, scheme, render, facts, **render_kwargs) -
     except Exception as exc:  # boundary-ok: broad-except -- selected output boundary contains renderer/plugin failures, discloses required output failure and exits 3
         print(f'Error: Requested output failed: {exc}', file=sys.stderr)
         code = 3
-    complete(args)
+    if code != 2:
+        complete(args)
     if code:
         sys.exit(code)
 
+
+
+def qualify_declared_answer(result, adapter_class, path: str):
+    """Keep required answers canonical before projections; malformed success is failure."""
+    from ...reveal_types import CONTRACT_VERSION, RevealResult
+    from ...utils.path_utils import to_posix
+    from ...utils.results import ResultBuilder
+    required = RevealResult.__required_keys__
+    valid = (isinstance(result, dict)
+             and all(isinstance(result.get(key), str) and result[key] for key in required)
+             and result.get('type') == adapter_class.RESULT_TYPE
+             and isinstance(result.get('meta', {}), dict)
+             and isinstance(result.get('scope', {}), dict))
+    if valid:
+        return result
+    original = result if isinstance(result, dict) else {}
+    error = original.get('error') or 'Adapter returned an invalid required answer envelope'
+    fields = required | {'meta', 'scope'}
+    data = {key: value for key, value in original.items() if key not in fields}
+    data['error'] = error
+    meta = original.get('meta')
+    if not isinstance(meta, dict):
+        meta = {'errors': [{'code': 'invalid_adapter_answer', 'message': error}], 'warnings': []}
+    return ResultBuilder.create(
+        adapter_class.RESULT_TYPE, to_posix(path), contract_version=CONTRACT_VERSION,
+        source_type='directory' if Path(path).is_dir() else 'file',
+        meta=meta, scope=original.get('scope'), data=data)

@@ -341,7 +341,8 @@ Adapters MAY include additional fields beyond the contract. These fields:
 
 A result says what happened through two top-level fields and one kind of `meta.warnings`
 entry. `reveal.utils.results.outcome_of` is the one definition, and the URI router turns it
-into the exit code for every adapter, in text and JSON alike (BACK-1059). The subcommands
+into the legacy exit code for adapters, in text and JSON alike (BACK-1059).
+Declared operations use the explicit policy below. The subcommands
 (`reveal overview`, `reveal hotspots`, ...) print their results through the same handling,
 `cli/routing/subcommand.emit_subcommand_result`, so a failed or cut answer reads the same in
 both forms (BACK-1544). A subcommand's findings exit (`hotspots`/`deps` exit 1 on findings,
@@ -408,6 +409,74 @@ both forms (BACK-1544). A subcommand's findings exit (`hotspots`/`deps` exit 1 o
   adapter with its cap knob at 1 and uncapped, and fails on any list that got shorter without
   a `truncated` entry, on a capped list that isn't the uncapped list's first N, and on a
   disclosed `total` that isn't the uncapped length (or, when `exact` is false, is above it).
+
+---
+
+## Declared execution policy
+
+Direct `reveal surface` and `surface://` requests share declared parameter binding,
+canonical `surface_scan` identity and one answer/emission path. Their execution policy
+uses explicit completeness and failure causes from the analysis owner, independently
+of `outcome_of()`'s legacy rendering categories:
+
+| Code | Meaning |
+|---|---|
+| `0` | Requested work completed without an enabled findings gate matching. |
+| `1` | Completed analysis matched a supported adverse-findings gate. |
+| `2` | Invalid invocation, resource or parameter. |
+| `3` | Required analysis or requested output failed or remained incomplete. |
+
+Surface is an inventory and declares only `--fail-on none`, also its default; it
+rejects `findings`. `none` never suppresses incomplete analysis or output failure.
+`unparsed_files` or `recovered_files` make its scan incomplete; taxonomy limitations,
+explicit scope exclusions and harmless warnings do not automatically do so. These
+facts are evaluated before field projections or presentation cuts. A returned or
+raised operational error retains the resolved `surface_scan` identity and exits 3;
+an invalid resource/parameter produces a structured error when JSON is requested.
+Unknown CLI options rejected by argparse still use stderr usage and empty stdout.
+
+Human-primary `--also-json PATH` uses the same result as primary JSON. A requested
+artifact write failure is disclosed on stderr and in `meta.output_errors`, while the
+primary result remains available and the exit is 3. Primary `--format json` retains
+its existing `--also-json` no-op. Closing stdout alone keeps the conventional exit 0;
+it cannot erase an independent analysis or artifact failure.
+
+The reusable owner API is `ExecutionFacts`, `AnalysisCompleteness`, `FailureCause`,
+`merge_execution_facts()` and `execution_exit_code()` in `utils.results`. Producers
+supply completeness and adverse findings explicitly; aggregate facts before mapping
+codes. Do not infer them from numeric child exits, arbitrary warnings or nonempty
+lists. `NOT_STARTED` records rejected/unattempted work without asserting successful
+analysis. Legacy `outcome_of()` behavior remains unchanged.
+
+Adoption is explicit in `Invocation`'s command catalog. Other commands, adapter-specific
+checks, file views, stdin and mixed URI batches retain their existing policies.
+`--fail-on` is rejected on unqualified operations/transports. This section does not
+claim those paths have adopted the declared policy.
+
+### Declared parameter bindings
+
+`ParamSpec` owns defaults, converters, bounds, choices, requiredness, zero semantics,
+role and optional `CliBinding` metadata. Its historical fixed `cli_flags` mappings keep
+their original meaning. A separate `ResourceSpec` owns the positional resource and its
+transport defaults. Schema export and generated arguments use those declarations.
+Global presentation, exclusions, gitignore and flag accounting retain their existing
+owners.
+
+`utils.query_binding.bind_declared_params()` accepts original typed values or a raw
+URI query. It validates without marking application; `ParamSpec.read()` marks actual
+use. Normalized reads do not rerun converters. Replacing a value invalidates its
+normalization; mutating a normalized container requires rebinding. Optional percent
+scalar and comma-percent list codecs decode exactly once, splitting lists before
+item decoding and preserving plus signs. Comma-percent's empty query represents an
+empty list; empty list members are rejected. Existing raw queries, exclude and filter
+codecs are not globally reinterpreted.
+
+Surface resource binding preserves an existing literal path first. If it does not
+exist, a once-decoded existing path can resolve URI-escaped characters. If both paths
+exist, the literal path wins. The resolved path and raw query remain separate through
+validation, exclusions and construction, so a decoded question mark never becomes a
+new query delimiter. Invalid encoded UTF-8/NUL rejects the resource; permission/I/O
+failure is operational failure, never permission to select another path.
 
 ---
 

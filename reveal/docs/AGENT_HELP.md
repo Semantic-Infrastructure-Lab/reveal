@@ -1673,6 +1673,12 @@ Files tree-sitter parsed only by guessing across an ERROR region are named too (
 
 **`--source-only` (v0.101.0+):** Prunes test directories (`tests/`, `test/`, `spec/`, `__tests__/`, any dir starting with `test` or `spec`) and test files (`test_*.py`, `*_test.py`, `conftest.py`, `*.test.ts`, `*.spec.ts`, etc.) before scanning. Useful for security/architecture reviews where test scaffolding adds noise. `_meta.known_limits` in JSON output records the exclusion.
 
+Both surface spellings emit `type: surface_scan` and support human-primary
+`--also-json`. Direct requests follow the
+[declared execution policy](development/OUTPUT_CONTRACT.md#declared-execution-policy);
+`--fail-on none` does not suppress unparsed/recovered input. See the
+[surface guide](adapters/SURFACE_ADAPTER_GUIDE.md#execution-and-compatibility) for migration details.
+
 **Use case:** Pre-deploy boundary audit, security review, or "what does this service expose / depend on?" When a config value, env var, or external endpoint changes, `reveal surface` tells you which code paths participate.
 
 **Interpreting absence of evidence:** Detection is taxonomy-based — only libraries in the built-in taxonomy (requests, boto3, flask, etc.) are recognised. Project-specific HTTP clients, custom I/O wrappers, or in-house SDK abstractions are not detected and will not appear. A zero count means "nothing in the known taxonomy found" — not "no external effects" — and a zero for a category listed under "Not implemented for scanned languages" means nothing was looked for at all.
@@ -2900,7 +2906,7 @@ reveal file.py --format text         # an explicit --format always wins
 
 `REVEAL_FORMAT` sets the default `--format` for every entry point — files, `uri://` adapters and subcommands (`reveal hotspots`, `reveal check`, …). An explicit `--format` on the command line overrides it.
 
-**Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `ast://`, `env://`, `markdown://` and `reveal check`; `typed` for a single file and `reveal check`. Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note). `--also-json PATH` works with `scheme://` URIs and `reveal check`, and exits 2 elsewhere; use `--format json` there.
+**Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `ast://`, `env://`, `markdown://` and `reveal check`; `typed` for a single file and `reveal check`. Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note). `--also-json PATH` works with `scheme://` URIs, `reveal check` and `reveal surface`, and exits 2 elsewhere; use `--format json` there.
 
 **Token budget flags (URI adapters — limits list fields like items/results/checks/commits):**
 ```bash
@@ -3637,7 +3643,8 @@ reveal deep_dir/
 | `ssl://… --check`, `domain://… --check` | pass | warning (e.g. cert expiring <30 days) | critical/failure (expired, <7 days, DNS/HTTP failure) | — |
 | nginx `--validate-nginx-acme` / `--check-acl` / `--cpanel-certs`, `cpanel://USER/full-audit`, `nginx:// --audit` | pass | — | failure / gaps found | — |
 | `reveal deps`, `reveal hotspots` | clean | cycles/unused imports, or hotspots, found | — | — |
-| Any command given a path that doesn't exist | — | `Error: … not found` | — | — |
+| Direct `reveal surface` / `surface://` | completed inventory | — | invalid resource/parameter or unsupported gate | required analysis/output incomplete or failed |
+| Other commands given a path that doesn't exist | — | `Error: … not found` | — | — |
 | An argument the run would ignore: a path given to a mode that reads none (`reveal a.py --rules`, `--adapters`, `--languages`, `--list-schemas`, `--explain`, `--stdin`, ...), a second path given to a flag that reads no element (`reveal a.py b.py --check`, `reveal a.html b.html --metadata`, `--links`, `--typed`), an element beside `--section` (`reveal a.md b.md --section X`), `--stdin` beside `--section`, or `--stdin` beside `--decorator-stats`/`--explain-file`/`--capabilities`/`--show-ast` (those read one path; loop over the paths instead) | — | — | usage error: stderr names the flag and the ignored argument, nothing runs | — |
 
 `reveal review --format json` also carries the verdict in the payload (`overall_status` + `exit_code`), so a gate can read either the exit code or the JSON.

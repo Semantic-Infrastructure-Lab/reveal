@@ -73,6 +73,7 @@ Not covered yet (BACK-1513 follow-ups): caps with no knob (a hard-coded ``[:20]`
 invariant 7 can't vary) and consumed flags (BACK-1514).
 """
 
+import copy
 import json
 import os
 import shutil
@@ -871,7 +872,16 @@ def test_batch_answers_like_the_uri(harness, scheme):
         expected = _expected_batch_status(code, payload)
         assert entry['status'] == expected, (
             f"{uri}: --batch says {entry['status']!r}, the URI form exits {code} ({expected!r})")
-        assert entry.get('data') == payload, f'{uri}: --batch answered differently from the URI form'
+        if scheme == 'surface' and uri == _missing_uri(scheme):
+            # Direct D6 adoption leaves mixed batches on their explicit legacy contract.
+            assert payload['type'] == 'surface_scan'
+            assert payload['meta']['errors'][0]['code'] == 'invalid_request'
+            legacy = copy.deepcopy(payload)
+            legacy['type'] = 'surface'
+            legacy['meta']['errors'][0]['code'] = 'adapter_error'
+            assert entry.get('data') == legacy
+        else:
+            assert entry.get('data') == payload, f'{uri}: --batch answered differently from the URI form'
         assert batch_code == (2 if expected == 'error' else 0), (
             f'{uri}: --batch exited {batch_code} for a {expected!r} entry')
 

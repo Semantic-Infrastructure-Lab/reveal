@@ -1,9 +1,9 @@
 ---
-title: surface:// Adapter Guide
+title: Surface Adapter Guide
 category: guide
 ---
 
-# surface:// Adapter Guide
+# Surface Adapter Guide
 
 `surface://` maps every external boundary a codebase touches: CLI arguments,
 HTTP routes, MCP tool registrations, environment variable reads, network/db/sdk
@@ -93,10 +93,33 @@ reveal 'surface://.?type=env' --format json
 | `source_only` | `true`, `false` (default) | Exclude test files and directories (`test_*.py`, `*_test.py`, `conftest.py`, `tests/`, `__tests__/`, `*.test.ts`, `*.spec.ts`, etc.). |
 | `by` | `dir` | Add a per-directory rollup (see below). |
 | `depth` | integer >= 0 (default `0`) | With `by=dir`: keep only the first N path segments of each directory, so `depth=2` folds `app/api/util` into `app/api`. `0` keeps the full directory. |
+| `top` | nonnegative integer (default: all) | Text entries per category or directories; `0` shows none. JSON stays complete. |
 
-The CLI subcommand form additionally supports `--top N` to cap entries shown
-per category in text output (JSON always returns all entries). With `--by dir`,
-`--top N` caps directories instead.
+The subcommand and URI forms share parameter declarations, validation, result identity
+(`surface_scan`) and output handling. `--top N` and `?top=N` both affect text only.
+Unknown categories, invalid booleans, fractional/negative depths and bare numeric
+presence flags are rejected rather than silently becoming empty inventories or
+truncated numbers. Boolean values accept true/false, yes/no and 1/0.
+
+## Execution and compatibility
+
+Direct requests follow the [declared execution policy](../development/OUTPUT_CONTRACT.md#declared-execution-policy).
+Unparsed or recovered files retain their partial facts and make the scan incomplete;
+ordinary taxonomy/scope limitations remain disclosed scope. `--fail-on none` is
+supported and never hides incomplete analysis. Surface has no adverse-findings
+predicate, so `--fail-on findings` is rejected.
+
+`--also-json PATH` works with human output in either spelling. Primary JSON retains
+its existing no-op for that flag. The subcommand's JSON `type` is now `surface_scan`,
+matching the URI form; consumers of the former `surface` identity should update.
+Stdin and mixed URI batches retain their existing exit policy.
+
+CLI paths are passed directly, including literal question marks and percent sequences
+where the filesystem permits them. URI paths use literal-existing-path precedence,
+then an existing once-decoded fallback. If both a literal percent-spelled path and its
+decoded alternative exist, the literal path wins. URI `?` still separates the query;
+encode a question mark in a filename. See the linked execution contract for encoding
+and requested-output failure details.
 
 ## Language Coverage
 

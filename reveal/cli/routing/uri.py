@@ -1142,8 +1142,9 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
     result = _call_adapter(lambda: adapter.get_structure(**structure_kwargs),
                            scheme_name, source, type(adapter))
 
-    if facts_of is not None and not isinstance(result, dict):
-        _fail(scheme_name, source, 'Adapter returned an invalid required answer', adapter_class=type(adapter))
+    if facts_of is not None:
+        from .declared import qualify_declared_answer
+        result = qualify_declared_answer(result, type(adapter), source)
     facts = facts_of(result) if facts_of is not None else None
 
     # Apply post-processing
@@ -1156,6 +1157,7 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
                                scheme_name, source, type(adapter))
         if facts_of is not None:
             from ...utils.results import merge_execution_facts
+            result = qualify_declared_answer(result, type(adapter), source)
             facts = merge_execution_facts(facts, facts_of(result))
 
     if source_path is None:
