@@ -161,14 +161,18 @@ class BindingScope:
                 return 'nonlocal' if _zero_arg(declaration, 'kind') == 'nonlocal_statement' else 'global'
         return None
 
+    def _owned_binding(self, name: str, node: Any) -> bool:
+        """A scoped WRITE binds only targets inside that lexical owner's span."""
+        start, end = _span(node)
+        return any(binding is not None and binding[0] <= start and end <= binding[1]
+                   for event in self._events(name)
+                   for binding in [event.get('binding_scope')])
+
     def has_explicit_binding(self, name: str, at_node: Any = None) -> bool:
         """Whether a lexical declaration shadows e.g. a Python builtin."""
         node = self.scope if at_node is None else at_node
-        start, end = _span(node)
-        for event in self._events(name):
-            binding = event.get('binding_scope')
-            if binding is not None and binding[0] <= start and end <= binding[1]:
-                return True
+        if self._owned_binding(name, node):
+            return True
         scopes = _FUNCTIONS | _ROOTS
         if _zero_arg(self.scope, 'kind') in _CLASSES:
             scopes = scopes | _CLASSES
@@ -207,6 +211,8 @@ class BindingScope:
         return self._shared_root(target, name)
 
     def _shared_root(self, target: Any, name: str) -> Optional[str]:
+        if self._owned_binding(name, target):
+            return None
         owner = _owner(target, self.language)
         if owner is not None and _zero_arg(owner, 'kind') in _CLASSES:
             if self._declared(owner, name):
