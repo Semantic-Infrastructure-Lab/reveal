@@ -291,7 +291,7 @@ def _outcome_summary(result: dict, target_count: int) -> dict:
                                                  'files_degraded', 'exit_code', 'scan_disclosures')}
     if kind == 'overview':
         summary = result.get('stats', {}).get('summary', {})
-    if kind in ('overview', 'hotspots'):
+    if kind in ('overview', 'hotspots', 'hotspots_scan'):
         _require_values(summary, {'total_files': target_count, 'excluded': 0})
         return {'total_files': target_count, 'excluded': 0}
     _require_values(result.get('scope', {}), {'total_code_files': target_count})
