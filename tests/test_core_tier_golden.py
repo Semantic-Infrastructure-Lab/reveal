@@ -47,7 +47,7 @@ LANGUAGES = sorted(EXPECTED)
 EXTENSIONS = {
     "python": "py", "c": "c", "cpp": "cpp", "csharp": "cs", "go": "go",
     "java": "java", "javascript": "js", "rust": "rs", "typescript": "ts",
-    "kotlin": "kt", "swift": "swift", "ruby": "rb", "php": "php", "lua": "lua", "dart": "dart", "scala": "scala", "gdscript": "gd",
+    "kotlin": "kt", "swift": "swift", "ruby": "rb", "php": "php", "lua": "lua", "dart": "dart", "scala": "scala", "gdscript": "gd", "zig": "zig",
 }
 
 DOC = "guide.md"
@@ -376,5 +376,13 @@ def test_dart_declaration_line_matches_named_function(runner):
     named = runner.json(CONFORMANCE_DIR, ['dart/sample.dart', 'processOrder'])
     positional = runner.json(CONFORMANCE_DIR, ['dart/sample.dart', ':12'])
     expected = (12, 22, 'processOrder')
+    assert (named['line_start'], named['line_end'], named['name']) == expected
+    assert (positional['line_start'], positional['line_end'], positional['name']) == expected
+
+
+def test_zig_declaration_line_matches_named_function(runner):
+    named = runner.json(CONFORMANCE_DIR, ['zig/sample.zig', 'processOrder'])
+    positional = runner.json(CONFORMANCE_DIR, ['zig/sample.zig', ':12'])
+    expected = (12, 25, 'processOrder')
     assert (named['line_start'], named['line_end'], named['name']) == expected
     assert (positional['line_start'], positional['line_end'], positional['name']) == expected
