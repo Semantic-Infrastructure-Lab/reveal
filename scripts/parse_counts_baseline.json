@@ -169,6 +169,7 @@
             "avg_quality_score": 100.0,
             "excluded": 0,
             "excluded_by_extension": {},
+            "has_findings": false,
             "total_classes": 0,
             "total_code_lines": 11,
             "total_files": 3,
