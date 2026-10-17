@@ -328,3 +328,5 @@ function target() {
 }
 ''')
     assert {d['var'] for d in collect_deps(scope, 1, end, text)} == {'captured', 'ready', 'tick', 'consume', 'y'}
+    assert next(d for d in collect_deps(scope, 1, end, text) if d['var'] == 'y') == {
+        'var': 'y', 'first_read_line': 3, 'first_write_line': None}
