@@ -7,9 +7,10 @@ Previous implementation: 197 lines of regex patterns
 Current implementation: 15 lines using TreeSitterAnalyzer
 """
 
-from typing import Optional
+from typing import List, Optional
 
 from ..core import node_children as _children
+from ..core import node_prev_sibling as _prev_sibling
 from ..core.callees.gdscript import site_for as gdscript_site_for
 from ..core.treesitter_compat import _zero_arg
 from ..registry import register
@@ -25,6 +26,45 @@ class GDScriptAnalyzer(TreeSitterAnalyzer):
     """
     language = 'gdscript'
     IMPORTS_VIA_EXTRACTOR = True  # BACK-1089
+    # Godot 4.5 modules/gdscript/gdscript_parser.cpp registers these targets;
+    # warning_ignore includes FUNCTION through CLASS_LEVEL. parse_program
+    # flushes preceding annotations to the script at pure SCRIPT directives.
+    # Leave @abstract undecoded: it can target script, class or function.
+    _FUNCTION_ANNOTATIONS = frozenset({'rpc', 'warning_ignore'})
+    _SCRIPT_ANNOTATIONS = frozenset({'tool', 'icon', 'static_unload'})
+
+    def _annotation_name(self, node) -> Optional[str]:
+        return next((self._get_node_text(child) for child in _children(node)
+                     if _zero_arg(child, 'kind') == 'identifier'), None)
+
+    def _extract_decorators(self, node) -> List[str]:
+        """Function annotations precede the declaration as sibling nodes."""
+        if _zero_arg(node, 'kind') != 'function_definition':
+            return []
+        decorators: List[str] = []
+        sibling = _prev_sibling(node)
+        while sibling is not None:
+            kind = _zero_arg(sibling, 'kind')
+            if kind == 'annotation':
+                name = self._annotation_name(sibling)
+                if name in self._SCRIPT_ANNOTATIONS:
+                    break
+                if name in self._FUNCTION_ANNOTATIONS:
+                    decorators.insert(0, self._get_node_text(sibling))
+            elif kind != 'comment':
+                break
+            sibling = _prev_sibling(sibling)
+        return decorators
+
+    def _extract_class_bases(self, node) -> List[str]:
+        """Read only this class's extends type, retaining qualified names."""
+        if _zero_arg(node, 'kind') != 'class_definition':
+            return super()._extract_class_bases(node)
+        return [self._get_node_text(base).strip()
+                for child in _children(node)
+                if _zero_arg(child, 'kind') == 'extends_statement'
+                for base in _children(child)
+                if _zero_arg(base, 'kind') == 'type']
 
     # ── Callee naming (BACK-915 slice 4) ──────────────────────────────────────
 

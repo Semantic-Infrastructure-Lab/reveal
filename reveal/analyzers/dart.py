@@ -115,6 +115,11 @@ class DartAnalyzer(TreeSitterAnalyzer):
         'types': ('type_alias',),
     }
 
+    def _extract_decorators(self, node) -> List[str]:
+        """Dart metadata annotations are direct children of their declaration."""
+        return [self._get_node_text(child) for child in _children(node)
+                if _zero_arg(child, 'kind') == 'annotation']
+
     def _get_node_name(self, node) -> Optional[str]:
         # A legacy function typedef (`typedef int Legacy(int x);`) puts its
         # return type first, so the first type_identifier is `int`. The alias

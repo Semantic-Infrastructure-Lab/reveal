@@ -25,6 +25,11 @@ class ScalaAnalyzer(TreeSitterAnalyzer):
         'types': ('type_definition',),
     }
 
+    def _extract_decorators(self, node) -> List[str]:
+        """Scala annotations are direct children of their owning declaration."""
+        return [self._get_node_text(child) for child in _children(node)
+                if _zero_arg(child, 'kind') == 'annotation']
+
     # ── Class bases (BACK-645) ──────────────────────────────────────────────
     # `class Foo[T] extends Bar[T] with Baz { ... }` previously fell through
     # to the base class's Python-shaped _extract_class_bases dispatch (looks
