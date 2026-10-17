@@ -25,6 +25,8 @@ SOURCE = '\n'.join([BOX, CHOICE, EITHER, '''const scalar: u32 = 3;
 const Derived = make(struct { hidden: u32 });
 const Selected = if (flag) struct { branch: u32 } else Box;
 fn factory() type { return struct { anonymous: u32 }; }
+const Tuple = struct { u32, bool };
+const Open = enum(u8) { first, _ };
 '''])
 
 
@@ -38,7 +40,7 @@ def analyzer(tmp_path):
 
 
 @pytest.mark.parametrize('category,names', [
-    ('structs', ['Box', 'Inner']), ('enums', ['Choice']), ('unions', ['Either']),
+    ('structs', ['Box', 'Inner', 'Tuple']), ('enums', ['Choice', 'Open']), ('unions', ['Either']),
 ])
 def test_structure_lists_exact_verified_container_names(analyzer, category, names):
     for _ in range(2):
@@ -47,6 +49,7 @@ def test_structure_lists_exact_verified_container_names(analyzer, category, name
 
 @pytest.mark.parametrize('name,kind', [
     ('Box', 'struct'), ('Choice', 'enum'), ('Either', 'union'),
+    ('Tuple', 'struct'), ('Open', 'enum'),
 ])
 def test_container_type_fact_reads_declared_type_wrapper(analyzer, name, kind):
     declaration = next(node for node in analyzer._find_nodes_by_type('VarDecl')
@@ -62,6 +65,7 @@ def test_container_type_fact_reads_declared_type_wrapper(analyzer, name, kind):
 @pytest.mark.parametrize('name,members', [
     ('Box', ['value', 'present']), ('Inner', ['nested']),
     ('Choice', ['first', 'second']), ('Either', ['number', 'text']),
+    ('Tuple', []), ('Open', ['first']),  # Types and nonexhaustive markers are not named fields.
 ])
 def test_members_are_direct_fields_not_nested_types_or_methods(analyzer, name, members):
     declaration = next(node for node in analyzer._find_nodes_by_type('VarDecl')
@@ -73,6 +77,8 @@ def test_members_are_direct_fields_not_nested_types_or_methods(analyzer, name, m
 @pytest.mark.parametrize('name,start,end,source', [
     ('Box', 1, 6, BOX), ('Inner', 5, 5, '    const Inner = struct { nested: u8 };'),
     ('Choice', 7, 10, CHOICE), ('Either', 11, 14, EITHER),
+    ('Tuple', 19, 19, 'const Tuple = struct { u32, bool };'),
+    ('Open', 20, 20, 'const Open = enum(u8) { first, _ };'),
 ])
 def test_named_container_extracts_exact_complete_source(analyzer, name, start, end, source):
     result = _extract_by_syntax(analyzer, name, _parse_element_syntax(name))
