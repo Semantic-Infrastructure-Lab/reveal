@@ -263,3 +263,61 @@ def test_missing_child_runtime_metadata_rejects(ledger, field):
     ledger[0]['metadata'].pop(field)
     with pytest.raises(ValueError, match='metadata'):
         snapshot(ledger)
+
+
+def test_cold_cached_requests_require_prior_observed_artifact(tmp_path):
+    source = 'x = 1\n'
+    path = tmp_path / 'config.py'
+    path.write_text(source, encoding='utf-8')
+    with capture_parses(tmp_path, targets=['config.py']) as capture:
+        with parse_request('python.ast', source, path, 'fullsource'):
+            with parse_attempt(source, 'original'):
+                pass
+        for _ in range(3):
+            with parse_request('python.ast', source, path, 'fullsource'):
+                pass
+    request = capture.events[0]
+    targets = {'config.py': {'parsers': ['python.ast'], 'sha256': request.source_hash,
+                              'bytes': request.source_length}}
+    audit = {'schema_version': 1, 'complete': True, 'exit_code': 0,
+             'metadata': _metadata(capture), 'events': [asdict(e) for e in capture.events]}
+    baseline = audit_snapshot(audit, os.getpid(), tmp_path, targets)
+    # A genuine reduction may remove a complete cached request while retaining
+    # the physical artifact that backs remaining warm requests.
+    reduced = deepcopy(audit)
+    reduced['events'] = reduced['events'][:-2]
+    assert compare_snapshots(baseline, audit_snapshot(reduced, os.getpid(), tmp_path, targets)) == []
+    audit['events'] = audit['events'][4:]
+    with pytest.raises(ValueError, match='cached'):
+        audit_snapshot(audit, os.getpid(), tmp_path, targets)
+
+
+def test_unqualified_physical_input_hash_cannot_hide_behind_request_identity(ledger):
+    for event in ledger[0]['events']:
+        if event['event'] in ('attempt', 'artifact'):
+            event['parsed_hash'] = '0' * 64
+    with pytest.raises(ValueError, match='physical'):
+        snapshot(ledger)
+
+
+def test_full_command_result_changes_cannot_hide_behind_equal_totals(ledger):
+    spec = {'type': 'surface', 'exit_code': 0}
+    result = {'type': 'surface', 'scope': {'total_code_files': 1}, 'total': 1,
+              'surfaces': {'env': [{'name': 'CORRECT'}]}}
+    first = validate_command_output(0, json.dumps(result), spec, 1)
+    result['surfaces']['env'][0]['name'] = 'WRONG'
+    second = validate_command_output(0, json.dumps(result), spec, 1)
+    assert first != second
+    report = snapshot(ledger)
+    report['command_outcome'] = first
+    changed = deepcopy(report)
+    changed['command_outcome'] = second
+    with pytest.raises(ValueError, match='repeat'):
+        qualify_snapshots([report] * 4 + [changed])
+
+
+@pytest.mark.parametrize('parser', ['python.ast', 'tree-sitter', 'tree-sitter-language-pack'])
+def test_parser_versions_must_be_nonempty_strings(ledger, parser):
+    ledger[0]['metadata']['parser_versions'][parser] = None
+    with pytest.raises(ValueError, match='metadata'):
+        snapshot(ledger)
