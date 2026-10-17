@@ -43,7 +43,14 @@ class CommandSpec(NamedTuple):
     # adapter's guide. '' leaves help://<name> to the adapter guide, if any (BACK-1055).
     help_guide: str = ''
 
+    declared_adapter: str = ''
+
     def load(self) -> Tuple[ArgumentParser, Callable[[Namespace], None]]:
+        if self.declared_adapter:
+            from functools import partial
+            from .routing.declared import create_declared_parser, run_declared_command
+            return create_declared_parser(self.declared_adapter), partial(
+                run_declared_command, self.declared_adapter)
         mod = importlib.import_module(self.module)
         return getattr(mod, self.parser_factory)(), getattr(mod, self.runner)
 
@@ -106,7 +113,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      help_guide=_SUBCOMMANDS_GUIDE),
     'surface':      _spec('surface',
                      'reveal surface [path]',
-                     'External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls'),
+                     'External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls')._replace(declared_adapter='surface'),
     'testability':  _spec('testability',
                      'reveal testability [path]',
                      'Test patch pressure joined with production boundary fan-out',

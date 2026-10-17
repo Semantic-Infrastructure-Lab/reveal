@@ -225,8 +225,11 @@ def _add_global_options(target) -> None:
                         help='Also write the result as JSON to PATH, in addition to '
                              '--format\'s primary output -- one invocation, one parse, both a '
                              'human-readable report and a machine-readable artifact. '
-                             'scheme://resource URIs and `reveal check` only (an error elsewhere); '
+                             'scheme://resource URIs, `reveal check` and declared adapter commands only; '
                              'no-op if --format is already json.')
+    target.add_argument('--fail-on', choices=['none', 'findings'], default=None,
+                        help='Findings gate for qualified commands. none suppresses findings only; '
+                             'required analysis/output failures remain errors. Unsupported operations reject it.')
     target.add_argument('--copy', '-c', action='store_true',
                         help='Copy output to clipboard (also prints normally)')
     target.add_argument('--verbose', '-v', action='store_true',

@@ -166,7 +166,7 @@ def _require_subcommand_format(name: str, args: Any,
     from .cli.routing.formats import reject_unhonored_also_json, require_supported_format
     supported = formats if formats is not None else _subcommand_formats(name)
     require_supported_format(args, supported, f"reveal {name}")
-    if name != 'check':
+    if name != 'check' and not COMMANDS[name].declared_adapter:
         reject_unhonored_also_json(args, f"reveal {name}")
 
 
@@ -255,6 +255,8 @@ def _dispatch_and_run(invocation: Invocation) -> None:
     and what runs the result. Everything else is applied here, once, for both.
     """
     args, run = _prepare(invocation)
+    from .cli.routing.declared import validate_execution_policy
+    validate_execution_policy(args, invocation.command)
     apply_global_flags(args)
     # --copy comes from the parsed args, so every spelling argparse accepts (-c, -qc,
     # --copy) is honored. A raw scan of argv missed the combined short form.
@@ -361,6 +363,9 @@ def _handle_special_modes(args: Any) -> bool:
     for dest, handler in _SPECIAL_MODES:
         if not getattr(args, dest, None):
             continue
+        if getattr(args, 'fail_on', None) is not None:
+            print('Error: --fail-on is not supported by discovery, stdin or special modes.', file=sys.stderr)
+            sys.exit(2)
         reject_stdin_for_path_mode(args, dest)  # --stdin cannot reach a mode that runs before it (BACK-1764)
         reject_ignored_path(args, dest)  # a mode that reads no path must not drop one (BACK-1751)
         if dest == 'stdin':  # each piped path or URI is answered by its own route

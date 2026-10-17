@@ -150,14 +150,24 @@ def _decline(scheme: str, resource: str, reason: str, adapter_class: Any = None)
     raise _Answered(result)
 
 
-def _answer(resolve: Callable[[], Answer], scheme: str, args: 'Namespace') -> Answer:
+def _answer(resolve: Callable[[], Answer], scheme: str, args: 'Namespace', *,
+            result_type: Optional[str] = None, source_path: Optional[str] = None,
+            facts_of: Optional[Callable] = None) -> Answer:
     """Run one resolution; a query it ended early (_Answered) is answered by the router's result."""
     try:
         return resolve()
     except _Answered as e:
         result, detail = e.result, e.detail  # `e` is unbound once the handler ends
+    if result_type is not None:
+        result['type'] = result_type
+    if source_path is not None:
+        echo_source(result, source_path)
+        result['source_type'] = ('directory' if os.path.isdir(source_path) else
+                                 'file' if os.path.isfile(source_path) else 'unknown')
+    facts = facts_of(result) if facts_of is not None else None
     return Answer(result, 'router',
-                  lambda: _emit_result(result, args, scheme, _render_router_result, detail=detail))
+                  lambda: _emit_result(result, args, scheme, _render_router_result,
+                                       execution_facts=facts, detail=detail))
 
 
 def _render_router_result(result: Any, output_format: str,
@@ -241,6 +251,11 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace',
         consumed: Flags the caller applied itself (``--stdin``), so the flag ledger does not
             report them as having no effect on the adapter
     """
+    from .declared import declared_adapter_class, run_declared_uri
+    scheme = uri.partition('://')[0]
+    if declared_adapter_class(scheme) is not None and not peek(args, 'stdin', False):
+        run_declared_uri(uri, element, args, consumed)
+        return
     try:
         with _dispatch(uri, element, args, consumed) as (adapter_class, scheme, resource, args):
             handle_adapter(adapter_class, scheme, resource, element, args)
@@ -1117,7 +1132,8 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
 
 
 def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
-                      scheme: Optional[str] = None, resource: Optional[str] = None) -> Answer:
+                      scheme: Optional[str] = None, resource: Optional[str] = None, *,
+                      source_path: Optional[str] = None, facts_of: Optional[Callable] = None) -> Answer:
     # Build adapter kwargs
     structure_kwargs = _build_adapter_kwargs(adapter, args, scheme, resource)
 
@@ -1125,6 +1141,10 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
     scheme_name, source = scheme or 'unknown', resource or ''
     result = _call_adapter(lambda: adapter.get_structure(**structure_kwargs),
                            scheme_name, source, type(adapter))
+
+    if facts_of is not None and not isinstance(result, dict):
+        _fail(scheme_name, source, 'Adapter returned an invalid required answer', adapter_class=type(adapter))
+    facts = facts_of(result) if facts_of is not None else None
 
     # Apply post-processing
     result = _apply_head_tail_range(result, args, adapter, scheme)
@@ -1134,8 +1154,14 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
         processed = result
         result = _call_adapter(lambda: adapter.post_process(processed, args),
                                scheme_name, source, type(adapter))
+        if facts_of is not None:
+            from ...utils.results import merge_execution_facts
+            facts = merge_execution_facts(facts, facts_of(result))
 
-    _echo_source(result, type(adapter), resource)
+    if source_path is None:
+        _echo_source(result, type(adapter), resource)
+    else:
+        echo_source(result, source_path)
 
     # Add available elements if adapter supports discovery
     if hasattr(adapter, 'get_available_elements'):
@@ -1148,6 +1174,7 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
     return Answer(result, 'structure',
                   lambda: _emit_result(result, args, scheme, renderer_class.render_structure,
                                        exit_code=getattr(renderer_class, 'exit_code', None),
+                                       execution_facts=facts,
                                        **_render_structure_top_kwargs(renderer_class, args, adapter)))
 
 
@@ -1159,7 +1186,8 @@ def _echo_source(result: Any, adapter_class: type, resource: Optional[str]) -> N
 
 
 def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render,
-                 exit_code: Optional[Callable[[Any, str], int]] = None, **render_kwargs) -> None:
+                 exit_code: Optional[Callable[[Any, str], int]] = None,
+                 execution_facts=None, **render_kwargs) -> None:
     """Render a URI result and turn its outcome into the exit code (BACK-1059).
 
     Every printed URI result, for the CLI and MCP alike, ends here (the emit of a
@@ -1177,6 +1205,10 @@ def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render,
     reports findings (a fleet audit with gaps) says so through `exit_code`, acted on here
     after the render instead of by a sys.exit inside the renderer.
     """
+    if execution_facts is not None:
+        from .declared import emit_declared_result
+        emit_declared_result(result, args, scheme, render, execution_facts, **render_kwargs)
+        return
     outcome = announce_outcome(result, f"{scheme or 'unknown'}://")
     write_also_json(result, args)
     emit_rendered(render, result, args.format, **render_kwargs)
@@ -1221,6 +1253,11 @@ def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace', adapte
     from here, and forwarding blind would either crash them or silently change
     behavior nobody asked this ticket to touch.
     """
+    declarations = getattr(type(adapter), 'PARAM_SPECS', ())
+    if isinstance(declarations, tuple):
+        for spec in declarations:
+            if spec.name == 'top' and spec.role == 'presentation':
+                return {'top': spec.read(adapter.query_params)}
     if getattr(renderer_class, 'ACCEPTS_TOP', False) is not True:
         return {}
     if peek(args, 'all', False) or peek(args, 'verbose', False):
