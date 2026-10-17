@@ -83,7 +83,7 @@ measurement populations are recorded under
    Rust, Java, Ruby, PHP, C#, Kotlin, Swift, C++, Scala, JS/TSX, Zig, C, Lua,
    GDScript, Dart — BACK-730, closed).
    `surface`/`contracts` also has historical measurements (10 languages/
-   categories, BACK-719/791/815). Several second-corpus inputs are currently
+   categories, BACK-719/791/815). Several first- and second-corpus inputs are currently
    unavailable; see the historical reproducibility qualification under [Scope](#scope).
    `patches://`/testability's call-site recall now has its first
    ground-truth measurements too — Python (BACK-972): all 10 real
@@ -1424,8 +1424,10 @@ every sample matched the published target and edge counts.
 - **Re-pinned and gated (BACK-1461, 2026-10-06):** four second corpora are now pinned in
   `tests/corpus/manifest.yaml` and measured on every run of
   [scripts/recall_gate.py](scripts/recall_gate.py) (full population, importers under
-  the listed directories). Their original commits were never recorded, so these are new
-  measurements at a new commit, not reproductions; the rows above stand as published.
+  the listed directories). These are new measurements at the manifest pins,
+  not asserted reproductions of the original populations; the rows above stand
+  as published. Some original commits survive in the per-loop records (including
+  ripgrep); a different canonical pin does not establish historical reproduction.
   - Python/celery `17b895ba` (whole repo): 443 files, 186 targets, 1,444/1,444 edges,
     0 extra (100% recall and precision).
   - Rust/ripgrep `3fce3b5b` (whole repo): 110 files, 46 targets, 100/100 edges, 0 extra.
@@ -1466,20 +1468,30 @@ every sample matched the published target and edge counts.
   tree-sitter 0.25.2 and tree-sitter-language-pack 1.22.1. Missing/unreadable source,
   an empty oracle and nonzero Reveal query exits fail the measurement.
 - **Historical import figures that cannot currently be re-run (BACK-1461):**
-  - Original corpus clone not preserved: Go/client_golang, Ruby/solidus,
+  - Original corpus clone not preserved: Python/celery, Rust/ripgrep, Java/guava,
+    Go/client_golang, Ruby/solidus,
     Kotlin/kotlinx.coroutines, Scala/cats-effect, C#/Newtonsoft.Json, PHP/osCommerce,
     Swift/swift-collections.
-  - Original oracle input not committed: TypeScript/VS Code (main + barrel), Java/Elasticsearch,
+  - Original oracle input not committed: TypeScript/VS Code (main), Java/Elasticsearch,
     C#/Jellyfin.
-  - No independent import-edge diff harness for the published population:
-    Ruby/Discourse, Swift/Kickstarter. Swift's retained graph-count and SwiftPM
-    target-key probes do not supply an import-edge recall comparison.
+  - The historical Swift/Kickstarter import-edge precision sample is unavailable.
 
   These figures stand as measured when published, but are not currently reproducible.
   The restored Go/client_golang pin supplies a **new** native-toolchain baseline
   in [Bounded reliability corpus loops](#bounded-reliability-corpus-loops-2026-10-14);
   it does not restore the original snapshot or its measurement. The same distinction
   applies to newer VS Code and Elasticsearch gate populations.
+  The separate historical VS Code barrel measurement retains its oracle and
+  sampled targets; all 21 sampled target files and importer files for the 158
+  recorded edges are present. It is not part of the missing-main-oracle exclusion.
+  The original Assimp snapshot, oracle and comparison also survive independently
+  of the newer `cpp-assimp` gate population.
+
+  **Different measurement scopes:** Ruby/Discourse's inferred-edge counts and
+  Swift/Kickstarter's graph-count and SwiftPM target-key coverage probes survive.
+  They do not establish independent import-edge recall; no independent edge-diff
+  harness is available for those populations. In particular, Swift's published
+  target-key coverage must not be read as an unavailable import-edge recall ratio.
 
 **What this program found.** Each language got a baseline oracle loop, and
 every language has since had a second, deliberately differently-shaped corpus
@@ -2170,11 +2182,13 @@ internal-docs/planning/dogfood-findings/ruby-autoload-oracle/
 internal-docs/planning/dogfood-findings/sideeffects-recall-oracle/
 ```
 
-Inside the maintainer workspace every harness exits non-zero, with the reason, when a run
-measured nothing (a missing corpus, errored queries, or 0 hits) instead of printing a
-recall figure, and records the Python, tree-sitter and tree-sitter-language-pack versions
-and the reveal commit it measured — the grammar version decides which files parse with
-errors, so the same command can give a different figure under a different grammar.
+The shared maintainer comparison guard preflights oracle paths and rejects empty
+samples, query failures and zero hits against a nonempty oracle. Comparison entry
+points using it announce Python, tree-sitter, tree-sitter-language-pack and Reveal
+commit provenance. Check each entry point's exit status and diagnostics; standalone
+legacy graph-count or module-key probes are not independent recall comparisons.
+The grammar version decides which files parse with errors, so the same command can
+give a different figure under a different grammar.
 
 ## Scope
 
@@ -2200,20 +2214,20 @@ its second-corpus verification program.** BACK-719 closed `surface`'s
 `cli`, `http`, `mcp`, and `contracts` (interfaces + structural implementers)
 against a first real corpus per language/category; BACK-791 then extended
 breadth to 9 more languages (Go, Rust, C++, Java, C#, PHP, Swift, Kotlin,
-Ruby); and **BACK-815 has now taken the whole program through the same
-second-corpus overfit-guard pass every other recall program in this doc
-required before being trusted** (see BACK-669 above) — the last gap this
-document flagged for `surface`/`contracts`. All 10 language/category
+Ruby); and **BACK-815 extended surface/contracts verification to a second-corpus
+overfit-guard pass, following the import-recall program's approach (BACK-669)**.
+This does not establish second-corpus coverage for the separate call or
+side-effect programs. All 10 language/category
 slices (Go, Rust, C++, Java, C#, PHP, Ruby, Swift, Kotlin, and HTTP-routes
 Python+TS/JS — BACK-816 through BACK-825) are done, each re-run against a
 deliberately different second real-world corpus (a single-module library
 instead of a multi-binary app, a framework's own repo instead of a
 downstream consumer, a CLI tool instead of a web app, etc. — see each
 language's own `dogfood-findings/*-surface-contracts-recall-oracle/README.md`
-for its specific second corpus and results). Aggregate result: every
-measured category holds at 100%/100% or a disclosed-heuristic near-100%
-on the second corpus too — no category collapsed the way TypeScript's
-import recall once did (BACK-669's original motivation). Along the way the
+for its specific second corpus and results). Results and residuals are
+category-specific: the HTTP TypeScript second corpus measured 66.67% recall
+(4/6 routes) and 100% precision (BACK-831), so this is not an aggregate
+near-100% result. Along the way the
 overfit-guard pass found and fixed 3 real oracle-side bugs (regression-
 checked byte-identical against each original corpus's committed results)
 and found and filed 6 new, narrow reveal-side residuals as tracked
@@ -2224,16 +2238,22 @@ virtual-destructor-only classes; out-of-line qualified nested classes),
 BACK-829 (Swift `~Copyable`/suppressed-conformance bases), BACK-830 (Kotlin
 class implementing a bare function-type supertype), and BACK-831 (TS `http`
 provenance missing a destructured-parameter-with-inline-object-type
-Express binding). None of these are recall collapses — each is a single
-disclosed idiom gap in an otherwise 100%-passing category, the same shape
-as this table's other footnoted residuals (BACK-738, BACK-742, BACK-756,
-BACK-768). `surface`/`contracts` recall is no longer the newest, least-
-verified signal in this document — see `tt show BACK-815` for the full
+Express binding). These are disclosed idiom gaps with the per-category
+impact recorded in each loop; a small number of missing routes can be a
+large fraction of a small population. See `tt show BACK-815` for the full
 ten-slice rollup and `internal-docs/planning/dogfood-findings/http-routes-recall-oracle/README.md`'s
 "Second corpus (BACK-815)" section for the closing slice's detail.
 
-**Historical reproducibility qualification (2026-10-17, BACK-1954/BACK-1955):**
-the documented BACK-815 second-corpus source trees for C++/RocksDB,
+**Historical reproducibility qualification (2026-10-17, BACK-1954/BACK-1955/BACK-1956):**
+the first-corpus HTTP pilot source trees for C++ (cpp-httplib and Crow),
+Go (Gin, Echo, Chi and Gitea), Java (Spring PetClinic) and Swift (Vapor)
+are absent from their documented `http-routes-pilot` locations; their historical
+HTTP measurements cannot currently be re-run from the preserved inputs. The C++
+Godot/Assimp staging directories are also absent, but their underlying source
+snapshots and documented subset recipes survive; absence of a staging
+directory alone does not mean the source has been lost.
+
+The documented BACK-815 second-corpus source trees for C++/RocksDB,
 C#/command-line-api, Go/client_golang, Java/spring-boot-admin, Kotlin/ktor,
 PHP/composer, Ruby/rubygems, Rust/axum and Swift/swift-package-manager,
 plus Swift's Vapor api-template HTTP pilot, are currently absent from their
@@ -2243,3 +2263,9 @@ cannot currently be re-run. A new source pin requires a new measurement; it
 cannot inherit the historical recall or precision. This qualification is
 separate from the pinned [bounded mixed-framework matrix](#bounded-mixed-framework-source-matrix-2026-10-14)
 and does not change that matrix's population or results.
+
+The original mixed Python/TypeScript CLI, MCP, HTTP and Dagster contract pilots,
+and the HTTP Python/TypeScript second corpus, retain their source inputs and
+independent oracles. Rebuilding those eight oracle outputs reproduced the
+recorded JSON in the 2026-10-17 availability review. This checks the oracle
+inputs, not the current Reveal result or historical byte identity of every source.
