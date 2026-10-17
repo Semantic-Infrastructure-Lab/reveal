@@ -142,3 +142,13 @@ func plain():
     pass
 ''')
     assert structure['functions'][0]['decorators'] == []
+
+
+@pytest.mark.parametrize('annotations,expected', [
+    ('@warning_ignore("unused_parameter")\n@abstract', []),
+    ('@abstract\n@rpc("any_peer")', ['@rpc("any_peer")']),
+], ids=['abstract-bounds-earlier-metadata', 'rpc-after-abstract'])
+def test_gdscript_declined_abstract_is_an_ownership_barrier(tmp_path, annotations, expected):
+    structure = _structure(
+        tmp_path, GDScriptAnalyzer, 'gd', f'{annotations}\nfunc plain():\n    pass\n')
+    assert structure['functions'][0]['decorators'] == expected
