@@ -326,9 +326,8 @@ def test_exits_finds_all_returns(lang):
 
 def test_returns_finds_gate_chains(lang):
     """--returns must list every return with its enclosing if-condition gate
-    chain, for every language — Tier 2 (BACK-422). A return inside a
-    try/catch (not an if) correctly has an empty gate chain; only c/cpp/go's
-    if-gated early returns have non-empty gates."""
+    chain, for every language — Tier 2 (BACK-422). Handler returns carry an
+    exception-context gate; the try body and trailing returns do not inherit it."""
     entry_fn = EXPECTED[lang]["entry_function"]
     out = _run(str(_sample_path(lang)), entry_fn, "--returns", "--format", "json")
     data = json.loads(out)

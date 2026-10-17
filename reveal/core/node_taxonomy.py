@@ -48,7 +48,9 @@ IF_NODES: frozenset = frozenset({
 }) | IF_MODIFIER_NODES
 # Lua's `elseif`/`else` arms are elseif_statement/else_statement: in no
 # family, so --outline put their bodies under the IF (BACK-1530).
-ELIF_NODES: frozenset = frozenset({'elif_clause', 'elseif_clause', 'elseif_statement'})
+ELIF_NODES: frozenset = frozenset({
+    'elif_clause', 'elseif_clause', 'elseif_statement', 'elsif', 'else_if_clause',
+})
 ELSE_NODES: frozenset = frozenset({'else_clause', 'else', 'else_statement'})
 # Zig's IfStatement (BACK-431 Issue G smoke-tier audit) has no AST fields at
 # all — unlike every other IF_NODES member, `_walk_if_while`'s
@@ -555,6 +557,7 @@ KEYWORD_LABEL: Dict[str, str] = {
     'if_statement': 'IF', 'if': 'IF', 'if_expression': 'IF', 'IfStatement': 'IF',
     'if_modifier': 'IF', 'unless': 'UNLESS', 'unless_modifier': 'UNLESS',
     'elif_clause': 'ELIF', 'elseif_clause': 'ELIF', 'elseif_statement': 'ELIF',
+    'elsif': 'ELIF', 'else_if_clause': 'ELIF',
     'else_clause': 'ELSE', 'else': 'ELSE', 'else_statement': 'ELSE',
     'for_statement': 'FOR', 'for': 'FOR', 'for_expression': 'FOR',
     'foreach_statement': 'FOR', 'for_in_statement': 'FOR',

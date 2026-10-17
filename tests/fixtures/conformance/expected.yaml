@@ -43,7 +43,7 @@ python:
   - {keyword: EXCEPT, line_start: 18}
   mutations_probe: {range: "13-13", var: result, next_read_line: 17}
   returns:
-  - {line: 19, gate_lines: []}
+  - {line: 19, gate_lines: [18]}
   - {line: 21, gate_lines: []}
   batch_element: Batch.run
   loopmap:
@@ -188,7 +188,7 @@ csharp:
   - {keyword: CATCH, line_start: 26}
   mutations_probe: {range: "21-21", var: result, next_read_line: 24}
   returns:
-  - {line: 28, gate_lines: []}
+  - {line: 28, gate_lines: [26]}
   - {line: 31, gate_lines: []}
   batch_element: Batch.Run
   loopmap:
@@ -233,7 +233,7 @@ java:
   - {keyword: CATCH, line_start: 21}
   mutations_probe: {range: "18-18", var: result, next_read_line: 20}
   returns:
-  - {line: 22, gate_lines: []}
+  - {line: 22, gate_lines: [21]}
   - {line: 25, gate_lines: []}
   batch_element: Batch.run
   loopmap:
@@ -270,7 +270,7 @@ javascript:
   - {keyword: CATCH, line_start: 17}
   mutations_probe: {range: "14-14", var: result, next_read_line: 16}
   returns:
-  - {line: 18, gate_lines: []}
+  - {line: 18, gate_lines: [17]}
   - {line: 21, gate_lines: []}
   batch_element: Batch.run
   loopmap:
@@ -360,7 +360,7 @@ typescript:
   - {keyword: CATCH, line_start: 17}
   mutations_probe: {range: "14-14", var: result, next_read_line: 16}
   returns:
-  - {line: 18, gate_lines: []}
+  - {line: 18, gate_lines: [17]}
   - {line: 21, gate_lines: []}
   batch_element: Batch.run
   loopmap:
@@ -441,7 +441,7 @@ kotlin:
   mutations_probe: {range: "12-12", var: result, next_read_line: 15}
   returns:
   - {line: 19, gate_lines: []}
-  - {line: 21, gate_lines: []}
+  - {line: 21, gate_lines: [20]}
   batch_element: Batch.run
   loopmap:
   - {keyword: FOR, line_start: 36}
@@ -479,7 +479,7 @@ swift:
   mutations_probe: {range: "13-13", var: result, next_read_line: 14}
   returns:
   - {line: 20, gate_lines: []}
-  - {line: 22, gate_lines: []}
+  - {line: 22, gate_lines: [21]}
   batch_element: Batch.run
   loopmap:
   - {keyword: FOR, line_start: 37}
@@ -522,7 +522,7 @@ ruby:
   mutations_probe: {range: "10-10", var: result, next_read_line: 17}
   returns:
   - {line: 17, gate_lines: []}
-  - {line: 19, gate_lines: []}
+  - {line: 19, gate_lines: [18]}
   batch_element: Batch.run
   loopmap:
   - {keyword: FOR, line_start: 33}
@@ -563,7 +563,7 @@ php:
   mutations_probe: {range: "14-14", var: "$result", next_read_line: 16}
   returns:
   - {line: 20, gate_lines: []}
-  - {line: 22, gate_lines: []}
+  - {line: 22, gate_lines: [21]}
   batch_element: Batch.run
   loopmap:
   - {keyword: FOR, line_start: 37}

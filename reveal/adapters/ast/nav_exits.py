@@ -6,7 +6,10 @@ from typing import Any, Callable, Collection, Dict, List, Optional
 
 from .nav_calls import _extract_callee
 from .nav_varflow import all_var_flow
-from .node_taxonomy import GATE_NODES, exit_label, is_rust_try_operator
+from .node_taxonomy import (
+    CATCH_NODES, ELIF_NODES, ELSE_NODES, EXCEPT_NODES, GATE_NODES, IF_NODES,
+    exit_label, is_rust_try_operator,
+)
 from ...core import node_children as _children
 from ...core.treesitter_compat import _zero_arg
 from reveal.utils.lines import split_lines
@@ -421,6 +424,67 @@ def _get_condition(node: Any, get_text: Callable) -> Optional[Dict[str, Any]]:
     return {'line': _zero_arg(cond, 'start_position').row + 1, 'text': text}
 
 
+def _same_span(left: Any, right: Any) -> bool:
+    """Bindings at the language-pack floor compare nodes by identity."""
+    return right is not None and all(
+        _zero_arg(left, field) == _zero_arg(right, field)
+        for field in ('start_byte', 'end_byte')
+    )
+
+
+def _branch_gates(node: Any, gates: List[Dict[str, Any]], get_text: Callable):
+    """Route gates to branch bodies, retaining failed sibling tests in order.
+
+    Python/PHP keep elif arms as siblings; Ruby nests them, while other
+    grammars put another if inside the alternative. Use fields and the shared
+    taxonomy for all three shapes rather than interpreting source keywords.
+    """
+    condition = _get_condition(node, get_text)
+    alternative = node.child_by_field_name('alternative')
+    consequence = node.child_by_field_name('consequence')
+    if consequence is None:
+        consequence = node.child_by_field_name('body')
+    remaining = gates + [dict(condition, text=f'not ({condition["text"]})')] if condition else gates
+    for child in _children(node):
+        kind = _zero_arg(child, 'kind')
+        if _zero_arg(child, 'is_named') and (
+                kind in ELIF_NODES | ELSE_NODES or _same_span(child, alternative)):
+            yield child, remaining
+            # Flat sibling elif chains must carry every earlier failed test.
+            if kind in ELIF_NODES:
+                test = _get_condition(child, get_text)
+                if test:
+                    remaining = remaining + [dict(test, text=f'not ({test["text"]})')]
+        elif _same_span(child, consequence):
+            yield child, gates + [condition] if condition else gates
+        else:
+            # Conditions and initializers run before the branch is selected.
+            yield child, gates
+
+
+def _gated_children(node: Any, gates: List[Dict[str, Any]], get_text: Callable):
+    """Child contexts for branch selection, loops and exception handlers."""
+    kind = _zero_arg(node, 'kind')
+    if (kind in IF_NODES | ELIF_NODES and _zero_arg(node, 'is_named') and
+            (node.child_by_field_name('consequence') is not None or
+             node.child_by_field_name('body') is not None)):
+        yield from _branch_gates(node, gates, get_text)
+        return
+
+    context = gates
+    handler = None
+    if kind in EXCEPT_NODES | CATCH_NODES and _zero_arg(node, 'is_named'):
+        context = gates + [{'line': _zero_arg(node, 'start_position').row + 1,
+                            'text': 'on exception'}]
+        # Ruby's rescue modifier has a normal body and a handler expression.
+        handler = node.child_by_field_name('handler')
+    elif kind in _GATE_NODE_TYPES:
+        cond = _get_condition(node, get_text)
+        context = gates + [cond] if cond else gates
+    for child in _children(node):
+        yield child, context if handler is None or _same_span(child, handler) else gates
+
+
 def collect_gate_chains(
     scope_node: Any,
     from_line: int,
@@ -447,8 +511,6 @@ def collect_gate_chains(
         if _zero_arg(node, 'end_position').row + 1 < from_line or line > to_line:
             return
 
-        ntype = _zero_arg(node, 'kind')
-
         if from_line <= line <= to_line:
             found = _exit_at(node, get_text, call_node_types)
             if found is not None:
@@ -457,14 +519,8 @@ def collect_gate_chains(
                 if not descend:
                     return
 
-        if ntype in _GATE_NODE_TYPES:
-            cond = _get_condition(node, get_text)
-            new_gates = gates + [cond] if cond else gates
-            for child in _children(node):
-                walk(child, new_gates)
-        else:
-            for child in _children(node):
-                walk(child, gates)
+        for child, child_gates in _gated_children(node, gates, get_text):
+            walk(child, child_gates)
 
     walk(scope_node, [])
 
