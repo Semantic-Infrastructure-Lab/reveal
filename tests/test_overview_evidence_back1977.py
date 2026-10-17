@@ -189,3 +189,31 @@ def test_reused_adapter_clears_failure_and_diagnostic_state(project):
     assert not restored['meta']['errors']
     assert restored['architecture']['metadata']['files_failed_count'] == 0
     assert restored['architecture']['metadata']['extraction_diagnostics'] == {}
+
+
+@pytest.mark.parametrize('relative', ['proj', '../proj'])
+@pytest.mark.parametrize('excluded', [False, True])
+def test_architecture_matches_absolute_target_and_preserves_exclusions(project, monkeypatch, relative, excluded):
+    (project/'b.py').write_text('import a\n', encoding='utf-8')
+    if relative.startswith('..'):
+        caller = project.parent/'caller'
+        caller.mkdir()
+        monkeypatch.chdir(caller)
+    query = 'no_git=true'+('&exclude=b.py' if excluded else '')
+    left = OverviewAdapter(relative, query).get_structure()
+    right = OverviewAdapter(str(project), query).get_structure()
+    assert left['source'] == left['path'] == relative
+    assert left['architecture'] == right['architecture']
+    assert sum(c['files'] for c in left['architecture']['components']) == (1 if excluded else 2)
+
+
+def test_symlink_target_retains_architecture_and_original_resource(project):
+    alias = project.parent/'alias'
+    try:
+        alias.symlink_to(project, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f'directory symlinks unavailable: {exc}')
+    left = OverviewAdapter(str(alias), 'no_git=true').get_structure()
+    right = OverviewAdapter(str(project), 'no_git=true').get_structure()
+    assert left['source'] == left['path'] == str(alias)
+    assert left['architecture'] == right['architecture']
