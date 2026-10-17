@@ -29,6 +29,10 @@ def test_surface_declaration_exports_complete_binding_schema():
     for name, declaration in specs.items():
         assert schema['query_params'][name] == declaration.schema()
     assert specs['depth'].minimum == 0 and 'env' in specs['type'].choices
+    assert {name: schema['query_params'][name]['examples'] for name in specs} == {
+        'type': ['type=env'], 'source_only': ['source_only=true'],
+        'by': ['by=dir'], 'depth': ['depth=2'], 'top': ['top=20', 'top=0'],
+    }
 
 
 def test_surface_typed_and_uri_inputs_share_scanner_result(tmp_path):
