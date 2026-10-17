@@ -564,6 +564,8 @@ def _run_check_with_ledger(args: 'Namespace') -> None:
     """
     from ...cli.commands.check import run_check
     from ..invocation import COMMANDS
+    if not getattr(args, 'stdin', False):
+        print('note: file --check/--lint is deprecated; use reveal check <path>.', file=sys.stderr)
     require_supported_format(args, COMMANDS['check'].formats, 'reveal --check')
     if ledger_of(args) is not None or not isinstance(args, Namespace):
         run_check(args)

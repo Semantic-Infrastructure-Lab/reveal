@@ -284,6 +284,8 @@ def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None]]:
         _check_ghost_flags(invocation)
         parser = create_argument_parser(__version__, full_help=invocation.typed('--help-all'))
         args = parser.parse_args(invocation.argv)
+        if invocation.typed('--search'):
+            print('note: --search is deprecated; use --name PATTERN (regex).', file=sys.stderr)
         validate_navigation_args(args)
         return args, lambda: _main_impl(invocation, parser, args)
 
