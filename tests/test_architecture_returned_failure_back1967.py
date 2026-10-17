@@ -1,7 +1,5 @@
 """Shared-walk architecture retains the AST owner's trust diagnostics."""
 
-from copy import deepcopy
-
 import pytest
 
 from reveal.adapters.architecture import (
@@ -79,7 +77,6 @@ def test_child_failure_metadata_survives(project, monkeypatch, kind):
 def test_real_ast_warning_producers_reach_architecture(project, monkeypatch, kind):
     build = ImportsAdapter._build_graph
     structures_seen = []
-    collect = AstAdapter._collect_structures
 
     def shared(self, path, **kwargs):
         build(self, path, **kwargs)
@@ -109,7 +106,6 @@ def test_real_ast_warning_producers_reach_architecture(project, monkeypatch, kin
     assert any(w.get('type') == expected for w in warnings)
     assert not report['meta']['errors']
     assert len(structures_seen) == 1
-    monkeypatch.setattr(AstAdapter, '_collect_structures', collect)
 
 
 def test_no_imports_composition_retains_same_child_error(project, monkeypatch):
@@ -124,7 +120,7 @@ def test_no_imports_composition_retains_same_child_error(project, monkeypatch):
     assert any('AST failed' in e['message'] for e in result['meta']['errors'])
 
 
-def test_returned_child_is_attributed_without_mutating_payload(project, monkeypatch):
+def test_returned_child_ranking_and_source_are_preserved(project, monkeypatch):
     original = AstAdapter.get_structure
     answers = []
 
@@ -138,5 +134,18 @@ def test_returned_child_is_attributed_without_mutating_payload(project, monkeypa
     _run_combined_analysis(adapter, project, 2)
     assert answers[0]['source'] == project.as_posix()
     assert adapter.composed_meta()['warnings']
-    # The ranking payload stays in the AST owner's established shape.
-    assert len(deepcopy(answers[0])['results']) == 2
+    assert len(answers[0]['results']) == 2
+    assert all(row['complexity'] == 13 for row in answers[0]['results'])
+
+
+def test_no_imports_not_applicable_child_remains_non_error(project, monkeypatch):
+    def declined(self, **kwargs):
+        return ResultBuilder.create(
+            'ast_query', str(project), applicable=False, reason='no applicable structures',
+            warnings=[{'code': 'not_applicable', 'message': 'no applicable structures'}])
+
+    monkeypatch.setattr(AstAdapter, 'get_structure', declined)
+    result = ArchitectureAdapter(str(project), 'no_imports=true').get_structure()
+    assert result['no_imports'] is True
+    assert not result['meta'].get('errors')
+    assert any(w.get('code') == 'not_applicable' for w in result['meta']['warnings'])
