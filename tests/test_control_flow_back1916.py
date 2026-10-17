@@ -7,7 +7,7 @@ from tree_sitter_language_pack import get_parser
 from conftest import _run_reveal_direct
 from reveal.adapters.ast.nav_exits import collect_exits, collect_gate_chains
 from reveal.adapters.ast.nav_loops import collect_fanout, collect_loops
-from reveal.adapters.ast.nav_outline import element_outline
+from reveal.adapters.ast.nav_outline import element_outline, scope_chain
 from reveal.core.treesitter_compat import _zero_arg, tree_root, ts_parse
 
 pytestmark = pytest.mark.conformance
@@ -120,3 +120,23 @@ def test_independent_unguarded_and_existing_handler_controls(language, source):
     expected = [[], [{'line': 1, 'text': 'on exception'}], []] if language == 'javascript' else [[]]
     assert [f['gates'] for f in findings] == expected
     assert collect_gate_chains(root, 1, 99, text) == findings
+
+
+def test_zig_catch_outline_starts_at_operator_and_excludes_operand_scope():
+    source = '''fn f(a: bool) i32 {
+  const x = risky(if (a) blk: { return 1; } else 2)
+    catch {
+      return 3;
+    };
+  return 4;
+}
+'''
+    tree, root, text = _parse('zig', source)
+    outline = element_outline(root, text, max_depth=9)
+    assert [(f['keyword'], f['line_start']) for f in outline if f['keyword'] in ('IF', 'CATCH')] == [
+        ('IF', 2), ('CATCH', 3)]
+    assert next(f for f in outline if f['keyword'] == 'CATCH')['label'] == 'CATCH'
+    assert [f['keyword'] for f in scope_chain(root, 2, text)] == ['DEF', 'IF']
+    assert [f['keyword'] for f in scope_chain(root, 4, text)] == ['DEF', 'CATCH']
+    assert [(f['line'], f['gates']) for f in collect_gate_chains(root, 3, 4, text)] == [
+        (4, [{'line': 3, 'text': 'on exception'}])]
