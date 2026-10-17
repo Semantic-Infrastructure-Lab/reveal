@@ -1,5 +1,6 @@
 """Expected diagnostics and untrusted text through the real SDK stdio boundary."""
 import asyncio
+import json
 import os
 import sys
 
@@ -8,6 +9,7 @@ import pytest
 pytest.importorskip('mcp')
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.server.mcpserver.exceptions import ToolError
 
 pytestmark = [pytest.mark.mcp, pytest.mark.component]
 
@@ -25,6 +27,8 @@ def display(analyzer, *args):
         raise RuntimeError('PRIVATE_CRASH_DETAIL')
     if scenario == 'operational':
         raise PermissionError('PUBLIC_PERMISSION_DETAIL')
+    if scenario == 'empty':
+        raise SystemExit(3)
     if scenario == 'literal':
         print('[reveal error: literal source text]')
     elif scenario == 'partial':
@@ -72,6 +76,10 @@ def test_expected_diagnostics_reach_stdio_client(tmp_path):
             'path': str(path), 'element': 'first', 'flag': 'unknown_flag'})
         assert invalid.is_error
         assert 'unknown nav flag' in _text(invalid)
+        invalid_rule = await session.call_tool('reveal_check', {
+            'path': str(path), 'select': 'NOT_A_RULE'})
+        assert invalid_rule.is_error
+        assert 'NOT_A_RULE' in _text(invalid_rule)
         # A sibling tool and a source edit remain successful in the same session.
         before = await session.call_tool('reveal_element', {'path': str(path), 'element': 'first'})
         assert not before.is_error
@@ -92,6 +100,7 @@ def test_expected_diagnostics_reach_stdio_client(tmp_path):
     ('literal', False, '[reveal error: literal source text]', ''),
     ('partial', False, 'usable partial narrative', ''),
     ('negative', False, 'negative finding', ''),
+    ('empty', False, '[reveal exited with code 3]', ''),
 ])
 def test_stdio_preserves_capture_origin_and_narrative(tmp_path, name, is_error, visible, hidden):
     path = tmp_path / f'{name}.py'
@@ -103,7 +112,9 @@ def test_stdio_preserves_capture_origin_and_narrative(tmp_path, name, is_error, 
         if visible:
             assert visible in _text(result)
         if hidden:
+            assert _text(result).strip()
             assert hidden not in _text(result)
+            assert hidden not in json.dumps(result.structured_content)
 
     _run(tmp_path, scenario, _CAPTURE_SERVER)
 
@@ -122,9 +133,15 @@ mcp_server.main()
 """
 
     async def scenario(session):
-        result = await session.call_tool('reveal_structure', {'path': str(path)})
-        assert result.is_error
-        assert 'PRIVATE_OUTER_DETAIL' not in _text(result)
+        for tool, arguments in (
+            ('reveal_structure', {'path': str(path)}),
+            ('reveal_element', {'path': str(path), 'element': 'VALUE'}),
+        ):
+            result = await session.call_tool(tool, arguments)
+            assert result.is_error
+            assert _text(result).strip()
+            assert 'PRIVATE_OUTER_DETAIL' not in _text(result)
+            assert 'PRIVATE_OUTER_DETAIL' not in json.dumps(result.structured_content)
 
     _run(tmp_path, scenario, code)
 
@@ -135,11 +152,22 @@ def test_direct_capture_string_and_registered_controls(tmp_path):
     direct = mcp_server.reveal_structure(str(missing))
     assert isinstance(direct, str)
     assert direct == f'[reveal error: path not found: {missing}]'
+    assert json.loads(json.dumps({'result': direct}))['result'] == direct
     registered = mcp_server.mcp._tool_manager._tools['reveal_structure'].fn
-    with pytest.raises(Exception, match='path not found'):
+    with pytest.raises(ToolError, match='path not found'):
         registered(path=str(missing))
 
     def broken():
         raise RuntimeError('PRIVATE_DIRECT_DETAIL')
 
     assert mcp_server._run_and_capture(broken) == '[reveal error: PRIVATE_DIRECT_DETAIL]'
+
+
+def test_unknown_adapter_remains_nonerror_stdio_result(tmp_path):
+    async def scenario(session):
+        result = await session.call_tool('reveal_query', {'uri': 'no-such-adapter://x'})
+        assert not result.is_error
+        assert '[reveal exited with code 1]' in _text(result)
+        assert 'Unsupported URI scheme' in _text(result)
+
+    _run(tmp_path, scenario)
