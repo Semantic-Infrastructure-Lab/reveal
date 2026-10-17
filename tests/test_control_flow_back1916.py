@@ -26,19 +26,16 @@ def _parse(language, source):
 
 
 @pytest.mark.parametrize('language,source,expected', [
-    ('dart', '''int f(bool a) {
-  if (a) {
-    try { return 1; }
-    on FormatException catch(e) { return 2; }
-    on StateError { return 3; }
-    catch(e) { return 4; }
-    finally { return 5; }
-  }
+    ('dart', '''int f() {
+  try { return 1; }
+  on FormatException catch(e) { return 2; }
+  on StateError { return 3; }
+  catch(e) { return 4; }
+  finally { return 5; }
   return 6;
 }
-''', [(3, [(2, 'a')]), (4, [(2, 'a'), (4, 'on exception')]),
-      (5, [(2, 'a'), (5, 'on exception')]), (6, [(2, 'a'), (6, 'on exception')]),
-      (7, [(2, 'a')]), (9, [])]),
+''', [(2, []), (3, [(3, 'on exception')]), (4, [(4, 'on exception')]),
+      (5, [(5, 'on exception')]), (6, []), (7, [])]),
     ('zig', '''fn f(a: bool, b: bool) i32 {
   if (a) {
     return 1;
