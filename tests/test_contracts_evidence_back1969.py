@@ -1,5 +1,4 @@
 """Contract facts retain their own failed and recovered input population."""
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -38,8 +37,8 @@ def test_real_scanners_retain_contracts_and_recovery(tmp_path, extension, recove
 
 
 def test_all_failed_shared_structures_are_loaded_once_and_count_distinct_inputs(tmp_path):
-    for name in ('a.py', 'b.ts'):
-        (tmp_path/name).write_text('irrelevant\n', encoding='utf-8')
+    for name, extension in (('a.py', 'py'), ('b.ts', 'ts')):
+        (tmp_path/name).write_text(SAMPLES[extension][0], encoding='utf-8')
     with patch.object(analysis, 'create_element_dict', side_effect=OSError('exact producer read failure')) as producer:
         result = ContractsAdapter(str(tmp_path)).get_structure()
     assert producer.call_count == 2
