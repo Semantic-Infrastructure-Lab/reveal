@@ -47,3 +47,7 @@ def capture_owner():
     def implicit_capture(key):
         captured[key] = 1
     return implicit_capture
+
+class LocalBody:
+    state = {}
+    state['key'] = 1

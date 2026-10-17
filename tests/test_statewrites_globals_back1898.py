@@ -25,7 +25,7 @@ def _scope(language, name):
     def text(node):
         return content[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8')
 
-    funcs = kind_nodes(root, 'function_definition', 'function_declaration', 'method_declaration')
+    funcs = kind_nodes(root, 'function_definition', 'function_declaration', 'method_declaration', 'class_definition')
     func = next(node for node in funcs if text(node.child_by_field_name('name')) == name)
     return tree, func, text, source
 
@@ -144,3 +144,7 @@ def test_javascript_function_value_scope_shapes(definition, kind):
     text = lambda node: content[_zero_arg(node, 'start_byte'):_zero_arg(node, 'end_byte')].decode('utf-8')
     assert collect_statewrites(func, 2, 2, text, 'javascript') == [
         dict(kind='global', line=2, target='state[key]', via='assignment')]
+
+
+def test_python_class_body_container_is_local_to_class():
+    assert _writes('python', 'LocalBody')[0] == []
