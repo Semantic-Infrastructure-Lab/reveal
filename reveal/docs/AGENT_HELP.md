@@ -66,7 +66,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 - **Limit results:** `--limit N` becomes `?limit=N` on ast/markdown/json/git/stats and `?top=N` on hotspots/calls/depends/testability; elsewhere a note says it has no effect. `--head N` slices any list result.
 - **Scripting:** `--format json` puts JSON on stdout (warnings go to stderr); `--no-breadcrumbs` drops the next-step hints. A target that cannot render a `--format` value exits 2.
 - **Machine-readable discovery:** `reveal 'help://schemas/<adapter>'` gives one adapter's query params and output shape; `reveal --discover` gives every adapter's schema (query params, flags, output types, examples) as one JSON document (large: ~12,500 tokens); rules are `reveal --rules`.
-- **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete; `review` 0 pass, 1 warnings, 2 blocking issue or bad target, 3 incomplete; `deps` defaults to no findings gate, with `--fail-on findings` for exit 1, usage 2 and incomplete/output failure 3; `hotspots` retains exit 1 for file quality below 70 or function complexity above 20.
+- **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete; `review` 0 pass, 1 warnings, 2 blocking issue or bad target, 3 incomplete; `deps` defaults to no findings gate, with `--fail-on findings` for exit 1, usage 2 and incomplete/output failure 3; `hotspots` defaults to no findings gate; `--fail-on findings` exits 1 for file quality below 70 or function complexity above 20, usage exits 2, and incomplete/output failure exits 3.
 
 ---
 
@@ -1554,6 +1554,15 @@ reveal hotspots . --format json    # JSON for CI/scripting
 ```
 
 **Output:** Files ranked by quality score (worst first) + complex functions with cyclomatic complexity scores. Each function shows a test-name-match hint (not measured coverage): ✅ (a `test_<func>` function exists in `tests/`/`test/`/`spec/`, or a `test_<module>.py` file matches the module name) or ⚪ (no test match found), or ❔ (no known test convention for the language — not a claim either way). Test matching follows each language's conventions (Go `_test.go` + `TestXxx`, Rust `#[test]`, JS/TS `*.test.*`/`*.spec.*`, JUnit `FooTest`/`testBar`). JSON output adds `has_test_hint: true/false/null` per function (`null` = no test convention known for that language).
+
+Both transports return `hotspots_scan`, default to `--fail-on none`, and support
+`--fail-on findings` using pre-cap evidence (quality <70 or complexity >20).
+`top` caps JSON and text rankings: 0 means all, negative values reject; signed
+`min_complexity` remains valid. Whole decimal/scientific values normalize; fractions
+and booleans reject. `--verbose` lifts caps in either form. URI `--all` preserves
+explicit `top`; the subcommand rejects `--all`. Required Stats/AST failures exit 3,
+including when `--fields` omits the evidence. See the
+[hotspots guide](adapters/HOTSPOTS_ADAPTER_GUIDE.md).
 
 **Use case:** Identify the 10 worst files in a codebase — start technical debt work here. Output is the same data `reveal review` uses to surface hotspots in PR reviews.
 
@@ -3657,7 +3666,7 @@ reveal deep_dir/
 | `reveal review` | pass | warn (`low`/`medium` findings only) | fail (any `high`/`critical` finding) **or** invalid target (unknown revision, not a git repo) | incomplete — a check crashed or skipped files |
 | `ssl://… --check`, `domain://… --check` | pass | warning (e.g. cert expiring <30 days) | critical/failure (expired, <7 days, DNS/HTTP failure) | — |
 | nginx `--validate-nginx-acme` / `--check-acl` / `--cpanel-certs`, `cpanel://USER/full-audit`, `nginx:// --audit` | pass | — | failure / gaps found | — |
-| `reveal deps`, `reveal hotspots` | clean | cycles/unused imports, or hotspots, found | — | — |
+| `reveal deps`, `reveal hotspots` | complete without an enabled gate matching | explicit `--fail-on findings` matches | invalid request | incomplete analysis/output failure |
 | Direct `reveal surface` / `surface://` | completed inventory | — | invalid resource/parameter or unsupported gate | required analysis/output incomplete or failed |
 | Other commands given a path that doesn't exist | — | `Error: … not found` | — | — |
 | An argument the run would ignore: a path given to a mode that reads none (`reveal a.py --rules`, `--adapters`, `--languages`, `--list-schemas`, `--explain`, `--stdin`, ...), a second path given to a flag that reads no element (`reveal a.py b.py --check`, `reveal a.html b.html --metadata`, `--links`, `--typed`), an element beside `--section` (`reveal a.md b.md --section X`), `--stdin` beside `--section`, or `--stdin` beside `--decorator-stats`/`--explain-file`/`--capabilities`/`--show-ast` (those read one path; loop over the paths instead) | — | — | usage error: stderr names the flag and the ignored argument, nothing runs | — |

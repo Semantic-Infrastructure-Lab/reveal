@@ -414,10 +414,10 @@ both forms (BACK-1544). A legacy subcommand's findings exit (`hotspots` exits 1 
 
 ## Declared execution policy
 
-Direct surface, architecture, contracts and deps subcommands and their URI equivalents share declared
+Direct surface, architecture, contracts, deps and hotspots subcommands and their URI equivalents share declared
 parameter binding and one answer/emission path. Surface retains `surface_scan`;
 architecture retains `architecture` or `architecture_diff` by resolved operation.
-Contracts retains `contracts`; deps retains `deps_scan`.
+Contracts retains `contracts`; deps retains `deps_scan`; hotspots retains `hotspots_scan`.
 Their execution policy
 uses explicit completeness and failure causes from the analysis owner, independently
 of `outcome_of()`'s legacy rendering categories:
@@ -468,6 +468,19 @@ primary JSON after execution facts exist. Text and human-primary artifacts retai
 the full map. Both spellings return `deps_scan`; `--fail-on findings` restores the
 previous text-mode findings gate. Whole-valued `top=3.0` and `top=1e2` are valid;
 CLI `--all` remains rejected, URI `--all` and both `--verbose` expand text only.
+
+Hotspots defaults to `none` and supports `findings` using the owner's pre-cap
+`summary.has_findings`: quality below 70 or complexity above 20. Stats coverage
+is required in every mode; AST coverage/results are required unless `files_only`.
+Missing/malformed proof, errors and `parse_degraded`, `check_rules_failed`,
+`analysis_failed` or `parse_recovered` warnings prevent successful execution.
+Optional churn/test convention warnings, confidence and ranking cuts do not.
+Top caps retained JSON and text rankings (zero all); negative top now rejects.
+Signed min_complexity remains accepted; whole decimal/scientific numeric values
+normalize consistently. Both transports' `--verbose` lifts caps. CLI `--all`
+remains rejected; URI `--all` preserves an explicit top. Default text findings
+now exit 0; explicit `--fail-on findings` restores the findings gate in either
+format and transport. Neither fields nor output cuts erase captured facts.
 
 Human-primary `--also-json PATH` uses the same result as primary JSON. A requested
 artifact write failure is disclosed on stderr and in `meta.output_errors`, while the

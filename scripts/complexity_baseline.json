@@ -93,7 +93,7 @@
   "reveal/adapters/help.py::HelpAdapter._discover_and_merge_guides": 18,
   "reveal/adapters/help.py::HelpAdapter._search_help": 24,
   "reveal/adapters/help.py::HelpAdapter._summarize_schema": 17,
-  "reveal/adapters/hotspots.py::HotspotsAdapter.get_structure": 18,
+  "reveal/adapters/hotspots.py::HotspotsAdapter.get_structure": 17,
   "reveal/adapters/hotspots.py::_build_test_name_index": 19,
   "reveal/adapters/imports.py::ImportsRenderer._render_circular_dependencies": 18,
   "reveal/adapters/imports.py::ImportsRenderer._render_import_summary": 17,

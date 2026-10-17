@@ -27,6 +27,14 @@ def _hotspots_top(value: Any) -> int:
     return nonnegative_display_limit(value)
 
 
+
+def _ranking_top(params: Dict[str, Any], verbose: bool) -> int:
+    top = cast(int, _TOP.read(params))
+    if verbose or top == 0:
+        from reveal.adapters.overview import UNLIMITED_TOP
+        return UNLIMITED_TOP
+    return top
+
 def _hotspots_min(value: Any) -> int:
     if isinstance(value, bool):
         raise ValueError('min_complexity requires a whole number, not a boolean')
@@ -178,8 +186,10 @@ def _compose_stats(adapter: 'HotspotsAdapter', path: Path, **params: Any) -> Dic
         # Stats still returns optional churn disclosures outside its meta frame.
         adapter.fold_meta({'warnings': data['warnings']})
     if params.get('hotspots'):
+        files = data.get('files')
+        files = files if isinstance(files, list) else []
         adapter._file_findings = _has_findings(
-            (file['quality']['score'] for file in (data.get('files') if isinstance(data.get('files'), list) else [])
+            (file['quality']['score'] for file in files
              if isinstance(file, dict) and isinstance(file.get('quality'), dict)
              and _is_metric(file['quality'].get('score'))), ())
     return cast(Dict[str, Any], data)
@@ -382,6 +392,13 @@ class HotspotsAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Test-coverage hint is a name-matching heuristic, not real coverage data.',
+                'Default --fail-on none reports findings without failing; --fail-on findings exits 1 '
+                'for file quality below 70 or function complexity above 20. Required analysis/output '
+                'failure exits 3; invalid requests exit 2.',
+                'top caps both JSON and text rankings (0 = all; negative values reject). '
+                'Whole decimal/scientific values are accepted; min_complexity remains signed. '
+                '--verbose lifts both caps. URI --all lifts caps only without explicit top; '
+                'the subcommand does not accept --all.',
             ],
             'see_also': [
                 'reveal hotspots <path> - CLI subcommand form',
@@ -425,12 +442,7 @@ class HotspotsAdapter(ResourceAdapter):
 
     def get_structure(self, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
         path = Path(self.path)
-        top = _TOP.read(self.query_params)
-        if verbose or top == 0:
-            # BACK-1505: top=0 meant "show none" and then printed the ✅ clean
-            # verdict -- a false all-clear. 0 means no cap, as it does for calls://.
-            from reveal.adapters.overview import UNLIMITED_TOP
-            top = UNLIMITED_TOP
+        top = _ranking_top(self.query_params, verbose)
         min_cx = _MIN_COMPLEXITY.read(self.query_params)
         functions_only = _FUNCTIONS_ONLY.read(self.query_params)
         files_only = _FILES_ONLY.read(self.query_params)

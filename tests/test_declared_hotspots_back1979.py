@@ -256,3 +256,94 @@ def test_uri_head_retains_preprojection_findings(project, policy, expected):
     result = run('hotspots://proj', '--format', 'json', '--head', '1', '--fail-on', policy)
     assert result.returncode == expected, result.stderr
     assert len(json.loads(result.stdout)['function_hotspots']) == 1
+
+
+@pytest.mark.parametrize('transport', ['cli', 'uri'])
+@pytest.mark.parametrize('kind', ['returned', 'raised', 'postraised', 'postNone', 'meta_error'])
+def test_required_returned_and_raised_failures(project, monkeypatch, transport, kind):
+    original = HotspotsAdapter.get_structure
+    if kind.startswith('post'):
+        def process(self, result, args):
+            if kind == 'postNone':
+                return None
+            raise OSError('postprocess inaccessible')
+        monkeypatch.setattr(HotspotsAdapter, 'post_process', process)
+    else:
+        def answer(self, **kwargs):
+            if kind == 'raised':
+                raise OSError('required analysis inaccessible')
+            result = original(self, **kwargs)
+            if kind == 'returned':
+                result['error'] = 'returned required failure'
+            else:
+                result.setdefault('meta', {})['errors'] = [{'code': 'invalid_request', 'message': 'producer failed'}]
+            return result
+        monkeypatch.setattr(HotspotsAdapter, 'get_structure', answer)
+    result = run(*argv(transport), '--format', 'json', '--fail-on', 'none')
+    assert result.returncode == 3, result.stderr
+    assert json.loads(result.stdout)['type'] == 'hotspots_scan'
+
+
+@pytest.mark.parametrize('warning', ['parse_degraded', 'analysis_failed', 'parse_recovered'])
+def test_required_ast_diagnostics_and_files_only_skip(project, monkeypatch, warning):
+    original = AstAdapter.get_structure
+    calls = []
+    def answer(self, **kwargs):
+        calls.append(True)
+        result = original(self, **kwargs)
+        result.setdefault('meta', {})['warnings'] = [{'type': warning, 'message': 'required parse did not complete'}]
+        return result
+    monkeypatch.setattr(AstAdapter, 'get_structure', answer)
+    assert run('hotspots://proj', '--format', 'json').returncode == 3
+    calls.clear()
+    result = run('hotspots://proj?files_only=true', '--format', 'json')
+    assert result.returncode == 0 and calls == []
+
+
+def test_composed_exception_once_and_instance_reuse(project, monkeypatch):
+    adapter = HotspotsAdapter('proj', 'functions_only=true')
+    original = AstAdapter.get_structure
+    def fail(self, **kwargs):
+        raise OSError('AST inaccessible')
+    monkeypatch.setattr(AstAdapter, 'get_structure', fail)
+    failed = adapter.get_structure()
+    errors = failed['meta']['errors']
+    assert len(errors) == 1 and errors[0]['code'] == 'E_COMPOSE'
+    assert 'AST inaccessible' in errors[0]['message']
+    monkeypatch.setattr(AstAdapter, 'get_structure', original)
+    complete = adapter.get_structure()
+    assert not complete.get('meta', {}).get('errors')
+    assert complete['summary']['has_findings'] is True
+
+
+@pytest.mark.parametrize('transport', ['cli', 'uri'])
+def test_missing_and_inaccessible_resources(project, monkeypatch, transport):
+    missing = ['hotspots', 'missing'] if transport == 'cli' else ['hotspots://missing']
+    result = run(*missing, '--format', 'json')
+    assert result.returncode == 2
+    assert json.loads(result.stdout)['type'] == 'hotspots_scan'
+    stat = Path.stat
+    def inaccessible(self, *args, **kwargs):
+        if str(self) in ('proj', str(project)):
+            raise PermissionError('required resource inaccessible')
+        return stat(self, *args, **kwargs)
+    monkeypatch.setattr(Path, 'stat', inaccessible)
+    result = run(*argv(transport), '--format', 'json')
+    assert result.returncode == 3
+    assert json.loads(result.stdout)['type'] == 'hotspots_scan'
+
+
+@pytest.mark.parametrize('flags', [['--exclude', 'a.py'], ['--no-gitignore'], ['--exclude', 'a.py', '--no-gitignore']])
+def test_scope_and_no_gitignore_parity(project, flags):
+    (project/'.gitignore').write_text('a.py\n', encoding='utf-8')
+    left = run('hotspots', 'proj', *flags, '--format', 'json')
+    right = run('hotspots://proj', *flags, '--format', 'json')
+    assert left.returncode == right.returncode == 0
+    equal_answers(json.loads(left.stdout), json.loads(right.stdout))
+
+
+@pytest.mark.parametrize('parameter', ['top', 'min_complexity'])
+@pytest.mark.parametrize('value', [True, False, 1.5, float('nan'), float('inf')])
+def test_typed_numeric_evidence_rejects_booleans_and_fractions(parameter, value):
+    with pytest.raises(ValueError):
+        HotspotsAdapter('.', params={parameter: value})

@@ -495,11 +495,19 @@ reveal hotspots [PATH] [--top N] [--min-complexity N]
 
 | Flag | Description |
 |------|-------------|
-| `--top N` | Number of hotspot files to show (default: 10) |
-| `--min-complexity N` | Minimum cyclomatic complexity to report (default: 10) |
+| `--top N` | Retained items per ranking, including JSON (default: 10; 0 = all; negative rejects) |
+| `--min-complexity N` | Signed whole-valued minimum complexity to report (default: 10) |
 | `--functions-only` | Show only complex functions, skip file-level hotspots |
 | `--files-only` | Show only file-level hotspots, skip function analysis |
 | `--format json` | Machine-readable output |
+
+Both spellings return `hotspots_scan` and default to `--fail-on none` (completed
+findings exit 0). `--fail-on findings` exits 1 for file quality below 70 or function
+complexity above 20 using evidence before ranking/field cuts. Invalid requests
+exit 2; incomplete required analysis or requested output failure exits 3. Numeric
+controls accept whole decimal/scientific values and reject fractions/booleans.
+`--verbose` lifts ranking caps for text and JSON in either transport. CLI `--all`
+is rejected; URI `--all` expands only without explicit `top`.
 
 ### Test Coverage Heuristic
 

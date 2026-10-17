@@ -35,10 +35,19 @@ reveal 'hotspots://.?top=20' --format json
 
 | Parameter | Values | Purpose |
 |-----------|--------|---------|
-| `top` | integer (default `10`) | Number of hotspots to show per list; `0` = all (as `--limit 0` and `--all`). |
-| `min_complexity` | integer (default `10`) | Minimum cyclomatic complexity for a function to be reported. |
+| `top` | nonnegative integer (default `10`) | Retained items per ranking in text and JSON; `0` = all. |
+| `min_complexity` | signed integer (default `10`) | Minimum cyclomatic complexity for a function to be reported. |
 | `functions_only` | `true`, `false` (default) | Skip file-level hotspots. |
 | `files_only` | `true`, `false` (default) | Skip function-level hotspots (and the test-index scan below). |
+
+Whole decimal/scientific spellings such as `3.0` and `1e2` are accepted for
+both numeric parameters; fractions and booleans reject. Negative `top` now rejects
+with usage code 2 rather than expanding the rankings; signed `min_complexity`
+thresholds remain valid. The two only-flags are independent strict booleans.
+
+`--verbose` lifts both ranking caps in either transport. URI `--all` lifts caps
+when no explicit `top` is present; explicit `top` wins. The subcommand rejects
+`--all`. These controls retain their existing acceptance boundaries.
 
 ## Reading The Output
 
@@ -72,10 +81,26 @@ Single-file requests support file ranking and disclose failed check rules just
 as directory requests do. Optional churn warnings survive composition without
 becoming adverse findings.
 
-The existing exit policy remains: direct CLI text exits 1 for these findings,
-including critical files outside its top ranking; CLI JSON and URI requests
-retain their existing exit behavior. This producer repair does not adopt the
-declared execution policy or add a `--fail-on` gate.
+Both invocation forms return `hotspots_scan` under the
+[declared execution policy](../development/OUTPUT_CONTRACT.md#declared-execution-policy).
+The default `--fail-on none` reports completed findings with exit 0 in text and JSON.
+Use `--fail-on findings` for exit 1 when `summary.has_findings` is true, including
+critical files outside the retained ranking. Invalid requests exit 2; required
+analysis or requested output failure exits 3 even with `--fail-on none`. This
+replaces the former automatic CLI text findings gate.
+
+Stats coverage is required in every mode, including both only-flags together.
+AST coverage/results are required unless `files_only` is enabled. Missing or
+malformed child proof and failed parse/check analysis remain failures before
+ranking or field projection. `parse_degraded`, `check_rules_failed`,
+`analysis_failed` and `parse_recovered` indicate incomplete required work;
+optional churn/test conventions, confidence alone and ranking cuts do not.
+Surviving observations and attributed diagnostics remain available.
+
+`--fields`, URI `--head` and `--max-items` operate after execution facts are
+captured. Human-primary `--also-json PATH` writes the same answer; a failed
+requested write exits 3. Primary JSON retains the existing artifact no-op.
+Mixed URI batches retain their legacy execution policy and reject `--fail-on`.
 
 ## Good Review Questions
 
