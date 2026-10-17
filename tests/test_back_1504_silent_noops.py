@@ -37,7 +37,7 @@ def test_calls_depth_where_it_applies_is_silent(pkg, capsys, query):
 
 
 def test_surface_unknown_type_is_an_error(pkg):
-    with pytest.raises(ValueError, match=r"type must be one of.*routes"):
+    with pytest.raises(ValueError, match=r"type must be one of .*got 'routes'"):
         SurfaceAdapter(str(pkg), 'type=routes').get_structure()
 
 
