@@ -100,7 +100,7 @@ const Outer = struct {
     fn run() u32 { return 1; }
     const Inner = struct {
         fn run() u32 { return 2; }
-    };
+    }; fn factory() type { return struct { fn hidden() void {} }; } const Derived = make(struct { fn secret() void {} });
 };
 const Other = struct { fn run() u32 { return 3; } };
 const Choice = enum { first, fn run() u32 { return 4; } };
@@ -144,6 +144,7 @@ def test_zig_bare_duplicate_and_ordinal_owners(zig):
 
 
 def test_zig_noncontainers_and_anonymous_values_are_not_owners(zig):
-    for address in ('scalar.run', 'Derived.hidden', 'factory.hidden', 'Missing.run'):
+    for address in ('scalar.run', 'Derived.hidden', 'factory.hidden', 'Missing.run',
+                    'Outer.hidden', 'Outer.secret', 'Outer.Derived.secret'):
         assert resolve_path(zig, address) is None
     assert _extract_element_at_line(zig, 11) is None
