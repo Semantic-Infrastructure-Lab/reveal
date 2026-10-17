@@ -118,3 +118,12 @@ def test_resource_raw_existing_path_wins_then_decodes_once(binding, tmp_path):
     assert binding.bind_resource_path(declaration, encoded, transport='uri') == str(question)
     assert binding.bind_resource_path(declaration, str(question), transport='typed') == str(question)
     assert binding.bind_resource_path(query.ResourceSpec(), encoded, transport='uri') == encoded
+
+
+def test_existing_raw_query_and_fixed_flags_negative_control():
+    legacy = query.ParamSpec('n', 'integer', 'Rows', 2, int, cli_flags=(('all', '1000000'),))
+    assert legacy.read(query.parse_query_params('n=0')) == 0
+    assert query.param_cli_flags((legacy,)) == {'all': 'n=1000000'}
+    assert dict(query.parse_query_params('x=%26+&x=a=b')) == {'x': 'a=b'}
+    assert query.split_exclude_param(query.join_exclude_patterns(['a,b', '%26'])) == ['a,b', '%26']
+    assert query.parse_query_filters('name=a%26b')[0].value == 'a%26b'
