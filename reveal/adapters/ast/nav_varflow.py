@@ -222,7 +222,8 @@ class VarFlowWalker:
         ntype = _zero_arg(n, 'kind')
         line = _zero_arg(n, 'start_position').row + 1
 
-        if _zero_arg(n, 'end_position').row + 1 < self.from_line or line > self.to_line:
+        if (_zero_arg(n, 'end_position').row + 1 < self.from_line or line > self.to_line
+                or ntype == 'type'):
             return
 
         # Terminal-identifier matches and per-language "this name is not a
@@ -241,9 +242,6 @@ class VarFlowWalker:
         _collect_identifier_names — direct --varflow queries reach var_flow()
         without going through that candidate pass, so the same "not a variable"
         knowledge has to be applied here too (BACK-431 feature-breadth pass)."""
-        if ntype == 'type':
-            return True
-
         if ntype in ('identifier', 'variable_name', 'simple_identifier', 'IDENTIFIER',
                      'shorthand_property_identifier_pattern') and self.get_text(n) == self.var_name:
             pos = (_zero_arg(n, 'start_position').row, _zero_arg(n, 'start_position').column)
@@ -1201,8 +1199,6 @@ def _member_access_descent(node: Any) -> Optional[List[Any]]:
     (BACK-431 feature-breadth pass); see the original inline comments preserved
     below for the exact source each idiom came from."""
     kind = _zero_arg(node, 'kind')
-    if kind == 'type':
-        return []
     if kind in _MEMBER_ACCESS_KINDS:
         # `obj.field` / `obj:method()` — only the base object is a variable.
         children = _children(node)

@@ -317,7 +317,7 @@ def collect_deps(
     """
     all_events = all_var_flow(scope_node, from_line, to_line, get_text)
     deps: List[Dict[str, Any]] = []
-    builtins = conventions_for(FAMILY_BY_LANGUAGE.get(language, language or '')).builtins
+    builtins = conventions_for(FAMILY_BY_LANGUAGE.get(language or '', language or '')).builtins
     bindings = BindingScope(scope_node, get_text, language) if builtins else None
     for var_name, events in all_events.items():
         in_range = [e for e in events if from_line <= e['line'] <= to_line]
