@@ -178,3 +178,110 @@ def test_incomplete_outcomes_are_rejected(tmp_path):
     capture.events[:] = [event for event in capture.events if event.event != 'outcome']
     with pytest.raises(error, match='outcome'):
         capture.validate()
+
+
+def test_explicit_manifest_does_not_merge_identical_files(tmp_path):
+    capture_parses, _ = _api()
+    with capture_parses(tmp_path, targets=['a.py']) as capture:
+        tp.get_tree('python', SOURCE, filename=tmp_path / 'a.py')
+        tp.get_tree('python', SOURCE, filename=tmp_path / 'b.py')
+    assert [event.scope for event in _events(capture, 'request')] == ['target', 'external']
+    assert len(_events(capture, 'artifact')) == 1
+
+
+def test_surface_callers_forward_python_and_javascript_filenames(tmp_path):
+    from reveal.adapters.surface import _scan_surface
+    capture_parses, _ = _api()
+    (tmp_path / 'a.py').write_text("import os\nx = os.environ['AUDIT_KEY']\n", encoding='utf-8')
+    (tmp_path / 'b.js').write_text('const x = process.env.AUDIT_KEY;\n', encoding='utf-8')
+    with capture_parses(tmp_path) as capture:
+        result = _scan_surface(tmp_path)
+    assert result['total'] == 2 and not result['unparsed_files']
+    assert {event.filename for event in _events(capture, 'request')} == {
+        (tmp_path / 'a.py').resolve().as_posix(), (tmp_path / 'b.js').resolve().as_posix()}
+    assert {event.parser for event in _events(capture, 'artifact')} == {'python.ast', 'treesitter:tsx'}
+
+
+def test_analyzer_outer_cache_hit_is_not_another_seam_request(tmp_path):
+    from reveal.analyzers.python import PythonAnalyzer
+    capture_parses, _ = _api()
+    source = tmp_path / 'a.py'
+    source.write_text(SOURCE, encoding='utf-8')
+    with capture_parses(tmp_path) as capture:
+        first = PythonAnalyzer(str(source)).tree
+        second = PythonAnalyzer(str(source)).tree
+    assert first is second
+    assert len(_events(capture, 'request')) == len(_events(capture, 'artifact')) == 1
+
+
+def test_file_fact_and_literal_callers_forward_filenames(tmp_path):
+    from reveal.adapters.ast.surface_facts import extract_file_facts
+    from reveal.rules.duplicates.D005 import D005, _file_literals
+    capture_parses, _ = _api()
+    path = tmp_path / 'a.py'
+    path.write_text('VALUES = ["a", "b", "c", "d", "e"]\n', encoding='utf-8')
+    with capture_parses(tmp_path) as capture:
+        facts = extract_file_facts(str(path))
+        literals = _file_literals(path, D005())
+    assert facts is not None and literals
+    assert [event.filename for event in _events(capture, 'request')] == [path.resolve().as_posix()] * 2
+
+
+@pytest.mark.parametrize(('remove', 'outcome'), [('artifact', None), (None, 'cached')])
+def test_built_and_cached_outcomes_must_agree_with_artifacts(tmp_path, remove, outcome):
+    capture_parses, error = _api()
+    with capture_parses(tmp_path) as capture:
+        pyparse.parse_python(SOURCE, tmp_path / 'a.py')
+    if remove:
+        capture.events[:] = [event for event in capture.events if event.event != remove]
+    if outcome:
+        capture.events[:] = [dataclasses.replace(event, outcome=outcome) if event.event == 'outcome'
+                             else event for event in capture.events]
+    with pytest.raises(error):
+        capture.validate()
+
+
+@pytest.mark.parametrize('filename', [None, '', '<virtual>'])
+def test_missing_empty_and_synthetic_fullsource_names_rejected(tmp_path, filename):
+    capture_parses, error = _api()
+    with pytest.raises(error, match='fullsource.*filename'):
+        with capture_parses(tmp_path):
+            tp.get_tree('python', SOURCE, filename=filename)
+
+
+def test_tree_attempt_counts_compatibility_wrapper_not_native_retry(tmp_path, monkeypatch):
+    from reveal.core import treesitter_compat as compat
+    capture_parses, _ = _api()
+    calls = []
+
+    class BytesParser:
+        def parse(self, source):
+            calls.append(type(source).__name__)
+            if isinstance(source, str):
+                raise TypeError('a bytes-like object is required')
+            return object()
+
+    monkeypatch.setattr(tp, 'get_parser', lambda language: BytesParser())
+    try:
+        with capture_parses(tmp_path) as capture:
+            first = tp.get_tree('bytes_fixture', SOURCE, filename=tmp_path / 'a.py')
+            assert tp.get_tree('bytes_fixture', SOURCE, filename=tmp_path / 'b.py') is first
+        assert calls == ['str', 'bytes']
+        attempt, = _events(capture, 'attempt')
+        assert attempt.phase == 'compatibility-wrapper'
+        assert len(_events(capture, 'artifact')) == 1
+        assert [event.outcome for event in _events(capture, 'outcome')] == ['built', 'cached']
+    finally:
+        compat._PARSE_TAKES_BYTES.pop(BytesParser, None)
+
+
+@pytest.mark.parametrize('field', ['filename', 'parser', 'source_hash', 'parsed_hash', 'phase', 'pid'])
+def test_artifact_cannot_forge_request_or_attempt_identity(tmp_path, field):
+    capture_parses, error = _api()
+    with capture_parses(tmp_path) as capture:
+        pyparse.parse_python(SOURCE, tmp_path / 'a.py')
+    replacement = 0 if field == 'pid' else 'forged'
+    capture.events[:] = [dataclasses.replace(event, **{field: replacement}) if event.event == 'artifact'
+                         else event for event in capture.events]
+    with pytest.raises(error):
+        capture.validate()
