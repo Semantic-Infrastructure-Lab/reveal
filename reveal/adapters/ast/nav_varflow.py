@@ -645,6 +645,17 @@ class VarFlowWalker:
         left = n.child_by_field_name(left_field)
         right = n.child_by_field_name(right_field)
         body = n.child_by_field_name('body')
+        declaration = n.child_by_field_name('kind')
+        initializer = n.child_by_field_name('initializer')
+        if (declaration is not None and _zero_arg(declaration, 'kind') in ('let', 'const')) or (
+                initializer is not None and _zero_arg(initializer, 'kind') == 'lexical_declaration'):
+            # JS/TS loop declarations own their body and captured reads, while
+            # `var` declarations and assignment-only loops keep function scope.
+            binding = initializer if initializer is not None else left
+            parts = [child for child in _children(n)
+                     if binding is None or _start_pos(child) != _start_pos(binding)]
+            self._walk_bound_body(n, [binding] if binding is not None else [], parts)
+            return
         processed: set = set()
         if left:
             processed.add((_zero_arg(left, 'start_byte'), _zero_arg(left, 'end_byte')))
