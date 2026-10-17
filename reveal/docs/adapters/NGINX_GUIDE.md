@@ -431,12 +431,12 @@ N012  LOW     limit_req_zone defined but not applied to this server block (line 
 
 Suppress per-server: `# reveal:allow-no-rate-limit`
 
-#### `--only-failures` with `--check`
+#### Filter file-rule findings by severity
 
-On configs with many domains, suppress passing rules — see only actionable findings:
+`reveal check` already prints only violations. To focus on high and critical findings:
 
 ```bash
-reveal check /etc/nginx/conf.d/users/myuser.conf --only-failures
+reveal check /etc/nginx/conf.d/users/myuser.conf --severity high
 ```
 
 #### `--no-group`
