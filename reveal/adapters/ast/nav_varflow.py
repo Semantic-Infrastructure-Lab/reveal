@@ -97,6 +97,10 @@ _DECL_SHAPES: Dict[str, _DeclShape] = {
     'lambda_literal': _DeclShape(positional='_walk_closure'),
     'catch_clause': _DeclShape(positional='_walk_catch'),
     'as_pattern': _DeclShape(write_field='alias'),
+    'default_parameter': _DeclShape(write_field='name', read_field='value'),
+    'typed_default_parameter': _DeclShape(write_field='name', read_field='value'),
+    'assignment_pattern': _DeclShape(write_field='left', read_field='right'),
+    'object_assignment_pattern': _DeclShape(write_field='left', read_field='right'),
     'for_in_clause': _DeclShape(write_field='left', read_field='right'),
     'range_clause': _DeclShape(write_field='left', read_field='right'),
     'list_comprehension': _DeclShape(positional='_walk_comprehension'),
@@ -237,7 +241,8 @@ class VarFlowWalker:
         _collect_identifier_names — direct --varflow queries reach var_flow()
         without going through that candidate pass, so the same "not a variable"
         knowledge has to be applied here too (BACK-431 feature-breadth pass)."""
-        if ntype in ('identifier', 'variable_name', 'simple_identifier', 'IDENTIFIER') and self.get_text(n) == self.var_name:
+        if ntype in ('identifier', 'variable_name', 'simple_identifier', 'IDENTIFIER',
+                     'shorthand_property_identifier_pattern') and self.get_text(n) == self.var_name:
             pos = (_zero_arg(n, 'start_position').row, _zero_arg(n, 'start_position').column)
             if pos == self.own_name_pos:
                 return True
@@ -681,9 +686,25 @@ class VarFlowWalker:
 
     def _walk_comprehension(self, n: Any) -> None:
         """Generators bind before the result expression, despite source order."""
-        clauses = [c for c in _children(n) if _zero_arg(c, 'kind') == 'for_in_clause']
-        rest = [c for c in _children(n) if _zero_arg(c, 'kind') != 'for_in_clause']
-        self._walk_bound_body(n, clauses, rest)
+        previous = self.binding_scope
+        for clause in _children(n):
+            if _zero_arg(clause, 'kind') != 'for_in_clause':
+                continue
+            right = clause.child_by_field_name('right')
+            left = clause.child_by_field_name('left')
+            if right is not None:
+                self.walk(right, 'READ')
+            start = len(self.events)
+            if left is not None:
+                self.walk(left, 'WRITE')
+            if self.events[start:]:
+                self.binding_scope = (_zero_arg(n, 'start_byte'), _zero_arg(n, 'end_byte'))
+                for event in self.events[start:]:
+                    event['binding_scope'] = self.binding_scope
+        for child in _children(n):
+            if _zero_arg(child, 'kind') != 'for_in_clause':
+                self.walk(child, 'READ')
+        self.binding_scope = previous
 
     def _walk_catch(self, n: Any) -> None:
         """JS, Java and PHP expose the catch target in different fields."""
@@ -1266,7 +1287,8 @@ def _collect_identifier_names(
         if _zero_arg(node, 'end_position').row + 1 < from_line or line > to_line:
             continue
         node_kind = _zero_arg(node, 'kind')
-        if (node_kind in ('identifier', 'variable_name', 'simple_identifier', 'IDENTIFIER') and
+        if (node_kind in ('identifier', 'variable_name', 'simple_identifier', 'IDENTIFIER',
+                     'shorthand_property_identifier_pattern') and
                 from_line <= line <= to_line):
             pos = (_zero_arg(node, 'start_position').row, _zero_arg(node, 'start_position').column)
             if pos not in skip_positions:

@@ -342,8 +342,12 @@ def collect_mutations(
     for var_name, events in all_events.items():
         in_range = [e for e in events if from_line <= e['line'] <= to_line]
         after_range = [e for e in events if e['line'] > to_line]
-        writes_in = [e for e in in_range if e['kind'] == 'WRITE']
-        if writes_in and after_range:
+        writes_in = [e for e in in_range if e['kind'] == 'WRITE'
+                     and any(later.get('binding_scope') == e.get('binding_scope')
+                             for later in after_range)]
+        if writes_in:
+            owners = {e.get('binding_scope') for e in writes_in}
+            after_range = [e for e in after_range if e.get('binding_scope') in owners]
             last_write = max(writes_in, key=lambda e: e['line'])
             next_read = min(after_range, key=lambda e: e['line'])
             mutations.append({
