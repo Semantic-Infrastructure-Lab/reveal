@@ -45,21 +45,21 @@ def _run_circular(adapter: 'DepsAdapter', path: Path) -> Dict[str, Any]:
     """Fetch circular dependency cycles via ImportsAdapter."""
     result = adapter.compose(ImportsAdapter, str(path), default={}, query='circular')
     adapter._record_component('circular', result)
-    return result if isinstance(result, dict) and _valid_component_payload('circular', result) else {}
+    return result if _valid_component_payload('circular', result, require_count=False) else {}
 
 
 def _run_unused(adapter: 'DepsAdapter', path: Path) -> List[Dict[str, Any]]:
     """Fetch unused imports via ImportsAdapter."""
     data = adapter.compose(ImportsAdapter, str(path), default={}, query='unused')
     adapter._record_component('unused', data)
-    return data['unused'] if _valid_component_payload('unused', data) else []
+    return data['unused'] if _valid_component_payload('unused', data, require_count=False) else []
 
 
 def _valid_import_entries(entries: Any) -> bool:
     return isinstance(entries, list) and all(isinstance(entry, dict) for entry in entries)
 
 
-def _valid_component_payload(name: str, result: Any) -> bool:
+def _valid_component_payload(name: str, result: Any, *, require_count: bool = True) -> bool:
     """Validate collections/counts consumed by the dashboard, not import internals."""
     if not isinstance(result, dict):
         return False
@@ -70,7 +70,7 @@ def _valid_component_payload(name: str, result: Any) -> bool:
     if not isinstance(values, list):
         return False
     count = result.get('count')
-    if type(count) is not int or count != len(values):
+    if require_count and (type(count) is not int or count != len(values)):
         return False
     if name == 'circular':
         return all(isinstance(cycle, list) and all(isinstance(file, str) for file in cycle)
@@ -272,8 +272,8 @@ class DepsAdapter(ResourceAdapter):
                 'code': 'E_DEPS_COMPONENT', 'component': name,
                 'message': str(result.get('error') or 'Required imports payload or failed/lost input counts are missing or malformed'),
             })
-        record = {'completeness': state.value, 'files_failed_count': counts[0] if counts else 0,
-                  'files_lost_count': counts[1] if counts else 0, 'diagnostics': diagnostics}
+        record = {'completeness': state.value, 'files_failed_count': counts[0] if counts else None,
+                  'files_lost_count': counts[1] if counts else None, 'diagnostics': diagnostics}
         self.__dict__.setdefault('_deps_components', {})[name] = record
 
     def __init__(self, resource: str, query: Optional[str] = None):
@@ -304,13 +304,9 @@ class DepsAdapter(ResourceAdapter):
                 'Not depends:// (one character apart) — deps:// is a dashboard '
                 'over the whole tree; depends:// answers "who imports this one '
                 'module" for a single target.',
-                'BACK-1178: the CLI subcommand form (`reveal deps <path> --format '
-                'json`) and this URI form intentionally carry different '
-                'contract_version/meta envelopes — subcommand-form is frozen at '
-                'v1.0 with no meta block (BACK-906, backward-compat guarantee for '
-                'existing --format json consumers), URI-form is on v1.1 with a '
-                'meta block (confidence/warnings/errors, BACK-885/891). The '
-                'underlying data fields are otherwise the same.',
+                'Both forms use contract v1.1. The CLI result type is deps; '
+                'the URI result type is deps_scan. analysis retains required '
+                'component completeness and uncapped findings counts.',
             ],
             'see_also': [
                 'reveal deps <path> - CLI subcommand form',
@@ -342,6 +338,7 @@ class DepsAdapter(ResourceAdapter):
                             'base': {'type': 'object'},
                             'circular': {'type': 'object'},
                             'unused': {'type': 'array'},
+                            'analysis': {'type': 'object', 'description': 'Required component completeness, exact failed/lost input counts and uncapped findings counts'},
                             'skipped': {
                                 'type': 'array',
                                 'description': "Checks turned off by no_circular/no_unused ('circular', 'unused'); "
@@ -360,15 +357,18 @@ class DepsAdapter(ResourceAdapter):
         }
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
-        self._deps_components = {}
+        self._clear_request_evidence()
         try:
             return self._get_structure()
         finally:
-            self._deps_components = {}
             # A request that fails before construction must not contaminate reuse.
-            self._composed_errors = []
-            self._composed_warnings = []
-            self._composed_confidences = []
+            self._clear_request_evidence()
+
+    def _clear_request_evidence(self) -> None:
+        self._deps_components = {}
+        self._composed_errors = []
+        self._composed_warnings = []
+        self._composed_confidences = []
 
     def _get_structure(self) -> Dict[str, Any]:
         path = Path(self.path)
@@ -399,7 +399,7 @@ class DepsAdapter(ResourceAdapter):
                                         for record in components.values()))
         findings = {}
         if not no_circular:
-            findings['circular'] = circular.get('count', 0)
+            findings['circular'] = len(circular.get('cycles', []))
         if not no_unused:
             findings['unused'] = len(unused)
         report['analysis'] = {'complete': facts.completeness is AnalysisCompleteness.COMPLETE,

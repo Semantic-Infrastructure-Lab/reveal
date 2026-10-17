@@ -50,6 +50,22 @@ with `no_circular`/`no_unused` (`["circular"]`, `["unused"]`), so an empty
 says "not checked" for them instead of ✅. Text rendering additionally derives
 third-party/stdlib package usage counts and a "top importers" ranking from `base`.
 
+`analysis.complete` states whether all requested components completed. Its
+`components` records retain each component's `completeness` (`complete`,
+`incomplete`, or `failed`), exact `files_failed_count`/`files_lost_count`, and
+attributed diagnostics. Lost inputs are included in the failed count. Missing or
+malformed count evidence is `null`, with the component marked failed. A recovered
+parse or lost input makes required analysis incomplete while preserving surviving
+imports and findings. Circular text reports incomplete or unavailable analysis
+instead of claiming there were no cycles.
+
+`analysis.findings` retains full circular-group and unused-import counts before
+text caps or JSON summary projection. Explicitly skipped checks are omitted from
+these required components and counts. Diagnostic path lists can be capped at 50;
+their exact counts and cut notes remain available. Unsupported languages,
+unused-detection limitations, unknown warnings and confidence alone do not make
+the analysis incomplete. This evidence does not change the current exit policy.
+
 ## Good Review Questions
 
 - Are any circular dependency cycles new, or in code about to be touched?

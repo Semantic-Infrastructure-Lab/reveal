@@ -11,7 +11,8 @@ from ...utils.results import outcome_of
 
 def _render_summary(analysis: Dict[str, Any], cycle_count: int, unused_count: int,
                     meta: Optional[Dict[str, Any]] = None,
-                    skipped: Optional[List[str]] = None) -> List[str]:
+                    skipped: Optional[List[str]] = None,
+                    circular_evidence: Optional[Dict[str, Any]] = None) -> List[str]:
     lines: List[str] = []
     meta = meta or {}
     skipped = skipped or []
@@ -35,12 +36,8 @@ def _render_summary(analysis: Dict[str, Any], cycle_count: int, unused_count: in
     health_parts = []
     if 'circular' in skipped:
         health_parts.append("— circular deps not checked (--no-circular)")
-    elif cycle_count:
-        health_parts.append(f"❌ {cycle_count} circular dep(s)")
-    elif total_imports:
-        health_parts.append("✅ no circular deps")
     else:
-        health_parts.append("— no imports found, so nothing to check for cycles")
+        health_parts.extend(_circular_health(cycle_count, total_imports, circular_evidence))
     if 'unused' in skipped:
         health_parts.append("— unused imports not checked (--no-unused)")
     elif unused_count:
@@ -57,6 +54,19 @@ def _render_summary(analysis: Dict[str, Any], cycle_count: int, unused_count: in
         listing = ', '.join(f"{ext} ({n})" for ext, n in unsupported.items())
         lines.append(f"          ⚠ No import extraction for: {listing}")
     return lines
+
+
+def _circular_health(cycle_count: int, total_imports: int,
+                     evidence: Optional[Dict[str, Any]]) -> List[str]:
+    state = evidence.get('completeness') if evidence else None
+    parts = [f"❌ {cycle_count} circular dep(s)"] if cycle_count else []
+    if state in ('incomplete', 'failed'):
+        label = 'unavailable' if state == 'failed' else 'incomplete'
+        parts.append(f"⚠ circular dependency analysis {label}")
+    elif not cycle_count:
+        parts.append("✅ no circular deps" if total_imports else
+                     "— no imports found, so nothing to check for cycles")
+    return parts
 
 
 def _render_external_packages(analysis: Dict[str, Any], top: int) -> List[str]:
@@ -162,7 +172,8 @@ def _render_deps(report: Dict[str, Any], top: int) -> List[str]:
     analysis = _analyse_imports(files, Path(path_str))
 
     cycles = circular.get('cycles', [])
-    cycle_count = circular.get('count', 0)
+    evidence = report.get('analysis', {})
+    cycle_count = evidence.get('findings', {}).get('circular', circular.get('count', 0))
 
     lines.append("")
     lines.append(f"Dependencies: {path_str}")
@@ -180,7 +191,8 @@ def _render_deps(report: Dict[str, Any], top: int) -> List[str]:
         lines.append(f"\n{warning}")
 
     skipped = report.get('skipped') or []
-    lines += _render_summary(analysis, cycle_count, len(unused), base_meta, skipped=skipped)
+    lines += _render_summary(analysis, cycle_count, len(unused), base_meta, skipped=skipped,
+                             circular_evidence=evidence.get('components', {}).get('circular'))
     # Per-language "not checked" is moot when --no-unused turned the check off.
     if 'unused' not in skipped:
         not_checked_note = unused_not_checked_line(base_meta.get('unused_not_checked_extensions') or {})
