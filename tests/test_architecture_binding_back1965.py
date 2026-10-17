@@ -111,3 +111,14 @@ def test_missing_evidence_wins_over_usage_without_analysis_record(identity, warn
                                   warnings=[{'type': warning, 'message': 'independent missing evidence'}],
                                   error='invalid entry')
     assert execution_exit_code(ArchitectureAdapter.execution_facts(result), fail_on='none') == 3
+
+
+@pytest.mark.parametrize('with_error', [False, True])
+def test_complete_comparison_with_only_usage_cause_remains_usage(with_error):
+    from reveal.utils.results import ResultBuilder, execution_exit_code
+    data = {'analysis': {'complete': True}}
+    if with_error:
+        data['error'] = 'invalid entry'
+    result = ResultBuilder.create('architecture_diff', '.', data=data,
+                                  errors=[{'code': 'invalid_request', 'message': 'invalid entry'}])
+    assert execution_exit_code(ArchitectureAdapter.execution_facts(result), fail_on='none') == 2
