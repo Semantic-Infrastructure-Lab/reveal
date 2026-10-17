@@ -9,6 +9,7 @@ from typing import Dict, List, Any, Optional, Sequence, Tuple, cast
 from ...complexity import fallback_complexity
 from ...reveal_types import StructureItem, WarningEntry
 from ...utils.path_utils import _walk_code_files, to_posix, to_relative_display
+from ...utils.results import outcome_of
 from .call_graph import build_symbol_map, resolve_callees
 
 logger = logging.getLogger(__name__)
@@ -371,6 +372,10 @@ def analyze_file_outcome(file_path: str, outline: bool = False,
 
         analyzer = analyzer_class(file_path)
         structure = analyzer.get_outline() if outline else analyzer.get_structure()
+        if outcome_of(structure) == 'failed':
+            failure = str(structure['error'])
+            _release_buffers(analyzer)
+            return None, failure
         if not structure:
             # An outline leaves out imports, so an empty one may be an import-only file that a
             # full scan counts. Such a file has no functions to measure: take it whole.
