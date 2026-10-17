@@ -614,3 +614,5 @@ lua:
   - {kind: cache, line: 30}
   decorators: {target: processOrder, category: functions, not_supported: true}
   bases: {target: processOrder, category: functions, not_supported: true}
+  xfails:
+    test_statewrites_classifies_field_and_call: "BACK-1911: Lua table-field assignment target is not reported"

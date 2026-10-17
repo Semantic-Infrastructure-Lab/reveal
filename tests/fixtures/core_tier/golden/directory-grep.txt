@@ -1,6 +1,6 @@
 $ reveal . --grep '= validate'
 Text search: .  —  pattern: = validate
-11 hits across 11 files
+12 hits across 12 files
 
 File: c/sample.c
   process_order()
@@ -25,6 +25,10 @@ File: javascript/sample.js
 File: kotlin/sample.kt
   processOrder()
     12: val result = validate(order)
+
+File: lua/sample.lua
+  processOrder()
+    12: local result = validate(order)
 
 File: php/sample.php
   processOrder()

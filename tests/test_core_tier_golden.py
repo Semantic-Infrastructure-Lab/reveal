@@ -2,8 +2,8 @@
 
 Five operations carry about 90% of real reveal use: extract an element, extract
 a markdown section, ``--grep``, outline a file, read a line range. Their text
-output is what agents read, so it is pinned here byte for byte, across the 13
-tier-1 languages (the ``tests/fixtures/conformance`` samples) plus markdown.
+output is what agents read, so it is pinned here byte for byte, across the
+conformance fixture languages (the ``tests/fixtures/conformance`` samples) plus markdown.
 
 Each golden file is a transcript: every command, its stdout, its stderr when
 there is any, and its exit code. A diff is a change agents will see. To accept
@@ -47,7 +47,7 @@ LANGUAGES = sorted(EXPECTED)
 EXTENSIONS = {
     "python": "py", "c": "c", "cpp": "cpp", "csharp": "cs", "go": "go",
     "java": "java", "javascript": "js", "rust": "rs", "typescript": "ts",
-    "kotlin": "kt", "swift": "swift", "ruby": "rb", "php": "php",
+    "kotlin": "kt", "swift": "swift", "ruby": "rb", "php": "php", "lua": "lua",
 }
 
 DOC = "guide.md"

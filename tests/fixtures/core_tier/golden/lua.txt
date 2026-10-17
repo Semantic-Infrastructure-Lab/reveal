@@ -1,0 +1,85 @@
+$ reveal lua/sample.lua
+File: sample.lua (809B, 35 lines)
+
+Imports (1):
+  :2      require("unused_fixture")
+
+Functions (4):
+  :4      validate(order) [6 lines, depth:2]
+  :11     processOrder(order) [10 lines, depth:2]
+  :22     run(order) [3 lines, depth:0]
+  :27     run(items) [6 lines, depth:2]
+
+[exit 0]
+
+$ reveal lua/sample.lua --outline
+File: sample.lua (809B, 35 lines)
+
+require("unused_fixture") (lua/sample.lua:2)
+validate(order) [6 lines, depth:2] (lua/sample.lua:4)
+processOrder(order) [10 lines, depth:2] (lua/sample.lua:11)
+run(order) [3 lines, depth:0] (lua/sample.lua:22)
+run(items) [6 lines, depth:2] (lua/sample.lua:27)
+
+[exit 0]
+
+$ reveal lua/sample.lua processOrder
+lua/sample.lua:11-20 | processOrder
+
+     11  local function processOrder(order)
+     12      local result = validate(order)
+     13      if result == nil then
+     14          return nil
+     15      end
+     16      local handle = io.open("orders.log", "a")
+     17      io.write(result)
+     18      result = result * 2
+     19      return result
+     20  end
+[exit 0]
+
+$ reveal lua/sample.lua :27-32
+lua/sample.lua:27-32 | lines:27-32
+
+     27  function Batch.run(items)
+     28      for _, item in ipairs(items) do
+     29          Batch.total = Batch.total + item
+     30          cache.set(item)
+     31      end
+     32  end
+[exit 0]
+
+$ reveal lua/sample.lua :11-13
+lua/sample.lua:11-13 | lines:11-13
+
+     11  local function processOrder(order)
+     12      local result = validate(order)
+     13      if result == nil then
+[exit 0]
+
+$ reveal lua/sample.lua :11
+lua/sample.lua:11-20 | processOrder
+
+     11  local function processOrder(order)
+     12      local result = validate(order)
+     13      if result == nil then
+     14          return nil
+     15      end
+     16      local handle = io.open("orders.log", "a")
+     17      io.write(result)
+     18      result = result * 2
+     19      return result
+     20  end
+[exit 0]
+
+$ reveal lua/sample.lua --grep result
+Text search: lua/sample.lua  —  pattern: result
+5 hits in 1 element
+
+  processOrder()
+    12: local result = validate(order)
+    13: if result == nil then
+    17: io.write(result)
+    18: result = result * 2
+    19: return result
+[exit 0]

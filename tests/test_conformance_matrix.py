@@ -13,6 +13,7 @@ csharp, go, java, javascript, rust, typescript) — see
 internal-docs/planning/BACK-422-conformance-matrix-design.md.
 """
 
+import inspect
 import json
 import os
 import re
@@ -52,9 +53,23 @@ def _lang_dir(lang: str) -> Path:
     return FIXTURES_DIR / lang
 
 
+def _xfail_reason(language, test_name):
+    failures = EXPECTED[language].get("xfails", {})
+    for name, reason in failures.items():
+        test = globals().get(name)
+        if (not name.startswith("test_") or not callable(test)
+                or "lang" not in inspect.signature(test).parameters or not reason):
+            raise ValueError(f"{language}: invalid conformance xfail {name!r}")
+    return failures.get(test_name)
+
+
 @pytest.fixture(params=LANGUAGES)
 def lang(request) -> str:
-    return request.param
+    language = request.param
+    reason = _xfail_reason(language, request.node.originalname)
+    if reason:
+        request.applymarker(pytest.mark.xfail(strict=True, reason=reason, raises=AssertionError))
+    return language
 
 
 # ─────────────────────────── name/signature extraction ───────────────────────
@@ -725,8 +740,29 @@ def test_check_and_hotspots_complete_quickly(lang):
             )
 
 
+@pytest.mark.xfail(
+    strict=True, raises=AssertionError,
+    reason="BACK-1910: Lua table-qualified methods lose their owner and cannot be addressed",
+)
 def test_lua_table_method_is_addressable():
     """A table-qualified definition must remain distinct from the top-level run."""
     result = _run_reveal_direct(str(_sample_path('lua')), 'Batch.run', '--format', 'json')
     assert result.returncode == 0, result.stderr
     assert 'Batch.total = Batch.total + item' in result.stdout
+
+
+@pytest.mark.parametrize('name', ['test_unknown_conformance_case', 'test_lua_table_method_is_addressable'])
+def test_conformance_xfail_metadata_rejects_unreached_names(monkeypatch, name):
+    """A typo or a non-parametrized test cannot become an inert xfail entry."""
+    monkeypatch.setitem(EXPECTED['lua'], 'xfails', {name: 'negative-control reason'})
+    with pytest.raises(ValueError, match='invalid conformance xfail'):
+        _xfail_reason('lua', 'test_statewrites_classifies_field_and_call')
+
+
+def test_lua_statewrite_call_and_local_assignment_controls():
+    """The missing table-field write must not hide call/local-write regressions."""
+    for element, expected in [(':30-30', [{'kind': 'cache', 'line': 30}]), (':18-18', [])]:
+        result = _run_reveal_direct(str(_sample_path('lua')), element, '--statewrites', '--format', 'json')
+        assert result.returncode == 0, result.stderr
+        findings = json.loads(result.stdout)['findings']
+        assert [{'kind': f['kind'], 'line': f['line']} for f in findings] == expected
