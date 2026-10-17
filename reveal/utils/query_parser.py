@@ -5,7 +5,7 @@ import sys
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Set, TextIO, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Mapping, Optional, Set, TextIO, Tuple, Union
 
 # Characters that only appear in a *filter* key (e.g. `complexity>10`, `msg~=x`),
 # never in a fixed param key. Used to distinguish the two in adapters that parse
@@ -98,7 +98,10 @@ class QueryParams(Dict[str, Any]):
         self._normalized.clear()
         super().clear()
 
-    def __ior__(self, other: Any):
+    def __or__(self, other: Any) -> Any:
+        return super().__or__(other)
+
+    def __ior__(self, other: Any) -> Any:
         self.update(other)
         return self
 
@@ -169,7 +172,7 @@ class QueryParams(Dict[str, Any]):
         return dict(dict.items(self))
 
 
-def peek_query_items(params: Dict[str, Any]) -> Iterator[Tuple[str, Any]]:
+def peek_query_items(params: Mapping[str, Any]) -> Iterator[Tuple[str, Any]]:
     """Walk a parsed query without counting its keys as used (a plain dict works too)."""
     return params.peek_items() if isinstance(params, QueryParams) else iter(list(params.items()))
 
