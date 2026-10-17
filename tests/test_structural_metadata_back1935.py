@@ -127,7 +127,8 @@ def test_gdscript_script_and_standalone_annotations_do_not_attach_to_function(tm
 
 
 def test_gdscript_script_annotation_does_not_hide_following_rpc(tmp_path):
-    structure = _structure(tmp_path, GDScriptAnalyzer, 'gd', '''@tool
+    structure = _structure(tmp_path, GDScriptAnalyzer, 'gd', '''@warning_ignore("unused_parameter")
+@tool
 @rpc("any_peer")
 func tagged():
     pass
