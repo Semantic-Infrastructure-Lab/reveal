@@ -54,6 +54,15 @@ def _has_findings(qualities: Iterable[Any], complexities: Iterable[Any]) -> bool
     return any(quality < 70 for quality in qualities) or any(cx > 20 for cx in complexities)
 
 
+def _scan_has_findings(adapter: 'HotspotsAdapter', files: List[Dict[str, Any]],
+                       functions: List[Dict[str, Any]]) -> bool:
+    # Stats' files are whole even when its ranking is cut. AST ranks by
+    # descending complexity with top >= 1, so a critical maximum survives.
+    return adapter._file_findings or _has_findings(
+        (entry.get('quality_score', 100) for entry in files),
+        (fn.get('complexity', 0) for fn in functions))
+
+
 def _compose_stats(adapter: 'HotspotsAdapter', path: Path, **params: Any) -> Dict[str, Any]:
     """Run StatsAdapter through compose() and keep its summary as the scan's coverage record."""
     from reveal.adapters.stats import StatsAdapter
@@ -306,11 +315,7 @@ class HotspotsAdapter(ResourceAdapter):
         if functions_only:
             _record_function_scan_coverage(self, path)
 
-        # Stats' files are whole even when its ranking is cut. AST ranks by
-        # descending complexity with top >= 1, so a critical maximum survives.
-        has_findings = self._file_findings or _has_findings(
-            (entry.get('quality_score', 100) for entry in file_hotspots),
-            (fn.get('complexity', 0) for fn in fn_hotspots))
+        has_findings = _scan_has_findings(self, file_hotspots, fn_hotspots)
         _relativize_hotspots_paths(file_hotspots, fn_hotspots, path)
 
         # BACK-1195: mark each ranked entry with its provenance so a reader
