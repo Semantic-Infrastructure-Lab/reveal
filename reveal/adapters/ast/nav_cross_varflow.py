@@ -66,7 +66,7 @@ def _collect_frames(
     frames: List[Dict[str, Any]],
     visited: Set[tuple],
 ) -> None:
-    func_name = _get_func_name(func_node, get_text)
+    func_name = _get_func_name(analyzer, func_node, get_text)
     key = (func_name, var_name)
     if key in visited:
         return
@@ -226,9 +226,9 @@ def _find_function_node(analyzer: Any, func_name: str) -> Optional[Any]:
     return None
 
 
-def _get_func_name(func_node: Any, get_text: Callable) -> str:
+def _get_func_name(analyzer: Any, func_node: Any, get_text: Callable) -> str:
     name_node = func_node.child_by_field_name('name')
-    return get_text(name_node) if name_node else '?'
+    return get_text(name_node) if name_node else analyzer._get_node_name(func_node) or '?'
 
 
 def _resolve_param_name(callee_node: Any, arg_pos: int, get_text: Callable, kw_name: str) -> str:
