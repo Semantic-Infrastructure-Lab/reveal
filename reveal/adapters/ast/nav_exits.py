@@ -318,7 +318,7 @@ def collect_deps(
     all_events = all_var_flow(scope_node, from_line, to_line, get_text)
     deps: List[Dict[str, Any]] = []
     builtins = conventions_for(FAMILY_BY_LANGUAGE.get(language or '', language or '')).builtins
-    bindings = BindingScope(scope_node, get_text, language) if builtins else None
+    bindings = BindingScope(scope_node, get_text, language)
     for var_name, events in all_events.items():
         in_range = [e for e in events if from_line <= e['line'] <= to_line]
         if not in_range:
@@ -334,7 +334,7 @@ def collect_deps(
                 'first_read_line': first_in_range['line'],
                 'first_write_line': first_write['line'] if first_write else None,
             }
-            if var_name in builtins and bindings is not None and not bindings.has_explicit_binding(
+            if var_name in builtins and not bindings.has_explicit_binding(
                     var_name, first_in_range['node']):
                 dep['classification'] = 'builtin'
             deps.append(dep)
