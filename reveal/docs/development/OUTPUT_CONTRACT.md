@@ -491,8 +491,11 @@ operation-specific applicability before analysis.
 
 Required answer qualification runs before and after postprocessing. Generic trust
 frames allow optional `meta.errors`/`meta.warnings`; present fields must be lists of
-diagnostic dictionaries. Repair retains valid diagnostic dictionaries, drops
-unusable members and records `invalid_adapter_answer` as required failure.
+diagnostic dictionaries. A diagnostic's optional `type`, consumed by common
+warning/result-control rendering, must be a string when present; unknown strings
+and absent types remain valid. Repair retains usable diagnostic fields/messages,
+removes unusable type values, drops non-dictionary members and records
+`invalid_adapter_answer` as required failure.
 An optional adapter-owned `answer_requirement_error(result, expected_type,
 prior_facts=None)` returns a diagnostic or `None` after generic frame validation.
 The postprocess call receives immutable established execution facts, so copied and

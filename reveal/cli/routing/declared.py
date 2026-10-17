@@ -253,12 +253,25 @@ def _repair_answer_meta(meta, error):
 
 
 def _diagnostic_dicts(entries):
-    return [entry for entry in entries if isinstance(entry, dict)] if isinstance(entries, list) else []
+    if not isinstance(entries, list):
+        return []
+    diagnostics = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        if 'type' in entry and not isinstance(entry['type'], str):
+            entry = {key: value for key, value in entry.items() if key != 'type'}
+        diagnostics.append(entry)
+    return diagnostics
 
 
 def _valid_answer_meta(meta):
     if not isinstance(meta, dict):
         return False
     return all(key not in meta or (isinstance(meta[key], list)
-                                  and all(isinstance(entry, dict) for entry in meta[key]))
+                                  and all(_valid_diagnostic(entry) for entry in meta[key]))
                for key in ('errors', 'warnings'))
+
+
+def _valid_diagnostic(entry):
+    return isinstance(entry, dict) and ('type' not in entry or isinstance(entry['type'], str))
