@@ -16,7 +16,8 @@ from scripts.check_parse_counts import (
 
 
 def _metadata(capture):
-    return {**capture.metadata, 'runtime': {
+    return {**capture.metadata, 'serial_observer': {
+        'enabled': True, 'complete': True, 'launches': []}, 'runtime': {
         'platform': sys.platform, 'implementation': platform.python_implementation()}}
 
 
@@ -416,3 +417,68 @@ def test_new_failed_attempt_cannot_hide_behind_fewer_success_artifacts(ledger):
     assert current['totals']['failure'] == 1
     errors = compare_snapshots(baseline, current)
     assert len(errors) == 1 and 'failure' in errors[0]
+
+
+@pytest.mark.parametrize('field,value', [('enabled', False), ('complete', False),
+                                        ('launches', [{'event': 'worker.start'}])])
+def test_serial_observer_must_be_complete_and_have_no_launches(ledger, field, value):
+    ledger[0]['metadata']['serial_observer'][field] = value
+    with pytest.raises(ValueError, match='serial observer'):
+        snapshot(ledger)
+
+
+def test_missing_serial_observer_cannot_mean_no_workers(ledger):
+    ledger[0]['metadata'].pop('serial_observer')
+    with pytest.raises(ValueError, match='serial observer'):
+        snapshot(ledger)
+
+
+@pytest.mark.parametrize('launch', [
+    pytest.param('fork', marks=pytest.mark.skipif(not hasattr(os, 'fork'), reason='POSIX fork proof')),
+    'spawn',
+])
+def test_real_child_launch_cannot_hide_unreported_worker_parses(tmp_path, monkeypatch, launch):
+    import shutil
+    from scripts import check_parse_counts as gate
+    manifest = json.loads(gate.MANIFEST.read_text(encoding='utf-8'))
+    corpus = tmp_path / 'corpus'
+    shutil.copytree(gate.ROOT / manifest['corpus'], corpus)
+    run = tmp_path / 'run'
+    run.mkdir()
+    if launch == 'fork':
+        injection = '''    import os
+    try:
+        child = os.fork()
+    except RuntimeError:
+        pass
+    else:
+        if child == 0:
+            from reveal.core.treesitter_parse import get_tree
+            target = Path(root) / 'first.ts'
+            get_tree('typescript', target.read_text(encoding='utf-8'), filename=target)
+            os._exit(0)
+        _, status = os.waitpid(child, 0)
+        if status:
+            raise RuntimeError('regression child failed')
+'''
+    else:
+        injection = '''    import os, multiprocessing
+    worker = multiprocessing.get_context('spawn').Process(target=os.getpid)
+    try:
+        worker.start()
+    except RuntimeError:
+        pass
+    else:
+        worker.join(timeout=10)
+        if worker.is_alive():
+            worker.terminate()
+            worker.join(timeout=10)
+            raise RuntimeError('regression child timed out')
+        if worker.exitcode != 0:
+            raise RuntimeError('regression child failed')
+'''
+    bootstrap = gate._BOOTSTRAP.replace('    from reveal.main import main\n',
+                                        injection + '    from reveal.main import main\n')
+    monkeypatch.setattr(gate, '_BOOTSTRAP', bootstrap)
+    with pytest.raises(ValueError, match='serial observer'):
+        gate.run_once(manifest['commands']['surface'], corpus, manifest['targets'], run)
