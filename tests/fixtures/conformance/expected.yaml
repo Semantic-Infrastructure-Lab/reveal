@@ -655,3 +655,7 @@ dart:
   - {kind: cache, line: 33}
   decorators: {target: Reporter, category: classes, expected: ["@deprecated"]}
   bases: {target: Reporter, category: classes, expected: ["Batch"]}
+  xfails:
+    test_decorators_extracted_for_annotated_construct: "BACK-1915: Dart class annotation is absent from decorators"
+    test_returns_finds_gate_chains: "BACK-1916: Dart catch-handler return lacks an exception-context gate"
+    test_statewrites_classifies_field_and_call: "BACK-1917: Dart this.total field assignment is not reported"

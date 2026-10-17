@@ -759,10 +759,28 @@ def test_conformance_xfail_metadata_rejects_unreached_names(monkeypatch, name):
         _xfail_reason('lua', 'test_statewrites_classifies_field_and_call')
 
 
-def test_lua_statewrite_call_and_local_assignment_controls():
-    """The missing table-field write must not hide call/local-write regressions."""
-    for element, expected in [(':30-30', [{'kind': 'cache', 'line': 30}]), (':18-18', [])]:
-        result = _run_reveal_direct(str(_sample_path('lua')), element, '--statewrites', '--format', 'json')
+def _assert_statewrite_controls(language, cases):
+    for element, expected in cases:
+        result = _run_reveal_direct(
+            str(_sample_path(language)), element, '--statewrites', '--format', 'json')
         assert result.returncode == 0, result.stderr
         findings = json.loads(result.stdout)['findings']
         assert [{'kind': f['kind'], 'line': f['line']} for f in findings] == expected
+
+
+def test_lua_statewrite_call_and_local_assignment_controls():
+    """The missing table-field write must not hide call/local-write regressions."""
+    _assert_statewrite_controls('lua', [(':30-30', [{'kind': 'cache', 'line': 30}]), (':18-18', [])])
+
+
+def test_dart_statewrite_call_and_local_assignment_controls():
+    """The missing Dart field write must not hide call/local-write regressions."""
+    _assert_statewrite_controls('dart', [(':33-33', [{'kind': 'cache', 'line': 33}]), (':20-20', [])])
+
+
+def test_dart_trailing_return_remains_unguarded():
+    """The missing handler gate must not conceal a spurious post-try gate."""
+    result = _run_reveal_direct(str(_sample_path('dart')), 'processOrder', '--returns', '--format', 'json')
+    assert result.returncode == 0, result.stderr
+    findings = json.loads(result.stdout)['findings']
+    assert next(f for f in findings if f['line'] == 21)['gates'] == []

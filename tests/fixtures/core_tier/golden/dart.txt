@@ -1,0 +1,106 @@
+$ reveal dart/sample.dart
+File: sample.dart (741B, 41 lines)
+
+Imports (2):
+  :2      import 'dart:io';
+  :3      import 'dart:math' as unused_math;
+
+Functions (5):
+  :5      validate(int order) [6 lines, depth:2]
+  :12     processOrder(int order) [11 lines, depth:2]
+  :24     run(int order) [3 lines, depth:0]
+  :30     Batch.run(List<int> items) [6 lines, depth:2]
+  :40     Reporter.summarize() [1 line, depth:0]
+
+Classes (2):
+  :28     Batch
+  :38     Reporter
+
+[exit 0]
+
+$ reveal dart/sample.dart --outline
+File: sample.dart (741B, 41 lines)
+
+import 'dart:io'; (dart/sample.dart:2)
+import 'dart:math' as unused_math; (dart/sample.dart:3)
+validate(int order) [6 lines, depth:2] (dart/sample.dart:5)
+processOrder(int order) [11 lines, depth:2] (dart/sample.dart:12)
+run(int order) [3 lines, depth:0] (dart/sample.dart:24)
+Batch (dart/sample.dart:28)
+  └─ run(List<int> items) [6 lines, depth:2] (line 30)
+Reporter (dart/sample.dart:38)
+  └─ summarize() [1 line, depth:0] (line 40)
+
+[exit 0]
+
+$ reveal dart/sample.dart processOrder
+dart/sample.dart:12-22 | processOrder
+
+     12  int processOrder(int order) {
+     13    var result = validate(order);
+     14    try {
+     15      final handle = File('orders.log');
+     16      handle.writeAsStringSync(result.toString());
+     17    } catch (e) {
+     18      return -1;
+     19    }
+     20    result = result * 2;
+     21    return result;
+     22  }
+[exit 0]
+
+$ reveal dart/sample.dart Batch.run
+dart/sample.dart:30-35 | Batch.run
+
+     30    void run(List<int> items) {
+     31      for (final item in items) {
+     32        this.total = this.total + item;
+     33        cache.set(item);
+     34      }
+     35    }
+[exit 0]
+
+$ reveal dart/sample.dart :12-14
+dart/sample.dart:12-14 | lines:12-14
+
+     12  int processOrder(int order) {
+     13    var result = validate(order);
+     14    try {
+[exit 0]
+
+$ reveal dart/sample.dart :12
+dart/sample.dart:2-22 | lines:2-22
+
+      2  import 'dart:io';
+      3  import 'dart:math' as unused_math;
+      4  
+      5  int validate(int order) {
+      6    if (order <= 0) {
+      7      throw ArgumentError('empty order');
+      8    }
+      9    return order;
+     10  }
+     11  
+     12  int processOrder(int order) {
+     13    var result = validate(order);
+     14    try {
+     15      final handle = File('orders.log');
+     16      handle.writeAsStringSync(result.toString());
+     17    } catch (e) {
+     18      return -1;
+     19    }
+     20    result = result * 2;
+     21    return result;
+     22  }
+[exit 0]
+
+$ reveal dart/sample.dart --grep result
+Text search: dart/sample.dart  —  pattern: result
+4 hits in 1 element
+
+  processOrder()
+    13: var result = validate(order);
+    16: handle.writeAsStringSync(result.toString());
+    20: result = result * 2;
+    21: return result;
+[exit 0]
