@@ -134,6 +134,11 @@ def _reads_via_shared_seam(name, flag):
         return False
     if declared:
         import inspect
+        from reveal.adapters.base import get_renderer_class
+        # Declared nouns also reach the existing presentation owner, which
+        # expands ACCEPTS_TOP renderers without widening their analysis.
+        if flag in ('all', 'verbose') and getattr(get_renderer_class(name), 'ACCEPTS_TOP', False) is True:
+            return True
         # The declared runner uses the URI owner's named-argument forwarding.
         return flag in inspect.signature(adapter_cls.get_structure).parameters
     return bool(getattr(adapter_cls, 'CLI_QUERY_FLAGS', {}).get(flag))
