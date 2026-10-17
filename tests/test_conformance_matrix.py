@@ -784,3 +784,12 @@ def test_dart_trailing_return_remains_unguarded():
     assert result.returncode == 0, result.stderr
     findings = json.loads(result.stdout)['findings']
     assert next(f for f in findings if f['line'] == 21)['gates'] == []
+
+
+@pytest.mark.parametrize('language', ['dart', 'lua'])
+def test_dart_and_lua_conformance_fixtures_parse_without_recovery(language):
+    from reveal.core import get_tree, tree_root, _zero_arg
+
+    source = _sample_path(language).read_text(encoding='utf-8')
+    root = tree_root(get_tree(language, source))
+    assert _zero_arg(root, 'has_error') is False, f'{language}: fixture requires parser recovery'
