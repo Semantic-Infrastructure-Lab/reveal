@@ -32,7 +32,7 @@ local Another = { Inner = {} }
 function Another.Inner.run() return "nested" end
 Outer.Inner.save = function(value) return value end
 Other.save = function(value) return value end
-local Table = { load = function(value) return value end }
+local Table = { load = function(value) return value end, Inner = { save = function(value) return value end } }
 invoke(function(value) return value end)
 ''')
 
@@ -41,7 +41,7 @@ invoke(function(value) return value end)
     ('Outer.Inner.run', 4, 'Outer.Inner'), ('Other.run', 5, 'Other'),
     ('Another.Inner.run', 7, 'Another.Inner'),
     ('Outer.Inner.save', 8, 'Outer.Inner'), ('Other.save', 9, 'Other'),
-    ('Table.load', 10, 'Table'),
+    ('Table.load', 10, 'Table'), ('Table.Inner.save', 10, 'Table.Inner'),
 ])
 def test_lua_qualified_declarations_and_bound_values(lua, address, line, owner):
     for _ in range(2):
