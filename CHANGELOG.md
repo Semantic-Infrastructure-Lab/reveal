@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Opt-in parser attribution separates target requests, cache hits, owned build attempts and artifacts without changing cache keys; malformed-source fact warnings now retain the target filename. Tree-sitter counts cover compatibility-wrapper calls, with direct parser bypasses explicitly outside scope (BACK-1912).
 - Pinned-source rule precision pilot retains stratified claims, source-reviewed TP/FP/uncertain labels and reproducible weighted reports with sampling intervals and blind subset agreement; the scheduled corpus workflow also runs the accepted Python caller baseline (BACK-1796, BACK-1797).
 - Optional Go import regression measurement uses a pinned client_golang corpus and the native Go parser; the same runner supports a bounded local Python caller baseline with implementation provenance (BACK-1461, BACK-1518, BACK-1096).
 - Calls, callees and trace share source-attributed module callers and typed JSX component references, with scope warnings and source lines (BACK-1778, BACK-1784).
