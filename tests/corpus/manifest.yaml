@@ -219,6 +219,13 @@ corpora:
       oracle: java-jls
       scan_root: guava
       importer_dirs: [guava/src]
+  # Restored at a new explicit release pin (BACK-1951); historical figures do not transfer.
+  - id: scala-cats-effect
+    language: scala
+    repo: https://github.com/typelevel/cats-effect.git
+    sha: 4fc56284b005ad8f00788780443ea1e9717cf9a8  # v3.5.4
+    license: Apache-2.0
+    role: Second Scala corpus; scoped lowerCamelCase-object member-import oracle
   - id: cpp-assimp
     language: cpp
     repo: https://github.com/assimp/assimp.git
