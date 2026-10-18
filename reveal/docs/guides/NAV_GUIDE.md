@@ -93,12 +93,15 @@ reveal legacy_handler.php :120-340 --varflow $userId  # where does $userId flow?
 
 ## MCP Equivalent
 
-All nav flags are exposed via the MCP server's `reveal_nav` tool:
+Primary nav operations are exposed via the MCP server's `reveal_nav` tool:
 
 ```python
 reveal_nav(path="app.py", element="process_order", flag="boundary")
 reveal_nav(path="legacy.php", element=":120-340", flag="sideeffects")
 ```
+
+The typed tool has no `transitive` argument. Passing `--transitive` in
+`flag_value` does not enable the CLI's transitive walk.
 
 See [`MCP_SETUP.md`](MCP_SETUP.md) for setup and the full tool list.
 
@@ -120,6 +123,7 @@ Different scope, different question.
 - `--statewrites` detects Python/JS module-bound container writes and explicit Python/PHP `global` assignments; explicit Python `nonlocal` writes are separate. PHP also recognizes `$GLOBALS`. Local/parameter containers stay local. Implicit enclosing-container captures without `nonlocal`, PHP reference captures, aliases, dynamic names, and imported-object resolution remain outside coverage. An empty result does not establish that shared state is untouched.
 - `--boundary` includes assignment writes in EFFECTS (JSON `via: assignment`). Under `--transitive`, call effects follow callees but assignment writes remain entry-function only; text and JSON warnings disclose this limit. Inputs/builtins/environment also remain entry-function scoped.
 
+- `--sideeffects --transitive` and `--boundary --transitive` retain required directory enumeration failures through collection and text/JSON warnings. Surviving effects remain visible; empty results describe the analyzed portion when discovery failed. Directory counts identify failed directories, with unknown missing file populations. Existing file-analysis notes remain separate, and CLI exits retain their current policy.
 - PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but classified as READ rather than WRITE.
 - Variable tracking is name-based; same-named variables in different scopes within a flat file may merge.
 - `--scope` and `--around` require a single `:LINE` — they do not accept ranges.

@@ -546,6 +546,15 @@ them to stderr to keep stdout a valid graph. These warnings retain Calls' legacy
 exit behavior; exit 0 alone does not establish complete analysis. An uncalled
 candidate remains a heuristic, not proof of dead code.
 
+The independent language census used for confidence also reports actual directory
+loss, even when a healthy retained query index supplies every observed caller.
+Census loss withholds the score instead of silently substituting a default or a
+score based on the surviving languages. Partial metadata qualifies the required
+census input; it does not establish a parser failure or an identified missing
+query row. Clean empty/unmeasured populations retain their normal fallback score.
+Other census consumers and non-enumeration stat/configuration failures have
+separate limits.
+
 **Static analysis only.** The following patterns are not resolved:
 
 - **Dynamic dispatch** — `getattr(obj, method_name)()`, callback tables, metaclasses
