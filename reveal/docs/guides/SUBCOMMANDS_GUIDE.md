@@ -304,12 +304,17 @@ Fan-in and focus graph relevance are additive ranking signals. When their
 Imports graph carries native directory or file-integrity diagnostics, Pack
 rejects that partial numeric input and uses filename/entry-point heuristics and
 recency instead. `meta.relevance_warning` retains the requested root and original
-causes, explaining that the signals were not computed completely. The CLI also
-prints this advisory notice on stderr. Primary candidate measurements and selected
-content remain available, with legacy exit 0.
+causes, explaining that the signals were not computed completely. In text output, the
+command and the URI both print this advisory notice on stderr; JSON carries it in meta. Primary candidate measurements and selected
+content remain available, with exit 0; an unusable `--since` ref is advisory in the
+same way, with its cause in `meta.since_error`.
 
-URI JSON retains this note; URI text currently does not display the
-`relevance_warning` string. The specialized `reveal_pack` MCP tool currently
+Lost candidate discovery or file measurement is different: Pack exits 3 (incomplete, or
+failed when no candidate survived) on the command and the URI, and the generic MCP tool
+returns the attributed cause as an error only when nothing survived. The check uses the
+uncapped candidate counts, so `--budget`, `--fields` and `--max-items` cannot hide it.
+
+The specialized `reveal_pack` MCP tool currently
 does not compute these optional graph ranking signals. Its defaults remain
 8000 tokens with content enabled, compared with the CLI/URI defaults of 2000
 tokens and content disabled. These presentation and ranking differences remain

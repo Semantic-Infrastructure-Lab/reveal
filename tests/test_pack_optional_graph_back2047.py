@@ -185,5 +185,6 @@ def test_specialized_mcp_and_uri_text_existing_presentation_are_not_migrated(pro
     response = run('pack://' + str(project) + '?architecture=true')
     assert len(observed['builds']) == 1 and observed['events'] == [project / 'included']
     assert response.returncode == 0 and 'Selected 2 of 2 files' in response.stdout
-    # URI text does not render the pre-existing relevance_warning string. Binding owns that visibility gap.
-    assert 'directory enumeration' not in response.stdout + response.stderr
+    # Binding closed the visibility gap (BACK-2045): URI text now carries the advisory on stderr,
+    # exactly as the command always did, with the original cause.
+    assert 'directory enumeration' in response.stderr and 'directory enumeration' not in response.stdout

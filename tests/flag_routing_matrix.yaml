@@ -586,6 +586,7 @@ adapters:
     verbose:
       via:
       - declared
+      - structure-param
   patches:
     all:
       via:

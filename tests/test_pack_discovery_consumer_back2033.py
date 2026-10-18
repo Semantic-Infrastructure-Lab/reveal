@@ -149,7 +149,13 @@ def test_both_decorated_tools_keep_ordinary_strings_with_one_attributed_diagnost
         return reveal_query('pack://' + tmp_path.as_posix() + '?budget=8000&content=true',
                             provenance=tool == 'generic-json')
     answer = _once(fault, invoke)
-    assert type(answer) is str and fault['events']
+    assert fault['events']
+    if root_loss and tool != 'specialized':
+        # D6 (BACK-2045): no candidate survived, so the generic tool fails with the cause.
+        assert type(answer).__name__ == '_ToolFailure'
+        assert str(answer).count('identified directory enumeration(s) failed') == 1
+        return
+    assert type(answer) is str
     if tool == 'generic-json':
         result = json.loads(answer)
         assert not result.get('error')
@@ -175,7 +181,7 @@ def test_cli_projection_and_text_artifact_keep_legacy_zero_and_population_uncert
             ['pack://' + root.as_posix() + f'?budget={budget}&content=true'])
     projection = ['--fields', 'files', '--max-items', '0'] if spelling == 'uri' else []
     run = _once(fault, lambda: _run_reveal_direct(*args, *projection, '--format', 'json', '--provenance'))
-    assert run.returncode == 0 and fault['events'], run.stderr
+    assert run.returncode == 3 and fault['events'], run.stderr
     result = json.loads(run.stdout)
     assert result['files'] == [] and not result.get('error')
     assert result['meta']['total_candidates'] == (0 if root_loss else 3)
@@ -184,12 +190,12 @@ def test_cli_projection_and_text_artifact_keep_legacy_zero_and_population_uncert
     # Native Pack supports text/JSON/provenance; JSON sidecars use the URI route.
     if spelling == 'command':
         native_text = _once(fault, lambda: _run_reveal_direct(*args))
-        assert native_text.returncode == 0 and fault['events']
+        assert native_text.returncode == 3 and fault['events']
         assert (native_text.stdout + native_text.stderr).count('identified directory enumeration(s) failed') == 1
     artifact = tmp_path / 'answer.json'
     artifact_args = ['pack://' + root.as_posix() + f'?budget={budget}&content=true']
     text = _once(fault, lambda: _run_reveal_direct(*artifact_args, '--also-json', str(artifact)))
-    assert text.returncode == 0 and artifact.exists()
+    assert text.returncode == 3 and artifact.exists()
     saved = json.loads(artifact.read_text(encoding='utf-8'))
     _warning(saved)
     assert (text.stdout + text.stderr).count('identified directory enumeration(s) failed') == 1
@@ -206,7 +212,7 @@ def test_uri_presentation_cap_zero_cannot_erase_positive_observed_population_war
     response = _once(fault, lambda: _run_reveal_direct(
         'pack://' + tmp_path.as_posix() + '?budget=8000&content=true',
         '--fields', 'files', '--max-items', '0', '--format', 'json'))
-    assert response.returncode == 0 and fault['events']
+    assert response.returncode == 3 and fault['events']
     result = json.loads(response.stdout)
     assert result['files'] == []
     assert result['meta']['total_candidates'] == result['meta']['selected'] == 3

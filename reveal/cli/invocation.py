@@ -102,7 +102,7 @@ COMMANDS: Dict[str, CommandSpec] = {
     'pack':         _spec('pack',
                      'reveal pack <path>',
                      'Token-budgeted context snapshot for LLM consumption',
-                     help_guide=_SUBCOMMANDS_GUIDE),  # pack:// guide is a pointer stub
+                     help_guide=_SUBCOMMANDS_GUIDE)._replace(declared_adapter='pack'),  # pack:// guide is a pointer stub
     'review':       _spec('review',
                      'reveal review <path>',
                      'Assess quality + structural changes before a PR merge',

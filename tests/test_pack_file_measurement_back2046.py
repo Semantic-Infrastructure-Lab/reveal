@@ -149,7 +149,7 @@ def test_real_read_loss_is_visible_in_both_public_forms_with_legacy_zero(measure
     args = ['pack', root, '--budget', '1-lines'] if spelling == 'command' else [f'pack://{root}?budget=1-lines']
     response = run(*args, '--format', format, '--verbose')
     assert state['events'] and all(op == 'line_count' for op, _ in state['events'])
-    assert response.returncode == 0
+    assert response.returncode == 3
     if format == 'json':
         result = json.loads(response.stdout)
         file_note(result)
@@ -166,7 +166,7 @@ def test_all_stat_loss_public_answer_explains_measurement_unavailability(measure
     state['stat'] = {core, healthy}
     response = run(f'pack://{root}', '--format', format)
     assert state['events'] and all(op == 'stat' for op, _ in state['events'])
-    assert response.returncode == 0, 'FILE prerequisite retains legacy warning-only success'
+    assert response.returncode == 3, 'lost FILE measurement is incomplete work (D6, BACK-2045)'
     if format == 'json':
         result = json.loads(response.stdout)
         file_note(result)
@@ -182,7 +182,7 @@ def test_supported_uri_artifact_and_global_cut_retain_pre_cut_file_disclosure(me
     destination = tmp_path / 'pack.json'
     response = run(f'pack://{root}?budget=1000', '--max-items', '0', '--also-json', destination)
     assert state['events'] and destination.exists()
-    assert response.returncode == 0
+    assert response.returncode == 3
     result = json.loads(destination.read_text(encoding='utf-8'))
     file_note(result)
     assert result['files'] == [] and result['meta']['total_candidates'] == 2

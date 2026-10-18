@@ -20,9 +20,10 @@ from ..conventions import conventions_for_path
 from ..rendering.adapters.pack import PackRenderer
 from ..utils.path_utils import (DISPLAY, _walk_code_files, classify_path_provenance,
                                to_posix, traversal_failed_warning)
-from ..utils.query import parse_query_params
-from ..utils.query_parser import split_exclude_param
-from ..utils.results import ResultBuilder
+from ..utils.query_binding import bind_declared_params
+from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, param_schema,
+                                  split_exclude_param)
+from ..utils.results import AnalysisCompleteness, ResultBuilder, result_execution_facts
 from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
@@ -719,6 +720,86 @@ def _count_lines(path: Path, *, on_error: Optional[Callable[[OSError], None]] = 
         return 0
 
 
+def _budget_text(value: Any) -> str:
+    """Keep the raw budget spelling; a bare 0/1 may arrive as a bool (BACK-1180)."""
+    return str(int(value)) if isinstance(value, bool) else str(value)
+
+
+def _optional_text(value: Any) -> Optional[str]:
+    return str(value) or None
+
+
+def _legacy_flag(value: Any) -> bool:
+    """Pack's historical boolean reading: true/yes/1 enable, anything else is false."""
+    return value is True or str(value).lower() in ('true', 'yes', '1')
+
+
+_BUDGET = ParamSpec('budget', 'string', 'Token or line budget (e.g. 2000, 500-lines)', '2000',
+                    _budget_text, ('budget=4000', 'budget=500-lines'), role='analysis',
+                    cli=CliBinding(('--budget',), metavar='N[=tokens|-lines]'))
+_FOCUS = ParamSpec('focus', 'string', 'Emphasize files matching this name pattern', None,
+                   _optional_text, ('focus=auth',), role='analysis', uri_codec='percent',
+                   cli=CliBinding(('--focus',), metavar='TOPIC'))
+_SINCE = ParamSpec('since', 'string', 'Git ref to diff against; changed files boosted to top priority',
+                   None, _optional_text, ('since=main',), role='analysis', uri_codec='percent',
+                   cli=CliBinding(('--since',), metavar='REF'))
+_CONTENT = ParamSpec('content', 'boolean', 'Include tiered file content (full/structure/name_only)',
+                     False, _legacy_flag, ('content=true',), role='presentation',
+                     cli=CliBinding(('--content',), action='store_true'))
+_ARCHITECTURE = ParamSpec('architecture', 'boolean', 'Boost high fan-in files; include an architecture hint',
+                          False, _legacy_flag, ('architecture=true',), role='analysis',
+                          cli=CliBinding(('--architecture',), action='store_true'))
+
+
+_REQUIRED_WARNINGS = {'analysis_incomplete', 'file_measurement_failed'}
+
+_HELP_EPILOG = (
+    "Examples:\n"
+    "  reveal pack ./src                      # Default 2000-token budget\n"
+    "  reveal pack ./src --budget 4000        # 4000-token budget\n"
+    "  reveal pack ./src --budget 500-lines   # 500-line budget\n"
+    "  reveal pack ./src --focus auth         # Emphasize auth module\n"
+    "  reveal pack ./src --since main         # PR review: changed files first\n"
+    "  reveal pack ./src --since HEAD~3       # Changes since 3 commits ago\n"
+    "  reveal pack ./src --content            # Emit structure content (agent-ready)\n"
+    "  reveal pack ./src --content --since main --budget 8000  # Full agent context\n"
+    "  reveal pack ./src --format json        # Structured output for tooling\n"
+    "  reveal pack ./src --architecture       # Boost core abstractions; show architecture brief\n"
+    "\n"
+    "Prioritization order:\n"
+    "  1. Changed files (with --since; git diff vs ref)\n"
+    "  2. Entry points and root config (main.py, index.js, package.json, etc.)\n"
+    "  3. Files matching --focus, and files tied to them by imports\n"
+    "  4. Key directories (api/, core/, models/, auth/, ...) and, with\n"
+    "     --architecture, widely imported files\n"
+    "  5. Other files (fills remaining budget); tests, vendor and docs last\n"
+    "  Ties go to the most recently modified file.\n"
+    "\n"
+    "--budget counts the raw size of the files selected, not the output.\n"
+    "With --content: changed files are shown raw (first 500 lines), key files\n"
+    "as structure, and the remaining selected files by name only.\n"
+)
+
+
+def _is_count(value: Any) -> bool:
+    return type(value) is int and value >= 0
+
+
+def _pack_proof_error(result: Any) -> Optional[str]:
+    """Validate the uncapped candidate counts; presentation cuts may hide rows but not these."""
+    if not isinstance(result, dict) or not isinstance(result.get('meta'), dict):
+        return 'Required pack answer is malformed'
+    if 'files' in result and not isinstance(result['files'], list):
+        return 'Required pack file selection is malformed'
+    meta = result['meta']
+    total, selected, skipped = (meta.get(key) for key in ('total_candidates', 'selected', 'skipped'))
+    if not all(_is_count(count) for count in (total, selected, skipped)):
+        return 'Required candidate counts are missing or malformed'
+    if selected + skipped != total:
+        return 'Required candidate counts disagree with each other'
+    return None
+
+
 @register_adapter('pack')
 @register_renderer(PackRenderer)
 class PackAdapter(ResourceAdapter):
@@ -732,9 +813,20 @@ class PackAdapter(ResourceAdapter):
     # Carry URI verbose through the result; the renderer also accepts CLI options.
     CLI_QUERY_FLAGS = {'verbose': 'verbose', 'respect_gitignore': 'respect_gitignore=false'}
 
-    def __init__(self, resource: str, query: Optional[str] = None):
+    RESULT_TYPE = 'pack'
+    FINDINGS_POLICIES = ('none',)
+    DEFAULT_FAIL_ON = 'none'
+    RESOURCE_SPEC = ResourceSpec(cli_default=None, required=True, uri_codec='existing-path-first')
+    PARAM_SPECS = (_BUDGET, _FOCUS, _SINCE, _CONTENT, _ARCHITECTURE)
+
+    def __init__(self, resource: str, query: Optional[str] = None, *,
+                 params: Optional[Dict[str, Any]] = None):
         self.path = str(Path(resource).expanduser())
-        self.query_params = parse_query_params(query or '', coerce=True)
+        if params is not None:
+            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
+                self.PARAM_SPECS, params, transport='typed')
+        else:
+            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
         self._warn_unknown_query_params(self.query_params)  # BACK-507
         # Populated by get_structure(); CLI needs this for its stderr warning,
         # but it's not part of the JSON contract (only meta.since is).
@@ -746,6 +838,24 @@ class PackAdapter(ResourceAdapter):
         # and the adapter's own priority-ranking description read as though
         # fan-in/relevance are always part of the ranking.
         self.relevance_warning: Optional[str] = None
+
+    @staticmethod
+    def answer_requirement_error(result, expected_type, prior_facts=None):
+        return _pack_proof_error(result)
+
+    @staticmethod
+    def execution_facts(result):
+        """D6: lost candidate discovery or measurement is incomplete work, never a clean answer."""
+        if _pack_proof_error(result):
+            return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
+        meta = result['meta']
+        lost = any(w.get('type') in _REQUIRED_WARNINGS for w in meta.get('warnings', []))
+        if lost:
+            usable = meta['total_candidates'] > 0
+            return result_execution_facts(
+                result, completeness=AnalysisCompleteness.INCOMPLETE if usable
+                else AnalysisCompleteness.FAILED)
+        return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE)
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -775,6 +885,7 @@ class PackAdapter(ResourceAdapter):
                 'reveal_pack MCP tool - same ranking, MCP-native',
             ],
             'output_formats': ['text', 'json'],
+            'epilog': _HELP_EPILOG,
         }
 
     @staticmethod
@@ -783,13 +894,11 @@ class PackAdapter(ResourceAdapter):
             'adapter': 'pack',
             'description': 'Token-budgeted context snapshot: ranked file selection for LLM consumption',
             'uri_syntax': 'pack://<path>?budget=2000&focus=auth&since=main&content=true&architecture=true',
+            'resource': PackAdapter.RESOURCE_SPEC.schema(),
+            'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none']},
             'query_params': {
-                'budget': {'type': 'string', 'description': 'Token or line budget (e.g. 2000, 500-lines)', 'examples': ['budget=4000', 'budget=500-lines']},
-                'focus': {'type': 'string', 'description': 'Emphasize files matching this name pattern', 'examples': ['focus=auth']},
+                **param_schema(PackAdapter.PARAM_SPECS),
                 'exclude': {'type': 'string', 'description': 'Comma-separated patterns to drop from candidacy entirely (inverse of focus=)', 'examples': ['exclude=spec/*,vendor/*']},
-                'since': {'type': 'string', 'description': 'Git ref to diff against; changed files boosted to top priority', 'examples': ['since=main']},
-                'content': {'type': 'boolean', 'description': 'Include tiered file content (full/structure/name_only)', 'examples': ['content=true']},
-                'architecture': {'type': 'boolean', 'description': 'Boost high fan-in files; include an architecture hint', 'examples': ['architecture=true']},
                 'verbose': {'type': 'flag', 'description': 'Show per-file token/line-count breakdown. Same as the CLI --verbose', 'examples': ['pack://src?verbose']},
             },
             'elements': {},
@@ -816,26 +925,14 @@ class PackAdapter(ResourceAdapter):
             ],
         }
 
-    def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+    def get_structure(self, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
         path = Path(self.path)
-        # BACK-1180: two compounding bugs made ?budget=0 silently fall back
-        # to the 2000 default instead of being honored (0 = select nothing).
-        # 1. 'or' treats a falsy coerced value as absent (BACK-985 shape).
-        # 2. query_parser.coerce_value() coerces the literal strings '0'/'1'
-        #    to bool False/True regardless of the field's real type — so
-        #    budget=0 arrives here as `False`, and str(False) == 'False'
-        #    fails _parse_budget's int() and falls back to 2000 too.
-        _budget_param = self.query_params.get('budget')
-        if _budget_param is None:
-            budget_str = '2000'
-        elif isinstance(_budget_param, bool):
-            budget_str = str(int(_budget_param))
-        else:
-            budget_str = str(_budget_param)
-        focus = self.query_params.get('focus') or None
-        since = self.query_params.get('since') or None
-        emit_content = str(self.query_params.get('content', False)).lower() == 'true'
-        architecture = str(self.query_params.get('architecture', False)).lower() == 'true'
+        # BACK-1180: a bare budget=0 stays '0'; declared binding keeps the raw spelling.
+        budget_str = _BUDGET.read(self.query_params)
+        focus = _FOCUS.read(self.query_params)
+        since = _SINCE.read(self.query_params)
+        emit_content = _CONTENT.read(self.query_params)
+        architecture = _ARCHITECTURE.read(self.query_params)
         # BACK-1196: ?exclude= is the inverse of ?focus= — drop a whole area
         # (fixtures, generated code, a vendored subtree) from candidacy
         # entirely, comma-separated, same format as overview://'s ?exclude=.
@@ -884,6 +981,9 @@ class PackAdapter(ResourceAdapter):
         if since:
             meta['since'] = since
             meta['changed_files_count'] = len(changed_files)
+        if self.since_error:
+            # Optional signal: candidates stay ranked without it, the cause stays visible.
+            meta['since_error'] = self.since_error
         if self.relevance_warning:
             meta['relevance_warning'] = self.relevance_warning
 
@@ -899,7 +999,7 @@ class PackAdapter(ResourceAdapter):
             report['content'] = _collect_file_contents(selected)
         # BACK-1379: carry ?verbose through the result dict since handle_uri
         # doesn't forward a verbose= render kwarg for this renderer.
-        if 'verbose' in self.query_params:
+        if verbose or 'verbose' in self.query_params:
             report['verbose'] = True
 
         return ResultBuilder.create(

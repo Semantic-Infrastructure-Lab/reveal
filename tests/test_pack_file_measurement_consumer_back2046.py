@@ -102,7 +102,7 @@ def test_token_pack_unknown_lines_remain_explicit_through_public_views(project, 
         args += ['--max-items', '0']
     response = invoke(*args)
     assert observed['reads'] == [bad] and observed['collections'] == 1
-    assert response.returncode == 0, (response.stdout, response.stderr)
+    assert response.returncode == 3, (response.stdout, response.stderr)
     data = json.loads(artifact.read_text(encoding='utf-8') if view == 'uri-artifact' else response.stdout)
     assert data['meta']['total_candidates'] == data['meta']['selected'] == 2
     assert data['meta']['used_tokens_approx'] == 9 and data['meta']['used_lines'] is None
@@ -121,7 +121,7 @@ def test_line_budget_excludes_unknown_cost_and_preserves_known_selected_total(pr
     root, bad, healthy = project
     observed['read_denied'] = {bad}
     response = invoke('pack://' + str(root) + '?budget=' + budget, '--format', 'json')
-    assert observed['reads'] == [bad] and response.returncode == 0
+    assert observed['reads'] == [bad] and response.returncode == 3
     data = json.loads(response.stdout)
     expected = int(budget == '1-lines')
     assert data['meta']['selected'] == expected and data['meta']['used_lines'] == expected
@@ -136,7 +136,7 @@ def test_unknown_line_cost_excluded_by_token_size_does_not_null_selected_healthy
     observed['read_denied'] = {bad}
     response = invoke('pack://' + str(root) + '?budget=2', '--format', 'json')
     data = json.loads(response.stdout)
-    assert observed['reads'] == [bad] and response.returncode == 0
+    assert observed['reads'] == [bad] and response.returncode == 3
     assert [row['path'] for row in data['files']] == [healthy.as_posix()]
     assert data['meta']['used_lines'] == 1 and 'line_budget_incomplete' not in data['meta']
     file_note(data, bad)
@@ -157,7 +157,7 @@ def test_all_stat_loss_reports_unavailable_measurements_instead_of_budget_exclus
     else:
         args = ['pack', str(root), '--verbose'] if seam == 'native-verbose' else ['pack://' + str(root)]
         response = invoke(*args)
-        assert response.returncode == 0
+        assert response.returncode == 3
         text = response.stdout + response.stderr
     assert set(observed['stats']) == {bad, healthy} and observed['collections'] == 1
     assert 'measurement' in text.lower() and 'unavailable' in text.lower()
@@ -170,7 +170,7 @@ def test_stat_loss_and_directory_loss_remain_independent_before_projection(proje
     hidden = write(root / 'included' / 'hidden.py', 'HIDDEN=1\n').parent
     observed.update(stat_denied={bad}, dir_denied={hidden})
     response = invoke('pack://' + str(root), '--format', 'json', '--max-items', '0')
-    assert response.returncode == 0 and observed['stats'] == [bad] and observed['directory'] == [hidden]
+    assert response.returncode == 3 and observed['stats'] == [bad] and observed['directory'] == [hidden]
     data = json.loads(response.stdout)
     assert data['meta']['total_candidates'] == data['meta']['selected'] == 1 and data['files'] == []
     file_note(data, bad)
@@ -183,7 +183,7 @@ def test_stat_loss_survivor_count_is_qualified_as_observed_measurements(project,
     root, bad, _ = project
     observed['stat_denied'] = {bad}
     response = invoke('pack', str(root), '--verbose')
-    assert observed['stats'] == [bad] and response.returncode == 0
+    assert observed['stats'] == [bad] and response.returncode == 3
     assert 'Selected 1 of 1' in response.stdout
     assert 'observed' in response.stdout.lower() or 'measured' in response.stdout.lower()
     assert 'measurement' in response.stdout.lower() + response.stderr.lower()

@@ -781,11 +781,12 @@ class TestRunPack(unittest.TestCase):
     def _make_args(self, path: str, budget: str = "2000", focus=None, fmt="text", verbose=False) -> Namespace:
         return Namespace(path=path, budget=budget, focus=focus, format=fmt, verbose=verbose)
 
-    def test_nonexistent_path_exits_1(self):
+    def test_nonexistent_path_exits_2(self):
+        # D6 (BACK-2045): a missing resource is a usage error on both spellings, not exit 1.
         args = self._make_args("/nonexistent/path/xyz")
         with self.assertRaises(SystemExit) as ctx:
             run_pack(args)
-        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(ctx.exception.code, 2)
 
     def test_real_dir_runs_without_crash(self):
         import io

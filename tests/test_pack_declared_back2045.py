@@ -132,3 +132,26 @@ def test_missing_path_is_an_error_on_both_spellings(tmp_path):
     gone = tmp_path / 'gone'
     assert run('pack', str(gone)).returncode != 0
     assert run(f'pack://{gone}').returncode != 0
+
+
+def test_malformed_or_disagreeing_counts_fail_even_beside_healthy_rows():
+    from reveal.utils.results import AnalysisCompleteness
+    good = {'type': 'pack', 'files': [{'relative': 'a.py'}],
+            'meta': {'total_candidates': 2, 'selected': 1, 'skipped': 1}}
+    assert pack.PackAdapter.execution_facts(good).completeness is AnalysisCompleteness.COMPLETE
+    for bad_meta in ({'total_candidates': 2, 'selected': 1, 'skipped': 0},
+                     {'total_candidates': True, 'selected': 1, 'skipped': 1},
+                     {'total_candidates': -1, 'selected': 0, 'skipped': 0},
+                     {'selected': 1, 'skipped': 1}):
+        bad = {**good, 'meta': bad_meta}
+        assert pack.PackAdapter.execution_facts(bad).completeness is AnalysisCompleteness.FAILED
+
+
+def test_presentation_cut_hides_rows_but_not_the_counts(tmp_path, monkeypatch):
+    root = tmp_path / 'p'
+    child = project(root)
+    lose(monkeypatch, {child})
+    cut = run(f'pack://{root}', '--fields', 'files', '--max-items', '0', '--format', 'json')
+    data = json.loads(cut.stdout)
+    assert cut.returncode == 3 and data['files'] == []
+    assert data['meta']['total_candidates'] == data['meta']['selected'] == 2

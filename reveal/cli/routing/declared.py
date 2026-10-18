@@ -28,9 +28,12 @@ def create_declared_parser(name: str) -> argparse.ArgumentParser:
     from ..global_flags import add_exclude_argument, add_gitignore_arguments
     from ...utils.query_binding import add_declared_arguments
     adapter = declared_adapter_class(name)
+    help_info = adapter.get_help()
+    epilog = help_info.get('epilog')
     parser = argparse.ArgumentParser(
         prog=f'reveal {name}', parents=[_build_global_options_parser()],
-        description=adapter.get_help()['description'])
+        description=help_info['description'], epilog=epilog,
+        formatter_class=argparse.RawDescriptionHelpFormatter if epilog else argparse.HelpFormatter)
     add_declared_arguments(parser, adapter.PARAM_SPECS, adapter.RESOURCE_SPEC)
     if name == 'overview':
         parser.add_argument('--all', action='store_true',

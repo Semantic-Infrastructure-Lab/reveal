@@ -114,8 +114,8 @@ def test_invalid_ref_remains_existing_nonfatal_fallback_without_new_json_error_c
         assert owner.since_error
     elif consumer == 'native-json':
         response = run('pack', str(source), '--since', 'missing-ref-for-independent-fixture', '--format', 'json')
-        assert response.returncode == 0 and 'Warning: --since:' in response.stderr
-        result = json.loads(response.stdout)
+        assert response.returncode == 0
+        result = json.loads(response.stdout)  # JSON mode keeps stderr clean; the cause is meta.since_error
     else:
         pytest.importorskip('mcp')
         from reveal.mcp_server import reveal_pack, reveal_query
@@ -127,7 +127,8 @@ def test_invalid_ref_remains_existing_nonfatal_fallback_without_new_json_error_c
         assert type(answer) is str
         assert 'Not a directory' not in answer, answer
         result = json.loads(answer.partition('\n[stderr:')[0])
-    assert not result.get('error') and 'since_error' not in result and 'since_error' not in result['meta']
+    # The cause is additive advisory metadata (BACK-2045); it is not an error and not a new exit.
+    assert not result.get('error') and 'since_error' not in result and result['meta']['since_error']
     assert result['meta']['changed_files_count'] == 0 and result['meta']['total_candidates'] == 1
     assert result['files'][0]['changed'] is False
 

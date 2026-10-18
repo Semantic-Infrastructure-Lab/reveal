@@ -139,6 +139,9 @@ def _reads_via_shared_seam(name, flag):
         # expands ACCEPTS_TOP renderers without widening their analysis.
         if flag in ('all', 'verbose') and getattr(get_renderer_class(name), 'ACCEPTS_TOP', False) is True:
             return True
+        # A declared parameter bound to the flag's dest is read where the adapter applies it.
+        if any((spec.cli.dest or spec.name) == flag for spec in adapter_cls.PARAM_SPECS if spec.cli):
+            return True
         # The declared runner uses the URI owner's named-argument forwarding.
         return flag in inspect.signature(adapter_cls.get_structure).parameters
     return bool(getattr(adapter_cls, 'CLI_QUERY_FLAGS', {}).get(flag))

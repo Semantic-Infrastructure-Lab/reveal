@@ -288,11 +288,11 @@ class TestHandleUriStructuralFlagsWarning:
         with patch('reveal.adapters.base.get_adapter_class', return_value=adapter_cls):
             with patch('reveal.adapters.base.get_renderer_class', return_value=MagicMock(**{'exit_code.return_value': 0})):
                 from reveal.cli.routing import handle_uri
-                handle_uri('pack://.', None, args)
+                handle_uri('stats://.', None, args)
 
     def test_depth_warns_when_adapter_has_no_matching_param(self, capsys):
         self._dispatch(_StubAdapterNoStructuralParams, depth=1)
-        assert '--depth has no effect on pack://' in capsys.readouterr().err
+        assert '--depth has no effect on stats://' in capsys.readouterr().err
 
     def test_no_warning_when_adapter_declares_matching_param(self, capsys):
         self._dispatch(_StubAdapterWithDepthParam, depth=1)

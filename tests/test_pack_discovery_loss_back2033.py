@@ -103,7 +103,7 @@ def test_empty_selection_discloses_budget_vs_unavailable_candidate_population(tm
     root = tmp_path / 'affected'; child = project(root)
     state = fault(monkeypatch, {root if lost == 'root' else child})
     response = run(f'pack://{root}?budget={budget}', '--format', 'text')
-    assert state['events'] and response.returncode == 0
+    assert state['events'] and response.returncode == 3
     assert response.stdout.count('missing file population is unknown') == 1
     text = response.stdout.lower()
     if lost == 'root':
@@ -121,7 +121,7 @@ def test_native_public_routes_preserve_legacy_zero_with_real_disclosure(tmp_path
     argv = [f'pack://{root}?budget=8000&content=true'] if route == 'uri' else [
         'pack', str(root), '--budget', '8000', '--content']
     response = run(*argv, '--format', format, '--provenance')
-    assert state['events'] and response.returncode == 0
+    assert state['events'] and response.returncode == 3
     if format == 'json':
         result = json.loads(response.stdout)
         assert result['meta']['total_candidates'] == 0 and result['files'] == []
@@ -143,7 +143,7 @@ def test_projection_and_artifact_keep_discovery_evidence(tmp_path, monkeypatch, 
     else:
         flags += ['--format', 'text', '--also-json', str(artifact)]
     response = run(f'pack://{root}?budget=8000', *flags)
-    assert state['events'] and response.returncode == 0
+    assert state['events'] and response.returncode == 3
     result = json.loads(response.stdout if view == 'projection' else artifact.read_text(encoding='utf-8'))
     assert result['execution']
     directory_warning(result)
@@ -159,10 +159,14 @@ def test_both_decorated_mcp_entrypoints_are_ordinary_strings_with_directory_warn
         wire = reveal_query(f'pack://{root}?budget=8000', provenance=True)
     else:
         wire = reveal_pack(str(root), budget=8000, content=True)
-    assert state['events'] and state['walks'] == 1 and type(wire) is str
+    assert state['events'] and state['walks'] == 1
     if tool == 'generic':
-        directory_warning(json.loads(wire))
+        # D6 (BACK-2045): total candidate loss has no usable answer, so the generic tool fails
+        # with the attributed incomplete-discovery cause instead of an ordinary packet.
+        assert type(wire).__name__ == '_ToolFailure'
+        assert wire.count('missing file population is unknown') == 1
     else:
+        assert type(wire) is str
         assert wire.count('missing file population is unknown') == 1
         assert 'No files fit within budget.' not in wire
 

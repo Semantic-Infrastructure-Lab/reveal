@@ -1,4 +1,5 @@
 """Returned pack text for CLI, URI and MCP consumers."""
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -78,7 +79,7 @@ def _format_pack_header(
 ) -> List[str]:
     """Format the pack header (budget + since + selected counts) as lines."""
     since_val = meta.get('since')
-    budget_desc = f"~{budget_tokens} tokens" if budget_tokens else f"{budget_lines} lines"
+    budget_desc = f"~{budget_tokens} tokens" if budget_tokens is not None else f"{budget_lines} lines"
     since_desc = f"  [since {since_val}]" if since_val else ""
     lines = [f"Pack: {path}  [{budget_desc} budget]{since_desc}"]
     if since_val:
@@ -202,7 +203,17 @@ class PackRenderer(BaseRenderer):
                          content: bool = False) -> Optional[str]:
         if format == 'json' or outcome_of(result) == 'failed':
             return super().render_structure(result, format)
+        cls._advisories(result)
         return cls._pack_body(result, verbose, architecture, content)
+
+    @staticmethod
+    def _advisories(result: Dict[str, Any]) -> None:
+        """Optional-signal notices go to stderr, as the command always printed them."""
+        meta = result.get('meta') or {}
+        if meta.get('since_error'):
+            print(f"Warning: --since: {meta['since_error']}", file=sys.stderr)
+        if meta.get('relevance_warning'):
+            print(f"Warning: {meta['relevance_warning']}", file=sys.stderr)
 
     @classmethod
     def _pack_body(cls, result: Dict[str, Any], verbose: bool = False,
