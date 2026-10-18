@@ -201,3 +201,74 @@ def test_clean_zero_and_excluded_single_file_siblings_are_exactly_unchanged(tmp_
     empty.mkdir()
     result = StatsAdapter(str(empty)).get_structure()
     assert result['summary']['total_files'] == 0 and not warnings(result)
+
+
+def test_finder_keeps_old_positional_controls_and_optional_error_callback(tmp_path, monkeypatch):
+    from reveal.adapters.stats.analysis import find_analyzable_files
+    child = tree(tmp_path)
+    real = os.scandir
+
+    def denied(path):
+        if Path(path) == child:
+            raise PermissionError(errno.EACCES, 'controlled finder loss', str(child))
+        return real(path)
+
+    monkeypatch.setattr(os, 'scandir', denied)
+    assert list(find_analyzable_files(tmp_path, False, False, None, {})) == [tmp_path / 'visible.py']
+    errors = []
+    assert list(find_analyzable_files(tmp_path, False, False, None, {}, on_error=errors.append)) == [tmp_path / 'visible.py']
+    assert len(errors) == 1 and Path(errors[0].filename) == child
+    with pytest.raises(TypeError):
+        find_analyzable_files(tmp_path, False, False, None, {}, errors.append)
+
+
+def test_root_loss_is_distinct_from_clean_empty(tmp_path, monkeypatch):
+    tree(tmp_path)
+    deny_stats(monkeypatch, {tmp_path})
+    result = StatsAdapter(str(tmp_path)).get_structure()
+    assert result['summary']['total_files'] == 0
+    diagnostic, = warnings(result)
+    assert diagnostic['count'] == 1 and diagnostic['unit'] == 'directories'
+    assert 'controlled Stats child traversal failure' in diagnostic['message']
+
+
+def test_gitignore_policy_skips_do_not_become_io_loss(tmp_path, monkeypatch):
+    child = tree(tmp_path)
+    (tmp_path / '.gitignore').write_text('included_child/\n', encoding='utf-8')
+    clean = StatsAdapter(str(tmp_path)).get_structure()
+    with monkeypatch.context() as context:
+        attempts = deny_stats(context, {child})
+        assert StatsAdapter(str(tmp_path)).get_structure() == clean
+    assert attempts == []
+    with monkeypatch.context() as context:
+        deny_stats(context, {child})
+        included = StatsAdapter(str(tmp_path), 'respect_gitignore=false').get_structure()
+    assert warnings(included)
+
+
+def test_single_file_error_return_resets_directory_state(tmp_path, monkeypatch):
+    from reveal.adapters.stats import adapter as stats_module
+    child = tree(tmp_path)
+    adapter = StatsAdapter(str(tmp_path))
+    with monkeypatch.context() as context:
+        deny_stats(context, {child})
+        assert warnings(adapter.get_structure())
+    adapter.path = tmp_path / 'visible.py'
+    with monkeypatch.context() as context:
+        context.setattr(stats_module, 'analyze_file', lambda *args: {
+            'analysis_failed': 'PermissionError: controlled file loss', 'path': str(adapter.path)})
+        result = adapter.get_structure()
+    assert result['error'] and not warnings(result)
+    assert adapter._traversal_failures == []
+    adapter.path = tmp_path
+    assert not warnings(adapter.get_structure())
+
+
+def test_review_hotspots_sibling_folds_directory_warning(tmp_path, monkeypatch):
+    from reveal.cli.commands.review import _run_hotspots
+    child = tree(tmp_path)
+    notes = []
+    deny_stats(monkeypatch, {child})
+    assert _run_hotspots(tmp_path, warnings=notes) == []  # no serious observations
+    diagnostic, = [note for note in notes if note.get('type') == 'analysis_incomplete']
+    assert diagnostic['count'] == 1 and diagnostic['message'].startswith('hotspots: ')
