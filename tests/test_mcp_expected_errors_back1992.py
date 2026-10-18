@@ -181,7 +181,8 @@ def test_unknown_adapter_remains_nonerror_stdio_result(tmp_path):
     _run(tmp_path, scenario)
 
 
-def test_registered_crash_logging_cannot_enter_sibling_capture(tmp_path, monkeypatch):
+@pytest.mark.parametrize('tool', ['reveal_structure', 'reveal_query'])
+def test_registered_crash_logging_cannot_enter_sibling_capture(tmp_path, monkeypatch, tool):
     import concurrent.futures
     import logging
     import threading
@@ -205,7 +206,7 @@ def test_registered_crash_logging_cannot_enter_sibling_capture(tmp_path, monkeyp
     logger = logging.getLogger(mcp_server.__name__)
     logger.addHandler(handler)
 
-    def crash(*args):
+    def crash(*args, **kwargs):
         raise RuntimeError('PRIVATE_CONCURRENT_DETAIL')
 
     def classify(result, tool_name):
@@ -235,11 +236,14 @@ def test_registered_crash_logging_cannot_enter_sibling_capture(tmp_path, monkeyp
 
     monkeypatch.setattr(structure, 'show_structure', crash)
     monkeypatch.setattr(mcp_server, '_raise_if_tool_failure', classify)
-    registered = mcp_server.mcp._tool_manager._tools['reveal_structure'].fn
+    from reveal.adapters.surface import SurfaceAdapter
+    monkeypatch.setattr(SurfaceAdapter, 'get_structure', crash)
+    registered = mcp_server.mcp._tool_manager._tools[tool].fn
+    arguments = {'path': str(path)} if tool == 'reveal_structure' else {'uri': f'surface://{tmp_path}'}
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             other = pool.submit(sibling)
-            failed = pool.submit(registered, path=str(path))
+            failed = pool.submit(registered, **arguments)
             with pytest.raises(ToolError, match='Internal error'):
                 failed.result(timeout=15)
             text = other.result(timeout=15)
