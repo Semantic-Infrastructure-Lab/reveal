@@ -252,6 +252,9 @@ have separate freshness scope.
 projects reached by that request. An incomplete zero-result scan says no findings
 in the checked population, rather than claiming a clean scan. D005 shows the total
 failed-file count, up to five examples, and the remaining count.
+D005 also retains directory-discovery loss, qualifies potentially missing duplicate
+clusters and participating-file observations, and rebuilds traversal-incomplete indexes
+at the next request. Healthy and cap-only indexes retain their validated reuse.
 
 `reveal_check` also reports directory-enumeration failures while discovering its
 candidate files, including failures with no surviving files. Its notes identify the

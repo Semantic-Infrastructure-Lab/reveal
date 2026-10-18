@@ -108,8 +108,18 @@ reveal check ./src --select D005
 
 Thresholds: `MIN_LITERAL_SIZE = 5` (items in the literal), `MIN_CLUSTER_FILES = 3`
 (distinct files). Names matching stable patterns (`__all__`, `*_format`, test
-fixtures) are exempt. The cross-file index is cached per project root for the
-duration of the process (same strategy as I002).
+fixtures) are exempt. The cross-file index is cached per project root. Serialized
+MCP requests validate healthy indexes against the existing tree fingerprint;
+indexes built with directory-discovery failures rebuild on the next request.
+
+Directory-discovery failures retain surviving findings and disclose that duplicate
+clusters or participating files may be missing. Recursive Check marks D005's source
+accounting `exact: false` while keeping observed file counts; it does not estimate
+unseen files or count them as failed analyses. This uses Check's existing incomplete
+exit 3 (`--exit-zero` retains the warning with exit 0) and ordinary MCP notes.
+A failure to analyze an enumerated file remains separate: enumeration can still be
+exact even when `failed_files` is positive. Existing scan-ceiling accounting and
+healthy cache reuse keep their policies.
 
 **Scope and ceiling:** the project root is the nearest ancestor with a marker
 file (`pyproject.toml`, `setup.py`, `package.json`, `go.mod`, `Cargo.toml`). A
