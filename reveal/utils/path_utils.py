@@ -11,7 +11,7 @@ import tempfile
 from dataclasses import dataclass, field
 from itertools import islice
 from pathlib import Path, PurePath
-from typing import Any, Callable, Dict, FrozenSet, Iterable, Iterator, Optional, List, Set, Tuple, Union
+from typing import Any, Callable, Dict, FrozenSet, Iterable, Iterator, Optional, List, Sequence, Set, Tuple, Union
 
 from ..defaults import (
     SKIP_DIRECTORIES,
@@ -23,6 +23,7 @@ from ..defaults import (
     MINIFIED_FILENAME_RE,
     DisplayDefaults,
 )
+from ..reveal_types import WarningEntry
 from .request_cache import register_request_cache
 from ..registry import _is_cpp_header_content, display_name_for_extension, language_for_extension, LANGUAGE_DISPLAY_NAMES
 
@@ -678,6 +679,38 @@ _DISPLAY_FILE_NOISE = re.compile(
     r'|pip-log\.txt$|pip-delete-this-directory\.txt$|npm-debug\.log$|yarn-error\.log$')
 
 OnHidden = Callable[[Path, bool, str], None]
+
+
+def traversal_failed_warning(failures: Sequence[Tuple[Optional[str], str]],
+                             base: Optional[Path] = None) -> Optional[WarningEntry]:
+    """Unique identified directories, plus unlocated enumeration error events."""
+    if not failures:
+        return None
+    by_directory: Dict[str, set] = {}
+    unknown = []
+    for path, cause in failures:
+        if path is None:
+            unknown.append(cause)
+        else:
+            by_directory.setdefault(path, set()).add(cause)
+    paths = sorted(by_directory)
+    shown = [to_relative_display(p, base) if base else to_posix(p) for p in paths[:5]]
+    details = [f"{display} ({'; '.join(sorted(by_directory[path]))})"
+               for display, path in zip(shown, paths[:5])]
+    more = f" and {len(paths) - len(shown)} more" if len(paths) > len(shown) else ''
+    causes = sorted({cause for _, cause in failures})[:5]
+    message = (f"{len(paths)} identified directory enumeration(s) failed; "
+               f"missing file population is unknown: {', '.join(details)}{more}")
+    if unknown:
+        message += (f"; {len(unknown)} enumeration error event(s) had an unknown directory: "
+                    f"{'; '.join(sorted(set(unknown))[:5])}")
+    warning: WarningEntry = {
+        'type': 'analysis_incomplete', 'count': len(paths), 'unit': 'directories',
+        'directories': shown, 'causes': causes, 'message': message,
+    }
+    if unknown:
+        warning['unknown_directory_events'] = len(unknown)
+    return warning
 
 
 def _walk_code_files(

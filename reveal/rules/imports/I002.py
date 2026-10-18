@@ -9,9 +9,9 @@ import hashlib
 import logging
 import os
 import stat as stat_module
-from ...utils.request_cache import register_validated_cache
+from ...utils.request_cache import register_request_cache, register_validated_cache
 from pathlib import Path
-from typing import List, Dict, Any, Iterator, Optional
+from typing import List, Dict, Any, Callable, Iterator, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...analyzers.imports import ImportGraph
@@ -23,7 +23,7 @@ from ...core import disk_cache
 from ...utils.query_control import ScanBudget
 from ...utils.parallel import pool_worker_count, submit_each
 from ...utils.path_utils import (
-    EVIDENCE, _walk_code_files, cross_file_scan_root, scan_roots,
+    EVIDENCE, _walk_code_files, cross_file_scan_root, scan_roots, to_posix, traversal_failed_warning,
 )
 
 logger = logging.getLogger(__name__)
@@ -175,7 +175,8 @@ def _cycle_detection_max_files() -> int:
     return _DEFAULT_CYCLE_DETECTION_MAX_FILES
 
 
-def _graph_source_files(directory: Path, supported) -> Iterator[Path]:
+def _graph_source_files(directory: Path, supported, *,
+                        on_error: Optional[Callable[[OSError], None]] = None) -> Iterator[Path]:
     """The source files I002's import graph is built from: one selection, shared by the
     disk-cache fingerprint and ``_collect_raw_imports``' Pass A, so the two cannot drift.
 
@@ -185,7 +186,7 @@ def _graph_source_files(directory: Path, supported) -> Iterator[Path]:
     ``rglob('*')``: an in-tree ``.venv`` pushed a small project over the cycle-detection
     limit and real cycles went unreported.
     """
-    for file_path in _walk_code_files(directory, purpose=EVIDENCE):
+    for file_path in _walk_code_files(directory, purpose=EVIDENCE, on_error=on_error):
         if file_path.suffix in supported:
             yield file_path
 
@@ -196,9 +197,9 @@ def _tree_fingerprint(directory: Path) -> Optional[str]:
     Selects files with ``_graph_source_files``, as Pass A does, then digests each file's
     ``(relpath, mtime_ns, size)`` through the shared fingerprint owner. Indexed targets
     include ignored/generated files and non-source extensions used by resolution.
-    A content edit bumps mtime_ns (and usually size); an add/delete/rename
-    changes the file set — every realistic change yields a different digest, so
-    a stale graph is never served. Stat-only (no parse), so it is cheap relative
+    Source/target membership and observed mtime/size changes alter the digest.
+    Preserved-stat content edits and successful source reads are not established
+    by this metadata fingerprint. Stat-only (no parse), so it is cheap relative
     to the ~O(files) tree-sitter build it may let us skip.
 
     Returns ``None`` (→ caller skips the cache and builds directly) when:
@@ -229,7 +230,8 @@ def _tree_fingerprint(directory: Path) -> Optional[str]:
         hasher.update(("\x00".join(sorted(supported))).encode("utf-8", "replace"))
         hasher.update(b"\x01")
         entries = []
-        for file_path in _graph_source_files(directory, supported):
+        enumeration_errors: List[OSError] = []
+        for file_path in _graph_source_files(directory, supported, on_error=enumeration_errors.append):
             try:
                 st = file_path.stat()
             except OSError:
@@ -241,9 +243,11 @@ def _tree_fingerprint(directory: Path) -> Optional[str]:
             entries.append((str(file_path), st.st_mtime_ns, st.st_size))
             if max_files is not None and len(entries) > max_files:
                 return None
-        if cycle_limit and len(entries) > cycle_limit:
+        if enumeration_errors or (cycle_limit and len(entries) > cycle_limit):
             return None
-        targets = basename_index([directory])
+        targets = basename_index([directory], on_error=enumeration_errors.append)
+        if enumeration_errors:
+            return None
         source_paths = [Path(entry[0]) for entry in entries]
         fingerprint = resolution_fingerprint(source_paths, targets, excluded_root=disk_cache.cache_root())
         if fingerprint is None:
@@ -304,6 +308,9 @@ def get_scan_disclosures(files: Optional[List[Path]] = None) -> List[str]:
     for directory, graph in _graph_cache.items():
         if roots is not None and directory not in roots:
             continue
+        traversal = traversal_failed_warning(graph.traversal_failures, directory)
+        if traversal:
+            disclosures.append(f"I002: {traversal['message']}; circular-dependency results may be incomplete")
         if graph.scan_skipped_reason:
             disclosures.append(graph.scan_skipped_reason)
         lost = set(graph.lost_files)
@@ -427,20 +434,24 @@ class I002(BaseRule):
                 _graph_cache[directory] = cached
                 return cached
 
-        all_imports, failed_files, lost_files, skipped_reason = self._collect_raw_imports(directory)
+        traversal_failures: List[Tuple[Optional[str], str]] = []
+        all_imports, failed_files, lost_files, skipped_reason = self._collect_raw_imports(
+            directory, traversal_failures=traversal_failures)
         graph = ImportGraph.from_imports(all_imports)
         graph.failed_files = failed_files
         graph.lost_files = lost_files
         graph.scan_skipped_reason = skipped_reason
         graph.scan_budget = self._scan_budget_metadata
-        self._resolve_graph_dependencies(graph, directory)
+        self._resolve_graph_dependencies(graph, directory, traversal_failures=traversal_failures)
 
+        # Keep an invocation-local memo so preload and per-file disclosures share evidence.
         _graph_cache[directory] = graph
-        if fingerprint is not None:
+        if fingerprint is not None and not graph.traversal_failures:
             disk_cache.put(_IMPORT_GRAPH_NAMESPACE, fingerprint, graph)
         return graph
 
-    def _collect_raw_imports(self, directory: Path) -> tuple:
+    def _collect_raw_imports(self, directory: Path, *,
+                            traversal_failures: Optional[List[Tuple[Optional[str], str]]] = None) -> tuple:
         """Phase 1: Walk directory and extract raw import statements from all files.
 
         Returns ``(all_imports, failed_files, lost_files, skipped_reason)`` --
@@ -480,7 +491,16 @@ class I002(BaseRule):
 
         # Pass A: cheap count-only walk — abort before any parsing if over ceiling.
         source_files = []
-        for file_path in _graph_source_files(directory, supported_extensions):
+        source_failures: List[Tuple[Optional[str], str]] = []
+
+        def on_error(error: OSError) -> None:
+            failure = (to_posix(error.filename) if error.filename else None,
+                       f'{type(error).__name__}: {error}')
+            source_failures.append(failure)
+            if traversal_failures is not None:
+                traversal_failures.append(failure)
+
+        for file_path in _graph_source_files(directory, supported_extensions, on_error=on_error):
             if not file_path.is_file():
                 continue
             source_files.append(file_path)
@@ -509,7 +529,8 @@ class I002(BaseRule):
             logger.warning(reason)
             return [], [], [], reason
 
-        self._record_scan_budget(budget, len(source_files), analyzed=len(source_files))
+        self._record_scan_budget(budget, len(source_files), analyzed=len(source_files),
+                                 source_incomplete=bool(source_failures))
 
         # Pass B: parse the (now bounded) set of files. Independent per file, so
         # fan out across processes on large trees (BACK-536). Results are read in
@@ -539,7 +560,8 @@ class I002(BaseRule):
         return all_imports, failed_files, lost_files, None
 
     def _record_scan_budget(self, budget: ScanBudget, count: int, *,
-                            capped: bool = False, analyzed: int, skipped: bool = False) -> None:
+                            capped: bool = False, analyzed: int, skipped: bool = False,
+                            source_incomplete: bool = False) -> None:
         self._scan_budget_metadata = {
             **asdict(budget.accounting(count, capped)),
             'limit': budget.limit,
@@ -547,10 +569,11 @@ class I002(BaseRule):
             'analyzed_files': analyzed,
             'skipped': capped or skipped,
         }
-        if skipped:
+        if skipped or source_incomplete:
             self._scan_budget_metadata['exact'] = False
 
-    def _resolve_graph_dependencies(self, graph: ImportGraph, directory: Path) -> None:
+    def _resolve_graph_dependencies(self, graph: ImportGraph, directory: Path, *,
+                                    traversal_failures: Optional[List[Tuple[Optional[str], str]]] = None) -> None:
         """Phase 2: resolve import statements to files through the shared
         import-analysis service, the same resolution imports:// uses (BACK-1723).
 
@@ -560,9 +583,16 @@ class I002(BaseRule):
         service skips TYPE_CHECKING and function-body imports, which cannot
         cause a circular ImportError at startup.
         """
+        failures = list(graph.traversal_failures if traversal_failures is None else traversal_failures)
+
+        def on_error(error: OSError) -> None:
+            failures.append((to_posix(error.filename) if error.filename else None,
+                             f'{type(error).__name__}: {error}'))
+
+        targets = basename_index([directory], on_error=on_error)
         import_analysis.resolve_graph(
             import_analysis.ScanScope(directory, frozenset(get_all_extensions())),
-            import_analysis.ImportFileSet(tuple(graph.files), basename_index([directory])),
+            import_analysis.ImportFileSet(tuple(graph.files), targets, traversal_failures=tuple(failures)),
             ImportAnalysis(graph=graph, scanned_files=set(graph.files)))
 
     def _format_cycle(self, cycle: List[Path]) -> str:
@@ -607,4 +637,17 @@ def _evict_root(root: Path) -> None:
     _graph_cache.pop(root, None)
 
 
+def _evict_incomplete_graphs() -> None:
+    """Retain partial graphs within an invocation, never across host requests.
+
+    A recovered sealing walk can stamp a graph built from incomplete input. Drop
+    that memo before validation; the existing owner then removes its orphan stamp.
+    Private direct builders without host resets retain their invocation memo lifetime.
+    """
+    for root, graph in tuple(_graph_cache.items()):
+        if graph.traversal_failures:
+            _evict_root(root)
+
+
+register_request_cache(__name__ + '.traversal', _evict_incomplete_graphs)
 register_validated_cache(__name__, _graph_cache, _evict_root)

@@ -8,7 +8,10 @@ from typing import Dict, List, Any, Optional, Sequence, Tuple, cast
 
 from ...complexity import fallback_complexity
 from ...reveal_types import StructureItem, WarningEntry
-from ...utils.path_utils import _walk_code_files, to_posix, to_relative_display
+from ...utils.path_utils import (
+    _walk_code_files, to_posix, to_relative_display,
+    traversal_failed_warning as traversal_failed_warning,
+)
 from ...utils.results import outcome_of
 from .call_graph import build_symbol_map, resolve_callees
 
@@ -84,38 +87,6 @@ def analysis_skipped_warning(skipped: List[Tuple[str, str]], base: Optional[Path
         'message': f"{len(paths)} file(s) could not be analyzed completely ({causes}) -- {consequence}: "
                    f"{', '.join(shown)}{more}",
     }
-
-
-def traversal_failed_warning(failures: Sequence[Tuple[Optional[str], str]],
-                             base: Optional[Path] = None) -> Optional[WarningEntry]:
-    """Unique identified directories, plus unlocated enumeration error events."""
-    if not failures:
-        return None
-    by_directory: Dict[str, set] = {}
-    unknown = []
-    for path, cause in failures:
-        if path is None:
-            unknown.append(cause)
-        else:
-            by_directory.setdefault(path, set()).add(cause)
-    paths = sorted(by_directory)
-    shown = [to_relative_display(p, base) if base else to_posix(p) for p in paths[:5]]
-    details = [f"{display} ({'; '.join(sorted(by_directory[path]))})"
-               for display, path in zip(shown, paths[:5])]
-    more = f" and {len(paths) - len(shown)} more" if len(paths) > len(shown) else ''
-    causes = sorted({cause for _, cause in failures})[:5]
-    message = (f"{len(paths)} identified directory enumeration(s) failed; "
-               f"missing file population is unknown: {', '.join(details)}{more}")
-    if unknown:
-        message += (f"; {len(unknown)} enumeration error event(s) had an unknown directory: "
-                    f"{'; '.join(sorted(set(unknown))[:5])}")
-    warning: WarningEntry = {
-        'type': 'analysis_incomplete', 'count': len(paths), 'unit': 'directories',
-        'directories': shown, 'causes': causes, 'message': message,
-    }
-    if unknown:
-        warning['unknown_directory_events'] = len(unknown)
-    return warning
 
 
 def collect_structures(path: str, outline: bool = False, needle: Optional[str] = None) -> StructureList:

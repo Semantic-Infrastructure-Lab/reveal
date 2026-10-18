@@ -47,12 +47,13 @@ def discover_import_files(
     return candidates, index, False
 
 
-def basename_index(roots: Iterable[Path]) -> Dict[str, List[Path]]:
+def basename_index(roots: Iterable[Path], *,
+                   on_error: Optional[Callable[[OSError], None]] = None) -> Dict[str, List[Path]]:
     """The basename index for callers that hand an extractor only search paths."""
     index: Dict[str, List[Path]] = {}
     for root in roots:
         if root.is_dir():
-            for name, paths in discover_import_files(root, lambda _p: False)[1].items():
+            for name, paths in discover_import_files(root, lambda _p: False, on_error=on_error)[1].items():
                 index.setdefault(name, []).extend(paths)
     return index
 
