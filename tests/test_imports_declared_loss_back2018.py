@@ -207,6 +207,22 @@ def test_clean_zero_remains_complete(tmp_path, name):
     assert request(name, tmp_path)[1] == 'complete'
 
 
+@pytest.mark.parametrize('collector_raises', [False, True])
+def test_architecture_request_capture_is_cleared_on_success_and_exception(tmp_path, collector_raises):
+    write(tmp_path / 'visible.py', complex_source())
+    owner = ArchitectureAdapter(str(tmp_path))
+    if collector_raises:
+        with patch('reveal.adapters.architecture._run_combined_analysis', side_effect=OSError('collector failed')):
+            with pytest.raises(OSError, match='collector failed'):
+                owner.get_structure()
+    else:
+        owner.get_structure()
+    assert not hasattr(owner, '_architecture_observations')
+    result = owner.get_structure()
+    assert owner.execution_facts(result).completeness.value == 'complete'
+    assert not hasattr(owner, '_architecture_observations')
+
+
 def test_overview_real_read_failures_are_not_stats_observations(tmp_path):
     from reveal.adapters.stats import StatsAdapter
     from reveal.adapters.stats import analysis
