@@ -109,7 +109,7 @@ def test_mcp_partial_file_observations_remain_usable(tmp_path):
         result = await session.call_tool('reveal_query', {
             'uri': f'hotspots://{root}?files_only=true', 'provenance': False})
         assert not result.is_error
-        assert 'visible.py' in _text(result)
+        assert 'lost.py' in _text(result)
         assert 'incomplete' in _text(result).lower()
 
     _run(tmp_path, scenario, _SERVER)
