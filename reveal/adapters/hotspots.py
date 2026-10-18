@@ -56,7 +56,8 @@ _FILES_ONLY = ParamSpec('files_only', 'boolean', 'Skip function analysis', False
                        boolean_value, ('files_only=true',), role='analysis',
                        cli=CliBinding(('--files-only',), action='store_true'))
 _COMPOSE_FAILED = object()
-_REQUIRED_WARNINGS = {'parse_degraded', 'check_rules_failed', 'analysis_failed', 'parse_recovered'}
+_REQUIRED_WARNINGS = {'parse_degraded', 'check_rules_failed', 'analysis_failed', 'parse_recovered',
+                      'analysis_incomplete'}
 
 
 def _is_count(value: Any) -> bool:

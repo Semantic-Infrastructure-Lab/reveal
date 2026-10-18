@@ -474,7 +474,7 @@ Hotspots defaults to `none` and supports `findings` using the owner's pre-cap
 `summary.has_findings`: quality below 70 or complexity above 20. Stats coverage
 is required in every mode; AST coverage/results are required unless `files_only`.
 Missing/malformed proof, errors and `parse_degraded`, `check_rules_failed`,
-`analysis_failed` or `parse_recovered` warnings prevent successful execution.
+`analysis_failed`, `parse_recovered` or `analysis_incomplete` warnings prevent successful execution.
 Optional churn/test convention warnings, confidence and ranking cuts do not.
 Top caps retained JSON and text rankings (zero all); negative top now rejects.
 Signed min_complexity remains accepted; whole decimal/scientific numeric values
@@ -494,6 +494,17 @@ reject. Both `--all` and `--verbose` override explicit top in both spellings.
 Without either, top0 retains all Stats hotspots but zero AST/Git results. The
 documented query-exclusion boundary remains: query exclude filters Stats/scope/
 Imports, while only global exclusions also filter AST complex functions.
+
+Directory enumeration failures collected by AST, trace, patch scanning and testability
+are disclosed as `analysis_incomplete`. Its `count` with `unit: directories` counts
+unique identified directories; `directories` and `causes` are bounded to five entries.
+Distinct causes for a shown directory remain in its message. When the operating system
+supplies no directory name, `unknown_directory_events` counts those error callbacks
+separately; they do not increase the identified-directory count. Neither count estimates
+the unknown missing file population. Policy exclusions are separate from I/O loss.
+Overview and Hotspots consume this propagated AST warning as required incompleteness.
+This is bounded consumer coverage: other walkers and the Calls, Contracts and transitive
+side-effect collection carriers are not yet qualified for directory failure disclosure.
 
 Trace supports only `none`. Required nonempty `from` preserves typed strings and
 uses once-only percent decoding for URI scalars without plus decoding. Signed
