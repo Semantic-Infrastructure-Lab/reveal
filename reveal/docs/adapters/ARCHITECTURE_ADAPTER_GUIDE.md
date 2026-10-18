@@ -89,10 +89,13 @@ untracked head files.
 Diff JSON records in `analysis` whether it analyzed both snapshots or proved the
 trees identical. Snapshot comparisons disclose imports and complexity completeness
 for each side. If either required component fails or has missing
-input, the result retains attributed diagnostics and returns an `error` with
+input, including required source or resolution-target directory enumeration loss,
+the result retains attributed diagnostics and returns an `error` with
 `deltas: null`. Text says the comparison is unavailable. Empty deltas on a
 successful complete result mean no observed architectural change; unavailable
-deltas do not. Confidence remains a separate descriptive field.
+deltas do not. Directory warnings retain snapshot attribution and unknown missing-file
+population; base-side causes use relative display rather than temporary materialization
+paths. Confidence remains a separate descriptive field.
 
 ## Good Review Questions
 

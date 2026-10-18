@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `git://` on a repository libgit2 refuses to open (e.g. a `safe.directory` ownership refusal) now fails with that reason from `get_metadata` too, instead of returning metadata with no path that callers read as "not a repository" (BACK-1845).
 
 ### Fixed
+- Architecture comparisons reject deltas after required source or resolution-target directory loss in either snapshot, preserving the existing unavailable-comparison error policy. Base-side diagnostic causes no longer expose temporary materialization paths (BACK-2017).
 - Calls callers/reference caches use the existing serialized host-request tree validation, following ordinary deep edits and membership changes while retaining unchanged entries. Raw string/Path cache keys and ordinary direct-helper cheap-key behavior are preserved; retained roots add validation walks even on unrelated requests (BACK-2013).
 - Imports preserves attributed discovery loss through source and resolution-target graph construction, JSON/text and private integrity diagnostics, and avoids graph-cache reads/writes with known incomplete backing. Empty conclusions are qualified after loss; clean observations, cache reuse and legacy direct exits remain unchanged (BACK-2014).
 - Classify discloses required directory-discovery failures in JSON, human output and artifacts while preserving discovered rows, intentional exclusions and legacy exits. Unknown missing populations no longer silently appear as complete classification counts (BACK-2009).
