@@ -15,6 +15,7 @@ import pytest
 
 from reveal.adapters import base as adapters_base
 from reveal.cli.defaults import _default_args
+from reveal.cli.routing.declared import declared_adapter_class
 from reveal.cli.routing.uri import handle_uri
 
 pytestmark = pytest.mark.component
@@ -45,6 +46,11 @@ def _flagged_schemes():
 PATH_ADAPTERS = _flagged_schemes()
 
 
+def _missing_path_contract(scheme):
+    adapter = declared_adapter_class(scheme)
+    return (2, adapter.RESULT_TYPE) if adapter is not None else (1, scheme)
+
+
 def test_default_is_not_a_path_adapter():
     assert adapters_base.ResourceAdapter.RESOURCE_IS_PATH is False
 
@@ -52,7 +58,7 @@ def test_default_is_not_a_path_adapter():
 @pytest.mark.parametrize('scheme', PATH_ADAPTERS)
 def test_missing_path_exits_with_error(scheme):
     code, out, err = _run(f'{scheme}://nonexistent_zz_1321')
-    assert code == (2 if scheme in ('architecture', 'surface') else 1)
+    assert code == _missing_path_contract(scheme)[0]
     assert f'Error ({scheme}://): Path not found: nonexistent_zz_1321' in err
     assert out == ''
 
@@ -60,10 +66,11 @@ def test_missing_path_exits_with_error(scheme):
 @pytest.mark.parametrize('scheme', PATH_ADAPTERS)
 def test_missing_path_json_emits_error_envelope(scheme):
     code, out, _ = _run(f'{scheme}://nonexistent_zz_1321', format='json')
-    assert code == (2 if scheme in ('architecture', 'surface') else 1)
+    expected_code, expected_type = _missing_path_contract(scheme)
+    assert code == expected_code
     payload = json.loads(out)
     assert 'Path not found' in payload['error']
-    assert payload['type'] == ('surface_scan' if scheme == 'surface' else scheme)
+    assert payload['type'] == expected_type
 
 
 def test_query_string_is_not_part_of_the_path():
