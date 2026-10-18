@@ -992,7 +992,7 @@ class ContractsAdapter(ResourceAdapter):
         unparsed = set(report.get('unparsed_files', []))
         failed = analysis_skipped_warning(
             [(file, cause) for file, cause in skipped if file not in unparsed],
-            None, "their contracts are missing from the result")
+            None, "analysis is incomplete; some contracts may be missing from the result")
         if failed:
             warnings.append(failed)
         recovered = report.get('recovered_files', [])

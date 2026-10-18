@@ -126,9 +126,9 @@ def build_meta(path: str, *, uncalled: bool = False,
             'message': f'Excludes {implicit_vocab} (implicitly invoked, not statically reachable).',
         })
 
-    # BACK-1860: files whose analysis raised are missing from every answer below.
+    # Required analysis loss can leave usable observations alongside missing ones.
     failed = analysis_skipped_warning(
-        list(skipped), None, "callers, callees and uncalled results cannot include them")
+        list(skipped), None, "analysis is incomplete; some callers, callees or uncalled results may be missing")
     if failed:
         warnings.append(failed)
 

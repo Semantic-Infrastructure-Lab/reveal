@@ -55,7 +55,8 @@ def failed_tree(tree, monkeypatch):
 
 def test_actual_failed_collection_keeps_exact_caps_once_and_reuse(failed_tree):
     structures = analysis.collect_structures(str(failed_tree))
-    expected = analysis.analysis_skipped_warning(structures.skipped, None, 'their functions are missing from the trace')
+    expected = analysis.analysis_skipped_warning(
+        structures.skipped, None, 'analysis is incomplete; some functions may be missing from the trace')
     adapter = TraceAdapter(str(failed_tree), 'from=main')
     for _ in range(2):
         report = adapter.get_structure()

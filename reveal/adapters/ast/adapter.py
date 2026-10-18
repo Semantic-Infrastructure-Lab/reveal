@@ -152,7 +152,7 @@ def _query_warnings(structures: List[Dict[str, Any]], filtered: List[Dict[str, A
         _unfiltered_ranking_warning(controlled),
         dict(_COMPLEXITY_IS_UNWEIGHTED) if 'complexity' in query else None,
         analysis_skipped_warning(getattr(structures, 'skipped', []), None,
-                                 "no result can include them"),  # BACK-1856
+                                 "analysis is incomplete; some matching observations may be missing"),  # BACK-1856
         traversal_failed_warning(getattr(structures, 'traversal_failures', [])),
         parse_recovered_warning(structures),  # BACK-1847
     ]

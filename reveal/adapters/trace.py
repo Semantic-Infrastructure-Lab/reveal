@@ -170,7 +170,7 @@ def _trace_collection(values: Any, path: str) -> Tuple[List[Dict[str, Any]], Dic
     else:
         _trace_problem(problems, path, 'Required trace structures collection is malformed')
     warnings = [entry for entry in (
-        analysis_skipped_warning(structures.skipped, None, 'their functions are missing from the trace'),
+        analysis_skipped_warning(structures.skipped, None, 'analysis is incomplete; some functions may be missing from the trace'),
         traversal_failed_warning(structures.traversal_failures),
         parse_recovered_warning(structures),
     ) if entry is not None]

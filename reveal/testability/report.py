@@ -35,7 +35,7 @@ def build_testability_report(
     if traversal:
         warnings.append(traversal)
     failed = analysis_skipped_warning(
-        profiles.skipped, None, "their boundary hotspots are missing from the report")  # BACK-1860
+        profiles.skipped, None, "analysis is incomplete; some boundary hotspots may be missing from the report")  # BACK-1860
     if failed:
         warnings.append(failed)
     failed_patches = analysis_skipped_warning(

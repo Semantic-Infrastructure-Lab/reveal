@@ -53,8 +53,7 @@ def parse_recovered_warning(structures: Sequence[Dict[str, Any]]) -> Optional[Wa
 
 def try_add_file_structure(file_path: str, structures: StructureList, outline: bool = False,
                            needle: Optional[str] = None) -> None:
-    """Analyze file and add its structure to list if successful; a failure is recorded
-    in ``structures.skipped`` (and warned on stderr, as before).
+    """Keep usable structure and attribute required loss in ``structures.skipped``.
 
     Args:
         file_path: Path to file to analyze
@@ -69,10 +68,9 @@ def try_add_file_structure(file_path: str, structures: StructureList, outline: b
 
 
 def analysis_skipped_warning(skipped: List[Tuple[str, str]], base: Optional[Path] = None,
-                             consequence: str = "they are missing from the result"
+                             consequence: str = "analysis is incomplete; some observations may be missing from the result"
                              ) -> Optional[WarningEntry]:
-    """One ``analysis_failed`` meta warning for files whose structure analysis raised
-    (BACK-1856); None when nothing failed. *consequence* says what is missing."""
+    """One ``analysis_failed`` warning for required analysis loss, partial or total."""
     if not skipped:
         return None
     paths = sorted(skipped)
@@ -83,7 +81,7 @@ def analysis_skipped_warning(skipped: List[Tuple[str, str]], base: Optional[Path
         'type': 'analysis_failed',
         'count': len(paths),
         'files': shown,
-        'message': f"{len(paths)} file(s) could not be analyzed ({causes}) -- {consequence}: "
+        'message': f"{len(paths)} file(s) could not be analyzed completely ({causes}) -- {consequence}: "
                    f"{', '.join(shown)}{more}",
     }
 
@@ -329,8 +327,8 @@ def unattributed_references(file_struct: Dict[str, Any]) -> List[Dict[str, Any]]
 def analyze_file(file_path: str) -> Optional[Dict[str, Any]]:
     """Analyze a single file and extract structure.
 
-    A failure is warned on stderr and returns None, like a file with no analyzer; a
-    caller that must tell the two apart uses ``analyze_file_outcome``.
+    Required loss is warned on stderr; surviving observations are retained. A
+    caller that needs the failure alongside them uses ``analyze_file_outcome``.
 
     Args:
         file_path: Path to file
@@ -412,7 +410,7 @@ def _required_metadata_failures(structure: Dict[str, Any]) -> List[str]:
     return failures
 
 
-def _required_categories(analyzer) -> set:
+def _required_categories(analyzer) -> set[str]:
     from ...structure import _CATEGORY_MAP
     return set(_CATEGORY_MAP) | set(getattr(analyzer, 'DECLARATION_CATEGORIES', {}))
 

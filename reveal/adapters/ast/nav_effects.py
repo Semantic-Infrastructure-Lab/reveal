@@ -1968,7 +1968,7 @@ def skipped_files_note(skipped: Sequence[Tuple[str, str]]) -> Optional[str]:
     """The disclosure line for files a --transitive walk could not analyze; None if none."""
     from .analysis import analysis_skipped_warning  # noqa: I006
     warning = analysis_skipped_warning(
-        list(skipped), consequence="calls into them were not followed, so their effects are missing")
+        list(skipped), consequence="analysis is incomplete; some calls may not have been followed and some effects may be missing")
     return warning['message'] if warning else None
 
 

@@ -1088,7 +1088,7 @@ class ImportsAdapter(ResourceAdapter):
                     worker_lost_warning([str(fp) for fp in lost], base),
                     analysis_skipped_warning(
                         self.analysis.structure_failures, base,
-                        "their functions and classes are missing from the complexity and structure results")]
+                        "analysis is incomplete; some functions and classes may be missing from the complexity and structure results")]
         return [w for w in warnings if w]
 
     def get_metadata(self) -> Dict[str, Any]:
