@@ -367,8 +367,12 @@ class HotspotsAdapter(ResourceAdapter):
         meta = result.get('meta') or {}
         missing = bool(meta.get('errors')) or any(
             warning.get('type') in _REQUIRED_WARNINGS for warning in meta.get('warnings', []))
+        usable = result['summary']['total_files'] > 0 or bool(result['function_hotspots'])
+        state = AnalysisCompleteness.COMPLETE
+        if missing:
+            state = AnalysisCompleteness.INCOMPLETE if usable else AnalysisCompleteness.FAILED
         return result_execution_facts(result,
-            completeness=AnalysisCompleteness.INCOMPLETE if missing else AnalysisCompleteness.COMPLETE,
+            completeness=state,
             findings=result['summary']['has_findings'])
 
     @staticmethod
