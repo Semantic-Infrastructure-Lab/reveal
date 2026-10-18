@@ -115,7 +115,7 @@ def test_rendered_format_still_renders(argv):
     ((ELEMENT_PY,), False),
     ((DISPLAY,), False),
     ((ELEMENT_PY, '--grep', 'def'), False),
-    (('overview', DISPLAY), False),
+    (('overview', DISPLAY), True),
     ((f'ast://{DISPLAY}',), True),
     ((DISPLAY, '--name', 'listed_item_line'), True),  # routes to ast://
     (('check', ELEMENT_PY), True),
