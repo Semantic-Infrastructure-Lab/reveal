@@ -9,6 +9,7 @@ import reveal
 from conftest import _run_reveal_direct as run
 from reveal import mcp_server
 from reveal.cli import file_checker as fc
+from reveal.utils.path_utils import to_posix
 
 pytestmark = pytest.mark.component
 assert Path(reveal.__file__).resolve().is_relative_to(Path(__file__).resolve().parents[1])
@@ -76,7 +77,7 @@ def disclosure(data, root):
     assert len(notes) == 1, notes
     text = notes[0]
     assert 'director' in text.lower() and 'incomplete' in text.lower()
-    assert str(root) in text and 'missing file population is unknown' in text
+    assert to_posix(root) in text and 'missing file population is unknown' in text
     return text
 
 
@@ -191,7 +192,7 @@ def test_decorated_check_keeps_ordinary_incomplete_narrative_even_with_no_surviv
     assert type(answer) is str and len(collection_fault['events']) == 1
     assert len(collection_fault['checked']) == (0 if population in ('all_lost', 'unknown_root') else 1)
     assert 'director' in answer.lower() and 'incomplete' in answer.lower(), answer
-    assert str(project) in answer and 'missing file population is unknown' in answer
+    assert to_posix(project) in answer and 'missing file population is unknown' in answer
     assert 'No files found' not in answer and 'No issues found.' not in answer
     if population == 'partial_positive':
         assert 'E501' in answer and '1 issue found.' in answer
@@ -257,7 +258,7 @@ def test_profile_healthy_timing_and_empty_message_remain_legacy_zero(project, co
     response = check(target, '--profile-rules')
     assert response.returncode == 0 and collection_fault['events'] == []
     if empty:
-        assert response.stdout == f'No supported files found in {target}\n'
+        assert response.stdout == f'No supported files found in {to_posix(target)}\n'
     else:
         assert 'Profiled 2 files, 1 issues' in response.stdout and 'E501' in response.stdout
         assert 'incomplete' not in response.stdout + response.stderr

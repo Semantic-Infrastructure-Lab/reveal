@@ -1,6 +1,8 @@
 """Late non-Python reference reads retain query-local file loss, not cached source loss."""
 import copy
 import json
+import os
+import time
 from pathlib import Path
 
 import pytest
@@ -21,6 +23,9 @@ def project(root, *, zero=False):
     registrar = 'int main(void) { return 0; }\n' if zero else 'void registrar(void) {}\n'
     file = root / 'registration.c'
     file.write_text('void target(void);\nvoid (*table[])(void) = {target};\n' + registrar, encoding='utf-8')
+    aged = time.time_ns() - 60_000_000_000  # request-cache stamps skip files newer than the request; Windows' clock is coarse
+    for source in (root / 'worker.c', file):
+        os.utime(source, ns=(aged, aged))
     return file
 
 

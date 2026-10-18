@@ -69,12 +69,13 @@ def collect_boundary_profiles(path: str) -> BoundaryProfiles:
     from reveal.adapters.ast.analysis import collect_structures
 
     from reveal.registry import language_for_extension
+    from reveal.utils.path_utils import to_posix
 
     structures = collect_structures(path)
     profiles = BoundaryProfiles()
     profiles.skipped = list(structures.skipped)
     profiles.traversal_failures = list(structures.traversal_failures)
-    profiles.recovered_files = [s['file'] for s in structures if s.get('parse_recovered')]
+    profiles.recovered_files = [to_posix(s['file']) for s in structures if s.get('parse_recovered')]
     imports_by_file = _imports_by_file(structures)
 
     for file_struct in structures:

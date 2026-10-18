@@ -14,7 +14,7 @@ pytestmark = pytest.mark.component
 
 def write(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding='utf-8')
+    path.write_bytes(text.encode('utf-8'))  # sizes below are LF byte counts on every platform
     return path
 
 

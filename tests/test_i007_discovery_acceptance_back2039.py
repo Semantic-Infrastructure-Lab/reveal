@@ -10,6 +10,7 @@ import pytest
 
 from reveal.rules.imports import _dep_reconciliation as dep
 from reveal.rules.scan_caches import get_scan_disclosures, preload_scan_caches
+from reveal.utils.path_utils import to_posix
 from test_i007_discovery_consumer_back2039 import Denial, check, project, write
 
 pytestmark = pytest.mark.component
@@ -89,7 +90,7 @@ def test_seven_real_enumeration_events_remain_complete_despite_display_limit(pro
     assert check(manifest)[0]==[]  # Uses also exist outside denied paths; zero findings is not completeness.
     assert len(state['events'])==7
     notes=get_scan_disclosures([manifest],['I007'],None)
-    assert len(notes)==1 and str(root) in notes[0] and 'Python' in notes[0]
+    assert len(notes)==1 and to_posix(root) in notes[0] and 'Python' in notes[0]
     facts=next(iter(dep._scan_cache[root].values()))
     assert len(facts.traversal_failures)==7
     callback=[]
@@ -99,7 +100,7 @@ def test_seven_real_enumeration_events_remain_complete_despite_display_limit(pro
         assert all(path is None for path,_ in callback)
         assert '0 identified directory' in notes[0] and '7 enumeration error event(s)' in notes[0]
     else:
-        assert {path for path,_ in callback}=={str(path) for path in denied}
+        assert {to_posix(path) for path,_ in callback}=={to_posix(path) for path in denied}
         assert '7 identified directory enumeration(s)' in notes[0]
         # Formatter displays bounded examples while retaining all events for replay.
         assert 'and 2 more' in notes[0]

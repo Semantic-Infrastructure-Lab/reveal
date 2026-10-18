@@ -273,9 +273,11 @@ def _dispatch_and_run(invocation: Invocation) -> None:
             # try: output smaller than the buffer otherwise failed at interpreter exit
             # with "Exception ignored ... BrokenPipeError" and exit 120 (BACK-1510).
             sys.stdout.flush()
-        except BrokenPipeError:
-            devnull = os.open(os.devnull, os.O_WRONLY)
-            os.dup2(devnull, sys.stdout.fileno())
+        except OSError as exc:
+            from .cli.routing.declared import detach_stdout, is_closed_reader
+            if not is_closed_reader(exc):
+                raise
+            detach_stdout()
             sys.exit(0)
 
 

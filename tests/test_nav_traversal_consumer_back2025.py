@@ -7,6 +7,7 @@ import pytest
 
 from conftest import _run_reveal_direct
 from reveal.adapters.ast import analysis, nav_effects
+from reveal.utils.path_utils import to_posix
 
 pytestmark = pytest.mark.component
 
@@ -75,8 +76,8 @@ def test_actual_events_deduplicate_identified_paths_but_preserve_unknown_populat
     assert '2 enumeration error event(s) had an unknown directory' in note
     assert 'and 2 more' in note
     for index in range(5):
-        assert str(directories[index]) in note
-    assert str(directories[5]) not in note and str(directories[6]) not in note
+        assert to_posix(directories[index]) in note
+    assert to_posix(directories[5]) not in note and to_posix(directories[6]) not in note
     assert 'os.remove' in str(lost)
     discovery_fault['denied'].clear()
     assert _cli(entry, flag, fmt) == clean

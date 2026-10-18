@@ -12,6 +12,7 @@ from reveal import mcp_server
 from reveal.rules.imports import _dep_reconciliation as dep
 from reveal.rules.imports.I007 import I007
 from reveal.rules.scan_caches import get_scan_disclosures, init_scan_caches, preload_scan_caches
+from reveal.utils.path_utils import to_posix
 from reveal.utils.request_cache import request_started_ns, reset_request_caches, seal_request_caches
 
 pytestmark = pytest.mark.component
@@ -248,6 +249,6 @@ def test_unknown_disclosures_identify_each_actual_language_population_and_root(t
     assert len(fault['events']) == len(fault['builds']) == 4
     assert len(set(notes)) == 4, 'unknown events must retain distinct reached root/language attribution'
     for root_name, pair in zip(('first', 'second'), (notes[:2], notes[2:])):
-        assert all(str(tmp_path / root_name) in note for note in pair)
+        assert all(to_posix(tmp_path / root_name) in note for note in pair)
         assert 'Python' in pair[0] and 'Rust' in pair[1]
         assert all('1 enumeration error event(s)' in note for note in pair)

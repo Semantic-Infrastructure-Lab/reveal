@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import os
 import sys
 from contextlib import nullcontext
@@ -188,6 +189,23 @@ def _invalid_answer(adapter, name, path, message, args, cause=None, *, result_ty
     return answer
 
 
+def is_closed_reader(exc: BaseException) -> bool:
+    """A write failed because the reader closed (`| head`). Windows reports a closed pipe as
+    EINVAL (WinError 232) where POSIX raises BrokenPipeError."""
+    if isinstance(exc, BrokenPipeError):
+        return True
+    return os.name == 'nt' and isinstance(exc, OSError) and exc.errno in (errno.EINVAL, errno.EPIPE)
+
+
+def detach_stdout() -> None:
+    """Point stdout at the null device so buffered output and interpreter exit stop failing."""
+    fd = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(fd, sys.stdout.fileno())
+    finally:
+        os.close(fd)
+
+
 def emit_declared_result(result, args, scheme, render, facts, *, execution_answer=None, announce_error=True, **render_kwargs) -> None:
     """Finalize selected D6 facts; legacy emitters keep their existing policy."""
     from ...display.formatting import print_result_control_notes
@@ -218,19 +236,16 @@ def emit_declared_result(result, args, scheme, render, facts, *, execution_answe
             emit_rendered(render, result, args.format, **render_kwargs)
         print_result_control_notes(result, args.format)
         sys.stdout.flush()
-    except BrokenPipeError:
-        # Reader closure alone retains 0; independently established failures survive.
-        fd = os.open(os.devnull, os.O_WRONLY)
-        try:
-            os.dup2(fd, sys.stdout.fileno())
-        finally:
-            os.close(fd)
     except Exception as exc:  # boundary-ok: broad-except -- selected output boundary contains renderer/plugin failures, discloses required output failure and exits 3
-        print(f'Error: Requested output failed: {exc}', file=sys.stderr)
-        facts = merge_execution_facts(facts, failure_execution_facts(FailureCause.OUTPUT))
-        if execution_answer is not None:
-            execution_answer.exception = exc
-        code = 3
+        if is_closed_reader(exc):
+            # Reader closure alone retains 0; independently established failures survive.
+            detach_stdout()
+        else:
+            print(f'Error: Requested output failed: {exc}', file=sys.stderr)
+            facts = merge_execution_facts(facts, failure_execution_facts(FailureCause.OUTPUT))
+            if execution_answer is not None:
+                execution_answer.exception = exc
+            code = 3
     if execution_answer is not None:
         execution_answer.execution_facts = facts
     if code != 2:

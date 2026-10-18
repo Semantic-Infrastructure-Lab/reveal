@@ -9,6 +9,7 @@ from conftest import _run_reveal_direct as run
 from reveal.adapters import depends
 from reveal.analyzers.imports import service
 from reveal.utils.exclusions import exclusion_scope
+from reveal.utils.path_utils import to_posix
 
 pytestmark = pytest.mark.component
 
@@ -153,7 +154,7 @@ def test_main_and_manifest_actual_events_merge_without_fabricating_source_count(
     state = fault(monkeypatch, root, combined=True)
     owner = depends.DependsAdapter(str(target)); result = owner.get_structure()
     assert {phase for phase, _ in state['events']} == {'source', 'manifest'}
-    assert {path for path, _ in owner._graph.traversal_failures} == {str(root / 'core'), str(root / 'api' / 'spec')}
+    assert {path for path, _ in owner._graph.traversal_failures} == {to_posix(root / 'core'), to_posix(root / 'api' / 'spec')}
     assert directory_warning(result)['count'] == 2
     assert result['metadata']['scan_budget'] == {'scope': 'scan', 'limit': 5000, 'total': 1, 'returned': 1, 'exact': False}
 

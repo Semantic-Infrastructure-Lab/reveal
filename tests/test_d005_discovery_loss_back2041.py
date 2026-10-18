@@ -97,6 +97,9 @@ def fault(monkeypatch):
         state['stamps'].append((result, state['active']))
         return result
 
+    # CI runs with the disk cache on (ci-local.sh forces it off): a warm entry from the clean run
+    # would skip the parses this test counts.
+    monkeypatch.setenv('REVEAL_DISK_CACHE', '0')
     monkeypatch.setattr(mod, '_build_index', build)
     monkeypatch.setattr(os, 'scandir', scandir)
     monkeypatch.setattr(os, 'walk', walk)
