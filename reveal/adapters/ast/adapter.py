@@ -32,6 +32,7 @@ from ...utils.query import (
     ResultControl
 )
 from ...utils.results import ResultBuilder, note_truncation
+from ...utils.path_utils import to_posix
 
 # Filter aliases that name a differently-named element field (see filtering.py).
 _SORT_FIELD_ALIASES = {'lines': 'line_count'}
@@ -40,6 +41,23 @@ DEFAULT_RESULT_CAP = 200
 
 # Suppress tree-sitter warnings (centralized in core module)
 suppress_treesitter_warnings()
+
+
+def _capability_hint_warnings(feature: str, path: Path) -> List[WarningEntry]:
+    """Collect advisory language-census evidence without changing Python analysis."""
+    from ...capabilities import python_only_warning
+    failures: List[OSError] = []
+    hint = python_only_warning(feature, path, on_error=failures.append)
+    warnings = [hint] if hint else []
+    warning = traversal_failed_warning([
+        (to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}')
+        for error in failures], path)
+    if warning:
+        warning['message'] = (
+            'Capability-language hint census is incomplete; foreign-language counts describe '
+            'observed files only; ' + warning['message'])
+        warnings.append(warning)
+    return warnings
 
 
 def _degraded_conformance_warning(elements: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -389,10 +407,9 @@ class AstAdapter(ResourceAdapter):
         if not items and not has_python_files(self.path):
             from ...utils.path_utils import detect_non_python_language
             unsupported_language = detect_non_python_language(Path(self.path))
-        from ...capabilities import python_only_warning
-        warning = python_only_warning(self.show_mode, Path(self.path))
+        warnings = _capability_hint_warnings(self.show_mode, Path(self.path))
         meta = self.create_meta(parse_mode='python_ast',
-                                confidence=1.0, warnings=[warning] if warning else [], errors=[])
+                                confidence=1.0, warnings=warnings, errors=[])
         result = ResultBuilder.create(
             result_type='ast_' + self.show_mode.replace('-', '_'),
             source=self.path,
@@ -411,10 +428,9 @@ class AstAdapter(ResourceAdapter):
         """reveal_type=<var>: type evidence for one variable."""
         from .nav_reveal_type import collect_type_evidence
         evidence = collect_type_evidence(self.path, self.reveal_type_var)
-        from ...capabilities import python_only_warning
-        warning = python_only_warning('reveal-type', Path(self.path))
+        warnings = _capability_hint_warnings('reveal-type', Path(self.path))
         meta = self.create_meta(parse_mode='tree_sitter_full',
-                                confidence=1.0, warnings=[warning] if warning else [], errors=[])
+                                confidence=1.0, warnings=warnings, errors=[])
         result = ResultBuilder.create(
             result_type='ast_reveal_type',
             source=self.path,

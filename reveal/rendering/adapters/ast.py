@@ -2,6 +2,7 @@
 
 
 import re
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, cast
 
@@ -193,12 +194,20 @@ def _render_call_graph(data: Dict[str, Any]) -> None:
         print()
 
 
-def _print_capability_warnings(data: Dict[str, Any]) -> None:
-    """Show W-CAP-* warnings (a Python-only feature run over other languages, BACK-1283)."""
-    for warning in (data.get('meta') or {}).get('warnings') or []:
-        if str(warning.get('code', '')).startswith('W-CAP'):
-            print()
-            print(f"  ⚠ {warning['code']}: {warning['message']}")
+def _print_capability_warnings(data: Dict[str, Any], output_format: str = 'text') -> None:
+    """Preserve capability text and disclose hint census loss outside grep data."""
+    from reveal.utils.warning_render import meta_warning_lines
+    warnings = (data.get('meta') or {}).get('warnings') or []
+    if output_format != 'grep':
+        for warning in warnings:
+            if str(warning.get('code', '')).startswith('W-CAP'):
+                print()
+                print(f"  ⚠ {warning['code']}: {warning['message']}")
+    directory_warnings = [warning for warning in warnings
+                          if warning.get('type') == 'analysis_incomplete'
+                          and warning.get('unit') == 'directories']
+    for line in meta_warning_lines({'meta': {'warnings': directory_warnings}}):
+        print(line, file=sys.stderr if output_format == 'grep' else sys.stdout)
 
 
 def _render_dict_heatmap(data: Dict[str, Any], output_format: str) -> None:
@@ -216,6 +225,7 @@ def _render_dict_heatmap(data: Dict[str, Any], output_format: str) -> None:
         for item in results:
             fields = ('file', 'line', 'function', 'param', 'key_count', 'source')
             print(':'.join(str(item.get(f, '')) for f in fields))
+        _print_capability_warnings(data, output_format)
         return
 
     print(render_dict_heatmap(results, path, unsupported_language))
@@ -236,6 +246,7 @@ def _render_dict_schemas(data: Dict[str, Any], output_format: str) -> None:
             for consumer in schema.get('consumers', []):
                 fields = [str(consumer.get(f, '')) for f in ('file', 'line', 'function', 'param')]
                 print(':'.join(fields + [schema.get('suggested_name', '')]))
+        _print_capability_warnings(data, output_format)
         return
 
     print(render_dict_schemas(results, data.get('path', '.'), data.get('unsupported_language', '')))
@@ -252,6 +263,7 @@ def _render_reveal_type(data: Dict[str, Any], output_format: str) -> None:
     if output_format == 'grep':
         for ev in results:
             print(f"{ev.get('file', '')}:{ev.get('line', 0)}:{var_name}")
+        _print_capability_warnings(data, output_format)
         return
 
     print(render_type_evidence(var_name, results, path))

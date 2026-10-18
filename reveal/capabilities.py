@@ -121,14 +121,15 @@ PYTHON_ONLY_FEATURES: Dict[str, PythonOnlyFeature] = {
 }
 
 
-def python_only_warning(feature: str, path: Path) -> Optional[WarningEntry]:
+def python_only_warning(feature: str, path: Path, *,
+                        on_error: Optional[Callable[[OSError], None]] = None) -> Optional[WarningEntry]:
     """A W-CAP-1 warning when `path` holds code in languages `feature` cannot
     analyze; None when it is all Python (or unreadable). The feature's result
     covers only the Python part -- this says so, instead of looking complete."""
     from .utils.path_utils import census_for_path
 
     try:
-        per_language = census_for_path(Path(path)).per_language
+        per_language = census_for_path(Path(path), on_error=on_error).per_language
     except OSError:
         return None
     others = {lang: n for lang, n in per_language.items() if lang != "python"}
