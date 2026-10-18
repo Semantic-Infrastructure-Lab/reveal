@@ -80,6 +80,7 @@ class TestabilityRenderer(BaseRenderer):
     """Renderer for testability:// results."""
 
     __test__ = False  # not a pytest class
+    ACCEPTS_TOP = True  # The declared route may forward an overridden display limit.
 
     @classmethod
     def render_structure(cls, result: Dict[str, Any], format: str = 'text',

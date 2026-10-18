@@ -279,7 +279,7 @@ class TestabilityAdapter(ResourceAdapter):
         test_paths = _resolve_test_paths(path, tests)
         if not test_paths:
             raise NotApplicableError(
-                f"no tests found for {path} — pass tests=<path> or add tests/, test/, or spec/"
+                f"no tests found for {path} — pass --tests <path> (URI: tests=<path>) or add tests/, test/, or spec/"
             )
 
         report = build_testability_report(
