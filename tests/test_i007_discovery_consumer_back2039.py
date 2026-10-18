@@ -104,7 +104,9 @@ def test_disclosure_selects_checked_manifest_exact_language_key(project, monkeyp
     assert 'unused' in notes[0].lower() and ('may' in notes[0].lower() or 'false' in notes[0].lower())
     assert rule.outcomes and rule.outcomes[-1]['status'] == 'unavailable'
     if unknown:
-        assert '0 director' in notes[0]
+        assert '0 identified directory' in notes[0]
+        assert '1 enumeration error event(s)' in notes[0]
+        assert 'independent unnamed evidence denial' in notes[0]
 
 
 @pytest.mark.parametrize('language', ['.py', '.rs'])
