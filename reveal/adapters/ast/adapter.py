@@ -439,11 +439,19 @@ class AstAdapter(ResourceAdapter):
 
     def _reveal_type_result(self) -> Dict[str, Any]:
         """reveal_type=<var>: type evidence for one variable."""
-        from .nav_reveal_type import collect_type_evidence
-        evidence = collect_type_evidence(self.path, self.reveal_type_var)
+        from .nav_reveal_type import TYPE_SOURCE_WARNING_CODE, collect_type_evidence
+        failures: List[OSError] = []
+        evidence = collect_type_evidence(self.path, self.reveal_type_var, on_error=failures.append)
         warnings = _capability_hint_warnings('reveal-type', Path(self.path))
+        source_warning = _directory_event_warning(failures, Path(self.path))
+        if source_warning:
+            source_warning['code'] = TYPE_SOURCE_WARNING_CODE
+            source_warning['message'] = (
+                'Python type-evidence source discovery is incomplete; occurrence, annotation, '
+                'and shape observations may be missing; ' + source_warning['message'])
+            warnings.append(source_warning)
         meta = self.create_meta(parse_mode='tree_sitter_full',
-                                confidence=1.0, warnings=warnings, errors=[])
+                                confidence=None if failures else 1.0, warnings=warnings, errors=[])
         result = ResultBuilder.create(
             result_type='ast_reveal_type',
             source=self.path,

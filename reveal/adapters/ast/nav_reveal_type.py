@@ -27,10 +27,14 @@ from ...core import tree_root
 from ...core.treesitter_compat import _zero_arg
 from ...utils.path_utils import _walk_code_files
 
+TYPE_SOURCE_WARNING_CODE = 'W-AST-TYPE-SOURCE'
+
 
 # ─────────────────────────── public entry point ──────────────────────────────
 
-def collect_type_evidence(path: str, var_name: str) -> List[Dict[str, Any]]:
+def collect_type_evidence(
+    path: str, var_name: str, *, on_error: Optional[Callable[[OSError], None]] = None,
+) -> List[Dict[str, Any]]:
     """Collect all type evidence for var_name at path (file or directory)."""
     path_obj = Path(path)
     evidence: List[Dict[str, Any]] = []
@@ -38,7 +42,7 @@ def collect_type_evidence(path: str, var_name: str) -> List[Dict[str, Any]]:
     if path_obj.is_file():
         _scan_file(str(path_obj), var_name, evidence)
     elif path_obj.is_dir():
-        for fp in _walk_code_files(path_obj):  # the shared walker (BACK-1577)
+        for fp in _walk_code_files(path_obj, on_error=on_error):  # the shared walker (BACK-1577)
             if _is_python_file(str(fp)):
                 _scan_file(str(fp), var_name, evidence)
 
@@ -354,13 +358,20 @@ def _infer_shape(node: Any, get_text: Callable) -> str:
 
 # ─────────────────────────── renderer ────────────────────────────────────────
 
+def _empty_type_evidence(var_name: str, path: str, source_incomplete: bool) -> str:
+    if source_incomplete:
+        return (f"reveal_type({var_name}): no occurrences displayed in the analyzed portion "
+                f"of {path}; analysis is incomplete")
+    return f"reveal_type({var_name}): no occurrences found in {path}"
+
+
 def render_type_evidence(
     var_name: str,
     evidence: List[Dict[str, Any]],
-    path: str,
+    path: str, *, source_incomplete: bool = False,
 ) -> str:
     if not evidence:
-        return f"reveal_type({var_name}): no occurrences found in {path}"
+        return _empty_type_evidence(var_name, path, source_incomplete)
 
     lines = [f"reveal_type({var_name})  —  {path}", '']
 

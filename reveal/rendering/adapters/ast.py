@@ -210,11 +210,15 @@ def _print_capability_warnings(data: Dict[str, Any], output_format: str = 'text'
         print(line, file=sys.stderr if output_format == 'grep' else sys.stdout)
 
 
+def _has_warning_code(data: Dict[str, Any], code: str) -> bool:
+    return any(warning.get('code') == code
+               for warning in (data.get('meta') or {}).get('warnings') or [])
+
+
 def _dict_source_incomplete(data: Dict[str, Any]) -> bool:
     """Distinguish analytical source loss from advisory language-hint loss."""
     from reveal.analyzers._python_dict_usage import DICT_SOURCE_WARNING_CODE
-    return any(warning.get('code') == DICT_SOURCE_WARNING_CODE
-               for warning in (data.get('meta') or {}).get('warnings') or [])
+    return _has_warning_code(data, DICT_SOURCE_WARNING_CODE)
 
 
 def _render_dict_heatmap(data: Dict[str, Any], output_format: str) -> None:
@@ -264,7 +268,7 @@ def _render_dict_schemas(data: Dict[str, Any], output_format: str) -> None:
 
 def _render_reveal_type(data: Dict[str, Any], output_format: str) -> None:
     """Render reveal_type=<var> evidence view."""
-    from reveal.adapters.ast.nav_reveal_type import render_type_evidence
+    from reveal.adapters.ast.nav_reveal_type import TYPE_SOURCE_WARNING_CODE, render_type_evidence
     var_name = data.get('var_name', '?')
     path = data.get('path', '.')
     results = data.get('results', [])
@@ -275,9 +279,11 @@ def _render_reveal_type(data: Dict[str, Any], output_format: str) -> None:
         _print_capability_warnings(data, output_format)
         return
 
-    print(render_type_evidence(var_name, results, path))
+    source_incomplete = _has_warning_code(data, TYPE_SOURCE_WARNING_CODE)
+    print(render_type_evidence(var_name, results, path, source_incomplete=source_incomplete))
     print()
-    print(f"  {len(results)} occurrence(s) found")
+    consequence = 'displayed in the analyzed portion' if source_incomplete else 'found'
+    print(f"  {len(results)} occurrence(s) {consequence}")
     print()
     print(f"  → Trace reads/writes: reveal file.py <function> --varflow {var_name}")
     print(f"  → Find functions:     reveal 'ast://{path}?param_type={var_name}'")
