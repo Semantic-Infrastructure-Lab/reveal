@@ -1051,6 +1051,8 @@ def census_for_path(
     path: Path,
     exclude_patterns: Optional[List[str]] = None,
     respect_gitignore: Optional[bool] = None,
+    *,
+    on_error: Optional[Callable[[OSError], None]] = None,
 ) -> ScopeCensus:
     """Build the unified BACK-884 scope census for *path* by walking it
     directly (skip-dir-correct per BACK-887) — the right choice for
@@ -1068,7 +1070,8 @@ def census_for_path(
     *exclude_patterns*/*respect_gitignore*: BACK-1042, see :func:`_walk_code_files`.
     """
     counts = tally_files_by_language(
-        _walk_code_files(path, exclude_patterns=exclude_patterns, respect_gitignore=respect_gitignore)
+        _walk_code_files(path, exclude_patterns=exclude_patterns, respect_gitignore=respect_gitignore,
+                         on_error=on_error)
     )
     return _census_from_counts(counts)
 

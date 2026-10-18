@@ -12,7 +12,7 @@ numbers come from (reveal's own VALIDATION.md oracle recall figures).
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from ...analyzers._capability_table import calls_extraction_confidence
 from ...defaults import (
@@ -22,7 +22,7 @@ from ...defaults import (
     CALL_GRAPH_IMPLICIT_EXCLUSION_VOCAB,
     CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB,
 )
-from ...utils.path_utils import census_for_path
+from ...utils.path_utils import census_for_path, to_posix
 from ..ast.analysis import analysis_skipped_warning, traversal_failed_warning
 
 # Capability metadata for v1.1 contract (BACK-307).
@@ -58,15 +58,17 @@ _UNCALLED_DERIVED_SIGNAL_WARNING = {
 }
 
 
-def language_census(path: str) -> Dict[str, int]:
+def language_census(path: str, *,
+                    on_error: Optional[Callable[[OSError], None]] = None) -> Dict[str, int]:
     """Per-language file counts under *path* (BACK-1198) — single walk,
     shared by the confidence and dynamic-dispatch-vocabulary computation.
     Empty dict (not an exception) on a missing/unreadable path — callers
     fall back to the language-agnostic defaults, same as the "unmeasured
-    language" case.
+    language" case. The optional callback retains actual directory enumeration
+    errors; the broad fallback below also covers unqualified non-walk errors.
     """
     try:
-        return dict(census_for_path(Path(path)).per_language)
+        return dict(census_for_path(Path(path), on_error=on_error).per_language)
     except OSError:
         return {}
 
@@ -84,7 +86,14 @@ def build_meta(path: str, *, uncalled: bool = False,
     vocabulary, printed unconditionally on every language) for the dominant
     language's own dispatch idioms.
     """
-    per_language = language_census(path)
+    census_failures: List[Tuple[Optional[str], str]] = []
+
+    def _record_census_error(error: OSError) -> None:
+        census_failures.append((to_posix(error.filename) if error.filename else None,
+                                f'{type(error).__name__}: {error}'))
+
+    per_language = language_census(path, on_error=_record_census_error)
+    directory_failures = (*traversal_failures, *census_failures)
     total = sum(per_language.values())
     if total:
         confidence = round(
@@ -118,7 +127,7 @@ def build_meta(path: str, *, uncalled: bool = False,
         warnings.append({'code': 'W-CALLS-8', 'message': (
             'JSX component uses are typed jsx_reference relationships; runtime render scheduling is unresolved. '
             'Class-field initializer navigation, string/HTML/Angular templates and Vue/Svelte component relationships are outside this scope.')})
-    known_loss = bool(skipped or traversal_failures)
+    known_loss = bool(skipped or directory_failures)
     if uncalled:
         heuristic = _UNCALLED_DERIVED_SIGNAL_WARNING
         if known_loss:
@@ -144,7 +153,7 @@ def build_meta(path: str, *, uncalled: bool = False,
 
     path_obj = Path(path)
     directory = path_obj if path_obj.is_dir() else path_obj.parent
-    traversal_warning = traversal_failed_warning(traversal_failures, directory)
+    traversal_warning = traversal_failed_warning(directory_failures, directory)
     if traversal_warning:
         warnings.append(traversal_warning)
 
