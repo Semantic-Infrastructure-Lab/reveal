@@ -95,8 +95,12 @@ def test_actual_owned_loss_classifies_domain_rows_and_same_owner_repairs(tmp_pat
         attempts = lose_child(context, root, mode)
         lost = owner.get_structure()
     assert attempts
-    expected = AnalysisCompleteness.INCOMPLETE if survives else AnalysisCompleteness.FAILED
+    # Activation can lose language discovery while the later Python collection recovers Hidden.
+    recovered_observation = mode == 'activation'
+    expected = AnalysisCompleteness.INCOMPLETE if survives or recovered_observation else AnalysisCompleteness.FAILED
     assert owner.execution_facts(lost).completeness is expected
+    if recovered_observation and not survives:
+        assert lost['abcs'][0]['name'] == 'Hidden'
     warning = directory_warning(lost)
     assert warning['count'] == 1 and warning['unit'] == 'directories'
     assert warning['directories'] == ['included_child']
