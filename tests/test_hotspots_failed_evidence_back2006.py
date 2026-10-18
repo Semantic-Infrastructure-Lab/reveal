@@ -1,6 +1,7 @@
 """Required Hotspots loss is usable only when requested observations survived."""
 
 import builtins
+import json
 from pathlib import Path
 
 import pytest
@@ -107,6 +108,27 @@ def test_review_optional_churn_warning_does_not_mark_required_analysis_lost():
     report = {'meta': {'warnings': [{'type': 'churn_unavailable', 'message': 'optional history unavailable'}]}}
     assert not review._lost_analysis(report)
     assert review._review_outcome([], [], analysis_incomplete=review._lost_analysis(report)) == ('pass', 0)
+
+
+@pytest.mark.parametrize('format', ['text', 'json'])
+def test_review_actual_stats_directory_loss_returns_incomplete(tmp_path, monkeypatch, format):
+    from conftest import _run_reveal_direct
+    from test_stats_traversal_back2006 import tree, deny_stats
+
+    child = tree(tmp_path)
+    attempts = deny_stats(monkeypatch, {child})
+    result = _run_reveal_direct('review', str(tmp_path), '--select', 'C', '--format', format)
+    assert attempts, 'the actual Stats collector must encounter the denied directory'
+    if format == 'json':
+        report = json.loads(result.stdout)
+        diagnostic, = [warning for warning in report['meta']['warnings']
+                       if warning.get('type') == 'analysis_incomplete']
+        assert diagnostic['directories'] == ['included_child']
+        assert diagnostic['unit'] == 'directories'
+        assert report['overall_status'] == 'incomplete'
+    else:
+        assert 'included_child' in result.stdout
+    assert result.returncode == 3, result.stderr
 
 
 _SERVER = '''
