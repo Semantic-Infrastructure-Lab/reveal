@@ -820,7 +820,7 @@ def _fail_element_not_found(adapter, element_name: str, section: Optional[str], 
         if scheme == 'help':
             _print_help_not_found_hints(adapter, element_name, section)
 
-    extra = {'available_elements': elements} if elements else {}
+    extra: dict[str, Any] = {'available_elements': elements} if elements else {}
     _fail(scheme or 'unknown', resource, f"Element '{element_name}' not found",
           adapter_class=type(adapter), code='element_not_found', detail=detail, **extra)
 
@@ -1170,6 +1170,9 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
             from ...utils.results import merge_execution_facts
             result = qualify_declared_answer(result, adapter, source, expected_type, prior_facts=facts)
             facts = merge_execution_facts(facts, facts_of(result))
+            post_diagnostic = str(result.get('error') or result.get('meta', {}).get('errors') or '')
+            if post_diagnostic and post_diagnostic != private_diagnostic:
+                private_diagnostic = '\n'.join(filter(None, (private_diagnostic, post_diagnostic)))
 
     if source_path is None:
         _echo_source(result, type(adapter), resource)
