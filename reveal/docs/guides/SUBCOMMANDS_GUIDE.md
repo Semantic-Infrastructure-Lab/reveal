@@ -254,6 +254,36 @@ establish completeness of optional import-graph ranking or file reads and parsin
 URI requests support `--also-json` artifacts and global field/item cuts; the native
 Pack subcommand retains its existing supported flags.
 
+### File measurements and budgets
+
+Candidate stat or line-count read failures appear separately in `meta.warnings`
+as `file_measurement_failed`, with file paths, operations and causes. A candidate
+whose stat cannot be measured is omitted while healthy siblings remain available.
+Counts then describe observed measured eligible candidates. If none can be
+measured, text reports unavailable measurements rather than budget exclusion.
+Independent directory and file-measurement warnings remain visible together.
+
+A readable stat still supplies the approximate token cost when the line count
+is unavailable. Machine consumers should handle these loss-only values:
+
+| Field | Meaning under measurement loss |
+|-------|--------------------------------|
+| `files[].lines: null` | This selected file's line count is unavailable. |
+| `meta.used_lines: null` | A token-budget selection contains an unknown line count; no complete selected line total is available. |
+| `meta.line_budget_incomplete: true` | Line-budget selection omitted candidates whose line costs were unavailable. |
+
+Token budgets can still select a file with unknown lines using its stat-derived
+cost. If the token budget omits that file, it does not make the selected healthy
+files' line total unknown. Line budgets conservatively skip unknown costs and
+retain the exact line total of the known-cost files selected. Skipped-file text
+distinguishes budget exclusion from unavailable line costs.
+
+Healthy JSON values remain unchanged. Genuine zero-byte files and readable files
+with no final newline retain the existing cost rules. Text shows unknown line
+measurements explicitly; it does not substitute a zero or known subtotal.
+These cases retain legacy CLI exit 0 and ordinary MCP responses. Candidate
+measurement loss does not imply that a separate requested content read failed.
+
 ### Priority Algorithm
 
 Files are scored and selected in this order:
@@ -267,6 +297,24 @@ Files are scored and selected in this order:
 Ties go to the most recently modified file. There is no complexity term in the score.
 
 Near-empty files (e.g., stub `__init__.py`) are excluded automatically.
+
+### Optional graph ranking
+
+Fan-in and focus graph relevance are additive ranking signals. When their
+Imports graph carries native directory or file-integrity diagnostics, Pack
+rejects that partial numeric input and uses filename/entry-point heuristics and
+recency instead. `meta.relevance_warning` retains the requested root and original
+causes, explaining that the signals were not computed completely. The CLI also
+prints this advisory notice on stderr. Primary candidate measurements and selected
+content remain available, with legacy exit 0.
+
+URI JSON retains this note; URI text currently does not display the
+`relevance_warning` string. The specialized `reveal_pack` MCP tool currently
+does not compute these optional graph ranking signals. Its defaults remain
+8000 tokens with content enabled, compared with the CLI/URI defaults of 2000
+tokens and content disabled. These presentation and ranking differences remain
+separate from candidate-measurement diagnostics. Native integrity notes do not
+establish completeness of every parser, file-read or dynamic-import channel.
 
 ### Examples
 
