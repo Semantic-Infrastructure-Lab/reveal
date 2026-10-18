@@ -44,6 +44,7 @@ class Answer:
     execution_facts: Optional[ExecutionFacts] = None
     exception: Optional[Exception] = field(default=None, repr=False)
     public_diagnostic: Optional[str] = None
+    private_diagnostic: Optional[str] = field(default=None, repr=False)
 
 
 class _Answered(Exception):
@@ -1155,6 +1156,7 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
         from .declared import qualify_declared_answer
         result = qualify_declared_answer(result, adapter, source, expected_type)
     facts = facts_of(result) if facts_of is not None else None
+    private_diagnostic = str(result.get('error') or result.get('meta', {}).get('errors') or '') if facts is not None else None
 
     # Apply post-processing
     result = _apply_head_tail_range(result, args, adapter, scheme)
@@ -1187,7 +1189,7 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
                                          exit_code=getattr(renderer_class, 'exit_code', None),
                                          execution_facts=facts, execution_answer=answer,
                                          **_render_structure_top_kwargs(renderer_class, args, adapter)),
-                    execution_facts=facts)
+                    execution_facts=facts, private_diagnostic=private_diagnostic)
     return answer
 
 

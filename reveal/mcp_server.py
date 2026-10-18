@@ -240,6 +240,8 @@ def _raise_if_tool_failure(result: str, tool_name: str) -> str:
             logging.getLogger(__name__).error(
                 "Unexpected failure in MCP tool %s", tool_name,
                 exc_info=(type(exc), exc, exc.__traceback__))
+        else:
+            logging.getLogger(__name__).error("Failure in MCP tool %s: %s", tool_name, result)
         raise ToolError(f"Internal error executing tool {tool_name}")
     return result
 
@@ -259,7 +261,7 @@ def _declared_failure(answer) -> str | None:
         return _tool_failure(str(exc), public=isinstance(exc, OSError), exception=exc)
     if answer.public_diagnostic is not None:
         return _tool_failure(answer.public_diagnostic)
-    return _tool_failure('Required analysis or output failed', public=False)
+    return _tool_failure(answer.private_diagnostic or 'Required analysis or output failed', public=False)
 
 
 def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = None):
