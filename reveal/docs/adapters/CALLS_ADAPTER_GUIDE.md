@@ -603,9 +603,17 @@ Add `# noqa: uncalled` to a `def` line to exclude a specific function from resul
 
 The project-level index is cached in memory per process per directory:
 
-- **Cache key**: frozenset of `(file_path, mtime_ns)` for all code files in the directory
-- **Invalidation**: any file change (add, modify, delete) causes a full rebuild on next query
-- **Rebuild cost**: proportional to number of functions × average calls per function — fast in practice, even for large codebases
+- **Cache key**: directory and immediate child-directory modification times, plus
+  the active exclusion and gitignore scope. This avoids a full file walk on a
+  matching hit; ordinary file overwrites and deeper membership changes can leave
+  the key unchanged in a long-lived process.
+- **Known missing inputs**: a supplied traversal-incomplete collection bypasses a
+  matching callers index and prevents retention. Python reference discovery,
+  read or parse failures also prevent retaining the reference set, so access or
+  source recovery can rebuild it. These guards do not establish general warm-cache
+  freshness or cover the separate non-Python reference pass.
+- **Rebuild cost**: depends on the source population and analysis work; use a
+  narrower directory when the question permits it.
 
 For very large codebases (100K+ lines), point at a subdirectory:
 
