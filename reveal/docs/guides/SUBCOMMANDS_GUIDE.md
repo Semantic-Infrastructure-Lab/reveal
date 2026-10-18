@@ -761,6 +761,29 @@ Traversal-incomplete import facts rebuild at the next serialized host request;
 healthy facts retain existing validation and reuse. This directory-loss handling
 does not change the separate public policy for skipped-file-only I007 outcomes.
 
+M102 discloses directory loss while discovering project-wide Python importers.
+Its root-attributed note warns that orphan findings and removal suggestions may
+be false positives because imports may be missing. Surviving heuristic findings
+remain visible; known loss makes the CLI scan incomplete (exit 3 unless
+`--exit-zero`), including after severity or display cuts. Ordinary MCP Check
+results carry the same notes. Do not interpret the finding count as a lower
+bound or remove a module solely on an uncertain orphan result.
+
+M102 notes apply to requested Python targets eligible for the rule, with their
+per-file configuration respected. Entry points, tests and disabled targets do
+not adopt another cached root's warning. Explicit `--select M102` retains the
+existing override of config disabling. A parallel preload may still prepare an
+index for a disabled rule; that alone does not make the requested answer
+incomplete. This is eligibility/config scope, not an execution ledger.
+
+Traversal-incomplete M102 inventories are retried at the next normal serialized
+host request, even if access recovered before the earlier request finished.
+Healthy inventories retain their existing validation and reuse. This handling
+covers directory enumeration, not the separate importer-file read or
+`__init__.py` fallback-read failure channels. See the
+[Stats scoring caveats](../adapters/STATS_ADAPTER_GUIDE.md#incomplete-check-evidence)
+when M102 contributes to quality scores and rankings.
+
 ### Usage
 
 ```

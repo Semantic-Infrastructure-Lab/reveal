@@ -545,6 +545,32 @@ Starting score: **100 points**
 
 **Final score**: `max(0, 100 - total_penalties)`
 
+### Incomplete Check Evidence
+
+A file can have valid physical measurements while a scoring rule has incomplete
+project-wide evidence. Stats retains that rule's scan-limit or discovery notes
+in `check_scan_disclosures` and reports them through `meta.warnings` as
+`analysis_incomplete`. These notes come from scoring rules that actually ran;
+a disabled rule's unused preloaded index does not make scoring incomplete.
+Original rule notes survive filtering, pagination, summary-only output and
+hotspot cuts, even when the affected file is no longer displayed.
+
+Treat check-issue counts, quality scores and rankings under these warnings as
+potentially inaccurate or incomplete. Missing duplicate evidence can hide
+penalties, while missing importers can make M102 report a false orphan and
+reduce its score. Neither issue counts nor scores have a universal lower-bound
+interpretation. Read the attributed rule note before acting on a ranking.
+
+A successful rule with partial evidence differs from a rule that crashes:
+actual rule failures remain in `check_rules_failed`. Score formulas and
+measurements remain available in both cases. File, directory and element text
+views display the warning footer once; JSON retains the diagnostics. Native
+`stats://` preserves its legacy exit 0 for these warnings.
+[Hotspots](HOTSPOTS_ADAPTER_GUIDE.md) and
+[Overview](OVERVIEW_ADAPTER_GUIDE.md) apply their existing required-analysis
+policy to composed Stats warnings: useful surviving observations remain
+available with incomplete analysis, and direct CLI requests exit 3.
+
 ### Quality Score Interpretation
 
 | Score | Interpretation | Typical Issues |
