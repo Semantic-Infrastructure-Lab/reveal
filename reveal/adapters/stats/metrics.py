@@ -214,10 +214,13 @@ def _count_check_issues(
     file_path: Path,
     structure: Dict[str, Any],
     content: str,
+    *,
+    disclosures: Optional[List[str]] = None,
 ) -> Tuple[Dict[str, int], List[str]]:
     """Run check rules and count detections by severity.
 
     Reuses already-computed structure and content — no re-parsing.
+    An optional disclosure sink receives notes from rules that actually ran.
 
     Returns:
         (counts, failed): counts for 'critical', 'high', 'medium', 'low', and the rules that
@@ -226,9 +229,10 @@ def _count_check_issues(
     """
     counts: Dict[str, int] = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
     rule_errors: List[Dict[str, str]] = []
+    coverage: List[Dict[str, Any]] = []
     try:
         from ...rules import RuleRegistry
-        detections = RuleRegistry.check_file(str(file_path), structure, content, errors=rule_errors)
+        detections = RuleRegistry.check_file(str(file_path), structure, content, errors=rule_errors, coverage=coverage)
         for d in detections:
             sev = d.severity.value if d.severity else 'medium'
             if sev in counts:
@@ -236,6 +240,12 @@ def _count_check_issues(
     except Exception as e:  # boundary-ok: broad-except -- check_file() loads the project's .reveal.yaml and runs every registered rule, plugin rules included (arbitrary code); one file's failed rule run must not drop its other statistics, and it is recorded as check_rules_failed in the file's stats
         logger.warning(f"Check rules failed for {file_path}, counting as 0 issues: {e}")
         return counts, ['all rules']
+    if disclosures is not None:
+        from ...rules.scan_caches import get_scan_disclosures
+        eligible = sorted({row['rule'] for row in coverage
+                           if row['status'] in {'run', 'unavailable'}})
+        if eligible:
+            disclosures.extend(get_scan_disclosures([file_path], eligible, None))
     return counts, sorted({err['rule'] for err in rule_errors})
 
 
@@ -273,7 +283,9 @@ def calculate_file_stats(
     metrics = extract_complexity_metrics(functions, content, file_path)
 
     # Run check rules using already-computed structure + content (no re-parsing)
-    check_issue_counts, check_rules_failed = _count_check_issues(file_path, structure, content)
+    check_scan_disclosures: List[str] = []
+    check_issue_counts, check_rules_failed = _count_check_issues(
+        file_path, structure, content, disclosures=check_scan_disclosures)
 
     # Calculate quality score
     quality_score = calculate_quality_score(
@@ -321,4 +333,6 @@ def calculate_file_stats(
     }
     if check_rules_failed:
         stats['check_rules_failed'] = check_rules_failed
+    if check_scan_disclosures:
+        stats['check_scan_disclosures'] = check_scan_disclosures
     return stats

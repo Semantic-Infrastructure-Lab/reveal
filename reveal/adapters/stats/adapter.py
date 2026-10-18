@@ -236,6 +236,7 @@ class StatsAdapter(ResourceAdapter):
             skip_filter_keys=True,
             extra_known_keys={'sort', 'limit', 'offset', 'exclude', 'respect_gitignore'},
         )
+        self._check_scan_disclosures: List[str] = []
         self._analysis_failures: list = []
         self._excluded_by_extension: Dict[str, int] = {}
 
@@ -304,9 +305,7 @@ class StatsAdapter(ResourceAdapter):
         else:
             all_stats = [_analyze_file_worker(a) for a in args]
 
-        self._analysis_failures = [s for s in all_stats
-                                   if is_failure(s) or s and (s.get('parse_degraded')
-                                                              or s.get('check_rules_failed'))]
+        self._record_analysis_results(all_stats)
         return [
             s for s in all_stats
             if s and not is_failure(s) and matches_filters(
@@ -314,6 +313,23 @@ class StatsAdapter(ResourceAdapter):
                 self.query_filters, field_value, compare
             )
         ]
+
+    def _record_analysis_results(self, all_stats: list) -> None:
+        """Capture raw rule facts before filters, paging, and presentation cuts."""
+        self._analysis_failures = [s for s in all_stats
+                                   if is_failure(s) or s and (s.get('parse_degraded')
+                                                              or s.get('check_rules_failed'))]
+        self._check_scan_disclosures = list(dict.fromkeys(
+            message for s in all_stats if s and not is_failure(s)
+            for message in s.get('check_scan_disclosures', [])))
+
+    def _disclose_rule_scans(self, result: dict) -> None:
+        for message in self._check_scan_disclosures:
+            note_warning(result, {
+                'type': 'analysis_incomplete',
+                'message': ('Check-issue counts, quality scores, and rankings may be inaccurate '
+                            f'or incomplete: {message}'),
+            })
 
     def _apply_sorting(self, file_stats: list) -> list:
         """Apply sorting to file stats if sort field is specified."""
@@ -364,6 +380,7 @@ class StatsAdapter(ResourceAdapter):
         from ..ast.analysis import traversal_failed_warning
         note_warning(result, cast(Optional[Dict[str, Any]],
                                   traversal_failed_warning(self._traversal_failures, self.path)))
+        self._disclose_rule_scans(result)
         degraded = [s for s in self._analysis_failures if s.get('parse_degraded')]
         if degraded:
             note_warning(result, {
@@ -377,7 +394,7 @@ class StatsAdapter(ResourceAdapter):
             note_warning(result, {
                 'type': 'check_rules_failed', 'count': len(rules_failed), 'files': shown,
                 'message': (f"{len(rules_failed)} file(s) had check rules that could not run; their "
-                            f"check-issue counts and quality scores are lower bounds: "
+                            f"check-issue counts are lower bounds and quality scores may be optimistic: "
                             f"{', '.join(shown)}{more}"),
             })
         failed = sorted(f['path'] for f in self._analysis_failures if is_failure(f))
@@ -531,6 +548,7 @@ class StatsAdapter(ResourceAdapter):
             Dict containing statistics and optionally hotspots
         """
         self._traversal_failures = []
+        self._record_analysis_results([])
         # Merge query params with flag params
         hotspots, code_only, min_lines, max_lines, min_complexity, max_complexity, min_functions, summary_only = \
             self._merge_query_params(hotspots, code_only, min_lines, max_lines,
@@ -551,8 +569,7 @@ class StatsAdapter(ResourceAdapter):
                     result_type='stats_file', source=self.path,
                     error=f"analysis failed: {file_stats['analysis_failed']}"))  # type: ignore[index]
             result = aggregate_stats([file_stats] if file_stats else [], self.path)
-            self._analysis_failures = [file_stats] if file_stats and (
-                file_stats.get('parse_degraded') or file_stats.get('check_rules_failed')) else []
+            self._record_analysis_results([file_stats])
             self._disclose_failures(result)
             result.update(
                 contract_version=CONTRACT_VERSION,
@@ -607,6 +624,8 @@ class StatsAdapter(ResourceAdapter):
         Returns:
             Dict with file statistics or None if not found
         """
+        self._traversal_failures = []
+        self._record_analysis_results([])
         target_path = self.path / element_name
         if not target_path.exists() or not target_path.is_file():
             return None
@@ -620,6 +639,9 @@ class StatsAdapter(ResourceAdapter):
         )
         if is_failure(file_stats):
             return {'error': f"{element_name}: analysis failed: {file_stats['analysis_failed']}"}  # type: ignore[index]
+        self._record_analysis_results([file_stats])
+        if file_stats:
+            self._disclose_failures(file_stats)
         return file_stats
 
     def get_metadata(self) -> Dict[str, Any]:

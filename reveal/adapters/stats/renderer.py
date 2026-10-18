@@ -98,3 +98,4 @@ class StatsRenderer:
         print(f"  Score:     {result['quality']['score']:.1f}/100")
         print(f"  Long funcs: {result['quality']['long_functions']}")
         print(f"  Deep nest:  {result['quality']['deep_nesting']}")
+        render_meta_warnings(result)
