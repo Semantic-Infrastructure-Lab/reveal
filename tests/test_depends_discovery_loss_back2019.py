@@ -182,3 +182,53 @@ def test_soft_resolution_inputs_remain_required(tmp_path, monkeypatch, policy):
         deny(monkeypatch, {child})
         result = owner.get_structure()
     assert result['count'] == 0 and warning(result)
+
+
+def test_repeated_actual_directory_events_have_bounded_unique_display(tmp_path, monkeypatch):
+    root = tmp_path / 'affected'; target, child = project(root)
+    children = {child}
+    for number in range(6):
+        directory = root / f'included_{number}'
+        write(directory / 'consumer.py', 'import target\n'); children.add(directory)
+    deny(monkeypatch, children)
+    adapter = DependsAdapter(str(target))
+    result = adapter.get_structure()
+    entry = warning(result)
+    assert len(adapter._graph.traversal_failures) == 7
+    assert entry['count'] == 7 and len(entry['directories']) == 5
+    assert 'and 2 more' in entry['message']
+    assert result['warning'].count('identified directory enumeration(s) failed') == 1
+    # The established helper remains a pair even when its FileSet had failures.
+    files, index = adapter._discover_files(root, frozenset({'.py'}))
+    assert files == [target] and 'target.py' in index
+
+
+def test_direct_element_projection_retains_current_graph_disclosure(tmp_path, monkeypatch):
+    root = tmp_path / 'affected'; target, child = project(root, survivor=True)
+    write(target, 'import decimal\n')
+    owner = DependsAdapter(str(target))
+    deny(monkeypatch, {child})
+    owner.get_structure()
+    result = owner.get_element('target.py')
+    assert result is not None and warning(result)
+    assert result['undercount_possible'] and result['_meta']['confidence'] == 'reduced'
+
+
+@pytest.mark.parametrize('kind', ['clean', 'inferred_root', 'capped'])
+def test_dot_without_directory_loss_keeps_legacy_bytes(tmp_path, monkeypatch, capsys, kind):
+    root = tmp_path / 'affected'
+    if kind != 'inferred_root':
+        write(root / 'pyproject.toml', '[project]\nname="dot"\n')
+    write(root / 'a.py', 'import decimal\n')
+    write(root / 'b.py', 'import math\n')
+    if kind == 'capped':
+        monkeypatch.setattr(DependsAdapter, '_SCAN_FILE_CAP', 1)
+    result = DependsAdapter(str(root), query='format=dot').get_structure()
+    if kind == 'capped':
+        assert result['metadata']['scan_capped'] and 'warning' in result
+    if kind == 'inferred_root':
+        assert result['metadata']['root_inferred'] and 'warning' in result
+    assert not warning(result)
+    DependsRenderer.render_structure(result)
+    assert capsys.readouterr().out == ('digraph depends {\n  rankdir=LR;\n'
+                                       '  node [shape=box fontname="monospace" fontsize=10];\n}\n')
