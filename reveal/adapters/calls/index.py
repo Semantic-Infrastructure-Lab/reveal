@@ -479,6 +479,10 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
                                   call_lines=sorted({site['line'] for site in sites if site.get('relationship') != 'jsx_reference'}))
                 _index_callee(index, callee, record, alias_map, class_aliases)
 
+    # Directory mtimes cannot prove recovery after an included subtree was unreadable.
+    if getattr(structures, 'traversal_failures', []):
+        _INDEX_CACHE.pop(dir_str, None)
+        return index
     _INDEX_CACHE[dir_str] = (cache_key, index)
     _INDEX_CACHE.move_to_end(dir_str)
     if len(_INDEX_CACHE) > _INDEX_CACHE_MAX:
