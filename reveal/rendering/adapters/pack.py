@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from ..base import BaseRenderer, capped_section
 from ...utils.results import outcome_of
+from ...utils.warning_render import meta_warning_lines
 
 def _format_architecture_brief(selected: List[Dict[str, Any]]) -> List[str]:
     """Format a concise architecture hint derived from fan-in and priority."""
@@ -37,6 +38,20 @@ def _format_file_line(f: Dict[str, Any], verbose: bool = True) -> str:
     return f"  {f['relative']:50} {f['tokens_approx']:5} tokens  {f['lines']:4} lines"
 
 
+def _candidate_discovery_incomplete(meta: Dict[str, Any]) -> bool:
+    return any(warning.get('type') == 'analysis_incomplete' and warning.get('unit') == 'directories'
+               for warning in meta.get('warnings') or [])
+
+
+def _pack_empty_line(meta: Dict[str, Any]) -> str:
+    if not _candidate_discovery_incomplete(meta):
+        return 'No files fit within budget.'
+    if meta['total_candidates'] == 0:
+        return ('No eligible files were observed; the candidate population is unknown '
+                'because directory discovery was incomplete.')
+    return 'No observed eligible files fit within budget; candidate discovery is incomplete.'
+
+
 def _format_pack_header(
     path: Path,
     meta: Dict[str, Any],
@@ -53,8 +68,9 @@ def _format_pack_header(
         lines.append(f"Changed files:  {meta.get('changed_files_count', 0)} (boosted to top priority)")
     if since_error:
         lines.append(f"Warning: --since: {since_error}")
+    file_label = 'observed eligible files' if _candidate_discovery_incomplete(meta) else 'files'
     lines.append(
-        f"Selected {meta['selected']} of {meta['total_candidates']} files "
+        f"Selected {meta['selected']} of {meta['total_candidates']} {file_label} "
         f"(~{meta['used_tokens_approx']} tokens, {meta['used_lines']} lines)"
     )
     lines.append("")
@@ -134,6 +150,9 @@ def _format_pack_result(
                      architecture, since_error).removesuffix('\n')
     if content and selected:
         body += "\n" + "\n".join(_format_pack_content(selected))
+    warning_lines = meta_warning_lines({'meta': meta})
+    if warning_lines:
+        body += "\n" + "\n".join(warning_lines)
     return body
 
 
@@ -143,7 +162,7 @@ def pack_text(path: Path, selected: List[Dict[str, Any]], meta: Dict[str, Any],
     """Format the CLI inventory without emitting or reading content."""
     lines = _format_pack_header(path, meta, budget_tokens, budget_lines, since_error)
     if not selected:
-        lines.append("No files fit within budget.")
+        lines.append(_pack_empty_line(meta))
     else:
         if architecture:
             lines.extend(_format_architecture_brief(selected))

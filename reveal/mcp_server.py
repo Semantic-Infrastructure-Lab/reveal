@@ -621,6 +621,7 @@ def reveal_pack(
             core abstractions) before the file listing
     """
     from pathlib import Path
+    from .adapters.pack import _record_candidate_discovery_warning
     from .cli.commands.pack import (
         _parse_budget, _get_changed_files, _collect_candidates,
         _apply_budget, _format_pack_result,
@@ -639,8 +640,10 @@ def reveal_pack(
     if since_val:
         changed_files, since_error = _get_changed_files(p, since_val)
 
-    candidates = _collect_candidates(p, focus_val, changed_files)
+    discovery_failures: list[OSError] = []
+    candidates = _collect_candidates(p, focus_val, changed_files, on_error=discovery_failures.append)
     selected, meta = _apply_budget(candidates, budget_tokens, budget_lines, p)
+    _record_candidate_discovery_warning(p, discovery_failures, meta)
 
     if since_val:
         meta['since'] = since_val

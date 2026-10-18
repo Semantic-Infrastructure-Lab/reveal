@@ -10,7 +10,7 @@ import logging
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, Generator, List, Optional, Sequence, Set, Tuple
 
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.registry import get_code_extensions
@@ -18,7 +18,8 @@ from reveal.registry import get_code_extensions
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..conventions import conventions_for_path
 from ..rendering.adapters.pack import PackRenderer
-from ..utils.path_utils import DISPLAY, _walk_code_files, classify_path_provenance, to_posix
+from ..utils.path_utils import (DISPLAY, _walk_code_files, classify_path_provenance,
+                               to_posix, traversal_failed_warning)
 from ..utils.query import parse_query_params
 from ..utils.query_parser import split_exclude_param
 from ..utils.results import ResultBuilder
@@ -329,6 +330,20 @@ def _parse_budget(budget_str: str) -> Tuple[Optional[int], Optional[int]]:
         return 2000, None
 
 
+def _record_candidate_discovery_warning(
+    path: Path, failures: Sequence[OSError], meta: Dict[str, Any],
+) -> None:
+    """Disclose actual candidate loss without changing Pack's legacy outcome policy."""
+    warning = traversal_failed_warning([
+        (to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}')
+        for error in failures], path)
+    if warning:
+        warning['message'] = (
+            'Pack candidate discovery is incomplete; candidate population is unknown; '
+            'counts and rankings cover observed eligible files only; ' + warning['message'])
+        meta.setdefault('warnings', []).append(warning)
+
+
 def _collect_candidates(
     path: Path,
     focus: Optional[str],
@@ -336,12 +351,14 @@ def _collect_candidates(
     fan_in_scores: Optional[Dict[str, int]] = None,
     graph_relevance_scores: Optional[Dict[str, float]] = None,
     exclude_patterns: Optional[List[str]] = None,
+    *,
+    on_error: Optional[Callable[[OSError], None]] = None,
 ) -> List[Dict[str, Any]]:
     """Collect and score candidate files for the pack."""
     candidates: List[Dict[str, Any]] = []
 
     files = [
-        f for f in _walk_files(path, exclude_patterns=exclude_patterns)
+        f for f in _walk_files(path, exclude_patterns=exclude_patterns, on_error=on_error)
         # Skip near-empty __init__.py files — they're almost always re-export
         # stubs and waste token budget without adding understanding
         if not (f.name == '__init__.py' and f.stat().st_size < 500)
@@ -570,6 +587,7 @@ def _apply_budget(
 
 def _walk_files(
     path: Path, exclude_patterns: Optional[List[str]] = None,
+    *, on_error: Optional[Callable[[OSError], None]] = None,
 ) -> Generator[Path, None, None]:
     """Yield code/config files under *path* (respects common ignores).
 
@@ -596,7 +614,7 @@ def _walk_files(
 
     # The display walk (BACK-1581): pack:// packs what `reveal DIR` shows -- noise and
     # dot dirs never entered, gitignore, REVEAL_IGNORE and --exclude/?exclude= applied.
-    for item in _walk_code_files(path, exclude_patterns, purpose=DISPLAY):
+    for item in _walk_code_files(path, exclude_patterns, purpose=DISPLAY, on_error=on_error):
         # Include root config files
         if item.parent == path and item.name in _ROOT_FILES:
             yield item
@@ -766,12 +784,14 @@ class PackAdapter(ResourceAdapter):
                 "ranked by filename/entry-point heuristics and recency only"
             )
 
+        discovery_failures: List[OSError] = []
         candidates = _collect_candidates(
             path, focus, changed_files, fan_in_scores=fan_in_scores,
             graph_relevance_scores=graph_relevance_scores,
-            exclude_patterns=exclude_patterns,
+            exclude_patterns=exclude_patterns, on_error=discovery_failures.append,
         )
         selected, meta = _apply_budget(candidates, budget_tokens, budget_lines, path)
+        _record_candidate_discovery_warning(path, discovery_failures, meta)
         if since:
             meta['since'] = since
             meta['changed_files_count'] = len(changed_files)
