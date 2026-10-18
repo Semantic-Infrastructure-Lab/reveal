@@ -313,6 +313,19 @@ def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int, *,
     return stats
 
 
+def _with_scope_warning(meta: Optional[RevealMeta], failures: List[OSError],
+                        path: Path) -> Optional[RevealMeta]:
+    """Append optional census disclosure only after required-source validation."""
+    warning = traversal_failed_warning([
+        (to_posix(exc.filename) if exc.filename else None, f'{type(exc).__name__}: {exc}')
+        for exc in failures], path)
+    if warning:
+        warning['message'] = 'Independent scope/language census is incomplete; ' + warning['message']
+        meta = meta or {}
+        meta.setdefault('warnings', []).append(warning)
+    return meta
+
+
 def _run_scope(adapter: 'OverviewAdapter', path: Path, *,
                failures: Optional[List[OSError]] = None) -> Dict[str, Any]:
     """BACK-884: files discovered/analyzed/skipped by language, with
@@ -754,15 +767,7 @@ class OverviewAdapter(ResourceAdapter):
         if error:
             meta = meta or {}
             meta.setdefault('errors', []).append(error)
-        # Scope is an optional child: disclose its loss after required-source validation.
-        scope_warning = traversal_failed_warning([
-            (to_posix(exc.filename) if exc.filename else None, f'{type(exc).__name__}: {exc}')
-            for exc in scope_failures], path)
-        if scope_warning:
-            scope_warning['message'] = (
-                'Independent scope/language census is incomplete; ' + scope_warning['message'])
-            meta = meta or {}
-            meta.setdefault('warnings', []).append(scope_warning)
+        meta = _with_scope_warning(meta, scope_failures, path)
         return ResultBuilder.create(
             result_type='overview',
             source=self.path,
