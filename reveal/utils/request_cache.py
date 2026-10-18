@@ -48,16 +48,17 @@ def _tree_stamp(root: Path, started_ns: Optional[int] = None) -> Optional[str]:
     if not root.is_dir():
         return None
     hasher = hashlib.sha256()
+    enumeration_errors = []
     try:
         # EVIDENCE is the widest walk the owners use (it ignores --exclude).
-        for path in sorted(_walk_code_files(root, purpose=EVIDENCE)):
+        for path in sorted(_walk_code_files(root, purpose=EVIDENCE, on_error=enumeration_errors.append)):
             st = os.stat(path)
             if started_ns is not None and st.st_mtime_ns >= started_ns:
                 return None
             hasher.update(f'{path}\0{st.st_mtime_ns}\0{st.st_size}\n'.encode('utf-8', 'surrogateescape'))
     except OSError:
         return None
-    return hasher.hexdigest()
+    return None if enumeration_errors else hasher.hexdigest()
 
 
 def reset_request_caches() -> None:

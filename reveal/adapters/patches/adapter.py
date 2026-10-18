@@ -158,8 +158,11 @@ class PatchesAdapter(ResourceAdapter):
             'code': 'W-PATCHES-1',
             'message': 'Patch pressure is advisory; mocking external boundaries can be correct.',
         }]
-        from ..ast.analysis import analysis_skipped_warning, parse_recovered_warning
+        from ..ast.analysis import analysis_skipped_warning, parse_recovered_warning, traversal_failed_warning
 
+        traversal = traversal_failed_warning(patches.traversal_failures)
+        if traversal:
+            warnings.append(traversal)
         failed = analysis_skipped_warning(
             patches.skipped, None, 'their patch uses are missing from the result')
         if failed:

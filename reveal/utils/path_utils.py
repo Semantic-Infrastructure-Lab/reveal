@@ -684,6 +684,7 @@ def _walk_code_files(
     *,
     purpose: Optional[WalkPurpose] = None,
     on_hidden: Optional[OnHidden] = None,
+    on_error: Optional[Callable[[OSError], None]] = None,
     sort: bool = False,
 ) -> Iterator[Path]:
     """Yield every file under *path* that a walk for *purpose* keeps (default: analysis).
@@ -711,7 +712,7 @@ def _walk_code_files(
         purpose = ANALYSIS if prune_noise else DOCS
     for root, _, filenames in walk_tree(path, purpose, exclude_patterns=exclude_patterns,
                                         respect_gitignore=respect_gitignore,
-                                        on_hidden=on_hidden, sort=sort):
+                                        on_hidden=on_hidden, on_error=on_error, sort=sort):
         for fname in filenames:
             yield root / fname
 
@@ -723,10 +724,13 @@ def walk_tree(
     exclude_patterns: Optional[List[str]] = None,
     respect_gitignore: Optional[bool] = None,
     on_hidden: Optional[OnHidden] = None,
+    on_error: Optional[Callable[[OSError], None]] = None,
     sort: bool = False,
 ) -> Iterator[Tuple[Path, List[str], List[str]]]:
     """``os.walk`` over *path* with the purpose's skip rules applied: ``(dir, dirs, files)``.
 
+    *on_error* receives directory enumeration errors; None retains os.walk defaults.
+    Policy exclusions only reach *on_hidden*.
     *dirs* is the kept subdirectory list and may still be pruned by the caller.
     *on_hidden(path, is_dir, cause)* is called once per pruned directory (not for its
     subtree) and once per skipped file -- check's ``skipped_*`` counts and grep's and the
@@ -741,7 +745,7 @@ def walk_tree(
             on_hidden(p, is_dir, cause)
         return cause is None
 
-    for root, dirs, filenames in os.walk(str(path)):
+    for root, dirs, filenames in os.walk(str(path), onerror=on_error):
         root_path = Path(root)
         dirs[:] = [d for d in (sorted(dirs) if sort else dirs) if kept(root_path / d, True)]
         yield root_path, dirs, [f for f in (sorted(filenames) if sort else filenames)

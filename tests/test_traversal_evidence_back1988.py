@@ -120,3 +120,107 @@ def test_clean_single_file_sibling_and_excluded_child_are_unchanged(tree, monkey
             kept = collect_structures(str(root))
             assert len(kept) == 1 and kept.skipped == []
             assert not getattr(kept, 'traversal_failures', [])
+
+
+def test_root_enumeration_denial_is_failed_not_absent(tree, monkeypatch):
+    root, _ = tree
+    deny(monkeypatch, root)
+    adapter = TraceAdapter(str(root), 'from=visible')
+    result = adapter.get_structure()
+    assert adapter.execution_facts(result).completeness.value == 'failed'
+    assert traversal_warning(result)[0]['directories'] == [root.as_posix()]
+    assert result['frames'][0]['resolved'] is False
+
+
+def test_directory_count_exact_and_bounded_and_overlapping_roots(tree, monkeypatch):
+    root, child = tree
+    directories = [child]
+    for index in range(6):
+        directory = root / f'child{index}'
+        directory.mkdir()
+        directories.append(directory)
+    real = os.scandir
+
+    def denied(path):
+        if Path(path) in directories:
+            raise PermissionError(13, 'controlled enumeration loss', str(path))
+        return real(path)
+
+    monkeypatch.setattr(os, 'scandir', denied)
+    patches = scan_patches([root, child, root])
+    assert len(patches.traversal_failures) == 7
+    result = build_testability_report(str(root), [str(root), str(child), str(root)])
+    warning, = traversal_warning(result)
+    assert warning['count'] == 7 and warning['unit'] == 'directories'
+    assert len(warning['directories']) == len(warning['causes']) == 5
+    assert 'unknown' in warning['message'] and 'files' not in warning
+
+
+@pytest.mark.parametrize('value', [None, [('bad',)], [('child', '')], 'malformed'])
+def test_malformed_traversal_evidence_cannot_prove_absence(tree, monkeypatch, value):
+    from reveal.adapters.ast import analysis
+    root, _ = tree
+    collection = analysis.StructureList()
+    collection.traversal_failures = value
+    monkeypatch.setattr(analysis, 'collect_structures', lambda path: collection)
+    adapter = TraceAdapter(str(root), 'from=hidden')
+    result = adapter.get_structure()
+    assert adapter.execution_facts(result).completeness.value == 'failed'
+    assert result['meta']['errors']
+
+
+def test_cache_cannot_seal_or_retain_incomplete_tree(tree, monkeypatch):
+    from reveal.utils import request_cache as cache
+    root, child = tree
+    entries = {root: object()}
+    name = 'back1988-control'
+    monkeypatch.setattr(cache, '_VALIDATED', {name: (entries, entries.pop)})
+    monkeypatch.setattr(cache, '_RESETTERS', {})
+    monkeypatch.setattr(cache, '_STAMPS', {})
+    # Future start avoids filesystem timestamp precision assumptions.
+    future_ns = cache.request_started_ns() + 10**12
+    with monkeypatch.context() as context:
+        deny(context, child)
+        cache.seal_request_caches(future_ns)
+        assert (name, root) not in cache._STAMPS
+    cache.seal_request_caches(future_ns)
+    assert (name, root) in cache._STAMPS
+    with monkeypatch.context() as context:
+        deny(context, child)
+        (child / 'hidden.py').write_text('def edited():\n    return 3\n', encoding='utf-8')
+        cache.reset_request_caches()
+    assert not entries and not cache._STAMPS
+
+
+def test_callback_is_opt_in_and_policy_events_stay_distinct(tree, monkeypatch):
+    from reveal.utils.path_utils import _walk_code_files, walk_tree
+    root, child = tree
+    deny(monkeypatch, child)
+    hidden, errors = [], []
+    assert list(_walk_code_files(root)) == [root / 'visible.py']
+    assert list(_walk_code_files(root, on_error=errors.append, on_hidden=lambda *args: hidden.append(args)))
+    assert len(errors) == 1 and Path(errors[0].filename) == child
+    assert hidden == []
+    errors.clear()
+    assert list(walk_tree(root, on_error=errors.append))
+    assert len(errors) == 1
+
+
+def test_ast_outline_and_overview_keep_required_warning(tree, monkeypatch):
+    from reveal.adapters.ast.adapter import AstAdapter
+    from reveal.adapters.overview import OverviewAdapter
+    root, child = tree
+    deny(monkeypatch, child)
+    result = AstAdapter(str(root), 'name=hidden').get_structure()
+    assert traversal_warning(result)
+    facts = OverviewAdapter.execution_facts({'meta': result['meta']})
+    assert facts.completeness.value == 'incomplete'
+
+
+@pytest.mark.parametrize('entry', ['visible', 'hidden'])
+def test_text_trace_discloses_directory_failure_once(tree, monkeypatch, entry):
+    root, child = tree
+    deny(monkeypatch, child)
+    result = _run_reveal_direct('trace', str(root), '--from', entry)
+    assert result.returncode == 3
+    assert (result.stdout + result.stderr).count('directory enumeration(s) failed') == 1

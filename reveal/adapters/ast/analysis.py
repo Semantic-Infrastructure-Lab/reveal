@@ -30,6 +30,7 @@ class StructureList(List[Dict[str, Any]]):
     def __init__(self, *args: Any) -> None:
         super().__init__(*args)
         self.skipped: List[Tuple[str, str]] = []
+        self.traversal_failures: List[Tuple[str, str]] = []
 
 
 def parse_recovered_warning(structures: Sequence[Dict[str, Any]]) -> Optional[WarningEntry]:
@@ -87,6 +88,23 @@ def analysis_skipped_warning(skipped: List[Tuple[str, str]], base: Optional[Path
     }
 
 
+def traversal_failed_warning(failures: Sequence[Tuple[str, str]],
+                             base: Optional[Path] = None) -> Optional[WarningEntry]:
+    """Directory enumeration loss, whose missing file population is unknown."""
+    if not failures:
+        return None
+    paths = sorted(dict(failures).items())
+    shown = [to_relative_display(p, base) if base else to_posix(p) for p, _ in paths[:5]]
+    causes = [cause for _, cause in paths[:5]]
+    more = f" and {len(paths) - len(shown)} more" if len(paths) > len(shown) else ''
+    return {
+        'type': 'analysis_incomplete', 'count': len(paths), 'unit': 'directories',
+        'directories': shown, 'causes': causes,
+        'message': f"{len(paths)} directory enumeration(s) failed; missing file population is unknown: "
+                   f"{', '.join(f'{p} ({c})' for p, c in zip(shown, causes))}{more}",
+    }
+
+
 def collect_structures(path: str, outline: bool = False, needle: Optional[str] = None) -> StructureList:
     """Collect structure data from file(s).
 
@@ -106,7 +124,11 @@ def collect_structures(path: str, outline: bool = False, needle: Optional[str] =
         # The shared walk (BACK-1223): well-known non-project dirs, what git ignores
         # (BACK-1386; --no-gitignore turns that off), REVEAL_IGNORE and --exclude. Its own
         # os.walk also skipped *.egg-info, which holds packaging metadata, no code files.
-        for fp in _walk_code_files(path_obj):
+        def on_error(error: OSError) -> None:
+            structures.traversal_failures.append((
+                to_posix(error.filename or path_obj), f'{type(error).__name__}: {error}'))
+
+        for fp in _walk_code_files(path_obj, on_error=on_error):
             if is_code_file(fp):
                 try_add_file_structure(str(fp), structures, outline, needle)
 

@@ -36,6 +36,10 @@ class WarningEntry(TypedDict, total=False):
     # and the first few, relative to the target.
     count: int
     files: List[str]
+    # Directory enumeration failures have an unknown missing file population.
+    unit: str
+    directories: List[str]
+    causes: List[str]
     # The --fields names that matched nothing ('fields_unmatched', BACK-1607).
     fields: List[str]
 

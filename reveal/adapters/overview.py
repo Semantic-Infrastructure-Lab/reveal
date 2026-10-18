@@ -559,7 +559,7 @@ class OverviewAdapter(ResourceAdapter):
         meta = result.get('meta', {})
         errors = meta.get('errors', [])
         required_warnings = {'analysis_failed', 'parse_recovered', 'parse_degraded',
-                             'partial_parse', 'worker_lost', 'check_rules_failed'}
+                             'partial_parse', 'worker_lost', 'check_rules_failed', 'analysis_incomplete'}
         missing = any(warning.get('type') in required_warnings for warning in meta.get('warnings', []))
         architecture = result.get('architecture')
         metadata = architecture.get('metadata') if isinstance(architecture, dict) else None

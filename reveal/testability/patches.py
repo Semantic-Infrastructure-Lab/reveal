@@ -8,7 +8,7 @@ from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Callable, Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from ..utils.path_utils import _walk_code_files, is_test_basename_for_language, to_posix
 from ..utils.pyparse import parse_python
@@ -57,12 +57,14 @@ class PatchUses(List[PatchUse]):
     def __init__(self) -> None:
         super().__init__()
         self.skipped: List[Tuple[str, str]] = []
+        self.traversal_failures: List[Tuple[str, str]] = []
         self.recovered_files: List[str] = []
 
     def merge(self, other: PatchUses) -> None:
         """Retain a file's uses and diagnostics in the aggregate."""
         self.extend(other)
         self.skipped.extend(other.skipped)
+        self.traversal_failures.extend(other.traversal_failures)
         self.recovered_files.extend(other.recovered_files)
 
 
@@ -105,6 +107,8 @@ def _is_ts_test_file(p: Path) -> bool:
 def iter_test_files(
     paths: Sequence[str | Path],
     extensions: Optional[Sequence[str]] = None,
+    *,
+    on_error: Optional[Callable[[OSError], None]] = None,
 ) -> List[Path]:
     """Return test files under the given paths, dispatching by extension.
 
@@ -118,7 +122,7 @@ def iter_test_files(
             if _file_matches(path, extensions):
                 files.append(path)
         elif path.is_dir():
-            files.extend(fp for fp in _walk_code_files(path)  # the shared walker (BACK-1577)
+            files.extend(fp for fp in _walk_code_files(path, on_error=on_error)  # the shared walker (BACK-1577)
                          if _file_matches(fp, extensions))
     return sorted(set(files))
 
@@ -141,7 +145,12 @@ def _file_matches(path: Path, extensions: Optional[Sequence[str]]) -> bool:
 def scan_patches(paths: Sequence[str | Path]) -> PatchUses:
     """Scan Python and TypeScript test files for patch-like calls."""
     uses = PatchUses()
-    for file_path in iter_test_files(paths):
+    def on_error(error: OSError) -> None:
+        failure = (to_posix(error.filename), f'{type(error).__name__}: {error}')
+        if failure not in uses.traversal_failures:
+            uses.traversal_failures.append(failure)
+
+    for file_path in iter_test_files(paths, on_error=on_error):
         if file_path.suffix == '.py':
             uses.merge(_scan_file(file_path))
         elif file_path.suffix in _TS_TEST_EXTENSIONS:
@@ -260,7 +269,12 @@ def scan_patches_ts(paths: Sequence[str | Path]) -> PatchUses:
       jest.replaceProperty(obj, 'prop', val)       → kind='jest.replaceProperty' / ...
     """
     uses = PatchUses()
-    for file_path in iter_test_files(paths, extensions=list(_TS_TEST_EXTENSIONS)):
+    def on_error(error: OSError) -> None:
+        failure = (to_posix(error.filename), f'{type(error).__name__}: {error}')
+        if failure not in uses.traversal_failures:
+            uses.traversal_failures.append(failure)
+
+    for file_path in iter_test_files(paths, extensions=list(_TS_TEST_EXTENSIONS), on_error=on_error):
         uses.merge(_scan_file_ts(file_path))
     return uses
 

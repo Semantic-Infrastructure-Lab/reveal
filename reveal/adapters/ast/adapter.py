@@ -15,6 +15,7 @@ from .queries import (
 )
 from .analysis import (
     analysis_skipped_warning, analyze_file_outcome, collect_structures, parse_recovered_warning,
+    traversal_failed_warning,
     StructureList, try_add_file_structure,
 )
 from .filtering import apply_filters, matches_decorator, find_unknown_filter_keys, outline_plan
@@ -152,6 +153,7 @@ def _query_warnings(structures: List[Dict[str, Any]], filtered: List[Dict[str, A
         dict(_COMPLEXITY_IS_UNWEIGHTED) if 'complexity' in query else None,
         analysis_skipped_warning(getattr(structures, 'skipped', []), None,
                                  "no result can include them"),  # BACK-1856
+        traversal_failed_warning(getattr(structures, 'traversal_failures', [])),
         parse_recovered_warning(structures),  # BACK-1847
     ]
     return cast(List[WarningEntry], [w for w in warnings if w])
@@ -272,6 +274,7 @@ class AstAdapter(ResourceAdapter):
         outline = collect_structures(self.path, outline=True, needle=needle)
         structures = StructureList()
         structures.skipped.extend(outline.skipped)
+        structures.traversal_failures.extend(outline.traversal_failures)
         for struct in outline:
             hit_in_text = struct.pop('name_in_text', False)
             if apply_filters([struct], query) or hit_in_text:
