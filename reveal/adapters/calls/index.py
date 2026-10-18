@@ -6,7 +6,8 @@ Builds and caches an inverted call graph across all code files in a directory:
 
 The cache key uses directory mtimes and active scope. It does not detect every
 file overwrite or deeper membership change. Known incomplete collections are not
-retained; ordinary warm-hit freshness remains a separate policy.
+retained. Host requests validate retained roots through the shared request-cache
+owner; direct helper reuse remains governed by the cheap key.
 """
 
 import os

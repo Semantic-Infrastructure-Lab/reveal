@@ -615,6 +615,14 @@ The project-level index is cached in memory per process per directory:
 - **Rebuild cost**: depends on the source population and analysis work; use a
   narrower directory when the question permits it.
 
+Serialized MCP requests validate retained callers and Python-reference caches
+with the shared path/mtime/size fingerprint, rebuilding changed roots while
+preserving unchanged entries. Each distinct retained root incurs a validation
+walk, including on unrelated tool requests. These fingerprints are not atomic
+snapshots or content/readability guarantees; an edit that preserves size and
+mtime can evade them. Direct adapter/helper calls outside the host request
+boundary retain the cheap-key behavior described above.
+
 For very large codebases (100K+ lines), point at a subdirectory:
 
 ```bash
