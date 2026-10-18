@@ -161,3 +161,25 @@ def test_exact_healthy_single_file_and_hard_excluded_controls(tmp_path, monkeypa
     deny_child(monkeypatch, child)
     assert ImportsAdapter(str(source)).get_structure() == single
     assert ImportsAdapter(str(root)).get_structure() == excluded
+
+
+@pytest.mark.parametrize('query,forbidden', [
+    ('unused', '✅ No unused imports found'),
+    ('circular', '✅ No circular dependencies found'),
+    ('entrypoints', 'every file is imported by at least one other'),
+    ('', 'only one file scanned'),
+    ('violations', '✅ No violations'),
+])
+def test_directory_loss_does_not_render_definitive_clean_conclusions(tmp_path, monkeypatch, capsys, query, forbidden):
+    root = tmp_path / 'affected'
+    child = make_tree(root, survivors=False)
+    if query != 'entrypoints':
+        write(root / 'visible.py', 'VALUE = 1\n')
+    if query == 'violations':
+        write(root / '.reveal.yaml', 'architecture:\n  layers:\n    - name: app\n      paths: [app/]\n      allow_imports: []\n      deny_imports: [db/]\n')
+    deny_child(monkeypatch, child)
+    result = ImportsAdapter(str(root), query).get_structure()
+    ImportsRenderer.render_structure(result)
+    output = capsys.readouterr().out
+    assert forbidden not in output
+    assert 'analysis is incomplete' in output or 'discovery incomplete' in output
