@@ -146,8 +146,11 @@ def build_meta(path: str, *, uncalled: bool = False,
         })
 
     # Required analysis loss can leave usable observations alongside missing ones.
-    failed = analysis_skipped_warning(
-        list(skipped), None, "analysis is incomplete; some callers, callees or uncalled results may be missing")
+    consequence = (
+        "analysis is incomplete; missing source or reference evidence can make uncalled "
+        "classifications incorrect or incomplete"
+        if uncalled else "analysis is incomplete; some callers, callees or uncalled results may be missing")
+    failed = analysis_skipped_warning(list(skipped), None, consequence)
     if failed:
         warnings.append(failed)
 

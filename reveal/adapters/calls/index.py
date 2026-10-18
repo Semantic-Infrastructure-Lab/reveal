@@ -14,6 +14,7 @@ import os
 import re
 from collections import OrderedDict
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Dict, FrozenSet, Iterator, List, Optional, Sequence, Set, Tuple
 
@@ -1064,8 +1065,18 @@ def _project_entry_point_decorators(directory: Path) -> FrozenSet[str]:
     return frozenset(str(d) for d in decorators)
 
 
+def _record_non_python_reference_failure(skipped: List[Tuple[str, str]],
+                                        file_path: str, error: OSError) -> None:
+    """Keep first-cause file identity on this query's diagnostic copy only."""
+    identity = os.path.normcase(os.path.realpath(file_path))
+    if not any(os.path.normcase(os.path.realpath(path)) == identity for path, _ in skipped):
+        skipped.append((
+            to_posix(file_path), f'{type(error).__name__}: non-Python reference read failed: {error}'))
+
+
 def _drop_referenced(entries: List[Dict[str, Any]],
-                     structures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+                     structures: List[Dict[str, Any]], *,
+                     on_read_error: Optional[Callable[[str, OSError], None]] = None) -> List[Dict[str, Any]]:
     """BACK-1391: drop candidates a non-Python file uses without calling them
     (callbacks, function pointers, module/class-body calls, PHP hook strings,
     Ruby symbols). Python files get the same treatment from
@@ -1089,7 +1100,8 @@ def _drop_referenced(entries: List[Dict[str, Any]],
                 here[bare] = here.get(bare, 0) + 1
     from .references import non_python_referenced_names
     referenced = non_python_referenced_names(
-        (fs.get('file', '') for fs in structures), candidates, definition_counts, defined_in_file)
+        (fs.get('file', '') for fs in structures), candidates, definition_counts, defined_in_file,
+        on_read_error=on_read_error)
     return [e for e in entries
             if _bare_callee_name(e['name']) not in referenced.get(_lang_family(e['file']), ())]
 
@@ -1300,7 +1312,9 @@ def find_uncalled(
                 'provenance': provenance_for_display_path(file_path, directory),
             })
 
-    entries = _drop_referenced(entries, structures)
+    query_skipped = list(structures.skipped)
+    entries = _drop_referenced(entries, structures, on_read_error=partial(
+        _record_non_python_reference_failure, query_skipped))
     entries.sort(key=lambda e: (_uncalled_entry_mtime(e), e['file'], e['line']))
     total_uncalled = len(entries)
     if top > 0:
@@ -1315,7 +1329,7 @@ def find_uncalled(
             excluded_by_reason.get(r, 0) for r in _TEST_ENTRYPOINT_REASONS),
         'excluded_by_reason': excluded_by_reason,
         'entries': entries,
-    }, structures.skipped, traversal_failures=getattr(structures, 'traversal_failures', ()))
+    }, query_skipped, traversal_failures=getattr(structures, 'traversal_failures', ()))
 
 
 def rank_by_callers(

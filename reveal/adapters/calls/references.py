@@ -19,7 +19,7 @@ per false entry (the trade _python_referenced_names documents).
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from ...core import get_tree, iter_tree, _zero_arg
 from ...conventions import family_for_path
@@ -93,11 +93,23 @@ def _binding_kind(node):
     return 'function' if value is not None and _FUNCTION_VALUE.search(_zero_arg(value, 'kind')) else 'variable'
 
 
-def _count_occurrences(file_path: str, family: str, names: Set[str], defined_here: Dict[str, int],
-                       occurrences: Dict[Tuple[str, str], int]) -> None:
+def _read_reference_text(
+    file_path: str, *, on_read_error: Optional[Callable[[str, OSError], None]] = None,
+) -> Optional[str]:
+    """Read one reference input; None is failure while empty text is valid."""
     try:
-        text = Path(file_path).read_text(encoding='utf-8', errors='replace')
-    except OSError:
+        return Path(file_path).read_text(encoding='utf-8', errors='replace')
+    except OSError as error:
+        if on_read_error is not None:
+            on_read_error(file_path, error)
+        return None
+
+
+def _count_occurrences(file_path: str, family: str, names: Set[str], defined_here: Dict[str, int],
+                       occurrences: Dict[Tuple[str, str], int], *,
+                       on_read_error: Optional[Callable[[str, OSError], None]] = None) -> None:
+    text = _read_reference_text(file_path, on_read_error=on_read_error)
+    if text is None:
         return
     present = names.intersection(_WORD.findall(text))
     if not present:
@@ -161,6 +173,7 @@ def non_python_referenced_names(
     candidates: Dict[str, Set[str]],
     definition_counts: Dict[Tuple[str, str], int],
     defined_in_file: Dict[str, Dict[str, int]],
+    *, on_read_error: Optional[Callable[[str, OSError], None]] = None,
 ) -> Dict[str, Set[str]]:
     """Per language family, the candidate names that are used somewhere.
 
@@ -178,7 +191,7 @@ def non_python_referenced_names(
         names = candidates.get(family)
         if names and family != 'python':
             _count_occurrences(file_path, family, names, defined_in_file.get(file_path, {}),
-                               occurrences)
+                               occurrences, on_read_error=on_read_error)
     referenced: Dict[str, Set[str]] = {}
     for (family, name), count in occurrences.items():
         own = 0 if family == 'c' else definition_counts.get((family, name), 0)
