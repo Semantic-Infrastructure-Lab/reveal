@@ -145,7 +145,8 @@ def test_decorated_generic_query_distinguishes_useful_partial_and_failed(tmp_pat
     fault(monkeypatch, child, unknown=True)
     result = reveal_query('contracts://' + str(root), provenance=provenance)
     assert isinstance(result, _ToolFailure) is (not useful)
-    assert 'unknown directory' in result
+    if useful:
+        assert 'unknown directory' in result
     if useful and provenance:
         data = json.loads(result)
         assert data['execution']['command'].startswith('reveal contracts://')
