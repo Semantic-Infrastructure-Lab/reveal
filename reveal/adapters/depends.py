@@ -394,7 +394,7 @@ class DependsRenderer:
         modules = result.get('modules', [])
         print('digraph depends {')
         if DependsRenderer._has_traversal_loss(result):
-            for line in result.get('warning', '').splitlines():
+            for line in result.get('warning', '').splitlines():  # boundary-ok: splitlines -- generated warning text, not file content; each line must be a DOT comment
                 print(f'  // {line}')
         print('  rankdir=LR;')
         print('  node [shape=box fontname="monospace" fontsize=10];')
@@ -1520,6 +1520,13 @@ class DependsAdapter(ResourceAdapter):
             "here may be significantly undercounted regardless of the count shown."
         )
 
+    def _traversal_warning(self) -> Optional[Dict[str, Any]]:
+        warning = traversal_failed_warning(self._traversal_failures, self._scan_root)
+        return dict(warning) if warning else None
+
+    def _undercount_possible(self, empty: bool) -> bool:
+        return bool(self._traversal_failures) or (empty and self._unresolved_intra > 0)
+
     def _warnings(self, include_honest_decline: bool = False) -> str:
         """Join active disclosures (scan cap, inferred root, and — only when the
         result is empty — honest-decline) into one warning string, in priority
@@ -1530,7 +1537,7 @@ class DependsAdapter(ResourceAdapter):
         confident, non-empty answer (that would be the cry-wolf failure honest-
         decline is meant to prevent)."""
         partial = parse_failure_warning(self._files_failed, self._scan_root)
-        traversal = traversal_failed_warning(self._traversal_failures, self._scan_root)
+        traversal = self._traversal_warning()
         parts = [
             self._root_override_warning(),
             self._scan_cap_warning(),
@@ -1626,8 +1633,8 @@ class DependsAdapter(ResourceAdapter):
         # Required directory loss qualifies positives too; the prior unresolved-
         # import policy still qualifies only empty answers (BACK-547).
         empty = not dependents
-        note_warning(result, traversal_failed_warning(self._traversal_failures, self._scan_root))
-        result['undercount_possible'] = bool(self._traversal_failures) or (empty and self._unresolved_intra > 0)
+        note_warning(result, self._traversal_warning())
+        result['undercount_possible'] = self._undercount_possible(empty)
         warnings = self._warnings(include_honest_decline=empty)
         if warnings:
             result['warning'] = warnings
@@ -1682,8 +1689,8 @@ class DependsAdapter(ResourceAdapter):
         # router read as a cut (BACK-1543).
         note_truncation(result, 'modules', len(modules), total_modules, 'limit', hint='raise ?top=N')
         empty = not modules
-        note_warning(result, traversal_failed_warning(self._traversal_failures, self._scan_root))
-        result['undercount_possible'] = bool(self._traversal_failures) or (empty and self._unresolved_intra > 0)
+        note_warning(result, self._traversal_warning())
+        result['undercount_possible'] = self._undercount_possible(empty)
         warnings = self._warnings(include_honest_decline=empty)
         if warnings:
             result['warning'] = warnings
