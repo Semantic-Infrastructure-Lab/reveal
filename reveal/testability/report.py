@@ -38,7 +38,7 @@ def _validate_carrier(value: Any) -> None:
             or not _valid_failures(getattr(value, 'skipped', None))
             or not _valid_failures(getattr(value, 'traversal_failures', None), directories=True)
             or not isinstance(getattr(value, 'recovered_files', None), list)
-            or not _strings(value.recovered_files)):
+            or not _strings(getattr(value, 'recovered_files', None))):
         raise ValueError('Testability required collector diagnostics are malformed')
 
 
