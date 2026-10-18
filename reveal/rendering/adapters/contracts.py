@@ -49,6 +49,11 @@ def _render_contract_groups(mode: str, report: Dict[str, Any], impls_cap: int = 
 
     return lines
 
+def _has_contract_rows(report: Dict[str, Any]) -> bool:
+    return any(report.get(key) for key in (
+        'abcs', 'protocols', 'typeddicts', 'dataclasses', 'basemodels', 'path_heuristic'))
+
+
 def _no_contracts_hint(mode: str) -> str:
     if mode == 'ts':
         return "  Try widening the path or checking for interface/abstract class usage."
@@ -90,7 +95,7 @@ def _render_report(report: Dict[str, Any], impls_cap: int = 5) -> List[str]:
     if by_language is not None:
         # BACK-780: more than one language present — render each language's
         # section under its own labels rather than picking one winner.
-        if total == 0:
+        if not any(_has_contract_rows(group) for group in by_language.values()):
             if not warning:
                 lines.append("  No contracts or seams found.")
                 lines.append('')
@@ -112,7 +117,7 @@ def _render_report(report: Dict[str, Any], impls_cap: int = 5) -> List[str]:
     mode = ('ts' if ts_mode else 'ruby' if ruby_mode else 'go' if go_mode
             else 'rust' if rust_mode else 'cpp' if cpp_mode else 'python')
 
-    if total == 0:
+    if not _has_contract_rows(report):
         if not warning:
             lang = report.get('unsupported_language', '')
             if lang:
