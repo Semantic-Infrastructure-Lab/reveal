@@ -114,6 +114,38 @@ def test_required_metadata_failure_survives_flattening_and_collection(source, mo
     assert 'required structure branch failed' in collected.skipped[0][1]
 
 
+@pytest.mark.parametrize('consumer', ['ast', 'imports', 'trace'])
+def test_partial_observation_warning_does_not_claim_whole_file_absence(source, monkeypatch, consumer):
+    _provide(monkeypatch, {
+        'functions': [FUNCTION],
+        'meta': {'errors': [{'code': 'analysis_failed', 'message': 'required structure branch failed'}]},
+    })
+    if consumer == 'ast':
+        answer = AstAdapter(str(source), 'complexity>0').get_structure()
+        assert any(item['name'] == 'main' for item in answer['results'])
+        warnings = answer['meta']['warnings']
+    elif consumer == 'imports':
+        from reveal.adapters.imports import ImportsAdapter
+        importer = ImportsAdapter(str(source.parent))
+        importer._build_graph(source.parent, collect_structures=True)
+        assert importer._structures[0]['elements'][0]['name'] == 'main'
+        warnings = importer.integrity_warnings(source.parent)
+    else:
+        from reveal.adapters.trace import TraceAdapter
+        answer = TraceAdapter(str(source.parent), 'from=main').get_structure()
+        assert answer['frames'][0]['resolved'] and answer['frames'][0]['name'] == 'main'
+        warnings = answer['meta']['warnings']
+    warning, = [entry for entry in warnings if entry.get('type') == 'analysis_failed']
+    assert warning['count'] == 1
+    assert 'incomplete' in warning['message'] and 'may be missing' in warning['message']
+
+
+def test_default_analysis_failure_warning_covers_partial_and_total_loss(source):
+    warning = analysis.analysis_skipped_warning([(str(source), 'ParseError: required parser failed')])
+    assert warning['count'] == 1
+    assert 'incomplete' in warning['message'] and 'may be missing' in warning['message']
+
+
 def test_required_failure_with_only_metadata_has_no_usable_observations(source, monkeypatch):
     _provide(monkeypatch, {
         'metadata': {'nonempty': True},
