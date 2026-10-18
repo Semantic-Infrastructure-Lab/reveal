@@ -281,11 +281,12 @@ def rust_declared_unused(
     return DeclaredUnused(frozenset(unused), scan.skipped)
 
 
-def _directory_disclosure(root: Path, failures: Sequence[_TraversalFailure]) -> Optional[str]:
+def _directory_disclosure(root: Path, failures: Sequence[_TraversalFailure], language: str) -> Optional[str]:
     warning = traversal_failed_warning(failures, root)
     if warning is None:
         return None
-    return (f"I007: {warning['message']}; project import discovery is incomplete; "
+    return (f"I007: {language} project import discovery under {to_posix(root)} is incomplete; "
+            f"{warning['message']}; "
             'dependencies reported as unused may be used in omitted inputs')
 
 
@@ -328,7 +329,8 @@ def get_scan_disclosures(files: Optional[List[Path]] = None) -> List[str]:
     messages = []
     for root, key in _reached_scan_keys(files):
         facts = _scan_cache.get(root, {}).get(key)
-        message = _directory_disclosure(root, facts.traversal_failures) if facts is not None else None
+        language = 'Python' if '.py' in key[0] else 'Rust'
+        message = _directory_disclosure(root, facts.traversal_failures, language) if facts is not None else None
         if message is not None:
             messages.append(message)
     return messages

@@ -125,6 +125,7 @@ class I007(BaseRule):
         ]
 
     def _note_directory_sources(self, failures: List[_TraversalFailure], manifest_path: Path) -> None:
-        message = _directory_disclosure(manifest_path.parent, failures)
+        language = 'Rust' if manifest_path.name == 'Cargo.toml' else 'Python'
+        message = _directory_disclosure(manifest_path.parent, failures, language)
         if message is not None:
             self.unavailable(message, str(manifest_path))
