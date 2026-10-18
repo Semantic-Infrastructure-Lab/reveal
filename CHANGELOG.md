@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `git://` on a repository libgit2 refuses to open (e.g. a `safe.directory` ownership refusal) now fails with that reason from `get_metadata` too, instead of returning metadata with no path that callers read as "not a repository" (BACK-1845).
 
 ### Fixed
+- Depends retains required Ruby classification-inventory directory loss across cache hits and reports resolution risk once per root, preserving observed classifications, source accounting and ordinary request-reset recovery. The historical inventory helper and cache controls remain compatible (BACK-2024).
 - Depends retains failures in required Ruby load-path manifest discovery, qualifying resolution confidence and possible undercount while preserving the independent source census and legacy exits/MCP flags (BACK-2023).
 - Contracts retains required activation, shared-structure and native-scanner directory loss before output cuts. Valid surviving requested rows support partial results; unavailable or malformed analysis fails safely with attributed CLI diagnostics. Numeric confidence is withheld for unknown missing populations, while clean and parse-only behavior remain unchanged (BACK-2020).
 - Depends retains attributed required directory loss through graph evidence, warnings and source accounting, reduces descriptive confidence and qualifies positive counts/rankings as observed. DOT carries loss warnings as comments; clean outputs and legacy exits/MCP policy remain unchanged (BACK-2019).

@@ -352,8 +352,15 @@ Ruby's separate gemspec discovery for load-path roots retains directory failures
 in the same graph diagnostics. Manifest-only loss leaves a successful independent
 source census exact; it still reduces resolution confidence and discloses possible
 undercount. Combined source and manifest loss retains both causes without estimating
-missing files. Gemspec contents are not evaluated. Cached Ruby classification
-inventory, manifest reads and generic fallback discovery retain independent limits.
+missing files. Gemspec contents are not evaluated. Ruby classification also retains manifest and existing-lib directory loss in
+its cached inventory. Depends replays that evidence once per inventory root in
+each graph build, including cache hits populated by another consumer. Observed
+local/external classifications and the independent source census keep their
+meaning; known inventory loss still qualifies confidence and undercount. The
+existing host-request reset repairs the inventory on the next request. Direct
+helper memo lifetime, lockfile reads, marker/stat failures and generic fallback
+discovery retain independent limits. Imports keeps its existing explicit
+unresolved annotation when the inventory cannot classify an import.
 
 **Scan-root disclosure**: known scan-root limitations appear in the `warning` field and `metadata` flags. `metadata.scan_capped` (+ a `⚠ Scan capped at N files...` warning) means the scan hit the 5,000-file safety cap under a genuinely huge project root. `metadata.root_inferred` (+ a `⚠ Couldn't determine this file's project boundary...` warning) means no project marker (`pyproject.toml`, `.git`, etc.) was found above the target before the filesystem/`$HOME` boundary, so the scan was scoped to the target's own directory only — pass an explicit root, or run from inside the project, for full coverage.
 
