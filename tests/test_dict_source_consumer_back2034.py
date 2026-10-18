@@ -199,3 +199,23 @@ def test_clean_sibling_and_single_file_have_no_source_side_effects(tmp_path, fau
     assert owner.get_structure() == clean
     assert AstAdapter(str(root / 'visible.py'), 'show=' + mode).get_structure() == single
     assert not fault['events'] and clean['meta']['confidence'] == 1.0
+
+
+@pytest.mark.parametrize('mode', MODES)
+def test_positive_uncapped_observations_hidden_by_cap_are_display_absence_only(tmp_path, fault, mode):
+    root = tmp_path / 'project'
+    children = _project(root)
+    # Both surviving readers share a shape, so both modes have actual positive observations.
+    _write(root / 'visible.py', HIDDEN)
+    fault.update(stages={'source'}, denied=set(children))
+    uncapped = AstAdapter(str(root), 'show=' + mode).get_structure()
+    assert uncapped['total_results'] == (2 if mode == 'dict-heatmap' else 1)
+    assert uncapped['results'] and fault['parsed'][-1] == ('visible.py', True)
+    artifact = tmp_path / 'capped.json'
+    response = run(f'ast://{root.as_posix()}?show={mode}', '--max-items', '0', '--also-json', str(artifact))
+    assert response.returncode == 0 and artifact.exists()
+    saved = json.loads(artifact.read_text(encoding='utf-8'))
+    assert saved['results'] == [] and saved['total_results'] == uncapped['total_results']
+    assert 'displayed' in response.stdout and 'analyzed portion' in response.stdout
+    assert 'analysis is incomplete' in response.stdout
+    assert (response.stdout + response.stderr).count('identified directory enumeration(s) failed') == 1
