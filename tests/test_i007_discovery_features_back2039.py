@@ -22,7 +22,7 @@ pytestmark = pytest.mark.component
 def test_full_actual_event_sequence_is_frozen_and_replayed_without_new_walk(tmp_path, fault, language, unknown):
     manifest, hidden, helper, used, missing, ext = project(tmp_path, language)
     for number in range(6):
-        write(tmp_path / f'part{number}' / 'included_child' / ('usage' + ext), hidden.read_text())
+        write(tmp_path / f'part{number}' / 'included_child' / ('usage' + ext), hidden.read_text(encoding='utf-8'))
     fault.update(mode='directory', unknown=unknown)
     events = []
     result = helper(tmp_path, on_traversal_failure=events.append)
