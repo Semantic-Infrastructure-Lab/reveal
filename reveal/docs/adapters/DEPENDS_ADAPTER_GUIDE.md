@@ -346,8 +346,14 @@ positive and empty results. Text qualifies observed counts and rankings. DOT
 includes the warning as comments when required directory loss is known. Clean,
 inferred-root and cap-only DOT output retain their existing behavior. Direct
 Depends exits and MCP flags retain their legacy policy, so exit 0 alone does not
-establish complete analysis. Language-specific manifest and fallback discovery
-have independent limitations.
+establish complete analysis.
+
+Ruby's separate gemspec discovery for load-path roots retains directory failures
+in the same graph diagnostics. Manifest-only loss leaves a successful independent
+source census exact; it still reduces resolution confidence and discloses possible
+undercount. Combined source and manifest loss retains both causes without estimating
+missing files. Gemspec contents are not evaluated. Cached Ruby classification
+inventory, manifest reads and generic fallback discovery retain independent limits.
 
 **Scan-root disclosure**: known scan-root limitations appear in the `warning` field and `metadata` flags. `metadata.scan_capped` (+ a `⚠ Scan capped at N files...` warning) means the scan hit the 5,000-file safety cap under a genuinely huge project root. `metadata.root_inferred` (+ a `⚠ Couldn't determine this file's project boundary...` warning) means no project marker (`pyproject.toml`, `.git`, etc.) was found above the target before the filesystem/`$HOME` boundary, so the scan was scoped to the target's own directory only — pass an explicit root, or run from inside the project, for full coverage.
 
