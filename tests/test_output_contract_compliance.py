@@ -883,6 +883,12 @@ def test_batch_answers_like_the_uri(harness, scheme):
             legacy['source'] = uri.partition('://')[2]  # legacy router retains original resource spelling
             legacy['meta']['errors'][0]['code'] = 'adapter_error'
             assert entry.get('data') == legacy
+        elif scheme == 'testability' and payload.get('applicable') is False:
+            # Direct D6 identity is fixed; mixed-batch N/A retains its legacy identity.
+            assert payload['type'] == declared.RESULT_TYPE
+            legacy = copy.deepcopy(payload)
+            legacy['type'] = scheme
+            assert entry.get('data') == legacy
         else:
             assert entry.get('data') == payload, f'{uri}: --batch answered differently from the URI form'
         assert batch_code == (2 if expected == 'error' else 0), (

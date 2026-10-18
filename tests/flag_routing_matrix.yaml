@@ -770,6 +770,7 @@ adapters:
     all:
       via:
       - declared
+      - routing-special
     respect_gitignore:
       via:
       - declared
@@ -784,11 +785,9 @@ adapters:
       review: not-applicable
       via: []
     verbose:
-      reason: 'CLI_QUERY_FLAGS declares only ''all''; render_structure(result, format)
-        has no verbose param; confirmed live: ''Unknown query param verbose'' warning
-        (testability.py:132)'
-      review: not-applicable
-      via: []
+      via:
+      - structure-param
+      - routing-special
   trace:
     all:
       reason: --all conventionally lifts a RESULTS cap (top=N/limit=N); trace's cap

@@ -152,7 +152,7 @@ def test_actual_output_discloses_failure_once_without_changing_legacy_exit(tmp_p
     target = _write(tmp_path / 'tests' / 'test_bad.py', 'def broken(:\n')
     uri = f'testability://{src.parent}?tests={target.parent}' if owner == 'testability' else f'patches://{target.parent}'
     result = _run_reveal_direct(uri, '--format', output_format)
-    assert result.returncode == 0
+    assert result.returncode == (3 if owner == 'testability' else 0)
     if output_format == 'json':
         payload = json.loads(result.stdout)
         failed, = _warning(payload, 'analysis_failed')

@@ -584,11 +584,8 @@ VERBOSE_TAKERS = {**{n: a for n, a in WALKERS.items() if n != 'trace'},
                   'health': ['proj'], 'review': ['proj']}
 
 # (subcommand, probe): the walk consulted the scope, but the fixture cannot show an effect.
-# The URI ratchet lists the same testability pair (BACK-1538).
-KNOWN_NOT_VISIBLE = {
-    ('testability', 'exclude'): 'BACK-1538',
-    ('testability', 'reveal_ignore'): 'BACK-1538',
-}
+# BACK-2003's common binding now makes both testability scope effects visible.
+KNOWN_NOT_VISIBLE = {}
 
 
 class _SubcommandHarness:
