@@ -63,11 +63,13 @@ class TestCreateTraceParser(unittest.TestCase):
 
     def test_depth_default(self):
         args = create_trace_parser().parse_args(['--from', 'f'])
-        self.assertEqual(args.depth, 2)
+        self.assertNotIn('depth', vars(args))
+        from reveal.adapters.trace import TraceAdapter
+        self.assertEqual(TraceAdapter.PARAM_SPECS[1].default, 2)
 
     def test_depth_custom(self):
         args = create_trace_parser().parse_args(['--from', 'f', '--depth', '4'])
-        self.assertEqual(args.depth, 4)
+        self.assertEqual(args.depth, '4')  # generated binding converts once after parsing
 
     def test_format_json(self):
         args = create_trace_parser().parse_args(['--from', 'f', '--format', 'json'])

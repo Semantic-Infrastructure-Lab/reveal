@@ -3,10 +3,8 @@
 Walks the call graph depth-first from a named entry point, one frame per
 definition, and builds a depth-indented narrative: each frame shows the function
 location, its parameters, classified side-effects, and what it calls next.
-Scan/render logic lives here (BACK-901/BACK-960); `cli/commands/trace.py` is
-a thin argparse shim over this adapter, unchanged in its own CLI/MCP
-contract (BACK-216/BACK-839 — `reveal trace` and the `reveal_trace` MCP
-tool both keep working exactly as before).
+Scan/render logic and required-answer proof live here; CLI, URI and MCP use the
+same declared binding and canonical outcome path.
 """
 
 from __future__ import annotations
@@ -20,7 +18,8 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils import print_json_result
-from ..utils.query import parse_query_params
+from ..utils.query_binding import bind_declared_params
+from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec, param_schema, peek_query_items
 from ..utils.path_utils import to_posix
 from ..utils.results import ResultBuilder
 
@@ -519,6 +518,101 @@ class TraceRenderer:
         _render_trace(result)
 
 
+def _trace_selector(value: Any) -> str:
+    if not isinstance(value, str) or not value.strip() or '\x00' in value:
+        raise ValueError('from requires a nonempty scalar string')
+    return value
+
+
+def _trace_depth(value: Any) -> int:
+    if type(value) is int:
+        return max(1, min(value, 5))
+    if isinstance(value, str) and re.fullmatch(r'[+-]?[0-9]+', value.strip()):
+        return max(1, min(int(value), 5))
+    raise ValueError('depth requires a signed whole integer')
+
+
+def _trace_frame_valid(frame: Any, depth: int) -> bool:
+    if not isinstance(frame, dict):
+        return False
+    scalar = (isinstance(frame.get('name'), str) and bool(frame['name'])
+              and isinstance(frame.get('file'), str) and _trace_count(frame.get('line'))
+              and _trace_count(frame.get('depth')) and frame['depth'] <= depth
+              and type(frame.get('resolved')) is bool and type(frame.get('ambiguous')) is bool)
+    return scalar and all(_trace_strings(frame.get(field)) for field in ('params', 'effects', 'calls'))
+
+
+def _trace_candidates_valid(frame: Dict[str, Any]) -> bool:
+    if not frame['ambiguous']:
+        return True
+    candidates = frame.get('candidates')
+    return isinstance(candidates, list) and bool(candidates) and all(
+        isinstance(candidate, dict) and isinstance(candidate.get('file'), str) and bool(candidate['file'])
+        and _trace_count(candidate.get('line')) for candidate in candidates)
+
+
+def _trace_placeholder(result: Dict[str, Any]) -> bool:
+    return (result.get('frames') == [_frame(result.get('root', ''), None, 0)]
+            and result.get('total_resolved') == result.get('total_unresolved') == 0)
+
+
+def _trace_absence_diagnostic_error(result: Dict[str, Any]) -> Optional[str]:
+    meta = result.get('meta') or {}
+    errors = meta.get('errors', []) if isinstance(meta, dict) else []
+    for entry in errors if isinstance(errors, list) else []:
+        if isinstance(entry, dict) and entry.get('code') == 'trace_root_not_found':
+            if not _trace_placeholder(result) or entry.get('message') != _trace_root_message(result):
+                return 'Trace absence diagnostic lacks canonical root-absence proof'
+    return None
+
+
+def _trace_proof_error(result: Any) -> Optional[str]:
+    if not isinstance(result, dict):
+        return 'Trace required answer must be an object'
+    if not all(isinstance(result.get(field), str) and result[field] for field in ('root', 'path')):
+        return 'Trace required root/path identity is missing or malformed'
+    depth = result.get('depth')
+    if type(depth) is not int or not 1 <= depth <= 5:
+        return 'Trace required depth is missing or malformed'
+    if not all(_trace_count(result.get(field)) for field in ('total_resolved', 'total_unresolved')):
+        return 'Trace required edge totals are missing or malformed'
+    frames = result.get('frames')
+    if not isinstance(frames, list) or not frames:
+        return 'Trace required frames are missing or malformed'
+    if not all(_trace_frame_valid(frame, depth) and _trace_candidates_valid(frame) for frame in frames):
+        return 'Trace required renderer frame evidence is malformed'
+    if not isinstance(result.get('warnings'), list) or not all(isinstance(w, str) for w in result['warnings']):
+        return 'Trace required warning strings are missing or malformed'
+    return _trace_absence_diagnostic_error(result)
+
+
+def _trace_root_message(result: Dict[str, Any]) -> str:
+    return f"Entry point '{result['root']}' not found in {result['path']}"
+
+
+def _trace_missing_evidence(result: Dict[str, Any]) -> bool:
+    meta = result.get('meta') or {}
+    if not isinstance(meta, dict):
+        return True
+    errors, warnings = meta.get('errors', []), meta.get('warnings', [])
+    if not isinstance(errors, list) or not isinstance(warnings, list):
+        return True
+    if any(not isinstance(entry, dict) for entry in [*errors, *warnings]):
+        return True
+    required = {'analysis_failed', 'parse_recovered', 'partial_parse', 'parse_degraded',
+                'worker_lost', 'check_rules_failed', 'analysis_incomplete'}
+    return (any(entry.get('code') != 'trace_root_not_found' for entry in errors)
+            or any(entry.get('type') in required for entry in warnings))
+
+
+def _trace_absent(result: Dict[str, Any]) -> bool:
+    if _trace_proof_error(result) or _trace_missing_evidence(result):
+        return False
+    if result.get('error') and result['error'] != _trace_root_message(result):
+        return False
+    return _trace_placeholder(result)
+
+
 @register_adapter('trace')
 @register_renderer(TraceRenderer)
 class TraceAdapter(ResourceAdapter):
@@ -531,10 +625,61 @@ class TraceAdapter(ResourceAdapter):
     RESOURCE_IS_PATH = True  # a typo'd path exits 1, not 'entry point has no calls' (BACK-1524)
     CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # --no-gitignore (BACK-1386)
 
-    def __init__(self, resource: str, query: Optional[str] = None):
-        self.path = str(Path(resource).expanduser())
-        self.query_params = parse_query_params(query or '', coerce=True)
-        self._warn_unknown_query_params(self.query_params)  # BACK-507
+    RESULT_TYPE = 'trace'
+    FINDINGS_POLICIES = ('none',)
+    DEFAULT_FAIL_ON = 'none'
+    RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
+    PARAM_SPECS = (
+        ParamSpec('from', 'string', 'Entry-point function; FILE:FUNC selects a definition', None,
+                  _trace_selector, required=True, uri_codec='percent', role='analysis',
+                  examples=('from=main', 'from=src/app.py:run'),
+                  cli=CliBinding(('--from',), dest='root', required=True, metavar='FUNC')),
+        ParamSpec('depth', 'integer', 'Call levels to expand (signed whole integer, clamped 1-5)', 2,
+                  _trace_depth, role='analysis', examples=('depth=4',),
+                  cli=CliBinding(('--depth',), metavar='N')),
+    )
+
+    def __init__(self, resource: str, query: Optional[str] = None, *,
+                 params: Optional[Dict[str, Any]] = None):
+        self.path = to_posix(Path(resource).expanduser())
+        if params is not None:
+            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
+                self.PARAM_SPECS, params, transport='typed')
+        else:
+            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
+        self._warn_unknown_query_params(self.query_params)
+
+    def answer_requirement_error(self, result, expected_type, prior_facts=None):
+        from ..utils.results import AnalysisCompleteness, FailureCause
+        error = _trace_proof_error(result)
+        if error:
+            return error
+        supplied = dict(peek_query_items(self.query_params))
+        if (result['root'] != supplied.get('from') or result['path'] != self.path
+                or result['depth'] != supplied.get('depth', 2)):
+            return 'Trace answer identity differs from the validated request'
+        if _trace_absent(result) and prior_facts is not None:
+            prior_usage = (prior_facts.completeness is AnalysisCompleteness.COMPLETE
+                           and prior_facts.failures == frozenset({FailureCause.INVALID_REQUEST}))
+            if not prior_usage:
+                return 'Trace postprocessing cannot establish absent root from prior analysis'
+        return None
+
+    def public_diagnostic(self, result):
+        return _trace_root_message(result) if _trace_absent(result) else None
+
+    @staticmethod
+    def execution_facts(result):
+        from ..utils.results import (AnalysisCompleteness, ExecutionFacts, FailureCause,
+                                     result_execution_facts, failure_execution_facts)
+        if _trace_proof_error(result):
+            return failure_execution_facts(FailureCause.ANALYSIS)
+        if _trace_absent(result):
+            return ExecutionFacts(AnalysisCompleteness.COMPLETE,
+                                  failures=frozenset({FailureCause.INVALID_REQUEST}))
+        state = (AnalysisCompleteness.INCOMPLETE if _trace_missing_evidence(result)
+                 else AnalysisCompleteness.COMPLETE)
+        return result_execution_facts(result, completeness=state)
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -570,10 +715,9 @@ class TraceAdapter(ResourceAdapter):
             'adapter': 'trace',
             'description': 'Execution narrative: depth-first call-graph walk from a named entry point',
             'uri_syntax': 'trace://<path>?from=<FUNC>&depth=2',
-            'query_params': {
-                'from': {'type': 'string', 'description': 'Entry-point function to start the trace from (required); `<file>:<name>` picks one of several same-named definitions', 'examples': ['from=main', 'from=src/app.py:run']},
-                'depth': {'type': 'integer', 'description': 'How many call levels to expand (clamped 1-5, default 2)', 'examples': ['depth=4']},
-            },
+            'resource': TraceAdapter.RESOURCE_SPEC.schema(),
+            'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none']},
+            'query_params': param_schema(TraceAdapter.PARAM_SPECS),
             'elements': {},
             'supports_batch': False,
             'supports_advanced': False,
@@ -599,11 +743,8 @@ class TraceAdapter(ResourceAdapter):
         }
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
-        root = self.query_params.get('from')
-        if not root:
-            raise ValueError("trace:// requires a 'from' query param naming the entry-point function")
-        depth_raw = self.query_params.get('depth')
-        depth = max(1, min(int(depth_raw) if depth_raw is not None else 2, 5))
+        root = self.PARAM_SPECS[0].read(self.query_params)
+        depth = self.PARAM_SPECS[1].read(self.query_params)
 
         report = _build_trace(self.path, str(root), depth)
         meta = report.pop('meta', {})
@@ -611,10 +752,12 @@ class TraceAdapter(ResourceAdapter):
             self.record_composed_error('collect_structures', problem['file'], ValueError(problem['message']))
         self.fold_meta(meta)
 
-        return ResultBuilder.create(
+        result = ResultBuilder.create(
             result_type='trace',
             source=self.path,
             contract_version=CONTRACT_VERSION,
             data=report,
             meta=dict(self.composed_meta() or {}) or None,
         )
+
+        return result

@@ -120,7 +120,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      help_guide='guides/TESTABILITY_GUIDE.md'),  # testability:// guide is a stub
     'trace':        _spec('trace',
                      'reveal trace --from FUNC',
-                     'Walk call graph from a named entry point; depth-indented narrative with side-effect classification'),
+                     'Walk call graph from a named entry point; depth-indented narrative with side-effect classification')._replace(declared_adapter='trace'),
 }
 
 

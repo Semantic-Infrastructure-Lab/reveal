@@ -1151,6 +1151,19 @@ def _answer_diagnostic(result: dict, previous: Optional[str] = None) -> Optional
     return diagnostic
 
 
+def _public_answer_diagnostic(adapter, result: dict, facts) -> Optional[str]:
+    """A qualified owner may provide an authored diagnostic for usage failure."""
+    from ...utils.results import FailureCause
+    if facts is None or FailureCause.INVALID_REQUEST not in facts.failures:
+        return None
+    if not callable(getattr(type(adapter), 'public_diagnostic', None)):
+        return None
+    diagnostic = adapter.public_diagnostic(result)
+    if diagnostic is not None:
+        result['error'] = diagnostic
+    return diagnostic
+
+
 def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
                       scheme: Optional[str] = None, resource: Optional[str] = None, *,
                       source_path: Optional[str] = None, facts_of: Optional[Callable] = None,
@@ -1194,6 +1207,8 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
         if available_elements:
             result['available_elements'] = available_elements
 
+    public_diagnostic = _public_answer_diagnostic(adapter, result, facts)
+
     # Last, so it selects from the result the user would otherwise see (BACK-1607).
     result = _apply_field_selection(result, args, scheme)
     answer = Answer(result, 'structure',
@@ -1201,7 +1216,7 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
                                          exit_code=getattr(renderer_class, 'exit_code', None),
                                          execution_facts=facts, execution_answer=answer,
                                          **_render_structure_top_kwargs(renderer_class, args, adapter)),
-                    execution_facts=facts, private_diagnostic=private_diagnostic)
+                    execution_facts=facts, private_diagnostic=private_diagnostic, public_diagnostic=public_diagnostic)
     return answer
 
 

@@ -246,11 +246,21 @@ def _raise_if_tool_failure(result: str, tool_name: str) -> str:
     return result
 
 
+def _trace_absence_compatibility(answer) -> bool:
+    """Only owner-qualified trace absence retains the historical MCP nonerror."""
+    from .utils.results import AnalysisCompleteness, FailureCause
+    return (answer.result.get('type') == 'trace' and answer.public_diagnostic is not None
+            and answer.execution_facts.completeness is AnalysisCompleteness.COMPLETE
+            and answer.execution_facts.failures == frozenset({FailureCause.INVALID_REQUEST}))
+
+
 def _declared_failure(answer) -> str | None:
     """Consume owner facts and diagnostic origin, never rendered result text."""
     from .utils.results import AnalysisCompleteness, FailureCause
     facts = answer.execution_facts
     if facts is None:
+        return None
+    if FailureCause.OUTPUT not in facts.failures and _trace_absence_compatibility(answer):
         return None
     failed = (facts.completeness in (AnalysisCompleteness.FAILED, AnalysisCompleteness.NOT_STARTED)
               or FailureCause.OUTPUT in facts.failures or FailureCause.INVALID_REQUEST in facts.failures)
@@ -262,6 +272,28 @@ def _declared_failure(answer) -> str | None:
     if answer.public_diagnostic is not None:
         return _tool_failure(answer.public_diagnostic)
     return _tool_failure(answer.private_diagnostic or 'Required analysis or output failed', public=False)
+
+
+def _run_declared_tool(fn, *args, **kwargs) -> str:
+    """Capture one qualified consumer while retaining canonical outcome evidence."""
+    answers = []
+
+    def consume(answer):
+        from .utils.results import AnalysisCompleteness
+        answers.append(answer)
+        if _declared_failure(answer) is not None:
+            return
+        if answer.execution_facts.completeness is AnalysisCompleteness.INCOMPLETE:
+            answer.result.setdefault('meta', {}).setdefault('warnings', []).append(
+                {'type': 'analysis_incomplete', 'message': 'Required analysis is incomplete; usable evidence follows.'})
+        answer.emit()
+
+    output = _run_and_capture(fn, *args, answer_consumer=consume, **kwargs)
+    if answers:
+        failure = _declared_failure(answers[-1])
+        if failure is not None:
+            return failure
+    return output
 
 
 def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = None):
@@ -541,25 +573,8 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
     # _run_and_capture's own internal acquisition below doesn't deadlock.
     with _capture_lock, invocation_scope(invocation):
         apply_global_flags(args)
-        answers = []
-
-        def consume(answer):
-            from .utils.results import AnalysisCompleteness
-            answers.append(answer)
-            if _declared_failure(answer) is not None:
-                return
-            if answer.execution_facts.completeness is AnalysisCompleteness.INCOMPLETE:
-                answer.result.setdefault('meta', {}).setdefault('warnings', []).append(
-                    {'type': 'analysis_incomplete', 'message': 'Required analysis is incomplete; usable evidence follows.'})
-            answer.emit()
-
         try:
-            output = _run_and_capture(handle_uri, uri, None, args, answer_consumer=consume)
-            if answers:
-                failure = _declared_failure(answers[-1])
-                if failure is not None:
-                    return failure
-            return output
+            return _run_declared_tool(handle_uri, uri, None, args)
         finally:
             set_provenance_enabled(False)
 
@@ -818,14 +833,22 @@ def reveal_trace(path: str, entry_point: str, depth: int = 2) -> str:
         depth: Call levels to expand, 1-5 (default 2)
     """
     from pathlib import Path
-    from .cli.commands.trace import run_trace
+    from .cli.routing.declared import run_declared_command
+    from .cli.invocation import Invocation, invocation_scope
+    from .utils.json_utils import set_provenance_enabled
 
     p = Path(path)
     if not p.exists():
         return _tool_failure(f"path not found: {path}")
 
     args = _default_args(path=str(p), root=entry_point, depth=depth, format='text')
-    return _run_and_capture(run_trace, args)
+    invocation = Invocation.parse(['reveal', 'trace', str(p), '--from', entry_point, '--depth', str(depth)])
+    with _capture_lock, invocation_scope(invocation):
+        apply_global_flags(args)
+        try:
+            return _run_declared_tool(run_declared_command, 'trace', args)
+        finally:
+            set_provenance_enabled(False)
 
 
 # ---------------------------------------------------------------------------

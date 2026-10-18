@@ -150,15 +150,15 @@ def test_renderer_deduplicates_exact_messages_only_and_never_mutates_json(tree):
 
 
 @pytest.mark.parametrize('transport', ['cli', 'uri'])
-def test_canonical_text_prints_typed_diagnostics_once_with_legacy_exit(failed_tree, transport):
+def test_canonical_text_prints_typed_diagnostics_once_with_incomplete_exit(failed_tree, transport):
     request = ['trace', str(failed_tree), '--from', 'main'] if transport == 'cli' else ['trace://'+str(failed_tree)+'?from=main']
     result = run(*request)
-    assert result.returncode == 0
+    assert result.returncode == 3
     assert result.stdout.count('7 file(s) could not be analyzed') == 1
 
 
-@pytest.mark.parametrize('transport,expected', [('cli', 1), ('uri', 0)])
-def test_unknown_root_keeps_legacy_exit_policy(tree, transport, expected):
+@pytest.mark.parametrize('transport,expected', [('cli', 2), ('uri', 2)])
+def test_unknown_root_uses_qualified_usage_policy(tree, transport, expected):
     request = ['trace', str(tree), '--from', 'absent'] if transport == 'cli' else ['trace://'+str(tree)+'?from=absent']
     assert run(*request, '--format', 'json').returncode == expected
 
