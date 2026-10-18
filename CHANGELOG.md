@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `git://` on a repository libgit2 refuses to open (e.g. a `safe.directory` ownership refusal) now fails with that reason from `get_metadata` too, instead of returning metadata with no path that callers read as "not a repository" (BACK-1845).
 
 ### Fixed
+- Contracts retains required activation, shared-structure and native-scanner directory loss before output cuts. Valid surviving requested rows support partial results; unavailable or malformed analysis fails safely with attributed CLI diagnostics. Numeric confidence is withheld for unknown missing populations, while clean and parse-only behavior remain unchanged (BACK-2020).
 - Depends retains attributed required directory loss through graph evidence, warnings and source accounting, reduces descriptive confidence and qualifies positive counts/rankings as observed. DOT carries loss warnings as comments; clean outputs and legacy exits/MCP policy remain unchanged (BACK-2019).
 - Contracts text shows actual returned implementation rows even when the scanner's contract count is zero, including Rust implementations of external traits. Counts and implementer caps retain their existing meaning (BACK-2021).
 - Deps, Architecture and Overview retain required directory-loss outcomes before ranking and projection. Valid surviving domain observations support useful partial results; unavailable or malformed required analysis becomes an MCP error. Clean zero results and independent physical Stats measurements remain usable (BACK-2018).
