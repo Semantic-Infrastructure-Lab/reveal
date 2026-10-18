@@ -506,6 +506,19 @@ Overview and Hotspots consume this propagated AST warning as required incomplete
 This is bounded consumer coverage: other walkers and the Calls, Contracts and transitive
 side-effect collection carriers are not yet qualified for directory failure disclosure.
 
+Inspection failure for an ambiguous `build`/`dist` directory does not prove noise,
+including a missing child from a stale listing. Normal descent remains eligible:
+it may recover, or its error reaches the qualified traversal consumers above.
+If inspection fails transiently and descent succeeds, otherwise-noise nested source
+may conservatively enter the population. Reserved noise, known virtualenv markers
+and explicit exclusion policies keep their rules. This does not qualify the other
+walkers and consumers listed above.
+
+Calls indexes built from known traversal-incomplete structure collections are
+returned for the current request but are evicted rather than cached. This guard applies at
+cache write; validation of existing warm hits, separate reference caches and full
+Calls directory diagnostics remain outside this bounded repair.
+
 Shared AST file analysis also discloses required parser loss as `analysis_failed`:
 an existing `parse_error` (including an empty message), malformed consumed analyzer
 output, or required `meta.errors` survives flattening into the answer. Usable
