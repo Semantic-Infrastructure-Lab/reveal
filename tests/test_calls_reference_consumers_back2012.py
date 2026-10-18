@@ -114,11 +114,13 @@ def test_reference_loss_in_empty_structural_collection_reaches_envelope(tmp_path
     root = tmp_path / 'affected'
     root.mkdir()
     reference = root / 'references.py'
-    reference.write_text('BOUND = kept\n', encoding='utf-8')
+    reference.write_text('def structural_element():\n    return 1\n\nBOUND = kept\n', encoding='utf-8')
     real = analysis.create_element_dict
+    structural_attempts = []
 
     def skip(path, *args, **kwargs):
         if Path(path) == reference:
+            structural_attempts.append(path)
             raise ValueError('controlled structural loss')
         return real(path, *args, **kwargs)
 
@@ -126,6 +128,7 @@ def test_reference_loss_in_empty_structural_collection_reaches_envelope(tmp_path
     reference_read_loss(monkeypatch, reference)
     result = CallsAdapter(str(root), 'uncalled').get_structure()
     assert result['total_defined'] == 0
+    assert len(structural_attempts) == 1
     assert str(root) not in index._REFERENCE_CACHE
     (warning,) = [w for w in result['meta']['warnings'] if w.get('type') == 'analysis_failed']
     assert warning['count'] == 1, 'one file lost in two passes must remain one missing file'
