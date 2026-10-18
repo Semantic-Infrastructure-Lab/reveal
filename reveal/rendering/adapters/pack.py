@@ -54,12 +54,13 @@ def _used_line_total(meta: Dict[str, Any]) -> str:
 
 
 def _pack_empty_line(meta: Dict[str, Any]) -> str:
-    if _stat_measurement_incomplete(meta):
-        if meta['total_candidates'] == 0:
-            return 'No eligible files were measured; candidate file measurements are unavailable.'
-        return 'No observed measured eligible files fit within budget; file measurements are incomplete.'
+    stat_incomplete = _stat_measurement_incomplete(meta)
+    if stat_incomplete and meta['total_candidates'] == 0:
+        return 'No eligible files were measured; candidate file measurements are unavailable.'
     if meta.get('line_budget_incomplete'):
         return 'No files selected: line costs are unavailable or exceed the budget.'
+    if stat_incomplete:
+        return 'No observed measured eligible files fit within budget; file measurements are incomplete.'
     if not _candidate_discovery_incomplete(meta):
         return 'No files fit within budget.'
     if meta['total_candidates'] == 0:
