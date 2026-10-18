@@ -982,15 +982,19 @@ def _census_from_counts(counts: Dict[str, Dict[str, Any]]) -> 'ScopeCensus':
     )
 
 
-def assess_language_coverage(path: Path, supported_languages: Set[str]) -> LanguageCoverage:
+def assess_language_coverage(
+    path: Path, supported_languages: Set[str], *,
+    on_error: Optional[Callable[[OSError], None]] = None,
+) -> LanguageCoverage:
     """Census *path*'s code files by language and compare against a command's
     supported set (registry language keys, e.g. ``{'python', 'typescript', 'tsx'}``).
 
     See :class:`LanguageCoverage` for how the result is used. Callers that
     also need the full BACK-884 scope census for the same tree should use
-    :func:`census_and_coverage_for_path` instead, to avoid walking twice.
+    :func:`census_and_coverage_for_path` instead, to avoid walking twice. Optional
+    *on_error* retains enumeration failures from this same census walk.
     """
-    counts = tally_files_by_language(_walk_code_files(path))
+    counts = tally_files_by_language(_walk_code_files(path, on_error=on_error))
     return _coverage_from_counts(counts, supported_languages)
 
 

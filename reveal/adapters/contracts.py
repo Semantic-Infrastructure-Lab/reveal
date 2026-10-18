@@ -188,9 +188,11 @@ def _scan_contracts(
     # for a mostly-unsupported tree (see surface.py / assess_language_coverage).
     # BACK-DD-1: reuse surface.py's single source of truth rather than a
     # second hardcoded literal that can silently drift from it.
+    coverage_failures: List[Tuple[Optional[str], str]] = []
     coverage = assess_language_coverage(
         path,
         _supported_coverage_languages(),
+        on_error=partial(_record_traversal_error, coverage_failures),
     )
     coverage_dict = coverage.to_scope_dict('contracts')
 
@@ -207,6 +209,7 @@ def _scan_contracts(
             'unsupported_language': unsupported_language,
             'coverage': coverage_dict,
             '_traversal_failures': traversal_failures,
+            '_coverage_failures': coverage_failures,
         }
 
     # collect_structures parses every tree-sitter-supported file in `path` in
@@ -248,6 +251,7 @@ def _scan_contracts(
         result = _run(active[0])
         result['coverage'] = coverage_dict
         result['_traversal_failures'] = traversal_failures
+        result['_coverage_failures'] = coverage_failures
         return _with_analysis_skipped(result, analysis_skipped, recovered=recovered_files)
 
     by_language = {name: _run(name) for name in active}
@@ -261,6 +265,7 @@ def _scan_contracts(
         'coverage': coverage_dict,
         'by_language': by_language,
         '_traversal_failures': traversal_failures,
+        '_coverage_failures': coverage_failures,
     }
     # BACK-1588: only the tree-sitter scanners (Go/Rust/Ruby/C++) have an unparsed
     # channel, so the key is present only when one of them ran.
@@ -901,15 +906,19 @@ def _contract_observations(report: Dict[str, Any]) -> bool:
     return observed
 
 
-def _discovery_error(report: Dict[str, Any], failures: List[Tuple[Optional[str], str]]) -> Optional[str]:
+def _discovery_error(
+    report: Dict[str, Any], failures: List[Tuple[Optional[str], str]], *,
+    coverage_only: bool = False,
+) -> Optional[str]:
     if not failures:
         return None
+    context = 'Required language-coverage census' if coverage_only else 'Required directory discovery'
     try:
         usable = _contract_observations(report)
     except ValueError as exc:
-        return f'Required directory discovery failed and the contract report is invalid: {exc}'
+        return f'{context} failed and the contract report is invalid: {exc}'
     if not usable:
-        return 'Required directory discovery failed and no contract or implementation observations survived'
+        return f'{context} failed and no contract or implementation observations survived'
     return None
 
 
@@ -1044,12 +1053,18 @@ class ContractsAdapter(ResourceAdapter):
 
         report = _scan_contracts(Path(self.path), abstract_only=abstract_only, show_implementations=show_implementations)
         traversal_failures = report.pop('_traversal_failures', [])
+        coverage_failures = report.pop('_coverage_failures', [])
         report['impls_cap'] = impls_cap  # the text view's per-contract cap; the lists themselves are whole
 
         warnings: List[Any] = []
         traversal_warning = traversal_failed_warning(traversal_failures, Path(self.path))
         if traversal_warning:
             warnings.append(traversal_warning)
+        census_warning = traversal_failed_warning(coverage_failures, Path(self.path))
+        if census_warning:
+            census_warning['message'] = ('Required language-coverage census is incomplete; '
+                                         'counts reflect only observed files: ' + census_warning['message'])
+            warnings.append(census_warning)
         coverage_warning = report.get('coverage', {}).get('warning', '')
         if coverage_warning:
             warnings.append({'code': 'W-CONTRACTS-1', 'message': coverage_warning})
@@ -1070,17 +1085,20 @@ class ContractsAdapter(ResourceAdapter):
             {'code': 'E_CONTRACTS_ANALYSIS', 'file': file, 'message': cause}
             for file, cause in skipped]
 
-        discovery_error = _discovery_error(report, traversal_failures)
+        discovery_error = _discovery_error(
+            report, traversal_failures or coverage_failures,
+            coverage_only=not traversal_failures)
         if discovery_error:
             report['error'] = discovery_error
-            errors.append({'code': 'E_CONTRACTS_DISCOVERY', 'message': discovery_error})
+            errors.append({'code': 'E_CONTRACTS_DISCOVERY' if traversal_failures else 'E_CONTRACTS_COVERAGE',
+                           'message': discovery_error})
 
         return ResultBuilder.create(
             result_type=self.RESULT_TYPE,
             source=self.path,
             contract_version=CONTRACT_VERSION,
             parse_mode='ast+tree_sitter',
-            confidence=None if traversal_failures else 0.7,
+            confidence=None if traversal_failures or coverage_failures else 0.7,
             warnings=warnings,
             errors=errors,
             data=report,
