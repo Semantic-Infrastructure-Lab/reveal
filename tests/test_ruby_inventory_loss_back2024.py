@@ -229,7 +229,7 @@ def test_frozen_fact_cache_and_historical_pair_controls_share_one_build(tmp_path
     assert len(events) == 1 and repeated is facts
     assert pair == (facts.local_names, facts.external_names)
     assert facts.root == tmp_path and isinstance(facts.traversal_failures, tuple)
-    assert facts.traversal_failures[0][0] == (tmp_path / 'core').as_posix()
+    assert Path(facts.traversal_failures[0][0]).resolve() == (tmp_path / 'core').resolve()
     info = generic._ruby_gem_inventory.cache_info()
     assert info.misses == 1 and info.hits == 2 and info.currsize == 1
     with pytest.raises(FrozenInstanceError):
