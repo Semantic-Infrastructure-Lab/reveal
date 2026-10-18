@@ -68,6 +68,10 @@ the MCP result — check that field rather than string-matching the response tex
 Input and operating-system failures retain actionable diagnostics. Unexpected
 crashes return generic feedback; their original details are logged on the server.
 Ordinary source text beginning with an error-like prefix remains tool output.
+Declared queries (architecture, contracts, deps, hotspots, overview, surface)
+retain canonical analysis and output outcomes: fully failed analysis or required
+output failure signals an error even when a renderer printed text. Usable partial
+analysis stays a normal result with an explicit incompleteness warning.
 A negative *verdict* from the tool itself (e.g. `reveal_health` returning FAIL, or
 `reveal_check` finding issues) is not a call failure and always comes back with
 `isError: false` — that's real output, not an error.

@@ -53,7 +53,7 @@ def validate_execution_policy(args, command: str | None = None) -> None:
         sys.exit(2)
 
 
-def run_declared_command(name: str, args) -> None:
+def run_declared_command(name: str, args, *, answer_consumer=None) -> None:
     """Bind original argparse values; no URI string is constructed."""
     adapter = declared_adapter_class(name)
     source = {}
@@ -64,23 +64,26 @@ def run_declared_command(name: str, args) -> None:
         if dest in vars(args):
             source[dest] = peek(args, dest)
             delegate(args, dest, spec.name)
-    _run_declared(name, args, getattr(args, adapter.RESOURCE_SPEC.name), source, 'typed')
+    _run_declared(name, args, getattr(args, adapter.RESOURCE_SPEC.name), source, 'typed',
+                  answer_consumer=answer_consumer)
 
 
-def run_declared_uri(uri: str, element: str | None, args, consumed=()) -> None:
+def run_declared_uri(uri: str, element: str | None, args, consumed=(), *, answer_consumer=None) -> None:
     name, _, resource = uri.partition('://')
     path, _, query = resource.partition('?')
     if element:
         print(f'Error: {name} does not support element selection.', file=sys.stderr)
         sys.exit(2)
-    _run_declared(name, args, path, query, 'uri', consumed)
+    _run_declared(name, args, path, query, 'uri', consumed, answer_consumer=answer_consumer)
 
 
-def _run_declared(name: str, args, path: str, source: Any, transport: str, consumed=()) -> None:
+def _run_declared(name: str, args, path: str, source: Any, transport: str, consumed=(), *,
+                  answer_consumer=None) -> None:
     from ...utils.exclusions import dispatch_scope, exclusion_scope
     from ...utils.gitignore import gitignore_scope, split_respect_gitignore
     from ...utils.query_binding import bind_resource_path, prepare_declared_params
     adapter = declared_adapter_class(name)
+    consume = answer_consumer or (lambda answer: answer.emit())
     from .formats import declared_output_formats, require_supported_format
     require_supported_format(args, declared_output_formats(adapter), f'{name}://')
     validate_execution_policy(args, name)
@@ -107,21 +110,21 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
             try:
                 path = bind_resource_path(adapter.RESOURCE_SPEC, os.path.expanduser(path), transport=transport)
             except ValueError as exc:
-                _invalid_answer(adapter, name, path, str(exc), args, result_type=expected_type).emit()
+                consume(_invalid_answer(adapter, name, path, str(exc), args, result_type=expected_type))
                 return
             except OSError as exc:
                 from ...utils.results import FailureCause
-                _invalid_answer(adapter, name, path, str(exc), args, FailureCause.ANALYSIS, result_type=expected_type).emit()
+                consume(_invalid_answer(adapter, name, path, str(exc), args, FailureCause.ANALYSIS, result_type=expected_type))
                 return
             try:
                 root, excludes = dispatch_scope(path, peek(args, 'exclude'))
             except OSError as exc:
                 from ...utils.results import FailureCause
-                _invalid_answer(adapter, name, path, str(exc), args, FailureCause.ANALYSIS,
-                                result_type=expected_type).emit()
+                consume(_invalid_answer(adapter, name, path, str(exc), args, FailureCause.ANALYSIS,
+                                        result_type=expected_type))
                 return
             with exclusion_scope(root, excludes), gitignore_scope(respect):
-                _declared_answer(adapter, name, path, source, transport, args, expected_type).emit()
+                consume(_declared_answer(adapter, name, path, source, transport, args, expected_type))
             complete(args)
     finally:
         if ledger is not None and ledger.complete:
@@ -167,11 +170,13 @@ def _invalid_answer(adapter, name, path, message, args, cause=None, *, result_ty
         (result_type or adapter.RESULT_TYPE), path, contract_version=CONTRACT_VERSION,
         source_type='unknown', errors=[{'code': cause.value, 'message': message}], error=message)
     facts = failure_execution_facts(cause)
-    return Answer(result, 'router', lambda: _emit_result(
-        result, args, name, _render_router_result, execution_facts=facts))
+    answer = Answer(result, 'router', lambda: _emit_result(
+        result, args, name, _render_router_result, execution_facts=facts, execution_answer=answer),
+        execution_facts=facts, public_diagnostic=message)
+    return answer
 
 
-def emit_declared_result(result, args, scheme, render, facts, **render_kwargs) -> None:
+def emit_declared_result(result, args, scheme, render, facts, *, execution_answer=None, **render_kwargs) -> None:
     """Finalize selected D6 facts; legacy emitters keep their existing policy."""
     from ...display.formatting import print_result_control_notes
     from ...rendering.base import emit_rendered
@@ -190,6 +195,8 @@ def emit_declared_result(result, args, scheme, render, facts, **render_kwargs) -
         result.setdefault('meta', {}).setdefault('output_errors', []).append(
             {'code': 'artifact_write_failed', 'message': message})
         facts = merge_execution_facts(facts, failure_execution_facts(FailureCause.OUTPUT))
+        if execution_answer is not None:
+            execution_answer.exception = exc
     code = execution_exit_code(facts, fail_on=policy)
     try:
         if args.format == 'json':
@@ -207,7 +214,12 @@ def emit_declared_result(result, args, scheme, render, facts, **render_kwargs) -
             os.close(fd)
     except Exception as exc:  # boundary-ok: broad-except -- selected output boundary contains renderer/plugin failures, discloses required output failure and exits 3
         print(f'Error: Requested output failed: {exc}', file=sys.stderr)
+        facts = merge_execution_facts(facts, failure_execution_facts(FailureCause.OUTPUT))
+        if execution_answer is not None:
+            execution_answer.exception = exc
         code = 3
+    if execution_answer is not None:
+        execution_answer.execution_facts = facts
     if code != 2:
         complete(args)
     if code:

@@ -244,6 +244,24 @@ def _raise_if_tool_failure(result: str, tool_name: str) -> str:
     return result
 
 
+def _declared_failure(answer) -> str | None:
+    """Consume owner facts and diagnostic origin, never rendered result text."""
+    from .utils.results import AnalysisCompleteness, FailureCause
+    facts = answer.execution_facts
+    if facts is None:
+        return None
+    failed = (facts.completeness in (AnalysisCompleteness.FAILED, AnalysisCompleteness.NOT_STARTED)
+              or FailureCause.OUTPUT in facts.failures or FailureCause.INVALID_REQUEST in facts.failures)
+    if not failed:
+        return None
+    if answer.exception is not None:
+        exc = answer.exception
+        return _tool_failure(str(exc), public=isinstance(exc, OSError), exception=exc)
+    if answer.public_diagnostic is not None:
+        return _tool_failure(answer.public_diagnostic)
+    return _tool_failure('Required analysis or output failed', public=False)
+
+
 def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = None):
     """Register failures with explicit origin; retain direct Python strings."""
 
@@ -521,8 +539,25 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
     # _run_and_capture's own internal acquisition below doesn't deadlock.
     with _capture_lock, invocation_scope(invocation):
         apply_global_flags(args)
+        answers = []
+
+        def consume(answer):
+            from .utils.results import AnalysisCompleteness
+            answers.append(answer)
+            if _declared_failure(answer) is not None:
+                return
+            if answer.execution_facts.completeness is AnalysisCompleteness.INCOMPLETE:
+                answer.result.setdefault('meta', {}).setdefault('warnings', []).append(
+                    {'type': 'analysis_incomplete', 'message': 'Required analysis is incomplete; usable evidence follows.'})
+            answer.emit()
+
         try:
-            return _run_and_capture(handle_uri, uri, None, args)
+            output = _run_and_capture(handle_uri, uri, None, args, answer_consumer=consume)
+            if answers:
+                failure = _declared_failure(answers[-1])
+                if failure is not None:
+                    return failure
+            return output
         finally:
             set_provenance_enabled(False)
 

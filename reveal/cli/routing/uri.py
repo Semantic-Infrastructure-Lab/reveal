@@ -10,7 +10,7 @@ import re
 import sys
 from argparse import Namespace
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Iterator, List, NoReturn, Optional, Tuple
 
 from ...errors import NotApplicableError
@@ -18,7 +18,7 @@ from ...rendering.base import emit_rendered
 from ...reveal_types import CONTRACT_VERSION, RevealResult
 from ...utils import print_json_result, write_also_json
 from ...display.formatting import print_result_control_notes
-from ...utils.results import (Outcome, ResultBuilder, echo_source, note_truncation, outcome_of,
+from ...utils.results import (ExecutionFacts, Outcome, ResultBuilder, echo_source, note_truncation, outcome_of,
                              slice_items, truncations_of)
 from .flag_specs import exclude_fragment, inject_query_flags, strip_result_control_keys
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
@@ -41,16 +41,21 @@ class Answer:
     result: Any
     kind: str
     emit: Callable[[], None]
+    execution_facts: Optional[ExecutionFacts] = None
+    exception: Optional[Exception] = field(default=None, repr=False)
+    public_diagnostic: Optional[str] = None
 
 
 class _Answered(Exception):
     """Ends resolution with a result the router built (_fail, _decline). _answer turns it
     into the query's Answer, so a query that stops early is answered like one that ends."""
 
-    def __init__(self, result: RevealResult, detail: Optional[Callable[[], None]] = None):
+    def __init__(self, result: RevealResult, detail: Optional[Callable[[], None]] = None,
+                 exception: Optional[Exception] = None):
         super().__init__(result.get('error') or result.get('reason'))
         self.result = result
         self.detail = detail
+        self.exception = exception
 
 
 class UriUsageError(Exception):
@@ -86,7 +91,7 @@ def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
         _decline(scheme, resource, e.reason, adapter_class)
     except Exception as e:  # boundary-ok: broad-except -- the router's boundary for every adapter: the query ends as a failed result via _fail, exit 1
         logger.debug('%s:// adapter call raised', scheme, exc_info=True)
-        _fail(scheme, resource, _exception_message(e), adapter_class=adapter_class)
+        _fail(scheme, resource, _exception_message(e), adapter_class=adapter_class, exception=e)
 
 
 def _exception_message(e: Exception) -> str:
@@ -128,7 +133,8 @@ def _router_result(scheme: str, resource: str, adapter_class: Any = None, **fiel
 
 def _fail(scheme: str, resource: str, message: str, *,
           adapter_class: Any = None, code: str = 'adapter_error',
-          detail: Optional[Callable[[], None]] = None, **fields: Any) -> NoReturn:
+          detail: Optional[Callable[[], None]] = None,
+          exception: Optional[Exception] = None, **fields: Any) -> NoReturn:
     """End the query with an error result; emitted, it exits 1 (_emit_result).
 
     ``meta.errors`` carries the error once more with a code (``adapter_error`` for a raise,
@@ -137,7 +143,7 @@ def _fail(scheme: str, resource: str, message: str, *,
     """
     result = _router_result(scheme, resource, adapter_class,
                             errors=[{'code': code, 'message': message}], error=message, **fields)
-    raise _Answered(result, detail)
+    raise _Answered(result, detail, exception)
 
 
 def _decline(scheme: str, resource: str, reason: str, adapter_class: Any = None) -> NoReturn:
@@ -157,7 +163,7 @@ def _answer(resolve: Callable[[], Answer], scheme: str, args: 'Namespace', *,
     try:
         return resolve()
     except _Answered as e:
-        result, detail = e.result, e.detail  # `e` is unbound once the handler ends
+        result, detail, exception = e.result, e.detail, e.exception  # `e` is unbound once the handler ends
     if result_type is not None:
         result['type'] = result_type
     if source_path is not None:
@@ -165,9 +171,11 @@ def _answer(resolve: Callable[[], Answer], scheme: str, args: 'Namespace', *,
         result['source_type'] = ('directory' if os.path.isdir(source_path) else
                                  'file' if os.path.isfile(source_path) else 'unknown')
     facts = facts_of(result) if facts_of is not None else None
-    return Answer(result, 'router',
-                  lambda: _emit_result(result, args, scheme, _render_router_result,
-                                       execution_facts=facts, detail=detail))
+    answer = Answer(result, 'router',
+                    lambda: _emit_result(result, args, scheme, _render_router_result,
+                                         execution_facts=facts, execution_answer=answer, detail=detail),
+                    execution_facts=facts, exception=exception)
+    return answer
 
 
 def _render_router_result(result: Any, output_format: str,
@@ -241,7 +249,7 @@ def _parse_text_frontmatter(text: str) -> Optional[dict]:
 
 
 def handle_uri(uri: str, element: Optional[str], args: 'Namespace',
-               consumed: Iterable[str] = ()) -> None:
+               consumed: Iterable[str] = (), *, answer_consumer=None) -> None:
     """Answer a URI query (env://, ast://, ...) and print it.
 
     Args:
@@ -254,7 +262,7 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace',
     from .declared import declared_adapter_class, run_declared_uri
     scheme = uri.partition('://')[0]
     if declared_adapter_class(scheme) is not None and not peek(args, 'stdin', False):
-        run_declared_uri(uri, element, args, consumed)
+        run_declared_uri(uri, element, args, consumed, answer_consumer=answer_consumer)
         return
     try:
         with _dispatch(uri, element, args, consumed) as (adapter_class, scheme, resource, args):
@@ -1174,11 +1182,13 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
 
     # Last, so it selects from the result the user would otherwise see (BACK-1607).
     result = _apply_field_selection(result, args, scheme)
-    return Answer(result, 'structure',
-                  lambda: _emit_result(result, args, scheme, renderer_class.render_structure,
-                                       exit_code=getattr(renderer_class, 'exit_code', None),
-                                       execution_facts=facts,
-                                       **_render_structure_top_kwargs(renderer_class, args, adapter)))
+    answer = Answer(result, 'structure',
+                    lambda: _emit_result(result, args, scheme, renderer_class.render_structure,
+                                         exit_code=getattr(renderer_class, 'exit_code', None),
+                                         execution_facts=facts, execution_answer=answer,
+                                         **_render_structure_top_kwargs(renderer_class, args, adapter)),
+                    execution_facts=facts)
+    return answer
 
 
 def _echo_source(result: Any, adapter_class: type, resource: Optional[str]) -> None:
@@ -1190,7 +1200,7 @@ def _echo_source(result: Any, adapter_class: type, resource: Optional[str]) -> N
 
 def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render,
                  exit_code: Optional[Callable[[Any, str], int]] = None,
-                 execution_facts=None, **render_kwargs) -> None:
+                 execution_facts=None, execution_answer=None, **render_kwargs) -> None:
     """Render a URI result and turn its outcome into the exit code (BACK-1059).
 
     Every printed URI result, for the CLI and MCP alike, ends here (the emit of a
@@ -1210,7 +1220,8 @@ def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render,
     """
     if execution_facts is not None:
         from .declared import emit_declared_result
-        emit_declared_result(result, args, scheme, render, execution_facts, **render_kwargs)
+        emit_declared_result(result, args, scheme, render, execution_facts,
+                             execution_answer=execution_answer, **render_kwargs)
         return
     outcome = announce_outcome(result, f"{scheme or 'unknown'}://")
     write_also_json(result, args)
