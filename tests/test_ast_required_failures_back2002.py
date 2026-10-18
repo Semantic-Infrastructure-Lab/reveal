@@ -124,6 +124,27 @@ def test_required_failure_with_only_metadata_has_no_usable_observations(source, 
     assert failure and 'required parser branch failed' in failure
 
 
+def test_named_metadata_is_not_usable_partial_parser_evidence(source, monkeypatch):
+    _provide(monkeypatch, {
+        'metadata': [{'name': 'opaque metadata'}],
+        'meta': {'errors': [{'code': 'analysis_failed', 'message': 'required parser branch failed'}]},
+    })
+    structure, failure = analysis.analyze_file_outcome(str(source))
+    assert failure and 'required parser branch failed' in failure
+    assert structure is None
+
+
+@pytest.mark.parametrize('meta', [
+    None, [], {'errors': None}, {'errors': [None]}, {'errors': [{}]},
+    {'errors': [{'message': ''}]},
+])
+def test_malformed_required_metadata_has_nonempty_failure(source, monkeypatch, meta):
+    _provide(monkeypatch, {'meta': meta})
+    structure, failure = analysis.analyze_file_outcome(str(source))
+    assert structure is None
+    assert isinstance(failure, str) and failure.strip()
+
+
 def test_lost_grammar_reaches_existing_ast_result_beside_usable_file(tmp_path, monkeypatch):
     good = tmp_path / 'good.go'
     lost = tmp_path / 'lost.go'
