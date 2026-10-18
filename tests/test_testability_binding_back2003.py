@@ -228,3 +228,50 @@ def test_declared_text_accepts_ranked_top_without_render_failure(project, observ
     assert [kind for kind, *_ in observed['calls']] == ['patches', 'profiles']
     if partial:
         assert 'missing from the report' in response.stdout
+
+
+@pytest.mark.parametrize('spelling', ['native', 'uri'])
+def test_binding_features_cut_both_lists_before_fields_and_keep_full_artifact(project, spelling, tmp_path):
+    src, tests = project
+    _write(src / 'bridge.py', 'import requests\nimport os\ndef run():\n    open("data")\n    requests.get("https://example.com")\n    return os.getenv("TOKEN")\n')
+    artifact = tmp_path / 'answer.json'
+    if spelling == 'native':
+        args = _args(src, [tests], spelling) + ['--min-patches', '1', '--min-categories', '1', '--include-unresolved']
+    else:
+        args = _args(src, [tests], spelling, 'min_patches=1&min_categories=1&include_unresolved=true')
+    uncut = run(*args, '--format', 'json')
+    data = json.loads(uncut.stdout)
+    assert uncut.returncode == 0 and len(data['patch_hotspots']) == len(data['boundary_hotspots']) == 1
+    response = run(*args, '--max-items', '0', '--fields', 'patch_hotspots,boundary_hotspots',
+                   '--format', 'json', '--provenance')
+    data = json.loads(response.stdout)
+    assert response.returncode == 0, (response.stdout, response.stderr)
+    sidecar = run(*args, '--max-items', '0', '--fields', 'patch_hotspots,boundary_hotspots',
+                  '--also-json', str(artifact), '--provenance')
+    assert sidecar.returncode == 0, (sidecar.stdout, sidecar.stderr)
+    saved = json.loads(artifact.read_text(encoding='utf-8'))
+    assert saved['patch_hotspots'] == saved['boundary_hotspots'] == []
+    assert saved['summary']['total_patch_uses'] == saved['summary']['total_boundary_profiles'] == 1
+    from reveal.utils.results import truncations_of
+    assert truncations_of(saved) == truncations_of(data)
+    assert data['patch_hotspots'] == data['boundary_hotspots'] == []
+    assert 'summary' not in data
+    assert len(truncations_of(data)) == 2
+
+
+@pytest.mark.parametrize('value', [True, False, 1.5, float('inf'), float('nan')])
+def test_typed_numeric_controls_reject_boolean_fraction_and_nonfinite(project, value):
+    from reveal.adapters.testability import TestabilityAdapter
+    src, tests = project
+    with pytest.raises(ValueError):
+        TestabilityAdapter(str(src), params={'tests': [str(tests)], 'top': value})
+
+
+@pytest.mark.parametrize('output_format', ['text', 'json'])
+def test_verbose_override_keeps_explicit_top_unused_in_ledger(project, observed, output_format):
+    src, tests = project
+    response = run('testability', str(src), '--tests', str(tests), '--top', '1',
+                   '--verbose', '--format', output_format)
+    assert response.returncode == 0, (response.stdout, response.stderr)
+    assert observed['builds'][0]['top'] > 1
+    assert 'top' in response.stderr and 'not' in response.stderr, response.stderr
