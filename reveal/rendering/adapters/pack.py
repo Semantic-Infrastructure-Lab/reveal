@@ -47,7 +47,7 @@ def _pack_empty_line(meta: Dict[str, Any]) -> str:
     if not _candidate_discovery_incomplete(meta):
         return 'No files fit within budget.'
     if meta['total_candidates'] == 0:
-        return ('No eligible files were observed; the candidate population is unknown '
+        return ('No eligible files were observed; the candidate population is unavailable '
                 'because directory discovery was incomplete.')
     return 'No observed eligible files fit within budget; candidate discovery is incomplete.'
 
