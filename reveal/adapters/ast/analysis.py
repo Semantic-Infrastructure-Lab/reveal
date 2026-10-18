@@ -390,11 +390,89 @@ def _add_call_sites(result: Dict[str, Any], file_path: str, analyzer) -> None:
         result['jsx_call_sites'] = jsx_owner_call_sites(analyzer, result['elements'], result['jsx_references'])
 
 
+def _parser_failure(analyzer) -> Optional[str]:
+    error = getattr(analyzer, 'parse_error', None)
+    if error is None:
+        return None
+    return f"ParseError: {error or 'required parser failed without a message'}"
+
+
+def _required_metadata_failures(structure: Dict[str, Any]) -> List[str]:
+    if 'meta' not in structure:
+        return []
+    meta = structure['meta']
+    if not isinstance(meta, dict) or not isinstance(meta.get('errors', []), list):
+        return ['AnalysisError: malformed required analyzer metadata']
+    failures = []
+    for entry in meta.get('errors', []):
+        if not isinstance(entry, dict) or not isinstance(entry.get('message'), str) or not entry['message'].strip():
+            failures.append('AnalysisError: malformed required analyzer diagnostic')
+        else:
+            failures.append(f"AnalysisError: {entry['message']}")
+    return failures
+
+
+def _prepare_required_structure(structure: Any, analyzer) -> Tuple[Dict[str, Any], List[str]]:
+    """Keep valid consumed records; metadata is not another element schema."""
+    from ...structure import _CATEGORY_MAP
+    if not isinstance(structure, dict):
+        return {}, [f'AnalysisError: analyzer returned {type(structure).__name__}, expected a structure mapping']
+    prepared = dict(structure)
+    failures = _required_metadata_failures(structure)
+    categories = set(_CATEGORY_MAP) | set(getattr(analyzer, 'DECLARATION_CATEGORIES', {}))
+    for category in sorted(categories.intersection(structure)):
+        items = structure[category]
+        if not isinstance(items, list):
+            prepared[category] = []
+            failures.append(f'AnalysisError: required {category} collection is malformed')
+            continue
+        valid = [item for item in items if isinstance(item, dict)]
+        if len(valid) != len(items):
+            failures.append(f'AnalysisError: required {category} collection contains malformed records')
+            prepared[category] = valid
+    return prepared, failures
+
+
+def _has_usable_observations(result: Dict[str, Any]) -> bool:
+    named = any(isinstance(item.get('name'), str) and item['name'] for item in result['elements'])
+    calls = any(isinstance(site.get('callee'), str) and site['callee']
+                for site in result.get('module_call_sites', []))
+    return named or calls
+
+
+def _analyzer_outcome(file_path: str, analyzer, outline: bool,
+                      needle: Optional[str]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    structure = analyzer.get_outline() if outline else analyzer.get_structure()
+    if outcome_of(structure) == 'failed':
+        return None, str(structure['error'])
+    structure, failures = _prepare_required_structure(structure, analyzer)
+    parse_failure = _parser_failure(analyzer)
+    if parse_failure is not None:
+        failures.append(parse_failure)
+    if not structure:
+        if failures:
+            return None, '; '.join(failures)
+        # Empty outlines may omit imports that the existing full scan counts.
+        return analyze_file_outcome(file_path) if outline else (None, None)
+    result = _flatten_structure(file_path, structure, analyzer, outline)
+    if outline:
+        if needle is not None:
+            result['name_in_text'] = needle in getattr(analyzer, 'content', '')
+    else:
+        _add_call_sites(result, file_path, analyzer)
+    parse_failure = _parser_failure(analyzer)
+    if parse_failure is not None and parse_failure not in failures:
+        failures.append(parse_failure)
+    failure = '; '.join(failures) or None
+    return (result if failure is None or _has_usable_observations(result) else None), failure
+
+
 def analyze_file_outcome(file_path: str, outline: bool = False,
                          needle: Optional[str] = None) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-    """``(structure, failure)`` for one file: *failure* is ``"ErrorType: message"`` when
-    the analysis raised, None when it ran (structure None then means no analyzer or an
-    empty structure, not a failure).
+    """``(structure, failure)`` for one file, including returned required failures.
+
+    A failure is attributed as ``"ErrorType: message"``. Usable observations may
+    coexist with it; None without a failure means unsupported or clean empty work.
 
     ``outline=True`` (BACK-1867) builds the cheap form: elements located by name, line and
     decorators, with no metrics, calls, imports, call sites or symbol map. It is only for
@@ -408,24 +486,10 @@ def analyze_file_outcome(file_path: str, outline: bool = False,
             return None, None
 
         analyzer = analyzer_class(file_path)
-        structure = analyzer.get_outline() if outline else analyzer.get_structure()
-        if outcome_of(structure) == 'failed':
-            failure = str(structure['error'])
+        try:
+            return _analyzer_outcome(file_path, analyzer, outline, needle)
+        finally:
             _release_buffers(analyzer)
-            return None, failure
-        if not structure:
-            # An outline leaves out imports, so an empty one may be an import-only file that a
-            # full scan counts. Such a file has no functions to measure: take it whole.
-            return analyze_file_outcome(file_path) if outline else (None, None)
-
-        result = _flatten_structure(file_path, structure, analyzer, outline)
-        if outline:
-            if needle is not None:
-                result['name_in_text'] = needle in getattr(analyzer, 'content', '')
-        else:
-            _add_call_sites(result, file_path, analyzer)
-        _release_buffers(analyzer)
-        return result, None
 
     except Exception as e:  # boundary-ok: broad-except -- any analyzer, any file: one file that cannot be analyzed must not end a directory scan; the failure is returned to the caller, which records the file (StructureList.skipped, ImportAnalysis.structure_failures) so its result can disclose the omission (BACK-1856)
         return None, f"{type(e).__name__}: {e}"
