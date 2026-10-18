@@ -25,17 +25,23 @@ def tree(root, *, survivor=True):
 def deny_stats(monkeypatch, directories, *, named=True):
     """Inject actual scandir errors only while the real Stats collector executes."""
     real_scan = os.scandir
-    real_collect = StatsAdapter._collect_filtered_stats
+    from reveal.adapters.stats import adapter as stats_module
+    real_find = stats_module.find_analyzable_files
     active = False
     attempts = []
 
-    def collect(self, *args, **kwargs):
+    def find(*args, **kwargs):
         nonlocal active
-        active = True
-        try:
-            return real_collect(self, *args, **kwargs)
-        finally:
-            active = False
+        iterator = iter(real_find(*args, **kwargs))
+        while True:
+            active = True
+            try:
+                path = next(iterator)
+            except StopIteration:
+                return
+            finally:
+                active = False
+            yield path
 
     def scan(path):
         if active and Path(path) in directories:
@@ -45,7 +51,7 @@ def deny_stats(monkeypatch, directories, *, named=True):
             raise PermissionError('controlled Stats child traversal failure')
         return real_scan(path)
 
-    monkeypatch.setattr(StatsAdapter, '_collect_filtered_stats', collect)
+    monkeypatch.setattr(stats_module, 'find_analyzable_files', find)
     monkeypatch.setattr(os, 'scandir', scan)
     return attempts
 
