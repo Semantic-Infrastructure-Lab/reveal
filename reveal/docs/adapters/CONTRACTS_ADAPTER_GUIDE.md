@@ -64,7 +64,10 @@ flat shape is preserved exactly for the common single-language case.
 
 ## Reading The Output
 
-`total_contracts` is the count across all detected contract categories.
+`total_contracts` retains each scanner's contract count. For Rust it counts local
+traits, so implementing types can appear with `total_contracts=0` when the trait
+is declared elsewhere. Text uses the actual returned groups to decide whether
+the inventory is empty, preserving those implementation rows and the count.
 
 `abcs`/`protocols`/`typeddicts`/`dataclasses`/`basemodels`/`path_heuristic`
 are Python's categories; non-Python scanners reuse these same field names so

@@ -337,7 +337,19 @@ reveal depends://src/auth.py
 
 **Language support**: Same as `imports://`. Run `reveal depends://src --format=json | jq '.metadata'` to see the scan result. Language support is determined by available import extractors — Python is fully supported; support for other languages depends on extractor availability.
 
-**Scan-root disclosure**: when the scan can't give a complete answer, the result carries a `warning` field and `metadata` flags saying so — it never silently presents a partial graph as complete. `metadata.scan_capped` (+ a `⚠ Scan capped at N files...` warning) means the scan hit the 5,000-file safety cap under a genuinely huge project root. `metadata.root_inferred` (+ a `⚠ Couldn't determine this file's project boundary...` warning) means no project marker (`pyproject.toml`, `.git`, etc.) was found above the target before the filesystem/`$HOME` boundary, so the scan was scoped to the target's own directory only — pass an explicit root, or run from inside the project, for full coverage.
+**Required directory loss**: the main graph discovery pass retains attributed
+source and resolution-target enumeration failures in `meta.warnings` and the
+existing human `warning`. The missing file population is unknown. Source scan
+accounting becomes inexact while observed counts remain intact; descriptive
+`_meta.confidence` becomes `reduced` and `undercount_possible` is true for both
+positive and empty results. Text qualifies observed counts and rankings. DOT
+includes the warning as comments when required directory loss is known. Clean,
+inferred-root and cap-only DOT output retain their existing behavior. Direct
+Depends exits and MCP flags retain their legacy policy, so exit 0 alone does not
+establish complete analysis. Language-specific manifest and fallback discovery
+have independent limitations.
+
+**Scan-root disclosure**: known scan-root limitations appear in the `warning` field and `metadata` flags. `metadata.scan_capped` (+ a `⚠ Scan capped at N files...` warning) means the scan hit the 5,000-file safety cap under a genuinely huge project root. `metadata.root_inferred` (+ a `⚠ Couldn't determine this file's project boundary...` warning) means no project marker (`pyproject.toml`, `.git`, etc.) was found above the target before the filesystem/`$HOME` boundary, so the scan was scoped to the target's own directory only — pass an explicit root, or run from inside the project, for full coverage.
 
 ---
 
