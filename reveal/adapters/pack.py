@@ -1,8 +1,8 @@
 """pack:// adapter - token-budgeted context snapshot for LLM consumption.
 
 Scan/rank logic lives here; presentation lives in rendering/adapters/pack.py.
-The CLI shim and reveal_pack MCP tool retain their existing scan helpers and
-MCP string-formatter interface through cli/commands/pack.py.
+The CLI command, pack:// and the reveal_pack MCP tool all run through the declared
+execution path; cli/commands/pack.py keeps only compatibility re-exports of these helpers.
 """
 
 import io

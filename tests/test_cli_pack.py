@@ -1,4 +1,4 @@
-"""Tests for reveal/cli/commands/pack.py.
+"""Tests for the pack subcommand and its adapter helpers.
 
 Covers _parse_budget, _compute_priority, _apply_budget, _walk_files,
 _count_lines, _collect_candidates, and run_pack integration.
@@ -12,7 +12,7 @@ from argparse import Namespace
 
 import pytest
 
-from reveal.cli.commands.pack import (
+from reveal.adapters.pack import (
     _parse_budget,
     _compute_priority,
     _apply_budget,
@@ -23,8 +23,8 @@ from reveal.cli.commands.pack import (
     _get_file_structure,
     _get_file_raw_content,
     _collect_file_contents,
-    run_pack,
 )
+from reveal.cli.commands.pack import run_pack
 
 from reveal.rendering.adapters.pack import (
     pack_text, _format_file_line, _format_pack_content, _format_architecture_brief,
@@ -569,14 +569,14 @@ class TestCollectCandidatesProvenance(unittest.TestCase):
 class TestComputeGraphRelevance(unittest.TestCase):
 
     def test_no_focus_returns_empty(self):
-        from reveal.cli.commands.pack import _compute_graph_relevance
+        from reveal.adapters.pack import _compute_graph_relevance
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "a.py").write_text("import b\n")
             result = _compute_graph_relevance(Path(d), None)
         self.assertEqual(result, {})
 
     def test_no_matching_seed_returns_empty(self):
-        from reveal.cli.commands.pack import _compute_graph_relevance
+        from reveal.adapters.pack import _compute_graph_relevance
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "a.py").write_text("import b\n")
             (Path(d) / "b.py").write_text("X = 1\n")
@@ -584,12 +584,12 @@ class TestComputeGraphRelevance(unittest.TestCase):
         self.assertEqual(result, {})
 
     def test_nonexistent_path_returns_empty(self):
-        from reveal.cli.commands.pack import _compute_graph_relevance
+        from reveal.adapters.pack import _compute_graph_relevance
         result = _compute_graph_relevance(Path("/nonexistent/path/that/cannot/exist"), "auth")
         self.assertEqual(result, {})
 
     def test_seed_file_scores_highest(self):
-        from reveal.cli.commands.pack import _compute_graph_relevance
+        from reveal.adapters.pack import _compute_graph_relevance
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "auth.py").write_text("import utils\n")
             (Path(d) / "utils.py").write_text("X = 1\n")
@@ -607,7 +607,7 @@ class TestComputeGraphRelevance(unittest.TestCase):
         """A file imported by the focus file, but not name-matching it, should
         still rank above a file with no graph relationship to the focus area —
         the exact gap BACK-833 was filed to close."""
-        from reveal.cli.commands.pack import _compute_graph_relevance
+        from reveal.adapters.pack import _compute_graph_relevance
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "auth.py").write_text("import helpers\n")
             (Path(d) / "helpers.py").write_text("X = 1\n")
@@ -620,7 +620,7 @@ class TestComputeGraphRelevance(unittest.TestCase):
         self.assertGreater(helpers_score, isolated_score)
 
     def test_all_scores_in_unit_range(self):
-        from reveal.cli.commands.pack import _compute_graph_relevance
+        from reveal.adapters.pack import _compute_graph_relevance
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "auth.py").write_text("import a, b, c\n")
             (Path(d) / "a.py").write_text("X = 1\n")
