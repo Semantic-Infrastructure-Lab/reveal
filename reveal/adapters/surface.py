@@ -10,10 +10,11 @@ from __future__ import annotations
 import importlib
 import os
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from reveal.reveal_types import CONTRACT_VERSION
+from reveal.reveal_types import CONTRACT_VERSION, WarningEntry
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..rendering.adapters.surface import (  # noqa: F401 -- _SURFACE_LABELS and the notes are re-exported
@@ -34,6 +35,8 @@ from ..utils.path_utils import (
     is_test_dir,
     is_test_filename,
     is_test_basename_for_language,
+    to_posix,
+    traversal_failed_warning,
     walk_tree,
 )
 from ..utils.query_parser import (
@@ -117,7 +120,10 @@ def _supported_coverage_languages() -> frozenset:
     return frozenset(langs)
 
 
-def _collect_source_files(path: Path, source_only: bool = False) -> Dict['_SurfaceScanner', List[Path]]:
+def _collect_source_files(
+    path: Path, source_only: bool = False, *,
+    on_error: Optional[Callable[[OSError], None]] = None,
+) -> Dict['_SurfaceScanner', List[Path]]:
     """Map each registered scanner to the files under `path` it should scan."""
 
     def _scanner_for(fpath: Path):
@@ -142,7 +148,7 @@ def _collect_source_files(path: Path, source_only: bool = False) -> Dict['_Surfa
 
     # The shared walker (BACK-1577): the same files the coverage census below counts,
     # dot-dir source included (BACK-1038). source_only prunes test dirs before descent.
-    for root, dirs, filenames in walk_tree(path, ANALYSIS):
+    for root, dirs, filenames in walk_tree(path, ANALYSIS, on_error=on_error):
         if source_only:
             dirs[:] = [d for d in dirs if not _is_test_dir(d)]
         for fname in filenames:
@@ -187,11 +193,102 @@ def _rollup_by_dir(surfaces: Dict[str, List[Dict[str, Any]]], depth: int = 0) ->
     return sorted(rows, key=lambda r: (-r['total'], r['dir']))
 
 
+def _record_traversal_error(failures: List[Tuple[Optional[str], str]], error: OSError) -> None:
+    failures.append((to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}'))
+
+
+def _surface_row_valid(row: Any) -> bool:
+    return (isinstance(row, dict) and isinstance(row.get('name'), str)
+            and all(isinstance(row.get(key), str) and bool(row[key].strip()) for key in ('file', 'type'))
+            and type(row.get('line')) is int and row['line'] > 0)
+
+
+def _validate_requested_surface(result: Any, type_filter: str) -> None:
+    """Check the actual requested scanner observations before merging or formatting."""
+    if not isinstance(result, dict):
+        raise ValueError('required surface scanner output must be an object')
+    for category, rows in result.items():
+        if category in (UNPARSED_KEY, RECOVERED_KEY, ROUTE_CLASSES_KEY):
+            continue
+        if type_filter and category != type_filter:
+            continue
+        if category not in CATEGORIES or not isinstance(rows, list):
+            raise ValueError(f'invalid required surface group: {category}')
+        if any(not _surface_row_valid(row) for row in rows):
+            raise ValueError(f'invalid required surface row: {category}')
+
+
+def _scan_collected_surface(
+    collected: Dict[_SurfaceScanner, List[Path]], type_filter: str, directory_loss: bool,
+) -> Tuple[Dict[str, List[Dict[str, Any]]], set[str], List[str], List[str], List[Dict[str, Any]], Optional[str]]:
+    """Merge native scanner results, retaining malformed required input as failure."""
+    surfaces: Dict[str, List[Dict[str, Any]]] = {k: [] for k in CATEGORIES}
+    scanned_languages = set()
+    unparsed: List[str] = []
+    recovered: List[str] = []
+    route_classes: List[Dict[str, Any]] = []
+    error: Optional[str] = None
+    for spec, file_list in collected.items():
+        if not file_list:
+            continue
+        scanned_languages.add(spec.language)
+        scan_fn = _load_scanner(spec)
+        for file_path in file_list:
+            result = scan_fn(str(file_path))
+            if directory_loss:
+                try:
+                    _validate_requested_surface(result, type_filter)
+                except ValueError as exc:
+                    error = str(exc)
+                    continue
+            unparsed.extend(result.pop(UNPARSED_KEY, []))
+            recovered.extend(result.pop(RECOVERED_KEY, []))
+            classes = result.pop(ROUTE_CLASSES_KEY, [])
+            if not directory_loss or type_filter in ('', 'http'):
+                route_classes.extend(classes)
+            for category, entries in result.items():
+                if directory_loss and type_filter and category != type_filter:
+                    continue
+                surfaces[category].extend(entries)
+    return surfaces, scanned_languages, unparsed, recovered, route_classes, error
+
+
+def _surface_discovery_error(
+    surfaces: Dict[str, List[Dict[str, Any]]], source_failures: List[Tuple[Optional[str], str]],
+    census_failures: List[Tuple[Optional[str], str]], malformed: Optional[str],
+) -> Optional[str]:
+    if not source_failures and not census_failures:
+        return None
+    population = 'Surface source discovery' if source_failures else 'Required scope/coverage census'
+    if malformed:
+        return f'{population} failed and requested surface observations are invalid: {malformed}'
+    if not any(surfaces.values()):
+        return f'{population} failed and no requested surface observations survived'
+    return None
+
+
+def _surface_traversal_warnings(
+    source_failures: List[Tuple[Optional[str], str]], census_failures: List[Tuple[Optional[str], str]], path: Path,
+) -> List[WarningEntry]:
+    warnings: List[WarningEntry] = []
+    for failures, attribution in (
+        (source_failures, 'Surface source discovery is incomplete'),
+        (census_failures, 'Required scope/coverage census is incomplete; counts reflect only observed files'),
+    ):
+        warning = traversal_failed_warning(failures, path)
+        if warning:
+            warning['message'] = f"{attribution}: {warning['message']}"
+            warnings.append(warning)
+    return warnings
+
+
 def _scan_surface(
     path: Path, type_filter: str = '', source_only: bool = False, by: str = '', depth: int = 0,
 ) -> Dict[str, Any]:
-    collected = _collect_source_files(path, source_only=source_only)
-    surfaces: Dict[str, List[Dict[str, Any]]] = {k: [] for k in CATEGORIES}
+    source_failures: List[Tuple[Optional[str], str]] = []
+    census_failures: List[Tuple[Optional[str], str]] = []
+    collected = _collect_source_files(path, source_only=source_only,
+                                     on_error=partial(_record_traversal_error, source_failures))
 
     unsupported_language = ''
     if not any(collected.values()):
@@ -204,25 +301,13 @@ def _scan_surface(
     # BACK-884: one walk produces both `coverage` (gated to surface's
     # supported-language set, BACK-518) and the broader per-language `scope`
     # census below.
-    census, coverage = census_and_coverage_for_path(path, _supported_coverage_languages())
+    census, coverage = census_and_coverage_for_path(
+        path, _supported_coverage_languages(), on_error=partial(_record_traversal_error, census_failures))
     scope = census.to_scope_dict(capability_tiers=capability_tiers_for(census.language_extensions))
 
-    scanned_languages = set()
-    unparsed: List[str] = []
-    recovered: List[str] = []
-    route_classes: List[Dict[str, Any]] = []
-    for spec, file_list in collected.items():
-        if not file_list:
-            continue
-        scanned_languages.add(spec.language)
-        scan_fn = _load_scanner(spec)
-        for file_path in file_list:
-            result = scan_fn(str(file_path))
-            unparsed.extend(result.pop(UNPARSED_KEY, []))
-            recovered.extend(result.pop(RECOVERED_KEY, []))
-            route_classes.extend(result.pop(ROUTE_CLASSES_KEY, []))
-            for cat, entries in result.items():
-                surfaces[cat].extend(entries)
+    directory_loss = bool(source_failures or census_failures)
+    surfaces, scanned_languages, unparsed, recovered, route_classes, malformed = _scan_collected_surface(
+        collected, type_filter, directory_loss)
     # BACK-1418: a controller's route prefix is often declared on a base class
     # in another file; resolved here, where every scanned class is known.
     resolve_inherited_route_prefixes(surfaces['http'], route_classes)
@@ -232,6 +317,8 @@ def _scan_surface(
 
     if type_filter:
         surfaces = {k: v for k, v in surfaces.items() if k == type_filter}
+
+    discovery_error = _surface_discovery_error(surfaces, source_failures, census_failures, malformed)
 
     # BACK-1332: which of the 0s above are "not implemented" rather than "found none".
     matrix = coverage_matrix(scanned_languages, tuple(surfaces))
@@ -264,6 +351,8 @@ def _scan_surface(
     total = sum(len(v) for v in surfaces.values())
     by_dir = {'by_dir': _rollup_by_dir(surfaces, depth)} if by == 'dir' else {}
     return {
+        **({'_source_traversal_failures': source_failures, '_census_traversal_failures': census_failures,
+            '_discovery_error': discovery_error} if directory_loss else {}),
         'path': str(path),
         'total': total,
         'surfaces': surfaces,
@@ -350,7 +439,9 @@ class SurfaceAdapter(ResourceAdapter):
         """The scan owner supplies completeness; scope limitations are not failures."""
         from ..utils.results import AnalysisCompleteness, result_execution_facts
         incomplete = isinstance(result, dict) and bool(
-            result.get('unparsed_files') or result.get('recovered_files'))
+            result.get('unparsed_files') or result.get('recovered_files') or
+            any(w.get('type') == 'analysis_incomplete' and w.get('unit') == 'directories'
+                for w in (result.get('meta') or {}).get('warnings', [])))
         state = AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE
         return result_execution_facts(result, completeness=state)
 
@@ -428,7 +519,17 @@ class SurfaceAdapter(ResourceAdapter):
         report = _scan_surface(Path(self.path), type_filter=type_filter, source_only=source_only,
                                by=by, depth=depth)
 
-        warnings = []
+        source_failures = report.pop('_source_traversal_failures', [])
+        census_failures = report.pop('_census_traversal_failures', [])
+        directory_loss = bool(source_failures or census_failures)
+        warnings = _surface_traversal_warnings(source_failures, census_failures, Path(self.path))
+        errors = []
+        discovery_error = report.pop('_discovery_error', None)
+        if discovery_error:
+            report['error'] = discovery_error
+            errors.append({'code': 'E_SURFACE_DISCOVERY', 'message': discovery_error})
+        if directory_loss:
+            report['_meta'].pop('confidence', None)
         coverage_warning = report.get('coverage', {}).get('warning', '')
         if coverage_warning:
             warnings.append({'code': 'W-SURFACE-1', 'message': coverage_warning})
@@ -443,9 +544,9 @@ class SurfaceAdapter(ResourceAdapter):
             source=self.path,
             contract_version=CONTRACT_VERSION,
             parse_mode='ast+tree_sitter',
-            confidence=0.6,
+            confidence=None if directory_loss else 0.6,
             warnings=warnings,
-            errors=[],
+            errors=errors,
             scope=report.pop('scope'),
             data=report,
         )

@@ -182,6 +182,13 @@ class SurfaceRenderer(BaseRenderer):
     RENDERS_META_WARNINGS = True
 
     @classmethod
+    def _failure_detail(cls, result: Dict[str, Any]) -> List[str]:
+        meta = result.get('meta') or {}
+        warnings = [warning for warning in meta.get('warnings', [])
+                    if warning.get('type') == 'analysis_incomplete' and warning.get('unit') == 'directories']
+        return meta_warning_lines({**result, 'meta': {**meta, 'warnings': warnings}})
+
+    @classmethod
     def _body(cls, result: Dict[str, Any], top: Optional[int] = None) -> str:
         meta = result.get('meta') or {}
         # Coverage and parser diagnostics are already printed above the inventory.

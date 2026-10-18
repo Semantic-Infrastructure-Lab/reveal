@@ -1077,13 +1077,15 @@ def census_for_path(
 
 
 def census_and_coverage_for_path(
-    path: Path, supported_languages: Set[str]
+    path: Path, supported_languages: Set[str], *,
+    on_error: Optional[Callable[[OSError], None]] = None,
 ) -> 'tuple[ScopeCensus, LanguageCoverage]':
     """Walk *path* once, returning both the BACK-884 scope census and the
     supported-language-gated :class:`LanguageCoverage` (BACK-518) — the
-    combination ``surface``/``contracts`` need, without a second walk.
+    combination ``surface``/``contracts`` need, without a second walk. Optional
+    *on_error* retains failures from that same walk without changing the pair.
     """
-    counts = tally_files_by_language(_walk_code_files(path))
+    counts = tally_files_by_language(_walk_code_files(path, on_error=on_error))
     return _census_from_counts(counts), _coverage_from_counts(counts, supported_languages)
 
 
