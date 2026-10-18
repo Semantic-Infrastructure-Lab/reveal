@@ -7,6 +7,7 @@ import pytest
 
 from reveal.adapters.hotspots import HotspotsAdapter
 from reveal.adapters.stats import adapter as stats
+from reveal.cli.commands import review
 from reveal.utils.results import AnalysisCompleteness
 from test_mcp_expected_errors_back1992 import _run, _text
 
@@ -71,6 +72,25 @@ def test_clean_requested_functions_survive_selective_total_stats_loss(tmp_path, 
     assert result['summary']['total_files'] == 0
     assert result['function_hotspots'][0]['name'] == 'visible'
     assert adapter.execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE
+
+
+def test_review_required_discovery_warning_marks_analysis_incomplete():
+    report = {'meta': {'warnings': [{
+        'type': 'analysis_incomplete', 'count': 1, 'unit': 'directories',
+        'directories': ['included_child'], 'message': 'hotspots: required directory loss',
+    }]}}
+    assert review._lost_analysis(report)
+    assert review._review_outcome([], [], analysis_incomplete=review._lost_analysis(report)) == ('incomplete', 3)
+
+
+def test_review_blocking_findings_keep_precedence_over_incomplete_analysis():
+    assert review._review_outcome([{'severity': 'high'}], [], analysis_incomplete=True) == ('fail', 2)
+
+
+def test_review_optional_churn_warning_does_not_mark_required_analysis_lost():
+    report = {'meta': {'warnings': [{'type': 'churn_unavailable', 'message': 'optional history unavailable'}]}}
+    assert not review._lost_analysis(report)
+    assert review._review_outcome([], [], analysis_incomplete=review._lost_analysis(report)) == ('pass', 0)
 
 
 _SERVER = '''
