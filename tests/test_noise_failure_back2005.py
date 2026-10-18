@@ -1,4 +1,5 @@
 """Ambiguous noise needs evidence; failed inspection leaves normal descent eligible."""
+import errno
 import json
 import os
 from pathlib import Path
@@ -31,7 +32,9 @@ def denial(monkeypatch, child, error=PermissionError, *, once=False, named=True)
             attempts.append(path)
             if not once or len(attempts) == 1:
                 if named:
-                    raise error(13, 'controlled ambiguous directory inspection failure', str(child))
+                    code = errno.ENOENT if error is FileNotFoundError else (
+                        errno.EIO if error is OSError else errno.EACCES)
+                    raise error(code, 'controlled ambiguous directory inspection failure', str(child))
                 raise error('controlled ambiguous directory inspection failure')
         return real(path)
 

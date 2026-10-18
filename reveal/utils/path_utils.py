@@ -63,6 +63,10 @@ def is_noise_dir(parent: Path, name: str) -> bool:
     - ``build``/``dist`` have no such marker, so they skip unless a source-code file sits
       directly inside (setuptools' ``build/`` holds ``lib/``/``bdist.*/``, not source).
 
+    Failed inspection does not establish noise: leave the directory eligible for
+    ordinary descent, which can recover or disclose the traversal failure. This
+    includes a missing directory from a stale walk entry.
+
     ``*.egg-info`` (setuptools metadata) is noise wherever it sits (BACK-093).
 
     Cheap: a few ``stat`` calls or one ``os.scandir`` per ambiguous name, never a sub-walk.
@@ -82,7 +86,7 @@ def is_noise_dir(parent: Path, name: str) -> bool:
                 if entry.is_file() and Path(entry.name).suffix.lower() in code_exts:
                     return False
     except OSError:
-        return True
+        return False
     return True
 
 
