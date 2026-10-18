@@ -263,3 +263,10 @@ def test_error_without_filename_discloses_unknown_directory(tree, monkeypatch, o
     assert warning['directories'] == []
     assert warning['count'] == 0 and warning['unknown_directory_events'] == 1
     assert 'controlled error without filename' in warning['message']
+
+
+def test_hotspots_cannot_claim_complete_after_required_ast_directory_loss(tree, monkeypatch):
+    root, child = tree
+    deny(monkeypatch, child)
+    result = _run_reveal_direct(f'hotspots://{root}?functions_only=true', '--format', 'json')
+    assert result.returncode == 3
