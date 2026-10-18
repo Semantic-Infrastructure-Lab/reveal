@@ -224,3 +224,41 @@ def test_text_trace_discloses_directory_failure_once(tree, monkeypatch, entry):
     result = _run_reveal_direct('trace', str(root), '--from', entry)
     assert result.returncode == 3
     assert (result.stdout + result.stderr).count('directory enumeration(s) failed') == 1
+
+
+def test_empty_patches_text_qualifies_directory_loss(tree, monkeypatch):
+    root, child = tree
+    deny(monkeypatch, child)
+    result = _run_reveal_direct(f'patches://{root}')
+    assert result.returncode == 0
+    assert 'No patch pressure groups in the available observations.' in result.stdout
+    assert 'No patch pressure groups found.' not in result.stdout
+    assert (result.stdout + result.stderr).count('directory enumeration(s) failed') == 1
+
+
+def test_warning_counts_unique_directories_without_discarding_causes():
+    from reveal.adapters.ast.analysis import traversal_failed_warning
+    warning = traversal_failed_warning([('child', 'PermissionError: denied'),
+                                        ('child', 'OSError: transient'),
+                                        ('child', 'PermissionError: denied')])
+    assert warning['count'] == 1
+    assert 'PermissionError: denied' in warning['message']
+    assert 'OSError: transient' in warning['message']
+
+
+@pytest.mark.parametrize('owner', ['ast', 'patches'])
+def test_error_without_filename_discloses_unknown_directory(tree, monkeypatch, owner):
+    root, child = tree
+    real = os.scandir
+
+    def denied(path):
+        if Path(path) == child:
+            raise PermissionError('controlled error without filename')
+        return real(path)
+
+    monkeypatch.setattr(os, 'scandir', denied)
+    result = (PatchesAdapter(str(root)).get_structure() if owner == 'patches'
+              else TraceAdapter(str(root), 'from=visible').get_structure())
+    warning, = traversal_warning(result)
+    assert warning['directories'] == ['<unknown directory>']
+    assert 'controlled error without filename' in warning['message']
