@@ -76,6 +76,17 @@ def run_declared_uri(uri: str, element: str | None, args, consumed=(), *, answer
     _run_declared(name, args, path, query, 'uri', consumed, answer_consumer=answer_consumer)
 
 
+def _delegate_typed_parameters(adapter, args, source, transport: str) -> None:
+    """Forward declaration accounting only after the receiving ledger exists."""
+    if transport != 'typed':
+        return
+    for spec in adapter.PARAM_SPECS:
+        if spec.cli is not None:
+            dest = spec.cli.dest or spec.name
+            if dest in source:
+                delegate(args, dest, spec.name)
+
+
 def _run_declared(name: str, args, path: str, source: Any, transport: str, consumed=(), *,
                   answer_consumer=None) -> None:
     from ...utils.exclusions import dispatch_scope, exclusion_scope
@@ -91,12 +102,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
         ledger = FlagLedger(args)
         args = ledger.track(args)
     mark(args, *consumed)
-    if transport == 'typed':
-        for spec in adapter.PARAM_SPECS:
-            if spec.cli is not None:
-                dest = spec.cli.dest or spec.name
-                if dest in source:
-                    delegate(args, dest, spec.name)
+    _delegate_typed_parameters(adapter, args, source, transport)
     query_resource = '?' + source if transport == 'uri' else ''
     if transport == 'uri':
         from .flag_specs import inject_query_flags

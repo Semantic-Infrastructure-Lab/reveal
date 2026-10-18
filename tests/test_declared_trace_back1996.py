@@ -194,3 +194,38 @@ def test_legacy_batch_retains_unresolved_nonerror(project):
                             text=True, encoding='utf-8', timeout=60)
     assert result.returncode == 0, result.stderr
     assert 'absent' in result.stdout
+
+
+def test_transport_noops_and_explicit_exclusions(project):
+    baseline = run(*requests(project)[1])
+    for flags in (['--all'], ['--verbose'], ['--all', '--verbose']):
+        shown = run(*requests(project)[1], *flags)
+        assert shown.returncode == 0
+        assert shown.stdout == baseline.stdout
+    assert run(*requests(project)[0], '--all').returncode == 2
+    (project / 'hidden.py').write_text('def external_api():\n    return 1\n', encoding='utf-8')
+    for argv in requests(project):
+        included = run(*argv, '--format', 'json')
+        excluded = run(*argv, '--format', 'json', '--exclude', 'hidden.py')
+        assert included.returncode == excluded.returncode == 0
+        before, after = json.loads(included.stdout), json.loads(excluded.stdout)
+        assert before['total_resolved'] > after['total_resolved']
+        assert not any(frame['file'].endswith('hidden.py') for frame in after['frames'])
+
+
+@pytest.mark.parametrize('values', [
+    {'from': 'main', 'depth': True}, {'from': 'main', 'depth': 2.0},
+    {'from': True}, {'from': []}, {'from': '   '},
+])
+def test_direct_typed_binding_rejects_nonscalar_or_nonwhole_values(project, values):
+    from reveal.adapters.trace import TraceAdapter
+    with pytest.raises(ValueError):
+        TraceAdapter(str(project), params=values)
+
+
+@pytest.mark.parametrize('transport', ['cli', 'uri'])
+def test_required_output_failure_overrides_proven_absence(project, transport):
+    result = run(*requests(project, 'absent')[transport == 'uri'], '--also-json', str(project))
+    assert result.returncode == 3
+    assert 'Trace:' in result.stdout
+    assert 'Requested JSON artifact failed' in result.stderr
