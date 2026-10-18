@@ -997,9 +997,9 @@ class TestIsSkippableDir:
             (d / 'pyvenv.cfg').write_text('home = /usr/bin\n', encoding='utf-8')
             assert is_noise_dir(tmp_path, name) is True, name
 
-    def test_ambiguous_name_missing_dir_skipped(self, tmp_path):
-        # Directory doesn't exist on disk (e.g. a stale walk entry) — fail safe.
-        assert is_noise_dir(tmp_path, 'build') is True
+    def test_ambiguous_name_missing_dir_is_not_known_noise(self, tmp_path):
+        # A stale walk entry must reach ordinary descent's missing-directory diagnostic.
+        assert is_noise_dir(tmp_path, 'build') is False
 
     def test_ambiguous_name_with_only_data_files_skipped(self, tmp_path):
         # A real venv/build dir with non-source files (configs, binaries) at
