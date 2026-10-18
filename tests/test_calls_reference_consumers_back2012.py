@@ -195,3 +195,68 @@ def test_clean_warm_reference_reuse_and_single_structural_collection(tmp_path, m
     monkeypatch.setattr(index, 'collect_structures', collect)
     assert names(CallsAdapter(str(root), 'uncalled').get_structure()) == {'genuinely_dead'}
     assert len(collections) == 1
+
+
+@pytest.mark.parametrize('unknown_directory', [False, True])
+def test_reference_only_discovery_loss_preserves_attribution_and_recovers(
+        tmp_path, monkeypatch, unknown_directory):
+    root = tmp_path / 'affected'
+    reference = make_tree(root)
+    child = root / 'included_child'
+    child.mkdir()
+    reference.rename(child / reference.name)
+    original_pass = index._python_referenced_names
+    original_scandir = os.scandir
+    active = []
+
+    def analyze(*args, **kwargs):
+        active.append(True)
+        try:
+            return original_pass(*args, **kwargs)
+        finally:
+            active.pop()
+
+    def scandir(path):
+        if active and Path(path) == child:
+            if unknown_directory:
+                raise PermissionError('controlled unknown directory')
+            raise PermissionError(13, 'controlled reference-only discovery loss', str(child))
+        return original_scandir(path)
+
+    with monkeypatch.context() as context:
+        context.setattr(index, '_python_referenced_names', analyze)
+        context.setattr(os, 'scandir', scandir)
+        result = CallsAdapter(str(root), 'uncalled').get_structure()
+        assert names(result) == {'kept', 'genuinely_dead'}
+        assert str(root) not in index._REFERENCE_CACHE
+        (warning,) = [w for w in result['meta']['warnings'] if w.get('type') == 'analysis_incomplete']
+        assert warning['count'] == (0 if unknown_directory else 1)
+        assert warning.get('unknown_directory_events', 0) == int(unknown_directory)
+        assert warning['directories'] == ([] if unknown_directory else ['included_child'])
+        assert 'PermissionError' in warning['message']
+        assert 'confidence' not in result['meta']
+    assert names(CallsAdapter(str(root), 'uncalled').get_structure()) == {'genuinely_dead'}
+
+
+def test_excluded_reference_is_policy_and_scope_change_rebuilds_cleanly(tmp_path):
+    from reveal.utils.exclusions import exclusion_scope
+
+    root = tmp_path / 'clean'
+    make_tree(root)
+    with exclusion_scope(root, ['references.py']):
+        result = CallsAdapter(str(root), 'uncalled').get_structure()
+        assert names(result) == {'kept', 'genuinely_dead'}
+        assert not [w for w in result['meta']['warnings'] if w.get('type') in ('analysis_failed', 'analysis_incomplete')]
+        assert 'confidence' in result['meta']
+        assert str(root) in index._REFERENCE_CACHE
+    assert names(CallsAdapter(str(root), 'uncalled').get_structure()) == {'genuinely_dead'}
+
+
+def test_existing_unsafe_parent_policy_is_not_required_loss(tmp_path, monkeypatch):
+    root = tmp_path / 'clean'
+    make_tree(root)
+    monkeypatch.setattr(index, 'is_unsafe_scan_root', lambda path: path == root)
+    found = index._python_referenced_names(root)
+    assert found == set()
+    assert index._python_referenced_names(root) is found
+    assert str(root) in index._REFERENCE_CACHE
