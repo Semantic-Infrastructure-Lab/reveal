@@ -1956,12 +1956,14 @@ def _resolve_definition_node(file_path: str, name: str, analyzer_cache: Dict[str
 
 class EffectList(List[Dict[str, Any]]):
     """The effects ``collect_effects_transitive`` found, plus ``skipped``: ``(file, cause)``
-    for every file whose structure analysis raised. An effect behind such a file cannot
-    be followed, so a list without it reads as "no further effects" (BACK-1861)."""
+    for every file whose structure analysis raised. Directory enumeration failures
+    are retained separately in ``traversal_failures``; their missing file population
+    is unknown. Either loss may hide effects behind an omitted definition."""
 
     def __init__(self, *args: Any) -> None:
         super().__init__(*args)
         self.skipped: List[Tuple[str, str]] = []
+        self.traversal_failures: List[Tuple[Optional[str], str]] = []
 
 
 def skipped_files_note(skipped: Sequence[Tuple[str, str]]) -> Optional[str]:
@@ -1969,6 +1971,13 @@ def skipped_files_note(skipped: Sequence[Tuple[str, str]]) -> Optional[str]:
     from .analysis import analysis_skipped_warning  # noqa: I006
     warning = analysis_skipped_warning(
         list(skipped), consequence="analysis is incomplete; some calls may not have been followed and some effects may be missing")
+    return warning['message'] if warning else None
+
+
+def _traversal_note(failures: Sequence[Tuple[Optional[str], str]]) -> Optional[str]:
+    """Share the existing directory-loss disclosure across transitive nav consumers."""
+    from ...utils.path_utils import traversal_failed_warning  # noqa: I006
+    warning = traversal_failed_warning(failures)
     return warning['message'] if warning else None
 
 
@@ -2011,6 +2020,7 @@ def collect_effects_transitive(
     directory = path_obj if path_obj.is_dir() else path_obj.parent
     structures = collect_structures(str(directory))
     results.skipped = list(structures.skipped)
+    results.traversal_failures = list(structures.traversal_failures)
     forward = _build_forward_index(structures, include_builtins=False)
 
     root_family = _lang_family(path) if path else ''
@@ -2084,13 +2094,21 @@ def render_effects_transitive(
     include_unclassified: bool = False,
 ) -> str:
     """Render collect_effects_transitive output, grouped by hop/call chain."""
+    note = _traversal_note(getattr(effects, 'traversal_failures', ()))
     visible = [e for e in effects if e['kind'] is not None or include_unclassified]
-    if not visible:
-        return (
-            f'No classified side effects found in {root_name} '
-            f'or its callees (--transitive, depth={depth})'
-        )
+    if visible:
+        body = _render_transitive_groups(visible, root_name)
+    elif note:
+        body = (f'No classified side effects observed in the analyzed portion of {root_name} '
+                f'or its callees (--transitive, depth={depth}); analysis is incomplete')
+    else:
+        body = (f'No classified side effects found in {root_name} '
+                f'or its callees (--transitive, depth={depth})')
+    return body + (f'\n\nWarning: {note}' if note else '')
 
+
+def _render_transitive_groups(visible: List[Dict[str, Any]], root_name: str) -> str:
+    """Render the observed effect groups without changing their display order."""
     kind_width = max(len(e['kind'] or '?') for e in visible)
     groups: Dict[Tuple[str, ...], List[Dict[str, Any]]] = OrderedDict()
     for e in visible:

@@ -9,6 +9,7 @@ from .nav_effects import (
     format_effect_target,
     render_effects_transitive,
     skipped_files_note,
+    _traversal_note,
 )
 
 
@@ -183,6 +184,8 @@ def collect_boundary_transitive(
     result['assignment_coverage_note'] = _ASSIGNMENT_COVERAGE_NOTE
     if effects.skipped:
         result['skipped'] = [list(item) for item in effects.skipped]
+    if effects.traversal_failures:
+        result['traversal_failures'] = list(effects.traversal_failures)
     return result
 
 
@@ -197,16 +200,22 @@ def render_boundary_transitive(
     sections = _render_boundary_header(result, from_line, to_line)
 
     effects = result['effects']
+    directory_note = _traversal_note(result.get('traversal_failures') or [])
     header = f'EFFECTS (--transitive, depth={depth}):'
     if effects:
         body = render_effects_transitive(effects, root_name, depth)
         sections.append(f'{header}\n' + '\n'.join(f'  {line}' for line in body.split('\n')))
+    elif directory_note:
+        sections.append(f'{header}\n  none observed in the analyzed portion of {root_name} '
+                        'or its callees; analysis is incomplete')
     else:
         sections.append(f'{header}\n  none in {root_name} or its callees')
 
     note = skipped_files_note(result.get('skipped') or [])
     if note:
         sections.append(f'Warning: {note}')
+    if directory_note:
+        sections.append(f'Warning: {directory_note}')
     if result.get('assignment_coverage_note'):
         sections.append(result['assignment_coverage_note'])
 

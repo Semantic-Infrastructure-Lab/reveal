@@ -254,7 +254,7 @@ def _nav_sideeffects(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import (  # noqa: I006
         collect_effects, collect_effects_transitive, render_effects, render_effects_transitive,
     )
-    from .adapters.ast.nav_effects import EffectList, skipped_files_note  # noqa: I006
+    from .adapters.ast.nav_effects import EffectList, skipped_files_note, _traversal_note  # noqa: I006
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
     language = getattr(ctx.analyzer, 'language', None)
     transitive = getattr(ctx.args, 'transitive', False)
@@ -285,7 +285,7 @@ def _nav_sideeffects(ctx: _NavCtx) -> None:
         ]
         note = skipped_files_note(effects.skipped) if transitive else None
         _nav_json('sideeffects', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
-                  warnings=[note] if note else None)
+                  warnings=[n for n in (note, _traversal_note(effects.traversal_failures)) if n])
     elif transitive:
         note = skipped_files_note(effects.skipped)
         print(render_effects_transitive(effects, ctx.element, depth)
@@ -365,7 +365,7 @@ def _nav_boundary(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import (  # noqa: I006
         collect_boundary, collect_boundary_transitive, render_boundary, render_boundary_transitive,
     )
-    from .adapters.ast.nav_effects import skipped_files_note  # noqa: I006
+    from .adapters.ast.nav_effects import skipped_files_note, _traversal_note  # noqa: I006
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
     language = getattr(ctx.analyzer, 'language', None)
     transitive = getattr(ctx.args, 'transitive', False)
@@ -399,7 +399,8 @@ def _nav_boundary(ctx: _NavCtx) -> None:
                for e in boundary['effects'] if e['kind'] is not None]
         )
         note = skipped_files_note(boundary.get('skipped') or []) if transitive else None
-        warnings = [n for n in (note, boundary.get('assignment_coverage_note')) if n]
+        directory_note = _traversal_note(boundary.get('traversal_failures') or [])
+        warnings = [n for n in (note, directory_note, boundary.get('assignment_coverage_note')) if n]
         _nav_json('boundary', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
                   warnings=warnings)
     elif transitive:
