@@ -192,8 +192,9 @@ def test_failed_comparison_survives_text_json_provenance_projections_and_artifac
     base = make_repo(root)
     selective_loss(monkeypatch, root)
     artifact = tmp_path / 'comparison.json'
-    output = _run_reveal_direct('architecture', str(root), '--against', base,
-                                '--also-json', str(artifact), *extra)
+    command = ([f'architecture://{root.as_posix()}?against={base}'] if extra == ('--head','1')
+               else ['architecture', str(root), '--against', base])
+    output = _run_reveal_direct(*command, '--also-json', str(artifact), *extra)
     assert output.returncode == 3
     assert 'comparison unavailable' in (output.stdout + output.stderr).lower()
     # Exactly one authored directory warning qualifies the body; the error boundary
