@@ -50,6 +50,9 @@ def _render_contract_groups(mode: str, report: Dict[str, Any], impls_cap: int = 
     return lines
 
 def _has_contract_rows(report: Dict[str, Any]) -> bool:
+    by_language = report.get('by_language')
+    if by_language is not None:
+        return any(_has_contract_rows(group) for group in by_language.values())
     return any(report.get(key) for key in (
         'abcs', 'protocols', 'typeddicts', 'dataclasses', 'basemodels', 'path_heuristic'))
 
@@ -95,7 +98,7 @@ def _render_report(report: Dict[str, Any], impls_cap: int = 5) -> List[str]:
     if by_language is not None:
         # BACK-780: more than one language present — render each language's
         # section under its own labels rather than picking one winner.
-        if not any(_has_contract_rows(group) for group in by_language.values()):
+        if not _has_contract_rows(report):
             if not warning:
                 lines.append("  No contracts or seams found.")
                 lines.append('')
