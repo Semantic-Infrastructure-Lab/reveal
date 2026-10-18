@@ -21,9 +21,9 @@ import ast
 import logging
 import os
 import re
-from ...utils.request_cache import register_validated_cache
+from ...utils.request_cache import register_request_cache, register_validated_cache
 from pathlib import Path
-from typing import Any, Dict, FrozenSet, List, Optional
+from typing import Any, Dict, FrozenSet, List, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
@@ -38,11 +38,13 @@ from ...analyzers._python_dict_usage import (
     iter_python_files,
     resolve_typeddicts,
 )
-from ...utils.path_utils import EVIDENCE, cross_file_scan_root, scan_roots
+from ...utils.path_utils import (
+    EVIDENCE, cross_file_scan_root, scan_roots, to_posix, traversal_failed_warning,
+)
 
 logger = logging.getLogger(__name__)
 
-# project_root -> {'typeddicts': [TypedDict record, ...], 'dict_aliases': frozenset}
+# project_root -> TypedDicts, dict aliases, and immutable traversal-failure evidence
 _project_index: Dict[Path, Dict[str, Any]] = {}
 # BACK-1051 pattern: project_root -> why its cross-module scan was skipped
 _project_skip_reasons: Dict[Path, str] = {}
@@ -237,8 +239,14 @@ def _build_index(project_root: Path) -> Dict[str, Any]:
     cross-module matching was skipped instead of implying none exists.
     """
     ceiling = _max_project_files()
+    failures: List[Tuple[Optional[str], str]] = []
+
+    def on_error(error: OSError) -> None:
+        failures.append((to_posix(error.filename) if error.filename else None,
+                         f'{type(error).__name__}: {error}'))
+
     files = []
-    for file_path in iter_python_files(str(project_root), purpose=EVIDENCE):
+    for file_path in iter_python_files(str(project_root), purpose=EVIDENCE, on_error=on_error):
         files.append(file_path)
         if len(files) > ceiling:
             reason = (
@@ -248,7 +256,7 @@ def _build_index(project_root: Path) -> Dict[str, Any]:
             )
             logger.warning(reason)
             _project_skip_reasons[project_root] = reason
-            return _EMPTY_FACTS
+            return {**_EMPTY_FACTS, 'traversal_failures': tuple(failures)}
 
     raw: Dict[str, List[Dict[str, Any]]] = {}
     trees = []
@@ -267,15 +275,24 @@ def _build_index(project_root: Path) -> Dict[str, Any]:
         collect_typeddict_definitions(tree, file_path, raw)
 
     aliases: FrozenSet[str] = build_context(trees).dict_aliases
-    return {'typeddicts': resolve_typeddicts(raw), 'dict_aliases': aliases}
+    return {'typeddicts': resolve_typeddicts(raw), 'dict_aliases': aliases,
+            'traversal_failures': tuple(failures)}
 
 
 def get_scan_disclosures(files: Optional[List[Path]] = None) -> List[str]:
-    """One-line reasons for every project whose cross-module TypedDict scan
-    was skipped by the file-count ceiling. Mirrors D005/I002."""
+    """Disclose capped or incomplete project TypedDict/alias evidence for these roots."""
     roots = scan_roots(files, _find_project_root) if files is not None else None
-    return [message for root, message in _project_skip_reasons.items()
-            if roots is None or root in roots]
+    disclosures = [message for root, message in _project_skip_reasons.items()
+                   if roots is None or root in roots]
+    for root, facts in _project_index.items():
+        if roots is not None and root not in roots:
+            continue
+        traversal = traversal_failed_warning(facts.get('traversal_failures', ()), root)
+        if traversal:
+            disclosures.append(
+                f"T006: {traversal['message']}; project TypedDict/alias evidence is incomplete; "
+                "suggestions may be missing")
+    return disclosures
 
 
 def _clear_index() -> None:
@@ -289,4 +306,16 @@ def _evict_root(root: Path) -> None:
     _project_skip_reasons.pop(root, None)
 
 
+def _evict_incomplete_indexes() -> None:
+    """Keep partial evidence within an invocation, never across host requests.
+
+    A healthy sealing walk cannot validate an index built from incomplete input.
+    Prune before the existing validator removes its orphan stamp.
+    """
+    for root, facts in tuple(_project_index.items()):
+        if facts.get('traversal_failures'):
+            _evict_root(root)
+
+
+register_request_cache(__name__ + '.traversal', _evict_incomplete_indexes)
 register_validated_cache(__name__, _project_index, _evict_root)
