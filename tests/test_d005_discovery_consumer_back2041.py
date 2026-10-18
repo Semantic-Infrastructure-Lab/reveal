@@ -142,7 +142,7 @@ def test_seven_build_only_errors_preserve_observed_budget_and_outer_population(p
     assert row['exact'] is False, row
     assert response.returncode == 3
     note = _directory_note(data['summary']['scan_disclosures'])
-    assert str(root) in note
+    assert root.as_posix() in note
     assert ('0 identified directory' if unknown else '7 identified directory') in note
     assert ('7 enumeration error event(s)' if unknown else 'and 2 more') in note
 
@@ -182,7 +182,7 @@ def test_empty_source_index_is_still_incomplete_in_ordinary_mcp_answer(project, 
     assert observed['events'] == [root] and rule._project_index[root] == {}
     assert type(answer) is str
     note = _directory_note(answer.splitlines())
-    assert str(root) in note
+    assert root.as_posix() in note
     assert 'No findings in the checked population; scan incomplete.' in answer
     assert 'No issues found.' not in answer
 

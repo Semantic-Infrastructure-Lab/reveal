@@ -46,7 +46,7 @@ def test_full_actual_event_sequence_survives_pickle_without_display_dedup(tmp_pa
     if unknown:
         assert index.traversal_failures == ((None, 'PermissionError: actual unnamed D005 source loss'),) * 7
     else:
-        assert [path for path, _cause in index.traversal_failures] == fault['events']
+        assert [path for path, _cause in index.traversal_failures] == [Path(event).as_posix() for event in fault['events']]
     note, = get_scan_disclosures([checked], ['D005'], None)
     assert ('7 enumeration error event(s)' if unknown else 'and 2 more') in note
     restored = pickle.loads(pickle.dumps(index))
@@ -61,7 +61,7 @@ def test_early_cap_keeps_actual_facts_and_unmodified_observed_lookahead(tmp_path
     fault.update(enabled=True, unknown=unknown)
     index = mod._build_index(tmp_path, mod.D005())
     assert len(fault['events']) == len(index.traversal_failures) == 1
-    assert index.traversal_failures[0][0] == (None if unknown else str(tmp_path / 'a_hidden'))
+    assert index.traversal_failures[0][0] == (None if unknown else (tmp_path / 'a_hidden').as_posix())
     assert not index and index.scan_budget == {
         'scope': 'scan', 'total': 3, 'returned': 2, 'exact': False,
         'limit': 2, 'analyzed_files': 0, 'failed_files': 0, 'skipped': True,
