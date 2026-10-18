@@ -231,3 +231,23 @@ def test_skipped_source_only_existing_public_policy_is_separate_control(tmp_path
     data = json.loads(response.stdout)
     assert response.returncode == 1 and data['total'] == 1 and data['scan_disclosures'] == []
     assert fault['events'] == [] and get_scan_disclosures([manifest], ['I007'], None) == []
+
+
+def test_unknown_disclosures_identify_each_actual_language_population_and_root(tmp_path, fault):
+    fault.update(mode='directory', unknown=True)
+    notes = []
+    for root_name in ('first', 'second'):
+        root = tmp_path / root_name
+        manifests = [project(root, language)[0] for language in ('python', 'rust')]
+        for manifest in manifests:
+            rule = I007()
+            assert len(rule.check(str(manifest), None, '')) == 1
+        current = get_scan_disclosures(manifests, ['I007'], None)
+        assert len(current) == 2
+        notes.extend(current)
+    assert len(fault['events']) == len(fault['builds']) == 4
+    assert len(set(notes)) == 4, 'unknown events must retain distinct reached root/language attribution'
+    for root_name, pair in zip(('first', 'second'), (notes[:2], notes[2:])):
+        assert all(str(tmp_path / root_name) in note for note in pair)
+        assert 'Python' in pair[0] and 'Rust' in pair[1]
+        assert all('1 enumeration error event(s)' in note for note in pair)
