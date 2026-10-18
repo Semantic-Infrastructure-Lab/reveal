@@ -18,8 +18,11 @@ def write(path, text):
 def test_count_callback_receives_actual_oserror_without_changing_legacy_zero(tmp_path, monkeypatch):
     file = write(tmp_path / 'file.py', 'X=1\n')
     actual = PermissionError('actual unlocated line read')
+    real_read = Path.read_text
     def denied(*args, **kwargs):
-        raise actual
+        if args[0] == file:
+            raise actual
+        return real_read(*args, **kwargs)
     monkeypatch.setattr(Path, 'read_text', denied)
     errors = []
     assert pack._count_lines(file, on_error=errors.append) == 0
@@ -30,8 +33,11 @@ def test_count_callback_receives_actual_oserror_without_changing_legacy_zero(tmp
 @pytest.mark.parametrize('error_class', [OSError, RuntimeError])
 def test_count_callback_failure_propagates_outside_native_io_catch(tmp_path, monkeypatch, error_class):
     file = write(tmp_path / 'file.py', 'X=1\n')
+    real_read = Path.read_text
     def denied(*args, **kwargs):
-        raise PermissionError('actual native read loss')
+        if args[0] == file:
+            raise PermissionError('actual native read loss')
+        return real_read(*args, **kwargs)
     sentinel = error_class('callback failure must propagate')
     def callback(error):
         assert isinstance(error, PermissionError)
