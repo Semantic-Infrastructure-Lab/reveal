@@ -164,9 +164,8 @@ def _add_top_section(report: Dict[str, Any], name: str, ranked: List[Dict[str, A
 
 
 def _lost_analysis(report: Dict[str, Any]) -> bool:
-    """True when the hotspot or complexity step could not analyze a target (BACK-1738,
-    BACK-1852)."""
-    return any(w.get('type') == 'analysis_failed'
+    """True when hotspot or complexity analysis lost required files or directories."""
+    return any(w.get('type') in {'analysis_failed', 'analysis_incomplete'}
                for w in report.get('meta', {}).get('warnings', []))
 
 
