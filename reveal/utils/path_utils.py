@@ -762,17 +762,19 @@ def walk_with_causes(
     *,
     exclude_patterns: Optional[List[str]] = None,
     respect_gitignore: Optional[bool] = None,
+    on_error: Optional[Callable[[OSError], None]] = None,
 ) -> Iterator[Tuple[Path, Optional[str]]]:
     """Every file a walk for *purpose* reaches, with the soft cause that would hide it from
     a plain walk (None when it would be kept): the resolution index needs gitignored and
     ``--exclude``'d files as import targets while leaving them out of the graph (BACK-1580).
     Directories with a cause in ``purpose.soft_dirs`` are still descended.
+    ``on_error`` receives enumeration failures; None retains os.walk defaults.
     """
     if path.is_file():
         yield path, None
         return
     hidden = walk_filter(path, purpose, exclude_patterns, respect_gitignore)
-    for root, dirs, filenames in os.walk(str(path)):
+    for root, dirs, filenames in os.walk(str(path), onerror=on_error):
         root_path = Path(root)
         dirs[:] = [d for d in dirs
                    if hidden(root_path / d, True) in (None, *purpose.soft_dirs)]

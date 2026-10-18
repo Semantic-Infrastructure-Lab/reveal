@@ -116,6 +116,8 @@ class ImportGraph:
     scan_skipped_reason: Optional[str] = None
     # Source-candidate accounting, distinct from graph membership and output paging.
     scan_budget: Dict[str, Any] = field(default_factory=dict)
+    # Directory enumeration loss affects sources and extension-agnostic resolution targets.
+    traversal_failures: List[Tuple[Optional[str], str]] = field(default_factory=list)
 
     @classmethod
     def from_imports(cls, imports: List[ImportStatement]) -> 'ImportGraph':

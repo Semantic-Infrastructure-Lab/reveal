@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .base import LanguageExtractor, get_extractor
 from .file_index import discover_import_files
 from .types import ImportAnalysis, ImportStatement
+from ...utils.path_utils import to_posix
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,7 @@ class ImportFileSet:
     candidates: Tuple[Path, ...]
     index: Dict[str, List[Path]]
     capped: bool = False
+    traversal_failures: Tuple[Tuple[Optional[str], str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -40,8 +42,14 @@ def discover(scope: ScanScope) -> ImportFileSet:
         return path.suffix in scope.extensions or path.suffix.lower() in scope.lowercase_extensions
     if scope.root.is_file():
         return ImportFileSet((scope.root,) if accepts(scope.root) else (), {})
-    candidates, index, capped = discover_import_files(scope.root, accepts, cap=scope.cap)
-    return ImportFileSet(tuple(candidates), index, capped)
+    failures: List[Tuple[Optional[str], str]] = []
+
+    def on_error(error: OSError) -> None:
+        failures.append((to_posix(error.filename) if error.filename else None,
+                         f'{type(error).__name__}: {error}'))
+
+    candidates, index, capped = discover_import_files(scope.root, accepts, cap=scope.cap, on_error=on_error)
+    return ImportFileSet(tuple(candidates), index, capped, tuple(failures))
 
 
 def resolve_primary(stmt: ImportStatement, extractor: LanguageExtractor, context: ResolutionContext) -> Optional[Path]:
@@ -81,6 +89,7 @@ def resolve_graph(scope: ScanScope, files: ImportFileSet, analysis: ImportAnalys
     """Resolve each file's imports to dependency edges (language-specific)."""
     if analysis.graph is None:
         raise ValueError('Import analysis requires an extracted graph before resolution')
+    analysis.graph.traversal_failures = list(files.traversal_failures)
     target_path, file_index = scope.root, files.index
     # BACK-554: the namespace index (below) must be built from every
     # scanned file (`analysis.scanned_files`), not just `analysis.graph.files`

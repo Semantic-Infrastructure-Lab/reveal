@@ -14,7 +14,7 @@ Usage:
 
 import os
 from pathlib import Path
-from typing import Callable, Dict, Any, List, Optional, Tuple, cast
+from typing import Callable, Dict, Any, List, Optional, Sequence, Tuple, cast
 from reveal.reveal_types import CONTRACT_VERSION, WarningEntry
 
 from .base import ResourceAdapter, register_adapter, register_renderer
@@ -35,6 +35,7 @@ from ..registry import get_code_extensions
 from ..utils.parallel import pool_worker_count, submit_each, worker_lost_warning as _worker_lost_warning
 from ..utils.path_utils import to_posix, to_relative_display
 from ..utils.results import ResultBuilder, note_truncation
+from ..utils.warning_render import meta_warning_lines
 
 # Disk-cache namespace for this adapter's resolved import graph (BACK-834).
 # Mirrors rules/imports/I002.py's own import-graph disk cache (_tree_fingerprint
@@ -46,9 +47,16 @@ from ..utils.results import ResultBuilder, note_truncation
 _ADAPTER_IMPORT_GRAPH_NAMESPACE = "adapter_import_graph"
 
 def _candidate_set_fingerprint(candidates: List[Path],
-                               file_index: Optional[Dict[str, List[Path]]] = None) -> Optional[str]:
+                               file_index: Optional[Dict[str, List[Path]]] = None, *,
+                               traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> Optional[str]:
     """Shared source/target fingerprint; preserve the private source-only call shape."""
-    return resolution_fingerprint(candidates, file_index or {}, excluded_root=disk_cache.cache_root())
+    return resolution_fingerprint(candidates, file_index or {}, excluded_root=disk_cache.cache_root(),
+                                  traversal_failures=traversal_failures)
+
+
+def _discovery_incomplete(result: Dict[str, Any]) -> bool:
+    """Whether the available import graph lost required directory enumeration."""
+    return any(w.get('type') == 'analysis_incomplete' for w in result.get('meta', {}).get('warnings', []))
 
 
 def _module_label(path: str) -> str:
@@ -514,7 +522,7 @@ class ImportsRenderer:
         judged_files = result.get('metadata', {}).get('scanned_files', 0) - sum(not_checked.values())
         if count == 0 and judged_files > 0:
             scope = f" in the {judged_files} checked file(s)" if not_checked else ""
-            print(f"  ✅ No unused imports found{scope}!\n")
+            ImportsRenderer._render_no_unused(result, scope)
         elif count == 0:
             pass
         else:
@@ -535,6 +543,34 @@ class ImportsRenderer:
                     print(f"  Run with --verbose to see all {count} unused imports\n")
 
     @staticmethod
+    def _render_no_unused(result: dict, scope: str) -> None:
+        """Qualify zero unused observations against required discovery loss."""
+        if _discovery_incomplete(result):
+            print(f"  No unused imports observed{scope} in the available inputs; analysis is incomplete.\n")
+        else:
+            print(f"  ✅ No unused imports found{scope}!\n")
+
+    @staticmethod
+    def _render_no_cycles(result: dict) -> None:
+        """Qualify zero observed cycles against the available resolution population."""
+        regime = result.get('metadata', {}).get('autoload_regime')
+        total_imports = result.get('metadata', {}).get('total_imports', 0)
+        scanned_files = result.get('metadata', {}).get('scanned_files', 0)
+        if _discovery_incomplete(result):
+            print("  No circular dependencies observed in the available graph; analysis is incomplete.\n")
+        elif regime:
+            # BACK-1245: an unqualified green check reads as "verified
+            # acyclic" when there's barely an explicit import graph to
+            # have cycles in -- disclose the denominator instead.
+            print(
+                f"  ✅ No circular dependencies found among {total_imports} explicit "
+                f"import(s) across {scanned_files} file(s).\n"
+            )
+            print(f"  {autoload_regime_warning(regime)}\n")
+        else:
+            print("  ✅ No circular dependencies found!\n")
+
+    @staticmethod
     def _render_circular_dependencies(result: dict, verbose: bool) -> None:
         """Render circular dependency groups (one entry per SCC)."""
         count = result['count']
@@ -542,21 +578,8 @@ class ImportsRenderer:
         print(f"Circular Dependencies: {count} cycle group{'s' if count != 1 else ''}")
         print(f"{'='*60}\n")
 
-        regime = result.get('metadata', {}).get('autoload_regime')
-        total_imports = result.get('metadata', {}).get('total_imports', 0)
-        scanned_files = result.get('metadata', {}).get('scanned_files', 0)
         if count == 0:
-            if regime:
-                # BACK-1245: an unqualified green check reads as "verified
-                # acyclic" when there's barely an explicit import graph to
-                # have cycles in -- disclose the denominator instead.
-                print(
-                    f"  ✅ No circular dependencies found among {total_imports} explicit "
-                    f"import(s) across {scanned_files} file(s).\n"
-                )
-                print(f"  {autoload_regime_warning(regime)}\n")
-            else:
-                print("  ✅ No circular dependencies found!\n")
+            ImportsRenderer._render_no_cycles(result)
             return
 
         groups = result['cycles']
@@ -598,7 +621,10 @@ class ImportsRenderer:
             print(f"  ℹ️  {note}\n")
             print(f"  Add layer rules to .reveal.yaml to enable this check.\n")
         elif count == 0:
-            print(f"  ✅ {note or 'No violations found'}\n")
+            if _discovery_incomplete(result):
+                print("  No layer violations observed in the available graph; analysis is incomplete.\n")
+            else:
+                print(f"  ✅ {note or 'No violations found'}\n")
         else:
             violations = result.get('violations', [])
             if verbose:
@@ -612,12 +638,29 @@ class ImportsRenderer:
                     print(f"  Run with --verbose to see all {count} violations\n")
 
     @staticmethod
+    def _render_cycle_summary(result: dict, display_path: str) -> None:
+        """Render observed cycles without declaring completeness after discovery loss."""
+        metadata = result.get('metadata', {})
+        total_files = metadata.get('total_files', 0)
+        total_imports = metadata.get('total_imports', 0)
+        has_cycles = metadata.get('has_cycles', False)
+        if _discovery_incomplete(result) and not has_cycles:
+            print("  Cycles Found:  Unknown (directory discovery incomplete)")
+        elif total_files <= 1 and Path(display_path).is_dir():
+            print("  Cycles Found:  N/A (only one file scanned — a cycle needs at least two)")
+        elif total_files <= 1:
+            print("  Cycles Found:  N/A (single-file scan — use imports://dir/ to detect cycles)")
+        elif not total_imports:
+            print("  Cycles Found:  N/A (no imports found)")
+        else:
+            print(f"  Cycles Found:  {'❌ Yes' if has_cycles else '✅ No'}")
+
+    @staticmethod
     def _render_import_summary(result: dict, resource: str) -> None:
         """Render import analysis summary."""
         metadata = result.get('metadata', {})
         total_files = metadata.get('total_files', 0)
         total_imports = metadata.get('total_imports', 0)
-        has_cycles = metadata.get('has_cycles', False)
 
         display_path = result.get('source', resource)
 
@@ -626,14 +669,7 @@ class ImportsRenderer:
         print(f"{'='*60}\n")
         print(f"  Total Files:   {total_files}")
         print(f"  Total Imports: {total_imports}")
-        if total_files <= 1 and Path(display_path).is_dir():
-            print("  Cycles Found:  N/A (only one file scanned — a cycle needs at least two)")
-        elif total_files <= 1:
-            print("  Cycles Found:  N/A (single-file scan — use imports://dir/ to detect cycles)")
-        elif not total_imports:
-            print("  Cycles Found:  N/A (no imports found)")
-        else:
-            print(f"  Cycles Found:  {'❌ Yes' if has_cycles else '✅ No'}")
+        ImportsRenderer._render_cycle_summary(result, display_path)
         print()
 
         # Honesty note: recognized code files whose language has no import
@@ -729,7 +765,10 @@ class ImportsRenderer:
         print()
 
         if not entries:
-            print("  No entry points found (every file is imported by at least one other).")
+            if _discovery_incomplete(result):
+                print("  No entry points observed in the available graph; analysis is incomplete.")
+            else:
+                print("  No entry points found (every file is imported by at least one other).")
             return
 
         source_path = Path(source) if source else None
@@ -800,6 +839,9 @@ class ImportsRenderer:
         if format == 'json':
             print_json_result(result)
             return
+
+        for line in meta_warning_lines(result):
+            print(line)
 
         # verbose from query (?verbose) takes precedence over caller arg
         verbose = result.get('verbose', verbose)
@@ -1081,10 +1123,12 @@ class ImportsAdapter(ResourceAdapter):
         rather than get_structure (overview, architecture): files parsed with errors
         (parse_failure_warning) and files a dead pool worker took down
         (worker_lost_warning), each under its own cause."""
-        from .ast.analysis import analysis_skipped_warning
+        from .ast.analysis import analysis_skipped_warning, traversal_failed_warning
         lost = set(self.analysis.files_lost)
         parse_failed = [str(fp) for fp in self.analysis.files_failed if fp not in lost]
-        warnings = [parse_failure_warning(parse_failed, base),
+        traversal = getattr(self.analysis.graph, 'traversal_failures', ())
+        warnings = [traversal_failed_warning(traversal, base),
+                    parse_failure_warning(parse_failed, base),
                     worker_lost_warning([str(fp) for fp in lost], base),
                     analysis_skipped_warning(
                         self.analysis.structure_failures, base,
@@ -1218,7 +1262,8 @@ class ImportsAdapter(ResourceAdapter):
 
     @staticmethod
     def _discover_candidate_files(
-        target_path: Path, supported_exts: frozenset, code_exts: frozenset
+        target_path: Path, supported_exts: frozenset, code_exts: frozenset, *,
+        traversal_failures: Optional[List[Tuple[Optional[str], str]]] = None,
     ) -> Tuple[List[Path], Dict[str, List[Path]]]:
         """Walk target_path for candidate code files (serial, cheap: no parsing).
 
@@ -1230,6 +1275,8 @@ class ImportsAdapter(ResourceAdapter):
         drops a file from both (BACK-1362); declaration-only stubs are not nodes (BACK-1467).
         """
         files = import_analysis.discover(import_analysis.ScanScope(target_path, supported_exts, code_exts))
+        if traversal_failures is not None:
+            traversal_failures.extend(files.traversal_failures)
         return list(files.candidates), files.index
 
     def _process_extracted_files(
@@ -1290,10 +1337,12 @@ class ImportsAdapter(ResourceAdapter):
         self.analysis.structure_failures = structure_failures
         return all_imports
 
-    def _resolve_dependencies(self, target_path: Path, file_index: Dict[str, List[Path]]) -> None:
+    def _resolve_dependencies(self, target_path: Path, file_index: Dict[str, List[Path]], *,
+                              traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> None:
         import_analysis.resolve_graph(
             import_analysis.ScanScope(target_path, frozenset(get_all_extensions())),
-            import_analysis.ImportFileSet(tuple(self.analysis.scanned_files), file_index), self.analysis)
+            import_analysis.ImportFileSet(tuple(self.analysis.scanned_files), file_index,
+                                          traversal_failures=tuple(traversal_failures)), self.analysis)
 
     def _build_graph(
         self,
@@ -1347,10 +1396,13 @@ class ImportsAdapter(ResourceAdapter):
         # honestly (instead of a silent 0) when a scan hits, e.g., Swift or Scala.
         code_exts = get_code_extensions()
 
-        candidates, file_index = self._discover_candidate_files(target_path, supported_exts, code_exts)
+        traversal_failures: List[Tuple[Optional[str], str]] = []
+        candidates, file_index = self._discover_candidate_files(
+            target_path, supported_exts, code_exts, traversal_failures=traversal_failures)
 
         cacheable = not collect_structures and on_file_processed is None
-        fingerprint = _candidate_set_fingerprint(candidates, file_index) if cacheable else None
+        fingerprint = _candidate_set_fingerprint(
+            candidates, file_index, traversal_failures=traversal_failures) if cacheable else None
         if fingerprint is not None:
             cached = disk_cache.get(_ADAPTER_IMPORT_GRAPH_NAMESPACE, fingerprint)
             if isinstance(cached, ImportAnalysis):
@@ -1362,7 +1414,7 @@ class ImportsAdapter(ResourceAdapter):
             candidates, collect_structures, on_file_processed, supported_exts, code_exts)
 
         self.analysis.graph = ImportGraph.from_imports(all_imports)
-        self._resolve_dependencies(target_path, file_index)
+        self._resolve_dependencies(target_path, file_index, traversal_failures=traversal_failures)
 
         if fingerprint is not None:
             disk_cache.put(_ADAPTER_IMPORT_GRAPH_NAMESPACE, fingerprint, self.analysis)
@@ -1378,12 +1430,19 @@ class ImportsAdapter(ResourceAdapter):
         Returns:
             Standardized response dict with contract_version, type, source, etc.
         """
+        base = self._target_path
+        if base is not None and not base.is_dir():
+            base = base.parent
+        # Keep legacy file/worker diagnostics in their existing metadata and text paths.
+        warnings = [warning for warning in self.integrity_warnings(base)
+                    if warning.get('type') == 'analysis_incomplete']
         response = ResultBuilder.create(
             result_type=response_type,
             source=str(self._target_path),
             source_type='directory' if self._target_path and self._target_path.is_dir() else 'file',
             contract_version=CONTRACT_VERSION,
             data=data_fields,
+            warnings=warnings,
         )
         response['metadata'] = metadata = self.get_metadata()
         failed = metadata.get('files_failed')

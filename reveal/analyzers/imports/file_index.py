@@ -11,7 +11,7 @@ import hashlib
 import stat
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from ...registry import DECLARATION_ONLY_EXTENSIONS
 from ...utils.path_utils import RESOLUTION, walk_with_causes
@@ -21,6 +21,8 @@ def discover_import_files(
     root: Path,
     is_candidate: Callable[[Path], bool],
     cap: Optional[int] = None,
+    *,
+    on_error: Optional[Callable[[OSError], None]] = None,
 ) -> Tuple[List[Path], Dict[str, List[Path]], bool]:
     """Walk *root* once: ``(graph files, basename -> paths index, capped)``.
 
@@ -33,7 +35,7 @@ def discover_import_files(
     """
     candidates: List[Path] = []
     index: Dict[str, List[Path]] = {}
-    for file_path, cause in walk_with_causes(root, RESOLUTION):
+    for file_path, cause in walk_with_causes(root, RESOLUTION, on_error=on_error):
         index.setdefault(file_path.name, []).append(file_path)
         if cause is not None or file_path.suffix.lower() in DECLARATION_ONLY_EXTENSIONS:
             continue
@@ -64,13 +66,16 @@ def load_path_manifests(root: Path, pattern: str) -> List[Path]:
 
 
 def resolution_fingerprint(candidates: Iterable[Path], index: Dict[str, List[Path]],
-                           excluded_root: Optional[Path] = None) -> Optional[str]:
+                           excluded_root: Optional[Path] = None, *,
+                           traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> Optional[str]:
     """Hash source membership plus the complete resolution target set (BACK-1755).
 
     Roles stay distinct: changing source eligibility still invalidates an unchanged
-    target index. Stat failure disables caching. Reveal's own cache artifacts are
+    target index. Known traversal loss or stat failure disables caching. Reveal's own cache artifacts are
     excluded so writing this graph does not invalidate the next read.
     """
+    if traversal_failures:
+        return None
     try:
         excluded = excluded_root.resolve() if excluded_root is not None else None
         hasher = hashlib.sha256()
