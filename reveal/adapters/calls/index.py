@@ -407,6 +407,17 @@ def _cache_callers_index(dir_str: str, cache_key: Any, index: CallersIndex,
         _INDEX_CACHE.popitem(last=False)
 
 
+def _cached_callers_index(dir_str: str, cache_key: Any,
+                          structures: Optional[StructureList]) -> Optional[CallersIndex]:
+    """Reuse a matching index only when supplied evidence has no known directory loss."""
+    if getattr(structures, 'traversal_failures', []):
+        return None
+    if dir_str in _INDEX_CACHE and _INDEX_CACHE[dir_str][0] == cache_key:
+        _INDEX_CACHE.move_to_end(dir_str)
+        return _INDEX_CACHE[dir_str][1]
+    return None
+
+
 def build_callers_index(path: str, structures: Optional[StructureList] = None) -> CallersIndex:
     """Return project-level callers index for *path* (file or directory).
 
@@ -420,8 +431,9 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
           ...
         }
 
-    Results are cached by directory mtime fingerprint; any file change causes
-    a full rebuild (rebuilds are fast — just iterating existing structures).
+    Results are cached by a directory mtime fingerprint and active scope. This
+    cheap key does not detect every file change. Supplied structures with known
+    directory traversal loss bypass a matching hit and are not cached.
 
     Args:
         path: File or directory to index.
@@ -444,9 +456,9 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
     # for the gitignore switch (--no-gitignore changes the file set).
     from ...utils.exclusions import active_exclusions
     cache_key = (_dir_cache_key(directory), active_exclusions(), gitignore_enabled())
-    if dir_str in _INDEX_CACHE and _INDEX_CACHE[dir_str][0] == cache_key:
-        _INDEX_CACHE.move_to_end(dir_str)
-        return _INDEX_CACHE[dir_str][1]
+    cached = _cached_callers_index(dir_str, cache_key, structures)
+    if cached is not None:
+        return cached
 
     # Build index
     structures = _structures_or_collect(structures, directory)
