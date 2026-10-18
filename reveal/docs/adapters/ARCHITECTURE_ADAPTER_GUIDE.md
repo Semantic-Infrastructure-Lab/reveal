@@ -81,6 +81,14 @@ The ordinary report retains AST warnings, errors, confidence and ranking cuts in
 `meta`, including when imports and complexity share one walk. A display cut or
 an informational complexity caveat does not establish missing input.
 
+For required directory loss, the ordinary report needs surviving positive
+relationships or requested AST observations to provide useful partial analysis.
+Component filenames and zero-edge rows alone do not establish that availability.
+With no usable observations, or malformed required child evidence, analysis is
+failed and MCP reports an error; useful partial analysis retains its warnings.
+A clean zero remains complete. AST availability uses its validated uncapped
+`total_results` before ranking limits, including when `top=0` hides all rows.
+
 A git-ref comparison applies the same explicit exclusions and current project
 ignore policy to both snapshots. The base contains tracked files; the live head
 honors the selected gitignore policy. Use `--no-gitignore` to include ignored

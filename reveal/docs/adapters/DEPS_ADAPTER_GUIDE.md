@@ -78,6 +78,14 @@ imports and findings. Text reports incomplete or unavailable base, circular and
 unused analysis from these same component records. Circular text avoids claiming
 there were no cycles when its required evidence is missing.
 
+Required directory loss leaves enabled components incomplete when validated raw
+imports, unused-import observations or genuine cycles survive. With no surviving
+dependency observations, affected components are failed. A clean zero remains
+complete. Source census and failed-file membership cannot prove usable analysis;
+relative imports such as `from . import helper` are valid observations. These facts
+precede summary and display cuts. MCP retains useful partial results with a
+warning and reports failed analysis as an error.
+
 `analysis.findings` retains full circular-group and unused-import counts before
 text caps or JSON summary projection; a missing or malformed findings array has
 an unknown (`null`) count rather than a measured zero. Explicitly skipped checks are omitted from

@@ -93,6 +93,14 @@ extensions and ranking cuts do not independently make completed work fail.
 Operational Git failures remain failures when Git was requested. Child populations
 can differ legitimately, including on unsupported-language and excluded trees.
 
+After required directory loss, surviving measured Stats, requested AST observations
+or positive relationships support useful partial analysis. Physical-line measurements
+can survive a degraded parse. Filenames, census totals and zero-edge membership
+alone do not prove availability. With no useful observations, or malformed required
+child evidence, analysis is failed and MCP reports an error. A clean zero remains
+complete. The validated uncapped AST count preserves availability before `top=0`
+or other ranking limits; projections cannot manufacture observations or erase failure.
+
 Execution facts are retained before `--fields` projection and postprocessing.
 Human-primary `--also-json PATH` retains complete arrays; a failed artifact write
 exits 3. Primary JSON keeps its established `--also-json` no-op. Closed stdout
