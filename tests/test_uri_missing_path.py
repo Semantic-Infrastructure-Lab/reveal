@@ -51,13 +51,25 @@ def _missing_path_contract(scheme):
     return (2, adapter.RESULT_TYPE) if adapter is not None else (1, scheme)
 
 
+def _missing_path_uri(scheme):
+    from reveal.utils.query_binding import encode_param_value
+    adapter = declared_adapter_class(scheme)
+    query = []
+    for spec in adapter.PARAM_SPECS if adapter is not None else ():
+        if spec.required:
+            assert spec.examples, f'{scheme}/{spec.name}: path probe needs a valid required value'
+            value = spec.examples[0].partition('=')[2]
+            query.append(f'{spec.name}={encode_param_value(spec, value)}')
+    return f'{scheme}://nonexistent_zz_1321' + ('?' + '&'.join(query) if query else '')
+
+
 def test_default_is_not_a_path_adapter():
     assert adapters_base.ResourceAdapter.RESOURCE_IS_PATH is False
 
 
 @pytest.mark.parametrize('scheme', PATH_ADAPTERS)
 def test_missing_path_exits_with_error(scheme):
-    code, out, err = _run(f'{scheme}://nonexistent_zz_1321')
+    code, out, err = _run(_missing_path_uri(scheme))
     assert code == _missing_path_contract(scheme)[0]
     assert f'Error ({scheme}://): Path not found: nonexistent_zz_1321' in err
     assert out == ''
@@ -65,7 +77,7 @@ def test_missing_path_exits_with_error(scheme):
 
 @pytest.mark.parametrize('scheme', PATH_ADAPTERS)
 def test_missing_path_json_emits_error_envelope(scheme):
-    code, out, _ = _run(f'{scheme}://nonexistent_zz_1321', format='json')
+    code, out, _ = _run(_missing_path_uri(scheme), format='json')
     expected_code, expected_type = _missing_path_contract(scheme)
     assert code == expected_code
     payload = json.loads(out)

@@ -423,7 +423,8 @@ subcommands:
       review: not-applicable
       via: []
     verbose:
-      reason: --verbose is not declared on `reveal trace`'s own parser -- argparse
-        rejects it loudly (unrecognized arguments), not a silent gap
+      reason: Trace accepts shared verbosity but expansion is controlled by depth;
+        verbosity is an explicit no-op disclosed by the flag ledger.
       review: not-applicable
-      via: []
+      via:
+      - declared-unused

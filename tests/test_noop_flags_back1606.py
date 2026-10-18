@@ -153,8 +153,15 @@ def test_usage_lists_only_formats_the_subcommand_accepts(tmp_path, name):
     import re
     usage = _cli(name, '--help', cwd=tmp_path).stdout
     listed = re.search(r'--format \{([^}]*)\}', usage).group(1).split(',')
+    from reveal.cli.routing.declared import declared_adapter_class
+    adapter = declared_adapter_class(name)
+    required = []
+    for spec in adapter.PARAM_SPECS if adapter is not None else ():
+        if spec.cli is not None and spec.cli.required:
+            assert spec.examples, f'{name}/{spec.name}: required format probe needs an example'
+            required.extend([spec.cli.flags[0], spec.examples[0].partition('=')[2]])
     for fmt in ('text', 'json', 'typed', 'grep'):
-        err = _cli(name, str(tmp_path), '--format', fmt, cwd=tmp_path).stderr
+        err = _cli(name, str(tmp_path), *required, '--format', fmt, cwd=tmp_path).stderr
         rejected = 'is not supported by' in err or "invalid choice: '%s'" % fmt in err
         assert (fmt in listed) != rejected, (name, fmt, listed)
 
