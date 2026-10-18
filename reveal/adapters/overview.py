@@ -197,16 +197,21 @@ def _validate_git_log(data: Any) -> None:
 
 
 def _required_child(adapter: 'OverviewAdapter', owner: type, path: Path,
-                    validate: Callable[[Any], None], **kwargs: Any) -> Dict[str, Any]:
+                    validate: Callable[[Any], None], *,
+                    observations: Optional[Dict[str, bool]] = None, **kwargs: Any) -> Dict[str, Any]:
     # A unique fallback distinguishes an already-attributed compose failure from
     # a child returning {}, which is missing evidence rather than empty success.
     missing = object()
     data = adapter.compose(owner, str(path), default=missing, **kwargs)
     if data is missing or (isinstance(data, dict) and data.get('error')):
+        if observations is not None:
+            observations['failed'] = True
         return {}
     try:
         validate(data)
     except ValueError as exc:
+        if observations is not None:
+            observations['failed'] = True
         adapter.record_composed_error(getattr(owner, '__name__', str(owner)), path, exc)
         return {}
     return cast(Dict[str, Any], data)
@@ -231,7 +236,36 @@ def without_internal_filter_warnings(meta: Optional[RevealMeta]) -> List[Warning
 
 # ── Data collectors ────────────────────────────────────────────────────────────
 
-def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int) -> Dict[str, Any]:
+def _measured_stats(entry: Dict[str, Any]) -> bool:
+    """Physical measurements survive a degraded parse; a filename alone does not."""
+    lines = entry.get('lines')
+    if entry.get('analysis_failed') or not isinstance(lines, dict):
+        return False
+    valid = all(type(lines.get(key)) is int and lines[key] >= 0
+                for key in ('total', 'code', 'empty', 'comments'))
+    return valid and lines['total'] == lines['code'] + lines['empty'] + lines['comments']
+
+
+def _observed_relationships(fan_in, entrypoints, components, cycles) -> bool:
+    rows = [*fan_in, *entrypoints, *components]
+    positive = any(type(row.get(key)) is int and row[key] > 0
+                   for row in rows for key in ('fan_in', 'fan_out', 'internal', 'outgoing', 'incoming'))
+    real_cycle = any(isinstance(cycle, list) and all(isinstance(path, str) and bool(path) for path in cycle)
+                     and len(set(cycle)) >= 2 for cycle in cycles)
+    return positive or real_cycle
+
+
+def _directory_loss_error(meta, observations) -> Optional[Dict[str, str]]:
+    if not any(w.get('type') == 'analysis_incomplete' for w in (meta or {}).get('warnings', [])):
+        return None
+    if observations.get('failed') or not observations.get('usable'):
+        return {'code': 'E_OVERVIEW_ANALYSIS',
+                'message': 'Required directory discovery failed; required analysis failed or no overview observations survived'}
+    return None
+
+
+def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int, *,
+               observations: Optional[Dict[str, bool]] = None) -> Dict[str, Any]:
     """Fetch stats and the top ``top`` hotspots via StatsAdapter.
 
     BACK-1042: forwards --exclude/--respect-gitignore as a raw query string
@@ -250,7 +284,10 @@ def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int) -> Dict[str, An
         query += f'&exclude={join_exclude_patterns(exclude_patterns)}'
     query += f'&respect_gitignore={"true" if adapter.respect_gitignore else "false"}'
     stats = _required_child(adapter, StatsAdapter, path, _validate_stats, query=query,
+                            observations=observations,
                             cut_as=('hotspots', 'raise ?top=N'))
+    if observations is not None and any(_measured_stats(entry) for entry in stats.get('files', [])):
+        observations['usable'] = True
     if stats.get('warnings'):
         adapter.fold_meta({'warnings': stats['warnings']})
     # Each file's language as the scope census names it, while the file can be
@@ -341,11 +378,16 @@ def _run_git_log(adapter: 'OverviewAdapter', path: Path, limit: int) -> List[Dic
     return data.get('history', data.get('commits', []))
 
 
-def _run_complex_functions(adapter: 'OverviewAdapter', path: Path, limit: int) -> List[Dict[str, Any]]:
+def _run_complex_functions(adapter: 'OverviewAdapter', path: Path, limit: int, *,
+                           observations: Optional[Dict[str, bool]] = None) -> List[Dict[str, Any]]:
     """Fetch top complex functions via AstAdapter."""
     data = _required_child(adapter, AstAdapter, path, _validate_ast,
+                            observations=observations,
                             query=f'complexity>9&sort=-complexity&limit={limit}',
                             cut_as=('complex_functions', 'raise ?top=N'))
+    if observations is not None and data.get('total_results', 0) > 0:
+        # This validated domain count is authoritative even when limit=0 hides rows.
+        observations['usable'] = True
     return data.get('results', data.get('elements', []))
 
 
@@ -365,7 +407,8 @@ def _imports_metadata(adapter: 'OverviewAdapter', metadata: Dict[str, Any]) -> D
     return retained
 
 
-def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path) -> Dict[str, Any]:
+def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, *,
+                          observations: Optional[Dict[str, bool]] = None) -> Dict[str, Any]:
     """Build import graph once and return architectural data for overview.
 
     Uses ImportsAdapter's private walk/format methods directly (not
@@ -397,12 +440,17 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path) -> Dict[str, A
         try:
             _validate_import_metadata(metadata, unsupported)
         except ValueError as exc:
+            if observations is not None:
+                observations['failed'] = True
             # Retain independently valid rankings and coverage disclosure, but
             # never fill unknown failure counts with fabricated zero evidence.
             adapter.record_composed_error('ImportsAdapter', path, exc)
             retained = {}
         else:
             retained = _imports_metadata(adapter, metadata)
+        if observations is not None and _observed_relationships(
+                fan_in['entries'], entrypoints['entries'], components['components'], circular.get('cycles', [])):
+            observations['usable'] = True
         return {
             'fan_in': fan_in.get('entries', []),
             'entrypoints': entrypoints.get('entries', []),
@@ -417,6 +465,8 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path) -> Dict[str, A
             'metadata': retained,
         }
     except Exception as exc:  # boundary-ok: broad-except -- composition seam that bypasses compose() for the shared ImportsAdapter walk; the sibling adapter's failure set is not bounded (parse, resolution, pool), and a failure is recorded in meta.errors with confidence 0 by record_composed_error, exactly what compose() does
+        if observations is not None:
+            observations['failed'] = True
         adapter.record_composed_error('ImportsAdapter', path, exc)
         return {'fan_in': [], 'entrypoints': [], 'components': [], 'circular_count': 0, 'unsupported_extensions': {}}
 
@@ -568,6 +618,8 @@ class OverviewAdapter(ResourceAdapter):
                                  for field in ('files_failed_count', 'files_lost_count'))
         incomplete = missing or bool(errors)
         state = AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE
+        if any(error.get('code') == 'E_OVERVIEW_ANALYSIS' for error in errors):
+            state = AnalysisCompleteness.FAILED
         return result_execution_facts(result, completeness=state)
 
     @staticmethod
@@ -652,15 +704,16 @@ class OverviewAdapter(ResourceAdapter):
         no_git = no_git_spec.read(self.query_params)
         no_imports = no_imports_spec.read(self.query_params)
 
-        stats = _run_stats(self, path, top)
+        observations: Dict[str, bool] = {}
+        stats = _run_stats(self, path, top, observations=observations)
         git_root = None if no_git else _git_root_or_disclose(self, path)
         git_log = [] if git_root is None else _run_git_log(self, path, top)
         git_foreign_root: Optional[Path] = None
         # Compare resolved: 'overview://.' at a repo root is not foreign to itself.
         if git_log and git_root is not None and git_root.resolve() != path.resolve():
             git_foreign_root = git_root
-        complex_fns = _run_complex_functions(self, path, top)
-        architecture = {} if no_imports else _run_imports_analysis(self, path)
+        complex_fns = _run_complex_functions(self, path, top, observations=observations)
+        architecture = {} if no_imports else _run_imports_analysis(self, path, observations=observations)
         _relativize_paths(complex_fns, architecture, path)
         _annotate_provenance(complex_fns, architecture)
 
@@ -675,6 +728,10 @@ class OverviewAdapter(ResourceAdapter):
         }
 
         meta = self.composed_meta()
+        error = _directory_loss_error(meta, observations)
+        if error:
+            meta = meta or {}
+            meta.setdefault('errors', []).append(error)
         return ResultBuilder.create(
             result_type='overview',
             source=self.path,

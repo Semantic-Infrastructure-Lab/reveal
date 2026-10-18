@@ -110,11 +110,27 @@ def _component_state(name: str, result: Dict[str, Any], counts: Optional[Tuple[i
                      meta: Dict[str, Any]) -> AnalysisCompleteness:
     if result.get('error') or counts is None or not _valid_component_payload(name, result):
         return AnalysisCompleteness.FAILED
-    missing = any(w.get('type') in ('partial_parse', 'worker_lost', 'analysis_failed', 'parse_recovered')
+    missing = any(w.get('type') in ('partial_parse', 'worker_lost', 'analysis_failed', 'parse_recovered', 'analysis_incomplete')
                   for w in meta.get('warnings', []))
     if any(counts) or meta.get('errors') or missing:
         return AnalysisCompleteness.INCOMPLETE
     return AnalysisCompleteness.COMPLETE
+
+
+def _observed_import(entry: Dict[str, Any]) -> bool:
+    names = entry.get('names')
+    relative = (entry.get('is_relative') is True and isinstance(names, list) and bool(names)
+                and all(isinstance(name, str) and bool(name) for name in names))
+    return (isinstance(entry.get('file'), str) and bool(entry['file'])
+            and type(entry.get('line')) is int and entry['line'] > 0
+            and (isinstance(entry.get('module'), str) and bool(entry['module']) or relative))
+
+
+def _observed_dependencies(base, circular, unused) -> bool:
+    imports = [entry for entries in base.get('files', {}).values() for entry in entries]
+    cycles = circular.get('cycles', [])
+    return (any(_observed_import(entry) for entry in [*imports, *unused])
+            or any(len(set(path for path in cycle if path)) >= 2 for cycle in cycles))
 
 
 def _deps_top(value: Any) -> int:
@@ -398,7 +414,7 @@ class DepsAdapter(ResourceAdapter):
                                         for component in analysis['components'].values()))
         meta = result.get('meta') or {}
         missing = bool(meta.get('errors')) or any(
-            warning.get('type') in ('partial_parse', 'worker_lost', 'analysis_failed', 'parse_recovered')
+            warning.get('type') in ('partial_parse', 'worker_lost', 'analysis_failed', 'parse_recovered', 'analysis_incomplete')
             for warning in meta.get('warnings', []))
         if missing:
             facts = merge_execution_facts(facts, ExecutionFacts(AnalysisCompleteness.INCOMPLETE))
@@ -503,6 +519,28 @@ class DepsAdapter(ResourceAdapter):
         self._composed_warnings = []
         self._composed_confidences = []
 
+    def _qualify_directory_loss(self, base, circular, unused) -> None:
+        """An inaccessible population cannot establish absence of dependencies."""
+        affected = [name for name, record in self._deps_components.items()
+                    if any(w.get('type') == 'analysis_incomplete'
+                           for w in record['diagnostics'].get('warnings', []))]
+        if not affected:
+            return
+        valid = {name for name, record in self._deps_components.items()
+                 if record['completeness'] != AnalysisCompleteness.FAILED.value}
+        base = base if 'base' in valid else {}
+        circular = circular if 'circular' in valid else {}
+        unused = unused if 'unused' in valid else []
+        if _observed_dependencies(base, circular, unused):
+            return
+        for name in affected:
+            record = self._deps_components[name]
+            record['completeness'] = AnalysisCompleteness.FAILED.value
+            self._composed_errors.append({
+                'code': 'E_DEPS_COMPONENT', 'component': name,
+                'message': 'Required directory discovery failed and no dependency observations survived',
+            })
+
     def _get_structure(self) -> Dict[str, Any]:
         path = Path(self.path)
         no_unused = _NO_UNUSED.read(self.query_params)
@@ -528,6 +566,7 @@ class DepsAdapter(ResourceAdapter):
         for name in required:
             if name not in components:
                 self._record_component(name, {})
+        self._qualify_directory_loss(base, circular, unused)
         facts = merge_execution_facts(*(ExecutionFacts(AnalysisCompleteness(record['completeness']))
                                         for record in components.values()))
         report['analysis'] = {'complete': facts.completeness is AnalysisCompleteness.COMPLETE,

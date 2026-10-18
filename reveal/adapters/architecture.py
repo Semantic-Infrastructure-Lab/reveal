@@ -35,11 +35,77 @@ _FAN_IN_RISK_THRESHOLD = 8        # fan-in count that makes a file load-bearing
 _CIRCULAR_TOLERANT_LANGUAGES = frozenset({'csharp', 'java', 'kotlin', 'swift'})
 
 
-def _run_complex_functions(adapter: 'ArchitectureAdapter', path: Path, limit: int) -> List[Dict[str, Any]]:
+def _ast_row_valid(row: Any) -> bool:
+    return (isinstance(row, dict)
+            and all(isinstance(row.get(key), str) and bool(row[key]) for key in ('file', 'name'))
+            and type(row.get('complexity')) is int and row['complexity'] >= 0)
+
+
+def _ast_counts_valid(data: Dict[str, Any], rows: list) -> bool:
+    return (all(type(data.get(key)) is int and data[key] >= 0
+                for key in ('total_files', 'total_results', 'displayed_results'))
+            and data['displayed_results'] == len(rows)
+            and data['total_results'] >= data['displayed_results'])
+
+
+def _capture_ast_observations(data: Any, observations: Optional[Dict[str, bool]]) -> None:
+    if observations is None:
+        return
+    rows = data.get('results', data.get('elements')) if isinstance(data, dict) else None
+    valid = (isinstance(data, dict) and not data.get('error') and isinstance(rows, list)
+             and all(_ast_row_valid(row) for row in rows) and _ast_counts_valid(data, rows))
+    if not valid:
+        observations['failed'] = True
+    elif data['total_results'] > 0:
+        # The existing domain-filtered count precedes the limit, including zero.
+        # At limit=0 the producer is authoritative for the hidden identities.
+        observations['usable'] = True
+
+
+def _relationship_rows_valid(rows: Any, path_key: str, counts: tuple) -> bool:
+    if not isinstance(rows, list):
+        return False
+    return all(isinstance(row, dict) and isinstance(row.get(path_key), str) and bool(row[path_key])
+               and all(type(row.get(key)) is int and row[key] >= 0 for key in counts)
+               for row in rows)
+
+
+def _capture_import_observations(data: Dict[str, Any], observations: Optional[Dict[str, bool]]) -> None:
+    if observations is None:
+        return
+    sections = [('entry_points', 'file', ('fan_out',)), ('core_abstractions', 'file', ('fan_in',)),
+                ('components', 'component', ('internal', 'outgoing', 'incoming'))]
+    valid = all(_relationship_rows_valid(data.get(key), path, counts) for key, path, counts in sections)
+    cycles = data.get('circular_groups')
+    if not valid or not _valid_cycles(cycles):
+        observations['failed'] = True
+        return
+    positive = any(row[count] > 0 for key, _, counts in sections for row in data[key] for count in counts)
+    if positive or any(len(set(cycle)) >= 2 for cycle in cycles):
+        observations['usable'] = True
+
+
+def _valid_cycles(cycles: Any) -> bool:
+    return (isinstance(cycles, list) and all(isinstance(cycle, list)
+            and all(isinstance(path, str) and bool(path) for path in cycle) for cycle in cycles))
+
+
+def _directory_loss_error(meta, observations) -> Optional[Dict[str, str]]:
+    if not any(w.get('type') == 'analysis_incomplete' for w in (meta or {}).get('warnings', [])):
+        return None
+    if observations.get('failed') or not observations.get('usable'):
+        return {'code': 'E_ARCHITECTURE_ANALYSIS',
+                'message': 'Required directory discovery failed; required analysis failed or no architectural observations survived'}
+    return None
+
+
+def _run_complex_functions(adapter: 'ArchitectureAdapter', path: Path, limit: int, *,
+                           observations: Optional[Dict[str, bool]] = None) -> List[Dict[str, Any]]:
     from reveal.adapters.ast import AstAdapter
     data = adapter.compose(AstAdapter, str(path), default={},
                             query=f'complexity>9&sort=-complexity&limit={limit}',
                             cut_as=('complex_functions', 'raise ?top=N'))
+    _capture_ast_observations(data, observations)
     return data.get('results', data.get('elements', []))
 
 
@@ -78,11 +144,18 @@ def _run_imports_analysis(adapter: 'ArchitectureAdapter', path: Path) -> Dict[st
         return {}
 
 
-def _format_imports_data(adapter, path: Path) -> Dict[str, Any]:
+def _format_imports_data(adapter, path: Path, *,
+                         observations: Optional[Dict[str, bool]] = None) -> Dict[str, Any]:
     fan_in_data = adapter._format_fan_in()
     entrypoints_data = adapter._format_entrypoints()
     components_data = adapter._format_components()
     circular_data = adapter._format_circular()
+    _capture_import_observations({
+        'entry_points': entrypoints_data.get('entries'),
+        'core_abstractions': fan_in_data.get('entries'),
+        'components': components_data.get('components'),
+        'circular_groups': circular_data.get('cycles'),
+    }, observations)
 
     all_entries = fan_in_data.get('entries', [])
     raw_eps = entrypoints_data.get('entries', [])
@@ -110,7 +183,8 @@ def _format_imports_data(adapter, path: Path) -> Dict[str, Any]:
     }
 
 
-def _run_combined_analysis(adapter: 'ArchitectureAdapter', path: Path, limit: int) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+def _run_combined_analysis(adapter: 'ArchitectureAdapter', path: Path, limit: int, *,
+                           observations: Optional[Dict[str, bool]] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Run imports + complexity analysis sharing one walk, one parse per file.
 
     Running these as two independent full-repo walk+parse passes (the original
@@ -136,14 +210,16 @@ def _run_combined_analysis(adapter: 'ArchitectureAdapter', path: Path, limit: in
         warnings = importer.integrity_warnings(path)  # BACK-1598, BACK-1753
         if warnings:
             adapter.fold_meta({'warnings': warnings})
-        imports_data = _format_imports_data(importer, path)
+        imports_data = _format_imports_data(importer, path, observations=observations)
     except Exception as exc:  # boundary-ok: broad-except -- composition seam that bypasses compose() for the shared ImportsAdapter walk; the sibling adapter's failure set is not bounded (parse, resolution, pool), and a failure is recorded in meta.errors with confidence 0 by record_composed_error, exactly what compose() does
+        if observations is not None:
+            observations['failed'] = True
         adapter.record_composed_error('ImportsAdapter', path, exc)
 
     if not graph_built:
         # The shared walk never ran, so no structures were collected either —
         # fall back to complexity analysis's own independent walk.
-        return _run_complex_functions(adapter, path, limit), imports_data
+        return _run_complex_functions(adapter, path, limit, observations=observations), imports_data
 
     try:
         from reveal.adapters.ast import AstAdapter
@@ -151,6 +227,7 @@ def _run_combined_analysis(adapter: 'ArchitectureAdapter', path: Path, limit: in
         # extra kwarg), so this can't go through compose() either — same
         # attributed-failure treatment as the ImportsAdapter branch (BACK-984).
         data = AstAdapter(str(path), f'complexity>9&sort=-complexity&limit={limit}').get_structure(structures=structures)
+        _capture_ast_observations(data, observations)
         from ..utils.results import echo_source, relabel_truncations
         # Match compose(cut_as=...) while retaining the shared-walk structures.
         echo_source(data, str(path))
@@ -160,6 +237,8 @@ def _run_combined_analysis(adapter: 'ArchitectureAdapter', path: Path, limit: in
             adapter.record_composed_error('AstAdapter', path, ValueError(str(data['error'])))
         complex_fns = data.get('results', data.get('elements', []))
     except Exception as exc:  # boundary-ok: broad-except -- composition seam that bypasses compose() to reuse the shared walk's structures; the sibling adapter's failure set is not bounded, and a failure is recorded in meta.errors with confidence 0 by record_composed_error, exactly what compose() does
+        if observations is not None:
+            observations['failed'] = True
         adapter.record_composed_error('AstAdapter', path, exc)
         complex_fns = []
 
@@ -378,7 +457,9 @@ def _architecture_ref(value: Any) -> str:
 
 def _architecture_completeness(result, meta, invalid_only):
     from ..utils.results import AnalysisCompleteness
-    missing = {'analysis_failed', 'parse_recovered', 'partial_parse', 'worker_lost'}
+    if any(error.get('code') == 'E_ARCHITECTURE_ANALYSIS' for error in meta.get('errors', [])):
+        return AnalysisCompleteness.FAILED
+    missing = {'analysis_failed', 'parse_recovered', 'partial_parse', 'worker_lost', 'analysis_incomplete'}
     missing_inputs = any(w.get('type') in missing for w in meta.get('warnings', []))
     if invalid_only and 'analysis' not in result and not missing_inputs:
         return AnalysisCompleteness.NOT_STARTED
@@ -561,12 +642,13 @@ class ArchitectureAdapter(ResourceAdapter):
         from .overview import UNLIMITED_TOP
         top = UNLIMITED_TOP if verbose else top_spec.read(self.query_params)
         no_imports = no_imports_spec.read(self.query_params)
+        observations: Dict[str, bool] = {}
 
         if no_imports:
-            complex_fns = _run_complex_functions(self, path, top * 4)
+            complex_fns = _run_complex_functions(self, path, top * 4, observations=observations)
             imports_data: Dict[str, Any] = {}
         else:
-            complex_fns, imports_data = _run_combined_analysis(self, path, top * 4)
+            complex_fns, imports_data = _run_combined_analysis(self, path, top * 4, observations=observations)
 
         risks = _compute_risks(imports_data, complex_fns, path)
         if not no_imports:
@@ -606,6 +688,10 @@ class ArchitectureAdapter(ResourceAdapter):
         _relativize_architecture_paths(report, path)
 
         meta = self.composed_meta()
+        error = _directory_loss_error(meta, observations)
+        if error:
+            meta = meta or {}
+            meta.setdefault('errors', []).append(error)
         return ResultBuilder.create(
             result_type='architecture',
             source=self.path,
