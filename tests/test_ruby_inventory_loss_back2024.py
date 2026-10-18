@@ -216,3 +216,23 @@ def test_existing_import_annotations_remain_honest_and_repair_normally(tmp_path)
     assert clean['another_unknown'] == lost['another_unknown'] == 'unresolved'
     assert clean['local'] == lost['local'] == 'intra_project'
     assert annotations() == clean
+
+
+def test_frozen_fact_cache_and_historical_pair_controls_share_one_build(tmp_path):
+    from dataclasses import FrozenInstanceError
+
+    tree(tmp_path)
+    with inventory_fault(tmp_path, 'manifest') as (events, _, _):
+        facts = generic._ruby_inventory_facts(tmp_path)
+        pair = generic._ruby_gem_inventory(tmp_path)
+        repeated = generic._ruby_inventory_facts(tmp_path)
+    assert len(events) == 1 and repeated is facts
+    assert pair == (facts.local_names, facts.external_names)
+    assert facts.root == tmp_path and isinstance(facts.traversal_failures, tuple)
+    assert facts.traversal_failures[0][0] == (tmp_path / 'core').as_posix()
+    info = generic._ruby_gem_inventory.cache_info()
+    assert info.misses == 1 and info.hits == 2 and info.currsize == 1
+    with pytest.raises(FrozenInstanceError):
+        setattr(facts, 'traversal_failures', ())
+    generic._ruby_gem_inventory.cache_clear()
+    assert generic._ruby_inventory_facts.cache_info().currsize == 0
