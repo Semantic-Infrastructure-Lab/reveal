@@ -39,9 +39,17 @@ reveal 'classify://src' --format json
 fraction of this codebase is first-party," the question this adapter
 exists to make computable independent of any ranking.
 
-Classification is path-only (directory-name and filename conventions) —
-no file content is read, so a generated-but-not-vendored file (detected
-via content markers in `reveal check`) is not distinguished here.
+These counts describe discovered files with a registered analyzer. Unsupported
+extensions appear separately under `summary.excluded`. If required directory
+enumeration fails, text and JSON disclose the directory/cause; the missing file
+population is unknown, so the observed fractions do not describe the complete
+target. Clean results keep the legacy envelope; known loss adds warning metadata.
+Classify retains its legacy exit behavior, so exit 0 alone does not establish a
+complete walk.
+
+Classification uses directory-name and filename conventions, with limited vendor
+banner and locale-file heuristics. It is not general generated-code detection;
+use `reveal check` for additional content checks.
 
 ## Good Review Questions
 
@@ -52,8 +60,8 @@ via content markers in `reveal check`) is not distinguished here.
 
 ## Limits
 
-- Path-only classification — no content-based generated-file detection
-  (see `reveal check`'s `_is_generated_file` for that, at higher cost).
+- Path conventions and limited vendor heuristics do not establish how a file was
+  generated or whether it is maintained locally.
 - Same walker and skip-directory rules as `stats://`; a file `stats://`
   can't analyze (no registered analyzer) is likewise absent here.
 
