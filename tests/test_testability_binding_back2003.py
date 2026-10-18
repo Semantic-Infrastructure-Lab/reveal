@@ -227,4 +227,4 @@ def test_declared_text_accepts_ranked_top_without_render_failure(project, observ
     assert 'unexpected keyword' not in response.stdout + response.stderr
     assert [kind for kind, *_ in observed['calls']] == ['patches', 'profiles']
     if partial:
-        assert 'incomplete' in response.stdout
+        assert 'missing from the report' in response.stdout
