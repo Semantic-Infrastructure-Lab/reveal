@@ -9,9 +9,9 @@ from reveal.adapters.ast.analysis import StructureList
 from reveal.adapters.calls import index as calls_index
 
 
-@pytest.fixture
-def tree(tmp_path):
-    child = tmp_path / 'included_child'
+@pytest.fixture(params=['included_child', 'build', 'dist'])
+def tree(tmp_path, request):
+    child = tmp_path / request.param
     child.mkdir()
     (tmp_path / 'visible.py').write_text(
         'def visible():\n    return target()\n', encoding='utf-8')
