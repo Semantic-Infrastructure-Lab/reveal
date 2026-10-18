@@ -537,6 +537,15 @@ reveal 'ast://src/auth.py?name=authenticate' --format=json | \
 
 ## Limitations
 
+**Known missing inputs.** When a Calls query reports failed file analysis or
+directory enumeration, surviving observations remain available with
+`meta.parse_mode: tree_sitter_partial` and no numeric `meta.confidence`.
+Directory diagnostics count identified directories; the number of missing files
+is unknown. Text shows required-loss warnings once, and supported DOT views send
+them to stderr to keep stdout a valid graph. These warnings retain Calls' legacy
+exit behavior; exit 0 alone does not establish complete analysis. An uncalled
+candidate remains a heuristic, not proof of dead code.
+
 **Static analysis only.** The following patterns are not resolved:
 
 - **Dynamic dispatch** — `getattr(obj, method_name)()`, callback tables, metaclasses
