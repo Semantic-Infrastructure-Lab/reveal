@@ -178,7 +178,7 @@ def _index_disclosures(root: Path, index: dict) -> List[str]:
                     *capped_section(messages, 5, str, indent='D005: ')]
     traversal = traversal_failed_warning(getattr(index, 'traversal_failures', ()), root)
     if traversal:
-        messages.append(f"D005: literal discovery under {root} is incomplete: {traversal['message']}; "
+        messages.append(f"D005: literal discovery under {to_posix(root)} is incomplete: {traversal['message']}; "
                         'duplicate clusters and participating-file observations may be missing')
     return messages
 
