@@ -217,6 +217,11 @@ smaller than the budget.
 reveal pack PATH [--budget N] [--focus TOPIC] [--since REF] [--content] [--verbose]
 ```
 
+`PATH` accepts a directory or a single file. For a file with `--since`, Git
+discovery starts from its containing directory, while only that file remains
+eligible for the pack. The changed-file count describes the repository diff;
+other changed files are not added to a single-file selection.
+
 ### CLI Flags
 
 | Flag | Description |
