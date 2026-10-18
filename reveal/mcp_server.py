@@ -274,9 +274,13 @@ def _declared_failure(answer) -> str | None:
     return _tool_failure(answer.private_diagnostic or 'Required analysis or output failed', public=False)
 
 
-def _run_declared_tool(fn, *args, quiet_usage: bool = False, **kwargs) -> str:
-    """Capture one qualified consumer while retaining canonical outcome evidence."""
+def _run_declared_tool(fn, *args, quiet_usage: bool = False, render=None, **kwargs) -> str:
+    """Capture one qualified consumer while retaining canonical outcome evidence.
+
+    ``render`` replaces the answer's own emission for a tool with a specialized text layout;
+    the outcome policy above it is unchanged."""
     answers = []
+    rendered: list[str] = []
 
     def consume(answer):
         from .utils.results import AnalysisCompleteness
@@ -286,7 +290,9 @@ def _run_declared_tool(fn, *args, quiet_usage: bool = False, **kwargs) -> str:
         if answer.execution_facts.completeness is AnalysisCompleteness.INCOMPLETE:
             answer.result.setdefault('meta', {}).setdefault('warnings', []).append(
                 {'type': 'analysis_incomplete', 'message': 'Required analysis is incomplete; usable evidence follows.'})
-        if quiet_usage and _trace_absence_compatibility(answer):
+        if render is not None:
+            rendered.append(render(answer.result))
+        elif quiet_usage and _trace_absence_compatibility(answer):
             answer.emit(announce_error=False)
         else:
             answer.emit()
@@ -296,6 +302,8 @@ def _run_declared_tool(fn, *args, quiet_usage: bool = False, **kwargs) -> str:
         failure = _declared_failure(answers[-1])
         if failure is not None:
             return failure
+    if rendered:
+        return rendered[-1]
     return output
 
 
@@ -621,41 +629,42 @@ def reveal_pack(
             core abstractions) before the file listing
     """
     from pathlib import Path
-    from .adapters.pack import _record_candidate_discovery_warning, _record_file_measurement_warning
-    from .cli.commands.pack import (
-        _parse_budget, _get_changed_files, _collect_candidates,
-        _apply_budget, _format_pack_result,
-    )
+    from .cli.routing.declared import run_declared_command
+    from .cli.invocation import Invocation, invocation_scope
+    from .rendering.adapters.pack import _format_pack_result
+    from .utils.json_utils import set_provenance_enabled
 
     p = Path(path)
     if not p.exists():
         return _tool_failure(f"{path}: not found")
 
-    budget_tokens, budget_lines = _parse_budget(str(budget))
-    focus_val = focus or None
-    since_val = since or None
+    argv = ['reveal', 'pack', str(p), '--budget', str(budget)]
+    for flag, value in (('--focus', focus), ('--since', since)):
+        if value:
+            argv += [flag, value]
+    argv += [flag for flag, on in (('--content', content), ('--architecture', architecture)) if on]
+    args = _default_args(path=str(p), budget=str(budget), focus=focus or None, since=since or None,
+                         content=content, architecture=architecture, format='text')
 
-    changed_files: set = set()
-    since_error = None
-    if since_val:
-        changed_files, since_error = _get_changed_files(p, since_val)
+    def render(result):
+        meta = result['meta']
+        text = _format_pack_result(
+            p, result['files'], meta, meta['budget_tokens'], meta['budget_lines'],
+            since_error=meta.get('since_error'), content=content,
+            architecture=result.get('architecture', False), content_data=result.get('content'))
+        if (focus or architecture) and meta.get('relevance_warning'):
+            # A requested optional signal that could not be built; the default
+            # "not requested" notice stays out of this tool's layout.
+            text += f"\n  ⚠ {meta['relevance_warning']}"
+        return text
 
-    discovery_failures: list[OSError] = []
-    file_failures: list = []
-    candidates = _collect_candidates(p, focus_val, changed_files, on_error=discovery_failures.append,
-                                     on_file_error=file_failures.append)
-    selected, meta = _apply_budget(candidates, budget_tokens, budget_lines, p)
-    _record_candidate_discovery_warning(p, discovery_failures, meta)
-    _record_file_measurement_warning(tuple(file_failures), meta)
-
-    if since_val:
-        meta['since'] = since_val
-        meta['changed_files_count'] = len(changed_files)
-
-    return _format_pack_result(
-        p, selected, meta, budget_tokens, budget_lines,
-        since_error=since_error, content=content, architecture=architecture,
-    )
+    invocation = Invocation.parse(argv)
+    with _capture_lock, invocation_scope(invocation):
+        apply_global_flags(args)
+        try:
+            return _run_declared_tool(run_declared_command, 'pack', args, render=render)
+        finally:
+            set_provenance_enabled(False)
 
 
 @mcp_tool(annotations=_LOCAL_READONLY, title='Reveal: Quality Check')

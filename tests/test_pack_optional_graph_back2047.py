@@ -175,13 +175,17 @@ def test_existing_raised_construction_failure_keeps_typed_cause_and_pair(project
     assert result['meta']['selected'] == 2 and failures[0] in result['meta']['relevance_warning']
 
 
-def test_specialized_mcp_and_uri_text_existing_presentation_are_not_migrated(project, observed):
+def test_specialized_mcp_and_uri_text_share_the_declared_signals(project, observed):
     pytest.importorskip('mcp')
     from reveal.mcp_server import reveal_pack
     configure(project, observed, 'child')
     specialized = reveal_pack(str(project), architecture=True, focus='worker', content=False)
     assert type(specialized) is str and 'Selected 2 of 2 files' in specialized
-    assert observed['builds'] == observed['events'] == []  # Existing specialized helper bypass.
+    # Binding (BACK-2045): the specialized tool builds the requested signals like the others
+    # and names the optional loss; its text layout is otherwise unchanged.
+    assert len(observed['builds']) == 2 and 'not computed completely' in specialized
+    observed['builds'].clear()
+    observed['events'].clear()
     response = run('pack://' + str(project) + '?architecture=true')
     assert len(observed['builds']) == 1 and observed['events'] == [project / 'included']
     assert response.returncode == 0 and 'Selected 2 of 2 files' in response.stdout

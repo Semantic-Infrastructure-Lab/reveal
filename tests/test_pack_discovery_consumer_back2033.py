@@ -150,8 +150,8 @@ def test_both_decorated_tools_keep_ordinary_strings_with_one_attributed_diagnost
                             provenance=tool == 'generic-json')
     answer = _once(fault, invoke)
     assert fault['events']
-    if root_loss and tool != 'specialized':
-        # D6 (BACK-2045): no candidate survived, so the generic tool fails with the cause.
+    if root_loss:
+        # D6 (BACK-2045): no candidate survived, so every tool fails with the cause.
         assert type(answer).__name__ == '_ToolFailure'
         assert str(answer).count('identified directory enumeration(s) failed') == 1
         return

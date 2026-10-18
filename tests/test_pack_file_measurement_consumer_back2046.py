@@ -153,7 +153,9 @@ def test_all_stat_loss_reports_unavailable_measurements_instead_of_budget_exclus
             text = reveal_pack(str(root))
         except OSError as exc:
             pytest.fail(f'Ordinary Pack MCP must disclose unavailable measurements: {exc}')
-        assert type(text) is str
+        # D6 (BACK-2045): no candidate was measured, so the tool fails with the cause.
+        assert type(text).__name__ == '_ToolFailure'
+        text = str(text)
     else:
         args = ['pack', str(root), '--verbose'] if seam == 'native-verbose' else ['pack://' + str(root)]
         response = invoke(*args)

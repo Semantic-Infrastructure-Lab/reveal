@@ -181,7 +181,7 @@ def test_uri_text_visibility_is_existing_binding_residual(tmp_path, native_fault
     assert 'heuristics and recency only' not in result.stdout
 
 
-def test_specialized_tool_keeps_existing_no_graph_build_route(tmp_path, native_fault):
+def test_specialized_tool_builds_requested_signals_and_names_optional_loss(tmp_path, native_fault):
     pytest.importorskip('mcp')
     from reveal.mcp_server import reveal_pack
     _project(tmp_path)
@@ -189,4 +189,7 @@ def test_specialized_tool_keeps_existing_no_graph_build_route(tmp_path, native_f
     result = reveal_pack(str(tmp_path), budget=8000, content=False,
                          architecture=True, focus='focus')
     assert type(result) is str and 'focus.py' in result
-    assert native_fault['builds'] == [] and native_fault['events'] == []
+    # Binding (BACK-2045): the specialized tool builds the requested signals like the other
+    # spellings, keeps its ordinary packet, and names the optional loss.
+    assert len(native_fault['builds']) == 2
+    assert 'not computed completely' in result

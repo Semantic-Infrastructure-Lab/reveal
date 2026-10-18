@@ -314,11 +314,12 @@ failed when no candidate survived) on the command and the URI, and the generic M
 returns the attributed cause as an error only when nothing survived. The check uses the
 uncapped candidate counts, so `--budget`, `--fields` and `--max-items` cannot hide it.
 
-The specialized `reveal_pack` MCP tool currently
-does not compute these optional graph ranking signals. Its defaults remain
-8000 tokens with content enabled, compared with the CLI/URI defaults of 2000
-tokens and content disabled. These presentation and ranking differences remain
-separate from candidate-measurement diagnostics. Native integrity notes do not
+The specialized `reveal_pack` MCP tool runs the same declared path, so
+`architecture` and `focus` build the same optional graph signals, a requested signal
+that could not be built is named in its text, and a total loss of candidates is a tool
+error. Its defaults remain 8000 tokens with content enabled, compared with the CLI/URI
+defaults of 2000 tokens and content disabled, and it keeps its own text layout.
+These presentation differences remain separate from candidate-measurement diagnostics. Native integrity notes do not
 establish completeness of every parser, file-read or dynamic-import channel.
 
 ### Examples

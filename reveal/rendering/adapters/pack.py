@@ -152,10 +152,13 @@ def _content_lines(content_data: List[Dict[str, Any]]) -> List[str]:
     return lines
 
 
-def _format_pack_content(selected: List[Dict[str, Any]]) -> List[str]:
+def _format_pack_content(selected: List[Dict[str, Any]],
+                         entries: Optional[List[Dict[str, Any]]] = None) -> List[str]:
     from ...adapters.pack import _collect_file_contents
-    # MCP's historical string helper trims trailing content whitespace.
-    entries = _collect_file_contents(selected)
+    # MCP's historical string helper trims trailing content whitespace. Callers that already
+    # hold the canonical content pass it, so migrated production reads each file once.
+    if entries is None:
+        entries = _collect_file_contents(selected)
     return _content_lines([{**entry, 'content': entry['content'].rstrip()} for entry in entries])
 
 
@@ -168,12 +171,13 @@ def _format_pack_result(
     since_error: Optional[str] = None,
     content: bool = True,
     architecture: bool = False,
+    content_data: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """Format the MCP snapshot, preserving its existing helper interface."""
     body = pack_text(path, selected, meta, True, budget_tokens, budget_lines,
                      architecture, since_error).removesuffix('\n')
     if content and selected:
-        body += "\n" + "\n".join(_format_pack_content(selected))
+        body += "\n" + "\n".join(_format_pack_content(selected, content_data))
     warning_lines = meta_warning_lines({'meta': meta})
     if warning_lines:
         body += "\n" + "\n".join(warning_lines)

@@ -152,7 +152,7 @@ def test_projection_and_artifact_keep_discovery_evidence(tmp_path, monkeypatch, 
 
 
 @pytest.mark.parametrize('tool', ['generic', 'specialized'])
-def test_both_decorated_mcp_entrypoints_are_ordinary_strings_with_directory_warning(tmp_path, monkeypatch, tool):
+def test_both_decorated_mcp_entrypoints_fail_with_the_directory_cause_when_nothing_survives(tmp_path, monkeypatch, tool):
     root = tmp_path / 'affected'; project(root)
     state = fault(monkeypatch, {root})
     if tool == 'generic':
@@ -160,15 +160,10 @@ def test_both_decorated_mcp_entrypoints_are_ordinary_strings_with_directory_warn
     else:
         wire = reveal_pack(str(root), budget=8000, content=True)
     assert state['events'] and state['walks'] == 1
-    if tool == 'generic':
-        # D6 (BACK-2045): total candidate loss has no usable answer, so the generic tool fails
-        # with the attributed incomplete-discovery cause instead of an ordinary packet.
-        assert type(wire).__name__ == '_ToolFailure'
-        assert wire.count('missing file population is unknown') == 1
-    else:
-        assert type(wire) is str
-        assert wire.count('missing file population is unknown') == 1
-        assert 'No files fit within budget.' not in wire
+    # D6 (BACK-2045): total candidate loss has no usable answer, so both tools fail with the
+    # attributed incomplete-discovery cause instead of an ordinary packet.
+    assert type(wire).__name__ == '_ToolFailure'
+    assert str(wire).count('missing file population is unknown') == 1
 
 
 @pytest.mark.parametrize('tool', ['adapter', 'specialized'])
