@@ -31,6 +31,16 @@ from .adapter_utils import find_adapter_file, find_init_definition_line
 logger = logging.getLogger(__name__)
 
 
+def _declared_required_error(adapter_class: type, message: str) -> bool:
+    """Recognize the existing binder's exact, owner-declared validation message."""
+    from ...utils.query_parser import ParamSpec
+    specs = getattr(adapter_class, 'PARAM_SPECS', ())
+    if not isinstance(specs, (tuple, list)):
+        return False
+    return any(isinstance(spec, ParamSpec) and spec.required
+               and message == f'{spec.name} is required' for spec in specs)
+
+
 class V019(BaseRule):
     """Validate that adapters follow initialization patterns correctly."""
 
@@ -170,6 +180,8 @@ class V019(BaseRule):
         except ValueError as e:
             # Check if this is argument validation or parsing error
             error_msg = str(e).lower()
+            if _declared_required_error(adapter_class, str(e)):
+                return None
 
             # These are acceptable ValueErrors (argument validation)
             if 'requires' in error_msg or 'format' in error_msg or 'invalid' in error_msg:
