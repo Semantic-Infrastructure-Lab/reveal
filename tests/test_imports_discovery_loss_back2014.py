@@ -155,7 +155,8 @@ def test_exact_healthy_single_file_and_hard_excluded_controls(tmp_path, monkeypa
     source = root / 'visible.py'
     single = ImportsAdapter(str(source)).get_structure()
     # REVEAL_IGNORE removes inputs from both source and target populations. Soft
-    # --exclude/gitignore paths remain resolution targets and are tested separately.
+    # File-level --exclude/gitignore paths remain resolution targets; directory
+    # --exclude is pruned by the existing policy. Both are tested separately.
     monkeypatch.setenv('REVEAL_IGNORE', 'included_child/')
     excluded = ImportsAdapter(str(root)).get_structure()
     deny_child(monkeypatch, child)
@@ -183,3 +184,125 @@ def test_directory_loss_does_not_render_definitive_clean_conclusions(tmp_path, m
     output = capsys.readouterr().out
     assert forbidden not in output
     assert 'analysis is incomplete' in output or 'discovery incomplete' in output
+
+
+@pytest.mark.parametrize('unknown', [False, True])
+def test_unknown_and_bounded_directory_disclosures(tmp_path, monkeypatch, unknown):
+    root = tmp_path / 'source'
+    children = {root / f'included_{n}' for n in range(7)}
+    for child in children:
+        write(child / 'hidden.py', 'import math\n')
+    real = os.scandir
+
+    def scandir(directory):
+        if Path(directory) in children:
+            if unknown:
+                raise PermissionError('controlled unknown enumeration')
+            raise PermissionError(13, 'controlled identified enumeration', str(directory))
+        return real(directory)
+
+    monkeypatch.setattr(os, 'scandir', scandir)
+    adapter = ImportsAdapter(str(root))
+    result = adapter.get_structure()
+    warning = discovery_warning(result)
+    assert warning['count'] == (0 if unknown else 7)
+    assert len(warning['directories']) == (0 if unknown else 5)
+    assert warning.get('unknown_directory_events', 0) == (7 if unknown else 0)
+    assert len(adapter.analysis.graph.traversal_failures) == 7
+    assert result['metadata']['scanned_files'] == 0
+
+
+def test_discovery_service_and_private_tuple_compatibility(tmp_path, monkeypatch):
+    from reveal.analyzers.imports.file_index import discover_import_files, resolution_fingerprint
+    from reveal.analyzers.imports.types import ImportAnalysis, ImportGraph
+    from reveal.registry import get_code_extensions
+
+    child = make_tree(tmp_path / 'source')
+    root = child.parent
+    # Existing positional cap and triple remain available.
+    triple = discover_import_files(root, lambda p: p.suffix == '.py', 1)
+    assert len(triple) == 3 and len(triple[0]) == 1 and triple[2]
+    assert service.ImportFileSet((), {}).traversal_failures == ()
+    assert service.ImportFileSet((), {}, True).capped
+    old_graph = ImportGraph({}, {}, {}, {}, [], [], None, {'legacy': True})
+    assert old_graph.scan_budget == {'legacy': True} and not old_graph.traversal_failures
+    assert 'traversal_failures' not in ImportAnalysis.__dataclass_fields__
+    deny_child(monkeypatch, child)
+    errors = []
+    triple = discover_import_files(root, lambda p: p.suffix == '.py', None, on_error=errors.append)
+    assert len(triple) == 3 and len(errors) == 1 and isinstance(errors[0], PermissionError)
+    files = service.discover(service.ScanScope(root, frozenset({'.py'})))
+    assert isinstance(files.traversal_failures, tuple) and len(files.traversal_failures) == 1
+    assert resolution_fingerprint(files.candidates, files.index, traversal_failures=files.traversal_failures) is None
+    assert resolution_fingerprint(files.candidates, files.index) is not None
+    sink = []
+    pair = ImportsAdapter._discover_candidate_files(root, frozenset({'.py'}), get_code_extensions(), traversal_failures=sink)
+    assert len(pair) == 2 and sink == list(files.traversal_failures)
+    artifact = ImportAnalysis(graph=ImportGraph())
+    assert service.resolve_graph(service.ScanScope(root, frozenset({'.py'})), files, artifact) is artifact
+    assert artifact.graph.traversal_failures == list(files.traversal_failures)
+
+
+def test_graph_preserves_distinct_causes_but_formatter_counts_unique_directories(tmp_path):
+    adapter = ImportsAdapter(str(tmp_path))
+    adapter._build_graph(tmp_path)
+    child = (tmp_path / 'included_child').as_posix()
+    events = [(child, 'PermissionError: first'), (child, 'PermissionError: first'), (child, 'OSError: second')]
+    adapter._resolve_dependencies(tmp_path, {}, traversal_failures=events)
+    assert adapter.analysis.graph.traversal_failures == events
+    (warning,) = adapter.integrity_warnings(tmp_path)
+    assert warning['count'] == 1 and warning['directories'] == ['included_child']
+    assert warning['causes'] == ['OSError: second', 'PermissionError: first']
+
+
+@pytest.mark.parametrize('soft_policy', ['exclude', 'gitignore'])
+def test_soft_excluded_resolution_target_loss_remains_required(tmp_path, monkeypatch, soft_policy):
+    from reveal.utils.exclusions import exclusion_scope
+
+    root = tmp_path / 'source'
+    child = make_tree(root, target_only=True)
+    if soft_policy == 'gitignore':
+        (root / '.git').mkdir()
+        write(root / '.gitignore', 'included_child/\n')
+    with exclusion_scope(root, ['included_child/deep/hidden.inc'] if soft_policy == 'exclude' else []):
+        clean = ImportsAdapter(str(root))
+        clean.get_structure()
+        assert sum(map(len, clean.analysis.graph.dependencies.values())) == 1
+        deny_child(monkeypatch, child)
+        partial = ImportsAdapter(str(root))
+        result = partial.get_structure()
+        assert result['metadata']['scanned_files'] == 1
+        assert not partial.analysis.graph.dependencies
+        assert_loss(result)
+
+
+@pytest.mark.disk_cache
+def test_cache_build_fingerprint_isolates_graph_record_layout(tmp_path, monkeypatch):
+    monkeypatch.setenv('REVEAL_CACHE_DIR', str(tmp_path / 'cache'))
+    root = tmp_path / 'source'
+    make_tree(root)
+    first = ImportsAdapter(str(root))
+    first.get_structure()
+    # The framework's actual build-key seam isolates a changed producer layout.
+    with monkeypatch.context() as context:
+        context.setattr(disk_cache, 'build_fingerprint', lambda: 'different-producer-build')
+        second = ImportsAdapter(str(root))
+        with patch.object(second, '_process_extracted_files', wraps=second._process_extracted_files) as extract:
+            second.get_structure()
+        assert extract.call_count == 1
+        assert second.analysis == first.analysis
+    third = ImportsAdapter(str(root))
+    with patch.object(third, '_process_extracted_files', wraps=third._process_extracted_files) as extract:
+        third.get_structure()
+    assert extract.call_count == 0
+
+
+def test_directory_exclusion_remains_exact_policy_control(tmp_path, monkeypatch):
+    from reveal.utils.exclusions import exclusion_scope
+
+    root = tmp_path / 'source'
+    child = make_tree(root, target_only=True)
+    with exclusion_scope(root, ['included_child']):
+        clean = ImportsAdapter(str(root)).get_structure()
+        deny_child(monkeypatch, child)
+        assert ImportsAdapter(str(root)).get_structure() == clean
