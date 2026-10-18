@@ -253,6 +253,14 @@ projects reached by that request. An incomplete zero-result scan says no finding
 in the checked population, rather than claiming a clean scan. D005 shows the total
 failed-file count, up to five examples, and the remaining count.
 
+`reveal_check` also reports directory-enumeration failures while discovering its
+candidate files, including failures with no surviving files. Its notes identify the
+requested root and known causes; file and scope counts cover only the discovered
+population, and missing findings remain possible. Severity filters do not hide those
+notes. A genuinely empty directory retains the normal no-files response. The CLI
+uses its existing incomplete-scan exit 3 (or 0 with `--exit-zero`); `--profile-rules`
+displays the discovery warning while retaining its profiling exit behavior.
+
 ## Available Resources
 
 Unlike Tools (model-decided actions), Resources are read-only, non-side-effecting
