@@ -136,6 +136,13 @@ def _build_pack_import_graph(
         from reveal.adapters.imports import ImportsAdapter  # noqa: I006
         adapter = ImportsAdapter(resource=str(path))
         adapter._build_graph(adapter._target_path)
+        warnings = adapter.integrity_warnings(path)
+        if warnings:
+            if failures is not None:
+                failures.extend(
+                    f"Optional import graph for {to_posix(path)} is incomplete: {warning['message']}"
+                    for warning in warnings)
+            return None, set()
         return adapter.analysis.graph, adapter.analysis.scanned_files
     except Exception as e:  # boundary-ok: broad-except -- the import graph is an optional ranking signal built by the whole imports walk (tree-sitter parsing of every file, resolution; failure set not bounded) and a pack is still useful without it; the failure is returned in `failures` and shown as meta.relevance_warning
         logger.warning('pack: import graph for %s failed: %s', path, e)
@@ -774,7 +781,8 @@ class PackAdapter(ResourceAdapter):
             # reads as fan-in 0 / relevance 0 and the ranking looks computed.
             asked = ' and '.join(n for n, on in (('fan-in', architecture), ('graph-relevance', bool(focus))) if on)
             self.relevance_warning = (
-                f"{asked} not computed, the import graph failed ({'; '.join(dict.fromkeys(graph_failures))}) "
+                f"{asked} not computed completely; the optional import graph is unavailable or incomplete "
+                f"({'; '.join(dict.fromkeys(graph_failures))}) "
                 "-- files are ranked by filename/entry-point heuristics and recency only"
             )
         elif not architecture and not focus:
