@@ -211,3 +211,20 @@ def test_binding_feature_whole_decimal_native_spelling_harmonization(project, ob
     response = run('testability', str(src), '--tests', str(tests), '--top', value, '--format', 'json')
     assert response.returncode == 0
     assert observed['builds'][0]['top'] == (3 if value == '+3.0' else 0)
+
+
+@pytest.mark.parametrize('spelling', ['native', 'uri'])
+@pytest.mark.parametrize('partial', [False, True])
+def test_declared_text_accepts_ranked_top_without_render_failure(project, observed, spelling, partial):
+    src, tests = project
+    if partial:
+        _write(tests / 'test_broken.py', 'def broken(:\n')
+    response = run(*_args(src, [tests], spelling), '--format', 'text')
+    assert response.returncode == (3 if partial else 0), (response.stdout, response.stderr)
+    assert 'Testability:' in response.stdout
+    assert 'Production Patch Hotspots' in response.stdout
+    assert 'Boundary Fan-Out Hotspots' in response.stdout
+    assert 'unexpected keyword' not in response.stdout + response.stderr
+    assert [kind for kind, *_ in observed['calls']] == ['patches', 'profiles']
+    if partial:
+        assert 'incomplete' in response.stdout

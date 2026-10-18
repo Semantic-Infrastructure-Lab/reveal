@@ -82,7 +82,9 @@ class TestabilityRenderer(BaseRenderer):
     __test__ = False  # not a pytest class
 
     @classmethod
-    def render_structure(cls, result: Dict[str, Any], format: str = 'text') -> Optional[str]:
+    def render_structure(cls, result: Dict[str, Any], format: str = 'text',
+                         top: Optional[int] = None) -> Optional[str]:
+        # The report owner already ranked and capped both hotspot lists.
         if format == 'json':
             print_json_result(result)
             return None
