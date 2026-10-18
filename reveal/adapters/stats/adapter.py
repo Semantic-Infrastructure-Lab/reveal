@@ -1,7 +1,7 @@
 """Statistics adapter (stats://) for codebase metrics and hotspots."""
 
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, cast
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
@@ -360,10 +360,10 @@ class StatsAdapter(ResourceAdapter):
             to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}'))
 
     def _disclose_failures(self, result: dict) -> None:
-        """One meta warning naming the files whose analysis raised: they are not in the
-        totals, and without this the totals read as the whole tree (BACK-1614)."""
+        """Disclose directory and file analysis loss without treating totals as complete."""
         from ..ast.analysis import traversal_failed_warning
-        note_warning(result, traversal_failed_warning(self._traversal_failures, self.path))
+        note_warning(result, cast(Optional[Dict[str, Any]],
+                                  traversal_failed_warning(self._traversal_failures, self.path)))
         degraded = [s for s in self._analysis_failures if s.get('parse_degraded')]
         if degraded:
             note_warning(result, {
