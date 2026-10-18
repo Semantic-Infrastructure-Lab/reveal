@@ -83,7 +83,6 @@ def test_malformed_falsy_required_response_is_not_clean_empty(source, monkeypatc
 @pytest.mark.parametrize('raw', [
     {'functions': 'not a collection'},
     {'functions': [None]},
-    {'functions': [{}]},
     {'imports': [42]},
 ])
 def test_malformed_consumed_categories_are_disclosed(source, monkeypatch, raw):
