@@ -95,7 +95,8 @@ print(json.dumps({'pid':os.getpid(),'found':found,'builds':builds,
 
 
 @pytest.mark.parametrize('unknown', [False, True])
-def test_selected_multi_root_preload_reaches_real_fresh_worker_without_rebuild(tmp_path, fault, unknown):
+@pytest.mark.parametrize('empty', [False, True])
+def test_selected_multi_root_preload_reaches_real_fresh_worker_without_rebuild(tmp_path, fault, unknown, empty):
     first = tmp_path / 'first'; checked, hidden = project(first, 'positive')
     second = tmp_path / 'second'
     write(second / 'pyproject.toml', '[project]\nname="second"\n')
@@ -107,10 +108,10 @@ def test_selected_multi_root_preload_reaches_real_fresh_worker_without_rebuild(t
     # Existing selection still avoids all D005 work when only an unrelated rule runs.
     assert preload_scan_caches(selected, tmp_path, ['E501'], None)['D005'] == {}
     assert fault['builds'] == [] and fault['events'] == []
-    fault.update(enabled=True, unknown=unknown)
+    fault.update(enabled=True, unknown=unknown, root=first if empty else None)
     payload = preload_scan_caches(selected, tmp_path, ['D005'], None)
     assert set(payload['D005']) == {first, second}
-    assert len(fault['builds']) == 2 and fault['events'] == [str(hidden)]
+    assert len(fault['builds']) == 2 and fault['events'] == [str(first if empty else hidden)]
     assert payload['D005'][second].traversal_failures == ()
     expected_notes = get_scan_disclosures(selected, ['D005'], None)
     packet = tmp_path / 'preload.pickle'; packet.write_bytes(pickle.dumps(payload))
@@ -118,10 +119,11 @@ def test_selected_multi_root_preload_reaches_real_fresh_worker_without_rebuild(t
                             cwd=Path.cwd(), env=dict(os.environ, PYTHONPATH=str(Path.cwd())),
                             capture_output=True, text=True, encoding='utf-8', timeout=30, check=True)
     data = json.loads(result.stdout)
-    assert data['pid'] != os.getpid() and data['builds'] == [] and data['found'] == [1, 1]
+    assert data['pid'] != os.getpid() and data['builds'] == [] and data['found'] == [0 if empty else 1, 1]
     assert data['notes'] == expected_notes and len(data['notes']) == 1
     assert data['facts'][str(first)] == [list(item) for item in payload['D005'][first].traversal_failures]
     assert data['facts'][str(second)] == []
     budgets = {row['root']: row for row in data['budgets']}
     assert not budgets[str(first)]['exact'] and budgets[str(second)]['exact']
-    assert all(row['total'] == row['returned'] == row['analyzed_files'] == 3 for row in budgets.values())
+    assert budgets[str(first)]['total'] == budgets[str(first)]['returned'] == budgets[str(first)]['analyzed_files'] == (0 if empty else 3)
+    assert budgets[str(second)]['total'] == budgets[str(second)]['returned'] == budgets[str(second)]['analyzed_files'] == 3
