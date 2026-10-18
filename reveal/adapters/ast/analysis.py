@@ -30,7 +30,7 @@ class StructureList(List[Dict[str, Any]]):
     def __init__(self, *args: Any) -> None:
         super().__init__(*args)
         self.skipped: List[Tuple[str, str]] = []
-        self.traversal_failures: List[Tuple[str, str]] = []
+        self.traversal_failures: List[Tuple[Optional[str], str]] = []
 
 
 def parse_recovered_warning(structures: Sequence[Dict[str, Any]]) -> Optional[WarningEntry]:
@@ -88,21 +88,36 @@ def analysis_skipped_warning(skipped: List[Tuple[str, str]], base: Optional[Path
     }
 
 
-def traversal_failed_warning(failures: Sequence[Tuple[str, str]],
+def traversal_failed_warning(failures: Sequence[Tuple[Optional[str], str]],
                              base: Optional[Path] = None) -> Optional[WarningEntry]:
-    """Directory enumeration loss, whose missing file population is unknown."""
+    """Unique identified directories, plus unlocated enumeration error events."""
     if not failures:
         return None
-    paths = sorted(dict(failures).items())
-    shown = [to_relative_display(p, base) if base else to_posix(p) for p, _ in paths[:5]]
-    causes = [cause for _, cause in paths[:5]]
+    by_directory: Dict[str, set] = {}
+    unknown = []
+    for path, cause in failures:
+        if path is None:
+            unknown.append(cause)
+        else:
+            by_directory.setdefault(path, set()).add(cause)
+    paths = sorted(by_directory)
+    shown = [to_relative_display(p, base) if base else to_posix(p) for p in paths[:5]]
+    details = [f"{display} ({'; '.join(sorted(by_directory[path]))})"
+               for display, path in zip(shown, paths[:5])]
     more = f" and {len(paths) - len(shown)} more" if len(paths) > len(shown) else ''
-    return {
+    causes = sorted({cause for _, cause in failures})[:5]
+    message = (f"{len(paths)} identified directory enumeration(s) failed; "
+               f"missing file population is unknown: {', '.join(details)}{more}")
+    if unknown:
+        message += (f"; {len(unknown)} enumeration error event(s) had an unknown directory: "
+                    f"{'; '.join(sorted(set(unknown))[:5])}")
+    warning: WarningEntry = {
         'type': 'analysis_incomplete', 'count': len(paths), 'unit': 'directories',
-        'directories': shown, 'causes': causes,
-        'message': f"{len(paths)} directory enumeration(s) failed; missing file population is unknown: "
-                   f"{', '.join(f'{p} ({c})' for p, c in zip(shown, causes))}{more}",
+        'directories': shown, 'causes': causes, 'message': message,
     }
+    if unknown:
+        warning['unknown_directory_events'] = len(unknown)
+    return warning
 
 
 def collect_structures(path: str, outline: bool = False, needle: Optional[str] = None) -> StructureList:
@@ -126,7 +141,7 @@ def collect_structures(path: str, outline: bool = False, needle: Optional[str] =
         # os.walk also skipped *.egg-info, which holds packaging metadata, no code files.
         def on_error(error: OSError) -> None:
             structures.traversal_failures.append((
-                to_posix(error.filename or path_obj), f'{type(error).__name__}: {error}'))
+                to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}'))
 
         for fp in _walk_code_files(path_obj, on_error=on_error):
             if is_code_file(fp):

@@ -57,8 +57,15 @@ class PatchUses(List[PatchUse]):
     def __init__(self) -> None:
         super().__init__()
         self.skipped: List[Tuple[str, str]] = []
-        self.traversal_failures: List[Tuple[str, str]] = []
+        self.traversal_failures: List[Tuple[Optional[str], str]] = []
         self.recovered_files: List[str] = []
+
+    def record_traversal_failure(self, error: OSError) -> None:
+        """Retain directory evidence separately from files that failed analysis."""
+        directory = to_posix(error.filename) if error.filename else None
+        failure = (directory, f'{type(error).__name__}: {error}')
+        if not error.filename or failure not in self.traversal_failures:
+            self.traversal_failures.append(failure)
 
     def merge(self, other: PatchUses) -> None:
         """Retain a file's uses and diagnostics in the aggregate."""
@@ -145,12 +152,7 @@ def _file_matches(path: Path, extensions: Optional[Sequence[str]]) -> bool:
 def scan_patches(paths: Sequence[str | Path]) -> PatchUses:
     """Scan Python and TypeScript test files for patch-like calls."""
     uses = PatchUses()
-    def on_error(error: OSError) -> None:
-        failure = (to_posix(error.filename), f'{type(error).__name__}: {error}')
-        if failure not in uses.traversal_failures:
-            uses.traversal_failures.append(failure)
-
-    for file_path in iter_test_files(paths, on_error=on_error):
+    for file_path in iter_test_files(paths, on_error=uses.record_traversal_failure):
         if file_path.suffix == '.py':
             uses.merge(_scan_file(file_path))
         elif file_path.suffix in _TS_TEST_EXTENSIONS:
@@ -269,12 +271,7 @@ def scan_patches_ts(paths: Sequence[str | Path]) -> PatchUses:
       jest.replaceProperty(obj, 'prop', val)       → kind='jest.replaceProperty' / ...
     """
     uses = PatchUses()
-    def on_error(error: OSError) -> None:
-        failure = (to_posix(error.filename), f'{type(error).__name__}: {error}')
-        if failure not in uses.traversal_failures:
-            uses.traversal_failures.append(failure)
-
-    for file_path in iter_test_files(paths, extensions=list(_TS_TEST_EXTENSIONS), on_error=on_error):
+    for file_path in iter_test_files(paths, extensions=list(_TS_TEST_EXTENSIONS), on_error=uses.record_traversal_failure):
         uses.merge(_scan_file_ts(file_path))
     return uses
 

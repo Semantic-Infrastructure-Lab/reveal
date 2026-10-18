@@ -22,7 +22,7 @@ class PatchesRenderer(BaseRenderer):
         lines.append('')
         groups = result.get('groups', [])
         if not groups:
-            incomplete = any(w.get('type') in {'analysis_failed', 'parse_recovered'}
+            incomplete = any(w.get('type') in {'analysis_failed', 'parse_recovered', 'analysis_incomplete'}
                              for w in result.get('meta', {}).get('warnings', [])
                              if isinstance(w, dict))
             empty = ('No patch pressure groups in the available observations.' if incomplete

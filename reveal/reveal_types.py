@@ -40,6 +40,7 @@ class WarningEntry(TypedDict, total=False):
     unit: str
     directories: List[str]
     causes: List[str]
+    unknown_directory_events: int
     # The --fields names that matched nothing ('fields_unmatched', BACK-1607).
     fields: List[str]
 

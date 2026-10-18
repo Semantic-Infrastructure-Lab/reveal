@@ -260,5 +260,6 @@ def test_error_without_filename_discloses_unknown_directory(tree, monkeypatch, o
     result = (PatchesAdapter(str(root)).get_structure() if owner == 'patches'
               else TraceAdapter(str(root), 'from=visible').get_structure())
     warning, = traversal_warning(result)
-    assert warning['directories'] == ['<unknown directory>']
+    assert warning['directories'] == []
+    assert warning['count'] == 0 and warning['unknown_directory_events'] == 1
     assert 'controlled error without filename' in warning['message']
