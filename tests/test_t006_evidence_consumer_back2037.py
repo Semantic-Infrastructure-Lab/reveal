@@ -127,7 +127,7 @@ found=rule.T006().check(str(file),None,file.read_text(encoding='utf-8'))
 print(json.dumps({'findings':len(found),'disclosures':get_scan_disclosures([file],['T006'],None)}))
 '''
     result = subprocess.run([sys.executable, '-c', script, str(payload), str(lost)],
-                            capture_output=True, text=True, timeout=30, check=True)
+                            capture_output=True, text=True, encoding='utf-8', timeout=30, check=True)
     answer = json.loads(result.stdout)
     assert answer['findings'] == 0
     assert len(answer['disclosures']) == 1, answer
