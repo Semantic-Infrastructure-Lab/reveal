@@ -64,7 +64,8 @@ def lose_child(monkeypatch, root, mode, *, unknown=False, child='included_child'
             active.pop()
 
     def scandir(path):
-        if (mode == 'all' or active and active[-1] == mode) and Path(path).resolve() == (root / child).resolve():
+        # 'all' covers all source populations; the independent coverage census stays healthy.
+        if active and (mode == 'all' or active[-1] == mode) and Path(path).resolve() == (root / child).resolve():
             attempts.append((str(path), active[-1] if active else 'other'))
             if unknown:
                 raise PermissionError('controlled Contracts unknown directory loss')
@@ -95,6 +96,8 @@ def test_actual_owned_loss_classifies_domain_rows_and_same_owner_repairs(tmp_pat
         attempts = lose_child(context, root, mode)
         lost = owner.get_structure()
     assert attempts
+    if mode == 'all':
+        assert lost['coverage']['total_code_files'] == 2
     # Activation can lose language discovery while the later Python collection recovers Hidden.
     recovered_observation = mode == 'activation'
     expected = AnalysisCompleteness.INCOMPLETE if survives or recovered_observation else AnalysisCompleteness.FAILED

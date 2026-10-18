@@ -66,7 +66,8 @@ def fault(monkeypatch, child, mode='all', *, unknown=False):
         return real_structures(*args, **kwargs)
 
     def scandir(path):
-        if Path(path) == child and (mode == 'all' or mode == state['stage']):
+        # 'all' covers all source populations; the independent coverage census stays healthy.
+        if state['stage'] is not None and Path(path) == child and (mode == 'all' or mode == state['stage']):
             state['attempts'].append(state['stage'])
             if unknown:
                 raise PermissionError('controlled unlocated Contracts consumer directory loss')
@@ -102,6 +103,8 @@ def test_actual_loss_public_json_and_text_keep_domain_outcome(tmp_path, monkeypa
     assert state['attempts']
     result = json.loads(response.stdout)
     assert response.returncode == 3
+    if mode == 'all':
+        assert result['coverage']['total_code_files'] == 1 + int(useful)
     expected = AnalysisCompleteness.INCOMPLETE if useful else AnalysisCompleteness.FAILED
     assert contracts.ContractsAdapter.execution_facts(result).completeness is expected
     assert bool(result.get('error')) is (not useful)
