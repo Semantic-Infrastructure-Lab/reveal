@@ -4,9 +4,9 @@ Builds and caches an inverted call graph across all code files in a directory:
 
     callee_name → [(file_path, caller_func_name, line)]
 
-Cache key is a frozenset of (file_path, mtime_ns) tuples so any file change
-invalidates only the entries affected.  In practice the whole index is rebuilt
-per directory when any file changes (simple and correct).
+The cache key uses directory mtimes and active scope. It does not detect every
+file overwrite or deeper membership change. Known incomplete collections are not
+retained; ordinary warm-hit freshness remains a separate policy.
 """
 
 import os
@@ -29,7 +29,7 @@ from ...utils.path_utils import _walk_code_files, is_unsafe_scan_root, to_posix
 from ...core.definition_names import lookup_keys, name_matches
 
 # Module-level LRU cache: directory → (cache_key, index)
-# cache_key is a tuple of (abspath_str, mtime_ns) pairs so it's hashable.
+# cache_key combines the hashable directory-mtime key with active scope.
 # Capped at 8 entries — call graphs are expensive to rebuild but rarely need
 # more than a handful cached simultaneously.
 _INDEX_CACHE: OrderedDict = OrderedDict()
@@ -392,11 +392,11 @@ def _dir_cache_key(directory: Path) -> Any:
     """Compute a hashable cache key for *directory*.
 
     Stats every immediate child directory in addition to the directory itself.
-    A single top-level stat is insufficient on Linux because editing a nested
-    file only updates the *containing subdirectory's* mtime, not the root.
+    Immediate membership changes can update these mtimes; file overwrites and
+    deeper changes need not. This cheap key is not complete file evidence.
 
-    If the directory can't be stat'ed or listed there is nothing to index, and a
-    walk of it would find nothing either: the key says so.
+    An unreadable key records a failed key lookup, not proof that the directory
+    is empty. Structural discovery separately records encountered input loss.
     """
     from ...utils.path_utils import is_noise_dir
     try:
