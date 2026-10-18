@@ -5,6 +5,7 @@ import os
 import pickle
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -47,6 +48,9 @@ def _project(root, survivor=True, local=False, children=1):
         content = 'from typing import TypedDict\n' + _definition('Local', KEYS) + content
     checked = root / 'consumer.py'
     checked.write_text(content, encoding='utf-8')
+    aged = time.time_ns() - 60_000_000_000  # request-cache stamps skip files newer than the request; Windows' clock is coarse
+    for source in root.rglob('*.py'):
+        os.utime(source, ns=(aged, aged))
     return checked, hidden
 
 

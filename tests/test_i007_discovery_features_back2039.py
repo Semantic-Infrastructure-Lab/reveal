@@ -13,6 +13,7 @@ from conftest import _run_reveal_direct as run
 from test_i007_discovery_loss_back2039 import fault, project, write  # noqa: F401
 from reveal.rules.imports import _dep_reconciliation as dep
 from reveal.rules.scan_caches import get_scan_disclosures, preload_scan_caches
+from reveal.utils.path_utils import to_posix
 
 pytestmark = pytest.mark.component
 
@@ -103,5 +104,5 @@ def test_existing_public_cuts_and_grep_boundaries_keep_incomplete_exit(tmp_path,
     else:
         data = json.loads(result.stdout)
         assert len(data['scan_disclosures']) == 1
-        assert 'Python' in data['scan_disclosures'][0] and str(tmp_path) in data['scan_disclosures'][0]
+        assert 'Python' in data['scan_disclosures'][0] and to_posix(tmp_path) in data['scan_disclosures'][0]
         assert len(data['detections']) == (0 if view == 'cap-zero' else 1)

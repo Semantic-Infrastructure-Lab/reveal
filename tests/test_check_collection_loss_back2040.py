@@ -120,7 +120,7 @@ def test_human_grep_and_sidecar_disclose_even_before_no_survivor_branch(
     assert data['summary']['files_checked'] == (0 if all_lost else 1)
     if fmt == 'grep':
         assert response.stdout == ''
-        assert 'director' in response.stderr.lower() and str(root) in response.stderr
+        assert 'director' in response.stderr.lower() and to_posix(root).lower() in response.stderr.lower()
     else:
         assert 'scan incomplete' in response.stdout.lower()
         assert '✅ No issues found' not in response.stdout

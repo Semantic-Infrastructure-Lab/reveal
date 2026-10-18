@@ -11,6 +11,7 @@ import pytest
 
 from conftest import _run_reveal_direct as run
 from reveal.testability import report
+from reveal.utils.path_utils import to_posix
 
 pytestmark = pytest.mark.component
 SOURCE = 'def run(value):\n    return value + 1\n'
@@ -117,7 +118,7 @@ def test_typed_and_comma_percent_roots_preserve_actual_requested_population(proj
     assert response.returncode == 0, (response.stdout, response.stderr)
     result = json.loads(response.stdout)
     assert result['summary']['total_patch_uses'] == 3, result
-    assert result['tests'] == [str(root)], result
+    assert result['tests'] == [to_posix(root)], result
     assert ('patches', 3) == observed['calls'][0][:2]
 
 

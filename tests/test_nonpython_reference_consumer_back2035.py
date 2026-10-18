@@ -1,6 +1,8 @@
 """Non-Python reference read loss is query-local required file evidence."""
 import copy
 import json
+import os
+import time
 from pathlib import Path
 
 import pytest
@@ -16,6 +18,8 @@ pytestmark = pytest.mark.component
 def _write(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding='utf-8')
+    aged = time.time_ns() - 60_000_000_000  # request-cache stamps skip files newer than the request; Windows' clock is coarse
+    os.utime(path, ns=(aged, aged))
 
 
 def _project(root):

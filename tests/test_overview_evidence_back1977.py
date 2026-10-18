@@ -12,6 +12,7 @@ from reveal.adapters.overview import OverviewAdapter, _relativize_paths, _run_gi
 from reveal.adapters.stats import StatsAdapter
 from reveal.errors import NotApplicableError
 from reveal.rendering.adapters.overview import _render_quality_pulse
+from reveal.utils.path_utils import to_posix
 
 
 @pytest.fixture
@@ -202,7 +203,7 @@ def test_architecture_matches_absolute_target_and_preserves_exclusions(project, 
     query = 'no_git=true'+('&exclude=b.py' if excluded else '')
     left = OverviewAdapter(relative, query).get_structure()
     right = OverviewAdapter(str(project), query).get_structure()
-    assert left['source'] == left['path'] == relative
+    assert to_posix(left['source']) == to_posix(left['path']) == relative
     assert left['architecture'] == right['architecture']
     assert sum(c['files'] for c in left['architecture']['components']) == (1 if excluded else 2)
 

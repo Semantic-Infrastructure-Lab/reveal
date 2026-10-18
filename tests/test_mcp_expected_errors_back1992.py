@@ -59,7 +59,8 @@ def _run(tmp_path, scenario, code=None):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     await scenario(session)
-    asyncio.run(asyncio.wait_for(exercise(), timeout=60))
+    # 60 s timed out twice on the loaded 1.8.1 compat leg (BACK-2050); a real hang still fails.
+    asyncio.run(asyncio.wait_for(exercise(), timeout=180))
 
 
 def test_expected_diagnostics_reach_stdio_client(tmp_path):

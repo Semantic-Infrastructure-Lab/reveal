@@ -2,6 +2,7 @@
 import errno
 import json
 import os
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
@@ -17,6 +18,8 @@ from reveal.mcp_server import _ToolFailure, reveal_query
 def write(path, source):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(source, encoding='utf-8')
+    aged = time.time_ns() - 60_000_000_000  # request-cache stamps skip files newer than the request; Windows' clock is coarse
+    os.utime(path, ns=(aged, aged))
     return path
 
 
