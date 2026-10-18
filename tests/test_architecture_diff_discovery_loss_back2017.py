@@ -131,6 +131,7 @@ def test_actual_base_resolution_warning_does_not_leak_materialization_path(tmp_p
 def test_clean_zero_and_unsupported_language_keep_complete_empty_deltas(tmp_path, monkeypatch, kind):
     root = tmp_path / 'healthy'
     base = make_repo(root, kind=kind)
+    invoke(root, base)  # warm-up: the uncached-grammar notice is once per process, not part of the comparison
     before = invoke(root, base)
     attempts = selective_loss(monkeypatch, root)
     after = invoke(root, base)
