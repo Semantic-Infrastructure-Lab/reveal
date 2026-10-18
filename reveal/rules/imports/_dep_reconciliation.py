@@ -30,13 +30,14 @@ adding one is the same shape as Python/Rust's existing inventory functions.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
 from pathlib import Path
-from typing import Callable, Dict, FrozenSet, NamedTuple, Set, Tuple
+from typing import Callable, Dict, FrozenSet, Iterator, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from ...analyzers.imports.base import get_extractor
-from ...utils.path_utils import EVIDENCE, _walk_code_files
-from ...utils.request_cache import register_validated_cache
+from ...utils.path_utils import EVIDENCE, _walk_code_files, to_posix, traversal_failed_warning
+from ...utils.request_cache import register_request_cache, register_validated_cache
 
 logger = logging.getLogger(__name__)
 
@@ -108,29 +109,58 @@ def _fold_hyphen_underscore(name: str) -> str:
 # {root: {(extensions, normalize, sep): scan}}. A project scan is expensive, so it lives
 # while its root's tree is unchanged (request_cache.register_validated_cache, BACK-1572):
 # a long-lived MCP host must not answer from the imports it saw on the first request.
-_scan_cache: Dict[Path, Dict[Tuple[FrozenSet[str], Callable[[str], str], str], ProjectImports]] = {}
+_ScanKey = Tuple[FrozenSet[str], Callable[[str], str], str]
+_TraversalFailure = Tuple[Optional[str], str]
+
+
+@dataclass(frozen=True)
+class _ProjectImportFacts:
+    imports: ProjectImports
+    traversal_failures: Tuple[_TraversalFailure, ...]
+
+
+_scan_cache: Dict[Path, Dict[_ScanKey, _ProjectImportFacts]] = {}
 
 
 def _scan_project_imports(
-    root: Path, extensions: FrozenSet[str], normalize: Callable[[str], str], sep: str
+    root: Path, extensions: FrozenSet[str], normalize: Callable[[str], str], sep: str,
+    *, on_traversal_failure: Optional[Callable[[_TraversalFailure], None]] = None,
 ) -> ProjectImports:
     """The cached `_scan_project_imports_uncached` for (root, extensions, normalize, sep)."""
     scans = _scan_cache.setdefault(root, {})
     key = (extensions, normalize, sep)
     if key not in scans:
-        scans[key] = _scan_project_imports_uncached(root, extensions, normalize, sep)
-    return scans[key]
+        failures: List[OSError] = []
+        imports = _scan_project_imports_uncached(root, extensions, normalize, sep,
+                                               on_error=failures.append)
+        scans[key] = _ProjectImportFacts(imports, tuple(
+            (to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}')
+            for error in failures))
+    facts = scans[key]
+    if on_traversal_failure is not None:
+        for failure in facts.traversal_failures:
+            on_traversal_failure(failure)
+    return facts.imports
 
 
 def _evict_root(root: Path) -> None:
     _scan_cache.pop(root, None)
 
 
+def _evict_incomplete_scans() -> None:
+    """Retain useful partial memo within an invocation, never across host requests."""
+    for root, scans in tuple(_scan_cache.items()):
+        if any(facts.traversal_failures for facts in scans.values()):
+            _evict_root(root)
+
+
+register_request_cache(__name__ + '.traversal', _evict_incomplete_scans)
 register_validated_cache(__name__, _scan_cache, _evict_root)
 
 
 def _scan_project_imports_uncached(
-    root: Path, extensions: FrozenSet[str], normalize: Callable[[str], str], sep: str
+    root: Path, extensions: FrozenSet[str], normalize: Callable[[str], str], sep: str,
+    *, on_error: Optional[Callable[[OSError], None]] = None,
 ) -> ProjectImports:
     """Every normalized top-level module/crate identifier imported anywhere
     (absolute imports only -- relative ones are unambiguously intra-project
@@ -145,7 +175,7 @@ def _scan_project_imports_uncached(
     """
     names: Set[str] = set()
     skipped: Set[str] = set()
-    for file_path in _walk_code_files(root, purpose=EVIDENCE):
+    for file_path in _walk_code_files(root, purpose=EVIDENCE, on_error=on_error):
         if file_path.suffix.lower() not in extensions:
             continue
         extractor = get_extractor(file_path)
@@ -183,7 +213,9 @@ def _raw_python_external_names(project_root: Path) -> FrozenSet[str]:
     return frozenset(names)
 
 
-def python_declared_unused(project_root: Path) -> DeclaredUnused:
+def python_declared_unused(
+    project_root: Path, *, on_traversal_failure: Optional[Callable[[_TraversalFailure], None]] = None,
+) -> DeclaredUnused:
     """Declared external dependency names (raw manifest spelling) never
     imported anywhere under *project_root* (I007)."""
     from ...analyzers.imports.python import _normalize_dist_name
@@ -191,7 +223,8 @@ def python_declared_unused(project_root: Path) -> DeclaredUnused:
     raw_names = _raw_python_external_names(project_root)
     if not raw_names:
         return DeclaredUnused(frozenset(), ())
-    scan = _scan_project_imports(project_root, frozenset({'.py'}), _normalize_dist_name, '.')
+    scan = _scan_project_imports(project_root, frozenset({'.py'}), _normalize_dist_name, '.',
+                                 on_traversal_failure=on_traversal_failure)
     unused = set()
     for raw_name in raw_names:
         norm = _normalize_dist_name(raw_name)
@@ -222,7 +255,9 @@ def _raw_rust_dependency_names(crate_root: Path) -> FrozenSet[str]:
     return frozenset(names)
 
 
-def rust_declared_unused(crate_root: Path) -> DeclaredUnused:
+def rust_declared_unused(
+    crate_root: Path, *, on_traversal_failure: Optional[Callable[[_TraversalFailure], None]] = None,
+) -> DeclaredUnused:
     """Declared [dependencies]/[dev-dependencies]/[build-dependencies] crate
     names (Cargo.toml key spelling, hyphens intact) never ``use``d anywhere
     under *crate_root* (I007)."""
@@ -233,7 +268,8 @@ def rust_declared_unused(crate_root: Path) -> DeclaredUnused:
         return DeclaredUnused(frozenset(), ())
     _, external_identifiers = _rust_crate_inventory(crate_root)
     scan = _scan_project_imports(
-        crate_root, frozenset({'.rs'}), _fold_hyphen_underscore, '::'
+        crate_root, frozenset({'.rs'}), _fold_hyphen_underscore, '::',
+        on_traversal_failure=on_traversal_failure,
     )
     unused = set()
     for raw_name in raw_names:
@@ -243,3 +279,56 @@ def rust_declared_unused(crate_root: Path) -> DeclaredUnused:
         if identifier not in scan.names:
             unused.add(raw_name)
     return DeclaredUnused(frozenset(unused), scan.skipped)
+
+
+def _directory_disclosure(root: Path, failures: Sequence[_TraversalFailure]) -> Optional[str]:
+    warning = traversal_failed_warning(failures, root)
+    if warning is None:
+        return None
+    return (f"I007: {warning['message']}; project import discovery is incomplete; "
+            'dependencies reported as unused may be used in omitted inputs')
+
+
+def _manifest_scan(path: Path) -> Optional[Tuple[Path, _ScanKey]]:
+    """Recheck declarations without walking: an old memo is not a reached subject."""
+    from ...analyzers.imports.python import _normalize_dist_name
+
+    if path.name not in {'pyproject.toml', 'requirements.txt', 'Cargo.toml'}:
+        return None
+    root = path.resolve().parent
+    if path.name == 'Cargo.toml':
+        return ((root, (frozenset({'.rs'}), _fold_hyphen_underscore, '::'))
+                if _raw_rust_dependency_names(root) else None)
+    if path.name == 'requirements.txt' and (root / 'pyproject.toml').exists():
+        return None
+    return ((root, (frozenset({'.py'}), _normalize_dist_name, '.'))
+            if _raw_python_external_names(root) else None)
+
+
+def _reached_scan_keys(files: Optional[List[Path]]) -> Iterator[Tuple[Path, _ScanKey]]:
+    seen: Set[Tuple[Path, _ScanKey]] = set()
+    for path in files or []:
+        scan = _manifest_scan(Path(path))
+        if scan is not None and scan not in seen:
+            seen.add(scan)
+            yield scan
+
+
+def _preload_project_imports(files: Optional[List[Path]]) -> Dict[Path, Dict[_ScanKey, _ProjectImportFacts]]:
+    """Build and transfer only the checked manifests' exact language populations."""
+    payload: Dict[Path, Dict[_ScanKey, _ProjectImportFacts]] = {}
+    for root, key in _reached_scan_keys(files):
+        _scan_project_imports(root, *key)
+        payload.setdefault(root, {})[key] = _scan_cache[root][key]
+    return payload
+
+
+def get_scan_disclosures(files: Optional[List[Path]] = None) -> List[str]:
+    """Read reached directory facts only; never build an index on a cache miss."""
+    messages = []
+    for root, key in _reached_scan_keys(files):
+        facts = _scan_cache.get(root, {}).get(key)
+        message = _directory_disclosure(root, facts.traversal_failures) if facts is not None else None
+        if message is not None:
+            messages.append(message)
+    return messages

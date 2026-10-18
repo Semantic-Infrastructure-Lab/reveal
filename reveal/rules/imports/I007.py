@@ -35,7 +35,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from ._dep_reconciliation import python_declared_unused, rust_declared_unused
+from ._dep_reconciliation import (
+    _TraversalFailure, _directory_disclosure, python_declared_unused, rust_declared_unused,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -89,8 +91,10 @@ class I007(BaseRule):
         # same project so a dependency isn't flagged twice.
         if manifest_path.name == 'requirements.txt' and (manifest_path.parent / 'pyproject.toml').exists():
             return []
-        result = python_declared_unused(manifest_path.parent)
+        failures: List[_TraversalFailure] = []
+        result = python_declared_unused(manifest_path.parent, on_traversal_failure=failures.append)
         self._note_skipped_sources(result, manifest_path)
+        self._note_directory_sources(failures, manifest_path)
         unused = result.unused
         return [
             self.create_detection(
@@ -104,8 +108,10 @@ class I007(BaseRule):
         ]
 
     def _check_rust(self, manifest_path: Path) -> List[Detection]:
-        result = rust_declared_unused(manifest_path.parent)
+        failures: List[_TraversalFailure] = []
+        result = rust_declared_unused(manifest_path.parent, on_traversal_failure=failures.append)
         self._note_skipped_sources(result, manifest_path)
+        self._note_directory_sources(failures, manifest_path)
         unused = result.unused
         return [
             self.create_detection(
@@ -117,3 +123,8 @@ class I007(BaseRule):
             )
             for name in sorted(unused)
         ]
+
+    def _note_directory_sources(self, failures: List[_TraversalFailure], manifest_path: Path) -> None:
+        message = _directory_disclosure(manifest_path.parent, failures)
+        if message is not None:
+            self.unavailable(message, str(manifest_path))

@@ -217,6 +217,26 @@ def _m102_init_worker(import_cache: dict) -> None:
     _import_cache.update(import_cache)
 
 
+def _i007_preload(directory: Path, select, ignore, files: Optional[List[Path]] = None) -> dict:
+    """Keep I007's parent disclosure and workers on the same reached import facts."""
+    try:
+        if not rule_will_run('I007', select, ignore):
+            return {}
+        from .imports._dep_reconciliation import _preload_project_imports
+        return _preload_project_imports(files)
+    except Exception as e:  # boundary-ok: broad-except -- the existing shared-index preload boundary records builder failures and falls back to per-worker evaluation
+        _record_preload_failure('I007', e)
+        return {}
+
+
+def _i007_init_worker(scans: dict) -> None:
+    if not scans:
+        return
+    from .imports._dep_reconciliation import _scan_cache
+    for root, keys in scans.items():
+        _scan_cache.setdefault(root, {}).update(keys)
+
+
 def preload_scan_caches(files: List[Path], directory: Path, select, ignore) -> dict:
     """Preload every scan-capped rule's shared index/graph in the main
     process, returning a dict of {rule_code: cache} for the pool initializer.
@@ -228,6 +248,7 @@ def preload_scan_caches(files: List[Path], directory: Path, select, ignore) -> d
     _preload_failures.clear()
     return {
         'I002': _i002_preload(directory, select, ignore, files),
+        'I007': _i007_preload(directory, select, ignore, files),
         'D005': _d005_preload(directory, select, ignore, files),
         'T006': _t006_preload(directory, select, ignore, files),
         'M102': _m102_preload(directory, select, ignore, files),
@@ -237,6 +258,7 @@ def preload_scan_caches(files: List[Path], directory: Path, select, ignore) -> d
 def init_scan_caches(caches: dict) -> None:
     """ProcessPoolExecutor initializer counterpart to preload_scan_caches."""
     _i002_init_worker(caches.get('I002', {}))
+    _i007_init_worker(caches.get('I007', {}))
     _d005_init_worker(caches.get('D005', {}))
     _t006_init_worker(caches.get('T006', {}))
     _m102_init_worker(caches.get('M102', {}))
@@ -263,8 +285,10 @@ def get_scan_disclosures(files: Optional[List[Path]] = None, select=None, ignore
     from .imports.I002 import get_scan_disclosures as i002_disclosures
     from .duplicates.D005 import get_scan_disclosures as d005_disclosures
     from .types.T006 import get_scan_disclosures as t006_disclosures
+    from .imports._dep_reconciliation import get_scan_disclosures as i007_disclosures
     messages = [message for code, collect in [('I002', i002_disclosures),
-                                             ('D005', d005_disclosures), ('T006', t006_disclosures)]
+                                             ('D005', d005_disclosures), ('T006', t006_disclosures),
+                                             ('I007', i007_disclosures)]
                 if rule_will_run(code, select, ignore) for message in collect(files)]
     for code, reason in sorted(_preload_failures.items()):
         if rule_will_run(code, select, ignore):
