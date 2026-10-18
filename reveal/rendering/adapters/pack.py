@@ -95,6 +95,11 @@ def _format_pack_header(
     return lines
 
 
+def _budget_skip_reason(meta: Dict[str, Any]) -> str:
+    return ('budget exceeded or line cost unavailable' if meta.get('line_budget_incomplete')
+            else 'exceeded budget')
+
+
 def _format_pack_file_groups(selected: List[Dict[str, Any]], meta: Dict[str, Any],
                              verbose: bool = True) -> List[str]:
     """Format the tiered file listing (changed/high/medium/low) as lines."""
@@ -116,9 +121,7 @@ def _format_pack_file_groups(selected: List[Dict[str, Any]], meta: Dict[str, Any
             lines.extend(_format_file_line(f, verbose) for f in files)
             lines.append("")
     if meta['skipped'] > 0:
-        reason = ('budget exceeded or line cost unavailable' if meta.get('line_budget_incomplete')
-                  else 'exceeded budget')
-        lines.append(f"[{meta['skipped']} files excluded — {reason}]")
+        lines.append(f"[{meta['skipped']} files excluded — {_budget_skip_reason(meta)}]")
     return lines
 
 
