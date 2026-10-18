@@ -280,9 +280,10 @@ def test_create_testability_parser_defaults():
     from reveal.utils.query_binding import bind_declared_params
     assert not hasattr(args, 'top')  # declaration defaults apply during binding
     params = bind_declared_params(TestabilityAdapter.PARAM_SPECS, {}, transport='typed')
-    assert params['top'] == 20
-    assert params['min_patches'] == 3
-    assert params['min_categories'] == 3
+    specs = {spec.name: spec for spec in TestabilityAdapter.PARAM_SPECS}
+    assert specs['top'].read(params) == 20
+    assert specs['min_patches'].read(params) == 3
+    assert specs['min_categories'].read(params) == 3
 
 
 def test_run_testability_text_output(tmp_path):
