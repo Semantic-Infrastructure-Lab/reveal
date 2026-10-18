@@ -13,6 +13,7 @@ from reveal.adapters.deps import DepsAdapter
 from reveal.adapters.overview import OverviewAdapter
 from reveal.analyzers.imports import file_index
 from reveal.mcp_server import _ToolFailure, reveal_query
+from reveal.utils.request_cache import reset_request_caches
 from reveal.utils.results import AnalysisCompleteness
 
 
@@ -114,6 +115,7 @@ def test_valid_surviving_relationships_are_incomplete_and_repair_restores_exact_
         assert attempts and response.returncode == 3
         assert OWNERS[name].execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE
         assert not isinstance(reveal_query(uri(name, root), provenance=True), _ToolFailure)
+    reset_request_caches()  # the repair is a new request; only the MCP host resets, not in-process main()
     repaired = invoke(name, root)
     assert (repaired.returncode, repaired.stdout, repaired.stderr) == (
         baseline.returncode, baseline.stdout, baseline.stderr)
