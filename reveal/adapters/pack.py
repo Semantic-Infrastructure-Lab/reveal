@@ -351,6 +351,67 @@ def _record_candidate_discovery_warning(
         meta.setdefault('warnings', []).append(warning)
 
 
+_FileMeasurementFailure = Tuple[str, str, str]
+
+
+def _file_measurement_failure(path: Path, operation: str, error: OSError) -> _FileMeasurementFailure:
+    return to_posix(path), operation, f'{type(error).__name__}: {error}'
+
+
+def _candidate_measurements(files, on_file_error):
+    """Reuse one adopted stat for eligibility, ranking and measured row facts."""
+    for path in files:
+        if on_file_error is None:
+            if path.name == '__init__.py' and path.stat().st_size < 500:
+                continue
+            yield path, None
+            continue
+        try:
+            measured = path.stat()
+        except OSError as error:
+            on_file_error(_file_measurement_failure(path, 'stat', error))
+            continue
+        if path.name != '__init__.py' or measured.st_size >= 500:
+            yield path, measured
+
+
+def _candidate_lines(path: Path, on_file_error) -> Optional[int]:
+    if on_file_error is None:
+        return _count_lines(path)
+    errors: List[OSError] = []
+    lines = _count_lines(path, on_error=errors.append)
+    if errors:
+        on_file_error(_file_measurement_failure(path, 'line_count', errors[0]))
+        return None
+    return lines
+
+
+def _candidate_stat(path: Path, measured):
+    return path.stat() if measured is None else measured
+
+
+def _priority_size(measured) -> dict:
+    return {} if measured is None else {'size_bytes': measured.st_size}
+
+
+def _record_file_measurement_warning(failures: Sequence[_FileMeasurementFailure], meta: Dict[str, Any]) -> None:
+    """FILE costs and eligibility are distinct from directory population loss."""
+    if not failures:
+        return
+    shown = list(dict.fromkeys(failures))[:5]
+    detail = '; '.join(f'{path} ({operation}: {cause})' for path, operation, cause in shown)
+    suffix = '; additional file measurement failures omitted' if len(set(failures)) > len(shown) else ''
+    meta.setdefault('warnings', []).append({
+        'type': 'file_measurement_failed',
+        'files': [path for path, _, _ in shown],
+        'operations': sorted({operation for _, operation, _ in failures}),
+        'causes': [f'{operation}: {cause}' for _, operation, cause in shown],
+        'message': ('Pack candidate file measurements are incomplete; counts and rankings cover '
+                    'observed measured candidates only; unknown line costs are unavailable '
+                    f'and excluded from line budgets: {detail}{suffix}'),
+    })
+
+
 def _collect_candidates(
     path: Path,
     focus: Optional[str],
@@ -360,16 +421,14 @@ def _collect_candidates(
     exclude_patterns: Optional[List[str]] = None,
     *,
     on_error: Optional[Callable[[OSError], None]] = None,
+    on_file_error: Optional[Callable[[_FileMeasurementFailure], None]] = None,
 ) -> List[Dict[str, Any]]:
     """Collect and score candidate files for the pack."""
     candidates: List[Dict[str, Any]] = []
 
-    files = [
-        f for f in _walk_files(path, exclude_patterns=exclude_patterns, on_error=on_error)
-        # Skip near-empty __init__.py files — they're almost always re-export
-        # stubs and waste token budget without adding understanding
-        if not (f.name == '__init__.py' and f.stat().st_size < 500)
-    ]
+    measurements = list(_candidate_measurements(
+        _walk_files(path, exclude_patterns=exclude_patterns, on_error=on_error), on_file_error))
+    files = [file for file, _ in measurements]
 
     # BACK-1206: a monorepo can have one _ENTRY_POINT_CONFIG_FILES-name
     # (package.json, Cargo.toml, ...) per sub-package/plugin — dozens of
@@ -386,12 +445,12 @@ def _collect_candidates(
             if depth < min_depth_by_name.get(f.name, depth + 1):
                 min_depth_by_name[f.name] = depth
 
-    for f in files:
+    for f, measured in measurements:
         rel = f.relative_to(path)
-        stat = f.stat()
+        stat = _candidate_stat(f, measured)
         size_chars = stat.st_size
         tokens_approx = size_chars // _APPROX_CHARS_PER_TOKEN
-        lines = _count_lines(f)
+        lines = _candidate_lines(f, on_file_error)
 
         is_changed = bool(changed_files and str(f.resolve()) in changed_files)
         fan_in = (fan_in_scores or {}).get(str(f.resolve()), 0)
@@ -399,7 +458,7 @@ def _collect_candidates(
         is_root_config = len(rel.parts) == min_depth_by_name.get(f.name, -1)
         priority = _compute_priority(
             f, rel, focus, is_changed=is_changed, fan_in=fan_in,
-            graph_relevance=graph_relevance, is_root_config=is_root_config,
+            graph_relevance=graph_relevance, is_root_config=is_root_config, **_priority_size(measured),
         )
         # BACK-1195/B2-4: same classifier _compute_priority now scores on
         # (BACK-1266 follow-up, 2026-09-02) -- this was the "future ranking
@@ -431,6 +490,10 @@ def _collect_candidates(
     return candidates
 
 
+def _file_size(path: Path, size_bytes: Optional[int]) -> int:
+    return path.stat().st_size if size_bytes is None else size_bytes
+
+
 def _compute_priority(
     path: Path,
     rel: Path,
@@ -439,6 +502,8 @@ def _compute_priority(
     fan_in: int = 0,
     graph_relevance: float = 0.0,
     is_root_config: bool = True,
+    *,
+    size_bytes: Optional[int] = None,
 ) -> float:
     """Score a file's priority for inclusion in the pack."""
     name = path.name.lower()
@@ -468,7 +533,7 @@ def _compute_priority(
     if _is_entry_config_file(name) and is_root_config:
         score += 10.0
     elif _is_entry_point_name(name):
-        file_size = path.stat().st_size
+        file_size = _file_size(path, size_bytes)
         if file_size > 2000:
             score += 10.0
         elif file_size >= 500:
@@ -483,7 +548,7 @@ def _compute_priority(
     # < 500 bytes are already excluded by _collect_candidates). Score below
     # regular modules (0.5 vs 2.0) so they land in "Other files" tier and
     # don't displace real logic files from "Key modules" tier.
-    if name == '__init__.py' and path.stat().st_size > 2000:
+    if name == '__init__.py' and _file_size(path, size_bytes) > 2000:
         score += 0.5
 
     # Focus pattern match: high bonus
@@ -547,7 +612,7 @@ def _compute_priority(
         score -= 2.0
 
     # Penalize very large files (noisy)
-    if path.stat().st_size > 50_000:
+    if _file_size(path, size_bytes) > 50_000:
         score -= 1.0
 
     return max(score, 0.0)
@@ -563,9 +628,15 @@ def _apply_budget(
     selected = []
     used_tokens = 0
     used_lines = 0
+    lines_unavailable = False
     skipped = 0
+    line_budget_incomplete = False
 
     for c in candidates:
+        if budget_lines is not None and c['lines'] is None:
+            skipped += 1
+            line_budget_incomplete = True
+            continue
         if budget_tokens is not None:
             if used_tokens + c['tokens_approx'] > budget_tokens:
                 skipped += 1
@@ -577,7 +648,10 @@ def _apply_budget(
                 skipped += 1
                 continue
 
-        used_lines += c['lines']
+        if c['lines'] is None:
+            lines_unavailable = True
+        else:
+            used_lines += c['lines']
         selected.append(c)
 
     meta = {
@@ -585,10 +659,12 @@ def _apply_budget(
         'selected': len(selected),
         'skipped': skipped,
         'used_tokens_approx': used_tokens,
-        'used_lines': used_lines,
+        'used_lines': None if lines_unavailable else used_lines,
         'budget_tokens': budget_tokens,
         'budget_lines': budget_lines,
     }
+    if line_budget_incomplete:
+        meta['line_budget_incomplete'] = True
     return selected, meta
 
 
@@ -631,13 +707,15 @@ def _walk_files(
             yield item
 
 
-def _count_lines(path: Path) -> int:
+def _count_lines(path: Path, *, on_error: Optional[Callable[[OSError], None]] = None) -> int:
     """Count lines in a file."""
     try:
         return path.read_text(encoding='utf-8', errors='ignore').count('\n')
-    except OSError:
-        # Line count feeds priority scoring only; an unreadable file just
-        # sorts as if it were empty, and its content entry says unreadable.
+    except OSError as error:
+        # Default callers retain the historical integer fallback. Adopted callers
+        # receive the cause and distinguish unknown cost from a measured zero.
+        if on_error is not None:
+            on_error(error)
         return 0
 
 
@@ -793,13 +871,16 @@ class PackAdapter(ResourceAdapter):
             )
 
         discovery_failures: List[OSError] = []
+        file_failures: List[_FileMeasurementFailure] = []
         candidates = _collect_candidates(
             path, focus, changed_files, fan_in_scores=fan_in_scores,
             graph_relevance_scores=graph_relevance_scores,
             exclude_patterns=exclude_patterns, on_error=discovery_failures.append,
+            on_file_error=file_failures.append,
         )
         selected, meta = _apply_budget(candidates, budget_tokens, budget_lines, path)
         _record_candidate_discovery_warning(path, discovery_failures, meta)
+        _record_file_measurement_warning(tuple(file_failures), meta)
         if since:
             meta['since'] = since
             meta['changed_files_count'] = len(changed_files)

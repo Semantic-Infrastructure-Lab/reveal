@@ -35,7 +35,8 @@ def _format_file_line(f: Dict[str, Any], verbose: bool = True) -> str:
     """Format one file entry as a string (verbose form, for MCP / string consumers)."""
     if not verbose:
         return f"  {f['relative']}"
-    return f"  {f['relative']:50} {f['tokens_approx']:5} tokens  {f['lines']:4} lines"
+    lines = '?' if f['lines'] is None else f['lines']
+    return f"  {f['relative']:50} {f['tokens_approx']:5} tokens  {lines:>4} lines"
 
 
 def _candidate_discovery_incomplete(meta: Dict[str, Any]) -> bool:
@@ -43,7 +44,22 @@ def _candidate_discovery_incomplete(meta: Dict[str, Any]) -> bool:
                for warning in meta.get('warnings') or [])
 
 
+def _stat_measurement_incomplete(meta: Dict[str, Any]) -> bool:
+    return any(warning.get('type') == 'file_measurement_failed' and 'stat' in warning.get('operations', [])
+               for warning in meta.get('warnings') or [])
+
+
+def _used_line_total(meta: Dict[str, Any]) -> str:
+    return 'unavailable' if meta['used_lines'] is None else str(meta['used_lines'])
+
+
 def _pack_empty_line(meta: Dict[str, Any]) -> str:
+    if _stat_measurement_incomplete(meta):
+        if meta['total_candidates'] == 0:
+            return 'No eligible files were measured; candidate file measurements are unavailable.'
+        return 'No observed measured eligible files fit within budget; file measurements are incomplete.'
+    if meta.get('line_budget_incomplete'):
+        return 'No files selected: line costs are unavailable or exceed the budget.'
     if not _candidate_discovery_incomplete(meta):
         return 'No files fit within budget.'
     if meta['total_candidates'] == 0:
@@ -68,10 +84,11 @@ def _format_pack_header(
         lines.append(f"Changed files:  {meta.get('changed_files_count', 0)} (boosted to top priority)")
     if since_error:
         lines.append(f"Warning: --since: {since_error}")
-    file_label = 'observed eligible files' if _candidate_discovery_incomplete(meta) else 'files'
+    file_label = ('observed eligible files' if _candidate_discovery_incomplete(meta)
+                  or _stat_measurement_incomplete(meta) else 'files')
     lines.append(
         f"Selected {meta['selected']} of {meta['total_candidates']} {file_label} "
-        f"(~{meta['used_tokens_approx']} tokens, {meta['used_lines']} lines)"
+        f"(~{meta['used_tokens_approx']} tokens, {_used_line_total(meta)} lines)"
     )
     lines.append("")
     return lines
@@ -98,7 +115,9 @@ def _format_pack_file_groups(selected: List[Dict[str, Any]], meta: Dict[str, Any
             lines.extend(_format_file_line(f, verbose) for f in files)
             lines.append("")
     if meta['skipped'] > 0:
-        lines.append(f"[{meta['skipped']} files excluded — exceeded budget]")
+        reason = ('budget exceeded or line cost unavailable' if meta.get('line_budget_incomplete')
+                  else 'exceeded budget')
+        lines.append(f"[{meta['skipped']} files excluded — {reason}]")
     return lines
 
 
