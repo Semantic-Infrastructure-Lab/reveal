@@ -78,7 +78,7 @@ def note(files, *, select=None, ignore=None):
 def assert_loss(notes, root):
     assert len(notes) == 1, 'Actual cached M102 importer loss must reach eligible public Check notes'
     text = notes[0]
-    assert 'M102' in text and str(root) in text and 'directory enumeration' in text
+    assert 'M102' in text and root.as_posix() in text and 'directory enumeration' in text
     assert 'false positive' in text.lower() or ('orphan' in text.lower() and 'may' in text.lower())
     assert 'lower bound' not in text.lower()
     return text
@@ -113,10 +113,10 @@ def test_mixed_roots_keep_config_scope_and_unknown_attribution(tmp_path, observe
     assert len(observed['events']) == 2
     before = len(observed['calls'])
     text = assert_loss(note([enabled, disabled]), enabled.parent)
-    assert str(disabled.parent) not in text
+    assert disabled.parent.as_posix() not in text
     both = note([enabled, disabled], select=['M102'])
     assert len(both) == 2 and len(set(both)) == 2
-    assert all(any(str(worker.parent) in row for row in both) for worker in (enabled, disabled))
+    assert all(any(worker.parent.as_posix() in row for row in both) for worker in (enabled, disabled))
     if unknown:
         assert all('0 identified directory' in row and '1 enumeration error event(s)' in row for row in both)
     assert len(observed['calls']) == before
@@ -132,7 +132,10 @@ def test_checked_target_aliases_use_registry_identity_and_do_not_duplicate_root(
         requested = Path(worker.name)
     elif alias == 'symlink':
         requested = tmp_path / 'alias.py'
-        requested.symlink_to(worker)
+        try:
+            requested.symlink_to(worker)
+        except (OSError, NotImplementedError) as exc:
+            pytest.skip(f'Symlink creation unsupported: {exc}')
     else:
         requested = worker
     assert mod.M102.matches_target(str(requested))
@@ -148,7 +151,7 @@ def test_none_diagnostic_population_and_empty_checked_population_are_distinct(tm
     before = len(observed['calls'])
     assert note([], select=['M102']) == []
     all_notes = note(None, select=['M102'])
-    assert any(str(worker.parent) in row for row in all_notes), all_notes
+    assert any(worker.parent.as_posix() in row for row in all_notes), all_notes
     assert len(observed['calls']) == before
 
 
