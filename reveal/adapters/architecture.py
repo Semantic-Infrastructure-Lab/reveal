@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from reveal.capabilities import scope_dict_for_path
-from reveal.reveal_types import CONTRACT_VERSION
+from reveal.reveal_types import CONTRACT_VERSION, WarningEntry
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..conventions import conventions_for_path
@@ -81,7 +81,7 @@ def _capture_import_observations(data: Dict[str, Any], observations: Optional[Di
         observations['failed'] = True
         return
     positive = any(row[count] > 0 for key, _, counts in sections for row in data[key] for count in counts)
-    if positive or any(len(set(cycle)) >= 2 for cycle in cycles):
+    if positive or any(len(set(cycle)) >= 2 for cycle in cast(List[List[str]], cycles)):
         observations['usable'] = True
 
 
@@ -90,7 +90,7 @@ def _valid_cycles(cycles: Any) -> bool:
             and all(isinstance(path, str) and bool(path) for path in cycle) for cycle in cycles))
 
 
-def _directory_loss_error(meta, observations) -> Optional[Dict[str, str]]:
+def _directory_loss_error(meta, observations) -> Optional[WarningEntry]:
     if not any(w.get('type') == 'analysis_incomplete' for w in (meta or {}).get('warnings', [])):
         return None
     if observations.get('failed') or not observations.get('usable'):

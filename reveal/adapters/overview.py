@@ -255,7 +255,7 @@ def _observed_relationships(fan_in, entrypoints, components, cycles) -> bool:
     return positive or real_cycle
 
 
-def _directory_loss_error(meta, observations) -> Optional[Dict[str, str]]:
+def _directory_loss_error(meta, observations) -> Optional[WarningEntry]:
     if not any(w.get('type') == 'analysis_incomplete' for w in (meta or {}).get('warnings', [])):
         return None
     if observations.get('failed') or not observations.get('usable'):
