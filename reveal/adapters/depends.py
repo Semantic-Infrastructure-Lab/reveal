@@ -12,6 +12,7 @@ Usage:
 from ..utils.query_control import ScanBudget
 
 import os
+from dataclasses import replace
 from pathlib import Path
 from typing import Dict, Any, List, NamedTuple, Optional, Set, Tuple
 from reveal.reveal_types import CONTRACT_VERSION
@@ -26,8 +27,9 @@ from ..analyzers.imports.generic import CImportExtractor, CppImportExtractor
 from ..analyzers.imports.file_index import load_path_manifests
 from ..analyzers.imports import service as import_analysis
 from ..utils.query import parse_query_params
-from ..utils.results import ResultBuilder, note_truncation
+from ..utils.results import ResultBuilder, note_truncation, note_warning
 from ..utils.path_utils import (
+    traversal_failed_warning,
     is_unsafe_scan_root,
     resolve_project_root,
     search_parents,
@@ -269,6 +271,11 @@ class DependsRenderer:
             print_json_result(result)
 
     @staticmethod
+    def _has_traversal_loss(result: dict) -> bool:
+        return any(entry.get('type') == 'analysis_incomplete' and entry.get('unit') == 'directories'
+                   for entry in result.get('meta', {}).get('warnings', []))
+
+    @staticmethod
     def _render_dependents(result: dict, verbose: bool) -> None:
         target = result.get('target', 'unknown')
         dependents = result.get('dependents', [])
@@ -304,7 +311,8 @@ class DependsRenderer:
             return
 
         shown = f" (showing {len(dependents)})" if len(dependents) < count else ''
-        print(f"  {count} file(s) import this module{shown}:\n")
+        observed = " observed" if DependsRenderer._has_traversal_loss(result) else ""
+        print(f"  {count}{observed} file(s) import this module{shown}:\n")
         for dep in dependents:
             file_path = dep.get('file', '')
             line = dep.get('line', 0)
@@ -357,7 +365,10 @@ class DependsRenderer:
 
         total = sum(m['dependent_count'] for m in modules)
         total_modules = result.get('total_modules', len(modules))
-        if len(modules) < total_modules:
+        if DependsRenderer._has_traversal_loss(result):
+            print(f"  {len(modules)} of {total_modules} observed module(s) imported internally "
+                  f"({total} observed import edges shown); ranking is among observed modules\n")
+        elif len(modules) < total_modules:
             print(f"  Top {len(modules)} of {total_modules} module(s) imported internally "
                   f"({total} import edges shown)\n")
         else:
@@ -382,6 +393,9 @@ class DependsRenderer:
     def _render_dot(result: dict) -> None:
         modules = result.get('modules', [])
         print('digraph depends {')
+        if DependsRenderer._has_traversal_loss(result):
+            for line in result.get('warning', '').splitlines():
+                print(f'  // {line}')
         print('  rankdir=LR;')
         print('  node [shape=box fontname="monospace" fontsize=10];')
         for m in modules:
@@ -477,6 +491,7 @@ class DependsAdapter(ResourceAdapter):
         self._unresolved_examples: List[tuple] = []
         # BACK-1598: files whose extractor set parse_failed, disclosed once.
         self._files_failed: List[str] = []
+        self._traversal_failures: Tuple[Tuple[Optional[str], str], ...] = ()
         # BACK-1093: languages seen among unresolved imports whose extractor
         # has no real True/False intra-project classification at all (always
         # None) — for these, `_unresolved_intra` staying low/zero says
@@ -680,6 +695,7 @@ class DependsAdapter(ResourceAdapter):
         self._unresolved_intra = 0
         self._unresolved_examples = []
         self._files_failed = []
+        self._traversal_failures = ()
         self._zeitwerk_edges = 0
         self._constants_indexed = 0
         self._constants_ambiguous = 0
@@ -692,6 +708,7 @@ class DependsAdapter(ResourceAdapter):
         files, file_index = self._discover_files(scan_root, supported_exts)
         indices = self._build_resolution_indices(files, scan_root)
         self._graph = ImportGraph.from_imports(indices.all_imports)
+        self._graph.traversal_failures = list(self._traversal_failures)
         self._resolve_edges(scan_root, file_index, indices)
         self._build_zeitwerk_edges(files, indices.zeitwerk_index)
 
@@ -714,8 +731,12 @@ class DependsAdapter(ResourceAdapter):
         Sets ``self._scan_capped`` as a side effect (the file-count cap).
         """
         files = import_analysis.discover(import_analysis.ScanScope(scan_root, supported_exts, cap=self._scan_budget.limit))
+        self._traversal_failures = files.traversal_failures
         self._scan_capped = files.capped
         self._scan_accounting = self._scan_budget.accounting(len(files.candidates), files.capped)
+        if self._traversal_failures:
+            # The combined source/target walk cannot certify the source census.
+            self._scan_accounting = replace(self._scan_accounting, exact=False)
         return list(files.candidates), files.index
 
     def _build_resolution_indices(self, files: List[Path], scan_root: Path) -> '_ResolutionIndices':
@@ -1325,6 +1346,10 @@ class DependsAdapter(ResourceAdapter):
             'conditional imports may not reflect runtime state',
             'TYPE_CHECKING-only imports are excluded',
         ]
+        if self._traversal_failures:
+            known_limits.append(
+                'required directory enumeration failed; missing file population is unknown; '
+                'dependency observations may be incomplete or undercounted')
         if self._scan_capped:
             known_limits.append(
                 f'scan capped at {self._SCAN_FILE_CAP:,} files — BACK-524, results may be partial')
@@ -1351,6 +1376,8 @@ class DependsAdapter(ResourceAdapter):
             )
         return {
             'analysis_kind': 'import-graph',
+            # Known required discovery loss also reduces confidence, independently
+            # of whether any surviving import could be classified as unresolved.
             # BACK-547: a graph with unresolved intra-project imports is not a
             # high-confidence source for a blast-radius negative. BACK-1093:
             # unclassifiable-language imports are a distinct, disclosed-but-
@@ -1358,7 +1385,7 @@ class DependsAdapter(ResourceAdapter):
             # folded into this binary confidence value, since "how much
             # residual risk" for a whole language is a bigger judgment call
             # than this per-scan flag should make unilaterally.
-            'confidence': 'reduced' if self._unresolved_intra > 0 else 'high',
+            'confidence': 'reduced' if self._traversal_failures or self._unresolved_intra > 0 else 'high',
             'known_limits': known_limits,
         }
 
@@ -1503,11 +1530,13 @@ class DependsAdapter(ResourceAdapter):
         confident, non-empty answer (that would be the cry-wolf failure honest-
         decline is meant to prevent)."""
         partial = parse_failure_warning(self._files_failed, self._scan_root)
+        traversal = traversal_failed_warning(self._traversal_failures, self._scan_root)
         parts = [
             self._root_override_warning(),
             self._scan_cap_warning(),
             self._root_inferred_warning(),
             f"⚠️  {partial['message']}" if partial else '',
+            f"⚠️  {traversal['message']}" if traversal else '',
         ]
         if include_honest_decline:
             parts.append(self._honest_decline_warning())
@@ -1594,11 +1623,11 @@ class DependsAdapter(ResourceAdapter):
             },
         )
         note_truncation(result, 'dependents', len(shown), len(dependents), 'limit', hint='raise ?top=N')
-        # BACK-547: undercount_possible flags that an empty result may be a lower
-        # bound (intra-project imports that didn't resolve), so the renderer
-        # softens the confident "nothing imports this" assertion and the ⚠ shows.
+        # Required directory loss qualifies positives too; the prior unresolved-
+        # import policy still qualifies only empty answers (BACK-547).
         empty = not dependents
-        result['undercount_possible'] = empty and self._unresolved_intra > 0
+        note_warning(result, traversal_failed_warning(self._traversal_failures, self._scan_root))
+        result['undercount_possible'] = bool(self._traversal_failures) or (empty and self._unresolved_intra > 0)
         warnings = self._warnings(include_honest_decline=empty)
         if warnings:
             result['warning'] = warnings
@@ -1653,7 +1682,8 @@ class DependsAdapter(ResourceAdapter):
         # router read as a cut (BACK-1543).
         note_truncation(result, 'modules', len(modules), total_modules, 'limit', hint='raise ?top=N')
         empty = not modules
-        result['undercount_possible'] = empty and self._unresolved_intra > 0
+        note_warning(result, traversal_failed_warning(self._traversal_failures, self._scan_root))
+        result['undercount_possible'] = bool(self._traversal_failures) or (empty and self._unresolved_intra > 0)
         warnings = self._warnings(include_honest_decline=empty)
         if warnings:
             result['warning'] = warnings
