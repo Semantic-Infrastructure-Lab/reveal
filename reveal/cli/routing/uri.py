@@ -1140,6 +1140,17 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
             scheme or 'unknown', args).emit()
 
 
+def _answer_diagnostic(result: dict, previous: Optional[str] = None) -> Optional[str]:
+    """Retain distinct server-only diagnostics before presentation drops fields."""
+    message = result.get('error') or result.get('meta', {}).get('errors')
+    if not message:
+        return previous
+    diagnostic = str(message)
+    if previous and previous != diagnostic:
+        return f'{previous}\n{diagnostic}'
+    return diagnostic
+
+
 def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
                       scheme: Optional[str] = None, resource: Optional[str] = None, *,
                       source_path: Optional[str] = None, facts_of: Optional[Callable] = None,
@@ -1156,7 +1167,7 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
         from .declared import qualify_declared_answer
         result = qualify_declared_answer(result, adapter, source, expected_type)
     facts = facts_of(result) if facts_of is not None else None
-    private_diagnostic = str(result.get('error') or result.get('meta', {}).get('errors') or '') if facts is not None else None
+    private_diagnostic = _answer_diagnostic(result) if facts is not None else None
 
     # Apply post-processing
     result = _apply_head_tail_range(result, args, adapter, scheme)
@@ -1170,9 +1181,7 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
             from ...utils.results import merge_execution_facts
             result = qualify_declared_answer(result, adapter, source, expected_type, prior_facts=facts)
             facts = merge_execution_facts(facts, facts_of(result))
-            post_diagnostic = str(result.get('error') or result.get('meta', {}).get('errors') or '')
-            if post_diagnostic and post_diagnostic != private_diagnostic:
-                private_diagnostic = '\n'.join(filter(None, (private_diagnostic, post_diagnostic)))
+            private_diagnostic = _answer_diagnostic(result, private_diagnostic)
 
     if source_path is None:
         _echo_source(result, type(adapter), resource)
