@@ -54,6 +54,9 @@ def json_render(result, *args, **kwargs):
 
 def project(self, result, args):
     case = Path(self.path).name
+    if case == 'postprocess_failed':
+        result['error'] = 'PRIVATE_POSTPROCESS_FAILURE'
+        result.setdefault('meta', {})['errors'] = [{'message': 'PRIVATE_POSTPROCESS_FAILURE'}]
     if case == 'returned_failed_copy':
         return {key: value for key, value in result.items() if key not in ('error', 'meta')}
     if case == 'returned_failed_inplace':
@@ -76,6 +79,7 @@ mcp_server.main()
     ('returned_failed', '', 'PRIVATE_RETURNED_FAILURE'),
     ('returned_failed_copy', '', 'PRIVATE_RETURNED_FAILURE'),
     ('returned_failed_inplace', '', 'PRIVATE_RETURNED_FAILURE'),
+    ('postprocess_failed', '', 'PRIVATE_POSTPROCESS_FAILURE'),
     ('render_permission', 'PUBLIC_RENDER_PERMISSION', ''),
     ('render_crash', '', 'PRIVATE_RENDER_CRASH'),
     ('render_after_stdout', '', 'PRIVATE_RENDER_CRASH'),
