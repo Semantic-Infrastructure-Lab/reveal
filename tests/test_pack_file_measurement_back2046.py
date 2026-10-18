@@ -265,3 +265,30 @@ def test_clean_zero_byte_and_no_newline_costs_are_not_measurement_loss(measured)
     assert result['meta']['selected'] == 2 and result['meta']['used_lines'] == 0
     assert not result['meta'].get('warnings') and not result['meta'].get('line_budget_incomplete')
     assert all(row['lines'] == 0 for row in result['files']) and state['events'] == []
+
+
+@pytest.mark.parametrize('directory_loss', [False, True])
+def test_mixed_stat_and_unknown_line_cost_empty_answer_does_not_claim_budget_fit(measured, directory_loss):
+    root, core, healthy, state = measured
+    state['stat'] = {core}
+    state['read'] = {healthy}
+    if directory_loss:
+        child = root / 'included'
+        child.mkdir()
+        (child / 'hidden.py').write_text('X=3\n', encoding='utf-8')
+        state['directories'] = {child}
+    result = native(root, 'budget=1-lines')
+    operations = {operation for operation, _ in state['events']}
+    assert operations == ({'stat', 'line_count', 'directory'} if directory_loss else {'stat', 'line_count'})
+    assert result['meta']['total_candidates'] == result['meta']['skipped'] == 1
+    assert result['meta']['selected'] == result['meta']['used_lines'] == 0
+    assert result['meta']['line_budget_incomplete'] is True
+    note, = file_note(result)
+    assert set(note['operations']) == {'stat', 'line_count'}
+    assert healthy.as_posix() in str(note)
+    directories = [n for n in result['meta']['warnings'] if n.get('unit') == 'directories']
+    assert len(directories) == int(directory_loss)
+    text = PackRenderer.render_structure(result)
+    assert 'observed' in text.lower()
+    assert 'fit within budget' not in text.lower(), 'Unknown remaining line cost cannot prove budget exclusion'
+    assert 'unavailable' in text.lower() or 'unknown' in text.lower()
