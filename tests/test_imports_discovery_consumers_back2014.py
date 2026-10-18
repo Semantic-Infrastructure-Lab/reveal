@@ -142,7 +142,7 @@ def test_incomplete_graph_bypasses_real_disk_get_and_put_but_clean_reuse_survive
     assert recovered == clean
 
 
-@pytest.mark.parametrize('policy', ['reveal_ignore', 'reserved_noise'])
+@pytest.mark.parametrize('policy', ['reveal_ignore', 'reserved_noise', 'directory_excluded'])
 def test_hard_policy_and_single_file_remain_exactly_unchanged(tmp_path, monkeypatch, policy):
     root = tmp_path / 'project'
     child = root / ('node_modules' if policy == 'reserved_noise' else 'included_child')
@@ -152,9 +152,40 @@ def test_hard_policy_and_single_file_remain_exactly_unchanged(tmp_path, monkeypa
         monkeypatch.setenv('REVEAL_IGNORE', 'included_child/')
         from reveal.config import RevealConfig
         RevealConfig._cache.clear()
-    baseline = ImportsAdapter(str(root)).get_structure()
-    single = ImportsAdapter(str(source)).get_structure()
-    attempts = deny(monkeypatch, child)
-    assert ImportsAdapter(str(root)).get_structure() == baseline
-    assert ImportsAdapter(str(source)).get_structure() == single
-    assert attempts == []
+    patterns = ['included_child/'] if policy == 'directory_excluded' else []
+    with exclusion_scope(root, patterns):
+        baseline = ImportsAdapter(str(root)).get_structure()
+        single = ImportsAdapter(str(source)).get_structure()
+        attempts = deny(monkeypatch, child)
+        assert ImportsAdapter(str(root)).get_structure() == baseline
+        assert ImportsAdapter(str(source)).get_structure() == single
+        assert attempts == []
+
+
+def test_defaulted_evidence_preserves_constructors_and_empty_private_sink(tmp_path, monkeypatch):
+    import pickle
+    from dataclasses import FrozenInstanceError
+    from reveal.analyzers.imports import service
+    from reveal.analyzers.imports.base import get_all_extensions
+    from reveal.analyzers.imports.file_index import discover_import_files
+    from reveal.analyzers.imports.types import ImportGraph
+    from reveal.registry import get_code_extensions
+
+    files = service.ImportFileSet((), {}, False)
+    assert files.traversal_failures == ()
+    with pytest.raises(FrozenInstanceError):
+        files.capped = True
+    graph = ImportGraph({}, {}, {}, {}, [], [], None, {})
+    assert graph.traversal_failures == []
+    graph.traversal_failures.append((None, 'PermissionError: unknown location'))
+    assert pickle.loads(pickle.dumps(graph)).traversal_failures == graph.traversal_failures
+    root = tmp_path / 'project'; child = python_tree(root)
+    assert len(discover_import_files(root, lambda p: p.suffix == '.py', 1)) == 3
+    deny(monkeypatch, child)
+    sink = []
+    pair = ImportsAdapter._discover_candidate_files(
+        root, frozenset(get_all_extensions()), get_code_extensions(), traversal_failures=sink)
+    assert len(pair) == 2 and len(pair[0]) == 2
+    assert len(sink) == 1 and sink[0][0] == child.as_posix()
+    artifact = service.discover(service.ScanScope(root, frozenset({'.py'})))
+    assert artifact.traversal_failures == tuple(sink)
