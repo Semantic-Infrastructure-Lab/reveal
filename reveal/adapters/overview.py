@@ -255,6 +255,20 @@ def _observed_relationships(fan_in, entrypoints, components, cycles) -> bool:
     return positive or real_cycle
 
 
+def _capture_import_observations(fan_in, entrypoints, components, cycles,
+                                  observations: Optional[Dict[str, bool]]) -> None:
+    if observations is None:
+        return
+    counts_valid = all(type(row.get(key)) is int and row[key] >= 0
+                       for row in components for key in ('internal', 'outgoing', 'incoming'))
+    cycles_valid = (isinstance(cycles, list) and all(isinstance(cycle, list)
+                    and all(isinstance(path, str) and bool(path) for path in cycle) for cycle in cycles))
+    if not counts_valid or not cycles_valid:
+        observations['failed'] = True
+    elif _observed_relationships(fan_in, entrypoints, components, cycles):
+        observations['usable'] = True
+
+
 def _directory_loss_error(meta, observations) -> Optional[WarningEntry]:
     if not any(w.get('type') == 'analysis_incomplete' for w in (meta or {}).get('warnings', [])):
         return None
@@ -448,9 +462,8 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, *,
             retained = {}
         else:
             retained = _imports_metadata(adapter, metadata)
-        if observations is not None and _observed_relationships(
-                fan_in['entries'], entrypoints['entries'], components['components'], circular.get('cycles', [])):
-            observations['usable'] = True
+        _capture_import_observations(fan_in['entries'], entrypoints['entries'], components['components'],
+                                     circular.get('cycles'), observations)
         return {
             'fan_in': fan_in.get('entries', []),
             'entrypoints': entrypoints.get('entries', []),
