@@ -14,7 +14,7 @@ import re
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, FrozenSet, Iterator, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, FrozenSet, Iterator, List, Optional, Sequence, Set, Tuple
 
 from ..ast.analysis import StructureList, collect_structures, is_code_file, call_sources, unattributed_references
 from ...utils.pyparse import parse_python
@@ -262,7 +262,8 @@ _REFERENCE_CACHE: OrderedDict = OrderedDict()
 _REFERENCE_CACHE_MAX = 8
 
 
-def _python_referenced_names(directory: Path) -> Set[str]:
+def _python_referenced_names(directory: Path, *,
+                             structures: Optional[StructureList] = None) -> Set[str]:
     """Names a Python file references without calling them directly.
 
     build_callers_index only walks `elements`, and only those in the
@@ -288,48 +289,41 @@ def _python_referenced_names(directory: Path) -> Set[str]:
     equivalent JS/TS mechanisms (JSX invocation, test-framework callbacks,
     object shorthand) need the same treatment in that analyzer.
     """
-    import ast as _ast
-
     from ...utils.exclusions import active_exclusions
     cache_key = (_dir_cache_key(directory), active_exclusions(), gitignore_enabled())
     dir_str = str(directory)
+    known_loss = structures is not None and bool(getattr(structures, 'traversal_failures', ()))
+    if known_loss:
+        _REFERENCE_CACHE.pop(dir_str, None)
     cached = _REFERENCE_CACHE.get(dir_str)
     if cached and cached[0] == cache_key:
         _REFERENCE_CACHE.move_to_end(dir_str)
         return cached[1]
 
+    skipped: List[Tuple[str, str]] = []
+    traversal_failures: List[Tuple[Optional[str], str]] = []
+
+    def on_error(error: OSError) -> None:
+        traversal_failures.append((
+            to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}'))
+
     referenced: Set[str] = set()
-    for py_file in _iter_python_files(directory):
+    for py_file in _iter_python_files(directory, on_error=on_error):
         try:
             if is_unsafe_scan_root(py_file.parent):
                 continue
             tree = parse_python(py_file.read_text(encoding='utf-8', errors='ignore'), str(py_file))
-        except (OSError, SyntaxError, ValueError, RecursionError):
+        except (OSError, SyntaxError, ValueError, RecursionError) as error:
+            skipped.append((to_posix(py_file), f'{type(error).__name__}: {error}'))
             continue
 
-        called_here = set()
-        for node in _ast.walk(tree):
-            if isinstance(node, _ast.Call):
-                func = node.func
-                if isinstance(func, _ast.Name):
-                    called_here.add(func.id)
-                    referenced.add(func.id)
-                elif isinstance(func, _ast.Attribute):
-                    referenced.add(func.attr)
-            elif isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)):
-                for dec in node.decorator_list:
-                    target = dec.func if isinstance(dec, _ast.Call) else dec
-                    if isinstance(target, _ast.Name):
-                        referenced.add(target.id)
-                    elif isinstance(target, _ast.Attribute):
-                        referenced.add(target.attr)
+        referenced.update(_python_tree_referenced_names(tree))
 
-        # Second pass: bare identifiers in load position that are not the
-        # function of a call (those are already counted above).
-        for node in _ast.walk(tree):
-            if isinstance(node, _ast.Name) and isinstance(node.ctx, _ast.Load):
-                referenced.add(node.id)
-
+    if structures is not None:
+        _record_reference_failures(structures, skipped, traversal_failures)
+    if known_loss or skipped or traversal_failures:
+        _REFERENCE_CACHE.pop(dir_str, None)
+        return referenced
     _REFERENCE_CACHE[dir_str] = (cache_key, referenced)
     _REFERENCE_CACHE.move_to_end(dir_str)
     if len(_REFERENCE_CACHE) > _REFERENCE_CACHE_MAX:
@@ -337,7 +331,51 @@ def _python_referenced_names(directory: Path) -> Set[str]:
     return referenced
 
 
-def _iter_python_files(directory: Path) -> Iterator[Path]:
+def _python_tree_referenced_names(tree: Any) -> Set[str]:
+    """Collect the existing call/decorator/load references from one parsed Python tree."""
+    import ast as _ast
+
+    referenced: Set[str] = set()
+    called_here = set()
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Call):
+            func = node.func
+            if isinstance(func, _ast.Name):
+                called_here.add(func.id)
+                referenced.add(func.id)
+            elif isinstance(func, _ast.Attribute):
+                referenced.add(func.attr)
+        elif isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)):
+            for dec in node.decorator_list:
+                target = dec.func if isinstance(dec, _ast.Call) else dec
+                if isinstance(target, _ast.Name):
+                    referenced.add(target.id)
+                elif isinstance(target, _ast.Attribute):
+                    referenced.add(target.attr)
+
+    # Second pass: bare identifiers in load position that are not the
+    # function of a call (those are already counted above).
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Name) and isinstance(node.ctx, _ast.Load):
+            referenced.add(node.id)
+
+    return referenced
+
+
+def _record_reference_failures(structures: StructureList, skipped: List[Tuple[str, str]],
+                               traversal_failures: List[Tuple[Optional[str], str]]) -> None:
+    """Merge required reference loss into the existing collection's diagnostic channels."""
+    identified = {os.path.normcase(os.path.realpath(path)) for path, _ in structures.skipped}
+    for path, cause in skipped:
+        identity = os.path.normcase(os.path.realpath(path))
+        if identity not in identified:
+            structures.skipped.append((path, cause))
+            identified.add(identity)
+    structures.traversal_failures.extend(traversal_failures)
+
+
+def _iter_python_files(directory: Path, *,
+                       on_error: Optional[Callable[[OSError], None]] = None) -> Iterator[Path]:
     """The .py files the callers index sees: the shared walker's, as collect_structures'
     (BACK-1577) -- skip dirs, what git ignores, REVEAL_IGNORE and --exclude.
 
@@ -345,7 +383,7 @@ def _iter_python_files(directory: Path) -> Iterator[Path]:
     node_modules/ and every git-ignored tree, so a name referenced only in a
     vendored or generated file hid a genuinely uncalled function.
     """
-    for fp in _walk_code_files(directory):
+    for fp in _walk_code_files(directory, on_error=on_error):
         if fp.suffix == '.py' and is_code_file(fp):
             yield fp
 
@@ -1200,7 +1238,7 @@ def find_uncalled(
     # BACK-1265: union in names used without a direct call expression --
     # module-level calls and callbacks passed by reference. See
     # _python_referenced_names for why both were invisible to the index.
-    called_names |= _python_referenced_names(directory)
+    called_names |= _python_referenced_names(directory, structures=structures)
     file_lines: Dict[str, List[str]] = {}
     extra_implicit_decorators = _project_entry_point_decorators(directory)
     cpp_overrides = _cpp_override_names(structures, file_lines)

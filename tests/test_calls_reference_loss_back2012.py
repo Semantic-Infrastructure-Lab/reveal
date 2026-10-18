@@ -176,3 +176,83 @@ def test_clean_reference_cache_keeps_set_shape_and_warm_identity(tmp_path, monke
 
     monkeypatch.setattr(Path, 'read_text', no_reads)
     assert index._python_referenced_names(root) is warm
+
+
+@pytest.mark.parametrize('unknown', [False, True])
+def test_empty_sink_keeps_reference_discovery_events(tmp_path, monkeypatch, unknown):
+    from reveal.adapters.ast.analysis import StructureList
+
+    root = tmp_path / 'affected'
+    child, hidden = make_tree(root, survivors=False)
+    sink = StructureList()
+    real_scandir = os.scandir
+
+    def scandir(directory):
+        if Path(directory) == child:
+            if unknown:
+                raise PermissionError('controlled unknown directory')
+            raise PermissionError(13, 'controlled directory', str(child))
+        return real_scandir(directory)
+
+    monkeypatch.setattr(os, 'scandir', scandir)
+    result = index._python_referenced_names(root, structures=sink)
+    assert not result
+    assert not sink
+    assert not sink.skipped
+    (directory, cause), = sink.traversal_failures
+    assert directory == (None if unknown else child.as_posix())
+    assert cause.startswith('PermissionError:')
+    assert str(root) not in index._REFERENCE_CACHE
+
+
+def test_reference_file_skip_deduplicates_normalized_structural_identity(tmp_path, monkeypatch):
+    from reveal.adapters.ast.analysis import StructureList
+
+    root = tmp_path / 'affected'
+    child, hidden = make_tree(root, survivors=False)
+    sink = StructureList()
+    existing = str(child / '..' / 'included_child' / hidden.name)
+    sink.skipped.append((existing, 'ValueError: structural cause'))
+    real_read = Path.read_text
+
+    def read(path, *args, **kwargs):
+        if path == hidden:
+            raise PermissionError(13, 'different reference cause', str(hidden))
+        return real_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_text', read)
+    assert not index._python_referenced_names(root, structures=sink)
+    assert sink.skipped == [(existing, 'ValueError: structural cause')]
+    assert str(root) not in index._REFERENCE_CACHE
+
+
+@pytest.mark.parametrize('failure', [ValueError('controlled parser value'), RecursionError('controlled parser recursion')])
+def test_existing_parser_boundary_records_loss_and_evicts_old_entry(tmp_path, monkeypatch, failure):
+    from reveal.adapters.ast.analysis import StructureList
+
+    source = tmp_path / 'source.py'
+    source.write_text('BOUND = visible\n', encoding='utf-8')
+    sink = StructureList()
+    index._REFERENCE_CACHE[str(tmp_path)] = (('obsolete-key',), {'old'})
+
+    def parse(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(index, 'parse_python', parse)
+    assert not index._python_referenced_names(tmp_path, structures=sink)
+    assert str(tmp_path) not in index._REFERENCE_CACHE
+    (path, cause), = sink.skipped
+    assert path == source.as_posix()
+    assert cause.startswith(f'{type(failure).__name__}:')
+
+
+def test_unsafe_root_policy_is_not_required_loss(tmp_path, monkeypatch):
+    from reveal.adapters.ast.analysis import StructureList
+
+    (tmp_path / 'source.py').write_text('BOUND = visible\n', encoding='utf-8')
+    sink = StructureList()
+    monkeypatch.setattr(index, 'is_unsafe_scan_root', lambda path: True)
+    names = index._python_referenced_names(tmp_path, structures=sink)
+    assert not names
+    assert not sink.skipped and not sink.traversal_failures
+    assert index._python_referenced_names(tmp_path, structures=sink) is names
