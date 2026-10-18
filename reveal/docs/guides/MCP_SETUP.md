@@ -206,8 +206,10 @@ caller/callee queries rather than rendering a readable walk-through.
 Both trace tools retain a normal MCP response when canonical evidence proves the
 entry point is absent; CLI/URI shell invocations use exit 2 for that request.
 Incomplete evidence cannot prove absence. Required analysis/output failure remains
-an MCP error, while usable partial narratives disclose incompleteness. Provenance
-JSON retains its structured diagnostics without a captured-stderr suffix.
+an MCP error, while usable partial narratives disclose incompleteness. For proven absence, provenance
+JSON retains the structured error without a duplicate stderr echo. Other captured
+notes keep their existing behavior; ignored-parameter warnings can follow the JSON
+body.
 
 ```
 reveal_trace("src/", "process_order", depth=2)

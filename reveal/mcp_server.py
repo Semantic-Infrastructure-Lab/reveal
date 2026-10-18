@@ -274,7 +274,7 @@ def _declared_failure(answer) -> str | None:
     return _tool_failure(answer.private_diagnostic or 'Required analysis or output failed', public=False)
 
 
-def _run_declared_tool(fn, *args, **kwargs) -> str:
+def _run_declared_tool(fn, *args, quiet_usage: bool = False, **kwargs) -> str:
     """Capture one qualified consumer while retaining canonical outcome evidence."""
     answers = []
 
@@ -286,7 +286,10 @@ def _run_declared_tool(fn, *args, **kwargs) -> str:
         if answer.execution_facts.completeness is AnalysisCompleteness.INCOMPLETE:
             answer.result.setdefault('meta', {}).setdefault('warnings', []).append(
                 {'type': 'analysis_incomplete', 'message': 'Required analysis is incomplete; usable evidence follows.'})
-        answer.emit()
+        if quiet_usage and _trace_absence_compatibility(answer):
+            answer.emit(announce_error=False)
+        else:
+            answer.emit()
 
     output = _run_and_capture(fn, *args, answer_consumer=consume, **kwargs)
     if answers:
@@ -559,7 +562,6 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
     """
     from .cli.invocation import Invocation, invocation_scope
     from .cli.routing import handle_uri
-    from .cli.routing.declared import declared_adapter_class
     from .utils.json_utils import set_provenance_enabled
 
     args = _default_args(path=uri, provenance=provenance, format='json' if provenance else 'text')
@@ -575,8 +577,7 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
     with _capture_lock, invocation_scope(invocation):
         apply_global_flags(args)
         try:
-            declared_json = provenance and declared_adapter_class(uri.partition('://')[0]) is not None
-            return _run_declared_tool(handle_uri, uri, None, args, capture_stderr=not declared_json)
+            return _run_declared_tool(handle_uri, uri, None, args, quiet_usage=provenance)
         finally:
             set_provenance_enabled(False)
 

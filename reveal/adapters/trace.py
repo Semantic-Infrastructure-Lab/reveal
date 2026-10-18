@@ -685,8 +685,10 @@ class TraceAdapter(ResourceAdapter):
         if _trace_absent(result):
             return ExecutionFacts(AnalysisCompleteness.COMPLETE,
                                   failures=frozenset({FailureCause.INVALID_REQUEST}))
-        state = (AnalysisCompleteness.INCOMPLETE if _trace_missing_evidence(result)
-                 else AnalysisCompleteness.COMPLETE)
+        state = AnalysisCompleteness.COMPLETE
+        if _trace_missing_evidence(result):
+            state = (AnalysisCompleteness.INCOMPLETE if any(frame['resolved'] for frame in result['frames'])
+                     else AnalysisCompleteness.FAILED)
         return result_execution_facts(result, completeness=state)
 
     @staticmethod

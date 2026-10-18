@@ -175,13 +175,14 @@ def _invalid_answer(adapter, name, path, message, args, cause=None, *, result_ty
         (result_type or adapter.RESULT_TYPE), path, contract_version=CONTRACT_VERSION,
         source_type='unknown', errors=[{'code': cause.value, 'message': message}], error=message)
     facts = failure_execution_facts(cause)
-    answer = Answer(result, 'router', lambda: _emit_result(
-        result, args, name, _render_router_result, execution_facts=facts, execution_answer=answer),
+    answer = Answer(result, 'router', lambda *, announce_error=True: _emit_result(
+        result, args, name, _render_router_result, execution_facts=facts, execution_answer=answer,
+        announce_error=announce_error),
         execution_facts=facts, public_diagnostic=message)
     return answer
 
 
-def emit_declared_result(result, args, scheme, render, facts, *, execution_answer=None, **render_kwargs) -> None:
+def emit_declared_result(result, args, scheme, render, facts, *, execution_answer=None, announce_error=True, **render_kwargs) -> None:
     """Finalize selected D6 facts; legacy emitters keep their existing policy."""
     from ...display.formatting import print_result_control_notes
     from ...rendering.base import emit_rendered
@@ -191,7 +192,8 @@ def emit_declared_result(result, args, scheme, render, facts, *, execution_answe
     from .uri import announce_outcome
     policy = getattr(args, 'fail_on', None) or declared_adapter_class(scheme).DEFAULT_FAIL_ON
     result = attach_provenance(result)
-    announce_outcome(result, f'{scheme}://')
+    if announce_error:
+        announce_outcome(result, f'{scheme}://')
     try:
         write_also_json(result, args)
     except (OSError, UnicodeError, ValueError) as exc:

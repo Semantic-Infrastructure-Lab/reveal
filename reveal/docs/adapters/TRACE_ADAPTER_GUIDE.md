@@ -67,7 +67,9 @@ and `--verbose` remain no-ops for trace expansion.
 
 The MCP tools preserve their historical nonerror response for a proven absent
 root, separately from CLI exit 2. Failed analysis or required rendering still
-signals an MCP error; usable partial traces retain an incompleteness warning.
+signals an MCP error; usable partial traces with resolved frames retain an
+incompleteness warning. Missing required inputs with only an unresolved placeholder
+is failed analysis, rather than a usable partial trace.
 Legacy mixed URI batches retain their previous outcome policy.
 
 JSX component-reference frames carry `relationship: jsx_reference` (or

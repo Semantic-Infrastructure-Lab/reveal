@@ -40,7 +40,7 @@ class Answer:
     """
     result: Any
     kind: str
-    emit: Callable[[], None]
+    emit: Callable[..., None]
     execution_facts: Optional[ExecutionFacts] = None
     exception: Optional[Exception] = field(default=None, repr=False)
     public_diagnostic: Optional[str] = None
@@ -173,8 +173,9 @@ def _answer(resolve: Callable[[], Answer], scheme: str, args: 'Namespace', *,
                                  'file' if os.path.isfile(source_path) else 'unknown')
     facts = facts_of(result) if facts_of is not None else None
     answer = Answer(result, 'router',
-                    lambda: _emit_result(result, args, scheme, _render_router_result,
-                                         execution_facts=facts, execution_answer=answer, detail=detail),
+                    lambda *, announce_error=True: _emit_result(
+                        result, args, scheme, _render_router_result, execution_facts=facts,
+                        execution_answer=answer, announce_error=announce_error, detail=detail),
                     execution_facts=facts, exception=exception)
     return answer
 
@@ -1142,7 +1143,8 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
 
 def _answer_diagnostic(result: dict, previous: Optional[str] = None) -> Optional[str]:
     """Retain distinct server-only diagnostics before presentation drops fields."""
-    message = result.get('error') or result.get('meta', {}).get('errors')
+    meta = result.get('meta', {})
+    message = result.get('error') or meta.get('errors') or meta.get('warnings')
     if not message:
         return previous
     diagnostic = str(message)
@@ -1215,9 +1217,9 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
     # Last, so it selects from the result the user would otherwise see (BACK-1607).
     result = _apply_field_selection(result, args, scheme)
     answer = Answer(result, 'structure',
-                    lambda: _emit_result(result, args, scheme, renderer_class.render_structure,
+                    lambda *, announce_error=True: _emit_result(result, args, scheme, renderer_class.render_structure,
                                          exit_code=getattr(renderer_class, 'exit_code', None),
-                                         execution_facts=facts, execution_answer=answer,
+                                         execution_facts=facts, execution_answer=answer, announce_error=announce_error,
                                          **_render_structure_top_kwargs(renderer_class, args, adapter)),
                     execution_facts=facts, private_diagnostic=private_diagnostic, public_diagnostic=public_diagnostic)
     return answer
@@ -1232,7 +1234,7 @@ def _echo_source(result: Any, adapter_class: type, resource: Optional[str]) -> N
 
 def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render,
                  exit_code: Optional[Callable[[Any, str], int]] = None,
-                 execution_facts=None, execution_answer=None, **render_kwargs) -> None:
+                 execution_facts=None, execution_answer=None, announce_error=True, **render_kwargs) -> None:
     """Render a URI result and turn its outcome into the exit code (BACK-1059).
 
     Every printed URI result, for the CLI and MCP alike, ends here (the emit of a
@@ -1253,7 +1255,7 @@ def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render,
     if execution_facts is not None:
         from .declared import emit_declared_result
         emit_declared_result(result, args, scheme, render, execution_facts,
-                             execution_answer=execution_answer, **render_kwargs)
+                             execution_answer=execution_answer, announce_error=announce_error, **render_kwargs)
         return
     outcome = announce_outcome(result, f"{scheme or 'unknown'}://")
     write_also_json(result, args)
