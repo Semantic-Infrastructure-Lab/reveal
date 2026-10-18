@@ -230,6 +230,25 @@ reveal pack PATH [--budget N] [--focus TOPIC] [--since REF] [--content] [--verbo
 | `--verbose` | Show per-file token/line counts |
 | `--format json` | Machine-readable output |
 
+### Discovery evidence
+
+Actual candidate-directory enumeration failures appear in `meta.warnings` and in
+human output for the CLI, URI and specialized MCP tool. Counts and rankings then
+cover observed eligible files; the missing file population is unknown. Surviving
+selected files and content remain available.
+
+An empty selection with observed candidates can still reflect the budget. If no
+candidates were observed under discovery loss, the text says the candidate population
+is unavailable instead of attributing the empty result to the budget. This decision
+uses candidate counts before budget and presentation cuts. Healthy empty scans and
+intentional exclusions keep their existing behavior.
+
+Pack retains its legacy exits and ordinary MCP responses, including under discovery
+loss; inspect the warnings to distinguish that uncertainty. This disclosure does not
+establish completeness of optional import-graph ranking or file reads and parsing.
+URI requests support `--also-json` artifacts and global field/item cuts; the native
+Pack subcommand retains its existing supported flags.
+
 ### Priority Algorithm
 
 Files are scored and selected in this order:
