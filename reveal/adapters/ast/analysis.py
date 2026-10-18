@@ -443,9 +443,23 @@ def _has_usable_observations(result: Dict[str, Any], analyzer) -> bool:
     return named or calls
 
 
+def _complete_structure(result: Dict[str, Any], file_path: str, analyzer,
+                        outline: bool, needle: Optional[str]) -> Optional[str]:
+    """Finish required projections without losing already extracted observations."""
+    from ...core.treesitter_parse import GrammarUnavailable
+    if outline:
+        if needle is not None:
+            result['name_in_text'] = needle in getattr(analyzer, 'content', '')
+        return None
+    try:
+        _add_call_sites(result, file_path, analyzer)
+    except GrammarUnavailable as exc:
+        return _parser_failure(analyzer) or f'GrammarUnavailable: {exc}'
+    return None
+
+
 def _analyzer_outcome(file_path: str, analyzer, outline: bool,
                       needle: Optional[str]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-    from ...core.treesitter_parse import GrammarUnavailable
     structure = analyzer.get_outline() if outline else analyzer.get_structure()
     if outcome_of(structure) == 'failed':
         return None, str(structure['error'])
@@ -459,14 +473,9 @@ def _analyzer_outcome(file_path: str, analyzer, outline: bool,
         # Empty outlines may omit imports that the existing full scan counts.
         return analyze_file_outcome(file_path) if outline else (None, None)
     result = _flatten_structure(file_path, structure, analyzer, outline)
-    if outline:
-        if needle is not None:
-            result['name_in_text'] = needle in getattr(analyzer, 'content', '')
-    else:
-        try:
-            _add_call_sites(result, file_path, analyzer)
-        except GrammarUnavailable as exc:
-            failures.append(_parser_failure(analyzer) or f'GrammarUnavailable: {exc}')
+    completion_failure = _complete_structure(result, file_path, analyzer, outline, needle)
+    if completion_failure is not None:
+        failures.append(completion_failure)
     parse_failure = _parser_failure(analyzer)
     if parse_failure is not None and parse_failure not in failures:
         failures.append(parse_failure)
