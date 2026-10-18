@@ -27,7 +27,7 @@ reveal 'trace://src?from=handle_request&depth=4'
 | Parameter | Values | Purpose |
 |-----------|--------|---------|
 | `from` | string (required) | Entry-point function to start the trace from. `<file>:<name>` (e.g. `src/app.py:run`) picks one of several same-named definitions; a bare name with several definitions traces each and adds a warning. |
-| `depth` | integer (default `2`, clamped 1-5) | How many call levels to expand. |
+| `depth` | signed whole integer (default `2`, clamped 1-5) | How many call levels to expand. |
 
 ## Reading The Output
 
@@ -48,11 +48,27 @@ attributed `E_COMPOSE` entries in `meta.errors`; valid sibling rows remain usabl
 Text prints mirrored legacy and typed diagnostics once. External/ambiguous calls
 and requested depth limits are separate observations, not failed input evidence.
 
-These evidence disclosures preserve the current exit policy: a surviving root
-can still return 0 with partial input, while an unknown root is rejected by the
-subcommand and remains an unresolved frame through URI invocation. Inspect the
-diagnostics before treating a trace as complete; declared execution binding is
-not part of this producer change.
+Both spellings use the declared `trace` result and execution policy. Complete
+analysis returns 0; invalid parameters, missing resources and a definitively
+absent entry point return 2; incomplete analysis or required output failure
+returns 3. An absent-root conclusion requires the canonical unresolved placeholder,
+zero edge totals and no failed, recovered or malformed required input evidence.
+Incomplete evidence takes precedence over absence. External/ambiguous callees
+remain ordinary observations. Only `--fail-on none` is supported.
+
+`from` is a required nonempty scalar string. URI selectors decode percent escapes
+once and preserve `+`; encode literal percent signs and separators such as `&` in
+selectors. Typed `--from` values remain unchanged. `depth` rejects booleans,
+fractions and scientific notation, then clamps signed whole integers to 1–5.
+Existing literal resource paths win before a once-decoded existing path is tried.
+Global exclusions, gitignore, `--provenance`, `--fields`, `--also-json` and
+`REVEAL_FORMAT` use the common owners. CLI `--all` remains rejected; URI `--all`
+and `--verbose` remain no-ops for trace expansion.
+
+The MCP tools preserve their historical nonerror response for a proven absent
+root, separately from CLI exit 2. Failed analysis or required rendering still
+signals an MCP error; usable partial traces retain an incompleteness warning.
+Legacy mixed URI batches retain their previous outcome policy.
 
 JSX component-reference frames carry `relationship: jsx_reference` (or
 `call_and_jsx_reference` when the symbol is also called) and text labels them

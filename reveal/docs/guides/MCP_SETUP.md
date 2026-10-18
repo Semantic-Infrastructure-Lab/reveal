@@ -68,7 +68,7 @@ the MCP result — check that field rather than string-matching the response tex
 Input and operating-system failures retain actionable diagnostics. Unexpected
 crashes return generic feedback; their original details are logged on the server.
 Ordinary source text beginning with an error-like prefix remains tool output.
-Declared queries (architecture, contracts, deps, hotspots, overview, surface)
+Declared queries (architecture, contracts, deps, hotspots, overview, surface, trace)
 retain canonical analysis and output outcomes: fully failed analysis or required
 output failure signals an error even when a renderer printed text. Usable partial
 analysis stays a normal result with an explicit incompleteness warning.
@@ -203,6 +203,11 @@ Depth-indented call-graph narrative from one entry point — each frame shows
 location, parameters, classified side effects, and what it calls next.
 Complements `reveal_query("calls://...")`, which answers structural
 caller/callee queries rather than rendering a readable walk-through.
+Both trace tools retain a normal MCP response when canonical evidence proves the
+entry point is absent; CLI/URI shell invocations use exit 2 for that request.
+Incomplete evidence cannot prove absence. Required analysis/output failure remains
+an MCP error, while usable partial narratives disclose incompleteness. Provenance
+JSON retains its structured diagnostics without a captured-stderr suffix.
 
 ```
 reveal_trace("src/", "process_order", depth=2)

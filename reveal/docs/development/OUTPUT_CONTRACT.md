@@ -414,11 +414,11 @@ apply after this legacy outcome handling:
 
 ## Declared execution policy
 
-Direct surface, architecture, contracts, deps, hotspots and overview subcommands and their URI equivalents share declared
+Direct surface, architecture, contracts, deps, hotspots, overview and trace subcommands and their URI equivalents share declared
 parameter binding and one answer/emission path. Surface retains `surface_scan`;
 architecture retains `architecture` or `architecture_diff` by resolved operation.
 Contracts retains `contracts`; deps retains `deps_scan`; hotspots retains `hotspots_scan`;
-overview retains `overview`.
+overview retains `overview`; trace retains `trace`.
 Their execution policy
 uses explicit completeness and failure causes from the analysis owner, independently
 of `outcome_of()`'s legacy rendering categories:
@@ -494,6 +494,19 @@ reject. Both `--all` and `--verbose` override explicit top in both spellings.
 Without either, top0 retains all Stats hotspots but zero AST/Git results. The
 documented query-exclusion boundary remains: query exclude filters Stats/scope/
 Imports, while only global exclusions also filter AST complex functions.
+
+Trace supports only `none`. Required nonempty `from` preserves typed strings and
+uses once-only percent decoding for URI scalars without plus decoding. Signed
+whole `depth` defaults to 2 and clamps to 1–5; booleans, fractions and scientific
+notation reject. Local proof validates renderer-consumed frames and nonnegative
+edge totals without equating edge counts to frame counts. Definitive root absence
+requires the canonical unresolved placeholder, zero totals and no known required
+input failures/recovery/malformed evidence. It is usage 2; incomplete evidence
+wins with 3. Postprocessing cannot fabricate absence from earlier successful or
+incomplete analysis. Facts and safe authored absence diagnostics survive field
+selection. Proven absence remains a normal MCP response for compatibility;
+required output failure overrides that exception. Legacy mixed batches keep their
+existing outcome policy.
 
 Human-primary `--also-json PATH` uses the same result as primary JSON. A requested
 artifact write failure is disclosed on stderr and in `meta.output_errors`, while the

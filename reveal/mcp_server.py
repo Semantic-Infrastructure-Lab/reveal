@@ -559,6 +559,7 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
     """
     from .cli.invocation import Invocation, invocation_scope
     from .cli.routing import handle_uri
+    from .cli.routing.declared import declared_adapter_class
     from .utils.json_utils import set_provenance_enabled
 
     args = _default_args(path=uri, provenance=provenance, format='json' if provenance else 'text')
@@ -574,7 +575,8 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
     with _capture_lock, invocation_scope(invocation):
         apply_global_flags(args)
         try:
-            return _run_declared_tool(handle_uri, uri, None, args)
+            declared_json = provenance and declared_adapter_class(uri.partition('://')[0]) is not None
+            return _run_declared_tool(handle_uri, uri, None, args, capture_stderr=not declared_json)
         finally:
             set_provenance_enabled(False)
 

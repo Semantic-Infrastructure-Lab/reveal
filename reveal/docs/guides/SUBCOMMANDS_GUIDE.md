@@ -334,8 +334,13 @@ reveal trace [PATH] --from FUNC [--depth N] [--format {text,json}]
 | Flag | Description |
 |------|-------------|
 | `--from FUNC` | Entry-point function to start the trace from (required). `FILE:FUNC` (e.g. `src/app.py:run`) picks one of several same-named definitions |
-| `--depth N` | Call levels to expand, 1–5 (default: 2) |
-| `--format` | Output format: `text` (default) or `json` |
+| `--depth N` | Signed whole call depth, clamped 1–5 (default: 2); fractions/booleans reject |
+| `--format` | `text` or `json`; default follows `REVEAL_FORMAT`, otherwise text |
+
+Both CLI and URI use the canonical `trace` answer. Complete execution exits 0;
+invalid input or a proven absent root exits 2; incomplete required analysis or
+output failure exits 3. `--fail-on none`, `--also-json`, `--provenance` and JSON
+`--fields` use the common declared policy. CLI `--all` remains rejected.
 
 ### Side-Effect Classification
 
