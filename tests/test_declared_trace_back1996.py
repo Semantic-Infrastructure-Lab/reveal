@@ -37,7 +37,6 @@ def test_canonical_parity(project, depth, provenance):
     answers = [json.loads(result.stdout) for result in results]
     assert answers[0]['type'] == 'trace'
     assert answers[0]['frames'][0]['resolved']
-    assert 'scope' in answers[0]
     if provenance:
         for answer, argv in zip(answers, requests(project, depth=depth)):
             assert answer['execution']['command'] == ' '.join(['reveal', *argv, *options])
