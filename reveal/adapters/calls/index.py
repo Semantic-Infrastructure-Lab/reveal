@@ -18,6 +18,7 @@ from typing import Any, Callable, Dict, FrozenSet, Iterator, List, Optional, Seq
 
 from ..ast.analysis import StructureList, collect_structures, is_code_file, call_sources, unattributed_references
 from ...utils.pyparse import parse_python
+from ...utils.request_cache import register_validated_cache
 from ..ast.call_graph import (
     ClassAliasSpan, build_alias_map, build_class_attribute_aliases, build_symbol_map, class_attribute_alias,
     resolve_callees as _resolve_callees,
@@ -260,6 +261,18 @@ def _bfs_level(
 # Separate cache from _INDEX_CACHE because it is derived from a different pass.
 _REFERENCE_CACHE: OrderedDict = OrderedDict()
 _REFERENCE_CACHE_MAX = 8
+
+
+def _evict_callers_root(root: str) -> None:
+    _INDEX_CACHE.pop(root, None)
+
+
+def _evict_reference_root(root: str) -> None:
+    _REFERENCE_CACHE.pop(root, None)
+
+
+register_validated_cache(__name__ + '.callers', _INDEX_CACHE, _evict_callers_root)
+register_validated_cache(__name__ + '.references', _REFERENCE_CACHE, _evict_reference_root)
 
 
 def _python_referenced_names(directory: Path, *,

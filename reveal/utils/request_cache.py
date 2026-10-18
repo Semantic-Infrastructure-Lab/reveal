@@ -16,11 +16,12 @@ import hashlib
 import os
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, MutableMapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, MutableMapping, Optional, Tuple, TypeVar, Union
 
+_Root = TypeVar('_Root', str, Path)
 _RESETTERS: Dict[str, Callable[[], None]] = {}
-_VALIDATED: Dict[str, Tuple[MutableMapping[Any, Any], Callable[[Path], None]]] = {}
-_STAMPS: Dict[Tuple[str, Path], str] = {}
+_VALIDATED: Dict[str, Tuple[MutableMapping[Any, Any], Callable[[Any], None]]] = {}
+_STAMPS: Dict[Tuple[str, Union[str, Path]], str] = {}
 
 
 def register_request_cache(name: str, reset: Callable[[], None]) -> None:
@@ -28,11 +29,13 @@ def register_request_cache(name: str, reset: Callable[[], None]) -> None:
     _RESETTERS[name] = reset
 
 
-def register_validated_cache(name: str, cache: MutableMapping[Any, Any],
-                             evict: Callable[[Path], None]) -> None:
+def register_validated_cache(name: str, cache: MutableMapping[_Root, Any],
+                             evict: Callable[[_Root], None]) -> None:
     """Declare a ``{root: index}`` cache that lives while its root's tree is unchanged.
 
-    *evict(root)* must drop everything the owner recorded for that root, including
+    Root keys may be strings or Paths; mappings, stamps and eviction retain their
+    original keys. Only fingerprinting and request-local walk dedup use Path(root).
+    *evict(root)* must drop this registration's evidence for that raw key, including
     skip reasons, so a rebuild re-records them.
     """
     _VALIDATED[name] = (cache, evict)
@@ -72,10 +75,11 @@ def reset_request_caches() -> None:
     seen: Dict[Path, Optional[str]] = {}
     for name, (cache, evict) in tuple(_VALIDATED.items()):
         for root in tuple(cache):
-            if root not in seen:
-                seen[root] = _tree_stamp(root)
+            path = Path(root)
+            if path not in seen:
+                seen[path] = _tree_stamp(path)
             recorded = _STAMPS.get((name, root))
-            if recorded is None or recorded != seen[root]:
+            if recorded is None or recorded != seen[path]:
                 evict(root)
                 _STAMPS.pop((name, root), None)
         for key in [k for k in _STAMPS if k[0] == name and k[1] not in cache]:
@@ -91,9 +95,10 @@ def seal_request_caches(started_ns: int) -> None:
         for root in tuple(cache):
             if (name, root) in _STAMPS:
                 continue
-            if root not in seen:
-                seen[root] = _tree_stamp(root, started_ns)
-            stamp = seen[root]
+            path = Path(root)
+            if path not in seen:
+                seen[path] = _tree_stamp(path, started_ns)
+            stamp = seen[path]
             if stamp is not None:
                 _STAMPS[(name, root)] = stamp
 
