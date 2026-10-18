@@ -272,3 +272,41 @@ def test_clean_zero_stays_silent_and_high_confidence(tmp_path):
     assert result['_meta']['confidence'] == 'high'
     assert result['metadata']['scan_budget']['exact'] is True
     assert 'warning' not in result
+
+
+@pytest.mark.parametrize('scope', ['file', 'directory'])
+def test_existing_display_cut_metadata_survives_required_loss(tmp_path, monkeypatch, scope):
+    target, child = tree(tmp_path, positive=True)
+    if scope == 'file':
+        write(tmp_path / 'second.py', 'import target\n')
+    else:
+        write(tmp_path / 'other.py', 'VALUE = 2\n')
+        write(tmp_path / 'visible.py', 'import target\nimport other\n')
+    deny(monkeypatch, [child])
+    result = DependsAdapter(str(target if scope == 'file' else tmp_path), 'top=1').get_structure()
+    warning(result)
+    field = 'dependents' if scope == 'file' else 'modules'
+    assert len(result[field]) == 1
+    cuts = [w for w in result['meta']['warnings'] if w.get('type') == 'truncated' and w.get('field') == field]
+    assert len(cuts) == 1 and cuts[0]['shown'] == 1 and cuts[0]['total'] == 2
+    if scope == 'file':
+        assert result['count'] == 2
+        assert '2 observed file(s)' in rendered(result)
+    else:
+        assert result['total_modules'] == 2
+        assert 'ranking is among observed modules' in rendered(result)
+
+
+def test_real_scan_cap_and_loss_keep_only_the_existing_cap_population_increment(tmp_path, monkeypatch):
+    target = write(tmp_path / 'target.py', 'VALUE = 1\n')
+    write(tmp_path / 'pyproject.toml', '[project]\nname="cap-loss"\n')
+    child = tmp_path / 'a_denied'
+    write(child / 'hidden.py', 'import target\n')
+    write(tmp_path / 'z_survivors' / 'first.py', 'import target\n')
+    write(tmp_path / 'z_survivors' / 'second.py', 'import target\n')
+    monkeypatch.setattr(DependsAdapter, '_SCAN_FILE_CAP', 2)
+    deny(monkeypatch, [child])
+    result = DependsAdapter(str(target)).get_structure()
+    warning(result)
+    assert result['metadata']['scan_capped'] is True
+    assert result['metadata']['scan_budget'] == {'scope': 'scan', 'limit': 2, 'total': 3, 'returned': 2, 'exact': False}
