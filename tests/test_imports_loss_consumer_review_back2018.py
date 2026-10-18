@@ -275,3 +275,36 @@ def test_actual_degraded_stats_retains_useful_physical_line_observation(tmp_path
     assert lines['total'] == lines['code'] + lines['empty'] + lines['comments']
     assert response.returncode == 3
     assert OverviewAdapter.execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE
+
+
+@pytest.mark.parametrize('malformation', ['boolean_internal', 'negative_incoming', 'malformed_cycle'])
+def test_malformed_relationship_sibling_dominates_real_stats_and_edges(tmp_path, monkeypatch, malformation):
+    from reveal.adapters.imports import ImportsAdapter
+    root = tmp_path / 'affected'
+    tree(root, 'edges')
+    original_components = ImportsAdapter._format_components
+    original_circular = ImportsAdapter._format_circular
+
+    def components(adapter):
+        data = original_components(adapter)
+        if malformation != 'malformed_cycle':
+            assert data['components']
+            data['components'][0]['internal' if malformation == 'boolean_internal' else 'incoming'] = (
+                True if malformation == 'boolean_internal' else -1)
+        return data
+
+    def circular(adapter):
+        data = original_circular(adapter)
+        if malformation == 'malformed_cycle':
+            data['cycles'] = [['visible.py', 4]]
+            data['count'] = 1
+        return data
+
+    monkeypatch.setattr(ImportsAdapter, '_format_components', components)
+    monkeypatch.setattr(ImportsAdapter, '_format_circular', circular)
+    attempts = fail_child(monkeypatch, root)
+    response = invoke('overview', root)
+    result = json.loads(response.stdout)
+    assert attempts
+    assert response.returncode == 3
+    assert OverviewAdapter.execution_facts(result).completeness is AnalysisCompleteness.FAILED
