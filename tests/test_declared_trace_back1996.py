@@ -96,3 +96,101 @@ def test_incomplete_collection_beats_absence(project, monkeypatch, transport):
     result = run(*requests(project, 'absent')[transport == 'uri'], '--format', 'json')
     assert result.returncode == 3
     assert json.loads(result.stdout)['meta']['warnings'][0]['type'] == 'analysis_failed'
+
+
+@pytest.mark.parametrize('field,value', [
+    ('frames', []), ('frames', None), ('depth', True), ('depth', 0),
+    ('total_resolved', True), ('total_unresolved', -1), ('warnings', None),
+    ('root', 'different_root'), ('path', 'different_path'),
+])
+def test_malformed_or_mismatched_required_answer_cannot_succeed(project, monkeypatch, field, value):
+    from reveal.adapters.trace import TraceAdapter
+    original = TraceAdapter(str(project), 'from=main').get_structure()
+    original[field] = value
+    monkeypatch.setattr(TraceAdapter, 'get_structure', lambda self, **kwargs: copy.deepcopy(original))
+    for argv in requests(project):
+        result = run(*argv, '--format', 'json')
+        assert result.returncode == 3
+        assert json.loads(result.stdout)['meta']['errors']
+
+
+@pytest.mark.parametrize('kind', ['resolved_frame', 'wrong_message'])
+def test_reserved_absence_diagnostic_requires_real_proof(project, monkeypatch, kind):
+    from reveal.adapters.trace import TraceAdapter
+    root = 'main' if kind == 'resolved_frame' else 'absent'
+    report = TraceAdapter(str(project), f'from={root}').get_structure()
+    report.setdefault('meta', {})['errors'] = [
+        {'code': 'trace_root_not_found', 'message': 'PRIVATE_FORGED_ABSENCE'}]
+    monkeypatch.setattr(TraceAdapter, 'get_structure', lambda self, **kwargs: copy.deepcopy(report))
+    result = run(*requests(project, root)[0], '--format', 'json')
+    assert result.returncode == 3
+    assert 'invalid_adapter_answer' in result.stdout
+
+
+@pytest.mark.parametrize('prior', ['complete', 'partial', 'absent'])
+@pytest.mark.parametrize('inplace', [False, True])
+def test_postprocessing_cannot_manufacture_absence(project, monkeypatch, prior, inplace):
+    from reveal.adapters.trace import TraceAdapter
+    entry = 'absent' if prior == 'absent' else 'main'
+    original = TraceAdapter.get_structure
+
+    def analyze(self, **kwargs):
+        result = original(self, **kwargs)
+        if prior == 'partial':
+            result.setdefault('meta', {})['warnings'] = [{'type': 'analysis_failed', 'message': 'required input missing'}]
+        return result
+
+    def project_answer(self, result, args):
+        projected = result if inplace else copy.deepcopy(result)
+        projected.pop('error', None)
+        projected.pop('meta', None)
+        projected.update(frames=[{'name': entry, 'file': '', 'line': 0, 'params': [], 'effects': [],
+                                  'calls': [], 'depth': 0, 'resolved': False, 'ambiguous': False}],
+                         total_resolved=0, total_unresolved=0, warnings=[])
+        return projected
+
+    monkeypatch.setattr(TraceAdapter, 'get_structure', analyze)
+    monkeypatch.setattr(TraceAdapter, 'post_process', project_answer, raising=False)
+    for argv in requests(project, entry):
+        result = run(*argv, '--format', 'json', '--fields', 'root')
+        assert result.returncode == (2 if prior == 'absent' else 3)
+        assert json.loads(result.stdout)['error']
+
+
+@pytest.mark.parametrize('transport', ['cli', 'uri'])
+def test_artifacts_environment_and_output_failure(project, monkeypatch, transport):
+    argv = requests(project)[transport == 'uri']
+    artifact = project.parent / (transport + '.json')
+    human = run(*argv, '--also-json', str(artifact))
+    primary = run(*argv, '--format', 'json')
+    assert human.returncode == primary.returncode == 0
+    assert json.loads(artifact.read_text(encoding='utf-8')) == json.loads(primary.stdout)
+    failed = run(*argv, '--also-json', str(project))
+    assert failed.returncode == 3
+    assert 'Trace:' in failed.stdout
+    monkeypatch.setenv('REVEAL_FORMAT', 'json')
+    implicit = run(*argv)
+    assert implicit.returncode == 0
+    assert json.loads(implicit.stdout) == json.loads(primary.stdout)
+
+
+def test_resource_codec_prefers_existing_literal_and_decodes_once(project):
+    roots = [project.parent / 'encoded name+&é', project.parent / 'encoded%20name+&é']
+    for root in roots:
+        root.mkdir()
+        (root / 'app.py').write_text('def main():\n    return 1\n', encoding='utf-8')
+    literal = run(f'trace://{roots[1]}?from=main', '--format', 'json')
+    encoded = run(f'trace://{quote(str(roots[0]), safe="/")}?from=main', '--format', 'json')
+    assert literal.returncode == encoded.returncode == 0
+    assert json.loads(literal.stdout)['source'] == roots[1].as_posix()
+    assert json.loads(encoded.stdout)['source'] == roots[0].as_posix()
+
+
+def test_legacy_batch_retains_unresolved_nonerror(project):
+    import subprocess
+    import sys
+    result = subprocess.run([sys.executable, '-m', 'reveal', '--stdin', '--batch', '--format', 'json'],
+                            input=f'trace://{project}?from=absent\n', capture_output=True,
+                            text=True, encoding='utf-8', timeout=60)
+    assert result.returncode == 0, result.stderr
+    assert 'absent' in result.stdout
