@@ -1,7 +1,7 @@
 """Statistics adapter (stats://) for codebase metrics and hotspots."""
 
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
@@ -14,7 +14,7 @@ from ...utils.query import (
 )
 from ...utils.query_parser import split_exclude_param
 from ...utils.gitignore import respect_gitignore_param
-from ...utils.path_utils import to_relative_display
+from ...utils.path_utils import to_posix, to_relative_display
 from ...utils.results import ResultBuilder, note_truncation, note_warning
 from ...utils.validation import require_path_exists
 from ...utils.parallel import pool_worker_count, submit_each
@@ -207,6 +207,7 @@ class StatsAdapter(ResourceAdapter):
         path, query_string = resource, query
         self.path = require_path_exists(Path(path).resolve())
         self._churn_disclosure: Optional[str] = None  # BACK-1166: set by _compute_churn_counts
+        self._traversal_failures: List[Tuple[Optional[str], str]] = []
 
         # Parse query string with type coercion (for legacy params)
         self.query_params = parse_query_params(query_string or '', coerce=True)
@@ -272,6 +273,7 @@ class StatsAdapter(ResourceAdapter):
             self.path, code_only=code_only,
             respect_gitignore=respect_gitignore, exclude_patterns=exclude_patterns,
             excluded_by_extension=self._excluded_by_extension,
+            on_error=self._record_traversal_failure,
         ))
         if not files:
             return []
@@ -352,9 +354,16 @@ class StatsAdapter(ResourceAdapter):
         note_truncation(result, 'hotspots', len(shown), len(ranked), 'limit', hint='raise ?top=N')
         return shown
 
+    def _record_traversal_failure(self, error: OSError) -> None:
+        """Directory loss has an unknown missing file population."""
+        self._traversal_failures.append((
+            to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}'))
+
     def _disclose_failures(self, result: dict) -> None:
         """One meta warning naming the files whose analysis raised: they are not in the
         totals, and without this the totals read as the whole tree (BACK-1614)."""
+        from ..ast.analysis import traversal_failed_warning
+        note_warning(result, traversal_failed_warning(self._traversal_failures, self.path))
         degraded = [s for s in self._analysis_failures if s.get('parse_degraded')]
         if degraded:
             note_warning(result, {
@@ -521,6 +530,7 @@ class StatsAdapter(ResourceAdapter):
         Returns:
             Dict containing statistics and optionally hotspots
         """
+        self._traversal_failures = []
         # Merge query params with flag params
         hotspots, code_only, min_lines, max_lines, min_complexity, max_complexity, min_functions, summary_only = \
             self._merge_query_params(hotspots, code_only, min_lines, max_lines,

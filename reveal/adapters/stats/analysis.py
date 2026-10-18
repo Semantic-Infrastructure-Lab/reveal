@@ -1,7 +1,7 @@
 """File analysis functions for stats adapter."""
 
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Iterator, cast
+from typing import Callable, Dict, Any, Optional, List, Iterator, cast
 
 from ...registry import DECLARATION_ONLY_EXTENSIONS, get_analyzer
 from ...utils.path_utils import _walk_code_files
@@ -31,6 +31,8 @@ def find_analyzable_files(
     respect_gitignore: Optional[bool] = None,
     exclude_patterns: Optional[List[str]] = None,
     excluded_by_extension: Optional[Dict[str, int]] = None,
+    *,
+    on_error: Optional[Callable[[OSError], None]] = None,
 ) -> Iterator[Path]:
     """Yield files that can be analyzed.
 
@@ -52,6 +54,9 @@ def find_analyzable_files(
             filtered out). Optional and additive: existing callers that
             don't pass it see no change in behavior or yield order.
 
+        on_error: Optional directory enumeration error callback, forwarded to the
+            shared walker. Policy exclusions do not call it.
+
     Yields:
         Analyzable file paths one at a time (generator — avoids materializing
         the full list into memory before analysis begins).
@@ -60,7 +65,8 @@ def find_analyzable_files(
     # REVEAL_IGNORE/config 'ignore:' (BACK-1221) and --exclude (BACK-1042), pruning
     # well-known directories so os.walk never descends into them. This walker had its own
     # copy of each rule.
-    for file_path in _walk_code_files(directory, exclude_patterns, respect_gitignore):
+    for file_path in _walk_code_files(directory, exclude_patterns, respect_gitignore,
+                                      on_error=on_error):
         # Check if reveal can analyze this file type (a .pyi stub can, but a
         # scan skips declaration-only files -- DECLARATION_ONLY_EXTENSIONS)
         if (file_path.suffix.lower() in DECLARATION_ONLY_EXTENSIONS
