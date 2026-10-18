@@ -8,6 +8,7 @@ from reveal import treesitter
 from reveal.adapters.ast import analysis
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.analyzers.go import GoAnalyzer
+from reveal.analyzers.python import PythonAnalyzer
 from reveal.core.treesitter_parse import GrammarUnavailable
 
 pytestmark = pytest.mark.component
@@ -164,6 +165,27 @@ def test_clean_cached_go_structure_needs_no_fresh_parser(tmp_path, monkeypatch):
 
     monkeypatch.setattr(treesitter, 'get_tree', unexpected_parse)
     assert analysis.analyze_file_outcome(str(path)) == (None, None)
+
+
+@pytest.mark.disk_cache
+def test_required_callsite_parse_failure_after_structure_cache_hit_is_disclosed(tmp_path, monkeypatch):
+    monkeypatch.setenv('REVEAL_CACHE_DIR', str(tmp_path / 'cache'))
+    monkeypatch.setenv('REVEAL_DISK_CACHE', '1')
+    path = tmp_path / 'cached.py'
+    path.write_text('def main():\n    return 1\n', encoding='utf-8')
+    assert PythonAnalyzer(str(path)).get_structure()['functions'][0]['name'] == 'main'
+    treesitter._get_parse_cache().clear()
+    requests = []
+
+    def unavailable(*args, **kwargs):
+        requests.append(kwargs['filename'])
+        raise RuntimeError('required callsite parser unavailable')
+
+    monkeypatch.setattr(treesitter, 'get_tree', unavailable)
+    structure, failure = analysis.analyze_file_outcome(str(path))
+    assert requests, 'fixture must reach the required callsite parse after its structure cache hit'
+    assert failure and 'required callsite parser unavailable' in failure
+    assert structure and [item['name'] for item in structure['elements']] == ['main']
 
 
 def test_clean_empty_mapping_and_unsupported_input_stay_distinct_from_failure(source, monkeypatch):
