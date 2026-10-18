@@ -608,7 +608,8 @@ def _snapshot_meta(raw: Dict[str, Any], side: str) -> List[Tuple[str, Dict[str, 
             if entry.get('files'):
                 entry['files'] = [_diagnostic_path(file, root) for file in entry['files']]
             if entry.get('causes'):
-                entry['causes'] = [_diagnostic_message(cause, root) for cause in entry['causes']]
+                entry['causes'] = [_diagnostic_message(cause, root)
+                                   for cause in cast(List[str], entry['causes'])]
             entry['message'] = f"{side}: {_diagnostic_message(entry.get('message', ''), root)}"
             entries.append((kind, entry))
     return entries
