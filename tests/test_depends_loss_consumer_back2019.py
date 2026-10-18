@@ -298,6 +298,15 @@ def test_existing_display_cut_metadata_survives_required_loss(tmp_path, monkeypa
 
 
 def test_real_scan_cap_and_loss_keep_only_the_existing_cap_population_increment(tmp_path, monkeypatch):
+    real_walk = os.walk
+
+    def ordered_walk(*args, **kwargs):
+        # Ensure the real denied directory is visited before the real cap stops discovery.
+        for root, dirs, files in real_walk(*args, **kwargs):
+            dirs.sort()
+            yield root, dirs, files
+
+    monkeypatch.setattr(os, 'walk', ordered_walk)
     target = write(tmp_path / 'target.py', 'VALUE = 1\n')
     write(tmp_path / 'pyproject.toml', '[project]\nname="cap-loss"\n')
     child = tmp_path / 'a_denied'
