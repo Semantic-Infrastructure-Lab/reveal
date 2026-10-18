@@ -192,3 +192,86 @@ def test_exact_healthy_and_explicitly_excluded_siblings_stay_unchanged(tmp_path,
     assert (excluded.returncode, excluded.stdout, excluded.stderr) == (
         after_excluded.returncode, after_excluded.stdout, after_excluded.stderr)
     assert attempts == []
+
+
+def test_actual_stats_read_failure_is_not_file_inventory_proof(tmp_path, monkeypatch):
+    import builtins
+    from reveal.adapters.stats import StatsAdapter
+
+    root = tmp_path / 'affected'
+    tree(root, 'lost')
+    visible = root / 'visible.py'
+    write(visible, 'VALUE = 1\n')
+    fail_child(monkeypatch, root)
+    real_stats = StatsAdapter.get_structure
+    real_open = builtins.open
+    active = []
+    reads = []
+    observed_stats = []
+
+    def stats(self, *args, **kwargs):
+        active.append(True)
+        try:
+            result = real_stats(self, *args, **kwargs)
+            observed_stats.append(copy.deepcopy(result))
+            return result
+        finally:
+            active.pop()
+
+    def open_file(path, *args, **kwargs):
+        if active and isinstance(path, (str, Path)) and Path(path).resolve() == visible.resolve():
+            reads.append(path)
+            raise PermissionError(13, 'independent Stats-only read denial', str(visible))
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(StatsAdapter, 'get_structure', stats)
+    monkeypatch.setattr(builtins, 'open', open_file)
+    response = invoke('overview', root)
+    result = json.loads(response.stdout)
+    assert reads
+    assert observed_stats[0]['files'] == [] and observed_stats[0]['summary']['total_files'] == 0
+    assert response.returncode == 3
+    assert OverviewAdapter.execution_facts(result).completeness is AnalysisCompleteness.FAILED
+
+
+@pytest.mark.parametrize('malformed', ['missing_lines', 'boolean_total', 'bad_partition'])
+def test_stats_path_or_invalid_measurements_do_not_rescue_directory_loss(tmp_path, monkeypatch, malformed):
+    from reveal.adapters.stats import StatsAdapter
+
+    root = tmp_path / 'affected'
+    tree(root, 'lost')
+    write(root / 'visible.py', 'VALUE = 1\n')
+    fail_child(monkeypatch, root)
+    real_stats = StatsAdapter.get_structure
+
+    def stats(self, *args, **kwargs):
+        result = real_stats(self, *args, **kwargs)
+        (entry,) = result['files']
+        if malformed == 'missing_lines':
+            entry.pop('lines')
+        elif malformed == 'boolean_total':
+            entry['lines']['total'] = True
+        else:
+            entry['lines']['total'] += 1
+        return result
+
+    monkeypatch.setattr(StatsAdapter, 'get_structure', stats)
+    response = invoke('overview', root)
+    result = json.loads(response.stdout)
+    assert response.returncode == 3
+    assert OverviewAdapter.execution_facts(result).completeness is AnalysisCompleteness.FAILED
+
+
+def test_actual_degraded_stats_retains_useful_physical_line_observation(tmp_path, monkeypatch):
+    root = tmp_path / 'affected'
+    tree(root, 'lost')
+    write(root / 'broken.py', 'def broken(\n')
+    fail_child(monkeypatch, root)
+    response = invoke('overview', root)
+    result = json.loads(response.stdout)
+    (entry,) = result['stats']['files']
+    assert entry['parse_degraded'] is True
+    lines = entry['lines']
+    assert lines['total'] == lines['code'] + lines['empty'] + lines['comments']
+    assert response.returncode == 3
+    assert OverviewAdapter.execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE
