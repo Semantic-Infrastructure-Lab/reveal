@@ -241,6 +241,30 @@ def test_required_callsite_parse_failure_after_structure_cache_hit_is_disclosed(
     assert structure and [item['name'] for item in structure['elements']] == ['main']
 
 
+@pytest.mark.disk_cache
+def test_unavailable_provider_during_required_callsites_keeps_cached_observations(tmp_path, monkeypatch):
+    import tree_sitter_language_pack
+    from reveal.core import treesitter_parse
+
+    monkeypatch.setenv('REVEAL_CACHE_DIR', str(tmp_path / 'cache'))
+    monkeypatch.setenv('REVEAL_DISK_CACHE', '1')
+    path = tmp_path / 'cached.py'
+    path.write_text('def main():\n    return 1\n', encoding='utf-8')
+    assert PythonAnalyzer(str(path)).get_structure()['functions'][0]['name'] == 'main'
+    treesitter._get_parse_cache().clear()
+    treesitter_parse._parse_recent.cache_clear()
+    requests = []
+
+    def unavailable(language):
+        requests.append(language)
+        raise RuntimeError('actual grammar provider unavailable')
+
+    monkeypatch.setattr(tree_sitter_language_pack, 'get_parser', unavailable)
+    structure, failure = analysis.analyze_file_outcome(str(path))
+    assert requests and failure and 'actual grammar provider unavailable' in failure
+    assert structure and [item['name'] for item in structure['elements']] == ['main']
+
+
 def test_clean_empty_mapping_and_unsupported_input_stay_distinct_from_failure(source, monkeypatch):
     _provide(monkeypatch, {})
     assert analysis.analyze_file_outcome(str(source)) == (None, None)
