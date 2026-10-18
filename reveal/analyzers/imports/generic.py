@@ -66,6 +66,7 @@ from .base import ImportsDiskCache, LanguageExtractor, nearest_marker_dir, regis
 from .file_index import basename_index, load_path_manifests
 from .types import ImportStatement
 from ...utils.request_cache import register_request_cache
+from ...utils.path_utils import to_posix
 from reveal.utils.lines import split_lines
 
 # Cross-invocation disk cache (BACK-626, extending BACK-625): same
@@ -2918,12 +2919,20 @@ def _find_ruby_project_root(start_path: Path) -> Optional[Path]:
     return nearest_marker_dir(start_path, 'Gemfile.lock')
 
 
+@dataclass(frozen=True)
+class _RubyInventoryFacts:
+    root: Path
+    local_names: FrozenSet[str]
+    external_names: FrozenSet[str]
+    traversal_failures: Tuple[Tuple[Optional[str], str], ...] = ()
+
+
 @lru_cache(maxsize=None)
-def _ruby_gem_inventory(project_root: Path) -> Tuple[FrozenSet[str], FrozenSet[str]]:
-    """(local top-level require names, external gem names) for the Ruby
-    project rooted at *project_root* -- the manifest inventory that
-    upgrades ``is_intra_project_import``'s honest ``None`` into a real
-    verdict (BACK-1189), the same shape Python/Rust already ship.
+def _ruby_inventory_facts(project_root: Path) -> _RubyInventoryFacts:
+    """Cached Ruby require-name inventory and attributed directory loss.
+
+    Its local/external names upgrade ``is_intra_project_import``'s honest
+    ``None`` into a real verdict (BACK-1189); failure facts survive cache hits.
 
     Local: every top-level entry directly under ``project_root/lib`` (a
     Bundler *application*'s own load-path root -- Rails apps have no
@@ -2953,12 +2962,18 @@ def _ruby_gem_inventory(project_root: Path) -> Tuple[FrozenSet[str], FrozenSet[s
     hyphen/underscore RubyGems convention, not a guess -- anything that
     matches neither set stays honest ``None``.
     """
+    failures: List[Tuple[Optional[str], str]] = []
+
+    def _record_manifest_error(error: OSError) -> None:
+        failures.append((to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}'))
+
     def _add_lib_entries(lib_dir: Path) -> None:
         if not lib_dir.is_dir():
             return
         try:
             entries = list(lib_dir.iterdir())
-        except OSError:
+        except OSError as exc:
+            failures.append((to_posix(lib_dir), f'{type(exc).__name__}: {exc}'))
             return
         for entry in entries:
             if entry.is_file() and entry.suffix == '.rb':
@@ -2968,7 +2983,7 @@ def _ruby_gem_inventory(project_root: Path) -> Tuple[FrozenSet[str], FrozenSet[s
 
     local: Set[str] = set()
     _add_lib_entries(project_root / 'lib')
-    for gemspec in load_path_manifests(project_root, '*.gemspec'):
+    for gemspec in load_path_manifests(project_root, '*.gemspec', on_error=_record_manifest_error):
         local.add(gemspec.stem.replace('-', '_'))
         _add_lib_entries(gemspec.parent / 'lib')
 
@@ -2996,7 +3011,22 @@ def _ruby_gem_inventory(project_root: Path) -> Tuple[FrozenSet[str], FrozenSet[s
         if match:
             external.add(match.group(1).replace('-', '_'))
 
-    return frozenset(local), frozenset(external)
+    return _RubyInventoryFacts(project_root, frozenset(local), frozenset(external), tuple(failures))
+
+
+class _RubyInventoryPair:
+    """The historical two-set helper and controls over the sole facts cache."""
+
+    def __call__(self, project_root: Path) -> Tuple[FrozenSet[str], FrozenSet[str]]:
+        facts = _ruby_inventory_facts(project_root)
+        return facts.local_names, facts.external_names
+
+    cache_clear = staticmethod(_ruby_inventory_facts.cache_clear)
+    cache_info = staticmethod(_ruby_inventory_facts.cache_info)
+    cache_parameters = staticmethod(_ruby_inventory_facts.cache_parameters)
+
+
+_ruby_gem_inventory = _RubyInventoryPair()
 
 
 @register_extractor
@@ -3023,27 +3053,33 @@ class RubyImportExtractor(_GenericTreeSitterImportExtractor):
         ``_GenericTreeSitterImportExtractor`` -- 11 other languages share
         that base class and must not be affected by a Ruby-only signal.
         """
+        return self._classify_with_inventory(stmt, base_path)[0]
+
+    def _classify_with_inventory(
+        self, stmt: ImportStatement, base_path: Path,
+    ) -> Tuple[Optional[bool], Optional[_RubyInventoryFacts]]:
+        """Retain the consulted inventory's evidence without changing classifier verdicts."""
         if stmt.is_relative:
-            return True
+            return True, None
         top_level = stmt.module_name.split('/')[0]
         if top_level.endswith('.rb'):
             top_level = top_level[:-3]
         if not top_level:
-            return None
+            return None, None
         project_root = _find_ruby_project_root(base_path)
         if project_root is None:
-            return None
-        local_names, external_names = _ruby_gem_inventory(project_root)
+            return None, None
+        inventory = _ruby_inventory_facts(project_root)
         # A gem's declared name conventionally uses hyphens while its
         # require path uses underscores (both inventory sets are built
-        # normalized this way -- see _ruby_gem_inventory), so the lookup
+        # normalized this way -- see _ruby_inventory_facts), so the lookup
         # key is normalized the same way on both sides.
         normalized = top_level.replace('-', '_')
-        if normalized in local_names:
-            return True
-        if normalized in external_names:
-            return False
-        return None
+        if normalized in inventory.local_names:
+            return True, inventory
+        if normalized in inventory.external_names:
+            return False, inventory
+        return None, inventory
 
 
 @register_extractor

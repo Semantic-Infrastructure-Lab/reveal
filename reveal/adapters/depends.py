@@ -23,7 +23,7 @@ from ..utils import print_json_result
 from ..analyzers._capability_table import depends_intra_project_classification_supported
 from ..analyzers.imports import ImportGraph, ImportStatement
 from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages
-from ..analyzers.imports.generic import CImportExtractor, CppImportExtractor
+from ..analyzers.imports.generic import CImportExtractor, CppImportExtractor, RubyImportExtractor
 from ..analyzers.imports.file_index import load_path_manifests
 from ..analyzers.imports import service as import_analysis
 from ..utils.query import parse_query_params
@@ -493,6 +493,7 @@ class DependsAdapter(ResourceAdapter):
         # BACK-1598: files whose extractor set parse_failed, disclosed once.
         self._files_failed: List[str] = []
         self._traversal_failures: Tuple[Tuple[Optional[str], str], ...] = ()
+        self._ruby_inventory_roots_seen: Set[Path] = set()
         # BACK-1093: languages seen among unresolved imports whose extractor
         # has no real True/False intra-project classification at all (always
         # None) — for these, `_unresolved_intra` staying low/zero says
@@ -697,6 +698,7 @@ class DependsAdapter(ResourceAdapter):
         self._unresolved_examples = []
         self._files_failed = []
         self._traversal_failures = ()
+        self._ruby_inventory_roots_seen = set()
         self._zeitwerk_edges = 0
         self._constants_indexed = 0
         self._constants_ambiguous = 0
@@ -709,9 +711,9 @@ class DependsAdapter(ResourceAdapter):
         files, file_index = self._discover_files(scan_root, supported_exts)
         indices = self._build_resolution_indices(files, scan_root)
         self._graph = ImportGraph.from_imports(indices.all_imports)
-        self._graph.traversal_failures = list(self._traversal_failures)
         self._resolve_edges(scan_root, file_index, indices)
         self._build_zeitwerk_edges(files, indices.zeitwerk_index)
+        self._graph.traversal_failures = list(self._traversal_failures)
 
     def _discover_files(
         self, scan_root: Path, supported_exts: frozenset,
@@ -1203,9 +1205,16 @@ class DependsAdapter(ResourceAdapter):
         intra-project. External (stdlib/dep) imports correctly have no
         in-tree edge; None means the extractor can't tell, and we
         conservatively don't count it (never cry wolf)."""
-        verdict = extractor.is_intra_project_import(
-            stmt, base_path, search_paths=extra_paths,
-            project_namespaces=indices.project_namespaces)
+        if isinstance(extractor, RubyImportExtractor):
+            verdict, inventory = extractor._classify_with_inventory(stmt, base_path)
+            # Replay each cached build once, retaining distinct unlocated events within it.
+            if inventory is not None and inventory.root not in self._ruby_inventory_roots_seen:
+                self._ruby_inventory_roots_seen.add(inventory.root)
+                self._traversal_failures += inventory.traversal_failures
+        else:
+            verdict = extractor.is_intra_project_import(
+                stmt, base_path, search_paths=extra_paths,
+                project_namespaces=indices.project_namespaces)
         if verdict is True:
             self._unresolved_intra += 1
             if len(self._unresolved_examples) < 5:
