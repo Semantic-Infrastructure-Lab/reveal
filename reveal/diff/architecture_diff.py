@@ -332,7 +332,7 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
         unsupported_extensions = metadata.get('unsupported_extensions', {})
         owner.fold_meta({'warnings': adapter.integrity_warnings(root)})
         if (adapter.analysis.files_failed or adapter.analysis.files_lost
-                or getattr(adapter.analysis.graph, 'traversal_failures', ())):
+                or bool(getattr(adapter.analysis.graph, 'traversal_failures', ()))):
             imports_state = 'incomplete'
     except Exception as exc:  # boundary-ok: broad-except -- whole-tree import analysis runs arbitrary analyzers; retain the attributed failure and reject comparison rather than treating empty facts as evidence
         owner.record_composed_error('ImportsAdapter', root, exc)
@@ -608,8 +608,7 @@ def _snapshot_meta(raw: Dict[str, Any], side: str) -> List[Tuple[str, Dict[str, 
             if entry.get('files'):
                 entry['files'] = [_diagnostic_path(file, root) for file in entry['files']]
             if entry.get('causes'):
-                entry['causes'] = [_diagnostic_message(cause, root)
-                                   for cause in cast(List[str], entry['causes'])]
+                entry['causes'] = [_diagnostic_message(cause, root) for cause in entry['causes']]
             entry['message'] = f"{side}: {_diagnostic_message(entry.get('message', ''), root)}"
             entries.append((kind, entry))
     return entries
