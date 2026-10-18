@@ -9,7 +9,12 @@ from reveal.adapters.hotspots import HotspotsAdapter
 from reveal.adapters.stats import adapter as stats
 from reveal.cli.commands import review
 from reveal.utils.results import AnalysisCompleteness
-from test_mcp_expected_errors_back1992 import _run, _text
+
+
+@pytest.fixture
+def wire():
+    from test_mcp_expected_errors_back1992 import _run, _text
+    return _run, _text
 
 
 def deny_source(monkeypatch):
@@ -74,6 +79,17 @@ def test_clean_requested_functions_survive_selective_total_stats_loss(tmp_path, 
     assert adapter.execution_facts(result).completeness is AnalysisCompleteness.INCOMPLETE
 
 
+def test_clean_ast_without_requested_function_match_does_not_make_loss_usable(tmp_path, monkeypatch):
+    (tmp_path / 'visible.py').write_text('def visible():\n    return 1\n', encoding='utf-8')
+    monkeypatch.setattr(stats, '_analyze_file_worker', lambda args: {
+        'analysis_failed': 'PermissionError: controlled Stats-only loss', 'path': args[0]})
+    adapter = HotspotsAdapter(str(tmp_path), 'functions_only=true&min_complexity=10')
+    result = adapter.get_structure()
+    assert result['summary']['total_files'] == 0
+    assert result['function_hotspots'] == []
+    assert adapter.execution_facts(result).completeness is AnalysisCompleteness.FAILED
+
+
 def test_review_required_discovery_warning_marks_analysis_incomplete():
     report = {'meta': {'warnings': [{
         'type': 'analysis_incomplete', 'count': 1, 'unit': 'directories',
@@ -109,7 +125,8 @@ mcp_server.main()
 
 @pytest.mark.mcp
 @pytest.mark.parametrize('provenance', [False, True])
-def test_mcp_all_loss_is_error_without_usable_evidence_claim(tmp_path, provenance):
+def test_mcp_all_loss_is_error_without_usable_evidence_claim(tmp_path, provenance, wire):
+    _run, _text = wire
     root = project(tmp_path)
 
     async def scenario(session):
@@ -122,7 +139,8 @@ def test_mcp_all_loss_is_error_without_usable_evidence_claim(tmp_path, provenanc
 
 
 @pytest.mark.mcp
-def test_mcp_partial_file_observations_remain_usable(tmp_path):
+def test_mcp_partial_file_observations_remain_usable(tmp_path, wire):
+    _run, _text = wire
     root = project(tmp_path, partial=True)
 
     async def scenario(session):
