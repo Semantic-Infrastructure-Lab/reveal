@@ -1571,6 +1571,20 @@ reveal 'imports://src?violations'
 
 ## Limitations
 
+Required directory-enumeration failures appear in JSON warning metadata and once
+in text across Imports query modes. Surviving imports remain available, but zero
+observed cycles, unused imports or entry points cannot establish a clean graph.
+Diagnostics identify failed directories; the number of missing files is unknown.
+Missing resolution targets can hide edges even when the scanned source count is
+unchanged. Known discovery loss prevents reading or writing the resolved graph
+cache. Direct Imports retains its legacy exit behavior, so exit 0 alone does not
+establish complete analysis.
+
+Resolution lookup can retain gitignored directories and file-pattern-excluded
+targets even though they are not source candidates. Explicitly excluded
+directories and hard ignore/noise policies remain omissions by policy. A failure
+in a required resolution subtree is distinct from an intentional omission.
+
 1. **Language support**
    - ✅ Fully supported (incl. `?unused`): Python, JS/TS, Go, Rust
    - 📦/📝 Every other language in [Supported Languages](#supported-languages): listing/graph only, `?unused` not checked
