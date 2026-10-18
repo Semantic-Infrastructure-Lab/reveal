@@ -475,7 +475,11 @@ Hotspots defaults to `none` and supports `findings` using the owner's pre-cap
 is required in every mode; AST coverage/results are required unless `files_only`.
 Missing/malformed proof, errors and `parse_degraded`, `check_rules_failed`,
 `analysis_failed`, `parse_recovered` or `analysis_incomplete` warnings prevent successful execution.
-Optional churn/test convention warnings, confidence and ranking cuts do not.
+With known required loss, positive uncapped Stats file coverage or surviving requested
+function observations establishes usable partial work; without either, analysis is
+failed. Clean zero populations remain complete. This conservative rule can classify
+Stats loss as failed when healthy AST analysis yields no function matching the
+requested threshold. Optional churn/test convention warnings, confidence and ranking cuts do not.
 Top caps retained JSON and text rankings (zero all); negative top now rejects.
 Signed min_complexity remains accepted; whole decimal/scientific numeric values
 normalize consistently. Both transports' `--verbose` lifts caps. CLI `--all`
@@ -495,15 +499,19 @@ Without either, top0 retains all Stats hotspots but zero AST/Git results. The
 documented query-exclusion boundary remains: query exclude filters Stats/scope/
 Imports, while only global exclusions also filter AST complex functions.
 
-Directory enumeration failures collected by AST, trace, patch scanning and testability
+Directory enumeration failures collected by Stats, AST, trace, patch scanning and testability
 are disclosed as `analysis_incomplete`. Its `count` with `unit: directories` counts
 unique identified directories; `directories` and `causes` are bounded to five entries.
 Distinct causes for a shown directory remain in its message. When the operating system
 supplies no directory name, `unknown_directory_events` counts those error callbacks
 separately; they do not increase the identified-directory count. Neither count estimates
 the unknown missing file population. Policy exclusions are separate from I/O loss.
-Overview and Hotspots consume this propagated AST warning as required incompleteness.
-This is bounded consumer coverage: other walkers and the Calls, Contracts and transitive
+Stats retains these invocation-local diagnostics before filters, empty returns and
+projections; direct legacy Stats exit behavior is unchanged. Overview and Hotspots
+consume required Stats and AST loss before execution classification. Review recognizes
+propagated directory loss as incomplete (exit 3), while retaining its legacy high/critical
+finding precedence (exit 2). This does not adopt the full declared Review policy.
+This is bounded consumer coverage: Classify, other walkers and the Calls, Contracts and transitive
 side-effect collection carriers are not yet qualified for directory failure disclosure.
 
 Inspection failure for an ambiguous `build`/`dist` directory does not prove noise,
