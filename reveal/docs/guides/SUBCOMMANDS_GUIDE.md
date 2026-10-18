@@ -734,6 +734,19 @@ reveal deps . --fail-on findings      # Gate on complete circular/unused finding
 
 Run 55 built-in quality rules against a file or directory (79 including internal self-check rules, shown with `--all`). Covers bugs, complexity, imports, maintainability, security, types, and more. Exit codes: 0 = complete and clean, 1 = findings, 2 = usage error, 3 = incomplete analysis (including capped or skipped rule-wide scans, and a file that did not parse inside a project-wide rule's index, even when the file you checked is clean). A rule that does not apply to a file's language is a printed note and does not change the exit code. `--exit-zero` overrides scan exits while retaining diagnostics.
 
+T006 also discloses actual directory loss while discovering project-wide TypedDict
+and dict-alias evidence. Surviving suggestions remain available, including matches
+from the checked module, but absent suggestions do not establish that no matching
+type exists. These disclosures appear in `scan_disclosures` and make the CLI scan
+incomplete (exit 3 unless `--exit-zero` is set), even when the checked file parsed
+successfully. An earlier directory error remains visible if the scan later reaches
+its file ceiling. Report exclusions do not narrow this evidence walk.
+
+Serialized MCP requests rebuild traversal-incomplete T006 indexes on the next
+request, including after access recovers. Healthy retained indexes still reuse
+the existing stat-based validation. This does not establish complete evidence
+for separate file-read or parse failures.
+
 ### Usage
 
 ```
@@ -792,8 +805,10 @@ git diff --name-only | reveal --stdin --check  # check only changed files
 
 | Code | Meaning |
 |------|---------|
-| `0` | No violations found |
-| `1` | One or more violations found |
+| `0` | Complete and clean, or explicit `--exit-zero` |
+| `1` | One or more violations found with no known scan incompleteness |
+| `2` | Usage error |
+| `3` | Incomplete analysis, including disclosed rule-wide evidence loss |
 
 Exit code 1 is set consistently across all invocation forms: single file, directory, and `--stdin --check` piped file lists.
 

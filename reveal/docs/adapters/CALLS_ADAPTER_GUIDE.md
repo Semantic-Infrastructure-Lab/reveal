@@ -546,6 +546,14 @@ them to stderr to keep stdout a valid graph. These warnings retain Calls' legacy
 exit behavior; exit 0 alone does not establish complete analysis. An uncalled
 candidate remains a heuristic, not proof of dead code.
 
+The non-Python reference pass for `?uncalled` also discloses actual file-read
+failures. Losing callback or function-pointer evidence can make an active
+function appear uncalled, so these classifications may be incorrect as well as
+incomplete. Diagnostics identify the attempted file even if the OS error omits
+its filename. They belong to that query and do not contaminate the healthy
+caller index; a later successful read restores the normal result. A single-file
+definition query can still require reference evidence from sibling files.
+
 The independent language census used for confidence also reports actual directory
 loss, even when a healthy retained query index supplies every observed caller.
 Census loss withholds the score instead of silently substituting a default or a
@@ -620,7 +628,8 @@ The project-level index is cached in memory per process per directory:
   matching callers index and prevents retention. Python reference discovery,
   read or parse failures also prevent retaining the reference set, so access or
   source recovery can rebuild it. These guards do not establish general warm-cache
-  freshness or cover the separate non-Python reference pass.
+  freshness. The non-Python reference pass runs again per uncalled query and keeps
+  its read-loss diagnostics local to that query; it does not evict healthy indexes.
 - **Rebuild cost**: depends on the source population and analysis work; use a
   narrower directory when the question permits it.
 
