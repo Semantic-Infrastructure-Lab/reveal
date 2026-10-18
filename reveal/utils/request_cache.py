@@ -16,7 +16,7 @@ import hashlib
 import os
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, MutableMapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, MutableMapping, Optional, Tuple
 
 _RESETTERS: Dict[str, Callable[[], None]] = {}
 _VALIDATED: Dict[str, Tuple[MutableMapping[Any, Any], Callable[[Path], None]]] = {}
@@ -48,7 +48,7 @@ def _tree_stamp(root: Path, started_ns: Optional[int] = None) -> Optional[str]:
     if not root.is_dir():
         return None
     hasher = hashlib.sha256()
-    enumeration_errors = []
+    enumeration_errors: List[OSError] = []
     try:
         # EVIDENCE is the widest walk the owners use (it ignores --exclude).
         for path in sorted(_walk_code_files(root, purpose=EVIDENCE, on_error=enumeration_errors.append)):

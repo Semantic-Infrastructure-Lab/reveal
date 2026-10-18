@@ -136,6 +136,23 @@ def _trace_skipped(values: Any, path: str, problems: List[Dict[str, str]]) -> Li
     return usable
 
 
+def _trace_traversal(values: Any, path: str,
+                     problems: List[Dict[str, str]]) -> List[Tuple[Optional[str], str]]:
+    """Validate directory loss separately: unlike file evidence, attribution may be unknown."""
+    if not isinstance(values, list):
+        _trace_problem(problems, path, 'Required trace traversal evidence is malformed')
+        return []
+    usable = []
+    for entry in values:
+        if (isinstance(entry, (tuple, list)) and len(entry) == 2
+                and (entry[0] is None or isinstance(entry[0], str) and bool(entry[0]))
+                and isinstance(entry[1], str) and bool(entry[1])):
+            usable.append((entry[0], entry[1]))
+        else:
+            _trace_problem(problems, path, 'Trace traversal entry is malformed')
+    return usable
+
+
 def _trace_collection(values: Any, path: str) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Retain usable input rows and structured evidence without collecting again."""
     from .ast.analysis import (StructureList, analysis_skipped_warning, parse_recovered_warning,
@@ -144,17 +161,8 @@ def _trace_collection(values: Any, path: str) -> Tuple[List[Dict[str, Any]], Dic
     problems: List[Dict[str, str]] = []
     if isinstance(values, list):
         structures.skipped = _trace_skipped(getattr(values, 'skipped', None), path, problems)
-        traversal = getattr(values, 'traversal_failures', [])
-        if not isinstance(traversal, list):
-            _trace_problem(problems, path, 'Required trace traversal evidence is malformed')
-        else:
-            for entry in traversal:
-                if (isinstance(entry, (tuple, list)) and len(entry) == 2
-                        and (entry[0] is None or isinstance(entry[0], str) and bool(entry[0]))
-                        and isinstance(entry[1], str) and bool(entry[1])):
-                    structures.traversal_failures.append((entry[0], entry[1]))
-                else:
-                    _trace_problem(problems, path, 'Trace traversal entry is malformed')
+        structures.traversal_failures = _trace_traversal(
+            getattr(values, 'traversal_failures', []), path, problems)
         for value in values:
             file = _trace_file(value, path, problems)
             if file is not None:
