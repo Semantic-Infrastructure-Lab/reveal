@@ -31,10 +31,11 @@ def make_tree(root, *, survivors=True, target_only=False):
 
 
 def deny_child(monkeypatch, child):
+    child = child.resolve()
     real = os.scandir
 
     def scandir(directory):
-        if Path(directory) == child:
+        if Path(directory).resolve() == child:
             raise PermissionError(13, 'controlled Imports directory loss', str(child))
         return real(directory)
 
@@ -189,13 +190,13 @@ def test_directory_loss_does_not_render_definitive_clean_conclusions(tmp_path, m
 @pytest.mark.parametrize('unknown', [False, True])
 def test_unknown_and_bounded_directory_disclosures(tmp_path, monkeypatch, unknown):
     root = tmp_path / 'source'
-    children = {root / f'included_{n}' for n in range(7)}
+    children = {(root / f'included_{n}').resolve() for n in range(7)}
     for child in children:
         write(child / 'hidden.py', 'import math\n')
     real = os.scandir
 
     def scandir(directory):
-        if Path(directory) in children:
+        if Path(directory).resolve() in children:
             if unknown:
                 raise PermissionError('controlled unknown enumeration')
             raise PermissionError(13, 'controlled identified enumeration', str(directory))
