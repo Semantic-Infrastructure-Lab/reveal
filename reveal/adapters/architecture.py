@@ -101,6 +101,8 @@ def _directory_loss_error(meta, observations) -> Optional[Dict[str, str]]:
 
 def _run_complex_functions(adapter: 'ArchitectureAdapter', path: Path, limit: int, *,
                            observations: Optional[Dict[str, bool]] = None) -> List[Dict[str, Any]]:
+    if observations is None:
+        observations = getattr(adapter, '_architecture_observations', None)
     from reveal.adapters.ast import AstAdapter
     data = adapter.compose(AstAdapter, str(path), default={},
                             query=f'complexity>9&sort=-complexity&limit={limit}',
@@ -195,6 +197,8 @@ def _run_combined_analysis(adapter: 'ArchitectureAdapter', path: Path, limit: in
     per-file callback keeps each file's parse-cache entry warm between the
     two uses instead of it getting evicted by the rest of a large repo.
     """
+    if observations is None:
+        observations = getattr(adapter, '_architecture_observations', None)
     structures: List[Dict[str, Any]] = []
 
     imports_data: Dict[str, Any] = {}
@@ -219,6 +223,8 @@ def _run_combined_analysis(adapter: 'ArchitectureAdapter', path: Path, limit: in
     if not graph_built:
         # The shared walk never ran, so no structures were collected either —
         # fall back to complexity analysis's own independent walk.
+        if observations is None:
+            return _run_complex_functions(adapter, path, limit), imports_data
         return _run_complex_functions(adapter, path, limit, observations=observations), imports_data
 
     try:
@@ -644,11 +650,15 @@ class ArchitectureAdapter(ResourceAdapter):
         no_imports = no_imports_spec.read(self.query_params)
         observations: Dict[str, bool] = {}
 
-        if no_imports:
-            complex_fns = _run_complex_functions(self, path, top * 4, observations=observations)
-            imports_data: Dict[str, Any] = {}
-        else:
-            complex_fns, imports_data = _run_combined_analysis(self, path, top * 4, observations=observations)
+        self._architecture_observations = observations
+        try:
+            if no_imports:
+                complex_fns = _run_complex_functions(self, path, top * 4)
+                imports_data: Dict[str, Any] = {}
+            else:
+                complex_fns, imports_data = _run_combined_analysis(self, path, top * 4)
+        finally:
+            del self._architecture_observations
 
         risks = _compute_risks(imports_data, complex_fns, path)
         if not no_imports:
