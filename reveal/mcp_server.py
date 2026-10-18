@@ -691,10 +691,12 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
     except ValueError as e:
         return _tool_failure(f"{e}")
 
+    collection = None
     if p.is_dir():
         directory = p.resolve()
-        files = collect_files_to_check(directory).files
-        if not files:
+        collection = collect_files_to_check(directory)
+        files = collection.files
+        if not files and not collection.traversal_failures:
             return f"No files found to check in {path}"
     else:
         directory = p.parent.resolve()
@@ -703,16 +705,11 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
     total_issues, _, file_results, _, _ = _check_files_json(
         files, directory, select_list, ignore_list, severity=severity_filter
     )
-    notes, incomplete = _check_notes(files, select_list, ignore_list, file_results)
+    notes, incomplete = _check_notes(
+        files, select_list, ignore_list, file_results, collection=collection, directory=directory)
 
     if total_issues == 0:
-        if incomplete:
-            verdict = "No findings in the checked population; scan incomplete."
-        elif notes:
-            verdict = "No issues found (some rules skip these languages; see notes above)."
-        else:
-            verdict = "No issues found."
-        return "\n".join(notes + [verdict])
+        return "\n".join(notes + [_check_zero_verdict(notes, incomplete)])
 
     lines = list(notes)
     for fr in file_results:
@@ -732,13 +729,26 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
     return "\n".join(lines)
 
 
-def _check_notes(files, select_list, ignore_list, file_results) -> tuple[list[str], bool]:
+def _check_zero_verdict(notes, incomplete) -> str:
+    """Keep discovery and rule losses distinct from a complete zero-findings answer."""
+    if incomplete:
+        return "No findings in the checked population; scan incomplete."
+    if notes:
+        return "No issues found (some rules skip these languages; see notes above)."
+    return "No issues found."
+
+
+def _check_notes(files, select_list, ignore_list, file_results, *,
+                 collection=None, directory=None) -> tuple[list[str], bool]:
     """Request-scoped diagnostics that precede every MCP check verdict, and whether
     any of them makes the scan incomplete (the CLI's exit 3). A language gap is a
     note only (BACK-1826)."""
     from .checks import capability_disclosures
     from .rules.scan_caches import get_scan_disclosures
     disclosures = get_scan_disclosures(files, select_list, ignore_list)
+    if collection is not None and directory is not None:
+        from .cli.file_checker import _collection_disclosures
+        disclosures = _collection_disclosures(collection, directory) + disclosures
     incomplete = bool(disclosures)
     notes = [f"⚠️  {n}" for n in
              disclosures + capability_disclosures(files, select_list, ignore_list)]

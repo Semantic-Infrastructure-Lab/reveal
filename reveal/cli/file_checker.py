@@ -26,6 +26,7 @@ from ..utils.path_utils import (
     _walk_code_files,
     tally_files_by_language,
     to_posix,
+    traversal_failed_warning,
 )
 
 if TYPE_CHECKING:
@@ -253,6 +254,7 @@ class FileCollectionResult:
     # surface them the same way overview's census_for_path() already does,
     # instead of silently dropping the language from scope.languages.
     no_analyzer_by_language: Dict[str, Dict[str, object]] = field(default_factory=dict)
+    traversal_failures: Tuple[Tuple[Optional[str], str], ...] = ()
 
     def to_scope_census(self) -> ScopeCensus:
         """Build the BACK-884 scope census for this collection: per-language
@@ -315,6 +317,7 @@ def collect_files_to_check(
     skipped = {True: 0, False: 0}  # is_dir -> count, whatever the cause
     skipped_no_analyzer = 0
     no_analyzer_by_language: Dict[str, Dict[str, object]] = {}
+    traversal_errors: List[OSError] = []
 
     def count_hidden(_path: Path, is_dir: bool, _cause: str) -> None:
         skipped[is_dir] += 1
@@ -322,7 +325,7 @@ def collect_files_to_check(
     # The shared walker (BACK-1577): noise dirs, what git ignores, REVEAL_IGNORE and
     # --exclude are the seam's, so check sees the files ast:// and stats:// see.
     for file_path in _walk_code_files(directory, exclude_patterns, respect_gitignore,
-                                      on_hidden=count_hidden):
+                                      on_hidden=count_hidden, on_error=traversal_errors.append):
         # Check if file has a supported analyzer
         if get_analyzer(str(file_path), allow_fallback=False):
             files_to_check.append(file_path)
@@ -347,7 +350,20 @@ def collect_files_to_check(
         skipped_no_analyzer=skipped_no_analyzer,
         skipped_dirs=skipped[True],
         no_analyzer_by_language=no_analyzer_by_language,
+        traversal_failures=tuple(
+            (to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}')
+            for error in traversal_errors),
     )
+
+
+def _collection_disclosures(collection: FileCollectionResult, directory: Path) -> List[str]:
+    """Describe actual discovery loss separately from policy omissions and file failures."""
+    warning = traversal_failed_warning(collection.traversal_failures, directory)
+    if warning is None:
+        return []
+    return [f"Check candidate discovery under {to_posix(directory)} is incomplete; "
+            f"{warning['message']}; file and scope counts describe the discovered population only, "
+            "and additional findings may be missing"]
 
 
 def check_and_report_file(
@@ -1133,7 +1149,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     files_to_check = collection.files
 
     output_format = getattr(args, 'format', 'text')
-    if not files_to_check:
+    if not files_to_check and not collection.traversal_failures:
         _handle_no_files_found(Path(shown), args)
         return
     if output_format == 'typed':
@@ -1174,15 +1190,19 @@ def _rule_filters(args: 'Namespace') -> tuple:
     return select, ignore
 
 
-def _scan_disclosures(files: List[Path], select, ignore) -> Tuple[List[str], bool]:
-    """Everything the run could not fully check, rule-wide: a capped scan
-    (BACK-1051) and rules a language skips (BACK-1466). Read after the scan --
+def _scan_disclosures(files: List[Path], select, ignore, *,
+                      collection: Optional[FileCollectionResult] = None,
+                      directory: Optional[Path] = None) -> Tuple[List[str], bool]:
+    """Everything the run could not fully check: candidate discovery loss,
+    rule-wide capped scans (BACK-1051), and language skips (BACK-1466). Read after the scan --
     the caps are recorded by it. [] claims the scan was complete.
 
     Also returns whether the scan itself was incomplete (a capped/lost scan,
     not a capability note). Collected once per run: each collection maps every
     file to its project root (BACK-1827)."""
     scan = get_scan_disclosures(files, select, ignore)
+    if collection is not None and directory is not None:
+        scan = _collection_disclosures(collection, directory) + scan
     return scan + capability_disclosures(files, select, ignore), bool(scan)
 
 
@@ -1227,7 +1247,8 @@ def _json_or_grep_check(files: List[Path], directory: Path, collection: 'FileCol
         )
     else:
         file_results, budget = _json_file_entries(checked)
-    disclosures, scan_incomplete = _scan_disclosures(files, select, ignore)
+    disclosures, scan_incomplete = _scan_disclosures(
+        files, select, ignore, collection=collection, directory=directory)
     result = _report_for(files, collection, args, select, ignore, disclosures, scan_incomplete)(
         tally, budget, file_results)
 
@@ -1261,7 +1282,8 @@ def _text_check(files: List[Path], directory: Path, collection: 'FileCollectionR
         limit = 50
     text = _check_text(files, directory, select, ignore, getattr(args, 'severity', None), limit, max_items)
     tally = text.tally
-    disclosures, scan_incomplete = _scan_disclosures(files, select, ignore)
+    disclosures, scan_incomplete = _scan_disclosures(
+        files, select, ignore, collection=collection, directory=directory)
     report = _report_for(files, collection, args, select, ignore, disclosures, scan_incomplete)
     result = report(tally, text.budget)
 
@@ -1310,9 +1332,13 @@ def handle_profile_rules(directory: Path, args: 'Namespace') -> None:
 
     respect_gitignore = getattr(args, 'respect_gitignore', True) is not False
     exclude_patterns = getattr(args, 'exclude', None) or []
-    files_to_check = collect_files_to_check(directory, respect_gitignore, exclude_patterns).files
+    collection = collect_files_to_check(directory, respect_gitignore, exclude_patterns)
+    files_to_check = collection.files
+    disclosures = _collection_disclosures(collection, directory)
+    for message in disclosures:
+        print(f"⚠️  {message}", file=sys.stderr)
     if not files_to_check:
-        print(_no_files_message(directory))
+        print("No files could be collected; scan incomplete" if disclosures else _no_files_message(directory))
         return
 
     select = args.select.split(',') if args.select else None
