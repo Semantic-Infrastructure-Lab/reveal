@@ -61,7 +61,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from .reveal_types import WarningEntry
 from .registry import get_analyzer_for_extension
@@ -1192,6 +1192,8 @@ def scope_dict_for_path(
     path: Path,
     exclude_patterns: Optional[List[str]] = None,
     respect_gitignore: Optional[bool] = None,
+    *,
+    on_error: Optional[Callable[[OSError], None]] = None,
 ) -> Dict[str, Any]:
     """The BACK-884 ``scope`` block for *path*: a fresh census
     (``path_utils.census_for_path``) with per-language capability tier
@@ -1208,5 +1210,6 @@ def scope_dict_for_path(
     """
     from .utils.path_utils import census_for_path
 
-    census = census_for_path(path, exclude_patterns=exclude_patterns, respect_gitignore=respect_gitignore)
+    census = census_for_path(path, exclude_patterns=exclude_patterns,
+                             respect_gitignore=respect_gitignore, on_error=on_error)
     return census.to_scope_dict(capability_tiers=capability_tiers_for(census.language_extensions))

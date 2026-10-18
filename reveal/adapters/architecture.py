@@ -14,7 +14,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from ..conventions import conventions_for_path
 from ..registry import language_for_extension
 from ..rendering.adapters.architecture import ArchitectureRenderer
-from ..utils.path_utils import is_test_path
+from ..utils.path_utils import is_test_path, to_posix, traversal_failed_warning
 from ..utils.query_binding import bind_declared_params, boolean_value
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
                                   nonnegative_display_limit, param_schema, peek_query_items)
@@ -111,7 +111,8 @@ def _run_complex_functions(adapter: 'ArchitectureAdapter', path: Path, limit: in
     return data.get('results', data.get('elements', []))
 
 
-def _run_scope(adapter: 'ArchitectureAdapter', path: Path) -> Dict[str, Any]:
+def _run_scope(adapter: 'ArchitectureAdapter', path: Path, *,
+               failures: Optional[List[OSError]] = None) -> Dict[str, Any]:
     """BACK-884: files discovered/analyzed/skipped by language, with
     per-language capability tier — additive 'scope' key in JSON output.
     Shared with overview.py via capabilities.scope_dict_for_path().
@@ -121,8 +122,14 @@ def _run_scope(adapter: 'ArchitectureAdapter', path: Path) -> Dict[str, Any]:
     meta.errors/confidence instead of silently rendering as an empty-but-
     trusted 'scope': {} — the same fix BACK-984 already gave every other
     sibling-adapter site in this file."""
+    if failures is None:
+        failures = []
     try:
-        return scope_dict_for_path(path)
+        scope = scope_dict_for_path(path, on_error=failures.append)
+        if failures:
+            adapter.record_composed_error('scope_dict_for_path', path, failures[0])
+            return {}
+        return scope
     except Exception as exc:  # boundary-ok: broad-except -- the scope census is an optional report section whose callee chain (directory walk, gitignore, language sniffing in utils/path_utils) is not bounded; a failing census must not end the report, and it is recorded in meta.errors with confidence 0 by record_composed_error and logged
         logger.warning("scope census failed for %s: %s", path, exc)
         adapter.record_composed_error('scope_dict_for_path', path, exc)
@@ -678,6 +685,7 @@ class ArchitectureAdapter(ResourceAdapter):
         _relativize_risks(risks, path)
         next_commands = _build_next_commands(path, risks, imports_data)
 
+        scope_failures: List[OSError] = []
         report = {
             'path': str(path),
             'facts': {
@@ -689,7 +697,7 @@ class ArchitectureAdapter(ResourceAdapter):
             'risks': risks,
             'next_commands': next_commands,
             'unsupported_extensions': imports_data.get('unsupported_extensions', {}),
-            'scope': _run_scope(self, path),
+            'scope': _run_scope(self, path, failures=scope_failures),
         }
         if verbose:
             report['verbose'] = True
@@ -702,6 +710,15 @@ class ArchitectureAdapter(ResourceAdapter):
         if error:
             meta = meta or {}
             meta.setdefault('errors', []).append(error)
+        # Scope is an optional child: disclose its loss after required-source validation.
+        scope_warning = traversal_failed_warning([
+            (to_posix(exc.filename) if exc.filename else None, f'{type(exc).__name__}: {exc}')
+            for exc in scope_failures], path)
+        if scope_warning:
+            scope_warning['message'] = (
+                'Independent scope/language census is incomplete; ' + scope_warning['message'])
+            meta = meta or {}
+            meta.setdefault('warnings', []).append(scope_warning)
         return ResultBuilder.create(
             result_type='architecture',
             source=self.path,

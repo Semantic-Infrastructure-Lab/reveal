@@ -24,7 +24,8 @@ from .imports import ImportsAdapter
 from .stats import StatsAdapter
 from ..utils.exclusions import exclusion_scope
 from ..utils.gitignore import respect_gitignore_param
-from ..utils.path_utils import as_spelled, display_name_for_path
+from ..utils.path_utils import (as_spelled, display_name_for_path, to_posix,
+                               traversal_failed_warning)
 from ..utils.query_binding import bind_declared_params, boolean_value
 from ..rendering.adapters.overview import (  # noqa: F401 -- the render helpers are re-exported
     OverviewRenderer,
@@ -312,7 +313,8 @@ def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int, *,
     return stats
 
 
-def _run_scope(adapter: 'OverviewAdapter', path: Path) -> Dict[str, Any]:
+def _run_scope(adapter: 'OverviewAdapter', path: Path, *,
+               failures: Optional[List[OSError]] = None) -> Dict[str, Any]:
     """BACK-884: files discovered/analyzed/skipped by language, with
     per-language capability tier — additive 'scope' key in JSON output.
     Shared with architecture.py via capabilities.scope_dict_for_path().
@@ -326,12 +328,18 @@ def _run_scope(adapter: 'OverviewAdapter', path: Path) -> Dict[str, Any]:
     BACK-1042: honors --exclude/--respect-gitignore so the scope census
     agrees with what stats/check actually skipped.
     """
+    if failures is None:
+        failures = []
     try:
         scope = scope_dict_for_path(
             path,
             exclude_patterns=adapter.exclude_patterns,
             respect_gitignore=adapter.respect_gitignore,
+            on_error=failures.append,
         )
+        if failures:
+            adapter.record_composed_error('scope_dict_for_path', path, failures[0])
+            return {}
         _validate_scope(scope)
         return scope
     except Exception as exc:  # boundary-ok: broad-except -- the scope census is an optional report section whose callee chain (directory walk, gitignore, language sniffing in utils/path_utils) is not bounded; a failing census must not end the report, and it is recorded in meta.errors with confidence 0 by record_composed_error and logged
@@ -730,6 +738,7 @@ class OverviewAdapter(ResourceAdapter):
         _relativize_paths(complex_fns, architecture, path)
         _annotate_provenance(complex_fns, architecture)
 
+        scope_failures: List[OSError] = []
         report: Dict[str, Any] = {
             'path': str(path),
             'stats': stats,
@@ -737,7 +746,7 @@ class OverviewAdapter(ResourceAdapter):
             'git_foreign_root': as_spelled(git_foreign_root, path) if git_foreign_root else None,
             'complex_functions': complex_fns,
             'architecture': architecture,
-            'scope': _run_scope(self, path),
+            'scope': _run_scope(self, path, failures=scope_failures),
         }
 
         meta = self.composed_meta()
@@ -745,6 +754,15 @@ class OverviewAdapter(ResourceAdapter):
         if error:
             meta = meta or {}
             meta.setdefault('errors', []).append(error)
+        # Scope is an optional child: disclose its loss after required-source validation.
+        scope_warning = traversal_failed_warning([
+            (to_posix(exc.filename) if exc.filename else None, f'{type(exc).__name__}: {exc}')
+            for exc in scope_failures], path)
+        if scope_warning:
+            scope_warning['message'] = (
+                'Independent scope/language census is incomplete; ' + scope_warning['message'])
+            meta = meta or {}
+            meta.setdefault('warnings', []).append(scope_warning)
         return ResultBuilder.create(
             result_type='overview',
             source=self.path,
