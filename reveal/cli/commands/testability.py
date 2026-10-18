@@ -1,115 +1,20 @@
-"""reveal testability - correlate patch pressure with production boundaries.
-
-Thin argparse shim over the testability:// adapter (BACK-901/BACK-959);
-render logic and test-path resolution live in
-reveal/adapters/testability.py. Internal names are re-exported here for
-backward compatibility with existing callers/tests.
-"""
-
-from __future__ import annotations
-
+"""Compatibility exports for testability; execution belongs to its declared owner."""
 import argparse
-import sys
 from argparse import Namespace
-from pathlib import Path
-from typing import List
 
-from reveal.adapters.testability import (  # noqa: F401 - re-exported for back-compat
-    TestabilityAdapter,
-    TestabilityRenderer,
-    _resolve_test_paths,
+from reveal.adapters.testability import (  # noqa: F401 -- existing helper imports
+    TestabilityAdapter, TestabilityRenderer, _resolve_test_paths,
 )
-from reveal.errors import NotApplicableError
-from reveal.rendering.adapters.testability import testability_text
-from ..global_flags import add_exclude_argument, add_gitignore_arguments
-from ..routing.subcommand import emit_subcommand_result
+from reveal.rendering.adapters.testability import testability_text  # noqa: F401
 
 
 def create_testability_parser() -> argparse.ArgumentParser:
-    from reveal.cli.parser import _build_global_options_parser
-
-    parser = argparse.ArgumentParser(
-        prog='reveal testability',
-        parents=[_build_global_options_parser()],
-        description='Find testability pressure by joining test patch usage with production boundary fan-out.',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=(
-            "Examples:\n"
-            "  reveal testability src --tests tests\n"
-            "  reveal testability . --tests tests integration_tests --top 20\n"
-            "  reveal testability src --tests tests --format json\n"
-            "  reveal 'patches://tests?group=target'  # raw patch scan\n"
-        ),
-    )
-    parser.add_argument(
-        'path',
-        nargs='?',
-        default='.',
-        help='Production source path to analyze (default: current directory)',
-    )
-    parser.add_argument(
-        '--tests',
-        nargs='+',
-        help='Test paths to scan. Defaults to tests/, test/, or spec/ under the source root.',
-    )
-    parser.add_argument(
-        '--top',
-        type=int,
-        default=20,
-        help='Maximum patch and boundary groups to show (default: 20)',
-    )
-    parser.add_argument(
-        '--min-patches',
-        type=int,
-        default=3,
-        help='Minimum patches for a target group (default: 3)',
-    )
-    parser.add_argument(
-        '--min-categories',
-        type=int,
-        default=3,
-        help='Minimum boundary categories for unpatched functions (default: 3)',
-    )
-    parser.add_argument(
-        '--include-unresolved',
-        action='store_true',
-        help='Include low-count unresolved patch targets in text/JSON results',
-    )
-    add_exclude_argument(parser)
-    add_gitignore_arguments(parser)
-    return parser
+    """Build the parser from the testability declaration."""
+    from ..routing.declared import create_declared_parser
+    return create_declared_parser('testability')
 
 
 def run_testability(args: Namespace) -> None:
-    path = Path(args.path)  # as the user named it, like the URI form (BACK-1366)
-    if not path.exists():
-        print(f"reveal testability: path not found: {path}", file=sys.stderr)
-        sys.exit(1)
-
-    tests: List[str] | None = getattr(args, 'tests', None)
-    # BACK-1362: --verbose was declared (inherited from the global options
-    # parser) but never read here, so it silently did nothing -- same
-    # "lift the default cap" meaning --verbose already has on overview/ast/
-    # hotspots URIs (BACK-1226/1379).
-    from reveal.adapters.overview import UNLIMITED_TOP
-    top = UNLIMITED_TOP if getattr(args, 'verbose', False) else max(0, int(args.top))
-    query_parts = [
-        f'top={top}',
-        f'min_patches={max(1, int(args.min_patches))}',
-        f'min_categories={max(1, int(args.min_categories))}',
-        f'include_unresolved={"true" if getattr(args, "include_unresolved", False) else "false"}',
-    ]
-    if tests:
-        query_parts.append(f'tests={",".join(tests)}')
-    query = '&'.join(query_parts)
-
-    try:
-        result = TestabilityAdapter(str(path), query).get_structure()
-    except (ValueError, NotApplicableError):
-        print(
-            "reveal testability: no tests found. Pass --tests <path>.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    emit_subcommand_result(result, args, name='testability', source=path, render=testability_text)
+    """Run either spelling through the common declared boundary."""
+    from ..routing.declared import run_declared_command
+    run_declared_command('testability', args)

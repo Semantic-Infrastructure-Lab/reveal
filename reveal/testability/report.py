@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
@@ -9,7 +10,79 @@ from typing import Any, Dict, List, Sequence
 from .boundaries import BoundaryProfile, collect_boundary_profiles, module_name_from_file, profile_score
 from ..reveal_types import CONTRACT_VERSION
 from ..utils.results import note_truncation
-from .patches import PatchGroup, group_patches, scan_patches
+from .patches import PatchGroup, PatchUse, group_patches, scan_patches
+
+
+def _count(value: Any) -> bool:
+    return type(value) is int and value >= 0
+
+
+def _finite(value: Any) -> bool:
+    return type(value) is int or (type(value) is float and math.isfinite(value))
+
+
+def _strings(value: Any) -> bool:
+    return isinstance(value, (list, tuple, set, frozenset)) and all(isinstance(item, str) for item in value)
+
+
+def _valid_failures(value: Any, *, directories: bool = False) -> bool:
+    if not isinstance(value, (list, tuple)):
+        return False
+    return all(isinstance(item, (list, tuple)) and len(item) == 2
+               and (isinstance(item[0], str) or (directories and item[0] is None))
+               and isinstance(item[1], str) for item in value)
+
+
+def _validate_carrier(value: Any) -> None:
+    if (not isinstance(value, list)
+            or not _valid_failures(getattr(value, 'skipped', None))
+            or not _valid_failures(getattr(value, 'traversal_failures', None), directories=True)
+            or not isinstance(getattr(value, 'recovered_files', None), list)
+            or not _strings(value.recovered_files)):
+        raise ValueError('Testability required collector diagnostics are malformed')
+
+
+def _patch_identity_valid(use: PatchUse) -> bool:
+    return (isinstance(use.test_file, str) and bool(use.test_file.strip())
+            and isinstance(use.test_name, str) and _count(use.line) and use.line > 0
+            and isinstance(use.patch_kind, str) and bool(use.patch_kind)
+            and isinstance(use.target_raw, str))
+
+
+def _patch_valid(use: Any) -> bool:
+    return (isinstance(use, PatchUse) and _patch_identity_valid(use)
+            and all(getattr(use, field) is None or isinstance(getattr(use, field), str)
+                    for field in ('target_module', 'target_symbol', 'target_qualname'))
+            and type(use.is_private_target) is bool and _count(use.context_depth)
+            and _finite(use.confidence))
+
+
+def _profile_valid(profile: Any) -> bool:
+    if not isinstance(profile, BoundaryProfile):
+        return False
+    identity = (isinstance(profile.file, str) and bool(profile.file.strip())
+                and isinstance(profile.function, str) and bool(profile.function.strip())
+                and _count(profile.line) and profile.line > 0)
+    return identity and _profile_values_valid(profile)
+
+
+def _profile_values_valid(profile: BoundaryProfile) -> bool:
+    return (all(_count(value) for value in (profile.lines, profile.complexity))
+            and _strings(profile.categories)
+            and isinstance(profile.calls, list) and _strings(profile.calls)
+            and isinstance(profile.imports, list) and _strings(profile.imports)
+            and isinstance(profile.mutation_sites, list)
+            and all(_count(line) for line in profile.mutation_sites)
+            and _finite(profile.confidence))
+
+
+def _validate_observations(patches: Any, profiles: Any) -> None:
+    _validate_carrier(patches)
+    _validate_carrier(profiles)
+    if not all(_patch_valid(use) for use in patches):
+        raise ValueError('Testability required patch-use evidence is malformed')
+    if not all(_profile_valid(profile) for profile in profiles):
+        raise ValueError('Testability required boundary-profile evidence is malformed')
 
 
 def build_testability_report(
@@ -24,8 +97,9 @@ def build_testability_report(
     from ..adapters.ast.analysis import analysis_skipped_warning, parse_recovered_warning, traversal_failed_warning
 
     patches = scan_patches(test_paths)
-    patch_groups = group_patches(patches, group_by='target', min_count=min_patches)
     profiles = collect_boundary_profiles(src_path)
+    _validate_observations(patches, profiles)
+    patch_groups = group_patches(patches, group_by='target', min_count=min_patches)
 
     warnings: List[Any] = [
         {'code': 'W-TESTABILITY-1', 'message': 'Static target resolution is best-effort.'},
@@ -66,6 +140,7 @@ def build_testability_report(
         'tests': [str(Path(p)) for p in test_paths],
         'summary': {
             'total_patch_uses': len(patches),
+            'total_boundary_profiles': len(profiles),
             'total_patch_targets': len({p.target_qualname or p.target_raw for p in patches}),
             'patch_groups_reported': len(target_rows),
             'boundary_profiles_reported': len(profile_rows),

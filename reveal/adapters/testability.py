@@ -10,13 +10,112 @@ which becomes a thin argparse shim.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..errors import NotApplicableError
 from ..rendering.adapters.testability import TestabilityRenderer
-from ..utils.query import parse_query_params
+from ..utils.query_binding import bind_declared_params, boolean_value
+from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
+                                  param_schema, peek_query_items, whole_number)
+from ..utils.results import AnalysisCompleteness, result_execution_facts
+
+
+def _whole_control(value: Any) -> int:
+    """Keep URI's non-exponent rule without rounding decimal strings through float."""
+    if isinstance(value, bool):
+        raise ValueError('boolean is not a whole number')
+    if isinstance(value, str):
+        spelling = value.strip()
+        if not re.fullmatch(r'[+-]?(?:[0-9]+(?:\.0*)?|\.0+)', spelling):
+            raise ValueError('expected a signed whole decimal')
+        integer = spelling.split('.')[0]
+        value = int(integer + '0' if integer in ('', '+', '-') else integer)
+    try:
+        return whole_number(value)
+    except OverflowError:
+        raise ValueError('expected a finite whole number') from None
+
+
+def _top(value: Any) -> int:
+    return max(0, _whole_control(value))
+
+
+def _threshold(value: Any) -> int:
+    return max(1, _whole_control(value))
+
+
+def _test_roots(value: Any) -> tuple:
+    if not isinstance(value, (list, tuple)) or not value:
+        raise ValueError('tests must contain at least one path')
+    if any(not isinstance(path, str) or not path or '\x00' in path for path in value):
+        raise ValueError('tests must contain nonempty paths')
+    return tuple(value)
+
+
+def _string_list(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def _required_loss(result: Dict[str, Any]) -> bool:
+    meta = result.get('meta', {})
+    kinds = {'analysis_failed', 'parse_recovered', 'analysis_incomplete', 'partial_parse', 'worker_lost'}
+    return bool(meta.get('errors')) or any(
+        isinstance(warning, dict) and warning.get('type') in kinds
+        for warning in meta.get('warnings', []))
+
+
+def _ranked_patch_valid(row: Any) -> bool:
+    from ..testability.report import _count, _finite
+    if not isinstance(row, dict):
+        return False
+    return (all(isinstance(row.get(key), str) for key in ('key', 'group_by', 'suggestion'))
+            and all(_count(row.get(key)) for key in ('patch_count', 'test_count', 'private_patch_count', 'max_patches_in_test'))
+            and _finite(row.get('score')) and _string_list(row.get('test_files'))
+            and _string_list(row.get('boundary_categories'))
+            and isinstance(row.get('related_profiles'), list)
+            and all(_related_profile_valid(profile) for profile in row['related_profiles']))
+
+
+def _related_profile_valid(row: Any) -> bool:
+    from ..testability.report import _count
+    if not isinstance(row, dict):
+        return False
+    return (all(isinstance(row.get(key), str) for key in ('file', 'function'))
+            and all(_count(row.get(key)) for key in ('line', 'complexity', 'lines'))
+            and row['line'] > 0 and _string_list(row.get('categories')))
+
+
+def _ranked_profile_valid(row: Any) -> bool:
+    from ..testability.report import _count, _finite
+    return (isinstance(row, dict) and _related_profile_valid(row)
+            and _count(row.get('patch_count')) and _finite(row.get('score'))
+            and isinstance(row.get('suggestion'), str))
+
+
+def _report_error(result: Dict[str, Any], *, initial: bool = False) -> Optional[str]:
+    from ..testability.report import _count
+    if result.get('error') or result.get('applicable') is False:
+        return None
+    summary = result.get('summary')
+    counts = ('total_patch_uses', 'total_boundary_profiles', 'total_patch_targets',
+              'patch_groups_reported', 'boundary_profiles_reported')
+    if not isinstance(summary, dict) or not all(_count(summary.get(key)) for key in counts):
+        return 'Testability answer is missing required uncapped observation counts'
+    if not _string_list(result.get('tests')):
+        return 'Testability answer has malformed test paths'
+    for field, validator, count in (
+        ('patch_hotspots', _ranked_patch_valid, 'patch_groups_reported'),
+        ('boundary_hotspots', _ranked_profile_valid, 'boundary_profiles_reported'),
+    ):
+        rows = result.get(field)
+        if not isinstance(rows, list) or not all(validator(row) for row in rows):
+            return f'Testability answer has malformed required {field}'
+        if initial and len(rows) != summary[count]:
+            return f'Testability answer has inconsistent {count}'
+    return None
 
 
 def _resolve_test_paths(src_path: Path, tests: Optional[List[str]]) -> List[Path]:
@@ -51,10 +150,58 @@ class TestabilityAdapter(ResourceAdapter):
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
 
-    def __init__(self, resource: str, query: Optional[str] = None):
+    RESULT_TYPE = 'testability_report'
+    FINDINGS_POLICIES = ('none',)
+    DEFAULT_FAIL_ON = 'none'
+    RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
+    BUDGET_LIST_FIELD = ('patch_hotspots', 'boundary_hotspots')
+    PARAM_SPECS = (
+        ParamSpec('tests', 'array', 'Test paths (omitted: discover tests/, test/, spec/)', None,
+                  _test_roots, uri_codec='comma-percent', role='analysis',
+                  cli=CliBinding(('--tests',), nargs='+')),
+        ParamSpec('top', 'integer', 'Maximum groups per hotspot list; zero is unlimited', 20,
+                  _top, zero_policy='unlimited', role='presentation', cli=CliBinding(('--top',))),
+        ParamSpec('min_patches', 'integer', 'Minimum patches for a target group', 3,
+                  _threshold, role='analysis', cli=CliBinding(('--min-patches',))),
+        ParamSpec('min_categories', 'integer', 'Minimum boundary categories', 3,
+                  _threshold, role='analysis', cli=CliBinding(('--min-categories',))),
+        ParamSpec('include_unresolved', 'boolean', 'Include low-count unresolved targets', False,
+                  boolean_value, role='analysis', cli=CliBinding(('--include-unresolved',), action='store_true')),
+    )
+
+    def __init__(self, resource: str, query: Optional[str] = None, *,
+                 params: Optional[Dict[str, Any]] = None):
         self.path = str(Path(resource).expanduser())
-        self.query_params = parse_query_params(query or '', coerce=True)
-        self._warn_unknown_query_params(self.query_params)  # BACK-507
+        if params is not None:
+            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
+                self.PARAM_SPECS, params, transport='typed')
+        else:
+            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
+        self._warn_unknown_query_params(self.query_params)
+
+    @staticmethod
+    def validate_request(params, args):
+        tests = dict(peek_query_items(params)).get('tests')
+        for root in tests or ():
+            try:
+                Path(root).expanduser().stat()
+            except (FileNotFoundError, NotADirectoryError):
+                raise ValueError(f'Test path not found: {root}') from None
+
+    def answer_requirement_error(self, result, expected_type, prior_facts=None):
+        return _report_error(result, initial=prior_facts is None)
+
+    @staticmethod
+    def execution_facts(result):
+        from ..utils.results import FailureCause, failure_execution_facts
+        if _report_error(result):
+            return failure_execution_facts(FailureCause.ANALYSIS)
+        state = AnalysisCompleteness.COMPLETE
+        if _required_loss(result):
+            summary = result.get('summary', {})
+            usable = summary.get('total_patch_uses', 0) or summary.get('total_boundary_profiles', 0)
+            state = AnalysisCompleteness.INCOMPLETE if usable else AnalysisCompleteness.FAILED
+        return result_execution_facts(result, completeness=state)
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
@@ -90,13 +237,8 @@ class TestabilityAdapter(ResourceAdapter):
             'adapter': 'testability',
             'description': 'Test patch/mock pressure joined with production boundary fan-out',
             'uri_syntax': 'testability://<path>?tests=tests,integration_tests&top=20&min_patches=3&min_categories=3',
-            'query_params': {
-                'tests': {'type': 'string', 'description': 'Comma-separated test paths to scan (default: auto-detect tests/, test/, spec/)', 'examples': ['tests=tests,integration_tests']},
-                'top': {'type': 'integer', 'description': 'Maximum patch and boundary groups to show', 'examples': ['top=10']},
-                'min_patches': {'type': 'integer', 'description': 'Minimum patches for a target group', 'examples': ['min_patches=5']},
-                'min_categories': {'type': 'integer', 'description': 'Minimum boundary categories for unpatched functions', 'examples': ['min_categories=2']},
-                'include_unresolved': {'type': 'boolean', 'description': 'Include low-count unresolved patch targets', 'examples': ['include_unresolved=true']},
-            },
+            'resource': TestabilityAdapter.RESOURCE_SPEC.schema(),
+            'query_params': param_schema(TestabilityAdapter.PARAM_SPECS),
             'elements': {},
             'supports_batch': False,
             'supports_advanced': False,
@@ -122,17 +264,17 @@ class TestabilityAdapter(ResourceAdapter):
             ],
         }
 
-    def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+    def get_structure(self, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
         from reveal.testability.report import build_testability_report
         from reveal.utils.path_utils import as_spelled, detect_non_python_language
 
         path = Path(self.path)
-        tests_param = self.query_params.get('tests')
-        tests = [t.strip() for t in str(tests_param).split(',') if t.strip()] if tests_param else None
-        top = self.int_param('top', 20)
-        min_patches = self.int_param('min_patches', 3)
-        min_categories = self.int_param('min_categories', 3)
-        include_unresolved = str(self.query_params.get('include_unresolved', False)).lower() == 'true'
+        tests = self.PARAM_SPECS[0].read(self.query_params)
+        from .overview import UNLIMITED_TOP
+        top = UNLIMITED_TOP if verbose else self.PARAM_SPECS[1].read(self.query_params)
+        min_patches = self.PARAM_SPECS[2].read(self.query_params)
+        min_categories = self.PARAM_SPECS[3].read(self.query_params)
+        include_unresolved = self.PARAM_SPECS[4].read(self.query_params)
 
         test_paths = _resolve_test_paths(path, tests)
         if not test_paths:

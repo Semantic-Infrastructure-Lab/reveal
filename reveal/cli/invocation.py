@@ -117,7 +117,7 @@ COMMANDS: Dict[str, CommandSpec] = {
     'testability':  _spec('testability',
                      'reveal testability [path]',
                      'Test patch pressure joined with production boundary fan-out',
-                     help_guide='guides/TESTABILITY_GUIDE.md'),  # testability:// guide is a stub
+                     help_guide='guides/TESTABILITY_GUIDE.md')._replace(declared_adapter='testability'),
     'trace':        _spec('trace',
                      'reveal trace --from FUNC',
                      'Walk call graph from a named entry point; depth-indented narrative with side-effect classification')._replace(declared_adapter='trace'),
