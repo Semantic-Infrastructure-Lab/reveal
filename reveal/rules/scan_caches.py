@@ -180,9 +180,8 @@ def _m102_preload(directory: Path, select, ignore, files: Optional[List[Path]] =
     """Build M102's whole-project import scan in the main process (BACK-1437,
     BACK-1429). Without it every worker re-reads every .py file under the
     project root on its first Python file -- ~6.7s per worker process on
-    home-assistant's mqtt component. M102 has no scan ceiling (one would mean
-    abstaining on large projects, which needs a decision), so there is no
-    disclosure to carry; this is the one-build half only.
+    home-assistant's mqtt component. M102 has no scan ceiling; its cached set
+    also carries directory-discovery loss for the parent disclosure join.
 
     The sample is the first file M102 would actually scan from: a .py file
     that is not an entry point or a test (M102 returns before resolving a
@@ -273,8 +272,7 @@ def get_scan_budgets(files: List[Path], select, ignore) -> List[dict]:
 
 
 def get_scan_disclosures(files: Optional[List[Path]] = None, select=None, ignore=None) -> List[str]:
-    """BACK-1051: collect every capped-scan disclosure recorded in this
-    process by rules with a shared-index/graph scan ceiling (I002, D005, T006).
+    """Collect cached scan-limit and discovery-loss disclosures for selected rules.
     Call only after the check run has completed (serial or parallel) —
     preload_scan_caches guarantees the main process sees a worker's cap
     hit, not just a serial in-process one. Returns [] when nothing was
@@ -286,10 +284,13 @@ def get_scan_disclosures(files: Optional[List[Path]] = None, select=None, ignore
     from .duplicates.D005 import get_scan_disclosures as d005_disclosures
     from .types.T006 import get_scan_disclosures as t006_disclosures
     from .imports._dep_reconciliation import get_scan_disclosures as i007_disclosures
+    from .maintainability.M102 import get_scan_disclosures as m102_disclosures
     messages = [message for code, collect in [('I002', i002_disclosures),
                                              ('D005', d005_disclosures), ('T006', t006_disclosures),
                                              ('I007', i007_disclosures)]
                 if rule_will_run(code, select, ignore) for message in collect(files)]
+    if rule_will_run('M102', select, ignore):
+        messages.extend(m102_disclosures(files, select=select))
     for code, reason in sorted(_preload_failures.items()):
         if rule_will_run(code, select, ignore):
             messages.append(

@@ -7,14 +7,14 @@ These are often dead code left behind after refactoring.
 import ast
 import logging
 import re
-from ...utils.request_cache import register_validated_cache
+from ...utils.request_cache import register_request_cache, register_validated_cache
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional, Set, Iterable, Sequence, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...utils.path_utils import (
     EVIDENCE, _walk_code_files, is_test_path, is_unsafe_scan_root, python_package_top,
-    resolve_project_root,
+    resolve_project_root, to_posix, traversal_failed_warning,
 )
 from ...utils.pyparse import parse_python
 
@@ -23,6 +23,47 @@ logger = logging.getLogger(__name__)
 # Module-level cache: package_root → set of imported names.
 # Built once per package per process; safe because files don't change mid-run.
 _import_cache: Dict[Path, Set[str]] = {}
+
+
+class _ImportSet(set):
+    """The existing mutable import set with picklable discovery facts."""
+
+    def __init__(self, values: Iterable[str] = (), *,
+                 traversal_failures: Sequence[Tuple[Optional[str], str]] = ()):
+        super().__init__(values)
+        self.traversal_failures = tuple(traversal_failures)
+
+
+def _disclosure_roots(files: List[Path], select) -> Set[Path]:
+    """Eligible/configured targets, not a ledger of actual rule execution."""
+    from .. import _as_checked, _file_config
+    rule = M102()
+    roots = set()
+    for file in files:
+        path = Path(_as_checked(str(file)))
+        if not rule.matches_target(str(path)) or rule._is_entry_point(path) or rule._is_test_file(path):
+            continue
+        root = _project_root(path)
+        if root is None or not rule._get_module_name(path, root):
+            continue
+        if not select and not _file_config(str(path)).is_rule_enabled('M102'):
+            continue
+        roots.add(root)
+    return roots
+
+
+def get_scan_disclosures(files: Optional[List[Path]] = None, *, select=None) -> List[str]:
+    """Disclose cached importer loss for the requested eligible M102 roots."""
+    roots = _disclosure_roots(files, select) if files is not None else None
+    messages = []
+    for root, imports in _import_cache.items():
+        if roots is not None and root not in roots:
+            continue
+        warning = traversal_failed_warning(getattr(imports, 'traversal_failures', ()), root)
+        if warning:
+            messages.append(f"M102: importer discovery under {to_posix(root)} is incomplete: {warning['message']}; "
+                            'orphan findings and removal suggestions may be false positives because imports may be missing')
+    return messages
 
 # What makes a directory a Python project for a file outside any package.
 _PYTHON_BUILD_MARKERS = ('pyproject.toml', 'setup.py')
@@ -327,15 +368,18 @@ class M102(BaseRule):
         if package_root in _import_cache:
             return _import_cache[package_root]
 
-        imports: set[str] = set()
-
         # BACK-1578: the evidence walk -- noise dirs (.venv, node_modules), what git ignores
         # and REVEAL_IGNORE are not the project's importers; --exclude narrows the report,
         # not the evidence (check --exclude tests must not make test-only imports orphans,
         # BACK-1259). os.walk skips a directory that vanishes mid-walk (BACK-1259's
         # concurrent temp-dir cleanup) instead of raising.
-        candidates = [f for f in _walk_code_files(package_root, purpose=EVIDENCE)
+        enumeration_errors: List[OSError] = []
+        candidates = [f for f in _walk_code_files(package_root, purpose=EVIDENCE,
+                                               on_error=enumeration_errors.append)
                       if f.suffix == '.py']
+        imports = _ImportSet(traversal_failures=tuple(
+            (to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}')
+            for error in enumeration_errors))
 
         for py_file in candidates:
             try:
@@ -415,4 +459,12 @@ def _evict_root(root: Path) -> None:
     _import_cache.pop(root, None)
 
 
+def _evict_incomplete_imports() -> None:
+    """Reuse partial import evidence within this request, then retry next time."""
+    for root, imports in tuple(_import_cache.items()):
+        if getattr(imports, 'traversal_failures', ()):
+            _evict_root(root)
+
+
+register_request_cache(__name__ + '.traversal', _evict_incomplete_imports)
 register_validated_cache(__name__, _import_cache, _evict_root)
