@@ -154,3 +154,55 @@ def test_clean_empty_is_full_and_warning_only_controls_keep_score(tmp_path, quer
     assert not required(result)
     assert result['meta']['parse_mode'] == 'tree_sitter_full'
     assert result['meta']['confidence'] == 0.85
+
+
+@pytest.mark.parametrize('unknown', [False, True])
+def test_supplied_directory_events_use_shared_counts_and_actual_file_scope(tmp_path, monkeypatch, unknown):
+    root = tmp_path / 'affected'
+    child = make_tree(root)
+    supplied = analysis.collect_structures(str(root))
+    directory = None if unknown else child.as_posix()
+    supplied.traversal_failures.extend([
+        (directory, 'PermissionError: first'),
+        (directory, 'PermissionError: first'),
+        (directory, 'OSError: second'),
+    ])
+    monkeypatch.setattr(index, 'collect_structures', lambda *args: supplied)
+    result = CallsAdapter(str(root / 'entry.py'), 'callees=entry').get_structure()
+    (warning,) = required(result)
+    assert warning['count'] == (0 if unknown else 1)
+    assert warning['directories'] == ([] if unknown else ['included_child'])
+    assert warning.get('unknown_directory_events', 0) == (3 if unknown else 0)
+    assert 'confidence' not in result['meta']
+    assert result['meta']['parse_mode'] == 'tree_sitter_partial'
+
+
+@pytest.mark.parametrize('query,count', MODES)
+def test_reused_adapter_recovers_after_real_loss(tmp_path, monkeypatch, query, count):
+    root = tmp_path / 'affected'
+    child = make_tree(root)
+    sibling = tmp_path / 'sibling'
+    make_tree(sibling)
+    clean_meta = CallsAdapter(str(sibling), query).get_structure()['meta']
+    adapter = CallsAdapter(str(root), query)
+    with monkeypatch.context() as context:
+        deny_child(context, child)
+        assert_loss(adapter.get_structure())
+    repaired = adapter.get_structure()
+    assert not required(repaired)
+    assert repaired['meta'] == clean_meta
+    assert repaired['meta']['parse_mode'] == 'tree_sitter_full'
+
+
+@pytest.mark.parametrize('query,count', MODES)
+def test_clean_sibling_text_is_unchanged_during_other_root_loss(tmp_path, monkeypatch, capsys, query, count):
+    root, sibling = tmp_path / 'affected', tmp_path / 'sibling'
+    child = make_tree(root)
+    make_tree(sibling)
+    adapter = CallsAdapter(str(sibling), query)
+    CallsRenderer.render_structure(adapter.get_structure())
+    before = capsys.readouterr()
+    deny_child(monkeypatch, child)
+    CallsAdapter(str(root), query).get_structure()
+    CallsRenderer.render_structure(adapter.get_structure())
+    assert capsys.readouterr() == before

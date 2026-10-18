@@ -1,9 +1,13 @@
 """Renderer for calls:// adapter output."""
 
 import os
+import sys
 from typing import Any, Dict, List
 
 from reveal.utils import print_json_result
+from reveal.utils.warning_render import meta_warning_lines
+
+_REQUIRED_LOSS_TYPES = frozenset({'analysis_failed', 'analysis_incomplete'})
 
 
 def render_calls_structure(data: Dict[str, Any], output_format: str) -> None:
@@ -16,6 +20,11 @@ def render_calls_structure(data: Dict[str, Any], output_format: str) -> None:
     if output_format == 'json':
         print_json_result(data)
         return
+
+    required = [w for w in data.get('meta', {}).get('warnings', [])
+                if w.get('type') in _REQUIRED_LOSS_TYPES]
+    for line in meta_warning_lines({'meta': {'warnings': required}}):
+        print(line, file=sys.stderr if output_format == 'dot' else sys.stdout)
 
     if data.get('query') == 'callees_recursive':
         if output_format == 'dot':
@@ -76,7 +85,8 @@ def _render_text(data: Dict[str, Any]) -> None:
         print()
         # BACK-1198: language-aware dispatch caveat, computed per-request.
         for w in data.get('meta', {}).get('warnings', []):
-            print(f"⚠ {w['message']}")
+            if w.get('type') not in _REQUIRED_LOSS_TYPES:
+                print(f"⚠ {w['message']}")
         return
 
     for lvl in levels:
@@ -203,7 +213,8 @@ def _render_uncalled_text(data: Dict[str, Any]) -> None:
     # this rendered ~2,235 lines below the count on a large uncalled list,
     # past where anyone reading the header would see it.
     for w in warnings:
-        print(f"⚠ {w['message']}")
+        if w.get('type') not in _REQUIRED_LOSS_TYPES:
+            print(f"⚠ {w['message']}")
     print()
 
     if not entries:

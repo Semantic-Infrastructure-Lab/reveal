@@ -14,7 +14,7 @@ import re
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, FrozenSet, Iterator, List, Optional, Set, Tuple
+from typing import Any, Dict, FrozenSet, Iterator, List, Optional, Sequence, Set, Tuple
 
 from ..ast.analysis import StructureList, collect_structures, is_code_file, call_sources, unattributed_references
 from ...utils.pyparse import parse_python
@@ -380,13 +380,19 @@ class CallersIndex(Dict[str, List[Dict[str, Any]]]):
     analysis failed, so the cached index keeps saying what it is missing (BACK-1860)."""
 
     skipped: List[Tuple[str, str]]
+    traversal_failures: List[Tuple[Optional[str], str]]
 
 
-def _disclose_skipped(result: Dict[str, Any], skipped: List[Tuple[str, str]]) -> Dict[str, Any]:
-    """Carry the files whose analysis failed on *result* as ``analysis_skipped`` for the
-    adapter to turn into an ``analysis_failed`` warning (BACK-1860). Absent when none."""
+def _disclose_skipped(result: Dict[str, Any], skipped: List[Tuple[str, str]], *,
+                      traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> Dict[str, Any]:
+    """Carry file and directory loss separately for adapter metadata construction.
+
+    Private carriers are absent when empty and consumed before building the envelope.
+    """
     if skipped:
         result['analysis_skipped'] = [list(item) for item in skipped]
+    if traversal_failures:
+        result['analysis_traversal_failures'] = [list(item) for item in traversal_failures]
     return result
 
 
@@ -464,6 +470,7 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
     structures = _structures_or_collect(structures, directory)
     index = CallersIndex()
     index.skipped = list(structures.skipped)
+    index.traversal_failures = list(getattr(structures, 'traversal_failures', ()))
 
     for file_struct in structures:
         file_path = file_struct.get('file', '')
@@ -572,7 +579,7 @@ def find_callees(
         'total_calls': sum(len(m['calls']) for m in matches),
         '_builtins_hidden': builtins_hidden,
     }
-    return _disclose_skipped(result, structures.skipped)
+    return _disclose_skipped(result, structures.skipped, traversal_failures=getattr(structures, 'traversal_failures', ()))
 
 
 def _build_forward_index(
@@ -707,7 +714,7 @@ def find_callees_recursive(
         'levels': levels,
         'total_resolved': total_resolved,
         'total_unresolved': total_unresolved,
-    }, structures.skipped)
+    }, structures.skipped, traversal_failures=getattr(structures, 'traversal_failures', ()))
 
 
 def find_callers(
@@ -752,7 +759,7 @@ def find_callers(
         'total_callers': total,
         'levels': levels,
     }
-    _disclose_skipped(result, index.skipped)
+    _disclose_skipped(result, index.skipped, traversal_failures=getattr(index, 'traversal_failures', ()))
 
     if total == 0:
         parent = str(Path(path).parent)
@@ -1256,7 +1263,7 @@ def find_uncalled(
             excluded_by_reason.get(r, 0) for r in _TEST_ENTRYPOINT_REASONS),
         'excluded_by_reason': excluded_by_reason,
         'entries': entries,
-    }, structures.skipped)
+    }, structures.skipped, traversal_failures=getattr(structures, 'traversal_failures', ()))
 
 
 def rank_by_callers(
@@ -1337,7 +1344,7 @@ def rank_by_callers(
         'top': shown,
         'total_unique_callees': len(entries),
         'entries': entries[:shown],
-    }, index.skipped)
+    }, index.skipped, traversal_failures=getattr(index, 'traversal_failures', ()))
 
 
 def _unattributed_sources(file_struct: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -1440,4 +1447,4 @@ def build_module_dependency_graph(
         'edges': edges,
         'total_nodes': len(nodes),
         'total_edges': len(edges),
-    }, structures.skipped)
+    }, structures.skipped, traversal_failures=getattr(structures, 'traversal_failures', ()))

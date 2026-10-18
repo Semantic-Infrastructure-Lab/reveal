@@ -12,7 +12,7 @@ numbers come from (reveal's own VALIDATION.md oracle recall figures).
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ...analyzers._capability_table import calls_extraction_confidence
 from ...defaults import (
@@ -23,7 +23,7 @@ from ...defaults import (
     CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB,
 )
 from ...utils.path_utils import census_for_path
-from ..ast.analysis import analysis_skipped_warning
+from ..ast.analysis import analysis_skipped_warning, traversal_failed_warning
 
 # Capability metadata for v1.1 contract (BACK-307).
 # Call-graph analysis is static — these limitations are universal across queries.
@@ -72,7 +72,8 @@ def language_census(path: str) -> Dict[str, int]:
 
 
 def build_meta(path: str, *, uncalled: bool = False,
-               skipped: Sequence[Tuple[str, str]] = ()) -> Dict[str, Any]:
+               skipped: Sequence[Tuple[str, str]] = (),
+               traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> Dict[str, Any]:
     """Per-request calls:// meta kwargs (BACK-1198).
 
     Replaces the prior flat ``confidence: 0.85`` (identical for a language
@@ -117,8 +118,17 @@ def build_meta(path: str, *, uncalled: bool = False,
         warnings.append({'code': 'W-CALLS-8', 'message': (
             'JSX component uses are typed jsx_reference relationships; runtime render scheduling is unresolved. '
             'Class-field initializer navigation, string/HTML/Angular templates and Vue/Svelte component relationships are outside this scope.')})
+    known_loss = bool(skipped or traversal_failures)
     if uncalled:
-        warnings.append(_UNCALLED_DERIVED_SIGNAL_WARNING)
+        heuristic = _UNCALLED_DERIVED_SIGNAL_WARNING
+        if known_loss:
+            heuristic = {**heuristic, 'message': (
+                "'Uncalled' is a derived heuristic, not a separately measured "
+                "signal -- the extraction estimate is withheld for missing required inputs. "
+                "Convention-invoked calls (runtime constructors, framework lifecycle hooks, "
+                "dynamic dispatch) remain outside static analysis. "
+                "Zero callers found is not proof of dead code.")}
+        warnings.append(heuristic)
         # BACK-1197: name what was ACTUALLY excluded for the language being
         # scanned, replacing the renderer's old hardcoded Python-only line.
         warnings.append({
@@ -132,8 +142,14 @@ def build_meta(path: str, *, uncalled: bool = False,
     if failed:
         warnings.append(failed)
 
+    path_obj = Path(path)
+    directory = path_obj if path_obj.is_dir() else path_obj.parent
+    traversal_warning = traversal_failed_warning(traversal_failures, directory)
+    if traversal_warning:
+        warnings.append(traversal_warning)
+
     return {
-        'parse_mode': 'tree_sitter_full',
-        'confidence': confidence,
+        'parse_mode': 'tree_sitter_partial' if known_loss else 'tree_sitter_full',
+        'confidence': None if known_loss else confidence,
         'warnings': warnings,
     }
