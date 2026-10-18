@@ -27,26 +27,30 @@ import logging
 import os
 from dataclasses import asdict
 from ...core import disk_cache
-from ...utils.request_cache import register_validated_cache
+from ...utils.request_cache import register_request_cache, register_validated_cache
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Sequence, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
 from ...utils.pyparse import parse_python, statement_index
 from ...utils.query_control import ScanBudget
-from ...utils.path_utils import EVIDENCE, _walk_code_files, cross_file_scan_root, scan_roots, to_posix
+from ...utils.path_utils import EVIDENCE, _walk_code_files, cross_file_scan_root, scan_roots, to_posix, traversal_failed_warning
 
 logger = logging.getLogger(__name__)
 
 class LiteralIndex(dict):
     """The existing literal mapping plus its picklable source-scan accounting."""
 
-    def __init__(self, budget: ScanBudget, admitted: int, capped: bool = False):
+    def __init__(self, budget: ScanBudget, admitted: int, capped: bool = False, *,
+                 traversal_failures: Sequence[Tuple[Optional[str], str]] = ()):
         super().__init__()
         self.scan_budget = {**asdict(budget.accounting(admitted, capped)),
                             'limit': budget.limit, 'analyzed_files': 0,
                             'failed_files': 0, 'skipped': capped}
+        self.traversal_failures = tuple(traversal_failures)
+        if self.traversal_failures:
+            self.scan_budget['exact'] = False
         self.disclosures: List[str] = []
 
 
@@ -169,10 +173,14 @@ def _index_disclosures(root: Path, index: dict) -> List[str]:
     from ...rendering.base import capped_section
     messages = sorted(getattr(index, 'disclosures', []))
     failed = getattr(index, 'scan_budget', {}).get('failed_files', 0)
-    if not failed:
-        return messages
-    return [f'D005: {failed} file(s) under {root} were not analyzed; cross-file results may be incomplete',
-            *capped_section(messages, 5, str, indent='D005: ')]
+    if failed:
+        messages = [f'D005: {failed} file(s) under {root} were not analyzed; cross-file results may be incomplete',
+                    *capped_section(messages, 5, str, indent='D005: ')]
+    traversal = traversal_failed_warning(getattr(index, 'traversal_failures', ()), root)
+    if traversal:
+        messages.append(f"D005: literal discovery under {root} is incomplete: {traversal['message']}; "
+                        'duplicate clusters and participating-file observations may be missing')
+    return messages
 
 
 def get_scan_budgets(files: List[Path]) -> List[Dict[str, Any]]:
@@ -331,12 +339,13 @@ def _build_index(
     ceiling = budget.limit
     _project_skip_reasons.pop(project_root, None)
     py_files: List[Path] = []
+    enumeration_errors: List[OSError] = []
     # The evidence walk (BACK-1578): noise, gitignored and REVEAL_IGNORE'd files are not
     # the project's literals, --exclude narrows the report and not the index. It judges
     # paths relative to the root: the old filter tested every component of the absolute
     # path, so a project under ~/.config/ or ~/.cache/ had every file skipped. os.walk
     # skips a directory that vanishes mid-scan (a shared temp dir) instead of raising.
-    for p in _walk_code_files(project_root, purpose=EVIDENCE):
+    for p in _walk_code_files(project_root, purpose=EVIDENCE, on_error=enumeration_errors.append):
         if p.suffix != '.py':
             continue
         py_files.append(p)
@@ -348,11 +357,13 @@ def _build_index(
             )
             logger.warning(reason)
             _project_skip_reasons[project_root] = reason
-            index = LiteralIndex(budget, ceiling, capped=True)
+            index = LiteralIndex(budget, ceiling, capped=True,
+                                 traversal_failures=_normalize_traversal_failures(enumeration_errors))
             index.disclosures.append(reason)
             return index
 
-    index = LiteralIndex(budget, len(py_files))
+    index = LiteralIndex(budget, len(py_files),
+                         traversal_failures=_normalize_traversal_failures(enumeration_errors))
 
     for py_file in py_files:
         try:
@@ -368,9 +379,22 @@ def _build_index(
     return index
 
 
+def _normalize_traversal_failures(errors: Sequence[OSError]) -> Tuple[Tuple[Optional[str], str], ...]:
+    return tuple((to_posix(error.filename) if error.filename else None,
+                  f'{type(error).__name__}: {error}') for error in errors)
+
+
 def _evict_root(root: Path) -> None:
     _project_index.pop(root, None)
     _project_skip_reasons.pop(root, None)
 
 
+def _evict_incomplete_indexes() -> None:
+    """Keep partial evidence within this request, then rebuild it next time."""
+    for root, index in tuple(_project_index.items()):
+        if getattr(index, 'traversal_failures', ()):
+            _evict_root(root)
+
+
+register_request_cache(__name__ + '.traversal', _evict_incomplete_indexes)
 register_validated_cache(__name__, _project_index, _evict_root)
