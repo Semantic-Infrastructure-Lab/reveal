@@ -181,6 +181,13 @@ class ContractsRenderer(BaseRenderer):
     RENDERS_META_WARNINGS = True
 
     @classmethod
+    def _failure_detail(cls, result: dict) -> List[str]:
+        meta = result.get('meta') or {}
+        warnings = [warning for warning in meta.get('warnings', [])
+                    if warning.get('type') == 'analysis_incomplete' and warning.get('unit') == 'directories']
+        return meta_warning_lines({**result, 'meta': {**meta, 'warnings': warnings}})
+
+    @classmethod
     def _render_text(cls, result: dict) -> str:
         # Coverage and unparsed-source notices retain their established place
         # above the inventory. The shared warning owner renders everything else.

@@ -24,6 +24,7 @@ from ..utils.path_utils import (
     assess_language_coverage,
     detect_non_python_language,
     to_posix,
+    traversal_failed_warning,
 )
 from ..utils.query_binding import bind_declared_params, boolean_value
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
@@ -82,7 +83,8 @@ def _is_cpp_file(fpath: Path) -> bool:
     return False
 
 
-def _walk_matching(path: Path, matches: Callable[[Path], bool]) -> Iterator[Path]:
+def _walk_matching(path: Path, matches: Callable[[Path], bool], *,
+                   on_error: Optional[Callable[[OSError], None]] = None) -> Iterator[Path]:
     """Files under *path* (or *path* itself) that *matches* accepts, through the shared
     walker (BACK-1577): the same files ``collect_structures`` hands the Python and
     TypeScript scanners, dot-dir source included (BACK-1038)."""
@@ -90,18 +92,20 @@ def _walk_matching(path: Path, matches: Callable[[Path], bool]) -> Iterator[Path
         if matches(path):
             yield path
         return
-    for fpath in _walk_code_files(path):
+    for fpath in _walk_code_files(path, on_error=on_error):
         if matches(fpath):
             yield fpath
 
 
-def _has_files(path: Path, matches: Callable[[Path], bool]) -> bool:
-    return next(_walk_matching(path, matches), None) is not None
+def _has_files(path: Path, matches: Callable[[Path], bool], *,
+               on_error: Optional[Callable[[OSError], None]] = None) -> bool:
+    return next(_walk_matching(path, matches, on_error=on_error), None) is not None
 
 
-def _collect_files(path: Path, matches: Callable[[Path], bool]) -> List[Path]:
+def _collect_files(path: Path, matches: Callable[[Path], bool], *,
+                   on_error: Optional[Callable[[OSError], None]] = None) -> List[Path]:
     """Files a scanner reads (an explicitly named single file is never excluded)."""
-    return list(_walk_matching(path, matches))
+    return list(_walk_matching(path, matches, on_error=on_error))
 
 
 def _unparsed_files(unparsed: List[str]) -> List[str]:
@@ -119,6 +123,10 @@ _CONTRACT_LANGUAGES: Tuple[Tuple[str, Callable[[Path], bool]], ...] = (
     ('cpp', _is_cpp_file),
     ('python', _is_python_file),
 )
+
+
+def _record_traversal_error(failures: List[Tuple[Optional[str], str]], error: OSError) -> None:
+    failures.append((to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}'))
 
 
 def _record_scan_error(skipped: List[Tuple[str, str]], file: str, exc: Exception) -> None:
@@ -170,7 +178,9 @@ def _scan_contracts(
     unchanged — only the polyglot case gets the new `by_language` shape,
     since that case was never correct before and had no shape to preserve.
     """
-    active = [name for name, matches in _CONTRACT_LANGUAGES if _has_files(path, matches)]
+    traversal_failures: List[Tuple[Optional[str], str]] = []
+    on_error = partial(_record_traversal_error, traversal_failures)
+    active = [name for name, matches in _CONTRACT_LANGUAGES if _has_files(path, matches, on_error=on_error)]
 
     unsupported_language = detect_non_python_language(path) if not active else ''
 
@@ -196,6 +206,7 @@ def _scan_contracts(
             'path_heuristic': [],
             'unsupported_language': unsupported_language,
             'coverage': coverage_dict,
+            '_traversal_failures': traversal_failures,
         }
 
     # collect_structures parses every tree-sitter-supported file in `path` in
@@ -212,6 +223,7 @@ def _scan_contracts(
             from reveal.adapters.ast.analysis import collect_structures
             collected = collect_structures(str(path))
             structures_loaded = True
+            traversal_failures.extend(collected.traversal_failures)
             structures_cache.extend(collected)
             analysis_skipped.extend((file, cause) for file, cause in collected.skipped
                                     if _uses_shared_structures(file))
@@ -223,18 +235,19 @@ def _scan_contracts(
         if name == 'ts':
             return _scan_contracts_ts(path, _structures(), abstract_only, show_implementations)
         if name == 'ruby':
-            return _scan_contracts_ruby(path, abstract_only, show_implementations)
+            return _scan_contracts_ruby(path, abstract_only, show_implementations, on_error=on_error)
         if name == 'go':
-            return _scan_contracts_go(path, abstract_only, show_implementations)
+            return _scan_contracts_go(path, abstract_only, show_implementations, on_error=on_error)
         if name == 'rust':
-            return _scan_contracts_rust(path, abstract_only, show_implementations)
+            return _scan_contracts_rust(path, abstract_only, show_implementations, on_error=on_error)
         if name == 'cpp':
-            return _scan_contracts_cpp(path, abstract_only, show_implementations)
+            return _scan_contracts_cpp(path, abstract_only, show_implementations, on_error=on_error)
         return _scan_contracts_python(path, _structures(), abstract_only, show_implementations)
 
     if len(active) == 1:
         result = _run(active[0])
         result['coverage'] = coverage_dict
+        result['_traversal_failures'] = traversal_failures
         return _with_analysis_skipped(result, analysis_skipped, recovered=recovered_files)
 
     by_language = {name: _run(name) for name in active}
@@ -247,6 +260,7 @@ def _scan_contracts(
         'unsupported_language': '',
         'coverage': coverage_dict,
         'by_language': by_language,
+        '_traversal_failures': traversal_failures,
     }
     # BACK-1588: only the tree-sitter scanners (Go/Rust/Ruby/C++) have an unparsed
     # channel, so the key is present only when one of them ran.
@@ -453,6 +467,7 @@ def _scan_contracts_ruby(
     path: Path,
     abstract_only: bool,
     show_implementations: bool,
+    *, on_error: Optional[Callable[[OSError], None]] = None,
 ) -> Dict[str, Any]:
     """Ruby-specific contract scanner — the mixin model.
 
@@ -468,7 +483,7 @@ def _scan_contracts_ruby(
     unparsed: List[str] = []
     recovered: List[str] = []
     skipped: List[Tuple[str, str]] = []
-    for file_path in _collect_files(path, _is_ruby_file):
+    for file_path in _collect_files(path, _is_ruby_file, on_error=on_error):
         scanned = scan_file_contracts_ruby(str(file_path), on_error=partial(_record_scan_error, skipped))
         modules.extend(scanned['modules'])
         classes.extend(scanned['classes'])
@@ -505,6 +520,7 @@ def _scan_contracts_go(
     path: Path,
     abstract_only: bool,
     show_implementations: bool,
+    *, on_error: Optional[Callable[[OSError], None]] = None,
 ) -> Dict[str, Any]:
     """Go-specific contract scanner — interfaces + structural implementers.
 
@@ -529,7 +545,7 @@ def _scan_contracts_go(
     unparsed: List[str] = []
     recovered: List[str] = []
     skipped: List[Tuple[str, str]] = []
-    for file_path in _collect_files(path, _is_go_file):
+    for file_path in _collect_files(path, _is_go_file, on_error=on_error):
         scanned = scan_file_contracts_go(str(file_path), on_error=partial(_record_scan_error, skipped))
         interfaces.extend(scanned['interfaces'])
         structs.extend(scanned['structs'])
@@ -608,6 +624,7 @@ def _scan_contracts_rust(
     path: Path,
     abstract_only: bool,
     show_implementations: bool,
+    *, on_error: Optional[Callable[[OSError], None]] = None,
 ) -> Dict[str, Any]:
     """Rust-specific contract scanner — traits + explicit implementors.
 
@@ -622,7 +639,7 @@ def _scan_contracts_rust(
     unparsed: List[str] = []
     recovered: List[str] = []
     skipped: List[Tuple[str, str]] = []
-    for file_path in _collect_files(path, _is_rust_file):
+    for file_path in _collect_files(path, _is_rust_file, on_error=on_error):
         scanned = scan_file_contracts_rust(str(file_path), on_error=partial(_record_scan_error, skipped))
         traits.extend(scanned['interfaces'])
         impls.extend(scanned['impls'])
@@ -678,6 +695,7 @@ def _scan_contracts_cpp(
     path: Path,
     abstract_only: bool,
     show_implementations: bool,
+    *, on_error: Optional[Callable[[OSError], None]] = None,
 ) -> Dict[str, Any]:
     """C++-specific contract scanner — abstract classes + subclasses.
 
@@ -692,7 +710,7 @@ def _scan_contracts_cpp(
     unparsed: List[str] = []
     recovered: List[str] = []
     skipped: List[Tuple[str, str]] = []
-    for file_path in _collect_files(path, _is_cpp_file):
+    for file_path in _collect_files(path, _is_cpp_file, on_error=on_error):
         scanned = scan_file_contracts_cpp(str(file_path), on_error=partial(_record_scan_error, skipped))
         classes.extend(scanned['classes'])
         unparsed.extend(scanned.get(UNPARSED_KEY, []))
@@ -852,6 +870,49 @@ def _add_implementations(
                 })
 
 
+def _contract_identity_valid(row: Any) -> bool:
+    return (isinstance(row, dict)
+            and all(isinstance(row.get(key), str) and bool(row[key].strip()) for key in ('name', 'file'))
+            and type(row.get('line')) is int and row['line'] > 0)
+
+
+def _contract_row_valid(row: Any) -> bool:
+    if not _contract_identity_valid(row):
+        return False
+    for field in ('bases', 'abstract_methods'):
+        if field in row and (not isinstance(row[field], list)
+                             or any(not isinstance(value, str) for value in row[field])):
+            return False
+    return ('implementations' not in row or isinstance(row['implementations'], list)
+            and all(_contract_identity_valid(item) for item in row['implementations']))
+
+
+def _contract_observations(report: Dict[str, Any]) -> bool:
+    groups = report.get('by_language', {'flat': report})
+    if not isinstance(groups, dict) or any(not isinstance(group, dict) for group in groups.values()):
+        raise ValueError('Contract groups must be objects')
+    observed = False
+    for group in groups.values():
+        for field in ('abcs', 'protocols', 'typeddicts', 'dataclasses', 'basemodels', 'path_heuristic'):
+            rows = group.get(field)
+            if not isinstance(rows, list) or any(not _contract_row_valid(row) for row in rows):
+                raise ValueError(f'Invalid required contract rows: {field}')
+            observed = observed or bool(rows)
+    return observed
+
+
+def _discovery_error(report: Dict[str, Any], failures: List[Tuple[Optional[str], str]]) -> Optional[str]:
+    if not failures:
+        return None
+    try:
+        usable = _contract_observations(report)
+    except ValueError as exc:
+        return f'Required directory discovery failed and the contract report is invalid: {exc}'
+    if not usable:
+        return 'Required directory discovery failed and no contract or implementation observations survived'
+    return None
+
+
 # Implementers listed under each contract in the text view; JSON always carries
 # them all. 0 lists every one (BACK-1384).
 def _contracts_impls(value: Any) -> int:
@@ -905,6 +966,8 @@ class ContractsAdapter(ResourceAdapter):
         from ..utils.results import AnalysisCompleteness, result_execution_facts
         incomplete = isinstance(result, dict) and bool(
             result.get('recovered_files') or result.get('unparsed_files') or
+            any(w.get('type') == 'analysis_incomplete' and w.get('unit') == 'directories'
+                for w in (result.get('meta') or {}).get('warnings', [])) or
             any(error.get('code') == 'E_CONTRACTS_ANALYSIS'
                 for error in (result.get('meta') or {}).get('errors', [])))
         state = AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE
@@ -980,9 +1043,13 @@ class ContractsAdapter(ResourceAdapter):
         impls_cap = _IMPLS.read(self.query_params)
 
         report = _scan_contracts(Path(self.path), abstract_only=abstract_only, show_implementations=show_implementations)
+        traversal_failures = report.pop('_traversal_failures', [])
         report['impls_cap'] = impls_cap  # the text view's per-contract cap; the lists themselves are whole
 
         warnings: List[Any] = []
+        traversal_warning = traversal_failed_warning(traversal_failures, Path(self.path))
+        if traversal_warning:
+            warnings.append(traversal_warning)
         coverage_warning = report.get('coverage', {}).get('warning', '')
         if coverage_warning:
             warnings.append({'code': 'W-CONTRACTS-1', 'message': coverage_warning})
@@ -1003,12 +1070,17 @@ class ContractsAdapter(ResourceAdapter):
             {'code': 'E_CONTRACTS_ANALYSIS', 'file': file, 'message': cause}
             for file, cause in skipped]
 
+        discovery_error = _discovery_error(report, traversal_failures)
+        if discovery_error:
+            report['error'] = discovery_error
+            errors.append({'code': 'E_CONTRACTS_DISCOVERY', 'message': discovery_error})
+
         return ResultBuilder.create(
             result_type=self.RESULT_TYPE,
             source=self.path,
             contract_version=CONTRACT_VERSION,
             parse_mode='ast+tree_sitter',
-            confidence=0.7,
+            confidence=None if traversal_failures else 0.7,
             warnings=warnings,
             errors=errors,
             data=report,
