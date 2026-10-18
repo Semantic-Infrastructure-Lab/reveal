@@ -752,6 +752,15 @@ request, including after access recovers. Healthy retained indexes still reuse
 the existing stat-based validation. This does not establish complete evidence
 for separate file-read or parse failures.
 
+I007 likewise discloses directory loss while discovering Python or Rust project
+imports. Its notes identify the project root and language: a dependency reported
+as unused may be used in omitted inputs. Check retains surviving findings, but
+known directory loss makes the CLI scan incomplete even when no findings remain
+(exit 3 unless `--exit-zero`). The same notes reach ordinary MCP Check results.
+Traversal-incomplete import facts rebuild at the next serialized host request;
+healthy facts retain existing validation and reuse. This directory-loss handling
+does not change the separate public policy for skipped-file-only I007 outcomes.
+
 ### Usage
 
 ```
@@ -859,6 +868,12 @@ reveal scaffold rule B007 "too-long"          # new quality rule stub
 Joins test patch usage with production boundary fan-out to find review targets
 where repeated mocking and runtime-boundary complexity overlap — not "mocking
 is bad," but where patching and boundary fan-out compound.
+
+Both CLI and URI spellings return `testability_report`. Direct requests reject
+missing explicit test roots before scanning (exit 2), retain required evidence
+loss before display cuts (exit 3), and keep genuine clean zero results and
+omitted-tests non-applicability at exit 0. Only `--fail-on none` is supported.
+See the full guide for uncapped observation counts, path encoding and artifacts.
 
 ### Usage
 

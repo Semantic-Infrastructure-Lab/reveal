@@ -41,6 +41,17 @@ Read the output as a ranked review queue:
 - boundary categories show runtime effects in related production functions
 - suggestions are advisory, not automatic refactor instructions
 
+Both spellings return `testability_report`. Explicit test roots are checked before
+analysis: every requested path must exist. Paths are relative to the working
+directory. An existing empty tests directory is valid; omitting `tests` searches
+for the usual test directories and returns not-applicable if none exist.
+
+CLI path arguments stay literal. In a URI list, percent-encode each path before
+joining with commas: `tests=tests%2Cextra,integration_tests` names two roots, the
+first of which contains a comma. Whole decimal controls such as `3.0` are accepted;
+fractions, booleans, exponent spellings and nonfinite values are usage errors.
+`top=0` remains unlimited; negative top clamps to zero and thresholds clamp to one.
+
 ## What It Finds
 
 Both `patches://` and `reveal testability` scan Python tests with AST parsing and detect:
@@ -132,6 +143,34 @@ reveal testability src --tests tests --format json
 The JSON output includes confidence metadata because static target resolution is
 best-effort. Do not treat the report as a precise runtime call graph.
 
+`summary.total_patch_uses` and `summary.total_boundary_profiles` count observations
+before grouping thresholds and display cuts. A pure function with no boundary
+categories still contributes a profile. Empty hotspot arrays therefore do not
+establish that no observations were collected. `--max-items` cuts both hotspot
+lists; JSON `--fields` projects the primary answer. Text `--also-json` saves the
+full answer after cuts, including its summary and diagnostics.
+
+## Execution Outcomes
+
+Direct CLI and URI requests use these exits:
+
+| Exit | Meaning |
+|------|---------|
+| `0` | Complete analysis, including genuine zero observations, or omitted-tests not-applicable |
+| `2` | Invalid request, including an empty or missing explicit test root |
+| `3` | Required evidence loss, malformed analysis, operational failure, or requested output failure |
+
+Known required loss with a surviving patch use or function profile is incomplete;
+without either it is failed. This deliberately treats constant-only source plus
+an entirely failed test scan as failed analysis. Clean-file availability is not
+inferred from an empty ranking. Advisory warnings alone do not cause failure.
+Only `--fail-on none` is supported; it does not suppress analysis or output failure.
+Legacy stdin batches retain their existing policy.
+
+Generic MCP queries use the same direct-request evidence: useful partial answers
+remain ordinary results with an incomplete-analysis note, while failed analysis
+is a tool error. No dedicated Testability tool is required.
+
 ## Limits
 
 - Patch detection supports Python and recognized JavaScript/TypeScript test files.
@@ -141,11 +180,10 @@ best-effort. Do not treat the report as a precise runtime call graph.
   `parse_recovered` warnings; surviving observations remain in the report.
   Production boundary-profile failures and recovered syntax are disclosed separately.
   Diagnostic counts cover all recorded files; displayed path samples stop at five.
-- These diagnostics do not prove complete directory traversal: the shared walker can
-  omit a directory it cannot enumerate before a local scanner sees its files.
+- Actual source and test directory enumeration failures are retained separately from
+  file failures, including events with no identified directory. The missing file
+  population is unknown; diagnostic path samples do not count unseen files.
 - Dynamic patch targets are preserved but may have lower confidence.
 - Static target resolution is best-effort.
 - Project-specific boundary words may need future config.
-- Advisory output is the main surface. CI-failing rules should come later after
-  thresholds are tuned for the project.
-
+- Findings remain advisory; analysis and output failures use the execution policy above.
