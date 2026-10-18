@@ -707,6 +707,15 @@ and text, and on stderr for grep so stdout remains data. Existing legacy exits a
 the domain confidence prior remain unchanged; that prior does not measure census
 coverage.
 
+The dict views separately retain analytical source-directory enumeration failures
+as `W-AST-DICT-SOURCE`. Surviving usages and derived schemas remain available, and
+numeric confidence is omitted for this known source loss. Empty text describes what
+is displayed in the analyzed portion; presentation cuts can hide positive uncapped
+observations, so an empty display does not establish absence. Source and hint warnings
+remain distinct even when the same directory fails in both walks. Legacy exits and
+ordinary MCP responses remain unchanged. This source-discovery disclosure applies to
+`dict-heatmap` and `dict-schemas`; hint-only loss keeps its existing confidence prior.
+
 **Expected outcome**: A short list of record types worth declaring (or adopting), with
 locations for the observed readers.
 
