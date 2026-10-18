@@ -151,7 +151,7 @@
   "reveal/display/structure.py::_enrich_structure": 16,
   "reveal/file_handler.py::handle_file": 19,
   "reveal/grep_handler.py::_group_by_element": 16,
-  "reveal/mcp_server.py::reveal_check": 18,
+  "reveal/mcp_server.py::reveal_check": 17,
   "reveal/rendering/adapters/contracts.py::_render_report": 17,
   "reveal/rendering/adapters/markdown_query.py::_render_result_row": 20,
   "reveal/rendering/adapters/overview.py::_render_architecture": 18,
