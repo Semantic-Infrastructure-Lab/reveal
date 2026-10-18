@@ -566,9 +566,7 @@ def _trace_absence_diagnostic_error(result: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _trace_proof_error(result: Any) -> Optional[str]:
-    if not isinstance(result, dict):
-        return 'Trace required answer must be an object'
+def _trace_identity_error(result: Dict[str, Any]) -> Optional[str]:
     if not all(isinstance(result.get(field), str) and result[field] for field in ('root', 'path')):
         return 'Trace required root/path identity is missing or malformed'
     depth = result.get('depth')
@@ -576,6 +574,16 @@ def _trace_proof_error(result: Any) -> Optional[str]:
         return 'Trace required depth is missing or malformed'
     if not all(_trace_count(result.get(field)) for field in ('total_resolved', 'total_unresolved')):
         return 'Trace required edge totals are missing or malformed'
+    return None
+
+
+def _trace_proof_error(result: Any) -> Optional[str]:
+    if not isinstance(result, dict):
+        return 'Trace required answer must be an object'
+    identity_error = _trace_identity_error(result)
+    if identity_error:
+        return identity_error
+    depth = result['depth']
     frames = result.get('frames')
     if not isinstance(frames, list) or not frames:
         return 'Trace required frames are missing or malformed'

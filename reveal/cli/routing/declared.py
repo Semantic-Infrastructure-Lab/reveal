@@ -63,7 +63,6 @@ def run_declared_command(name: str, args, *, answer_consumer=None) -> None:
         dest = spec.cli.dest or spec.name
         if dest in vars(args):
             source[dest] = peek(args, dest)
-            delegate(args, dest, spec.name)
     _run_declared(name, args, getattr(args, adapter.RESOURCE_SPEC.name), source, 'typed',
                   answer_consumer=answer_consumer)
 
@@ -92,6 +91,12 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
         ledger = FlagLedger(args)
         args = ledger.track(args)
     mark(args, *consumed)
+    if transport == 'typed':
+        for spec in adapter.PARAM_SPECS:
+            if spec.cli is not None:
+                dest = spec.cli.dest or spec.name
+                if dest in source:
+                    delegate(args, dest, spec.name)
     query_resource = '?' + source if transport == 'uri' else ''
     if transport == 'uri':
         from .flag_specs import inject_query_flags

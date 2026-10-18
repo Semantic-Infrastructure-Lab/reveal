@@ -1159,8 +1159,11 @@ def _public_answer_diagnostic(adapter, result: dict, facts) -> Optional[str]:
     if not callable(getattr(type(adapter), 'public_diagnostic', None)):
         return None
     diagnostic = adapter.public_diagnostic(result)
-    if diagnostic is not None:
-        result['error'] = diagnostic
+    if diagnostic is None:
+        return None
+    if not isinstance(diagnostic, str):
+        raise TypeError('Public answer diagnostic must be a string or None')
+    result['error'] = diagnostic
     return diagnostic
 
 
