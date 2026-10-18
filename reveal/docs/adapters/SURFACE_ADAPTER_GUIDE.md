@@ -109,6 +109,14 @@ ordinary taxonomy/scope limitations remain disclosed scope. `--fail-on none` is
 supported and never hides incomplete analysis. Surface has no adverse-findings
 predicate, so `--fail-on findings` is rejected.
 
+Required source collection and independent language-coverage census walks disclose
+actual directory enumeration failures separately. Usable requested rows produce an
+incomplete result; no usable requested rows, or malformed required rows, produce a
+failed analysis. These outcomes are decided before output cuts such as `top=0`.
+Directory loss omits numeric and categorical confidence estimates. A healthy empty
+scan keeps its existing complete outcome; census loss does not prove that Surface
+rows or parser results are missing.
+
 `--also-json PATH` works with human output in either spelling. Primary JSON retains
 its existing no-op for that flag. The subcommand's JSON `type` is now `surface_scan`,
 matching the URI form; consumers of the former `surface` identity should update.

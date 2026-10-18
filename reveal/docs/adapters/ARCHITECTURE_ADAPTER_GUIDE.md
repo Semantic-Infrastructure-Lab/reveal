@@ -115,6 +115,14 @@ paths. Confidence remains a separate descriptive field.
 
 ## Limits
 
+The independent `scope` census is an optional composed section. If directory
+enumeration fails, it follows the existing optional-section failure behavior:
+`scope` is empty, one `E_COMPOSE` diagnostic is retained, confidence is `0.0`,
+and the analysis is incomplete (direct CLI exit 3), including an otherwise empty
+result. Directory warnings identify the scope census; they do not establish lost
+imports, AST rows or physical file statistics. Required-analysis failures retain
+their own failure outcome.
+
 - Static imports only — dynamically loaded files (plugins, registries) may
   appear as spurious entry points.
 - Composed, not independent: quality is bounded by `imports://`'s and

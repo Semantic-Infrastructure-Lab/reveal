@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `git://` on a repository libgit2 refuses to open (e.g. a `safe.directory` ownership refusal) now fails with that reason from `get_metadata` too, instead of returning metadata with no path that callers read as "not a repository" (BACK-1845).
 
 ### Fixed
+- Surface retains required source-collection and independent census directory loss before output cuts, validates usable requested rows, and omits confidence estimates under that loss. Architecture and Overview route scope-census enumeration failures through their existing optional-section diagnostics and incomplete outcome (BACK-2028, BACK-2029).
 - Calls reports independent confidence-census directory loss and withholds numeric confidence while retaining healthy query observations. Known directory causes survive warm query-index reuse, output cuts and artifacts; clean empty/unmeasured fallback scores and legacy exits remain unchanged (BACK-2027).
 - Transitive side-effect and boundary navigation retain required directory loss in native carriers and text/JSON warnings. Empty results qualify the analyzed portion, surviving effects stay visible, and existing file-analysis notes and exits remain unchanged (BACK-2025).
 - Depends retains required Ruby classification-inventory directory loss across cache hits and reports resolution risk once per root, preserving observed classifications, source accounting and ordinary request-reset recovery. The historical inventory helper and cache controls remain compatible (BACK-2024).

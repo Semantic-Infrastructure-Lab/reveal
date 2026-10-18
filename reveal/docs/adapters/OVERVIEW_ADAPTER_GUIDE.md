@@ -117,6 +117,14 @@ effect, and generated CLI `--max-items` likewise leaves these arrays unchanged.
 
 ## Limits
 
+The independent `scope` census is an optional composed section. If directory
+enumeration fails, it follows the existing optional-section failure behavior:
+`scope` is empty, one `E_COMPOSE` diagnostic is retained, confidence is `0.0`,
+and the analysis is incomplete (direct CLI exit 3), including an otherwise empty
+result. Directory warnings identify the scope census; they do not establish lost
+imports, AST rows or physical file statistics. Required-analysis failures retain
+their own failure outcome.
+
 - Composed, not independent: quality is bounded by each underlying
   adapter's own coverage for a given language.
 - Static imports only for the architecture section — dynamically loaded
