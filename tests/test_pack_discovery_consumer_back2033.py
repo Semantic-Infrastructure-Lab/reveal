@@ -181,8 +181,14 @@ def test_cli_projection_and_text_artifact_keep_legacy_zero_and_population_uncert
     assert result['meta']['total_candidates'] == (0 if root_loss else 3)
     assert result['meta']['budget_tokens'] == budget
     _warning(result)
+    # Native Pack supports text/JSON/provenance; JSON sidecars use the URI route.
+    if spelling == 'command':
+        native_text = _once(fault, lambda: _run_reveal_direct(*args))
+        assert native_text.returncode == 0 and fault['events']
+        assert (native_text.stdout + native_text.stderr).count('identified directory enumeration(s) failed') == 1
     artifact = tmp_path / 'answer.json'
-    text = _once(fault, lambda: _run_reveal_direct(*args, '--also-json', str(artifact)))
+    artifact_args = ['pack://' + root.as_posix() + f'?budget={budget}&content=true']
+    text = _once(fault, lambda: _run_reveal_direct(*artifact_args, '--also-json', str(artifact)))
     assert text.returncode == 0 and artifact.exists()
     saved = json.loads(artifact.read_text(encoding='utf-8'))
     _warning(saved)
