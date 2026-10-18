@@ -54,7 +54,7 @@ def selective_loss(monkeypatch, root, *, side='head', unknown=False):
             active.pop()
 
     def scandir(path):
-        selected = active and ((active[-1] == root) is (side == 'head'))
+        selected = active and ((active[-1].resolve() == root.resolve()) is (side == 'head'))
         child = active[-1] / 'included_child' if selected else None
         if child is not None and Path(path) == child:
             attempts.append((active[-1], child))
@@ -69,8 +69,15 @@ def selective_loss(monkeypatch, root, *, side='head', unknown=False):
 
 
 def invoke(root, base, transport='command', *extra):
-    arguments = (['architecture', str(root), '--against', base] if transport == 'command'
-                 else [f'architecture://{root.as_posix()}?against={base}'])
+    if transport == 'command':
+        arguments = ['architecture', str(root), '--against', base]
+    else:
+        query = f'against={base}'
+        if '--top' in extra:
+            position = extra.index('--top')
+            query += '&top=' + extra[position + 1]
+            extra = (*extra[:position], *extra[position + 2:])
+        arguments = [f'architecture://{root.as_posix()}?{query}']
     return _run_reveal_direct(*arguments, '--format', 'json', *extra)
 
 
@@ -84,13 +91,13 @@ def test_head_resolution_loss_rejects_deltas_with_healthy_base_and_structures(tm
     attempts = selective_loss(monkeypatch, root)
     if transport == 'mcp':
         answer = reveal_query(f'architecture://{root.as_posix()}?against={base}', provenance=True)
-        assert attempts and all(snapshot == root for snapshot, _ in attempts)
+        assert attempts and all(snapshot.resolve() == root.resolve() for snapshot, _ in attempts)
         assert isinstance(answer, _ToolFailure)
         assert 'Architecture comparison unavailable' in answer
         return
     response = invoke(root, base, transport)
     result = json.loads(response.stdout)
-    assert attempts and all(snapshot == root for snapshot, _ in attempts)
+    assert attempts and all(snapshot.resolve() == root.resolve() for snapshot, _ in attempts)
     states = result['analysis']['snapshots']
     assert states['base'] == {'imports':'complete', 'complexity':'complete'}
     assert states['head']['complexity'] == 'complete'
@@ -109,7 +116,7 @@ def test_actual_base_resolution_warning_does_not_leak_materialization_path(tmp_p
     base = make_repo(root)
     attempts = selective_loss(monkeypatch, root, side='base')
     result = diff.run_architecture_diff(root, base)
-    assert attempts and all(snapshot != root for snapshot, _ in attempts)
+    assert attempts and all(snapshot.resolve() != root.resolve() for snapshot, _ in attempts)
     (warning,) = [entry for entry in result['meta']['warnings'] if entry.get('type') == 'analysis_incomplete']
     assert warning['snapshot'] == 'base'
     assert warning['directories'] == ['included_child']
@@ -160,3 +167,45 @@ def test_mixed_actual_parse_and_discovery_loss_preserves_existing_failed_compari
     assert result['deltas'] is None and not result['analysis']['complete']
     kinds = {warning.get('type') for warning in result['meta']['warnings']}
     assert {'analysis_incomplete', 'partial_parse', 'parse_recovered'} <= kinds
+
+
+def test_unknown_directory_event_rejects_comparison_and_repair_restores_clean_output(tmp_path, monkeypatch):
+    root = tmp_path / 'affected'
+    base = make_repo(root)
+    clean = invoke(root, base)
+    with monkeypatch.context() as context:
+        attempts = selective_loss(context, root, unknown=True)
+        response = invoke(root, base)
+        result = json.loads(response.stdout)
+        assert attempts and response.returncode == 3
+        assert result['deltas'] is None
+        (warning,) = [entry for entry in result['meta']['warnings'] if entry.get('type') == 'analysis_incomplete']
+        assert warning['count'] == 0 and warning['unknown_directory_events'] == 1
+        assert warning['directories'] == []
+    repaired = invoke(root, base)
+    assert (repaired.returncode, repaired.stdout, repaired.stderr) == (clean.returncode, clean.stdout, clean.stderr)
+
+
+@pytest.mark.parametrize('extra', [(), ('--fields','analysis'), ('--head','1'), ('--top','0')])
+def test_failed_comparison_survives_text_json_provenance_projections_and_artifact(tmp_path, monkeypatch, extra):
+    root = tmp_path / 'affected'
+    base = make_repo(root)
+    selective_loss(monkeypatch, root)
+    artifact = tmp_path / 'comparison.json'
+    output = _run_reveal_direct('architecture', str(root), '--against', base,
+                                '--also-json', str(artifact), *extra)
+    assert output.returncode == 3
+    assert 'comparison unavailable' in (output.stdout + output.stderr).lower()
+    # Exactly one authored directory warning qualifies the body; the error boundary
+    # separately announces that no comparison can be delivered.
+    assert (output.stdout + output.stderr).count('missing file population is unknown') == 1
+    saved = json.loads(artifact.read_text(encoding='utf-8'))
+    assert saved['type'] == 'architecture_diff'
+    assert not saved['analysis']['complete']
+    machine = invoke(root, base, 'uri', '--provenance', *extra)
+    assert machine.returncode == 3
+    result = json.loads(machine.stdout)
+    assert result['execution']['command']
+    assert any(warning.get('type') == 'analysis_incomplete' for warning in result['meta']['warnings'])
+    if extra != ('--fields','analysis'):
+        assert result['deltas'] is None
