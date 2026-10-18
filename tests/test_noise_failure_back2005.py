@@ -275,3 +275,13 @@ def test_known_virtualenv_markers_preserve_noise_without_inspection(tmp_path, mo
     assert is_noise_dir(tmp_path, name)
     assert list(_walk_code_files(tmp_path)) == [tmp_path / 'visible.py']
     assert attempts == []
+
+
+def test_evidence_stamp_refuses_persistent_ambiguous_directory_loss(tmp_path, monkeypatch):
+    from reveal.utils.request_cache import _tree_stamp
+    child = tree(tmp_path)
+    assert _tree_stamp(tmp_path) is not None
+    with monkeypatch.context() as context:
+        denial(context, child)
+        assert _tree_stamp(tmp_path) is None
+    assert _tree_stamp(tmp_path) is not None
