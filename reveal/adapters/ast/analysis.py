@@ -412,15 +412,18 @@ def _required_metadata_failures(structure: Dict[str, Any]) -> List[str]:
     return failures
 
 
+def _required_categories(analyzer) -> set:
+    from ...structure import _CATEGORY_MAP
+    return set(_CATEGORY_MAP) | set(getattr(analyzer, 'DECLARATION_CATEGORIES', {}))
+
+
 def _prepare_required_structure(structure: Any, analyzer) -> Tuple[Dict[str, Any], List[str]]:
     """Keep valid consumed records; metadata is not another element schema."""
-    from ...structure import _CATEGORY_MAP
     if not isinstance(structure, dict):
         return {}, [f'AnalysisError: analyzer returned {type(structure).__name__}, expected a structure mapping']
     prepared = dict(structure)
     failures = _required_metadata_failures(structure)
-    categories = set(_CATEGORY_MAP) | set(getattr(analyzer, 'DECLARATION_CATEGORIES', {}))
-    for category in sorted(categories.intersection(structure)):
+    for category in sorted(_required_categories(analyzer).intersection(structure)):
         items = structure[category]
         if not isinstance(items, list):
             prepared[category] = []
@@ -433,8 +436,10 @@ def _prepare_required_structure(structure: Any, analyzer) -> Tuple[Dict[str, Any
     return prepared, failures
 
 
-def _has_usable_observations(result: Dict[str, Any]) -> bool:
-    named = any(isinstance(item.get('name'), str) and item['name'] for item in result['elements'])
+def _has_usable_observations(result: Dict[str, Any], analyzer) -> bool:
+    categories = _required_categories(analyzer)
+    named = any(item['category'] in categories and isinstance(item.get('name'), str) and item['name']
+                for item in result['elements'])
     calls = any(isinstance(site.get('callee'), str) and site['callee']
                 for site in result.get('module_call_sites', []))
     return named or calls
@@ -464,7 +469,7 @@ def _analyzer_outcome(file_path: str, analyzer, outline: bool,
     if parse_failure is not None and parse_failure not in failures:
         failures.append(parse_failure)
     failure = '; '.join(failures) or None
-    return (result if failure is None or _has_usable_observations(result) else None), failure
+    return (result if failure is None or _has_usable_observations(result, analyzer) else None), failure
 
 
 def analyze_file_outcome(file_path: str, outline: bool = False,
