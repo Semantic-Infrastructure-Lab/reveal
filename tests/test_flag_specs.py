@@ -59,7 +59,11 @@ def test_declared_fragment_is_accepted_by_its_adapter_without_warning(scheme, de
     """A declaration the adapter's own validator flags would print a false 'unknown param'
     every time the flag is used (the BACK-1361 failure)."""
     cls = adapters_base.get_adapter_class(scheme)
-    query = fragment.replace('{value}', '2026-01-01')
+    # --limit is numeric; --since/--until use date values.
+    value = '3' if dest == 'limit' else '2026-01-01'
+    query = fragment.replace('{value}', value)
+    if scheme == 'trace':
+        query = 'from=main&' + query  # required constructor origin, independent of this flag
     err = io.StringIO()
     with redirect_stderr(err), caplog.at_level(logging.WARNING):
         cls(str(REPO), query)
