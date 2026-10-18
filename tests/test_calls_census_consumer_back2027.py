@@ -120,7 +120,7 @@ def test_existing_cli_cuts_and_formats_cannot_hide_census_only_loss(tmp_path, fa
     uri = f'calls://{root.as_posix()}?target=target'
     artifact = tmp_path / 'answer.json'
     if view == 'projection':
-        flags = ['--format', 'json', '--fields', 'callers,total_callers', '--max-items', '0', '--provenance']
+        flags = ['--format', 'json', '--fields', 'levels,total_callers', '--max-items', '0', '--provenance']
     elif view == 'sidecar':
         uri += '&format=json'
         flags = ['--format', 'text', '--also-json', str(artifact), '--provenance']
@@ -142,7 +142,7 @@ def test_existing_cli_cuts_and_formats_cannot_hide_census_only_loss(tmp_path, fa
         if view == 'sidecar':
             assert json.loads(artifact.read_text(encoding='utf-8')) == data
         else:
-            assert data['callers'] == []
+            assert data['levels'] == []
 
 
 @pytest.mark.parametrize('provenance', [False, True])
