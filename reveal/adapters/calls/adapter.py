@@ -76,7 +76,7 @@ _HELP: Dict[str, Any] = {
     ],
     'notes': [
         'Static analysis only — dynamic dispatch (callbacks, metaclasses) is not resolved.',
-        'Results are cached per-directory; any file change triggers a full rebuild.',
+        'Callers indexes use directory-mtime and scope keys; these do not detect every file change.',
         'Callee names are normalised: "self.foo" → "foo" for index lookup.',
         'depth=N expands callers transitively up to N levels (capped at 5).',
         '?callees=X finds every definition of X and shows what it calls — useful for multi-file functions.',
@@ -227,7 +227,7 @@ _SCHEMA: Dict[str, Any] = {
     ],
     'notes': [
         'Static analysis only — dynamic dispatch, callbacks, and metaclasses are not resolved.',
-        'Results are cached per-directory; any file change triggers a full index rebuild.',
+        'Callers indexes use directory-mtime and scope keys; these do not detect every file change.',
         'Callee names are normalised: "self.foo" → "foo" for lookup; full dotted form also indexed.',
         '?target depth=N expands callers transitively up to N levels (capped at 5).',
         '?callees=X scans all definitions of X — useful when the name appears in multiple files.',
