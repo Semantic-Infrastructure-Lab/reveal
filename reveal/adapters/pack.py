@@ -82,7 +82,7 @@ def _get_changed_files(path: Path, since_ref: str) -> Tuple[Set[str], Optional[s
     try:
         root_result = subprocess.run(
             ['git', 'rev-parse', '--show-toplevel'],
-            capture_output=True, text=True, cwd=str(path), timeout=10, encoding='utf-8', errors='replace',
+            capture_output=True, text=True, cwd=str(path.parent if path.is_file() else path), timeout=10, encoding='utf-8', errors='replace',
         )
         if root_result.returncode != 0:
             return set(), "not a git repository"
