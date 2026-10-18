@@ -210,6 +210,13 @@ def _print_capability_warnings(data: Dict[str, Any], output_format: str = 'text'
         print(line, file=sys.stderr if output_format == 'grep' else sys.stdout)
 
 
+def _dict_source_incomplete(data: Dict[str, Any]) -> bool:
+    """Distinguish analytical source loss from advisory language-hint loss."""
+    from reveal.analyzers._python_dict_usage import DICT_SOURCE_WARNING_CODE
+    return any(warning.get('code') == DICT_SOURCE_WARNING_CODE
+               for warning in (data.get('meta') or {}).get('warnings') or [])
+
+
 def _render_dict_heatmap(data: Dict[str, Any], output_format: str) -> None:
     """Render show=dict-heatmap bare-dict param ranking."""
     from reveal.adapters.ast.nav_dict_heatmap import render_dict_heatmap
@@ -228,7 +235,8 @@ def _render_dict_heatmap(data: Dict[str, Any], output_format: str) -> None:
         _print_capability_warnings(data, output_format)
         return
 
-    print(render_dict_heatmap(results, path, unsupported_language))
+    print(render_dict_heatmap(results, path, unsupported_language,
+                              source_incomplete=_dict_source_incomplete(data)))
     _print_capability_warnings(data)
 
 
@@ -249,7 +257,8 @@ def _render_dict_schemas(data: Dict[str, Any], output_format: str) -> None:
         _print_capability_warnings(data, output_format)
         return
 
-    print(render_dict_schemas(results, data.get('path', '.'), data.get('unsupported_language', '')))
+    print(render_dict_schemas(results, data.get('path', '.'), data.get('unsupported_language', ''),
+                              source_incomplete=_dict_source_incomplete(data)))
     _print_capability_warnings(data)
 
 

@@ -27,9 +27,15 @@ def _describe(item: Dict[str, Any]) -> str:
 
 
 def render_dict_heatmap(
-    items: List[Dict[str, Any]], path: str, unsupported_language: str = '',
+    items: List[Dict[str, Any]], path: str, unsupported_language: str = '', *,
+    source_incomplete: bool = False,
 ) -> str:
     if not items:
+        if source_incomplete:
+            return (
+                'dict heatmap: no untyped-dict names with key accesses displayed in the '
+                f'analyzed portion of {path}; analysis is incomplete'
+            )
         if unsupported_language:
             return (
                 f"dict heatmap: Python-only — no .py/.pyi files found in {path}\n"
@@ -74,9 +80,15 @@ def render_dict_heatmap(
 
 
 def render_dict_schemas(
-    schemas: List[Dict[str, Any]], path: str, unsupported_language: str = '',
+    schemas: List[Dict[str, Any]], path: str, unsupported_language: str = '', *,
+    source_incomplete: bool = False,
 ) -> str:
     if not schemas:
+        if source_incomplete:
+            return (
+                f'dict schemas: no untyped dict shapes shared by {SCHEMA_MIN_CONSUMERS}+ '
+                f'functions displayed in the analyzed portion of {path}; analysis is incomplete'
+            )
         if unsupported_language:
             return (
                 f"dict schemas: Python-only — no .py/.pyi files found in {path}\n"

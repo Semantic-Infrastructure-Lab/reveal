@@ -49,15 +49,20 @@ def _capability_hint_warnings(feature: str, path: Path) -> List[WarningEntry]:
     failures: List[OSError] = []
     hint = python_only_warning(feature, path, on_error=failures.append)
     warnings = [hint] if hint else []
-    warning = traversal_failed_warning([
-        (to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}')
-        for error in failures], path)
+    warning = _directory_event_warning(failures, path)
     if warning:
         warning['message'] = (
             'Capability-language hint census is incomplete; foreign-language counts describe '
             'observed files only; ' + warning['message'])
         warnings.append(warning)
     return warnings
+
+
+def _directory_event_warning(failures: List[OSError], path: Path) -> Optional[WarningEntry]:
+    """Use the shared directory formatter for actual events from one population."""
+    return traversal_failed_warning([
+        (to_posix(error.filename) if error.filename else None, f'{type(error).__name__}: {error}')
+        for error in failures], path)
 
 
 def _degraded_conformance_warning(elements: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -396,9 +401,10 @@ class AstAdapter(ResourceAdapter):
     def _dict_analysis_result(self) -> Dict[str, Any]:
         """show=dict-heatmap / show=dict-schemas: Python untyped-dict analysis."""
         from ...analyzers._python_dict_usage import (
-            collect_dict_analysis, collect_dict_schemas, has_python_files,
+            DICT_SOURCE_WARNING_CODE, collect_dict_analysis, collect_dict_schemas, has_python_files,
         )
-        items, typeddicts = collect_dict_analysis(self.path)
+        failures: List[OSError] = []
+        items, typeddicts = collect_dict_analysis(self.path, on_error=failures.append)
         if self.show_mode == 'dict-heatmap':
             results = items
         else:
@@ -408,8 +414,15 @@ class AstAdapter(ResourceAdapter):
             from ...utils.path_utils import detect_non_python_language
             unsupported_language = detect_non_python_language(Path(self.path))
         warnings = _capability_hint_warnings(self.show_mode, Path(self.path))
+        source_warning = _directory_event_warning(failures, Path(self.path))
+        if source_warning:
+            source_warning['code'] = DICT_SOURCE_WARNING_CODE
+            source_warning['message'] = (
+                'Python dict source discovery is incomplete; dict usages, TypedDicts, and '
+                'shared-schema observations may be missing; ' + source_warning['message'])
+            warnings.append(source_warning)
         meta = self.create_meta(parse_mode='python_ast',
-                                confidence=1.0, warnings=warnings, errors=[])
+                                confidence=None if failures else 1.0, warnings=warnings, errors=[])
         result = ResultBuilder.create(
             result_type='ast_' + self.show_mode.replace('-', '_'),
             source=self.path,

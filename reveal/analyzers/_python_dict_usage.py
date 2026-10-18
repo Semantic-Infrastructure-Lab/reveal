@@ -45,7 +45,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, FrozenSet, Iterable, Iterator, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, FrozenSet, Iterable, Iterator, List, Optional, Set, Tuple
 
 from ..utils.path_utils import WalkPurpose, _walk_code_files
 from ..utils.pyparse import parse_python, statement_index
@@ -59,6 +59,8 @@ _WRAPPER_ANNOTATION_NAMES = frozenset({'Optional', 'Union'})
 _KEY_METHODS = frozenset({'get', 'pop', 'setdefault'})
 _SKIP_NAMES = frozenset({'self', 'cls'})
 _FuncNode = (ast.FunctionDef, ast.AsyncFunctionDef)
+
+DICT_SOURCE_WARNING_CODE = 'W-AST-DICT-SOURCE'
 
 MIN_UNTYPED_KEYS = 2
 SCHEMA_MIN_SHARED_KEYS = 3
@@ -78,14 +80,17 @@ class ScanContext:
 
 # ─────────────────────────── whole-path entry points ─────────────────────────
 
-def collect_dict_analysis(path: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+def collect_dict_analysis(
+    path: str, *, on_error: Optional[Callable[[OSError], None]] = None,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """(usage records, TypedDicts) for every .py/.pyi under path.
 
     Two phases because key constants and dict aliases are usually defined in
     a different module (const.py, typing.py) from the ones reading them: every
     file is parsed first to build the context, then functions are scanned.
     """
-    trees = [(f, t) for f in iter_python_files(path) for t in [parse_file(f)] if t is not None]
+    trees = [(f, t) for f in iter_python_files(path, on_error=on_error)
+             for t in [parse_file(f)] if t is not None]
     ctx = build_context(t for _, t in trees)
 
     usages: List[Dict[str, Any]] = []
@@ -113,7 +118,10 @@ def has_python_files(path: str) -> bool:
     return next(iter_python_files(path), None) is not None
 
 
-def iter_python_files(path: str, purpose: Optional[WalkPurpose] = None) -> Iterator[str]:
+def iter_python_files(
+    path: str, purpose: Optional[WalkPurpose] = None, *,
+    on_error: Optional[Callable[[OSError], None]] = None,
+) -> Iterator[str]:
     """The .py/.pyi files under *path*, in a stable order, through the shared walker
     (BACK-1223): the dict heatmap is an analysis walk; T006's project index passes
     ``EVIDENCE``, so ``--exclude`` narrows its report, not the aliases it matches against."""
@@ -124,7 +132,7 @@ def iter_python_files(path: str, purpose: Optional[WalkPurpose] = None) -> Itera
         return
     if not path_obj.is_dir():
         return
-    for file_path in _walk_code_files(path_obj, purpose=purpose, sort=True):
+    for file_path in _walk_code_files(path_obj, purpose=purpose, sort=True, on_error=on_error):
         if file_path.suffix in ('.py', '.pyi'):
             yield str(file_path)
 
