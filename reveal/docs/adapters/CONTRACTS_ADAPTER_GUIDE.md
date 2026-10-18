@@ -91,10 +91,11 @@ When recovery occurs, `recovered_files` and a `parse_recovered` warning identify
 those files. Failed supported inputs reduce `coverage.analyzed_files` once per
 distinct file; warnings and `meta.errors` retain the consuming scanner's exact
 failure cause. A separate shared analysis failure does not invalidate a successful
-native contract scan. Empty and unsupported inventories remain nonfatal.
+native contract scan. Healthy empty and disclosed unsupported inventories remain nonfatal.
 
-Required scanner directory-enumeration failures retain attributed warnings,
-including when activation finds no supported scanner. Shared and native scanner
+Required scanner and independent coverage-census directory-enumeration failures
+retain separate attributed warnings, including when activation finds no supported
+scanner. Shared and native scanner
 observations remain available. With validated requested contract or implementation
 rows, analysis is incomplete; without usable rows, or with malformed required
 rows, it fails. The fixed numeric confidence is omitted for directory loss because
@@ -105,7 +106,10 @@ These facts are established before implementer caps, fields and artifacts. Faile
 CLI text retains directory diagnostics once, and MCP reports failed analysis as
 an error under its existing failure policy. Useful partial MCP results retain the
 rows and warning. Clean zero, unsupported scope and preexisting parse-only policy
-remain unchanged. Independent coverage-census traversal has separate limitations.
+remain unchanged. Census-only loss qualifies coverage counts and language claims;
+it does not establish missing contract rows or failed parsing. If source and census
+walks both fail, each population retains its warning and source-failure diagnostics
+keep their existing precedence.
 
 Direct `reveal contracts` and `contracts://` requests exit 0 for complete work,
 2 for invalid parameters or missing resources, and 3 for required analysis or

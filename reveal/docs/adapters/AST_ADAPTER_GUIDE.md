@@ -698,8 +698,17 @@ Scan the package root: TypedDicts are matched only if defined under the scanned 
 TypedDict or the reader is wrong before annotating. Keys may be literals or ALL_CAPS constants;
 dict type aliases (`ConfigType = dict[str, Any]`) count as untyped dicts.
 
-**Expected outcome**: A short list of record types worth declaring (or adopting), with every reader
-located.
+These Python-only modes (`dict-heatmap`, `dict-schemas`, and `reveal_type`) use an
+independent language census for capability hints. Directory enumeration failures in
+that census retain an attributed warning: foreign-language counts describe observed
+files, and the missing population is unknown. This warning concerns the hint census;
+it does not establish missing analytical rows or failed parsing. It appears in JSON
+and text, and on stderr for grep so stdout remains data. Existing legacy exits and
+the domain confidence prior remain unchanged; that prior does not measure census
+coverage.
+
+**Expected outcome**: A short list of record types worth declaring (or adopting), with
+locations for the observed readers.
 
 ---
 
