@@ -83,6 +83,7 @@ def test_malformed_falsy_required_response_is_not_clean_empty(source, monkeypatc
 @pytest.mark.parametrize('raw', [
     {'functions': 'not a collection'},
     {'functions': [None]},
+    {'functions': [{}]},
     {'imports': [42]},
 ])
 def test_malformed_consumed_categories_are_disclosed(source, monkeypatch, raw):
@@ -111,6 +112,16 @@ def test_required_metadata_failure_survives_flattening_and_collection(source, mo
     assert [item['name'] for item in collected[0]['elements']] == ['main']
     assert collected.skipped and collected.skipped[0][0] == str(source)
     assert 'required structure branch failed' in collected.skipped[0][1]
+
+
+def test_required_failure_with_only_metadata_has_no_usable_observations(source, monkeypatch):
+    _provide(monkeypatch, {
+        'metadata': {'nonempty': True},
+        'meta': {'errors': [{'code': 'analysis_failed', 'message': 'required parser branch failed'}]},
+    })
+    structure, failure = analysis.analyze_file_outcome(str(source))
+    assert structure is None
+    assert failure and 'required parser branch failed' in failure
 
 
 def test_lost_grammar_reaches_existing_ast_result_beside_usable_file(tmp_path, monkeypatch):
@@ -175,6 +186,7 @@ def test_optional_enrichment_and_harmless_metadata_do_not_fail_required_structur
         'functions': [FUNCTION], '_imports_failed': 'RuntimeError: optional import enrichment',
         'metadata': {'note': 'harmless analyzer metadata'},
         'language': 'go', 'source_summary': 42,
+        'tags': ['harmless list metadata'],
         'meta': {'warnings': [{'type': 'imports_failed', 'message': 'optional import enrichment'}]},
     })
 
