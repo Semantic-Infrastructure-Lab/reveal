@@ -122,3 +122,15 @@ def test_compatible_absence_provenance_is_parseable_json(tmp_path):
         assert answer['error'] and answer['execution']['command']
 
     _run(tmp_path, scenario)
+
+
+def test_applied_trace_depth_has_no_false_unused_flag_warning(tmp_path):
+    (tmp_path / 'app.py').write_text('def main():\n    helper()\n\ndef helper():\n    third()\n', encoding='utf-8')
+
+    async def scenario(session):
+        answer = await session.call_tool('reveal_trace', {'path': str(tmp_path), 'entry_point': 'main', 'depth': 1})
+        assert not answer.is_error
+        assert 'depth 1' in _text(answer)
+        assert '--depth has no effect' not in _text(answer)
+
+    _run(tmp_path, scenario)
