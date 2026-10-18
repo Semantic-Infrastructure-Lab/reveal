@@ -127,9 +127,10 @@ def test_top_zero_retains_uncapped_real_ast_observation(tmp_path, name):
 
 
 @pytest.mark.parametrize('kind', ['boolean_count', 'count_mismatch', 'bad_complexity'])
-def test_malformed_ast_cannot_rescue_directory_loss(tmp_path, kind):
+@pytest.mark.parametrize('surviving_edge', [False, True])
+def test_malformed_ast_cannot_rescue_directory_loss(tmp_path, kind, surviving_edge):
     from reveal.adapters.ast import AstAdapter
-    child = tree(tmp_path, 'lost')
+    child = tree(tmp_path, 'edge' if surviving_edge else 'lost')
     data = {'results': [], 'total_files': 0, 'total_results': 1, 'displayed_results': 0}
     if kind == 'boolean_count':
         data['total_results'] = True
