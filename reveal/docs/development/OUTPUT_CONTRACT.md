@@ -506,6 +506,15 @@ Overview and Hotspots consume this propagated AST warning as required incomplete
 This is bounded consumer coverage: other walkers and the Calls, Contracts and transitive
 side-effect collection carriers are not yet qualified for directory failure disclosure.
 
+Shared AST file analysis also discloses required parser loss as `analysis_failed`:
+an existing `parse_error` (including an empty message), malformed consumed analyzer
+output, or required `meta.errors` survives flattening into the answer. Usable
+observations from the existing owned categories remain alongside the attributed
+failure; arbitrary metadata does not prove usable partial analysis. Clean empty
+structures, supported cached artifacts and optional import enrichment retain their
+existing behavior. This is a producer repair, not an exhaustive row-schema validator
+or adoption of the declared execution policy by legacy testability reports.
+
 Trace supports only `none`. Required nonempty `from` preserves typed strings and
 uses once-only percent decoding for URI scalars without plus decoding. Signed
 whole `depth` defaults to 2 and clamps to 1–5; booleans, fractions and scientific

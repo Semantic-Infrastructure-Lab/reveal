@@ -445,6 +445,7 @@ def _has_usable_observations(result: Dict[str, Any], analyzer) -> bool:
 
 def _analyzer_outcome(file_path: str, analyzer, outline: bool,
                       needle: Optional[str]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    from ...core.treesitter_parse import GrammarUnavailable
     structure = analyzer.get_outline() if outline else analyzer.get_structure()
     if outcome_of(structure) == 'failed':
         return None, str(structure['error'])
@@ -462,7 +463,10 @@ def _analyzer_outcome(file_path: str, analyzer, outline: bool,
         if needle is not None:
             result['name_in_text'] = needle in getattr(analyzer, 'content', '')
     else:
-        _add_call_sites(result, file_path, analyzer)
+        try:
+            _add_call_sites(result, file_path, analyzer)
+        except GrammarUnavailable as exc:
+            failures.append(_parser_failure(analyzer) or f'GrammarUnavailable: {exc}')
     parse_failure = _parser_failure(analyzer)
     if parse_failure is not None and parse_failure not in failures:
         failures.append(parse_failure)
