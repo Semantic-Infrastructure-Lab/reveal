@@ -14,7 +14,7 @@ from ..utils.query_control import ScanBudget
 import os
 from dataclasses import replace
 from pathlib import Path
-from typing import Dict, Any, List, NamedTuple, Optional, Set, Tuple
+from typing import Callable, Dict, Any, List, NamedTuple, Optional, Set, Tuple
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
@@ -30,6 +30,7 @@ from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder, note_truncation, note_warning
 from ..utils.path_utils import (
     traversal_failed_warning,
+    to_posix,
     is_unsafe_scan_root,
     resolve_project_root,
     search_parents,
@@ -832,7 +833,7 @@ class DependsAdapter(ResourceAdapter):
         # per scan, gated on the language actually being present (files may span
         # languages for a directory target), so this is a no-op glob for every
         # other tree.
-        load_path_roots = self._build_load_path_roots(files, scan_root)
+        load_path_roots = self._build_load_path_roots(files, scan_root, on_error=self._record_manifest_failure)
         # Built empty and mutated in place by _index_one_file below — every
         # field is a mutable List/Set/Dict, so there is no reassignment
         # risk, and it lets the per-file helper take the same one-bundle
@@ -941,8 +942,15 @@ class DependsAdapter(ResourceAdapter):
                     for ns in declared:
                         indices.member_index.setdefault((ns, typename), []).append(file_path)
 
+    def _record_manifest_failure(self, error: OSError) -> None:
+        """Resolution loss joins graph diagnostics without changing the source census."""
+        failure = (to_posix(error.filename) if error.filename else None,
+                   f'{type(error).__name__}: {error}')
+        self._traversal_failures += (failure,)
+
     @staticmethod
-    def _build_load_path_roots(files: List[Path], scan_root: Path) -> List[Path]:
+    def _build_load_path_roots(files: List[Path], scan_root: Path, *,
+                               on_error: Optional[Callable[[OSError], None]] = None) -> List[Path]:
         """BACK-669 solidus second-corpus loop: every ``<dir>/lib`` sibling of a
         ``spec.load_path_manifest_glob`` match (RubyGems ``*.gemspec``) under
         ``scan_root`` — the real Bundler ``$LOAD_PATH`` roots a multi-gem
@@ -973,7 +981,7 @@ class DependsAdapter(ResourceAdapter):
             return []
         manifest_glob, lib_dirname = glob[0], str(glob[1])
         lib_dirs = (manifest.parent / lib_dirname
-                    for manifest in load_path_manifests(scan_root, manifest_glob))
+                    for manifest in load_path_manifests(scan_root, manifest_glob, on_error=on_error))
         return [lib_dir for lib_dir in lib_dirs if lib_dir.is_dir()]
 
     @staticmethod

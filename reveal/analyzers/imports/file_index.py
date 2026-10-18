@@ -58,12 +58,14 @@ def basename_index(roots: Iterable[Path], *,
     return index
 
 
-def load_path_manifests(root: Path, pattern: str) -> List[Path]:
+def load_path_manifests(root: Path, pattern: str, *,
+                        on_error: Optional[Callable[[OSError], None]] = None) -> List[Path]:
     """Every manifest matching *pattern* (RubyGems ``*.gemspec``) under *root*, found by the
     resolution walk: noise directories are never entered, and the skip is judged relative
     to *root* -- the old filter tested the absolute path, so a project under ``~/.cache``
     lost every gemspec."""
-    return [path for path, _ in walk_with_causes(root, RESOLUTION) if fnmatch(path.name, pattern)]
+    return [path for path, _ in walk_with_causes(root, RESOLUTION, on_error=on_error)
+            if fnmatch(path.name, pattern)]
 
 
 def resolution_fingerprint(candidates: Iterable[Path], index: Dict[str, List[Path]],
