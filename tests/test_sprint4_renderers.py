@@ -30,7 +30,8 @@ def test_real_clean_hotspots_result_keeps_clean_verdict(tmp_path):
     (tmp_path / 'clean.py').write_text('def small():\n    return 1\n', encoding='utf-8')
     result = _run('hotspots', tmp_path)
     assert result.returncode == 0
-    assert 'No hotspots found ✅  Code quality looks good.' in result.stdout
+    assert 'No hotspots found in the requested analyzed population.' in result.stdout
+    assert 'Code quality looks good' not in result.stdout  # BACK-1974: no all-clear claim
     assert 'complexity is McCabe' in result.stdout
 
 
@@ -44,7 +45,7 @@ def test_empty_hotspots_does_not_call_internal_filter_a_typo(tmp_path):
 def test_parse_degraded_hotspots_never_claims_clean(tmp_path):
     (tmp_path / 'broken.py').write_text('def broken(:\n    pass\n', encoding='utf-8')
     result = _run('hotspots', tmp_path)
-    assert result.returncode == 0
+    assert result.returncode == 3  # required parse loss is incomplete analysis (D6), not a clean 0
     assert 'Code quality looks good' not in result.stdout
 
 

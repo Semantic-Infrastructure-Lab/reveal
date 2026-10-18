@@ -260,9 +260,9 @@ def test_the_subcommand_says_what_its_uri_form_says(proj):
 
 
 def test_a_subcommand_cut_is_printed_before_its_findings_exit(proj):
-    """hotspots exits 1 on findings (EXIT_CODE_CONTRACT); the cut line still prints first."""
+    """hotspots exits 1 on findings when asked (--fail-on findings; default none); the cut line still prints first."""
     _two_complex_functions(proj, branches=24)  # complexity > 20 is a hotspots finding
-    r = _run_reveal_direct('hotspots', '.', '--top', '1', '--min-complexity', '1')
+    r = _run_reveal_direct('hotspots', '.', '--top', '1', '--min-complexity', '1', '--fail-on', 'findings')
     assert r.returncode == 1
     assert '⚠ Truncated function_hotspots: showing 1 of ' in r.stdout
     payload = json.loads(_run_reveal_direct(
