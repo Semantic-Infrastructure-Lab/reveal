@@ -43,6 +43,8 @@ class WarningEntry(TypedDict, total=False):
     unknown_directory_events: int
     # The --fields names that matched nothing ('fields_unmatched', BACK-1607).
     fields: List[str]
+    # The check rule whose scan produced the warning (stats rule-scan disclosures, BACK-2042).
+    rule: str
 
 
 class RevealMeta(TypedDict, total=False):

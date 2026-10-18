@@ -327,6 +327,22 @@ class TestComposedMetaConsuming(unittest.TestCase):
         second = self.adapter.composed_meta()
         self.assertIsNone(second)
 
+    def test_omit_warnings_drops_matching_child_warnings_before_the_fold(self):
+        """A child warning the parent discloses itself is dropped, not repeated (BACK-2042)."""
+        class Child(ResourceAdapter):
+            def __init__(self, resource=None, query=None):
+                super().__init__()
+
+            def get_structure(self, **kwargs):
+                return {'meta': {'warnings': [
+                    {'type': 'analysis_incomplete', 'rule': 'I002', 'message': 'owned elsewhere'},
+                    {'type': 'analysis_incomplete', 'rule': 'D005', 'message': 'kept'},
+                ]}}
+
+        self.adapter.compose(Child, 'r', omit_warnings=lambda w: w.get('rule') == 'I002')
+        meta = self.adapter.composed_meta()
+        self.assertEqual([w['message'] for w in meta['warnings']], ['kept'])
+
     def test_fresh_error_after_consumption_is_reported_alone(self):
         self.adapter.record_composed_error('child', 'r', RuntimeError('first'))
         self.adapter.composed_meta()  # consumes it

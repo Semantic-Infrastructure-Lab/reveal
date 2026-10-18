@@ -1,5 +1,6 @@
 """Statistics adapter (stats://) for codebase metrics and hotspots."""
 
+import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, cast
 from reveal.reveal_types import CONTRACT_VERSION
@@ -325,11 +326,15 @@ class StatsAdapter(ResourceAdapter):
 
     def _disclose_rule_scans(self, result: dict) -> None:
         for message in self._check_scan_disclosures:
-            note_warning(result, {
+            entry = {
                 'type': 'analysis_incomplete',
                 'message': ('Check-issue counts, quality scores, and rankings may be inaccurate '
                             f'or incomplete: {message}'),
-            })
+            }
+            rule = re.match(r'([A-Z]\d{3}):', message)
+            if rule:
+                entry['rule'] = rule.group(1)
+            note_warning(result, entry)
 
     def _apply_sorting(self, file_stats: list) -> list:
         """Apply sorting to file stats if sort field is specified."""

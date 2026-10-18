@@ -300,7 +300,10 @@ def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int, *,
     query += f'&respect_gitignore={"true" if adapter.respect_gitignore else "false"}'
     stats = _required_child(adapter, StatsAdapter, path, _validate_stats, query=query,
                             observations=observations,
-                            cut_as=('hotspots', 'raise ?top=N'))
+                            cut_as=('hotspots', 'raise ?top=N'),
+                            # I002's import-graph loss is the imports slice's fact: disclosed
+                            # there when requested, skipped under no_imports (BACK-2018).
+                            omit_warnings=lambda w: w.get('rule') == 'I002')
     if observations is not None and any(_measured_stats(entry) for entry in stats.get('files', [])):
         observations['usable'] = True
     if stats.get('warnings'):

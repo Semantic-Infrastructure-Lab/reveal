@@ -15,7 +15,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
-from typing import Dict, Any, Iterable, Optional, List, Tuple
+from typing import Callable, Dict, Any, Iterable, Optional, List, Tuple
 
 from reveal.reveal_types import RevealMeta, RevealResult, WarningEntry
 
@@ -315,6 +315,7 @@ class ResourceAdapter(ABC):
     def compose(self, adapter_cls: type, resource: Any, *,
                 query: Optional[str] = None, default: Any = None,
                 cut_as: Optional[Tuple[str, str]] = None,
+                omit_warnings: Optional[Callable[[Any], bool]] = None,
                 **params: Any) -> Any:
         """Run a sibling adapter in-process as part of this adapter's own scan.
 
@@ -345,6 +346,10 @@ class ResourceAdapter(ABC):
         ``cut_as=(field, hint)``: this adapter shows the child's list as its own
         ``field``, cut by its own knob (``hint``), so the child's truncation is restated
         that way before it is folded (BACK-1059). Without it the child's wording is kept.
+
+        ``omit_warnings``: a predicate for child warnings that restate a fact this adapter
+        discloses itself; matching entries are dropped from the child's result before the
+        fold, so they neither repeat in nor change the completeness of this adapter.
         """
         if query is None and params:
             from urllib.parse import urlencode
@@ -363,7 +368,10 @@ class ResourceAdapter(ABC):
             echo_source(result, str(resource))  # the sibling's source, as this adapter named it (BACK-1366)
             if cut_as:
                 relabel_truncations(result, *cut_as)
-            self.fold_meta(result.get('meta'))
+            child_meta = result.get('meta')
+            if omit_warnings and child_meta and child_meta.get('warnings'):
+                child_meta['warnings'] = [w for w in child_meta['warnings'] if not omit_warnings(w)]
+            self.fold_meta(child_meta)
             if result.get('error'):
                 self.record_composed_error(child_name, resource, ValueError(str(result['error'])))
 
