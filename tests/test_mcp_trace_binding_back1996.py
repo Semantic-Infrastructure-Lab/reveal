@@ -134,3 +134,44 @@ def test_applied_trace_depth_has_no_false_unused_flag_warning(tmp_path):
         assert '--depth has no effect' not in _text(answer)
 
     _run(tmp_path, scenario)
+
+
+@pytest.mark.parametrize('tool', ['reveal_trace', 'reveal_query'])
+def test_all_required_inputs_lost_is_failure_not_usable_partial(tmp_path, tool):
+    (tmp_path / 'app.py').write_text('def main():\n    return 1\n', encoding='utf-8')
+    code = '''
+from reveal import mcp_server
+from reveal.adapters.ast import analysis
+
+def collect(path):
+    result = analysis.StructureList()
+    result.skipped = [(str(path) + '/app.py', 'PermissionError: PRIVATE_INPUT_LOSS')]
+    return result
+
+analysis.collect_structures = collect
+mcp_server.main()
+'''
+
+    async def scenario(session):
+        arguments = ({'path': str(tmp_path), 'entry_point': 'main'} if tool == 'reveal_trace'
+                     else {'uri': f'trace://{tmp_path}?from=main', 'provenance': True})
+        answer = await session.call_tool(tool, arguments)
+        assert answer.is_error
+        assert 'usable evidence follows' not in _text(answer)
+        assert 'PRIVATE_INPUT_LOSS' not in json.dumps(answer.model_dump(mode='json'))
+
+    _run(tmp_path, scenario, code)
+    assert 'analysis_failed' in (tmp_path / 'server-stderr.txt').read_text(encoding='utf-8')
+
+
+def test_qualified_json_does_not_silence_ignored_query_warning(tmp_path):
+    (tmp_path / 'app.py').write_text('def main():\n    return 1\n', encoding='utf-8')
+
+    async def scenario(session):
+        answer = await session.call_tool('reveal_query', {
+            'uri': f'trace://{tmp_path}?from=main&bogus=1', 'provenance': True})
+        assert not answer.is_error
+        assert 'Unknown query param' in _text(answer)
+        assert 'bogus' in _text(answer)
+
+    _run(tmp_path, scenario)
