@@ -395,6 +395,18 @@ def _structures_or_collect(structures: Optional[StructureList], directory: Path)
     return collect_structures(str(directory)) if structures is None else structures
 
 
+def _cache_callers_index(dir_str: str, cache_key: Any, index: CallersIndex,
+                         structures: StructureList) -> None:
+    # Directory mtimes cannot prove recovery after an included subtree was unreadable.
+    if getattr(structures, 'traversal_failures', []):
+        _INDEX_CACHE.pop(dir_str, None)
+        return
+    _INDEX_CACHE[dir_str] = (cache_key, index)
+    _INDEX_CACHE.move_to_end(dir_str)
+    if len(_INDEX_CACHE) > _INDEX_CACHE_MAX:
+        _INDEX_CACHE.popitem(last=False)
+
+
 def build_callers_index(path: str, structures: Optional[StructureList] = None) -> CallersIndex:
     """Return project-level callers index for *path* (file or directory).
 
@@ -479,14 +491,7 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
                                   call_lines=sorted({site['line'] for site in sites if site.get('relationship') != 'jsx_reference'}))
                 _index_callee(index, callee, record, alias_map, class_aliases)
 
-    # Directory mtimes cannot prove recovery after an included subtree was unreadable.
-    if getattr(structures, 'traversal_failures', []):
-        _INDEX_CACHE.pop(dir_str, None)
-        return index
-    _INDEX_CACHE[dir_str] = (cache_key, index)
-    _INDEX_CACHE.move_to_end(dir_str)
-    if len(_INDEX_CACHE) > _INDEX_CACHE_MAX:
-        _INDEX_CACHE.popitem(last=False)
+    _cache_callers_index(dir_str, cache_key, index, structures)
     return index
 
 
