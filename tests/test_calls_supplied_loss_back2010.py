@@ -46,7 +46,7 @@ def test_real_supplied_loss_supersedes_matching_warm_hit(tmp_path, monkeypatch, 
         supplied = collect_structures(str(root))
         assert len(supplied.traversal_failures) == 1
         failed_directory, cause = supplied.traversal_failures[0]
-        assert failed_directory == str(child)
+        assert failed_directory == child.as_posix()
         assert cause.startswith('PermissionError:')
         assert 'controlled included child loss' in cause
         assert calls_index._INDEX_CACHE[str(root)][0] == warm_key
@@ -82,3 +82,19 @@ def test_healthy_supplied_collection_keeps_matching_warm_identity(tmp_path, monk
     monkeypatch.setattr(calls_index, 'collect_structures', unexpected_collection)
     assert calls_index.build_callers_index(str(root), supplied) is warm
     assert callers(warm) == {'visible', 'hidden'}
+
+
+def test_empty_supplied_collection_keeps_matching_warm_identity(tmp_path, monkeypatch):
+    root = tmp_path / 'empty'
+    root.mkdir()
+    supplied = collect_structures(str(root))
+    assert not supplied
+    assert not supplied.traversal_failures
+    warm = calls_index.build_callers_index(str(root), supplied)
+    assert not warm
+
+    def unexpected_collection(*args, **kwargs):
+        pytest.fail('a supplied empty collection must not trigger another collection')
+
+    monkeypatch.setattr(calls_index, 'collect_structures', unexpected_collection)
+    assert calls_index.build_callers_index(str(root), supplied) is warm
