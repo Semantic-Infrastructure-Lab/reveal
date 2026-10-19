@@ -54,10 +54,24 @@ def _project(root, survivor=True, local=False, children=1):
     return checked, hidden
 
 
+def _why_untrusted(root, started_ns):
+    """Why request_cache._tree_stamp refused *root*: walk errors, or files newer than the request."""
+    from reveal.utils.path_utils import _walk_code_files
+    errors = []
+    newer = []
+    try:
+        for path in _walk_code_files(Path(root), purpose=EVIDENCE, on_error=errors.append):
+            if started_ns is not None and os.stat(path).st_mtime_ns >= started_ns:
+                newer.append(str(path))
+    except OSError as exc:
+        errors.append(exc)
+    return {'root': str(root), 'started_ns': started_ns, 'walk_errors': [repr(e) for e in errors], 'newer': newer}
+
+
 @pytest.fixture
 def fault(monkeypatch):
     state = {'active': False, 'denied': set(), 'unknown': False, 'events': [],
-             'builds': [], 'reached': [], 'parsed': [], 'stamps': []}
+             'builds': [], 'reached': [], 'parsed': [], 'stamps': [], 'untrusted': []}
     real_build, real_iter = rule._build_index, rule.iter_python_files
     real_parse, real_scandir = rule.parse_python, os.scandir
     real_stamp = request_cache._tree_stamp
@@ -93,6 +107,8 @@ def fault(monkeypatch):
     def stamp(root, *args, **kwargs):
         result = real_stamp(root, *args, **kwargs)
         state['stamps'].append((Path(root), bool(args or kwargs), result, state['active']))
+        if result is None:  # BACK-2057: say why a census was refused, so a CI flake names its cause
+            state['untrusted'].append(_why_untrusted(root, args[0] if args else kwargs.get('started_ns')))
         return result
 
     monkeypatch.setattr(rule, '_build_index', build)
@@ -242,7 +258,7 @@ def test_normal_request_rebuilds_partial_evidence_and_recovers_without_clears(tm
     cached = rule._project_index[checked.parent]
     # The real sealing census is healthy even though the earlier index build was denied.
     assert any(root == checked.parent and sealing and stamp and not active
-               for root, sealing, stamp, active in fault['stamps'])
+               for root, sealing, stamp, active in fault['stamps']), fault['untrusted']
     second = reveal_check(str(checked), select='T006')
     assert len(fault['events']) == 2, 'A recovered sealing walk must not bless incomplete evidence'
     assert rule._project_index[checked.parent] is not cached
@@ -301,5 +317,5 @@ def test_cap_only_request_retains_existing_validated_cache_policy(tmp_path, faul
     cached = rule._project_index[checked.parent]
     assert 'REVEAL_T006_MAX_FILES' in first and 'incomplete' in first.lower()
     assert reveal_check(str(checked), select='T006') == first
-    assert rule._project_index[checked.parent] is cached and len(fault['builds']) == 1
+    assert rule._project_index[checked.parent] is cached and len(fault['builds']) == 1, fault['untrusted']
     assert not fault['events']
