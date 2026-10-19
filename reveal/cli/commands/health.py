@@ -96,6 +96,21 @@ def _detect_targets() -> List[str]:
     return ['.']
 
 
+# What one target's check established (BACK-2051). A numeric child exit code does not say which:
+# a child exiting 2 may carry a real domain verdict (an expired certificate) or may have crashed.
+#   healthy        completed, nothing adverse
+#   finding        completed with a negative domain verdict (violations, failing checks)
+#   not_applicable the check does not apply to this target
+#   unavailable    the target could not be reached or read
+#   incomplete     usable but partial or capped evidence
+#   failed         the check could not produce its answer
+HEALTH_VERDICTS = ('healthy', 'finding', 'not_applicable', 'unavailable', 'incomplete', 'failed')
+
+# A producer that names no verdict gets one from its legacy outcome; an unknown outcome is never clean.
+_OUTCOME_VERDICTS = {'not_applicable': 'not_applicable', 'partial': 'incomplete',
+                     'skipped': 'incomplete', 'failed': 'failed'}
+
+
 @dataclass(frozen=True)
 class HealthResult:
     """One target's status and source accounting, carried to both output formats."""
@@ -103,6 +118,15 @@ class HealthResult:
     summary: str
     outcome: str = 'ok'
     scan_budget: Optional[dict] = None
+    verdict: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.verdict is None:
+            derived = ('finding' if self.exit_code else 'healthy') if self.outcome == 'ok' \
+                else _OUTCOME_VERDICTS.get(self.outcome, 'failed')
+            object.__setattr__(self, 'verdict', derived)
+        elif self.verdict not in HEALTH_VERDICTS:
+            raise ValueError(f'unknown health verdict: {self.verdict}')
 
 
 def run_health(args: Namespace) -> None:
@@ -145,11 +169,13 @@ def _check_target(target: str, args: Namespace):
     if path.exists():
         if path.suffix.lower() in ('.conf',):
             code, summary = _check_nginx(path, args)
-            return HealthResult(code, summary, 'failed' if 'cannot read' in summary else 'ok')
+            unreadable = 'cannot read' in summary
+            return HealthResult(code, summary, 'failed' if unreadable else 'ok',
+                                verdict='unavailable' if unreadable else None)
         return _check_code(path, args)
 
     print(f"  ⚠  {target}: not found", file=sys.stderr)
-    return HealthResult(1, f"not found: {target}", "failed")
+    return HealthResult(1, f"not found: {target}", "failed", verdict='unavailable')
 
 
 # Maximum supported files before health bails and tells the user to run reveal check directly.
@@ -312,35 +338,59 @@ def _child_reason(stderr: Optional[str], first: bool = False) -> str:
     return f': {lines[0 if first else -1][:200]}' if lines else ''
 
 
+def _failing_check_result(scheme: str, output: str) -> Optional[HealthResult]:
+    """A completed health-check answer whose own verdict is ``failure`` (an expired certificate,
+    a refused connection, a domain that does not resolve) is a finding about the target,
+    however the child's exit code reads. None when the child printed anything else."""
+    import json
+    try:
+        data = json.loads(output)
+    except (ValueError, TypeError):
+        return None
+    if not (isinstance(data, dict) and isinstance(data.get('checks'), list) and data.get('status') == 'failure'):
+        return None
+    failing = sum(1 for c in data['checks'] if isinstance(c, dict) and c.get('status') == 'failure')
+    return HealthResult(2, f"{scheme}: checks failed" + (f" ({failing} failing)" if failing else ""),
+                        'ok', verdict='finding')
+
+
+def _completed_uri_result(scheme: str, returncode: int, output: str) -> HealthResult:
+    """Judge a child that exited 0 or 1 by its parsed answer; ValueError/TypeError mean malformed."""
+    import json
+    data = json.loads(output)
+    if not isinstance(data, dict):
+        raise ValueError('expected an object')
+    outcome = outcome_of(data)
+    if outcome == 'failed':
+        return HealthResult(1, f"{scheme}: {data['error']}", 'failed')
+    if outcome == 'not_applicable':
+        return HealthResult(1, f"{scheme}: not applicable", 'not_applicable')
+    meta = data.get('meta') or {}
+    if not isinstance(meta, dict):
+        raise ValueError('invalid metadata')
+    reported = data.get('exit_code')
+    if type(reported) is int and reported >= 2:
+        # The answer itself says it failed, whatever the process exit code was.
+        return HealthResult(2, f"{scheme}: critical failure (reported exit {reported})", 'failed')
+    if meta.get('errors') or meta.get('warnings') or data.get('warnings'):
+        return HealthResult(1, f"{scheme}: incomplete or warning result", 'partial')
+    if returncode:
+        # A completed answer whose findings set the exit code is not partial.
+        return HealthResult(1, f"{scheme}: warnings found", 'ok')
+    return HealthResult(0, f"{scheme}: healthy", 'ok')
+
+
 def _uri_health_result(scheme: str, returncode: int, output: str,
                        stderr: Optional[str] = None) -> HealthResult:
     """A failed child is failed; a partial or unavailable answer cannot be clean."""
-    import json
+    verdict = _failing_check_result(scheme, output) if returncode >= 0 else None
+    if verdict is not None:
+        return verdict
     if returncode < 0 or returncode >= 2:
         return HealthResult(2, f"{scheme}: critical failure (exit {returncode}{_child_reason(stderr)})",
                             'failed')
     try:
-        data = json.loads(output)
-        if not isinstance(data, dict):
-            raise ValueError('expected an object')
-        outcome = outcome_of(data)
-        if outcome == 'failed':
-            return HealthResult(1, f"{scheme}: {data['error']}", 'failed')
-        if outcome == 'not_applicable':
-            return HealthResult(1, f"{scheme}: not applicable", 'not_applicable')
-        meta = data.get('meta') or {}
-        if not isinstance(meta, dict):
-            raise ValueError('invalid metadata')
-        reported = data.get('exit_code')
-        if type(reported) is int and reported >= 2:
-            # The answer itself says it failed, whatever the process exit code was.
-            return HealthResult(2, f"{scheme}: critical failure (reported exit {reported})", 'failed')
-        if meta.get('errors') or meta.get('warnings') or data.get('warnings'):
-            return HealthResult(1, f"{scheme}: incomplete or warning result", 'partial')
-        if returncode:
-            # A completed answer whose findings set the exit code is not partial.
-            return HealthResult(1, f"{scheme}: warnings found", 'ok')
-        return HealthResult(0, f"{scheme}: healthy", 'ok')
+        return _completed_uri_result(scheme, returncode, output)
     except (ValueError, TypeError):
         return HealthResult(2, f"{scheme}: malformed check results (exit {returncode}"
                                f"{_child_reason(stderr, first=True)})", 'failed')
