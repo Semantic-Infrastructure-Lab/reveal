@@ -16,7 +16,8 @@ in ``reveal/core/treesitter*.py``.
 
 import functools
 import logging
-from typing import Any, Dict, Iterable, Optional, Set
+import threading
+from typing import Any, Callable, Dict, Iterable, Optional, Set
 
 from .treesitter_compat import ts_parse
 from ..utils.parse_audit import Domain, PathArg, capture_enabled, parse_attempt, parse_request
@@ -120,13 +121,43 @@ def get_tree(language: str, source: str, *, filename: Optional[PathArg] = None,
         return _parse_recent(language, source)
 
 
-@functools.lru_cache(maxsize=4)
-def _parse_recent(language: str, source: str) -> Any:
+def _parse_build(language: str, source: str) -> Any:
     parser = get_parser(language)
     if not capture_enabled():
         return ts_parse(parser, source)
     with parse_attempt(source, 'compatibility-wrapper'):
         return ts_parse(parser, source)
+
+
+class _ThreadLocalMemo:
+    """``functools.lru_cache`` per thread, with its ``__wrapped__`` and ``cache_clear``.
+
+    With language-pack 1.8.1 a tree-sitter Node is unsendable: walking a tree another OS
+    thread built panics (``PanicException``, not an ``Exception``), and reveal-mcp runs each tool
+    call on its own worker thread. A process-global memo handed one call's tree to the next and
+    hung the client (BACK-2050). Each thread keeps and drops its own trees, as the parse cache in
+    treesitter.py does; reuse within a thread, which per-file rules need, is unchanged."""
+
+    def __init__(self, build: Callable[[str, str], Any], maxsize: int) -> None:
+        self.__wrapped__ = build
+        self._maxsize = maxsize
+        self._local = threading.local()
+
+    def _memo(self) -> Any:
+        memo = getattr(self._local, 'memo', None)
+        if memo is None:
+            memo = self._local.memo = functools.lru_cache(maxsize=self._maxsize)(self.__wrapped__)
+        return memo
+
+    def __call__(self, language: str, source: str) -> Any:
+        return self._memo()(language, source)
+
+    def cache_clear(self) -> None:
+        """Forget this thread's parses (other threads' memos belong to them)."""
+        self._memo().cache_clear()
+
+
+_parse_recent = _ThreadLocalMemo(_parse_build, maxsize=4)
 
 
 def has_grammar(language: str) -> bool:
