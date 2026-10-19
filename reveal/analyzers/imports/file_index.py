@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from ...registry import DECLARATION_ONLY_EXTENSIONS
-from ...utils.path_utils import RESOLUTION, walk_with_causes
+from ...utils.path_utils import RESOLUTION, OnHidden, walk_with_causes
 
 
 def discover_import_files(
@@ -23,6 +23,7 @@ def discover_import_files(
     cap: Optional[int] = None,
     *,
     on_error: Optional[Callable[[OSError], None]] = None,
+    on_hidden: Optional[OnHidden] = None,
 ) -> Tuple[List[Path], Dict[str, List[Path]], bool]:
     """Walk *root* once: ``(graph files, basename -> paths index, capped)``.
 
@@ -31,11 +32,12 @@ def discover_import_files(
     BACK-491 keeps it extension-agnostic for ``.inc``/``.tcc`` includes). The graph files are
     those with no such cause that *is_candidate* accepts, minus declaration-only stubs, which
     would duplicate their module's edges (BACK-1467). Past *cap* graph files the walk stops
-    and ``capped`` is True.
+    and ``capped`` is True. *on_hidden* sees each entry left out of the graph by a skip
+    cause, once (BACK-2065).
     """
     candidates: List[Path] = []
     index: Dict[str, List[Path]] = {}
-    for file_path, cause in walk_with_causes(root, RESOLUTION, on_error=on_error):
+    for file_path, cause in walk_with_causes(root, RESOLUTION, on_error=on_error, on_hidden=on_hidden):
         index.setdefault(file_path.name, []).append(file_path)
         if cause is not None or file_path.suffix.lower() in DECLARATION_ONLY_EXTENSIONS:
             continue

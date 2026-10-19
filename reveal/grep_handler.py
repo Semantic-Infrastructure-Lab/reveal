@@ -15,7 +15,6 @@ a capped search of a large tree parses only the files it shows.
 
 import logging
 import re
-from collections import Counter
 from pathlib import Path
 from argparse import Namespace
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -303,20 +302,16 @@ def _collect_dir_results(
     ``--exclude`` or REVEAL_IGNORE, tallied as the directory view does. A search of a
     gitignored directory said "No matches found" as if it had looked (BACK-1546).
     """
-    from .utils.path_utils import DISPLAY, to_posix, walk_tree
-    hidden: Counter = Counter()
+    from .utils.path_utils import DISPLAY, HiddenTally, to_posix, walk_tree
+    hidden = HiddenTally()  # what the user can act on: gitignore, --exclude, REVEAL_IGNORE
     exts = {e.lower().lstrip('.') for e in include_extensions} if include_extensions else None
-
-    def tally(_path: Path, _is_dir: bool, cause: str) -> None:
-        if cause in ('gitignore', 'exclude', 'reveal_ignore'):  # what the user can act on
-            hidden[cause] += 1
 
     file_results: List[Dict[str, Any]] = []
     total_hits = 0
     searched = 0
     for root_path, _dirs, files in walk_tree(dir_path, DISPLAY, exclude_patterns=exclude_patterns,
                                              respect_gitignore=respect_gitignore,
-                                             on_hidden=tally, sort=True):
+                                             on_hidden=hidden, sort=True):
         for fname in files:
             fpath = root_path / fname
             if exts is not None and fpath.suffix.lower().lstrip('.') not in exts:

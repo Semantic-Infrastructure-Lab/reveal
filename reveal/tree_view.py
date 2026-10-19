@@ -10,7 +10,9 @@ from typing import Any, Callable, Generator, List, Optional, Tuple
 from .registry import get_analyzer
 from .reveal_types import CONTRACT_VERSION
 from .utils import format_size
-from .utils.path_utils import DISPLAY, WalkPurpose, _walk_code_files, list_dir, to_posix, walk_filter
+from .utils.path_utils import (
+    DISPLAY, WalkPurpose, _walk_code_files, hidden_entries_phrase, list_dir, to_posix, walk_filter,
+)
 
 Hidden = Callable[[Path, bool], Optional[str]]
 
@@ -339,33 +341,13 @@ def _count_entries_with_suppressed(path: Path, depth: int, hidden: Hidden) -> Tu
 
 
 def _format_suppressed_footer(suppressed: Counter) -> Optional[str]:
-    """Render the 'N entries hidden by ...' footer from a cause tally (BACK-1224).
+    """Render the '... N entries hidden by ...' footer from a cause tally (BACK-1224).
 
-    Surfaces gitignore/noise/exclude/REVEAL_IGNORE counts, but only gitignore gets a
-    "use --flag" hint: noise patterns have no CLI escape hatch, and a user who typed
-    --exclude or set REVEAL_IGNORE already knows why those entries are missing. Hidden
-    dotfiles are omitted entirely: no CLI flag currently exposes show_hidden,
-    so a hint would point at nothing actionable.
+    The wording is the walker seam's (``hidden_entries_phrase``), which the analysis
+    engines' ``scope_hidden`` warning uses too (BACK-2065).
     """
-    causes = []  # (count, label, hint)
-    if suppressed.get('gitignore'):
-        causes.append((suppressed['gitignore'], '.gitignore', ' (use --no-gitignore to show)'))
-    if suppressed.get('noise'):
-        causes.append((suppressed['noise'], 'default noise filters', ''))
-    if suppressed.get('exclude'):
-        causes.append((suppressed['exclude'], '--exclude', ''))
-    if suppressed.get('reveal_ignore'):
-        causes.append((suppressed['reveal_ignore'], 'REVEAL_IGNORE / config ignore:', ''))
-
-    if not causes:
-        return None
-    if len(causes) == 1:
-        count, label, hint = causes[0]
-        return f"... {count} entries hidden by {label}{hint}"
-
-    total = sum(c for c, _, _ in causes)
-    breakdown = '; '.join(f"{c} by {label}{hint}" for c, label, hint in causes)
-    return f"... {total} entries hidden ({breakdown})"
+    phrase = hidden_entries_phrase(suppressed)
+    return f"... {phrase}" if phrase else None
 
 
 def _initialize_context() -> dict:

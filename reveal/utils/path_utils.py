@@ -8,10 +8,13 @@ import json
 import os
 import re
 import tempfile
+from collections import Counter
 from dataclasses import dataclass, field
 from itertools import islice
 from pathlib import Path, PurePath
-from typing import Any, Callable, Dict, FrozenSet, Iterable, Iterator, Optional, List, Sequence, Set, Tuple, Union
+from typing import (
+    Any, Callable, Dict, FrozenSet, Iterable, Iterator, Mapping, Optional, List, Sequence, Set, Tuple, Union,
+)
 
 from ..defaults import (
     SKIP_DIRECTORIES,
@@ -680,6 +683,58 @@ _DISPLAY_FILE_NOISE = re.compile(
 
 OnHidden = Callable[[Path, bool, str], None]
 
+# The hide causes a user can act on, in footer order. Noise and dot entries have no flag
+# that shows them, so a hint would point at nothing (BACK-1224).
+ACTIONABLE_HIDDEN_CAUSES = ('gitignore', 'exclude', 'reveal_ignore')
+_HIDDEN_CAUSE_LABELS = {  # footer order
+    'gitignore': ('.gitignore', ' (use --no-gitignore to show)'),
+    'noise': ('default noise filters', ''),
+    'exclude': ('--exclude', ''),
+    'reveal_ignore': ('REVEAL_IGNORE / config ignore:', ''),
+}
+
+
+class HiddenTally(Counter[str]):
+    """An ``on_hidden`` callback that counts the entries a walk left out, by actionable
+    cause: what a tree or grep footer, or an engine's ``scope_hidden`` warning, reports."""
+
+    def __call__(self, _path: Path, _is_dir: bool, cause: str) -> None:
+        if cause in ACTIONABLE_HIDDEN_CAUSES:
+            self[cause] += 1
+
+
+def hidden_entries_phrase(hidden: Mapping[str, int]) -> Optional[str]:
+    """'N entries hidden by .gitignore (use --no-gitignore to show)' for a cause tally, or
+    None when nothing was hidden. Only gitignore gets a hint: noise has no flag, and a user
+    who typed --exclude or set REVEAL_IGNORE knows why those entries are missing. Dot
+    entries are never named, since no flag shows them."""
+    causes = [(hidden[c], label, hint) for c, (label, hint) in _HIDDEN_CAUSE_LABELS.items() if hidden.get(c)]
+    if not causes:
+        return None
+    if len(causes) == 1:
+        count, label, hint = causes[0]
+        return f"{count} entries hidden by {label}{hint}"
+    breakdown = '; '.join(f"{c} by {label}{hint}" for c, label, hint in causes)
+    return f"{sum(c for c, _, _ in causes)} entries hidden ({breakdown})"
+
+
+def hidden_entries_warning(hidden: Mapping[str, int], analyzed: int) -> Optional[WarningEntry]:
+    """The ``scope_hidden`` warning for an analysis whose walk kept *analyzed* files and hid
+    *hidden* (a :class:`HiddenTally`), or None. Only a walk that kept nothing to analyze
+    says so: its empty answer would otherwise read as a clean zero (BACK-2065). A walk
+    that kept files is the ordinary case of an ignored ``build/`` next to real source."""
+    counts = {c: hidden[c] for c in ACTIONABLE_HIDDEN_CAUSES if hidden.get(c)}
+    if analyzed or not counts:
+        return None
+    warning: WarningEntry = {
+        'type': 'scope_hidden', 'count': sum(counts.values()), 'unit': 'entries',
+        'causes': sorted(counts), 'hidden': counts,
+        'message': f"No files left to analyze: {hidden_entries_phrase(counts)}",
+    }
+    if 'gitignore' in counts:
+        warning['suggestion'] = '--no-gitignore'
+    return warning
+
 
 def traversal_failed_warning(failures: Sequence[Tuple[Optional[str], str]],
                              base: Optional[Path] = None) -> Optional[WarningEntry]:
@@ -796,24 +851,42 @@ def walk_with_causes(
     exclude_patterns: Optional[List[str]] = None,
     respect_gitignore: Optional[bool] = None,
     on_error: Optional[Callable[[OSError], None]] = None,
+    on_hidden: Optional[OnHidden] = None,
 ) -> Iterator[Tuple[Path, Optional[str]]]:
     """Every file a walk for *purpose* reaches, with the soft cause that would hide it from
     a plain walk (None when it would be kept): the resolution index needs gitignored and
     ``--exclude``'d files as import targets while leaving them out of the graph (BACK-1580).
     Directories with a cause in ``purpose.soft_dirs`` are still descended.
     ``on_error`` receives enumeration failures; None retains os.walk defaults.
+    *on_hidden* sees what :func:`walk_tree` would hide, once per entry: a descended soft
+    directory is reported and its contents are not reported again (BACK-2065).
     """
     if path.is_file():
         yield path, None
         return
     hidden = walk_filter(path, purpose, exclude_patterns, respect_gitignore)
+    reported: Set[Path] = set()  # descended directories already reported hidden
+
+    def judge(p: Path, is_dir: bool, quiet: bool) -> Optional[str]:
+        cause = hidden(p, is_dir)
+        if cause is not None and on_hidden is not None and not quiet:
+            on_hidden(p, is_dir, cause)
+        return cause
+
     for root, dirs, filenames in os.walk(str(path), onerror=on_error):
         root_path = Path(root)
-        dirs[:] = [d for d in dirs
-                   if hidden(root_path / d, True) in (None, *purpose.soft_dirs)]
+        quiet = root_path in reported
+        kept = []
+        for d in dirs:
+            cause = judge(root_path / d, True, quiet)
+            if cause in (None, *purpose.soft_dirs):
+                kept.append(d)
+                if cause is not None or quiet:
+                    reported.add(root_path / d)
+        dirs[:] = kept
         for fname in filenames:
             file_path = root_path / fname
-            cause = hidden(file_path, False)
+            cause = judge(file_path, False, quiet)
             if cause is None or cause in purpose.soft_files:
                 yield file_path, cause
 
@@ -1057,6 +1130,7 @@ def census_for_path(
     respect_gitignore: Optional[bool] = None,
     *,
     on_error: Optional[Callable[[OSError], None]] = None,
+    on_hidden: Optional[OnHidden] = None,
 ) -> ScopeCensus:
     """Build the unified BACK-884 scope census for *path* by walking it
     directly (skip-dir-correct per BACK-887) — the right choice for
@@ -1072,10 +1146,11 @@ def census_for_path(
     :func:`census_and_coverage_for_path` instead, to avoid walking twice.
 
     *exclude_patterns*/*respect_gitignore*: BACK-1042, see :func:`_walk_code_files`.
+    *on_hidden* sees what the walk hid (a :class:`HiddenTally`, BACK-2065).
     """
     counts = tally_files_by_language(
         _walk_code_files(path, exclude_patterns=exclude_patterns, respect_gitignore=respect_gitignore,
-                         on_error=on_error)
+                         on_error=on_error, on_hidden=on_hidden)
     )
     return _census_from_counts(counts)
 
@@ -1083,13 +1158,15 @@ def census_for_path(
 def census_and_coverage_for_path(
     path: Path, supported_languages: Set[str], *,
     on_error: Optional[Callable[[OSError], None]] = None,
+    on_hidden: Optional[OnHidden] = None,
 ) -> 'tuple[ScopeCensus, LanguageCoverage]':
     """Walk *path* once, returning both the BACK-884 scope census and the
     supported-language-gated :class:`LanguageCoverage` (BACK-518) — the
     combination ``surface``/``contracts`` need, without a second walk. Optional
-    *on_error* retains failures from that same walk without changing the pair.
+    *on_error* retains failures from that same walk without changing the pair;
+    *on_hidden* sees what it hid (BACK-2065).
     """
-    counts = tally_files_by_language(_walk_code_files(path, on_error=on_error))
+    counts = tally_files_by_language(_walk_code_files(path, on_error=on_error, on_hidden=on_hidden))
     return _census_from_counts(counts), _coverage_from_counts(counts, supported_languages)
 
 

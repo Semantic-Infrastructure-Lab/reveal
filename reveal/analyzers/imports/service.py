@@ -4,14 +4,14 @@ Discovery stays in the shared file-index walker. This module owns graph assembly
 and extractor resolution dispatch, rather than loading a resource adapter in the
 analysis layer. Extraction/cache ownership remains with existing callers in this pilot.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .base import LanguageExtractor, get_extractor
 from .file_index import discover_import_files
 from .types import ImportAnalysis, ImportStatement
-from ...utils.path_utils import to_posix
+from ...utils.path_utils import HiddenTally, to_posix
 
 
 @dataclass(frozen=True)
@@ -28,6 +28,8 @@ class ImportFileSet:
     index: Dict[str, List[Path]]
     capped: bool = False
     traversal_failures: Tuple[Tuple[Optional[str], str], ...] = ()
+    # Entries the walk hid, by actionable cause (``HiddenTally``; BACK-2065).
+    hidden: Dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -48,8 +50,10 @@ def discover(scope: ScanScope) -> ImportFileSet:
         failures.append((to_posix(error.filename) if error.filename else None,
                          f'{type(error).__name__}: {error}'))
 
-    candidates, index, capped = discover_import_files(scope.root, accepts, cap=scope.cap, on_error=on_error)
-    return ImportFileSet(tuple(candidates), index, capped, tuple(failures))
+    hidden = HiddenTally()
+    candidates, index, capped = discover_import_files(scope.root, accepts, cap=scope.cap, on_error=on_error,
+                                                      on_hidden=hidden)
+    return ImportFileSet(tuple(candidates), index, capped, tuple(failures), dict(hidden))
 
 
 def resolve_primary(stmt: ImportStatement, extractor: LanguageExtractor, context: ResolutionContext) -> Optional[Path]:

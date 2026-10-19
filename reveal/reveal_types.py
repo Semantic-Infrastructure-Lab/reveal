@@ -13,7 +13,7 @@ Adapter-specific data fields are spread at the top level via result.update(data)
 so RevealResult is a minimum contract, not an exhaustive schema.
 """
 
-from typing import Any, List, TypedDict
+from typing import Any, Dict, List, TypedDict
 
 
 # Current Output Contract version emitted by adapters/analyzers that opt into
@@ -41,6 +41,9 @@ class WarningEntry(TypedDict, total=False):
     directories: List[str]
     causes: List[str]
     unknown_directory_events: int
+    # What a walk hid by cause and how to show it ('scope_hidden', BACK-2065).
+    hidden: Dict[str, int]
+    suggestion: str
     # The --fields names that matched nothing ('fields_unmatched', BACK-1607).
     fields: List[str]
     # The check rule whose scan produced the warning (stats rule-scan disclosures, BACK-2042).
