@@ -196,7 +196,7 @@ def run_check(args: Namespace) -> None:
             resolved = resolve_profile(profile_name, user_profiles=project_profiles)
         except KeyError as e:
             print(f"Error: {e}", file=sys.stderr)
-            sys.exit(1)
+            sys.exit(2)
         # Profile values are lower-priority than explicit --select/--ignore
         if not args.select:
             args.select = ','.join(resolved['select'])
@@ -206,19 +206,19 @@ def run_check(args: Namespace) -> None:
     path_str = getattr(args, 'path', None)
     if not path_str:
         print("Error: path is required for reveal check", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(2)
 
     # BACK-261: detect URI where a file path was expected
     import re as _re
     if _re.match(r'^[a-z][a-z0-9+\-.]+://', path_str):
         print(f"Error: '{path_str}' looks like a URI, not a file path.", file=sys.stderr)
         print(f"  Did you mean: reveal {path_str} --check", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(2)
 
     path = Path(path_str)
     if not path.exists():
         print(f"Error: {path_str}: no such file or directory", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(2)
 
     if path.is_dir():
         args.recursive = True

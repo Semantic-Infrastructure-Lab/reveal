@@ -262,7 +262,7 @@ class TestCheckCommandProfileArg(unittest.TestCase):
                 with self.assertRaises(SystemExit) as ctx:
                     from reveal.cli.commands.check import run_check
                     run_check(args)
-        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(ctx.exception.code, 2)
         self.assertIn("does-not-exist", stderr_cap.getvalue())
 
     def test_profile_with_project_config(self):

@@ -1490,7 +1490,7 @@ class TestCheckSubcommandURIDetection:
     def test_ssl_uri_exits_with_message(self, capsys):
         with pytest.raises(SystemExit) as exc:
             self._run('ssl://example.com')
-        assert exc.value.code == 1
+        assert exc.value.code == 2
         captured = capsys.readouterr()
         assert 'looks like a URI' in captured.err
         assert 'reveal ssl://example.com --check' in captured.err
@@ -1498,7 +1498,7 @@ class TestCheckSubcommandURIDetection:
     def test_nginx_uri_exits_with_message(self, capsys):
         with pytest.raises(SystemExit) as exc:
             self._run('nginx://example.com')
-        assert exc.value.code == 1
+        assert exc.value.code == 2
         captured = capsys.readouterr()
         assert 'looks like a URI' in captured.err
 
