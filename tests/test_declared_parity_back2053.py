@@ -260,6 +260,30 @@ def test_option_values_are_read_alike(project, noun, flags):
         assert a.returncode == 0 and a.stdout.strip()
 
 
+@pytest.mark.parametrize('noun', NOUNS)
+def test_a_harmless_warning_is_shown_and_never_makes_a_complete_answer_fail(project, monkeypatch, noun):
+    adapter = declared_adapter_class(noun)
+    original = adapter.get_structure
+    calls = []
+
+    def observed(self, **kwargs):
+        calls.append(noun)
+        result = original(self, **kwargs)
+        result.setdefault('meta', {}).setdefault('warnings', []).append(
+            {'type': 'informational', 'message': 'harmless observation'})
+        return result
+
+    monkeypatch.setattr(adapter, 'get_structure', observed)
+    answers = []
+    for spelling in ('cli', 'uri'):
+        result = run(noun, spelling, '--format', 'json')
+        assert result.returncode == 0, (spelling, result.stderr)
+        answers.append(json.loads(result.stdout))
+        assert answers[-1]['meta']['warnings'][-1]['message'] == 'harmless observation'
+    assert len(calls) == 2, 'the patched entry point was not the one the noun runs'
+    assert_equal_answers(noun, *answers)
+
+
 def test_the_comparison_fails_on_a_changed_count_or_dropped_diagnostic():
     answer = {'type': 'x', 'total': 2, 'meta': {'warnings': [{'message': 'incomplete'}]}}
     changed = copy.deepcopy(answer)

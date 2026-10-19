@@ -104,6 +104,27 @@ def test_expected_diagnostics_reach_stdio_client(tmp_path):
     _run(tmp_path, scenario)
 
 
+def test_trace_success_and_fresh_result_after_edit_reach_stdio_client(tmp_path):
+    path = tmp_path / 'app.py'
+    path.write_text('def serve():\n    return helper_one()\n\n\ndef helper_one():\n    return 1\n\n\n'
+                    'def helper_two():\n    return 2\n', encoding='utf-8')
+
+    async def scenario(session):
+        before = await session.call_tool('reveal_trace', {'path': str(tmp_path), 'entry_point': 'serve'})
+        assert not before.is_error
+        assert 'helper_one' in _text(before)
+        assert 'helper_two' not in _text(before)
+        path.write_text(path.read_text(encoding='utf-8').replace('helper_one()\n\n\ndef helper_one',
+                                                                 'helper_two()\n\n\ndef helper_one'),
+                        encoding='utf-8')
+        after = await session.call_tool('reveal_trace', {'path': str(tmp_path), 'entry_point': 'serve'})
+        assert not after.is_error
+        assert 'helper_two' in _text(after)
+        assert 'helper_one' not in _text(after)
+
+    _run(tmp_path, scenario)
+
+
 @pytest.mark.parametrize('name,is_error,visible,hidden', [
     ('operational', True, 'PUBLIC_PERMISSION_DETAIL', ''),
     ('crash', True, '', 'PRIVATE_CRASH_DETAIL'),
