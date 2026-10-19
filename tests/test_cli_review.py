@@ -495,13 +495,13 @@ class TestRunReview(unittest.TestCase):
            return_value=[{'severity': 'high', 'rule': 'B001'}])
     @patch('reveal.cli.commands.review._run_hotspots', return_value=[])
     @patch('reveal.cli.commands.review._run_complexity', return_value=[])
-    def test_high_violations_exits_2(self, mock_cx, mock_hs, mock_chk):
+    def test_high_violations_exit_1_not_the_usage_code(self, mock_cx, mock_hs, mock_chk):
         with tempfile.TemporaryDirectory() as d:
             args = self._args(d)
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit) as ctx:
                     run_review(args)
-            self.assertEqual(ctx.exception.code, 2)
+            self.assertEqual(ctx.exception.code, 1)
 
     @patch('reveal.cli.commands.review._run_check',
            return_value=[{'severity': 'medium', 'rule': 'C901'}])
@@ -777,7 +777,7 @@ class TestReviewAgainstRealRepo(unittest.TestCase):
         self._commit('swallow.py', _HIGH)
         fail = self._review('HEAD~1..HEAD', '--format', 'json')
         self.assertEqual((json.loads(warn.stdout)['overall_status'], warn.returncode), ('warn', 1))
-        self.assertEqual((json.loads(fail.stdout)['overall_status'], fail.returncode), ('fail', 2))
+        self.assertEqual((json.loads(fail.stdout)['overall_status'], fail.returncode), ('fail', 1))
 
     @unittest.skipUnless(shutil.which('jq'), 'jq not installed')
     @unittest.skipIf(sys.platform == 'win32', "the documented gates use POSIX-shell quoting")

@@ -100,8 +100,19 @@ def test_review_required_discovery_warning_marks_analysis_incomplete():
     assert review._review_outcome([], [], analysis_incomplete=review._lost_analysis(report)) == ('incomplete', 3)
 
 
-def test_review_blocking_findings_keep_precedence_over_incomplete_analysis():
-    assert review._review_outcome([{'severity': 'high'}], [], analysis_incomplete=True) == ('fail', 2)
+def test_review_incomplete_analysis_takes_precedence_over_blocking_findings():
+    # D6: once analysis begins, lost or capped evidence beats a findings gate (BACK-2051).
+    blocking = [{'severity': 'high'}]
+    assert review._review_outcome(blocking, [], analysis_incomplete=True) == ('incomplete', 3)
+    assert review._review_outcome(blocking, ['x.py: could not be checked']) == ('incomplete', 3)
+    assert review._review_outcome(blocking, [], scan_incomplete=True) == ('incomplete', 3)
+
+
+def test_review_blocking_finding_alone_is_a_finding_not_a_usage_code():
+    # Exit 2 means usage rejection everywhere else; a high/critical violation is exit 1.
+    for severity in ('high', 'critical'):
+        assert review._review_outcome([{'severity': severity}], []) == ('fail', 1)
+    assert review._review_outcome([{'severity': 'medium'}], []) == ('warn', 1)
 
 
 def test_review_optional_churn_warning_does_not_mark_required_analysis_lost():

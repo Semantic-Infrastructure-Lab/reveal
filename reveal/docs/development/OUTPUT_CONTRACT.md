@@ -509,8 +509,9 @@ the unknown missing file population. Policy exclusions are separate from I/O los
 Stats retains these invocation-local diagnostics before filters, empty returns and
 projections; direct legacy Stats exit behavior is unchanged. Overview and Hotspots
 consume required Stats and AST loss before execution classification. Review recognizes
-propagated directory loss as incomplete (exit 3), while retaining its legacy high/critical
-finding precedence (exit 2). This does not adopt the full declared Review policy.
+propagated directory loss as incomplete (exit 3), ahead of any finding. A high/critical
+finding alone exits 1 (`overall_status` stays `fail`); exit 2 is usage rejection only (BACK-2051).
+This does not yet add `--fail-on` to Review.
 This is bounded consumer coverage: Classify, other walkers and the Calls, Contracts and transitive
 side-effect collection carriers are not yet qualified for directory failure disclosure.
 

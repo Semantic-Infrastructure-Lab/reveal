@@ -25,8 +25,9 @@ def create_review_parser() -> argparse.ArgumentParser:
         prog='reveal review',
         parents=[_build_global_options_parser()],
         description='Assess code quality and structural changes before a PR merge. '
-                    'Exit code 0 = pass, 1 = warnings, 2 = a blocking (high/critical) issue or an '
-                    'invalid target, 3 = incomplete (some files could not be checked or ranked). '
+                    'Exit code 0 = pass, 1 = findings (warnings, or a blocking high/critical issue, '
+                     'told apart by overall_status), 2 = invalid target, 3 = incomplete (some files '
+                     'could not be checked or ranked; beats findings). '
                     'A large range can take minutes.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
@@ -57,7 +58,7 @@ def create_review_parser() -> argparse.ArgumentParser:
     return parser
 
 
-# Severities that make a review fail (exit 2). `check` severities are
+# Severities that make a review fail (exit 1, unless analysis was incomplete: exit 3). `check` severities are
 # low/medium/high/critical (rules.base.Severity); only N002 emits critical.
 BLOCKING_SEVERITIES = ('high', 'critical')
 
@@ -172,15 +173,17 @@ def _lost_analysis(report: Dict[str, Any]) -> bool:
 def _review_outcome(violations: List[Dict[str, Any]], errors: List[str],
                     analysis_incomplete: bool = False,
                     scan_incomplete: bool = False) -> tuple:
-    """(overall_status, exit_code): fail/2 on a blocking-severity issue,
-    incomplete/3 when the quality pass could not check everything (so an
-    empty violation list is not proof of a clean change), a rule-wide scan was
-    capped, skipped or partly unparsed (BACK-1824), or the hotspot or
-    complexity step could not analyze every file (Scott, 2026-10-07), warn/1, pass/0."""
-    if any(v.get('severity') in BLOCKING_SEVERITIES for v in violations):
-        return 'fail', 2
+    """(overall_status, exit_code), D6 precedence (BACK-2051): incomplete/3 when the
+    quality pass could not check everything (so an empty violation list is not proof
+    of a clean change), a rule-wide scan was capped, skipped or partly unparsed
+    (BACK-1824), or the hotspot or complexity step could not analyze every file
+    (Scott, 2026-10-07); then fail/1 on a blocking-severity issue, warn/1 on any
+    other violation, pass/0. Lost evidence beats a findings gate, and exit 2 stays
+    reserved for usage rejection (an invalid target)."""
     if errors or analysis_incomplete or scan_incomplete:
         return 'incomplete', 3
+    if any(v.get('severity') in BLOCKING_SEVERITIES for v in violations):
+        return 'fail', 1
     if violations:
         return 'warn', 1
     return 'pass', 0
