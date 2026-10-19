@@ -130,6 +130,47 @@ EPILOG_ORDER = ('overview', 'architecture', 'deps', 'hotspots', 'contracts', 'su
                 'scaffold', 'offline')
 
 
+# What each exit code means for a command on the D6 outcome policy (EXIT_CODE_CONTRACT.md). The one
+# home for the wording help prints; a command words a code more specifically in EXIT_CODE_WORDING.
+EXIT_CODES: Dict[int, str] = {
+    0: 'completed; no enabled findings gate matched',
+    1: 'a findings gate matched',
+    2: 'request rejected before analysis (usage error, missing path)',
+    3: 'required analysis or output failed or was incomplete',
+}
+EXIT_CODE_WORDING: Dict[str, Dict[int, str]] = {
+    'check': {0: 'no issues', 1: 'issues found',
+              3: 'scan incomplete (a file could not be parsed/checked)'},
+    'review': {0: 'pass',
+               1: 'findings (warnings, or a blocking high/critical issue, told apart by overall_status)',
+               2: 'invalid target',
+               3: 'incomplete (some files could not be checked or ranked; beats findings)'},
+    'health': {0: 'all pass', 1: 'findings (warnings or failing checks)', 2: 'usage error (no target)',
+               3: 'a check failed, could not reach its target (a missing local path included), '
+                  'or was incomplete'},
+    'deps': {1: 'circular dependencies or unused imports matched --fail-on findings (default: none)'},
+    'hotspots': {1: 'file quality below 70 or function complexity above 20 matched '
+                    '--fail-on findings (default: none)'},
+}
+# Commands whose findings gate is on unless --fail-on none says otherwise.
+FINDINGS_BY_DEFAULT = ('check', 'review', 'health')
+
+# Old spelling -> (replacement, D5 stage) for names the surface program retires. Empty: Phase 1 removes
+# no names; help and error messages derive from it once a later phase adds entries.
+RETIREMENTS: Dict[str, Tuple[str, str]] = {}
+
+
+def exit_codes_text(command: str, gates: Sequence[str] = ('none', 'findings')) -> str:
+    """The exit-code lines `reveal <command> --help` prints, from EXIT_CODES. *gates* are the
+    --fail-on values the command supports: without 'findings' it never exits 1."""
+    wording = {**EXIT_CODES, **EXIT_CODE_WORDING.get(command, {})}
+    codes = [c for c in wording if c != 1 or 'findings' in gates]
+    lines = ['Exit codes:'] + [f'  {c}  {wording[c]}' for c in codes]
+    if command in FINDINGS_BY_DEFAULT:
+        lines.append('--fail-on none reports findings without exit 1; lost analysis still exits 3.')
+    return '\n'.join(lines)
+
+
 def subcommand_help_guides() -> Dict[str, str]:
     """help:// topic -> reveal/docs guide for each subcommand that declares its own guide."""
     return {name: spec.help_guide for name, spec in COMMANDS.items() if spec.help_guide}

@@ -29,11 +29,13 @@ def create_declared_parser(name: str) -> argparse.ArgumentParser:
     from ...utils.query_binding import add_declared_arguments
     adapter = declared_adapter_class(name)
     help_info = adapter.get_help()
-    epilog = help_info.get('epilog')
+    from ..invocation import exit_codes_text
+    exits = exit_codes_text(name, getattr(adapter, 'FINDINGS_POLICIES', ('none',)))
+    epilog = '\n\n'.join(part for part in (help_info.get('epilog'), exits) if part)
     parser = argparse.ArgumentParser(
         prog=f'reveal {name}', parents=[_build_global_options_parser()],
         description=help_info['description'], epilog=epilog,
-        formatter_class=argparse.RawDescriptionHelpFormatter if epilog else argparse.HelpFormatter)
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     add_declared_arguments(parser, adapter.PARAM_SPECS, adapter.RESOURCE_SPEC)
     if name == 'overview':
         parser.add_argument('--all', action='store_true',

@@ -27,6 +27,7 @@ def create_check_parser() -> argparse.ArgumentParser:
     automatically inherits --format, --copy, --verbose, --no-breadcrumbs, etc.
     """
     from reveal.cli.parser import _build_global_options_parser
+    from reveal.cli.invocation import exit_codes_text
     global_opts = _build_global_options_parser()
     parser = argparse.ArgumentParser(
         prog='reveal check',
@@ -34,9 +35,7 @@ def create_check_parser() -> argparse.ArgumentParser:
         description=(
             'Run reveal quality rules on a file or directory.\n\n'
             'Checks for bugs, security issues, complexity problems, and more.\n'
-            'Exit code 0 = no issues, 1 = issues found, 2 = usage error, '
-            '3 = scan incomplete (a file could not be parsed/checked).\n'
-              '--fail-on none reports issues without exit 1 (an incomplete scan still exits 3).'
+            + exit_codes_text('check')
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(

@@ -248,6 +248,8 @@ Outcomes (exit code from the router):
   not applicable  'applicable': false plus a 'reason'         exit 0
   truncated       a meta.warnings entry of type 'truncated'   exit 0
   ok              none of these (an empty answer is still ok) exit 0
+  Declared commands (check, review, health, deps, pack, ...) use the 0/1/2/3 policy in
+  their own --help instead: 2 rejects the request, 3 means required analysis was lost.
 
 Recommended Optional Fields:
   metadata:     dict     # Generic counts, timestamps, metrics

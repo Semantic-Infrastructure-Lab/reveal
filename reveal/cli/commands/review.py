@@ -21,15 +21,12 @@ _SECTION_TOP = 10
 def create_review_parser() -> argparse.ArgumentParser:
     """Create parser for reveal review subcommand."""
     from reveal.cli.parser import _build_global_options_parser
+    from reveal.cli.invocation import exit_codes_text
     parser = argparse.ArgumentParser(
         prog='reveal review',
         parents=[_build_global_options_parser()],
         description='Assess code quality and structural changes before a PR merge. '
-                    'Exit code 0 = pass, 1 = findings (warnings, or a blocking high/critical issue, '
-                     'told apart by overall_status), 2 = invalid target, 3 = incomplete (some files '
-                     'could not be checked or ranked; beats findings). --fail-on none reports findings '
-                     'without exit 1. '
-                    'A large range can take minutes.',
+                    'A large range can take minutes.\n\n' + exit_codes_text('review'),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"

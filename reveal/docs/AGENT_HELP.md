@@ -3662,12 +3662,13 @@ reveal deep_dir/
 
 | Command | `0` | `1` | `2` | `3` |
 |---------|-----|-----|-----|-----|
-| `reveal check` / `<path> --check` | no issues | issues found | usage error (bad arguments) | scan incomplete — a file could not be parsed or checked |
-| `reveal review` | pass | warn (`low`/`medium` findings only) | fail (any `high`/`critical` finding) **or** invalid target (unknown revision, not a git repo) | incomplete — a check crashed or skipped files |
+| `reveal check` / `<path> --check` | no issues | issues found | request rejected before scanning (bad arguments, missing path, URI given as a path, unknown `--profile`) | scan incomplete — a file could not be parsed or checked |
+| `reveal review` | pass | findings — warnings, or a blocking `high`/`critical` issue (`overall_status` says which) | invalid target (unknown revision, not a git repo) | incomplete — a check crashed or skipped files; beats findings |
+| `reveal health` | all targets pass | findings (warnings or failing checks, severe ones included) | usage error (no target) | a check failed, could not reach its target (a missing local path included) or was incomplete (a skipped oversized directory, a degraded parse) |
 | `ssl://… --check`, `domain://… --check` | pass | warning (e.g. cert expiring <30 days) | critical/failure (expired, <7 days, DNS/HTTP failure) | — |
 | nginx `--validate-nginx-acme` / `--check-acl` / `--cpanel-certs`, `cpanel://USER/full-audit`, `nginx:// --audit` | pass | — | failure / gaps found | — |
 | Direct `deps` / `hotspots` (subcommand or URI) | complete without an enabled gate matching | explicit `--fail-on findings` matches | invalid request | incomplete analysis/output failure |
-| Direct `surface` / `architecture` / `contracts` / `overview` (subcommand or URI) | completed requested analysis | — | invalid resource/parameter or unsupported gate | required analysis/output incomplete or failed |
+| Direct `surface` / `architecture` / `contracts` / `overview` / `pack` / `testability` / `trace` (subcommand or URI) | completed requested analysis | — | invalid resource/parameter or unsupported gate | required analysis/output incomplete or failed |
 | Other legacy commands given a path that doesn't exist | — | `Error: … not found` | — | — |
 | An argument the run would ignore: a path given to a mode that reads none (`reveal a.py --rules`, `--adapters`, `--languages`, `--list-schemas`, `--explain`, `--stdin`, ...), a second path given to a flag that reads no element (`reveal a.py b.py --check`, `reveal a.html b.html --metadata`, `--links`, `--typed`), an element beside `--section` (`reveal a.md b.md --section X`), `--stdin` beside `--section`, or `--stdin` beside `--decorator-stats`/`--explain-file`/`--capabilities`/`--show-ast` (those read one path; loop over the paths instead) | — | — | usage error: stderr names the flag and the ignored argument, nothing runs | — |
 

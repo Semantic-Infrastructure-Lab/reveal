@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 def create_health_parser() -> argparse.ArgumentParser:
     """Create parser for reveal health subcommand."""
     from reveal.cli.parser import _build_global_options_parser
+    from reveal.cli.invocation import exit_codes_text
     parser = argparse.ArgumentParser(
         prog='reveal health',
         parents=[_build_global_options_parser()],
@@ -33,9 +34,7 @@ def create_health_parser() -> argparse.ArgumentParser:
             "  reveal health domain://example.com   # DNS + registration health\n"
             "  reveal health ./src ssl://example.com  # Multiple resources\n"
             "\n"
-            "Exit codes: 0=all pass, 1=findings (warnings or failing checks), 2=usage error,\n"
-            "            3=a check failed, could not reach its target, or was incomplete\n"
-            "--fail-on none reports findings without exit 1; lost checks still exit 3.\n"
+            + exit_codes_text('health') + "\n"
             "A target a check does not apply to is shown but never fails the run.\n"
             "\n"
             "Adapter-specific help:\n"
