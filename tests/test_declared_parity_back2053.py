@@ -233,6 +233,33 @@ def test_fail_on_means_the_same_before_after_and_on_a_uri(project, noun, gate):
         assert 'not supported' in runs['uri'].stderr
 
 
+VALUE_CASES = [
+    ['--max-items', '0'], ['--max-items', '1'], ['--max-items', '-1'], ['--max-items', 'abc'],
+    ['--max-snippet-chars', '0'], ['--max-snippet-chars', '-3'], ['--fields', 'nope'], ['--verbose'],
+    ['--format', 'json', '--max-items', '0'], ['--format', 'json', '--fields', 'type'], ['--format', 'bogus'],
+]
+
+
+def ignored_flags(stderr):
+    """The flags a 'has no effect' note names; the sentence names the spelling, so compare the flags."""
+    return sorted(line.split()[2] for line in stderr.splitlines() if line.startswith('Note: ') and 'has no effect' in line)
+
+
+@pytest.mark.parametrize('flags', VALUE_CASES, ids=' '.join)
+@pytest.mark.parametrize('noun', NOUNS)
+def test_option_values_are_read_alike(project, noun, flags):
+    """Zero, negative, malformed and unused values: same exit, same stdout, same ignored-flag notes."""
+    a, b = run(noun, 'cli', *flags), run(noun, 'uri', *flags)
+    assert a.returncode == b.returncode, (a.stderr, b.stderr)
+    assert a.stdout == b.stdout
+    assert ignored_flags(a.stderr) == ignored_flags(b.stderr)
+    if a.returncode == 2:
+        # parser-level rejection: no answer, a usage message in both spellings
+        assert not a.stdout and 'usage:' in a.stderr and 'usage:' in b.stderr
+    else:
+        assert a.returncode == 0 and a.stdout.strip()
+
+
 def test_the_comparison_fails_on_a_changed_count_or_dropped_diagnostic():
     answer = {'type': 'x', 'total': 2, 'meta': {'warnings': [{'message': 'incomplete'}]}}
     changed = copy.deepcopy(answer)
