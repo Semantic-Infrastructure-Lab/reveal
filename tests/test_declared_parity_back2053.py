@@ -1,0 +1,164 @@
+"""Phase 1 exit audit (BACK-2053): the nine declared nouns answer alike in both spellings.
+
+One table drives every noun through `reveal NOUN ...` and `reveal NOUN://...`: parsed JSON equal except
+the command spelling, same exits and visible diagnostics, provenance off/on, text, requested JSON
+artifacts (success and failed write), and a rejected resource. Per-noun depth lives in the
+test_declared_<noun>_* files; this file is the cross-noun gate and fails if a noun is added to
+COMMANDS without a row here.
+"""
+import copy
+import json
+
+import pytest
+
+from conftest import _run_reveal_direct
+from reveal.cli.invocation import COMMANDS
+
+# noun -> (CLI argv after the noun, URI suffix after `noun://proj`)
+CASES = {
+    'architecture': ([], ''),
+    'contracts': ([], ''),
+    'deps': ([], ''),
+    'hotspots': ([], ''),
+    'overview': ([], ''),
+    'pack': ([], ''),
+    'surface': ([], ''),
+    'testability': ([], ''),
+    'trace': (['--from', 'serve'], '?from=serve'),
+}
+NOUNS = sorted(CASES)
+
+APP = '''\
+import os
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+
+class Store(ABC):
+    @abstractmethod
+    def get(self, key):
+        ...
+
+
+@dataclass
+class Item:
+    name: str
+
+
+def load(key):
+    return os.getenv(key)
+
+
+def serve(key):
+    if key:
+        return load(key)
+    return None
+'''
+
+
+@pytest.fixture
+def project(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    root = tmp_path / 'proj'
+    (root / 'tests').mkdir(parents=True)
+    (root / 'app.py').write_text(APP, encoding='utf-8')
+    (root / 'tests' / 'test_app.py').write_text(
+        'from app import serve\n\n\ndef test_serve():\n    assert serve("") is None\n', encoding='utf-8')
+    return root
+
+
+def argv_for(noun, spelling, resource='proj'):
+    cli, query = CASES[noun]
+    if spelling == 'cli':
+        return [noun, resource, *cli]
+    return [f'{noun}://{resource}{query}']
+
+
+def run(noun, spelling, *extra, resource='proj'):
+    return _run_reveal_direct(*argv_for(noun, spelling, resource), '--no-gitignore', *extra)
+
+
+def assert_equal_answers(noun, left, right):
+    """Only the command spelling may differ; a changed count or a dropped diagnostic must not pass."""
+    a, b = copy.deepcopy(left), copy.deepcopy(right)
+    if 'execution' in a:
+        assert a['execution']['command'].startswith(f'reveal {noun} ')
+        assert b['execution']['command'].startswith(f'reveal {noun}://')
+        del a['execution']['command']
+        del b['execution']['command']
+    assert a == b
+
+
+def test_every_declared_noun_has_a_row():
+    declared = sorted(n for n, spec in COMMANDS.items() if spec.declared_adapter)
+    assert declared == NOUNS
+
+
+@pytest.mark.parametrize('provenance', [False, True])
+@pytest.mark.parametrize('noun', NOUNS)
+def test_json_answers_match(project, noun, provenance):
+    extra = ['--format', 'json'] + (['--provenance'] if provenance else [])
+    a, b = run(noun, 'cli', *extra), run(noun, 'uri', *extra)
+    assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)
+    left, right = json.loads(a.stdout), json.loads(b.stdout)
+    assert left.get('type'), 'an empty answer would compare equal vacuously'
+    if provenance:
+        assert left['execution']['command'].startswith(f'reveal {noun} ')
+        assert right['execution']['command'].startswith(f'reveal {noun}://')
+    assert_equal_answers(noun, left, right)
+    assert a.stderr == b.stderr
+
+
+@pytest.mark.parametrize('noun', NOUNS)
+def test_text_output_matches(project, noun):
+    a, b = run(noun, 'cli'), run(noun, 'uri')
+    assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)
+    assert a.stdout.strip()
+    assert a.stdout == b.stdout
+    assert a.stderr == b.stderr
+
+
+@pytest.mark.parametrize('noun', NOUNS)
+def test_requested_artifact_equals_the_primary_json(project, tmp_path, noun):
+    docs = {}
+    for spelling in ('cli', 'uri'):
+        artifact = tmp_path / f'{spelling}.json'
+        result = run(noun, spelling, '--also-json', str(artifact))
+        assert result.returncode == 0, result.stderr
+        docs[spelling] = json.loads(artifact.read_text(encoding='utf-8'))
+    primary = json.loads(run(noun, 'cli', '--format', 'json').stdout)
+    assert docs['cli'] == primary == docs['uri']
+
+
+@pytest.mark.parametrize('noun', NOUNS)
+def test_failed_artifact_write_keeps_the_answer_and_exits_three(project, tmp_path, noun):
+    # A directory cannot be written as a file on any platform.
+    a = run(noun, 'cli', '--also-json', str(tmp_path))
+    b = run(noun, 'uri', '--also-json', str(tmp_path))
+    assert a.returncode == b.returncode == 3, (a.stderr, b.stderr)
+    assert a.stdout == b.stdout and a.stdout.strip()
+    assert a.stderr == b.stderr
+    assert 'artifact' in a.stderr.lower()
+    assert 'Traceback' not in a.stderr
+
+
+@pytest.mark.parametrize('fmt', ['text', 'json'])
+@pytest.mark.parametrize('noun', NOUNS)
+def test_missing_resource_is_rejected_alike(project, noun, fmt):
+    a = run(noun, 'cli', '--format', fmt, resource='absent')
+    b = run(noun, 'uri', '--format', fmt, resource='absent')
+    assert a.returncode == b.returncode == 2, (a.stderr, b.stderr)
+    assert a.stdout == b.stdout
+    assert a.stderr == b.stderr
+
+
+def test_the_comparison_fails_on_a_changed_count_or_dropped_diagnostic():
+    answer = {'type': 'x', 'total': 2, 'meta': {'warnings': [{'message': 'incomplete'}]}}
+    changed = copy.deepcopy(answer)
+    changed['total'] = 1
+    with pytest.raises(AssertionError):
+        assert_equal_answers('x', answer, changed)
+    changed = copy.deepcopy(answer)
+    changed['meta']['warnings'].clear()
+    with pytest.raises(AssertionError):
+        assert_equal_answers('x', answer, changed)
