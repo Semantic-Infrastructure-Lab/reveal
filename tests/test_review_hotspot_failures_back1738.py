@@ -88,14 +88,14 @@ def test_review_negative_control_clean_tree_is_not_incomplete(tmp_path):
     assert json.loads(out)['overall_status'] != 'incomplete' and code != 3
 
 
-def test_review_blocking_issue_still_fails_when_hotspots_lost_a_file(
+def test_review_lost_hotspot_file_outranks_a_blocking_issue(
         tmp_path, stats_loses_one_file, monkeypatch):
-    """fail/2 outranks incomplete/3, as it does for a quality pass that missed files."""
+    """incomplete/3 outranks a blocking finding: lost evidence beats the findings gate (BACK-2051, D6)."""
     from reveal.cli.commands import review
     monkeypatch.setattr(review, '_run_check', lambda *a, **k: [
         {'file': 'm0.py', 'line': 1, 'rule': 'S001', 'severity': 'critical', 'message': 'x'}])
     code, out = _review(_tree(tmp_path), 'json')
-    assert (code, json.loads(out)['overall_status']) == (2, 'fail')
+    assert (code, json.loads(out)['overall_status']) == (3, 'incomplete')
 
 
 def test_single_file_review_names_a_file_hotspots_could_not_analyze(tmp_path, monkeypatch):

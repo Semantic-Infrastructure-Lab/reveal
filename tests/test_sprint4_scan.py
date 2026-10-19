@@ -184,7 +184,7 @@ def test_capped_review_is_incomplete_in_text_and_json(tmp_path, monkeypatch):
     monkeypatch.setenv('REVEAL_I002_MAX_FILES', '0')
     _clear_rule_caches()
     control = _review(tmp_path)
-    assert control.returncode == 2          # the 7 high I002 cycle findings are visible uncapped
+    assert control.returncode == 1          # the 7 high I002 cycle findings are visible uncapped (a finding, not usage 2)
     assert 'Review incomplete' not in control.stdout
 
 
