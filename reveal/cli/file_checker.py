@@ -17,7 +17,7 @@ from ..utils.parallel import pool_worker_count, submit_each
 from ..utils.results import note_truncation
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List, Dict, Tuple, TYPE_CHECKING
+from typing import Optional, List, Dict, Literal, Tuple, TYPE_CHECKING
 
 from ..utils.path_utils import (
     ScopeCensus,
@@ -546,9 +546,19 @@ def _apply_severity_filter(detections: list, severity: Optional[str]) -> list:
     return [d for d in detections if _SEVERITY_ORDER.index(d.severity.value.lower()) >= min_idx]
 
 
+# Findings gates check supports (D6), evaluated by check_exit_code; the router only validates against this.
+CHECK_FINDINGS_POLICIES = ('none', 'findings')
+
+
+def requested_fail_on(args: 'Namespace') -> Literal['none', 'findings']:
+    """The findings gate this check run asked for; omission is the declared default, findings."""
+    return getattr(args, 'fail_on', None) or 'findings'
+
+
 def check_exit_code(
     total_issues: int, files_errored: int = 0, files_degraded: int = 0,
     exit_zero: bool = False, *, scan_incomplete: bool = False,
+    fail_on: Literal['none', 'findings'] = 'findings',
 ) -> int:
     """Compute `reveal check`'s process exit code (BACK-1099's contract).
 
@@ -564,6 +574,10 @@ def check_exit_code(
         be wrong or incomplete -- see
         internal-docs/design/EXIT_CODE_CONTRACT.md.
 
+    fail_on (BACK-2051, D6): ``findings`` (the default) keeps 1 for issues; ``none``
+    reports them without failing but never hides lost or degraded analysis (3).
+    It is mutually exclusive with exit_zero at the CLI (usage error, 2).
+
     (2 is reserved for usage/invocation errors -- bad args, unsupported
     path -- raised directly by the CLI layer before a scan starts, not
     computed here.)
@@ -577,11 +591,11 @@ def check_exit_code(
     to drop into a `set -e` / CI pipeline without the caller needing to
     know this one adapter's special exit-code convention.
     """
-    if exit_zero:
-        return 0
-    if files_errored or files_degraded or scan_incomplete:
-        return 3
-    return 1 if total_issues > 0 else 0
+    from ..utils.results import AnalysisCompleteness, ExecutionFacts, execution_exit_code
+    incomplete = bool(files_errored or files_degraded or scan_incomplete)
+    facts = ExecutionFacts(AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE,
+                           findings=total_issues > 0)
+    return execution_exit_code(facts, fail_on=fail_on, legacy_scan_override=exit_zero)
 
 
 def _build_file_entry(
@@ -959,6 +973,7 @@ def _check_report(
     scan_disclosures: Optional[List[str]] = None,
     exit_zero: bool = False,
     scan_incomplete: bool = False,
+    fail_on: Literal['none', 'findings'] = 'findings',
 ) -> dict:
     """check's result as plain data; the subcommand seam (emit_subcommand_result /
     subcommand_json) adds the Output Contract envelope (BACK-1545).
@@ -1000,7 +1015,7 @@ def _check_report(
         "total_issues": tally.total_issues,
         "exit_code": check_exit_code(
             tally.total_issues, tally.files_errored, tally.files_degraded, exit_zero=exit_zero,
-            scan_incomplete=scan_incomplete),
+            scan_incomplete=scan_incomplete, fail_on=fail_on),
         "scan_disclosures": scan_disclosures or [],
         "items_truncated": budget.truncated,
     }
@@ -1210,7 +1225,7 @@ def _report_for(files: List[Path], collection: 'FileCollectionResult', args: 'Na
                 select, ignore, disclosures: List[str], scan_incomplete: bool):
     """_check_report with this run's arguments, so --format json and both
     --also-json writers describe the run the same way (BACK-1248): same scope,
-    same scan disclosures, same exit_zero."""
+    same scan disclosures, same exit_zero and fail_on."""
     def report(tally: _CheckTally, budget: _ItemBudget, file_results: Optional[List[dict]] = None) -> dict:
         result = _check_report(
             tally, len(files), budget, file_results,
@@ -1218,6 +1233,7 @@ def _report_for(files: List[Path], collection: 'FileCollectionResult', args: 'Na
             select=select, ignore=ignore, scan_disclosures=disclosures,
             exit_zero=getattr(args, 'exit_zero', False),
             scan_incomplete=scan_incomplete,
+            fail_on=requested_fail_on(args),
         )
         result['summary']['scan_budgets'] = [
             {**row, 'root': as_spelled(row['root'], getattr(args, 'path', '.') or '.')}

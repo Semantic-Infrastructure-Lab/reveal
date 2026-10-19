@@ -35,7 +35,8 @@ def create_check_parser() -> argparse.ArgumentParser:
             'Run reveal quality rules on a file or directory.\n\n'
             'Checks for bugs, security issues, complexity problems, and more.\n'
             'Exit code 0 = no issues, 1 = issues found, 2 = usage error, '
-            '3 = scan incomplete (a file could not be parsed/checked).'
+            '3 = scan incomplete (a file could not be parsed/checked).\n'
+              '--fail-on none reports issues without exit 1 (an incomplete scan still exits 3).'
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
@@ -44,6 +45,7 @@ def create_check_parser() -> argparse.ArgumentParser:
             '  reveal check file.py                # check single file\n'
             '  reveal check ./src --select B,S     # bugs and security only\n'
             '  reveal check ./src --format json    # machine-readable output\n'
+            '  reveal check ./src --fail-on none   # report issues; exit 0 unless the scan is incomplete\n'
             '\n'
             + textwrap.fill(f'Rule categories: {category_legend()}', width=78,
                             subsequent_indent=' ' * 17) + '\n'
@@ -150,7 +152,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
              'degraded/unparseable files -- moves "were there issues" into the JSON/text '
              'output only (meta/summary), matching how every other reveal adapter behaves. '
              'A genuine usage error (exit 2, e.g. bad arguments) still exits nonzero. '
-             'Makes check safe to drop into a set -e / CI pipeline (BACK-1186).',
+             'Makes check safe to drop into a set -e / CI pipeline (BACK-1186). Legacy: it also '
+             'hides incomplete analysis, so prefer --fail-on none, which reports findings '
+             'without failing but still exits 3 when the scan is incomplete. Cannot be '
+             'combined with --fail-on.',
     )
 
 
@@ -244,10 +249,11 @@ def run_check(args: Namespace) -> None:
         # can mean "clean" or "couldn't actually check it". Exit 3 makes
         # that distinguishable from clean (0) and from real issues (1) at
         # the shell level; see internal-docs/design/EXIT_CODE_CONTRACT.md.
-        from reveal.cli.file_checker import check_exit_code
+        from reveal.cli.file_checker import check_exit_code, requested_fail_on
         complete(args)  # the exit code is the result: the flag ledger still reports
         sys.exit(check_exit_code(
             violations,
             files_degraded=1 if degraded else 0,
             exit_zero=getattr(args, 'exit_zero', False),
+            fail_on=requested_fail_on(args),
         ))

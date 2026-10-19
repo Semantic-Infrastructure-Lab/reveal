@@ -44,6 +44,14 @@ def create_declared_parser(name: str) -> argparse.ArgumentParser:
     return parser
 
 
+def _is_file_check(args, command: str | None) -> bool:
+    """File or directory check, by `reveal check PATH` or `reveal PATH --check`; URI and stdin checks differ."""
+    if command == 'check':
+        return True
+    path = str(peek(args, 'path', '') or '')
+    return command is None and bool(peek(args, 'check', False)) and bool(path) and '://' not in path
+
+
 def validate_execution_policy(args, command: str | None = None) -> None:
     """Reject execution policy on transports that have not adopted its contract."""
     policy = peek(args, 'fail_on')
@@ -52,8 +60,15 @@ def validate_execution_policy(args, command: str | None = None) -> None:
     name = command or str(peek(args, 'path', '')).partition('://')[0]
     adapter = declared_adapter_class(name)
     supported = getattr(adapter, 'FINDINGS_POLICIES', ()) if adapter is not None else ()
+    if adapter is None and _is_file_check(args, command):
+        from ..file_checker import CHECK_FINDINGS_POLICIES
+        supported = CHECK_FINDINGS_POLICIES
     if peek(args, 'stdin', False) or peek(args, 'batch', False) or policy not in supported:
         print(f'Error: --fail-on {policy} is not supported for this operation/transport.', file=sys.stderr)
+        sys.exit(2)
+    if peek(args, 'exit_zero', False):
+        print('Error: --fail-on cannot be combined with the legacy --exit-zero override; '
+              'use --fail-on none to report findings without failing.', file=sys.stderr)
         sys.exit(2)
 
 
