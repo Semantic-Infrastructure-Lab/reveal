@@ -13,6 +13,7 @@ import pytest
 
 from conftest import _run_reveal_direct
 from reveal.cli.invocation import COMMANDS
+from reveal.cli.routing.declared import declared_adapter_class
 
 # noun -> (CLI argv after the noun, URI suffix after `noun://proj`)
 CASES = {
@@ -30,6 +31,7 @@ NOUNS = sorted(CASES)
 
 APP = '''\
 import os
+import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -53,6 +55,60 @@ def serve(key):
     if key:
         return load(key)
     return None
+
+
+def branchy(x):
+    if x == 0:
+        return 0
+    if x == 1:
+        return 1
+    if x == 2:
+        return 2
+    if x == 3:
+        return 3
+    if x == 4:
+        return 4
+    if x == 5:
+        return 5
+    if x == 6:
+        return 6
+    if x == 7:
+        return 7
+    if x == 8:
+        return 8
+    if x == 9:
+        return 9
+    if x == 10:
+        return 10
+    if x == 11:
+        return 11
+    if x == 12:
+        return 12
+    if x == 13:
+        return 13
+    if x == 14:
+        return 14
+    if x == 15:
+        return 15
+    if x == 16:
+        return 16
+    if x == 17:
+        return 17
+    if x == 18:
+        return 18
+    if x == 19:
+        return 19
+    if x == 20:
+        return 20
+    if x == 21:
+        return 21
+    if x == 22:
+        return 22
+    if x == 23:
+        return 23
+    if x == 24:
+        return 24
+    return -1
 '''
 
 
@@ -150,6 +206,31 @@ def test_missing_resource_is_rejected_alike(project, noun, fmt):
     assert a.returncode == b.returncode == 2, (a.stderr, b.stderr)
     assert a.stdout == b.stdout
     assert a.stderr == b.stderr
+
+
+@pytest.mark.parametrize('gate', ['findings', 'none'])
+@pytest.mark.parametrize('noun', NOUNS)
+def test_fail_on_means_the_same_before_after_and_on_a_uri(project, noun, gate):
+    """The project carries an unused import and a branchy function, so a declared gate has something to match."""
+    cli, query = CASES[noun]
+    spellings = {
+        'after': [noun, 'proj', *cli, '--fail-on', gate],
+        'before': ['--fail-on', gate, noun, 'proj', *cli],
+        'uri': [f'{noun}://proj{query}', '--fail-on', gate],
+    }
+    runs = {k: _run_reveal_direct(*v, '--format', 'json', '--no-gitignore') for k, v in spellings.items()}
+    if gate == 'none':
+        expected = 0
+    elif 'findings' in declared_adapter_class(noun).FINDINGS_POLICIES:
+        expected = 1
+    else:
+        expected = 2
+    for name, result in runs.items():
+        assert result.returncode == expected, (name, result.stderr)
+    assert len({r.stdout for r in runs.values()}) == 1
+    if expected == 2:
+        assert len({r.stderr for r in runs.values()}) == 1
+        assert 'not supported' in runs['uri'].stderr
 
 
 def test_the_comparison_fails_on_a_changed_count_or_dropped_diagnostic():
