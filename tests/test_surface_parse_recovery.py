@@ -13,7 +13,7 @@ from unittest.mock import patch
 import pytest
 
 from reveal.adapters.ast.surface_matrix import RECOVERED_KEY
-from reveal.cli.commands.surface import _SURFACE_SCANNERS, _scan_surface
+from reveal.adapters.surface import _SURFACE_SCANNERS, _scan_surface
 from reveal.rendering.adapters.surface import surface_text
 
 # One unbalanced-brace snippet per tree-sitter language: parses with error recovery.

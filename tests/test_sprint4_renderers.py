@@ -78,6 +78,6 @@ def test_migrated_subcommands_emit_each_diagnostic_once(tmp_path, command):
 
 def test_renderer_compat_exports_do_not_silently_change_print_semantics():
     from reveal.adapters import deps
-    from reveal.cli.commands import contracts
+    from reveal.adapters import contracts
     assert not hasattr(deps, '_render_deps')
     assert not hasattr(contracts, '_render_report')

@@ -12,6 +12,8 @@ from unittest.mock import MagicMock, patch, call
 
 import pytest
 
+from functools import partial
+from reveal.cli.routing.declared import create_declared_parser, run_declared_command
 from reveal.adapters.overview import (
     OverviewAdapter,
     _age_label,
@@ -34,10 +36,8 @@ from reveal.adapters.overview import (
     _run_scope,
     _run_stats,
 )
-from reveal.cli.commands.overview import (
-    create_overview_parser,
-    run_overview,
-)
+create_overview_parser = partial(create_declared_parser, 'overview')
+run_overview = partial(run_declared_command, 'overview')
 
 # BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
 pytestmark = pytest.mark.component

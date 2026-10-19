@@ -9,7 +9,6 @@ import pytest
 import reveal
 from conftest import _run_reveal_direct as run
 from reveal.adapters import pack
-from reveal.cli.commands import pack as shim
 from reveal.mcp_server import reveal_pack
 from reveal.rendering.adapters.pack import PackRenderer
 
@@ -60,7 +59,6 @@ def measured(tmp_path, monkeypatch):
         return scan(*args, **kwargs)
 
     monkeypatch.setattr(pack, '_collect_candidates', candidates)
-    monkeypatch.setattr(shim, '_collect_candidates', candidates)
     monkeypatch.setattr(Path, 'stat', file_stat)
     monkeypatch.setattr(Path, 'read_text', file_read)
     monkeypatch.setattr(os, 'scandir', scandir)

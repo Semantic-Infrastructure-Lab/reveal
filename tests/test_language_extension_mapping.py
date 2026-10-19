@@ -151,7 +151,7 @@ class TestOverviewLanguageBreakdown(unittest.TestCase):
     }
 
     def test_byte_identical_to_original_table(self):
-        from reveal.cli.commands.overview import _NON_CODE_EXT_LABELS
+        from reveal.adapters.overview import _NON_CODE_EXT_LABELS
         for ext, expected in self.ORIGINAL_TABLE.items():
             actual = (
                 display_name_for_extension(ext)

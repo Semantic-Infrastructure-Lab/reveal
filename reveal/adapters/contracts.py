@@ -1,8 +1,7 @@
 """contracts:// adapter - contract and seam inventory for a codebase.
 
-Scan/render logic lives here (BACK-905); `cli/commands/contracts.py` is a thin
-argparse shim over this adapter, matching the URI/adapter contract every other
-capability follows (BACK-901). Same treatment as surface.py (BACK-904).
+Scan/render logic lives here (BACK-905). The `reveal contracts` command is generated from this
+adapter's declaration (BACK-901), as for surface.py (BACK-904).
 """
 
 from __future__ import annotations

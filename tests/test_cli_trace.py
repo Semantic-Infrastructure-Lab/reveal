@@ -13,16 +13,18 @@ from unittest.mock import patch
 
 import pytest
 
-from reveal.cli.commands.trace import (
+from functools import partial
+from reveal.cli.routing.declared import create_declared_parser, run_declared_command
+from reveal.adapters.trace import (
     _build_trace,
     _collect_function_index,
     _effects_from_calls,
     _params_from_signature,
     _relpath,
     _render_trace,
-    create_trace_parser,
-    run_trace,
 )
+create_trace_parser = partial(create_declared_parser, 'trace')
+run_trace = partial(run_declared_command, 'trace')
 
 # BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
 pytestmark = pytest.mark.component

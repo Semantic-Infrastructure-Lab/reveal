@@ -12,6 +12,8 @@ from argparse import Namespace
 
 import pytest
 
+from functools import partial
+from reveal.cli.routing.declared import run_declared_command
 from reveal.adapters.pack import (
     _parse_budget,
     _compute_priority,
@@ -24,11 +26,11 @@ from reveal.adapters.pack import (
     _get_file_raw_content,
     _collect_file_contents,
 )
-from reveal.cli.commands.pack import run_pack
 
 from reveal.rendering.adapters.pack import (
     pack_text, _format_file_line, _format_pack_content, _format_architecture_brief,
 )
+run_pack = partial(run_declared_command, 'pack')
 
 # BACK-1149: exercises reveal.main's CLI entry point via conftest's _run_reveal_direct/subprocess
 pytestmark = pytest.mark.cli
@@ -1563,13 +1565,13 @@ class TestComputePriorityFanIn(unittest.TestCase):
 class TestFetchFanIn(unittest.TestCase):
 
     def test_graceful_failure_returns_empty_dict(self):
-        from reveal.cli.commands.pack import _fetch_fan_in
+        from reveal.adapters.pack import _fetch_fan_in
         # Non-existent path — should return {} without raising
         result = _fetch_fan_in(Path("/nonexistent/path/that/cannot/exist"))
         self.assertIsInstance(result, dict)
 
     def test_returns_dict_for_valid_path(self):
-        from reveal.cli.commands.pack import _fetch_fan_in
+        from reveal.adapters.pack import _fetch_fan_in
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "a.py").write_text("import b\n")
             (Path(d) / "b.py").write_text("X = 1\n")

@@ -2,7 +2,7 @@
 
 Scan/rank logic lives here; presentation lives in rendering/adapters/pack.py.
 The CLI command, pack:// and the reveal_pack MCP tool all run through the declared
-execution path; cli/commands/pack.py keeps only compatibility re-exports of these helpers.
+execution path.
 """
 
 import io

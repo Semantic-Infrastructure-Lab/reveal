@@ -11,7 +11,8 @@ from unittest.mock import patch
 import pytest
 
 from reveal.adapters.patches.adapter import PatchesAdapter
-from reveal.cli.commands.testability import create_testability_parser, run_testability
+from functools import partial
+from reveal.cli.routing.declared import create_declared_parser, run_declared_command
 from reveal.testability.boundaries import collect_boundary_profiles
 from reveal.testability.patches import (
     group_patches,
@@ -20,6 +21,8 @@ from reveal.testability.patches import (
     scan_patches_ts,
 )
 from reveal.testability.report import build_testability_report
+create_testability_parser = partial(create_declared_parser, 'testability')
+run_testability = partial(run_declared_command, 'testability')
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
 pytestmark = pytest.mark.component

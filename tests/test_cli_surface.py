@@ -19,16 +19,18 @@ from reveal.adapters.ast.nav_surface import (
     _is_http_route,
     _is_mock_patch_decorator,
 )
-from reveal.cli.commands.surface import (
+from functools import partial
+from reveal.cli.routing.declared import create_declared_parser, run_declared_command
+from reveal.adapters.surface import (
     _SURFACE_SCANNERS,
     _is_test_file,
     _scan_surface,
     _supported_coverage_languages,
-    create_surface_parser,
-    run_surface,
 )
 from reveal.registry import language_for_extension
 from reveal.rendering.adapters.surface import surface_text
+create_surface_parser = partial(create_declared_parser, 'surface')
+run_surface = partial(run_declared_command, 'surface')
 
 # BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
 pytestmark = pytest.mark.component
@@ -1375,7 +1377,7 @@ class TestScanSurfaceTS(unittest.TestCase):
         self.assertIn('API_KEY', env_names)
 
     def test_subprocess_label_in_surface_labels(self):
-        from reveal.cli.commands.surface import _SURFACE_LABELS
+        from reveal.adapters.surface import _SURFACE_LABELS
         self.assertIn('subprocess', _SURFACE_LABELS)
 
 

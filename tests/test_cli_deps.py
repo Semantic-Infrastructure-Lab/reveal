@@ -11,6 +11,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from functools import partial
+from reveal.cli.routing.declared import create_declared_parser, run_declared_command
 from reveal.adapters.deps import (
     DepsAdapter,
     _analyse_imports,
@@ -23,10 +25,8 @@ from reveal.rendering.adapters.deps import (
     _render_circular, _render_deps, _render_external_packages,
     _render_next_steps, _render_summary, _render_top_importers, _render_unused,
 )
-from reveal.cli.commands.deps import (
-    create_deps_parser,
-    run_deps,
-)
+create_deps_parser = partial(create_declared_parser, 'deps')
+run_deps = partial(run_declared_command, 'deps')
 
 # BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
 pytestmark = pytest.mark.component

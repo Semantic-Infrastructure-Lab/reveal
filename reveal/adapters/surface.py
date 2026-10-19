@@ -1,8 +1,7 @@
 """surface:// adapter - external boundary map for a codebase.
 
-Scan/render logic lives here (BACK-904); `cli/commands/surface.py` is a thin
-argparse shim over this adapter, matching the URI/adapter contract every other
-capability follows (BACK-901).
+Scan/render logic lives here (BACK-904). The `reveal surface` command is generated from
+this adapter's declaration (BACK-901).
 """
 
 from __future__ import annotations

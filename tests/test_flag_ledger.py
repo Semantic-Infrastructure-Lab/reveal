@@ -483,9 +483,11 @@ def test_tracked_args_behave_like_the_namespace_they_copy():
 # 4. Subcommands (BACK-1539): the same ledger and walk scope through one seam
 # ---------------------------------------------------------------------------
 
-from reveal.cli.commands.surface import create_surface_parser  # noqa: E402
+from functools import partial
+from reveal.cli.routing.declared import create_declared_parser
 from reveal.cli.routing.ledger import complete  # noqa: E402
 from reveal.cli.routing.subcommand import dispatch_subcommand  # noqa: E402
+create_surface_parser = partial(create_declared_parser, 'surface')
 
 
 def test_a_subcommand_ledger_judges_flags_against_its_own_parser():

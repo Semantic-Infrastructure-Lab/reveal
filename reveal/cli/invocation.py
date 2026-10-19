@@ -61,6 +61,11 @@ def _spec(name: str, usage: str, summary: str, formats: Optional[Tuple[str, ...]
                        formats, usage, summary, help_guide)
 
 
+def _declared(name: str, usage: str, summary: str, help_guide: str = '') -> CommandSpec:
+    """A noun the same-named adapter declares: no module of its own, `load()` builds both from the declaration."""
+    return CommandSpec('', '', '', None, usage, summary, help_guide, declared_adapter=name)
+
+
 _SUBCOMMANDS_GUIDE = 'guides/SUBCOMMANDS_GUIDE.md'
 
 
@@ -68,20 +73,20 @@ _SUBCOMMANDS_GUIDE = 'guides/SUBCOMMANDS_GUIDE.md'
 # from an unknown name (BACK-1028). health and review have no same-named adapter, and their
 # runners render only these formats (measured: grep/typed output matched text byte for byte).
 COMMANDS: Dict[str, CommandSpec] = {
-    'architecture': _spec('architecture',
+    'architecture': _declared('architecture',
                      'reveal architecture [path]',
-                     'Architectural brief: entry points, core abstractions, risks')._replace(declared_adapter='architecture'),
+                     'Architectural brief: entry points, core abstractions, risks'),
     'check':        _spec('check',
                      'reveal check <path>',
                      'Run quality rules on a file or directory',
                      ('text', 'json', 'grep'),  # also PATH --check (BACK-1644)
                      help_guide=_SUBCOMMANDS_GUIDE),
-    'contracts':    _spec('contracts',
+    'contracts':    _declared('contracts',
                      'reveal contracts [path]',
-                     'Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses')._replace(declared_adapter='contracts'),
-    'deps':         _spec('deps',
+                     'Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses'),
+    'deps':         _declared('deps',
                      'reveal deps [path]',
-                     'Dependency health: external packages, circular deps, unused imports')._replace(declared_adapter='deps'),
+                     'Dependency health: external packages, circular deps, unused imports'),
     'dev':          _spec('dev',
                      'reveal dev <command>',
                      'Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config',
@@ -90,19 +95,19 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'reveal health [path]',
                      'Unified health: code rules + SSL + databases + DNS',
                      ('text', 'json'), help_guide=_SUBCOMMANDS_GUIDE),
-    'hotspots':     _spec('hotspots',
+    'hotspots':     _declared('hotspots',
                      'reveal hotspots [path]',
-                     'High-complexity files and functions that need attention')._replace(declared_adapter='hotspots'),
+                     'High-complexity files and functions that need attention'),
     'offline':      _spec('offline',
                      'reveal offline',
                      'Pre-download tree-sitter grammars for offline/air-gapped use'),
-    'overview':     _spec('overview',
+    'overview':     _declared('overview',
                      'reveal overview [path]',
-                     'One-glance dashboard: languages, quality, hotspots, recent git')._replace(declared_adapter='overview'),
-    'pack':         _spec('pack',
+                     'One-glance dashboard: languages, quality, hotspots, recent git'),
+    'pack':         _declared('pack',
                      'reveal pack <path>',
                      'Token-budgeted context snapshot for LLM consumption',
-                     help_guide=_SUBCOMMANDS_GUIDE)._replace(declared_adapter='pack'),  # pack:// guide is a pointer stub
+                     help_guide=_SUBCOMMANDS_GUIDE),  # pack:// guide is a pointer stub
     'review':       _spec('review',
                      'reveal review <path>',
                      'Assess quality + structural changes before a PR merge',
@@ -111,16 +116,16 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'reveal scaffold <kind>',
                      'Older alias of `reveal dev new-*` — prefer `reveal dev`',
                      help_guide=_SUBCOMMANDS_GUIDE),
-    'surface':      _spec('surface',
+    'surface':      _declared('surface',
                      'reveal surface [path]',
-                     'External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls')._replace(declared_adapter='surface'),
-    'testability':  _spec('testability',
+                     'External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls'),
+    'testability':  _declared('testability',
                      'reveal testability [path]',
                      'Test patch pressure joined with production boundary fan-out',
-                     help_guide='guides/TESTABILITY_GUIDE.md')._replace(declared_adapter='testability'),
-    'trace':        _spec('trace',
+                     help_guide='guides/TESTABILITY_GUIDE.md'),
+    'trace':        _declared('trace',
                      'reveal trace --from FUNC',
-                     'Walk call graph from a named entry point; depth-indented narrative with side-effect classification')._replace(declared_adapter='trace'),
+                     'Walk call graph from a named entry point; depth-indented narrative with side-effect classification'),
 }
 
 

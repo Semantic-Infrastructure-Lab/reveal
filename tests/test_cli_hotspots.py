@@ -11,6 +11,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from functools import partial
+from reveal.cli.routing.declared import create_declared_parser, run_declared_command
 from reveal.adapters.hotspots import (
     HotspotsAdapter,
     _build_test_name_index,
@@ -24,10 +26,8 @@ from reveal.rendering.adapters.hotspots import (
     _render_report, _render_summary,
 )
 from reveal.utils.results import note_truncation
-from reveal.cli.commands.hotspots import (
-    create_hotspots_parser,
-    run_hotspots,
-)
+create_hotspots_parser = partial(create_declared_parser, 'hotspots')
+run_hotspots = partial(run_declared_command, 'hotspots')
 
 # BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
 pytestmark = pytest.mark.component

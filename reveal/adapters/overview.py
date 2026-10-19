@@ -1,8 +1,7 @@
 """overview:// adapter - one-glance codebase dashboard.
 
-Scan/render logic lives here (BACK-901/BACK-958); `cli/commands/overview.py`
-is a thin argparse shim over this adapter, matching the URI/adapter contract
-every other capability follows.
+Scan/render logic lives here (BACK-901/BACK-958). The `reveal overview` command is
+generated from this adapter's declaration.
 """
 
 from __future__ import annotations

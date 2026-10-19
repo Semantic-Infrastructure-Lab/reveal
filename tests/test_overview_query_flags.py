@@ -15,8 +15,11 @@ from unittest.mock import patch
 
 import pytest
 
-from reveal.cli.commands.overview import create_overview_parser, run_overview
+from functools import partial
+from reveal.cli.routing.declared import create_declared_parser, run_declared_command
 from reveal.cli.routing.uri import _inject_exclude_flag
+create_overview_parser = partial(create_declared_parser, 'overview')
+run_overview = partial(run_declared_command, 'overview')
 
 
 def _bound_request(*argv):

@@ -7,7 +7,6 @@ import pytest
 
 from conftest import _run_reveal_direct as run
 from reveal.adapters import pack
-from reveal.cli.commands import pack as shim
 
 pytestmark = pytest.mark.component
 
@@ -64,7 +63,6 @@ def observed(monkeypatch):
         return real_scan(path)
 
     monkeypatch.setattr(pack, '_collect_candidates', collect)
-    monkeypatch.setattr(shim, '_collect_candidates', collect)  # Existing specialized compatibility import.
     monkeypatch.setattr(Path, 'read_text', read)
     monkeypatch.setattr(Path, 'stat', stat)
     monkeypatch.setattr(os, 'scandir', scandir)

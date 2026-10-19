@@ -284,8 +284,8 @@ Several subcommands compose adapters into higher-level workflows. The full list 
 | `reveal check <dir>` | `cli/commands/check.py` | Runs quality rules (B/M/I/V/L/N series) |
 | `reveal review <diff>` | `cli/commands/review.py` | diff + check + hotspots + complexity delta |
 | `reveal health <dir>` | `cli/commands/health.py` | CI-oriented: exit 0 pass, 1 findings, 2 usage, 3 a check failed or was incomplete (`--fail-on none` skips 1) |
-| `reveal pack <dir>` | `cli/commands/pack.py` | Token-budgeted context snapshots for LLMs |
-| `reveal hotspots <dir>` | `cli/commands/hotspots.py` | Complexity + coupling ranking |
+| `reveal pack <dir>` | `adapters/pack.py` (declared) | Token-budgeted context snapshots for LLMs |
+| `reveal hotspots <dir>` | `adapters/hotspots.py` (declared) | Complexity + coupling ranking |
 | `reveal dev <cmd>` | `cli/commands/dev.py` | Developer tooling (new-adapter scaffold, etc.) |
 
 `main()` parses the command line once, into an `Invocation`, which names the subcommand. `main._dispatch_and_run` runs a subcommand and the path/URI form the same way: parse with the command's own parser, apply the global flags and `--copy`, and run. A subcommand runs through `cli/routing/subcommand.py`, which applies the flag ledger and the `--exclude`/REVEAL_IGNORE walk scope (BACK-1058, BACK-1539). Subcommands call adapters programmatically (not via URI routing) and compose their outputs.

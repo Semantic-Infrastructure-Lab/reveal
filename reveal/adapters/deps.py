@@ -1,8 +1,7 @@
 """deps:// adapter - dependency health dashboard.
 
-Scan logic lives here; returned text bodies live in rendering/adapters/deps.py (BACK-901/BACK-956); `cli/commands/deps.py` is a
-thin argparse shim over this adapter, matching the URI/adapter contract every
-other capability follows.
+Scan logic lives here; returned text bodies live in rendering/adapters/deps.py (BACK-901/BACK-956).
+The `reveal deps` command is generated from this adapter's declaration.
 """
 
 from __future__ import annotations

@@ -15,7 +15,9 @@ import pytest
 
 from reveal.adapters.ast.analysis import collect_structures
 
-from reveal.cli.commands.contracts import (
+from functools import partial
+from reveal.cli.routing.declared import create_declared_parser, run_declared_command
+from reveal.adapters.contracts import (
     _add_implementations,
     _extract_all_classes,
     _is_abc,
@@ -24,10 +26,10 @@ from reveal.cli.commands.contracts import (
     _is_protocol,
     _is_typeddict,
     _scan_contracts,
-    create_contracts_parser,
-    run_contracts,
 )
 from reveal.rendering.adapters.contracts import _render_report
+create_contracts_parser = partial(create_declared_parser, 'contracts')
+run_contracts = partial(run_declared_command, 'contracts')
 
 # BACK-1149: component-layer test -- calls a reveal.cli.* handler function directly, not through reveal.main
 pytestmark = pytest.mark.component

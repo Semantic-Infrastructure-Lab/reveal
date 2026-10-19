@@ -4,8 +4,8 @@ Scan logic already lived in the dedicated reveal.testability.report module
 (build_testability_report, already self-enveloped with contract_version/
 type/source — BACK-906); this adapter just gives it the same URI/adapter
 registration every other capability follows (BACK-901/BACK-959). Render
-logic and test-path resolution move here from cli/commands/testability.py,
-which becomes a thin argparse shim.
+logic and test-path resolution live here; the `reveal testability` command is
+generated from this adapter's declaration.
 """
 
 from __future__ import annotations

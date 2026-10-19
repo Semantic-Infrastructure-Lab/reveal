@@ -38,7 +38,6 @@ Regenerate with `python tests/test_subcommand_flag_matrix.py --write` (keeps han
 `review`/`reason` fields, exactly like the URI matrix's `--write`).
 """
 import ast
-import importlib
 import io
 import sys
 from contextlib import redirect_stderr, redirect_stdout
@@ -98,6 +97,14 @@ _FLAG_TO_CLI = {
 }
 
 
+def _own_source(spec):
+    """The source file a hand-written subcommand reads its flags in; declared nouns have none (the
+    declaration and the shared runner own them)."""
+    if spec.declared_adapter:
+        return ''
+    return 'reveal/' + spec.module.split('reveal.', 1)[1].replace('.', '/') + '.py'
+
+
 def _module_reads_flag(rel_path: str, flag: str) -> bool:
     path = REVEAL_PKG.parent / rel_path if not rel_path.startswith('reveal/') else REVEAL_PKG / rel_path[len('reveal/'):]
     if not path.exists():
@@ -122,11 +129,11 @@ def _reads_via_shared_seam(name, flag):
     That reads args via a variable dest (getattr(args, spec.dest)), not the literal
     `args.<flag>` _module_reads_flag looks for, and is gated on the target adapter's own
     CLI_QUERY_FLAGS declaration, not on anything visible in the subcommand's source."""
-    own_rel = 'reveal/' + SUBCOMMANDS[name][0].split('reveal.', 1)[1].replace('.', '/') + '.py'
-    src = (REVEAL_PKG.parent / own_rel).read_text(encoding='utf-8')
     declared = bool(SUBCOMMANDS[name].declared_adapter)
-    if 'inject_query_flags' not in src and not declared:
-        return False
+    if not declared:
+        src = (REVEAL_PKG.parent / _own_source(SUBCOMMANDS[name])).read_text(encoding='utf-8')
+        if 'inject_query_flags' not in src:
+            return False
     from reveal.adapters.base import get_adapter_class
     try:
         adapter_cls = get_adapter_class(name)
@@ -150,18 +157,16 @@ def _reads_via_shared_seam(name, flag):
 def derive_matrix():
     matrix = {}
     for name, spec in SUBCOMMANDS.items():
-        modpath, parser_fn = spec.module, spec.parser_factory
-        mod = importlib.import_module(modpath)
-        parser = getattr(mod, parser_fn)()
+        parser, _ = spec.load()
         dests = {a.dest for a in parser._actions}
-        own_rel = 'reveal/' + modpath.split('reveal.', 1)[1].replace('.', '/') + '.py'
+        own_rel = _own_source(spec)
         cross_files = _CROSS_FILE_READERS.get(name, ())
         cells = {}
         for flag in FLAGS:
             if flag not in dests:
                 cells[flag] = []
                 continue
-            read = (_module_reads_flag(own_rel, flag)
+            read = ((bool(own_rel) and _module_reads_flag(own_rel, flag))
                     or any(_module_reads_flag(f, flag) for f in cross_files)
                     or _reads_via_shared_seam(name, flag))
             if read:
@@ -241,15 +246,14 @@ def test_probes_only_target_honored_cells():
 
 def _run_subcommand(name, argv):
     spec = SUBCOMMANDS[name]
-    modpath, parser_fn, runner_fn = spec.module, spec.parser_factory, spec.runner
-    mod = importlib.import_module(modpath)
-    args = getattr(mod, parser_fn)().parse_args(argv)
+    parser, runner = spec.load()
+    args = parser.parse_args(argv)
     from reveal.cli.global_flags import apply_global_flags
     apply_global_flags(args)
     out = io.StringIO()
     with redirect_stdout(out), redirect_stderr(io.StringIO()):
         try:
-            getattr(mod, runner_fn)(args)
+            runner(args)
         except SystemExit:
             pass
     return out.getvalue()
