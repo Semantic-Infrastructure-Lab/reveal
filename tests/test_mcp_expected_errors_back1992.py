@@ -48,6 +48,8 @@ def _text(result):
 
 
 def _run(tmp_path, scenario, code=None):
+    phase = ['starting the server']
+
     async def exercise():
         params = StdioServerParameters(
             command=sys.executable,
@@ -57,10 +59,17 @@ def _run(tmp_path, scenario, code=None):
         with (tmp_path / 'server-stderr.txt').open('w', encoding='utf-8') as errlog:
             async with stdio_client(params, errlog=errlog) as (read, write):
                 async with ClientSession(read, write) as session:
+                    phase[0] = 'session.initialize()'
                     await session.initialize()
+                    phase[0] = 'the scenario'
                     await scenario(session)
-    # 60 s timed out twice on the loaded 1.8.1 compat leg (BACK-2050); a real hang still fails.
-    asyncio.run(asyncio.wait_for(exercise(), timeout=180))
+    # 60 s timed out repeatedly on the loaded 1.8.1 compat leg (BACK-2050); a real hang still fails.
+    try:
+        asyncio.run(asyncio.wait_for(exercise(), timeout=180))
+    except (asyncio.TimeoutError, TimeoutError):
+        stderr = (tmp_path / 'server-stderr.txt').read_text(encoding='utf-8', errors='replace')
+        pytest.fail(f'MCP stdio run timed out after 180 s while {phase[0]}; server stderr tail:\n'
+                    f'{stderr[-3000:] or "(empty)"}', pytrace=False)
 
 
 def test_expected_diagnostics_reach_stdio_client(tmp_path):
