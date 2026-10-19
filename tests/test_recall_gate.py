@@ -216,6 +216,39 @@ def test_a_reveal_side_loss_is_measured_and_fails_the_gate(python_corpus, monkey
         gate.measure(entry, root)
 
 
+def test_the_gate_scores_what_depends_renders_not_the_private_graph(python_corpus, monkeypatch):
+    # BACK-2062: the gate once read adapter._graph.reverse_deps, so it stayed green while the
+    # rendered answer lost a dependent. Drop pkg/b.py from the rendered view only; the graph keeps it.
+    root, entry = python_corpus
+    real = DependsAdapter._format_file_dependents
+
+    def render_without_b(self, target, top_n=None):
+        result = real(self, target, top_n=top_n)
+        result['dependents'] = [d for d in result['dependents'] if d['file'] != 'pkg/b.py']
+        result['count'] = len(result['dependents'])
+        return result
+
+    monkeypatch.setattr(DependsAdapter, '_format_file_dependents', render_without_b)
+    measured = gate.measure(entry, root)
+    assert measured['recall'] == 0.75
+    assert measured['differences'] == [{'target': 'pkg/a.py', 'missed': ['pkg/b.py'], 'extra': []}]
+
+
+def test_a_truncated_rendered_view_is_a_failure_not_a_smaller_answer(python_corpus, monkeypatch):
+    # The rendered list may be cut (?top=N); the gate must see count > len(dependents) and refuse.
+    root, entry = python_corpus
+    real = DependsAdapter._format_file_dependents
+
+    def cut(self, target, top_n=None):
+        result = real(self, target, top_n=top_n)
+        result['dependents'] = []  # count still says what the full answer held
+        return result
+
+    monkeypatch.setattr(DependsAdapter, '_format_file_dependents', cut)
+    with pytest.raises(RuntimeError, match='truncated'):
+        gate.measure(entry, root)
+
+
 def test_unknown_oracle_and_escaping_scan_root_fail(python_corpus):
     root, entry = python_corpus
     with pytest.raises(RuntimeError, match="Unknown recall oracle 'nope'"):

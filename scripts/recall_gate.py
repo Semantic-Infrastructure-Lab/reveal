@@ -13,12 +13,17 @@ The default signal is imports; --signal calls runs the separate pinned Python ca
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import importlib.metadata
+import io
 import json
+import os
+import re
 import subprocess
 import sys
 import time
+import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -26,13 +31,65 @@ from typing import Any
 import yaml
 
 from recall_oracles import ORACLES, Scope, tracked_files, build_python_calls_oracle
-from reveal.adapters.depends import DependsAdapter, scan_extensions_for
+from reveal.adapters.depends import DependsAdapter
+from reveal.main import main as reveal_main
+from reveal.utils.request_cache import reset_request_caches
 from reveal import __version__
 
 MANIFEST = Path(__file__).resolve().parent.parent / 'tests/corpus/manifest.yaml'
 BASELINE = MANIFEST.with_name('recall_baseline.json')
 # Fields whose change means the measured population moved: review the baseline, never auto-accept.
 POPULATION_FIELDS = ('oracle', 'sha', 'targets', 'oracle_edges', 'coverage')
+
+
+_PARTIAL_PARSE = re.compile(r'(\d+) file\(s\) parsed with errors')
+
+
+@contextlib.contextmanager
+def _scan_cap(cap: int):
+    """The one knob without a per-request spelling: depends:// reads the class default."""
+    before = DependsAdapter._SCAN_FILE_CAP
+    DependsAdapter._SCAN_FILE_CAP = cap
+    try:
+        yield
+    finally:
+        DependsAdapter._SCAN_FILE_CAP = before
+
+
+def rendered_dependents(scan: Path, target: Path) -> dict[str, Any]:
+    """Importers of ``target`` as the public ``depends://`` request prints them (BACK-2062).
+
+    Goes through ``reveal.main.main`` with the argv a user would type, so flag routing, the
+    project-root choice, the rendered path spelling and the disclosures are all the ones the CLI
+    produces; it never reads the adapter's private graph. A failed, capped or cut answer raises
+    instead of becoming a smaller truth.
+    """
+    uri = f'depends://{target.as_posix()}?root={urllib.parse.quote(scan.as_posix(), safe="/:")}'
+    out, err = io.StringIO(), io.StringIO()
+    code = 0
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        try:
+            reveal_main(['reveal', uri, '--format', 'json'])
+        except SystemExit as exc:
+            code = exc.code if isinstance(exc.code, int) else 0
+    try:
+        result = json.loads(out.getvalue())
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f'depends:// printed no JSON for {target.name} (exit {code}): {err.getvalue()[:200]}') from exc
+    if code or result.get('error'):
+        raise RuntimeError(f'depends:// failed for {target.name} (exit {code}): {result.get("error") or err.getvalue()[:200]}')
+    if result.get('metadata', {}).get('scan_capped'):
+        raise RuntimeError('Reveal scan was capped; measurement unavailable')
+    dependents = result['dependents']
+    if len(dependents) != result['count']:
+        raise RuntimeError(f'depends:// answer truncated for {target.name}: {len(dependents)} of {result["count"]} shown')
+    warning = result.get('warning') or ''
+    found = _PARTIAL_PARSE.search(warning)
+    if 'parsed with errors' in warning and not found:
+        raise RuntimeError(f'Unrecognized partial-parse disclosure: {warning[:200]}')
+    return {'importers': {Path(os.path.normpath(scan / dep['file'])) for dep in dependents},
+            'partial_files': int(found.group(1)) if found else 0}
+
 
 
 def corpus_key(entry: dict) -> str:
@@ -56,41 +113,32 @@ def measure(entry: dict, root: Path) -> dict[str, Any]:
     edges, coverage = oracle.build(Scope(root, scan, importers, config))
     if not edges or not importers or not coverage.get('files'):
         raise RuntimeError('Oracle produced zero rows/files; measurement unavailable')
-    adapter = DependsAdapter(resource=str(scan))
     # The parse corpus depends:// itself scans for a file target of this language.
-    cap = config.get('scan_file_cap', adapter._SCAN_FILE_CAP)
+    cap = config.get('scan_file_cap', DependsAdapter._SCAN_FILE_CAP)
     if not isinstance(cap, int) or cap <= 0:
         raise RuntimeError('scan_file_cap must be a positive integer')
-    adapter._SCAN_FILE_CAP = cap
-    adapter._build_graph(scan, scan_extensions=scan_extensions_for(root / next(iter(edges))))
-    if adapter._scan_capped:
-        raise RuntimeError('Reveal scan was capped; measurement unavailable')
     excluded_suffixes = tuple(config.get('exclude_importer_suffixes', []))
     population = {p for p in importers if not excluded_suffixes or not p.name.endswith(excluded_suffixes)}
-    hit = expected = extra = 0
+    hit = expected = extra = partial = 0
     differences = []
-    for target, truth_list in edges.items():
-        truth = set(truth_list)
-        if name == 'go-toolchain':
-            # Go imports name packages; measure the private file projection, which
-            # expands directory-keyed edges, rather than raw graph storage keys.
-            view = adapter._format_file_dependents(root / target)
-            found = {Path(item['file']).as_posix() for item in view['dependents']
-                     if root / item['file'] in population}
-        else:
-            found = {p.relative_to(root).as_posix() for p in adapter._graph.reverse_deps.get(root / target, set())
-                     if p in population}
-        matched, missed, surplus = truth & found, truth - found, found - truth
-        hit += len(matched)
-        expected += len(truth)
-        extra += len(surplus)
-        if missed or surplus:
-            differences.append({'target': target, 'missed': sorted(missed), 'extra': sorted(surplus)})
+    with _scan_cap(cap):
+        reset_request_caches()
+        for target, truth_list in edges.items():
+            view = rendered_dependents(scan, root / target)
+            partial = view['partial_files']
+            truth = set(truth_list)
+            found = {p.relative_to(root).as_posix() for p in view['importers'] if p in population}
+            matched, missed, surplus = truth & found, truth - found, found - truth
+            hit += len(matched)
+            expected += len(truth)
+            extra += len(surplus)
+            if missed or surplus:
+                differences.append({'target': target, 'missed': sorted(missed), 'extra': sorted(surplus)})
     if not hit:
         raise RuntimeError('Reveal found zero oracle edges; positive control failed')
     return {'oracle': name, 'sha': head, 'targets': len(edges), 'oracle_edges': expected, 'hit_edges': hit,
             'extra_edges': extra, 'recall': hit / expected, 'precision': hit / (hit + extra),
-            'coverage': coverage, 'partial_files': len(adapter._files_failed),
+            'coverage': coverage, 'partial_files': partial,
             'differences': differences}
 
 
