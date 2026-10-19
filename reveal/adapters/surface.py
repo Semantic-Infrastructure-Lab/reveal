@@ -29,8 +29,10 @@ from ..registry import (
 )
 from ..utils.path_utils import (
     ANALYSIS,
+    HiddenTally,
     census_and_coverage_for_path,
     detect_non_python_language,
+    hidden_entries_warning,
     is_test_dir,
     is_test_filename,
     is_test_basename_for_language,
@@ -300,8 +302,13 @@ def _scan_surface(
     # BACK-884: one walk produces both `coverage` (gated to surface's
     # supported-language set, BACK-518) and the broader per-language `scope`
     # census below.
+    hidden = HiddenTally()
     census, coverage = census_and_coverage_for_path(
-        path, _supported_coverage_languages(), on_error=partial(_record_traversal_error, census_failures))
+        path, _supported_coverage_languages(), on_error=partial(_record_traversal_error, census_failures),
+        on_hidden=hidden)
+    # The census walks what the scan walked: nothing left to scan and something hidden
+    # means "no surfaces" is gitignore's answer, not the code's (BACK-2065).
+    scope_hidden = hidden_entries_warning(hidden, census.total_code_files)
     scope = census.to_scope_dict(capability_tiers=capability_tiers_for(census.language_extensions))
 
     directory_loss = bool(source_failures or census_failures)
@@ -352,6 +359,7 @@ def _scan_surface(
     return {
         **({'_source_traversal_failures': source_failures, '_census_traversal_failures': census_failures,
             '_discovery_error': discovery_error} if directory_loss else {}),
+        '_scope_hidden': scope_hidden,
         'path': str(path),
         'total': total,
         'surfaces': surfaces,
@@ -522,6 +530,9 @@ class SurfaceAdapter(ResourceAdapter):
         census_failures = report.pop('_census_traversal_failures', [])
         directory_loss = bool(source_failures or census_failures)
         warnings = _surface_traversal_warnings(source_failures, census_failures, Path(self.path))
+        scope_hidden = report.pop('_scope_hidden', None)
+        if scope_hidden:
+            warnings.append(scope_hidden)
         errors = []
         discovery_error = report.pop('_discovery_error', None)
         if discovery_error:

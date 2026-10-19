@@ -22,7 +22,7 @@ from ...defaults import (
     CALL_GRAPH_IMPLICIT_EXCLUSION_VOCAB,
     CALL_GRAPH_DEFAULT_IMPLICIT_EXCLUSION_VOCAB,
 )
-from ...utils.path_utils import census_for_path, to_posix
+from ...utils.path_utils import HiddenTally, OnHidden, census_for_path, hidden_entries_warning, to_posix
 from ..ast.analysis import analysis_skipped_warning, traversal_failed_warning
 
 # Capability metadata for v1.1 contract (BACK-307).
@@ -59,16 +59,18 @@ _UNCALLED_DERIVED_SIGNAL_WARNING = {
 
 
 def language_census(path: str, *,
-                    on_error: Optional[Callable[[OSError], None]] = None) -> Dict[str, int]:
+                    on_error: Optional[Callable[[OSError], None]] = None,
+                    on_hidden: Optional[OnHidden] = None) -> Dict[str, int]:
     """Per-language file counts under *path* (BACK-1198) — single walk,
     shared by the confidence and dynamic-dispatch-vocabulary computation.
     Empty dict (not an exception) on a missing/unreadable path — callers
     fall back to the language-agnostic defaults, same as the "unmeasured
     language" case. The optional callback retains actual directory enumeration
     errors; the broad fallback below also covers unqualified non-walk errors.
+    *on_hidden* sees what the walk hid (BACK-2065).
     """
     try:
-        return dict(census_for_path(Path(path), on_error=on_error).per_language)
+        return dict(census_for_path(Path(path), on_error=on_error, on_hidden=on_hidden).per_language)
     except OSError:
         return {}
 
@@ -92,7 +94,8 @@ def build_meta(path: str, *, uncalled: bool = False,
         census_failures.append((to_posix(error.filename) if error.filename else None,
                                 f'{type(error).__name__}: {error}'))
 
-    per_language = language_census(path, on_error=_record_census_error)
+    hidden = HiddenTally()
+    per_language = language_census(path, on_error=_record_census_error, on_hidden=hidden)
     directory_failures = (*traversal_failures, *census_failures)
     total = sum(per_language.values())
     if total:
@@ -159,6 +162,11 @@ def build_meta(path: str, *, uncalled: bool = False,
     traversal_warning = traversal_failed_warning(directory_failures, directory)
     if traversal_warning:
         warnings.append(traversal_warning)
+    # The census walks the tree the index walked: no code file left and something hidden
+    # means the empty answer is gitignore's, not the code's (BACK-2065).
+    scope_hidden = hidden_entries_warning(hidden, total)
+    if scope_hidden:
+        warnings.append(scope_hidden)
 
     return {
         'parse_mode': 'tree_sitter_partial' if known_loss else 'tree_sitter_full',

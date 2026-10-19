@@ -29,6 +29,7 @@ from ..analyzers.imports import service as import_analysis
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder, note_truncation, note_warning
 from ..utils.path_utils import (
+    hidden_entries_warning,
     traversal_failed_warning,
     to_posix,
     is_unsafe_scan_root,
@@ -493,6 +494,8 @@ class DependsAdapter(ResourceAdapter):
         # BACK-1598: files whose extractor set parse_failed, disclosed once.
         self._files_failed: List[str] = []
         self._traversal_failures: Tuple[Tuple[Optional[str], str], ...] = ()
+        # A scan whose walk hid every candidate says so (BACK-2065); set by _discover_files.
+        self._scope_hidden: Optional[Dict[str, Any]] = None
         self._ruby_inventory_roots_seen: Set[Path] = set()
         # BACK-1093: languages seen among unresolved imports whose extractor
         # has no real True/False intra-project classification at all (always
@@ -698,6 +701,7 @@ class DependsAdapter(ResourceAdapter):
         self._unresolved_examples = []
         self._files_failed = []
         self._traversal_failures = ()
+        self._scope_hidden = None
         self._ruby_inventory_roots_seen = set()
         self._zeitwerk_edges = 0
         self._constants_indexed = 0
@@ -735,6 +739,8 @@ class DependsAdapter(ResourceAdapter):
         """
         files = import_analysis.discover(import_analysis.ScanScope(scan_root, supported_exts, cap=self._scan_budget.limit))
         self._traversal_failures = files.traversal_failures
+        scope_hidden = hidden_entries_warning(files.hidden, len(files.candidates))
+        self._scope_hidden = dict(scope_hidden) if scope_hidden else None
         self._scan_capped = files.capped
         self._scan_accounting = self._scan_budget.accounting(len(files.candidates), files.capped)
         if self._traversal_failures:
@@ -1561,6 +1567,7 @@ class DependsAdapter(ResourceAdapter):
             self._root_inferred_warning(),
             f"⚠️  {partial['message']}" if partial else '',
             f"⚠️  {traversal['message']}" if traversal else '',
+            f"⚠️  {self._scope_hidden['message']}" if self._scope_hidden else '',
         ]
         if include_honest_decline:
             parts.append(self._honest_decline_warning())
@@ -1651,6 +1658,7 @@ class DependsAdapter(ResourceAdapter):
         # import policy still qualifies only empty answers (BACK-547).
         empty = not dependents
         note_warning(result, self._traversal_warning())
+        note_warning(result, self._scope_hidden)
         result['undercount_possible'] = self._undercount_possible(empty)
         warnings = self._warnings(include_honest_decline=empty)
         if warnings:
@@ -1707,6 +1715,7 @@ class DependsAdapter(ResourceAdapter):
         note_truncation(result, 'modules', len(modules), total_modules, 'limit', hint='raise ?top=N')
         empty = not modules
         note_warning(result, self._traversal_warning())
+        note_warning(result, self._scope_hidden)
         result['undercount_possible'] = self._undercount_possible(empty)
         warnings = self._warnings(include_honest_decline=empty)
         if warnings:

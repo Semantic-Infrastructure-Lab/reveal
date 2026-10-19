@@ -515,6 +515,16 @@ This does not yet add `--fail-on` to Review.
 This is bounded consumer coverage: Classify, other walkers and the Calls, Contracts and transitive
 side-effect collection carriers are not yet qualified for directory failure disclosure.
 
+A policy exclusion that leaves an analysis nothing to analyze is disclosed as `scope_hidden`
+(BACK-2065), so an ignored tree does not read as a clean zero. Imports, Depends, Calls and
+Surface add one when their walk kept no candidate file but hid entries by `.gitignore`,
+`--exclude` or REVEAL_IGNORE. `count` with `unit: entries` counts what the walk hid the way
+the directory view's footer does (a pruned directory once, not its contents), `hidden` maps
+each cause to its count, `causes` lists them, and `suggestion` is `--no-gitignore` when
+gitignore is one. The `message` uses the footer's wording (`N entries hidden by .gitignore
+(use --no-gitignore to show)`) and is printed once with the other warnings. It is not loss:
+confidence and the outcome are unchanged, and a walk that kept any file reports nothing.
+
 Inspection failure for an ambiguous `build`/`dist` directory does not prove noise,
 including a missing child from a stale listing. Normal descent remains eligible:
 it may recover, or its error reaches the qualified traversal consumers above.

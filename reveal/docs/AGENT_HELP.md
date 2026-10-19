@@ -1469,7 +1469,7 @@ reveal 'calls://src/?uncalled&top=20'          # Top 20 most-recently-added unca
 
 Test entry points (Go `Test*`, Rust `#[test]`, JS/TS test callbacks, JUnit3 `test*`) are counted in `test_entrypoints_excluded` (JSON) instead of being listed. Add `&test-framework=true` to list them as candidates too. `.reveal.yaml` `adapters.calls.entry_points.decorators` adds project-specific entry-point decorators.
 
-**Interpreting absence of evidence:** "No callers found" means no *static* callers were detected in the scanned path. It does not mean the function is dead — runtime dispatch (callbacks, plugin loaders, framework hooks, `getattr`-based dispatch) may call it without leaving a static trace. Treat `?uncalled` output as *candidates for review*, not confirmed dead code.
+**Interpreting absence of evidence:** "No callers found" means no *static* callers were detected in the scanned path. It does not mean the function is dead — runtime dispatch (callbacks, plugin loaders, framework hooks, `getattr`-based dispatch) may call it without leaving a static trace. Treat `?uncalled` output as *candidates for review*, not confirmed dead code. When `.gitignore` hid the whole scanned tree, the empty answer carries `⚠ No files left to analyze: N entries hidden by .gitignore (use --no-gitignore to show)` (a `scope_hidden` warning in JSON `meta.warnings`); imports://, depends:// and surface:// say the same.
 
 ---
 

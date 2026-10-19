@@ -33,7 +33,7 @@ from ..analyzers.imports import service as import_analysis
 from ..analyzers.imports.file_index import resolution_fingerprint
 from ..registry import get_code_extensions
 from ..utils.parallel import pool_worker_count, submit_each, worker_lost_warning as _worker_lost_warning
-from ..utils.path_utils import to_posix, to_relative_display
+from ..utils.path_utils import hidden_entries_warning, to_posix, to_relative_display
 from ..utils.results import ResultBuilder, note_truncation
 from ..utils.warning_render import meta_warning_lines
 
@@ -1053,6 +1053,8 @@ class ImportsAdapter(ResourceAdapter):
                 raise ValueError(f'rank must be one of: {choices}; got {value!r}')
         self._local_names_cache: Optional[frozenset] = None  # BACK-1190, lazy
         self._project_namespaces_cache: Optional[set] = None  # BACK-1234, lazy
+        # A walk that hid every candidate says so (BACK-2065); set by _build_graph.
+        self._scope_hidden: Optional[WarningEntry] = None
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Analyze imports in directory or file.
@@ -1264,6 +1266,7 @@ class ImportsAdapter(ResourceAdapter):
     def _discover_candidate_files(
         target_path: Path, supported_exts: frozenset, code_exts: frozenset, *,
         traversal_failures: Optional[List[Tuple[Optional[str], str]]] = None,
+        hidden: Optional[Dict[str, int]] = None,
     ) -> Tuple[List[Path], Dict[str, List[Path]]]:
         """Walk target_path for candidate code files (serial, cheap: no parsing).
 
@@ -1273,10 +1276,13 @@ class ImportsAdapter(ResourceAdapter):
         ``#include`` resolution is a dict lookup. Gitignored and --exclude'd files stay in
         the index as targets but are not graph nodes (BACK-1386, BACK-1495); REVEAL_IGNORE
         drops a file from both (BACK-1362); declaration-only stubs are not nodes (BACK-1467).
+        *hidden* receives the walk's hidden-entry tally (BACK-2065).
         """
         files = import_analysis.discover(import_analysis.ScanScope(target_path, supported_exts, code_exts))
         if traversal_failures is not None:
             traversal_failures.extend(files.traversal_failures)
+        if hidden is not None:
+            hidden.update(files.hidden)
         return list(files.candidates), files.index
 
     def _process_extracted_files(
@@ -1397,8 +1403,11 @@ class ImportsAdapter(ResourceAdapter):
         code_exts = get_code_extensions()
 
         traversal_failures: List[Tuple[Optional[str], str]] = []
+        hidden: Dict[str, int] = {}
         candidates, file_index = self._discover_candidate_files(
-            target_path, supported_exts, code_exts, traversal_failures=traversal_failures)
+            target_path, supported_exts, code_exts, traversal_failures=traversal_failures, hidden=hidden)
+        # Discovery runs on a cache hit too, so the disclosure is never a cached one.
+        self._scope_hidden = hidden_entries_warning(hidden, len(candidates))
 
         cacheable = not collect_structures and on_file_processed is None
         fingerprint = _candidate_set_fingerprint(
@@ -1436,6 +1445,8 @@ class ImportsAdapter(ResourceAdapter):
         # Keep legacy file/worker diagnostics in their existing metadata and text paths.
         warnings = [warning for warning in self.integrity_warnings(base)
                     if warning.get('type') == 'analysis_incomplete']
+        if self._scope_hidden:
+            warnings.append(self._scope_hidden)
         response = ResultBuilder.create(
             result_type=response_type,
             source=str(self._target_path),
