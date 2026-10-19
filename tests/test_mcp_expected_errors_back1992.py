@@ -262,3 +262,37 @@ def test_registered_crash_logging_cannot_enter_sibling_capture(tmp_path, monkeyp
     finally:
         release.set()
         logger.removeHandler(handler)
+
+
+def test_stdio_answers_when_a_native_extension_panics(tmp_path):
+    """A PyO3 PanicException is a BaseException, so it skipped every ``except Exception`` and the
+    client never got a reply (BACK-2050: tree-sitter 'Node is unsendable' on language-pack 1.8.1)."""
+    path = tmp_path / 'demo.py'
+    path.write_text('VALUE = 1\n', encoding='utf-8')
+    code = """
+from reveal import mcp_server, registry
+
+class PanicException(BaseException):
+    pass
+
+def broken(*args, **kwargs):
+    raise PanicException('PRIVATE_PANIC_DETAIL')
+
+registry.get_analyzer = broken
+mcp_server.main()
+"""
+
+    async def scenario(session):
+        for tool, arguments in (
+            ('reveal_structure', {'path': str(path)}),
+            ('reveal_element', {'path': str(path), 'element': 'VALUE'}),
+        ):
+            result = await asyncio.wait_for(session.call_tool(tool, arguments), timeout=20)
+            assert result.is_error
+            assert 'PRIVATE_PANIC_DETAIL' not in _text(result)
+        # the server survived: a later, ordinary call still answers
+        ok = await asyncio.wait_for(session.call_tool('reveal_structure', {'path': str(tmp_path)}), timeout=20)
+        assert ok is not None
+
+    _run(tmp_path, scenario, code)
+    assert 'PRIVATE_PANIC_DETAIL' in (tmp_path / 'server-stderr.txt').read_text(encoding='utf-8')

@@ -336,6 +336,11 @@ def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = 
                 except Exception:  # boundary-ok: broad-except -- SDK 2.0 exposes arbitrary exception details; mask at the registered tool boundary
                     logging.getLogger(__name__).exception("Unexpected failure in MCP tool %s", fn.__name__)
                     raise ToolError(f"Internal error executing tool {fn.__name__}") from None
+                except BaseException as exc:  # boundary-ok: broad-except -- a PyO3 PanicException is a BaseException, so no other handler sees it and the client would wait forever for a reply (BACK-2050); every other BaseException (exit, interrupt, cancellation) propagates
+                    if type(exc).__name__ != 'PanicException':
+                        raise
+                    logging.getLogger(__name__).exception("Native extension panic in MCP tool %s", fn.__name__)
+                    raise ToolError(f"Internal error executing tool {fn.__name__}") from None
                 return _raise_if_tool_failure(result, fn.__name__)
 
         mcp.tool(annotations=annotations, title=title)(wrapper)
