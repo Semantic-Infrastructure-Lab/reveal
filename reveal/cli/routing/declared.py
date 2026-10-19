@@ -46,8 +46,8 @@ def create_declared_parser(name: str) -> argparse.ArgumentParser:
 
 def _has_findings_gate(args, command: str | None) -> bool:
     """Commands that evaluate --fail-on in their own exit owner: file or directory check (`reveal check
-    PATH` or `reveal PATH --check`; URI and stdin checks differ) and review."""
-    if command in ('check', 'review'):
+    PATH` or `reveal PATH --check`; URI and stdin checks differ) review and health."""
+    if command in ('check', 'review', 'health'):
         return True
     path = str(peek(args, 'path', '') or '')
     return command is None and bool(peek(args, 'check', False)) and bool(path) and '://' not in path

@@ -62,8 +62,9 @@ def test_real_degraded_file_directory_and_stats_agree(tmp_path):
     bad.write_text('def broken(\n', encoding='utf-8')
     for target in (str(bad), str(tmp_path), 'stats://' + str(tmp_path)):
         result = _run_reveal_direct('health', target, '--select', 'C901', '--format', 'json')
-        assert result.returncode == 1
-        assert json.loads(result.stdout)['results'][0]['outcome'] == 'partial'
+        assert result.returncode == 3  # a degraded parse is incomplete evidence, not a warning
+        row = json.loads(result.stdout)['results'][0]
+        assert (row['outcome'], row['verdict']) == ('partial', 'incomplete')
     bad.write_text('value = 1\n', encoding='utf-8')
     for target in (str(bad), str(tmp_path), 'stats://' + str(tmp_path)):
         result = _run_reveal_direct('health', target, '--select', 'C901', '--format', 'json')

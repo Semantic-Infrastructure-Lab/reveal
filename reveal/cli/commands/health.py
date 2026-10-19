@@ -8,7 +8,8 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import List, Optional
 from ...utils.query_control import ScanBudget, BudgetAccounting
-from ...utils.results import outcome_of
+from ...utils.results import (AnalysisCompleteness, ExecutionFacts, execution_exit_code, outcome_of,
+                              requested_fail_on)
 from ..global_flags import add_gitignore_arguments, rule_patterns
 from ..routing.ledger import complete
 from ..routing.subcommand import emit_subcommand_result
@@ -32,7 +33,10 @@ def create_health_parser() -> argparse.ArgumentParser:
             "  reveal health domain://example.com   # DNS + registration health\n"
             "  reveal health ./src ssl://example.com  # Multiple resources\n"
             "\n"
-            "Exit codes: 0=all pass, 1=warnings present, 2=failures present\n"
+            "Exit codes: 0=all pass, 1=findings (warnings or failing checks), 2=usage error,\n"
+            "            3=a check failed, could not reach its target, or was incomplete\n"
+            "--fail-on none reports findings without exit 1; lost checks still exit 3.\n"
+            "A target a check does not apply to is shown but never fails the run.\n"
             "\n"
             "Adapter-specific help:\n"
             "  reveal help://ssl      reveal help://mysql\n"
@@ -137,8 +141,8 @@ def run_health(args: Namespace) -> None:
     elif not targets:
         _print_usage_and_exit()
 
-    overall_exit = 0
     results = []
+    checked = []
 
     for target in targets:
         try:
@@ -147,7 +151,8 @@ def run_health(args: Namespace) -> None:
             # Visible via the 'summary' field appended to results below.
             result = HealthResult(2, f"error: {exc}", "failed")
         results.append({'target': target, **asdict(result)})
-        overall_exit = max(overall_exit, result.exit_code)
+        checked.append(result)
+    overall_exit = _overall_exit(checked, requested_fail_on(args))
 
     emit_subcommand_result({'results': results, 'overall_exit': overall_exit}, args,
                            name='health', source=','.join(targets), source_type='multi',
@@ -155,6 +160,21 @@ def run_health(args: Namespace) -> None:
 
     complete(args)  # the exit code is the result: the flag ledger still reports
     sys.exit(overall_exit)
+
+
+# Verdicts that mean the requested check did not complete (D6: required analysis failed or is incomplete).
+_LOST_VERDICTS = ('unavailable', 'incomplete', 'failed')
+
+
+def _overall_exit(results: List[HealthResult], fail_on) -> int:
+    """The process code from the targets' verdicts (BACK-2051, D6), never the maximum of their
+    legacy severity codes: 3 when any check was lost, else 1 when a finding matches the gate, else 0.
+    A target the check does not apply to is disclosed but never fails the run."""
+    lost = [r for r in results if r.verdict in _LOST_VERDICTS]
+    state = (AnalysisCompleteness.FAILED if len(lost) == len(results) else AnalysisCompleteness.INCOMPLETE) \
+        if lost else AnalysisCompleteness.COMPLETE
+    facts = ExecutionFacts(state, findings=any(r.verdict == 'finding' for r in results))
+    return execution_exit_code(facts, fail_on=fail_on)
 
 
 def _check_target(target: str, args: Namespace):
@@ -273,31 +293,39 @@ def _code_result(data: dict, returncode: int, accounting: dict) -> HealthResult:
     if report.errors or returncode < 0:
         return HealthResult(2, f'code: check failed ({report.errors} errored files, exit {returncode})',
                             'failed', accounting)
-    incomplete = _incomplete_code_result(data, report, accounting, changed)
+    incomplete = _incomplete_code_result(data, report, accounting, changed, returncode)
     if incomplete is not None:
         return incomplete
     if returncode >= 2:
         return HealthResult(2, f'code: check failed (exit {returncode})', 'failed', accounting)
+    return _completed_code_result(report, returncode, accounting)
+
+
+def _completed_code_result(report: CodeReport, returncode: int, accounting: dict) -> HealthResult:
+    """A complete scan: healthy, or a finding whose summary carries any capability note."""
     high = sum(1 for d in report.detections if d.get('severity') == 'high')
     critical = sum(1 for d in report.detections if d.get('severity') == 'critical')
+    notes = f" — {'; '.join(str(d) for d in report.disclosures)}" if report.disclosures else ''
     if high or critical:
-        return HealthResult(2, f'code: {report.total} violations ({high} high, {critical} critical)', 'ok', accounting)
+        return HealthResult(2, f'code: {report.total} violations ({high} high, {critical} critical){notes}', 'ok', accounting)
     if report.total:
-        return HealthResult(1, f'code: {report.total} violations', 'ok', accounting)
+        return HealthResult(1, f'code: {report.total} violations{notes}', 'ok', accounting)
     if returncode:
         return HealthResult(2, f'code: check failed (exit {returncode})', 'failed', accounting)
-    return HealthResult(0, 'code: healthy', 'ok', accounting)
+    return HealthResult(0, f'code: healthy{notes}', 'ok', accounting)
 
 
 def _incomplete_code_result(data: dict, report: CodeReport, accounting: dict,
-                            changed: bool) -> Optional[HealthResult]:
-    """Retain child scope disclosures before judging violation severity."""
+                            changed: bool, returncode: int) -> Optional[HealthResult]:
+    """Retain child scope disclosures before judging violation severity. Disclosures count as
+    lost evidence only when the child itself exited 3 (a capped or lost scan); a language-capability
+    note leaves check at exit 0 or 1 and stays a note on the summary."""
     meta = data.get('meta') or {}
     if not isinstance(meta, dict):
         raise ValueError('invalid check metadata')
     if report.checked == 0:
         return HealthResult(1, 'code: no applicable files were checked', 'not_applicable', accounting)
-    if changed or report.degraded or report.disclosures or meta.get('errors') or meta.get('warnings'):
+    if changed or report.degraded or (report.disclosures and returncode == 3) or meta.get('errors') or meta.get('warnings'):
         notices = [*report.disclosures, *(['file population changed between preflight and check'] if changed else [])]
         detail = '; '.join(str(d) for d in notices)
         return HealthResult(1, f'code: incomplete check ({report.total} violations, {report.degraded} degraded files)'
@@ -413,12 +441,27 @@ def _check_nginx(path: Path, args: Namespace):
     return 0, "nginx: healthy"
 
 
+def _row_verdict(row: dict) -> str:
+    """A rendered row's verdict; rows from before the verdict field derive it the way HealthResult does."""
+    return row.get('verdict') or str(HealthResult(row['exit_code'], '', row.get('outcome', 'ok')).verdict)
+
+
+def _icon(row: dict) -> str:
+    verdict = _row_verdict(row)
+    if verdict == 'healthy':
+        return '✅'
+    if verdict == 'not_applicable':
+        return '➖'
+    if verdict in ('finding', 'incomplete'):
+        return '⚠️ ' if row['exit_code'] < 2 else '❌'
+    return '❌'
+
+
 def _render_results(results: list) -> None:
     """Render health check results to stdout."""
     print()
     for r in results:
-        exit_code = r['exit_code']
-        icon = '✅' if exit_code == 0 else '⚠️ ' if exit_code == 1 else '❌'
+        icon = _icon(r)
         print(f"  {icon}  {r['target']}")
         print(f"       {r['summary']}")
         budget = r.get('scan_budget')
@@ -427,13 +470,16 @@ def _render_results(results: list) -> None:
             print(f"       Scan: {total} candidate files, {budget['analyzed_files']} analyzed; limit {budget['limit']}")
     print()
 
-    overall = max((r['exit_code'] for r in results), default=0)
-    if overall == 0:
-        print("Health: PASS")
-    elif overall == 1:
+    verdicts = [_row_verdict(r) for r in results]
+    severity = max((r['exit_code'] for r, v in zip(results, verdicts) if v == 'finding'), default=0)
+    if any(v in _LOST_VERDICTS for v in verdicts):
+        print("Health: INCOMPLETE — some checks failed or could not complete (see above)")
+    elif severity >= 2:
+        print("Health: FAIL — see failed checks above")
+    elif severity == 1:
         print("Health: WARN — review warnings above")
     else:
-        print("Health: FAIL — see failed checks above")
+        print("Health: PASS")
     print()
 
 
@@ -444,4 +490,4 @@ def _print_usage_and_exit() -> None:
     print("  reveal health ./src", file=sys.stderr)
     print("  reveal health ssl://example.com", file=sys.stderr)
     print("  reveal health mysql://host", file=sys.stderr)
-    sys.exit(1)
+    sys.exit(2)

@@ -63,10 +63,10 @@ PLACEHOLDERS = (
     ('config.json', 'proj/data.json'),
 )
 
-# A subcommand's own findings exit (its --help states it); anything else must exit 0. review's
-# 2 is also "invalid target", which prints an Error line the stderr check catches.
-FINDINGS_EXITS = {'review': {0, 1, 2}, 'check': {0, 1}, 'hotspots': {0, 1}, 'deps': {0, 1},
-                  'health': {0, 1, 2}}
+# A subcommand's own findings exit (its --help states it); anything else must exit 0. Exit 2 is usage
+# rejection and 3 is lost analysis for every command here, so neither is a findings exit (BACK-2051).
+FINDINGS_EXITS = {'review': {0, 1}, 'check': {0, 1}, 'hotspots': {0, 1}, 'deps': {0, 1},
+                  'health': {0, 1}}
 # Flag forms with the same findings exit: --check is `reveal check` (1 = issues found);
 # --validate-schema documents 1 = validation failures (SCHEMA_VALIDATION_HELP.md "Exit Codes").
 FINDINGS_FLAGS = {'--check': {0, 1}, '--validate-schema': {0, 1}}

@@ -782,7 +782,7 @@ def reveal_health(target: str, select: str = '') -> str:
 
     Checks code quality thresholds for a local path, or SSL/database/DNS
     health for a URI resource (ssl://, mysql://, domain://). Returns a
-    PASS/WARN/FAIL verdict per target plus a one-line summary — narrower
+    PASS/WARN/FAIL/INCOMPLETE verdict per target plus a one-line summary — narrower
     and faster than reveal_check/reveal_query/reveal_review for a quick
     go/no-go read. For an itemized list of issues instead of a verdict, use
     reveal_check (a file/dir) or reveal_review (pre-merge, git-range aware).

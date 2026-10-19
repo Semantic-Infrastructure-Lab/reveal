@@ -283,7 +283,7 @@ Several subcommands compose adapters into higher-level workflows. The full list 
 |------------|------|-----------------|
 | `reveal check <dir>` | `cli/commands/check.py` | Runs quality rules (B/M/I/V/L/N series) |
 | `reveal review <diff>` | `cli/commands/review.py` | diff + check + hotspots + complexity delta |
-| `reveal health <dir>` | `cli/commands/health.py` | CI-oriented: exit 0/1/2 for pass/warn/fail |
+| `reveal health <dir>` | `cli/commands/health.py` | CI-oriented: exit 0 pass, 1 findings, 2 usage, 3 a check failed or was incomplete (`--fail-on none` skips 1) |
 | `reveal pack <dir>` | `cli/commands/pack.py` | Token-budgeted context snapshots for LLMs |
 | `reveal hotspots <dir>` | `cli/commands/hotspots.py` | Complexity + coupling ranking |
 | `reveal dev <cmd>` | `cli/commands/dev.py` | Developer tooling (new-adapter scaffold, etc.) |

@@ -102,3 +102,133 @@ def test_legacy_construction_derives_a_safe_verdict():
     assert HealthResult(1, 'warn').verdict == 'finding'
     assert HealthResult(2, 'x', 'failed').verdict == 'failed'
     assert HealthResult(0, 'x', 'mystery').verdict == 'failed'
+
+
+# --- aggregation: facts, never the numeric maximum of child codes --------------------------------
+
+import io
+import os
+import subprocess
+import sys
+from argparse import Namespace
+from contextlib import redirect_stdout
+
+
+def _finding(code=1):
+    return HealthResult(code, 'f', 'ok', verdict='finding')
+
+
+_HEALTHY = HealthResult(0, 'h')
+_NOT_APPLICABLE = HealthResult(1, 'n/a', 'not_applicable')
+_UNAVAILABLE = HealthResult(1, 'gone', 'failed', verdict='unavailable')
+_INCOMPLETE = HealthResult(1, 'partial', 'partial')
+_FAILED = HealthResult(2, 'boom', 'failed')
+
+
+def _run(results, fail_on=None):
+    args = Namespace(targets=[f't{i}' for i in range(len(results))], health_all=False, format='text',
+                     select=None, fail_on=fail_on)
+    with patch.object(health, '_check_target', side_effect=results), redirect_stdout(io.StringIO()):
+        with pytest.raises(SystemExit) as exit_info:
+            health.run_health(args)
+    return exit_info.value.code
+
+
+@pytest.mark.parametrize('results, fail_on, expected', [
+    ([_HEALTHY], None, 0),
+    ([_finding(1)], None, 1),
+    ([_finding(2)], None, 1),                       # a severe finding is a finding, not the usage code
+    ([_finding(1), _finding(2)], 'findings', 1),
+    ([_NOT_APPLICABLE], None, 0),                   # not applicable alone never fails a run
+    ([_NOT_APPLICABLE, _HEALTHY], None, 0),
+    ([_UNAVAILABLE], None, 3),
+    ([_INCOMPLETE], None, 3),
+    ([_FAILED], None, 3),
+    ([_finding(2), _FAILED], None, 3),              # lost evidence beats a findings gate
+    ([_finding(1), _INCOMPLETE], 'findings', 3),
+    ([_finding(2)], 'none', 0),
+    ([_finding(1), _HEALTHY], 'none', 0),
+    ([_finding(1), _FAILED], 'none', 3),            # none never hides a failure
+    ([_UNAVAILABLE], 'none', 3),
+])
+def test_overall_code_comes_from_verdicts(results, fail_on, expected):
+    assert _run(results, fail_on) == expected
+
+
+def test_one_target_raising_is_failed_and_does_not_end_the_others():
+    code = _run([_finding(1), RuntimeError('x')])
+    assert code == 3
+
+
+def test_json_overall_exit_is_the_process_code_and_rows_carry_verdicts():
+    args = Namespace(targets=['a', 'b'], health_all=False, format='json', select=None, fail_on=None)
+    out = io.StringIO()
+    with patch.object(health, '_check_target', side_effect=[_finding(2), _UNAVAILABLE]), redirect_stdout(out):
+        with pytest.raises(SystemExit) as exit_info:
+            health.run_health(args)
+    data = json.loads(out.getvalue())
+    assert data['overall_exit'] == exit_info.value.code == 3
+    assert [r['verdict'] for r in data['results']] == ['finding', 'unavailable']
+
+
+def _banner(rows):
+    out = io.StringIO()
+    with redirect_stdout(out):
+        health._render_results(rows)
+    return out.getvalue()
+
+
+def test_banner_follows_verdicts():
+    row = lambda r, t='x': {'target': t, **__import__('dataclasses').asdict(r)}  # noqa: E731
+    assert 'Health: PASS' in _banner([row(_HEALTHY), row(_NOT_APPLICABLE)])
+    assert 'Health: WARN' in _banner([row(_finding(1))])
+    assert 'Health: FAIL' in _banner([row(_finding(2))])
+    assert 'Health: INCOMPLETE' in _banner([row(_finding(1)), row(_INCOMPLETE)])
+    assert 'Health: INCOMPLETE' in _banner([row(_UNAVAILABLE)])
+
+
+def test_banner_still_reads_rows_without_a_verdict():
+    assert 'Health: FAIL' in _banner([{'target': 'code', 'exit_code': 2, 'summary': 'code: 7 violations'}])
+    assert 'Health: PASS' in _banner([{'target': 'code', 'exit_code': 0, 'summary': 'code: healthy'}])
+
+
+def _cli(*args):
+    env = {**os.environ, 'REVEAL_DISK_CACHE': '0'}
+    return subprocess.run([sys.executable, '-m', 'reveal', *args], capture_output=True, text=True,
+                          env=env, timeout=180, check=False, encoding='utf-8')
+
+
+def test_real_cli_codes(tmp_path):
+    clean = tmp_path / 'ok.py'
+    clean.write_text('def f(x):\n    return x\n', encoding='utf-8')
+    assert _cli('health', str(clean)).returncode == 0
+    gone = _cli('health', str(tmp_path / 'missing'))
+    assert gone.returncode == 3
+    refused = _cli('health', 'ssl://127.0.0.1:9')
+    assert refused.returncode == 1                  # a refused connection is a finding, not a crash
+    assert _cli('health', 'ssl://127.0.0.1:9', '--fail-on', 'none').returncode == 0
+    assert _cli('health', str(tmp_path / 'missing'), '--fail-on', 'none').returncode == 3
+    assert _cli('health').returncode == 2           # no target: usage
+
+
+_CAPABILITY_NOTE = 'W-CAP-2: I001 has no unused-import detection for these languages; 8 file(s) were not checked by it: .php (4)'
+
+
+def _capability_report(issues):
+    return {'summary': {'total_issues': issues, 'files_checked': 1, 'scan_disclosures': [_CAPABILITY_NOTE]},
+            'files': [{'detections': [{'severity': 'medium'}] * issues}]}
+
+
+def test_capability_note_alone_is_not_lost_evidence():
+    # check keeps exit 0/1 for a language-capability note and exit 3 only for a capped or lost scan;
+    # health follows the child, and still shows the note.
+    clean = _code_result(_capability_report(0), 0, dict(_ACCOUNTING))
+    assert (clean.verdict, clean.exit_code) == ('healthy', 0)
+    assert 'W-CAP-2' in clean.summary
+    found = _code_result(_capability_report(2), 1, dict(_ACCOUNTING))
+    assert (found.verdict, found.exit_code) == ('finding', 1)
+    assert 'W-CAP-2' in found.summary
+
+
+def test_capped_scan_disclosure_with_child_exit_3_stays_incomplete():
+    assert _code_result(_capability_report(0), 3, dict(_ACCOUNTING)).verdict == 'incomplete'

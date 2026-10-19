@@ -21,7 +21,7 @@ def accounting():
     ({'applicable': False}, 0, 'not_applicable'),
     ({'summary': {'total_issues': 0, 'files_checked': 3, 'files_errored': 1}}, 3, 'failed'),
     ({'summary': {'total_issues': 0, 'files_checked': 3, 'files_degraded': 1}}, 3, 'partial'),
-    ({'summary': {'total_issues': 0, 'files_checked': 3, 'scan_disclosures': ['D005 skipped']}}, 0, 'partial'),
+    ({'summary': {'total_issues': 0, 'files_checked': 3, 'scan_disclosures': ['D005 skipped']}}, 3, 'partial'),  # a capped scan makes check exit 3
     ({'summary': {'total_issues': 0, 'files_checked': 0}}, 0, 'not_applicable'),
     ({'total': 0, 'detections': []}, 1, 'failed'),
     ({'total': 0, 'detections': []}, 0, 'ok'),

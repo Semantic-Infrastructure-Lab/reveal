@@ -373,11 +373,11 @@ class TestRenderResults(unittest.TestCase):
 
 class TestPrintUsageAndExit(unittest.TestCase):
 
-    def test_exits_1(self):
+    def test_exits_2(self):
         with redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit) as ctx:
                 _print_usage_and_exit()
-        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(ctx.exception.code, 2)  # usage rejection (D6)
 
     def test_shows_usage(self):
         buf = io.StringIO()
@@ -396,12 +396,12 @@ class TestRunHealth(unittest.TestCase):
     def _args(self, targets, fmt='text', health_all=False, select=None):
         return Namespace(targets=targets, format=fmt, health_all=health_all, select=select)
 
-    def test_no_targets_exits_1(self):
+    def test_no_targets_exits_2(self):
         args = self._args([])
         with redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit) as ctx:
                 run_health(args)
-        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual(ctx.exception.code, 2)
 
     @patch('reveal.cli.commands.health._check_target', return_value=HealthResult(0, 'code: healthy'))
     def test_single_target_exits_0(self, mock_check):
@@ -414,13 +414,14 @@ class TestRunHealth(unittest.TestCase):
             self.assertEqual(ctx.exception.code, 0)
 
     @patch('reveal.cli.commands.health._check_target', return_value=HealthResult(2, 'code: critical'))
-    def test_critical_exits_2(self, mock_check):
+    def test_critical_finding_exits_1(self, mock_check):
+        # A severe finding is still a finding: exit 2 is usage rejection (BACK-2051, D6).
         with tempfile.TemporaryDirectory() as d:
             args = self._args([d])
             with redirect_stdout(io.StringIO()):
                 with self.assertRaises(SystemExit) as ctx:
                     run_health(args)
-            self.assertEqual(ctx.exception.code, 2)
+            self.assertEqual(ctx.exception.code, 1)
 
     @patch('reveal.cli.commands.health._check_target', return_value=HealthResult(0, 'code: healthy'))
     def test_json_format(self, mock_check):
@@ -444,12 +445,12 @@ class TestRunHealth(unittest.TestCase):
         mock_detect.assert_called_once()
 
     @patch('reveal.cli.commands.health._check_target', side_effect=[HealthResult(1, 'warn'), HealthResult(2, 'fail')])
-    def test_multiple_targets_max_exit_code(self, mock_check):
+    def test_multiple_findings_are_not_maximized(self, mock_check):
         args = self._args(['./a', './b'])
         with redirect_stdout(io.StringIO()):
             with self.assertRaises(SystemExit) as ctx:
                 run_health(args)
-        self.assertEqual(ctx.exception.code, 2)
+        self.assertEqual(ctx.exception.code, 1)
 
     @patch(
         'reveal.cli.commands.health._check_target',
@@ -464,7 +465,7 @@ class TestRunHealth(unittest.TestCase):
         with redirect_stdout(buf):
             with self.assertRaises(SystemExit) as ctx:
                 run_health(args)
-        self.assertEqual(ctx.exception.code, 2)
+        self.assertEqual(ctx.exception.code, 3)  # a raised check is a failed check (BACK-2051)
         data = json.loads(buf.getvalue())
         self.assertEqual(len(data['results']), 2)
         self.assertEqual(data['results'][0]['exit_code'], 2)
