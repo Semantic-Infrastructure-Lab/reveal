@@ -249,7 +249,8 @@ def run_check(args: Namespace) -> None:
         # can mean "clean" or "couldn't actually check it". Exit 3 makes
         # that distinguishable from clean (0) and from real issues (1) at
         # the shell level; see internal-docs/design/EXIT_CODE_CONTRACT.md.
-        from reveal.cli.file_checker import check_exit_code, requested_fail_on
+        from reveal.cli.file_checker import check_exit_code
+        from reveal.utils.results import requested_fail_on
         complete(args)  # the exit code is the result: the flag ledger still reports
         sys.exit(check_exit_code(
             violations,

@@ -14,7 +14,7 @@ from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from ..logging_setup import worker_bootstrap
 from ..utils.parallel import pool_worker_count, submit_each
-from ..utils.results import note_truncation
+from ..utils.results import note_truncation, requested_fail_on
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, List, Dict, Literal, Tuple, TYPE_CHECKING
@@ -544,15 +544,6 @@ def _apply_severity_filter(detections: list, severity: Optional[str]) -> list:
         return detections
     min_idx = _SEVERITY_ORDER.index(level)
     return [d for d in detections if _SEVERITY_ORDER.index(d.severity.value.lower()) >= min_idx]
-
-
-# Findings gates check supports (D6), evaluated by check_exit_code; the router only validates against this.
-CHECK_FINDINGS_POLICIES = ('none', 'findings')
-
-
-def requested_fail_on(args: 'Namespace') -> Literal['none', 'findings']:
-    """The findings gate this check run asked for; omission is the declared default, findings."""
-    return getattr(args, 'fail_on', None) or 'findings'
 
 
 def check_exit_code(

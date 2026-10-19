@@ -189,6 +189,15 @@ def merge_execution_facts(*facts: ExecutionFacts) -> ExecutionFacts:
     raise ValueError('aggregation has no recognized completeness evidence')
 
 
+# The findings gates the shared exit owner evaluates; commands declare which of them they support.
+FINDINGS_GATES = ('none', 'findings')
+
+
+def requested_fail_on(args: Any) -> Literal['none', 'findings']:
+    """The findings gate a check or review run asked for; omission is its declared default, findings."""
+    return getattr(args, 'fail_on', None) or 'findings'
+
+
 def execution_exit_code(facts: ExecutionFacts, *, fail_on: Literal['none', 'findings'] = 'none',
                         legacy_scan_override: bool = False) -> int:
     """Map opt-in D6 evidence; existing routers and outcome_of retain their policy.
@@ -198,7 +207,7 @@ def execution_exit_code(facts: ExecutionFacts, *, fail_on: Literal['none', 'find
     suppresses findings alone. Closed stdout alone adds no failure; independent
     analysis, output, usage and findings facts still determine the verdict.
     """
-    if fail_on not in ('none', 'findings'):
+    if fail_on not in FINDINGS_GATES:
         raise ValueError('unsupported findings gate')
     if FailureCause.OUTPUT in facts.failures:
         return 3

@@ -98,3 +98,21 @@ def test_stdin_and_uri_checks_still_reject_fail_on(tree, argv, stdin):
     run = _reveal(tree, *argv, stdin=stdin)
     assert run.returncode == 2
     assert 'not supported' in run.stderr
+
+
+@pytest.mark.parametrize('argv, expected', [
+    (['review', 'findings'], 1),
+    (['review', 'findings', '--fail-on', 'findings'], 1),
+    (['review', 'findings', '--fail-on', 'none'], 0),
+    (['--fail-on', 'none', 'review', 'findings'], 0),
+    (['review', 'findings/ok.py', '--fail-on', 'findings'], 0),
+])
+def test_review_fail_on_gates_findings(tree, argv, expected):
+    run = _reveal(tree, *argv, '--format', 'json')
+    assert run.returncode == expected, run.stderr
+    assert json.loads(run.stdout)['exit_code'] == expected
+
+
+def test_review_fail_on_none_keeps_the_finding_visible(tree):
+    report = json.loads(_reveal(tree, 'review', 'findings', '--fail-on', 'none', '--format', 'json').stdout)
+    assert report['overall_status'] in ('warn', 'fail') and report['sections']['violations']

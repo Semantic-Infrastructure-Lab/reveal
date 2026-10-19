@@ -7,11 +7,11 @@ import subprocess
 import sys
 from argparse import Namespace
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from ..global_flags import add_gitignore_arguments, rule_patterns
 from ..routing.ledger import complete
 from ..routing.subcommand import emit_subcommand_result
-from ...utils.results import RESULT_CONTROL_WARNINGS, note_truncation
+from ...utils.results import RESULT_CONTROL_WARNINGS, note_truncation, requested_fail_on
 from ...utils.warning_render import collect_meta_warnings, render_meta_warnings
 
 # Hotspots and complex functions each list their top this-many (BACK-1543 records the rest).
@@ -27,7 +27,8 @@ def create_review_parser() -> argparse.ArgumentParser:
         description='Assess code quality and structural changes before a PR merge. '
                     'Exit code 0 = pass, 1 = findings (warnings, or a blocking high/critical issue, '
                      'told apart by overall_status), 2 = invalid target, 3 = incomplete (some files '
-                     'could not be checked or ranked; beats findings). '
+                     'could not be checked or ranked; beats findings). --fail-on none reports findings '
+                     'without exit 1. '
                     'A large range can take minutes.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
@@ -138,7 +139,7 @@ def run_review(args: Namespace) -> None:
         report['errors'] = errors
     report['overall_status'], report['exit_code'] = _review_outcome(
         violations, errors, analysis_incomplete=_lost_analysis(report),
-        scan_incomplete=bool(scan_disclosures))
+        scan_incomplete=bool(scan_disclosures), fail_on=requested_fail_on(args))
 
     # Render
     if is_git_range:
@@ -172,21 +173,27 @@ def _lost_analysis(report: Dict[str, Any]) -> bool:
 
 def _review_outcome(violations: List[Dict[str, Any]], errors: List[str],
                     analysis_incomplete: bool = False,
-                    scan_incomplete: bool = False) -> tuple:
+                    scan_incomplete: bool = False,
+                    fail_on: Literal['none', 'findings'] = 'findings') -> tuple:
     """(overall_status, exit_code), D6 precedence (BACK-2051): incomplete/3 when the
     quality pass could not check everything (so an empty violation list is not proof
     of a clean change), a rule-wide scan was capped, skipped or partly unparsed
     (BACK-1824), or the hotspot or complexity step could not analyze every file
     (Scott, 2026-10-07); then fail/1 on a blocking-severity issue, warn/1 on any
     other violation, pass/0. Lost evidence beats a findings gate, and exit 2 stays
-    reserved for usage rejection (an invalid target)."""
-    if errors or analysis_incomplete or scan_incomplete:
-        return 'incomplete', 3
-    if any(v.get('severity') in BLOCKING_SEVERITIES for v in violations):
-        return 'fail', 1
-    if violations:
-        return 'warn', 1
-    return 'pass', 0
+    reserved for usage rejection (an invalid target). ``fail_on='none'`` reports the
+    findings (status stays fail/warn) without exit 1; it never hides incomplete analysis."""
+    from ...utils.results import AnalysisCompleteness, ExecutionFacts, execution_exit_code
+    incomplete = bool(errors or analysis_incomplete or scan_incomplete)
+    if incomplete:
+        status = 'incomplete'
+    elif any(v.get('severity') in BLOCKING_SEVERITIES for v in violations):
+        status = 'fail'
+    else:
+        status = 'warn' if violations else 'pass'
+    facts = ExecutionFacts(AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE,
+                           findings=bool(violations))
+    return status, execution_exit_code(facts, fail_on=fail_on)
 
 
 def _git_range_error(git_range: str) -> Optional[str]:

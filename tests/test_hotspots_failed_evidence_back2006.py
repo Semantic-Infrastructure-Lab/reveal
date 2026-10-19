@@ -184,3 +184,13 @@ def test_mcp_partial_file_observations_remain_usable(tmp_path, wire):
         assert 'incomplete' in _text(result).lower()
 
     _run(tmp_path, scenario, _SERVER)
+
+
+def test_review_fail_on_none_reports_findings_without_failing_but_keeps_incomplete():
+    # D6: none suppresses the findings gate only; the status still names the finding (BACK-2051).
+    blocking, medium = [{'severity': 'high'}], [{'severity': 'medium'}]
+    assert review._review_outcome(blocking, [], fail_on='none') == ('fail', 0)
+    assert review._review_outcome(medium, [], fail_on='none') == ('warn', 0)
+    assert review._review_outcome(blocking, [], fail_on='findings') == ('fail', 1)
+    assert review._review_outcome(blocking, [], analysis_incomplete=True, fail_on='none') == ('incomplete', 3)
+    assert review._review_outcome([], ['x.py: not checked'], fail_on='none') == ('incomplete', 3)

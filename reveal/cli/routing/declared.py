@@ -44,9 +44,10 @@ def create_declared_parser(name: str) -> argparse.ArgumentParser:
     return parser
 
 
-def _is_file_check(args, command: str | None) -> bool:
-    """File or directory check, by `reveal check PATH` or `reveal PATH --check`; URI and stdin checks differ."""
-    if command == 'check':
+def _has_findings_gate(args, command: str | None) -> bool:
+    """Commands that evaluate --fail-on in their own exit owner: file or directory check (`reveal check
+    PATH` or `reveal PATH --check`; URI and stdin checks differ) and review."""
+    if command in ('check', 'review'):
         return True
     path = str(peek(args, 'path', '') or '')
     return command is None and bool(peek(args, 'check', False)) and bool(path) and '://' not in path
@@ -60,9 +61,8 @@ def validate_execution_policy(args, command: str | None = None) -> None:
     name = command or str(peek(args, 'path', '')).partition('://')[0]
     adapter = declared_adapter_class(name)
     supported = getattr(adapter, 'FINDINGS_POLICIES', ()) if adapter is not None else ()
-    if adapter is None and _is_file_check(args, command):
-        from ..file_checker import CHECK_FINDINGS_POLICIES
-        supported = CHECK_FINDINGS_POLICIES
+    if adapter is None and _has_findings_gate(args, command):
+        from ...utils.results import FINDINGS_GATES as supported
     if peek(args, 'stdin', False) or peek(args, 'batch', False) or policy not in supported:
         print(f'Error: --fail-on {policy} is not supported for this operation/transport.', file=sys.stderr)
         sys.exit(2)
