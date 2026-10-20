@@ -7,7 +7,7 @@ grammars, so a grammar bump or a new language added kinds silently. The kinds co
 the installed grammars at runtime (``Language.node_kind_*``); tree-sitter-language-pack
 ships no node-types.json.
 
-Two checks:
+Three checks:
 
 ``test_table_kinds_exist_in_a_grammar``
     Every kind in a central table exists in at least one grammar reveal can parse: a
@@ -341,3 +341,190 @@ def test_a_fixed_gap_is_stale_but_a_kind_the_grammar_lacks_is_not():
     entries = {'do_while_statement': 'BACK-1', 'repeat_statement': 'BACK-2'}
     assert stale_entries(named, frozenset({'do_while_statement'}), entries) == {'do_while_statement'}
     assert stale_entries(named, frozenset(), entries) == set()
+
+
+# ---------------------------------------------------------------------------
+# Function-like kinds and the import edge scope (BACK-2076)
+# ---------------------------------------------------------------------------
+# node_taxonomy.edge_scope() calls an import 'local' when a LOCAL_SCOPE_NODES ancestor
+# (DEF_NODES | LAMBDA_NODES) encloses it. For each grammar behind an import extractor,
+# every named kind whose name holds a function-like word is in that family, explained in
+# NOT_LOCAL_SCOPE, or a gap in LOCAL_SCOPE_GAPS that names its task. A new function-like
+# kind from a grammar bump fails here instead of reading as module scope.
+
+FUNCTION_LIKE_STEM = re.compile(
+    r'(^|_)(function|func|fn|method|lambda|closure|constructor|arrow|init|deinit|getter|'
+    r'setter|accessor|anonymous|generator)(_|$)|^(Decl|do_block)$')
+
+_FN_PART = ('part of a function (signature, declarator, parameters, modifier, body wrapper), '
+            'not the function')
+_FN_NAME_ONLY = ('the name holds a function-like word, but the kind is a type, call, pattern '
+                 'or initializer')
+_FILE_LEVEL = 'imports are allowed only at file (or namespace) level, so no import sits in it'
+_NOT_RUNTIME = 'a preprocessor macro, not a function body'
+
+NOT_LOCAL_SCOPE: Dict[str, Dict[str, str]] = {
+    'c': {'abstract_function_declarator': _FN_PART, 'function_declarator': _FN_PART,
+          'init_declarator': _FN_NAME_ONLY, 'preproc_function_def': _NOT_RUNTIME},
+    'cpp': {
+        'abstract_function_declarator': _FN_PART, 'function_declarator': _FN_PART,
+        'default_method_clause': _FN_PART, 'delete_method_clause': _FN_PART,
+        'explicit_function_specifier': _FN_PART, 'init_declarator': _FN_NAME_ONLY,
+        'init_statement': _FN_NAME_ONLY, 'lambda_capture_initializer': _FN_PART,
+        'lambda_capture_specifier': _FN_PART, 'lambda_declarator': _FN_PART,
+        'lambda_default_capture': _FN_PART, 'lambda_specifier': _FN_PART,
+        'preproc_function_def': _NOT_RUNTIME,
+        'template_function': _FN_NAME_ONLY, 'template_method': _FN_NAME_ONLY,
+    },
+    'csharp': {kind: _FILE_LEVEL for kind in (
+        'accessor_declaration', 'anonymous_method_expression', 'lambda_expression',
+        'local_function_statement')} | {
+        'accessor_list': _FN_PART, 'arrow_expression_clause': _FN_PART,
+        'constructor_initializer': _FN_PART,
+        'anonymous_object_creation_expression': _FN_NAME_ONLY,
+        'constructor_constraint': _FN_NAME_ONLY, 'function_pointer_parameter': _FN_NAME_ONLY,
+        'function_pointer_type': _FN_NAME_ONLY, 'primary_constructor_base_type': _FN_NAME_ONLY,
+    },
+    # Dart's function_signature (DEF_NODES) is the sibling of its function_body, so a walk
+    # up from a body never meets it; imports are file-level only, so no edge is affected.
+    'dart': {kind: _FILE_LEVEL for kind in (
+        'function_body', 'function_expression', 'lambda_expression',
+        'local_function_declaration', 'redirecting_factory_constructor_signature')} | {
+        'function_expression_body': _FN_PART, 'method_signature': _FN_PART,
+        'constructor_param': _FN_PART,
+        'constructor_invocation': _FN_NAME_ONLY, 'constructor_tearoff': _FN_NAME_ONLY,
+        'function_type': _FN_NAME_ONLY,
+    },
+    # GDScript 4 property bodies are get_body/set_body, which hold no function-like word:
+    # out of this check's reach, like the wrapper kinds above (strict xfail in
+    # tests/test_import_edge_scope_back2076.py, BACK-2079). getter/setter are the names.
+    'gdscript': {'getter': _FN_NAME_ONLY, 'setter': _FN_NAME_ONLY},
+    'go': {'func_literal': _FILE_LEVEL, 'function_type': _FN_NAME_ONLY,
+           'method_elem': _FN_NAME_ONLY},
+    'java': {kind: _FILE_LEVEL
+             for kind in ('compact_constructor_declaration', 'lambda_expression')} | {
+        'constructor_body': _FN_PART,
+        'explicit_constructor_invocation': _FN_NAME_ONLY, 'method_invocation': _FN_NAME_ONLY,
+        'method_reference': _FN_NAME_ONLY,
+    },
+    'kotlin': {kind: _FILE_LEVEL for kind in (
+        'annotated_lambda', 'anonymous_function', 'anonymous_initializer', 'getter',
+        'lambda_literal', 'secondary_constructor', 'setter')} | {
+        'function_body': _FN_PART, 'function_modifier': _FN_PART,
+        'function_value_parameters': _FN_PART, 'lambda_parameters': _FN_PART,
+        'primary_constructor': _FN_PART,
+        'constructor_delegation_call': _FN_NAME_ONLY, 'constructor_invocation': _FN_NAME_ONLY,
+        'function_type': _FN_NAME_ONLY, 'function_type_parameters': _FN_NAME_ONLY,
+    },
+    'lua': {'function_call': _FN_NAME_ONLY, 'method_index_expression': _FN_NAME_ONLY,
+            'table_constructor': _FN_NAME_ONLY},
+    'php': {'anonymous_class': _FN_NAME_ONLY, 'anonymous_function_use_clause': _FN_PART,
+            'function_call_expression': _FN_NAME_ONLY, 'function_static_declaration': _FN_PART},
+    'python': {'generator_expression': _FN_NAME_ONLY, 'lambda_parameters': _FN_PART},
+    'ruby': {'lambda_parameters': _FN_PART, 'method_parameters': _FN_PART,
+             'setter': _FN_NAME_ONLY},
+    'rust': {'closure_parameters': _FN_PART, 'function_modifiers': _FN_PART,
+             'function_signature_item': 'a bodiless trait method signature',
+             'function_type': _FN_NAME_ONLY, 'generic_function': _FN_NAME_ONLY},
+    'scala': {'applied_constructor_type': _FN_NAME_ONLY, 'arrow_renamed_identifier': _FN_NAME_ONLY,
+              'function_type': _FN_NAME_ONLY, 'generic_function': _FN_NAME_ONLY,
+              'method_value': _FN_NAME_ONLY, 'type_lambda': _FN_NAME_ONLY},
+    'swift': {kind: _FILE_LEVEL
+              for kind in ('computed_getter', 'computed_setter', 'lambda_literal')} | {
+        'function_body': _FN_PART, 'function_modifier': _FN_PART, 'getter_specifier': _FN_PART,
+        'lambda_parameter': _FN_PART, 'setter_specifier': _FN_PART,
+        'protocol_function_declaration': 'a bodiless protocol requirement',
+        'constructor_expression': _FN_NAME_ONLY, 'constructor_suffix': _FN_NAME_ONLY,
+        'function_type': _FN_NAME_ONLY, 'lambda_function_type': _FN_NAME_ONLY,
+        'lambda_function_type_parameters': _FN_NAME_ONLY,
+    },
+    'typescript': {'abstract_method_signature': 'a bodiless signature',
+                   'method_signature': 'a bodiless signature',
+                   'constructor_type': _FN_NAME_ONLY, 'function_type': _FN_NAME_ONLY},
+    'tsx': {'abstract_method_signature': 'a bodiless signature',
+            'method_signature': 'a bodiless signature',
+            'constructor_type': _FN_NAME_ONLY, 'function_type': _FN_NAME_ONLY},
+}
+
+# Function bodies an import can sit in that LOCAL_SCOPE_NODES does not hold: edge_scope()
+# calls them module scope. Each row names its task and is deleted by the fix
+# (tests/test_import_edge_scope_back2076.py has one strict xfail per language).
+LOCAL_SCOPE_GAPS: Dict[str, Dict[str, str]] = {
+    'cpp': {'lambda_expression': 'BACK-2079'},
+    'javascript': {'function_expression': 'BACK-2078', 'generator_function': 'BACK-2078'},
+    'php': {'anonymous_function': 'BACK-2079'},
+    'ruby': {'do_block': 'BACK-2079'},
+    'rust': {'closure_expression': 'BACK-2079'},
+    'scala': {'lambda_expression': 'BACK-2079'},
+    'tsx': {'function_expression': 'BACK-2078', 'generator_function': 'BACK-2078'},
+    'typescript': {'function_expression': 'BACK-2078', 'generator_function': 'BACK-2078'},
+}
+
+
+def _import_languages() -> Tuple[str, ...]:
+    """Grammars behind a registered import extractor."""
+    from reveal.analyzers.imports.base import get_all_extensions
+    mapping = get_analyzer_mapping()
+    return tuple(sorted({getattr(mapping.get(ext), 'language', None)
+                         for ext in get_all_extensions()} - {None}))
+
+
+IMPORT_LANGUAGES = _import_languages()
+
+
+def unscoped_function_kinds(named: Iterable[str], local: FrozenSet[str],
+                            *allowed: Mapping[str, str]) -> Set[str]:
+    """Function-like kinds in ``named`` outside ``local`` that no list explains."""
+    return {kind for kind in named
+            if FUNCTION_LIKE_STEM.search(kind) and kind not in local
+            and not any(kind in entries for entries in allowed)}
+
+
+def test_every_import_language_is_checked():
+    assert len(IMPORT_LANGUAGES) >= 19, f'import extractor discovery broke: only {IMPORT_LANGUAGES}'
+    unknown = (set(NOT_LOCAL_SCOPE) | set(LOCAL_SCOPE_GAPS)) - set(IMPORT_LANGUAGES)
+    assert not unknown, f'entries for languages with no import extractor: {sorted(unknown)}'
+
+
+@pytest.mark.parametrize('language', IMPORT_LANGUAGES)
+def test_function_like_kinds_have_an_edge_scope(language):
+    from reveal.core.node_taxonomy import LOCAL_SCOPE_NODES
+    named, _ = grammar_kinds(language)
+    new = unscoped_function_kinds(named, LOCAL_SCOPE_NODES, NOT_LOCAL_SCOPE.get(language, {}),
+                                  LOCAL_SCOPE_GAPS.get(language, {}))
+    assert not new, (
+        f'{language}: function-like node kinds outside node_taxonomy.LOCAL_SCOPE_NODES: '
+        f'{sorted(new)}. An import inside one reads as module scope. Add the kind to its '
+        f'family (DEF_NODES or LAMBDA_NODES), or to NOT_LOCAL_SCOPE with the reason, or to '
+        f'LOCAL_SCOPE_GAPS with its task.')
+
+
+@pytest.mark.parametrize('language', IMPORT_LANGUAGES)
+def test_no_stale_edge_scope_entries(language):
+    from reveal.core.node_taxonomy import LOCAL_SCOPE_NODES
+    named, _ = grammar_kinds(language)
+    stale = {name: sorted(kind for kind in entries.get(language, {})
+                          if kind in named and (kind in LOCAL_SCOPE_NODES
+                                                or not FUNCTION_LIKE_STEM.search(kind)))
+             for name, entries in (('NOT_LOCAL_SCOPE', NOT_LOCAL_SCOPE),
+                                   ('LOCAL_SCOPE_GAPS', LOCAL_SCOPE_GAPS))}
+    stale = {name: kinds for name, kinds in stale.items() if kinds}
+    assert not stale, f'{language}: entries no longer needed; delete them: {stale}'
+
+
+def test_edge_scope_lists_do_not_overlap_and_gaps_name_a_task():
+    both = {lang: sorted(set(NOT_LOCAL_SCOPE.get(lang, {})) & set(LOCAL_SCOPE_GAPS.get(lang, {})))
+            for lang in IMPORT_LANGUAGES}
+    assert not {lang: kinds for lang, kinds in both.items() if kinds}
+    assert not {(lang, kind): task for lang, entries in LOCAL_SCOPE_GAPS.items()
+                for kind, task in entries.items() if not re.fullmatch(r'BACK-\d+', task)}
+
+
+def test_an_unscoped_function_like_kind_is_caught():
+    """Negative control: a kind taken out of LOCAL_SCOPE_NODES fails the check."""
+    from reveal.core.node_taxonomy import LOCAL_SCOPE_NODES
+    named, _ = grammar_kinds('python')
+    assert unscoped_function_kinds(named, LOCAL_SCOPE_NODES - {'function_definition'},
+                                   NOT_LOCAL_SCOPE['python']) == {'function_definition'}
+    assert unscoped_function_kinds(frozenset({'arrow_function', 'local_lambda_block'}),
+                                   frozenset({'arrow_function'})) == {'local_lambda_block'}
