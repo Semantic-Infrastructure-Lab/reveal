@@ -93,37 +93,40 @@ def _extract_imports_for_file(fp_str: str) -> tuple:
     """Extract imports for one file. Module-level and picklable so it runs
     unchanged under a ProcessPoolExecutor (fork or spawn).
 
-    Returns ``(imports, failed)``. Swallows per-file extraction errors and
-    returns ``([], False)`` for files with no extractor — mirroring
+    Returns ``(imports, failed, cacheable)``. Swallows per-file extraction errors and
+    returns ``([], False, True)`` for files with no extractor — mirroring
     _collect_raw_imports's serial per-file try/except so the parallel and
     serial paths produce identical results. ``failed`` is True when the
     extractor's language IS supported but tree-sitter could not parse the
     file (``extractor.parse_failed``, BACK-982). Recovered imports remain in the
     graph, but missing edges can hide a cycle. Consumers disclose incomplete
     coverage rather than treating an empty cycle list as confirmed clean.
+    ``cacheable`` is False when the failure came from the environment (the file
+    could not be read, ``ImportExtraction.cacheable``), so no stat-keyed graph cache
+    keeps it (BACK-2084).
     """
     fp = Path(fp_str)
     extractor = get_extractor(fp)
     if not extractor:
-        return [], False
+        return [], False, True
     try:
         imports = list(extractor.extract_imports(fp))
-        return imports, extractor.parse_failed
-    except Exception:  # boundary-ok: broad-except -- the extractor walks tree-sitter nodes of arbitrary user source (native binding, no enumerable error set); one file must not end the scan, and the failed flag below is reported by get_scan_disclosures
+        return imports, extractor.parse_failed, extractor.analysis.cacheable
+    except Exception as e:  # boundary-ok: broad-except -- the extractor walks tree-sitter nodes of arbitrary user source (native binding, no enumerable error set); one file must not end the scan, and the failed flag below is reported by get_scan_disclosures
         # Intentional silence here: the `True` failed-flag IS the visible
         # signal, surfaced as a logger.warning by the caller once per graph
         # build (_build_import_graph) rather than once per file here.
-        return [], True
+        return [], True, not isinstance(e, OSError)
 
 
 def _extract_in_pool(file_strs: List[str], workers: int, results: Dict[str, tuple],
                      lost_files: Optional[set] = None) -> None:
     """``_extract_imports_for_file`` over *file_strs* in a process pool, one future
-    per file, into ``results[fp_str] = (imports, failed)`` in submission order.
+    per file, into ``results[fp_str] = (imports, failed, cacheable)`` in submission order.
 
     A dead worker breaks the pool and fails every pending future, so the culprit
     cannot be told from the files lost with it; each of them is a failed file
-    (``([], True)``), the channel a file tree-sitter could not parse already uses,
+    (``([], True, False)``), the channel a file tree-sitter could not parse already uses,
     which ``get_scan_disclosures`` reports. None is re-run in this process, where
     the culprit could take the whole run down (BACK-1726). Each is also added to
     *lost_files*, so the disclosure can say a worker died, not that the file had
@@ -137,7 +140,7 @@ def _extract_in_pool(file_strs: List[str], workers: int, results: Dict[str, tupl
             try:
                 results[fp_str] = future.result()
             except Exception as e:  # boundary-ok: broad-except -- future.result() re-raises whatever broke the worker or its pickled result (BrokenProcessPool, unpickling errors of any type); each such file is recorded as a failed, lost file and disclosed below and by get_scan_disclosures
-                results[fp_str] = ([], True)
+                results[fp_str] = ([], True, False)
                 lost.append(e)
                 if lost_files is not None:
                     lost_files.add(fp_str)
@@ -438,29 +441,35 @@ class I002(BaseRule):
                 return cached
 
         traversal_failures: List[Tuple[Optional[str], str]] = []
+        unreadable_files: List[Path] = []
         all_imports, failed_files, lost_files, skipped_reason = self._collect_raw_imports(
-            directory, traversal_failures=traversal_failures)
+            directory, traversal_failures=traversal_failures, unreadable_files=unreadable_files)
         graph = ImportGraph.from_imports(all_imports)
         graph.failed_files = failed_files
         graph.lost_files = lost_files
+        graph.unreadable_files = unreadable_files
         graph.scan_skipped_reason = skipped_reason
         graph.scan_budget = self._scan_budget_metadata
         self._resolve_graph_dependencies(graph, directory, traversal_failures=traversal_failures)
 
         # Keep an invocation-local memo so preload and per-file disclosures share evidence.
         _graph_cache[directory] = graph
-        if fingerprint is not None and not graph.traversal_failures:
+        # An unlisted directory, an unreadable file or a dead worker is not the tree's
+        # answer: chmod and a worker death leave the stat key unchanged (BACK-2084).
+        if fingerprint is not None and graph.cacheable:
             disk_cache.put(_IMPORT_GRAPH_NAMESPACE, fingerprint, graph)
         return graph
 
     def _collect_raw_imports(self, directory: Path, *,
-                            traversal_failures: Optional[List[Tuple[Optional[str], str]]] = None) -> tuple:
+                            traversal_failures: Optional[List[Tuple[Optional[str], str]]] = None,
+                            unreadable_files: Optional[List[Path]] = None) -> tuple:
         """Phase 1: Walk directory and extract raw import statements from all files.
 
         Returns ``(all_imports, failed_files, lost_files, skipped_reason)`` --
         ``failed_files`` (BACK-982) are source files whose language IS supported but
         that tree-sitter parsed with errors, or that a dead pool worker took down
         before they were parsed; ``lost_files`` (BACK-1753) is that second subset.
+        Failed files that could not be read are appended to *unreadable_files* (BACK-2084).
         Recovered edges are retained; missing edges can still hide a cycle. Empty in the two early-abort paths below (the scan never
         reached Pass B, so failure status is simply unknown, not "none failed").
         ``skipped_reason`` (BACK-1051) is None when the scan ran to completion,
@@ -555,10 +564,12 @@ class I002(BaseRule):
         all_imports: list = []
         failed_files: list = []
         for fp_str in file_strs:
-            imports, failed = results[fp_str] if fp_str in results else _extract_imports_for_file(fp_str)
+            imports, failed, cacheable = results[fp_str] if fp_str in results else _extract_imports_for_file(fp_str)
             all_imports.extend(imports)
             if failed:
                 failed_files.append(Path(fp_str))
+            if not cacheable and fp_str not in lost_strs and unreadable_files is not None:
+                unreadable_files.append(Path(fp_str))
         lost_files = [Path(fp_str) for fp_str in file_strs if fp_str in lost_strs]
         return all_imports, failed_files, lost_files, None
 
@@ -644,12 +655,14 @@ def _evict_root(root: Path) -> None:
 def _evict_incomplete_graphs() -> None:
     """Retain partial graphs within an invocation, never across host requests.
 
-    A recovered sealing walk can stamp a graph built from incomplete input. Drop
-    that memo before validation; the existing owner then removes its orphan stamp.
+    A recovered sealing walk can stamp a graph built from incomplete input, and a file
+    that was unreadable or lost to a dead worker leaves the tree stamp unchanged when it
+    recovers (BACK-2084). Drop that memo before validation; the existing owner then
+    removes its orphan stamp. A genuine parse failure of unchanged content is kept.
     Private direct builders without host resets retain their invocation memo lifetime.
     """
     for root, graph in tuple(_graph_cache.items()):
-        if graph.traversal_failures:
+        if not graph.cacheable:
             _evict_root(root)
 
 

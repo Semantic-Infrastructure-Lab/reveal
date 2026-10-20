@@ -433,9 +433,9 @@ the values, and `<namespace>` names the kind of artifact.
   writing is skipped, so the command runs uncached and gives the same answer.
 - *Failures the content did not cause.* A source file that could not be read (a denied
   permission, an I/O error) or that a dead worker process never parsed is reported as failed but
-  not cached, nor is an `imports://` graph that contains one, so the next run reads it again even
-  though its mtime and size did not change. A syntax error is cached like any other result: the
-  same content fails the same way. (The `I002` graph still stores such failures.)
+  not cached, nor is an `imports://` or `I002` graph that contains one, so the next run reads it
+  again even though its mtime and size did not change. A syntax error is cached like any other
+  result: the same content fails the same way.
 
 **Housekeeping:** when a new build directory appears, only the 4 most recently used build
 directories are kept and the rest are deleted. Within a namespace the oldest entries are evicted past

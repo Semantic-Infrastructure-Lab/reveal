@@ -151,6 +151,16 @@ class ImportGraph:
     # produced the edge ('module', 'local', or None where the extractor records no scope).
     # Every edge is stored; views (edge_view) filter at presentation.
     edge_scopes: Dict[Tuple[Path, Path], Set[Optional[str]]] = field(default_factory=dict)
+    # The subset of failed_files that could not be read (ImportExtraction.environmental): a
+    # later run can read them with mtime and size unchanged (BACK-2084). Last, so positional
+    # construction keeps its field order.
+    unreadable_files: List[Path] = field(default_factory=list)
+
+    @property
+    def cacheable(self) -> bool:
+        """Whether the graph is the tree's answer for its stat key: no file lost to a dead
+        worker, none unreadable, no directory left unlisted (BACK-2084)."""
+        return not (self.lost_files or self.unreadable_files or self.traversal_failures)
 
     @classmethod
     def from_imports(cls, imports: List[ImportStatement]) -> 'ImportGraph':
