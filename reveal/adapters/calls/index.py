@@ -577,6 +577,7 @@ def find_callees(
     path: str,
     target: str,
     include_builtins: bool = False,
+    structures: Optional[StructureList] = None,
 ) -> Dict[str, Any]:
     """Find what function *target* calls, across all matching definitions.
 
@@ -594,6 +595,8 @@ def find_callees(
             languages' calls (e.g. Scala/Ruby ``.map``/``.filter``) are never
             filtered, since PYTHON_BUILTINS names can collide with other
             languages' real methods.  Pass True to see the raw list.
+        structures: ``collect_structures(<the directory>)`` the caller already holds
+            (the callee walk reads the same ones), used instead of collecting again.
 
     Returns:
         Dict with ``target``, ``matches`` (one entry per definition found),
@@ -601,7 +604,7 @@ def find_callees(
     """
     path_obj = Path(path)
     directory = path_obj if path_obj.is_dir() else path_obj.parent
-    structures = collect_structures(str(directory))
+    structures = _structures_or_collect(structures, directory)
 
     matches: List[Dict[str, Any]] = []
     builtins_hidden = 0
