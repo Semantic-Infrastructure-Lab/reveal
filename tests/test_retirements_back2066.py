@@ -3,10 +3,12 @@
 A retired spelling prints a note naming its replacement and answers as before; after the cut
 release it is an error with the same text. The table is `RETIREMENTS` in cli/invocation.py and
 `retirement_note` is the one reader, consulted where each kind of spelling is parsed. The
-production rows are two BACK-1906 notes; the tests below inject test-only rows (one per kind)
-so the seam is proven independently of what the table holds today.
+production rows are two BACK-1906 notes and Phase 2b's call-graph spellings (BACK-2066); the tests
+below inject test-only rows (one per kind) so the seam is proven independently of what the table
+holds today.
 """
 import json
+from pathlib import Path
 
 import pytest
 
@@ -170,6 +172,9 @@ def test_a_retirement_row_validates_itself():
 PRODUCTION_CASES = {
     'flag:--search': lambda f: [f, '--search', 'auth'],
     'flag:--check': lambda f: [f, '--check', '--select', 'B001'],
+    # Phase 2b (BACK-2066); every spelling of each row is in tests/test_retired_call_spellings_back2066.py.
+    'param:calls.root': lambda f: [f'calls://{Path(f).parent}?root=auth_gate'],
+    'param:calls.target': lambda f: [f'calls://{Path(f).parent}?target=auth_gate'],
 }
 
 

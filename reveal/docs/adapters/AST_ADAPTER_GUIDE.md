@@ -464,13 +464,13 @@ validate_token
 
 ```bash
 # Who calls validate_token across the entire project?
-reveal 'calls://src/?target=validate_token'
+reveal 'calls://src/?callers=validate_token'
 
 # Two levels deep (callers-of-callers)
-reveal 'calls://src/?target=validate_token&depth=2'
+reveal 'calls://src/?callers=validate_token&depth=2'
 
 # Graphviz dot output
-reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > call_graph.svg
+reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > call_graph.svg
 ```
 
 See [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) for full `calls://` documentation.
@@ -657,17 +657,17 @@ reveal 'ast://src/auth.py?show=calls'
 reveal 'ast://src/auth.py?calls=validate_token'
 
 # Step 3: Find callers project-wide
-reveal 'calls://src/?target=validate_token'
+reveal 'calls://src/?callers=validate_token'
 
 # Step 4: Explore callers-of-callers (who triggers the chain?)
-reveal 'calls://src/?target=validate_token&depth=2'
+reveal 'calls://src/?callers=validate_token&depth=2'
 
 # Step 5: Extract call data for a specific function (JSON)
 reveal 'ast://src/auth.py?name=authenticate' --format=json | \
   jq '.results[0] | {calls, called_by, resolved_calls}'
 
 # Step 6: Generate a visual graph
-reveal 'calls://src/?target=authenticate&format=dot' | dot -Tsvg > auth_calls.svg
+reveal 'calls://src/?callers=authenticate&format=dot' | dot -Tsvg > auth_calls.svg
 ```
 
 **Expected outcome**: Complete picture of call chains — who triggers what, and how deep it goes.
@@ -1351,8 +1351,8 @@ A: Yes. Two levels of support:
   ```
 - **Cross-file (project-wide)** — use the `calls://` adapter:
   ```bash
-  reveal 'calls://src/?target=validate_token'           # direct callers
-  reveal 'calls://src/?target=validate_token&depth=2'   # callers-of-callers
+  reveal 'calls://src/?callers=validate_token'           # direct callers
+  reveal 'calls://src/?callers=validate_token&depth=2'   # callers-of-callers
   ```
 
 See [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) for full documentation.

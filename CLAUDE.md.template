@@ -11,7 +11,7 @@ Replace these common patterns:
 | `cat src/auth.py` | `reveal src/auth.py` |
 | `cat src/auth.py \| grep def` | `reveal src/auth.py` |
 | `find . -name "*.py" \| head -20` | `reveal src/` |
-| `grep -r "validate_token" src/` | `reveal 'calls://src/?target=validate_token'` |
+| `grep -r "validate_token" src/` | `reveal 'calls://src/?callers=validate_token'` |
 
 ## Progressive Disclosure Workflow
 
@@ -41,7 +41,7 @@ No need to read each changed file separately.
 reveal 'calls://src/?uncalled'
 
 # Impact radius before refactoring
-reveal 'calls://src/?target=my_function&depth=3'
+reveal 'calls://src/?callers=my_function&depth=3'
 
 # Unused imports
 reveal 'imports://src/?unused'

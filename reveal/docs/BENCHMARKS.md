@@ -86,7 +86,7 @@ reveal pack src/ --since main --budget 8000 --content
 | Approach | Tokens | Lines | Quality |
 |----------|--------|-------|---------|
 | `grep -r 'handle_file' reveal/ --include=*.py` | 560 | 28 | File:line snippets — noisy (imports, comments, partial matches) |
-| `reveal 'calls://reveal/?target=handle_file'` | 84 | 8 | Structured caller list: function name, file, line |
+| `reveal 'calls://reveal/?callers=handle_file'` | 84 | 8 | Structured caller list: function name, file, line |
 | **Reduction** | **6.7x** | — | Higher signal — callers only, no noise |
 
 **grep output** (560 tokens) includes import statements, partial string matches, and repeated filenames. **calls://** gives you the exact answer:
@@ -133,7 +133,7 @@ The 33x reduction is real: Reveal eliminates the manual cross-reference work. Wh
 | Understand large file (637 lines) | cat: 5,883 tokens | struct + element: 1,499 tokens | **3.9x** |
 | Understand focused module | cat: 4,128 tokens | struct: 275 tokens | **15x** |
 | PR context (24 changed files) | git diff \| cat: 12,000+ | pack --content: ~4,000 | **3–4x** |
-| Find callers of a function | grep: 560 tokens | calls://?target: 84 tokens | **6.7x** |
+| Find callers of a function | grep: 560 tokens | calls://?callers: 84 tokens | **6.7x** |
 | Uncalled function scan | ast:// all + manual: 7,196 tokens | calls://?uncalled: 220 tokens | **33x** *(candidates, not confirmed)* |
 
 **The typical range is 3.9–15x** for file inspection and call graph queries. Scenario 5 reaches 33x but requires human verification of results. The gap widens when:
@@ -160,7 +160,7 @@ uncalled) versus requiring you to read and synthesize.
 
 Tokens are not the only measure. **Signal density** — how much of what the agent reads is relevant to the task — matters equally.
 
-`grep -r 'handle_file'` returns 560 tokens but ~30% is noise (imports, string matches, repeated filename prefixes). `calls://?target=handle_file` returns 84 tokens, all signal.
+`grep -r 'handle_file'` returns 560 tokens but ~30% is noise (imports, string matches, repeated filename prefixes). `calls://?callers=handle_file` returns 84 tokens, all signal.
 
 Reveal's progressive disclosure makes the efficient path the default: **raw code comes back only for an element or a line range you name**; a directory or file answers with its tree or outline.
 
@@ -178,7 +178,7 @@ reveal reveal/file_handler.py handle_file | wc -c      # element bytes
 
 # Scenario 4
 grep -r 'handle_file' reveal/ --include='*.py' | wc -c
-reveal 'calls://reveal/?target=handle_file' | wc -c
+reveal 'calls://reveal/?callers=handle_file' | wc -c
 
 # Scenario 5
 reveal 'ast://reveal/?show=functions' | wc -c

@@ -221,7 +221,7 @@ reveal 'ast://file.py?name~=auth' | reveal --stdin --check
 | `markdown://` | ✅ Frontmatter filtering | `?status=draft`, `?body-contains=X` |
 | `stats://` | ✅ Metric filtering | `?hotspots`, `?min_complexity=10` |
 | `git://` | ✅ Commit filtering | `?author=`, `?since=`, `?type=` |
-| `calls://` | ✅ Call graph | `?target=fn`, `?top=10` |
+| `calls://` | ✅ Call graph | `?callers=fn`, `?top=10` |
 | `patches://` | ✅ Test patch pressure | `?group=target`, `?min=3`, `?limit=20` |
 | `claude://` | ✅ Session filtering | `?summary`, `?errors`, `?contains=` |
 | `xlsx://` | ✅ Sheet/range | `?sheet=Sales`, `?range=A1:D10` |

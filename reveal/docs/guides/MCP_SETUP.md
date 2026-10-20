@@ -108,7 +108,7 @@ Run any reveal URI query across all adapters. Same syntax as the CLI.
 
 ```
 reveal_query("ast://src/?complexity>10&sort=-complexity")
-reveal_query("calls://src/?target=validate_token&depth=3")
+reveal_query("calls://src/?callers=validate_token&depth=3")
 reveal_query("calls://src/?uncalled")
 reveal_query("ssl://api.example.com")
 reveal_query("domain://example.com")
@@ -300,7 +300,7 @@ reveal_pack("src/", since="main", budget=8000, content=True)
 reveal_query("calls://src/?uncalled")
 
 # 6. Impact analysis before changing a function
-reveal_query("calls://src/?target=validate_token&depth=3")
+reveal_query("calls://src/?callers=validate_token&depth=3")
 ```
 
 ## Cross-Resource Workflows

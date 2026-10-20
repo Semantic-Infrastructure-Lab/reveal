@@ -245,7 +245,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal contracts [path]` | Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal contracts --help` |
 | `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal surface --help` |
 | `reveal testability [path]` | Test patch pressure joined with production boundary fan-out *(Python and TS/JS test suites)* | `reveal testability --help` |
-| `reveal calls --callers FUNC` | Call graph: callers, callees (--depth N, --detail), callee walk (--root), --rank callers, --uncalled, --modules | `reveal calls --help` |
+| `reveal calls --callers FUNC` | Call graph: callers, callees (--depth N, --detail), --rank callers, --uncalled, --modules | `reveal calls --help` |
 | `reveal trace --from FUNC` | Walk call graph from a named entry point; depth-indented narrative with side-effect classification | `reveal trace --help` |
 | `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
 | `reveal review <path>` | Assess quality + structural changes before a PR merge | `reveal review --help` |
@@ -817,7 +817,7 @@ reveal app.py process_batch --calls               # all calls in the function
 # L10:  results.append(value)
 # L12:  log_error(e)
 ```
-> **Disambiguation**: `--calls` (this flag) lists call sites *within a line range* — it's a sub-element analysis tool. `calls://` (the URI adapter) is a project-level call graph — use `reveal 'calls://file.py?target=myfunc'` to find which functions *across the project* call `myfunc`. Different scope, different question.
+> **Disambiguation**: `--calls` (this flag) lists call sites *within a line range* — it's a sub-element analysis tool. `calls://` (the URI adapter) is a project-level call graph — use `reveal 'calls://file.py?callers=myfunc'` to find which functions *across the project* call `myfunc`. Different scope, different question.
 
 **`--around N` → verbatim context centered on a line (v0.78.0+)**
 ```bash
@@ -1337,7 +1337,7 @@ inspect their warnings and confirm important edges in source.
 
 **Pattern:**
 ```bash
-# Cross-file: who calls a function across the entire project? (reverse; ?target= is the older name)
+# Cross-file: who calls a function across the entire project? (reverse)
 reveal 'calls://src/?callers=validate_item'
 
 # Cross-file: what does a function call? (forward, builtins hidden by default)
@@ -1374,9 +1374,10 @@ reveal calls src/ --callers validate_item --depth 2
 reveal calls src/ --rank callers --top 20
 ```
 
-One mode per request (`callers` or `target`, `callees`, `root`, `rank`, `uncalled`, `modules`): two
-exit 2 and name both, and a malformed value (`depth=abc`, `top=-1`, `callers=a.py:f`, `detail`
-without `callees`) exits 2 naming the parameter. A name that names nothing (callees: no definition;
+One mode per request (`callers`, `callees`, `rank`, `uncalled`, `modules`): two exit 2 and name
+both, and a malformed value (`depth=abc`, `top=-1`, `callers=a.py:f`, `detail` without `callees`)
+exits 2 naming the parameter. The retired `?target=` and `?root=` still answer, with a note naming
+`?callers=` and `?callees=NAME&depth=N`. A name that names nothing (callees: no definition;
 callers: no definition and no call site) exits 2 with the empty answer. Exit 3 means a file or
 directory could not be read; the answer still prints with its warning. A callee walk beyond depth 1
 and `detail` are not measured in any language (W-CALLS-9; the `walk_rule` and its `Rule:` line say

@@ -28,7 +28,7 @@ Most tools expose features as subcommands (`git log`, `git blame`). Reveal expos
 
 ```bash
 reveal 'ast://src/?complexity>10&sort=-complexity'
-reveal 'calls://src/?target=validate_token&depth=3'
+reveal 'calls://src/?callers=validate_token&depth=3'
 reveal ssl://api.example.com
 reveal 'mysql://prod/?type=replication'
 reveal 'markdown://docs/?aggregate=type'
@@ -46,10 +46,10 @@ Who calls this function? What does it call? What are the most-coupled functions 
 
 ```bash
 # Who calls validate_token? (anywhere in the project)
-reveal 'calls://src/?target=validate_token'
+reveal 'calls://src/?callers=validate_token'
 
 # Callers-of-callers — full impact radius before a refactor
-reveal 'calls://src/?target=validate_token&depth=3'
+reveal 'calls://src/?callers=validate_token&depth=3'
 
 # What does process_payment call?
 reveal 'calls://src/?callees=process_payment'
@@ -57,11 +57,11 @@ reveal 'calls://src/?callees=process_payment'
 # Architectural coupling: what functions are called the most?
 reveal 'calls://src/?rank=callers&top=20'
 
-# Colon shorthand — same as ?target=
+# Colon shorthand — same as ?callers=
 reveal 'calls://src/auth.py:validate_token'
 
 # Visual call graph (pipe to graphviz)
-reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > callgraph.svg
+reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
 
 # Rough dead code check — functions with no callers in the index
 reveal 'calls://src/?uncalled&type=function&top=20'  # verify results: entry points and decorators may appear

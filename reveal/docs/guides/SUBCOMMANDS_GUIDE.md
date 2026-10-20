@@ -407,14 +407,14 @@ With `--content`: also includes `content` — a list of `{file, changed, content
 The `calls://` adapter as a subcommand: the flags are generated from the same parameter
 declarations as the URI's query keys, and both spellings run through one execution path, so
 `reveal calls src --callers helper` and `reveal 'calls://src?callers=helper'` print the same answer
-(JSON equal, same exit code). `--target`/`?target=` is the older name of `--callers`/`?callers=`.
+(JSON equal, same exit code). The retired `--target`/`?target=` and `--root`/`?root=` still answer,
+with a note naming `--callers` and `--callees NAME --depth N` ([retired spellings](../adapters/CALLS_ADAPTER_GUIDE.md#retired-spellings)).
 
 ### Usage
 
 ```
 reveal calls [PATH] --callers NAME [--depth N]
 reveal calls [PATH] --callees NAME|FILE:NAME [--depth N] [--detail] [--builtins]
-reveal calls [PATH] --root NAME [--depth N] [--builtins]
 reveal calls [PATH] --rank callers [--top N] [--builtins] [--test-framework]
 reveal calls [PATH] --uncalled [--type function|method] [--top N] [--test-framework]
 reveal calls [PATH] --modules [--external]
@@ -425,18 +425,18 @@ reveal calls [PATH] --modules [--external]
 | Flag | URI key | Description |
 |------|---------|-------------|
 | `--callers NAME` | `callers` | Who calls NAME (reverse lookup); a bare NAME (`FILE:NAME` exits 2). `PATH:NAME` as the path is shorthand when no other mode is given |
-| `--target NAME` | `target` | The older name of `--callers`: the same mode and answer |
+| `--target NAME` | `target` | Retired name of `--callers`: the same mode and answer, with a note |
 | `--callees NAME` | `callees` | What every definition of NAME (or `FILE:NAME`, one file's) calls (builtins hidden); with `--depth 2-5` a level-by-level walk, each definition expanded once at its shallowest level |
 | `--detail` | `detail` | With `--callees`: params and effects of every definition reached; any other mode exits 2 |
-| `--root NAME` | `root` | Level-by-level callee walk from NAME (or `FILE:NAME`), the walk `trace` uses |
-| `--depth N` | `depth` | Signed whole integer, clamped 1–5: callers levels (default 1), callee walk levels for `--callees` (default 1) and `--root` (default 2); other modes ignore it with a warning |
+| `--root NAME` | `root` | Retired: `--callees NAME --depth N` is the same walk (`--root` defaulted to depth 2); prints a note |
+| `--depth N` | `depth` | Signed whole integer, clamped 1–5: callers levels (default 1), callee walk levels for `--callees` (default 1) and the retired `--root` (default 2); other modes ignore it with a warning |
 | `--rank callers` | `rank=callers` | Rank every function by caller count |
 | `--top N` | `top` | Entries for `--rank` (default 10) or `--uncalled` (default all); 0 = all; negative values reject |
 | `--uncalled` | `uncalled` | Functions/methods with no callers (dead-code candidates) |
 | `--type KIND` | `type` | With `--uncalled`: `function` (module-level only) or `method` |
 | `--modules` | `modules` | Module-level dependency graph |
 | `--external` | `external` | With `--modules`: include non-project modules |
-| `--builtins` | `builtins` | Include language builtins in callees (every depth), root and rank output |
+| `--builtins` | `builtins` | Include language builtins in callees (every depth), the retired root and rank output |
 | `--test-framework` | `test-framework` | Count test-framework entrypoints (rank callers, uncalled candidates) |
 
 `?format=dot` (Graphviz) has no subcommand spelling; `--format` takes `text` or `json`.
@@ -467,7 +467,6 @@ reveal calls src --callers validate_item           # who calls validate_item?
 reveal calls src --callers process --depth 2       # callers of callers
 reveal calls src --callees validate_item           # what it calls
 reveal calls src --callees main --depth 3 --detail # what that calls, 3 levels, params/effects
-reveal calls src --root main --depth 3             # callee walk, 3 levels
 reveal calls src --rank callers --top 20           # most-called functions
 reveal calls src --uncalled --type function        # dead-code candidates
 reveal calls src --modules --format json           # module graph, JSON

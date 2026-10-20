@@ -73,18 +73,20 @@ def _flag_spec(name: str, description: str, role: str = 'analysis', dest: Option
 _CALLERS = _name_spec('callers', 'Function name to find callers of (reverse lookup): a bare NAME, since the '
                       'callers index has no file filter (FILE:NAME exits 2); calls://<path>:<name> is shorthand '
                       'when no mode is given', 'callers=validate_item')
-_TARGET = _name_spec('target', 'Older name of callers= (the same mode and answer)', 'target=validate_item')
+_TARGET = _name_spec('target', 'Retired name of callers=: the same mode and answer, with a replaced-by note',
+                     'target=validate_item')
 _CALLEES = _name_spec('callees', 'Function name, or FILE:NAME for one file\'s definitions, to find callees of: '
                       'at depth 1 what every definition calls (matches); at depth 2-5 a level-by-level walk '
                       '(levels, definitions), each definition expanded once at its shallowest level, every call '
                       'site an edge; builtins hidden', 'callees=validate_item')
-_ROOT = _name_spec('root', 'Function name (or FILE:NAME) for a level-by-level callee walk, the walk trace:// '
-                   'uses: each definition is expanded once, at the shallowest level it is reached, and every '
+_ROOT = _name_spec('root', 'Retired (use callees=NAME&depth=N, the same walk; prints a replaced-by note): '
+                   'function name (or FILE:NAME) for a level-by-level callee walk: each definition is '
+                   'expanded once, at the shallowest level it is reached, and every '
                    'call site of an expanded definition is an edge (call_expr), one to a definition already '
                    'reached with expanded: false. Totals count edges: total_edges = total_resolved (ambiguous '
                    'included, also counted in total_ambiguous) + total_unresolved', 'root=main')
 _DEPTH = ParamSpec('depth', 'integer', 'Levels to walk, a signed whole integer clamped 1-5: callers (default 1), '
-                   'callees (default 1; beyond 1 is not measured, W-CALLS-9), the callee walk for root '
+                   'callees (default 1; beyond 1 is not measured, W-CALLS-9), the retired root '
                    '(default 2); other modes ignore it with a warning',
                    None, _calls_depth, examples=('depth=2',), role='analysis',
                    cli=CliBinding(('--depth',), metavar='N'))
@@ -147,15 +149,16 @@ _HELP: Dict[str, Any] = {
     'syntax': 'calls://<path>?callers=<function>[&depth=N][&format=dot|json]\n'
               '         calls://<path>?callees=<function>|<file>:<function>[&depth=N][&detail]\n'
               '         calls://<path>:<function>           # shorthand — infers ?callers=<function>\n'
-              '         reveal calls <path> --callers NAME | --callees NAME [--detail] | --root NAME [--depth N] | '
+              '         reveal calls <path> --callers NAME [--depth N] | --callees NAME [--depth N] [--detail] | '
               '--rank callers [--top N] | --uncalled | --modules',
     'parameters': {spec.name: spec.description for spec in _PARAM_SPECS},
-    'epilog': 'One mode per request: --callers (or its older name --target), --callees, --root, --rank, '
-              '--uncalled or --modules (calls://<path>?callers=NAME and the rest are the same request). '
-              'Two modes exit 2. A callee walk beyond depth 1 and --detail are not measured (W-CALLS-9).',
+    'epilog': 'One mode per request: --callers, --callees, --rank, --uncalled or --modules '
+              '(calls://<path>?callers=NAME and the rest are the same request). Two modes exit 2. A callee '
+              'walk beyond depth 1 and --detail are not measured (W-CALLS-9). The retired --target and --root '
+              '(?target=, ?root=) still answer, with a note naming --callers and --callees NAME --depth N.',
     'examples': [
         {'uri': 'calls://src/?callers=validate_item',
-         'description': 'Who calls validate_item? (reverse lookup; ?target= is the older name)'},
+         'description': 'Who calls validate_item? (reverse lookup)'},
         {'uri': 'calls://src/main.py:main',
          'description': 'Shorthand — who calls main? (colon infers ?callers=main)'},
         {'uri': 'calls://src/?callers=process_batch&depth=2',
@@ -308,7 +311,8 @@ _SCHEMA: Dict[str, Any] = {
         },
         {
             'type': 'calls_callees_recursive',
-            'description': 'Callee walk from ?root: every edge by level, each definition expanded once at the '
+            'description': 'Callee walk from the retired ?root (use ?callees=X&depth=N): every edge by level, '
+                           'each definition expanded once at the '
                            'shallowest level it is reached',
             'schema': {
                 'type': 'object',
@@ -397,18 +401,20 @@ _SCHEMA: Dict[str, Any] = {
         'Static analysis only — dynamic dispatch, callbacks, and metaclasses are not resolved.',
         'Callers indexes use directory-mtime and scope keys; these do not detect every file change.',
         'Callee names are normalised: "self.foo" → "foo" for lookup; full dotted form also indexed.',
-        '?callers (or ?target) depth=N expands callers transitively up to N levels (capped at 5).',
+        '?callers depth=N expands callers transitively up to N levels (capped at 5).',
         'Every callers and callees answer carries walk_rule (its counting rule; text is the Rule: line); '
         'callers measure levels 1 and 2, callees level 1.',
         '?callees=X scans all definitions of X — useful when the name appears in multiple files.',
         '?callees hides Python builtins by default (len, str, sorted, ValueError, etc.); use ?builtins=true to include them.',
-        '?root: every call site of an expanded definition is an edge with call_expr; expanded is false when its '
+        '?root (retired; ?callees=X&depth=N is the same walk): every call site of an expanded definition is an '
+        'edge with call_expr; expanded is false when its '
         'target was already reached at a shallower or earlier level. total_edges = total_resolved + total_unresolved; '
         'total_ambiguous counts the resolved edges with several candidate definitions.',
         '?callees depth=2-5 and detail: the callee walk under calls_callees, every call site of an expanded '
         'definition an edge; not measured in any language (W-CALLS-9 in meta.warnings, walk_rule.measured).',
         'A call-source language with no recall snapshot in scope: no meta.confidence, W-CALLS-10 names it (languages).',
-        'Exactly one mode per request (callers or target, callees, root, rank, uncalled, modules), else exit 2 '
+        'Exactly one mode per request (callers, callees, rank, uncalled, modules, or the retired target and '
+        'root), else exit 2 '
         'naming both. Exit 0 complete, 2 rejected before analysis or a name with no definition (callers: and '
         'no call site), 3 required analysis or output failed or incomplete.',
     ],

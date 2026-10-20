@@ -82,7 +82,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'Architectural brief: entry points, core abstractions, risks'),
     'calls':        _declared('calls',
                      'reveal calls --callers FUNC',
-                     'Call graph: callers, callees (--depth N, --detail), callee walk (--root), --rank callers, --uncalled, --modules'),
+                     'Call graph: callers, callees (--depth N, --detail), --rank callers, --uncalled, --modules'),
     'check':        _spec('check',
                      'reveal check <path>',
                      'Run quality rules on a file or directory',
@@ -210,11 +210,16 @@ class Retirement:
         return f'{self.old} is deprecated; use {self.replacement}.'
 
 
-# Phase 1 removes no URI or subcommand names; the rows are the two older BACK-1906 notes.
+# The two older BACK-1906 notes, then Phase 2b's call-graph spellings (BACK-2066). A param:
+# row covers the URI parameter and the same parameter typed as a declared subcommand's flag.
 RETIREMENTS: Dict[str, Retirement] = {
     'flag:--search': Retirement('--search', '--name PATTERN (regex)'),
     # One row for the file route's --check and its --lint alias.
     'flag:--check': Retirement('file --check/--lint', 'reveal check <path>'),
+    'param:calls.root': Retirement('calls ?root= (--root)',
+                                   '?callees=FUNC&depth=N (--callees FUNC --depth N), the same walk'),
+    # Decision (a): an alias that answers identically until the cut.
+    'param:calls.target': Retirement('calls ?target= (--target)', '?callers=FUNC (--callers FUNC), the same answer'),
 }
 
 

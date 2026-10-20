@@ -1,6 +1,6 @@
 """BACK-2093 R7: a long-lived host never keeps a callers index built while a file was unreadable.
 
-``chmod 000 other.py``, an MCP ``calls://...?target=helper`` request ("1 file(s) could not
+``chmod 000 other.py``, an MCP ``calls://...?callers=helper`` request ("1 file(s) could not
 be analyzed completely (PermissionError)"), ``chmod 644``, a second request: it still said
 so, because the validated callers index survives a request while the tree stamp (path,
 mtime, size) is unchanged and ``chmod`` moves only ctime. An index whose skipped files
@@ -62,7 +62,7 @@ def builds(monkeypatch):
 
 
 def request(root):
-    return mcp_server.reveal_query(f'calls://{root.as_posix()}?target=helper')
+    return mcp_server.reveal_query(f'calls://{root.as_posix()}?callers=helper')
 
 
 def fail_one(monkeypatch, name, cause):

@@ -576,7 +576,7 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
     (reveal_check has severity/select/ignore).
 
     Args:
-        uri: Full reveal URI, e.g. 'calls://src/?target=my_fn' or 'help://quick'
+        uri: Full reveal URI, e.g. 'calls://src/?callers=my_fn' or 'help://quick'
         provenance: When true, attach a '--provenance' execution manifest
             (git state, command, timestamp) to the result, for callers that
             need to cite evidence provenance (e.g. a DD finding contract).

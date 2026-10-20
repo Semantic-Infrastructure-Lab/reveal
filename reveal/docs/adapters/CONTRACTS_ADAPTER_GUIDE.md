@@ -147,4 +147,4 @@ exit policy and reject `--fail-on` until separately qualified.
 
 - `reveal help://schemas/contracts` - JSON schema
 - `reveal 'ast://<path>'` - full structure for any contract's implementers
-- `reveal 'calls://<dir>/?target=<method>'` - who calls into a specific implementation
+- `reveal 'calls://<dir>/?callers=<method>'` - who calls into a specific implementation

@@ -6,7 +6,7 @@ A local-first, adapter-driven semantic inspection layer — progressive disclosu
 
 ```bash
 reveal src/auth.py validate_token           # What does this function do?
-reveal 'calls://src/?target=validate_token' # Who calls it? (cross-file)
+reveal 'calls://src/?callers=validate_token' # Who calls it? (cross-file)
 reveal overview .                           # one-glance dashboard: quality, activity, deps
 reveal 'ast://src/?complexity>10'           # What's too complex?
 reveal health ssl://api.example.com domain://example.com ./src  # One-shot health check
@@ -37,7 +37,7 @@ reveal src/auth.py validate_token    # exact code (~100-600 tokens)
 
 **Cross-file call graph analysis:**
 ```bash
-reveal 'calls://src/?target=fn&depth=3'    # full impact radius before a refactor
+reveal 'calls://src/?callers=fn&depth=3'  # full impact radius before a refactor
 reveal 'calls://src/?rank=callers&top=20'  # most architecturally coupled functions
 reveal 'calls://src/?uncalled'             # functions with no callers — rough check, verify results
 ```
@@ -116,7 +116,7 @@ code, but for sessions, git history, documents, data stores, and runtime state.
 | Need | Adapter | Example |
 |------|---------|---------|
 | Code structure / functions | `ast://` | `reveal 'ast://src/?type=function'` |
-| Call relationships | `calls://` | `reveal 'calls://src/?target=my_fn'` |
+| Call relationships | `calls://` | `reveal 'calls://src/?callers=my_fn'` |
 | Imports / change impact | `imports://` `depends://` | `reveal imports://src/` |
 | Git history / diffs | `git://` `diff://` | `reveal 'git://.?message~=fix'` |
 | Claude sessions / prompts | `claude://` | `reveal 'claude://sessions/?search=auth-refactor'` |

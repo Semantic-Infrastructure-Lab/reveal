@@ -119,7 +119,7 @@ Reveal is very good at answering "what else will this touch?"
 The two key tools are `calls://` and `depends://`:
 
 ```bash
-reveal 'calls://src/?target=validate_token&depth=3'
+reveal 'calls://src/?callers=validate_token&depth=3'
 reveal 'calls://src/?rank=callers&top=20'
 reveal depends://src/auth/tokens.py
 reveal 'depends://src?top=20'
@@ -485,7 +485,7 @@ Reveal is good for people who like Unix-style pipelines, but want higher-level b
 
 ```bash
 reveal nginx.conf --extract domains | sed 's/^/ssl:\/\//' | reveal --stdin --check
-reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > callgraph.svg
+reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
 reveal 'depends://src?format=dot' | dot -Tsvg > depends.svg
 reveal @domains.txt --check
 ```
@@ -602,7 +602,7 @@ Start with the workflow that matches your job:
 | Learn a repo | `reveal .` → `reveal src/` → `reveal file.py` |
 | Find risky code | `reveal overview .` and `reveal hotspots .` |
 | Review a PR | `reveal review main..HEAD` |
-| Estimate refactor blast radius | `reveal 'calls://src/?target=func'` and `reveal depends://path/to/module.py` |
+| Estimate refactor blast radius | `reveal 'calls://src/?callers=func'` and `reveal depends://path/to/module.py` |
 | Prepare AI context | `reveal pack src/ --since main --budget 8000 --content` |
 | Discover Reveal capabilities | `reveal help://` or `reveal help://schemas` |
 | Investigate docs | `reveal 'markdown://docs/?link-graph'` |

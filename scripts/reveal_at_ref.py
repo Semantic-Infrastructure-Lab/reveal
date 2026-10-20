@@ -12,7 +12,7 @@ PYTHONPYCACHEPREFIX (stale bytecode from another tree).
 
 Usage:
     python scripts/reveal_at_ref.py b1263bac -- check src/ --select B006 --format json
-    python scripts/reveal_at_ref.py HEAD~3 --diff -- 'calls://src?target=helper' --format json
+    python scripts/reveal_at_ref.py HEAD~3 --diff -- 'calls://src?callers=helper' --format json
     python scripts/reveal_at_ref.py WORKTREE -- --version      # the current checkout, same guard
 
 --diff runs the ref and then the working tree with the same arguments and prints a unified

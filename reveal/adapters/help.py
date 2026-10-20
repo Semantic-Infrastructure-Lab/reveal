@@ -1511,7 +1511,7 @@ class HelpAdapter(ResourceAdapter):
         {'want': 'find the riskiest code (complexity and quality hotspots)',
          'use': 'hotspots://', 'example': "reveal 'hotspots://src/?functions_only=true&top=10'"},
         {'want': 'know who calls a function',
-         'use': 'calls://', 'example': "reveal 'calls://src/?target=my_fn'"},
+         'use': 'calls://', 'example': "reveal 'calls://src/?callers=my_fn'"},
         {'want': 'find dead code (functions nothing calls)',
          'use': 'calls://', 'example': "reveal 'calls://src/?uncalled'"},
         {'want': 'follow what a function calls, level by level',
@@ -1694,7 +1694,7 @@ class HelpAdapter(ResourceAdapter):
                 {
                     'adapters': ['ast', 'calls'],
                     'description': 'Core code understanding: structure + relationships',
-                    'example': "reveal src/auth.py  &&  reveal 'calls://src/?target=validate_token'",
+                    'example': "reveal src/auth.py  &&  reveal 'calls://src/?callers=validate_token'",
                 },
                 {
                     'adapters': ['pack', 'ast'],

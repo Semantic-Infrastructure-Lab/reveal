@@ -21,7 +21,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **markdown://** | field filters (frontmatter), `aggregate`, `body-contains`, `sort`, `limit`, `offset` | `markdown://docs/?status=draft` |
 | **stats://** | `hotspots`, `code_only`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions`, `exclude`, `sort`, `limit`, `offset` | `stats://.?hotspots` |
 | **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `has_decorator`, `calls`, `callee_of`, `show`, `sort`, `limit`, `offset`, `param_type`, `return_type`, `has_annotations`, `callers`, `reveal_type` | `ast://src?complexity>10` |
-| **calls://** | `callers`, `target`, `callees`, `detail`, `uncalled`, `rank`, `top`, `depth`, `format`, `builtins`, `root`, `modules`, `external` | `calls://src?callers=fn` |
+| **calls://** | `callers`, `callees`, `detail`, `uncalled`, `rank`, `top`, `depth`, `format`, `builtins`, `modules`, `external` (retired, with a note: `target`, `root`) | `calls://src?callers=fn` |
 | **claude://** | `summary`, `errors`, `tools`, `contains`, `role`, `search`, `tail`, `last`, `tokens` | `claude://session?summary` |
 | **codex://** | `search`, `filter`, `since`, `until` | `codex://sessions/?search=auth-refactor` |
 | **depends://** | `top`, `format` | `depends://src?top=10` |
@@ -382,8 +382,8 @@ reveal 'stats://.?hotspots&code_only'
 
 **Query Parameters**:
 
-- **`callers`** - Find all callers of a function (reverse lookup); **`target`** is its older name
-  (the same mode and answer). A bare name: `callers=FILE:NAME` exits 2
+- **`callers`** - Find all callers of a function (reverse lookup). A bare name: `callers=FILE:NAME`
+  exits 2. The retired **`target`** answers the same, with a replaced-by note
   ```bash
   reveal 'calls://src?callers=validate_item'
   # Shorthand: calls://src/file.py:validate_item (only with no other mode; with one it exits 2)
@@ -411,7 +411,7 @@ reveal 'stats://.?hotspots&code_only'
   reveal 'calls://src?rank=callers&top=20'   # top 20
   ```
 
-- **`depth`** - Levels for `?callers` and `?callees` (default 1) and `?root` (default 2), clamped 1-5
+- **`depth`** - Levels for `?callers` and `?callees` (default 1; the retired `?root`: 2), clamped 1-5
   ```bash
   reveal 'calls://src?callers=validate_item&depth=2'  # callers-of-callers
   ```
@@ -421,18 +421,17 @@ reveal 'stats://.?hotspots&code_only'
   reveal 'calls://src?callers=main&format=dot' | dot -Tsvg > graph.svg
   ```
 
-- **`builtins`** - Include Python builtins in `?callees` (every depth), `?root` and `?rank` output (default: false)
+- **`builtins`** - Include Python builtins in `?callees` (every depth), the retired `?root` and `?rank` output (default: false)
   ```bash
   reveal 'calls://src?callees=fn&builtins=true'
   ```
 
-- **`root=<func>&depth=N`** - Recursive callee walk (BFS forward from an entry point)
+- **`root=<func>&depth=N`** - Retired: `?callees=<func>&depth=N` is the same walk (`?root` defaulted
+  to depth 2) and `&detail` adds params and side effects. `?root` still answers, with a replaced-by note
   ```bash
-  reveal 'calls://src?root=main'             # everything main() calls, depth 2
-  reveal 'calls://src?root=process_order&depth=3'
-  reveal 'calls://src?root=handle_request&format=dot' | dot -Tsvg > graph.svg
+  reveal 'calls://src?callees=main&depth=2'           # was ?root=main
+  reveal 'calls://src?callees=handle_request&depth=2&format=dot' | dot -Tsvg > graph.svg
   ```
-  Resolved (project-internal) callees are distinguished from unresolved (external/stdlib). Use `reveal trace` for a narrative view with side-effect labels.
 
 - **`modules=true`** - Module-level dependency graph (collapses function calls to file→file edges)
   ```bash
@@ -442,7 +441,8 @@ reveal 'stats://.?hotspots&code_only'
   ```
   Outputs unique module→module edges with call counts. `--format dot` produces a Graphviz digraph with edge labels.
 
-One mode per request (`callers`/`target`, `callees`, `root`, `rank`, `uncalled`, `modules`); two exit 2.
+One mode per request (`callers`, `callees`, `rank`, `uncalled`, `modules`, or the retired `target`
+and `root`); two exit 2.
 A name that names nothing exits 2 (`callees`: no definition; `callers`: no definition and no call
 site). A scanned call-source language with no recall snapshot (Elixir, Objective-C) withholds `meta.confidence` and is named (W-CALLS-10).
 

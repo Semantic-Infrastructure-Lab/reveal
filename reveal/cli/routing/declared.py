@@ -74,9 +74,28 @@ def validate_execution_policy(args, command: str | None = None) -> None:
         sys.exit(2)
 
 
+def _note_retired_flags(name: str, adapter) -> None:
+    """The subcommand route's retirement hook: a declared parameter typed as its flag
+    (``reveal calls --target``) is the spelling ``calls://?target=`` is, so it is looked up under
+    the same ``param:<name>.<param>`` key, in the order typed (a URI's are in query order). The URI
+    route's hook is ``_note_retired_spellings``."""
+    from ..invocation import current_invocation, retirement_note
+    invocation = current_invocation()
+    if invocation is None:
+        return
+    params = {flag: spec.name for spec in adapter.PARAM_SPECS if spec.cli is not None for flag in spec.cli.flags}
+    for token in invocation.command_argv:
+        if token == '--':
+            break
+        param = params.get(token.partition('=')[0])
+        if param is not None:
+            retirement_note(f'param:{name}.{param}')
+
+
 def run_declared_command(name: str, args, *, answer_consumer=None) -> None:
     """Bind original argparse values; no URI string is constructed."""
     adapter = declared_adapter_class(name)
+    _note_retired_flags(name, adapter)
     source = {}
     for spec in adapter.PARAM_SPECS:
         if spec.cli is None:

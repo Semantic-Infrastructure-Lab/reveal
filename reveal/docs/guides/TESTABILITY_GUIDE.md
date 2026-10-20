@@ -125,7 +125,7 @@ reveal 'ast://src?complexity>10&sort=-complexity&limit=20'
 
 # See cross-file calls for a function
 reveal 'calls://src?callees=function_name'
-reveal 'calls://src?target=function_name'
+reveal 'calls://src?callers=function_name'
 
 # Map external surfaces in the codebase
 reveal surface src

@@ -27,7 +27,8 @@ beth_topics:
 8. [Limitations](#limitations)
 9. [Performance & Caching](#performance-caching)
 10. [FAQ](#faq)
-11. [Related Documentation](#related-documentation)
+11. [Retired spellings](#retired-spellings)
+12. [Related Documentation](#related-documentation)
 
 ---
 
@@ -60,7 +61,8 @@ reveal calls src/ --callers validate_item --depth 2
 reveal calls src/ --callees validate_item --depth 2 --detail
 ```
 
-`?target=` is the older name of `?callers=`: the same mode and the same answer.
+`?target=` and `?root=` are retired spellings (see [Retired spellings](#retired-spellings)): they still
+answer, with a note naming `?callers=` and `?callees=NAME&depth=N`.
 
 **Why use calls://?**
 - **Impact analysis**: Before changing a function, find all callers across the codebase
@@ -188,22 +190,22 @@ callee → [(file, caller_func, line), ...]
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `callers` | string | — | Function name to find **callers of** (reverse lookup). A bare name: `callers=FILE:NAME` exits 2, because the callers index has no file filter |
-| `target` | string | — | The older name of `callers`: the same mode and the same answer |
+| `target` | string | — | Retired name of `callers`: the same mode and answer, with a replaced-by note |
 | `callees` | string | — | Function name, or `FILE:NAME` for the definitions in one file, to find **callees of** (forward lookup). Depth 1 lists each definition's calls (`matches`); depth 2-5 walks level by level (see [`callees`](#callees)) |
 | `detail` | flag | — | `?callees` only: adds `params` and `effects` to every definition the walk reaches (`definitions[]`); with any other mode it exits 2. Not measured (W-CALLS-9) |
 | `rank` | string | — | Set to `callers` to rank all functions by in-degree |
 | `uncalled` | flag | — | List dead-code candidates — functions/methods with no static callers (see [Workflow 2](#workflow-2-find-unused-functions-dead-code)) |
 | `top` | integer | 10 for `?rank`, all for `?uncalled` | Max results for `?rank=callers` or `?uncalled`; `0` = all; a negative or non-whole value exits 2. `--limit N` becomes `top=N` |
-| `depth` | integer | 1 (`?root`: 2) | Levels for `?callers`, `?callees` and `?root`: a signed whole integer clamped 1–5 (1 = direct only); `depth=abc` or `1.5` exits 2. A callee walk beyond depth 1 is not measured (W-CALLS-9) |
-| `builtins` | boolean | `false` | Include Python builtins in output (applies to `?callees` at every depth, `?root` and `?rank=callers`) |
+| `depth` | integer | 1 (the retired `?root`: 2) | Levels for `?callers` and `?callees` (and the retired `?root`): a signed whole integer clamped 1–5 (1 = direct only); `depth=abc` or `1.5` exits 2. A callee walk beyond depth 1 is not measured (W-CALLS-9) |
+| `builtins` | boolean | `false` | Include Python builtins in output (applies to `?callees` at every depth, the retired `?root` and `?rank=callers`) |
 | `format` | string | `text` | Output format: `text`, `json`, or `dot`; another value exits 2 |
-| `root` | string | — | Root function name (or `FILE:NAME`) for a level-by-level callee walk, the same walk `trace://` uses. Every matching definition is a starting point and each definition is expanded once, at the shallowest level it is reached. Every call site of an expanded definition is an edge (`call_expr`), including one to a definition already reached, which has `expanded: false`. A callee name that several definitions share, with none in the caller's file or imports, is listed as `ambiguous` with its candidates and not expanded. Totals count edges: `total_edges` = `total_resolved` (ambiguous included, also counted in `total_ambiguous`) + `total_unresolved` |
+| `root` | string | — | Retired: use `callees=NAME&depth=N`, the same walk (`?root` defaults to depth 2). A replaced-by note is printed. Root function name (or `FILE:NAME`) for a level-by-level callee walk. Every matching definition is a starting point and each definition is expanded once, at the shallowest level it is reached. Every call site of an expanded definition is an edge (`call_expr`), including one to a definition already reached, which has `expanded: false`. A callee name that several definitions share, with none in the caller's file or imports, is listed as `ambiguous` with its candidates and not expanded. Totals count edges: `total_edges` = `total_resolved` (ambiguous included, also counted in `total_ambiguous`) + `total_unresolved` |
 | `modules` | boolean | `false` | Build a module-level dependency graph instead of function-level |
 | `external` | boolean | `false` | Include external (non-project) modules in the `?modules` graph |
 | `test-framework` | boolean | `false` | Include test-framework entrypoints as callers in `?rank=callers`, and as dead-code candidates in `?uncalled` |
 
-> Exactly one of `callers` (or `target`), `callees`, `root`, `rank`, `uncalled` or `modules` per
-> request; `callers` and `target` together are two selectors too. The `path:name` shorthand is the
+> Exactly one of `callers`, `callees`, `rank`, `uncalled` or `modules` per request (the retired
+> `target` and `root` count as selectors too, so `callers` and `target` together are two). The `path:name` shorthand is the
 > callers mode, so with any other mode it exits 2. Two modes exit 2 and name both;
 > before calls was a declared noun they resolved silently by a hidden precedence. No mode exits 2.
 > Values are typed, never coerced: `callers=123` is the name `123`; a malformed value (`depth=abc`,
@@ -212,10 +214,9 @@ callee → [(file, caller_func, line), ...]
 
 ### Subcommand and exit codes
 
-`reveal calls <path>` takes the same parameters as flags (`--callers NAME`, `--target NAME`, `--callees NAME`,
-`--root NAME`, `--depth N`, `--detail`, `--rank callers`, `--top N`, `--uncalled`, `--type KIND`, `--modules`,
-`--external`, `--builtins`, `--test-framework`); both spellings give equal JSON through one
-execution path. `format=dot` stays URI-only. Details: [SUBCOMMANDS_GUIDE](../guides/SUBCOMMANDS_GUIDE.md#reveal-calls--cross-file-call-graph).
+`reveal calls <path>` takes the same parameters as flags (`--callers NAME`, `--callees NAME`, `--depth N`, `--detail`, `--rank callers`, `--top N`, `--uncalled`, `--type KIND`, `--modules`,
+`--external`, `--builtins`, `--test-framework`, and the retired `--target`/`--root`, which print the
+same note as `?target=`/`?root=`); both spellings give equal JSON through one execution path. `format=dot` stays URI-only. Details: [SUBCOMMANDS_GUIDE](../guides/SUBCOMMANDS_GUIDE.md#reveal-calls--cross-file-call-graph).
 
 | Exit | Meaning |
 |------|---------|
@@ -227,8 +228,7 @@ execution path. `format=dot` stays URI-only. Details: [SUBCOMMANDS_GUIDE](../gui
 
 ### `callers`
 
-Reverse lookup — who calls this function? The bare function name, no file qualifier needed
-(`?target=` is the older name of the same mode):
+Reverse lookup — who calls this function? The bare function name, no file qualifier needed:
 
 ```bash
 # Bare name (most common)
@@ -795,6 +795,18 @@ The `?callers=` direction (reverse lookup) always returns results regardless of 
 **Q: Is `calls://` the same as a full call graph tool like pycallgraph or pyCallGraph?**
 
 A: No — `calls://` is a fast static analysis tool built on the same parse trees as `ast://`. It doesn't execute code, doesn't track dynamic dispatch, and doesn't generate flame graphs. For profiling and runtime call graphs, use profiling tools. For structural analysis, refactoring, and impact assessment, `calls://` is faster and doesn't require a running application.
+
+## Retired spellings
+
+Phase 2b merged the older call-graph spellings into `calls://`. Until the cut release each one
+still answers exactly as before, prints one `note: <old> is deprecated; use <new>.` line on stderr,
+and carries a `retired_spelling` entry in JSON `meta.warnings` (MCP returns the note with the
+result). At the cut the same text becomes an exit-2 error.
+
+| Retired | Use instead |
+|---------|-------------|
+| `calls://<path>?target=NAME`, `reveal calls --target NAME` | `?callers=NAME`, `--callers NAME` (the same answer) |
+| `calls://<path>?root=NAME[&depth=N]`, `reveal calls --root NAME` | `?callees=NAME&depth=N`, `--callees NAME --depth N` (the same walk; `?root` defaulted to depth 2) |
 
 ---
 

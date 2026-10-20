@@ -143,10 +143,10 @@ _HELP_WORKFLOWS = [
         'steps': [
             "reveal 'ast://src/?show=calls'                        # Compact call graph: all functions + their calls",
             "reveal 'ast://src/?calls=validate_item'               # Which functions call validate_item? (within-file)",
-            "reveal 'calls://src/?target=validate_item'            # Cross-file: who calls validate_item project-wide?",
+            "reveal 'calls://src/?callers=validate_item'           # Cross-file: who calls validate_item project-wide?",
             "reveal 'calls://src/?callees=validate_item'           # Cross-file: what does validate_item call?",
-            "reveal 'calls://src/?target=validate_item&depth=2'    # Callers-of-callers (transitive, 2 levels)",
-            "reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > call_graph.svg  # Graphviz SVG",
+            "reveal 'calls://src/?callers=validate_item&depth=2'   # Callers-of-callers (transitive, 2 levels)",
+            "reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > call_graph.svg  # Graphviz SVG",
         ]
     },
     {
