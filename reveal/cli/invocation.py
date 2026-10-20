@@ -132,7 +132,8 @@ COMMANDS: Dict[str, CommandSpec] = {
                      help_guide='guides/TESTABILITY_GUIDE.md'),
     'trace':        _declared('trace',
                      'reveal trace --from FUNC',
-                     'Walk call graph from a named entry point; depth-indented narrative with side-effect classification'),
+                     'Retired: use reveal calls --callees FUNC --depth N --detail (the same walk); '
+                     'depth-indented narrative with side effects'),
 }
 
 
@@ -216,6 +217,10 @@ RETIREMENTS: Dict[str, Retirement] = {
     'flag:--search': Retirement('--search', '--name PATTERN (regex)'),
     # One row for the file route's --check and its --lint alias.
     'flag:--check': Retirement('file --check/--lint', 'reveal check <path>'),
+    # trace merged into calls (BACK-2066): both spellings keep trace's frames shape until the cut
+    # (decision c); the MCP tool reveal_trace keeps its name until Phase 7 (decision g).
+    'subcommand:trace': Retirement('reveal trace', 'reveal calls <path> --callees FUNC --depth N --detail'),
+    'scheme:trace': Retirement('trace://', 'calls://<path>?callees=FUNC&depth=N&detail'),
     'param:calls.root': Retirement('calls ?root= (--root)',
                                    '?callees=FUNC&depth=N (--callees FUNC --depth N), the same walk'),
     # Decision (a): an alias that answers identically until the cut.

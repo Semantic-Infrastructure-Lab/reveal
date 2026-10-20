@@ -19,6 +19,19 @@ def project(tmp_path, monkeypatch):
     return root
 
 
+def answer_of(result, spelling_key):
+    """The JSON answer minus its retired_spelling warning (BACK-2066 slice D): each spelling carries
+    its own (``subcommand:trace`` or ``scheme:trace``); the rest must be equal."""
+    answer = json.loads(result.stdout)
+    warnings = answer['meta']['warnings']
+    assert [w['field'] for w in warnings if w.get('code') == 'retired_spelling'] == [spelling_key]
+    answer['meta']['warnings'] = [w for w in warnings if w.get('code') != 'retired_spelling']
+    return answer
+
+
+SPELLING_KEYS = ('subcommand:trace', 'scheme:trace')
+
+
 def requests(root, entry='main', depth=None):
     cli = ['trace', str(root), '--from', entry]
     uri = [f'trace://{root}?from={quote(entry, safe="")}']
@@ -34,7 +47,7 @@ def test_canonical_parity(project, depth, provenance):
     options = ['--format', 'json', '--no-gitignore'] + (['--provenance'] if provenance else [])
     results = [run(*argv, *options) for argv in requests(project, depth=depth)]
     assert [result.returncode for result in results] == [0, 0]
-    answers = [json.loads(result.stdout) for result in results]
+    answers = [answer_of(result, key) for result, key in zip(results, SPELLING_KEYS)]
     assert answers[0]['type'] == 'trace'
     assert answers[0]['frames'][0]['resolved']
     if provenance:
@@ -58,10 +71,10 @@ def test_once_percent_selector_and_literal_resource(project):
     source.write_text('def entrée():\n    return 1\n', encoding='utf-8')
     entry = source.name + ':entrée'
     answers = []
-    for argv in requests(project, entry):
+    for argv, key in zip(requests(project, entry), SPELLING_KEYS):
         result = run(*argv, '--format', 'json')
         assert result.returncode == 0
-        answer = json.loads(result.stdout)
+        answer = answer_of(result, key)
         assert answer['root'] == entry
         assert answer['frames'][0]['resolved']
         answers.append(answer)

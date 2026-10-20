@@ -178,6 +178,8 @@ PRODUCTION_CASES = {
     'param:ast.calls': lambda f: [f'ast://{f}?calls=auth_gate'],
     'param:ast.callee_of': lambda f: [f'ast://{f}?callee_of=auth_gate'],
     'value:ast.show=calls': lambda f: [f'ast://{f}?show=calls'],
+    'subcommand:trace': lambda f: ['trace', str(Path(f).parent), '--from', 'auth_gate'],
+    'scheme:trace': lambda f: [f'trace://{Path(f).parent}?from=auth_gate'],
 }
 
 

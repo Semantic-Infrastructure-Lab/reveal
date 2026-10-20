@@ -164,7 +164,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Find error handlers', 'query': 'ast://src?name~=error&type=function', 'description': 'Locate error handling code', 'output_type': 'ast_query'},
             {'goal': 'Check recent changes', 'query': 'git://.?type=history', 'description': 'Review recent commit history', 'output_type': 'git_ref'},
             {'goal': 'Find large functions', 'query': 'ast://src?lines>100&type=function', 'description': 'Locate potentially problematic large functions', 'output_type': 'ast_query'},
-            {'goal': 'Walk the call chain from an entry point', 'query': 'trace://src?from=main', 'description': 'Depth-indented execution narrative from the calls://?root= callee walk — see the actual path a bug report walks', 'output_type': 'trace'},
+            {'goal': 'Walk the call chain from an entry point', 'query': 'calls://src?callees=main&depth=2&detail', 'description': 'Level-by-level callee walk with params and side effects — see the actual path a bug report walks', 'output_type': 'calls_callees'},
         ]
     },
     'quality': {
@@ -1515,7 +1515,7 @@ class HelpAdapter(ResourceAdapter):
         {'want': 'find dead code (functions nothing calls)',
          'use': 'calls://', 'example': "reveal 'calls://src/?uncalled'"},
         {'want': 'follow what a function calls, level by level',
-         'use': 'trace://', 'example': "reveal 'trace://src/?from=my_fn&depth=2'"},
+         'use': 'calls://', 'example': "reveal 'calls://src/?callees=my_fn&depth=2'"},
         {'want': "see a function's inputs, side effects (db/http/file/env) and exits",
          'use': '--boundary / --sideeffects', 'example': "reveal src/app.py my_fn --boundary"},
         {'want': 'map HTTP routes, env vars, network, db and filesystem access',
@@ -1641,7 +1641,7 @@ class HelpAdapter(ResourceAdapter):
                         ('overview', 'stats', 'dashboard hotspots/quality pulse draw on the same quality score'),
                         ('overview', 'git', 'recent-activity section is a git:// log query'),
                         ('testability', 'patches', 'testability joins the same patch scan against production boundary fan-out'),
-                        ('trace', 'calls', 'trace frames and calls://?root= come from the same callee walk'),
+                        ('trace', 'calls', 'trace is retired: its frames come from the calls://?callees=&depth= callee walk that replaces it'),
                         ('pack', 'imports', '--architecture/--focus ranking is built on the same import/dependency graph'),
                     ],
                 },

@@ -200,10 +200,11 @@ reveal_grep("src/auth.py", "validate_.*token", ignore_case=True)
 ### `reveal_trace(path, entry_point, depth)`
 
 Depth-indented call-graph narrative from one entry point — each frame shows
-location, parameters, classified side effects, and what it calls next.
-Complements `reveal_query("calls://...")`, which answers structural
-caller/callee queries rather than rendering a readable walk-through.
-Both trace tools retain a normal MCP response when canonical evidence proves the
+location, parameters, classified side effects, and what it calls next. It is
+the same callee walk as `reveal_query("calls://src/?callees=process_order&depth=2&detail")`,
+which replaces it: the CLI's `reveal trace` and `trace://` are retired and print a
+replaced-by note; this tool keeps its name for now and prints none.
+Both trace spellings retain a normal MCP response when canonical evidence proves the
 entry point is absent; CLI/URI shell invocations use exit 2 for that request.
 Incomplete evidence cannot prove absence. Required analysis/output failure remains
 an MCP error, while usable partial narratives disclose incompleteness. For proven absence, provenance

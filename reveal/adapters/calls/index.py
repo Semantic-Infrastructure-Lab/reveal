@@ -737,7 +737,7 @@ def _effects_from_calls(calls: List[str], classify_call, language=None) -> List[
     return effects
 
 
-# --- The forward walk (BACK-2096): one engine for calls://?root= and trace:// --------------
+# --- The forward walk (BACK-2096): one engine for ?callees=&depth= and the retired ?root=/trace://
 #
 # Level by level over definitions from every root definition. Each definition is expanded once,
 # at the shallowest level the walk reaches it, and every call site of an expanded definition is

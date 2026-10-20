@@ -51,7 +51,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | Riskiest code | `reveal 'hotspots://src/?functions_only=true&top=10'` |
 | Query functions by complexity/size/type | `reveal 'ast://src/?type=function&complexity>10&sort=-complexity&limit=10'` |
 | Who calls a function | `reveal 'calls://src/?callers=my_fn'` |
-| What a function calls, level by level | `reveal 'trace://src/?from=my_fn&depth=2'` |
+| What a function calls, level by level | `reveal 'calls://src/?callees=my_fn&depth=2'` |
 | Dead code | `reveal 'calls://src/?uncalled'` |
 | A function's inputs, side effects, exits | `reveal src/app.py my_fn --boundary` (or `--sideeffects`, `--exits`) |
 | Unused or circular imports | `reveal 'imports://src/?unused'` / `?circular` |
@@ -246,7 +246,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal surface --help` |
 | `reveal testability [path]` | Test patch pressure joined with production boundary fan-out *(Python and TS/JS test suites)* | `reveal testability --help` |
 | `reveal calls --callers FUNC` | Call graph: callers, callees (--depth N, --detail), --rank callers, --uncalled, --modules | `reveal calls --help` |
-| `reveal trace --from FUNC` | Walk call graph from a named entry point; depth-indented narrative with side-effect classification | `reveal trace --help` |
+| `reveal trace --from FUNC` | Retired: use reveal calls --callees FUNC --depth N --detail (the same walk); depth-indented narrative with side effects | `reveal trace --help` |
 | `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
 | `reveal review <path>` | Assess quality + structural changes before a PR merge | `reveal review --help` |
 | `reveal health [path]` | Unified health: code rules + SSL + databases + DNS in one report | `reveal health --help` |
@@ -259,7 +259,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 - Exploring an unfamiliar codebase → `reveal overview` first, then `reveal architecture`.
 - Pre-merge review → `reveal review` (quality + structural diff in one).
 - Building LLM context with a token budget → `reveal pack`.
-- Tracing what a function actually does (calls + side-effects) → `reveal trace --from <func>`.
+- Tracing what a function actually does (calls + side-effects) → `reveal calls <path> --callees <func> --depth 2 --detail`.
 - Mapping the system's external boundaries → `reveal surface`.
 - Finding testability pressure → `reveal testability src --tests tests`.
 - Building your own adapter, analyzer, or rule → `reveal dev new-adapter|new-analyzer|new-rule`.
@@ -1399,30 +1399,24 @@ Fields:
 
 **See also:** `CALLS_ADAPTER_GUIDE.md` for full `calls://` documentation.
 
-**Execution narrative — `reveal trace` (v0.86.0+):**
+**Execution narrative — the callee walk with `--detail`:**
 
 ```bash
-# Depth-indented execution narrative from an entry point
-reveal trace src/ --from main
-reveal trace src/ --from main --depth 3    # expand 3 levels (max 5)
-reveal trace src/ --from process_request --format json   # JSON output
-reveal trace src/ --from src/app.py:main   # FILE:NAME picks one of several same-named definitions
+# Level-by-level: what main calls, what those call, with params and classified side effects
+reveal calls src/ --callees main --depth 2 --detail
+reveal 'calls://src/?callees=main&depth=3&detail'          # the same request as a URI
+reveal calls src/ --callees src/app.py:main --depth 2      # FILE:NAME picks one file's definitions
 ```
 
-Each frame shows:
-- Function name + file:line (relative path)
-- `params:` — function parameters
-- `effects:` — classified side-effects (hard_stop, db, http, cache, file, env, log, sleep), e.g. `effects: env:get`
-- `calls:` — what it calls at the next level
+Each node shows its `file:line` (or an `[external]` / `[ambiguous: …]` marker), and with
+`--detail` its `params:` and `effects:` (hard_stop, db, http, cache, file, env, log, sleep). Each
+definition is expanded once, at the shallowest level it is reached; a later edge to it says
+`(expanded above/below)`. A callee name with several definitions resolves to the one in the
+caller's file, then the one the caller imports; otherwise it is ambiguous and not expanded. Walks
+beyond depth 1 and `--detail` are not measured (W-CALLS-9).
 
-Output is depth-indented so the execution tree is scannable at a glance.  Unresolved
-(external/stdlib) callees appear with an `[external]` marker.
-
-**One frame per definition (BACK-1399).** Same-named functions in different files are never merged. A bare `--from NAME` with several definitions traces each one separately and warns:
-```
-⚠ 'check' has 8 definitions (I001.py:63, I002.py:268, I003.py:69, I004.py:75, I005.py:55 (+3 more)); each is traced separately -- pick one with --from <file>:check
-```
-A callee name with several definitions resolves to the one in the caller's file, then the one the caller imports; otherwise it is marked `[ambiguous: N definitions -- …]` (JSON `ambiguous`, `candidates`) and not expanded. Each definition is expanded once, at the shallowest depth it is reached (the walk `calls://?root=` uses); frames print in pre-order under the call that first reaches them.
+`reveal trace --from FUNC` and `trace://<path>?from=FUNC` are retired: they still print trace's
+frames (the same walk), with a note naming `reveal calls --callees FUNC --depth N --detail`.
 
 
 ---

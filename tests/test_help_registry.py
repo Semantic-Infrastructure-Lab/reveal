@@ -421,11 +421,12 @@ class TestAllAdaptersInExampleRecipes(unittest.TestCase):
     # more naturally, so both forms count as coverage.
     _SUBCOMMAND_RE = re.compile(r"\breveal\s+([a-z][a-z_-]*)\b")
 
-    def test_all_adapters_referenced_in_some_recipe_query(self):
-        from reveal.adapters.base import _ADAPTER_REGISTRY
-        from reveal.adapters.registry import _SCAFFOLD_SCHEMES
-        all_registered = set(_ADAPTER_REGISTRY.keys()) - _SCAFFOLD_SCHEMES - {'help'}
+    @staticmethod
+    def _retired_schemes():
+        from reveal.cli.invocation import RETIREMENTS
+        return {key.split(':', 1)[1] for key in RETIREMENTS if key.startswith('scheme:')}
 
+    def _referenced(self, all_registered):
         referenced = set()
         for task_data in _EXAMPLE_RECIPES.values():
             for recipe in task_data.get('recipes', []):
@@ -435,12 +436,25 @@ class TestAllAdaptersInExampleRecipes(unittest.TestCase):
                     m for m in self._SUBCOMMAND_RE.findall(query)
                     if m in all_registered
                 )
+        return referenced
 
-        missing = all_registered - referenced
+    def test_all_adapters_referenced_in_some_recipe_query(self):
+        from reveal.adapters.base import _ADAPTER_REGISTRY
+        from reveal.adapters.registry import _SCAFFOLD_SCHEMES
+        # A retired scheme (trace://, BACK-2066) is taught by its replacement, not by a recipe.
+        all_registered = set(_ADAPTER_REGISTRY.keys()) - _SCAFFOLD_SCHEMES - {'help'} - self._retired_schemes()
+
+        missing = all_registered - self._referenced(all_registered)
         self.assertEqual(
             missing, set(),
             f"Registered adapters missing from every help://examples/* recipe query: {missing}"
         )
+
+    def test_no_recipe_teaches_a_retired_scheme(self):
+        from reveal.adapters.base import _ADAPTER_REGISTRY
+        retired = self._retired_schemes()
+        self.assertTrue(retired)
+        self.assertEqual(retired & self._referenced(set(_ADAPTER_REGISTRY.keys())), set())
 
 
 class TestHelpEnvelopeConsistency(unittest.TestCase):

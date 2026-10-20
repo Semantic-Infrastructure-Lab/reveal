@@ -3,10 +3,14 @@
 Walks the call graph from a named entry point, one frame per definition, and
 builds a depth-indented narrative: each frame shows the function location,
 its parameters, classified side-effects, and what it calls next.
-The walk is calls.index.walk_callees, the one calls://?root= answers from:
+The walk is calls.index.walk_callees, the one calls://?callees=&depth= answers from:
 each definition is expanded once, at the shallowest depth it is reached.
 Scan/render logic and required-answer proof live here; CLI, URI and MCP use the
 same declared binding and canonical outcome path.
+
+Retired (BACK-2066): ``reveal trace`` and ``trace://`` print a replaced-by note from the
+RETIREMENTS table and keep this frames shape until the cut (decision c); the MCP tool
+reveal_trace keeps its name until Phase 7 (decision g).
 """
 
 from __future__ import annotations
@@ -554,7 +558,9 @@ class TraceAdapter(ResourceAdapter):
     def get_help() -> Dict[str, Any]:
         return {
             'name': 'trace',
-            'description': 'Walk the call graph from a named entry point and print a depth-indented execution narrative.',
+            'description': ('Retired: use calls://<path>?callees=<FUNC>&depth=N&detail, the same walk (trace:// '
+                            'prints a replaced-by note). Walks the call graph from a named entry point and prints '
+                            'a depth-indented execution narrative.'),
             'syntax': 'trace://<path>?from=<FUNC>[&depth=2]',
             'examples': [
                 {'uri': "trace://src?from=main", 'description': 'Trace from main(), depth 2'},
@@ -573,7 +579,7 @@ class TraceAdapter(ResourceAdapter):
                 'A same-named definition in an unrelated language is not conflated with the real target (BACK-405).',
             ],
             'see_also': [
-                'reveal trace <path> --from <FUNC> - CLI subcommand form',
+                'calls://<path>?callees=<FUNC>&depth=N&detail - the replacement (reveal calls <path> --callees ...)',
                 "reveal_trace MCP tool - same narrative, MCP-native",
             ],
             'output_formats': ['text', 'json'],
@@ -583,7 +589,7 @@ class TraceAdapter(ResourceAdapter):
     def get_schema() -> Dict[str, Any]:
         return {
             'adapter': 'trace',
-            'description': 'Execution narrative: call-graph walk from a named entry point, each definition expanded at the shallowest depth it is reached',
+            'description': 'Retired (use calls://<path>?callees=<FUNC>&depth=N&detail). Execution narrative: call-graph walk from a named entry point, each definition expanded at the shallowest depth it is reached',
             'uri_syntax': 'trace://<path>?from=<FUNC>&depth=2',
             'resource': TraceAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none']},
@@ -608,7 +614,7 @@ class TraceAdapter(ResourceAdapter):
                 {'uri': 'trace://src?from=main', 'description': 'Trace from main()', 'output_type': 'trace', 'task': 'debugging'},
             ],
             'notes': [
-                'Frames are per definition (file:line), in pre-order under the call that first reaches them; each definition is expanded once, at the shallowest depth it is reached, by the same walk as calls://?root= (BACK-2096). A callee name with several definitions resolves through the same file, then the caller\'s imports; otherwise it is marked ambiguous and not expanded (BACK-1399).',
+                'Frames are per definition (file:line), in pre-order under the call that first reaches them; each definition is expanded once, at the shallowest depth it is reached, by the same walk as calls://?callees=&depth= (BACK-2096). A callee name with several definitions resolves through the same file, then the caller\'s imports; otherwise it is marked ambiguous and not expanded (BACK-1399).',
             ],
         }
 

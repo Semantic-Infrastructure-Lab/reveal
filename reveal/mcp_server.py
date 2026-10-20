@@ -118,8 +118,10 @@ mcp = MCPServer(
         "   varflow     — trace one variable's reads and writes\n"
         "5. reveal_grep(path, pattern) — \"where is X used?\" cross-file "
         "search grouped by enclosing function (use instead of shell grep).\n"
-        "6. reveal_trace(dir, entry_point) — \"what happens when X runs?\" "
-        "depth-indented call-graph narrative from one entry point.\n"
+        "6. reveal_query('calls://<dir>?callees=FN&depth=2&detail') — \"what "
+        "happens when X runs?\" level-by-level callee walk with params and side "
+        "effects (reveal_trace(dir, entry_point) renders the same walk as a "
+        "depth-indented narrative).\n"
         "7. reveal_query('help://quick') — lost, or need an adapter outside "
         "this workflow (git, imports, sqlite, env, infra adapters like ssl/"
         "domain/mysql/cpanel, ...)? Start here for an orientation map of "
@@ -866,11 +868,12 @@ def reveal_grep(path: str, pattern: str, ignore_case: bool = False) -> str:
 def reveal_trace(path: str, entry_point: str, depth: int = 2) -> str:
     """Walk the call graph from a named entry point as a depth-indented execution narrative.
 
-    Each frame shows the function's location, parameters, classified side
-    effects (db/http/log/file/...), and what it calls next. Unlike
-    reveal_query('calls://...'), which answers structural caller/callee
-    queries, this renders a readable top-down trace starting from one function
-    — useful for "walk me through what happens when X runs."
+    The narrative view of the calls:// callee walk: the same walk as
+    reveal_query('calls://<path>?callees=FUNC&depth=N&detail'), which replaces it (the CLI's
+    `reveal trace` and `trace://` already print a replaced-by note; this tool keeps its name for
+    now). Each frame shows the function's location, parameters, classified side effects
+    (db/http/log/file/...), and what it calls next — useful for "walk me through what happens
+    when X runs."
 
     Args:
         path: Source directory to analyse

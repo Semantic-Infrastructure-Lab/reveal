@@ -216,7 +216,7 @@ reveal architecture src/          # Entry points, core abstractions, circular gr
 reveal overview .                 # One-glance dashboard: stats, quality, architecture, git
 
 # Execution and boundary analysis (v0.85.0+)
-reveal trace src/ --from main     # Depth-indented execution narrative with side-effects
+reveal calls src/ --callees main --depth 2 --detail  # What main calls, level by level, with side effects
 reveal contracts src/             # ABC/Protocol/TypedDict/Pydantic contract inventory
 reveal surface src/               # External boundary map: CLI args, routes, env vars, I/O
 

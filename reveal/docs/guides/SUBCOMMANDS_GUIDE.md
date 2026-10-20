@@ -472,39 +472,9 @@ reveal calls src --uncalled --type function        # dead-code candidates
 reveal calls src --modules --format json           # module graph, JSON
 ```
 
-### See Also
+### Side-effect tags
 
-- [CALLS_ADAPTER_GUIDE.md](../adapters/CALLS_ADAPTER_GUIDE.md) — the full parameter and output reference
-- `reveal calls --help` — Full flag reference
-
----
-
-## reveal trace — Execution Narrative
-
-Walk the call graph forward from a named entry point and print a depth-indented execution narrative. Each frame shows the function's location, parameters, classified side-effects, and what it calls next.
-
-### Usage
-
-```
-reveal trace [PATH] --from FUNC [--depth N] [--format {text,json}]
-```
-
-### CLI Flags
-
-| Flag | Description |
-|------|-------------|
-| `--from FUNC` | Entry-point function to start the trace from (required). `FILE:FUNC` (e.g. `src/app.py:run`) picks one of several same-named definitions |
-| `--depth N` | Signed whole call depth, clamped 1–5 (default: 2); fractions/booleans reject |
-| `--format` | `text` or `json`; default follows `REVEAL_FORMAT`, otherwise text |
-
-Both CLI and URI use the canonical `trace` answer. Complete execution exits 0;
-invalid input or a proven absent root exits 2; incomplete required analysis or
-output failure exits 3. `--fail-on none`, `--also-json`, `--provenance` and JSON
-`--fields` use the common declared policy. CLI `--all` remains rejected.
-
-### Side-Effect Classification
-
-Each frame is labelled with detected side-effects:
+With `--detail` each reached definition lists its classified side effects:
 
 | Tag | Meaning |
 |-----|---------|
@@ -517,25 +487,29 @@ Each frame is labelled with detected side-effects:
 | `env` | Environment/config read |
 | `hard_stop` | Process exit: `sys.exit`/`os._exit`, PHP `exit`/`die` (a `raise` is not a side effect) |
 
-Unresolved (external/stdlib) callees appear with an `[external]` marker.
-
-### Same-Named Functions
-
-Frames are per definition, in call order, so two unrelated functions named `run` are never merged into one frame. A bare `--from run` with several definitions traces each one separately and prints a warning naming them; `--from path/to/file.py:run` traces just that one. A callee whose name matches several definitions resolves to the one in the caller's own file, then to the one the caller imports; otherwise it is shown as `[ambiguous: N definitions -- a.py:3, b.py:9]` and not expanded, rather than guessing.
-
-### Examples
-
-```bash
-reveal trace src/ --from main               # Trace from main(), depth 2
-reveal trace src/ --from process_order --depth 3
-reveal trace src/ --from src/jobs/runner.py:run   # One of several run() definitions
-reveal trace . --from handle_request --format json  # Machine-readable output
-```
-
 ### See Also
 
-- `calls://` adapter — raw cross-file call graph queries
-- `reveal trace --help` — Full flag reference
+- [CALLS_ADAPTER_GUIDE.md](../adapters/CALLS_ADAPTER_GUIDE.md) — the full parameter and output reference
+- `reveal calls --help` — Full flag reference
+
+---
+
+## reveal trace — Retired (use `reveal calls --callees`)
+
+`reveal trace` and `trace://` are retired: trace merged into `reveal calls`, whose callee walk they
+already answered from. Until the cut release they still print trace's frames (text and JSON, the
+same exits: 0 complete, 2 invalid input or a proven absent root, 3 incomplete), with one note on
+stderr and a `retired_spelling` entry in JSON `meta.warnings`. The MCP tool `reveal_trace` keeps its
+name for now.
+
+| Retired | Use instead |
+|---------|-------------|
+| `reveal trace PATH --from FUNC [--depth N]` | `reveal calls PATH --callees FUNC --depth N --detail` (trace's default depth was 2) |
+| `reveal 'trace://PATH?from=FUNC&depth=N'` | `reveal 'calls://PATH?callees=FUNC&depth=N&detail'` |
+| `--from FILE:FUNC` | `--callees FILE:FUNC` |
+
+`--detail` adds each reached definition's `params:` and `effects:`; the effect tags are listed in
+[the calls section](#side-effect-tags).
 
 ---
 

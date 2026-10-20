@@ -157,7 +157,7 @@ reveal hotspots src/           # top complexity hotspots (✅/⚪ test-coverage 
 reveal overview .              # one-glance dashboard: stats, quality, git activity
 reveal deps .                  # dependency health: circular imports, unused, packages
 reveal architecture src/       # architectural brief: entry points, abstractions, risks
-reveal trace src/ --from main  # execution narrative from an entry point
+reveal calls src/ --callees main --depth 2 --detail  # what main calls, level by level, with side effects
 reveal contracts src/          # ABC/Protocol/TypedDict/Pydantic inventory
 reveal surface src/            # external boundary map: CLI args, routes, env vars, I/O
 reveal dev new-adapter <name>  # scaffold new adapters/rules

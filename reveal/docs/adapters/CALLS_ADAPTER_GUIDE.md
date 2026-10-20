@@ -655,7 +655,7 @@ languages' top-level code remain outside this relationship scope and are disclos
 
 ```bash
 reveal 'calls://src?callees=<module>'
-reveal 'trace://src?from=script.py:<module>&depth=2'
+reveal 'calls://src?callees=script.py:<module>&depth=2'
 ```
 
 **`line` in a caller record is the caller function's definition line, not the call-site line.** Each record is built per-*function*, not per-*call-expression* — repeat calls to the same target within one function collapse to a single record, and that record's `line` is where the caller function is `def`ined, not where the call itself appears in the body. Don't use it to jump to the exact call; use it to locate the calling function.
@@ -794,6 +794,7 @@ result). At the cut the same text becomes an exit-2 error.
 |---------|-------------|
 | `calls://<path>?target=NAME`, `reveal calls --target NAME` | `?callers=NAME`, `--callers NAME` (the same answer) |
 | `calls://<path>?root=NAME[&depth=N]`, `reveal calls --root NAME` | `?callees=NAME&depth=N`, `--callees NAME --depth N` (the same walk; `?root` defaulted to depth 2) |
+| `reveal trace PATH --from FUNC`, `trace://PATH?from=FUNC` | `reveal calls PATH --callees FUNC --depth N --detail`, `calls://PATH?callees=FUNC&depth=N&detail` (the same walk; trace keeps its frames output until the cut; see [TRACE_ADAPTER_GUIDE.md](TRACE_ADAPTER_GUIDE.md)) |
 | `ast://<path>?calls=NAME` | `calls://<path>?callers=NAME`; a pattern (`calls=*send*`) is a `reveal <path> --grep 'send'` text search |
 | `ast://<path>?callee_of=NAME` | `calls://<path>?callees=NAME` |
 | `ast://<path>?show=calls` | `calls://<path>?callers=NAME` or `?callees=NAME` |

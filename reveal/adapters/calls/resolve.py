@@ -1,5 +1,6 @@
 """Resolve a call site to the one definition it reaches -- for the callee walk
-(calls.index.walk_callees) that trace:// and calls://?root=X&depth=N answer from.
+(calls.index.walk_callees) that calls://?callees=X&depth=N answers from (and the retired
+trace:// and ?root=).
 
 A walk keyed by bare name merges every same-named function: two unrelated
 `run()`s contribute each other's callees once either is reached. trace://
