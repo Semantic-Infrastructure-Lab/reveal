@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Set, Iterable, Sequence, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from ...utils.gitignore import gitignore_enabled
 from ...utils.path_utils import (
     EVIDENCE, _walk_code_files, is_test_path, is_unsafe_scan_root, python_package_top,
     resolve_project_root, to_posix, traversal_failed_warning,
@@ -32,6 +33,8 @@ class _ImportSet(set):
                  traversal_failures: Sequence[Tuple[Optional[str], str]] = ()):
         super().__init__(values)
         self.traversal_failures = tuple(traversal_failures)
+        # The walk honours the gitignore switch, so the import set depends on it.
+        self.gitignore = gitignore_enabled()
 
 
 def _disclosure_roots(files: List[Path], select) -> Set[Path]:
@@ -365,8 +368,9 @@ class M102(BaseRule):
         Results are cached by package_root so the O(n) AST scan runs once per
         package per process instead of once per file checked (was O(n²)).
         """
-        if package_root in _import_cache:
-            return _import_cache[package_root]
+        cached = _import_cache.get(package_root)
+        if cached is not None and getattr(cached, 'gitignore', True) == gitignore_enabled():
+            return cached
 
         # BACK-1578: the evidence walk -- noise dirs (.venv, node_modules), what git ignores
         # and REVEAL_IGNORE are not the project's importers; --exclude narrows the report,
@@ -460,9 +464,14 @@ def _evict_root(root: Path) -> None:
 
 
 def _evict_incomplete_imports() -> None:
-    """Reuse partial import evidence within this request, then retry next time."""
+    """Reuse partial import evidence within this request, then retry next time.
+
+    A set built with the gitignore switch off is request-local too: the tree stamp that
+    validates a kept entry is taken with the default switch, so it cannot see an edit to an
+    ignored file (BACK-2118).
+    """
     for root, imports in tuple(_import_cache.items()):
-        if getattr(imports, 'traversal_failures', ()):
+        if getattr(imports, 'traversal_failures', ()) or not getattr(imports, 'gitignore', True):
             _evict_root(root)
 
 

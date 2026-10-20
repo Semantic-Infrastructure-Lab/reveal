@@ -34,6 +34,7 @@ from typing import Dict, List, Any, Optional, Sequence, Tuple
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
 from ...utils.pyparse import parse_python, statement_index
+from ...utils.gitignore import gitignore_enabled
 from ...utils.query_control import ScanBudget
 from ...utils.path_utils import EVIDENCE, _walk_code_files, cross_file_scan_root, scan_roots, to_posix, traversal_failed_warning
 
@@ -52,6 +53,9 @@ class LiteralIndex(dict):
         if self.traversal_failures:
             self.scan_budget['exact'] = False
         self.disclosures: List[str] = []
+        # The walk honours the gitignore switch, so the file set (and this index) depends on it.
+        # A plain dict seeded by hand has no flag and counts as built with the default switch.
+        self.gitignore = gitignore_enabled()
 
 
 # ── Module-level cache ────────────────────────────────────────────────────────
@@ -267,10 +271,10 @@ class D005(BaseRule, ASTParsingMixin):
             logger.debug("D005: no cross-file scan for standalone file under %s", path.parent)
             return []
 
-        if project_root not in _project_index:
-            _project_index[project_root] = _build_index(project_root, self)
+        index = _project_index.get(project_root)
+        if index is None or getattr(index, 'gitignore', True) != gitignore_enabled():
+            index = _project_index[project_root] = _build_index(project_root, self)
 
-        index = _project_index[project_root]
         file_str = str(path)
         detections = []
 
@@ -390,9 +394,14 @@ def _evict_root(root: Path) -> None:
 
 
 def _evict_incomplete_indexes() -> None:
-    """Keep partial evidence within this request, then rebuild it next time."""
+    """Keep partial evidence within this request, then rebuild it next time.
+
+    An index built with the gitignore switch off is request-local too: the tree stamp that
+    validates a kept index is taken with the default switch, so it cannot see an edit to an
+    ignored file (BACK-2118).
+    """
     for root, index in tuple(_project_index.items()):
-        if getattr(index, 'traversal_failures', ()):
+        if getattr(index, 'traversal_failures', ()) or not getattr(index, 'gitignore', True):
             _evict_root(root)
 
 

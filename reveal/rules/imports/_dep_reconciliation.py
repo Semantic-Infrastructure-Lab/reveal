@@ -30,12 +30,13 @@ adding one is the same shape as Python/Rust's existing inventory functions.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pathlib import Path
 from typing import Callable, Dict, FrozenSet, Iterator, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from ...analyzers.imports.base import get_extractor
+from ...utils.gitignore import gitignore_enabled
 from ...utils.path_utils import EVIDENCE, _walk_code_files, to_posix, traversal_failed_warning
 from ...utils.request_cache import register_request_cache, register_validated_cache
 
@@ -117,6 +118,8 @@ _TraversalFailure = Tuple[Optional[str], str]
 class _ProjectImportFacts:
     imports: ProjectImports
     traversal_failures: Tuple[_TraversalFailure, ...]
+    # The walk honours the gitignore switch, so the scan depends on it (BACK-2118).
+    gitignore: bool = field(default_factory=gitignore_enabled)
 
 
 _scan_cache: Dict[Path, Dict[_ScanKey, _ProjectImportFacts]] = {}
@@ -129,7 +132,7 @@ def _scan_project_imports(
     """The cached `_scan_project_imports_uncached` for (root, extensions, normalize, sep)."""
     scans = _scan_cache.setdefault(root, {})
     key = (extensions, normalize, sep)
-    if key not in scans:
+    if key not in scans or scans[key].gitignore != gitignore_enabled():
         failures: List[OSError] = []
         imports = _scan_project_imports_uncached(root, extensions, normalize, sep,
                                                on_error=failures.append)
@@ -148,9 +151,14 @@ def _evict_root(root: Path) -> None:
 
 
 def _evict_incomplete_scans() -> None:
-    """Retain useful partial memo within an invocation, never across host requests."""
+    """Retain useful partial memo within an invocation, never across host requests.
+
+    A scan built with the gitignore switch off is request-local too: the tree stamp that
+    validates a kept entry is taken with the default switch, so it cannot see an edit to an
+    ignored file (BACK-2118).
+    """
     for root, scans in tuple(_scan_cache.items()):
-        if any(facts.traversal_failures for facts in scans.values()):
+        if any(facts.traversal_failures or not facts.gitignore for facts in scans.values()):
             _evict_root(root)
 
 

@@ -38,6 +38,7 @@ from ...analyzers._python_dict_usage import (
     iter_python_files,
     resolve_typeddicts,
 )
+from ...utils.gitignore import gitignore_enabled
 from ...utils.path_utils import (
     EVIDENCE, cross_file_scan_root, scan_roots, to_posix, traversal_failed_warning,
 )
@@ -210,9 +211,10 @@ def _project_facts(file_path: str) -> Dict[str, Any]:
     root = _find_project_root(path.resolve())
     if root is None:  # a standalone file in the temp dir, $HOME or a drive root
         return _EMPTY_FACTS
-    if root not in _project_index:
-        _project_index[root] = _build_index(root)
-    return _project_index[root]
+    facts = _project_index.get(root)
+    if facts is None or facts.get('gitignore', True) != gitignore_enabled():
+        facts = _project_index[root] = _build_index(root)
+    return facts
 
 
 def _find_project_root(path: Path) -> Optional[Path]:
@@ -256,7 +258,7 @@ def _build_index(project_root: Path) -> Dict[str, Any]:
             )
             logger.warning(reason)
             _project_skip_reasons[project_root] = reason
-            return {**_EMPTY_FACTS, 'traversal_failures': tuple(failures)}
+            return {**_EMPTY_FACTS, 'traversal_failures': tuple(failures), 'gitignore': gitignore_enabled()}
 
     raw: Dict[str, List[Dict[str, Any]]] = {}
     trees = []
@@ -276,7 +278,7 @@ def _build_index(project_root: Path) -> Dict[str, Any]:
 
     aliases: FrozenSet[str] = build_context(trees).dict_aliases
     return {'typeddicts': resolve_typeddicts(raw), 'dict_aliases': aliases,
-            'traversal_failures': tuple(failures)}
+            'traversal_failures': tuple(failures), 'gitignore': gitignore_enabled()}
 
 
 def get_scan_disclosures(files: Optional[List[Path]] = None) -> List[str]:
@@ -310,10 +312,12 @@ def _evict_incomplete_indexes() -> None:
     """Keep partial evidence within an invocation, never across host requests.
 
     A healthy sealing walk cannot validate an index built from incomplete input.
-    Prune before the existing validator removes its orphan stamp.
+    Prune before the existing validator removes its orphan stamp. An index built with the
+    gitignore switch off is request-local too: the tree stamp that validates a kept index is
+    taken with the default switch, so it cannot see an edit to an ignored file (BACK-2118).
     """
     for root, facts in tuple(_project_index.items()):
-        if facts.get('traversal_failures'):
+        if facts.get('traversal_failures') or not facts.get('gitignore', True):
             _evict_root(root)
 
 
