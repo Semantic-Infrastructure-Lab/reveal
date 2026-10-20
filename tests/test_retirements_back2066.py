@@ -124,6 +124,12 @@ def test_the_same_parameter_on_another_scheme_is_a_different_spelling(monkeypatc
     assert text not in result.stderr
 
 
+def test_an_operator_spells_the_parameter_before_it():
+    assert uri_retirement_keys('ast://src?calls~=a*&callers>2&lines<=9&name!=x&type=function') == [
+        'scheme:ast', 'param:ast.calls', 'param:ast.callers', 'param:ast.lines', 'param:ast.name',
+        'param:ast.type', 'value:ast.type=function']
+
+
 def test_a_repeated_spelling_notes_once_per_invocation(monkeypatch, source):
     text = _retire(monkeypatch, 'param:ast.name', 'ast://?name=')
     result = _run_reveal_direct(f'ast://{source}?name=auth*&name=gate*', '--format', 'json')

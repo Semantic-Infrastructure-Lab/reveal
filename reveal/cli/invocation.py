@@ -293,6 +293,9 @@ def retirement_warnings() -> list:
             for key, entry in noted_retirements().items()]
 
 
+_QUERY_OPERATOR = re.compile(r'!=|~=|>=|<=|=|>|<')
+
+
 def uri_retirement_keys(uri: str) -> list:
     """The table keys a URI spells: its scheme, each query parameter, each parameter value."""
     from urllib.parse import unquote_plus
@@ -304,10 +307,13 @@ def uri_retirement_keys(uri: str) -> list:
     for pair in rest.partition('?')[2].partition('#')[0].split('&'):
         if not pair:
             continue
-        name, eq, value = pair.partition('=')
+        # The parameter is the text before its operator: ``calls~=x`` and ``calls!=x`` spell
+        # ``calls`` as ``calls=x`` does; only ``=`` names a value.
+        match = _QUERY_OPERATOR.search(pair)
+        name, op, value = (pair[:match.start()], match.group(0), pair[match.end():]) if match else (pair, '', '')
         name = unquote_plus(name)
         keys.append(f'param:{scheme}.{name}')
-        if eq:
+        if op == '=':
             keys.append(f'value:{scheme}.{name}={unquote_plus(value)}')
     return keys
 

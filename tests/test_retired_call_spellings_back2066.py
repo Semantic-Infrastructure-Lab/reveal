@@ -57,6 +57,8 @@ CASES = {
     'ast ?calls=': ('param:ast.calls', lambda p: [f'ast://{p}?calls=helper'], '?callers='),
     'ast ?callee_of=': ('param:ast.callee_of', lambda p: [f'ast://{p}?callee_of=main'], '?callees='),
     'ast ?show=calls': ('value:ast.show=calls', lambda p: [f'ast://{p}?show=calls'], '?callers='),
+    'ast ?calls~=': ('param:ast.calls', lambda p: [f'ast://{p}?calls~=help'], '?callers='),
+    'ast ?callee_of!=': ('param:ast.callee_of', lambda p: [f'ast://{p}?callee_of!=main'], '?callees='),
 }
 
 # The spellings that replace them, and siblings that share a parameter or scheme name: none notes.
