@@ -224,7 +224,9 @@ def test_explicit_directory_policy_omission_is_never_attempted(tmp_path):
     assert events == [] and result['count'] == 0
     assert result['_meta']['confidence'] == 'high' and result['undercount_possible'] is False
     assert_manifest_only_source_population(result, discoveries, 1)
-    assert not result.get('meta', {}).get('warnings')
+    # No loss warning: the only disclosure is that the policy hid the target (BACK-2075).
+    assert [(w['type'], w['causes']) for w in result.get('meta', {}).get('warnings', [])] == [
+        ('scope_hidden', ['exclude'])]
 
 
 def test_reserved_noise_is_relative_to_root_and_never_attempted(tmp_path):
