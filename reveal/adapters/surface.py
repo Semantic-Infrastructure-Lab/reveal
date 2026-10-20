@@ -34,8 +34,7 @@ from ..utils.path_utils import (
     detect_non_python_language,
     hidden_entries_warning,
     is_test_dir,
-    is_test_filename,
-    is_test_basename_for_language,
+    is_test_file_name,
     to_posix,
     traversal_failed_warning,
     walk_tree,
@@ -62,7 +61,7 @@ def _is_test_dir(name: str) -> bool:
 def _is_test_file(fpath: Path) -> bool:
     """File-name test detection: generic naming (BACK-1252) plus the file's own
     language convention from the conventions profile (BACK-1277)."""
-    return is_test_filename(fpath.stem, fpath.suffix) or is_test_basename_for_language(fpath.name)
+    return is_test_file_name(fpath)
 
 
 @dataclass(frozen=True)

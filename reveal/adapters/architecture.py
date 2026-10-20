@@ -15,7 +15,9 @@ from ..analyzers.imports import service as import_analysis
 from ..conventions import conventions_for_path
 from ..registry import language_for_extension
 from ..rendering.adapters.architecture import ArchitectureRenderer
-from ..utils.path_utils import is_test_path, to_posix, traversal_failed_warning
+from ..utils.entry_points import active_entry_points
+from ..utils.path_utils import is_test_path_any_sep as _is_test_file  # noqa: F401 -- name kept for importers
+from ..utils.path_utils import to_posix, traversal_failed_warning
 from ..utils.query_binding import bind_declared_params, boolean_value
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
                                   nonnegative_display_limit, param_schema, peek_query_items)
@@ -186,12 +188,7 @@ def _format_imports_data(adapter, path: Path, *,
     components = components_data.get('components', [])
     cycle_groups = circular_data.get('cycles', [])
 
-    live_eps = [
-        e for e in raw_eps
-        if e.get('fan_out', 0) > 0
-        and not _is_test_file(e['file'])
-        and Path(e['file']).name != '__init__.py'
-    ]
+    live_eps = active_entry_points(raw_eps)
     core_abstractions = [e for e in all_entries if e.get('fan_in', 0) > 0]
 
     return {
@@ -401,10 +398,6 @@ def _is_reexport_file(file_str: str) -> bool:
     no logic of their own, so they must not dominate 'Core Abstractions' (BACK-1287)."""
     name = Path(file_str).name
     return name in conventions_for_path(name).reexport_files
-
-
-def _is_test_file(file_str: str) -> bool:
-    return is_test_path(file_str.replace('\\', '/'))
 
 
 def _relpath(file_str: str, base_path: Optional[Path]) -> str:

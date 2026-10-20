@@ -147,11 +147,26 @@ def is_test_path(path: Union[str, PurePath]) -> bool:
     a test?" for callers that see a whole path.
     """
     p = PurePath(path)
-    return (
-        any(is_test_dir(part) for part in p.parts[:-1])
-        or is_test_filename(p.stem, p.suffix)
-        or is_test_basename_for_language(p.name)
-    )
+    return any(is_test_dir(part) for part in p.parts[:-1]) or is_test_file_name(p)
+
+
+def is_test_path_any_sep(path: str) -> bool:
+    """:func:`is_test_path` for a path string that may use either separator.
+
+    A string recorded with Windows separators is read on POSIX too (``PurePath``
+    there splits on ``/`` only), so the architecture, overview and diff entry-point
+    filters normalise first; this is the one place that does.
+    """
+    return is_test_path(path.replace('\\', '/'))
+
+
+def is_test_file_name(path: Union[str, PurePath]) -> bool:
+    """The file-name half of :func:`is_test_path` (no directory check): generic
+    ``test_``/``_test``/``Test`` naming plus the file's own language convention.
+    ``surface --source-only`` prunes test directories during its walk, so it asks
+    only this."""
+    p = PurePath(path)
+    return is_test_filename(p.stem, p.suffix) or is_test_basename_for_language(p.name)
 
 
 def is_test_basename_for_language(name: str) -> bool:

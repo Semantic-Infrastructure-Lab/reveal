@@ -1636,13 +1636,10 @@ class ImportsAdapter(ResourceAdapter):
 
         graph = self._edges(LAZY_INCLUDE)
 
-        def _is_test_file(f) -> bool:
-            return is_test_path(f)
-
         def _non_test_fan_in(f) -> int:
             return sum(
                 1 for importer in graph.reverse_deps.get(f, set())
-                if not _is_test_file(importer)
+                if not is_test_path(importer)
             )
 
         all_files = self.analysis.scanned_files | set(graph.files.keys()) | set(self.analysis.graph.reverse_deps.keys())
@@ -1655,7 +1652,7 @@ class ImportsAdapter(ResourceAdapter):
                     # Kept visible rather than filtered out: a test file with
                     # no importers genuinely has fan-in 0, and dropping it
                     # silently would trade one wrong answer for another.
-                    'is_test': _is_test_file(f),
+                    'is_test': is_test_path(f),
                     'test_only_importers': len(
                         graph.reverse_deps.get(f, set())
                     ),

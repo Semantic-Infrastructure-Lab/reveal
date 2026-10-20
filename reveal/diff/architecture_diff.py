@@ -60,6 +60,7 @@ from ..defaults import (
 )
 
 from ..reveal_types import RevealMeta, WarningEntry
+from ..utils.entry_points import active_entry_points
 
 logger = logging.getLogger(__name__)
 
@@ -285,16 +286,6 @@ def _fast_exit_possible(repo, base_commit, subpath: str) -> bool:
 
 # ── Snapshot extraction (reuses architecture.py + imports.py unmodified) ───
 
-def _is_reportable_entry_point(entry: Dict[str, Any]) -> bool:
-    from reveal.adapters.architecture import _is_test_file
-
-    return (
-        entry.get('fan_out', 0) > 0
-        and not _is_test_file(entry['file'])
-        and Path(entry['file']).name != '__init__.py'
-    )
-
-
 def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
     """Run the import-graph + complexity analysis against `root` exactly once,
     returning the raw (absolute-path-keyed) facts needed for diffing.
@@ -336,7 +327,7 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
         raw_eps = entrypoints_data.get('entries', [])
         edge_rules = import_analysis.architecture_edge_rules(
             fan_in_data, entrypoints_data, components_data, circular_data)  # BACK-2087
-        entry_points = [e['file'] for e in raw_eps if _is_reportable_entry_point(e)]
+        entry_points = [e['file'] for e in active_entry_points(raw_eps)]
         metadata = adapter.get_metadata()
         unsupported_extensions = metadata.get('unsupported_extensions', {})
         owner.fold_meta({'warnings': adapter.integrity_warnings(root)})

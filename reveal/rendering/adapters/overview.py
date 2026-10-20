@@ -16,7 +16,9 @@ from ...analyzers.imports.service import edge_rule_lines
 from ...registry import display_name_for_extension
 from ...utils import print_json_result
 from ...utils.formatting import cwd_path
-from ...utils.path_utils import is_test_path, to_relative_display
+from ...utils.entry_points import active_entry_points
+from ...utils.path_utils import is_test_path_any_sep as _is_test_file  # noqa: F401 -- name kept for importers
+from ...utils.path_utils import to_relative_display
 from ...utils.query_control import omitted_line
 from ...utils.warning_render import meta_warning_lines
 
@@ -33,11 +35,6 @@ _NON_CODE_EXT_LABELS: Dict[str, str] = {
     '.dockerfile': 'Dockerfile', '.ini': 'INI', '.ipynb': 'Jupyter',
     '.xlsx': 'Excel', '.docx': 'Word', '.pptx': 'PowerPoint',
 }
-
-
-def _is_test_file(file_str: str) -> bool:
-    """Return True if file looks like a test file (shared classifier, BACK-1277)."""
-    return is_test_path(file_str.replace('\\', '/'))
 
 
 def _relpath(file_str: str, base_path: Optional[Path]) -> str:
@@ -200,12 +197,7 @@ def _render_complex_functions(fns: List[Dict[str, Any]], base_path: Optional[Pat
 
 def _architecture_entry_points(entrypoints: List[Dict[str, Any]], top: int,
                                base_path: Optional[Path]) -> List[str]:
-    live_eps = [
-        e for e in entrypoints
-        if e.get('fan_out', 0) > 0
-        and not _is_test_file(e['file'])
-        and Path(e['file']).name != '__init__.py'
-    ]
+    live_eps = active_entry_points(entrypoints)
     if not live_eps:
         return []
     lines = [f"  Entry points  ({len(entrypoints)} fan-in=0, {len(live_eps)} active)"]
