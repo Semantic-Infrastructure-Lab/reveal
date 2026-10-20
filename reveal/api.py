@@ -254,6 +254,9 @@ def check(
         ``.rule_code``, ``.message``, ``.line``, ``.column``, ``.severity``,
         and ``.suggestion`` attributes.  Call ``.to_dict()`` for JSON-safe output.
 
+    Each call is one host request, like :func:`query`: an edit made between two calls is
+    seen by the second, including by project-wide rules such as I002.
+
     Raises:
         FileNotFoundError: If *path* does not exist on disk.
 
@@ -264,6 +267,7 @@ def check(
     """
     from .registry import get_analyzer
     from .rules import RuleRegistry
+    from .utils.request_cache import host_request
 
     file_path = Path(path)
     if not file_path.exists():
@@ -272,16 +276,19 @@ def check(
     path_str = str(file_path)
     content = file_path.read_text(encoding="utf-8", errors="replace")
 
-    # Obtain structure if possible — rules use it for semantic analysis
-    structure_data: Optional[Dict[str, Any]] = None
-    analyzer_class = get_analyzer(path_str)
-    if analyzer_class is not None:
-        try:
-            analyzer = analyzer_class(path_str)
-            structure_data = analyzer.get_structure()
-        except Exception as e:  # boundary-ok: broad-except -- public check() skips one file's structure and says so at warning; an analyzer is arbitrary per-language code
-            logger.warning("check() get_structure failed for %s: %s", path_str, e)
+    # One host request, as query() and an MCP tool call are: project-wide rule memos
+    # (I002's import graph among them) are revalidated against the tree first (BACK-2093).
+    with host_request():
+        # Obtain structure if possible — rules use it for semantic analysis
+        structure_data: Optional[Dict[str, Any]] = None
+        analyzer_class = get_analyzer(path_str)
+        if analyzer_class is not None:
+            try:
+                analyzer = analyzer_class(path_str)
+                structure_data = analyzer.get_structure()
+            except Exception as e:  # boundary-ok: broad-except -- public check() skips one file's structure and says so at warning; an analyzer is arbitrary per-language code
+                logger.warning("check() get_structure failed for %s: %s", path_str, e)
 
-    return RuleRegistry.check_file(
-        path_str, structure_data, content, select=select, ignore=ignore
-    )
+        return RuleRegistry.check_file(
+            path_str, structure_data, content, select=select, ignore=ignore
+        )
