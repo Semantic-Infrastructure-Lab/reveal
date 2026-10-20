@@ -18,7 +18,9 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Dict, FrozenSet, Iterator, List, Optional, Sequence, Set, Tuple
 
-from ..ast.analysis import StructureList, collect_structures, is_code_file, call_sources, unattributed_references
+from ..ast.analysis import (
+    StructureList, collect_structures, environmental_failure, is_code_file, call_sources, unattributed_references,
+)
 from ...utils.pyparse import parse_python
 from ...utils.request_cache import register_validated_cache
 from ..ast.call_graph import (
@@ -456,8 +458,11 @@ def _structures_or_collect(structures: Optional[StructureList], directory: Path)
 
 def _cache_callers_index(dir_str: str, cache_key: Any, index: CallersIndex,
                          structures: StructureList) -> None:
-    # Directory mtimes cannot prove recovery after an included subtree was unreadable.
-    if getattr(structures, 'traversal_failures', []):
+    # Directory mtimes cannot prove recovery after an included subtree was unreadable, nor
+    # can a tree stamp after a file was (chmod moves only ctime) or a worker died (BACK-2093).
+    # A failure the content causes is stored: the same bytes fail the same way.
+    if getattr(structures, 'traversal_failures', []) or any(
+            environmental_failure(cause) for _, cause in index.skipped):
         _INDEX_CACHE.pop(dir_str, None)
         return
     _INDEX_CACHE[dir_str] = (cache_key, index)
@@ -492,7 +497,8 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None) -
 
     Results are cached by a directory mtime fingerprint and active scope. This
     cheap key does not detect every file change. Supplied structures with known
-    directory traversal loss bypass a matching hit and are not cached.
+    directory traversal loss bypass a matching hit and are not cached; nor is an index
+    with a file skipped for an environmental reason (``environmental_failure``).
 
     Args:
         path: File or directory to index.

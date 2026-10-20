@@ -1,6 +1,7 @@
 """File analysis and structure extraction for AST adapter."""
 
 
+import builtins
 import logging
 import sys
 from pathlib import Path
@@ -87,6 +88,18 @@ def analysis_skipped_warning(skipped: List[Tuple[str, str]], base: Optional[Path
         'message': f"{len(paths)} file(s) could not be analyzed completely ({causes}) -- {consequence}: "
                    f"{', '.join(shown)}{more}",
     }
+
+
+def environmental_failure(cause: str) -> bool:
+    """Whether an ``"ErrorType: message"`` failure (``StructureList.skipped``) came from the
+    environment, not the file's content: an ``OSError`` such as a denied permission, or a
+    lost pool worker. A later run can succeed with the file's mtime and size unchanged
+    (``chmod`` moves only ctime), so no stat-validated cache may keep it (BACK-2093)."""
+    name = cause.split(':', 1)[0].strip()
+    if name == 'BrokenProcessPool':
+        return True
+    error_type = getattr(builtins, name, None)
+    return isinstance(error_type, type) and issubclass(error_type, OSError)
 
 
 def collect_structures(path: str, outline: bool = False, needle: Optional[str] = None) -> StructureList:

@@ -630,7 +630,10 @@ The project-level index is cached in memory per process per directory:
   matching hit; ordinary file overwrites and deeper membership changes can leave
   the key unchanged in a long-lived process.
 - **Known missing inputs**: a supplied traversal-incomplete collection bypasses a
-  matching callers index and prevents retention. Python reference discovery,
+  matching callers index and prevents retention. An index in which a file could not
+  be read (a denied permission, an I/O error) or was lost to a dead worker is returned
+  but not retained either, so the next request reads that file again; a failure the
+  file's content causes is retained. Python reference discovery,
   read or parse failures also prevent retaining the reference set, so access or
   source recovery can rebuild it. These guards do not establish general warm-cache
   freshness. The non-Python reference pass runs again per uncalled query and keeps

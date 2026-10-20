@@ -539,7 +539,9 @@ walkers and consumers listed above.
 Calls indexes built from known traversal-incomplete structure collections are
 returned for the current request but are evicted rather than cached. This guard applies at
 cache write and when explicitly supplied structures with known traversal loss would
-otherwise reuse a matching warm hit. Healthy warm hits, including empty indexes,
+otherwise reuse a matching warm hit. An index with a file skipped for an environmental
+reason (an `OSError`, a lost worker) is likewise returned but not cached, since a recovered
+file keeps its mtime and size. Healthy warm hits, including empty indexes,
 retain their existing reuse behavior. The cheap directory-mtime/scope key does not
 detect every file change. General warm/deep freshness, separate reference caches
 and full Calls directory diagnostics remain outside this bounded repair.
