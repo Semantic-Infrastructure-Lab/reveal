@@ -22,6 +22,7 @@ from .git import GitAdapter
 from .imports import ImportsAdapter
 from .stats import StatsAdapter
 from ..analyzers.imports import service as import_analysis
+from ..utils.entry_points import entry_point_filter
 from ..utils.exclusions import exclusion_scope
 from ..utils.gitignore import respect_gitignore_param
 from ..utils.path_utils import (as_spelled, display_name_for_path, to_posix,
@@ -494,6 +495,8 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, *,
             **import_analysis.architecture_edge_rules(fan_in, entrypoints, components, circular),
             'fan_in': fan_in.get('entries', []),
             'entrypoints': entrypoints.get('entries', []),
+            # BACK-1891: the fan-in-0 count, the active count and the rule between them.
+            'entry_point_filter': entry_point_filter(entrypoints.get('entries', [])),
             'components': components.get('components', []),
             'circular_count': circular.get('count', 0),
             # BACK-518 part 2: disclose files the import graph couldn't cover,

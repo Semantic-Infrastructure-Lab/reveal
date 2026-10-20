@@ -23,3 +23,17 @@ def is_active_entry_point(entry: Dict[str, Any]) -> bool:
 
 def active_entry_points(entries: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [e for e in entries if is_active_entry_point(e)]
+
+
+def entry_point_filter(entries: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+    """How many fan-in-0 files there are, how many of them are active, and the rule between them."""
+    rows = list(entries)
+    return {
+        'fan_in_zero': len(rows),
+        'active': len(active_entry_points(rows)),
+        'rule': ACTIVE_ENTRY_POINT_RULE,
+    }
+
+
+def entry_point_rule_line(indent: str = '') -> str:
+    return f'{indent}active = {ACTIVE_ENTRY_POINT_RULE}'

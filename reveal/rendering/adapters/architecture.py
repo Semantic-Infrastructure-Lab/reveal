@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from ..base import BaseRenderer, capped_section
 from ...analyzers.imports.service import edge_rule_lines
+from ...utils.entry_points import entry_point_rule_line
 from ...utils.results import outcome_of
 from ...utils.warning_render import meta_warning_lines
 
@@ -14,11 +15,20 @@ def _render_edge_rule(report: Dict[str, Any]) -> List[str]:
     return ['\n'.join(rule) + '\n'] if rule else []
 
 
-def _render_entry_points(entry_points: List[Dict], top: int, base_path: Path) -> List[str]:
+def _render_entry_points(entry_points: List[Dict], top: int, base_path: Path,
+                         counts: Optional[Dict[str, Any]] = None) -> List[str]:
     from ...adapters.architecture import _relpath
-    if not entry_points:
+    # BACK-1891: the filter that turned the fan-in-0 files into these rows is stated, not implied.
+    if counts is None:  # a report without the counts (no import graph) knows only the rows it holds
+        heading = [f"Entry Points  ({len(entry_points)} active)"] if entry_points else []
+    elif counts['fan_in_zero']:
+        heading = [f"Entry Points  ({counts['active']} active of {counts['fan_in_zero']} fan-in=0 files)",
+                   entry_point_rule_line('  ')]
+    else:
+        heading = []
+    if not heading:
         return []
-    return [f"Entry Points  ({len(entry_points)} active)", *capped_section(
+    return [*heading, *capped_section(
         entry_points, top,
         lambda ep: f"  {_relpath(ep['file'], base_path):<54}  fan-out {ep['fan_out']}",
         indent='  ', suffix=' (--format json lists all)'), '']
@@ -71,7 +81,8 @@ def _render_brief(report: Dict[str, Any], top: int, base_path: Path,
     if warning:
         lines.append(f'{warning}\n')
     lines += _render_edge_rule(report)
-    lines += _render_entry_points(facts.get('entry_points', []), top, base_path)
+    lines += _render_entry_points(facts.get('entry_points', []), top, base_path,
+                                   report.get('entry_point_filter'))
     lines += _render_core_abstractions(facts.get('core_abstractions', []), top, base_path)
     lines += _render_components(facts.get('components', []), top, base_path)
     lines += _render_risks(report.get('risks', []))

@@ -16,7 +16,7 @@ from ...analyzers.imports.service import edge_rule_lines
 from ...registry import display_name_for_extension
 from ...utils import print_json_result
 from ...utils.formatting import cwd_path
-from ...utils.entry_points import active_entry_points
+from ...utils.entry_points import active_entry_points, entry_point_rule_line
 from ...utils.path_utils import is_test_path_any_sep as _is_test_file  # noqa: F401 -- name kept for importers
 from ...utils.path_utils import to_relative_display
 from ...utils.query_control import omitted_line
@@ -198,9 +198,10 @@ def _render_complex_functions(fns: List[Dict[str, Any]], base_path: Optional[Pat
 def _architecture_entry_points(entrypoints: List[Dict[str, Any]], top: int,
                                base_path: Optional[Path]) -> List[str]:
     live_eps = active_entry_points(entrypoints)
-    if not live_eps:
+    if not entrypoints:
         return []
-    lines = [f"  Entry points  ({len(entrypoints)} fan-in=0, {len(live_eps)} active)"]
+    lines = [f"  Entry points  ({len(entrypoints)} fan-in=0, {len(live_eps)} active)",
+             entry_point_rule_line('    ')]
     for ep in live_eps[:top]:
         rel = _relpath(ep['file'], base_path)
         lines.append(f"    {rel:<50}  fan-out {ep['fan_out']}")

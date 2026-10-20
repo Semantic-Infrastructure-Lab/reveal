@@ -15,7 +15,7 @@ from ..analyzers.imports import service as import_analysis
 from ..conventions import conventions_for_path
 from ..registry import language_for_extension
 from ..rendering.adapters.architecture import ArchitectureRenderer
-from ..utils.entry_points import active_entry_points
+from ..utils.entry_points import active_entry_points, entry_point_filter
 from ..utils.path_utils import is_test_path_any_sep as _is_test_file  # noqa: F401 -- name kept for importers
 from ..utils.path_utils import to_posix, traversal_failed_warning
 from ..utils.query_binding import bind_declared_params, boolean_value
@@ -196,6 +196,8 @@ def _format_imports_data(adapter, path: Path, *,
         'edge_rules': import_analysis.architecture_edge_rules(
             fan_in_data, entrypoints_data, components_data, circular_data),
         'entry_points': live_eps,
+        # BACK-1891: the fan-in-0 count, the active count and the rule between them.
+        'entry_point_filter': entry_point_filter(raw_eps),
         'core_abstractions': core_abstractions,
         'components': components,
         'circular_groups': cycle_groups,
@@ -712,6 +714,8 @@ class ArchitectureAdapter(ResourceAdapter):
             'risks': risks,
             'next_commands': next_commands,
             **imports_data.get('edge_rules', {}),
+            **({'entry_point_filter': imports_data['entry_point_filter']}
+               if 'entry_point_filter' in imports_data else {}),
             'unsupported_extensions': imports_data.get('unsupported_extensions', {}),
             'scope': _run_scope(self, path, failures=scope_failures),
         }
