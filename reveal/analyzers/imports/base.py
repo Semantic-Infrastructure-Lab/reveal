@@ -372,7 +372,7 @@ class LanguageExtractor(ABC):
             self.analysis.diagnostics['parse'] = {'status': 'unavailable', 'reason': str(e)}
             if isinstance(e, OSError):
                 # Unreadable now, not unparseable: never cached as the file's answer (BACK-2083).
-                self.analysis.environmental = True
+                self.analysis.read_error = type(e).__name__
             logger.debug(
                 "Parse failed for %s: %s -- imports/symbols for this file "
                 "are incomplete, not confirmed empty",

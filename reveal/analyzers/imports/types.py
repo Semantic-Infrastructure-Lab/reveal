@@ -63,11 +63,16 @@ class ImportExtraction:
     # The file was never parsed: its pool worker died (BACK-1753). Also sets parse_failed
     # so every consumer that treats a failed file as incomplete keeps doing so.
     worker_lost: bool = False
-    # The failure came from the environment, not the content: the file could not be read (an
-    # OSError such as a denied permission). A later run can succeed with the same mtime and
-    # size (chmod moves only ctime), so no stat-keyed cache may keep it (BACK-2083).
-    environmental: bool = False
+    # The failure came from the environment, not the content: the file could not be read. The
+    # OSError's type name (``PermissionError``), for the disclosure (BACK-2099). A later run can
+    # succeed with the same mtime and size (chmod moves only ctime), so no stat-keyed cache may
+    # keep it (BACK-2083).
+    read_error: Optional[str] = None
     diagnostics: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def environmental(self) -> bool:
+        return self.read_error is not None
 
     @property
     def cacheable(self) -> bool:
@@ -151,10 +156,10 @@ class ImportGraph:
     # produced the edge ('module', 'local', or None where the extractor records no scope).
     # Every edge is stored; views (edge_view) filter at presentation.
     edge_scopes: Dict[Tuple[Path, Path], Set[Optional[str]]] = field(default_factory=dict)
-    # The subset of failed_files that could not be read (ImportExtraction.environmental): a
-    # later run can read them with mtime and size unchanged (BACK-2084). Last, so positional
-    # construction keeps its field order.
-    unreadable_files: List[Path] = field(default_factory=list)
+    # The subset of failed_files that could not be read (ImportExtraction.read_error), each with
+    # the error's type name: a later run can read them with mtime and size unchanged (BACK-2084,
+    # BACK-2099). Last, so positional construction keeps its field order.
+    unreadable_files: Dict[Path, str] = field(default_factory=dict)
 
     @property
     def cacheable(self) -> bool:

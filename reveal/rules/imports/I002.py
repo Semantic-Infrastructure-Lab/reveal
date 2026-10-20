@@ -93,40 +93,40 @@ def _extract_imports_for_file(fp_str: str) -> tuple:
     """Extract imports for one file. Module-level and picklable so it runs
     unchanged under a ProcessPoolExecutor (fork or spawn).
 
-    Returns ``(imports, failed, cacheable)``. Swallows per-file extraction errors and
-    returns ``([], False, True)`` for files with no extractor — mirroring
+    Returns ``(imports, failed, read_error)``. Swallows per-file extraction errors and
+    returns ``([], False, None)`` for files with no extractor — mirroring
     _collect_raw_imports's serial per-file try/except so the parallel and
     serial paths produce identical results. ``failed`` is True when the
     extractor's language IS supported but tree-sitter could not parse the
     file (``extractor.parse_failed``, BACK-982). Recovered imports remain in the
     graph, but missing edges can hide a cycle. Consumers disclose incomplete
     coverage rather than treating an empty cycle list as confirmed clean.
-    ``cacheable`` is False when the failure came from the environment (the file
-    could not be read, ``ImportExtraction.cacheable``), so no stat-keyed graph cache
-    keeps it (BACK-2084).
+    ``read_error`` is the error's type name when the failure came from the environment
+    (the file could not be read, ``ImportExtraction.read_error``), else None: no
+    stat-keyed graph cache keeps it (BACK-2084) and the disclosure names it (BACK-2099).
     """
     fp = Path(fp_str)
     extractor = get_extractor(fp)
     if not extractor:
-        return [], False, True
+        return [], False, None
     try:
         imports = list(extractor.extract_imports(fp))
-        return imports, extractor.parse_failed, extractor.analysis.cacheable
+        return imports, extractor.parse_failed, extractor.analysis.read_error
     except Exception as e:  # boundary-ok: broad-except -- the extractor walks tree-sitter nodes of arbitrary user source (native binding, no enumerable error set); one file must not end the scan, and the failed flag below is reported by get_scan_disclosures
         # Intentional silence here: the `True` failed-flag IS the visible
         # signal, surfaced as a logger.warning by the caller once per graph
         # build (_build_import_graph) rather than once per file here.
-        return [], True, not isinstance(e, OSError)
+        return [], True, type(e).__name__ if isinstance(e, OSError) else None
 
 
 def _extract_in_pool(file_strs: List[str], workers: int, results: Dict[str, tuple],
                      lost_files: Optional[set] = None) -> None:
     """``_extract_imports_for_file`` over *file_strs* in a process pool, one future
-    per file, into ``results[fp_str] = (imports, failed, cacheable)`` in submission order.
+    per file, into ``results[fp_str] = (imports, failed, read_error)`` in submission order.
 
     A dead worker breaks the pool and fails every pending future, so the culprit
     cannot be told from the files lost with it; each of them is a failed file
-    (``([], True, False)``), the channel a file tree-sitter could not parse already uses,
+    (``([], True, None)``), the channel a file tree-sitter could not parse already uses,
     which ``get_scan_disclosures`` reports. None is re-run in this process, where
     the culprit could take the whole run down (BACK-1726). Each is also added to
     *lost_files*, so the disclosure can say a worker died, not that the file had
@@ -140,7 +140,7 @@ def _extract_in_pool(file_strs: List[str], workers: int, results: Dict[str, tupl
             try:
                 results[fp_str] = future.result()
             except Exception as e:  # boundary-ok: broad-except -- future.result() re-raises whatever broke the worker or its pickled result (BrokenProcessPool, unpickling errors of any type); each such file is recorded as a failed, lost file and disclosed below and by get_scan_disclosures
-                results[fp_str] = ([], True, False)
+                results[fp_str] = ([], True, None)
                 lost.append(e)
                 if lost_files is not None:
                     lost_files.add(fp_str)
@@ -151,19 +151,20 @@ def _extract_in_pool(file_strs: List[str], workers: int, results: Dict[str, tupl
 
 
 def _assemble_pass_b(file_strs: List[str], results: Dict[str, tuple], lost_strs: set,
-                     unreadable_files: Optional[List[Path]]) -> Tuple[list, list, list]:
+                     unreadable_files: Optional[Dict[Path, str]]) -> Tuple[list, list, list]:
     """``(all_imports, failed_files, lost_files)`` from Pass B's per-file results, in
     submission order; a file the pool did not deliver is extracted here, serially. Failed
-    files that could not be read (not lost) are appended to *unreadable_files* (BACK-2084)."""
+    files that could not be read (not lost) are added to *unreadable_files* with the error's
+    type name (BACK-2084, BACK-2099)."""
     all_imports: list = []
     failed_files: list = []
     for fp_str in file_strs:
-        imports, failed, cacheable = results[fp_str] if fp_str in results else _extract_imports_for_file(fp_str)
+        imports, failed, read_error = results[fp_str] if fp_str in results else _extract_imports_for_file(fp_str)
         all_imports.extend(imports)
         if failed:
             failed_files.append(Path(fp_str))
-        if not cacheable and fp_str not in lost_strs and unreadable_files is not None:
-            unreadable_files.append(Path(fp_str))
+        if read_error and fp_str not in lost_strs and unreadable_files is not None:
+            unreadable_files[Path(fp_str)] = read_error
     lost_files = [Path(fp_str) for fp_str in file_strs if fp_str in lost_strs]
     return all_imports, failed_files, lost_files
 
@@ -336,7 +337,14 @@ def get_scan_disclosures(files: Optional[List[Path]] = None) -> List[str]:
         if graph.scan_skipped_reason:
             disclosures.append(graph.scan_skipped_reason)
         lost = set(graph.lost_files)
-        parse_failed = [fp for fp in graph.failed_files if fp not in lost]
+        unreadable = graph.unreadable_files
+        parse_failed = [fp for fp in graph.failed_files if fp not in lost and fp not in unreadable]
+        if unreadable:
+            errors = ', '.join(sorted(set(unreadable.values())))
+            disclosures.append(
+                f"I002: {len(unreadable)} file(s) under {directory} could not be read ({errors}); "
+                "circular-dependency results may be incomplete"
+            )
         if parse_failed:
             disclosures.append(
                 f"I002: {len(parse_failed)} file(s) under {directory} parsed with errors; "
@@ -459,7 +467,7 @@ class I002(BaseRule):
                 return cached
 
         traversal_failures: List[Tuple[Optional[str], str]] = []
-        unreadable_files: List[Path] = []
+        unreadable_files: Dict[Path, str] = {}
         all_imports, failed_files, lost_files, skipped_reason = self._collect_raw_imports(
             directory, traversal_failures=traversal_failures, unreadable_files=unreadable_files)
         graph = ImportGraph.from_imports(all_imports)
@@ -480,14 +488,14 @@ class I002(BaseRule):
 
     def _collect_raw_imports(self, directory: Path, *,
                             traversal_failures: Optional[List[Tuple[Optional[str], str]]] = None,
-                            unreadable_files: Optional[List[Path]] = None) -> tuple:
+                            unreadable_files: Optional[Dict[Path, str]] = None) -> tuple:
         """Phase 1: Walk directory and extract raw import statements from all files.
 
         Returns ``(all_imports, failed_files, lost_files, skipped_reason)`` --
         ``failed_files`` (BACK-982) are source files whose language IS supported but
         that tree-sitter parsed with errors, or that a dead pool worker took down
         before they were parsed; ``lost_files`` (BACK-1753) is that second subset.
-        Failed files that could not be read are appended to *unreadable_files* (BACK-2084).
+        Failed files that could not be read are added to *unreadable_files*, path to error type (BACK-2084).
         Recovered edges are retained; missing edges can still hide a cycle. Empty in the two early-abort paths below (the scan never
         reached Pass B, so failure status is simply unknown, not "none failed").
         ``skipped_reason`` (BACK-1051) is None when the scan ran to completion,

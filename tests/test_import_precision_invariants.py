@@ -73,8 +73,8 @@ def test_imports_survive_unrelated_error_copy_and_comment(tmp_path, suffix):
             assert statement.module_name in lines[statement.line_number - 1]
         analyzer = get_analyzer(str(path))(str(path))
         assert analyzer.tree and analyzer.has_parse_errors() is partial
-        worker_imports, failed, cacheable = _extract_imports_for_file(str(path))
-        assert claims(worker_imports) == expected and failed is partial and cacheable
+        worker_imports, failed, read_error = _extract_imports_for_file(str(path))
+        assert claims(worker_imports) == expected and failed is partial and read_error is None
         adapter = ImportsAdapter(resource=str(path))
         adapter._build_graph(path)
         assert claims(adapter.analysis.graph.files[path]) == expected
