@@ -72,9 +72,10 @@ def _anchor_exists(md_path, anchor):
         line = line.strip()
         if line.startswith('#'):
             heading = line.lstrip('#').strip()
-            # GitHub anchor: lowercase, spaces→hyphens, strip non-alphanum (except -)
+            # GitHub anchor: lowercase, strip non-alphanum (except -), then each space is its own
+            # hyphen: "a — b" is a--b, not a-b (BACK-2066)
             slug = re.sub(r'[^\w\s-]', '', heading.lower()).strip()
-            slug = re.sub(r'[\s]+', '-', slug)
+            slug = re.sub(r'\s', '-', slug)
             if slug == anchor:
                 return True
     return False
