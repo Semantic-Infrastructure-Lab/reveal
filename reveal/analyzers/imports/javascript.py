@@ -23,6 +23,7 @@ from ...utils.request_cache import register_request_cache
 from .base import ImportsDiskCache, LanguageExtractor, register_extractor
 from ...registry import JS_TS_LANGUAGES, extensions_for_languages
 from ...core import node_children as _children
+from ...core.node_taxonomy import edge_scope
 from ...core.treesitter_compat import _zero_arg
 
 logger = logging.getLogger(__name__)
@@ -731,6 +732,7 @@ class JavaScriptExtractor(LanguageExtractor):
             is_relative=module_path.startswith('.'),
             import_type=import_type,
             alias=alias,
+            scope=edge_scope(node),
             dynamic=False,
             source_line=_line_text(analyzer, line_number),
         )]
@@ -775,6 +777,7 @@ class JavaScriptExtractor(LanguageExtractor):
             is_relative=module_path.startswith('.'),
             import_type='re_export',
             alias=None,
+            scope=edge_scope(node),
             dynamic=False,
             source_line=_line_text(analyzer, line_number),
             skip_unused=True,
@@ -812,9 +815,10 @@ class JavaScriptExtractor(LanguageExtractor):
         return None
 
     def _build_dynamic_import_statement(
-        self, file_path: Path, line_number: int, module_path: str, analyzer=None
+        self, file_path: Path, line_number: int, module_path: str, analyzer=None,
+        scope: Optional[str] = None,
     ) -> ImportStatement:
-        """Build ImportStatement for dynamic import()."""
+        """Build ImportStatement for dynamic import(); ``scope`` is edge_scope() of the call."""
         return ImportStatement(
             file_path=file_path,
             line_number=line_number,
@@ -823,6 +827,7 @@ class JavaScriptExtractor(LanguageExtractor):
             is_relative=module_path.startswith('.'),
             import_type='dynamic_import',
             alias=None,
+            scope=scope,
             dynamic=True,
             source_line=_line_text(analyzer, line_number) if analyzer else "",
         )
@@ -868,9 +873,10 @@ class JavaScriptExtractor(LanguageExtractor):
         return [left_side]
 
     def _build_require_import_statement(
-        self, file_path: Path, line_number: int, module_path: str, imported_names: List[str], analyzer=None
+        self, file_path: Path, line_number: int, module_path: str, imported_names: List[str], analyzer=None,
+        scope: Optional[str] = None,
     ) -> ImportStatement:
-        """Build ImportStatement for CommonJS require()."""
+        """Build ImportStatement for CommonJS require(); ``scope`` is edge_scope() of the call."""
         import_type = 'side_effect_require' if not imported_names else 'commonjs_require'
 
         return ImportStatement(
@@ -881,6 +887,7 @@ class JavaScriptExtractor(LanguageExtractor):
             is_relative=module_path.startswith('.'),
             import_type=import_type,
             alias=None,
+            scope=scope,
             dynamic=True,
             source_line=_line_text(analyzer, line_number) if analyzer else "",
         )
@@ -905,14 +912,19 @@ class JavaScriptExtractor(LanguageExtractor):
             return None
 
         line_number = _zero_arg(node, 'start_position').row + 1
+        # BACK-2078: positional, like every extractor's (node_taxonomy.edge_scope): a call in
+        # a function, method or arrow body is 'local'; at top level or directly in a class
+        # body (field initializer, static block) it is 'module'.
+        scope = edge_scope(node)
 
         # Handle dynamic import
         if func_name == 'import':
-            return self._build_dynamic_import_statement(file_path, line_number, module_path, analyzer)
+            return self._build_dynamic_import_statement(file_path, line_number, module_path, analyzer, scope)
 
         # Handle CommonJS require
         imported_names = self._extract_require_imported_names(node, analyzer)
-        return self._build_require_import_statement(file_path, line_number, module_path, imported_names, analyzer)
+        return self._build_require_import_statement(
+            file_path, line_number, module_path, imported_names, analyzer, scope)
 
     def _is_usage_context(self, node) -> bool:
         """Check if identifier node is in a usage context (not definition).

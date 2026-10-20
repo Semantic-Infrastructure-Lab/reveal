@@ -232,8 +232,8 @@ _LAZY = ParamSpec(
     'lazy', 'string',
     'Function-level (lazy) import edges: include them, exclude them (load-time edges only: '
     'the architecture view) or show only them. Default: ?circular and has_cycles exclude, '
-    'every other view includes. Only Python records import scope; other languages\' edges '
-    'count as load-time under every value, and the printed rule names them',
+    'every other view includes. Python, JavaScript, TypeScript and TSX record import scope; '
+    'other languages\' edges count as load-time under every value, and the printed rule names them',
     None, _lazy_value,
     examples=('imports://src?rank=fan-in&lazy=exclude', 'imports://src?circular&lazy=include'),
     choices=LAZY_MODES,
@@ -538,7 +538,7 @@ _SCHEMA_NOTES = [
     'Unused import detection works with Python, JavaScript, Go, etc.',
     'False positives: imports that trigger side effects (e.g. decorator-based registration) will be flagged as unused — these are intentional and safe to ignore',
     'Fan-in ranking covers static imports only — decorator-based registration and importlib dynamic imports are not captured',
-    'Function-level (lazy) imports are edges: ?circular and metadata.has_cycles leave them out by default, every other view counts them; &lazy=include|exclude|only overrides. Each answer states its rule in edge_rule (and a Rule: line in text). Only Python records import scope; edge_rule names the languages whose edges it could not classify',
+    'Function-level (lazy) imports are edges: ?circular and metadata.has_cycles leave them out by default, every other view counts them; &lazy=include|exclude|only overrides. Each answer states its rule in edge_rule (and a Rule: line in text). Python, JavaScript, TypeScript and TSX record import scope; edge_rule names the languages whose edges it could not classify',
     'Two summary views sit on top of this adapter: deps:// (whole-tree dashboard) and depends:// (single-module reverse lookup) — use imports:// directly for the raw graph or a query neither of those covers',
 ]
 

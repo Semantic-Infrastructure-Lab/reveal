@@ -518,9 +518,10 @@ FUNCTION_TYPES: frozenset = DEF_NODES | CLASS_NODES | STRUCT_NODES | IMPL_NODES 
 
 # BACK-2076: the kinds whose body runs when it is called, not when the file loads.
 # edge_scope() walks to the nearest one. Not FUNCTION_TYPES: a Python class body runs at
-# load time, so the class, struct and impl kinds stay out. The grammar-coverage test
+# load time, so the class, struct and impl kinds stay out. FUNCTION_EXPRESSION_NODES are
+# in (BACK-2078) without joining FUNCTION_TYPES. The grammar-coverage test
 # (tests/test_grammar_coverage.py) lists every function-like kind outside this set.
-LOCAL_SCOPE_NODES: frozenset = DEF_NODES | LAMBDA_NODES
+LOCAL_SCOPE_NODES: frozenset = DEF_NODES | LAMBDA_NODES | FUNCTION_EXPRESSION_NODES
 
 EXIT_NODES: frozenset = (
     RETURN_NODES | RAISE_NODES | THROW_NODES | YIELD_NODES
@@ -730,7 +731,9 @@ def edge_scope(node: Any) -> str:
 
     The one positional rule every import extractor uses (BACK-2076). It is not a
     runtime claim: a Rust fn-local ``use`` and a Scala block import are local without
-    being lazy, and a class, struct, impl or namespace body is module scope."""
+    being lazy, and a class, struct, impl or namespace body is module scope (so a JS class
+    field initializer or static block is module, an instance field although it runs at
+    construction; an arrow function in the field is local)."""
     current = _zero_arg(node, 'parent')
     while current is not None:
         if _is_local_scope(current, _zero_arg(current, 'kind')):

@@ -387,8 +387,10 @@ NOT_LOCAL_SCOPE: Dict[str, Dict[str, str]] = {
     },
     # Dart's function_signature (DEF_NODES) is the sibling of its function_body, so a walk
     # up from a body never meets it; imports are file-level only, so no edge is affected.
+    # function_expression (a Dart lambda) is in LOCAL_SCOPE_NODES through
+    # FUNCTION_EXPRESSION_NODES, the JS/TS kind of the same name (BACK-2078).
     'dart': {kind: _FILE_LEVEL for kind in (
-        'function_body', 'function_expression', 'lambda_expression',
+        'function_body', 'lambda_expression',
         'local_function_declaration', 'redirecting_factory_constructor_signature')} | {
         'function_expression_body': _FN_PART, 'method_signature': _FN_PART,
         'constructor_param': _FN_PART,

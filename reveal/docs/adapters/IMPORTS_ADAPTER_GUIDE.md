@@ -436,9 +436,11 @@ counted by, as a `Rule:` line in text and an `edge_rule` object in JSON (`lazy`,
 
 `exclude` and `only` split the edges: per file, fan-in under `include` is the sum of the other
 two. Only importers inside the scanned path count, tests included (`?entrypoints` does not count
-importers under a test path); `depends://` scans from the project root instead. Only Python
-records import scope today: other languages' edges count as load-time under every value, and the
-rule names those languages and the number of edges. An unknown value is an error.
+importers under a test path); `depends://` scans from the project root instead. Python,
+JavaScript, TypeScript and TSX record import scope (positionally: an import, `import()` or
+`require()` in a function, method, arrow or function expression is function-level; a class field
+initializer or static block is module level). Other languages' edges count as load-time under
+every value, and the rule names those languages and the number of edges. An unknown value is an error.
 
 ```bash
 reveal 'imports://src?rank=fan-in&lazy=exclude'   # module-level imports only

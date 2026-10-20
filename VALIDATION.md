@@ -1657,8 +1657,19 @@ recurses into function bodies). Each answer prints its rule, a `Rule:` line in t
 `<dir>`, `depends://<file>` scans from the project root. `imports://<dir>?rank=fan-in&lazy=exclude`
 is the architecture view (load-time edges only); `?circular` uses it by default, because a
 function-level import runs after every module has loaded and cannot close an import-time
-cycle. Only Python records where an import sits; for other languages `&lazy` cannot separate
-edges, and the printed rule names them.
+cycle. Python, JavaScript, TypeScript and TSX record where an import sits; for other languages
+`&lazy` cannot separate edges, and the printed rule names them.
+
+The JS/TS rule is positional, like Python's [BACK-2078]: an ES `import`, an `export ... from`
+and a top-level `import()` or `require()` are module level; an `import()` or `require()` inside
+a function declaration, arrow function, function expression, generator, method or object method
+is function-level. A class body is module level, so a class field initializer and a `static {}`
+block are too (an instance field runs at construction, but by position it is module level); an
+arrow function in a field is function-level. The rule does not see runtime timing either way:
+an immediately invoked `(function () { require('./x'); })()` runs at load time but sits in a
+function expression, so it is function-level. TS `import type` is a module-level edge, as before.
+Before the change every JS/TS edge was unclassified, so a function-level `import()` back-edge
+closed a cycle in `?circular`; it now reports no cycle by default and one with `&lazy=include`.
 
 Measured on reveal's own `reveal/registry.py`, tree at `17429e17`, before and after the change:
 

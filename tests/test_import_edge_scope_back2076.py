@@ -253,7 +253,8 @@ def test_every_gap_has_a_snippet():
 
 def test_local_scope_nodes_are_defs_and_lambdas_not_containers():
     """The family holds no class, struct or impl kind: those bodies run at load time."""
-    assert node_taxonomy.LOCAL_SCOPE_NODES == node_taxonomy.DEF_NODES | node_taxonomy.LAMBDA_NODES
+    assert node_taxonomy.LOCAL_SCOPE_NODES == (node_taxonomy.DEF_NODES | node_taxonomy.LAMBDA_NODES
+                                               | node_taxonomy.FUNCTION_EXPRESSION_NODES)
     containers = node_taxonomy.CLASS_NODES | node_taxonomy.STRUCT_NODES | node_taxonomy.IMPL_NODES
     assert not node_taxonomy.LOCAL_SCOPE_NODES & containers
 

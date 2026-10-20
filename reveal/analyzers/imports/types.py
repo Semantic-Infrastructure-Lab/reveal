@@ -36,7 +36,7 @@ class ImportStatement:
     # BACK-2076: where the import sits, from node_taxonomy.edge_scope(): 'module' (file,
     # class or namespace body; runs when the file loads) or 'local' (a function or lambda
     # body). Positional, not a runtime claim. None: the extractor does not record it yet
-    # (only Python does; other languages opt in with BACK-2078/2079).
+    # (Python and JavaScript/TypeScript/TSX record it; other languages opt in with BACK-2079).
     scope: Optional[str] = None
     # BACK-2076: True for a loader call (JS/TS `import()` and `require()`), False for a
     # declaration (Python `import`, ES `import`/`export ... from`). None: not recorded.
