@@ -22,6 +22,7 @@ from .types import ImportExtraction, ImportStatement, restamp_file_path
 from ...core import disk_cache
 from ...registry import get_analyzer
 from ...utils.path_utils import search_parents_within_ceiling
+from ...utils.request_cache import register_request_cache
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,9 @@ class ImportsDiskCache:
         self._default_max_files = default_max_files
         # Persist the complete artifact, including future diagnostic fields.
         self._mem_cache: Dict[Tuple[str, int, int], ImportExtraction] = {}
+        # A long-lived host (MCP) starts every request with this layer empty; the disk
+        # layer still serves unchanged files (BACK-2083).
+        register_request_cache(f'{__name__}.{namespace}', self.clear)
 
     def max_files(self) -> int:
         """Read the entry cap, honoring this cache's env var override."""
@@ -88,6 +92,8 @@ class ImportsDiskCache:
 
         Legacy tuple entries are misses, never assumed to have clean diagnostics.
         Input freshness belongs in the key; request path spelling is applied on read.
+        A failure the file's content did not cause (``ImportExtraction.cacheable``) is
+        returned but stored in neither layer, so the next call reads the file again (BACK-2083).
         """
         path_str = os.path.abspath(str(file_path))
         try:
@@ -110,13 +116,15 @@ class ImportsDiskCache:
             return owner.analysis.imports
         owner.analysis = ImportExtraction()
         owner.analysis.imports = compute()
+        if not owner.analysis.cacheable:
+            return owner.analysis.imports
         self._mem_cache[cache_key] = deepcopy(owner.analysis)
         if fingerprint is not None:
             disk_cache.put(self.namespace, fingerprint, owner.analysis, max_entries=self.max_files())
         return owner.analysis.imports
 
     def clear(self) -> None:
-        """Drop the in-process layer (tests only; disk entries are untouched)."""
+        """Drop the in-process layer (each host request, and tests; disk entries are untouched)."""
         self._mem_cache.clear()
 
 
@@ -359,6 +367,9 @@ class LanguageExtractor(ABC):
         except Exception as e:  # boundary-ok: broad-except -- one file's analyzer (tree-sitter load, file read, grammar) must not end the graph build; parse_failed + diagnostics['parse'] disclose it to every consumer
             self.parse_failed = True
             self.analysis.diagnostics['parse'] = {'status': 'unavailable', 'reason': str(e)}
+            if isinstance(e, OSError):
+                # Unreadable now, not unparseable: never cached as the file's answer (BACK-2083).
+                self.analysis.environmental = True
             logger.debug(
                 "Parse failed for %s: %s -- imports/symbols for this file "
                 "are incomplete, not confirmed empty",

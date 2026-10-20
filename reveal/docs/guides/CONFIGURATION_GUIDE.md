@@ -431,6 +431,11 @@ the values, and `<namespace>` names the kind of artifact.
   the old one is never read. A rule or extractor change cannot serve an answer computed by older code.
 - *On any error* (unreadable directory, corrupt or truncated entry, full disk) reading is a miss and
   writing is skipped, so the command runs uncached and gives the same answer.
+- *Failures the content did not cause.* A source file that could not be read (a denied
+  permission, an I/O error) or that a dead worker process never parsed is reported as failed but
+  not cached, nor is an `imports://` graph that contains one, so the next run reads it again even
+  though its mtime and size did not change. A syntax error is cached like any other result: the
+  same content fails the same way. (The `I002` graph still stores such failures.)
 
 **Housekeeping:** when a new build directory appears, only the 4 most recently used build
 directories are kept and the rest are deleted. Within a namespace the oldest entries are evicted past

@@ -1499,7 +1499,8 @@ class ImportsAdapter(ResourceAdapter):
         self.analysis.graph = ImportGraph.from_imports(all_imports)
         self._resolve_dependencies(target_path, file_index, traversal_failures=traversal_failures)
 
-        if fingerprint is not None:
+        # A file lost to a dead worker or unreadable this run is not the tree's answer (BACK-2083).
+        if fingerprint is not None and self.analysis.cacheable:
             disk_cache.put(_ADAPTER_IMPORT_GRAPH_NAMESPACE, fingerprint, self.analysis)
 
 

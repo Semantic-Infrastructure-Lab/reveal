@@ -53,7 +53,9 @@ def deny(monkeypatch):
             raise PermissionError(13, 'Permission denied', str(self.path))
         return real(self)
 
-    monkeypatch.setattr(reveal_base.FileAnalyzer, '_read_file', read)
+    # Reaches extraction under every start method: its users extract serially (suite
+    # REVEAL_MAX_WORKERS=1); the one test that sets 2 runs an in-process fake pool, not this.
+    monkeypatch.setattr(reveal_base.FileAnalyzer, '_read_file', read)  # noqa: V036 reviewed: serial
     return denied
 
 

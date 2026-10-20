@@ -63,7 +63,16 @@ class ImportExtraction:
     # The file was never parsed: its pool worker died (BACK-1753). Also sets parse_failed
     # so every consumer that treats a failed file as incomplete keeps doing so.
     worker_lost: bool = False
+    # The failure came from the environment, not the content: the file could not be read (an
+    # OSError such as a denied permission). A later run can succeed with the same mtime and
+    # size (chmod moves only ctime), so no stat-keyed cache may keep it (BACK-2083).
+    environmental: bool = False
     diagnostics: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def cacheable(self) -> bool:
+        """Whether this record is the file's answer for its stat key (BACK-2083)."""
+        return not (self.environmental or self.worker_lost)
 
 
 @dataclass
@@ -82,6 +91,12 @@ class ImportAnalysis:
     structure_failures: List[Tuple[str, str]] = field(default_factory=list)
     diagnostics: Dict[str, Any] = field(default_factory=dict)
     extractions: Dict[Path, ImportExtraction] = field(default_factory=dict)
+
+    @property
+    def cacheable(self) -> bool:
+        """Whether the build is the tree's answer: no file lost to a dead worker and none
+        that failed for an environmental reason (BACK-2083)."""
+        return not self.files_lost and all(e.cacheable for e in self.extractions.values())
 
 
 def restamp_file_path(imports: List['ImportStatement'], file_path: Path) -> List['ImportStatement']:

@@ -458,6 +458,13 @@ _MODULE_CACHES = (
     ('reveal.analyzers.imports.python', '_python_project_inventory'),
     ('reveal.analyzers.imports.rust', '_rust_crate_inventory'),
     ('reveal.analyzers.imports.generic', '_ruby_gem_inventory'),
+    # ImportsDiskCache in-process layers, keyed by absolute path (BACK-2083).
+    ('reveal.analyzers.imports.python', '_IMPORTS_CACHE'),
+    ('reveal.analyzers.imports.javascript', '_IMPORTS_CACHE'),
+    ('reveal.analyzers.imports.go', '_IMPORTS_CACHE'),
+    ('reveal.analyzers.imports.rust', '_IMPORTS_CACHE'),
+    ('reveal.analyzers.imports.zig', '_IMPORTS_CACHE'),
+    ('reveal.analyzers.imports.generic', '_IMPORTS_CACHE'),
 )
 
 
