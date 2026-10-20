@@ -22,7 +22,8 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from .calls.index import CalleeNode, walk_callees
 from ..utils import print_json_result
 from ..utils.query_binding import bind_declared_params
-from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec, param_schema, peek_query_items
+from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, clamped_whole,
+                                  nonempty_scalar, param_schema, peek_query_items)
 from ..utils.path_utils import to_posix
 from ..utils.results import ResultBuilder
 
@@ -386,18 +387,8 @@ class TraceRenderer:
         _render_trace(result)
 
 
-def _trace_selector(value: Any) -> str:
-    if not isinstance(value, str) or not value.strip() or '\x00' in value:
-        raise ValueError('from requires a nonempty scalar string')
-    return value
-
-
 def _trace_depth(value: Any) -> int:
-    if type(value) is int:
-        return max(1, min(value, 5))
-    if isinstance(value, str) and re.fullmatch(r'[+-]?[0-9]+', value.strip()):
-        return max(1, min(int(value), 5))
-    raise ValueError('depth requires a signed whole integer')
+    return clamped_whole(value, 1, 5)
 
 
 def _trace_frame_valid(frame: Any, depth: int) -> bool:
@@ -507,7 +498,7 @@ class TraceAdapter(ResourceAdapter):
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     PARAM_SPECS = (
         ParamSpec('from', 'string', 'Entry-point function; FILE:FUNC selects a definition', None,
-                  _trace_selector, required=True, uri_codec='percent', role='analysis',
+                  nonempty_scalar, required=True, uri_codec='percent', role='analysis',
                   examples=('from=main', 'from=src/app.py:run'),
                   cli=CliBinding(('--from',), dest='root', required=True, metavar='FUNC')),
         ParamSpec('depth', 'integer', 'Call levels to expand (signed whole integer, clamped 1-5)', 2,
