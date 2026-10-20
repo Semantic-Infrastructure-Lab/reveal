@@ -20,30 +20,49 @@ class ZigAnalyzer(TreeSitterAnalyzer):
     language = 'zig'
     IMPORTS_VIA_EXTRACTOR = True  # BACK-1089
 
+    # BACK-2123: enums, unions and tests are built into the structure the shared
+    # builder caches (TreeSitterAnalyzer._get_or_build_structure), so a warm Zig
+    # query never re-extracts. The entries are not node kinds: `enum` and `union`
+    # are container types of a `Decl`, `TestDecl` is a real kind; _extract_declarations
+    # below maps each to the Zig extractor.
+    DECLARATION_CATEGORIES = {
+        'enums': ('enum',),
+        'unions': ('union',),
+        'tests': ('TestDecl',),
+    }
+
     def get_structure(self, **kwargs) -> Dict[str, Any]:
-        """Extract Zig code structure."""
-        if not self.tree:
+        """Extract Zig code structure (cached by the shared builder, BACK-2123)."""
+        structure = self._get_or_build_structure()
+        if not structure:
             return {}
 
-        structure: Dict[str, Any] = {}
+        # The shared builder also records `called_by` on functions; Zig's outline
+        # never carried it and its shape is unchanged. A new dict per function: a
+        # disk-cache hit is shared with later hits.
+        data = {k: v for k, v in structure.items() if v}
+        if 'functions' in data:
+            data['functions'] = [{k: v for k, v in func.items() if k != 'called_by'}
+                                 for func in data['functions']]
 
-        # Extract Zig elements
-        structure['imports'] = self._extract_imports()  # BACK-1089: `@import` builtin, via imports://
-        structure['functions'] = self._extract_functions()
-        structure['structs'] = self._extract_container_decls('struct')
-        structure['enums'] = self._extract_container_decls('enum')
-        structure['unions'] = self._extract_container_decls('union')
-        structure['tests'] = self._extract_tests()
-
-        # Remove empty categories and add output contract fields
         return ResultBuilder.create(
             result_type='zig_structure',
             source=self.path,
-            data={k: v for k, v in structure.items() if v},
+            data=data,
             contract_version=CONTRACT_VERSION,
             parse_mode='tree_sitter_full',
             confidence=1.0,
         )
+
+    def _extract_structs(self) -> List[StructureItem]:
+        """Zig structs are `const Name = struct {...}` declarations, not a node kind."""
+        return self._extract_container_decls('struct')
+
+    def _extract_declarations(self, node_kind: str) -> List[StructureItem]:
+        """The Zig extractor behind each DECLARATION_CATEGORIES entry."""
+        if node_kind == 'TestDecl':
+            return self._extract_tests()
+        return self._extract_container_decls(node_kind)
 
     def _has_pub_visibility(self, decl_node) -> bool:
         """Check if declaration has pub keyword."""
