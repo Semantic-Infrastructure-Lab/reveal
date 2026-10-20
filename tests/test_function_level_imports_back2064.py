@@ -8,10 +8,10 @@ Measured on 93600af3: ``depends://`` finds the function-level importer in every 
 below; ``imports://`` finds it in every language except Python, where
 ``analyzers/imports/service.py`` ``resolve_graph`` skips ``stmt.scope == 'local'`` (set only
 by the Python extractor). That skip is BACK-445's: a lazy import cannot cause an
-import-time cycle, so ``?circular`` must not count it. The fix BACK-2061 designs keeps the
-edge, tagged lazy: cycles leave lazy edges out, fan-in and importers keep them. The
-Python fan-in case is therefore a strict expected failure, and
-``test_lazy_back_edge_is_not_a_cycle`` holds BACK-445's half of the contract.
+import-time cycle, so ``?circular`` must not count it. BACK-2077 keeps the edge, tagged
+with its scope: cycles leave local edges out, fan-in and importers keep them, so the
+Python fan-in case passes, and ``test_lazy_back_edge_is_not_a_cycle`` holds BACK-445's
+half of the contract.
 
 Kotlin and Swift have no function-scope import: ``kotlinc`` says "expecting an element"
 and ``swiftc`` "declaration is only valid at file scope" for one, so only their file-scope
@@ -24,8 +24,6 @@ import pytest
 
 from conftest import _run_reveal_direct
 from reveal.utils.path_utils import to_posix
-
-BACK_2061 = 'BACK-2061: resolve_graph drops function-level imports (BACK-445); fix = lazy tag'
 
 # language -> (files, target, file-scope importers, function-level importers)
 CASES = {
@@ -100,8 +98,9 @@ NO_FUNCTION_SCOPE_IMPORT = {
              '("declaration is only valid at file scope") and tree-sitter parses it as an error',
 }
 
-# imports:// languages whose function-level importer is dropped today, by task.
-IMPORTS_KNOWN_DROPS = {'python': BACK_2061}
+# imports:// languages whose function-level importer is dropped today, by task (none since
+# BACK-2077 kept Python's local edges).
+IMPORTS_KNOWN_DROPS: dict = {}
 
 
 def _project(tmp_path, lang):

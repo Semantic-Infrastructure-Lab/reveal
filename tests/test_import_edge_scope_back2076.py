@@ -13,7 +13,8 @@ grammar-coverage check for function-like kinds is in ``tests/test_grammar_covera
 (``LOCAL_SCOPE_GAPS``).
 
 Python is the first extractor on the helper (``ImportStatement.scope``), and
-``resolve_graph`` drops by it: a class body's import, decorated or not, is a load-time edge.
+cycles leave local edges out by it (BACK-2077): a class body's import, decorated or not, is a
+load-time edge.
 """
 
 import json
@@ -356,16 +357,16 @@ def test_javascript_dynamic_flag(tmp_path):
         'commonjs_require': True, 'side_effect_require': True, 'dynamic_import': True,
     }
     assert {stmt.scope for stmt in by_name.values()} == {None}, (
-        'JS/TS scope is not recorded yet: resolve_graph would drop its local edges (BACK-2078)')
+        'JS/TS scope is not recorded yet: ?circular cannot leave its local edges out (BACK-2078)')
 
 
 # ---------------------------------------------------------------------------
-# The open decision: resolve_graph still drops a decorated class body's import
+# Which imports are edges, and which are load-time edges
 # ---------------------------------------------------------------------------
 
 
-def _fan_out(root):
-    out = _run_reveal_direct(f'imports://{to_posix(root)}?rank=fan-in', '--format', 'json')
+def _fan_out(root, extra=''):
+    out = _run_reveal_direct(f'imports://{to_posix(root)}?rank=fan-in{extra}', '--format', 'json')
     assert out.returncode == 0, out.stderr
     return {to_posix(e['file']): e['fan_out'] for e in json.loads(out.stdout)['entries']}
 
@@ -389,7 +390,8 @@ def test_decorated_class_body_import_is_an_imports_edge(tmp_path):
     assert _fan_out(root)['a.py'] == 1
 
 
-def test_function_body_import_is_still_dropped(tmp_path):
-    """Negative control: BACK-445's drop of a function-body import is unchanged."""
+def test_function_body_import_is_a_lazy_edge(tmp_path):
+    """A function-body import is an edge (BACK-2077); only &lazy=exclude leaves it out."""
     root = _tree(tmp_path, 'def f():\n    import b\n')
-    assert _fan_out(root)['a.py'] == 0
+    assert _fan_out(root)['a.py'] == 1
+    assert _fan_out(root, '&lazy=exclude')['a.py'] == 0
