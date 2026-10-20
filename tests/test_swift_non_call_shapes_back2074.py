@@ -107,6 +107,21 @@ def test_function_references_passed_as_values_are_not_calls(tmp_path):
     assert not [row for row in callers_of_init if row[0] == 'notificationPreviewType']
 
 
+def test_a_function_used_only_by_reference_is_not_reported_uncalled(tmp_path):
+    # The reference is no longer a call edge, but `?uncalled` still counts it as a use.
+    _write(tmp_path, 'u.swift', '''
+        struct Holder {
+            func convert(tx: Int) -> Int { return tx }
+            func viaReference(_ xs: [Int]) -> [Int] { return xs.map(self.convert(tx:)) }
+            func neverUsed() -> Int { return 1 }
+        }
+    ''')
+    result = CallsAdapter(str(tmp_path), 'uncalled').get_structure()
+    names = {entry['name'] for entry in result['entries']}
+    assert 'neverUsed' in names
+    assert 'convert' not in names
+
+
 def test_labelled_calls_with_arguments_are_still_calls(tmp_path):
     _write(tmp_path, 'refs.swift', REFS)
     assert {'foo', 'Date.init', 'f', 'convert', 'Date'} <= set(_callees(tmp_path, 'realCalls'))
