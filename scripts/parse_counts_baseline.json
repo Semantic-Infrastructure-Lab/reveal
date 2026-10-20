@@ -291,6 +291,11 @@
                 "unclassified_languages": []
               }
             },
+            "entry_point_filter": {
+              "active": 0,
+              "fan_in_zero": 3,
+              "rule": "fan_out > 0, not a test file, not __init__.py"
+            },
             "entrypoints": [
               {
                 "fan_out": 0,
