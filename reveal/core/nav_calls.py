@@ -310,8 +310,9 @@ def _extract_callee(
     if not _zero_arg(call_node, 'child_count'):
         return None
 
-    # Call-shaped nodes that are really other syntax (C++ mfp declaration, BACK-745)
-    if is_misparsed_call(_zero_arg(call_node, 'kind'), call_node):
+    # Call-shaped nodes that are really other syntax (C++ mfp declaration, BACK-745; Swift
+    # subscript, function reference, `-(x)`, `defer { }`, BACK-2074)
+    if is_misparsed_call(_zero_arg(call_node, 'kind'), call_node, get_text):
         return None
 
     # Language-specific call shapes shared with the analyzer path (PHP, Java, Scala,

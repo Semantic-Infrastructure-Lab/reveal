@@ -12,8 +12,7 @@
   "reveal/adapters/pack.py::_compute_priority": 27,
   "reveal/adapters/xlsx.py::XlsxAdapter._parse_xmla_tables": 25,
   "reveal/analyzers/_js_function_values.py::JSFunctionValueMixin._iter_function_values": 25,
-  "reveal/analyzers/imports/javascript.py::_get_tsconfig_aliases": 25,
-  "reveal/core/callees/generic.py::callee_name_from_node": 22
+  "reveal/analyzers/imports/javascript.py::_get_tsconfig_aliases": 25
  },
  "threshold": 21,
  "watch": {
@@ -139,7 +138,7 @@
   "reveal/cli/routing/uri.py::_element_answer": 16,
   "reveal/complexity.py::is_decision": 17,
   "reveal/core/callees/dart.py::cascade_sites": 16,
-  "reveal/core/callees/generic.py::callee_name_from_node": 22,
+  "reveal/core/callees/generic.py::callee_name_from_node": 20,
   "reveal/core/callees/zig.py::suffix_sites": 20,
   "reveal/display/coverage.py::outline_coverage": 17,
   "reveal/display/element.py::_extract_by_syntax": 21,

@@ -35,16 +35,20 @@ def _new_expression(node: Any, get_text: Callable[[Any], str], **kw: Any) -> Opt
     return dart.flat_type_call(node, get_text, **kw)
 
 
-# Kinds whose call nodes are misparses of non-call syntax and name nothing.
-_MISPARSE_CHECKS: Dict[str, Callable[[Any], bool]] = {
-    'call_expression': cpp.is_member_function_pointer_misparse,
+# Kinds whose call nodes may be non-call syntax that names nothing. Each check is a
+# (node, get_text) predicate keyed on grammar shape, so it is a no-op for other languages.
+_MISPARSE_CHECKS: Dict[str, Tuple[Callable[[Any, Optional[Callable[[Any], str]]], bool], ...]] = {
+    'call_expression': (
+        cpp.is_member_function_pointer_misparse,  # BACK-745
+        swift.is_non_call,  # subscript, function reference, `-(x)`, `defer { }` (BACK-2074)
+    ),
 }
 
 
-def is_misparsed_call(kind: str, node: Any) -> bool:
-    """True when a call-shaped node is really something else (e.g. C++ mfp declaration)."""
-    check = _MISPARSE_CHECKS.get(kind)
-    return bool(check and check(node))
+def is_misparsed_call(kind: str, node: Any, get_text: Optional[Callable[[Any], str]] = None) -> bool:
+    """True when a call-shaped node is really something else (C++ mfp declaration, Swift
+    subscript or function reference, ...). Checks that need source text skip without `get_text`."""
+    return any(check(node, get_text) for check in _MISPARSE_CHECKS.get(kind, ()))
 
 
 # Kinds shared with another language: the extractor only owns nodes the predicate

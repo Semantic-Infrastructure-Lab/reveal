@@ -15,7 +15,7 @@ taxonomy.
 
 from __future__ import annotations
 
-from typing import AbstractSet, Any, Callable, Optional
+from typing import AbstractSet, Any, Callable, Optional, Tuple
 
 from .. import node_children as _children
 from ..node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_KINDS
@@ -34,7 +34,42 @@ _UNNAMEABLE_CALLEE_KINDS = frozenset({
     'function_expression', 'function', 'generator_function', 'arrow_function', 'lambda',
     'class', 'conditional_expression', 'ternary_expression', 'await_expression',
     'binary_expression',
+    'lambda_literal',  # Swift/Kotlin closure literal: `{ ... }()` (BACK-2074)
 })
+
+# What a wrapper callee does when its operand names nothing: fall through to the raw
+# text, decline only when there is no operand at all, or always decline.
+_FALL_THROUGH, _DECLINE_IF_MISSING, _DECLINE = 'fall_through', 'decline_if_missing', 'decline'
+
+_OPERAND_WRAPPER_KINDS = frozenset({
+    'generic_function', 'parenthesized_expression', 'prefix_expression',
+    'try_expression', 'await_expression',
+})
+
+
+def _callee_operand(callee_node: Any, kind: str) -> Tuple[Optional[Any], str]:
+    """(operand, policy) for a callee kind in `_OPERAND_WRAPPER_KINDS`.
+
+    - Rust turbofish `size_of::<u32>()` is generic_function(path, '::', type_arguments):
+      the path is the callee (BACK-733).
+    - `(f)(args)`: raw text would be the unmatchable "(f)" (BACK-733); an unnameable
+      parenthesized callee names nothing (BACK-1305).
+    - Swift `!isRunning(x)` / implicit-member `.foo(x)` is prefix_expression: the operand
+      is last, after the operator token (BACK-730).
+    - Swift `try await svc.fetch(id: 1) { done() }` parses the trailing closure as a second
+      call whose callee is the whole `try await svc.fetch(id: 1)`. The wrapped call is
+      already its own edge, so this one names nothing; `try f { }` names `f` (BACK-2074).
+    """
+    if kind == 'generic_function':
+        return callee_node.child(0), _FALL_THROUGH
+    if kind == 'parenthesized_expression':
+        return unwrap_parenthesized_callee(callee_node), _DECLINE_IF_MISSING
+    if kind == 'prefix_expression':
+        kids = _children(callee_node)
+        return (kids[-1] if kids else None), _FALL_THROUGH
+    named = [c for c in _children(callee_node)
+             if _zero_arg(c, 'is_named') and _zero_arg(c, 'kind') != 'try_operator']
+    return (named[-1] if named else None), _DECLINE
 
 
 def unwrap_parenthesized_callee(node: Any) -> Optional[Any]:
@@ -125,37 +160,19 @@ def callee_name_from_node(
     if call_node_types and kind in call_node_types:
         return None
 
-    # Rust turbofish (`size_of::<u32>()`, `x.remap_types::<T>()`) parses as
-    # generic_function(path, '::', type_arguments): the path is the real callee
-    # (BACK-733). Recurse into just the path.
-    if kind == 'generic_function':
-        path_node = callee_node.child(0)
-        if path_node is not None:
-            name = callee_name_from_node(
-                path_node, get_text, call_node_types=call_node_types, chain_receiver=chain_receiver)
-            if name:
-                return name
+    # Swift/Kotlin `{ ... }()` invokes a closure literal: no name of its own, and raw text
+    # would emit the closure's whole source as a callee. Its body's calls are their own
+    # nodes (BACK-2074, same policy as a parenthesized JS IIFE, BACK-1305).
+    if kind == 'lambda_literal':
+        return None
 
-    # `(f)(args)`: raw text would be the unmatchable literal "(f)" (BACK-733).
-    if kind == 'parenthesized_expression':
-        inner = unwrap_parenthesized_callee(callee_node)
-        if inner is None:
-            return None  # no nameable callee (BACK-1305)
-        name = callee_name_from_node(
-            inner, get_text, call_node_types=call_node_types, chain_receiver=chain_receiver)
-        if name:
+    # A callee wrapping the node that names it: name the operand (see _callee_operand).
+    if kind in _OPERAND_WRAPPER_KINDS:
+        operand, policy = _callee_operand(callee_node, kind)
+        name = None if operand is None else callee_name_from_node(
+            operand, get_text, call_node_types=call_node_types, chain_receiver=chain_receiver)
+        if name or policy == _DECLINE or (operand is None and policy == _DECLINE_IF_MISSING):
             return name
-
-    # Swift `!isRunning(x)` parses the callee as prefix_expression(bang,
-    # simple_identifier); the operand is always last, after the operator token
-    # (BACK-730). Also covers the implicit-member `.foo(...)` shape.
-    if kind == 'prefix_expression':
-        kids = _children(callee_node)
-        if kids:
-            name = callee_name_from_node(
-                kids[-1], get_text, call_node_types=call_node_types, chain_receiver=chain_receiver)
-            if name:
-                return name
 
     # Fluent chain `fetch(x).then(...).catch(...)`: the callee is a member
     # access whose *receiver* is itself a call, so its raw text folds the whole

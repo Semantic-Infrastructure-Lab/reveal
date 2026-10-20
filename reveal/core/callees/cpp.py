@@ -68,7 +68,7 @@ def direct_init(
     return text.split('::')[-1] if kind == 'qualified_identifier' else text
 
 
-def is_member_function_pointer_misparse(call_node: Any) -> bool:
+def is_member_function_pointer_misparse(call_node: Any, get_text: Optional[Callable[[Any], str]] = None) -> bool:
     """True if `call_node` is a member-function-pointer declaration misparsed as a call (BACK-745).
 
     `void (Base::*mfp)() = &Base::plain;` parses as nested call_expression nodes

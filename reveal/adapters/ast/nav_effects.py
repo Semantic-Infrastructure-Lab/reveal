@@ -5,9 +5,10 @@ from __future__ import annotations
 import re
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import AbstractSet, Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from ...core import node_children as _children
+from ...core.callees.swift import is_subscript as _is_swift_subscript
 from ...core.treesitter_compat import _zero_arg
 from .nav_calls import range_calls
 from .node_taxonomy import MEMBER_ACCESS_NODES as _MEMBER_ACCESS_NODES
@@ -577,13 +578,11 @@ _TAXONOMY_BY_LANG: Dict[str, List[Tuple[str, List[str]]]] = {
         # BACK-728: `Bundle.main.infoDictionary` (`ServiceType.userAgent`'s
         # app-version/bundle-metadata read, `MFMailComposeViewController
         # .support`'s support-email diagnostics) is Kickstarter's dominant
-        # build-metadata/env-config read once scope widened past KsApi/. It
-        # renders as an ordinary extractable callee (`Bundle.main
-        # .infoDictionary?[...]`'s optional-subscript access is call-shaped
-        # in this grammar), so a normal three-segment taxonomy entry — not
-        # the separate BACK-644/BACK-727-style property-access channel —
-        # already reaches it; verified live via `classify_call()` before
-        # relying on this instead of the heavier property channel.
+        # build-metadata/env-config read once scope widened past KsApi/. Its
+        # subscript form `Bundle.main.infoDictionary?[...]` is call-shaped in
+        # this grammar but is not a call (BACK-2074), so that read now comes
+        # through the property channel (_ENV_BASES_BY_LANG['swift']); this
+        # entry still names the dotted form when it is a real callee.
         ('env', ['bundle.main.infodictionary']),
         # BACK-498 quick win: NSLog/os_log are Swift/Cocoa's logging calls —
         # bare `print` deliberately stays unclassified (matches tier1 Java/C#/
@@ -1759,6 +1758,11 @@ _ENV_BASES_BY_LANG: Dict[str, Tuple[str, ...]] = {
     # same residual-risk shape every other entry in this table already
     # accepts.
     'kotlin': ('BuildConfig',),
+    # BACK-728's `Bundle.main.infoDictionary?[...]` read reached the call channel only
+    # because a Swift subscript parses as `call_expression`. Subscripts are not calls
+    # (BACK-2074), so the read comes through this channel, like Python's
+    # `os.environ['X']`.
+    'swift': ('Bundle.main.infoDictionary',),
 }
 
 
@@ -1772,6 +1776,20 @@ def _env_property_bases(language: Optional[str]) -> Tuple[str, ...]:
         lang = _LANG_GROUP.get(language, language)
         return _ENV_BASES_BY_LANG.get(lang, ())
     return tuple(base for bases in _ENV_BASES_BY_LANG.values() for base in bases)
+
+
+def _node_channel(node: Any, call_kinds: AbstractSet[str]) -> Optional[str]:
+    """'call' for a call node, 'property' for a member access or subscript, else None.
+
+    Swift's subscript `x?["k"]` is a `call_expression` that calls nothing (BACK-2074): it is
+    a subscript here, its base being child(0) as for the other subscript kinds.
+    """
+    kind = _zero_arg(node, 'kind')
+    if kind == 'call_expression' and _is_swift_subscript(node):
+        return 'property'
+    if kind in call_kinds:
+        return 'call'
+    return 'property' if kind in _PROPERTY_NODES else None
 
 
 def _collect_property_effects(
@@ -1800,8 +1818,8 @@ def _collect_property_effects(
         line = _zero_arg(node, 'start_position').row + 1
         if _zero_arg(node, 'end_position').row + 1 < from_line or line > to_line:
             continue
-        kind = _zero_arg(node, 'kind')
-        if kind in CALL_NODE_TYPES:
+        channel = _node_channel(node, CALL_NODE_TYPES)
+        if channel == 'call':
             # A call's own callee belongs to the call channel: `os.environ.get`
             # is an `attribute` whose base text is exactly `os.environ`, so
             # without this it would be reported a second time here, on the very
@@ -1824,7 +1842,7 @@ def _collect_property_effects(
                 callee = node.child(0)
             if callee is not None:
                 callee_spans.add((_zero_arg(callee, 'start_byte'), _zero_arg(callee, 'end_byte')))
-        elif kind in _PROPERTY_NODES and (_zero_arg(node, 'start_byte'), _zero_arg(node, 'end_byte')) not in callee_spans:
+        elif channel == 'property' and (_zero_arg(node, 'start_byte'), _zero_arg(node, 'end_byte')) not in callee_spans:
             # child(0) is the base in every shape this matches: the receiver of
             # a member access (`process.env` in `process.env.FOO`) and the
             # subject of a subscript (`os.environ` in `os.environ['FOO']`).

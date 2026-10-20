@@ -2113,7 +2113,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if not _zero_arg(call_node, 'child_count'):
             return None
         kind = _zero_arg(call_node, 'kind')
-        if is_misparsed_call(kind, call_node):  # C++ mfp declaration (BACK-745)
+        # C++ mfp declaration (BACK-745); Swift subscript, function reference, `-(x)`, `defer` (BACK-2074)
+        if is_misparsed_call(kind, call_node, self._get_node_text):
             return None
         # Language-specific call shapes shared with nav (PHP, Java, Scala, Swift, ...):
         # one implementation in core/callees (BACK-1279).
