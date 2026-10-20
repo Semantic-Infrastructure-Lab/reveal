@@ -11,7 +11,7 @@ try:
 except ImportError:  # Windows CPython has no `resource` module
     resource = None  # type: ignore[assignment]
 from pathlib import Path
-from argparse import Namespace
+from argparse import SUPPRESS, Namespace
 from contextlib import contextmanager
 from typing import Optional, Tuple, Any, List, TextIO, cast
 from collections.abc import Callable, Iterator, Sequence
@@ -160,6 +160,16 @@ def _show_subcommand_formats(parser: Any, formats: Optional[Tuple[str, ...]]) ->
                            "Defaults to $REVEAL_FORMAT if set.")
 
 
+def _show_subcommand_options(parser: Any, name: str) -> None:
+    """Leave out of ``reveal <name> --help`` and its usage the global options the command
+    rejects: ``--also-json`` unless its ``CommandSpec.also_json`` says it writes one (BACK-2094)."""
+    if COMMANDS[name].also_json:
+        return
+    for action in parser._actions:
+        if '--also-json' in action.option_strings:
+            action.help = SUPPRESS
+
+
 def _require_subcommand_format(name: str, args: Any,
                                formats: Optional[Tuple[str, ...]] = None) -> None:
     """A subcommand renders what its adapter (or its COMMANDS entry) declares;
@@ -167,7 +177,7 @@ def _require_subcommand_format(name: str, args: Any,
     from .cli.routing.formats import reject_unhonored_also_json, require_supported_format
     supported = formats if formats is not None else _subcommand_formats(name)
     require_supported_format(args, supported, f"reveal {name}")
-    if name != 'check' and not COMMANDS[name].declared_adapter:
+    if not COMMANDS[name].also_json:
         reject_unhonored_also_json(args, f"reveal {name}")
 
 
@@ -304,6 +314,7 @@ def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None]]:
     sub_parser, runner = COMMANDS[name].load()
     formats = _subcommand_formats(name)
     _show_subcommand_formats(sub_parser, formats)
+    _show_subcommand_options(sub_parser, name)
     sub_args = sub_parser.parse_args(invocation.command_argv)
     _require_subcommand_format(name, sub_args, formats)
     # BACK-1539: the flag ledger and the REVEAL_IGNORE/--exclude walk scope, once for all.

@@ -45,6 +45,9 @@ class CommandSpec(NamedTuple):
     help_guide: str = ''
 
     declared_adapter: str = ''
+    # Whether the command writes the --also-json artifact. The one declaration: a command that
+    # does not rejects the flag with exit 2 and leaves it out of its --help (BACK-2094).
+    also_json: bool = False
 
     def load(self) -> Tuple[ArgumentParser, Callable[[Namespace], None]]:
         if self.declared_adapter:
@@ -57,14 +60,14 @@ class CommandSpec(NamedTuple):
 
 
 def _spec(name: str, usage: str, summary: str, formats: Optional[Tuple[str, ...]] = None,
-          help_guide: str = '') -> CommandSpec:
+          help_guide: str = '', also_json: bool = False) -> CommandSpec:
     return CommandSpec(f'reveal.cli.commands.{name}', f'create_{name}_parser', f'run_{name}',
-                       formats, usage, summary, help_guide)
+                       formats, usage, summary, help_guide, also_json=also_json)
 
 
 def _declared(name: str, usage: str, summary: str, help_guide: str = '') -> CommandSpec:
     """A noun the same-named adapter declares: no module of its own, `load()` builds both from the declaration."""
-    return CommandSpec('', '', '', None, usage, summary, help_guide, declared_adapter=name)
+    return CommandSpec('', '', '', None, usage, summary, help_guide, declared_adapter=name, also_json=True)
 
 
 _SUBCOMMANDS_GUIDE = 'guides/SUBCOMMANDS_GUIDE.md'
@@ -84,7 +87,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'reveal check <path>',
                      'Run quality rules on a file or directory',
                      ('text', 'json', 'grep'),  # also PATH --check (BACK-1644)
-                     help_guide=_SUBCOMMANDS_GUIDE),
+                     help_guide=_SUBCOMMANDS_GUIDE, also_json=True),
     'contracts':    _declared('contracts',
                      'reveal contracts [path]',
                      'Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses'),
