@@ -135,12 +135,15 @@ def test_depth_is_clamped_one_to_five(project, depth, effective):
 
 
 def test_numeric_name_is_a_name_not_a_crash(project):
+    # Nothing defines or calls `123`: an absent name exits 2 since slice C2 (decision d).
     for result in uri_first(['--target', '123'], 'target=123', '--format', 'json'):
-        assert result.returncode == 0, result.stderr
+        assert result.returncode == 2, result.stderr
+        assert 'Traceback' not in result.stderr
         answer = json.loads(result.stdout)
         assert answer['type'] == 'calls_query'
         assert answer['target'] == '123'
         assert answer['total_callers'] == 0
+        assert answer['error'] == "Function '123' not found in proj"
 
 
 @pytest.mark.parametrize('flags,query,names', [
@@ -203,17 +206,19 @@ def test_shorthand_selects_target_in_both_spellings(project):
     assert left['source'] == 'proj/pkg/util.py'
 
 
-def test_explicit_mode_beats_the_shorthand(project):
+def test_shorthand_with_an_explicit_mode_is_two_modes(project):
+    # It answered the explicit mode and ignored :fmt silently until BACK-2102.
     result = run('calls://proj/pkg/util.py:fmt?callees=helper', '--format', 'json')
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 2, result.stderr
     answer = json.loads(result.stdout)
-    assert (answer['type'], answer['target']) == ('calls_callees', 'helper')
+    assert answer['type'] == 'calls_callees'
+    assert 'one mode per request' in answer['error']
 
 
-def test_ignored_depth_warning_is_unchanged(project):
-    for result in uri_first(['--callees', 'serve', '--depth', '3'], 'callees=serve&depth=3'):
+def test_ignored_depth_warning_names_the_modes_that_walk(project):
+    for result in uri_first(['--rank', 'callers', '--depth', '3'], 'rank=callers&depth=3'):
         assert result.returncode == 0, result.stderr
-        assert "Query param 'depth' for calls:// applies to ?target and ?root only" in result.stderr
+        assert "Query param 'depth' for calls:// applies to ?callers, ?callees and ?root only" in result.stderr
 
 
 @pytest.mark.parametrize('gate,expected', [('none', 0), ('findings', 2)])

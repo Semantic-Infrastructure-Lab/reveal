@@ -35,16 +35,19 @@ beth_topics:
 
 ```bash
 # Who calls validate_item anywhere in the project? (reverse lookup)
-reveal 'calls://src/?target=validate_item'
+reveal 'calls://src/?callers=validate_item'
 
 # What does validate_item call? (forward lookup)
 reveal 'calls://src/?callees=validate_item'
 
+# ... and what those call, level by level (not measured beyond depth 1: W-CALLS-9)
+reveal 'calls://src/?callees=validate_item&depth=2&detail'
+
 # Include callers-of-callers (2 levels deep)
-reveal 'calls://src/?target=validate_item&depth=2'
+reveal 'calls://src/?callers=validate_item&depth=2'
 
 # Graphviz dot output (pipe to dot for SVG/PNG)
-reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > call_graph.svg
+reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > call_graph.svg
 
 # Within-file call graph (ast:// adapter — cheaper, no project index)
 reveal 'ast://src/auth.py?show=calls'
@@ -53,9 +56,11 @@ reveal 'ast://src/auth.py?show=calls'
 reveal 'ast://src/auth.py?calls=validate_token'
 
 # The same requests as a subcommand (flags generated from the same declarations)
-reveal calls src/ --target validate_item --depth 2
-reveal calls src/ --callees validate_item
+reveal calls src/ --callers validate_item --depth 2
+reveal calls src/ --callees validate_item --depth 2 --detail
 ```
+
+`?target=` is the older name of `?callers=`: the same mode and the same answer.
 
 **Why use calls://?**
 - **Impact analysis**: Before changing a function, find all callers across the codebase
@@ -69,14 +74,14 @@ reveal calls src/ --callees validate_item
 ## URI Syntax
 
 ```
-# Reverse lookup: who calls function X?
-calls://<path>?target=<name>[&depth=N][&format=<fmt>]
+# Reverse lookup: who calls function X? (target= is the older name)
+calls://<path>?callers=<name>[&depth=N][&format=<fmt>]
 
-# Shorthand (colon syntax): same as ?target=
+# Shorthand (colon syntax): same as ?callers=, only when no mode is given
 calls://<path>:<name>
 
-# Forward lookup: what does function X call?
-calls://<path>?callees=<name>[&format=<fmt>]
+# Forward lookup: what does function X call? FILE:X picks one file's definitions
+calls://<path>?callees=<name>|<file>:<name>[&depth=N][&detail][&format=<fmt>]
 
 # Ranking: most-called functions in the project
 calls://<path>?rank=callers[&top=N]
@@ -85,50 +90,51 @@ calls://<path>?rank=callers[&top=N]
 | Component | Description |
 |-----------|-------------|
 | `path` | Directory (or file) to index — typically `src/` or `.` |
-| `target` | Function name to find **callers of** (reverse lookup) |
-| `callees` | Function name to find **callees of** (forward lookup) |
+| `callers` | Function name to find **callers of** (reverse lookup); `target` is its older name |
+| `callees` | Function name, or `FILE:NAME`, to find **callees of** (forward lookup) |
 | `rank` | Set to `callers` to rank all functions by in-degree (coupling metrics) |
 | `top` | Max results for `?rank=callers` (default: 10; `0` = all) |
-| `depth` | Transitive levels for `?target` (default: 1, max: 5) |
+| `depth` | Levels for `?callers` and `?callees` (default: 1, max: 5) |
+| `detail` | `?callees` only: add each reached definition's params and effects |
 | `format` | Output format: `text` (default), `json`, or `dot` (Graphviz) |
 
 ### Colon Shorthand
 
-The colon syntax `calls://path:name` is equivalent to `calls://path?target=name`. Reveal detects that the portion before the colon is an existing filesystem path and the portion after is a bare name (no slashes), and automatically routes it as `?target=`:
+The colon syntax `calls://path:name` is equivalent to `calls://path?callers=name`. Reveal detects that the portion before the colon is an existing filesystem path and the portion after is a bare name (no slashes), and automatically routes it as the callers mode. With an explicit mode (`calls://src/a.py:main?callees=x`) it names a second mode and exits 2; it used to ignore `:main` silently (BACK-2102):
 
 ```bash
 # These are equivalent:
 reveal 'calls://src/auth.py:validate_token'
-reveal 'calls://src/?target=validate_token'
+reveal 'calls://src/?callers=validate_token'
 
 # Works with directories too:
 reveal 'calls://src:validate_token'
-reveal 'calls://src/?target=validate_token'
+reveal 'calls://src/?callers=validate_token'
 ```
 
 ### Examples
 
 ```bash
 # Direct callers of process_batch (reverse lookup)
-reveal 'calls://src/?target=process_batch'
+reveal 'calls://src/?callers=process_batch'
 
 # What does process_batch call? (forward lookup)
 reveal 'calls://src/?callees=process_batch'
 
 # Callers-of-callers (2 levels)
-reveal 'calls://src/?target=process_batch&depth=2'
+reveal 'calls://src/?callers=process_batch&depth=2'
 
 # Full transitive tree (5 levels max)
-reveal 'calls://src/?target=entry_point&depth=5'
+reveal 'calls://src/?callers=entry_point&depth=5'
 
 # Graphviz for visual diagram
-reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > main_callers.svg
+reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > main_callers.svg
 
 # JSON for programmatic use
-reveal 'calls://src/?target=validate_item&format=json'
+reveal 'calls://src/?callers=validate_item&format=json'
 
 # Whole-project index (use . for current dir)
-reveal 'calls://.?target=my_function'
+reveal 'calls://.?callers=my_function'
 ```
 
 ---
@@ -181,51 +187,55 @@ callee → [(file, caller_func, line), ...]
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `target` | string | — | Function name to find **callers of** (reverse lookup) |
-| `callees` | string | — | Function name to find **callees of** (forward lookup) |
+| `callers` | string | — | Function name to find **callers of** (reverse lookup). A bare name: `callers=FILE:NAME` exits 2, because the callers index has no file filter |
+| `target` | string | — | The older name of `callers`: the same mode and the same answer |
+| `callees` | string | — | Function name, or `FILE:NAME` for the definitions in one file, to find **callees of** (forward lookup). Depth 1 lists each definition's calls (`matches`); depth 2-5 walks level by level (see [`callees`](#callees)) |
+| `detail` | flag | — | `?callees` only: adds `params` and `effects` to every definition the walk reaches (`definitions[]`); with any other mode it exits 2. Not measured (W-CALLS-9) |
 | `rank` | string | — | Set to `callers` to rank all functions by in-degree |
 | `uncalled` | flag | — | List dead-code candidates — functions/methods with no static callers (see [Workflow 2](#workflow-2-find-unused-functions-dead-code)) |
 | `top` | integer | 10 for `?rank`, all for `?uncalled` | Max results for `?rank=callers` or `?uncalled`; `0` = all; a negative or non-whole value exits 2. `--limit N` becomes `top=N` |
-| `depth` | integer | 1 (`?root`: 2) | Transitive levels for `?target` and `?root`: a signed whole integer clamped 1–5 (1 = direct only); `depth=abc` or `1.5` exits 2 |
-| `builtins` | boolean | `false` | Include Python builtins in output (applies to `?callees` and `?rank=callers`) |
+| `depth` | integer | 1 (`?root`: 2) | Levels for `?callers`, `?callees` and `?root`: a signed whole integer clamped 1–5 (1 = direct only); `depth=abc` or `1.5` exits 2. A callee walk beyond depth 1 is not measured (W-CALLS-9) |
+| `builtins` | boolean | `false` | Include Python builtins in output (applies to `?callees` at every depth, `?root` and `?rank=callers`) |
 | `format` | string | `text` | Output format: `text`, `json`, or `dot`; another value exits 2 |
 | `root` | string | — | Root function name (or `FILE:NAME`) for a level-by-level callee walk, the same walk `trace://` uses. Every matching definition is a starting point and each definition is expanded once, at the shallowest level it is reached. Every call site of an expanded definition is an edge (`call_expr`), including one to a definition already reached, which has `expanded: false`. A callee name that several definitions share, with none in the caller's file or imports, is listed as `ambiguous` with its candidates and not expanded. Totals count edges: `total_edges` = `total_resolved` (ambiguous included, also counted in `total_ambiguous`) + `total_unresolved` |
 | `modules` | boolean | `false` | Build a module-level dependency graph instead of function-level |
 | `external` | boolean | `false` | Include external (non-project) modules in the `?modules` graph |
 | `test-framework` | boolean | `false` | Include test-framework entrypoints as callers in `?rank=callers`, and as dead-code candidates in `?uncalled` |
 
-> Exactly one of `target`, `callees`, `root`, `rank`, `uncalled` or `modules` per request (the
-> `path:name` shorthand counts as `target` only when none is given). Two modes exit 2 and name both;
+> Exactly one of `callers` (or `target`), `callees`, `root`, `rank`, `uncalled` or `modules` per
+> request; `callers` and `target` together are two selectors too. The `path:name` shorthand is the
+> callers mode, so with any other mode it exits 2. Two modes exit 2 and name both;
 > before calls was a declared noun they resolved silently by a hidden precedence. No mode exits 2.
-> Values are typed, never coerced: `target=123` is the name `123`; a malformed value (`depth=abc`,
+> Values are typed, never coerced: `callers=123` is the name `123`; a malformed value (`depth=abc`,
 > `top=-1`, `rank=often`, `type=klass`, `builtins=maybe`) exits 2 naming the parameter. Boolean
 > keys take `true/false/yes/no/1/0` or bare presence.
 
 ### Subcommand and exit codes
 
-`reveal calls <path>` takes the same parameters as flags (`--target NAME`, `--callees NAME`,
-`--root NAME`, `--depth N`, `--rank callers`, `--top N`, `--uncalled`, `--type KIND`, `--modules`,
+`reveal calls <path>` takes the same parameters as flags (`--callers NAME`, `--target NAME`, `--callees NAME`,
+`--root NAME`, `--depth N`, `--detail`, `--rank callers`, `--top N`, `--uncalled`, `--type KIND`, `--modules`,
 `--external`, `--builtins`, `--test-framework`); both spellings give equal JSON through one
 execution path. `format=dot` stays URI-only. Details: [SUBCOMMANDS_GUIDE](../guides/SUBCOMMANDS_GUIDE.md#reveal-calls--cross-file-call-graph).
 
 | Exit | Meaning |
 |------|---------|
-| 0 | Complete answer (an empty one included: a name with no callers or no definition is still 0) |
-| 2 | Rejected before analysis: two modes, no mode, a malformed value, a missing path |
+| 0 | Complete answer (an empty one included: a defined function with no callers, or a name with call sites and no definition, such as a library function) |
+| 2 | Rejected before analysis: two modes, no mode, a malformed value, a missing path, `callers=FILE:NAME`, `detail` outside `callees`. Also a complete answer whose name names nothing: `callees` finds no definition, or `callers` finds no definition and no call site (`error`: "Function 'X' not found in PATH"; the empty answer is still printed). A tree `.gitignore` hid is never absent (0, with `scope_hidden`) |
 | 3 | Required analysis or output incomplete: a file or directory could not be read (the answer is still printed with its `analysis_failed`/`analysis_incomplete` warning), or a requested `--also-json` could not be written |
 
 `--fail-on` accepts `none` only: calls reports facts, not findings.
 
-### `target`
+### `callers`
 
-Reverse lookup — who calls this function? The bare function name, no file qualifier needed:
+Reverse lookup — who calls this function? The bare function name, no file qualifier needed
+(`?target=` is the older name of the same mode):
 
 ```bash
 # Bare name (most common)
-reveal 'calls://src/?target=validate_item'
+reveal 'calls://src/?callers=validate_item'
 
 # Method names work the same way
-reveal 'calls://src/?target=process'
+reveal 'calls://src/?callers=process'
 ```
 
 ### `callees`
@@ -245,11 +255,39 @@ reveal 'calls://src/?callees=handle_request'
 
 Python builtins (`len`, `str`, `sorted`, `ValueError`, `open`, `print`, etc.) are hidden by default — they add noise without revealing project structure. Use `?builtins=true` when you specifically want to audit dangerous builtins like `eval`, `exec`, or `open`.
 
-> `?builtins` applies to both `?callees` (forward lookup) and `?rank=callers`. The `?target` (reverse lookup) is unaffected — callers of builtins are always shown.
+`FILE:NAME` picks the definitions in one file (`?callees=pkg/util.py:fmt`); a relative `FILE`
+matches the trailing path parts.
+
+**Depth 2-5 (a callee walk).** `&depth=N` walks level by level from every definition of the
+name. Each definition is expanded once, at the shallowest level it is reached; every call site of
+an expanded definition is an edge (call text de-duplicated per definition), including one to a
+definition already reached (`expanded: false`). A call resolves within the caller's language family
+to its one definition, else to a same-file one or the one its imports name, else it is `ambiguous`
+with its `candidates` and not expanded. The answer keeps type `calls_callees` and its depth-1
+`matches`, and adds `depth`, `levels[].callees[]` (one per edge: `caller`, `caller_file`,
+`caller_line`, `call_expr`, `callee`, `resolved`, `callee_file`/`callee_line` or `ambiguous` and
+`candidates`, `expanded`), `definitions[]` (every definition reached: `name`, `file`, `line`,
+`level`, 0 for the roots, and `expanded`), the edge totals (`total_edges` = `total_resolved` +
+`total_unresolved`; `total_ambiguous` counts resolved edges with several candidates) and a
+`walk_rule` stating all of this (text: a `Rule:` line). `&detail` adds `params` and `effects` to each
+definition, also at depth 1. Text is a depth-indented tree: `[external]`, `[ambiguous: N ...]`,
+and `(expanded above)` / `(expanded below)` for a definition whose calls are listed elsewhere.
+
+No oracle scores a callee walk beyond depth 1 or `detail`'s params and effects in any language:
+those answers carry W-CALLS-9 ("... not measured in any language"), and `walk_rule.measured` is
+`{depth_1: true, beyond_depth_1: false, detail: false}`. The callees snapshot measures depth-1 call
+lists only.
+
+```bash
+reveal 'calls://src/?callees=handle_request&depth=3'
+reveal 'calls://src/?callees=handle_request&detail' --format=json | jq '.definitions[0].effects'
+```
+
+> `?builtins` applies to both `?callees` (forward lookup) and `?rank=callers`. The `?callers` (reverse lookup) is unaffected — callers of builtins are always shown.
 
 ### `rank`
 
-Rank all callable symbols in the project by how many unique callers they have (in-degree coupling metric). Zero new infrastructure — uses the same cached index as `?target`.
+Rank all callable symbols in the project by how many unique callers they have (in-degree coupling metric). Zero new infrastructure — uses the same cached index as `?callers`.
 
 ```bash
 # Top 10 most-called functions
@@ -281,12 +319,13 @@ High in-degree = potential coupling hotspot. Functions at the top are load-beari
 
 ### `depth`
 
-Expands callers transitively. Level 1 = direct callers, level 2 = callers of those callers, etc.:
+Expands callers transitively (level 1 = direct callers, level 2 = callers of those callers, etc.),
+or walks callees level by level (see [`callees`](#callees)):
 
 ```bash
-reveal 'calls://src/?target=validate_item&depth=1'   # default — direct callers
-reveal 'calls://src/?target=validate_item&depth=2'   # direct + their callers
-reveal 'calls://src/?target=validate_item&depth=5'   # up to 5 levels deep (capped)
+reveal 'calls://src/?callers=validate_item&depth=1'   # default — direct callers
+reveal 'calls://src/?callers=validate_item&depth=2'   # direct + their callers
+reveal 'calls://src/?callers=validate_item&depth=5'   # up to 5 levels deep (capped)
 ```
 
 ---
@@ -359,7 +398,7 @@ Total:      4 call(s) across 1 definition(s)
 
 With `?builtins=true` the footer disappears and the full raw list (including `len`, `str`, `isinstance`, etc.) is shown. The footer only appears when at least one builtin was filtered.
 
-When the function is not found:
+When the function is not found (exit 2; stderr has `Error (calls://): Function 'unknown_fn' not found in src/`):
 
 ```
 Callees of: unknown_fn
@@ -369,12 +408,18 @@ Total:      0 call(s) across 0 definition(s)
   No definition of 'unknown_fn' found.
 ```
 
+**Confidence.** `meta.confidence` is a file-weighted mean of the per-language recall figures. A
+scanned language with no recall snapshot (the 19 measured pairs cover python, typescript/tsx,
+javascript, go, rust, java, ruby, php, csharp, kotlin, swift, cpp, c, scala, zig, lua, gdscript and
+dart; Elixir, Bash and the rest are not measured) withholds it: the envelope carries no
+`confidence`, and W-CALLS-10 names each such language with its file count, in text and JSON.
+
 ### JSON
 
 Structured data for programmatic processing:
 
 ```bash
-reveal 'calls://src/?target=validate_item' --format=json
+reveal 'calls://src/?callers=validate_item' --format=json
 ```
 
 ```json
@@ -415,13 +460,13 @@ Directed graph format for visualisation:
 
 ```bash
 # Text preview
-reveal 'calls://src/?target=validate_item&format=dot'
+reveal 'calls://src/?callers=validate_item&format=dot'
 
 # SVG
-reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > call_graph.svg
+reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > call_graph.svg
 
 # PNG
-reveal 'calls://src/?target=main&format=dot' | dot -Tpng > call_graph.png
+reveal 'calls://src/?callers=main&format=dot' | dot -Tpng > call_graph.png
 ```
 
 Example dot output:
@@ -446,13 +491,13 @@ Before modifying a function, understand all callers to assess risk:
 
 ```bash
 # Step 1: Direct callers
-reveal 'calls://src/?target=parse_config'
+reveal 'calls://src/?callers=parse_config'
 
 # Step 2: Expand to understand full impact (transitive)
-reveal 'calls://src/?target=parse_config&depth=3'
+reveal 'calls://src/?callers=parse_config&depth=3'
 
 # Step 3: Extract files to review
-reveal 'calls://src/?target=parse_config' --format=json | \
+reveal 'calls://src/?callers=parse_config' --format=json | \
   jq -r '.levels[0].callers[].file' | sort -u
 ```
 
@@ -472,7 +517,7 @@ Starting from an entry point, trace who it calls and what calls it:
 
 ```bash
 # Who calls the entry point?
-reveal 'calls://src/?target=handle_request'
+reveal 'calls://src/?callers=handle_request'
 
 # What does handle_request call? (use ast://)
 reveal 'ast://src/?callee_of=handle_request'
@@ -485,11 +530,11 @@ reveal 'ast://src/handler.py?calls=*' --format=json | jq '.results[] | select(.c
 
 ```bash
 # Visual call graph for documentation
-reveal 'calls://src/?target=main&depth=3&format=dot' | \
+reveal 'calls://src/?callers=main&depth=3&format=dot' | \
   dot -Tsvg -Grankdir=TB > architecture.svg
 
 # JSON for custom visualisation
-reveal 'calls://src/?target=main&depth=5' --format=json > call_tree.json
+reveal 'calls://src/?callers=main&depth=5' --format=json > call_tree.json
 ```
 
 ### Workflow 5: Verify Refactoring
@@ -497,11 +542,11 @@ reveal 'calls://src/?target=main&depth=5' --format=json > call_tree.json
 After extracting a function, confirm the old callers now use the new name:
 
 ```bash
-# Check old name has no callers
-reveal 'calls://src/?target=old_parse_config'
+# Check old name has no callers (exit 2 "not found" once nothing defines or calls it)
+reveal 'calls://src/?callers=old_parse_config'
 
 # Check new name has callers
-reveal 'calls://src/?target=parse_config'
+reveal 'calls://src/?callers=parse_config'
 ```
 
 ### Workflow 6: Understand What a Function Does (Forward Lookup)
@@ -528,8 +573,8 @@ For within-file analysis, `ast://` provides lighter-weight call graph features w
 |---------|---------|-----------|
 | Scope | Within a single file | Across the whole project |
 | `calls` outgoing | ✅ (via JSON or text renderer) | ✅ `?callees=<name>` (forward lookup) |
-| `called_by` incoming | ✅ within-file reverse | ✅ `?target=<name>` (full project) |
-| Filters | `calls=<name>`, `callee_of=<name>` | `target=<name>`, `callees=<name>` |
+| `called_by` incoming | ✅ within-file reverse | ✅ `?callers=<name>` (full project) |
+| Filters | `calls=<name>`, `callee_of=<name>` | `callers=<name>`, `callees=<name>` |
 | Display mode | `show=calls` (arrow diagram) | text / json / dot |
 | Cross-file resolution | `resolved_calls[]` in JSON | full index |
 | Cache | No (per-request) | Yes (mtime-based) |
@@ -602,8 +647,8 @@ separate limits.
 **Scope is per-directory.** The index is built from `path` downward. Callers above the given path are not visible:
 
 ```bash
-reveal 'calls://src/?target=fn'   # won't see callers in tests/ above src/
-reveal 'calls://.?target=fn'       # use project root for full coverage
+reveal 'calls://src/?callers=fn'   # won't see callers in tests/ above src/
+reveal 'calls://.?callers=fn'       # use project root for full coverage
 ```
 
 **Top-level callers:** Python, JS/TS, PHP and Ruby source files include a synthetic
@@ -633,7 +678,7 @@ trigger() {
 }
 ```
 
-`reveal 'calls://.?target=doResolve'` lists both `fn` and `trigger` as callers, since executing `trigger()` does transitively execute that call. This is intentional depth, not a bug — it doesn't cause false negatives — but it means callers counts for functions called from inline closures will be higher than a naive "innermost scope only" model expects. Plain anonymous/inline arrows (callback arguments, object-literal property values) don't get their own element at all and are attributed only to the nearest enclosing named scope, same as a Python `lambda`.
+`reveal 'calls://.?callers=doResolve'` lists both `fn` and `trigger` as callers, since executing `trigger()` does transitively execute that call. This is intentional depth, not a bug — it doesn't cause false negatives — but it means callers counts for functions called from inline closures will be higher than a naive "innermost scope only" model expects. Plain anonymous/inline arrows (callback arguments, object-literal property values) don't get their own element at all and are attributed only to the nearest enclosing named scope, same as a Python `lambda`.
 
 ### False Positives in `?uncalled`
 
@@ -677,22 +722,22 @@ For very large codebases (100K+ lines), point at a subdirectory:
 
 ```bash
 # Faster — only indexes auth/ module
-reveal 'calls://src/auth/?target=validate_token'
+reveal 'calls://src/auth/?callers=validate_token'
 
 # Full project — slower first run, cached after
-reveal 'calls://src/?target=validate_token'
+reveal 'calls://src/?callers=validate_token'
 ```
 
 ---
 
 ## FAQ
 
-**Q: What if `target` is a common name used in many places?**
+**Q: What if the `callers` name is common and used in many places?**
 
 A: The index returns all files that call it. Use JSON output and filter by file if needed:
 
 ```bash
-reveal 'calls://src/?target=process' --format=json | \
+reveal 'calls://src/?callers=process' --format=json | \
   jq '.levels[0].callers[] | select(.file | contains("auth"))'
 ```
 
@@ -701,7 +746,7 @@ reveal 'calls://src/?target=process' --format=json | \
 A: Yes. The index normalises `self.foo` → `foo` for lookup. Pass the bare method name:
 
 ```bash
-reveal 'calls://src/?target=validate'   # matches self.validate(), obj.validate(), validate()
+reveal 'calls://src/?callers=validate'   # matches self.validate(), obj.validate(), validate()
 ```
 
 The `call_expr` field in results preserves the original form (`self.validate_item`).
@@ -710,7 +755,7 @@ The `call_expr` field in results preserves the original form (`self.validate_ite
 
 A: A few possibilities:
 - The function is never called (genuine dead code)
-- It's called only from outside the indexed path — try `calls://.?target=fn`
+- It's called only from outside the indexed path — try `calls://.?callers=fn`
 - It's called via dynamic dispatch (not statically resolvable)
 - The caller is in a file type not indexed (e.g., `.yaml` or `.sh`)
 
@@ -735,10 +780,10 @@ A: Use `?builtins=true` on a `?callees=` query to include builtins in the output
 reveal 'calls://src/?callees=process_input&builtins=true' | grep 'eval'
 
 # Or scan callers of eval directly (reverse lookup — always includes builtins)
-reveal 'calls://src/?target=eval'
+reveal 'calls://src/?callers=eval'
 ```
 
-The `?target=` direction (reverse lookup) always returns results regardless of `?builtins` — builtins filtering only applies to the forward `?callees=` direction.
+The `?callers=` direction (reverse lookup) always returns results regardless of `?builtins` — builtins filtering only applies to the forward `?callees=` direction.
 
 **Q: Is `calls://` the same as a full call graph tool like pycallgraph or pyCallGraph?**
 

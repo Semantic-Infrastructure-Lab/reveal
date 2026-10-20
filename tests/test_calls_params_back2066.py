@@ -274,7 +274,8 @@ def test_unmeasured_language_gets_null_confidence_and_is_named(project, with_pyt
         (root / 'p.py').write_text('def run():\n    return 1\n', encoding='utf-8')
     result, answer = jrun('calls://proj/ex?callees=run')
     assert result.returncode == 0, result.stderr
-    assert answer['meta']['confidence'] is None
+    # The envelope omits a None confidence (ResultBuilder.create_meta), as for known loss.
+    assert 'confidence' not in answer['meta']
     declines = [w for w in answer['meta']['warnings'] if w.get('code') == 'W-CALLS-10']
     assert len(declines) == 1 and declines[0]['languages'] == ['elixir']
     assert 'elixir' in declines[0]['message']
@@ -328,12 +329,18 @@ def test_absent_name_with_lost_evidence_exits_three(project, monkeypatch):
         assert 'error' not in answer
 
 
-def test_mcp_absent_name_is_a_tool_error_and_a_present_one_answers(project):
+def test_mcp_absent_name_keeps_its_empty_answer_and_a_present_one_answers(project):
+    # reveal_query returned the empty answer for an absent name before exit 2 existed; the same
+    # compatibility trace's absence has keeps it (mcp_server._trace_absence_compatibility).
     pytest.importorskip('mcp')
     from reveal.mcp_server import _ToolFailure, reveal_query
     absent = reveal_query(f'calls://{project.as_posix()}?callees=nothere')
-    assert isinstance(absent, _ToolFailure)
-    assert "Function 'nothere' not found" in str(absent)
+    assert not isinstance(absent, _ToolFailure)
+    assert "No definition of 'nothere' found" in absent
+    as_json = json.loads(reveal_query(f'calls://{project.as_posix()}?callers=nothere', provenance=True))
+    assert as_json['error'] == f"Function 'nothere' not found in {project.as_posix()}"
+    usage = reveal_query(f'calls://{project.as_posix()}?callers=helper&detail')
+    assert isinstance(usage, _ToolFailure) and 'detail applies to callees only' in str(usage)
     present = reveal_query(f'calls://{project.as_posix()}?callers=helper')
     assert not isinstance(present, _ToolFailure)
     assert 'Callers of: helper' in present

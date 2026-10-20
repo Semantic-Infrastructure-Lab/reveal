@@ -145,7 +145,10 @@ def _enrich_recipe_tree(root):
         'def error_handler(x):\n    return x\n'
         f'def query_complex(x):\n{branches}    return -1\n'
         f'def large_function(x):\n{padding}    return x\n'
-        'def external_boundary():\n    return requests.get("https://example.invalid")\n',
+        'def external_boundary():\n    return requests.get("https://example.invalid")\n'
+        # calls:// examples name validate_item: an absent name exits 2 (BACK-2066, decision d).
+        'def validate_item(x):\n    return auth_gate(x)\n'
+        'def post_item(x):\n    return validate_item(x)\n',
         encoding='utf-8')
     (root / 'proj' / 'cycle_a.py').write_text('import cycle_b\n', encoding='utf-8')
     (root / 'proj' / 'cycle_b.py').write_text('import cycle_a\n', encoding='utf-8')

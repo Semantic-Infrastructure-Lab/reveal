@@ -58,6 +58,48 @@ _UNCALLED_DERIVED_SIGNAL_WARNING = {
 }
 
 
+# The languages a per-language recall snapshot measures (calls-recall-oracle, 19 pairs:
+# javascript has two corpora; tsx is scored inside the typescript corpus, whose 307 files
+# are .ts/.tsx). Every other language declines: the answer's confidence is null while one
+# of its files is in scope, and the language is named (decision i, BACK-2066).
+SNAPSHOT_LANGUAGES = frozenset({
+    'python', 'typescript', 'tsx', 'javascript', 'go', 'rust', 'java', 'ruby', 'php', 'csharp',
+    'kotlin', 'swift', 'cpp', 'c', 'scala', 'zig', 'lua', 'gdscript', 'dart'})
+
+# Callee walks beyond depth 1 and --detail: no oracle scores them in any language (decision f).
+_UNMEASURED_WALK_WARNING = {
+    'code': 'W-CALLS-9', 'type': 'not_measured',
+    'message': ('Callee walks beyond depth 1 and --detail params/effects are not measured in any language: '
+                'the callees snapshot scores depth-1 call lists only.'),
+}
+
+
+def _unmeasured_language_warning(per_language: Dict[str, int]) -> Optional[Dict[str, Any]]:
+    """W-CALLS-10, naming each scanned language with no recall snapshot, or None."""
+    unmeasured = sorted(lang for lang in per_language if lang not in SNAPSHOT_LANGUAGES)
+    if not unmeasured:
+        return None
+    named = ', '.join(f"{lang} ({per_language[lang]} file{'s' if per_language[lang] != 1 else ''})"
+                      for lang in unmeasured)
+    return {'code': 'W-CALLS-10', 'type': 'not_measured', 'languages': unmeasured,
+            'message': (f'Confidence withheld: {named} in scope with no recall snapshot; '
+                        'no measured number covers their call edges.')}
+
+
+def _declines(per_language: Dict[str, int], unmeasured_walk: bool) -> List[Dict[str, Any]]:
+    """W-CALLS-9 for an unmeasured walk, W-CALLS-10 for unmeasured languages (rule 8)."""
+    declines = [dict(_UNMEASURED_WALK_WARNING)] if unmeasured_walk else []
+    unmeasured = _unmeasured_language_warning(per_language)
+    return declines + ([unmeasured] if unmeasured else [])
+
+
+def _reported_confidence(confidence: float, known_loss: bool, declines: List[Dict[str, Any]]) -> Optional[float]:
+    """No number while evidence was lost or a scanned language has no recall snapshot."""
+    if known_loss or any(w['code'] == 'W-CALLS-10' for w in declines):
+        return None
+    return confidence
+
+
 def language_census(path: str, *,
                     on_error: Optional[Callable[[OSError], None]] = None,
                     on_hidden: Optional[OnHidden] = None) -> Dict[str, int]:
@@ -75,7 +117,7 @@ def language_census(path: str, *,
         return {}
 
 
-def build_meta(path: str, *, uncalled: bool = False,
+def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = False,
                skipped: Sequence[Tuple[str, str]] = (),
                traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> Dict[str, Any]:
     """Per-request calls:// meta kwargs (BACK-1198).
@@ -86,7 +128,9 @@ def build_meta(path: str, *, uncalled: bool = False,
     actually measured (``defaults.CALL_GRAPH_EXTRACTION_CONFIDENCE``), and
     swaps the generic "dynamic dispatch... getattr..." warning (Python
     vocabulary, printed unconditionally on every language) for the dominant
-    language's own dispatch idioms.
+    language's own dispatch idioms. A scanned language outside SNAPSHOT_LANGUAGES
+    makes the confidence null and is named (W-CALLS-10); *unmeasured_walk* adds the
+    W-CALLS-9 decline for a callee walk beyond depth 1 or --detail.
     """
     census_failures: List[Tuple[Optional[str], str]] = []
 
@@ -130,6 +174,8 @@ def build_meta(path: str, *, uncalled: bool = False,
         warnings.append({'code': 'W-CALLS-8', 'message': (
             'JSX component uses are typed jsx_reference relationships; runtime render scheduling is unresolved. '
             'Class-field initializer navigation, string/HTML/Angular templates and Vue/Svelte component relationships are outside this scope.')})
+    declines = _declines(per_language, unmeasured_walk)
+    warnings.extend(declines)
     known_loss = bool(skipped or directory_failures)
     if uncalled:
         heuristic = _UNCALLED_DERIVED_SIGNAL_WARNING
@@ -170,6 +216,6 @@ def build_meta(path: str, *, uncalled: bool = False,
 
     return {
         'parse_mode': 'tree_sitter_partial' if known_loss else 'tree_sitter_full',
-        'confidence': None if known_loss else confidence,
+        'confidence': _reported_confidence(confidence, known_loss, declines),
         'warnings': warnings,
     }

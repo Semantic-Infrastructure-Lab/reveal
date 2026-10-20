@@ -24,13 +24,15 @@ def pkg(tmp_path):
     return tmp_path
 
 
-def test_calls_depth_on_callees_warns(pkg, capsys):
-    CallsAdapter(str(pkg), 'callees=top&depth=3').get_structure()
+def test_calls_depth_on_rank_warns(pkg, capsys):
+    # ?callees takes depth since BACK-2066 (a level-by-level walk); rank still ignores it.
+    CallsAdapter(str(pkg), 'rank=callers&depth=3').get_structure()
     err = capsys.readouterr().err
-    assert "'depth'" in err and '?root=<name>&depth=N' in err
+    assert "'depth'" in err and 'applies to ?callers, ?callees and ?root only' in err
 
 
-@pytest.mark.parametrize('query', ['target=leaf&depth=2', 'root=top&depth=2', 'callees=top'])
+@pytest.mark.parametrize('query', ['target=leaf&depth=2', 'root=top&depth=2', 'callees=top',
+                                   'callees=top&depth=3'])
 def test_calls_depth_where_it_applies_is_silent(pkg, capsys, query):
     CallsAdapter(str(pkg), query).get_structure()
     assert "'depth'" not in capsys.readouterr().err

@@ -2,12 +2,14 @@
 
 import os
 import sys
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set, Tuple
 
 from reveal.utils import print_json_result
 from reveal.utils.warning_render import meta_warning_lines
 
 _REQUIRED_LOSS_TYPES = frozenset({'analysis_failed', 'analysis_incomplete'})
+# Printed above every view: what the answer lost, and what no measurement covers (W-CALLS-9/10).
+_ALWAYS_SHOWN = _REQUIRED_LOSS_TYPES | {'not_measured'}
 
 
 def render_calls_structure(data: Dict[str, Any], output_format: str) -> None:
@@ -21,9 +23,10 @@ def render_calls_structure(data: Dict[str, Any], output_format: str) -> None:
         print_json_result(data)
         return
 
-    required = [w for w in data.get('meta', {}).get('warnings', [])
-                if w.get('type') in _REQUIRED_LOSS_TYPES]
-    for line in meta_warning_lines({'meta': {'warnings': required}}):
+    if data.get('query') == 'callees' and 'levels' in data:
+        _render_callee_walk(data, output_format)
+        return
+    for line in meta_warning_lines({'meta': {'warnings': _leading_warnings(data)}}):
         print(line, file=sys.stderr if output_format == 'dot' else sys.stdout)
 
     if data.get('query') == 'callees_recursive':
@@ -59,6 +62,25 @@ def render_calls_structure(data: Dict[str, Any], output_format: str) -> None:
     _render_text(data)
 
 
+def _render_callee_walk(data: Dict[str, Any], output_format: str) -> None:
+    """?callees=X&depth=N (or &detail): the tree prints every warning under its rule; dot puts them
+    on stderr, as every dot view does."""
+    if output_format != 'dot':
+        _render_callee_walk_text(data)
+        return
+    for line in meta_warning_lines({'meta': {'warnings': data.get('meta', {}).get('warnings', [])}}):
+        print(line, file=sys.stderr)
+    _render_callees_recursive_dot(data)
+
+
+def _leading_warnings(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The warnings printed above a view: what the answer lost and what no measurement covers, plus
+    scope_hidden for the per-definition callees view, which prints no caveat of its own (BACK-2065)."""
+    warnings: List[Dict[str, Any]] = data.get('meta', {}).get('warnings', [])
+    shown_types = _ALWAYS_SHOWN | ({'scope_hidden'} if data.get('query') == 'callees' else frozenset())
+    return [w for w in warnings if w.get('type') in shown_types]
+
+
 def _render_text(data: Dict[str, Any]) -> None:
     if 'error' in data and 'target' not in data:  # the router reports the error (BACK-1059)
         if 'example' in data:
@@ -85,7 +107,7 @@ def _render_text(data: Dict[str, Any]) -> None:
         print()
         # BACK-1198: language-aware dispatch caveat, computed per-request.
         for w in data.get('meta', {}).get('warnings', []):
-            if w.get('type') not in _REQUIRED_LOSS_TYPES:
+            if w.get('type') not in _ALWAYS_SHOWN:
                 print(f"⚠ {w['message']}")
         return
 
@@ -156,6 +178,78 @@ def _render_callees_text(data: Dict[str, Any]) -> None:
         print()
 
 
+def _render_callee_walk_text(data: Dict[str, Any]) -> None:
+    """?callees=X&depth=N (or &detail): a depth-indented tree from each definition of X, its rule, and
+    every warning the answer carries."""
+    from reveal.analyzers.imports.service import edge_rule_lines
+    target = data.get('target', '?')
+    definitions = data.get('definitions', [])
+    roots = [d for d in definitions if d['level'] == 0]
+    print(f"Callees of: {target}  (depth {data.get('depth', 1)})")
+    print(f"Project:    {data.get('path', '.')}")
+    print(f"Total:      {data.get('total_edges', 0)} call edges: {data.get('total_resolved', 0)} resolved "
+          f"({data.get('total_ambiguous', 0)} ambiguous), {data.get('total_unresolved', 0)} external/unresolved, "
+          f"from {len(roots)} definition(s)")
+    if data.get('_builtins_hidden'):
+        print(f"            ({data['_builtins_hidden']} builtin(s) hidden at level 1 — use ?builtins=true to include)")
+    for line in edge_rule_lines({'edge_rule': data.get('walk_rule')}):  # the one Rule: renderer
+        print(line)
+    for line in meta_warning_lines({'meta': {'warnings': data.get('meta', {}).get('warnings', [])}}):
+        print(line)
+    print()
+    if not roots:
+        print(f"  No definition of '{target}' found.")
+        return
+    edges: Dict[Any, List[Dict[str, Any]]] = {}
+    for level in data.get('levels', []):
+        for edge in level['callees']:
+            edges.setdefault((edge['caller_file'], edge['caller_line']), []).append(edge)
+    tree = _WalkTree(edges, {(d['file'], d['line']): d for d in definitions})
+    for root in roots:
+        for line in tree.lines(root, '  ', ''):
+            print(line)
+        print()
+
+
+class _WalkTree:
+    """Pre-order lines of the callee walk: an edge whose target is expanded elsewhere says where."""
+
+    def __init__(self, edges: Dict[Any, List[Dict[str, Any]]], definitions: Dict[Any, Dict[str, Any]]):
+        self.edges, self.definitions = edges, definitions
+        self.printed: Set[Tuple[Any, Any]] = set()
+
+    def lines(self, node: Dict[str, Any], pad: str, label: str) -> List[str]:
+        key = (node['file'], node['line'])
+        self.printed.add(key)
+        out = [f"{pad}{label or node['name']}  {node['file']}:{node['line']}"]
+        if 'params' in node:
+            out.append(f"{pad}    params: {', '.join(node['params']) or '(none)'}")
+            out.append(f"{pad}    effects: {', '.join(node['effects']) or '(none)'}")
+        children = self.edges.get(key, [])
+        if node['expanded'] and not children:
+            out.append(f"{pad}  (no calls detected)")
+        for edge in children:
+            out.extend(self._edge_lines(edge, pad + '  '))
+        return out
+
+    def _edge_lines(self, edge: Dict[str, Any], pad: str) -> List[str]:
+        label = '→ ' + edge['callee'] + {'jsx_reference': ' (JSX reference)', 'call_and_jsx_reference':
+                                          ' (includes JSX reference)'}.get(edge.get('relationship', ''), '')
+        if edge.get('ambiguous'):
+            where = ', '.join(f"{os.path.basename(c['file'])}:{c['line']}" for c in edge['candidates'][:5])
+            return [f"{pad}{label}  [ambiguous: {len(edge['candidates'])} definitions -- {where}]"]
+        if not edge['resolved']:
+            return [f"{pad}{label}  [external]"]
+        key = (edge['callee_file'], edge['callee_line'])
+        target = self.definitions.get(key)
+        if edge.get('expanded') and target is not None:
+            return self.lines(target, pad, label)
+        mark = ''
+        if target is not None and target['expanded']:
+            mark = '  (expanded above)' if key in self.printed else '  (expanded below)'
+        return [f"{pad}{label}  {edge['callee_file']}:{edge['callee_line']}{mark}"]
+
+
 def _render_ranking_text(data: Dict[str, Any]) -> None:
     """Render rank=callers output — most-called functions sorted by in-degree."""
     path = data.get('path', '.')
@@ -213,7 +307,7 @@ def _render_uncalled_text(data: Dict[str, Any]) -> None:
     # this rendered ~2,235 lines below the count on a large uncalled list,
     # past where anyone reading the header would see it.
     for w in warnings:
-        if w.get('type') not in _REQUIRED_LOSS_TYPES:
+        if w.get('type') not in _ALWAYS_SHOWN:
             print(f"⚠ {w['message']}")
     print()
 
@@ -274,7 +368,7 @@ def _render_callees_recursive_text(data: Dict[str, Any]) -> None:
 
 
 def _render_callees_recursive_dot(data: Dict[str, Any]) -> None:
-    root = data.get('root', '?')
+    root = data.get('root', data.get('target', '?'))  # ?root, or the ?callees walk
     levels = data.get('levels', [])
 
     print("digraph calls {")

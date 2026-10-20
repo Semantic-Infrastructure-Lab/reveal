@@ -247,9 +247,11 @@ def _raise_if_tool_failure(result: str, tool_name: str) -> str:
 
 
 def _trace_absence_compatibility(answer) -> bool:
-    """Only owner-qualified trace absence retains the historical MCP nonerror."""
+    """Only owner-qualified trace absence retains the historical MCP nonerror; so does a calls
+    name answer's (exit 2 on the CLI, BACK-2066), which reveal_query returned as an empty answer."""
     from .utils.results import AnalysisCompleteness, FailureCause
-    return (answer.result.get('type') == 'trace' and answer.public_diagnostic is not None
+    return (answer.result.get('type') in ('trace', 'calls_query', 'calls_callees')
+            and answer.public_diagnostic is not None
             and answer.execution_facts.completeness is AnalysisCompleteness.COMPLETE
             and answer.execution_facts.failures == frozenset({FailureCause.INVALID_REQUEST}))
 

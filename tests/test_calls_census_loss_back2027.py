@@ -98,7 +98,10 @@ def test_actual_unknown_census_event_is_loss_even_without_named_directory(tmp_pa
     clean = CallsAdapter(str(root), 'target=leaf').get_structure()
     fault(monkeypatch, {root}, unknown=True)
     result = CallsAdapter(str(root), 'target=leaf').get_structure()
-    assert observations(result) == observations(clean)
+    # Complete and empty, the clean answer says nothing defines or calls leaf (BACK-2066,
+    # decision d); with a census event lost the absence is not claimed.
+    assert ('error' in clean) is empty and 'error' not in result
+    assert observations(result) == {k: v for k, v in observations(clean).items() if k != 'error'}
     entry = directory_warning(result)
     assert entry['count'] == 0 and entry['unknown_directory_events'] == 1
     assert 'confidence' not in result['meta']

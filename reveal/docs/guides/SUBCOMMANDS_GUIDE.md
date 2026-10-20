@@ -406,14 +406,14 @@ With `--content`: also includes `content` — a list of `{file, changed, content
 
 The `calls://` adapter as a subcommand: the flags are generated from the same parameter
 declarations as the URI's query keys, and both spellings run through one execution path, so
-`reveal calls src --target helper` and `reveal 'calls://src?target=helper'` print the same answer
-(JSON equal, same exit code).
+`reveal calls src --callers helper` and `reveal 'calls://src?callers=helper'` print the same answer
+(JSON equal, same exit code). `--target`/`?target=` is the older name of `--callers`/`?callers=`.
 
 ### Usage
 
 ```
-reveal calls [PATH] --target NAME [--depth N]
-reveal calls [PATH] --callees NAME [--builtins]
+reveal calls [PATH] --callers NAME [--depth N]
+reveal calls [PATH] --callees NAME|FILE:NAME [--depth N] [--detail] [--builtins]
 reveal calls [PATH] --root NAME [--depth N] [--builtins]
 reveal calls [PATH] --rank callers [--top N] [--builtins] [--test-framework]
 reveal calls [PATH] --uncalled [--type function|method] [--top N] [--test-framework]
@@ -424,29 +424,37 @@ reveal calls [PATH] --modules [--external]
 
 | Flag | URI key | Description |
 |------|---------|-------------|
-| `--target NAME` | `target` | Who calls NAME (reverse lookup). `PATH:NAME` as the path is shorthand when no other mode is given |
-| `--callees NAME` | `callees` | What every definition of NAME calls (builtins hidden) |
+| `--callers NAME` | `callers` | Who calls NAME (reverse lookup); a bare NAME (`FILE:NAME` exits 2). `PATH:NAME` as the path is shorthand when no other mode is given |
+| `--target NAME` | `target` | The older name of `--callers`: the same mode and answer |
+| `--callees NAME` | `callees` | What every definition of NAME (or `FILE:NAME`, one file's) calls (builtins hidden); with `--depth 2-5` a level-by-level walk, each definition expanded once at its shallowest level |
+| `--detail` | `detail` | With `--callees`: params and effects of every definition reached; any other mode exits 2 |
 | `--root NAME` | `root` | Level-by-level callee walk from NAME (or `FILE:NAME`), the walk `trace` uses |
-| `--depth N` | `depth` | Signed whole integer, clamped 1–5: callers levels for `--target` (default 1), walk levels for `--root` (default 2); other modes ignore it with a warning |
+| `--depth N` | `depth` | Signed whole integer, clamped 1–5: callers levels (default 1), callee walk levels for `--callees` (default 1) and `--root` (default 2); other modes ignore it with a warning |
 | `--rank callers` | `rank=callers` | Rank every function by caller count |
 | `--top N` | `top` | Entries for `--rank` (default 10) or `--uncalled` (default all); 0 = all; negative values reject |
 | `--uncalled` | `uncalled` | Functions/methods with no callers (dead-code candidates) |
 | `--type KIND` | `type` | With `--uncalled`: `function` (module-level only) or `method` |
 | `--modules` | `modules` | Module-level dependency graph |
 | `--external` | `external` | With `--modules`: include non-project modules |
-| `--builtins` | `builtins` | Include language builtins in callees, root and rank output |
+| `--builtins` | `builtins` | Include language builtins in callees (every depth), root and rank output |
 | `--test-framework` | `test-framework` | Count test-framework entrypoints (rank callers, uncalled candidates) |
 
 `?format=dot` (Graphviz) has no subcommand spelling; `--format` takes `text` or `json`.
 `--all`/`--limit` lift or set `top` on the URI only; the subcommand takes `--top N`.
 
-Exactly one mode per request: two modes (for example `--target a --callees b`) exit 2 and name
-both, where the URI used to answer one of them silently. A name is never coerced (`--target 123`
-looks for the name `123`), and a malformed value exits 2 naming the parameter (`--depth abc`,
-`--top -1`, `--rank often`). Exits follow the declared-noun policy: 0 complete; 2 rejected before
-analysis (bad request, no mode, missing path); 3 required analysis or output incomplete (a file or
-directory could not be read: the answer is still printed with the warning). `--fail-on` accepts
-`none` only. A function with no definition is still exit 0 here.
+Exactly one mode per request: two modes (for example `--callers a --callees b`, or `--callers a
+--target a`) exit 2 and name both, where the URI used to answer one of them silently; so does the
+`PATH:NAME` shorthand with an explicit mode. A name is never coerced (`--callers 123` looks for the
+name `123`), and a malformed value exits 2 naming the parameter (`--depth abc`, `--top -1`,
+`--rank often`, `--callers a.py:f`, `--detail` without `--callees`). Exits follow the declared-noun
+policy: 0 complete; 2 rejected before analysis (bad request, no mode, missing path), or a name that
+names nothing in PATH (`--callees`: no definition; `--callers`: no definition and no call site; the
+empty answer is still printed); 3 required analysis or output incomplete (a file or directory could
+not be read: the answer is still printed with the warning). `--fail-on` accepts `none` only.
+
+A callee walk beyond depth 1 and `--detail` are not measured in any language: the answer carries
+W-CALLS-9 and its `walk_rule` (a `Rule:` line in text) says `beyond_depth_1: false, detail: false`.
+A language with no recall snapshot in PATH withholds the confidence and is named (W-CALLS-10).
 
 A directory named `calls` in the current directory is shadowed by the verb: `reveal calls`
 prints `note: ./calls/ exists — use ./calls or calls/ to target it`; `reveal calls/` is the path.
@@ -454,9 +462,10 @@ prints `note: ./calls/ exists — use ./calls or calls/ to target it`; `reveal c
 ### Examples
 
 ```bash
-reveal calls src --target validate_item            # who calls validate_item?
-reveal calls src --target process --depth 2        # callers of callers
+reveal calls src --callers validate_item           # who calls validate_item?
+reveal calls src --callers process --depth 2       # callers of callers
 reveal calls src --callees validate_item           # what it calls
+reveal calls src --callees main --depth 3 --detail # what that calls, 3 levels, params/effects
 reveal calls src --root main --depth 3             # callee walk, 3 levels
 reveal calls src --rank callers --top 20           # most-called functions
 reveal calls src --uncalled --type function        # dead-code candidates

@@ -50,7 +50,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | Read one function or class | `reveal src/app.py load_config` (also `Class.method`, `:120-160`) |
 | Riskiest code | `reveal 'hotspots://src/?functions_only=true&top=10'` |
 | Query functions by complexity/size/type | `reveal 'ast://src/?type=function&complexity>10&sort=-complexity&limit=10'` |
-| Who calls a function | `reveal 'calls://src/?target=my_fn'` |
+| Who calls a function | `reveal 'calls://src/?callers=my_fn'` |
 | What a function calls, level by level | `reveal 'trace://src/?from=my_fn&depth=2'` |
 | Dead code | `reveal 'calls://src/?uncalled'` |
 | A function's inputs, side effects, exits | `reveal src/app.py my_fn --boundary` (or `--sideeffects`, `--exits`) |
@@ -245,7 +245,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal contracts [path]` | Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal contracts --help` |
 | `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal surface --help` |
 | `reveal testability [path]` | Test patch pressure joined with production boundary fan-out *(Python and TS/JS test suites)* | `reveal testability --help` |
-| `reveal calls --target FUNC` | Call graph: callers, callees, callee walk (--root), --rank callers, --uncalled, --modules | `reveal calls --help` |
+| `reveal calls --callers FUNC` | Call graph: callers, callees (--depth N, --detail), callee walk (--root), --rank callers, --uncalled, --modules | `reveal calls --help` |
 | `reveal trace --from FUNC` | Walk call graph from a named entry point; depth-indented narrative with side-effect classification | `reveal trace --help` |
 | `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
 | `reveal review <path>` | Assess quality + structural changes before a PR merge | `reveal review --help` |
@@ -1337,17 +1337,20 @@ inspect their warnings and confirm important edges in source.
 
 **Pattern:**
 ```bash
-# Cross-file: who calls a function across the entire project? (reverse)
-reveal 'calls://src/?target=validate_item'
+# Cross-file: who calls a function across the entire project? (reverse; ?target= is the older name)
+reveal 'calls://src/?callers=validate_item'
 
 # Cross-file: what does a function call? (forward, builtins hidden by default)
 reveal 'calls://src/?callees=validate_item'
+
+# ... and what those call, level by level, with params and effects (not measured: W-CALLS-9)
+reveal 'calls://src/?callees=validate_item&depth=2&detail'
 
 # Include Python builtins — useful to audit for eval/open/exec
 reveal 'calls://src/?callees=validate_item&builtins=true'
 
 # Transitive: callers-of-callers (2 levels)
-reveal 'calls://src/?target=validate_item&depth=2'
+reveal 'calls://src/?callers=validate_item&depth=2'
 
 # Within-file: find all functions that call validate_item
 reveal 'ast://src/auth.py?calls=validate_item'
@@ -1359,7 +1362,7 @@ reveal 'ast://src/?callee_of=process_batch'
 reveal 'ast://src/?show=calls'
 
 # Graphviz: pipe to dot for SVG
-reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > callgraph.svg
+reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
 
 # Coupling metrics: rank all functions by how many unique callers they have
 reveal 'calls://src/?rank=callers'             # Top 10 most-called functions
@@ -1367,19 +1370,23 @@ reveal 'calls://src/?rank=callers&top=20'      # Top 20
 reveal 'calls://src/?rank=callers&builtins=true'  # Include Python builtins
 
 # The same queries as a subcommand: one flag per query key, equal JSON
-reveal calls src/ --target validate_item --depth 2
+reveal calls src/ --callers validate_item --depth 2
 reveal calls src/ --rank callers --top 20
 ```
 
-One mode per request (`target`, `callees`, `root`, `rank`, `uncalled`, `modules`): two exit 2 and
-name both, and a malformed value (`depth=abc`, `top=-1`) exits 2 naming the parameter. Exit 3 means
-a file or directory could not be read; the answer still prints with its warning.
+One mode per request (`callers` or `target`, `callees`, `root`, `rank`, `uncalled`, `modules`): two
+exit 2 and name both, and a malformed value (`depth=abc`, `top=-1`, `callers=a.py:f`, `detail`
+without `callees`) exits 2 naming the parameter. A name that names nothing (callees: no definition;
+callers: no definition and no call site) exits 2 with the empty answer. Exit 3 means a file or
+directory could not be read; the answer still prints with its warning. A callee walk beyond depth 1
+and `detail` are not measured in any language (W-CALLS-9; the `walk_rule` and its `Rule:` line say
+so), and a scanned language with no recall snapshot withholds the confidence (W-CALLS-10).
 
 **Two adapters — different scopes:**
 
 | Adapter | Scope | Use For |
 |---------|-------|---------|
-| `calls://src/?target=fn` | Cross-file, whole project | "Who calls fn anywhere?" (reverse) |
+| `calls://src/?callers=fn` | Cross-file, whole project | "Who calls fn anywhere?" (reverse) |
 | `calls://src/?callees=fn` | Cross-file, whole project | "What does fn call?" (forward, builtins hidden; add `&builtins=true` to include) |
 | `calls://src/?rank=callers` | Cross-file, whole project | "Which functions are called most?" (coupling metrics) |
 | `ast://src/?calls=fn` | Within-file only | "Does this file call fn?" |
@@ -1517,7 +1524,7 @@ reveal 'depends://src?format=dot' | dot -Tsvg > deps.svg
 | `imports://src?components` | Which directories are real components? | Per-directory |
 | `depends://src/module.py` | What exactly imports this file? | Per-file reverse |
 | `imports://src` | What does each file import? | Forward, all files |
-| `calls://src/?target=fn` | Who calls this function? | Function level |
+| `calls://src/?callers=fn` | Who calls this function? | Function level |
 
 Use the three `imports://` views for orientation; `depends://` for targeted impact analysis before a specific change.
 
