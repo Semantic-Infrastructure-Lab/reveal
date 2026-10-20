@@ -333,6 +333,8 @@ reveal depends://src/auth.py
 
 **TYPE_CHECKING imports excluded**: Imports under `if TYPE_CHECKING:` are intentionally excluded. These are type-hint-only and don't create runtime dependencies.
 
+**Function-level imports counted**: an `import` inside a function body is an importer like any other (the gate's oracles count it too). Every answer prints its rule (`Rule: ...` in text, `edge_rule` in JSON). `depends://` takes no `&lazy`; for the load-time (architecture) view use `imports://<dir>?rank=fan-in&lazy=exclude`. Only Python records where an import sits, so the rule names the other languages it could not classify.
+
 **Name-based resolution**: Imports are resolved to file paths. If two files export the same name, resolution may be ambiguous. Relative imports are resolved correctly; absolute imports use project root detection.
 
 **Language support**: Same as `imports://`. Run `reveal depends://src --format=json | jq '.metadata'` to see the scan result. Language support is determined by available import extractors — Python is fully supported; support for other languages depends on extractor availability.

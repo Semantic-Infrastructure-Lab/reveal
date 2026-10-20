@@ -15,7 +15,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 
 | Adapter | Query Params | Example |
 |---------|--------------|---------|
-| **imports://** | `unused`, `circular`, `circular&verbose`, `violations` | `imports://.?unused` |
+| **imports://** | `unused`, `circular`, `circular&verbose`, `violations`, `lazy` | `imports://.?unused` |
 | **git://** | `type`, `detail`, `element`, `author`, `email`, `message`, `hash`, `ref`, `sort`, `limit`, `offset` | `git://file.py?type=history` |
 | **json://** | `schema`, `flatten`, `gron`, `type`, `keys`, `length`, field filters, `sort`, `limit`, `offset` | `json://data.json?type=object` |
 | **markdown://** | field filters (frontmatter), `aggregate`, `body-contains`, `sort`, `limit`, `offset` | `markdown://docs/?status=draft` |
@@ -76,6 +76,17 @@ Every adapter that walks a directory also takes `respect_gitignore=false` (the s
   reveal 'imports://src?circular&verbose'
   ```
   Without `verbose`, circular output lists the files in each SCC. With `verbose`, shows the full edge sequence tracing one representative cycle per group.
+
+- **`lazy`** (`include`, `exclude` or `only`) - Which function-level (lazy) import edges an edge-derived answer counts
+  ```bash
+  reveal 'imports://src?rank=fan-in&lazy=exclude'   # load-time edges only: the architecture view
+  reveal 'imports://src?circular&lazy=include'      # count lazy back-edges as cycle edges too
+  ```
+  Default: `circular` (and `metadata.has_cycles`) exclude them, since a function-level import runs after
+  every module has loaded and is the usual way to break a cycle; fan-in, entrypoints, components and
+  violations include them. Every answer prints its rule (`Rule: ...`, `edge_rule` in JSON). Only Python
+  records import scope; other languages' edges count as load-time under every value, and the rule names
+  them. An unknown value is an error.
 
 **Combining Parameters**: `unused`, `circular` and `violations` are separate views --
 run one per call (with several, the first in that order wins and the others draw a

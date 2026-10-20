@@ -23,12 +23,15 @@ from ..core import disk_cache
 from ..utils.formatting import cwd_path
 from ..utils import print_json_result
 from ..analyzers.imports import ImportGraph, ImportStatement
-from ..analyzers.imports.types import ImportAnalysis, ImportExtraction
+from ..analyzers.imports.types import (
+    LAZY_EXCLUDE, LAZY_INCLUDE, LAZY_MODES, ImportAnalysis, ImportExtraction,
+)
 from ..analyzers.imports.classify import classify_import, local_package_names
 from ..conventions import family_for_path
 from ..analyzers.imports.base import build_project_namespaces
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
+from ..utils.query_parser import ParamSpec
 from ..analyzers.imports import service as import_analysis
 from ..analyzers.imports.file_index import resolution_fingerprint
 from ..registry import get_code_extensions
@@ -217,6 +220,25 @@ def autoload_regime_warning(regime: Optional[Dict[str, str]]) -> str:
     )
 
 
+def _lazy_value(value: Any) -> str:
+    if not isinstance(value, str):  # a bare `&lazy` parses as True
+        raise TypeError(value)
+    return value
+
+
+# BACK-2077: which edges an edge-derived answer counts, by the scope of the imports behind
+# each edge. No default here: every view has its own (cycles leave lazy edges out).
+_LAZY = ParamSpec(
+    'lazy', 'string',
+    'Function-level (lazy) import edges: include them, exclude them (load-time edges only: '
+    'the architecture view) or show only them. Default: ?circular and has_cycles exclude, '
+    'every other view includes. Only Python records import scope; other languages\' edges '
+    'count as load-time under every value, and the printed rule names them',
+    None, _lazy_value,
+    examples=('imports://src?rank=fan-in&lazy=exclude', 'imports://src?circular&lazy=include'),
+    choices=LAZY_MODES,
+)
+
 _SCHEMA_QUERY_PARAMS = {
     'unused': {
         'type': 'flag',
@@ -259,6 +281,22 @@ _SCHEMA_QUERY_PARAMS = {
         'description': 'Show everything instead of a summary: every file in a cycle group plus its cycle edges, all unused imports, all violations. Same as the CLI --verbose',
         'examples': ['imports://src?circular&verbose']
     },
+    'lazy': _LAZY.schema(),
+}
+
+# BACK-2077: the counting rule every edge-derived answer carries (service.edge_rule).
+_EDGE_RULE_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'lazy': {'type': 'string', 'enum': list(LAZY_MODES)},
+        'lazy_default': {'type': 'boolean'},
+        'type_checking': {'type': 'string', 'const': 'excluded'},
+        'tests': {'type': 'string', 'enum': ['included', 'importers_not_counted']},
+        'scope': {'type': 'string', 'enum': ['scanned_path', 'scan_root']},
+        'unclassified_edges': {'type': 'integer'},
+        'unclassified_languages': {'type': 'array', 'items': {'type': 'string'}},
+        'text': {'type': 'string'},
+    },
 }
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -278,9 +316,11 @@ _SCHEMA_OUTPUT_TYPES = [
                     'properties': {
                         'total_files': {'type': 'integer'},
                         'total_imports': {'type': 'integer'},
-                        'has_cycles': {'type': 'boolean'}
+                        'has_cycles': {'type': 'boolean'},
+                        'cycles_lazy': {'type': 'string', 'enum': list(LAZY_MODES)},
                     }
-                }
+                },
+                'edge_rule': _EDGE_RULE_SCHEMA,
             }
         }
     },
@@ -320,6 +360,7 @@ _SCHEMA_OUTPUT_TYPES = [
                 'source': {'type': 'string'},
                 'source_type': {'type': 'string'},
                 'count': {'type': 'integer'},
+                'edge_rule': _EDGE_RULE_SCHEMA,
                 'cycles': {
                     'type': 'array',
                     'items': {
@@ -341,6 +382,7 @@ _SCHEMA_OUTPUT_TYPES = [
                 'source': {'type': 'string'},
                 'source_type': {'type': 'string'},
                 'count': {'type': 'integer'},
+                'edge_rule': _EDGE_RULE_SCHEMA,
                 'violations': {
                     'type': 'array',
                     'items': {
@@ -366,6 +408,7 @@ _SCHEMA_OUTPUT_TYPES = [
                 'source': {'type': 'string'},
                 'source_type': {'type': 'string'},
                 'total': {'type': 'integer'},
+                'edge_rule': _EDGE_RULE_SCHEMA,
                 'entries': {
                     'type': 'array',
                     'items': {
@@ -391,6 +434,7 @@ _SCHEMA_OUTPUT_TYPES = [
                 'source': {'type': 'string'},
                 'source_type': {'type': 'string'},
                 'total': {'type': 'integer'},
+                'edge_rule': _EDGE_RULE_SCHEMA,
                 'components': {
                     'type': 'array',
                     'items': {
@@ -420,6 +464,7 @@ _SCHEMA_OUTPUT_TYPES = [
                 'source': {'type': 'string'},
                 'source_type': {'type': 'string'},
                 'total_scanned': {'type': 'integer'},
+                'edge_rule': _EDGE_RULE_SCHEMA,
                 'entries': {
                     'type': 'array',
                     'items': {
@@ -474,6 +519,16 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'description': 'Top-20 files by fan-in',
         'output_type': 'fan_in_ranking'
     },
+    {
+        'uri': 'imports://src?rank=fan-in&lazy=exclude',
+        'description': 'Fan-in over load-time (module-level) imports only: the architecture view',
+        'output_type': 'fan_in_ranking'
+    },
+    {
+        'uri': 'imports://src?circular&lazy=include',
+        'description': 'Cycles counting function-level (lazy) imports too',
+        'output_type': 'circular_dependencies'
+    },
 ]
 
 _SCHEMA_NOTES = [
@@ -483,12 +538,20 @@ _SCHEMA_NOTES = [
     'Unused import detection works with Python, JavaScript, Go, etc.',
     'False positives: imports that trigger side effects (e.g. decorator-based registration) will be flagged as unused — these are intentional and safe to ignore',
     'Fan-in ranking covers static imports only — decorator-based registration and importlib dynamic imports are not captured',
+    'Function-level (lazy) imports are edges: ?circular and metadata.has_cycles leave them out by default, every other view counts them; &lazy=include|exclude|only overrides. Each answer states its rule in edge_rule (and a Rule: line in text). Only Python records import scope; edge_rule names the languages whose edges it could not classify',
     'Two summary views sit on top of this adapter: deps:// (whole-tree dashboard) and depends:// (single-module reverse lookup) — use imports:// directly for the raw graph or a query neither of those covers',
 ]
 
 
 class ImportsRenderer:
     """Renderer for import analysis results."""
+
+    @staticmethod
+    def _render_edge_rule(result: dict) -> None:
+        """The counting rule of an edge-derived answer, as the JSON states it (BACK-2077)."""
+        rule = result.get('edge_rule')
+        if rule:
+            print(f"  {rule['text']}\n")
 
     @staticmethod
     def _render_unused_imports(result: dict, verbose: bool) -> None:
@@ -577,6 +640,7 @@ class ImportsRenderer:
         print(f"\n{'='*60}")
         print(f"Circular Dependencies: {count} cycle group{'s' if count != 1 else ''}")
         print(f"{'='*60}\n")
+        ImportsRenderer._render_edge_rule(result)
 
         if count == 0:
             ImportsRenderer._render_no_cycles(result)
@@ -616,6 +680,7 @@ class ImportsRenderer:
         else:
             print(f"Layer Violations: {count}")
         print(f"{'='*60}\n")
+        ImportsRenderer._render_edge_rule(result)
 
         if not_configured:
             print(f"  ℹ️  {note}\n")
@@ -671,6 +736,7 @@ class ImportsRenderer:
         print(f"  Total Imports: {total_imports}")
         ImportsRenderer._render_cycle_summary(result, display_path)
         print()
+        ImportsRenderer._render_edge_rule(result)
 
         # Honesty note: recognized code files whose language has no import
         # extractor were scanned but contribute nothing — say so instead of
@@ -730,6 +796,7 @@ class ImportsRenderer:
         print(f"\nFan-in ranking: {source}")
         print(f"Files: {len(entries)} of {total}  (fan-in = number of files that import this file)")
         print()
+        ImportsRenderer._render_edge_rule(result)
 
         if not entries:
             print("  No import data found.")
@@ -763,6 +830,7 @@ class ImportsRenderer:
         print(f"\nEntry points: {source}")
         print(f"Files: {len(entries)} of {total_scanned}  (fan-in=0: nothing imports these — entry points or dead code)")
         print()
+        ImportsRenderer._render_edge_rule(result)
 
         if not entries:
             if _discovery_incomplete(result):
@@ -798,6 +866,7 @@ class ImportsRenderer:
         print(f"\nComponent analysis: {source}")
         print(f"Components: {len(components)}  (cohesion = internal imports ÷ outgoing imports from component)")
         print()
+        ImportsRenderer._render_edge_rule(result)
 
         if not components:
             print("  No components found.")
@@ -1051,6 +1120,8 @@ class ImportsAdapter(ResourceAdapter):
             if key == 'rank' and value not in _SCHEMA_QUERY_PARAMS['rank']['values']:
                 choices = ', '.join(_SCHEMA_QUERY_PARAMS['rank']['values'])
                 raise ValueError(f'rank must be one of: {choices}; got {value!r}')
+            if key == _LAZY.name:
+                _LAZY.validate(value)
         self._local_names_cache: Optional[frozenset] = None  # BACK-1190, lazy
         self._project_namespaces_cache: Optional[set] = None  # BACK-1234, lazy
         # A walk that hid every candidate says so (BACK-2065); set by _build_graph.
@@ -1153,7 +1224,9 @@ class ImportsAdapter(ResourceAdapter):
             # total_files == 0 despite being fully, correctly analyzed; the
             # text renderer needs this count to tell "clean" from "unchecked."
             'scanned_files': len(self.analysis.scanned_files),
-            'has_cycles': len(self.analysis.graph.find_cycle_groups()) > 0,
+            # Cycles leave function-level imports out unless &lazy says otherwise (BACK-2077).
+            'has_cycles': len(self._edges(LAZY_EXCLUDE).find_cycle_groups()) > 0,
+            'cycles_lazy': self._lazy_mode(LAZY_EXCLUDE)[0],
             'analyzer': 'imports',
             # Recognized code files whose language has no import extractor yet.
             'unsupported_extensions': dict(sorted(self.analysis.unsupported_extensions.items())),
@@ -1464,6 +1537,27 @@ class ImportsAdapter(ResourceAdapter):
                             hint='the first 50 by path; files_failed_count is exact')
         return response
 
+    def _lazy_mode(self, default: str) -> Tuple[str, bool]:
+        """The &lazy value this view applies, and whether it is the view's ``default``."""
+        raw = self._query_params.get(_LAZY.name)  # a read: the view applies it
+        return (default, True) if raw is None else (_LAZY.validate(raw), False)
+
+    def _graph(self) -> ImportGraph:
+        if self.analysis.graph is None:
+            raise ValueError('Import analysis requires a built graph before presentation')
+        return self.analysis.graph
+
+    def _edges(self, default: str) -> ImportGraph:
+        """The graph view an edge-derived answer counts: &lazy, else the view's default."""
+        return self._graph().edge_view(self._lazy_mode(default)[0])
+
+    def _edge_rule(self, default: str, subject: str, *, tests_counted: bool = True) -> Dict[str, Any]:
+        """The rule (JSON and text) of an answer counted on ``self._edges(default)``."""
+        lazy, lazy_default = self._lazy_mode(default)
+        return import_analysis.edge_rule(
+            self._graph(), lazy, lazy_default=lazy_default, subject=subject,
+            scope='scanned_path', tests_counted=tests_counted)
+
     def _format_all(self) -> Dict[str, Any]:
         """Format all imports (default view)."""
         if not self.analysis.graph:
@@ -1474,7 +1568,9 @@ class ImportsAdapter(ResourceAdapter):
             for file_path, imports in self.analysis.graph.files.items()
         }
 
-        return self._build_response('imports', files=imports_by_file)
+        return self._build_response(
+            'imports', files=imports_by_file,
+            edge_rule=self._edge_rule(LAZY_EXCLUDE, 'Cycles Found uses static imports between'))
 
     def _format_fan_in(self) -> Dict[str, Any]:
         """Rank files by fan-in (number of other files that import them).
@@ -1488,14 +1584,16 @@ class ImportsAdapter(ResourceAdapter):
         top_param = self._query_params.get('top')
         top = int(top_param) if top_param else None
 
-        # Union: all scanned files + files that appear as import targets (may live outside scan root)
-        all_files = self.analysis.scanned_files | set(self.analysis.graph.files.keys()) | set(self.analysis.graph.reverse_deps.keys())
+        graph = self._edges(LAZY_INCLUDE)
+        # Union: all scanned files + files that appear as import targets (may live outside scan
+        # root); every edge's target, whichever view, so a row never vanishes with &lazy.
+        all_files = self.analysis.scanned_files | set(graph.files.keys()) | set(self.analysis.graph.reverse_deps.keys())
         entries = sorted(
             [
                 {
                     'file': str(f),
-                    'fan_in': len(self.analysis.graph.reverse_deps.get(f, set())),
-                    'fan_out': len(self.analysis.graph.dependencies.get(f, set())),
+                    'fan_in': len(graph.reverse_deps.get(f, set())),
+                    'fan_out': len(graph.dependencies.get(f, set())),
                 }
                 for f in all_files
             ],
@@ -1506,7 +1604,9 @@ class ImportsAdapter(ResourceAdapter):
         if top and top > 0:  # a negative slice would drop the tail, not cap
             entries = entries[:top]
 
-        response = self._build_response('fan_in_ranking', entries=entries, total=total)
+        response = self._build_response(
+            'fan_in_ranking', entries=entries, total=total,
+            edge_rule=self._edge_rule(LAZY_INCLUDE, 'fan-in and fan-out count static imports between'))
         # BACK-1543: 'total' said it; the marker is what gets printed.
         note_truncation(response, 'entries', len(entries), total, 'limit', hint='raise ?top=N')
         return response
@@ -1533,28 +1633,30 @@ class ImportsAdapter(ResourceAdapter):
 
         from ..utils.path_utils import is_test_path
 
+        graph = self._edges(LAZY_INCLUDE)
+
         def _is_test_file(f) -> bool:
             return is_test_path(f)
 
         def _non_test_fan_in(f) -> int:
             return sum(
-                1 for importer in self.analysis.graph.reverse_deps.get(f, set())
+                1 for importer in graph.reverse_deps.get(f, set())
                 if not _is_test_file(importer)
             )
 
-        all_files = self.analysis.scanned_files | set(self.analysis.graph.files.keys()) | set(self.analysis.graph.reverse_deps.keys())
+        all_files = self.analysis.scanned_files | set(graph.files.keys()) | set(self.analysis.graph.reverse_deps.keys())
         candidates = [f for f in all_files if _non_test_fan_in(f) == 0]
         entries = sorted(
             [
                 {
                     'file': str(f),
-                    'fan_out': len(self.analysis.graph.dependencies.get(f, set())),
+                    'fan_out': len(graph.dependencies.get(f, set())),
                     # Kept visible rather than filtered out: a test file with
                     # no importers genuinely has fan-in 0, and dropping it
                     # silently would trade one wrong answer for another.
                     'is_test': _is_test_file(f),
                     'test_only_importers': len(
-                        self.analysis.graph.reverse_deps.get(f, set())
+                        graph.reverse_deps.get(f, set())
                     ),
                 }
                 for f in candidates
@@ -1566,6 +1668,8 @@ class ImportsAdapter(ResourceAdapter):
 
         response = self._build_response(
             'entrypoints', entries=entries, total_scanned=len(all_files),
+            edge_rule=self._edge_rule(LAZY_INCLUDE, 'fan-in counts static imports between',
+                                      tests_counted=False),
         )
         test_share = sum(1 for e in entries if e['is_test'])
         if entries and test_share:
@@ -1599,6 +1703,7 @@ class ImportsAdapter(ResourceAdapter):
         if not self.analysis.graph:
             return self._build_response('components', components=[], total=0)
 
+        graph = self._edges(LAZY_INCLUDE)
         # Group scanned files by immediate parent — only analyze files within the scan root
         dir_files: dict = defaultdict(set)
         for f in self.analysis.scanned_files:
@@ -1623,13 +1728,13 @@ class ImportsAdapter(ResourceAdapter):
             bridge_counts: dict = defaultdict(int)
 
             for f in file_set:
-                for dep in self.analysis.graph.dependencies.get(f, set()):
+                for dep in graph.dependencies.get(f, set()):
                     if dep.resolve() in resolved_file_set:
                         internal += 1
                     else:
                         outgoing += 1
                         bridge_counts[f] += 1
-                for src in self.analysis.graph.reverse_deps.get(f, set()):
+                for src in graph.reverse_deps.get(f, set()):
                     if src.resolve() not in resolved_file_set:
                         incoming += 1
 
@@ -1659,7 +1764,9 @@ class ImportsAdapter(ResourceAdapter):
         # Sort: cohesion descending (best-structured first), files descending as tiebreak
         components.sort(key=lambda c: (-c['cohesion'], -c['files'], c['component']))
 
-        return self._build_response('components', components=components, total=len(components))
+        return self._build_response(
+            'components', components=components, total=len(components),
+            edge_rule=self._edge_rule(LAZY_INCLUDE, 'internal, outgoing and incoming count static imports between'))
 
     def _format_unused(self) -> Dict[str, Any]:
         """Format unused imports."""
@@ -1681,9 +1788,10 @@ class ImportsAdapter(ResourceAdapter):
         if not self.analysis.graph:
             return {'cycles': []}
 
-        groups = self.analysis.graph.find_cycle_groups()
+        graph = self._edges(LAZY_EXCLUDE)
+        groups = graph.find_cycle_groups()
         cycle_paths = [
-            [str(p) for p in self.analysis.graph.find_cycle_path(group)]
+            [str(p) for p in graph.find_cycle_path(group)]
             for group in groups
         ]
 
@@ -1691,7 +1799,8 @@ class ImportsAdapter(ResourceAdapter):
             'circular_dependencies',
             cycles=[[str(p) for p in group] for group in groups],
             cycle_paths=cycle_paths,
-            count=len(groups)
+            count=len(groups),
+            edge_rule=self._edge_rule(LAZY_EXCLUDE, 'cycles use static imports between'),
         )
 
     def _format_violations(self) -> Dict[str, Any]:
@@ -1709,7 +1818,7 @@ class ImportsAdapter(ResourceAdapter):
         project_root = self._target_path if self._target_path.is_dir() else self._target_path.parent
         violations = []
 
-        for from_file, to_files in self.analysis.graph.dependencies.items():
+        for from_file, to_files in self._edges(LAZY_INCLUDE).dependencies.items():
             for to_file in to_files:
                 result = layer_config.check_import(from_file, to_file, project_root)
                 if result is not None:
@@ -1725,6 +1834,7 @@ class ImportsAdapter(ResourceAdapter):
             'layer_violations',
             violations=violations,
             count=len(violations),
+            edge_rule=self._edge_rule(LAZY_INCLUDE, 'violations check static imports between'),
         )
 
     def _get_local_names(self) -> frozenset:

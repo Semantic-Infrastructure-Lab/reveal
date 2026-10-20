@@ -18,7 +18,7 @@ from ...analyzers.imports import ImportGraph
 from ...analyzers.imports import service as import_analysis
 from ...analyzers.imports.base import get_extractor, get_all_extensions
 from ...analyzers.imports.file_index import basename_index, resolution_fingerprint
-from ...analyzers.imports.types import ImportAnalysis
+from ...analyzers.imports.types import LAZY_EXCLUDE, ImportAnalysis
 from ...core import disk_cache
 from ...utils.query_control import ScanBudget
 from ...utils.parallel import pool_worker_count, submit_each
@@ -380,8 +380,10 @@ class I002(BaseRule):
             graph = self._build_import_graph(scan_root)
 
             # Cycles involving this specific file; the graph-wide search runs
-            # once per graph, not once per file (BACK-1873)
-            relevant_cycles = graph.cycles_by_file().get(target_path, [])
+            # once per graph, not once per file (BACK-1873). Load-time edges only: the
+            # graph keeps function-level imports, which cannot close an import-time
+            # cycle (BACK-445, BACK-2077).
+            relevant_cycles = graph.edge_view(LAZY_EXCLUDE).cycles_by_file().get(target_path, [])
 
             # Create detection for each relevant cycle
             for cycle in relevant_cycles:
@@ -580,8 +582,9 @@ class I002(BaseRule):
         The project root is a search path, so an absolute intra-project import
         (`import pkg.b`, `from pkg import b`) resolves, and every target of a
         statement becomes an edge (`from pkg import b` loads pkg/b.py). The
-        service skips TYPE_CHECKING and function-body imports, which cannot
-        cause a circular ImportError at startup.
+        service skips TYPE_CHECKING imports and tags function-body imports
+        'local'; check() reads cycles from the load-time view, since neither can
+        cause a circular ImportError at startup (BACK-2077).
         """
         failures = list(graph.traversal_failures if traversal_failures is None else traversal_failures)
 

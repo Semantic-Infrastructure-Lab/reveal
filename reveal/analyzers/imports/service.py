@@ -10,8 +10,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .base import LanguageExtractor, get_extractor
 from .file_index import discover_import_files
-from .types import ImportAnalysis, ImportStatement
-from ...core.node_taxonomy import LOCAL_SCOPE
+from .types import LAZY_EXCLUDE, LAZY_INCLUDE, LAZY_MODES, LAZY_ONLY, ImportAnalysis, ImportGraph, ImportStatement
+from ...registry import language_for_extension
 from ...utils.path_utils import HiddenTally, to_posix
 
 
@@ -154,18 +154,15 @@ def resolve_graph(scope: ScanScope, files: ImportFileSet, analysis: ImportAnalys
         # extractors (python/js/go/rust) have no `spec` and keep the 3-arg
         # signature, so gate the index-passing on spec presence.
         for stmt in imports:
-            # BACK-445: skip imports that can't cause a circular ImportError
-            # at startup — the circular-import definition imports:// and I002
-            # share (I002 resolves through this function too, BACK-1723):
-            #   - TYPE_CHECKING imports never run at runtime
-            #   - function-body (deferred/lazy) imports (scope 'local', BACK-2076;
-            #     a class body, decorated or not, is 'module') run only after all
-            #     top-level code has finished importing — they are the
-            #     standard pattern used to *break* cycles, so counting them
-            #     as cycle edges reports phantom cycles (e.g. registry.py's
-            #     lazy `from .analyzers.nginx import ...`, whose own comment
-            #     says it exists "to avoid circular import").
-            if stmt.is_type_checking or stmt.scope == LOCAL_SCOPE:
+            # TYPE_CHECKING imports never run, so they are no edge in any view. A
+            # function-body (deferred/lazy) import (scope 'local', BACK-2076; a class
+            # body, decorated or not, is 'module') is an edge, tagged with its scope
+            # (BACK-2077): it runs only after every top-level import finished, so it
+            # is the standard way to *break* a load-time cycle, and the cycle views
+            # (imports:// ?circular, I002, which resolves here too, BACK-1723) leave it
+            # out through ImportGraph.edge_view (BACK-445: registry.py's lazy
+            # `from .analyzers.nginx import ...` exists "to avoid circular import").
+            if stmt.is_type_checking:
                 continue
 
             # BACK-1723: every file the statement loads, not only the primary
@@ -178,7 +175,7 @@ def resolve_graph(scope: ScanScope, files: ImportFileSet, analysis: ImportAnalys
                 if t != file_path]
             if targets:
                 for resolved in targets:
-                    analysis.graph.add_dependency(file_path, resolved)
+                    analysis.graph.add_dependency(file_path, resolved, stmt.scope)
                 analysis.graph.resolved_paths[stmt.module_name] = targets[0]
                 # BACK-1193: carry the resolution onto the statement itself
                 # (not just the module-name-keyed graph index) so per-import
@@ -195,7 +192,49 @@ def resolve_graph(scope: ScanScope, files: ImportFileSet, analysis: ImportAnalys
             if namespace_index and getattr(getattr(extractor, 'spec', None), 'resolve_namespaces', False):
                 for target in getattr(extractor, 'resolve_namespace_targets')(stmt, namespace_index):
                     if target != file_path:
-                        analysis.graph.add_dependency(file_path, target)
+                        analysis.graph.add_dependency(file_path, target, stmt.scope)
                         stmt.resolved_path = target  # BACK-1193: any in-tree target proves intra-project
 
     return analysis
+
+
+_LAZY_PHRASES = {
+    LAZY_INCLUDE: 'function-level (lazy) imports included',
+    LAZY_EXCLUDE: 'function-level (lazy) imports excluded',
+    LAZY_ONLY: 'only function-level (lazy) imports',
+}
+
+
+def edge_rule(graph: ImportGraph, lazy: str, *, lazy_default: bool, subject: str,
+              scope: str, tests_counted: bool = True, hint: Optional[str] = None) -> Dict[str, Any]:
+    """The counting rule of an edge-derived answer, for its JSON and its text (BACK-2077).
+
+    ``lazy`` is the LAZY_MODES value the answer used and ``lazy_default`` whether the
+    request left it to the view's default. ``subject`` names what is counted, ``scope``
+    which files an edge may join ('scanned_path' or 'scan_root'). ``hint`` replaces the
+    default pointer at the other ``&lazy`` values. Edges from languages whose extractor
+    records no import scope are named: every view counts them as load-time.
+    """
+    unclassified = graph.unclassified_edges()
+    languages = sorted({language_for_extension(src.suffix.lower()) or src.suffix
+                        for src, _target in unclassified})
+    where = 'files under the scanned path' if scope == 'scanned_path' else 'files under the scan root'
+    tests = ', tests included' if tests_counted else ', importers under a test path not counted'
+    source = 'default' if lazy_default else f'&lazy={lazy}'
+    if hint is None:
+        hint = 'other views: ' + ', '.join(f'&lazy={mode}' for mode in LAZY_MODES if mode != lazy)
+    text = (f'Rule: {subject} {where}{tests}; TYPE_CHECKING imports excluded; '
+            f'{_LAZY_PHRASES[lazy]} ({source}); {hint}.')
+    if unclassified:
+        text += (f' Import scope is not recorded for {", ".join(languages)}: '
+                 f'{len(unclassified)} edge(s) count as load-time under every &lazy value.')
+    return {
+        'lazy': lazy,
+        'lazy_default': lazy_default,
+        'type_checking': 'excluded',
+        'tests': 'included' if tests_counted else 'importers_not_counted',
+        'scope': scope,
+        'unclassified_edges': len(unclassified),
+        'unclassified_languages': languages,
+        'text': text,
+    }

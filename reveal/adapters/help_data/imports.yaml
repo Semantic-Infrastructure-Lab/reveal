@@ -36,6 +36,13 @@ examples:
   - uri: "imports://src?components"
     description: 'Score each directory as a component — cohesion (how self-contained), coupling (incoming/outgoing), top bridge file'
 
+  # Which edges count (function-level imports)
+  - uri: "imports://src?rank=fan-in&lazy=exclude"
+    description: 'Load-time (module-level) imports only — the architecture view; the default counts function-level imports too'
+
+  - uri: "imports://src?circular&lazy=include"
+    description: 'Count function-level (lazy) imports as cycle edges too; ?circular leaves them out by default'
+
   # Verbose output
   - uri: "imports://src --verbose"
     description: 'Show detailed import information including file paths and line numbers'
@@ -48,6 +55,7 @@ elements:
   unused: 'Imports that are never used in the code'
   circular: 'Circular dependency chains between modules'
   violations: 'Architecture layer violations (requires .reveal.yaml config)'
+  lazy: 'Which function-level import edges count: include, exclude (load-time only) or only'
 
 flags:
   --verbose: 'Show detailed import information (file paths, line numbers, full chains)'
@@ -129,6 +137,7 @@ notes:
   - 'Unused import detection requires parsing file content to check references'
   - 'Circular dependency detection builds full import graph'
   - 'Layer violations require .reveal.yaml configuration file'
+  - "Function-level (lazy) imports are edges: ?circular and has_cycles leave them out (a lazy back-edge is no import-time cycle), every other view counts them; &lazy=include|exclude|only overrides. Every answer prints its rule (Rule: line, edge_rule in JSON). Only Python records import scope; the rule names other languages' unclassified edges"
   - 'Static imports only — dynamic dispatch (importlib.import_module, JS require(), Java Class.forName, Ruby autoload, plugin registries, etc.) is not captured by any query mode; affected files show lower fan-in than actual and may appear as false-positive entrypoints'
   - 'Supported languages: Python, JavaScript, TypeScript, Go, Rust, Java, C++, and more'
   - 'Use --verbose for detailed import chains and file paths'

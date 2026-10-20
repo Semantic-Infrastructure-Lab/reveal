@@ -1648,6 +1648,35 @@ sweep ran. The one new thing this sweep adds to the record is mechanism 5
 and its magnitude on C++ `calls://` — real, benign by the same logic as
 mechanism 3, but large enough to name and watch rather than average away.
 
+### What `imports` and `depends` count [BACK-2077]
+
+Both commands count an importer by the rule the gate's oracles use: every static import
+except `TYPE_CHECKING` ones, function-level imports and tests included (the python-ast oracle
+recurses into function bodies). Each answer prints its rule, a `Rule:` line in text and
+`edge_rule` in JSON. They differ in scope: `imports://<dir>` sees only importers inside
+`<dir>`, `depends://<file>` scans from the project root. `imports://<dir>?rank=fan-in&lazy=exclude`
+is the architecture view (load-time edges only); `?circular` uses it by default, because a
+function-level import runs after every module has loaded and cannot close an import-time
+cycle. Only Python records where an import sits; for other languages `&lazy` cannot separate
+edges, and the printed rule names them.
+
+Measured on reveal's own `reveal/registry.py`, tree at `17429e17`, before and after the change:
+
+| Command | Before | After |
+|---|---|---|
+| `depends://reveal/registry.py` | **174** = 94 in `reveal/` + 77 tests + 3 scripts | **174** |
+| `imports://.?rank=fan-in` | **124** | **174**; `&lazy=exclude` 124 |
+| `imports://reveal?rank=fan-in` | **69** | **86**; `&lazy=exclude` 69, `&lazy=only` 17 |
+
+The 105 importers between 69 and 174 were 80 tests and scripts outside `reveal/`, 17
+function-level importers inside it that the graph dropped, and 8 files that import
+`reveal.registry` by its absolute name, which resolves only when the scan includes the
+repository root (5 of the 8 import it inside a function). Of the 94 importers in `reveal/`,
+72 import it at module level and 22 only inside functions; the 25 "function-level" first
+quoted for this gap counted the 17 and the 8 together. On this change's own tree each count
+is one or two higher (176, 176, 87): the import service now imports `registry`, and one test
+file was added since `17429e17`.
+
 ### Open residual gaps
 
 Three measured languages sit below 100% with a gap that is real, still open,

@@ -78,7 +78,7 @@ imports://<path>[?<query>]
 | Component | Required | Default | Description |
 |-----------|----------|---------|-------------|
 | `path` | No | `.` (current directory) | Directory or file to analyze |
-| `query` | No | (none) | Query flag (?unused, ?circular, ?violations) |
+| `query` | No | (none) | Query flag (?unused, ?circular, ?violations), plus `&lazy=include\|exclude\|only` (see [Which edges count](#which-edges-count-lazy)) |
 
 ### Examples
 
@@ -323,6 +323,7 @@ Each inner array is the **members of one SCC** (sorted, no repeated last node).
 - ✅ Detects: Indirect cycles (A → B → C → A)
 - ✅ Collapses: Hub cycles — N files cycling through a shared module = 1 group
 - ❌ Ignores: `TYPE_CHECKING` imports (not runtime cycles)
+- ❌ Leaves out by default: function-level (lazy) imports, which run after every module has loaded and are the usual way to break a cycle; `&lazy=include` counts them (see [Which edges count](#which-edges-count-lazy))
 - ✅ Reports: All members of each cycle group, sorted
 
 **Why circular dependencies are bad**:
@@ -416,8 +417,33 @@ reveal 'imports://src?rank=fan-in' --format=json
 **Coverage notes**:
 - ✅ Includes files with zero imports (they appear with fan-in from others)
 - ✅ Includes files never imported (they appear with fan-in=0)
+- ✅ Includes function-level (lazy) imports; `&lazy=exclude` counts load-time imports only
 - ❌ Dynamic imports (`importlib.import_module`) not captured
 - ❌ Decorator-based registration (e.g. `@app.route`) not captured
+
+### Which edges count (`&lazy`)
+
+The graph keeps every static import edge except `TYPE_CHECKING` ones, tagged with where the
+import sits (module level or inside a function). Each edge-derived answer prints the rule it
+counted by, as a `Rule:` line in text and an `edge_rule` object in JSON (`lazy`, `lazy_default`,
+`type_checking`, `tests`, `scope`, `unclassified_edges`, `unclassified_languages`, `text`):
+
+| `&lazy=` | Edges counted | Default for |
+|----------|---------------|-------------|
+| `include` | every edge | fan-in, `?entrypoints`, `?components`, `?violations` |
+| `exclude` | load-time edges only (the architecture view) | `?circular`, `metadata.has_cycles` (`metadata.cycles_lazy` says which) |
+| `only` | function-level edges only | none |
+
+`exclude` and `only` split the edges: per file, fan-in under `include` is the sum of the other
+two. Only importers inside the scanned path count, tests included (`?entrypoints` does not count
+importers under a test path); `depends://` scans from the project root instead. Only Python
+records import scope today: other languages' edges count as load-time under every value, and the
+rule names those languages and the number of edges. An unknown value is an error.
+
+```bash
+reveal 'imports://src?rank=fan-in&lazy=exclude'   # module-level imports only
+reveal 'imports://src?circular&lazy=include'      # a lazy back-edge closes a cycle too
+```
 
 **When to use `imports://rank=fan-in` vs `depends://`:**
 

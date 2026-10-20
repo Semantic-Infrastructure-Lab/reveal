@@ -119,7 +119,7 @@
   "reveal/analyzers/imports/javascript.py::_load_workspace_package_globs": 17,
   "reveal/analyzers/imports/javascript.py::_resolve_exports_subpath": 19,
   "reveal/analyzers/imports/python.py::_parse_pyproject_dependency_names": 16,
-  "reveal/analyzers/imports/service.py::resolve_graph": 17,
+  "reveal/analyzers/imports/service.py::resolve_graph": 16,
   "reveal/analyzers/imports/unused.py::unused_entries": 16,
   "reveal/analyzers/markdown.py::MarkdownAnalyzer._extract_related": 16,
   "reveal/analyzers/nginx.py::NginxAnalyzer.extract_ssl_domains": 21,

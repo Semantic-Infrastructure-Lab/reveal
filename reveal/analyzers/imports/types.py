@@ -10,6 +10,13 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from collections import defaultdict, deque
 
 from .unused import unused_entries
+from ...core.node_taxonomy import LOCAL_SCOPE
+
+# BACK-2077: which edges a graph view keeps, by the scope of the imports behind each edge.
+# 'include' keeps every edge, 'exclude' the load-time ones (an edge with at least one import
+# that is not function-level), 'only' the rest; exclude and only partition the edges.
+LAZY_INCLUDE, LAZY_EXCLUDE, LAZY_ONLY = 'include', 'exclude', 'only'
+LAZY_MODES = (LAZY_INCLUDE, LAZY_EXCLUDE, LAZY_ONLY)
 
 
 @dataclass
@@ -125,6 +132,10 @@ class ImportGraph:
     scan_budget: Dict[str, Any] = field(default_factory=dict)
     # Directory enumeration loss affects sources and extension-agnostic resolution targets.
     traversal_failures: List[Tuple[Optional[str], str]] = field(default_factory=list)
+    # BACK-2077: (from_file, to_file) -> the ImportStatement.scope of every import that
+    # produced the edge ('module', 'local', or None where the extractor records no scope).
+    # Every edge is stored; views (edge_view) filter at presentation.
+    edge_scopes: Dict[Tuple[Path, Path], Set[Optional[str]]] = field(default_factory=dict)
 
     @classmethod
     def from_imports(cls, imports: List[ImportStatement]) -> 'ImportGraph':
@@ -139,11 +150,50 @@ class ImportGraph:
 
         return graph
 
-    def add_dependency(self, from_file: Path, to_file: Path) -> None:
-        """Add a dependency edge: from_file imports to_file."""
+    def add_dependency(self, from_file: Path, to_file: Path, scope: Optional[str] = None) -> None:
+        """Add a dependency edge: from_file imports to_file, from an import at ``scope``
+        (``ImportStatement.scope``; None when the extractor does not record it)."""
         self.dependencies[from_file].add(to_file)
         self.reverse_deps[to_file].add(from_file)
+        self.edge_scopes.setdefault((from_file, to_file), set()).add(scope)
         self.__dict__.pop('_cycles_by_file', None)
+        self.__dict__.pop('_edge_views', None)
+
+    def is_lazy_edge(self, from_file: Path, to_file: Path) -> bool:
+        """True when every import behind the edge is function-level (scope 'local')."""
+        return self.edge_scopes.get((from_file, to_file)) == {LOCAL_SCOPE}
+
+    def unclassified_edges(self) -> List[Tuple[Path, Path]]:
+        """Edges with an import whose scope was not recorded and no load-time import: every
+        view counts them as load-time, so &lazy cannot separate them."""
+        return [edge for edge, scopes in self.edge_scopes.items()
+                if None in scopes and not (scopes - {None, LOCAL_SCOPE})]
+
+    def edge_view(self, lazy: str) -> 'ImportGraph':
+        """This graph with only the edges ``lazy`` keeps (LAZY_MODES), computed once per mode.
+
+        The view shares files, resolved paths and diagnostics with this graph; only
+        dependencies and reverse_deps are filtered, so every graph method (cycles included)
+        answers for the view. LAZY_INCLUDE is the graph itself.
+        """
+        if lazy not in LAZY_MODES:
+            raise ValueError(f'lazy must be one of {LAZY_MODES!r}, got {lazy!r}')
+        if lazy == LAZY_INCLUDE:
+            return self
+        views: Dict[str, 'ImportGraph'] = self.__dict__.setdefault('_edge_views', {})
+        view = views.get(lazy)
+        if view is None:
+            keep_lazy = lazy == LAZY_ONLY
+            dependencies: Dict[Path, Set[Path]] = defaultdict(set)
+            reverse_deps: Dict[Path, Set[Path]] = defaultdict(set)
+            for from_file, to_files in self.dependencies.items():
+                for to_file in to_files:
+                    if self.is_lazy_edge(from_file, to_file) == keep_lazy:
+                        dependencies[from_file].add(to_file)
+                        reverse_deps[to_file].add(from_file)
+            view = replace(self, dependencies=dependencies, reverse_deps=reverse_deps)
+            views[lazy] = view
+        return view
 
     def find_cycles(self) -> List[List[Path]]:
         """Find all circular dependencies using DFS.
@@ -340,4 +390,5 @@ class ImportGraph:
         return len(self.files)
 
 
-__all__ = ['ImportStatement', 'ImportExtraction', 'ImportAnalysis', 'ImportGraph']
+__all__ = ['ImportStatement', 'ImportExtraction', 'ImportAnalysis', 'ImportGraph',
+           'LAZY_INCLUDE', 'LAZY_EXCLUDE', 'LAZY_ONLY', 'LAZY_MODES']

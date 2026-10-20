@@ -9,6 +9,7 @@ import pytest
 
 from reveal.adapters.depends import DependsAdapter
 from reveal.adapters.imports import ImportsAdapter
+from reveal.analyzers.imports.types import LAZY_EXCLUDE
 from reveal.rules.imports.I002 import I002, _graph_cache
 
 pytestmark = pytest.mark.component
@@ -47,7 +48,9 @@ def _imports_graph(root):
 
 
 def _imports_cycles(root):
-    return sorted(sorted(_rel(root, group)) for group in _imports_graph(root).find_cycle_groups())
+    """Cycle groups on the load-time edges, the view ?circular reads (BACK-2077)."""
+    groups = _imports_graph(root).edge_view(LAZY_EXCLUDE).find_cycle_groups()
+    return sorted(sorted(_rel(root, group)) for group in groups)
 
 
 def _i002_cycle_files(root):

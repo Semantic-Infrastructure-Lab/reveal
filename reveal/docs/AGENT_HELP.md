@@ -1512,6 +1512,8 @@ reveal 'depends://src?format=dot' | dot -Tsvg > deps.svg
 
 Use the three `imports://` views for orientation; `depends://` for targeted impact analysis before a specific change.
 
+**Which edges count:** every view counts function-level (lazy) imports except `?circular` (and `metadata.has_cycles`), where a lazy back-edge is not an import-time cycle. `&lazy=exclude` gives the load-time (architecture) view, `&lazy=include` makes `?circular` count lazy edges, `&lazy=only` shows only them. Each answer prints its rule: a `Rule:` line in text, `edge_rule` in JSON. Only Python records import scope; the rule names any other language whose edges it could not classify.
+
 **Enforce architectural layers (`?violations`):**
 ```bash
 reveal 'imports://src?violations'
@@ -1533,9 +1535,9 @@ Output: one line per violation with file, line, and direction. Clean output = âœ
 
 **Scan root tip**: scan from the project root (not a subdirectory) when imports use absolute package paths (e.g. `from myapp.utils import x`). Scanning too deep causes the resolver to miss edges, producing false fan-in=0 entries.
 
-**Limitations:** Dynamic imports (`importlib.import_module`) and `TYPE_CHECKING`-only imports are not tracked (same as `imports://`). Static resolution can miss edges or infer false edges, especially through name-based fallbacks. Confirm consequential relationships in source.
+**Limitations:** Dynamic imports (`importlib.import_module`) and `TYPE_CHECKING`-only imports are not tracked (same as `imports://`); function-level `import` statements are counted. Static resolution can miss edges or infer false edges, especially through name-based fallbacks. Confirm consequential relationships in source.
 
-**Interpreting absence of evidence:** `count: 0` from `depends://` means no *static* importer was found in the scanned path. Dynamic imports (plugin loaders, `importlib.import_module`, conditional lazy imports) are not tracked and will not appear here. Confirm a module is truly unused before deleting it if the codebase uses runtime import patterns.
+**Interpreting absence of evidence:** `count: 0` from `depends://` means no *static* importer was found in the scanned path. Dynamic imports (plugin loaders, `importlib.import_module`, `__import__`) are not tracked and will not appear here; an `import` statement inside a function is tracked. Confirm a module is truly unused before deleting it if the codebase uses runtime import patterns.
 
 ---
 

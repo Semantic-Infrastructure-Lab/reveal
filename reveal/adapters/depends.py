@@ -26,6 +26,7 @@ from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supp
 from ..analyzers.imports.generic import CImportExtractor, CppImportExtractor, RubyImportExtractor
 from ..analyzers.imports.file_index import load_path_manifests
 from ..analyzers.imports import service as import_analysis
+from ..analyzers.imports.types import LAZY_INCLUDE
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder, note_truncation, note_warning
 from ..utils.path_utils import (
@@ -170,6 +171,7 @@ _SCHEMA_OUTPUT_TYPES = [
                     },
                 },
                 'count': {'type': 'integer'},
+                'edge_rule': {'type': 'object'},
             },
         },
     },
@@ -194,6 +196,7 @@ _SCHEMA_OUTPUT_TYPES = [
                         },
                     },
                 },
+                'edge_rule': {'type': 'object'},
             },
         },
     },
@@ -234,6 +237,7 @@ _SCHEMA_NOTES = [
     'Inverts the import graph built by imports:// — same language support, same resolution',
     'Dynamic imports (importlib.import_module, __import__) are not tracked',
     'TYPE_CHECKING-only imports are excluded from edges (intentional)',
+    'Function-level imports are importers like any other; edge_rule (and a Rule: line in text) states the rule. depends:// takes no &lazy: imports://<dir>?rank=fan-in&lazy=exclude is the load-time view',
     'Results are conservative: false negatives possible, never false positives',
     'Use ?top=N on a directory to find high-coupling modules (many dependents = high impact if changed)',
     'Use depends://file.py to do impact analysis before refactoring a module',
@@ -273,6 +277,13 @@ class DependsRenderer:
             print_json_result(result)
 
     @staticmethod
+    def _render_edge_rule(result: dict) -> None:
+        """The counting rule, as the JSON states it (BACK-2077)."""
+        rule = result.get('edge_rule')
+        if rule:
+            print(f"  {rule['text']}\n")
+
+    @staticmethod
     def _has_traversal_loss(result: dict) -> bool:
         return any(entry.get('type') == 'analysis_incomplete' and entry.get('unit') == 'directories'
                    for entry in result.get('meta', {}).get('warnings', []))
@@ -290,6 +301,7 @@ class DependsRenderer:
         warning = result.get('warning')
         if warning:
             print(f"{warning}\n")
+        DependsRenderer._render_edge_rule(result)
 
         # BACK-557: convention-autoload coverage caveat prints for both empty
         # and positive results (a positive count is still a lower bound here).
@@ -355,6 +367,7 @@ class DependsRenderer:
         warning = result.get('warning')
         if warning:
             print(f"{warning}\n")
+        DependsRenderer._render_edge_rule(result)
 
         if not modules:
             if result.get('undercount_possible'):
@@ -1136,7 +1149,7 @@ class DependsAdapter(ResourceAdapter):
         added = False
         for resolved in targets:
             if resolved and resolved != file_path:
-                self._graph.add_dependency(file_path, resolved)
+                self._graph.add_dependency(file_path, resolved, stmt.scope)
                 self._graph.resolved_paths[stmt.module_name] = resolved
                 self._edge_stmts[(file_path, resolved)] = stmt
                 added = True
@@ -1154,7 +1167,7 @@ class DependsAdapter(ResourceAdapter):
         added = False
         for resolved in extractor.resolve_namespace_targets(stmt, indices.namespace_index):
             if resolved != file_path:
-                self._graph.add_dependency(file_path, resolved)
+                self._graph.add_dependency(file_path, resolved, stmt.scope)
                 self._edge_stmts[(file_path, resolved)] = stmt
                 added = True
         return added
@@ -1176,7 +1189,7 @@ class DependsAdapter(ResourceAdapter):
         added = False
         for resolved in extractor.resolve_member_targets(stmt, indices.member_index):
             if resolved != file_path:
-                self._graph.add_dependency(file_path, resolved)
+                self._graph.add_dependency(file_path, resolved, stmt.scope)
                 self._edge_stmts[(file_path, resolved)] = stmt
                 added = True
         return added
@@ -1198,7 +1211,7 @@ class DependsAdapter(ResourceAdapter):
         added = False
         for resolved in extractor.resolve_module_targets(stmt, indices.module_index):
             if resolved != file_path:
-                self._graph.add_dependency(file_path, resolved)
+                self._graph.add_dependency(file_path, resolved, stmt.scope)
                 self._edge_stmts.setdefault((file_path, resolved), stmt)
                 added = True
         return added
@@ -1412,6 +1425,15 @@ class DependsAdapter(ResourceAdapter):
             'confidence': 'reduced' if self._traversal_failures or self._unresolved_intra > 0 else 'high',
             'known_limits': known_limits,
         }
+
+    def _edge_rule(self) -> Dict[str, Any]:
+        """depends:// counts every edge; the load-time view is imports://'s &lazy=exclude."""
+        assert self._graph is not None
+        return import_analysis.edge_rule(
+            self._graph, LAZY_INCLUDE, lazy_default=True,
+            subject='importers are files whose static imports resolve here, among',
+            scope='scan_root',
+            hint="depends:// takes no &lazy; imports://<dir>?rank=fan-in&lazy=exclude counts load-time edges only")
 
     def _scan_cap_warning(self) -> str:
         """BACK-524: one-line disclosure when _build_graph stopped early.
@@ -1650,6 +1672,7 @@ class DependsAdapter(ResourceAdapter):
                 'target': to_relative_display(str(target), self._scan_root),
                 'dependents': shown,
                 'count': len(dependents),  # the total, also when top= shows fewer (BACK-1496)
+                'edge_rule': self._edge_rule(),
                 'metadata': self.get_metadata(),
                 '_meta': self._build_meta(),
             },
@@ -1707,6 +1730,7 @@ class DependsAdapter(ResourceAdapter):
                 '_format': fmt,
                 'modules': modules,
                 'total_modules': total_modules,
+                'edge_rule': self._edge_rule(),
                 'metadata': self.get_metadata(),
                 '_meta': self._build_meta(),
             },
