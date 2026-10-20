@@ -13,7 +13,7 @@ owner; direct helper reuse remains governed by the cheap key.
 import os
 import re
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Dict, FrozenSet, Iterator, List, Optional, Sequence, Set, Tuple
@@ -732,6 +732,206 @@ def _effects_from_calls(calls: List[str], classify_call, language=None) -> List[
                 seen.add(label)
                 effects.append(label)
     return effects
+
+
+# --- The forward walk (BACK-2096): one engine for calls://?root= and trace:// --------------
+#
+# Level by level over definitions from every root definition. Each definition is expanded once,
+# at the shallowest level the walk reaches it, and every call site of an expanded definition is
+# an edge -- an edge to a definition already reached is kept and marked `expanded: false`.
+# trace walked depth-first and never expanded a definition it had first reached deeper (its
+# callees vanished); ?root dropped the edge itself once its target had been seen, across root
+# definitions too. Call sites resolve through calls.resolve.CallResolver, unchanged.
+
+_CALL_SOURCE_CATEGORIES = ('functions', 'methods', 'tests', 'modules')
+
+
+def _call_definitions(structures: List[Dict[str, Any]]) -> Iterator[Tuple[str, str, Dict[str, Any]]]:
+    """(file, name, element) for every named call source: functions, methods, modules and
+    'tests', so a Zig test block can be a root or be passed through (BACK-663)."""
+    for file_struct in structures:
+        file_path = file_struct.get('file', '')
+        for elem in call_sources(file_struct):
+            if elem.get('category') not in _CALL_SOURCE_CATEGORIES:
+                continue
+            name = elem.get('name', '')
+            if name:
+                yield file_path, name, elem
+
+
+def _walk_index(structures: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
+    """Every definition, and name -> its definitions (lookup_keys), both in (file, line) order:
+    collect_structures' file order is not stable, levels and candidates must be. Calls are
+    stored unfiltered; the builtins switch applies when a definition is walked."""
+    definitions = [{
+        'name': name,
+        'file': to_posix(file_path),  # '/' on every OS (BACK-1586)
+        'line': elem.get('line', 0),
+        'signature': elem.get('signature', ''),
+        'calls': elem.get('calls', []),
+        'references': elem.get('references', []),
+        'reference_only_calls': elem.get('reference_only_calls', []),
+    } for file_path, name, elem in _call_definitions(structures)]
+    definitions.sort(key=lambda d: (d['file'], d['line']))
+    index: Dict[str, List[Dict[str, Any]]] = {}
+    for record in definitions:
+        # A C++ out-of-line `Cls::poll` is keyed as `poll` too, so a bare `poll()`
+        # call site reaches it (BACK-1400).
+        for key in lookup_keys(record['name']):
+            index.setdefault(key, []).append(record)
+    return definitions, index
+
+
+def _walked_calls(record: Dict[str, Any], include_builtins: bool) -> List[str]:
+    """A definition's call sites, de-duplicated by call text, builtins hidden unless asked."""
+    calls = record['calls']
+    builtins = conventions_for(_lang_family(record['file'])).builtins
+    if not include_builtins and builtins:
+        calls = [c for c in calls if c.split('.')[-1] not in builtins]
+    return list(dict.fromkeys(calls))
+
+
+@dataclass
+class CalleeNode:
+    """One definition the walk reached, at the shallowest level it is reached (0 = a root).
+    ``edges`` pairs each call site with the node that call placed, or None (external,
+    ambiguous, or already reached)."""
+    name: str
+    file: str
+    line: int
+    level: int
+    params: List[str]
+    effects: List[str]
+    references: List[Dict[str, Any]]
+    expanded: bool
+    record: Dict[str, Any] = field(repr=False)
+    edges: List[Tuple[Dict[str, Any], Optional['CalleeNode']]] = field(default_factory=list)
+
+
+@dataclass
+class CalleeWalk:
+    """The walk from *root*: its root definitions and the edges of each level (1 first)."""
+    root: str
+    root_name: str
+    depth: int
+    roots: List[CalleeNode]
+    levels: List[Dict[str, Any]]
+    skipped: List[Tuple[str, str]]
+    traversal_failures: List[Tuple[Optional[str], str]]
+
+
+def _callee_node(record: Dict[str, Any], name: str, level: int, depth: int) -> CalleeNode:
+    """A reached definition with trace's per-node detail: parameters, and the effects its
+    calls classify as (a JSX component use is not a call, BACK-1834)."""
+    from ..ast.nav_effects import classify_call  # noqa: I006 -- nav_effects imports this module
+    from ...registry import language_for_extension
+    calls = [c for c in record['calls'] if c not in record['reference_only_calls']]
+    return CalleeNode(
+        name=name, file=record['file'], line=record['line'], level=level,
+        params=_params_from_signature(record['signature'], record['name']),
+        effects=_effects_from_calls(calls, classify_call, language_for_extension(Path(record['file']).suffix)),
+        references=record['references'], expanded=level < depth, record=record)
+
+
+def _callee_edge(node: CalleeNode, call: str, resolver: Any) -> Tuple[Dict[str, Any], Any]:
+    """One call site of *node*: the edge record and its target (definition, candidates, None)."""
+    tail, target = resolver.resolve(call, node.file)
+    edge: Dict[str, Any] = {
+        'caller': node.name,
+        'callee': tail if target is not None else call,
+        'resolved': target is not None,
+        'caller_file': node.file,
+        'caller_line': node.line,
+    }
+    if isinstance(target, dict):
+        edge['callee_file'], edge['callee_line'] = target['file'], target['line']
+    elif target:
+        edge['ambiguous'] = True
+        edge['candidates'] = [{'file': c['file'], 'line': c['line']} for c in target]
+    edge['call_expr'] = call
+    if any(r['callee'] == call for r in node.references):
+        edge['relationship'] = ('jsx_reference' if call in node.record['reference_only_calls']
+                                else 'call_and_jsx_reference')
+    return edge, target
+
+
+def walk_callees(path: str, root: str, depth: int = 2, include_builtins: bool = False,
+                 structures: Optional[List[Dict[str, Any]]] = None) -> CalleeWalk:
+    """Walk what *root* calls, level by level, to *depth* levels of edges (1 = direct calls).
+
+    *root* is a name, matched like ``find_callees`` (``core.definition_names.name_matches``),
+    or ``FILE:NAME`` to pick the definitions in one file; every matching definition is a
+    starting point. A definition is expanded once, at the shallowest level it is reached;
+    every call site of an expanded definition is an edge, ``expanded`` true only on the
+    edge whose target's own calls the next level lists. Its level-1 edges are exactly
+    ``find_callees``' call lists for the same definitions.
+
+    Args:
+        path: Root directory (or file) to search.
+        root: Entry-point name, or ``FILE:NAME``.
+        depth: Levels of edges to walk (the caller clamps it to 1..5).
+        include_builtins: Keep calls to language builtins (hidden by default).
+        structures: ``collect_structures`` of the directory the caller already holds
+            (trace validates them first); collected here when None.
+    """
+    from .resolve import CallResolver  # noqa: I006 -- resolve imports this module
+
+    if structures is None:
+        path_obj = Path(path)
+        structures = collect_structures(str(path_obj if path_obj.is_dir() else path_obj.parent))
+    definitions, index = _walk_index(structures)
+    resolver = CallResolver(index)
+    file_filter, root_name = _split_root(root)
+    placed: Set[Tuple[str, int, str]] = set()
+
+    def place(record: Dict[str, Any], name: str, level: int) -> CalleeNode:
+        placed.add((record['file'], record['line'], record['name']))
+        return _callee_node(record, name, level, depth)
+
+    roots = [place(record, root_name, 0) for record in definitions
+             if name_matches(record['name'], root_name) and _path_matches(record['file'], file_filter)]
+    levels: List[Dict[str, Any]] = []
+    frontier = list(roots)
+    for level in range(1, depth + 1):
+        level_edges: List[Dict[str, Any]] = []
+        next_frontier: List[CalleeNode] = []
+        for node in frontier:
+            for call in _walked_calls(node.record, include_builtins):
+                edge, target = _callee_edge(node, call, resolver)
+                child = None
+                if isinstance(target, dict) and (target['file'], target['line'], target['name']) not in placed:
+                    child = place(target, edge['callee'], level)
+                    if child.expanded:
+                        next_frontier.append(child)
+                edge['expanded'] = child is not None and child.expanded
+                node.edges.append((edge, child))
+                level_edges.append(edge)
+        if level_edges:
+            levels.append({'level': level, 'callees': level_edges})
+        frontier = next_frontier
+        if not frontier:
+            break
+    return CalleeWalk(root=root, root_name=root_name, depth=depth, roots=roots, levels=levels,
+                      skipped=list(getattr(structures, 'skipped', ())),
+                      traversal_failures=list(getattr(structures, 'traversal_failures', ())))
+
+
+def callee_levels(walk: CalleeWalk) -> Dict[str, Any]:
+    """The ``calls://?root=`` answer: every edge by level. Totals count edges:
+    ``total_resolved`` includes the ``total_ambiguous`` ones (a project definition matched,
+    several candidates), ``total_unresolved`` are external."""
+    edges = [edge for level in walk.levels for edge in level['callees']]
+    resolved = sum(1 for edge in edges if edge['resolved'])
+    return _disclose_skipped({
+        'root': walk.root,
+        'query': 'callees_recursive',
+        'depth': walk.depth,
+        'levels': walk.levels,
+        'total_resolved': resolved,
+        'total_unresolved': len(edges) - resolved,
+        'total_edges': len(edges),
+        'total_ambiguous': sum(1 for edge in edges if edge.get('ambiguous')),
+    }, walk.skipped, traversal_failures=walk.traversal_failures)
 
 
 def _build_forward_index(

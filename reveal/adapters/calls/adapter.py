@@ -24,7 +24,8 @@ from reveal.reveal_types import CONTRACT_VERSION, RevealResult
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .confidence import build_meta as _call_graph_meta
-from .index import find_callers, find_callees, find_callees_recursive, find_uncalled, rank_by_callers, build_module_dependency_graph
+from .index import (find_callers, find_callees, find_uncalled, rank_by_callers, build_module_dependency_graph,
+                    walk_callees, callee_levels)
 from .renderer import render_calls_structure
 from ...utils.query import parse_query_params
 from ...utils.results import ResultBuilder, note_truncation
@@ -429,7 +430,7 @@ class CallsAdapter(ResourceAdapter):
             depth = int(self.query_params.get('depth', '2'))
             depth = max(1, min(depth, 5))
             include_builtins = bool(self.query_params.get('builtins', False))
-            result_data = find_callees_recursive(self.path, root, depth=depth, include_builtins=include_builtins)
+            result_data = callee_levels(walk_callees(self.path, str(root), depth=depth, include_builtins=include_builtins))
             result_data['path'] = self.path
             query_format = self.query_params.get('format', '')
             if query_format:

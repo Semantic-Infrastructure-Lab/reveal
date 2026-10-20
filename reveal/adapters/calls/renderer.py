@@ -241,7 +241,8 @@ def _render_callees_recursive_text(data: Dict[str, Any]) -> None:
 
     print(f"Callees of: {root}  (recursive, depth {depth})")
     print(f"Project:    {path}")
-    print(f"Total:      {total_resolved} resolved, {total_unresolved} external/unresolved")
+    total_edges = data.get('total_edges', total_resolved + total_unresolved)
+    print(f"Total:      {total_edges} call edges: {total_resolved} resolved, {total_unresolved} external/unresolved")
     print()
 
     if not levels:
@@ -259,6 +260,9 @@ def _render_callees_recursive_text(data: Dict[str, Any]) -> None:
             file_path = entry.get('caller_file', '')
             line = entry.get('caller_line', '')
             status = '✓' if resolved else '✗ [external]'
+            if resolved and not entry.get('ambiguous') and level_num < depth and entry.get('expanded') is False:
+                # BACK-2096: the target was reached by an earlier edge; its callees are listed there.
+                status = '✓ (already expanded)'
             if entry.get('ambiguous'):
                 # BACK-1442: several definitions match and none is the
                 # caller's own or imported one -- listed, not expanded.

@@ -164,7 +164,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Find error handlers', 'query': 'ast://src?name~=error&type=function', 'description': 'Locate error handling code', 'output_type': 'ast_query'},
             {'goal': 'Check recent changes', 'query': 'git://.?type=history', 'description': 'Review recent commit history', 'output_type': 'git_ref'},
             {'goal': 'Find large functions', 'query': 'ast://src?lines>100&type=function', 'description': 'Locate potentially problematic large functions', 'output_type': 'ast_query'},
-            {'goal': 'Walk the call chain from an entry point', 'query': 'trace://src?from=main', 'description': 'Depth-indented execution narrative built on the calls:// index, followed depth-first — see the actual path a bug report walks', 'output_type': 'trace'},
+            {'goal': 'Walk the call chain from an entry point', 'query': 'trace://src?from=main', 'description': 'Depth-indented execution narrative from the calls://?root= callee walk — see the actual path a bug report walks', 'output_type': 'trace'},
         ]
     },
     'quality': {
@@ -1641,7 +1641,7 @@ class HelpAdapter(ResourceAdapter):
                         ('overview', 'stats', 'dashboard hotspots/quality pulse draw on the same quality score'),
                         ('overview', 'git', 'recent-activity section is a git:// log query'),
                         ('testability', 'patches', 'testability joins the same patch scan against production boundary fan-out'),
-                        ('trace', 'calls', 'trace narrative is built on the calls:// index'),
+                        ('trace', 'calls', 'trace frames and calls://?root= come from the same callee walk'),
                         ('pack', 'imports', '--architecture/--focus ranking is built on the same import/dependency graph'),
                     ],
                 },

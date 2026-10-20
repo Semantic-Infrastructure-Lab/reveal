@@ -1412,7 +1412,7 @@ Output is depth-indented so the execution tree is scannable at a glance.  Unreso
 ```
 ⚠ 'check' has 8 definitions (I001.py:63, I002.py:268, I003.py:69, I004.py:75, I005.py:55 (+3 more)); each is traced separately -- pick one with --from <file>:check
 ```
-A callee name with several definitions resolves to the one in the caller's file, then the one the caller imports; otherwise it is marked `[ambiguous: N definitions -- …]` (JSON `ambiguous`, `candidates`) and not expanded. Frames print in depth-first call order.
+A callee name with several definitions resolves to the one in the caller's file, then the one the caller imports; otherwise it is marked `[ambiguous: N definitions -- …]` (JSON `ambiguous`, `candidates`) and not expanded. Each definition is expanded once, at the shallowest depth it is reached (the walk `calls://?root=` uses); frames print in pre-order under the call that first reaches them.
 
 
 ---

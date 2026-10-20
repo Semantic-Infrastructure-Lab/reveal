@@ -671,4 +671,6 @@ class TestTraceSelfDescription:
         }
         for source, text in texts.items():
             assert 'BFS' not in text and 'breadth' not in text.lower(), source
-        assert 'depth-first' in texts['get_schema']
+        # BACK-2096: the walk is no longer depth-first either; each definition is expanded
+        # once, at the shallowest depth it is reached.
+        assert 'depth-first' not in json.dumps(texts) and 'shallowest' in texts['get_schema']

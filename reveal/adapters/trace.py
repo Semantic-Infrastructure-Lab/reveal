@@ -1,8 +1,10 @@
 """trace:// adapter - execution narrative from an entry-point function.
 
-Walks the call graph depth-first from a named entry point, one frame per
-definition, and builds a depth-indented narrative: each frame shows the function
-location, its parameters, classified side-effects, and what it calls next.
+Walks the call graph from a named entry point, one frame per definition, and
+builds a depth-indented narrative: each frame shows the function location,
+its parameters, classified side-effects, and what it calls next.
+The walk is calls.index.walk_callees, the one calls://?root= answers from:
+each definition is expanded once, at the shallowest depth it is reached.
 Scan/render logic and required-answer proof live here; CLI, URI and MCP use the
 same declared binding and canonical outcome path.
 """
@@ -17,7 +19,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
-from .calls.index import _effects_from_calls, _params_from_signature, _path_matches, _split_root
+from .calls.index import CalleeNode, _effects_from_calls, _params_from_signature, walk_callees
 from ..utils import print_json_result
 from ..utils.query_binding import bind_declared_params
 from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec, param_schema, peek_query_items
@@ -179,40 +181,40 @@ def _trace_collection(values: Any, path: str) -> Tuple[List[Dict[str, Any]], Dic
     return structures, meta
 
 def _build_trace(path: str, root: str, depth: int) -> Dict[str, Any]:
-    """Build a trace report: a depth-first walk over *definitions* (file:line),
-    frames in pre-order so each renders under its caller.
+    """Build a trace report from the shared callee walk (calls.index.walk_callees).
 
-    Keyed by definition, not by name (BACK-1399): the old name-keyed BFS merged
-    every same-named function into one frame, so two unrelated `run()`s
-    reported each other's callees. `root` may be `path/to/file.py:name` to pick
-    one definition; an ambiguous bare name traces each definition separately.
+    One frame per *definition* (file:line), never per name (BACK-1399): two unrelated
+    `run()`s never report each other's callees. A definition is expanded once, at the
+    shallowest depth the walk reaches it (BACK-2096), and its frame is listed in pre-order
+    under the call that first reaches it; a later call to it is named in its caller's
+    `calls` without a second frame. `root` may be `path/to/file.py:name` to pick one
+    definition; an ambiguous bare name traces each definition separately.
     """
     from reveal.adapters.ast.analysis import collect_structures
 
     structures, meta = _trace_collection(collect_structures(path), path)
-    index = _definition_index(structures)
-    file_filter, root_name = _split_root(root)
-    roots = [d for d in index.get(root_name, []) if _path_matches(d['file'], file_filter)]
+    walk = walk_callees(path, root, depth, structures=structures)
+    roots, root_name = walk.roots, walk.root_name
 
     warnings: List[str] = [entry['message'] for entry in meta.get('warnings', [])]
     if len(roots) > 1:
-        where = ', '.join(f"{_relpath(d['file'], path)}:{d['line']}" for d in roots[:5])
+        where = ', '.join(f"{_relpath(d.file, path)}:{d.line}" for d in roots[:5])
         more = f" (+{len(roots) - 5} more)" if len(roots) > 5 else ''
         warnings.append(
             f"'{root_name}' has {len(roots)} definitions ({where}{more}); each is traced "
             f"separately -- pick one with --from <file>:{root_name}"
         )
 
-    walker = _TraceWalker(index, depth)
-    for defn in roots:
-        walker.expand(root_name, defn, 0)
-    frames = walker.frames or [_frame(root, None, 0)]
+    projection = _TraceFrames()
+    for node in roots:
+        projection.visit(node)
+    frames = projection.frames or [_frame(root, None, 0)]
     if any(frame.get('references') for frame in frames):
         warnings.append('JSX edges are component-use references; runtime render scheduling is not resolved.')
-    if walker.ambiguous_names:
+    if projection.ambiguous_names:
         warnings.append(
-            f"{len(walker.ambiguous_names)} callee name(s) match several definitions and are "
-            f"not expanded: {', '.join(sorted(walker.ambiguous_names)[:5])}"
+            f"{len(projection.ambiguous_names)} callee name(s) match several definitions and are "
+            f"not expanded: {', '.join(sorted(projection.ambiguous_names)[:5])}"
         )
 
     return {
@@ -221,8 +223,8 @@ def _build_trace(path: str, root: str, depth: int) -> Dict[str, Any]:
         'depth': depth,
         'frames': frames,
         'warnings': warnings,
-        'total_resolved': walker.resolved,
-        'total_unresolved': walker.unresolved,
+        'total_resolved': projection.resolved,
+        'total_unresolved': projection.unresolved,
         'meta': meta,
     }
 
@@ -237,88 +239,71 @@ def _short_callee(call: str) -> str:
     return text if len(text) <= _MAX_EXTERNAL_NAME else text[:_MAX_EXTERNAL_NAME - 3] + '...'
 
 
-def _frame(name: str, defn: Optional[Dict[str, Any]], depth: int) -> Dict[str, Any]:
+def _frame(name: str, node: Optional[CalleeNode], depth: int) -> Dict[str, Any]:
     return {
         'name': name,
-        'file': defn['file'] if defn else '',
-        'line': defn['line'] if defn else 0,
-        'params': defn['params'] if defn else [],
-        'effects': defn['effects'] if defn else [],
+        'file': node.file if node else '',
+        'line': node.line if node else 0,
+        'params': node.params if node else [],
+        'effects': node.effects if node else [],
         'calls': [],
         'depth': depth,
-        'resolved': defn is not None,
+        'resolved': node is not None,
         'ambiguous': False,
     }
 
 
-class _TraceWalker:
-    """Expands definitions depth-first; each definition gets one frame."""
+class _TraceFrames:
+    """Projects the callee walk onto trace frames, in pre-order: a definition's frame sits
+    under the call that placed it; external and ambiguous callees get one frame per name.
+    Totals count each frame's distinct callee labels (ambiguous ones as resolved)."""
 
-    def __init__(self, index: Dict[str, List[Dict[str, Any]]], max_depth: int) -> None:
-        from reveal.adapters.calls.resolve import CallResolver
-        self.index = index
-        self._resolver = CallResolver(index)
-        self.max_depth = max_depth
+    def __init__(self) -> None:
         self.frames: List[Dict[str, Any]] = []
         self.resolved = 0
         self.unresolved = 0
         self.ambiguous_names: Set[str] = set()
-        self._expanded: Set[Tuple[str, int, str]] = set()
         self._leaf_names: Set[str] = set()
 
-    def expand(self, name: str, defn: Dict[str, Any], depth: int, relationship: Optional[str] = None) -> None:
-        self._expanded.add((defn['file'], defn['line'], name))
-        frame = _frame(name, defn, depth)
+    def visit(self, node: CalleeNode, relationship: Optional[str] = None) -> None:
+        frame = _frame(node.name, node, node.level)
         if relationship:
             frame['relationship'] = relationship
-        if defn.get('references'):
-            frame['references'] = defn['references']
+        if node.references:
+            frame['references'] = node.references
         self.frames.append(frame)
-        if depth >= self.max_depth:
+        if not node.expanded:
             return
-        targets = []
-        for call in defn['calls']:
-            label, target = self._resolve(call, defn['file'])
-            if label not in frame['calls']:
+        for edge, child in node.edges:
+            label = edge['callee'] if edge['resolved'] else _short_callee(edge['call_expr'])
+            first = label not in frame['calls']
+            if first:
                 frame['calls'].append(label)
-                relationship = None
-                if any(r['callee'] == call for r in defn.get('references', [])):
-                    relationship = 'jsx_reference' if call in defn.get('reference_only_calls', []) else 'call_and_jsx_reference'
-                targets.append((label, target, relationship))
-        for label, target, relationship in targets:
-            if target is None:
-                self.unresolved += 1
-                self._leaf(label, depth + 1, resolved=False, relationship=relationship)
-            elif isinstance(target, list):
-                self.resolved += 1
+                if edge['resolved']:
+                    self.resolved += 1
+                else:
+                    self.unresolved += 1
+            if child is not None:
+                self.visit(child, edge.get('relationship'))
+            elif first and not edge['resolved']:
+                self._leaf(label, edge, node.level + 1)
+            elif first and edge.get('ambiguous'):
                 self.ambiguous_names.add(label)
-                self._leaf(label, depth + 1, resolved=False, candidates=target, relationship=relationship)
-            else:
-                self.resolved += 1
-                if (target['file'], target['line'], label) not in self._expanded:
-                    self.expand(label, target, depth + 1, relationship=relationship)
+                self._leaf(label, edge, node.level + 1)
 
-    def _leaf(self, label: str, depth: int, resolved: bool,
-              candidates: Optional[List[Dict[str, Any]]] = None, relationship: Optional[str] = None) -> None:
+    def _leaf(self, label: str, edge: Dict[str, Any], depth: int) -> None:
         """External and ambiguous callees: one frame per name, never expanded."""
         if label in self._leaf_names:
             return
         self._leaf_names.add(label)
         frame = _frame(label, None, depth)
-        frame['resolved'] = resolved
-        if relationship:
-            frame['relationship'] = relationship
-        if candidates:
+        frame['resolved'] = edge['resolved']
+        if edge.get('relationship'):
+            frame['relationship'] = edge['relationship']
+        if edge.get('ambiguous'):
             frame['ambiguous'] = True
-            frame['candidates'] = [{'file': c['file'], 'line': c['line']} for c in candidates]
+            frame['candidates'] = edge['candidates']
         self.frames.append(frame)
-
-    def _resolve(self, call: str, caller_file: str) -> Tuple[str, Any]:
-        """(label, target): target is one definition, a list of candidate
-        definitions when the name is ambiguous, or None when external
-        (calls.resolve.CallResolver, shared with calls://?callees&depth)."""
-        tail, target = self._resolver.resolve(call, caller_file)
-        return (tail if target is not None else _short_callee(call)), target
 
 
 def _definition_index(structures: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
@@ -556,8 +541,8 @@ def _trace_absent(result: Dict[str, Any]) -> bool:
 @register_renderer(TraceRenderer)
 class TraceAdapter(ResourceAdapter):
     """Adapter walking the call graph from a named entry point and building
-    a depth-indented execution narrative (a depth-first walk that resolves callees
-    with the calls:// machinery)."""
+    a depth-indented execution narrative (the calls:// callee walk: each definition
+    expanded once, at the shallowest depth it is reached)."""
     HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
@@ -633,7 +618,8 @@ class TraceAdapter(ResourceAdapter):
                 {'uri': "trace://src?from=handle_request&depth=4", 'description': 'Trace 4 levels deep'},
             ],
             'features': [
-                'Depth-first walk, one frame per definition: two unrelated functions named run() are never merged',
+                'One frame per definition: two unrelated functions named run() are never merged',
+                'Each definition is expanded once, at the shallowest depth it is reached; a later call to it is listed in its caller\'s calls without a second frame',
                 'from=<file>:<name> picks one definition; a bare name with several traces each and warns',
                 'Callees with several same-named definitions resolve via the same file, then imports, else [ambiguous]',
                 'Each frame: file/line, parameters, classified side-effects, and what it calls next',
@@ -654,7 +640,7 @@ class TraceAdapter(ResourceAdapter):
     def get_schema() -> Dict[str, Any]:
         return {
             'adapter': 'trace',
-            'description': 'Execution narrative: depth-first call-graph walk from a named entry point',
+            'description': 'Execution narrative: call-graph walk from a named entry point, each definition expanded at the shallowest depth it is reached',
             'uri_syntax': 'trace://<path>?from=<FUNC>&depth=2',
             'resource': TraceAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none']},
@@ -679,7 +665,7 @@ class TraceAdapter(ResourceAdapter):
                 {'uri': 'trace://src?from=main', 'description': 'Trace from main()', 'output_type': 'trace', 'task': 'debugging'},
             ],
             'notes': [
-                'Frames are per definition (file:line), in call order. A callee name with several definitions resolves through the same file, then the caller\'s imports; otherwise it is marked ambiguous and not expanded (BACK-1399).',
+                'Frames are per definition (file:line), in pre-order under the call that first reaches them; each definition is expanded once, at the shallowest depth it is reached, by the same walk as calls://?root= (BACK-2096). A callee name with several definitions resolves through the same file, then the caller\'s imports; otherwise it is marked ambiguous and not expanded (BACK-1399).',
             ],
         }
 

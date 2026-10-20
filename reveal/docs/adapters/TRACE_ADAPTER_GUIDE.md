@@ -5,10 +5,11 @@ category: guide
 
 # trace:// Adapter Guide
 
-`trace://` walks the call graph depth-first from a named entry-point
-function, one frame per definition, and builds a depth-indented execution
-narrative: each frame shows the function's file/line, parameters,
-classified side-effects, and what it calls next.
+`trace://` walks the call graph from a named entry-point function, one frame
+per definition, and builds a depth-indented execution narrative: each frame shows the function's file/line, parameters,
+classified side-effects, and what it calls next. It is the same walk
+`calls://<dir>?root=<fn>&depth=N` answers from: level by level, each definition
+expanded once, at the shallowest depth it is reached.
 
 ## Quick Start
 
@@ -31,8 +32,11 @@ reveal 'trace://src?from=handle_request&depth=4'
 
 ## Reading The Output
 
-`frames` are in depth-first call order, so each frame follows its caller
-(`depth` gives the nesting). Each frame is one definition, with `file`/`line`,
+`frames` are in pre-order: each frame follows the call that first reaches it
+(`depth` gives the nesting). A definition is expanded once, at the shallowest
+depth the walk reaches it, so `f -> a -> b -> c` plus `f -> c` lists `c` at
+depth 1 with its own callees; the later call from `b` names `c` in `b`'s
+`calls` without a second frame. Each frame is one definition, with `file`/`line`,
 `params`, `effects` (classified side-effect labels like `db:execute`,
 `http:get`), `calls` (callee names), `resolved` and `ambiguous`. `resolved:
 false` means the callee is external/unresolved (marked `[external]` in text

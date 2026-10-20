@@ -185,7 +185,7 @@ callee → [(file, caller_func, line), ...]
 | `depth` | integer | 1 (`?root`: 2) | Transitive levels for `?target` and `?root` (1 = direct only, max 5) |
 | `builtins` | boolean | `false` | Include Python builtins in output (applies to `?callees` and `?rank=callers`) |
 | `format` | string | `text` | Output format: `text`, `json`, or `dot` |
-| `root` | string | — | Root function name for a recursive callee-tree traversal. Each definition is walked on its own; a callee name that several definitions share, with none in the caller's file or imports, is listed as `ambiguous` with its candidates and not expanded |
+| `root` | string | — | Root function name (or `FILE:NAME`) for a level-by-level callee walk, the same walk `trace://` uses. Every matching definition is a starting point and each definition is expanded once, at the shallowest level it is reached. Every call site of an expanded definition is an edge (`call_expr`), including one to a definition already reached, which has `expanded: false`. A callee name that several definitions share, with none in the caller's file or imports, is listed as `ambiguous` with its candidates and not expanded. Totals count edges: `total_edges` = `total_resolved` (ambiguous included, also counted in `total_ambiguous`) + `total_unresolved` |
 | `modules` | boolean | `false` | Build a module-level dependency graph instead of function-level |
 | `external` | boolean | `false` | Include external (non-project) modules in the `?modules` graph |
 | `test-framework` | boolean | `false` | Include test-framework entrypoints as callers in `?rank=callers` |

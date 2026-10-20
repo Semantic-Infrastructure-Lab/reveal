@@ -130,3 +130,60 @@ def test_level_one_edges_equal_find_callees_call_lists(tmp_path, language):
     assert sorted(_bare_callee_name(callee) for _, _, callee, _ in edges) == expected
     trace = _trace(path, root, 1)
     assert sorted(_bare_callee_name(label) for label in trace['frames'][0]['calls']) == expected
+
+
+# --- the shared walk's own contract ----------------------------------------------------------
+
+def test_root_marks_which_edge_expands_its_target(tmp_path):
+    # Fixture a: f->c places c at level 1 (expanded); b->c at level 3 is the later edge.
+    result = CallsAdapter(_tree(tmp_path, FIXTURE_A), 'root=f&depth=3').get_structure()
+    marks = {(e['caller'], e['callee'], level['level']): e['expanded']
+             for level in result['levels'] for e in level['callees']}
+    assert marks == {('f', 'a', 1): True, ('f', 'c', 1): True, ('a', 'b', 2): True,
+                     ('c', 'd', 2): True, ('b', 'c', 3): False}
+    assert (result['total_edges'], result['total_resolved'], result['total_unresolved'],
+            result['total_ambiguous']) == (5, 5, 0, 0)
+
+
+def test_root_marks_an_edge_to_a_target_reached_at_the_same_level(tmp_path):
+    result = CallsAdapter(_tree(tmp_path, FIXTURE_B), 'root=X&depth=2').get_structure()
+    marks = [(Path(e['caller_file']).name, e['expanded']) for e in result['levels'][0]['callees']]
+    assert marks == [('one.py', True), ('two.py', False)]
+
+
+def test_root_file_selector_picks_one_definition(tmp_path):
+    path = _tree(tmp_path, FIXTURE_B)
+    assert _root_edges(path, 'two.py:X', 1) == {('two.py', 'X', 'helper', 1)}
+
+
+@pytest.mark.parametrize('language', sorted(LANGUAGES))
+def test_level_one_call_text_is_find_callees_per_definition(tmp_path, language):
+    # Exact call text per definition, builtins hidden and shown, against find_callees.
+    from reveal.adapters.calls.index import walk_callees
+    root, files = LANGUAGES[language]
+    path = _tree(tmp_path, files)
+    for builtins in (False, True):
+        expected = {(m['file'], m['line']): m['calls']
+                    for m in find_callees(path, root, include_builtins=builtins)['matches']}
+        walk = walk_callees(path, root, depth=1, include_builtins=builtins)
+        assert {(n.file, n.line): [e['call_expr'] for e, _ in n.edges] for n in walk.roots} == expected
+
+
+def test_trace_keeps_params_and_effects_from_the_walk(tmp_path):
+    path = _tree(tmp_path, {'m.py': 'import shutil\n\ndef run(src, dst):\n    copy(src, dst)\n\n'
+                                    'def copy(a, b):\n    shutil.copy(a, b)\n'})
+    frames = {f['name']: f for f in _trace(path, 'run', 2)['frames']}
+    assert frames['run']['params'] == ['src', 'dst']
+    assert frames['copy']['params'] == ['a', 'b']
+    assert frames['copy']['effects'] == ['file:copy'] and frames['copy']['depth'] == 1
+
+
+def test_root_text_names_the_already_expanded_edge_and_counts_edges(tmp_path, capsys):
+    from reveal.adapters.calls.renderer import render_calls_structure
+    result = CallsAdapter(_tree(tmp_path, FIXTURE_B), 'root=X&depth=2').get_structure()
+    render_calls_structure(result, 'text')
+    out = capsys.readouterr().out
+    assert 'Total:      2 call edges: 2 resolved, 0 external/unresolved' in out
+    assert [line.strip() for line in out.splitlines() if '→' in line] == [
+        f'X → helper  ✓  {(tmp_path / "one.py").as_posix()}:1',
+        f'X → helper  ✓ (already expanded)  {(tmp_path / "two.py").as_posix()}:1']
