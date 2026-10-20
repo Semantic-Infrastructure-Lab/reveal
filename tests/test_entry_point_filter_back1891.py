@@ -14,6 +14,7 @@ active entry point:
 """
 
 import json
+from pathlib import PurePath
 
 import pytest
 
@@ -66,9 +67,9 @@ EXPECTED = {'fan_in_zero': 4, 'active': 1, 'rule': RULE}
 
 def test_the_fixture_has_four_fan_in_zero_files_and_one_active(project):
     rows = _json(f'imports://{project}?entrypoints')['entries']
-    assert sorted(r['file'].rsplit('/', 1)[-1] for r in rows) == [
+    assert sorted(PurePath(r['file']).name for r in rows) == [
         '__init__.py', 'app.py', 'orphan.py', 'test_app.py']
-    assert [r['file'].rsplit('/', 1)[-1] for r in active_entry_points(rows)] == ['app.py']
+    assert [PurePath(r['file']).name for r in active_entry_points(rows)] == ['app.py']
 
 
 def test_architecture_json_counts_fan_in_zero_and_active_and_states_the_rule(project):
