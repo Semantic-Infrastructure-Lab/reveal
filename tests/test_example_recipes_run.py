@@ -194,9 +194,15 @@ def _assert_text_as_written(harness, query, literal=False):
     return out
 
 
-def _assert_runs_as_written(harness, query, output_type):
+def _assert_runs_as_written(harness, query, output_type, retired_note=None):
+    """*retired_note* is the one note a retired scheme's own schema example prints (BACK-2066);
+    any other note, a retired spelling's in a recipe included, is a problem."""
     argv = _argv(query)
     code, out, err, _ = harness.run_subcommand(argv[0], *argv[1:], '--format', 'json')
+    if retired_note is not None:
+        lines = err.splitlines()
+        assert lines.count(retired_note) == 1, f"{query}: expected {retired_note!r} once in {lines[:3]}"
+        err = '\n'.join(line for line in lines if line != retired_note)
     problems = [line for line in err.splitlines()
                 if PROBLEM_LINE.search(line) and not any(n in line for n in ENVIRONMENT_NOISE)]
     assert not problems, f"{query}: stderr {problems[:3]}"
@@ -382,8 +388,11 @@ def _schema_query(uri):
 
 @pytest.mark.parametrize('example', _schema_examples())
 def test_schema_example_runs_as_written(harness, example):
+    from reveal.cli.invocation import RETIREMENTS
     query = _schema_query(example['uri'])
-    _assert_claim(harness, query, _assert_runs_as_written(harness, query, example.get('output_type')))
+    retired = RETIREMENTS.get(f"scheme:{query.partition('://')[0]}")
+    note = f'note: {retired.text}' if retired is not None and retired.stage == 'note' else None
+    _assert_claim(harness, query, _assert_runs_as_written(harness, query, example.get('output_type'), note))
 
 
 # -- third source: help://fields examples (FIELD_SELECTION_GUIDE.md, BACK-1607) -------------
