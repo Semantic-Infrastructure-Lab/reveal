@@ -42,8 +42,9 @@ import os
 import pickle
 import shutil
 import tempfile
+import threading
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 from ..version import __version__
 
@@ -78,6 +79,15 @@ _DISABLED_VALUES = {"0", "false", "no", "off", ""}
 
 # Build dirs whose mtime this process has already refreshed (see _mark_used).
 _used_build_dirs: set = set()
+
+# Per namespace dir: [entries as this process believes, own puts since the directory was last
+# read] (BACK-2121). put() used to re-list the whole namespace on every write, 21 ms per put at
+# 40k entries; it now lists it on a process's first put, when its own count says the cap is
+# crossed, and every _resync_every(cap) puts so that other processes' writes are noticed.
+_ns_counts: Dict[str, List[int]] = {}
+_ns_counts_lock = threading.Lock()
+_MIN_RESYNC = 16
+_RESYNC_DIVISOR = 8
 
 
 def is_enabled() -> bool:
@@ -203,15 +213,50 @@ def put(namespace: str, key: str, value: Any, max_entries: Optional[int] = None)
             except OSError:
                 pass
             raise
-        _prune(ns_dir, max_entries if max_entries is not None else _MAX_ENTRIES_PER_NAMESPACE)
+        cap = max_entries if max_entries is not None else _MAX_ENTRIES_PER_NAMESPACE
+        if _prune_due(ns_dir, cap):
+            _record_count(ns_dir, _prune(ns_dir, cap))
     except Exception as e:  # boundary-ok: broad-except -- pickle.dump of an arbitrary value can raise anything besides OSError; the cache degrades to uncached, never to a wrong answer
         # Read-only home, disk full, race — degrade to no caching.
         logger.debug("disk cache write of %s/%s skipped: %s", namespace, key, e)
         return
 
 
-def _prune(ns_dir: Path, max_entries: int) -> None:
-    """Best-effort LRU-ish cap: keep the newest ``max_entries``.
+def _resync_every(max_entries: int) -> int:
+    """Own puts between two reads of the namespace directory: an eighth of the cap, so the
+    listing costs O(1) entries per put however big the namespace, and the count another
+    process's writes put out of date is corrected within that window."""
+    return max(_MIN_RESYNC, max_entries // _RESYNC_DIVISOR)
+
+
+def _prune_due(ns_dir: Path, max_entries: int) -> bool:
+    """Count this put and say whether the namespace must be listed and pruned now.
+
+    Yes on this process's first put to the namespace, when its own count exceeds the cap
+    (single process: the cap is enforced on the put that crosses it, as before), and every
+    ``_resync_every`` puts. Overwriting a key counts as a new entry, which can only bring the
+    next listing forward, never delay one.
+    """
+    with _ns_counts_lock:
+        state = _ns_counts.get(str(ns_dir))
+        if state is None:
+            return True
+        state[0] += 1
+        state[1] += 1
+        return state[0] > max_entries or state[1] >= _resync_every(max_entries)
+
+
+def _record_count(ns_dir: Path, remaining: Optional[int]) -> None:
+    """Remember how many entries the namespace held after the listing (None: not listed)."""
+    if remaining is None:
+        return
+    with _ns_counts_lock:
+        _ns_counts[str(ns_dir)] = [remaining, 0]
+
+
+def _prune(ns_dir: Path, max_entries: int) -> Optional[int]:
+    """Best-effort LRU-ish cap: keep the newest ``max_entries``. Returns the number of entries
+    left, or None when the directory could not be listed.
 
     Cheap by default: a namespace under its cap is the overwhelmingly common
     case (every ``put()`` call re-checks), so we count entries via
@@ -232,20 +277,22 @@ def _prune(ns_dir: Path, max_entries: int) -> None:
                         over_cap = True
                         break
         if not over_cap:
-            return
+            return count
         entries = sorted(
             (p for p in ns_dir.glob("*.pkl")),
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )
+        left = min(len(entries), max_entries)
         for stale in entries[max_entries:]:
             try:
                 stale.unlink()
             except OSError:
-                pass
+                left += 1  # still on disk: the next listing retries it
+        return left
     except OSError as e:
         logger.debug("disk cache prune of %s skipped: %s", ns_dir, e)
-        return
+        return None
 
 
 def _mark_used(build_dir: Path) -> None:
