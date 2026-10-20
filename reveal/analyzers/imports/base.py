@@ -53,8 +53,10 @@ class ImportsDiskCache:
         self.namespace = namespace
         self._env_var = env_var
         self._default_max_files = default_max_files
-        # Persist the complete artifact, including future diagnostic fields.
-        self._mem_cache: Dict[Tuple[str, int, int], ImportExtraction] = {}
+        # Persist the complete artifact, including future diagnostic fields. One entry per
+        # absolute path, holding the (mtime_ns, size) it answers for: an edit replaces it
+        # rather than adding one (BACK-2093; it grew by one entry per edit).
+        self._mem_cache: Dict[str, Tuple[int, int, ImportExtraction]] = {}
         # A long-lived host (MCP) starts every request with this layer empty; the disk
         # layer still serves unchanged files (BACK-2083).
         register_request_cache(f'{__name__}.{namespace}', self.clear)
@@ -102,14 +104,15 @@ class ImportsDiskCache:
             owner.analysis = ImportExtraction()
             owner.analysis.imports = compute()
             return owner.analysis.imports
-        cache_key = (path_str, stat.st_mtime_ns, stat.st_size)
+        stamp = (stat.st_mtime_ns, stat.st_size)
         fingerprint = self.fingerprint(path_str, stat.st_mtime_ns)
-        cached = self._mem_cache.get(cache_key)
+        entry = self._mem_cache.get(path_str)
+        cached = entry[2] if entry is not None and entry[:2] == stamp else None
         if cached is None and fingerprint is not None:
             candidate = disk_cache.get(self.namespace, fingerprint)
             if isinstance(candidate, ImportExtraction):
                 cached = candidate
-                self._mem_cache[cache_key] = candidate
+                self._mem_cache[path_str] = (*stamp, candidate)
         if cached is not None:
             owner.analysis = deepcopy(cached)
             owner.analysis.imports = restamp_file_path(owner.analysis.imports, file_path)
@@ -118,7 +121,7 @@ class ImportsDiskCache:
         owner.analysis.imports = compute()
         if not owner.analysis.cacheable:
             return owner.analysis.imports
-        self._mem_cache[cache_key] = deepcopy(owner.analysis)
+        self._mem_cache[path_str] = (*stamp, deepcopy(owner.analysis))
         if fingerprint is not None:
             disk_cache.put(self.namespace, fingerprint, owner.analysis, max_entries=self.max_files())
         return owner.analysis.imports
