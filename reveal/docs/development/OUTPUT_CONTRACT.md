@@ -524,6 +524,9 @@ each cause to its count, `causes` lists them, and `suggestion` is `--no-gitignor
 gitignore is one. The `message` uses the footer's wording (`N entries hidden by .gitignore
 (use --no-gitignore to show)`) and is printed once with the other warnings. It is not loss:
 confidence and the outcome are unchanged, and a walk that kept any file reports nothing.
+Depends walks from the project root, so it judges this at its target: nothing left to analyze
+at the requested file or directory, with the target (or a directory holding it) hidden, is
+disclosed even when the project has other files (BACK-2075).
 
 Inspection failure for an ambiguous `build`/`dist` directory does not prove noise,
 including a missing child from a stale listing. Normal descent remains eligible:
