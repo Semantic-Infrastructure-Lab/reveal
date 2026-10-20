@@ -60,11 +60,20 @@ _UNCALLED_DERIVED_SIGNAL_WARNING = {
 
 # The languages a per-language recall snapshot measures (calls-recall-oracle, 19 pairs:
 # javascript has two corpora; tsx is scored inside the typescript corpus, whose 307 files
-# are .ts/.tsx). Every other language declines: the answer's confidence is null while one
-# of its files is in scope, and the language is named (decision i, BACK-2066).
+# are .ts/.tsx).
 SNAPSHOT_LANGUAGES = frozenset({
     'python', 'typescript', 'tsx', 'javascript', 'go', 'rust', 'java', 'ruby', 'php', 'csharp',
     'kotlin', 'swift', 'cpp', 'c', 'scala', 'zig', 'lua', 'gdscript', 'dart'})
+
+# The languages with no snapshot whose extractor yields call sources: one of their files in scope
+# withholds the answer's confidence and is named (decision i, BACK-2066). A language whose files
+# yield no call edge (bash, sql, graphql, proto, yaml, ...) does not. Nothing derives this at
+# request time: call extraction walks treesitter.CALL_NODE_TYPES (kotlin and zig add their own),
+# so a grammar with none of those kinds cannot yield a call, and the grammars that have one were
+# checked with a function-calls-function file each (erlang, ocaml, r, verilog and hcl yield no call
+# source). tests/test_calls_params_back2066.py re-derives the set from the registered grammars and
+# those files, so a new call grammar or a better extractor fails it until it is listed here.
+UNMEASURED_CALL_SOURCE_LANGUAGES = frozenset({'elixir', 'objc'})
 
 # Callee walks beyond depth 1 and --detail: no oracle scores them in any language (decision f).
 _UNMEASURED_WALK_WARNING = {
@@ -75,8 +84,9 @@ _UNMEASURED_WALK_WARNING = {
 
 
 def _unmeasured_language_warning(per_language: Dict[str, int]) -> Optional[Dict[str, Any]]:
-    """W-CALLS-10, naming each scanned language with no recall snapshot, or None."""
-    unmeasured = sorted(lang for lang in per_language if lang not in SNAPSHOT_LANGUAGES)
+    """W-CALLS-10, naming each scanned language that yields call sources and has no recall
+    snapshot, or None."""
+    unmeasured = sorted(lang for lang in per_language if lang in UNMEASURED_CALL_SOURCE_LANGUAGES)
     if not unmeasured:
         return None
     named = ', '.join(f"{lang} ({per_language[lang]} file{'s' if per_language[lang] != 1 else ''})"
@@ -94,7 +104,7 @@ def _declines(per_language: Dict[str, int], unmeasured_walk: bool) -> List[Dict[
 
 
 def _reported_confidence(confidence: float, known_loss: bool, declines: List[Dict[str, Any]]) -> Optional[float]:
-    """No number while evidence was lost or a scanned language has no recall snapshot."""
+    """No number while evidence was lost or a scanned call-source language has no recall snapshot."""
     if known_loss or any(w['code'] == 'W-CALLS-10' for w in declines):
         return None
     return confidence
@@ -128,7 +138,7 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
     actually measured (``defaults.CALL_GRAPH_EXTRACTION_CONFIDENCE``), and
     swaps the generic "dynamic dispatch... getattr..." warning (Python
     vocabulary, printed unconditionally on every language) for the dominant
-    language's own dispatch idioms. A scanned language outside SNAPSHOT_LANGUAGES
+    language's own dispatch idioms. A scanned language in UNMEASURED_CALL_SOURCE_LANGUAGES
     makes the confidence null and is named (W-CALLS-10); *unmeasured_walk* adds the
     W-CALLS-9 decline for a callee walk beyond depth 1 or --detail.
     """

@@ -415,10 +415,11 @@ Total:      0 call(s) across 0 definition(s)
 ```
 
 **Confidence.** `meta.confidence` is a file-weighted mean of the per-language recall figures. A
-scanned language with no recall snapshot (the 19 measured pairs cover python, typescript/tsx,
-javascript, go, rust, java, ruby, php, csharp, kotlin, swift, cpp, c, scala, zig, lua, gdscript and
-dart; Elixir, Bash and the rest are not measured) withholds it: the envelope carries no
-`confidence`, and W-CALLS-10 names each such language with its file count, in text and JSON.
+scanned language that yields call sources and has no recall snapshot (today Elixir and
+Objective-C; the 19 measured pairs cover python, typescript/tsx, javascript, go, rust, java, ruby,
+php, csharp, kotlin, swift, cpp, c, scala, zig, lua, gdscript and dart) withholds it: the envelope
+carries no `confidence`, and W-CALLS-10 names each such language with its file count, in text and
+JSON. Files that yield no call edge (shell, SQL, GraphQL, protobuf, YAML, ...) do not withhold it.
 
 ### JSON
 

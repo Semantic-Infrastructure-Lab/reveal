@@ -1380,7 +1380,7 @@ without `callees`) exits 2 naming the parameter. A name that names nothing (call
 callers: no definition and no call site) exits 2 with the empty answer. Exit 3 means a file or
 directory could not be read; the answer still prints with its warning. A callee walk beyond depth 1
 and `detail` are not measured in any language (W-CALLS-9; the `walk_rule` and its `Rule:` line say
-so), and a scanned language with no recall snapshot withholds the confidence (W-CALLS-10).
+so), and a scanned call-source language with no recall snapshot (Elixir, Objective-C) withholds the confidence (W-CALLS-10).
 
 **Two adapters — different scopes:**
 

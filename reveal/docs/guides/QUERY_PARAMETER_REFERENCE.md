@@ -444,7 +444,7 @@ reveal 'stats://.?hotspots&code_only'
 
 One mode per request (`callers`/`target`, `callees`, `root`, `rank`, `uncalled`, `modules`); two exit 2.
 A name that names nothing exits 2 (`callees`: no definition; `callers`: no definition and no call
-site). A scanned language with no recall snapshot withholds `meta.confidence` and is named (W-CALLS-10).
+site). A scanned call-source language with no recall snapshot (Elixir, Objective-C) withholds `meta.confidence` and is named (W-CALLS-10).
 
 - **`external=true`** - Include stdlib/third-party edges in `?modules=true` output (default: false)
   ```bash

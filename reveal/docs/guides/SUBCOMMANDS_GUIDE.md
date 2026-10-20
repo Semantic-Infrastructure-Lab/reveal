@@ -454,7 +454,8 @@ not be read: the answer is still printed with the warning). `--fail-on` accepts 
 
 A callee walk beyond depth 1 and `--detail` are not measured in any language: the answer carries
 W-CALLS-9 and its `walk_rule` (a `Rule:` line in text) says `beyond_depth_1: false, detail: false`.
-A language with no recall snapshot in PATH withholds the confidence and is named (W-CALLS-10).
+A language in PATH that yields call sources and has no recall snapshot (Elixir, Objective-C)
+withholds the confidence and is named (W-CALLS-10); shell, SQL and other files with no call edges do not.
 
 A directory named `calls` in the current directory is shadowed by the verb: `reveal calls`
 prints `note: ./calls/ exists — use ./calls or calls/ to target it`; `reveal calls/` is the path.

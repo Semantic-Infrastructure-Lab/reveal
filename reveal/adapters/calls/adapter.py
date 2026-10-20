@@ -190,8 +190,8 @@ _HELP: Dict[str, Any] = {
         'depth=2-5 walks level by level under the same calls_callees type (levels, definitions, edge totals, '
         'walk_rule and a Rule: line); &detail adds params and effects. Neither is measured in any language '
         '(W-CALLS-9).',
-        'A scanned language with no recall snapshot (Elixir, Bash, ...) withholds meta.confidence and is named '
-        '(W-CALLS-10).',
+        'A scanned language that yields call sources and has no recall snapshot (Elixir, Objective-C) withholds '
+        'meta.confidence and is named (W-CALLS-10); shell, SQL and other files with no call edges do not.',
         '?uncalled: web/CLI framework routes (Flask, FastAPI, Click, …) are dispatched by the '
         'framework, not a static call, so they false-flag as dead code by default. Declare '
         'project-specific entry-point decorators in .reveal.yaml to exclude them: '
@@ -407,7 +407,7 @@ _SCHEMA: Dict[str, Any] = {
         'total_ambiguous counts the resolved edges with several candidate definitions.',
         '?callees depth=2-5 and detail: the callee walk under calls_callees, every call site of an expanded '
         'definition an edge; not measured in any language (W-CALLS-9 in meta.warnings, walk_rule.measured).',
-        'A language with no recall snapshot in scope: no meta.confidence, W-CALLS-10 names it (languages).',
+        'A call-source language with no recall snapshot in scope: no meta.confidence, W-CALLS-10 names it (languages).',
         'Exactly one mode per request (callers or target, callees, root, rank, uncalled, modules), else exit 2 '
         'naming both. Exit 0 complete, 2 rejected before analysis or a name with no definition (callers: and '
         'no call site), 3 required analysis or output failed or incomplete.',
