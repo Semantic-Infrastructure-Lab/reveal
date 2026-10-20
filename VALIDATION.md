@@ -2084,6 +2084,14 @@ manifest entry with a `recall:` block names an independent oracle from
 The corpora are optional test inputs, never runtime dependencies or services. Normal
 installation and the normal test suite do not fetch them.
 
+The gate reads reveal through its public output. For the import oracles it makes one
+`depends://<scan dir>` request per corpus (the dependency summary lists every module with its
+sorted importers); Go uses the per-file form, whose package view expands a directory import to
+files. It fails on a capped scan, a cut module list, non-JSON output or a nonzero exit, and
+never reads the adapter's private graph. `partial_files` is the count the CLI prints for the
+whole scan tree, so it includes files of other languages: cpp-assimp's 458 counts one Rust
+file (`port/assimp_rs/src/lib.rs`) that the C++-only count of 457 did not.
+
 ```bash
 npm ci --prefix scripts/oracles --ignore-scripts --no-audit --no-fund  # optional compiler oracle
 python scripts/fetch_corpus.py --recall
