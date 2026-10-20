@@ -12,9 +12,9 @@ every ``loc_*`` identifier ``local``. A ``gap_*`` identifier sits in a function 
 grammar-coverage check for function-like kinds is in ``tests/test_grammar_coverage.py``
 (``LOCAL_SCOPE_GAPS``).
 
-Python is the first extractor on the helper (``ImportStatement.scope``), and
-cycles leave local edges out by it (BACK-2077): a class body's import, decorated or not, is a
-load-time edge.
+Python and JavaScript/TypeScript/TSX (BACK-2078) record ``ImportStatement.scope`` from the
+helper, and cycles leave local edges out by it (BACK-2077): a class body's import, decorated
+or not, is a load-time edge.
 """
 
 import json
@@ -60,24 +60,27 @@ SNIPPETS = {
         'const g = () => loc_b;\n'
         'class K { m() { loc_c; } }\n'
         'function* gen() { loc_d; }\n'
-        'const h = function () { gap_a; };\n'
-        'const k = function* () { gap_b; };\n'
+        'const h = function () { loc_e; };\n'
+        'const k = function* () { loc_f; };\n'
+        'class C { f = mod_b; static s = mod_c; static { mod_d; } a = () => loc_g; }\n'
     ),
     'typescript': (
         "import { x } from './x'; mod_a;\n"
         'function f(): void { loc_a; }\n'
         'const g = (): number => loc_b;\n'
         'class K { m(): void { loc_c; } }\n'
-        'const h = function (): void { gap_a; };\n'
-        'const k = function* (): Generator<number> { gap_b; };\n'
+        'const h = function (): void { loc_d; };\n'
+        'const k = function* (): Generator<number> { loc_e; };\n'
+        'class C { f: number = mod_b; static s = mod_c; static { mod_d; } a = (): number => loc_f; }\n'
     ),
     'tsx': (
         "import { x } from './x'; mod_a;\n"
         'function f(): void { loc_a; }\n'
         'const g = (): number => loc_b;\n'
         'class K { m(): void { loc_c; } }\n'
-        'const h = function (): void { gap_a; };\n'
-        'const k = function* (): Generator<number> { gap_b; };\n'
+        'const h = function (): void { loc_d; };\n'
+        'const k = function* (): Generator<number> { loc_e; };\n'
+        'class C { f: number = mod_b; static s = mod_c; static { mod_d; } a = (): number => loc_f; }\n'
     ),
     'rust': (
         'use mod_a;\n'
@@ -180,12 +183,6 @@ SNIPPETS = {
 # (grammar, gap identifier) -> why it reads 'module' today. Keep in step with
 # tests/test_grammar_coverage.py LOCAL_SCOPE_GAPS.
 GAPS = {
-    ('javascript', 'gap_a'): 'BACK-2078: function_expression is not in LOCAL_SCOPE_NODES',
-    ('typescript', 'gap_a'): 'BACK-2078: function_expression is not in LOCAL_SCOPE_NODES',
-    ('tsx', 'gap_a'): 'BACK-2078: function_expression is not in LOCAL_SCOPE_NODES',
-    ('javascript', 'gap_b'): 'BACK-2078: generator_function is not in LOCAL_SCOPE_NODES',
-    ('typescript', 'gap_b'): 'BACK-2078: generator_function is not in LOCAL_SCOPE_NODES',
-    ('tsx', 'gap_b'): 'BACK-2078: generator_function is not in LOCAL_SCOPE_NODES',
     ('gdscript', 'gap_a'): 'BACK-2079: a GDScript 4 property get_body is not in LOCAL_SCOPE_NODES',
     ('rust', 'gap_a'): 'BACK-2079: closure_expression is not in LOCAL_SCOPE_NODES',
     ('cpp', 'gap_a'): 'BACK-2079: lambda_expression is not in LOCAL_SCOPE_NODES',
@@ -336,7 +333,8 @@ def test_python_import_statements_are_not_dynamic(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# JavaScript/TypeScript: the dynamic flag (scope opts in with BACK-2078)
+# JavaScript/TypeScript: the dynamic flag, and the scope from the helper (BACK-2078;
+# every case and TS/TSX in tests/test_js_import_scope_back2078.py)
 # ---------------------------------------------------------------------------
 
 JS_SOURCE = (
@@ -356,8 +354,10 @@ def test_javascript_dynamic_flag(tmp_path):
         'static_import': False, 're_export': False,
         'commonjs_require': True, 'side_effect_require': True, 'dynamic_import': True,
     }
-    assert {stmt.scope for stmt in by_name.values()} == {None}, (
-        'JS/TS scope is not recorded yet: ?circular cannot leave its local edges out (BACK-2078)')
+    assert {name: stmt.scope for name, stmt in by_name.items()} == {
+        'static_import': 'module', 're_export': 'module',
+        'commonjs_require': 'module', 'side_effect_require': 'module', 'dynamic_import': 'local',
+    }
 
 
 # ---------------------------------------------------------------------------

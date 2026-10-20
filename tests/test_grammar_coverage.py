@@ -451,13 +451,10 @@ NOT_LOCAL_SCOPE: Dict[str, Dict[str, str]] = {
 # (tests/test_import_edge_scope_back2076.py has one strict xfail per language).
 LOCAL_SCOPE_GAPS: Dict[str, Dict[str, str]] = {
     'cpp': {'lambda_expression': 'BACK-2079'},
-    'javascript': {'function_expression': 'BACK-2078', 'generator_function': 'BACK-2078'},
     'php': {'anonymous_function': 'BACK-2079'},
     'ruby': {'do_block': 'BACK-2079'},
     'rust': {'closure_expression': 'BACK-2079'},
     'scala': {'lambda_expression': 'BACK-2079'},
-    'tsx': {'function_expression': 'BACK-2078', 'generator_function': 'BACK-2078'},
-    'typescript': {'function_expression': 'BACK-2078', 'generator_function': 'BACK-2078'},
 }
 
 

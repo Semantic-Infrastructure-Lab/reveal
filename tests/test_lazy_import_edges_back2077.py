@@ -221,20 +221,24 @@ def test_depends_prints_its_rule(project):
 
 
 def test_unclassified_language_is_disclosed(tmp_path):
-    """Only Python records import scope today: a JS edge is counted under every &lazy
-    value, and the rule names the language instead of claiming the filter covered it."""
+    """A language whose extractor records no import scope (Ruby, until BACK-2079) is counted
+    under every &lazy value, and the rule names it instead of claiming the filter covered
+    it. The wired languages beside it (Python; JavaScript since BACK-2078) are filtered and
+    not named: wiring a language removes its disclosure."""
     root = _tree(tmp_path / 'mixed', {
+        'a.rb': 'X = 1\n', 'b.rb': "def f\n  require_relative 'a'\nend\n",
         'a.js': 'export const x = 1;\n',
         'b.js': "export function f() { return import('./a.js'); }\n",
         'p.py': 'X = 1\n', 'q.py': 'def f():\n    import p\n',
     })
-    for lazy, fan_in in (('include', {'a.js': 1, 'p.py': 1}), ('exclude', {'a.js': 1}), ('only', {'p.py': 1})):
+    for lazy, fan_in in (('include', {'a.rb': 1, 'a.js': 1, 'p.py': 1}), ('exclude', {'a.rb': 1}),
+                         ('only', {'a.js': 1, 'p.py': 1})):
         data = _json(_uri(root, f'rank=fan-in&lazy={lazy}'))
         assert _ranks(data)[0] == fan_in, lazy
         assert data['edge_rule']['unclassified_edges'] == 1
-        assert data['edge_rule']['unclassified_languages'] == ['javascript']
+        assert data['edge_rule']['unclassified_languages'] == ['ruby']
     text = _run(_uri(root, 'rank=fan-in&lazy=exclude'))
-    assert 'scope is not recorded for javascript' in text
+    assert 'Import scope is not recorded for ruby: 1 edge(s)' in text
 
 
 # ------------------------------------------------------------------ I002 keeps BACK-445
