@@ -148,49 +148,60 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
                 from ...utils.results import FailureCause
                 consume(_invalid_answer(adapter, name, path, str(exc), args, FailureCause.ANALYSIS, result_type=expected_type))
                 return
+            scope_path = _scope_path(adapter, path)
             try:
-                root, excludes = dispatch_scope(path, peek(args, 'exclude'))
+                root, excludes = dispatch_scope(scope_path, peek(args, 'exclude'))
             except OSError as exc:
                 from ...utils.results import FailureCause
                 consume(_invalid_answer(adapter, name, path, str(exc), args, FailureCause.ANALYSIS,
                                         result_type=expected_type))
                 return
             with exclusion_scope(root, excludes), gitignore_scope(respect):
-                consume(_declared_answer(adapter, name, path, source, transport, args, expected_type))
+                consume(_declared_answer(adapter, name, path, source, transport, args, expected_type,
+                                         scope_path=scope_path))
             complete(args)
     finally:
         if ledger is not None and ledger.complete:
             ledger.report(name)
 
 
-def _declared_answer(adapter_class, name: str, path: str, source: Any, transport: str, args, expected_type: str):
+def _scope_path(adapter_class, path: str) -> str:
+    """The filesystem path a resource names: calls' `path:name` shorthand names `path` (BACK-1499).
+    The adapter receives the resource as spelled; scope, the stat and `source` use this path."""
+    resolve = getattr(adapter_class, 'resource_path', None)
+    return str(resolve(path)) if resolve is not None else path
+
+
+def _declared_answer(adapter_class, name: str, path: str, source: Any, transport: str, args, expected_type: str,
+                     *, scope_path: str | None = None):
     from ...adapters.factory import _canonical_init
     from ...utils.query_binding import bind_prepared_params
     from ...utils.path_utils import to_posix
     from ...utils.results import FailureCause
     from .uri import _answer, _call_adapter, _renderer_class_of, _structure_answer
+    scope = path if scope_path is None else scope_path
     try:
         params = bind_prepared_params(adapter_class.PARAM_SPECS, source, transport=transport)
         validate = getattr(adapter_class, 'validate_request', None)
         if validate is not None:
             validate(params, args)
         # stat distinguishes absence from inaccessible required work.
-        Path(path).stat()
+        Path(scope).stat()
     except (FileNotFoundError, NotADirectoryError):
-        return _invalid_answer(adapter_class, name, path, f'Path not found: {to_posix(path)}', args, result_type=expected_type)
+        return _invalid_answer(adapter_class, name, scope, f'Path not found: {to_posix(path)}', args, result_type=expected_type)
     except ValueError as exc:
-        return _invalid_answer(adapter_class, name, path, str(exc), args, result_type=expected_type)
+        return _invalid_answer(adapter_class, name, scope, str(exc), args, result_type=expected_type)
     except OSError as exc:
-        return _invalid_answer(adapter_class, name, path, str(exc), args, FailureCause.ANALYSIS, result_type=expected_type)
+        return _invalid_answer(adapter_class, name, scope, str(exc), args, FailureCause.ANALYSIS, result_type=expected_type)
 
     def resolve():
         adapter = _call_adapter(lambda: _canonical_init(adapter_class, path, params=params),
-                                name, path, adapter_class)
-        return _structure_answer(adapter, _renderer_class_of(name), args, name, path,
-                                 source_path=path, facts_of=adapter_class.execution_facts, expected_type=expected_type)
+                                name, scope, adapter_class)
+        return _structure_answer(adapter, _renderer_class_of(name), args, name, scope,
+                                 source_path=scope, facts_of=adapter_class.execution_facts, expected_type=expected_type)
 
     return _answer(resolve, name, args, result_type=expected_type,
-                   source_path=path, facts_of=adapter_class.execution_facts)
+                   source_path=scope, facts_of=adapter_class.execution_facts)
 
 
 def _invalid_answer(adapter, name, path, message, args, cause=None, *, result_type=None):

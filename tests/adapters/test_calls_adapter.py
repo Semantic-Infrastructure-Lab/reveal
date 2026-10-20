@@ -996,12 +996,11 @@ def validate():
         self.assertIn('helper', calls)
         self.assertIn('validate', calls)
 
-    def test_callees_param_takes_precedence_over_target(self):
-        """?callees=X&target=Y: callees param wins (callees mode)."""
+    def test_two_modes_are_rejected_not_resolved_by_precedence(self):
+        """?callees=X&target=Y used to answer callees silently; one mode per request (BACK-2066)."""
         adapter = CallsAdapter(self.tmpdir, 'callees=worker&target=helper')
-        result = adapter.get_structure()
-        self.assertEqual(result.get('type'), 'calls_callees')
-        self.assertEqual(result.get('target'), 'worker')
+        with self.assertRaisesRegex(ValueError, 'target and callees'):
+            adapter.get_structure()
 
     def test_missing_both_params_returns_error(self):
         adapter = CallsAdapter(self.tmpdir, '')

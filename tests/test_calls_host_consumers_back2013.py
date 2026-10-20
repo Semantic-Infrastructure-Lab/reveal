@@ -76,7 +76,7 @@ def test_host_projection_keeps_known_loss_and_does_not_retain_either_lru(tmp_pat
         context.setattr(os, 'scandir', scandir)
         result = request(f'calls://{root}?uncalled', '--format', 'json',
                          '--fields', 'entries,total_uncalled', '--max-items', '0')
-        assert result.returncode == 0, result.stderr
+        assert result.returncode == 3, result.stderr  # D6 since calls is declared (BACK-2066): known loss is incomplete analysis, 3
         payload = json.loads(result.stdout)
         assert payload['entries'] == [] and payload['total_uncalled'] == 1
         warnings = [w for w in payload['meta']['warnings'] if w.get('type') == 'analysis_incomplete']

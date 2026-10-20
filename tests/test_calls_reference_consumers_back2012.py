@@ -167,7 +167,7 @@ def test_cli_text_discloses_reference_only_read_loss_once_and_preserves_exit(tmp
     reference = make_tree(root)
     reference_read_loss(monkeypatch, reference)
     result = _run_reveal_direct(f'calls://{root.as_posix()}?uncalled')
-    assert result.returncode == 0
+    assert result.returncode == 3  # D6 since calls is declared (BACK-2066): known loss is incomplete analysis, 3
     combined = result.stdout + result.stderr
     assert combined.count('1 file(s) could not be analyzed completely (PermissionError)') == 1
     assert 'confidence above' not in combined

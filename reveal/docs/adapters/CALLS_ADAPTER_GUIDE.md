@@ -51,6 +51,10 @@ reveal 'ast://src/auth.py?show=calls'
 
 # Find all callers of a function in a single file (within-file only)
 reveal 'ast://src/auth.py?calls=validate_token'
+
+# The same requests as a subcommand (flags generated from the same declarations)
+reveal calls src/ --target validate_item --depth 2
+reveal calls src/ --callees validate_item
 ```
 
 **Why use calls://?**
@@ -181,16 +185,36 @@ callee → [(file, caller_func, line), ...]
 | `callees` | string | — | Function name to find **callees of** (forward lookup) |
 | `rank` | string | — | Set to `callers` to rank all functions by in-degree |
 | `uncalled` | flag | — | List dead-code candidates — functions/methods with no static callers (see [Workflow 2](#workflow-2-find-unused-functions-dead-code)) |
-| `top` | integer | 10 for `?rank`, all for `?uncalled` | Max results for `?rank=callers` or `?uncalled`; `0` = all. `--limit N` becomes `top=N` |
-| `depth` | integer | 1 (`?root`: 2) | Transitive levels for `?target` and `?root` (1 = direct only, max 5) |
+| `top` | integer | 10 for `?rank`, all for `?uncalled` | Max results for `?rank=callers` or `?uncalled`; `0` = all; a negative or non-whole value exits 2. `--limit N` becomes `top=N` |
+| `depth` | integer | 1 (`?root`: 2) | Transitive levels for `?target` and `?root`: a signed whole integer clamped 1–5 (1 = direct only); `depth=abc` or `1.5` exits 2 |
 | `builtins` | boolean | `false` | Include Python builtins in output (applies to `?callees` and `?rank=callers`) |
-| `format` | string | `text` | Output format: `text`, `json`, or `dot` |
+| `format` | string | `text` | Output format: `text`, `json`, or `dot`; another value exits 2 |
 | `root` | string | — | Root function name (or `FILE:NAME`) for a level-by-level callee walk, the same walk `trace://` uses. Every matching definition is a starting point and each definition is expanded once, at the shallowest level it is reached. Every call site of an expanded definition is an edge (`call_expr`), including one to a definition already reached, which has `expanded: false`. A callee name that several definitions share, with none in the caller's file or imports, is listed as `ambiguous` with its candidates and not expanded. Totals count edges: `total_edges` = `total_resolved` (ambiguous included, also counted in `total_ambiguous`) + `total_unresolved` |
 | `modules` | boolean | `false` | Build a module-level dependency graph instead of function-level |
 | `external` | boolean | `false` | Include external (non-project) modules in the `?modules` graph |
-| `test-framework` | boolean | `false` | Include test-framework entrypoints as callers in `?rank=callers` |
+| `test-framework` | boolean | `false` | Include test-framework entrypoints as callers in `?rank=callers`, and as dead-code candidates in `?uncalled` |
 
-> One of `target`, `callees`, `rank`, `uncalled`, `root`, or `modules` is required. If `rank=callers` is given, it takes precedence.
+> Exactly one of `target`, `callees`, `root`, `rank`, `uncalled` or `modules` per request (the
+> `path:name` shorthand counts as `target` only when none is given). Two modes exit 2 and name both;
+> before calls was a declared noun they resolved silently by a hidden precedence. No mode exits 2.
+> Values are typed, never coerced: `target=123` is the name `123`; a malformed value (`depth=abc`,
+> `top=-1`, `rank=often`, `type=klass`, `builtins=maybe`) exits 2 naming the parameter. Boolean
+> keys take `true/false/yes/no/1/0` or bare presence.
+
+### Subcommand and exit codes
+
+`reveal calls <path>` takes the same parameters as flags (`--target NAME`, `--callees NAME`,
+`--root NAME`, `--depth N`, `--rank callers`, `--top N`, `--uncalled`, `--type KIND`, `--modules`,
+`--external`, `--builtins`, `--test-framework`); both spellings give equal JSON through one
+execution path. `format=dot` stays URI-only. Details: [SUBCOMMANDS_GUIDE](../guides/SUBCOMMANDS_GUIDE.md#reveal-calls--cross-file-call-graph).
+
+| Exit | Meaning |
+|------|---------|
+| 0 | Complete answer (an empty one included: a name with no callers or no definition is still 0) |
+| 2 | Rejected before analysis: two modes, no mode, a malformed value, a missing path |
+| 3 | Required analysis or output incomplete: a file or directory could not be read (the answer is still printed with its `analysis_failed`/`analysis_incomplete` warning), or a requested `--also-json` could not be written |
+
+`--fail-on` accepts `none` only: calls reports facts, not findings.
 
 ### `target`
 

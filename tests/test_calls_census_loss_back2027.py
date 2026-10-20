@@ -127,7 +127,7 @@ def test_actual_public_output_discloses_census_loss_once(tmp_path, monkeypatch, 
     if view == 'artifact':
         flags += ['--also-json', str(artifact)]
     response = run(uri, *flags)
-    assert response.returncode == 0  # existing Calls legacy outcome policy
+    assert response.returncode == 3  # D6 since calls is declared (BACK-2066): known loss is incomplete analysis, 3
     if view in {'json', 'artifact'}:
         data = json.loads(response.stdout if view == 'json' else artifact.read_text(encoding='utf-8'))
         assert data['total_callers'] == 2 and 'confidence' not in data['meta']

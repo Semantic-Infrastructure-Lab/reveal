@@ -179,13 +179,13 @@ def test_public_cuts_and_text_sidecar_preserve_zero_display_file_diagnostic_and_
     fault.update(denied={denied}, mode='unknown')
     uri = 'calls://' + tmp_path.as_posix() + '?uncalled=true'
     response = run(uri, '--fields', 'entries', '--max-items', '0', '--format', 'json', '--provenance')
-    assert response.returncode == 0 and fault['events'] == [denied]
+    assert response.returncode == 3 and fault['events'] == [denied]  # D6 since calls is declared (BACK-2066): known loss is incomplete analysis, 3
     result = json.loads(response.stdout)
     assert result['entries'] == []
     _warning(result)
     artifact = tmp_path / 'answer.json'
     text = run(uri, '--max-items', '0', '--also-json', str(artifact))
-    assert text.returncode == 0 and artifact.exists()
+    assert text.returncode == 3 and artifact.exists()
     saved = json.loads(artifact.read_text(encoding='utf-8'))
     _warning(saved)
     assert (text.stdout + text.stderr).count('file(s) could not be analyzed') == 1

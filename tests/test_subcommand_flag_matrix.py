@@ -83,6 +83,7 @@ PROBES = {
     ('surface', 'respect_gitignore'): (['{tree}'], False),
     ('testability', 'respect_gitignore'): (['{tree}'], False),
     ('trace', 'respect_gitignore'): (['{tree}', '--from', 'a'], False),
+    ('calls', 'respect_gitignore'): (['{tree}', '--uncalled'], False),
     ('overview', 'respect_gitignore'): (['{tree}'], False),
     ('pack', 'since'): (['{tree}'], '2099-01-01'),
     ('overview', 'all'): (['{pkg}'], True),

@@ -38,6 +38,34 @@ subcommands:
       review: honored
       via:
       - declared-read
+  calls:
+    all:
+      reason: --all is not declared on `reveal calls`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap; the subcommand takes --top N
+      review: not-applicable
+      via: []
+    respect_gitignore:
+      reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
+        proves an output diff'
+      review: honored
+      via:
+      - declared-global
+    since:
+      reason: --since is not declared on `reveal calls`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    until:
+      reason: --until is not declared on `reveal calls`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    verbose:
+      reason: calls accepts shared verbosity but nothing it prints changes with it; the
+        flag ledger names it as a no-op, as for calls:// (BACK-2066).
+      review: not-applicable
+      via:
+      - declared-unused
   check:
     all:
       reason: --all is not declared on `reveal check`'s own parser -- argparse rejects

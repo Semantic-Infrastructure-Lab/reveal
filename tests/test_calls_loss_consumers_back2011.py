@@ -155,7 +155,7 @@ def test_cli_json_projections_and_artifact_preserve_loss(tmp_path, monkeypatch, 
         f'calls://{root.as_posix()}?uncalled&top=1' + ('&format=json' if query_override else ''),
         '--format', 'text' if query_override else 'json',
         '--also-json', str(artifact), *extra)
-    assert output.returncode == 0
+    assert output.returncode == 3  # D6 since calls is declared (BACK-2066): known loss is incomplete analysis, 3
     result = json.loads(output.stdout)
     assert len(loss_warning(result)) == 1
     assert 'confidence' not in result['meta']

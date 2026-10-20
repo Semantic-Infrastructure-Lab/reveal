@@ -77,6 +77,9 @@ COMMANDS: Dict[str, CommandSpec] = {
     'architecture': _declared('architecture',
                      'reveal architecture [path]',
                      'Architectural brief: entry points, core abstractions, risks'),
+    'calls':        _declared('calls',
+                     'reveal calls --target FUNC',
+                     'Call graph: callers, callees, callee walk (--root), --rank callers, --uncalled, --modules'),
     'check':        _spec('check',
                      'reveal check <path>',
                      'Run quality rules on a file or directory',
@@ -132,7 +135,7 @@ COMMANDS: Dict[str, CommandSpec] = {
 
 # Order of the `--help-all` subcommand listing: task entry points first, tooling last.
 EPILOG_ORDER = ('overview', 'architecture', 'deps', 'hotspots', 'contracts', 'surface',
-                'testability', 'trace', 'check', 'review', 'health', 'pack', 'dev',
+                'testability', 'calls', 'trace', 'check', 'review', 'health', 'pack', 'dev',
                 'scaffold', 'offline')
 
 

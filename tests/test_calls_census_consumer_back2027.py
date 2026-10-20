@@ -128,7 +128,7 @@ def test_existing_cli_cuts_and_formats_cannot_hide_census_only_loss(tmp_path, fa
         uri += '&format=dot'
         flags = ['--format', 'text']
     result = run(uri, *flags)
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 3, result.stderr  # D6 since calls is declared (BACK-2066): known loss is incomplete analysis, 3
     assert fault['events'] and fault['censuses'][-1] == {}
     if view == 'query_dot':
         assert result.stdout.startswith('digraph ')

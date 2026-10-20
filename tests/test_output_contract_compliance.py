@@ -157,6 +157,7 @@ KNOWN_VIOLATIONS: dict = {}
 # needs a row here or a NOT_A_QUERY reason.
 SUBCOMMAND_ARGV = {
     'architecture': ['proj'],
+    'calls': ['proj', '--target', 'main'],
     'check': ['proj'],
     'contracts': ['proj'],
     'deps': ['proj'],

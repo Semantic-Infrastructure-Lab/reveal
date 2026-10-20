@@ -266,7 +266,8 @@ def test_generated_help_names_every_mode_and_its_exits():
         assert flag in result.stdout, flag
     assert 'clamped 1-5' in result.stdout
     assert 'Exit codes:' in result.stdout
-    assert '  3  ' in result.stdout and 'findings gate matched' not in result.stdout
+    assert '\n  3  ' in result.stdout
+    assert '\n  1  ' not in result.stdout, 'calls has no findings gate'
 
 
 def test_mcp_usage_rejection_is_a_tool_error_naming_both(project):
@@ -278,3 +279,49 @@ def test_mcp_usage_rejection_is_a_tool_error_naming_both(project):
     answer = reveal_query(f'calls://{project.as_posix()}?target=helper')
     assert not isinstance(answer, _ToolFailure)
     assert 'Callers of: helper' in answer
+
+
+# The shared ParamSpec owner gained three small pieces for this declaration.
+
+def test_param_value_error_keeps_the_converters_message_and_others_stay_generic():
+    from reveal.utils.query_parser import ParamSpec, ParamValueError
+
+    def authored(value):
+        raise ParamValueError("'x' needs a function name: x=<name>")
+
+    def plain(value):
+        raise ValueError('internal detail')
+
+    with pytest.raises(ValueError, match="^'x' needs a function name"):
+        ParamSpec('x', 'string', '', None, authored).validate(True)
+    with pytest.raises(ValueError, match="^x must be a valid string, got 'v'$"):
+        ParamSpec('x', 'string', '', None, plain).validate('v')
+
+
+def test_an_absent_optional_choice_is_its_default_and_a_wrong_one_rejects():
+    from reveal.utils.query_parser import ParamSpec, nonempty_scalar
+    spec = ParamSpec('rank', 'string', '', None, nonempty_scalar, choices=('callers',))
+    assert spec.validate(None) is None
+    assert spec.validate('callers') == 'callers'
+    with pytest.raises(ValueError, match='one of'):
+        spec.validate('often')
+
+
+@pytest.mark.parametrize('value,expected', [(4, 4), ('+3', 3), ('-2', 1), (' 9 ', 5), (0, 1)])
+def test_clamped_whole_accepts_signed_whole_values(value, expected):
+    from reveal.utils.query_parser import clamped_whole
+    assert clamped_whole(value, 1, 5) == expected
+
+
+@pytest.mark.parametrize('value', [True, False, 1.0, '1.5', '2.0', '1e2', 'abc', '', None])
+def test_clamped_whole_rejects_everything_else(value):
+    from reveal.utils.query_parser import clamped_whole
+    with pytest.raises(ValueError):
+        clamped_whole(value, 1, 5)
+
+
+@pytest.mark.parametrize('value', ['', '   ', 'a\x00b', True, 123, None])
+def test_nonempty_scalar_rejects_non_names(value):
+    from reveal.utils.query_parser import nonempty_scalar
+    with pytest.raises(ValueError):
+        nonempty_scalar(value)

@@ -13,6 +13,8 @@ from reveal.mcp_server import reveal_query
 from reveal.utils import request_cache
 from reveal.utils.exclusions import exclusion_scope
 
+_MCP_INCOMPLETE = 'Required analysis is incomplete; usable evidence follows.'
+
 pytestmark = pytest.mark.component
 
 
@@ -139,6 +141,11 @@ def test_query_local_loss_never_poisons_healthy_sealed_index_and_repairs_without
         wire = reveal_query(f'calls://{path}?uncalled=true', provenance=True)
         assert type(wire) is str
         value = json.loads(wire); value.pop('execution', None)
+        # The declared MCP consumer marks usable incomplete evidence once (BACK-2066); the adapter's own
+        # disclosure is what file_warning checks.
+        marks = [w for w in value['meta']['warnings'] if w.get('message') == _MCP_INCOMPLETE]
+        assert len(marks) <= 1
+        value['meta']['warnings'] = [w for w in value['meta']['warnings'] if w not in marks]
         return value
 
     clean, sibling_clean = invoke(root), invoke(sibling)
@@ -171,7 +178,7 @@ def test_public_legacy_zero_discloses_late_file_loss_before_cuts(tmp_path, monke
         if view == 'projection':
             flags += ['--fields', 'entries,total_uncalled', '--max-items', '0']
     response = run(f'calls://{root}?uncalled=true&top=1', *flags)
-    assert state['events'] and response.returncode == 0
+    assert state['events'] and response.returncode == 3  # D6 since calls is declared (BACK-2066): known loss is incomplete analysis, 3
     if view == 'text':
         assert response.stdout.count('could not be analyzed completely') == 1
         assert 'registration.c' in response.stdout

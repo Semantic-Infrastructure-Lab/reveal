@@ -245,6 +245,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal contracts [path]` | Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal contracts --help` |
 | `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal surface --help` |
 | `reveal testability [path]` | Test patch pressure joined with production boundary fan-out *(Python and TS/JS test suites)* | `reveal testability --help` |
+| `reveal calls --target FUNC` | Call graph: callers, callees, callee walk (--root), --rank callers, --uncalled, --modules | `reveal calls --help` |
 | `reveal trace --from FUNC` | Walk call graph from a named entry point; depth-indented narrative with side-effect classification | `reveal trace --help` |
 | `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
 | `reveal review <path>` | Assess quality + structural changes before a PR merge | `reveal review --help` |
@@ -1364,7 +1365,15 @@ reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > callgraph.svg
 reveal 'calls://src/?rank=callers'             # Top 10 most-called functions
 reveal 'calls://src/?rank=callers&top=20'      # Top 20
 reveal 'calls://src/?rank=callers&builtins=true'  # Include Python builtins
+
+# The same queries as a subcommand: one flag per query key, equal JSON
+reveal calls src/ --target validate_item --depth 2
+reveal calls src/ --rank callers --top 20
 ```
+
+One mode per request (`target`, `callees`, `root`, `rank`, `uncalled`, `modules`): two exit 2 and
+name both, and a malformed value (`depth=abc`, `top=-1`) exits 2 naming the parameter. Exit 3 means
+a file or directory could not be read; the answer still prints with its warning.
 
 **Two adapters — different scopes:**
 

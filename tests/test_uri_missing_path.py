@@ -131,5 +131,5 @@ def test_calls_name_shorthand_is_not_a_missing_path(tmp_path):
 
 def test_calls_name_shorthand_on_missing_path_still_errors():
     code, _, err = _run('calls://nonexistent_zz_1499.py:helper')
-    assert code == 1
+    assert code == 2  # a declared noun rejects a missing path before analysis (BACK-2066)
     assert 'Path not found: nonexistent_zz_1499.py:helper' in err

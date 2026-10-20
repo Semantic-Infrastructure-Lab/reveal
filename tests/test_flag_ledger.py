@@ -571,6 +571,7 @@ def _walk_tree(root):
 # name -> argv after the subcommand, for every subcommand that walks a tree.
 WALKERS = {
     'architecture': ['proj'],
+    'calls': ['proj', '--uncalled'],
     'check': ['proj'],
     'contracts': ['proj'],
     'deps': ['proj'],
