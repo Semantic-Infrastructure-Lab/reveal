@@ -212,6 +212,32 @@ def nonnegative_display_limit(value: Any, name: str = 'top') -> int:
     return limit
 
 
+class ParamValueError(ValueError):
+    """A converter's rejection whose message already names the parameter and what to type.
+
+    ``ParamSpec.validate`` keeps it as written instead of its generic
+    "must be a valid <type>" wording (a bare ``?target`` is not "a valid string, got True").
+    """
+
+
+def nonempty_scalar(value: Any) -> str:
+    """A name-valued parameter: a string with a non-blank character and no NUL, never coerced
+    (``123`` and ``true`` stay strings)."""
+    if not isinstance(value, str) or not value.strip() or '\x00' in value:
+        raise ValueError('expected a nonempty string without NUL')
+    return value
+
+
+def clamped_whole(value: Any, low: int, high: int) -> int:
+    """A signed whole integer (``4``, ``'+3'``, ``'-2'``) clamped to ``low..high``.
+    Booleans, fractions (``'1.5'``, ``'2.0'``), exponents and other text raise ValueError."""
+    if type(value) is int:
+        return max(low, min(value, high))
+    if isinstance(value, str) and _re.fullmatch(r'[+-]?[0-9]+', value.strip()):
+        return max(low, min(int(value), high))
+    raise ValueError('expected a signed whole integer')
+
+
 def cli_display_limit(value: str) -> int:
     """argparse ``type=`` for ``--top``: the shared parser, with the flag's own name in the message."""
     import argparse
@@ -288,12 +314,14 @@ class ParamSpec:
         else:
             try:
                 value = self.convert(raw)
+            except ParamValueError:
+                raise
             except (TypeError, ValueError):
                 what = 'a whole number' if self.type == 'integer' else f'a valid {self.type}'
                 raise ValueError(f'{self.name} must be {what}, got {raw!r}') from None
         if self.minimum is not None and value is not None and value < self.minimum:
             raise ValueError(f'{self.name} must be >= {self.minimum}')
-        if self.choices and value not in self.choices:
+        if self.choices and value is not None and value not in self.choices:  # an absent optional choice
             raise ValueError(f'{self.name} must be one of {self.choices!r}, got {value!r}')
         return value
 
