@@ -12,6 +12,7 @@ from typing import Optional, Any, List, Tuple
 
 from .base import FileAnalyzer
 from .utils import get_file_type_from_analyzer, print_breadcrumbs
+from reveal.utils.json_utils import write_requested_artifact, write_text_artifact
 from reveal.utils.lines import split_lines
 
 # When a single rule fires this many times in one file, collapse to a summary line.
@@ -349,7 +350,7 @@ def run_pattern_detection(
     output_format: str,
     args: Any,
     config: Optional[Any] = None
-) -> int:
+) -> Tuple[int, bool, bool]:
     """Run pattern detection rules on a file.
 
     Args:
@@ -360,12 +361,14 @@ def run_pattern_detection(
         config: Optional RevealConfig for breadcrumb settings
 
     Returns:
-        (detection_count, degraded) tuple. `degraded` is True when the file
+        (detection_count, degraded, artifact_failed) tuple. `degraded` is True when the file
         did not parse cleanly (BACK-1083's parse_degraded, tree-sitter
         error-recovery) or a rule raised (rule_errors) -- meaning
         `detection_count` may be incomplete/wrong, not a trustworthy
         "clean" signal. Added for BACK-1099's exit-code contract: a caller
-        that only wants the old int should unpack `count, _ = run_pattern_detection(...)`.
+        that only wants the old int should unpack `count, _, _ = run_pattern_detection(...)`.
+        `artifact_failed` is True when a requested artifact (``--also-json``) could not be
+        written: a required output failure, exit 3 (BACK-1939), disclosed on stderr here.
     """
     from .rules import RuleRegistry
 
@@ -439,12 +442,10 @@ def run_pattern_detection(
     # isinstance rather than truthiness: `args` is a Mock in several callers'
     # tests, and getattr on a Mock returns a truthy Mock for any attribute.
     also_json = getattr(args, 'also_json', None)
+    artifact_failed = False
     if isinstance(also_json, (str, os.PathLike)) and output_format != 'json':
-        try:
-            with open(also_json, 'w', encoding='utf-8') as f:
-                f.write(_detections_json(path, result))
-        except OSError as e:
-            print(f"Warning: --also-json could not write {also_json}: {e}", file=sys.stderr)
+        artifact_failed = write_requested_artifact(
+            lambda: write_text_artifact(also_json, _detections_json(path, result))) is not None
 
     # Print breadcrumbs after text output (not for json/grep)
     if output_format == 'text':
@@ -453,7 +454,7 @@ def run_pattern_detection(
                          detections=detections)
 
     degraded = parse_degraded or bool(rule_errors) or bool(scan_disclosures)
-    return len(detections), degraded
+    return len(detections), degraded, artifact_failed
 
 
 def run_schema_validation(

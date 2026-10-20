@@ -14,6 +14,7 @@ from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from ..logging_setup import worker_bootstrap
 from ..utils.parallel import pool_worker_count, submit_each
+from ..utils.json_utils import write_requested_artifact, write_text_artifact
 from ..utils.results import note_truncation, requested_fail_on
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -549,7 +550,7 @@ def _apply_severity_filter(detections: list, severity: Optional[str]) -> list:
 def check_exit_code(
     total_issues: int, files_errored: int = 0, files_degraded: int = 0,
     exit_zero: bool = False, *, scan_incomplete: bool = False,
-    fail_on: Literal['none', 'findings'] = 'findings',
+    fail_on: Literal['none', 'findings'] = 'findings', output_failed: bool = False,
 ) -> int:
     """Compute `reveal check`'s process exit code (BACK-1099's contract).
 
@@ -569,6 +570,10 @@ def check_exit_code(
     reports them without failing but never hides lost or degraded analysis (3).
     It is mutually exclusive with exit_zero at the CLI (usage error, 2).
 
+    output_failed (BACK-1939, D6): a requested artifact (``--also-json``) could not be
+    written. Required output failure is 3 over findings (1) and over exit_zero, like the
+    declared nouns (``execution_exit_code``).
+
     (2 is reserved for usage/invocation errors -- bad args, unsupported
     path -- raised directly by the CLI layer before a scan starts, not
     computed here.)
@@ -582,10 +587,12 @@ def check_exit_code(
     to drop into a `set -e` / CI pipeline without the caller needing to
     know this one adapter's special exit-code convention.
     """
-    from ..utils.results import AnalysisCompleteness, ExecutionFacts, execution_exit_code
+    from ..utils.results import (AnalysisCompleteness, ExecutionFacts, FailureCause,
+                                 execution_exit_code)
     incomplete = bool(files_errored or files_degraded or scan_incomplete)
     facts = ExecutionFacts(AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE,
-                           findings=total_issues > 0)
+                           findings=total_issues > 0,
+                           failures=frozenset({FailureCause.OUTPUT}) if output_failed else frozenset())
     return execution_exit_code(facts, fail_on=fail_on, legacy_scan_override=exit_zero)
 
 
@@ -1036,23 +1043,20 @@ def _scope_dict(scope: ScopeCensus, select, ignore) -> dict:
     return scope_dict
 
 
-def _write_also_json_report(path: str, result: dict, source: str) -> None:
+def _write_also_json_report(path: str, result: dict, source: str) -> bool:
     """BACK-1248: write check's JSON report to *path* alongside a text/grep
     render on stdout, so one invocation produces both the human report and the
     machine artifact -- the document --format json prints (subcommand_json).
 
     Previously --also-json was wired only for the uri:// render paths and this
     subcommand merely warned that the flag did nothing, which left consumers
-    dispatching `check` twice over the same tree. A write failure is reported
-    on stderr and does not change the exit code -- the check itself succeeded,
-    and its exit code is the answer the caller is branching on.
+    dispatching `check` twice over the same tree. A write failure is disclosed on
+    stderr by the shared artifact owner and returned True: a requested output
+    failed, so the caller exits 3 (BACK-1939, D6), the answer already printed.
     """
     from .routing.subcommand import subcommand_json
-    try:
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(subcommand_json(result, name='check', source=source))
-    except OSError as e:
-        print(f"Warning: --also-json could not write {path}: {e}", file=sys.stderr)
+    return write_requested_artifact(
+        lambda: write_text_artifact(path, subcommand_json(result, name='check', source=source))) is not None
 
 
 def _print_grep_output(file_results: List[dict]) -> None:
@@ -1176,8 +1180,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
 
     from .routing.subcommand import emit_subcommand_result
     emit_subcommand_result(result, args, name='check', source=shown, render=render)
-    if artifact is not None:
-        _write_also_json_report(args.also_json, artifact, shown)
+    artifact_failed = artifact is not None and _write_also_json_report(args.also_json, artifact, shown)
 
     # Exit with appropriate code (BACK-1099: distinguish "clean" from
     # "issues found" from "scan incomplete" -- files_errored/files_degraded
@@ -1186,6 +1189,10 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     # file exited 0 identically to an all-clean directory).
     from .routing.ledger import complete
     complete(args)  # the exit code is the result: the flag ledger still reports
+    if artifact_failed:
+        # A requested output that failed outranks every scan fact (findings, --exit-zero), so
+        # the summary's own scan verdict (already printed) cannot change the code: 3.
+        sys.exit(check_exit_code(0, output_failed=True))
     sys.exit(result['summary']['exit_code'])
 
 

@@ -226,7 +226,7 @@ def _add_global_options(target) -> None:
                              '--format\'s primary output -- one invocation, one parse, both a '
                              'human-readable report and a machine-readable artifact. '
                              'scheme://resource URIs, `reveal check` and declared adapter commands only; '
-                             'no-op if --format is already json.')
+                             'no-op if --format is already json. A write that fails exits 3.')
     target.add_argument('--fail-on', choices=['none', 'findings'], default=None,
                         help='Findings gate for qualified commands. none suppresses findings only; '
                              'required analysis/output failures remain errors. Unsupported operations reject it.')

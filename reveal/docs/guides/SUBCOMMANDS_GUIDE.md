@@ -899,9 +899,11 @@ git diff --name-only | reveal --stdin --check  # check only changed files
 | `0` | Complete and clean, or explicit `--exit-zero` |
 | `1` | One or more violations found with no known scan incompleteness |
 | `2` | Usage error |
-| `3` | Incomplete analysis, including disclosed rule-wide evidence loss |
+| `3` | Incomplete analysis, including disclosed rule-wide evidence loss, or a requested `--also-json` artifact that could not be written |
 
 Exit code 1 is set consistently across all invocation forms: single file, directory, and `--stdin --check` piped file lists.
+
+A requested `--also-json PATH` that cannot be written (the path is a directory, the parent is missing or read-only) exits 3 in all three forms: the report on stdout is still printed in full, and `Error: Requested JSON artifact failed: ...` is printed once on stderr. This outranks issues found (1) and the legacy `--exit-zero`. With `--format json` the artifact would equal the printed document, so `--also-json` is not written and cannot fail. (Before this, `check` printed a `Warning:` and kept the scan's exit code, so a gate could read 0 for a run whose artifact was never written.)
 
 ### See Also
 

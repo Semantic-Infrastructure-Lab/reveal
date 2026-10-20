@@ -240,7 +240,7 @@ def run_check(args: Namespace) -> None:
         )
         cli_overrides = _build_file_cli_overrides(args)
         config = RevealConfig.get(start_path=path.parent, cli_overrides=cli_overrides or None)
-        violations, degraded = run_pattern_detection(
+        violations, degraded, artifact_failed = run_pattern_detection(
             analyzer, str(path), getattr(args, 'format', 'text'), args, config=config
         )
         # BACK-1099: a file that didn't parse cleanly (or a rule that raised)
@@ -256,4 +256,5 @@ def run_check(args: Namespace) -> None:
             files_degraded=1 if degraded else 0,
             exit_zero=getattr(args, 'exit_zero', False),
             fail_on=requested_fail_on(args),
+            output_failed=artifact_failed,
         ))

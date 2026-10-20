@@ -71,7 +71,7 @@ def _process_stdin_uri(target: str, args: 'Namespace', is_batch_mode: bool,
 
 def _process_stdin_file(
     target: str, args: 'Namespace', handle_file_func, is_check_mode: bool = False
-) -> Tuple[int, bool]:
+) -> Tuple[int, bool, bool]:
     """Process a file path from stdin.
 
     Args:
@@ -81,32 +81,34 @@ def _process_stdin_file(
         is_check_mode: When True, run quality check and return violation count
 
     Returns:
-        (violation count, degraded) when is_check_mode is True, else (0, False).
+        (violation count, degraded, artifact_failed) when is_check_mode is True, else
+        (0, False, False).
         degraded mirrors run_pattern_detection()'s BACK-1099 signal: the file
         didn't parse cleanly or a rule raised, so `violations` on its own
-        isn't a trustworthy signal for this file.
+        isn't a trustworthy signal for this file. artifact_failed is run_pattern_detection()'s
+        BACK-1939 signal: a requested --also-json artifact could not be written (exit 3).
     """
     path = Path(target)
 
     # Skip if path doesn't exist (graceful degradation)
     if not path.exists():
         print(f"Warning: {target} not found, skipping", file=sys.stderr)
-        return 0, False
+        return 0, False, False
 
     # Skip directories (only process files)
     if path.is_dir():
         print(f"Warning: {target} is a directory, skipping (use reveal {target}/ directly)", file=sys.stderr)
-        return 0, False
+        return 0, False, False
 
     # Process the file
     if not path.is_file():
-        return 0, False
+        return 0, False, False
 
     # An unreadable file is skipped like a missing one; in check mode it
     # degrades the run (exit 3) rather than ending the whole batch (BACK-1424).
     if not os.access(path, os.R_OK):
         print(f"Warning: {target} is not readable, skipping", file=sys.stderr)
-        return 0, is_check_mode
+        return 0, is_check_mode, False
 
     if is_check_mode:
         from reveal.file_handler import _get_analyzer_or_exit, _build_file_cli_overrides
@@ -116,13 +118,13 @@ def _process_stdin_file(
         analyzer = _get_analyzer_or_exit(str(path), allow_fallback)
         cli_overrides = _build_file_cli_overrides(args)
         config = RevealConfig.get(start_path=path.parent, cli_overrides=cli_overrides or None)
-        violations, degraded = run_pattern_detection(
+        violations, degraded, artifact_failed = run_pattern_detection(
             analyzer, str(path), getattr(args, 'format', 'text'), args, config=config
         )
-        return violations, degraded
+        return violations, degraded, artifact_failed
 
     handle_file_func(str(path), None, args.meta, args.format, args)
-    return 0, False
+    return 0, False, False
 
 
 def handle_stdin_mode(args: 'Namespace', handle_file_func):
@@ -163,6 +165,7 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     # this is True — same shape as the directory-mode bug already fixed in
     # reveal/cli/file_checker.py; see internal-docs/design/EXIT_CODE_CONTRACT.md.
     any_file_degraded = False
+    any_artifact_failed = False  # BACK-1939: a requested artifact write failed (exit 3, even under --exit-zero)
     uri_exit = 0  # the worst exit of a URI answered one at a time (BACK-1556)
 
     # Read paths/URIs from stdin (one per line)
@@ -191,11 +194,12 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
         else:
             # Apply --ext filter for file paths
             if _passes_ext_filter(target, getattr(args, 'ext', None)):
-                violations, degraded = _process_stdin_file(
+                violations, degraded, artifact_failed = _process_stdin_file(
                     target, args, handle_file_func, is_check_mode=is_check_mode
                 )
                 total_file_violations += violations
                 any_file_degraded = any_file_degraded or degraded
+                any_artifact_failed = any_artifact_failed or artifact_failed
 
     # Render aggregated batch results
     if batch_results:
@@ -219,8 +223,9 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
         exit_zero = getattr(args, 'exit_zero', False)
         file_exit = check_exit_code(
             total_file_violations, files_degraded=degraded_count, exit_zero=exit_zero,
+            output_failed=any_artifact_failed,
         )
-        sys.exit(0 if exit_zero else max(file_exit, ssl_exit, uri_exit))
+        sys.exit(0 if exit_zero and not any_artifact_failed else max(file_exit, ssl_exit, uri_exit))
 
     sys.exit(1 if total_file_violations > 0 or uri_exit else 0)
 

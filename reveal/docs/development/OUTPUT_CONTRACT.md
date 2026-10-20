@@ -572,6 +572,13 @@ primary result remains available and the exit is 3. Primary `--format json` reta
 its existing `--also-json` no-op. Closing stdout alone keeps the conventional exit 0;
 it cannot erase an independent analysis or artifact failure.
 
+Native `reveal check` (single file, directory and `--stdin --check`) follows the same artifact
+rule through the one owner, `write_requested_artifact` (`utils/json_utils.py`), which is
+flag-agnostic: a requested `--also-json` write that fails is disclosed once on stderr and exits 3,
+over findings (1) and over the legacy `--exit-zero` (`check_exit_code(..., output_failed=True)`
+through `execution_exit_code`). The report is printed in full first. Primary `--format json`
+keeps the `--also-json` no-op, so check's JSON never carries `meta.output_errors`.
+
 The reusable owner API is `ExecutionFacts`, `AnalysisCompleteness`, `FailureCause`,
 `merge_execution_facts()` and `execution_exit_code()` in `utils.results`. Producers
 supply completeness and adverse findings explicitly; aggregate facts before mapping

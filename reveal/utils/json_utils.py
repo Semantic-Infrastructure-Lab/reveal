@@ -69,6 +69,12 @@ def write_also_json(result, args) -> None:
 ARTIFACT_WRITE_ERRORS = (OSError, UnicodeError, ValueError)
 
 
+def write_text_artifact(path, text) -> None:
+    """Write an already-rendered artifact document to *path* (raises ARTIFACT_WRITE_ERRORS)."""
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(text)
+
+
 def write_requested_artifact(write, result=None):
     """Run *write*, the writer of a file the caller asked for beside its primary answer.
 

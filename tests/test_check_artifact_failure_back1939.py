@@ -55,7 +55,8 @@ def test_unwritable_artifact_exits_three_and_keeps_the_answer(tree, label, targe
     assert alone.returncode == own_exit, alone.stderr
     failed = _reveal(tree, 'check', target, '--format', fmt, '--also-json', 'sink')
     assert failed.returncode == 3, (failed.returncode, failed.stderr)
-    assert failed.stdout == alone.stdout and failed.stdout.strip()   # primary answer, in full
+    assert failed.stdout == alone.stdout                              # primary answer, in full
+    assert failed.stdout.strip() or (own_exit == 0 and fmt == 'grep')  # (a clean grep report is empty)
     assert failed.stderr.count(_FAILED) == 1                          # disclosed once
     assert 'could not write' not in failed.stderr                     # not the old warning
     assert 'Traceback' not in failed.stderr
