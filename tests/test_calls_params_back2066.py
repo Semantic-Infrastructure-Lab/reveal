@@ -404,3 +404,88 @@ def test_depth_one_callees_text_states_its_rule_and_every_warning(project):
     text = run('calls://proj?callees=main', '--no-gitignore')
     assert any(line.startswith('Rule: callees') for line in text.stdout.splitlines())
     assert 'Dynamic dispatch' in text.stdout  # W-CALLS-1, a caveat the per-definition view used to drop
+
+
+# --- W-CALLS-10 names only languages that produce call sources ------------------------------
+# A .sh, .sql, .graphql or .proto file yields no call edge, so it must not withhold the
+# confidence of a TypeScript answer; an Elixir file yields call sources nothing has measured.
+
+TS_APP = 'export function run(x: number) {\n  return helper(x);\n}\n\nfunction helper(y: number) {\n  return y;\n}\n'
+NO_CALL_FILES = {'build.sh': 'f() {\n  g\n}\ng() {\n  ls\n}\n', 'schema.sql': 'SELECT count(*) FROM t;\n',
+                 'api.graphql': 'type Q { a: Int }\n', 'msg.proto': 'syntax = "proto3";\nmessage M { int32 a = 1; }\n'}
+
+
+def _ts_project(root, extra):
+    root.mkdir()
+    (root / 'app.ts').write_text(TS_APP, encoding='utf-8')
+    for name, text in extra.items():
+        (root / name).write_text(text, encoding='utf-8')
+    return root
+
+
+@pytest.mark.parametrize('name', sorted(NO_CALL_FILES))
+def test_a_language_without_call_sources_keeps_the_confidence(project, name):
+    _ts_project(project / 'ts', {name: NO_CALL_FILES[name]})
+    result, answer = jrun('calls://proj/ts?callees=run')
+    assert result.returncode == 0, result.stderr
+    assert 'W-CALLS-10' not in warning_codes(answer)
+    assert isinstance(answer['meta'].get('confidence'), float)
+
+
+def test_a_call_source_language_without_a_snapshot_withholds_it(project):
+    _ts_project(project / 'ts', {'m.ex': ELIXIR})
+    result, answer = jrun('calls://proj/ts?callees=run')
+    assert result.returncode == 0, result.stderr
+    assert 'confidence' not in answer['meta']
+    declines = [w for w in answer['meta']['warnings'] if w.get('code') == 'W-CALLS-10']
+    assert len(declines) == 1 and declines[0]['languages'] == ['elixir']
+
+
+# Each registered language without a snapshot whose grammar has a call node kind, written as a
+# function calling another: the declared set is exactly those whose extractor then yields a call.
+CALL_GRAMMAR_FIXTURES = {
+    'elixir': ('m.ex', ELIXIR),
+    'objc': ('m.m', 'int helper(int x) { return x; }\nint run(int x) { return helper(x); }\n'),
+    'erlang': ('m.erl', '-module(m).\nrun(X) -> helper(X).\nhelper(Y) -> Y.\n'),
+    'ocaml': ('m.ml', 'let helper x = x\nlet run x = helper x\n'),
+    'r': ('m.r', 'helper <- function(x) { x }\nrun <- function(x) { helper(x) }\n'),
+    'verilog': ('m.sv', 'module top;\n  function int helper(int x); return x; endfunction\n'
+                        '  function int run(int x); return helper(x); endfunction\nendmodule\n'),
+    'hcl': ('main.tf', 'locals {\n  a = upper("x")\n}\n'),
+}
+
+
+def _registered_languages():
+    from reveal.registry import TREESITTER_EXTENSION_MAP, get_analyzer_mapping, language_for_extension
+    exts = set(get_analyzer_mapping()) | set(TREESITTER_EXTENSION_MAP)
+    return {lang for lang in map(language_for_extension, exts) if lang}
+
+
+def _grammar_has_call_nodes(language):
+    from reveal.core import treesitter_parse
+    from reveal.treesitter import CALL_NODE_TYPES
+    lang = treesitter_parse.get_parser(language, announce_fetch=False).language
+    kinds = {lang.node_kind_for_id(i) for i in range(lang.node_kind_count) if lang.node_kind_is_named(i)}
+    return bool(kinds & CALL_NODE_TYPES)
+
+
+def test_unmeasured_call_source_languages_are_pinned_against_the_extractors(tmp_path):
+    from reveal.adapters.ast.analysis import call_sources, collect_structures
+    from reveal.adapters.calls.confidence import SNAPSHOT_LANGUAGES, UNMEASURED_CALL_SOURCE_LANGUAGES
+    from reveal.core import treesitter_parse
+    # Only kotlin and zig fill calls outside the CALL_NODE_TYPES walk; both have a snapshot.
+    candidates = sorted(lang for lang in _registered_languages() - SNAPSHOT_LANGUAGES
+                        if treesitter_parse.is_downloaded(lang) and _grammar_has_call_nodes(lang))
+    assert set(candidates) <= set(CALL_GRAMMAR_FIXTURES), 'a new call grammar needs a fixture here'
+    producing = set()
+    for lang in candidates:
+        name, text = CALL_GRAMMAR_FIXTURES[lang]
+        path = tmp_path / lang / name
+        path.parent.mkdir()
+        path.write_text(text, encoding='utf-8')
+        if any(elem.get('calls') for s in collect_structures(str(path)) for elem in call_sources(s)
+               if elem.get('category') in ('functions', 'methods', 'tests', 'modules')):
+            producing.add(lang)
+    assert 'elixir' in candidates  # positive control: the grammar check sees Elixir's `call`
+    assert producing == UNMEASURED_CALL_SOURCE_LANGUAGES & set(candidates)
+    assert UNMEASURED_CALL_SOURCE_LANGUAGES <= set(candidates)
