@@ -462,9 +462,9 @@ def _registered_languages():
 
 
 def _grammar_has_call_nodes(language):
-    from reveal.core import treesitter_parse
+    from tree_sitter_language_pack import get_language  # Parser.language is missing on the 1.8.1 floor
     from reveal.treesitter import CALL_NODE_TYPES
-    lang = treesitter_parse.get_parser(language, announce_fetch=False).language
+    lang = get_language(language)
     kinds = {lang.node_kind_for_id(i) for i in range(lang.node_kind_count) if lang.node_kind_is_named(i)}
     return bool(kinds & CALL_NODE_TYPES)
 
@@ -488,4 +488,13 @@ def test_unmeasured_call_source_languages_are_pinned_against_the_extractors(tmp_
             producing.add(lang)
     assert 'elixir' in candidates  # positive control: the grammar check sees Elixir's `call`
     assert producing == UNMEASURED_CALL_SOURCE_LANGUAGES & set(candidates)
-    assert UNMEASURED_CALL_SOURCE_LANGUAGES <= set(candidates)
+    # candidates only holds downloaded grammars, which differ between machines: pin against the registry
+    assert UNMEASURED_CALL_SOURCE_LANGUAGES <= _registered_languages() - SNAPSHOT_LANGUAGES
+
+
+def test_unmeasured_languages_pin_holds_when_a_grammar_is_not_downloaded(tmp_path, monkeypatch):
+    """CI downloads fewer grammars than a dev machine: the pin must not need objc's grammar present."""
+    from reveal.core import treesitter_parse
+    real = treesitter_parse.is_downloaded
+    monkeypatch.setattr(treesitter_parse, 'is_downloaded', lambda lang: lang != 'objc' and real(lang))
+    test_unmeasured_call_source_languages_are_pinned_against_the_extractors(tmp_path)

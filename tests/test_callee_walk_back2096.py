@@ -17,6 +17,7 @@ import pytest
 from reveal.adapters.calls.adapter import CallsAdapter
 from reveal.adapters.calls.index import _bare_callee_name, find_callees
 from reveal.adapters.trace import TraceAdapter
+from reveal.utils.path_utils import to_posix
 
 # Fixtures copied from the manager's repro (colliding-asteroid-1019/repro/d2066/{a,b}).
 FIXTURE_A = {'m.py': 'def f():\n    a()\n    c()\n\ndef a():\n    b()\n\ndef b():\n    c()\n\n'
@@ -163,7 +164,7 @@ def test_level_one_call_text_is_find_callees_per_definition(tmp_path, language):
     root, files = LANGUAGES[language]
     path = _tree(tmp_path, files)
     for builtins in (False, True):
-        expected = {(m['file'], m['line']): m['calls']
+        expected = {(to_posix(m['file']), m['line']): m['calls']  # find_callees keeps the OS spelling
                     for m in find_callees(path, root, include_builtins=builtins)['matches']}
         walk = walk_callees(path, root, depth=1, include_builtins=builtins)
         assert {(n.file, n.line): [e['call_expr'] for e, _ in n.edges] for n in walk.roots} == expected
