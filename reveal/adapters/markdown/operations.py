@@ -237,6 +237,27 @@ def _link_graph_fingerprint(base_path: Path, all_files: List[Path]) -> Optional[
         return None
 
 
+def _storable(unreadable: List[List[str]]) -> bool:
+    """Whether a graph with these unreadable files is the tree's answer for its stat key.
+
+    A read failure the bytes did not cause (BACK-2119) is returned, never stored: chmod
+    leaves the (relpath, mtime_ns, size) key unchanged, so the entry would outlive the fix.
+    A content failure is the same on every read of unchanged bytes and may be stored.
+    """
+    return all(files.is_content_failure(failure) for _, failure in unreadable)
+
+
+def _cached_link_graph(fingerprint: Optional[str]) -> Optional[Dict[str, Any]]:
+    """The stored graph for *fingerprint*, or None. An entry written before BACK-2119 may carry
+    an environmental failure; it is treated as a miss and rebuilt."""
+    if fingerprint is None:
+        return None
+    cached = disk_cache.get(_LINK_GRAPH_CACHE_NAMESPACE, fingerprint)
+    if cached is not None and _storable(cached.get('unreadable_files', [])):
+        return cached
+    return None
+
+
 def build_link_graph(base_path: Path) -> Dict[str, Any]:
     """Build a cross-file link graph for all markdown files under base_path.
 
@@ -263,10 +284,9 @@ def build_link_graph(base_path: Path) -> Dict[str, Any]:
     all_files = files.find_markdown_files(base_path)
 
     fingerprint = _link_graph_fingerprint(base_path, all_files)
-    if fingerprint is not None:
-        cached = disk_cache.get(_LINK_GRAPH_CACHE_NAMESPACE, fingerprint)
-        if cached is not None:
-            return cached
+    cached = _cached_link_graph(fingerprint)
+    if cached is not None:
+        return cached
 
     base_resolved = base_path.resolve()
 
@@ -314,8 +334,8 @@ def build_link_graph(base_path: Path) -> Dict[str, Any]:
         'isolated': isolated,
     }
     if unreadable:
-        graph['unreadable_files'] = unreadable  # BACK-1854: cached with the graph, so a hit still says it
-    if fingerprint is not None:
+        graph['unreadable_files'] = unreadable  # BACK-1854: a stored content failure still says it on a hit
+    if fingerprint is not None and _storable(unreadable):
         disk_cache.put(_LINK_GRAPH_CACHE_NAMESPACE, fingerprint, graph)
     return graph
 

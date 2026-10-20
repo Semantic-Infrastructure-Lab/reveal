@@ -57,6 +57,16 @@ def unreadable_warning(unreadable: List[Tuple[str, str]], consequence: str,
     }
 
 
+def is_content_failure(failure: str) -> bool:
+    """Whether an ``"ErrorType: message"`` read failure came from the file's bytes.
+
+    Undecodable bytes fail the same way on every read of an unchanged file; any other
+    failure (``PermissionError``, a vanished file) belongs to the environment and can clear
+    with mtime and size unchanged, so no stat-keyed cache may keep it (BACK-2119).
+    """
+    return failure.startswith('UnicodeDecodeError:')
+
+
 def read_body_outcome(path: Path) -> Tuple[str, Optional[str]]:
     """``(body, failure)``: the body text of a markdown file (content after frontmatter), or
     ``('', "ErrorType: message")`` when the file could not be read -- an empty body that

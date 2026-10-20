@@ -112,3 +112,13 @@ def test_clean_graph_is_still_stored_and_served(corpus, hits):
     assert hits['n'] == 1
     assert second == first
     assert second['total_edges'] == 1 and 'unreadable_files' not in second
+
+
+def test_entry_stored_before_the_fix_with_an_environmental_failure_is_rebuilt(corpus, hits):
+    stale = operations.build_link_graph(corpus)
+    stale['unreadable_files'] = [['a.md', 'PermissionError: [Errno 13] Permission denied']]
+    stale['total_edges'] = 0
+    key = operations._link_graph_fingerprint(corpus, operations.files.find_markdown_files(corpus))
+    disk_cache.put(operations._LINK_GRAPH_CACHE_NAMESPACE, key, stale)
+    rebuilt = operations.build_link_graph(corpus)
+    assert 'unreadable_files' not in rebuilt and rebuilt['total_edges'] == 1
