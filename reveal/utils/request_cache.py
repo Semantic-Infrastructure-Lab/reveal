@@ -14,14 +14,20 @@ Two lifetimes:
 """
 import hashlib
 import os
+import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Dict, List, MutableMapping, Optional, Tuple, TypeVar, Union
+from typing import Any, Callable, Dict, Iterator, List, MutableMapping, Optional, Tuple, TypeVar, Union
 
 _Root = TypeVar('_Root', str, Path)
 _RESETTERS: Dict[str, Callable[[], None]] = {}
 _VALIDATED: Dict[str, Tuple[MutableMapping[Any, Any], Callable[[Any], None]]] = {}
 _STAMPS: Dict[Tuple[str, Union[str, Path]], str] = {}
+# Serializes host requests (MCP tools, reveal.api) across threads; re-entrant, so a request
+# made inside another one joins it instead of resetting the caches it is using.
+_REQUEST_LOCK = threading.RLock()
+_request_depth = 0
 
 
 def register_request_cache(name: str, reset: Callable[[], None]) -> None:
@@ -105,3 +111,27 @@ def seal_request_caches(started_ns: int) -> None:
 
 def request_started_ns() -> int:
     return time.time_ns()
+
+
+@contextmanager
+def host_request() -> Iterator[None]:
+    """One serialized host request: reset owner-registered caches on entry, seal on exit.
+
+    The one owner of the request lifetime for every long-lived host (MCP tools and
+    ``reveal.api``, BACK-2093). Held under ``_REQUEST_LOCK``; a nested request (a tool that
+    calls ``reveal.api``) neither resets nor seals, so the outer request's evidence stays.
+    """
+    global _request_depth
+    with _REQUEST_LOCK:
+        outer = _request_depth == 0
+        started_ns = 0
+        if outer:
+            reset_request_caches()
+            started_ns = request_started_ns()
+        _request_depth += 1
+        try:
+            yield
+        finally:
+            _request_depth -= 1
+            if outer:
+                seal_request_caches(started_ns)

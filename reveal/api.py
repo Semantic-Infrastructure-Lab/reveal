@@ -176,6 +176,10 @@ def query(
         **kwargs: Additional keyword arguments forwarded to the adapter's
             ``get_structure()`` or ``get_element()`` method.
 
+    Each call is one host request with the MCP server's evidence lifetime: an edit
+    made between two calls is seen by the second, and an unchanged tree's indexes are
+    reused. Calls are serialized across threads.
+
     Returns:
         Result dict from the adapter.
 
@@ -210,7 +214,11 @@ def query(
             f"Supported schemes: {supported}"
         )
 
-    with gitignore_scope(respect_gitignore):
+    from .utils.request_cache import host_request
+
+    # One host request, as an MCP tool call is: owner-registered caches (the calls
+    # indexes among them) are reset or revalidated against the tree first (BACK-2093).
+    with host_request(), gitignore_scope(respect_gitignore):
         if isinstance(adapter_class, type) and hasattr(adapter_class, "from_uri"):
             adapter = adapter_class.from_uri(scheme, resource, element_name)
         else:

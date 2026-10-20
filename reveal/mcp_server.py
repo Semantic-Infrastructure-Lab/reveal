@@ -313,17 +313,11 @@ def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = 
     def decorator(fn):
         @functools.wraps(fn)
         def request(*args, **kwargs):
-            from .utils.request_cache import (
-                request_started_ns, reset_request_caches, seal_request_caches)
+            from .utils.request_cache import host_request
             # Direct Python callers and registered tools have the same evidence
             # lifetime, while retaining their distinct error-sentinel contracts.
-            with _capture_lock:
-                reset_request_caches()
-                started_ns = request_started_ns()
-                try:
-                    return fn(*args, **kwargs)
-                finally:
-                    seal_request_caches(started_ns)
+            with _capture_lock, host_request():
+                return fn(*args, **kwargs)
 
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):

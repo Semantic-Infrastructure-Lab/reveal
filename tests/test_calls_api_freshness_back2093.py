@@ -21,11 +21,6 @@ from reveal.utils import request_cache
 
 pytestmark = pytest.mark.component
 
-API_HAS_NO_RESET = pytest.mark.xfail(
-    strict=True,
-    reason='BACK-2093: reveal.api.query takes no request reset; the fix moves the MCP request '
-           'body into one shared seam, a design decision handed to the manager')
-
 
 def write(path, source, *, age=60):
     """Files modified at or after a request start are never stamped as current."""
@@ -80,7 +75,6 @@ def r5(tmp_path):
     return root
 
 
-@API_HAS_NO_RESET
 def test_in_place_edit_is_seen_by_the_next_query(r5):
     """R5: the directory mtimes do not move when a file deep in the tree is appended to."""
     assert api_callers(r5) == [('use.py', 'one')]
@@ -88,7 +82,6 @@ def test_in_place_edit_is_seen_by_the_next_query(r5):
     assert api_callers(r5) == [('use.py', 'added'), ('use.py', 'one')]
 
 
-@API_HAS_NO_RESET
 def test_new_file_two_levels_down_is_seen_by_the_next_query(tmp_path):
     """R13: a file created in pkg/deep/ moves only pkg/deep's mtime, which the key does not stat."""
     root = tmp_path / 'r13'
@@ -101,7 +94,6 @@ def test_new_file_two_levels_down_is_seen_by_the_next_query(tmp_path):
     assert api_callers(root) == [('new.py', 'deep_caller')]
 
 
-@API_HAS_NO_RESET
 def test_uncalled_sees_a_bare_reference_added_in_place(tmp_path):
     """R8: ``REGISTRY = [cb]`` is a use only _REFERENCE_CACHE records; clearing _INDEX_CACHE
     alone did not fix it."""
@@ -126,4 +118,16 @@ def test_unchanged_tree_reuses_the_index_across_queries(r5, builds):
     first = api_callers(r5)
     assert api_callers(r5) == first == [('use.py', 'one')]
     assert api_uncalled(r5) == ['one']
+    assert len(builds) == 1, builds
+
+
+def test_a_query_inside_a_request_joins_it(tmp_path, builds):
+    """Within one request the index is reused: a nested request neither resets nor seals,
+    even for files too new to be stamped (no aging here)."""
+    root = tmp_path / 'fresh'
+    (root / 'pkg').mkdir(parents=True)
+    (root / 'pkg' / 'lib.py').write_text('def helper():\n    pass\n\ndef one():\n    helper()\n', encoding='utf-8')
+    with request_cache.host_request():
+        assert api_callers(root) == [('lib.py', 'one')]
+        assert api_callers(root) == [('lib.py', 'one')]
     assert len(builds) == 1, builds
