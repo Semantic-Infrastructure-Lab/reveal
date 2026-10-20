@@ -48,10 +48,11 @@ def rule_will_run(code: str, select, ignore) -> bool:
     Delegates to the same RuleRegistry resolution the per-file check uses, so
     a preload decision can never drift from what actually runs. In particular
     this honors --select: ``check <dir> --select C901`` must not trigger an
-    expensive project-wide index build (BACK-338).
+    expensive project-wide index build (BACK-338). The registry filter runs once per
+    distinct (select, ignore) per request (``RuleRegistry.effective_codes``, BACK-2114):
+    stats asks this five to seven times for every file it analyzes.
     """
-    rules = RuleRegistry.get_rules(select=select, ignore=ignore)
-    return any(r.code == code for r in rules)
+    return code in RuleRegistry.effective_codes(select, ignore)
 
 
 def _project_roots(directory: Path, files, find_root):

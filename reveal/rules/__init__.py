@@ -10,10 +10,11 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import List, Type, Optional, Dict, Any
+from typing import List, Type, Optional, Dict, Any, FrozenSet, Tuple
 
 from .base import BaseRule, Detection, RulePrefix, Severity
 from reveal.config import get_config
+from reveal.utils.request_cache import register_request_cache
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,20 @@ def _file_config(file_path: str) -> Any:
     overrides that match it."""
     path = Path(file_path)
     return get_config(start_path=path.parent).get_file_config(path)
+
+
+# select/ignore -> (the rule list it was resolved from, that list's length, effective codes).
+# Request-lifetime memo of RuleRegistry.effective_codes (BACK-2114); emptied by every host
+# request reset and by a forced rediscovery.
+_effective_codes_cache: Dict[Tuple[Optional[Tuple[str, ...]], Optional[Tuple[str, ...]]],
+                             Tuple[List[Type[BaseRule]], int, FrozenSet[str]]] = {}
+
+
+def _clear_effective_codes() -> None:
+    _effective_codes_cache.clear()
+
+
+register_request_cache(__name__, _clear_effective_codes)
 
 
 class RuleRegistry:
@@ -286,6 +301,7 @@ class RuleRegistry:
 
         cls._rules = []
         cls._rules_by_code = {}
+        _effective_codes_cache.clear()
         config = get_config()
 
         cls._discover_built_in_rules()
@@ -457,6 +473,29 @@ class RuleRegistry:
             rules = cls._apply_enabled_filter(rules)
 
         return rules
+
+    @classmethod
+    def effective_codes(
+        cls,
+        select: Optional[List[str]] = None,
+        ignore: Optional[List[str]] = None
+    ) -> FrozenSet[str]:
+        """Codes of the rules ``get_rules(select, ignore)`` returns, resolved once per pair.
+
+        A scan that asks "did rule X run" for every file (stats, overview) would otherwise
+        filter the whole registry per question (BACK-2114). The memo lasts one host request
+        (request_cache) and is only valid for the rule list it was resolved from: a forced
+        rediscovery replaces the list, and a rule registered afterwards changes its length.
+        """
+        if not cls._discovered:
+            cls.discover()
+        key = (tuple(select) if select else None, tuple(ignore) if ignore else None)
+        entry = _effective_codes_cache.get(key)
+        if entry is not None and entry[0] is cls._rules and entry[1] == len(cls._rules):
+            return entry[2]
+        codes = frozenset(r.code for r in cls.get_rules(select=select, ignore=ignore))
+        _effective_codes_cache[key] = (cls._rules, len(cls._rules), codes)
+        return codes
 
     @classmethod
     def get_rule(cls, code: str) -> Optional[Type[BaseRule]]:
