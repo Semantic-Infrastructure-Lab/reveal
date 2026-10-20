@@ -511,6 +511,12 @@ MEMBER_ACCESS_NODES: frozenset = frozenset({
 
 FUNCTION_TYPES: frozenset = DEF_NODES | CLASS_NODES | STRUCT_NODES | IMPL_NODES | LAMBDA_NODES
 
+# BACK-2076: the kinds whose body runs when it is called, not when the file loads.
+# edge_scope() walks to the nearest one. Not FUNCTION_TYPES: a Python class body runs at
+# load time, so the class, struct and impl kinds stay out. The grammar-coverage test
+# (tests/test_grammar_coverage.py) lists every function-like kind outside this set.
+LOCAL_SCOPE_NODES: frozenset = DEF_NODES | LAMBDA_NODES
+
 EXIT_NODES: frozenset = (
     RETURN_NODES | RAISE_NODES | THROW_NODES | YIELD_NODES
     | BREAK_NODES | CONTINUE_NODES | HARD_EXIT_NODES
@@ -696,6 +702,36 @@ def scope_label(node: Any, kind: str) -> str:
     if zig_catch_parts(node) is not None:
         return 'CATCH'
     return KEYWORD_LABEL.get(kind, kind.upper())
+
+
+MODULE_SCOPE = 'module'
+LOCAL_SCOPE = 'local'
+
+
+def _is_local_scope(node: Any, kind: str) -> bool:
+    """Whether a node of ``kind`` is a function-like body for edge_scope().
+
+    LOCAL_SCOPE_NODES, except Zig's ``Decl``, which wraps every top-level declaration
+    (`const std = @import("std");` too); only one holding an ``FnProto`` is a function."""
+    if kind not in LOCAL_SCOPE_NODES:
+        return False
+    if kind == 'Decl':
+        return any(_zero_arg(c, 'kind') == 'FnProto' for c in node_children(node))
+    return True
+
+
+def edge_scope(node: Any) -> str:
+    """LOCAL_SCOPE when ``node`` sits inside a function-like body, else MODULE_SCOPE.
+
+    The one positional rule every import extractor uses (BACK-2076). It is not a
+    runtime claim: a Rust fn-local ``use`` and a Scala block import are local without
+    being lazy, and a class, struct, impl or namespace body is module scope."""
+    current = _zero_arg(node, 'parent')
+    while current is not None:
+        if _is_local_scope(current, _zero_arg(current, 'kind')):
+            return LOCAL_SCOPE
+        current = _zero_arg(current, 'parent')
+    return MODULE_SCOPE
 
 
 def opens_scope(node: Any, kind: str) -> bool:

@@ -731,6 +731,7 @@ class JavaScriptExtractor(LanguageExtractor):
             is_relative=module_path.startswith('.'),
             import_type=import_type,
             alias=alias,
+            dynamic=False,
             source_line=_line_text(analyzer, line_number),
         )]
 
@@ -774,6 +775,7 @@ class JavaScriptExtractor(LanguageExtractor):
             is_relative=module_path.startswith('.'),
             import_type='re_export',
             alias=None,
+            dynamic=False,
             source_line=_line_text(analyzer, line_number),
             skip_unused=True,
         )
@@ -821,6 +823,7 @@ class JavaScriptExtractor(LanguageExtractor):
             is_relative=module_path.startswith('.'),
             import_type='dynamic_import',
             alias=None,
+            dynamic=True,
             source_line=_line_text(analyzer, line_number) if analyzer else "",
         )
 
@@ -878,6 +881,7 @@ class JavaScriptExtractor(LanguageExtractor):
             is_relative=module_path.startswith('.'),
             import_type=import_type,
             alias=None,
+            dynamic=True,
             source_line=_line_text(analyzer, line_number) if analyzer else "",
         )
 

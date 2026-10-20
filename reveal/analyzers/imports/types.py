@@ -27,6 +27,14 @@ class ImportStatement:
     alias: Optional[str] = None  # 'np' in 'import numpy as np'
     is_type_checking: bool = False  # True if inside 'if TYPE_CHECKING:' block
     is_in_function: bool = False  # True if inside a function/method body
+    # BACK-2076: where the import sits, from node_taxonomy.edge_scope(): 'module' (file,
+    # class or namespace body; runs when the file loads) or 'local' (a function or lambda
+    # body). Positional, not a runtime claim. None: the extractor does not record it yet
+    # (only Python does; other languages opt in with BACK-2078/2079).
+    scope: Optional[str] = None
+    # BACK-2076: True for a loader call (JS/TS `import()` and `require()`), False for a
+    # declaration (Python `import`, ES `import`/`export ... from`). None: not recorded.
+    dynamic: Optional[bool] = None
     source_line: str = ""  # Full source line (for noqa comment detection)
     level: int = 0  # Relative import level: 0=absolute, 1='.', 2='..', etc.
     skip_unused: bool = False  # True when unused-detection is unreliable for this

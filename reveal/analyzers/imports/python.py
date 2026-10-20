@@ -22,6 +22,7 @@ from ...utils.request_cache import register_request_cache
 from pathlib import Path
 from typing import FrozenSet, List, Set, Optional, Dict, Tuple
 from ...core import node_children as _children, node_prev_sibling as _prev_sibling
+from ...core.node_taxonomy import edge_scope
 from ...core.treesitter_compat import _zero_arg
 
 logger = logging.getLogger(__name__)
@@ -117,7 +118,11 @@ class PythonExtractor(LanguageExtractor):
         return False
 
     def _is_inside_function(self, node) -> bool:
-        """Check if import node is inside a function or method body."""
+        """Check if import node is inside a function or method body.
+
+        What resolve_graph drops by (BACK-445). It also counts a *decorated class* body,
+        whose import runs at load time, as a function; ``edge_scope`` calls that body
+        module scope. Replaced by ``scope`` once that difference is decided (BACK-2076)."""
         current = _zero_arg(node, 'parent')
         while current:
             if _zero_arg(current, 'kind') in ('function_definition', 'decorated_definition'):
@@ -138,6 +143,7 @@ class PythonExtractor(LanguageExtractor):
         # Detect TYPE_CHECKING context and function body
         is_type_checking = self._is_inside_type_checking(node, analyzer)
         is_in_function = self._is_inside_function(node)
+        scope = edge_scope(node)
 
         # Get source line (0-indexed -> 1-indexed)
         start_row = _zero_arg(node, 'start_position').row
@@ -177,6 +183,8 @@ class PythonExtractor(LanguageExtractor):
                 alias=alias,
                 is_type_checking=is_type_checking,
                 is_in_function=is_in_function,
+                scope=scope,
+                dynamic=False,
                 source_line=source_line
             ))
 
@@ -258,6 +266,7 @@ class PythonExtractor(LanguageExtractor):
         # Detect TYPE_CHECKING context and function body
         is_type_checking = self._is_inside_type_checking(node, analyzer)
         is_in_function = self._is_inside_function(node)
+        scope = edge_scope(node)
 
         # Get source line (0-indexed -> 1-indexed)
         start_row = _zero_arg(node, 'start_position').row
@@ -278,6 +287,8 @@ class PythonExtractor(LanguageExtractor):
             alias=None,  # from imports don't have module-level aliases
             is_type_checking=is_type_checking,
             is_in_function=is_in_function,
+            scope=scope,
+            dynamic=False,
             source_line=source_line,
             level=level,
         )]
