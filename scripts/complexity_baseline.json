@@ -166,7 +166,6 @@
   "reveal/rules/bugs/B006.py::B006._php_has_visible_signal": 16,
   "reveal/rules/bugs/B006.py::B006._swift_has_visible_signal": 21,
   "reveal/rules/bugs/_exception_flow.py::py_carries": 20,
-  "reveal/rules/imports/I002.py::I002._collect_raw_imports": 16,
   "reveal/rules/imports/I005.py::I005.check": 20,
   "reveal/rules/maintainability/M104.py::M104._classify_list": 19,
   "reveal/rules/types/T005.py::T005._check_function": 21,

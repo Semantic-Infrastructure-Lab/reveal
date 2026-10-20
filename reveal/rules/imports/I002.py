@@ -150,6 +150,24 @@ def _extract_in_pool(file_strs: List[str], workers: int, results: Dict[str, tupl
                        len(lost), type(lost[0]).__name__, lost[0])
 
 
+def _assemble_pass_b(file_strs: List[str], results: Dict[str, tuple], lost_strs: set,
+                     unreadable_files: Optional[List[Path]]) -> Tuple[list, list, list]:
+    """``(all_imports, failed_files, lost_files)`` from Pass B's per-file results, in
+    submission order; a file the pool did not deliver is extracted here, serially. Failed
+    files that could not be read (not lost) are appended to *unreadable_files* (BACK-2084)."""
+    all_imports: list = []
+    failed_files: list = []
+    for fp_str in file_strs:
+        imports, failed, cacheable = results[fp_str] if fp_str in results else _extract_imports_for_file(fp_str)
+        all_imports.extend(imports)
+        if failed:
+            failed_files.append(Path(fp_str))
+        if not cacheable and fp_str not in lost_strs and unreadable_files is not None:
+            unreadable_files.append(Path(fp_str))
+    lost_files = [Path(fp_str) for fp_str in file_strs if fp_str in lost_strs]
+    return all_imports, failed_files, lost_files
+
+
 def _max_graph_files() -> int:
     """Read the import-graph file ceiling, honoring REVEAL_I002_MAX_FILES."""
     raw = os.environ.get('REVEAL_I002_MAX_FILES')
@@ -561,17 +579,7 @@ class I002(BaseRule):
                 # Only the files the pool did not deliver run serially.
                 logger.warning("I002: parallel import extraction failed (%s: %s); "
                                "extracting the rest serially", type(e).__name__, e)
-        all_imports: list = []
-        failed_files: list = []
-        for fp_str in file_strs:
-            imports, failed, cacheable = results[fp_str] if fp_str in results else _extract_imports_for_file(fp_str)
-            all_imports.extend(imports)
-            if failed:
-                failed_files.append(Path(fp_str))
-            if not cacheable and fp_str not in lost_strs and unreadable_files is not None:
-                unreadable_files.append(Path(fp_str))
-        lost_files = [Path(fp_str) for fp_str in file_strs if fp_str in lost_strs]
-        return all_imports, failed_files, lost_files, None
+        return (*_assemble_pass_b(file_strs, results, lost_strs, unreadable_files), None)
 
     def _record_scan_budget(self, budget: ScanBudget, count: int, *,
                             capped: bool = False, analyzed: int, skipped: bool = False,
