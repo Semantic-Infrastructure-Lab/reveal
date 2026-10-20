@@ -70,8 +70,12 @@ cuts and documented unsupported-language scope remain successful.
 
 ## Reading The Output
 
-`facts.entry_points` are live (non-test, non-`__init__.py`, fan-out > 0)
-files nothing else imports. `facts.core_abstractions` are files many others
+`facts.entry_points` are the *active* entry points: of the files nothing but
+tests imports ("fan-in 0", the list `imports://<dir>?entrypoints` prints), the
+ones with fan-out > 0 that are not test files and not `__init__.py`. The report
+states both numbers and the rule: `entry_point_filter` in JSON
+(`fan_in_zero`, `active`, `rule`) and the `Entry Points  (N active of M fan-in=0
+files)` heading plus an `active = ...` line in text. `facts.core_abstractions` are files many others
 import (fan-in > 0). `facts.circular_groups` are import cycles. `risks`
 flags circular groups, high-complexity entry points (complexity ≥ 20), and
 load-bearing files (fan-in ≥ 8). `next_commands` suggests the next reveal
