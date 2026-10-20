@@ -22,10 +22,8 @@ DOC = "# Title\n\nIntro with a [link](other.md).\n\n## Setup\n\nRun `make`.\n\nS
 def _isolate_cache(tmp_path, monkeypatch):
     monkeypatch.setenv("REVEAL_CACHE_DIR", str(tmp_path / "cache"))
     ts_mod._get_parse_cache().clear()
-    md_mod._inline_parse_cache.clear()
     yield
     ts_mod._get_parse_cache().clear()
-    md_mod._inline_parse_cache.clear()
 
 
 @pytest.fixture

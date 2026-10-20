@@ -130,15 +130,17 @@ def _parse_build(language: str, source: str) -> Any:
 
 
 class _ThreadLocalMemo:
-    """``functools.lru_cache`` per thread, with its ``__wrapped__`` and ``cache_clear``.
+    """``functools.lru_cache`` per thread, with its ``__wrapped__``, ``cache_clear`` and
+    ``cache_info``. Any memo whose values hold tree-sitter trees or nodes uses it.
 
     With language-pack 1.8.1 a tree-sitter Node is unsendable: walking a tree another OS
     thread built panics (``PanicException``, not an ``Exception``), and reveal-mcp runs each tool
     call on its own worker thread. A process-global memo handed one call's tree to the next and
-    hung the client (BACK-2050). Each thread keeps and drops its own trees, as the parse cache in
-    treesitter.py does; reuse within a thread, which per-file rules need, is unchanged."""
+    hung the client (BACK-2050, and the rules' kind index, BACK-2115). Each thread keeps and drops
+    its own trees, as the parse cache in treesitter.py does; reuse within a thread, which per-file
+    rules need, is unchanged."""
 
-    def __init__(self, build: Callable[[str, str], Any], maxsize: int) -> None:
+    def __init__(self, build: Callable[..., Any], maxsize: int) -> None:
         self.__wrapped__ = build
         self._maxsize = maxsize
         self._local = threading.local()
@@ -149,12 +151,16 @@ class _ThreadLocalMemo:
             memo = self._local.memo = functools.lru_cache(maxsize=self._maxsize)(self.__wrapped__)
         return memo
 
-    def __call__(self, language: str, source: str) -> Any:
-        return self._memo()(language, source)
+    def __call__(self, *args: Any) -> Any:
+        return self._memo()(*args)
 
     def cache_clear(self) -> None:
-        """Forget this thread's parses (other threads' memos belong to them)."""
+        """Forget this thread's entries (other threads' memos belong to them)."""
         self._memo().cache_clear()
+
+    def cache_info(self) -> Any:
+        """This thread's hits, misses and size (``functools`` ``CacheInfo``)."""
+        return self._memo().cache_info()
 
 
 _parse_recent = _ThreadLocalMemo(_parse_build, maxsize=4)

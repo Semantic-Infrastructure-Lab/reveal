@@ -10,8 +10,9 @@ import heapq
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..core import _zero_arg, iter_tree
+from ..core import _zero_arg, get_tree, iter_tree, tree_root
 from ..core.treesitter_compat import zero_arg_getter
+from ..core.treesitter_parse import _ThreadLocalMemo
 from ..utils.pyparse import parse_python
 
 logger = logging.getLogger(__name__)
@@ -27,23 +28,6 @@ def toml_table(data: Any, *keys: str) -> Dict[str, Any]:
     for key in keys:
         node = node.get(key) if isinstance(node, dict) else None
     return node if isinstance(node, dict) else {}
-
-
-@functools.lru_cache(maxsize=4)
-def _cached_treesitter_parse(content: str, file_path: str, language: str):
-    """Parse non-Python content into a tree-sitter root node, LRU-cached.
-
-    Keyed by (content, file_path, language) — same rationale as
-    ``_cached_ast_parse``. Returns None on any parse failure (unknown
-    language, grammar not installed, etc.) rather than raising, so callers
-    can use the same "skip" pattern as the Python AST mixin.
-    """
-    from ..core import get_tree, tree_root
-    try:
-        return tree_root(get_tree(language, content, filename=file_path))
-    except Exception as e:  # boundary-ok: broad-except -- Parser.parse is a native binding whose error types are not enumerable from Python; the caller skips the file and the warning names it and the language
-        logger.warning(f"tree-sitter parse failed for {file_path} ({language}): {e}")
-        return None
 
 
 @functools.lru_cache(maxsize=4)
@@ -68,14 +52,14 @@ def _cached_ast_parse(content: str, file_path: str) -> Optional[ast.AST]:
         return None
 
 
-@functools.lru_cache(maxsize=4)
-def _kind_buckets(root: Any) -> Dict[str, Tuple[List[Any], List[int]]]:
+def _build_kind_buckets(root: Any) -> Dict[str, Tuple[List[Any], List[int]]]:
     """Every node of a tree-sitter tree grouped by kind, in one pre-order pass.
 
     Maps kind -> (nodes, pre-order ordinals). Keyed by the root node (nodes compare and
-    hash by identity of the underlying node), so every rule that parsed the same file
-    through `_cached_treesitter_parse` shares one pass instead of each walking the whole
-    tree to find its own few kinds (BACK-1880). Callers must not mutate the lists.
+    hash by identity of the underlying node; `tree_root` gives one root per tree), so every
+    rule that got the same file's tree from `get_tree` shares one pass instead of each
+    walking the whole tree to find its own few kinds (BACK-1880). Callers must not mutate
+    the lists.
     """
     kind_of = zero_arg_getter(type(root), 'kind')
     buckets: Dict[str, Tuple[List[Any], List[int]]] = {}
@@ -89,6 +73,10 @@ def _kind_buckets(root: Any) -> Dict[str, Tuple[List[Any], List[int]]]:
     return buckets
 
 
+# Per thread: the buckets hold the tree's nodes, which must not cross threads (BACK-2115).
+_kind_buckets = _ThreadLocalMemo(_build_kind_buckets, maxsize=4)
+
+
 def kind_nodes(root: Any, *kinds: str) -> List[Any]:
     """The nodes of `root` whose kind is one of `kinds`, in document (pre-order) order.
 
@@ -97,7 +85,7 @@ def kind_nodes(root: Any, *kinds: str) -> List[Any]:
     """
     if root is None:
         return []
-    buckets = _kind_buckets(root)
+    buckets: Dict[str, Tuple[List[Any], List[int]]] = _kind_buckets(root)
     if len(kinds) == 1:
         entry = buckets.get(kinds[0])
         return entry[0] if entry is not None else []
@@ -206,8 +194,19 @@ class TreeSitterParsingMixin:
     """
 
     def _parse_treesitter(self, content: str, file_path: str, language: str):
-        """Parse content with tree-sitter, returning the root node or None."""
-        return _cached_treesitter_parse(content, file_path, language)
+        """Parse content with tree-sitter, returning the root node or None.
+
+        The tree comes from `get_tree`, whose per-thread recent-parse memo lets every rule on
+        the same file share one parse, and `tree_root` gives that tree one root, so the kind
+        index is built once. Returns None on any parse failure (unknown language, grammar
+        not installed, etc.) rather than raising, so callers can use the same "skip" pattern
+        as the Python AST mixin.
+        """
+        try:
+            return tree_root(get_tree(language, content, filename=file_path))
+        except Exception as e:  # boundary-ok: broad-except -- Parser.parse is a native binding whose error types are not enumerable from Python; the caller skips the file and the warning names it and the language
+            logger.warning(f"tree-sitter parse failed for {file_path} ({language}): {e}")
+            return None
 
     def _parse_treesitter_or_skip(self, content: str, file_path: str, language: str) -> tuple:
         """Parse or return empty detections list, mirroring _parse_python_or_skip.

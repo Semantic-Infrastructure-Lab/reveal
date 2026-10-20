@@ -269,9 +269,19 @@ def node_next_sibling(node):
 # the pinned floor) and ==1.12.5 (property/bytes) in isolated venvs.
 
 
-_ROOT_MEMO: dict = {}
-_ROOT_MEMO_LOCK = threading.Lock()
+# Per thread, like every cache of trees or nodes (BACK-2050, BACK-2115): on the 1.8.1 binding a
+# Tree is unsendable, and a shared memo let one reveal-mcp worker thread's parses evict, and so
+# drop, a tree another thread built (an unraisable RuntimeError per drop).
+_ROOT_MEMO = threading.local()
 _ROOT_MEMO_MAX = 8
+
+
+def _root_memo() -> dict:
+    """This thread's id(tree) -> (tree, root) memo, oldest first."""
+    memo = getattr(_ROOT_MEMO, 'entries', None)
+    if memo is None:
+        memo = _ROOT_MEMO.entries = {}
+    return memo
 
 
 def tree_root(tree):
@@ -287,15 +297,14 @@ def tree_root(tree):
     root (the rules' kind index, BACK-1880) was rebuilt once per rule instead of once per tree
     (2.00 builds per file). The memo holds the tree, so its id cannot be reused while cached.
     """
-    with _ROOT_MEMO_LOCK:
-        entry = _ROOT_MEMO.get(id(tree))
-        if entry is not None and entry[0] is tree:
-            return entry[1]
+    memo = _root_memo()
+    entry = memo.get(id(tree))
+    if entry is not None and entry[0] is tree:
+        return entry[1]
     root = _zero_arg(tree, 'root_node')
-    with _ROOT_MEMO_LOCK:
-        if len(_ROOT_MEMO) >= _ROOT_MEMO_MAX:
-            _ROOT_MEMO.pop(next(iter(_ROOT_MEMO)), None)
-        _ROOT_MEMO[id(tree)] = (tree, root)
+    if len(memo) >= _ROOT_MEMO_MAX:
+        memo.pop(next(iter(memo)), None)
+    memo[id(tree)] = (tree, root)
     return root
 
 

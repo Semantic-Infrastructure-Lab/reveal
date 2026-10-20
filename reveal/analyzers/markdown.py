@@ -19,11 +19,6 @@ from ..core.treesitter_compat import _zero_arg
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
-# Cache for markdown_inline parse results, keyed by (path, mtime_ns).
-# Avoids re-parsing the same file's inline content when multiple rules or
-# calls analyze the same markdown file in a single --check run.
-_inline_parse_cache: Dict[Tuple[str, int], Any] = {}
-
 # BACK-1562: _heading_index()'s tree-derived result, per file, in the disk cache.
 _HEADINGS_CACHE_NAMESPACE = "markdown-headings"
 
@@ -93,23 +88,19 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         Lazy like TreeSitterAnalyzer.tree (BACK-1562): headings come from the block
         tree alone, so the outline and --grep never pay this second whole-file parse.
-        Uses the same (path, mtime_ns) cache key as TreeSitterAnalyzer so multiple
-        rule passes on the same file share a single parse.
+        Several analyzers of one file on one thread share the parse through get_tree's
+        per-thread, content-keyed memo; a process-wide cache of these trees handed one
+        reveal-mcp worker thread's tree to the next, which panics on the 1.8.1 binding
+        (BACK-2115).
         """
         if self._inline_parsed:
             return self._inline_tree
         self._inline_parsed = True
-        cache_key = getattr(self, '_cache_key', None)
-        if cache_key is not None and cache_key in _inline_parse_cache:
-            self._inline_tree = _inline_parse_cache[cache_key]
-            return self._inline_tree
         try:
             import warnings
             warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
 
             self._inline_tree = get_tree('markdown_inline', self.content, filename=self.path)
-            if cache_key is not None:
-                _inline_parse_cache[cache_key] = self._inline_tree
         except GrammarUnavailable:
             # No markdown_inline grammar: fall back to regex for links/code
             pass
