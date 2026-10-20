@@ -879,6 +879,7 @@ def walk_with_causes(
     respect_gitignore: Optional[bool] = None,
     on_error: Optional[Callable[[OSError], None]] = None,
     on_hidden: Optional[OnHidden] = None,
+    on_dir: Optional[Callable[[Path], None]] = None,
 ) -> Iterator[Tuple[Path, Optional[str]]]:
     """Every file a walk for *purpose* reaches, with the soft cause that would hide it from
     a plain walk (None when it would be kept): the resolution index needs gitignored and
@@ -886,7 +887,9 @@ def walk_with_causes(
     Directories with a cause in ``purpose.soft_dirs`` are still descended.
     ``on_error`` receives enumeration failures; None retains os.walk defaults.
     *on_hidden* sees what :func:`walk_tree` would hide, once per entry: a descended soft
-    directory is reported and its contents are not reported again (BACK-2065).
+    directory is reported and its contents are not reported again (BACK-2065). *on_dir* sees
+    every directory entry the walk meets, empty and pruned (``build``, ``node_modules``) ones
+    included: a directory is a resolution target that no file path names (BACK-2085).
     """
     if path.is_file():
         yield path, None
@@ -905,6 +908,8 @@ def walk_with_causes(
         quiet = root_path in reported
         kept = []
         for d in dirs:
+            if on_dir is not None:
+                on_dir(root_path / d)
             cause = judge(root_path / d, True, quiet)
             if cause in (None, *purpose.soft_dirs):
                 kept.append(d)

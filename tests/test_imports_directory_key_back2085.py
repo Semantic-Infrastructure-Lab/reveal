@@ -115,3 +115,15 @@ def test_adapter_key_covers_directories(tree):
     (tree / 'pkg').mkdir()
     candidates, index = adapter._discover_candidate_files(tree, frozenset({'.py'}), frozenset({'.py'}))
     assert _candidate_set_fingerprint(candidates, index, root=tree) != before
+
+
+@pytest.mark.parametrize('name', ['build', 'node_modules'])
+def test_pruned_directory_created_after_a_cached_run_is_seen(tree, monkeypatch, builds, name):
+    """The walk prunes noise directories, but `import build` still resolves to one."""
+    (tree / 'a.py').write_text(f'import {name}\n', encoding='utf-8')
+    monkeypatch.setenv('REVEAL_DISK_CACHE', '1')
+    assert _resolved(tree) is None
+    (tree / name).mkdir()
+    expected = _cache_off_answer(tree, monkeypatch)
+    assert expected == name, 'fixture: the cache-off run resolves to the pruned directory'
+    assert _resolved(tree) == expected, f'the graph cached before {name}/ existed was served'

@@ -53,7 +53,7 @@ def _candidate_set_fingerprint(candidates: List[Path],
                                file_index: Optional[Dict[str, List[Path]]] = None, *, root: Path,
                                traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> Optional[str]:
     """Shared root/source/target fingerprint; preserve the private source-only call shape."""
-    return resolution_fingerprint(candidates, file_index or {}, excluded_root=disk_cache.cache_root(),
+    return resolution_fingerprint(candidates, {} if file_index is None else file_index, excluded_root=disk_cache.cache_root(),
                                   root=root, traversal_failures=traversal_failures)
 
 

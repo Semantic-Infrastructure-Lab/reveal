@@ -11,10 +11,23 @@ import hashlib
 import stat
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from ...registry import DECLARATION_ONLY_EXTENSIONS
 from ...utils.path_utils import RESOLUTION, OnHidden, walk_with_causes
+
+
+class FileIndex(Dict[str, List[Path]]):
+    """The ``basename -> paths`` index, plus the directories the walk met.
+
+    An import can resolve to a directory (a namespace package, a Go or Rust module directory),
+    and an empty one appears in no file path, so a key over files alone cannot see it
+    (BACK-2085). A plain dict compares and iterates as before.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.directories: Set[Path] = set()
 
 
 def discover_import_files(
@@ -24,7 +37,7 @@ def discover_import_files(
     *,
     on_error: Optional[Callable[[OSError], None]] = None,
     on_hidden: Optional[OnHidden] = None,
-) -> Tuple[List[Path], Dict[str, List[Path]], bool]:
+) -> Tuple[List[Path], FileIndex, bool]:
     """Walk *root* once: ``(graph files, basename -> paths index, capped)``.
 
     The index holds every file an import could point to, including gitignored and
@@ -36,8 +49,9 @@ def discover_import_files(
     cause, once (BACK-2065).
     """
     candidates: List[Path] = []
-    index: Dict[str, List[Path]] = {}
-    for file_path, cause in walk_with_causes(root, RESOLUTION, on_error=on_error, on_hidden=on_hidden):
+    index = FileIndex()
+    for file_path, cause in walk_with_causes(root, RESOLUTION, on_error=on_error, on_hidden=on_hidden,
+                                             on_dir=index.directories.add):
         index.setdefault(file_path.name, []).append(file_path)
         if cause is not None or file_path.suffix.lower() in DECLARATION_ONLY_EXTENSIONS:
             continue
@@ -50,13 +64,15 @@ def discover_import_files(
 
 
 def basename_index(roots: Iterable[Path], *,
-                   on_error: Optional[Callable[[OSError], None]] = None) -> Dict[str, List[Path]]:
+                   on_error: Optional[Callable[[OSError], None]] = None) -> FileIndex:
     """The basename index for callers that hand an extractor only search paths."""
-    index: Dict[str, List[Path]] = {}
+    index = FileIndex()
     for root in roots:
         if root.is_dir():
-            for name, paths in discover_import_files(root, lambda _p: False, on_error=on_error)[1].items():
+            found = discover_import_files(root, lambda _p: False, on_error=on_error)[1]
+            for name, paths in found.items():
                 index.setdefault(name, []).extend(paths)
+            index.directories |= found.directories
     return index
 
 
@@ -74,6 +90,10 @@ def resolution_fingerprint(candidates: Iterable[Path], index: Dict[str, List[Pat
                            excluded_root: Optional[Path] = None, *, root: Path,
                            traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> Optional[str]:
     """Hash the scan root, source membership and the complete resolution target set (BACK-1755).
+    The target set is every indexed file and, when *index* is a :class:`FileIndex`, every
+    directory the walk descended, by path alone: a file's stat covers its content, and a
+    directory's membership is covered by its files, but an empty directory is a target
+    only its own path names (BACK-2085).
 
     Roles stay distinct: changing source eligibility still invalidates an unchanged
     target index. *root* is the scan root the graph resolves against: every file gets it
@@ -99,6 +119,11 @@ def resolution_fingerprint(candidates: Iterable[Path], index: Dict[str, List[Pat
                     continue
                 hasher.update(str(path).encode('utf-8', 'replace'))
                 hasher.update(f"\x02{info.st_mtime_ns}\x03{info.st_size}\x04".encode('ascii'))
+        hasher.update(b'directories')
+        for directory in sorted(getattr(index, 'directories', ())):
+            if excluded is not None and directory.resolve().is_relative_to(excluded):
+                continue
+            hasher.update(str(directory).encode('utf-8', 'replace') + b'\x04')
         return hasher.hexdigest()
     except (OSError, ValueError):
         return None
