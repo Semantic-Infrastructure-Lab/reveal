@@ -1536,11 +1536,14 @@ class TestCallsAdapterColonSyntax(unittest.TestCase):
         # Path should not be modified — the colon shorthand should not apply
         self.assertIn(':helper', adapter.path)
 
-    def test_colon_syntax_does_not_override_explicit_target(self):
-        """Explicit ?target= in query string takes priority over colon element."""
+    def test_colon_syntax_with_an_explicit_mode_is_two_modes(self):
+        """path:name is the callers mode: with an explicit ?target= it is a second mode, a usage
+        answer (exit 2), where it used to let ?target= win and drop :helper silently (BACK-2102)."""
         adapter = CallsAdapter(f"{self.tmpdir}:helper", 'target=caller_a')
-        # Explicit query_string target should win — colon shorthand is skipped
-        self.assertEqual(adapter.query_params.get('target'), 'caller_a')
+        self.assertEqual(adapter.query_params.get('target'), 'caller_a')  # :helper is not applied
+        result = adapter.get_structure()
+        self.assertIn('one mode per request', result['error'])
+        self.assertEqual([e['code'] for e in result['meta']['errors']], ['invalid_request'])
 
     def test_no_colon_path_unaffected(self):
         """Paths without ':' are not modified."""
