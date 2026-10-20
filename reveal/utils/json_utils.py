@@ -65,6 +65,31 @@ def write_also_json(result, args) -> None:
         print_json_result(result, file=f)
 
 
+# What a requested artifact write raises: no path (OSError), an unencodable value, a bad serialization.
+ARTIFACT_WRITE_ERRORS = (OSError, UnicodeError, ValueError)
+
+
+def write_requested_artifact(write, result=None):
+    """Run *write*, the writer of a file the caller asked for beside its primary answer.
+
+    The one owner of what a failed requested artifact means (D6, "requested output failed"):
+    it is disclosed once on stderr and recorded in ``result['meta']['output_errors']`` when a
+    result dict is given. Returns the exception so the caller maps it to exit 3 (declared
+    nouns through ``emit_declared_result``, native check through ``check_exit_code``); None
+    when the write succeeded. Flag-agnostic: ``--also-json`` is one spelling that reaches it.
+    """
+    try:
+        write()
+    except ARTIFACT_WRITE_ERRORS as exc:
+        message = f'Requested JSON artifact failed: {exc}'
+        print(f'Error: {message}', file=sys.stderr)
+        if isinstance(result, dict):
+            result.setdefault('meta', {}).setdefault('output_errors', []).append(
+                {'code': 'artifact_write_failed', 'message': message})
+        return exc
+    return None
+
+
 def print_json_result(result, file=None) -> None:
     """Print a reveal result dict as JSON — the single funnel for adapter/
     renderer CLI JSON output (BACK-893). Not for printing arbitrary values

@@ -230,7 +230,8 @@ def emit_declared_result(result, args, scheme, render, facts, *, execution_answe
     """Finalize selected D6 facts; legacy emitters keep their existing policy."""
     from ...display.formatting import print_result_control_notes
     from ...rendering.base import emit_rendered
-    from ...utils.json_utils import attach_provenance, print_json_result, write_also_json
+    from ...utils.json_utils import (attach_provenance, print_json_result, write_also_json,
+                                     write_requested_artifact)
     from ...utils.results import (FailureCause, execution_exit_code,
                                  failure_execution_facts, merge_execution_facts)
     from .uri import announce_outcome
@@ -238,16 +239,11 @@ def emit_declared_result(result, args, scheme, render, facts, *, execution_answe
     result = attach_provenance(result)
     if announce_error:
         announce_outcome(result, f'{scheme}://')
-    try:
-        write_also_json(result, args)
-    except (OSError, UnicodeError, ValueError) as exc:
-        message = f'Requested JSON artifact failed: {exc}'
-        print(f'Error: {message}', file=sys.stderr)
-        result.setdefault('meta', {}).setdefault('output_errors', []).append(
-            {'code': 'artifact_write_failed', 'message': message})
+    failure = write_requested_artifact(lambda: write_also_json(result, args), result)
+    if failure is not None:
         facts = merge_execution_facts(facts, failure_execution_facts(FailureCause.OUTPUT))
         if execution_answer is not None:
-            execution_answer.exception = exc
+            execution_answer.exception = failure
     code = execution_exit_code(facts, fail_on=policy)
     try:
         if args.format == 'json':
