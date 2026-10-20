@@ -127,6 +127,27 @@ def _process_stdin_file(
     return 0, False, False
 
 
+def _stdin_check_exit(args: 'Namespace', violations: int, degraded: bool, artifact_failed: bool,
+                      ssl_exit: int, uri_exit: int) -> int:
+    """The exit code of ``--stdin --check``.
+
+    BACK-1099: reuse `reveal check`'s own 0/1/3 contract instead of this path's previous
+    0/1-only exit, so a degraded/unparseable file piped through --stdin --check is
+    distinguishable from a clean run at the shell level, same as the directory-mode fix.
+    The ssl:// batch's own exit (2 on a failed domain, as `reveal ssl://HOST --check`)
+    counts too: it used to be printed as "Exit code: 2" while the process exited 0
+    (BACK-1554). BACK-1939: a requested artifact that could not be written is 3 even under
+    --exit-zero, like the other check forms.
+    """
+    from reveal.cli.file_checker import check_exit_code
+    exit_zero = getattr(args, 'exit_zero', False)
+    file_exit = check_exit_code(
+        violations, files_degraded=1 if degraded else 0, exit_zero=exit_zero,
+        output_failed=artifact_failed,
+    )
+    return 0 if exit_zero and not artifact_failed else max(file_exit, ssl_exit, uri_exit)
+
+
 def handle_stdin_mode(args: 'Namespace', handle_file_func):
     """Handle --stdin mode to process files/URIs from stdin.
 
@@ -211,21 +232,8 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     ssl_exit = _render_ssl_batch_results(ssl_check_results, args) if ssl_check_results else 0
 
     if is_check_mode:
-        # BACK-1099: reuse `reveal check`'s own 0/1/3 contract instead of
-        # this path's previous 0/1-only exit, so a degraded/unparseable
-        # file piped through --stdin --check is distinguishable from a
-        # clean run at the shell level, same as the directory-mode fix.
-        # The ssl:// batch's own exit (2 on a failed domain, as `reveal
-        # ssl://HOST --check`) counts too: it used to be printed as
-        # "Exit code: 2" while the process exited 0 (BACK-1554).
-        from reveal.cli.file_checker import check_exit_code
-        degraded_count = 1 if any_file_degraded else 0
-        exit_zero = getattr(args, 'exit_zero', False)
-        file_exit = check_exit_code(
-            total_file_violations, files_degraded=degraded_count, exit_zero=exit_zero,
-            output_failed=any_artifact_failed,
-        )
-        sys.exit(0 if exit_zero and not any_artifact_failed else max(file_exit, ssl_exit, uri_exit))
+        sys.exit(_stdin_check_exit(args, total_file_violations, any_file_degraded,
+                                   any_artifact_failed, ssl_exit, uri_exit))
 
     sys.exit(1 if total_file_violations > 0 or uri_exit else 0)
 

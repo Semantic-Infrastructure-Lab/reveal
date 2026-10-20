@@ -88,7 +88,7 @@ def write_requested_artifact(write, result=None):
         write()
     except ARTIFACT_WRITE_ERRORS as exc:
         message = f'Requested JSON artifact failed: {exc}'
-        print(f'Error: {message}', file=sys.stderr)
+        print(f'Error: {message}', file=sys.stderr)  # boundary-ok: print -- the one disclosure line for a failed requested artifact, shared by declared nouns and check
         if isinstance(result, dict):
             result.setdefault('meta', {}).setdefault('output_errors', []).append(
                 {'code': 'artifact_write_failed', 'message': message})
