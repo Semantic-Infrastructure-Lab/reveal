@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..base import BaseRenderer
+from ...analyzers.imports.service import edge_rule_lines
 from ...registry import display_name_for_extension
 from ...utils import print_json_result
 from ...utils.formatting import cwd_path
@@ -266,6 +267,7 @@ def _render_architecture(
     if not fan_in and not entrypoints and not components:
         return lines
 
+    lines.extend(f"  {line}" for line in edge_rule_lines(arch))
     parts = [f"circulars: {circular_count}"]
     if complex_fns:
         sample = complex_fns[:10]

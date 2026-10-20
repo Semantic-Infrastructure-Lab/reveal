@@ -21,6 +21,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from .git import GitAdapter
 from .imports import ImportsAdapter
 from .stats import StatsAdapter
+from ..analyzers.imports import service as import_analysis
 from ..utils.exclusions import exclusion_scope
 from ..utils.gitignore import respect_gitignore_param
 from ..utils.path_utils import (as_spelled, display_name_for_path, to_posix,
@@ -462,10 +463,11 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, *,
         warnings = importer.integrity_warnings(path)  # BACK-1598, BACK-1753
         if warnings:
             adapter.fold_meta({'warnings': warnings})
-        fan_in = importer._format_fan_in()
-        entrypoints = importer._format_entrypoints()
-        components = importer._format_components()
-        circular = importer._format_circular()
+        with import_analysis.composed_rules('overview://'):  # BACK-2087
+            fan_in = importer._format_fan_in()
+            entrypoints = importer._format_entrypoints()
+            components = importer._format_components()
+            circular = importer._format_circular()
         metadata = importer.get_metadata()
         _validate_import_rows(fan_in, 'entries', 'fan_in')
         _validate_import_rows(entrypoints, 'entries', 'entrypoints')
@@ -488,6 +490,8 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, *,
         _capture_import_observations(fan_in['entries'], entrypoints['entries'], components['components'],
                                      circular.get('cycles'), observations)
         return {
+            # BACK-2087: the rule these counts were made by (edge_rule, edge_rule_sections).
+            **import_analysis.architecture_edge_rules(fan_in, entrypoints, components, circular),
             'fan_in': fan_in.get('entries', []),
             'entrypoints': entrypoints.get('entries', []),
             'components': components.get('components', []),

@@ -4,9 +4,11 @@ Discovery stays in the shared file-index walker. This module owns graph assembly
 and extractor resolution dispatch, rather than loading a resource adapter in the
 analysis layer. Extraction/cache ownership remains with existing callers in this pilot.
 """
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from .base import LanguageExtractor, get_extractor
 from .file_index import discover_import_files
@@ -222,6 +224,8 @@ def edge_rule(graph: ImportGraph, lazy: str, *, lazy_default: bool, subject: str
     tests = ', tests included' if tests_counted else ', importers under a test path not counted'
     source = 'default' if lazy_default else f'&lazy={lazy}'
     if hint is None:
+        hint = _RULE_HINT.get()
+    if hint is None:
         hint = 'other views: ' + ', '.join(f'&lazy={mode}' for mode in LAZY_MODES if mode != lazy)
     text = (f'Rule: {subject} {where}{tests}; TYPE_CHECKING imports excluded; '
             f'{_LAZY_PHRASES[lazy]} ({source}); {hint}.')
@@ -240,11 +244,69 @@ def edge_rule(graph: ImportGraph, lazy: str, *, lazy_default: bool, subject: str
     }
 
 
+def _counting_view(rule: Dict[str, Any]) -> Tuple[Any, Any, Any]:
+    """What makes two rules count different edges (the subject only names what is counted)."""
+    return rule['lazy'], rule['tests'], rule['scope']
+
+
+def fold_edge_rules(rules: Dict[str, Optional[Dict[str, Any]]], headline: str) -> Dict[str, Any]:
+    """The rule fields of one answer made of several edge-derived sections (BACK-2087).
+
+    ``rules`` maps each section to the ``edge_rule`` its formatter returned. ``headline`` is
+    the section whose rule the answer leads with; a section that counts different edges
+    (another ``&lazy`` view, tests not counted) keeps its own rule under ``edge_rule_sections``,
+    so no number is read under a rule it was not counted by. An answer with no headline rule
+    counted no edge and returns nothing.
+    """
+    head = rules.get(headline)
+    if not head:
+        return {}
+    sections = {name: rule for name, rule in rules.items()
+                if name != headline and rule and _counting_view(rule) != _counting_view(head)}
+    return {'edge_rule': head, **({'edge_rule_sections': sections} if sections else {})}
+
+
+def composed_rule_hint(noun: str) -> str:
+    """The ``hint`` of a rule printed by a command that takes no ``&lazy`` itself (the default
+    hint would point at a parameter that command rejects)."""
+    return f'{noun} takes no &lazy; imports:// answers the same counts with &lazy=include|exclude|only'
+
+
+_RULE_HINT: ContextVar[Optional[str]] = ContextVar('edge_rule_hint', default=None)
+
+
+@contextmanager
+def composed_rules(noun: str) -> Iterator[None]:
+    """Rules built inside this block point at ``imports://``'s views, not at an ``&lazy`` that
+    ``noun`` rejects: for a command that composes imports answers (BACK-2087). The scope ends with
+    the block, so no later request reads it."""
+    token = _RULE_HINT.set(composed_rule_hint(noun))
+    try:
+        yield
+    finally:
+        _RULE_HINT.reset(token)
+
+
+def architecture_edge_rules(fan_in: Dict[str, Any], entrypoints: Dict[str, Any],
+                            components: Dict[str, Any], circular: Dict[str, Any]) -> Dict[str, Any]:
+    """``fold_edge_rules`` for the four imports answers architecture, overview and the
+    architecture comparison are made of; fan-in leads, because its rule is the default one."""
+    return fold_edge_rules({'fan_in': fan_in.get('edge_rule'), 'entry_points': entrypoints.get('edge_rule'),
+                            'components': components.get('edge_rule'), 'cycles': circular.get('edge_rule')},
+                           'fan_in')
+
+
 def edge_rule_lines(result: Dict[str, Any]) -> List[str]:
     """The text lines that state an answer's counting rule: the one renderer of ``edge_rule``.
 
     Every consumer of the edge-derived graph prints through this (imports, depends and the
-    commands that rank by the same edges), so the JSON object and the text cannot drift.
+    commands that rank by the same edges), so the JSON objects and the text cannot drift.
+    A section's rule is labelled with the section it governs.
     """
     rule = result.get('edge_rule')
-    return [rule['text']] if rule else []
+    if not rule:
+        return []
+    lines = [rule['text']]
+    for name, section in (result.get('edge_rule_sections') or {}).items():
+        lines.append(section['text'].replace('Rule:', f"Rule ({name.replace('_', ' ')}):", 1))
+    return lines

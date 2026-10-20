@@ -311,22 +311,31 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
     from reveal.adapters.architecture import _run_complex_functions
     from reveal.adapters.architecture import ArchitectureAdapter
     from reveal.adapters.imports import ImportsAdapter
+    from reveal.analyzers.imports import service as import_analysis
 
     fan_in_out: List[Dict[str, Any]] = []
     circular_groups: List[List[str]] = []
     components: List[Dict[str, Any]] = []
     entry_points: List[str] = []
     unsupported_extensions: Dict[str, int] = {}
+    edge_rules: Dict[str, Any] = {}
     owner = ArchitectureAdapter(str(root))
     imports_state = 'complete'
 
     try:
         adapter = ImportsAdapter(str(root))
         adapter._build_graph(root)
-        fan_in_out = adapter._format_fan_in().get('entries', [])
-        circular_groups = adapter._format_circular().get('cycles', [])
-        components = adapter._format_components().get('components', [])
-        raw_eps = adapter._format_entrypoints().get('entries', [])
+        with import_analysis.composed_rules('architecture://'):  # BACK-2087
+            fan_in_data = adapter._format_fan_in()
+            circular_data = adapter._format_circular()
+            components_data = adapter._format_components()
+            entrypoints_data = adapter._format_entrypoints()
+        fan_in_out = fan_in_data.get('entries', [])
+        circular_groups = circular_data.get('cycles', [])
+        components = components_data.get('components', [])
+        raw_eps = entrypoints_data.get('entries', [])
+        edge_rules = import_analysis.architecture_edge_rules(
+            fan_in_data, entrypoints_data, components_data, circular_data)  # BACK-2087
         entry_points = [e['file'] for e in raw_eps if _is_reportable_entry_point(e)]
         metadata = adapter.get_metadata()
         unsupported_extensions = metadata.get('unsupported_extensions', {})
@@ -361,6 +370,7 @@ def _snapshot(root: Path, top_n: int) -> Dict[str, Any]:
         'entry_points': entry_points,
         'complex_fns': complex_fns,
         'unsupported_extensions': unsupported_extensions,
+        'edge_rules': edge_rules,
     }
 
 
@@ -575,8 +585,10 @@ def run_architecture_diff(
     supplied = [value for value in confidences.values() if value is not None]
     confidence = min(supplied) if supplied else None
     deltas = diff_snapshots(base_snapshot, head_snapshot, top_n) if complete else None
+    # Both sides are counted by one rule (the same formatters and defaults), so the answer states it once.
     return _comparison_report(path, base_ref, head_ref, deltas, analysis,
-                              [*base_meta, *_snapshot_meta(head_raw, 'head')], confidence=confidence)
+                              [*base_meta, *_snapshot_meta(head_raw, 'head')], confidence=confidence,
+                              edge_rules=head_raw['edge_rules'] if deltas is not None else None)
 
 
 def _diagnostic_path(value: str, root: Path) -> str:
@@ -616,12 +628,13 @@ def _snapshot_meta(raw: Dict[str, Any], side: str) -> List[Tuple[str, Dict[str, 
 
 def _comparison_report(path: Path, base_ref: str, head_ref: str, deltas: Optional[Dict[str, Any]],
                        analysis: Dict[str, Any], diagnostics: List[Tuple[str, Dict[str, Any]]],
-                       *, confidence: Optional[float] = None) -> Dict[str, Any]:
+                       *, confidence: Optional[float] = None,
+                       edge_rules: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     from ..utils.results import ResultBuilder
     from ..utils.path_utils import to_posix
     from ..reveal_types import CONTRACT_VERSION
     data = {'base_ref': base_ref, 'head_ref': head_ref, 'path': to_posix(path),
-            'deltas': deltas, 'analysis': analysis}
+            'deltas': deltas, 'analysis': analysis, **(edge_rules or {})}
     if not analysis['complete']:
         data['error'] = 'Architecture comparison unavailable: required snapshot evidence is incomplete'
     return cast(Dict[str, Any], ResultBuilder.create(

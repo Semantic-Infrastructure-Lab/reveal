@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..base import BaseRenderer, capped_section
+from ...analyzers.imports.service import edge_rule_lines
 from ...utils.path_utils import to_relative_display
 from ...utils.results import outcome_of
 
@@ -212,6 +213,9 @@ def _render_deps(report: Dict[str, Any], top: int) -> List[str]:
     skipped = report.get('skipped') or []
     lines += _render_summary(analysis, cycle_count, len(unused), base_meta, skipped=skipped,
                              components=evidence.get('components'))
+    if 'circular' not in skipped:
+        # BACK-2087: the Health verdict above counts cycles by the load-time view; the JSON said so.
+        lines.extend(f"          {line}" for line in edge_rule_lines(circular))
     # Per-language "not checked" is moot when --no-unused turned the check off.
     if 'unused' not in skipped:
         not_checked_note = unused_not_checked_line(base_meta.get('unused_not_checked_extensions') or {})

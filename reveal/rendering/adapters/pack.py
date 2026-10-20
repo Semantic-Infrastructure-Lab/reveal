@@ -1,8 +1,9 @@
 """Returned pack text for CLI, URI and MCP consumers."""
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
+from ...analyzers.imports.service import edge_rule_lines
 from ..base import BaseRenderer, capped_section
 from ...utils.results import outcome_of
 from ...utils.warning_render import meta_warning_lines
@@ -76,8 +77,9 @@ def _format_pack_header(
     budget_tokens: Optional[int],
     budget_lines: Optional[int],
     since_error: Optional[str],
+    rule_lines: Sequence[str] = (),
 ) -> List[str]:
-    """Format the pack header (budget + since + selected counts) as lines."""
+    """Format the pack header (budget + since + selected counts + the edge rule) as lines."""
     since_val = meta.get('since')
     budget_desc = f"~{budget_tokens} tokens" if budget_tokens is not None else f"{budget_lines} lines"
     since_desc = f"  [since {since_val}]" if since_val else ""
@@ -92,6 +94,7 @@ def _format_pack_header(
         f"Selected {meta['selected']} of {meta['total_candidates']} {file_label} "
         f"(~{meta['used_tokens_approx']} tokens, {_used_line_total(meta)} lines)"
     )
+    lines.extend(rule_lines)
     lines.append("")
     return lines
 
@@ -172,10 +175,11 @@ def _format_pack_result(
     content: bool = True,
     architecture: bool = False,
     content_data: Optional[List[Dict[str, Any]]] = None,
+    rule_lines: Sequence[str] = (),
 ) -> str:
     """Format the MCP snapshot, preserving its existing helper interface."""
     body = pack_text(path, selected, meta, True, budget_tokens, budget_lines,
-                     architecture, since_error).removesuffix('\n')
+                     architecture, since_error, rule_lines).removesuffix('\n')
     if content and selected:
         body += "\n" + "\n".join(_format_pack_content(selected, content_data))
     warning_lines = meta_warning_lines({'meta': meta})
@@ -186,9 +190,10 @@ def _format_pack_result(
 
 def pack_text(path: Path, selected: List[Dict[str, Any]], meta: Dict[str, Any],
               verbose: bool, budget_tokens: Optional[int], budget_lines: Optional[int],
-              architecture: bool = False, since_error: Optional[str] = None) -> str:
+              architecture: bool = False, since_error: Optional[str] = None,
+              rule_lines: Sequence[str] = ()) -> str:
     """Format the CLI inventory without emitting or reading content."""
-    lines = _format_pack_header(path, meta, budget_tokens, budget_lines, since_error)
+    lines = _format_pack_header(path, meta, budget_tokens, budget_lines, since_error, rule_lines)
     if not selected:
         lines.append(_pack_empty_line(meta))
     else:
@@ -225,7 +230,8 @@ class PackRenderer(BaseRenderer):
         meta = result['meta']
         body = pack_text(Path(result['path']), result['files'], meta,
                          result.get('verbose', verbose), meta.get('budget_tokens'),
-                         meta.get('budget_lines'), result.get('architecture', architecture))
+                         meta.get('budget_lines'), result.get('architecture', architecture),
+                         rule_lines=edge_rule_lines(result))
         if content or 'content' in result:
             body += "\n".join(_content_lines(result.get('content', []))) + "\n"
         return body

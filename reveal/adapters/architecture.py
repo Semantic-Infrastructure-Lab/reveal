@@ -11,6 +11,7 @@ from reveal.capabilities import scope_dict_for_path
 from reveal.reveal_types import CONTRACT_VERSION, RevealMeta, WarningEntry
 
 from .base import ResourceAdapter, register_adapter, register_renderer
+from ..analyzers.imports import service as import_analysis
 from ..conventions import conventions_for_path
 from ..registry import language_for_extension
 from ..rendering.adapters.architecture import ArchitectureRenderer
@@ -168,10 +169,11 @@ def _run_imports_analysis(adapter: 'ArchitectureAdapter', path: Path) -> Dict[st
 
 def _format_imports_data(adapter, path: Path, *,
                          observations: Optional[Dict[str, bool]] = None) -> Dict[str, Any]:
-    fan_in_data = adapter._format_fan_in()
-    entrypoints_data = adapter._format_entrypoints()
-    components_data = adapter._format_components()
-    circular_data = adapter._format_circular()
+    with import_analysis.composed_rules('architecture://'):  # BACK-2087
+        fan_in_data = adapter._format_fan_in()
+        entrypoints_data = adapter._format_entrypoints()
+        components_data = adapter._format_components()
+        circular_data = adapter._format_circular()
     _capture_import_observations({
         'entry_points': entrypoints_data.get('entries'),
         'core_abstractions': fan_in_data.get('entries'),
@@ -193,6 +195,8 @@ def _format_imports_data(adapter, path: Path, *,
     core_abstractions = [e for e in all_entries if e.get('fan_in', 0) > 0]
 
     return {
+        # BACK-2087: the rule these counts were made by (edge_rule, edge_rule_sections).
+        **import_analysis.architecture_edge_rules(fan_in_data, entrypoints_data, components_data, circular_data),
         'entry_points': live_eps,
         'core_abstractions': core_abstractions,
         'components': components,
@@ -709,6 +713,7 @@ class ArchitectureAdapter(ResourceAdapter):
             },
             'risks': risks,
             'next_commands': next_commands,
+            **{key: imports_data[key] for key in ('edge_rule', 'edge_rule_sections') if key in imports_data},
             'unsupported_extensions': imports_data.get('unsupported_extensions', {}),
             'scope': _run_scope(self, path, failures=scope_failures),
         }

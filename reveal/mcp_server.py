@@ -636,6 +636,7 @@ def reveal_pack(
     from pathlib import Path
     from .cli.routing.declared import run_declared_command
     from .cli.invocation import Invocation, invocation_scope
+    from .analyzers.imports.service import edge_rule_lines
     from .rendering.adapters.pack import _format_pack_result
     from .utils.json_utils import set_provenance_enabled
 
@@ -656,7 +657,8 @@ def reveal_pack(
         text = _format_pack_result(
             p, result['files'], meta, meta['budget_tokens'], meta['budget_lines'],
             since_error=meta.get('since_error'), content=content,
-            architecture=result.get('architecture', False), content_data=result.get('content'))
+            architecture=result.get('architecture', False), content_data=result.get('content'),
+            rule_lines=edge_rule_lines(result))
         if (focus or architecture) and meta.get('relevance_warning'):
             # A requested optional signal that could not be built; the default
             # "not requested" notice stays out of this tool's layout.

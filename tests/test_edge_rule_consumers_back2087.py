@@ -86,14 +86,22 @@ def _assert_rule(rule, expected):
         assert rule[key] == value, (key, rule)
 
 
-def _assert_rules(owner, root):
+def _same_rule(rule, imports_rule, noun):
+    """The rule is imports://'s for the same view, built by the same function. Only the pointer
+    at the other views differs: this command takes no &lazy, so it must not point at one."""
+    assert {k: v for k, v in rule.items() if k != 'text'} == {k: v for k, v in imports_rule.items() if k != 'text'}
+    assert rule['text'].partition(' (default); ')[0] == imports_rule['text'].partition(' (default); ')[0]
+    assert f'{noun} takes no &lazy' in rule['text'] and 'other views: &lazy=' not in rule['text']
+
+
+def _assert_rules(owner, root, noun='architecture://'):
     """Headline = fan-in view; entry points and cycles carry their own; all equal imports://'s."""
-    assert owner['edge_rule'] == _imports_rule(root, 'rank=fan-in')
+    _same_rule(owner['edge_rule'], _imports_rule(root, 'rank=fan-in'), noun)
     _assert_rule(owner['edge_rule'], HEADLINE)
     sections = owner['edge_rule_sections']
     assert sorted(sections) == ['cycles', 'entry_points']
-    assert sections['entry_points'] == _imports_rule(root, 'entrypoints')
-    assert sections['cycles'] == _imports_rule(root, 'circular')
+    _same_rule(sections['entry_points'], _imports_rule(root, 'entrypoints'), noun)
+    _same_rule(sections['cycles'], _imports_rule(root, 'circular'), noun)
     _assert_rule(sections['entry_points'], ENTRY_POINTS)
     _assert_rule(sections['cycles'], CYCLES)
 
@@ -145,7 +153,7 @@ def test_overview_states_its_rule_in_json(project):
     fan_in = {to_posix(e['file']).rsplit('/', 1)[-1]: e['fan_in'] for e in arch['fan_in'] if e['fan_in']}
     assert fan_in == {'core.py': 3, 'late.py': 1, 'ring_a.py': 1, 'ring_b.py': 1}
     assert arch['circular_count'] == 0
-    _assert_rules(arch, project)
+    _assert_rules(arch, project, 'overview://')
 
 
 def test_overview_states_its_rule_in_text(project):
@@ -164,11 +172,11 @@ def test_pack_architecture_states_its_rule(project):
     data = _json('pack', to_posix(project), '--architecture')
     fan_in = {f['relative']: f['fan_in'] for f in data['files'] if f['fan_in']}
     assert fan_in == {'core.py': 3, 'late.py': 1, 'ring_a.py': 1, 'ring_b.py': 1}
-    # Same object as imports://'s; only the text differs, because pack names its own subject.
+    # imports://'s object for the same view; pack names its own subject and cannot take &lazy.
     assert {k: v for k, v in data['edge_rule'].items() if k != 'text'} == {
         k: v for k, v in _imports_rule(project, 'rank=fan-in').items() if k != 'text'}
     _assert_rule(data['edge_rule'], HEADLINE)
-    assert 'fan-in' in data['edge_rule']['text']
+    assert 'fan-in' in data['edge_rule']['text'] and 'pack takes no &lazy' in data['edge_rule']['text']
     text = _run('pack', to_posix(project), '--architecture')
     assert 'Rule: ' in text and 'function-level (lazy) imports included (default)' in text
 
@@ -187,15 +195,23 @@ def test_pack_without_graph_flags_states_no_rule(project):
     assert 'Rule: ' not in _run('pack', to_posix(project))
 
 
+def test_pack_over_mcp_states_its_rule(project):
+    from reveal.mcp_server import reveal_pack
+    text = reveal_pack(str(project), architecture=True)
+    assert 'Rule: fan-in counts' in text and 'function-level (lazy) imports included (default)' in text
+    assert 'Rule: ' not in reveal_pack(str(project))
+
+
 # ------------------------------------------------------------------ deps
 
 def test_deps_text_states_the_cycle_rule(project):
     """deps:// reports 'no circular deps' from the load-time view; its JSON said so, its text did not."""
     data = _json(f'deps://{to_posix(project)}')
-    assert data['circular']['edge_rule'] == _imports_rule(project, 'circular')
+    _same_rule(data['circular']['edge_rule'], _imports_rule(project, 'circular'), 'deps://')
     text = _run(f'deps://{to_posix(project)}')
     assert 'no circular deps' in text
     assert 'Rule: ' in text and 'function-level (lazy) imports excluded (default)' in text
+    assert 'deps:// takes no &lazy' in text
 
 
 # ------------------------------------------------------------------ architecture --against
@@ -216,3 +232,16 @@ def test_architecture_against_states_its_rule(tmp_path):
     late = [d for d in data['deltas']['fan_in'] if d['file'].endswith('late.py')]
     assert [(d['base'], d['head']) for d in late] == [(0, 1)]  # the delta is the lazy edge
     _assert_rules(data, root)
+
+
+def test_architecture_against_states_its_rule_in_text(tmp_path):
+    root = _tree(tmp_path / 'repo', {k: v for k, v in FILES.items() if k != 'tests/test_core.py'})
+    (root / 'lazy.py').write_text('def f():\n    import core\n    return core.X\n', encoding='utf-8')
+    _git(root, 'init', '-q')
+    _git(root, 'add', '.')
+    _git(root, '-c', 'commit.gpgsign=false', '-c', 'user.name=t', '-c', 'user.email=t@example.com',
+         'commit', '-q', '-m', 'base')
+    (root / 'lazy.py').write_text(FILES['lazy.py'], encoding='utf-8')
+    text = _run(f'architecture://{to_posix(root)}?against=HEAD')
+    assert 'late.py' in text and 'Fan-in changes' in text
+    _assert_rule_lines(text)

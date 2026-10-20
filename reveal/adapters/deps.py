@@ -15,6 +15,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .imports import ImportsAdapter
+from ..analyzers.imports import service as import_analysis
 from ..analyzers.imports.classify import (
     classify_module as _classify_module,
     local_package_names as _local_package_names,
@@ -36,14 +37,16 @@ from ..utils.results import AnalysisCompleteness, ExecutionFacts, ResultBuilder,
 
 def _run_base(adapter: 'DepsAdapter', path: Path) -> Dict[str, Any]:
     """Fetch base import map via ImportsAdapter."""
-    result = adapter.compose(ImportsAdapter, str(path), default={})
+    with import_analysis.composed_rules('deps://'):  # BACK-2087
+        result = adapter.compose(ImportsAdapter, str(path), default={})
     adapter._record_component('base', result)
     return result if isinstance(result, dict) and _valid_component_payload('base', result) else {}
 
 
 def _run_circular(adapter: 'DepsAdapter', path: Path) -> Dict[str, Any]:
     """Fetch circular dependency cycles via ImportsAdapter."""
-    result = adapter.compose(ImportsAdapter, str(path), default={}, query='circular')
+    with import_analysis.composed_rules('deps://'):  # BACK-2087
+        result = adapter.compose(ImportsAdapter, str(path), default={}, query='circular')
     adapter._record_component('circular', result)
     return result if _valid_component_payload('circular', result, require_count=False) else {}
 

@@ -16,6 +16,8 @@ from reveal.reveal_types import CONTRACT_VERSION
 from reveal.registry import get_code_extensions
 
 from .base import ResourceAdapter, register_adapter, register_renderer
+from ..analyzers.imports import service as import_analysis
+from ..analyzers.imports.types import LAZY_INCLUDE
 from ..conventions import conventions_for_path
 from ..rendering.adapters.pack import PackRenderer
 from ..utils.path_utils import (DISPLAY, _walk_code_files, classify_path_provenance,
@@ -152,21 +154,39 @@ def _build_pack_import_graph(
         return None, set()
 
 
-def _fetch_fan_in(path: Path, failures: Optional[List[str]] = None) -> Dict[str, int]:
+def _pack_edge_rule(graph: Any, fan_in: bool, relevance: bool) -> Dict[str, Any]:
+    """The rule of the import edges the ranking read (BACK-2087): every edge, function-level and
+    test importers included, which is the view ``imports://?rank=fan-in`` counts by default."""
+    subject = {
+        (True, False): 'fan-in counts static imports between',
+        (False, True): 'graph relevance follows static imports, in both directions, between',
+        (True, True): 'fan-in counts, and graph relevance follows in both directions, static imports between',
+    }[(fan_in, relevance)]
+    return import_analysis.edge_rule(graph, LAZY_INCLUDE, lazy_default=True, subject=subject,
+                                     scope='scanned_path',
+                                     hint=import_analysis.composed_rule_hint('pack'))
+
+
+def _fetch_fan_in(path: Path, failures: Optional[List[str]] = None, *,
+                  graphs: Optional[List[Tuple[str, Any]]] = None) -> Dict[str, int]:
     """Return {abs_path: fan_in} for all files under *path* via ImportsAdapter.
 
     Returns empty dict on any failure — callers treat missing entries as fan_in=0
-    (the failure is appended to *failures* when given).
+    (the failure is appended to *failures* when given). The graph the counts came from
+    is appended to *graphs* when given (as ``('fan_in', graph)``), so the caller can state the rule they follow.
     """
     graph, scanned_files = _build_pack_import_graph(path, failures)
     if graph is None:
         return {}
+    if graphs is not None:
+        graphs.append(('fan_in', graph))
     all_files = scanned_files | set(graph.files.keys()) | set(graph.reverse_deps.keys())
     return {str(f): len(graph.reverse_deps.get(f, set())) for f in all_files}
 
 
 def _compute_graph_relevance(
-    path: Path, focus: Optional[str], failures: Optional[List[str]] = None,
+    path: Path, focus: Optional[str], failures: Optional[List[str]] = None, *,
+    graphs: Optional[List[Tuple[str, Any]]] = None,
 ) -> Dict[str, float]:
     """Personalized-PageRank relevance score per file, seeded from --focus (BACK-833).
 
@@ -182,7 +202,8 @@ def _compute_graph_relevance(
 
     Returns {abs_path: score in [0, 1]}; empty on no focus, no matching seed
     files, or any graph-construction failure — callers treat missing entries
-    as 0 (pure relevance signal, additive on top of the existing heuristic).
+    as 0 (pure relevance signal, additive on top of the existing heuristic). The graph
+    the scores walked is appended to *graphs* when given (see ``_fetch_fan_in``).
     """
     if not focus:
         return {}
@@ -198,6 +219,8 @@ def _compute_graph_relevance(
     seeds = [f for f in all_files if focus_lower in str(f).lower()]
     if not seeds:
         return {}
+    if graphs is not None:
+        graphs.append(('relevance', graph))
 
     # Undirected adjacency: an import edge signals relevance in either
     # direction, not just "depends on."
@@ -948,8 +971,10 @@ class PackAdapter(ResourceAdapter):
             changed_files, self.since_error = _get_changed_files(path, since)
 
         graph_failures: List[str] = []
-        fan_in_scores = _fetch_fan_in(path, graph_failures) if architecture else None
-        graph_relevance_scores = _compute_graph_relevance(path, focus, graph_failures) if focus else {}
+        graphs: List[Tuple[str, Any]] = []
+        fan_in_scores = _fetch_fan_in(path, graph_failures, graphs=graphs) if architecture else None
+        graph_relevance_scores = (_compute_graph_relevance(path, focus, graph_failures, graphs=graphs)
+                                  if focus else {})
 
         if graph_failures:
             # The signal was asked for and could not be built: without this, every file
@@ -995,6 +1020,9 @@ class PackAdapter(ResourceAdapter):
         }
         if architecture:
             report['architecture'] = True
+        if graphs:
+            kinds = {kind for kind, _graph in graphs}
+            report['edge_rule'] = _pack_edge_rule(graphs[0][1], 'fan_in' in kinds, 'relevance' in kinds)
         if emit_content:
             report['content'] = _collect_file_contents(selected)
         # BACK-1379: carry ?verbose through the result dict since handle_uri

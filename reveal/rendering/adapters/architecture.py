@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..base import BaseRenderer, capped_section
+from ...analyzers.imports.service import edge_rule_lines
 from ...utils.results import outcome_of
 from ...utils.warning_render import meta_warning_lines
 
@@ -63,6 +64,9 @@ def _render_brief(report: Dict[str, Any], top: int, base_path: Path,
     warning = coverage_warning_line(report.get('unsupported_extensions', {}))
     if warning:
         lines.append(f'{warning}\n')
+    rule = edge_rule_lines(report)
+    if rule:
+        lines.append('\n'.join(rule) + '\n')
     lines += _render_entry_points(facts.get('entry_points', []), top, base_path)
     lines += _render_core_abstractions(facts.get('core_abstractions', []), top, base_path)
     lines += _render_components(facts.get('components', []), top, base_path)
@@ -117,6 +121,9 @@ def architecture_diff_text(report: Dict[str, Any]) -> str:
     deltas = report['deltas']
     lines.append(f"Architecture Diff: {report['path']}")
     lines.append(f"  {report['base_ref']} -> {report['head_ref']}\n")
+    rule = edge_rule_lines(report)
+    if rule:
+        lines.append('\n'.join(rule) + '\n')
 
     fan_in = deltas['fan_in']
     if fan_in:
