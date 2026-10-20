@@ -56,13 +56,12 @@ def _scan_cap(cap: int):
         DependsAdapter._SCAN_FILE_CAP = before
 
 
-def rendered_dependents(scan: Path, target: Path) -> dict[str, Any]:
-    """Importers of ``target`` as the public ``depends://`` request prints them (BACK-2062).
+def _depends_request(target: Path, scan: Path) -> dict[str, Any]:
+    """One ``depends://`` request through ``reveal.main.main`` with the argv a user would type.
 
-    Goes through ``reveal.main.main`` with the argv a user would type, so flag routing, the
-    project-root choice, the rendered path spelling and the disclosures are all the ones the CLI
-    produces; it never reads the adapter's private graph. A failed, capped or cut answer raises
-    instead of becoming a smaller truth.
+    Flag routing, the project-root choice, the rendered path spelling and the disclosures are the
+    CLI's own; the adapter's private graph is never read. A failed, capped or cut answer raises
+    instead of becoming a smaller truth (BACK-2062).
     """
     uri = f'depends://{target.as_posix()}?root={urllib.parse.quote(scan.as_posix(), safe="/:")}'
     out, err = io.StringIO(), io.StringIO()
@@ -80,16 +79,44 @@ def rendered_dependents(scan: Path, target: Path) -> dict[str, Any]:
         raise RuntimeError(f'depends:// failed for {target.name} (exit {code}): {result.get("error") or err.getvalue()[:200]}')
     if result.get('metadata', {}).get('scan_capped'):
         raise RuntimeError('Reveal scan was capped; measurement unavailable')
-    dependents = result['dependents']
-    if len(dependents) != result['count']:
-        raise RuntimeError(f'depends:// answer truncated for {target.name}: {len(dependents)} of {result["count"]} shown')
+    return result
+
+
+def _partial_files(result: dict[str, Any]) -> int:
+    """The partial-parse count, which the public JSON carries only in the warning text."""
     warning = result.get('warning') or ''
     found = _PARTIAL_PARSE.search(warning)
     if 'parsed with errors' in warning and not found:
         raise RuntimeError(f'Unrecognized partial-parse disclosure: {warning[:200]}')
-    return {'importers': {Path(os.path.normpath(scan / dep['file'])) for dep in dependents},
-            'partial_files': int(found.group(1)) if found else 0}
+    return int(found.group(1)) if found else 0
 
+
+def rendered_dependents(scan: Path, target: Path) -> dict[str, Any]:
+    """Importers of one file as ``depends://<file>`` prints them: the package view Go needs, where an
+    import names a directory. It builds the whole graph per request, so use it only where the
+    directory form below cannot answer."""
+    result = _depends_request(target, scan)
+    dependents = result['dependents']
+    if len(dependents) != result['count']:
+        raise RuntimeError(f'depends:// answer truncated for {target.name}: {len(dependents)} of {result["count"]} shown')
+    return {'importers': {Path(os.path.normpath(scan / dep['file'])) for dep in dependents},
+            'partial_files': _partial_files(result)}
+
+
+def rendered_reverse_graph(scan: Path) -> dict[str, Any]:
+    """Every module's importers from ONE ``depends://<scan dir>`` request (the dependency summary).
+
+    ``depends://<file>`` rebuilds the full import graph per request (4837 files, 10-28 s each on
+    the Java corpus), so a per-target gate would take hours; the directory summary lists
+    every module with its sorted importers in a single answer.
+    """
+    result = _depends_request(scan, scan)
+    modules = result['modules']
+    if len(modules) != result['total_modules']:
+        raise RuntimeError(f'depends:// summary truncated: {len(modules)} of {result["total_modules"]} modules shown')
+    return {'by_target': {Path(os.path.normpath(scan / m['module'])): {Path(os.path.normpath(scan / d)) for d in m['dependents']}
+                          for m in modules},
+            'partial_files': _partial_files(result)}
 
 
 def corpus_key(entry: dict) -> str:
@@ -123,11 +150,16 @@ def measure(entry: dict, root: Path) -> dict[str, Any]:
     differences = []
     with _scan_cap(cap):
         reset_request_caches()
+        # Go imports name packages, so its per-file answer is the package view of depends://<file>.
+        graph = None if name == 'go-toolchain' else rendered_reverse_graph(scan)
         for target, truth_list in edges.items():
-            view = rendered_dependents(scan, root / target)
-            partial = view['partial_files']
+            if graph is None:
+                view = rendered_dependents(scan, root / target)
+                importers, partial = view['importers'], view['partial_files']
+            else:
+                importers, partial = graph['by_target'].get(root / target, set()), graph['partial_files']
             truth = set(truth_list)
-            found = {p.relative_to(root).as_posix() for p in view['importers'] if p in population}
+            found = {p.relative_to(root).as_posix() for p in importers if p in population}
             matched, missed, surplus = truth & found, truth - found, found - truth
             hit += len(matched)
             expected += len(truth)

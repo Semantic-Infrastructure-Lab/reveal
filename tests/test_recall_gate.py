@@ -218,25 +218,43 @@ def test_a_reveal_side_loss_is_measured_and_fails_the_gate(python_corpus, monkey
 
 def test_the_gate_scores_what_depends_renders_not_the_private_graph(python_corpus, monkeypatch):
     # BACK-2062: the gate once read adapter._graph.reverse_deps, so it stayed green while the
-    # rendered answer lost a dependent. Drop pkg/b.py from the rendered view only; the graph keeps it.
+    # rendered answer lost a dependent. Drop pkg/b.py from the rendered summary only; the graph keeps it.
     root, entry = python_corpus
-    real = DependsAdapter._format_file_dependents
+    real = DependsAdapter._format_directory_summary
 
-    def render_without_b(self, target, top_n=None):
-        result = real(self, target, top_n=top_n)
-        result['dependents'] = [d for d in result['dependents'] if d['file'] != 'pkg/b.py']
-        result['count'] = len(result['dependents'])
+    def render_without_b(self, directory, top_n, fmt):
+        result = real(self, directory, top_n, fmt)
+        for module in result['modules']:
+            module['dependents'] = [d for d in module['dependents'] if d != 'pkg/b.py']
+            module['dependent_count'] = len(module['dependents'])
         return result
 
-    monkeypatch.setattr(DependsAdapter, '_format_file_dependents', render_without_b)
+    monkeypatch.setattr(DependsAdapter, '_format_directory_summary', render_without_b)
     measured = gate.measure(entry, root)
     assert measured['recall'] == 0.75
     assert measured['differences'] == [{'target': 'pkg/a.py', 'missed': ['pkg/b.py'], 'extra': []}]
 
 
-def test_a_truncated_rendered_view_is_a_failure_not_a_smaller_answer(python_corpus, monkeypatch):
-    # The rendered list may be cut (?top=N); the gate must see count > len(dependents) and refuse.
+def test_a_truncated_rendered_summary_is_a_failure_not_a_smaller_answer(python_corpus, monkeypatch):
+    # The rendered module list may be cut (?top=N); the gate must see total_modules > len(modules) and refuse.
     root, entry = python_corpus
+    real = DependsAdapter._format_directory_summary
+
+    def cut(self, directory, top_n, fmt):
+        result = real(self, directory, top_n, fmt)
+        result['modules'] = result['modules'][:1]  # total_modules still says what the full answer held
+        return result
+
+    monkeypatch.setattr(DependsAdapter, '_format_directory_summary', cut)
+    with pytest.raises(RuntimeError, match='truncated'):
+        gate.measure(entry, root)
+
+
+def test_the_per_file_form_scores_the_rendered_package_view_and_refuses_a_cut(python_corpus, monkeypatch):
+    # Go's answer is the per-file form of depends://, so that helper is gated the same way.
+    root, entry = python_corpus
+    scan = root.resolve()
+    assert gate.rendered_dependents(scan, scan / 'pkg/a.py')['importers'] == {scan / 'pkg/b.py'}
     real = DependsAdapter._format_file_dependents
 
     def cut(self, target, top_n=None):
@@ -246,7 +264,7 @@ def test_a_truncated_rendered_view_is_a_failure_not_a_smaller_answer(python_corp
 
     monkeypatch.setattr(DependsAdapter, '_format_file_dependents', cut)
     with pytest.raises(RuntimeError, match='truncated'):
-        gate.measure(entry, root)
+        gate.rendered_dependents(scan, scan / 'pkg/a.py')
 
 
 def test_unknown_oracle_and_escaping_scan_root_fail(python_corpus):
