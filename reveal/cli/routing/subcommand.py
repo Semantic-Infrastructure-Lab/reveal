@@ -29,7 +29,7 @@ from typing import Any, Callable, Dict, Optional, Union
 from ...display.formatting import print_result_control_notes
 from ...rendering.base import emit_body
 from ...utils.exclusions import dispatch_scope, exclusion_scope
-from ...utils.json_utils import attach_provenance
+from ...utils.json_utils import attach_provenance, attach_retirements
 from ...utils.path_utils import to_posix
 from ...utils.results import add_cli_contract_fields, outcome_of
 from .ledger import FlagLedger, peek
@@ -83,9 +83,9 @@ def subcommand_json(result: Dict[str, Any], *, name: str, source: Union[str, Pat
     """
     report = {k: v for k, v in result.items() if k not in _ADAPTER_IDENTITY_KEYS}
     return json.dumps(
-        attach_provenance(add_cli_contract_fields(
+        attach_provenance(attach_retirements(add_cli_contract_fields(
             report, result_type=name, source=to_posix(source), source_type=source_type,
-        )),
+        ))),
         indent=2, default=str,
     )
 

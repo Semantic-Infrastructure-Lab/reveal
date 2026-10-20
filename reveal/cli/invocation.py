@@ -204,8 +204,12 @@ class Retirement:
         return f'{self.old} is deprecated; use {self.replacement}.'
 
 
-# Phase 1 removes no names (tests/test_exit_code_table_back2052.py); the first rows are the two BACK-1906 notes.
-RETIREMENTS: Dict[str, Retirement] = {}
+# Phase 1 removes no URI or subcommand names; the rows are the two older BACK-1906 notes.
+RETIREMENTS: Dict[str, Retirement] = {
+    'flag:--search': Retirement('--search', '--name PATTERN (regex)'),
+    # One row for the file route's --check and its --lint alias.
+    'flag:--check': Retirement('file --check/--lint', 'reveal check <path>'),
+}
 
 
 class RetiredSpellingError(Exception):

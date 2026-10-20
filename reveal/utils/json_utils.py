@@ -50,6 +50,23 @@ def attach_provenance(result):
     return result
 
 
+def attach_retirements(result):
+    """Return *result* with a ``retired_spelling`` entry in ``meta.warnings`` for each retired
+    spelling this invocation used (the stderr note's fact for a reader of the JSON; ground
+    rule 7). The result itself is not mutated; one with nothing to add is returned as is."""
+    if not isinstance(result, dict):
+        return result
+    from ..cli.invocation import retirement_warnings
+    entries = retirement_warnings()
+    if not entries:
+        return result
+    meta = dict(result['meta']) if isinstance(result.get('meta'), dict) else {}
+    warnings = list(meta['warnings']) if isinstance(meta.get('warnings'), list) else []
+    seen = {w.get('field') for w in warnings if isinstance(w, dict) and w.get('code') == 'retired_spelling'}
+    meta['warnings'] = warnings + [entry for entry in entries if entry['field'] not in seen]
+    return {**result, 'meta': meta}
+
+
 def write_also_json(result, args) -> None:
     """BACK-1184: write *result* as JSON to args.also_json, if set, alongside
     whatever --format is already rendering to stdout. Lets one invocation
@@ -105,4 +122,4 @@ def print_json_result(result, file=None) -> None:
     When provenance is enabled (see set_provenance_enabled), attaches an
     'execution' block to dict results that don't already carry one.
     """
-    print(safe_json_dumps(attach_provenance(result)), file=file or sys.stdout)
+    print(safe_json_dumps(attach_provenance(attach_retirements(result))), file=file or sys.stdout)

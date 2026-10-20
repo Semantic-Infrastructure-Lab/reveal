@@ -8,6 +8,18 @@ import pytest
 from conftest import _run_reveal_direct
 
 
+def _answer(stdout):
+    """The JSON answer minus the ``retired_spelling`` warning (BACK-2066), which must be the
+    legacy spelling's one extra fact: returns (answer, [retired keys])."""
+    doc = json.loads(stdout)
+    meta = doc.get('meta') or {}
+    kept = [w for w in meta.get('warnings') or [] if w.get('code') != 'retired_spelling']
+    retired = [w['field'] for w in meta.get('warnings') or [] if w.get('code') == 'retired_spelling']
+    if 'warnings' in meta:
+        meta['warnings'] = kept
+    return doc, retired
+
+
 @pytest.fixture
 def source(tmp_path):
     path = tmp_path / 'sample.py'
@@ -21,7 +33,9 @@ def test_search_alias_names_replacement_and_preserves_json(source, spelling):
     legacy = _run_reveal_direct(source, *flags, '--format', 'json')
     current = _run_reveal_direct(source, '--name', 'auth', '--format', 'json')
     assert legacy.returncode == current.returncode == 0
-    assert json.loads(legacy.stdout) == json.loads(current.stdout)
+    (legacy_doc, legacy_retired), (current_doc, current_retired) = _answer(legacy.stdout), _answer(current.stdout)
+    assert legacy_doc == current_doc
+    assert legacy_retired == ['flag:--search'] and current_retired == []
     assert 'deprecated' in legacy.stderr and '--name' in legacy.stderr
     assert 'deprecated' not in current.stderr
 
@@ -33,7 +47,12 @@ def test_file_check_alias_names_replacement_and_preserves_findings(source, has_i
     legacy = _run_reveal_direct(source, '--check', '--select', 'B001', '--format', 'json')
     current = _run_reveal_direct('check', source, '--select', 'B001', '--format', 'json')
     assert legacy.returncode == current.returncode == int(has_issue)
-    assert json.loads(legacy.stdout) == json.loads(current.stdout)
+    (legacy_doc, legacy_retired), (current_doc, current_retired) = _answer(legacy.stdout), _answer(current.stdout)
+    if 'meta' in legacy_doc and 'meta' not in current_doc:  # the warning created the only meta key
+        assert legacy_doc['meta'] == {'warnings': []}
+        del legacy_doc['meta']
+    assert legacy_doc == current_doc
+    assert legacy_retired == ['flag:--check'] and current_retired == []
     if has_issue:
         assert 'B001' in legacy.stdout
     assert 'deprecated' in legacy.stderr and 'reveal check' in legacy.stderr

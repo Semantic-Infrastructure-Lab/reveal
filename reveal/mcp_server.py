@@ -274,6 +274,21 @@ def _declared_failure(answer) -> str | None:
     return _tool_failure(answer.private_diagnostic or 'Required analysis or output failed', public=False)
 
 
+def _with_retirement_notes(output: str) -> str:
+    """Append the retired-spelling notes this call used to a text result (ground rule 7). The MCP
+    server never prints them to stderr; a JSON result carries them as ``meta.warnings`` already."""
+    from .cli.invocation import noted_retirements
+    notes = noted_retirements()
+    if not notes or isinstance(output, _ToolFailure):
+        return output
+    try:
+        if isinstance(json.loads(output), dict):
+            return output
+    except ValueError:
+        pass
+    return output.rstrip('\n') + ''.join(f'\n[note: {entry.text}]' for entry in notes.values()) + '\n'
+
+
 def _run_declared_tool(fn, *args, quiet_usage: bool = False, render=None, **kwargs) -> str:
     """Capture one qualified consumer while retaining canonical outcome evidence.
 
@@ -303,8 +318,8 @@ def _run_declared_tool(fn, *args, quiet_usage: bool = False, render=None, **kwar
         if failure is not None:
             return failure
     if rendered:
-        return rendered[-1]
-    return output
+        return _with_retirement_notes(rendered[-1])
+    return _with_retirement_notes(output)
 
 
 def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = None):
@@ -581,7 +596,7 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
     # already serializes -- a concurrent call with provenance=False must not
     # observe this call's flag mid-flight. _capture_lock is an RLock so
     # _run_and_capture's own internal acquisition below doesn't deadlock.
-    with _capture_lock, invocation_scope(invocation):
+    with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False):
         apply_global_flags(args)
         try:
             return _run_declared_tool(handle_uri, uri, None, args, quiet_usage=provenance)
@@ -660,7 +675,7 @@ def reveal_pack(
         return text
 
     invocation = Invocation.parse(argv)
-    with _capture_lock, invocation_scope(invocation):
+    with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False):
         apply_global_flags(args)
         try:
             return _run_declared_tool(run_declared_command, 'pack', args, render=render)
@@ -863,7 +878,7 @@ def reveal_trace(path: str, entry_point: str, depth: int = 2) -> str:
     """
     from pathlib import Path
     from .cli.routing.declared import run_declared_command
-    from .cli.invocation import Invocation, invocation_scope
+    from .cli.invocation import Invocation, RetiredSpellingError, invocation_scope, retirement_note
     from .utils.json_utils import set_provenance_enabled
 
     p = Path(path)
@@ -872,8 +887,12 @@ def reveal_trace(path: str, entry_point: str, depth: int = 2) -> str:
 
     args = _default_args(path=str(p), root=entry_point, depth=depth, format='text')
     invocation = Invocation.parse(['reveal', 'trace', str(p), '--from', entry_point, '--depth', str(depth)])
-    with _capture_lock, invocation_scope(invocation):
+    with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False):
         apply_global_flags(args)
+        try:
+            retirement_note('mcp:reveal_trace')
+        except RetiredSpellingError as exc:
+            return _tool_failure(f'error: {exc.entry.text}')
         try:
             return _run_declared_tool(run_declared_command, 'trace', args)
         finally:

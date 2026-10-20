@@ -22,7 +22,8 @@ from .registry import FALLBACK_SUPPORT_NOTE, display_name_for_extension, fallbac
 from . import __version__
 from .utils import copy_to_clipboard, check_for_updates
 from .cli.global_flags import apply_global_flags
-from .cli.invocation import COMMANDS, Invocation, invocation_scope
+from .cli.invocation import (COMMANDS, Invocation, RetiredSpellingError, invocation_scope,
+                             retirement_note)
 from .config import disable_breadcrumbs_permanently
 
 
@@ -237,6 +238,11 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     try:
         with invocation_scope(invocation):
             _dispatch_and_run(invocation)
+    except RetiredSpellingError as exc:
+        # The cut release: a retired spelling is an error with the text its note had (D5).
+        print(f'error: {exc.entry.text}', file=sys.stderr)  # boundary-ok: print -- the retirement error line
+        exit_code = 2
+        raise SystemExit(2) from None
     except SystemExit as e:
         exit_code = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
         raise
@@ -289,10 +295,11 @@ def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None]]:
         parser = create_argument_parser(__version__, full_help=invocation.typed('--help-all'))
         args = parser.parse_args(invocation.argv)
         if invocation.typed('--search'):
-            print('note: --search is deprecated; use --name PATTERN (regex).', file=sys.stderr)
+            retirement_note('flag:--search')
         validate_navigation_args(args)
         return args, lambda: _main_impl(invocation, parser, args)
 
+    retirement_note(f'subcommand:{name}')
     _warn_if_subcommand_shadows_path(name)
     sub_parser, runner = COMMANDS[name].load()
     formats = _subcommand_formats(name)

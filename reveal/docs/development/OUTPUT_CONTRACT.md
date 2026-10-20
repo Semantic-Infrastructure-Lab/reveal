@@ -335,6 +335,20 @@ Adapters MAY include additional fields beyond the contract. These fields:
 }
 ```
 
+### Retired spellings (`retired_spelling`)
+
+A spelling the surface program has retired (a flag, subcommand, URI scheme, query parameter
+or parameter value, or an MCP tool name) is listed once in `RETIREMENTS` in
+`reveal/cli/invocation.py`, with its replacement and a stage. At the `note` stage the command
+still answers as before. Its exit code and answer do not change, and it prints one stderr line,
+`note: <old> is deprecated; use <replacement>.`, once per invocation. `--format json` stdout stays
+one parseable document and carries the same fact as a `meta.warnings` entry:
+`{"code": "retired_spelling", "message": ..., "field": "<table key>", "old": ..., "replacement": ..., "stage": "note"}`.
+`field` is the table key (`flag:--search`, `param:calls.root`, ...), so two retired spellings are
+two entries. The MCP server never writes the note to stderr: a JSON result carries the same
+entry, and a text result ends with a `[note: ...]` line. At the `error` stage (the cut release) the
+same text is an error and the exit code is 2. A `phase7` row is recorded and prints nothing yet.
+
 ---
 
 ## Outcomes: failed, not applicable, truncated, ok

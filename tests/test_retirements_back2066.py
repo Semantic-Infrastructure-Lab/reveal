@@ -39,12 +39,15 @@ def _warnings(doc):
 
 
 def _without_retirement_warning(doc):
-    """The answer minus the retirement fact: what an unretired spelling prints."""
+    """The answer minus the retirement fact, an emptied warnings list or meta dropped: what an unretired
+    spelling prints."""
     meta = doc.get('meta')
     if isinstance(meta, dict) and 'warnings' in meta:
         meta['warnings'] = [w for w in meta['warnings'] if w.get('code') != 'retired_spelling']
         if not meta['warnings']:
             del meta['warnings']
+        if not meta:
+            del doc['meta']
     return doc
 
 
@@ -84,7 +87,7 @@ def test_a_retired_spelling_prints_one_note_and_the_answer_is_unchanged(monkeypa
     entries = _warnings(doc)
     assert [(w['old'], w['replacement'], w['stage']) for w in entries] == [(old, 'NEW SPELLING', 'note')]
     assert entries[0]['message'] == text
-    assert _without_retirement_warning(doc) == json.loads(base_json.stdout)
+    assert _without_retirement_warning(doc) == _without_retirement_warning(json.loads(base_json.stdout))
 
 
 @pytest.mark.parametrize('kind', KINDS)
@@ -109,7 +112,8 @@ def test_a_note_names_the_spelling_that_was_used_not_a_sibling(monkeypatch, sour
 
 def test_the_same_parameter_on_another_scheme_is_a_different_spelling(monkeypatch, source):
     """depends://?root= is the scan root; only calls://?root= is retired."""
-    assert uri_retirement_keys('depends://src?root=/x') == ['scheme:depends', 'param:depends.root']
+    assert uri_retirement_keys('depends://src?root=/x') == [
+        'scheme:depends', 'param:depends.root', 'value:depends.root=/x']
     assert uri_retirement_keys('calls://src?root=main&depth=2') == [
         'scheme:calls', 'param:calls.root', 'value:calls.root=main',
         'param:calls.depth', 'value:calls.depth=2']
@@ -249,3 +253,13 @@ def test_the_log_is_per_invocation(monkeypatch, source):
         result = _run_reveal_direct(f'ast://{source}?name=auth*')
         assert _notes(result.stderr, text) == 1
     assert not invocation.noted_retirements()
+
+
+@pytest.mark.parametrize('key', sorted(PRODUCTION_CASES))
+def test_a_production_row_at_the_error_stage_exits_2_with_its_text(monkeypatch, source, key):
+    """The cut release flips a row's stage and nothing else: same text, exit 2, no answer."""
+    monkeypatch.setitem(RETIREMENTS, key, Retirement(RETIREMENTS[key].old, RETIREMENTS[key].replacement, 'error'))
+    result = _run_reveal_direct(*PRODUCTION_CASES[key](str(source)), '--format', 'json')
+    assert result.returncode == 2
+    assert f'error: {RETIREMENTS[key].text}' in result.stderr
+    assert result.stdout == ''

@@ -20,6 +20,7 @@ from ...utils import print_json_result, write_also_json
 from ...display.formatting import print_result_control_notes
 from ...utils.results import (ExecutionFacts, Outcome, ResultBuilder, echo_source, note_truncation, outcome_of,
                              slice_items, truncations_of)
+from ..invocation import RetiredSpellingError, retirement_note, uri_retirement_keys
 from .flag_specs import exclude_fragment, inject_query_flags, strip_result_control_keys
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
 from .formats import declared_output_formats, require_supported_format
@@ -250,6 +251,14 @@ def _parse_text_frontmatter(text: str) -> Optional[dict]:
     return {'data': data, 'line_start': 1, 'line_end': line_end, 'raw': yaml_content.strip()}
 
 
+def _note_retired_spellings(uri: str) -> None:
+    """The URI route's retirement hook: the scheme, each query parameter and each parameter
+    value the URI spells, looked up after parsing and before anything runs (ground rule 7).
+    A spelling at the ``error`` stage raises RetiredSpellingError (exit 2, the note's text)."""
+    for key in uri_retirement_keys(uri):
+        retirement_note(key)
+
+
 def handle_uri(uri: str, element: Optional[str], args: 'Namespace',
                consumed: Iterable[str] = (), *, answer_consumer=None) -> None:
     """Answer a URI query (env://, ast://, ...) and print it.
@@ -263,6 +272,11 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace',
     """
     from .declared import declared_adapter_class, run_declared_uri
     scheme = uri.partition('://')[0]
+    try:
+        _note_retired_spellings(uri)
+    except RetiredSpellingError as exc:
+        print(f'error: {exc.entry.text}', file=sys.stderr)  # boundary-ok: print -- the retirement error line
+        sys.exit(2)
     if declared_adapter_class(scheme) is not None and not peek(args, 'stdin', False):
         run_declared_uri(uri, element, args, consumed, answer_consumer=answer_consumer)
         return
@@ -281,8 +295,10 @@ def resolve_uri(uri: str, args: 'Namespace', consumed: Iterable[str] = ()) -> An
     several (stdin --batch). The same dispatch as handle_uri: the flag injection, the walk
     scope and the flag ledger, from_uri, the missing-path check, check() arguments, and
     element lookup, with a raise or a missing element as a failed result. Raises
-    UriUsageError for a URI with no ``://`` or an unknown scheme.
+    UriUsageError for a URI with no ``://`` or an unknown scheme, and RetiredSpellingError for
+    a spelling past the cut release.
     """
+    _note_retired_spellings(uri)
     with _dispatch(uri, None, args, consumed) as (adapter_class, scheme, resource, args):
         return resolve_adapter(adapter_class, _renderer_class_of(scheme), scheme, resource,
                                None, args)

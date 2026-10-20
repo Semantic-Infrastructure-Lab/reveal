@@ -25,7 +25,9 @@ def _help(command):
 
 
 def test_no_surface_name_is_retired_in_phase_1():
-    assert RETIREMENTS == {}
+    """Phase 1 retires no URI scheme, parameter or subcommand; the table holds only the two older
+    BACK-1906 flag notes. Every row is validated and exercised in tests/test_retirements_back2066.py."""
+    assert sorted(RETIREMENTS) == ['flag:--check', 'flag:--search']
 
 
 def test_table_covers_the_four_codes_and_commands_only_reword_them():

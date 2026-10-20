@@ -563,9 +563,9 @@ def _run_check_with_ledger(args: 'Namespace') -> None:
     It takes the formats ``reveal check`` takes: ``--format typed`` printed text (BACK-1644).
     """
     from ...cli.commands.check import run_check
-    from ..invocation import COMMANDS
+    from ..invocation import COMMANDS, retirement_note
     if not getattr(args, 'stdin', False):
-        print('note: file --check/--lint is deprecated; use reveal check <path>.', file=sys.stderr)
+        retirement_note('flag:--check')
     require_supported_format(args, COMMANDS['check'].formats, 'reveal --check')
     if ledger_of(args) is not None or not isinstance(args, Namespace):
         run_check(args)
