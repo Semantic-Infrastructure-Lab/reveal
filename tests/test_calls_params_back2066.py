@@ -173,8 +173,10 @@ def test_callees_depth_two_lists_the_walkers_edges(project):
 def test_callees_depth_one_keeps_the_per_definition_answer(project):
     result, answer = jrun('calls://proj?callees=main')
     assert result.returncode == 0, result.stderr
+    # The a7d949eb answer plus the walk_rule every callers/callees answer states (ground rule 4).
     assert set(answer) == {'contract_version', 'type', 'source', 'source_type', 'meta', 'target', 'query',
-                           'matches', 'total_calls', '_builtins_hidden', 'path'}
+                           'matches', 'total_calls', '_builtins_hidden', 'path', 'walk_rule'}
+    assert answer['walk_rule']['depth'] == 1
     explicit, explicit_answer = jrun('calls://proj?callees=main&depth=1')
     assert explicit.returncode == 0 and explicit_answer == answer
 
@@ -383,3 +385,22 @@ def test_depth_with_a_mode_that_takes_none_still_warns(project):
     result = run('calls://proj?rank=callers&depth=2', '--no-gitignore')
     assert result.returncode == 0, result.stderr
     assert "Query param 'depth' for calls:// applies to ?callers, ?callees and ?root only" in result.stderr
+
+
+# --- the preferred option: a rule on every callers and callees answer ------------------------
+
+@pytest.mark.parametrize('query', ['callers=helper', 'target=helper&depth=2'])
+def test_walk_rule_states_the_callers_walk(project, query):
+    answer = jrun(f'calls://proj?{query}')[1]
+    rule = answer['walk_rule']
+    assert rule['direction'] == 'callers' and rule['match'] == 'bare_name_or_import_alias'
+    assert rule['measured'] == {'depth_1': True, 'depth_2': True, 'beyond_depth_2': False}
+    assert rule['text'].startswith('Rule: callers whose body calls helper by bare name or import alias')
+    text = run(f'calls://proj?{query}', '--no-gitignore')
+    assert [line for line in text.stdout.splitlines() if line.startswith('Rule: ')] == [rule['text']]
+
+
+def test_depth_one_callees_text_states_its_rule_and_every_warning(project):
+    text = run('calls://proj?callees=main', '--no-gitignore')
+    assert any(line.startswith('Rule: callees') for line in text.stdout.splitlines())
+    assert 'Dynamic dispatch' in text.stdout  # W-CALLS-1, a caveat the per-definition view used to drop

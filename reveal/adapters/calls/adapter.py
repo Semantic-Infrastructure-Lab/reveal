@@ -398,6 +398,8 @@ _SCHEMA: Dict[str, Any] = {
         'Callers indexes use directory-mtime and scope keys; these do not detect every file change.',
         'Callee names are normalised: "self.foo" → "foo" for lookup; full dotted form also indexed.',
         '?callers (or ?target) depth=N expands callers transitively up to N levels (capped at 5).',
+        'Every callers and callees answer carries walk_rule (its counting rule; text is the Rule: line); '
+        'callers measure levels 1 and 2, callees level 1.',
         '?callees=X scans all definitions of X — useful when the name appears in multiple files.',
         '?callees hides Python builtins by default (len, str, sorted, ValueError, etc.); use ?builtins=true to include them.',
         '?root: every call site of an expanded definition is an edge with call_expr; expanded is false when its '
@@ -825,18 +827,19 @@ class CallsAdapter(ResourceAdapter):
                 data.update(_walk_view(walk_callees(self.path, name, depth=depth, include_builtins=include_builtins,
                                                     structures=structures), detail))
         data['path'] = self.path
-        rule = (lambda declined: _callees_rule(depth, include_builtins, declined)) if walked else None
         return self._answer('calls_callees', data, query_format=query_format, unmeasured_walk=walked,
-                            absent=lambda: not data['matches'], rule=rule)
+                            absent=lambda: not data['matches'],
+                            rule=lambda declined: _callees_rule(depth, include_builtins, declined))
 
     def _callers(self, name: str, query_format: str) -> RevealResult:
-        depth = _DEPTH.read(self.query_params)
-        data = find_callers(self.path, name, depth=1 if depth is None else depth)
+        depth = _DEPTH.read(self.query_params) or 1
+        data = find_callers(self.path, name, depth=depth)
         data['path'] = self.path
         # No caller and no definition: the name names nothing here. A name with call sites and
         # no definition (a library function) has an answer.
         return self._answer('calls_query', data, query_format=query_format,
-                            absent=lambda: data['total_callers'] == 0 and not self._defines(name))
+                            absent=lambda: data['total_callers'] == 0 and not self._defines(name),
+                            rule=lambda declined: _callers_rule(name, depth, declined))
 
     def _defines(self, name: str) -> bool:
         """Any element of any kind (a class too: `Foo()` calls it) is named *name* or its bare tail."""
@@ -868,6 +871,26 @@ def _walk_view(walk: CalleeWalk, detail: bool) -> Dict[str, Any]:
         queue.extend(child for _edge, child in node.edges if child is not None)
     return {'depth': walk.depth, 'levels': view['levels'], 'definitions': definitions,
             **{key: view[key] for key in _WALK_TOTALS}}
+
+
+def _callers_rule(name: str, depth: int, declined: List[str]) -> Dict[str, Any]:
+    """find_callers' rule, for its JSON and its ``Rule:`` line (ground rule 4). The callers
+    and depth-2 snapshots measure levels 1 and 2."""
+    text = (f"Rule: callers whose body calls {name} by bare name or import alias; level k+1 looks each caller "
+            f"up by name, so same-named functions' callers join; each (file, caller) once; depth {depth} "
+            "(clamped 1-5). Measured: levels 1 and 2.")
+    if declined:
+        text += f" No recall snapshot: {', '.join(declined)}."
+    return {
+        'direction': 'callers',
+        'match': 'bare_name_or_import_alias',
+        'expansion': 'by_name',
+        'once_per': 'file_caller',
+        'depth': depth,
+        'measured': {'depth_1': True, 'depth_2': True, 'beyond_depth_2': False},
+        'unmeasured_languages': declined,
+        'text': text,
+    }
 
 
 def _callees_rule(depth: int, include_builtins: bool, declined: List[str]) -> Dict[str, Any]:

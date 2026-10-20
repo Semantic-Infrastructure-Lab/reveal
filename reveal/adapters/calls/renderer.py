@@ -73,12 +73,21 @@ def _render_callee_walk(data: Dict[str, Any], output_format: str) -> None:
     _render_callees_recursive_dot(data)
 
 
+def _print_rule(data: Dict[str, Any]) -> None:
+    """The answer's walk_rule as its Rule: line, through the one rule renderer (imports' edge_rule)."""
+    from reveal.analyzers.imports.service import edge_rule_lines
+    for line in edge_rule_lines({'edge_rule': data.get('walk_rule')}):
+        print(line)
+
+
 def _leading_warnings(data: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """The warnings printed above a view: what the answer lost and what no measurement covers, plus
-    scope_hidden for the per-definition callees view, which prints no caveat of its own (BACK-2065)."""
+    """The warnings printed above a view: every one for the per-definition callees view, which prints
+    no caveat of its own (lane D finding e: scope_hidden was dropped); else what the answer lost and
+    what no measurement covers."""
     warnings: List[Dict[str, Any]] = data.get('meta', {}).get('warnings', [])
-    shown_types = _ALWAYS_SHOWN | ({'scope_hidden'} if data.get('query') == 'callees' else frozenset())
-    return [w for w in warnings if w.get('type') in shown_types]
+    if data.get('query') == 'callees':
+        return warnings
+    return [w for w in warnings if w.get('type') in _ALWAYS_SHOWN]
 
 
 def _render_text(data: Dict[str, Any]) -> None:
@@ -97,6 +106,7 @@ def _render_text(data: Dict[str, Any]) -> None:
     if depth > 1:
         print(f"Depth:      {depth}")
     print(f"Total:      {total}")
+    _print_rule(data)
     print()
 
     if not levels:
@@ -155,6 +165,7 @@ def _render_callees_text(data: Dict[str, Any]) -> None:
     print(f"Total:      {total} call(s) across {len(matches)} definition(s)")
     if builtins_hidden:
         print(f"            ({builtins_hidden} builtin(s) hidden — use ?builtins=true to include)")
+    _print_rule(data)
     print()
 
     if not matches:
@@ -181,7 +192,6 @@ def _render_callees_text(data: Dict[str, Any]) -> None:
 def _render_callee_walk_text(data: Dict[str, Any]) -> None:
     """?callees=X&depth=N (or &detail): a depth-indented tree from each definition of X, its rule, and
     every warning the answer carries."""
-    from reveal.analyzers.imports.service import edge_rule_lines
     target = data.get('target', '?')
     definitions = data.get('definitions', [])
     roots = [d for d in definitions if d['level'] == 0]
@@ -192,8 +202,7 @@ def _render_callee_walk_text(data: Dict[str, Any]) -> None:
           f"from {len(roots)} definition(s)")
     if data.get('_builtins_hidden'):
         print(f"            ({data['_builtins_hidden']} builtin(s) hidden at level 1 — use ?builtins=true to include)")
-    for line in edge_rule_lines({'edge_rule': data.get('walk_rule')}):  # the one Rule: renderer
-        print(line)
+    _print_rule(data)
     for line in meta_warning_lines({'meta': {'warnings': data.get('meta', {}).get('warnings', [])}}):
         print(line)
     print()

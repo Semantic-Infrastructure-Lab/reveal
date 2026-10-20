@@ -340,6 +340,7 @@ Human-readable summary with relative file path, line, and caller context:
 Callers of: validate_item
 Project:    src/
 Total:      3
+Rule: callers whose body calls validate_item by bare name or import alias; level k+1 looks each caller up by name, so same-named functions' callers join; each (file, caller) once; depth 1 (clamped 1-5). Measured: levels 1 and 2.
 
   src/auth/handlers.py:42  authenticate  (calls validate_item)
   src/api/routes.py:78     process_request  (calls validate_item)
@@ -347,6 +348,11 @@ Total:      3
 ```
 
 > File paths are relative to the project root — not just the basename — so `auth/handlers.py` and `utils/handlers.py` are never confused.
+
+Every callers and callees answer states its rule: `walk_rule` in JSON (`direction`, `depth`,
+`measured`, `unmeasured_languages`, `text`, plus the direction's own fields) and its `text` as a
+`Rule:` line under the header. The per-definition callees view also prints every `meta.warnings`
+entry (the language caveats W-CALLS-1..8 included), like the callee walk.
 
 With `depth=2`:
 
