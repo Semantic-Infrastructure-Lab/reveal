@@ -297,6 +297,9 @@ def _render_claude_cross_session_search(result: dict) -> None:
 
     print()
     matches = result.get('matches', [])
+    if len(matches) < count:
+        print(f'Showing {len(matches)} of {count} (most recent first); --all lists every match, --head N sets the cap')
+        print()
     for match in matches:
         session = match.get('session', '?')
         modified = (match.get('modified') or '')[:16].replace('T', ' ')

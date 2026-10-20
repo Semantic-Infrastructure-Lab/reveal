@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from ....utils.parallel import grep_files
-from .messages import _content_to_blocks, _collect_block_matches
+from .messages import _content_to_blocks, _collect_block_matches, _find_excerpt, _matches_term
 
 
 def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = False,
@@ -32,6 +32,7 @@ def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = Fa
     """
     lower = term.lower()
     message_index = 0
+    fallback: Dict[str, Any] | None = None
     try:
         with open(jsonl_path, encoding='utf-8', errors='replace') as fh:
             for raw_line in fh:
@@ -46,6 +47,8 @@ def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = Fa
                     continue
                 role = msg.get('type', '')
                 message = msg.get('message')
+                if fallback is None and lower in line.lower():
+                    fallback = _sidecar_hit(msg, role, term, message_index, whole_word, window_chars)
                 if role in ('user', 'assistant') and lower in line.lower() and isinstance(message, dict):
                     content = message.get('content', [])
                     blocks = _content_to_blocks(content)
@@ -62,7 +65,30 @@ def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = Fa
                 message_index += 1
     except OSError:  # the file vanished or can't be read: no snippet, the hit still stands
         pass
-    return {'excerpt': '', 'role': '', 'timestamp': '', 'message_index': None}
+    return fallback or {'excerpt': '', 'role': '', 'timestamp': '', 'message_index': None}
+
+
+def _sidecar_hit(msg: Dict[str, Any], role: str, term: str, message_index: int,
+                 whole_word: bool, window_chars: int) -> Dict[str, Any] | None:
+    """Excerpt for a record whose match sits outside ``message.content`` (BACK-2088).
+
+    The phase-1 byte filter matches anywhere in the file, e.g. the top-level
+    ``toolUseResult`` sidecar, while the content-block matcher only sees
+    ``message.content``. Without this the session is listed with no snippet.
+    """
+    sidecar = msg.get('toolUseResult')
+    if sidecar is None:
+        return None
+    text = sidecar if isinstance(sidecar, str) else json.dumps(sidecar, ensure_ascii=False)
+    if not _matches_term(text, term.lower(), whole_word):
+        return None
+    ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
+    return {
+        'excerpt': '[toolUseResult] ' + _find_excerpt(text, term, window=window_chars),
+        'role': role,
+        'timestamp': ts,
+        'message_index': message_index,
+    }
 
 
 def search_sessions_for_term(
