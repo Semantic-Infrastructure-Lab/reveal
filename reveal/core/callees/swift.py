@@ -43,16 +43,21 @@ def is_subscript(node: Any) -> bool:
 def _is_function_reference(suffix: Any) -> bool:
     """`T.init(rawValue:)`, `self.f(tx:)`, `g(_:)`: argument labels and no argument values.
 
-    The function is named, not applied; `f()` (no arguments) and `f(x: 1)` are calls.
+    The function is named, not applied; `f()` (no arguments) and `f(x: 1)` are calls. Every
+    child counts, not only named ones: language-pack 1.8.1 parses `nil` as an anonymous token,
+    so `set(nil)` and `set(to: nil)` have no named value child and are still calls.
     """
     args = _value_arguments(suffix)
     if args is None:
         return False
     arguments = [c for c in _children(args) if _zero_arg(c, 'kind') == 'value_argument']
-    return bool(arguments) and all(
-        _zero_arg(c, 'kind') == 'value_argument_label'
-        for arg in arguments for c in _children(arg) if _zero_arg(c, 'is_named')
-    )
+    return bool(arguments) and all(_is_label_only(arg) for arg in arguments)
+
+
+def _is_label_only(argument: Any) -> bool:
+    """A `value_argument` that is labels and colons only (`a:b:`), with no value."""
+    kinds = [_zero_arg(c, 'kind') for c in _children(argument)]
+    return 'value_argument_label' in kinds and all(k in ('value_argument_label', ':') for k in kinds)
 
 
 def _is_operator_application(node: Any) -> bool:

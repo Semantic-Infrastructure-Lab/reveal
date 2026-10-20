@@ -89,6 +89,13 @@ func realCalls(x: Double, y: Int) -> Date {
     let g = convert(tx: y)
     return Date(timeIntervalSince1970: x)
 }
+
+func literalArguments() {
+    cache.set(nil)
+    column.update(to: nil)
+    toggle(true)
+    flag(on: false)
+}
 '''
 
 
@@ -104,6 +111,13 @@ def test_labelled_calls_with_arguments_are_still_calls(tmp_path):
     _write(tmp_path, 'refs.swift', REFS)
     assert {'foo', 'Date.init', 'f', 'convert', 'Date'} <= set(_callees(tmp_path, 'realCalls'))
     assert ('realCalls', 'Date.init') in _caller_names(tmp_path, 'init')
+
+
+def test_calls_whose_argument_is_a_keyword_literal_are_still_calls(tmp_path):
+    # On language-pack 1.8.1 `nil` is an anonymous token, so `set(nil)` has no named value
+    # child; it must not read as the label-only reference `set(_:)`.
+    _write(tmp_path, 'refs.swift', REFS)
+    assert sorted(_callees(tmp_path, 'literalArguments')) == ['cache.set', 'column.update', 'flag', 'toggle']
 
 
 # --- (2) subscripts -------------------------------------------------------------------------
@@ -189,6 +203,24 @@ def test_a_trailing_closure_call_is_listed_once(tmp_path):
     assert not [c for c in calls if c.startswith(('try', 'await'))]
 
 
+# --- arithmetic that tree-sitter-swift binds tighter than the call --------------------------
+
+ARITHMETIC = '''
+func arithmetic(d: Double, ts: UInt64) -> UInt64 {
+    let a = 1000 * max(0, d)
+    return ts + UInt64(a)
+}
+'''
+
+
+def test_a_call_after_an_arithmetic_operator_is_named_by_its_callee(tmp_path):
+    # `1000 * max(0, d)` parses as call(`1000 * max`, args): the callee is `max`. The old
+    # text `1000 * max` matched no definition, so `max`'s callers missed this one.
+    _write(tmp_path, 'arith.swift', ARITHMETIC)
+    assert sorted(_callees(tmp_path, 'arithmetic')) == ['UInt64', 'max']
+    assert ('arithmetic', 'max') in _caller_names(tmp_path, 'max')
+
+
 # --- (5) immediately-invoked closure literals -----------------------------------------------
 
 IIFE = '''
@@ -209,8 +241,8 @@ def test_immediately_invoked_closures_are_declined_and_their_bodies_kept(tmp_pat
 
 # --- both extractors agree on every shape above ---------------------------------------------
 
-@pytest.mark.parametrize('src', [REFS, SUBSCRIPTS, OPERATORS, TRAILING, IIFE],
-                         ids=['refs', 'subscripts', 'operators', 'trailing', 'iife'])
+@pytest.mark.parametrize('src', [REFS, SUBSCRIPTS, OPERATORS, TRAILING, ARITHMETIC, IIFE],
+                         ids=['refs', 'subscripts', 'operators', 'trailing', 'arithmetic', 'iife'])
 def test_analyzer_and_nav_paths_agree(tmp_path, src):
     calls = _both_paths_agree(_write(tmp_path, 't.swift', src))
     assert calls, 'positive control: the first function has real calls'

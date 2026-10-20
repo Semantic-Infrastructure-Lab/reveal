@@ -41,10 +41,13 @@ _UNNAMEABLE_CALLEE_KINDS = frozenset({
 # text, decline only when there is no operand at all, or always decline.
 _FALL_THROUGH, _DECLINE_IF_MISSING, _DECLINE = 'fall_through', 'decline_if_missing', 'decline'
 
+# Callee kinds whose LAST child is the callee: a prefix operator's operand, and the right
+# operand of the arithmetic tree-sitter-swift binds tighter than the call (see below).
+_LAST_OPERAND_KINDS = frozenset({'prefix_expression', 'additive_expression', 'multiplicative_expression'})
+
 _OPERAND_WRAPPER_KINDS = frozenset({
-    'generic_function', 'parenthesized_expression', 'prefix_expression',
-    'try_expression', 'await_expression',
-})
+    'generic_function', 'parenthesized_expression', 'try_expression', 'await_expression',
+}) | _LAST_OPERAND_KINDS
 
 
 def _callee_operand(callee_node: Any, kind: str) -> Tuple[Optional[Any], str]:
@@ -56,6 +59,8 @@ def _callee_operand(callee_node: Any, kind: str) -> Tuple[Optional[Any], str]:
       parenthesized callee names nothing (BACK-1305).
     - Swift `!isRunning(x)` / implicit-member `.foo(x)` is prefix_expression: the operand
       is last, after the operator token (BACK-730).
+    - Swift `1000 * max(0, d)` / `ts + UInt64(x)` parse as a call whose callee is
+      `1000 * max` / `ts + UInt64`: the right operand is the callee (BACK-2074).
     - Swift `try await svc.fetch(id: 1) { done() }` parses the trailing closure as a second
       call whose callee is the whole `try await svc.fetch(id: 1)`. The wrapped call is
       already its own edge, so this one names nothing; `try f { }` names `f` (BACK-2074).
@@ -64,7 +69,7 @@ def _callee_operand(callee_node: Any, kind: str) -> Tuple[Optional[Any], str]:
         return callee_node.child(0), _FALL_THROUGH
     if kind == 'parenthesized_expression':
         return unwrap_parenthesized_callee(callee_node), _DECLINE_IF_MISSING
-    if kind == 'prefix_expression':
+    if kind in _LAST_OPERAND_KINDS:
         kids = _children(callee_node)
         return (kids[-1] if kids else None), _FALL_THROUGH
     named = [c for c in _children(callee_node)
