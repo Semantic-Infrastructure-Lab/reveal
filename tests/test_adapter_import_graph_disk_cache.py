@@ -54,7 +54,7 @@ def _cache_entry_for(root):
     candidates, index = adapter._discover_candidate_files(
         adapter._target_path, frozenset(get_all_extensions()), get_code_extensions(),
     )
-    fp = _candidate_set_fingerprint(candidates, index)
+    fp = _candidate_set_fingerprint(candidates, index, root=adapter._target_path)
     return disk_cache.get(_ADAPTER_IMPORT_GRAPH_NAMESPACE, fp) if fp else None
 
 

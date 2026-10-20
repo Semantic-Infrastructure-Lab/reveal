@@ -50,11 +50,11 @@ from ..utils.warning_render import meta_warning_lines
 _ADAPTER_IMPORT_GRAPH_NAMESPACE = "adapter_import_graph"
 
 def _candidate_set_fingerprint(candidates: List[Path],
-                               file_index: Optional[Dict[str, List[Path]]] = None, *,
+                               file_index: Optional[Dict[str, List[Path]]] = None, *, root: Path,
                                traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> Optional[str]:
-    """Shared source/target fingerprint; preserve the private source-only call shape."""
+    """Shared root/source/target fingerprint; preserve the private source-only call shape."""
     return resolution_fingerprint(candidates, file_index or {}, excluded_root=disk_cache.cache_root(),
-                                  traversal_failures=traversal_failures)
+                                  root=root, traversal_failures=traversal_failures)
 
 
 def _discovery_incomplete(result: Dict[str, Any]) -> bool:
@@ -1464,9 +1464,9 @@ class ImportsAdapter(ResourceAdapter):
         `on_file_processed` callback was given — the common case for
         `imports://`, `pack --architecture`'s fan-in, and `pack --focus`'s
         graph-relevance ranking — the resolved graph is cached on disk keyed by
-        a fingerprint of source membership and resolution targets, so a 2nd+ call on an unchanged
-        tree skips the tree-sitter extraction and dependency-resolution walk
-        entirely. Skipped (never read or written) when either is set, since
+        a fingerprint of the scan root (BACK-2082), source membership and resolution
+        targets, so a 2nd+ call on an unchanged tree skips the tree-sitter
+        extraction and dependency-resolution walk entirely. Skipped (never read or written) when either is set, since
         `self._structures` and per-file progress callbacks aren't part of the
         cached payload and would silently go missing on a cache hit.
         """
@@ -1484,7 +1484,8 @@ class ImportsAdapter(ResourceAdapter):
 
         cacheable = not collect_structures and on_file_processed is None
         fingerprint = _candidate_set_fingerprint(
-            candidates, file_index, traversal_failures=traversal_failures) if cacheable else None
+            candidates, file_index, root=target_path,
+            traversal_failures=traversal_failures) if cacheable else None
         if fingerprint is not None:
             cached = disk_cache.get(_ADAPTER_IMPORT_GRAPH_NAMESPACE, fingerprint)
             if isinstance(cached, ImportAnalysis):

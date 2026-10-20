@@ -422,8 +422,9 @@ the values, and `<namespace>` names the kind of artifact.
 
 - *Per entry.* A file's structure is keyed on its absolute path, modification time (nanoseconds),
   size and language, so any edit misses. Project-wide artifacts such as the import graph are keyed
-  on a fingerprint of every source file's path, mtime and size; churn counts are keyed on the commit
-  being walked and the query options.
+  on a fingerprint of every source file's path, mtime and size; the import graphs also key on the
+  scan root they resolve imports against, so `imports://src` and `imports://src/pkg` never share an
+  entry. Churn counts are keyed on the commit being walked and the query options.
 - *Per build.* `<build>` is computed from the path, mtime and size of every file in the `reveal`
   package plus `tree_sitter` and `tree_sitter_language_pack`. Upgrading reveal, editing a
   development checkout or swapping the language pack therefore lands in a different directory, and

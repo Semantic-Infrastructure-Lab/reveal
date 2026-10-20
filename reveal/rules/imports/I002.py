@@ -249,7 +249,8 @@ def _tree_fingerprint(directory: Path) -> Optional[str]:
         if enumeration_errors:
             return None
         source_paths = [Path(entry[0]) for entry in entries]
-        fingerprint = resolution_fingerprint(source_paths, targets, excluded_root=disk_cache.cache_root())
+        fingerprint = resolution_fingerprint(source_paths, targets, excluded_root=disk_cache.cache_root(),
+                                             root=directory)
         if fingerprint is None:
             return None
         hasher.update(fingerprint.encode('ascii'))

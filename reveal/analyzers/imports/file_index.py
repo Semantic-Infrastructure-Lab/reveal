@@ -71,12 +71,15 @@ def load_path_manifests(root: Path, pattern: str, *,
 
 
 def resolution_fingerprint(candidates: Iterable[Path], index: Dict[str, List[Path]],
-                           excluded_root: Optional[Path] = None, *,
+                           excluded_root: Optional[Path] = None, *, root: Path,
                            traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> Optional[str]:
-    """Hash source membership plus the complete resolution target set (BACK-1755).
+    """Hash the scan root, source membership and the complete resolution target set (BACK-1755).
 
     Roles stay distinct: changing source eligibility still invalidates an unchanged
-    target index. Known traversal loss or stat failure disables caching. Reveal's own cache artifacts are
+    target index. *root* is the scan root the graph resolves against: every file gets it
+    as an extra search path, so two roots that walk the same files (``w`` holding only
+    ``w/sub``) still resolve differently and must not share an entry (BACK-2082).
+    Known traversal loss or stat failure disables caching. Reveal's own cache artifacts are
     excluded so writing this graph does not invalidate the next read.
     """
     if traversal_failures:
@@ -84,6 +87,7 @@ def resolution_fingerprint(candidates: Iterable[Path], index: Dict[str, List[Pat
     try:
         excluded = excluded_root.resolve() if excluded_root is not None else None
         hasher = hashlib.sha256()
+        hasher.update(b'root\x01' + str(root).encode('utf-8', 'replace') + b'\x04')
         groups = (('sources', set(candidates)), ('targets', {p for paths in index.values() for p in paths}))
         for role, paths in groups:
             hasher.update(role.encode('ascii'))

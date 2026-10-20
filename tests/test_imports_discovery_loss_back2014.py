@@ -234,8 +234,9 @@ def test_discovery_service_and_private_tuple_compatibility(tmp_path, monkeypatch
     assert len(triple) == 3 and len(errors) == 1 and isinstance(errors[0], PermissionError)
     files = service.discover(service.ScanScope(root, frozenset({'.py'})))
     assert isinstance(files.traversal_failures, tuple) and len(files.traversal_failures) == 1
-    assert resolution_fingerprint(files.candidates, files.index, traversal_failures=files.traversal_failures) is None
-    assert resolution_fingerprint(files.candidates, files.index) is not None
+    assert resolution_fingerprint(files.candidates, files.index, root=root,
+                                  traversal_failures=files.traversal_failures) is None
+    assert resolution_fingerprint(files.candidates, files.index, root=root) is not None
     sink = []
     pair = ImportsAdapter._discover_candidate_files(root, frozenset({'.py'}), get_code_extensions(), traversal_failures=sink)
     assert len(pair) == 2 and sink == list(files.traversal_failures)
