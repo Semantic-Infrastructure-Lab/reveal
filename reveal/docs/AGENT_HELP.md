@@ -1352,15 +1352,6 @@ reveal 'calls://src/?callees=validate_item&builtins=true'
 # Transitive: callers-of-callers (2 levels)
 reveal 'calls://src/?callers=validate_item&depth=2'
 
-# Within-file: find all functions that call validate_item
-reveal 'ast://src/auth.py?calls=validate_item'
-
-# Within-file: find everything called by process_batch
-reveal 'ast://src/?callee_of=process_batch'
-
-# Compact call graph view (arrow diagram)
-reveal 'ast://src/?show=calls'
-
 # Graphviz: pipe to dot for SVG
 reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
 
@@ -1390,8 +1381,10 @@ so), and a scanned call-source language with no recall snapshot (Elixir, Objecti
 | `calls://src/?callers=fn` | Cross-file, whole project | "Who calls fn anywhere?" (reverse) |
 | `calls://src/?callees=fn` | Cross-file, whole project | "What does fn call?" (forward, builtins hidden; add `&builtins=true` to include) |
 | `calls://src/?rank=callers` | Cross-file, whole project | "Which functions are called most?" (coupling metrics) |
-| `ast://src/?calls=fn` | Within-file only | "Does this file call fn?" |
-| `ast://src/?show=calls` | Within-file only | "Show me the call graph for this file" |
+| `ast://src/?type=function` | Per file | Each function's `calls`/`called_by` lists (JSON) |
+
+The `ast://` call filters `calls=`, `callee_of=` and `show=calls` are retired: each still answers with
+a note naming `calls://?callers=`/`?callees=` (or `--grep` for a `calls=*pattern*`).
 
 **JSON output — call fields per function:**
 ```bash

@@ -220,6 +220,12 @@ RETIREMENTS: Dict[str, Retirement] = {
                                    '?callees=FUNC&depth=N (--callees FUNC --depth N), the same walk'),
     # Decision (a): an alias that answers identically until the cut.
     'param:calls.target': Retirement('calls ?target= (--target)', '?callers=FUNC (--callers FUNC), the same answer'),
+    # Decision (e): ast's call filters are retired, not kept as element filters; calls= matched call
+    # text in every scanned file instead of the callers index, so the two could disagree.
+    'param:ast.calls': Retirement('ast://?calls=', "calls://<path>?callers=NAME, or --grep 'PATTERN' for a pattern"),
+    'param:ast.callee_of': Retirement('ast://?callee_of=', 'calls://<path>?callees=NAME'),
+    'value:ast.show=calls': Retirement('ast://?show=calls',
+                                       "calls://<path>?callers=NAME or ?callees=NAME, or --grep 'PATTERN'"),
 }
 
 

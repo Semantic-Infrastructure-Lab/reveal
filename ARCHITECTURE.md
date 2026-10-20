@@ -246,7 +246,7 @@ These params are handled at the routing layer, not per-adapter:
 - `format=json` — emit JSON instead of text
 - `format=grep` — emit grep-compatible lines
 - `format=dot` — emit Graphviz DOT (where supported)
-- `show=calls` — override display mode (ast://, calls://)
+- `show=dict-heatmap` / `show=dict-schemas` — override display mode (ast://; `show=calls` is retired, use `calls://`)
 
 ---
 

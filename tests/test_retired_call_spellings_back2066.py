@@ -77,7 +77,8 @@ def _retired(doc):
 
 
 def _without_retirement(doc):
-    """The answer minus the retirement fact: an emptied warnings list or meta dropped."""
+    """The answer minus the retirement fact, an emptied warnings list or meta dropped; applied to both
+    sides, since some answers carry an empty warnings list of their own."""
     meta = doc.get('meta')
     if isinstance(meta, dict) and 'warnings' in meta:
         meta['warnings'] = [w for w in meta['warnings'] if w.get('code') != 'retired_spelling']
@@ -115,7 +116,7 @@ def test_a_retired_call_spelling_prints_one_note_and_keeps_its_answer(monkeypatc
     assert text_run.returncode == base_text.returncode == 0
     assert json_run.returncode == base_json.returncode == 0
     assert text_run.stdout == base_text.stdout
-    assert _without_retirement(json.loads(json_run.stdout)) == json.loads(base_json.stdout)
+    assert _without_retirement(json.loads(json_run.stdout)) == _without_retirement(json.loads(base_json.stdout))
 
 
 @pytest.mark.parametrize('case', CASES)

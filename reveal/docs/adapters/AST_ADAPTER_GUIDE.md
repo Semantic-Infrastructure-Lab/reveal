@@ -251,14 +251,14 @@ Complete reference of all supported query parameters:
 | `type` | string | Element type: `function`, `class`, `method`. Supports OR with `\|` or `,` | `type=function`, `type=class\|function` |
 | `name` | string | Element name with wildcards (`*` = any chars, `?` = one char) or regex | `name=test_*`, `name~=^test_` |
 | `decorator` | string | Decorator pattern with wildcards or regex | `decorator=property`, `decorator=*cache*` |
-| `calls` | string | Find functions that call a given name (wildcard supported) | `calls=validate_item`, `calls=*send*` |
-| `callee_of` | string | Find functions called by a given name (within-file reverse) | `callee_of=main`, `callee_of=process_*` |
+| `calls` | string | Retired (prints a replaced-by note): use `calls://<path>?callers=NAME`, or `--grep 'PATTERN'` for a pattern | `calls=validate_item` |
+| `callee_of` | string | Retired (prints a replaced-by note): use `calls://<path>?callees=NAME` | `callee_of=main` |
 | `callers` | integer | Number of inbound callers within the scanned files (length of `called_by`). High values find high-coupling functions | `callers>5`, `callers>3&complexity>10`, `callers==0` |
 | `param_type` | string | Find functions where any parameter has a given type annotation (parses the signature string; glob supported; bare type name matches generics too) | `param_type=dict`, `param_type=Dict*`, `param_type=Optional*` |
 | `return_type` | string | Find functions with a given return type annotation (parses the `-> TYPE` suffix; glob supported) | `return_type=bool`, `return_type=List*` |
 | `has_annotations` | boolean | Filter by presence of type annotations — `has_annotations=false` finds fully unannotated functions | `has_annotations=false`, `has_annotations=true` |
 | `reveal_type` | string | Show all type evidence for a named variable: parameter annotations, inferred assignment shapes, for-loop bindings — works on unannotated code, no mypy `reveal_type()` needed | `reveal_type=trade`, `reveal_type=config` |
-| `show` | string | Display mode — `show=calls` renders a compact call graph view; `show=dict-heatmap` ranks untyped-dict names (annotated/unannotated params, loop variables, locals) by distinct string keys read via `x['k']`, `x.get('k')`, `'k' in x`; `show=dict-schemas` clusters those across functions into shared implicit record shapes and names any TypedDict (defined under the scanned path) that already covers one, plus the keys readers use that it doesn't declare. Python only | `show=calls`, `show=dict-heatmap`, `show=dict-schemas` |
+| `show` | string | Display mode — `show=calls` (retired, prints a replaced-by note: use `calls://<path>?callers=NAME` or `?callees=NAME`) renders a compact call graph view; `show=dict-heatmap` ranks untyped-dict names (annotated/unannotated params, loop variables, locals) by distinct string keys read via `x['k']`, `x.get('k')`, `'k' in x`; `show=dict-schemas` clusters those across functions into shared implicit record shapes and names any TypedDict (defined under the scanned path) that already covers one, plus the keys readers use that it doesn't declare. Python only | `show=dict-heatmap`, `show=dict-schemas` |
 
 **Parameter capabilities:**
 
@@ -417,50 +417,25 @@ The AST adapter extracts call graph data from every function and method during a
 
 Call graph fields appear automatically in JSON output and in the default text renderer (as `calls:` and `called by:` lines below each function).
 
-### Within-file call queries
+### Retired call filters
 
-**`calls=<name>`** — find functions that call a given name:
+The `calls=<name>`, `callee_of=<name>` and `show=calls` query parameters are retired (Phase 2b):
+they still answer, with one `note: ... is deprecated; use ...` line on stderr and a
+`retired_spelling` entry in JSON `meta.warnings`, and become an error at the cut. `calls=` matched
+call text in every scanned file rather than going through the callers index, so the two could give
+different callers for the same name; callers and callees questions go to `calls://`:
 
-```bash
-# Find all callers of validate_token in auth.py
-reveal 'ast://src/auth.py?calls=validate_token'
+| Retired | Use instead |
+|---------|-------------|
+| `ast://<path>?calls=NAME` | `calls://<path>?callers=NAME`; for a pattern (`calls=*send*`), `reveal <path> --grep 'send'` |
+| `ast://<path>?callee_of=NAME` | `calls://<path>?callees=NAME` |
+| `ast://<path>?show=calls` | `calls://<path>?callers=NAME` or `?callees=NAME`; the `calls`/`called_by` JSON fields below |
 
-# Wildcard: find functions calling any logging method
-reveal 'ast://src/?calls=log.*'
-reveal 'ast://src/?calls=*log*'
-```
-
-**`callee_of=<name>`** — find functions called by a specific function:
-
-```bash
-# What does process_batch call?
-reveal 'ast://src/?callee_of=process_batch'
-```
-
-**`show=calls`** — compact call graph view (arrow diagram):
-
-```bash
-# Show full call graph for a file or directory
-reveal 'ast://src/auth.py?show=calls'
-reveal 'ast://src/?show=calls'
-```
-
-Output:
-```
-Call Graph: src/auth.py
-
-authenticate
-  └─calls──▶ validate_token, hash_password, log_attempt
-  ◀─called─  login_handler
-
-validate_token
-  └─calls──▶ decode_jwt, check_expiry
-  ◀─called─  authenticate
-```
+The `calls`, `called_by` and `resolved_calls` fields and the `callers>N` filter are not retired.
 
 ### Cross-file call queries
 
-`calls=` and `callee_of=` only see within-file relationships. For project-wide callers use the `calls://` adapter:
+For project-wide callers use the `calls://` adapter:
 
 ```bash
 # Who calls validate_token across the entire project?
@@ -650,23 +625,20 @@ reveal 'ast://./src?type=class|function' --format=json | \
 **Scenario**: Understand execution paths and call chains through a codebase.
 
 ```bash
-# Step 1: See who each function calls (compact view)
-reveal 'ast://src/auth.py?show=calls'
+# Step 1: See what a function calls
+reveal 'calls://src/?callees=authenticate'
 
-# Step 2: Find callers of a specific function (within-file)
-reveal 'ast://src/auth.py?calls=validate_token'
-
-# Step 3: Find callers project-wide
+# Step 2: Find callers of a specific function
 reveal 'calls://src/?callers=validate_token'
 
-# Step 4: Explore callers-of-callers (who triggers the chain?)
+# Step 3: Explore callers-of-callers (who triggers the chain?)
 reveal 'calls://src/?callers=validate_token&depth=2'
 
-# Step 5: Extract call data for a specific function (JSON)
+# Step 4: Extract call data for a specific function (JSON)
 reveal 'ast://src/auth.py?name=authenticate' --format=json | \
   jq '.results[0] | {calls, called_by, resolved_calls}'
 
-# Step 6: Generate a visual graph
+# Step 5: Generate a visual graph
 reveal 'calls://src/?callers=authenticate&format=dot' | dot -Tsvg > auth_calls.svg
 ```
 
@@ -1343,13 +1315,8 @@ A: Tree-sitter-based McCabe complexity for supported languages; keyword-count es
 
 **Q: Can I find all callers of a function?**
 
-A: Yes. Two levels of support:
-
-- **Within-file** — use `calls=<name>` to find functions that call `<name>` in the same file:
-  ```bash
-  reveal 'ast://src/auth.py?calls=validate_token'
-  ```
-- **Cross-file (project-wide)** — use the `calls://` adapter:
+A: Yes, with the `calls://` adapter (`ast://?calls=` is retired; see
+[Retired call filters](#retired-call-filters)):
   ```bash
   reveal 'calls://src/?callers=validate_token'           # direct callers
   reveal 'calls://src/?callers=validate_token&depth=2'   # callers-of-callers

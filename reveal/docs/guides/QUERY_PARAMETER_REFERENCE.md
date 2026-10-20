@@ -20,7 +20,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **json://** | `schema`, `flatten`, `gron`, `type`, `keys`, `length`, field filters, `sort`, `limit`, `offset` | `json://data.json?type=object` |
 | **markdown://** | field filters (frontmatter), `aggregate`, `body-contains`, `sort`, `limit`, `offset` | `markdown://docs/?status=draft` |
 | **stats://** | `hotspots`, `code_only`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions`, `exclude`, `sort`, `limit`, `offset` | `stats://.?hotspots` |
-| **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `has_decorator`, `calls`, `callee_of`, `show`, `sort`, `limit`, `offset`, `param_type`, `return_type`, `has_annotations`, `callers`, `reveal_type` | `ast://src?complexity>10` |
+| **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `has_decorator`, `show`, `sort`, `limit`, `offset`, `param_type`, `return_type`, `has_annotations`, `callers`, `reveal_type` (retired, with a note: `calls`, `callee_of`, `show=calls`) | `ast://src?complexity>10` |
 | **calls://** | `callers`, `callees`, `detail`, `uncalled`, `rank`, `top`, `depth`, `format`, `builtins`, `modules`, `external` (retired, with a note: `target`, `root`) | `calls://src?callers=fn` |
 | **claude://** | `summary`, `errors`, `tools`, `contains`, `role`, `search`, `tail`, `last`, `tokens` | `claude://session?summary` |
 | **codex://** | `search`, `filter`, `since`, `until` | `codex://sessions/?search=auth-refactor` |
@@ -302,20 +302,12 @@ reveal 'stats://.?hotspots&code_only'
   reveal 'ast://src?decorator=staticmethod'
   ```
 
-- **`calls`** - Find functions that call a given function (within-file)
+- **`calls`**, **`callee_of`**, **`show=calls`** - Retired: each still answers with a replaced-by
+  note. Use `calls://` instead
   ```bash
-  reveal 'ast://src?calls=validate_item'
-  reveal 'ast://src?calls=*send*'        # wildcard: calls anything with "send"
-  ```
-
-- **`callee_of`** - Find functions called by a given function (within-file)
-  ```bash
-  reveal 'ast://src?callee_of=main'
-  ```
-
-- **`show=calls`** - Show call graph for all functions in the file
-  ```bash
-  reveal 'ast://src/file.py?show=calls'
+  reveal 'calls://src?callers=validate_item'   # was ast://src?calls=validate_item
+  reveal src --grep 'send'                     # was ast://src?calls=*send* (a pattern)
+  reveal 'calls://src?callees=main'            # was ast://src?callee_of=main
   ```
 
 - **`show=dict-heatmap`** - Rank untyped dicts by distinct string keys read (`x['k']`, `x.get('k')`, `'k' in x`); covers dict-annotated and unannotated params, loop variables (`for elem in structure['functions']`), and locals; suggests TypedDict names. Each result carries a `source` field.
@@ -372,7 +364,7 @@ reveal 'stats://.?hotspots&code_only'
   ```
   Gathers annotations, assignment RHS shapes, and loop variable hints.
 
-> For cross-file call graph queries, use `calls://` (see below). `ast://` call filters (`calls=`, `callee_of=`) are within-file only.
+> For call graph queries, use `calls://` (see below). The `ast://` call filters (`calls=`, `callee_of=`, `show=calls`) are retired.
 
 ---
 

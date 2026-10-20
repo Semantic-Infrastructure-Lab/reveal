@@ -646,10 +646,11 @@ reveal 'calls://src/?uncalled' --format json | jq '.uncalled[] | select(.is_priv
 **What to expect:** `__dunder__` methods and functions decorated with `@property`, `@classmethod`, `@staticmethod` are excluded (they're called implicitly). Functions imported under aliases are correctly resolved — `from utils import helper as h` means `helper` is treated as called when `h` is called.
 
 ```bash
-# Within a single file (cheaper — no cross-file index)
-reveal 'ast://src/auth.py?calls=validate_item'    # who calls it in this file?
-reveal 'ast://src/auth.py?callee_of=process'      # what does process call?
-reveal 'ast://src/auth.py?show=calls'             # full call graph diagram
+# What does process call, and what do those call? (forward walk)
+reveal 'calls://src/?callees=process&depth=2'
+# Each function's calls/called_by lists for one file (the ast:// calls=, callee_of= and
+# show=calls filters are retired and print a note naming calls://)
+reveal 'ast://src/auth.py?type=function' --format json
 ```
 
 ---

@@ -83,18 +83,6 @@ _HELP_EXAMPLES = [
         'description': 'Complex functions, paginated results (NEW: full result control)'
     },
     {
-        'uri': 'ast://src/?calls=validate_item --format=json',
-        'description': 'Find all functions that call validate_item (JSON includes calls + resolved_calls)'
-    },
-    {
-        'uri': 'ast://src/?callee_of=process_batch',
-        'description': 'Find functions called by process_batch (within-file)'
-    },
-    {
-        'uri': 'ast://src/?show=calls',
-        'description': 'Show call graph view for all functions in src/ (calls + called_by)'
-    },
-    {
         'uri': "ast://src/?depth>4",
         'description': 'Find deeply nested functions (exceeds C905 threshold)'
     },
@@ -141,8 +129,7 @@ _HELP_WORKFLOWS = [
         'name': 'Trace Function Call Graph',
         'scenario': 'Understand what calls what — trace execution paths and identify hotspots',
         'steps': [
-            "reveal 'ast://src/?show=calls'                        # Compact call graph: all functions + their calls",
-            "reveal 'ast://src/?calls=validate_item'               # Which functions call validate_item? (within-file)",
+            "reveal 'ast://src/?type=function' --format json      # calls[] and called_by[] on every function",
             "reveal 'calls://src/?callers=validate_item'           # Cross-file: who calls validate_item project-wide?",
             "reveal 'calls://src/?callees=validate_item'           # Cross-file: what does validate_item call?",
             "reveal 'calls://src/?callers=validate_item&depth=2'   # Callers-of-callers (transitive, 2 levels)",
@@ -224,13 +211,16 @@ _SCHEMA_QUERY_PARAMS = {
     },
     'calls': {
         'type': 'string',
-        'description': 'Find functions/methods that call a given name (wildcard supported). Matches against the calls list extracted from function bodies.',
+        'description': ('Retired (prints a replaced-by note): use calls://<path>?callers=NAME, or '
+                        "--grep 'PATTERN' for a pattern. Finds functions/methods whose calls list "
+                        '(extracted from function bodies) matches a name (wildcard supported).'),
         'operators': ['==', '~='],
         'examples': ['calls=validate_item', 'calls=*send*', 'calls=db.*']
     },
     'callee_of': {
         'type': 'string',
-        'description': 'Find functions that are called by a given function name (within-file reverse direction). Matches against the called_by list.',
+        'description': ('Retired (prints a replaced-by note): use calls://<path>?callees=NAME. Finds '
+                        'functions whose called_by list (within-file) matches a name.'),
         'operators': ['==', '~='],
         'examples': ['callee_of=main', 'callee_of=process_batch', 'callee_of=*handler*']
     },
@@ -278,7 +268,8 @@ _SCHEMA_QUERY_PARAMS = {
     'show': {
         'type': 'string',
         'description': (
-            'Display mode (not a filter): show=calls renders a compact call graph view; '
+            'Display mode (not a filter): show=calls (retired, prints a replaced-by note: use '
+            'calls://<path>?callers=NAME or ?callees=NAME) renders a compact call graph view; '
             'show=dict-heatmap ranks untyped-dict names (annotated/unannotated params, loop '
             'variables, locals) by distinct string keys read (TypedDict migration priority list); '
             'show=dict-schemas clusters those across functions into shared implicit record '
@@ -287,7 +278,7 @@ _SCHEMA_QUERY_PARAMS = {
         ),
         'operators': ['=='],
         'valid_values': ['calls', 'dict-heatmap', 'dict-schemas'],
-        'examples': ['show=calls', 'show=dict-heatmap', 'show=dict-schemas']
+        'examples': ['show=dict-heatmap', 'show=dict-schemas']
     },
 }
 
@@ -498,21 +489,6 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'output_type': 'ast_query'
     },
     {
-        'uri': 'ast://src/?calls=validate_item',
-        'description': 'Find functions that call validate_item (within-file)',
-        'output_type': 'ast_query'
-    },
-    {
-        'uri': 'ast://src/?callee_of=main',
-        'description': 'Find functions called by main (within-file)',
-        'output_type': 'ast_query'
-    },
-    {
-        'uri': 'ast://src/?show=calls',
-        'description': 'Compact call graph view for all functions in src/',
-        'output_type': 'ast_query'
-    },
-    {
         'uri': 'ast://src/?show=dict-heatmap',
         'description': 'Untyped dicts (params, loop vars, locals) ranked by keys read',
         'output_type': 'ast_dict_heatmap'
@@ -547,13 +523,13 @@ def get_help() -> Dict[str, Any]:
             'type': 'Element type: function, class, method. Supports OR with | or , (e.g., type=function, type=class|function)',
             'name': 'Element name pattern with wildcards or regex (e.g., name=test_*, name~=^test_)',
             'decorator': 'Decorator pattern - find decorated functions/classes (e.g., decorator=property, decorator!=property)',
-            'calls': 'Find functions that call a given name (e.g., calls=validate_item, calls=*send*)',
-            'callee_of': 'Find functions called by a given function (within-file reverse, e.g., callee_of=main)',
+            'calls': "Retired: use calls://<path>?callers=NAME, or --grep 'PATTERN' (prints a note)",
+            'callee_of': 'Retired: use calls://<path>?callees=NAME (prints a note)',
             'param_type': 'Find functions where any param has this type annotation (e.g., param_type=dict, param_type=Dict*)',
             'return_type': 'Find functions with this return annotation (e.g., return_type=bool, return_type=None)',
             'reveal_type': 'Show type evidence for a variable: params, assignments, for-loops across the file (e.g., reveal_type=trade)',
             'show': (
-                'Display mode: show=calls renders call graph, show=dict-heatmap ranks '
+                'Display mode: show=calls (retired: use calls://) renders call graph, show=dict-heatmap ranks '
                 'untyped-dict params/loop vars/locals by distinct keys read (TypedDict '
                 'migration priority list), show=dict-schemas clusters them into shared '
                 'implicit record shapes and flags existing TypedDicts that readers bypass '
@@ -572,7 +548,6 @@ def get_help() -> Dict[str, Any]:
             "reveal 'ast://.?name=test_*'",
             "reveal 'ast://.?decorator=property'",
             "reveal 'ast://.?decorator=*cache*'",
-            "reveal 'ast://.?show=calls'",
         ],
         # Scenario-based workflow patterns
         'workflows': _HELP_WORKFLOWS,
@@ -587,7 +562,7 @@ def get_help() -> Dict[str, Any]:
             'Scans all code files in directory recursively',
             'Supports Python, JS, TS, Rust, Go and more via tree-sitter (reveal --languages)',
             'Use --format=json for programmatic filtering with jq',
-            'Call graph: calls= and callee_of= filters work within a file; use calls:// for cross-file callers (?target=X) and callees (?callees=X)',
+            'Call graph: calls=, callee_of= and show=calls are retired (each prints a note); use calls:// for callers (?callers=X) and callees (?callees=X), or --grep for a text pattern',
             'JSON output includes calls[], called_by[], and resolved_calls[] fields on each function/method',
         ],
         'output_formats': ['text', 'json', 'grep'],
@@ -633,8 +608,8 @@ def get_schema() -> Dict[str, Any]:
             'Complexity is proper McCabe cyclomatic complexity for tree-sitter languages; falls back to a keyword-count estimate (shared with stats:// and C901) for unsupported languages',
             'type= shorthand: ?functions → ?type=function, ?classes → ?type=class, ?methods → ?type=method',
             'Call graph fields on functions/methods in JSON: calls[] (outgoing), called_by[] (within-file incoming), resolved_calls[] (cross-file resolved entries)',
-            'calls= and callee_of= filters search within-file call lists; for project-wide callers use calls:// adapter',
-            'show=calls renders a compact call graph view (arrow diagram) instead of the standard element list',
+            'calls=, callee_of= and show=calls are retired spellings (a replaced-by note until the cut): '
+            "use calls://<path>?callers=NAME or ?callees=NAME, or --grep 'PATTERN' for a text pattern",
             'show=dict-heatmap / show=dict-schemas are Python-only and return their own '
             'result types (ast_dict_heatmap / ast_dict_schemas), not ast_query; TypedDicts '
             'are matched only if defined under the scanned path. The rule form is T006: '

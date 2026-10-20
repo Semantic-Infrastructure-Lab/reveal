@@ -28,7 +28,8 @@ def test_only_the_phase_2b_call_graph_spellings_are_retired():
     """Phase 1 retired no URI scheme, parameter or subcommand: the table held only the two older
     BACK-1906 flag notes. Phase 2b (BACK-2066) adds the call-graph spellings trace merged into calls,
     and nothing else. Every row is validated and exercised in tests/test_retirements_back2066.py."""
-    assert sorted(RETIREMENTS) == ['flag:--check', 'flag:--search', 'param:calls.root', 'param:calls.target']
+    assert sorted(RETIREMENTS) == ['flag:--check', 'flag:--search', 'param:ast.callee_of', 'param:ast.calls',
+                                   'param:calls.root', 'param:calls.target', 'value:ast.show=calls']
 
 
 def test_table_covers_the_four_codes_and_commands_only_reword_them():

@@ -50,11 +50,8 @@ reveal 'calls://src/?callers=validate_item&depth=2'
 # Graphviz dot output (pipe to dot for SVG/PNG)
 reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > call_graph.svg
 
-# Within-file call graph (ast:// adapter — cheaper, no project index)
-reveal 'ast://src/auth.py?show=calls'
-
-# Find all callers of a function in a single file (within-file only)
-reveal 'ast://src/auth.py?calls=validate_token'
+# Per-function calls/called_by fields of one file (ast:// adapter — no project index)
+reveal 'ast://src/auth.py?type=function' --format json
 
 # The same requests as a subcommand (flags generated from the same declarations)
 reveal calls src/ --callers validate_item --depth 2
@@ -526,11 +523,8 @@ Starting from an entry point, trace who it calls and what calls it:
 # Who calls the entry point?
 reveal 'calls://src/?callers=handle_request'
 
-# What does handle_request call? (use ast://)
-reveal 'ast://src/?callee_of=handle_request'
-
-# Or see everything handle_request calls
-reveal 'ast://src/handler.py?calls=*' --format=json | jq '.results[] | select(.called_by | contains(["handle_request"]))'
+# What does handle_request call, two levels deep?
+reveal 'calls://src/?callees=handle_request&depth=2'
 ```
 
 ### Workflow 4: Generate Architecture Documentation
@@ -581,15 +575,14 @@ For within-file analysis, `ast://` provides lighter-weight call graph features w
 | Scope | Within a single file | Across the whole project |
 | `calls` outgoing | ✅ (via JSON or text renderer) | ✅ `?callees=<name>` (forward lookup) |
 | `called_by` incoming | ✅ within-file reverse | ✅ `?callers=<name>` (full project) |
-| Filters | `calls=<name>`, `callee_of=<name>` | `callers=<name>`, `callees=<name>` |
-| Display mode | `show=calls` (arrow diagram) | text / json / dot |
+| Filters | `calls=`, `callee_of=` retired (a note names `calls://`) | `callers=<name>`, `callees=<name>` |
+| Display mode | `show=calls` retired (a note names `calls://`) | text / json / dot |
 | Cross-file resolution | `resolved_calls[]` in JSON | full index |
 | Cache | No (per-request) | Yes (mtime-based) |
 
 **Use `ast://` when:**
 - You're already inspecting a single file and want to see call structure inline
-- You want to filter functions by what they call (`calls=validate*`)
-- You want a quick call graph diagram for a file (`show=calls`)
+- You want each function's `calls`/`called_by` lists in its JSON record
 
 **Use `calls://` when:**
 - You need to know all callers across the entire project
@@ -599,16 +592,10 @@ For within-file analysis, `ast://` provides lighter-weight call graph features w
 
 ### ast:// call graph examples
 
+The `calls=`, `callee_of=` and `show=calls` parameters are retired: each still answers with a
+replaced-by note (see [Retired spellings](#retired-spellings)).
+
 ```bash
-# Show calls/called_by for every function (arrow diagram)
-reveal 'ast://src/auth.py?show=calls'
-
-# Find functions calling validate_token
-reveal 'ast://src/?calls=validate_token'
-
-# Find functions called by main
-reveal 'ast://src/?callee_of=main'
-
 # JSON: get calls + resolved_calls for a specific function
 reveal 'ast://src/auth.py?name=authenticate' --format=json | \
   jq '.results[0] | {calls, called_by, resolved_calls}'
@@ -807,11 +794,14 @@ result). At the cut the same text becomes an exit-2 error.
 |---------|-------------|
 | `calls://<path>?target=NAME`, `reveal calls --target NAME` | `?callers=NAME`, `--callers NAME` (the same answer) |
 | `calls://<path>?root=NAME[&depth=N]`, `reveal calls --root NAME` | `?callees=NAME&depth=N`, `--callees NAME --depth N` (the same walk; `?root` defaulted to depth 2) |
+| `ast://<path>?calls=NAME` | `calls://<path>?callers=NAME`; a pattern (`calls=*send*`) is a `reveal <path> --grep 'send'` text search |
+| `ast://<path>?callee_of=NAME` | `calls://<path>?callees=NAME` |
+| `ast://<path>?show=calls` | `calls://<path>?callers=NAME` or `?callees=NAME` |
 
 ---
 
 ## Related Documentation
 
-- [`AST_ADAPTER_GUIDE.md`](AST_ADAPTER_GUIDE.md) — `ast://` adapter, including within-file call graph features (`calls=`, `callee_of=`, `show=calls`)
+- [`AST_ADAPTER_GUIDE.md`](AST_ADAPTER_GUIDE.md) — `ast://` adapter, including its per-function `calls`/`called_by` fields
 - [`IMPORTS_ADAPTER_GUIDE.md`](IMPORTS_ADAPTER_GUIDE.md) — import graph analysis (`imports://`)
 - [`AGENT_HELP.md`](../AGENT_HELP.md) — complete agent workflow reference including call graph task patterns
