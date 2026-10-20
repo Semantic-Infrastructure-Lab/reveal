@@ -42,6 +42,10 @@ class FileAnalyzer(ABC):
     def __init__(self, path: str):
         self.path = Path(path)
         self._detected_encoding: str = 'utf-8'
+        # The stat taken before the content was read (set by _read_file). Caches of what is
+        # derived from the content key on it, never on a later stat: an edit landing after the
+        # read would otherwise file this content under the edited file's key (BACK-2116).
+        self._content_stat: Optional[os.stat_result] = None
         self.lines = self._read_file()
         self.content = '\n'.join(self.lines)
 
@@ -49,7 +53,7 @@ class FileAnalyzer(ABC):
 
     def _read_file(self) -> List[str]:
         """Read file with automatic encoding detection."""
-        stat = os.stat(self.path)
+        stat = self._content_stat = os.stat(self.path)
         if stat.st_size > self.MAX_INPUT_SIZE:
             raise ValueError(
                 f"File too large ({stat.st_size:,} bytes); "

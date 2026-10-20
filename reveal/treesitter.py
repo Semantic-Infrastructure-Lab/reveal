@@ -70,7 +70,7 @@ _MAX_PARSE_CACHE = 128
 _parse_cache_local = threading.local()
 
 
-def _get_parse_cache() -> "OrderedDict[Tuple[str, int], Dict[str, Any]]":
+def _get_parse_cache() -> "OrderedDict[Tuple[str, int, int], Dict[str, Any]]":
     """Return this thread's parse cache, creating it on first use."""
     cache = getattr(_parse_cache_local, 'cache', None)
     if cache is None:
@@ -528,15 +528,12 @@ class TreeSitterAnalyzer(FileAnalyzer):
         self.parse_error: Optional[str] = None  # BACK-979: set when _parse_tree()'s except branch fires
         self._outline_only: bool = False  # set only for the duration of get_outline()
 
-        # Cache key is cheap (one stat) and computed eagerly — some subclasses
-        # (e.g. MarkdownAnalyzer's inline-tree cache) read it right after
-        # construction. The expensive part, the actual parse, stays lazy.
-        path_str = os.path.abspath(str(self.path))
-        try:
-            mtime_ns = os.stat(path_str).st_mtime_ns
-        except OSError:
-            mtime_ns = 0
-        self._cache_key: Tuple[str, int] = (path_str, mtime_ns)
+        # The parse-cache key: the stat FileAnalyzer took before it read the content, with the
+        # size (a same-mtime edit that changes the size is a different file, BACK-2116). None
+        # (no parse caching) when a subclass read the content some other way.
+        stat = self._content_stat
+        self._cache_key: Optional[Tuple[str, int, int]] = None if stat is None else (
+            os.path.abspath(str(self.path)), stat.st_mtime_ns, stat.st_size)
 
     @property
     def tree(self) -> Optional[Any]:
@@ -562,7 +559,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
     def _parse_tree(self) -> None:
         """Parse file with tree-sitter.
 
-        Uses a per-thread cache keyed by (path, mtime_ns) to avoid re-parsing
+        Uses a per-thread cache keyed by (path, mtime_ns, size) to avoid re-parsing
         the same unchanged file across multiple analyzer instances (e.g.
         extract_imports, extract_symbols, extract_exports all called on the
         same .py file during --check). See _get_parse_cache() for why this is
@@ -572,10 +569,11 @@ class TreeSitterAnalyzer(FileAnalyzer):
         suppress_treesitter_warnings() call at top of file.
         """
         parse_cache = _get_parse_cache()
-        cached = parse_cache.get(self._cache_key)
-        if cached is not None:
+        key = self._cache_key
+        cached = parse_cache.get(key) if key is not None else None
+        if cached is not None and key is not None:
             # Move to end (most-recently-used) on hit
-            parse_cache.move_to_end(self._cache_key)
+            parse_cache.move_to_end(key)
             self.tree = cached['tree']
             if 'node_cache' in cached:
                 self._node_cache = cached['node_cache']
@@ -604,8 +602,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 logger.debug("tree-sitter parse failed for %s: %s", self.path, e)
             self.tree = None
 
-        if self.tree is not None:
-            parse_cache[self._cache_key] = {'tree': self.tree}
+        if self.tree is not None and key is not None:
+            parse_cache[key] = {'tree': self.tree}
             if len(parse_cache) > _MAX_PARSE_CACHE:
                 parse_cache.popitem(last=False)  # evict least-recently-used
 
@@ -647,15 +645,15 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         Bound to (path, mtime_ns, size, language) — any edit changes mtime_ns
         (and usually size), and language guards against reusing an entry if a
-        path were ever analyzed under a different grammar. Returns None (skip
-        cache) on any stat error, so a vanished/unreadable file falls through
-        to the uncached (correct) path rather than caching a wrong key.
+        path were ever analyzed under a different grammar. The stat is the one
+        taken before the content was read (``_content_stat``), so an edit that
+        lands after the read cannot file this content under the edited file's
+        key (BACK-2116). Returns None (skip cache) when there is no such stat.
         """
-        try:
-            path_str = os.path.abspath(str(self.path))
-            st = os.stat(path_str)
-        except OSError:
+        st = self._content_stat
+        if st is None:
             return None
+        path_str = os.path.abspath(str(self.path))
         hasher = hashlib.sha256()
         hasher.update(path_str.encode("utf-8", "replace"))
         hasher.update(b"\x00")
@@ -1407,10 +1405,11 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
             # Write completed node_cache back to this thread's cache.
             parse_cache = _get_parse_cache()
-            entry = parse_cache.get(self._cache_key)
-            if entry is not None:
+            key = self._cache_key
+            entry = parse_cache.get(key) if key is not None else None
+            if entry is not None and key is not None:
                 entry['node_cache'] = self._node_cache
-                parse_cache.move_to_end(self._cache_key)  # refresh LRU position
+                parse_cache.move_to_end(key)  # refresh LRU position
 
         return (self._node_cache or {}).get(node_type, [])
 

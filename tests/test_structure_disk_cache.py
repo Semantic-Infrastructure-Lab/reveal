@@ -188,8 +188,18 @@ def test_cache_hit_does_not_mutate_stored_entry(tmp_path):
     assert [f["name"] for f in fresh_again["functions"]] == ["alpha", "beta"]
 
 
-def test_fingerprint_none_on_missing_file(tmp_path):
+def test_fingerprint_is_the_stat_the_content_was_read_under(tmp_path):
+    """BACK-2116: the key is the stat taken before the read, never a later one, so a file
+    removed (or edited) after the read still files the content it read under that stat."""
     src = _write_module(tmp_path / "mod.py")
     analyzer = PythonAnalyzer(str(src))
+    before = analyzer._structure_fingerprint()
     src.unlink()
+    assert before is not None and analyzer._structure_fingerprint() == before
+
+
+def test_fingerprint_none_without_a_read_stat(tmp_path):
+    src = _write_module(tmp_path / "mod.py")
+    analyzer = PythonAnalyzer(str(src))
+    analyzer._content_stat = None  # content obtained without FileAnalyzer._read_file
     assert analyzer._structure_fingerprint() is None
