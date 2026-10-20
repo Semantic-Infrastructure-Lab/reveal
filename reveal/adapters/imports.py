@@ -549,9 +549,8 @@ class ImportsRenderer:
     @staticmethod
     def _render_edge_rule(result: dict) -> None:
         """The counting rule of an edge-derived answer, as the JSON states it (BACK-2077)."""
-        rule = result.get('edge_rule')
-        if rule:
-            print(f"  {rule['text']}\n")
+        for line in import_analysis.edge_rule_lines(result):
+            print(f"  {line}\n")
 
     @staticmethod
     def _render_unused_imports(result: dict, verbose: bool) -> None:

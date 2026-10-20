@@ -279,9 +279,8 @@ class DependsRenderer:
     @staticmethod
     def _render_edge_rule(result: dict) -> None:
         """The counting rule, as the JSON states it (BACK-2077)."""
-        rule = result.get('edge_rule')
-        if rule:
-            print(f"  {rule['text']}\n")
+        for line in import_analysis.edge_rule_lines(result):
+            print(f"  {line}\n")
 
     @staticmethod
     def _has_traversal_loss(result: dict) -> bool:

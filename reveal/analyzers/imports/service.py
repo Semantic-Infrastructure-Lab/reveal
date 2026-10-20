@@ -238,3 +238,13 @@ def edge_rule(graph: ImportGraph, lazy: str, *, lazy_default: bool, subject: str
         'unclassified_languages': languages,
         'text': text,
     }
+
+
+def edge_rule_lines(result: Dict[str, Any]) -> List[str]:
+    """The text lines that state an answer's counting rule: the one renderer of ``edge_rule``.
+
+    Every consumer of the edge-derived graph prints through this (imports, depends and the
+    commands that rank by the same edges), so the JSON object and the text cannot drift.
+    """
+    rule = result.get('edge_rule')
+    return [rule['text']] if rule else []
