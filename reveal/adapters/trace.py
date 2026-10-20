@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
+from .calls.index import _effects_from_calls, _params_from_signature, _path_matches, _split_root
 from ..utils import print_json_result
 from ..utils.query_binding import bind_declared_params
 from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec, param_schema, peek_query_items
@@ -226,23 +227,7 @@ def _build_trace(path: str, root: str, depth: int) -> Dict[str, Any]:
     }
 
 
-_ROOT_WITH_FILE = re.compile(r'^(?P<file>.+\.[A-Za-z0-9_+]+):(?P<name>[^:].*)$')
 _MAX_EXTERNAL_NAME = 80
-
-
-def _split_root(root: str) -> Tuple[str, str]:
-    """`src/a.py:run` -> ('src/a.py', 'run'); `run` / `Foo::run` -> ('', name)."""
-    m = _ROOT_WITH_FILE.match(root)
-    return (m.group('file'), m.group('name')) if m else ('', root)
-
-
-def _path_matches(file_path: str, file_filter: str) -> bool:
-    if not file_filter:
-        return True
-    want = Path(file_filter)
-    if want.is_absolute():
-        return Path(file_path).resolve() == want.resolve()
-    return Path(file_path).parts[-len(want.parts):] == want.parts
 
 
 def _short_callee(call: str) -> str:
@@ -382,81 +367,6 @@ def _collect_function_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
     """Every definition under *path*, by name (see _definition_index)."""
     from reveal.adapters.ast.analysis import collect_structures
     return _definition_index(collect_structures(path))
-
-
-def _split_top_level_commas(text: str) -> List[str]:
-    """Split on commas that are not nested inside (), [] or {}.
-
-    Type annotations routinely contain commas (`dict[str, str]`,
-    `Callable[[int], None]`, `tuple[int, ...]`), so a naive `str.split(',')`
-    over a parameter list fabricates phantom parameters.
-    """
-    parts: List[str] = []
-    depth = 0
-    current: List[str] = []
-    for ch in text:
-        if ch in '([{':
-            depth += 1
-        elif ch in ')]}':
-            depth = max(0, depth - 1)
-        if ch == ',' and depth == 0:
-            parts.append(''.join(current))
-            current = []
-        else:
-            current.append(ch)
-    if current:
-        parts.append(''.join(current))
-    return parts
-
-
-def _params_from_signature(signature: str, func_name: str) -> List[str]:
-    """Extract parameter names from a function signature string.
-
-    Signature format from tree-sitter: '(param1: Type, *args) -> ReturnType'
-    or just '(param1, param2)'. A parameter's type annotation or default can
-    itself contain commas, parens and brackets (`dict[str, str]`,
-    `Callable[[], None]`, `x=foo()`), so the list is delimited by the paren
-    that matches the opening one — not the first close-paren — and split on
-    top-level commas only. A naive `split('(',1)[1].split(')',1)[0]` +
-    `split(',')` produced phantom params like `str] | None` from
-    `error_...placeholders: dict[str, str] | None` and truncated on any
-    default containing `)`.
-    """
-    start = signature.find('(')
-    if start == -1:
-        return []
-    depth = 0
-    end = -1
-    for i in range(start, len(signature)):
-        ch = signature[i]
-        if ch == '(':
-            depth += 1
-        elif ch == ')':
-            depth -= 1
-            if depth == 0:
-                end = i
-                break
-    inner = signature[start + 1:end] if end != -1 else signature[start + 1:]
-    params = []
-    for part in _split_top_level_commas(inner):
-        name = part.strip().lstrip('*').split(':')[0].split('=')[0].strip()
-        if name and name not in ('self', 'cls', '/', ''):
-            params.append(name)
-    return params
-
-
-def _effects_from_calls(calls: List[str], classify_call, language=None) -> List[str]:
-    """Return deduplicated effect labels for a function's call list."""
-    effects: List[str] = []
-    seen: Set[str] = set()
-    for callee in calls:
-        kind = classify_call(callee, language)
-        if kind:
-            label = f"{kind}:{callee.split('.')[-1]}"
-            if label not in seen:
-                seen.add(label)
-                effects.append(label)
-    return effects
 
 
 def _relpath(file_str: str, base: str) -> str:
