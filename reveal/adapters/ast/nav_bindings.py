@@ -4,16 +4,14 @@ from __future__ import annotations
 from typing import Any, Callable, Optional
 
 from ...core import node_children
-from ...core.node_taxonomy import CLASS_NODES, DEF_NODES, LAMBDA_NODES
+from ...core.node_taxonomy import CLASS_NODES, DEF_NODES, FUNCTION_EXPRESSION_NODES, LAMBDA_NODES
 from ...core.treesitter_compat import _zero_arg
 from ...rules.base_mixins import kind_nodes
 from .nav_varflow import _declared_name_node, _MEMBER_ACCESS_KINDS, var_flow
 
 
 # Anonymous/value-function shapes verified by the Python/JS/PHP fixtures.
-_FUNCTIONS = DEF_NODES | LAMBDA_NODES | frozenset({
-    'function_expression', 'anonymous_function', 'generator_function_declaration', 'generator_function',
-})
+_FUNCTIONS = DEF_NODES | LAMBDA_NODES | FUNCTION_EXPRESSION_NODES | frozenset({'anonymous_function'})
 _CLASSES = CLASS_NODES
 _ROOTS = frozenset({'module', 'program'})
 

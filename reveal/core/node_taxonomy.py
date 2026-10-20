@@ -367,6 +367,11 @@ BODY_DEFINED_NODES: frozenset = frozenset({
 # block was silently dropped from --scope's ancestor chain).
 IMPL_NODES: frozenset = frozenset({'impl_item'})
 LAMBDA_NODES: frozenset = frozenset({'lambda'})
+# JS/TS/TSX function values: `function () {}` and `function* () {}` (Dart's lambda is
+# also function_expression). 'function' in DEF_NODES was the old JavaScript grammar's
+# name for the first. Not part of FUNCTION_TYPES, so element extraction, --scope and
+# --outline do not list them.
+FUNCTION_EXPRESSION_NODES: frozenset = frozenset({'function_expression', 'generator_function'})
 # BACK-1400: type declarations that own members but are neither a class, a
 # struct nor an impl. Element extraction needs them twice: as the `Parent` in
 # `Parent.member` (`Metadata.isMetadata` on a Java nested enum was "not
