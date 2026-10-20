@@ -20,6 +20,9 @@ class ScanScope:
     extensions: frozenset
     lowercase_extensions: frozenset = frozenset()
     cap: Optional[int] = None
+    # The file or directory the request is about when the walk is wider than it (depends
+    # walks from the project root): what is left to analyze is judged there (BACK-2075).
+    focus: Optional[Path] = None
 
 
 @dataclass(frozen=True)
@@ -29,7 +32,10 @@ class ImportFileSet:
     capped: bool = False
     traversal_failures: Tuple[Tuple[Optional[str], str], ...] = ()
     # Entries the walk hid, by actionable cause (``HiddenTally``; BACK-2065).
+    # With a focus, the causes at the focus once the walk kept files elsewhere.
     hidden: Dict[str, int] = field(default_factory=dict)
+    # Graph files at the scope's focus (all of them without one): what ``hidden`` is judged against.
+    analyzed: int = 0
 
 
 @dataclass(frozen=True)
@@ -43,17 +49,25 @@ def discover(scope: ScanScope) -> ImportFileSet:
     def accepts(path: Path) -> bool:
         return path.suffix in scope.extensions or path.suffix.lower() in scope.lowercase_extensions
     if scope.root.is_file():
-        return ImportFileSet((scope.root,) if accepts(scope.root) else (), {})
+        kept = (scope.root,) if accepts(scope.root) else ()
+        return ImportFileSet(kept, {}, analyzed=len(kept))
     failures: List[Tuple[Optional[str], str]] = []
 
     def on_error(error: OSError) -> None:
         failures.append((to_posix(error.filename) if error.filename else None,
                          f'{type(error).__name__}: {error}'))
 
-    hidden = HiddenTally()
+    hidden = HiddenTally(scope.focus)
     candidates, index, capped = discover_import_files(scope.root, accepts, cap=scope.cap, on_error=on_error,
                                                       on_hidden=hidden)
-    return ImportFileSet(tuple(candidates), index, capped, tuple(failures), dict(hidden))
+    focus = scope.focus
+    if focus is None:
+        return ImportFileSet(tuple(candidates), index, capped, tuple(failures), dict(hidden), len(candidates))
+    analyzed = sum(1 for c in candidates if c == focus or focus in c.parents)
+    # A walk that kept nothing at all says everything it hid; one that kept files elsewhere
+    # says only what hides the focus, so an ignored sibling is not blamed for an empty one.
+    return ImportFileSet(tuple(candidates), index, capped, tuple(failures),
+                         dict(hidden if not candidates else hidden.at_focus), analyzed)
 
 
 def resolve_primary(stmt: ImportStatement, extractor: LanguageExtractor, context: ResolutionContext) -> Optional[Path]:

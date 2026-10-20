@@ -737,9 +737,10 @@ class DependsAdapter(ResourceAdapter):
 
         Sets ``self._scan_capped`` as a side effect (the file-count cap).
         """
-        files = import_analysis.discover(import_analysis.ScanScope(scan_root, supported_exts, cap=self._scan_budget.limit))
+        files = import_analysis.discover(import_analysis.ScanScope(
+            scan_root, supported_exts, cap=self._scan_budget.limit, focus=self._target_path))
         self._traversal_failures = files.traversal_failures
-        scope_hidden = hidden_entries_warning(files.hidden, len(files.candidates))
+        scope_hidden = hidden_entries_warning(files.hidden, files.analyzed)
         self._scope_hidden = dict(scope_hidden) if scope_hidden else None
         self._scan_capped = files.capped
         self._scan_accounting = self._scan_budget.accounting(len(files.candidates), files.capped)

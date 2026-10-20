@@ -696,11 +696,23 @@ _HIDDEN_CAUSE_LABELS = {  # footer order
 
 class HiddenTally(Counter[str]):
     """An ``on_hidden`` callback that counts the entries a walk left out, by actionable
-    cause: what a tree or grep footer, or an engine's ``scope_hidden`` warning, reports."""
+    cause: what a tree or grep footer, or an engine's ``scope_hidden`` warning, reports.
 
-    def __call__(self, _path: Path, _is_dir: bool, cause: str) -> None:
-        if cause in ACTIONABLE_HIDDEN_CAUSES:
-            self[cause] += 1
+    With a *focus* (the file or directory a request is about, inside a wider walk) it also
+    keeps ``at_focus``: the hidden entries that are the focus, hold it, or lie under it."""
+
+    def __init__(self, focus: Optional[Path] = None) -> None:
+        super().__init__()
+        self.focus = focus
+        self.at_focus: Counter[str] = Counter()
+
+    def __call__(self, path: Path, _is_dir: bool, cause: str) -> None:
+        if cause not in ACTIONABLE_HIDDEN_CAUSES:
+            return
+        self[cause] += 1
+        focus = self.focus
+        if focus is not None and (path == focus or focus in path.parents or path in focus.parents):
+            self.at_focus[cause] += 1
 
 
 def hidden_entries_phrase(hidden: Mapping[str, int]) -> Optional[str]:
