@@ -218,6 +218,11 @@ def _architecture_entry_points(entrypoints: List[Dict[str, Any]], top: int,
     return lines
 
 
+def _architecture_rule(arch: Dict[str, Any]) -> List[str]:
+    """The counting rule of the architecture numbers, indented under their heading (BACK-2087)."""
+    return [f"  {line}" for line in edge_rule_lines(arch)]
+
+
 def _architecture_components(components: List[Dict[str, Any]], top: int,
                              base_path: Optional[Path]) -> List[str]:
     if not components:
@@ -267,7 +272,7 @@ def _render_architecture(
     if not fan_in and not entrypoints and not components:
         return lines
 
-    lines.extend(f"  {line}" for line in edge_rule_lines(arch))
+    lines.extend(_architecture_rule(arch))
     parts = [f"circulars: {circular_count}"]
     if complex_fns:
         sample = complex_fns[:10]

@@ -235,6 +235,11 @@ other changed files are not added to a single-file selection.
 | `--verbose` | Show per-file token/line counts |
 | `--format json` | Machine-readable output |
 
+`--architecture` fan-in and `--focus` relevance read the import graph and state their rule: a `Rule:` line under
+the header, `edge_rule` in JSON, and none when neither flag is given. Every static import edge except
+`TYPE_CHECKING` ones counts, function-level imports and test importers included. `pack` takes no `&lazy`;
+`imports://<dir>?rank=fan-in&lazy=exclude` is the load-time view.
+
 ### Discovery evidence
 
 Actual candidate-directory enumeration failures appear in `meta.warnings` and in
@@ -629,7 +634,10 @@ reveal hotspots . --files-only     # Only file-level view
 One-glance dashboard synthesising stats, language breakdown, quality pulse, top
 hotspots, complex functions, architecture overview (entry points, core
 abstractions, component cohesion, circular count), and recent git activity into
-a single view.
+a single view. Its architecture section states the rule it counted by (`Rule:` lines in text, `edge_rule` in
+JSON under `architecture`): every static import edge except `TYPE_CHECKING` ones, function-level imports
+included; circulars use the load-time view. `overview` takes no `&lazy`; `imports://<dir>?rank=fan-in&lazy=exclude`
+is the load-time view.
 
 ### Usage
 
@@ -704,6 +712,11 @@ reveal architecture [PATH] [--top N] [--no-imports | --against REF] [--format js
 - **Risks** — derived from findings: circular groups, high-complexity entry points, load-bearing files
 - **Next Commands** — specific `reveal` follow-up commands generated from what was found
 
+Every count states its rule (`Rule:` lines in text, `edge_rule` and `edge_rule_sections` in JSON): every static
+import edge except `TYPE_CHECKING` ones, function-level imports included (entry points ignore importers under a
+test path); cycles use the load-time view. `architecture` takes no `&lazy`; `imports://<dir>?rank=fan-in&lazy=exclude`
+is the load-time view. `--against` prints the rule once for both snapshots.
+
 ### Examples
 
 ```bash
@@ -738,7 +751,8 @@ as entry points. High entry point counts often indicate dynamic loading patterns
 ## reveal deps — Dependency Health Dashboard
 
 Wraps three `imports://` queries to give a dependency health summary: external
-package count, circular dependency detection, unused imports, top importers.
+package count, circular dependency detection, unused imports, top importers. The circular verdict counts
+load-time edges only; the text prints that rule under the Health line (`Rule:`, `circular.edge_rule` in JSON).
 
 ### Usage
 

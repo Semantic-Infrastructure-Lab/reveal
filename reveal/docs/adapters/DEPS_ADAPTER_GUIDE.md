@@ -67,6 +67,10 @@ with `no_circular`/`no_unused` (`["circular"]`, `["unused"]`), so an empty
 `circular`/`unused` there means "not checked", not "clean"; the text Health line
 says "not checked" for them instead of ✅. Text rendering additionally derives
 third-party/stdlib package usage counts and a "top importers" ranking from `base`.
+The circular verdict counts load-time edges only (a function-level import cannot close an
+import-time cycle); the text prints that rule under the Health line (a `Rule:` line) and
+`circular.edge_rule` states it in JSON. `deps://` takes no `&lazy`; `imports://<dir>?circular&lazy=include`
+counts function-level imports too.
 
 `analysis.complete` states whether all requested components completed. Its
 `components` records retain each component's `completeness` (`complete`,

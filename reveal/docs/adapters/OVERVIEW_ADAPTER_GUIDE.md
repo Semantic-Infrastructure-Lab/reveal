@@ -64,6 +64,7 @@ retain their separate policy and reject `--fail-on`.
 `stats` carries the summary/hotspots/files data from `stats://`.
 `complex_functions` is the `ast://` complexity ranking. `architecture` has
 `fan_in`/`entrypoints`/`components`/`circular_count` from `imports://`.
+Every count states its rule: a `Rule:` line per counting view in text, `edge_rule` (plus `edge_rule_sections` for entry points and cycles) in JSON (inside `architecture`), built by the same function as `imports://`'s. Fan-in, entry points and components count every static import edge except `TYPE_CHECKING` ones, function-level imports included (entry points ignore importers under a test path); cycles use the load-time view. `overview://` takes no `&lazy`; `imports://<dir>?rank=fan-in&lazy=exclude` is the load-time view.
 `git_log` is recent commits from `git://`; if the target directory has no
 `.git` of its own, `git_foreign_root` names the enclosing repo the history
 actually came from.

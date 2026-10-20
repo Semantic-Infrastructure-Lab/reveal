@@ -196,7 +196,8 @@ def _format_imports_data(adapter, path: Path, *,
 
     return {
         # BACK-2087: the rule these counts were made by (edge_rule, edge_rule_sections).
-        **import_analysis.architecture_edge_rules(fan_in_data, entrypoints_data, components_data, circular_data),
+        'edge_rules': import_analysis.architecture_edge_rules(
+            fan_in_data, entrypoints_data, components_data, circular_data),
         'entry_points': live_eps,
         'core_abstractions': core_abstractions,
         'components': components,
@@ -617,6 +618,8 @@ class ArchitectureAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Static imports only — dynamically loaded files (plugins, registries) may appear as entry points.',
+                'Counts state their rule (Rule: lines in text, edge_rule and edge_rule_sections in JSON): '
+                'function-level imports count, entry points ignore test importers, cycles use the load-time view.',
                 'Use --against REF or ?against=REF for git comparisons; diff rejects no_imports and verbose.',
             ],
             'see_also': [
@@ -648,6 +651,8 @@ class ArchitectureAdapter(ResourceAdapter):
                             'facts': {'type': 'object'},
                             'risks': {'type': 'array'},
                             'next_commands': {'type': 'array'},
+                            'edge_rule': {'type': 'object'},
+                            'edge_rule_sections': {'type': 'object'},
                         },
                     },
                 },
@@ -713,7 +718,7 @@ class ArchitectureAdapter(ResourceAdapter):
             },
             'risks': risks,
             'next_commands': next_commands,
-            **{key: imports_data[key] for key in ('edge_rule', 'edge_rule_sections') if key in imports_data},
+            **imports_data.get('edge_rules', {}),
             'unsupported_extensions': imports_data.get('unsupported_extensions', {}),
             'scope': _run_scope(self, path, failures=scope_failures),
         }

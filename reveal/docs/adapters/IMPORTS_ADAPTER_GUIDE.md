@@ -441,6 +441,8 @@ JavaScript, TypeScript and TSX record import scope (positionally: an import, `im
 `require()` in a function, method, arrow or function expression is function-level; a class field
 initializer or static block is module level). Other languages' edges count as load-time under
 every value, and the rule names those languages and the number of edges. An unknown value is an error.
+`architecture://`, `overview://`, `pack` and `deps://` print the same rule for the numbers they take from this
+graph; none of them accepts `&lazy`.
 
 ```bash
 reveal 'imports://src?rank=fan-in&lazy=exclude'   # module-level imports only

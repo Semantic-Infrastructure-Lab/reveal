@@ -154,17 +154,28 @@ def _build_pack_import_graph(
         return None, set()
 
 
-def _pack_edge_rule(graph: Any, fan_in: bool, relevance: bool) -> Dict[str, Any]:
-    """The rule of the import edges the ranking read (BACK-2087): every edge, function-level and
-    test importers included, which is the view ``imports://?rank=fan-in`` counts by default."""
+def _note_graph(graphs: Optional[List[Tuple[str, Any]]], kind: str, graph: Any) -> None:
+    """Record the graph a ranking signal read, for ``_pack_edge_rule`` (a caller that does not
+    state the rule passes no sink)."""
+    if graphs is not None:
+        graphs.append((kind, graph))
+
+
+def _pack_edge_rule(graphs: List[Tuple[str, Any]]) -> Dict[str, Any]:
+    """``{'edge_rule': ...}`` for the import edges the ranking read (BACK-2087), or nothing when it
+    read none: every edge, function-level and test importers included, which is the view
+    ``imports://?rank=fan-in`` counts by default."""
+    if not graphs:
+        return {}
+    kinds = {kind for kind, _graph in graphs}
     subject = {
         (True, False): 'fan-in counts static imports between',
         (False, True): 'graph relevance follows static imports, in both directions, between',
         (True, True): 'fan-in counts, and graph relevance follows in both directions, static imports between',
-    }[(fan_in, relevance)]
-    return import_analysis.edge_rule(graph, LAZY_INCLUDE, lazy_default=True, subject=subject,
-                                     scope='scanned_path',
-                                     hint=import_analysis.composed_rule_hint('pack'))
+    }[('fan_in' in kinds, 'relevance' in kinds)]
+    return {'edge_rule': import_analysis.edge_rule(
+        graphs[0][1], LAZY_INCLUDE, lazy_default=True, subject=subject, scope='scanned_path',
+        hint=import_analysis.composed_rule_hint('pack'))}
 
 
 def _fetch_fan_in(path: Path, failures: Optional[List[str]] = None, *,
@@ -178,8 +189,7 @@ def _fetch_fan_in(path: Path, failures: Optional[List[str]] = None, *,
     graph, scanned_files = _build_pack_import_graph(path, failures)
     if graph is None:
         return {}
-    if graphs is not None:
-        graphs.append(('fan_in', graph))
+    _note_graph(graphs, 'fan_in', graph)
     all_files = scanned_files | set(graph.files.keys()) | set(graph.reverse_deps.keys())
     return {str(f): len(graph.reverse_deps.get(f, set())) for f in all_files}
 
@@ -219,8 +229,7 @@ def _compute_graph_relevance(
     seeds = [f for f in all_files if focus_lower in str(f).lower()]
     if not seeds:
         return {}
-    if graphs is not None:
-        graphs.append(('relevance', graph))
+    _note_graph(graphs, 'relevance', graph)
 
     # Undirected adjacency: an import edge signals relevance in either
     # direction, not just "depends on."
@@ -798,6 +807,9 @@ _HELP_EPILOG = (
     "  5. Other files (fills remaining budget); tests, vendor and docs last\n"
     "  Ties go to the most recently modified file.\n"
     "\n"
+    "--architecture and --focus rank by import edges and print the rule they\n"
+    "counted by (a Rule: line; edge_rule in JSON): function-level imports and\n"
+    "test importers count.\n"
     "--budget counts the raw size of the files selected, not the output.\n"
     "With --content: changed files are shown raw (first 500 lines), key files\n"
     "as structure, and the remaining selected files by name only.\n"
@@ -902,6 +914,8 @@ class PackAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Token counts are approximate (chars / 4), not a real tokenizer.',
+                'architecture=true and focus= rank by import edges and state the rule they counted by '
+                '(a Rule: line in text, edge_rule in JSON); function-level imports and test importers count.',
             ],
             'see_also': [
                 'reveal pack <path> - CLI subcommand form',
@@ -936,6 +950,7 @@ class PackAdapter(ResourceAdapter):
                         'properties': {
                             'meta': {'type': 'object'},
                             'files': {'type': 'array'},
+                            'edge_rule': {'type': 'object'},
                         },
                     },
                 },
@@ -1020,9 +1035,7 @@ class PackAdapter(ResourceAdapter):
         }
         if architecture:
             report['architecture'] = True
-        if graphs:
-            kinds = {kind for kind, _graph in graphs}
-            report['edge_rule'] = _pack_edge_rule(graphs[0][1], 'fan_in' in kinds, 'relevance' in kinds)
+        report.update(_pack_edge_rule(graphs))
         if emit_content:
             report['content'] = _collect_file_contents(selected)
         # BACK-1379: carry ?verbose through the result dict since handle_uri

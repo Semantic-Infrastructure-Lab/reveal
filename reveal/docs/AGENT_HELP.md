@@ -1586,7 +1586,7 @@ reveal overview . --no-git         # Skip git history (useful in CI or non-git d
 reveal overview . --format json    # Machine-readable output
 ```
 
-**Output sections:** codebase stats (files, lines, functions, classes) · language breakdown · quality pulse (avg score, hotspot count) · top hotspots with `→ reveal <file>` hints · top complex functions · architecture (entry points, core abstractions, component cohesion bars, circular count) · recent git commits with age labels. Skip architecture with `--no-imports`.
+**Output sections:** codebase stats (files, lines, functions, classes) · language breakdown · quality pulse (avg score, hotspot count) · top hotspots with `→ reveal <file>` hints · top complex functions · architecture (entry points, core abstractions, component cohesion bars, circular count) · recent git commits with age labels. Skip architecture with `--no-imports`. The architecture section states its counting rule (`Rule:` lines, `edge_rule` in JSON): all static import edges except `TYPE_CHECKING` ones, function-level imports included; circulars use the load-time view.
 
 **Use case:** Fast orientation for an unfamiliar codebase. Combined entry point before deciding which area to investigate with `reveal hotspots`, `reveal deps`, or `ast://`.
 
@@ -1603,7 +1603,7 @@ reveal architecture src/ --no-imports  # Skip import analysis (faster, no graph)
 reveal architecture src/ --against main  # Diff against a git ref (BACK-441)
 ```
 
-**Output sections:** entry points (fan-in=0, by fan-out) · core abstractions (most imported) · component cohesion bars · risks (circular groups, high-complexity entry points, load-bearing files) · next commands (dynamically generated from findings).
+**Output sections:** entry points (fan-in=0, by fan-out) · core abstractions (most imported) · component cohesion bars · risks (circular groups, high-complexity entry points, load-bearing files) · next commands (dynamically generated from findings). Every count states its rule (`Rule:` lines, `edge_rule` and `edge_rule_sections` in JSON): all static import edges except `TYPE_CHECKING` ones, function-level imports included (entry points ignore importers under a test path); cycles use the load-time view.
 
 **`--against REF` → architectural diff against a git ref (BACK-441)**
 ```bash
@@ -1611,7 +1611,7 @@ reveal architecture src/ --against main
 reveal architecture src/ --against v1.2.0 --format json
 reveal 'architecture://src?against=main' --format json
 ```
-Base = `REF` (materialized read-only via git, working tree untouched), head = the current working tree. Reports fan-in/fan-out deltas, circular-dependency groups introduced or resolved, component-coupling changes, complexity-centroid shift, and entry-point changes — "what did this branch actually change architecturally" instead of diffing file-by-file. Deltas are only meaningful for graph-backed languages (Python/JS/TS/Go/Rust/C/C++ today — see BACK-487/488).
+Base = `REF` (materialized read-only via git, working tree untouched), head = the current working tree. Reports fan-in/fan-out deltas, circular-dependency groups introduced or resolved, component-coupling changes, complexity-centroid shift, and entry-point changes — "what did this branch actually change architecturally" instead of diffing file-by-file. Both snapshots are counted by one stated rule (`edge_rule` beside `deltas`; function-level imports included, cycles on the load-time view). Deltas are only meaningful for graph-backed languages (Python/JS/TS/Go/Rust/C/C++ today — see BACK-487/488).
 
 Both forms preserve `architecture_diff` identity on success and failure. Diff rejects explicit `no_imports`/`verbose`, including false URI values. `top` is an analysis population control: ordinary `top*4`, diff `max(top,1)*4`. Ordinary `--verbose` expands analysis and text on both forms; URI `--all` stays text-only. URI ref values percent-decode once and preserve plus; encode literal percent as `%25`. Architecture exits 0 for completed answers, 2 for invalid requests and 3 for required incomplete analysis/output failures. Only `--fail-on none` is supported, and it cannot suppress required failures. See [the adapter guide](adapters/ARCHITECTURE_ADAPTER_GUIDE.md) for encoding and evidence limits.
 
@@ -1630,7 +1630,7 @@ reveal pack ./src --since main --architecture --budget 8000  # PR context + arch
 ```
 
 **`--architecture` does two things:**
-1. Queries `imports://` fan-in data and boosts widely-imported files in the priority score (fan-in ≥1: +1pt, ≥5: +3pt, ≥15: +5pt)
+1. Queries `imports://` fan-in data and boosts widely-imported files in the priority score (fan-in ≥1: +1pt, ≥5: +3pt, ≥15: +5pt); fan-in counts all static import edges except `TYPE_CHECKING` ones, function-level imports and test importers included, and the output states that rule (`Rule:` line, `edge_rule` in JSON)
 2. Prepends an **Architecture Hint** before the tier list:
 ```
 ── Architecture Hint ──
@@ -1652,7 +1652,7 @@ reveal deps . --no-unused          # Skip unused imports (focus on structure)
 reveal deps . --format json        # Machine-readable for CI
 ```
 
-**Output:** Third-party package summary · health line (circular deps + unused imports) · top packages by usage · circular dependency cycles · unused imports with file:line · top importers.
+**Output:** Third-party package summary · health line (circular deps + unused imports) · top packages by usage · circular dependency cycles · unused imports with file:line · top importers. The circular verdict counts load-time edges only and the text prints that rule (`Rule:` line, `circular.edge_rule` in JSON).
 
 **Exit codes:** 0 (completed, default `--fail-on none`) · 1 (`--fail-on findings` matched circular groups or unused imports) · 2 (invalid request) · 3 (required analysis/output incomplete or failed). Gates use full counts before text or JSON projection.
 

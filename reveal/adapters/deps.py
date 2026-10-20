@@ -449,6 +449,8 @@ class DepsAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Composed entirely from imports:// — not an independent scan.',
+                'The circular verdict counts load-time edges only; the text prints that rule (Rule: line) and '
+                'circular.edge_rule states it in JSON.',
                 'Default --fail-on none reports completed findings without failing; '
                 '--fail-on findings exits 1 for circular groups or unused imports. '
                 'Required analysis/output failures exit 3; invalid requests exit 2.',

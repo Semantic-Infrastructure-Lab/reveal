@@ -77,6 +77,9 @@ flags circular groups, high-complexity entry points (complexity ≥ 20), and
 load-bearing files (fan-in ≥ 8). `next_commands` suggests the next reveal
 invocation for each risk found.
 
+Every count states its rule: a `Rule:` line per counting view in text, `edge_rule` (plus `edge_rule_sections` for entry points and cycles) in JSON, built by the same function as `imports://`'s. Fan-in, entry points and components count every static import edge except `TYPE_CHECKING` ones, function-level imports included (entry points ignore importers under a test path); cycles use the load-time view. `architecture://` takes no `&lazy`; `imports://<dir>?rank=fan-in&lazy=exclude` is the load-time view. A git-ref comparison states the same rule once
+(`edge_rule` beside `deltas`; both snapshots are counted by it).
+
 The ordinary report retains AST warnings, errors, confidence and ranking cuts in
 `meta`, including when imports and complexity share one walk. A display cut or
 an informational complexity caveat does not establish missing input.

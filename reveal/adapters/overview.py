@@ -684,6 +684,8 @@ class OverviewAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Static imports only for the architecture section — dynamically loaded files may appear as entry points.',
+                'The architecture section states the rule it counted by (Rule: lines in text, edge_rule and '
+                'edge_rule_sections in JSON under architecture): function-level imports count, circulars use the load-time view.',
                 '?exclude= applies to stats/hotspots, scope and the Imports architecture section. '
                 'Complex functions retain their existing scope; global --exclude also filters AST.',
                 'Every section skips what git ignores (tracked files are never skipped); '
