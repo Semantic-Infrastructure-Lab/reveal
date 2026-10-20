@@ -829,8 +829,8 @@ def main():
         assert by_module['pathlib'].is_type_checking is True
         assert by_module['os'].is_type_checking is False
 
-    def test_is_in_function_flag_set(self, tmp_path):
-        """Imports inside function bodies must have is_in_function=True."""
+    def test_function_body_imports_are_local_scope(self, tmp_path):
+        """Imports inside function bodies have scope 'local' (BACK-2076)."""
         code = (
             "import os\n"
             "\n"
@@ -844,12 +844,12 @@ def main():
         imports = extract_python_imports(test_file)
         by_module = {stmt.module_name: stmt for stmt in imports}
 
-        assert by_module['os'].is_in_function is False
-        assert by_module['re'].is_in_function is True
-        assert by_module['pathlib'].is_in_function is True
+        assert by_module['os'].scope == 'module'
+        assert by_module['re'].scope == 'local'
+        assert by_module['pathlib'].scope == 'local'
 
     def test_type_checking_and_function_body_are_independent(self, tmp_path):
-        """is_type_checking and is_in_function are set independently."""
+        """is_type_checking and scope are set independently."""
         code = (
             "from typing import TYPE_CHECKING\n"
             "if TYPE_CHECKING:\n"
@@ -867,11 +867,11 @@ def main():
         by_module = {stmt.module_name: stmt for stmt in imports}
 
         assert by_module['T1'].is_type_checking is True
-        assert by_module['T1'].is_in_function is False
+        assert by_module['T1'].scope == 'module'
         assert by_module['F1'].is_type_checking is False
-        assert by_module['F1'].is_in_function is True
+        assert by_module['F1'].scope == 'local'
         assert by_module['Top'].is_type_checking is False
-        assert by_module['Top'].is_in_function is False
+        assert by_module['Top'].scope == 'module'
 
 
 class TestImportsAdapter:

@@ -6,7 +6,7 @@ graph) and ``imports://?rank=fan-in`` must both name ``b`` and ``c`` as importer
 
 Measured on 93600af3: ``depends://`` finds the function-level importer in every language
 below; ``imports://`` finds it in every language except Python, where
-``analyzers/imports/service.py`` ``resolve_graph`` skips ``stmt.is_in_function`` (set only
+``analyzers/imports/service.py`` ``resolve_graph`` skips ``stmt.scope == 'local'`` (set only
 by the Python extractor). That skip is BACK-445's: a lazy import cannot cause an
 import-time cycle, so ``?circular`` must not count it. The fix BACK-2061 designs keeps the
 edge, tagged lazy: cycles leave lazy edges out, fan-in and importers keep them. The

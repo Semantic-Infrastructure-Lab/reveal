@@ -12,9 +12,8 @@ every ``loc_*`` identifier ``local``. A ``gap_*`` identifier sits in a function 
 grammar-coverage check for function-like kinds is in ``tests/test_grammar_coverage.py``
 (``LOCAL_SCOPE_GAPS``).
 
-Python is the first extractor on the helper (``ImportStatement.scope``). ``resolve_graph``
-still drops by the old ``is_in_function`` walk, which also calls a *decorated* class body
-local; the strict xfails at the end hold that disagreement until it is decided.
+Python is the first extractor on the helper (``ImportStatement.scope``), and
+``resolve_graph`` drops by it: a class body's import, decorated or not, is a load-time edge.
 """
 
 import json
@@ -335,15 +334,6 @@ def test_python_import_statements_are_not_dynamic(tmp_path):
     assert {stmt.dynamic for stmt in _python_imports(tmp_path).values()} == {False}
 
 
-def test_python_scope_and_the_resolve_graph_drop_agree_outside_decorated_classes(tmp_path):
-    """``is_in_function`` is what resolve_graph drops by; outside a decorated class it is
-    exactly ``scope == 'local'``."""
-    by_name = _python_imports(tmp_path)
-    disagree = {name for name, stmt in by_name.items()
-                if stmt.is_in_function != (stmt.scope == 'local')}
-    assert disagree == {'decorated_class_body'}
-
-
 # ---------------------------------------------------------------------------
 # JavaScript/TypeScript: the dynamic flag (scope opts in with BACK-2078)
 # ---------------------------------------------------------------------------
@@ -373,9 +363,6 @@ def test_javascript_dynamic_flag(tmp_path):
 # The open decision: resolve_graph still drops a decorated class body's import
 # ---------------------------------------------------------------------------
 
-DECORATED = ('BACK-2076: resolve_graph drops by is_in_function, which calls a decorated class '
-             'body local')
-
 
 def _fan_out(root):
     out = _run_reveal_direct(f'imports://{to_posix(root)}?rank=fan-in', '--format', 'json')
@@ -397,7 +384,6 @@ def test_class_body_import_is_an_imports_edge(tmp_path):
     assert _fan_out(root)['a.py'] == 1
 
 
-@pytest.mark.xfail(strict=True, reason=DECORATED, raises=AssertionError)
 def test_decorated_class_body_import_is_an_imports_edge(tmp_path):
     root = _tree(tmp_path, 'def deco(c):\n    return c\n@deco\nclass K:\n    import b\n')
     assert _fan_out(root)['a.py'] == 1

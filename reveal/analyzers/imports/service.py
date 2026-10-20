@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .base import LanguageExtractor, get_extractor
 from .file_index import discover_import_files
 from .types import ImportAnalysis, ImportStatement
+from ...core.node_taxonomy import LOCAL_SCOPE
 from ...utils.path_utils import HiddenTally, to_posix
 
 
@@ -157,13 +158,14 @@ def resolve_graph(scope: ScanScope, files: ImportFileSet, analysis: ImportAnalys
             # at startup — the circular-import definition imports:// and I002
             # share (I002 resolves through this function too, BACK-1723):
             #   - TYPE_CHECKING imports never run at runtime
-            #   - function-body (deferred/lazy) imports run only after all
+            #   - function-body (deferred/lazy) imports (scope 'local', BACK-2076;
+            #     a class body, decorated or not, is 'module') run only after all
             #     top-level code has finished importing — they are the
             #     standard pattern used to *break* cycles, so counting them
             #     as cycle edges reports phantom cycles (e.g. registry.py's
             #     lazy `from .analyzers.nginx import ...`, whose own comment
             #     says it exists "to avoid circular import").
-            if stmt.is_type_checking or stmt.is_in_function:
+            if stmt.is_type_checking or stmt.scope == LOCAL_SCOPE:
                 continue
 
             # BACK-1723: every file the statement loads, not only the primary

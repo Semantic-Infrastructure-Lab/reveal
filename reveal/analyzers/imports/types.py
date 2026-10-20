@@ -26,7 +26,6 @@ class ImportStatement:
     import_type: str  # 'import', 'from_import', 'star_import'
     alias: Optional[str] = None  # 'np' in 'import numpy as np'
     is_type_checking: bool = False  # True if inside 'if TYPE_CHECKING:' block
-    is_in_function: bool = False  # True if inside a function/method body
     # BACK-2076: where the import sits, from node_taxonomy.edge_scope(): 'module' (file,
     # class or namespace body; runs when the file loads) or 'local' (a function or lambda
     # body). Positional, not a runtime claim. None: the extractor does not record it yet
