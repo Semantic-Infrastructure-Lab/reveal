@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import importlib
 import re
+import sys
 from argparse import ArgumentParser, Namespace
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -161,9 +162,128 @@ EXIT_CODE_WORDING: Dict[str, Dict[int, str]] = {
 # Commands whose findings gate is on unless --fail-on none says otherwise.
 FINDINGS_BY_DEFAULT = ('check', 'review', 'health')
 
-# Old spelling -> (replacement, D5 stage) for names the surface program retires. Empty: Phase 1 removes
-# no names; help and error messages derive from it once a later phase adds entries.
-RETIREMENTS: Dict[str, Tuple[str, str]] = {}
+# The retired spellings (surface program ground rule 7, release strategy D5): the one table every
+# kind of retired name goes into, so a later phase adds a row instead of a print. A key is
+# namespaced by the kind of spelling, so a subcommand, a scheme and a parameter of the same name
+# cannot collide, and ``depends://?root=`` stays apart from ``calls://?root=``:
+#   subcommand:<name>            reveal trace ...
+#   scheme:<name>                trace://...
+#   param:<scheme>.<param>       calls://...?root=
+#   value:<scheme>.<param>=<v>   ast://...?show=calls
+#   flag:<--flag>                --search
+#   mcp:<tool>                   reveal_trace
+# A row's stage says what the spelling does now: ``note`` prints the note and answers as before,
+# ``phase7`` is recorded and prints nothing yet (MCP tool names stay until Phase 7), ``error``
+# is the cut release: exit 2 with the same text. retirement_note() is the one reader.
+STAGES = ('note', 'phase7', 'error')
+RETIREMENT_KEY = re.compile(
+    r'^(?:subcommand:[a-z][a-z0-9-]*'
+    r'|scheme:[a-z][a-z0-9+.-]*'
+    r'|param:[a-z][a-z0-9+.-]*\.[^.=\s]+'
+    r'|value:[a-z][a-z0-9+.-]*\.[^.=\s]+=.*'
+    r'|flag:--[a-z][a-z0-9-]*'
+    r'|mcp:[a-z][a-z0-9_]*)$')
+
+
+@dataclass(frozen=True)
+class Retirement:
+    """One retired spelling: *old* as the user types it, what replaces it, and its stage."""
+    old: str
+    replacement: str
+    stage: str = 'note'
+
+    def __post_init__(self) -> None:
+        if not self.old or not self.replacement:
+            raise ValueError('a retirement names the old spelling and its replacement')
+        if self.stage not in STAGES:
+            raise ValueError(f'retirement stage {self.stage!r} is not one of {STAGES}')
+
+    @property
+    def text(self) -> str:
+        """The one wording, for the note, the error and the JSON warning."""
+        return f'{self.old} is deprecated; use {self.replacement}.'
+
+
+# Phase 1 removes no names (tests/test_exit_code_table_back2052.py); the first rows are the two BACK-1906 notes.
+RETIREMENTS: Dict[str, Retirement] = {}
+
+
+class RetiredSpellingError(Exception):
+    """A spelling at the ``error`` stage was used: the caller exits 2 with its text."""
+
+    def __init__(self, key: str, entry: Retirement) -> None:
+        super().__init__(entry.text)
+        self.key = key
+        self.entry = entry
+
+
+class RetirementLog:
+    """The retired spellings one invocation used. ``to_stderr`` is False for a host (MCP) that
+    returns the fact in its result instead of printing it."""
+
+    def __init__(self, to_stderr: bool = True) -> None:
+        self.to_stderr = to_stderr
+        self.noted: Dict[str, Retirement] = {}
+        self.recorded: Dict[str, Retirement] = {}
+
+
+_LOG: ContextVar[Optional[RetirementLog]] = ContextVar('reveal_retirement_log', default=None)
+
+
+def retirement_note(key: str) -> Optional[Retirement]:
+    """The one hook: consulted where each kind of spelling is parsed. Returns the table row for
+    *key*, or None when it is not retired (nothing printed). A ``note`` row prints its note to
+    stderr once per invocation (when a host asked for stderr) and joins the log that the JSON
+    ``meta.warnings`` entry is built from; ``phase7`` is only recorded; ``error`` raises
+    RetiredSpellingError."""
+    entry = RETIREMENTS.get(key)
+    if entry is None:
+        return None
+    if entry.stage == 'error':
+        raise RetiredSpellingError(key, entry)
+    log = _LOG.get()
+    if log is None:  # a library call outside any invocation: nobody to tell
+        return entry
+    if entry.stage == 'phase7':
+        log.recorded[key] = entry
+    elif key not in log.noted:
+        log.noted[key] = entry
+        if log.to_stderr:
+            print(f'note: {entry.text}', file=sys.stderr)  # boundary-ok: print -- the one retirement note
+    return entry
+
+
+def noted_retirements() -> Dict[str, Retirement]:
+    """The ``note``-stage spellings this invocation used, by key."""
+    log = _LOG.get()
+    return dict(log.noted) if log is not None else {}
+
+
+def retirement_warnings() -> list:
+    """meta.warnings entries for noted_retirements(): code ``retired_spelling``. ``field`` is the
+    key, so two retired spellings are two entries under note_warning's (type, field) dedupe."""
+    return [{'code': 'retired_spelling', 'message': entry.text, 'field': key, 'old': entry.old,
+             'replacement': entry.replacement, 'stage': entry.stage}
+            for key, entry in noted_retirements().items()]
+
+
+def uri_retirement_keys(uri: str) -> list:
+    """The table keys a URI spells: its scheme, each query parameter, each parameter value."""
+    from urllib.parse import unquote_plus
+    scheme, sep, rest = uri.partition('://')
+    if not sep:
+        return []
+    scheme = scheme.lower()
+    keys = [f'scheme:{scheme}']
+    for pair in rest.partition('?')[2].partition('#')[0].split('&'):
+        if not pair:
+            continue
+        name, eq, value = pair.partition('=')
+        name = unquote_plus(name)
+        keys.append(f'param:{scheme}.{name}')
+        if eq:
+            keys.append(f'value:{scheme}.{name}={unquote_plus(value)}')
+    return keys
 
 
 def exit_codes_text(command: str, gates: Sequence[str] = ('none', 'findings')) -> str:
@@ -311,10 +431,14 @@ def current_invocation() -> Optional[Invocation]:
 
 
 @contextmanager
-def invocation_scope(invocation: Invocation) -> Iterator[Invocation]:
-    """Publish ``invocation`` for the code it runs, and restore the previous one on exit."""
+def invocation_scope(invocation: Invocation, *, retirements_to_stderr: bool = True) -> Iterator[Invocation]:
+    """Publish ``invocation`` for the code it runs, and restore the previous one on exit. It
+    also opens the invocation's RetirementLog; the MCP server passes
+    ``retirements_to_stderr=False`` and returns the fact in the tool result."""
     token = _CURRENT.set(invocation)
+    log_token = _LOG.set(RetirementLog(retirements_to_stderr))
     try:
         yield invocation
     finally:
+        _LOG.reset(log_token)
         _CURRENT.reset(token)
