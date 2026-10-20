@@ -12,6 +12,7 @@ kind index, and ``tree_root``'s root memo.
 The two ``reveal_check`` tests panic only on the 1.8.1 binding (newer packs' nodes are
 sendable); the identity tests below them fail on any binding when a cache is shared.
 """
+import gc
 import sys
 import threading
 
@@ -117,3 +118,24 @@ def test_another_threads_parses_never_evict_this_threads_root(monkeypatch):
     assert error is None, repr(error)
     assert tree_root(tree) is root, 'another thread\'s parses evicted (and dropped) this thread\'s root'
     assert not [u for u in unraisable if 'another thread' in u], unraisable
+
+
+def test_markdown_node_lookups_leave_no_cyclic_garbage_holding_nodes(tmp_path):
+    """Nodes in a reference cycle are dropped by whichever thread the collector next runs on:
+    on the 1.8.1 binding, an unraisable RuntimeError per node when that is not the thread that
+    built them (two per two-thread reveal_check of a .md file, from the link lookup)."""
+    doc = tmp_path / 'doc.md'
+    doc.write_text(_MD, encoding='utf-8')
+    analyzer = MarkdownAnalyzer(str(doc))
+    gc.collect()
+    gc.set_debug(gc.DEBUG_SAVEALL)
+    try:
+        links = analyzer.get_structure(extract_links=True)['links']
+        gc.collect()
+        holding = [type(o).__name__ for o in gc.garbage
+                   if isinstance(o, list) and any(type(x).__name__ == 'Node' for x in o)]
+    finally:
+        gc.set_debug(0)
+        gc.garbage.clear()
+    assert [link['url'] for link in links] == ['missing.md', '#nope']  # positive control
+    assert holding == [], f'{len(holding)} unreachable list(s) of nodes left for the cycle collector'
