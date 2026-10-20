@@ -13,7 +13,7 @@ from ..treesitter import TreeSitterAnalyzer, _structure_cache_max_files
 from ..core import disk_cache
 from ..structure_options import StructureOptions
 from ..core import node_children as _children
-from ..core import get_tree, tree_root
+from ..core import get_tree, iter_tree, tree_root
 from ..core.treesitter_parse import GrammarUnavailable
 from ..core.treesitter_compat import _zero_arg
 from ..utils.results import ResultBuilder
@@ -114,20 +114,16 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             node_type: Type of node to find
 
         Returns:
-            List of matching nodes
+            List of matching nodes, in document (pre-order) order
+
+        The shared cursor walk, not a self-referencing closure: that closure was a reference
+        cycle holding the nodes, freed by the cycle collector on whatever thread it next ran,
+        which on the 1.8.1 binding is an unraisable RuntimeError per node (BACK-2115).
         """
-        results = []
-
-        def _traverse(node):
-            if _zero_arg(node, 'kind') == node_type:
-                results.append(node)
-            for child in _children(node):
-                _traverse(child)
-
-        if tree and tree_root(tree):
-            _traverse(tree_root(tree))
-
-        return results
+        root = tree_root(tree) if tree else None
+        if not root:
+            return []
+        return [node for node in iter_tree(root) if _zero_arg(node, 'kind') == node_type]
 
     def _should_include_headings(self, options: StructureOptions, outline_mode: bool) -> bool:
         """Determine if headings should be included in output.
