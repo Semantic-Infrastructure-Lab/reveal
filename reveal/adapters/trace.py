@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
-from .calls.index import CalleeNode, _effects_from_calls, _params_from_signature, walk_callees
+from .calls.index import CalleeNode, walk_callees
 from ..utils import print_json_result
 from ..utils.query_binding import bind_declared_params
 from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec, param_schema, peek_query_items
@@ -304,54 +304,6 @@ class _TraceFrames:
             frame['ambiguous'] = True
             frame['candidates'] = edge['candidates']
         self.frames.append(frame)
-
-
-def _definition_index(structures: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
-    """name -> every definition of it: file, line, params, effects and calls
-    (language builtins dropped, as in calls://)."""
-    from reveal.adapters.ast.nav_effects import classify_call
-    from reveal.adapters.calls.index import _lang_family
-    from reveal.core.definition_names import lookup_keys
-    from reveal.conventions import conventions_for
-    from reveal.registry import language_for_extension
-
-    from .ast.analysis import call_sources
-    index: Dict[str, List[Dict[str, Any]]] = {}
-    for file_struct in structures:
-        file_path = file_struct.get('file', '')
-        language = language_for_extension(Path(file_path).suffix)
-        builtins = conventions_for(_lang_family(file_path)).builtins
-        for elem in call_sources(file_struct):
-            # 'tests' so a Zig test block can be a root (BACK-663).
-            if elem.get('category') not in ('functions', 'methods', 'tests', 'modules'):
-                continue
-            name = elem.get('name', '')
-            if not name:
-                continue
-            calls = elem.get('calls', [])
-            record = {
-                'file': to_posix(file_path),  # '/' on every OS (BACK-1586)
-                'line': elem.get('line', 0),
-                'params': _params_from_signature(elem.get('signature', ''), name),
-                'effects': _effects_from_calls([c for c in calls if c not in elem.get('reference_only_calls', [])], classify_call, language),
-                'calls': [c for c in calls if c.split('.')[-1] not in builtins] if builtins else calls,
-                'references': elem.get('references', []),
-                'reference_only_calls': elem.get('reference_only_calls', []),
-            }
-            # A C++ out-of-line `Cls::poll` is keyed as `poll` too, so a bare
-            # `--from poll` and a bare `poll()` call site both reach it (BACK-1400).
-            for key in lookup_keys(name):
-                index.setdefault(key, []).append(record)
-    # collect_structures' file order is not stable; frames and candidates must be.
-    for defs in index.values():
-        defs.sort(key=lambda d: (d['file'], d['line']))
-    return index
-
-
-def _collect_function_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
-    """Every definition under *path*, by name (see _definition_index)."""
-    from reveal.adapters.ast.analysis import collect_structures
-    return _definition_index(collect_structures(path))
 
 
 def _relpath(file_str: str, base: str) -> str:

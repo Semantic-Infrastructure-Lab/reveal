@@ -938,135 +938,20 @@ def _build_forward_index(
     structures: List[Dict[str, Any]],
     include_builtins: bool,
 ) -> Dict[str, List[Dict[str, Any]]]:
-    """Build name → [{file, line, calls}] forward call index from collected structures."""
+    """Build name → [{file, line, calls}] forward call index from collected structures
+    (``--sideeffects --transitive``; builtins filtered at build, in structure order)."""
     forward: Dict[str, List[Dict[str, Any]]] = {}
-    for file_struct in structures:
-        file_path = file_struct.get('file', '')
-        for elem in call_sources(file_struct):
-            # 'tests' included so a recursive walk (find_callees_recursive) can
-            # start from or pass through a Zig test root (BACK-663).
-            if elem.get('category') not in ('functions', 'methods', 'tests', 'modules'):
-                continue
-            name = elem.get('name', '')
-            if not name:
-                continue
-            calls = elem.get('calls', [])
-            builtins = conventions_for(_lang_family(file_path)).builtins
-            if not include_builtins and builtins:
-                calls = [c for c in calls if c.split('.')[-1] not in builtins]
-            record = {'file': file_path, 'line': elem.get('line', 0), 'calls': calls,
-                      'references': elem.get('references', []),
-                      'reference_only_calls': elem.get('reference_only_calls', [])}
-            for key in lookup_keys(name):
-                forward.setdefault(key, []).append(record)
+    for file_path, name, elem in _call_definitions(structures):
+        calls = elem.get('calls', [])
+        builtins = conventions_for(_lang_family(file_path)).builtins
+        if not include_builtins and builtins:
+            calls = [c for c in calls if c.split('.')[-1] not in builtins]
+        record = {'file': file_path, 'line': elem.get('line', 0), 'calls': calls,
+                  'references': elem.get('references', []),
+                  'reference_only_calls': elem.get('reference_only_calls', [])}
+        for key in lookup_keys(name):
+            forward.setdefault(key, []).append(record)
     return forward
-
-
-def _collect_level_entries(
-    frontier: List[Tuple[str, Dict[str, Any]]],
-    resolver: Any,
-    seen: Set[Any],
-) -> Tuple[List[Dict[str, Any]], List[Tuple[str, Dict[str, Any]]]]:
-    """Collect callee entries for one level; return (entries, next frontier).
-
-    *frontier* holds (name, definition) pairs: each definition is expanded on
-    its own, so two same-named functions never contribute each other's
-    callees (BACK-1442, the bug trace:// had before BACK-1399). Each call
-    site resolves through calls.resolve.CallResolver -- language family
-    (BACK-405), then same file or imports; a name still matching several
-    definitions is an `ambiguous` entry with its candidates and is not
-    expanded.
-
-    *seen* keeps each reachable thing listed once, as the name-keyed walk
-    did: a resolved callee by its definition (file, line), an external or
-    ambiguous one by its name.
-    """
-    level_entries: List[Dict[str, Any]] = []
-    next_frontier: List[Tuple[str, Dict[str, Any]]] = []
-
-    for source_name, defn in frontier:
-        for callee in defn['calls']:
-            tail, target = resolver.resolve(callee, defn['file'])
-            entry: Dict[str, Any] = {
-                'caller': source_name,
-                'callee': tail if target is not None else callee,
-                'resolved': target is not None,
-                'caller_file': defn['file'],
-                'caller_line': defn['line'],
-            }
-            if isinstance(target, dict):
-                key: Any = (target['file'], target['line'])
-                entry['callee_file'], entry['callee_line'] = key
-            else:
-                key = entry['callee']
-                if target:
-                    entry['ambiguous'] = True
-                    entry['candidates'] = [{'file': c['file'], 'line': c['line']} for c in target]
-            if key in seen:
-                continue
-            seen.add(key)
-            level_entries.append(entry)
-            if isinstance(target, dict):
-                next_frontier.append((tail, target))
-
-    return level_entries, next_frontier
-
-
-def find_callees_recursive(
-    path: str,
-    root: str,
-    depth: int = 2,
-    include_builtins: bool = False,
-) -> Dict[str, Any]:
-    """Recursive callees walk: follow what *root* calls, then what those call.
-
-    Args:
-        path: Root directory (or file) to search.
-        root: Entry-point function name to start the walk from.
-        depth: How many levels to expand (1 = direct callees only, max 5).
-        include_builtins: When False (default), Python builtins are excluded
-            from callee lists, keeping the output focused on project code.
-
-    Returns:
-        Dict with ``root``, ``depth``, ``levels`` (one per BFS level),
-        ``total_resolved`` (callees found in the project),
-        ``total_unresolved`` (external / not-found names).
-    """
-    from .resolve import CallResolver  # noqa: I006 -- resolve imports this module
-
-    path_obj = Path(path)
-    directory = path_obj if path_obj.is_dir() else path_obj.parent
-    structures = collect_structures(str(directory))
-    forward = _build_forward_index(structures, include_builtins)
-    # collect_structures' file order is not stable; levels and candidates must be.
-    for defs in forward.values():
-        defs.sort(key=lambda d: (d['file'], d['line']))
-
-    # Every definition of the root is a starting point (the root has no call
-    # site to disambiguate by); each is then walked on its own.
-    frontier = [(root, defn) for defn in forward.get(root, [])]
-    seen: Set[Any] = {(defn['file'], defn['line']) for _, defn in frontier}
-    resolver = CallResolver(forward)
-    levels: List[Dict[str, Any]] = []
-
-    for level_num in range(1, depth + 1):
-        level_entries, frontier = _collect_level_entries(frontier, resolver, seen)
-        if level_entries:
-            levels.append({'level': level_num, 'callees': level_entries})
-        if not frontier:
-            break
-
-    total_resolved = sum(sum(1 for e in lvl['callees'] if e['resolved']) for lvl in levels)
-    total_unresolved = sum(sum(1 for e in lvl['callees'] if not e['resolved']) for lvl in levels)
-
-    return _disclose_skipped({
-        'root': root,
-        'query': 'callees_recursive',
-        'depth': depth,
-        'levels': levels,
-        'total_resolved': total_resolved,
-        'total_unresolved': total_unresolved,
-    }, structures.skipped, traversal_failures=getattr(structures, 'traversal_failures', ()))
 
 
 def find_callers(

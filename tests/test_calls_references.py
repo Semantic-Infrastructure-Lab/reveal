@@ -170,7 +170,8 @@ def test_a_variable_that_is_the_definition_still_counts_its_uses(tmp_path):
 ])
 def test_top_level_callers_preserve_sites_and_agree_with_forward_queries(tmp_path, filename, body, lines):
     from reveal.adapters.calls.index import find_callers, find_callees
-    from reveal.adapters.trace import _collect_function_index, _build_trace
+    from reveal.adapters.calls.index import walk_callees
+    from reveal.adapters.trace import _build_trace
     path = tmp_path / filename
     path.write_text(body, encoding='utf-8')
     callers = find_callers(str(tmp_path), 'target_fn')
@@ -181,8 +182,7 @@ def test_top_level_callers_preserve_sites_and_agree_with_forward_queries(tmp_pat
     assert any(r['caller'] == 'wrapper' for r in records)
     forward = find_callees(str(tmp_path), '<module>')
     assert 'target_fn' in forward['matches'][0]['calls']
-    index = _collect_function_index(str(tmp_path))
-    assert '<module>' in index
+    assert [n.name for n in walk_callees(str(tmp_path), filename + ':<module>', 1).roots] == ['<module>']
     trace = _build_trace(str(tmp_path), filename + ':<module>', depth=2)
     assert trace['frames'][0]['resolved']
     assert any(frame['name'] == 'target_fn' and frame['resolved'] for frame in trace['frames'])
@@ -234,13 +234,12 @@ def test_called_and_jsx_used_component_keeps_both_relationships(tmp_path):
 
 
 def test_component_reference_is_not_classified_as_an_effectful_call(tmp_path, monkeypatch):
-    import reveal.adapters.trace as trace
-    from reveal.adapters.ast.analysis import collect_structures
+    import reveal.adapters.calls.index as calls_index
     (tmp_path / 'App.tsx').write_text('function App(){ return <Fetch/>; }\n', encoding='utf-8')
     seen = []
-    monkeypatch.setattr(trace, '_effects_from_calls', lambda calls, *args: seen.extend(calls) or [])
-    trace._definition_index(collect_structures(str(tmp_path)))
-    assert 'Fetch' not in seen
+    monkeypatch.setattr(calls_index, '_effects_from_calls', lambda calls, *args: seen.extend(calls) or [])
+    walk = calls_index.walk_callees(str(tmp_path), 'App', 1)
+    assert [n.name for n in walk.roots] == ['App'] and seen == []
 
 
 def test_class_field_reference_is_not_misattributed_to_module_scope(tmp_path):

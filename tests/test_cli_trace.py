@@ -15,11 +15,9 @@ import pytest
 
 from functools import partial
 from reveal.cli.routing.declared import create_declared_parser, run_declared_command
+from reveal.adapters.calls.index import _effects_from_calls, _params_from_signature, walk_callees
 from reveal.adapters.trace import (
     _build_trace,
-    _collect_function_index,
-    _effects_from_calls,
-    _params_from_signature,
     _relpath,
     _render_trace,
 )
@@ -182,8 +180,15 @@ class TestEffectsFromCalls(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# _collect_function_index
+# Per-definition detail from the callee walk (was trace's own definition index;
+# one walk since BACK-2096)
 # ---------------------------------------------------------------------------
+
+def _collect_function_index(path: str, name: str):
+    """name -> its root definitions in the callee walk, each with params/effects/file."""
+    roots = walk_callees(path, name, depth=1).roots
+    return {name: [{'file': n.file, 'params': n.params, 'effects': n.effects} for n in roots]} if roots else {}
+
 
 class TestCollectFunctionIndex(unittest.TestCase):
 
@@ -195,7 +200,7 @@ class TestCollectFunctionIndex(unittest.TestCase):
             def greet(name, greeting):
                 print(greeting, name)
         """)
-        index = _collect_function_index(self.tmpdir)
+        index = _collect_function_index(self.tmpdir, 'greet')
         self.assertIn('greet', index)
         self.assertEqual(index['greet'][0]['params'], ['name', 'greeting'])
 
@@ -205,7 +210,7 @@ class TestCollectFunctionIndex(unittest.TestCase):
                 def bar(self, x):
                     pass
         """)
-        index = _collect_function_index(self.tmpdir)
+        index = _collect_function_index(self.tmpdir, 'bar')
         self.assertIn('bar', index)
         self.assertNotIn('self', index['bar'][0]['params'])
 
@@ -214,7 +219,7 @@ class TestCollectFunctionIndex(unittest.TestCase):
             def my_func():
                 pass
         """)
-        index = _collect_function_index(self.tmpdir)
+        index = _collect_function_index(self.tmpdir, 'my_func')
         self.assertEqual(index['my_func'][0]['file'], Path(path).as_posix())  # '/' on every OS (BACK-1586)
 
     def test_effects_captured(self):
@@ -223,7 +228,7 @@ class TestCollectFunctionIndex(unittest.TestCase):
             def writer(src, dst):
                 shutil.copy(src, dst)
         """)
-        index = _collect_function_index(self.tmpdir)
+        index = _collect_function_index(self.tmpdir, 'writer')
         self.assertIn('writer', index)
         self.assertTrue(any('file' in e for e in index['writer'][0]['effects']))
 
@@ -232,13 +237,13 @@ class TestCollectFunctionIndex(unittest.TestCase):
         # so callers can disambiguate by language family.
         _write(self.tmpdir, 'e.py', "def dup(): pass\n")
         _write(self.tmpdir, 'sub/f.py', "def dup(): pass\n")
-        index = _collect_function_index(self.tmpdir)
+        index = _collect_function_index(self.tmpdir, 'dup')
         self.assertEqual(len(index['dup']), 2)
 
     def test_syntax_error_file_skipped(self):
         _write(self.tmpdir, 'bad.py', "def (:\n  pass\n")
         _write(self.tmpdir, 'good.py', "def ok(): pass\n")
-        index = _collect_function_index(self.tmpdir)
+        index = _collect_function_index(self.tmpdir, 'ok')
         self.assertIn('ok', index)
 
 

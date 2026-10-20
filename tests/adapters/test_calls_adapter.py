@@ -2363,8 +2363,8 @@ class TestDirCacheKey(unittest.TestCase):
         ))
 
 
-class TestFindCalleesRecursive(unittest.TestCase):
-    """find_callees_recursive BFS forward walk tests."""
+class TestRootCalleeWalk(unittest.TestCase):
+    """calls://?root= answer: the level-by-level callee walk (walk_callees + callee_levels)."""
 
     def setUp(self):
         import shutil
@@ -2381,7 +2381,7 @@ class TestFindCalleesRecursive(unittest.TestCase):
         return path
 
     def test_direct_callees_level_1(self):
-        from reveal.adapters.calls.index import find_callees_recursive
+        from reveal.adapters.calls.index import callee_levels, walk_callees
         self._write('app.py', '''\
             def entry():
                 helper()
@@ -2389,12 +2389,12 @@ class TestFindCalleesRecursive(unittest.TestCase):
             def helper():
                 pass
         ''')
-        result = find_callees_recursive(self.tmp, 'entry', depth=1)
+        result = callee_levels(walk_callees(self.tmp, 'entry', depth=1))
         callees = [e['callee'] for e in result['levels'][0]['callees']]
         self.assertIn('helper', callees)
 
     def test_recursive_level_2(self):
-        from reveal.adapters.calls.index import find_callees_recursive
+        from reveal.adapters.calls.index import callee_levels, walk_callees
         self._write('app.py', '''\
             def entry():
                 helper()
@@ -2403,26 +2403,27 @@ class TestFindCalleesRecursive(unittest.TestCase):
             def worker():
                 pass
         ''')
-        result = find_callees_recursive(self.tmp, 'entry', depth=2)
+        result = callee_levels(walk_callees(self.tmp, 'entry', depth=2))
         self.assertEqual(len(result['levels']), 2)
         level2_callees = [e['callee'] for e in result['levels'][1]['callees']]
         self.assertIn('worker', level2_callees)
 
     def test_no_cycles(self):
-        from reveal.adapters.calls.index import find_callees_recursive
+        from reveal.adapters.calls.index import callee_levels, walk_callees
         self._write('app.py', '''\
             def a():
                 b()
             def b():
                 a()
         ''')
-        result = find_callees_recursive(self.tmp, 'a', depth=5)
-        # 'a' should appear at most once (not looped back in)
-        all_callees = [e['callee'] for lvl in result['levels'] for e in lvl['callees']]
-        self.assertEqual(all_callees.count('a'), 0)  # 'a' is visited root, not a callee
+        result = callee_levels(walk_callees(self.tmp, 'a', depth=5))
+        # BACK-2096: the walk stops, and b -> a is listed (it was dropped because the
+        # root a was "seen"), marked as not expanded again.
+        edges = [(e['caller'], e['callee'], e['expanded']) for lvl in result['levels'] for e in lvl['callees']]
+        self.assertEqual(edges, [('a', 'b', True), ('b', 'a', False)])
 
     def test_unresolved_marked_external(self):
-        from reveal.adapters.calls.index import find_callees_recursive
+        from reveal.adapters.calls.index import callee_levels, walk_callees
         self._write('app.py', '''\
             def entry():
                 third_party_func()
@@ -2430,7 +2431,7 @@ class TestFindCalleesRecursive(unittest.TestCase):
             def local_helper():
                 pass
         ''')
-        result = find_callees_recursive(self.tmp, 'entry', depth=1)
+        result = callee_levels(walk_callees(self.tmp, 'entry', depth=1))
         entries = {e['callee']: e for e in result['levels'][0]['callees']}
         self.assertTrue(entries['local_helper']['resolved'])
         self.assertFalse(entries.get('third_party_func', {}).get('resolved', True))
@@ -2439,7 +2440,7 @@ class TestFindCalleesRecursive(unittest.TestCase):
         # BACK-405: a C caller's `write()` syscall must not resolve to an
         # unrelated same-named Python `def write` elsewhere in the project —
         # the flat, language-blind index used to let it win.
-        from reveal.adapters.calls.index import find_callees_recursive
+        from reveal.adapters.calls.index import callee_levels, walk_callees
         self._write('server.c', '''\
             void log_raw(void) {
                 write(1, "x", 1);
@@ -2449,7 +2450,7 @@ class TestFindCalleesRecursive(unittest.TestCase):
             def write(f):
                 pass
         ''')
-        result = find_callees_recursive(self.tmp, 'log_raw', depth=1)
+        result = callee_levels(walk_callees(self.tmp, 'log_raw', depth=1))
         entries = {e['callee']: e for e in result['levels'][0]['callees']}
         self.assertIn('write', entries)
         self.assertFalse(entries['write']['resolved'])
@@ -2457,14 +2458,14 @@ class TestFindCalleesRecursive(unittest.TestCase):
     def test_same_language_bare_name_still_resolves(self):
         # Same-language resolution must be unaffected by the language-family
         # scoping added for BACK-405.
-        from reveal.adapters.calls.index import find_callees_recursive
+        from reveal.adapters.calls.index import callee_levels, walk_callees
         self._write('app.py', '''\
             def entry():
                 helper()
             def helper():
                 pass
         ''')
-        result = find_callees_recursive(self.tmp, 'entry', depth=1)
+        result = callee_levels(walk_callees(self.tmp, 'entry', depth=1))
         entries = {e['callee']: e for e in result['levels'][0]['callees']}
         self.assertTrue(entries['helper']['resolved'])
 
@@ -2487,7 +2488,7 @@ class TestFindCalleesRecursive(unittest.TestCase):
     def test_same_named_functions_are_not_merged(self):
         # BACK-1442: the name-keyed BFS expanded every `run` once `run` was
         # reached, so main -> run listed alpha AND beta at level 2.
-        from reveal.adapters.calls.index import find_callees_recursive
+        from reveal.adapters.calls.index import callee_levels, walk_callees
         self._two_runs()
         self._write('main.py', """\
             from b import run
@@ -2495,34 +2496,34 @@ class TestFindCalleesRecursive(unittest.TestCase):
             def main():
                 run()
         """)
-        result = find_callees_recursive(self.tmp, 'main', depth=2)
+        result = callee_levels(walk_callees(self.tmp, 'main', depth=2))
         level2 = [(e['caller'], e['callee']) for e in result['levels'][1]['callees']]
         self.assertEqual(level2, [('run', 'beta')])
         run = result['levels'][0]['callees'][0]
         self.assertEqual((os.path.basename(run['callee_file']), run['callee_line']), ('b.py', 1))
 
     def test_unresolvable_same_named_callee_is_ambiguous_not_expanded(self):
-        from reveal.adapters.calls.index import find_callees_recursive
+        from reveal.adapters.calls.index import callee_levels, walk_callees
         self._two_runs()
         self._write('main.py', """\
             def main():
                 run()
         """)
-        result = find_callees_recursive(self.tmp, 'main', depth=3)
+        result = callee_levels(walk_callees(self.tmp, 'main', depth=3))
         self.assertEqual(len(result['levels']), 1)
         run = result['levels'][0]['callees'][0]
         self.assertTrue(run['ambiguous'])
         self.assertEqual(sorted(os.path.basename(c['file']) for c in run['candidates']), ['a.py', 'b.py'])
 
     def test_each_root_definition_keeps_its_own_callees(self):
-        from reveal.adapters.calls.index import find_callees_recursive
+        from reveal.adapters.calls.index import callee_levels, walk_callees
         self._two_runs()
-        result = find_callees_recursive(self.tmp, 'run', depth=1)
+        result = callee_levels(walk_callees(self.tmp, 'run', depth=1))
         pairs = [(os.path.basename(e['caller_file']), e['callee']) for e in result['levels'][0]['callees']]
         self.assertEqual(pairs, [('a.py', 'alpha'), ('b.py', 'beta')])
 
     def test_ambiguous_entry_renders_its_candidates(self):
-        from reveal.adapters.calls.index import find_callees_recursive
+        from reveal.adapters.calls.index import callee_levels, walk_callees
         from reveal.adapters.calls.renderer import _render_callees_recursive_text
         self._two_runs()
         self._write('main.py', """\
@@ -2531,18 +2532,18 @@ class TestFindCalleesRecursive(unittest.TestCase):
         """)
         out = io.StringIO()
         with redirect_stdout(out):
-            _render_callees_recursive_text(find_callees_recursive(self.tmp, 'main', depth=2))
+            _render_callees_recursive_text(callee_levels(walk_callees(self.tmp, 'main', depth=2)))
         self.assertIn('main → run  ? [ambiguous: 2 definitions -- a.py:1, b.py:1]', out.getvalue())
 
     def test_empty_project_returns_no_levels(self):
-        from reveal.adapters.calls.index import find_callees_recursive
+        from reveal.adapters.calls.index import callee_levels, walk_callees
         self._write('app.py', 'def entry():\n    pass\n')
-        result = find_callees_recursive(self.tmp, 'entry', depth=2)
+        result = callee_levels(walk_callees(self.tmp, 'entry', depth=2))
         self.assertEqual(result['levels'], [])
         self.assertEqual(result['total_resolved'], 0)
 
     def test_total_counts(self):
-        from reveal.adapters.calls.index import find_callees_recursive
+        from reveal.adapters.calls.index import callee_levels, walk_callees
         self._write('app.py', '''\
             def entry():
                 known()
@@ -2550,7 +2551,7 @@ class TestFindCalleesRecursive(unittest.TestCase):
             def known():
                 pass
         ''')
-        result = find_callees_recursive(self.tmp, 'entry', depth=1)
+        result = callee_levels(walk_callees(self.tmp, 'entry', depth=1))
         self.assertEqual(result['total_resolved'], 1)
         self.assertEqual(result['total_unresolved'], 1)
 

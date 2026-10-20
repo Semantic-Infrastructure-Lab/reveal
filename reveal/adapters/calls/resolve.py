@@ -1,13 +1,13 @@
-"""Resolve a call site to the one definition it reaches -- shared by trace://
-and calls://?callees=X&depth=N.
+"""Resolve a call site to the one definition it reaches -- for the callee walk
+(calls.index.walk_callees) that trace:// and calls://?root=X&depth=N answer from.
 
 A walk keyed by bare name merges every same-named function: two unrelated
 `run()`s contribute each other's callees once either is reached. trace://
 fixed that by walking definitions (BACK-1399); the recursive callees walk kept
-the name-keyed BFS (BACK-1442). Both now resolve each call site here: the
-caller's language family first (BACK-405), then a same-file definition or the
-one its imports name, else the call is ambiguous and reported as such, never
-guessed.
+the name-keyed BFS (BACK-1442). One walk now does both (BACK-2096) and resolves
+each call site here: the caller's language family first (BACK-405), then a
+same-file definition or the one its imports name, else the call is ambiguous
+and reported as such, never guessed.
 """
 
 from pathlib import Path
