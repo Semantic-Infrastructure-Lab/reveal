@@ -137,7 +137,7 @@ notes:
   - 'Unused import detection requires parsing file content to check references'
   - 'Circular dependency detection builds full import graph'
   - 'Layer violations require .reveal.yaml configuration file'
-  - "Function-level (lazy) imports are edges: ?circular and has_cycles leave them out (a lazy back-edge is no import-time cycle), every other view counts them; &lazy=include|exclude|only overrides. Every answer prints its rule (Rule: line, edge_rule in JSON). Only Python records import scope; the rule names other languages' unclassified edges"
+  - "Function-level (lazy) imports are edges: ?circular and has_cycles leave them out (a lazy back-edge is no import-time cycle), every other view counts them; &lazy=include|exclude|only overrides. Every answer prints its rule (Rule: line, edge_rule in JSON). Python, JavaScript, TypeScript and TSX record import scope; the rule names other languages' unclassified edges"
   - 'Static imports only — dynamic dispatch (importlib.import_module, JS require(), Java Class.forName, Ruby autoload, plugin registries, etc.) is not captured by any query mode; affected files show lower fan-in than actual and may appear as false-positive entrypoints'
   - 'Supported languages: Python, JavaScript, TypeScript, Go, Rust, Java, C++, and more'
   - 'Use --verbose for detailed import chains and file paths'

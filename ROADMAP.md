@@ -351,7 +351,8 @@ What landed, and when, is in CHANGELOG `[0.130.0]` and `internal-docs/RESOLVED_L
    I002, D005 and health; broader defaults/environment policy remains).
 4. **One seam per concern.** The parser, path, root-finder and walker seams are done. Open:
    BACK-1054 (import resolution: imports and depends share scope and dispatch; depends'
-   indexing/fallback and extraction-cache ownership remain; I002 already uses the service).
+   indexing/fallback and extraction-cache ownership remain; I002 already uses the service,
+   and the graph keeps every edge with its scope so views filter at presentation).
 
 These gates run continuously alongside the steps above:
 - BACK-1365: executable docs. The first gate runs offline recipes as text and JSON,
