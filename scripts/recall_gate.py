@@ -181,9 +181,19 @@ def measure(entry: dict, root: Path) -> dict[str, Any]:
             'differences': differences}
 
 
+def rendered_callers(scan: Path, target: str) -> list[dict[str, Any]]:
+    """Callers of one name as ``calls://<scan>?callers=<name>`` prints them; a cut answer raises."""
+    result = _cli_json(f'calls://{scan.as_posix()}?callers={urllib.parse.quote(target, safe="")}', target)
+    if result.get('meta', {}).get('errors'):
+        raise RuntimeError(f'calls:// reported errors for {target}: {result["meta"]["errors"][:3]}')
+    rows = [row for level in result['levels'] for row in level['callers']]
+    if len(rows) != result['total_callers']:
+        raise RuntimeError(f'calls:// answer truncated for {target}: {len(rows)} of {result["total_callers"]} shown')
+    return rows
+
+
 def measure_calls(entry: dict, root: Path) -> dict[str, Any]:
-    """Measure the existing public callers projection against independent Python AST."""
-    from reveal.adapters.calls.index import find_callers
+    """Measure the public callers answer (``calls://?callers=``) against independent Python AST."""
     head = subprocess.run(['git', '-C', str(root), 'rev-parse', 'HEAD'], check=True,
                           capture_output=True, text=True, encoding='utf-8', timeout=30).stdout.strip()
     if head != entry['sha']:
@@ -203,11 +213,11 @@ def measure_calls(entry: dict, root: Path) -> dict[str, Any]:
         raise RuntimeError('Call oracle produced zero claims')
     hit = extra = 0
     differences = []
+    reset_request_caches()
     for target, truth_list in edges.items():
-        answer = find_callers(str(scan), target)
         truth = set(truth_list)
         found = {f"{Path(row['file']).relative_to(root).as_posix()}::{row['caller']}"
-                 for level in answer['levels'] for row in level['callers']
+                 for row in rendered_callers(scan, target)
                  if row.get('caller_kind') != 'module' and Path(row['file']) in files}
         matched, missed, surplus = truth & found, truth - found, found - truth
         hit += len(matched)

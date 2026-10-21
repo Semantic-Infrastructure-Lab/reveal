@@ -528,9 +528,11 @@ def test_python_call_loss_and_bad_population_fail(tmp_path, monkeypatch):
     entry['call_recall'] = {'scan_root': 'pkg', 'importer_dirs': ['pkg']}
     before = gate.measure_calls(entry, root)
     assert before['recall'] == before['precision'] == 1
-    from reveal.adapters.calls import index
-    original = index.find_callers
-    monkeypatch.setattr(index, 'find_callers', lambda path, target: {'levels': []} if target == 'target' else original(path, target))
+    from reveal.adapters.calls import adapter
+    original = adapter.find_callers
+    monkeypatch.setattr(adapter, 'find_callers', lambda path, target, **kw: (
+        {**original(path, target, **kw), 'levels': [], 'total_callers': 0} if target == 'target'
+        else original(path, target, **kw)))
     after = gate.measure_calls(entry, root)
     assert after['recall'] == 0.5 and gate.regressions({'calls': after}, {'calls': before})
     (root / 'pkg/a.py').write_text('def broken(:\n', encoding='utf-8')
