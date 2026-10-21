@@ -281,3 +281,40 @@ def test_same_stat_edit_is_exactly_as_stale_as_the_structure_entry(project):
     callees = {site["callee"] for site in after["b.py"]["module_call_sites"]}
     assert "other" in functions and "other" in callees
     assert "OTHER" not in functions and "OTHER" not in callees
+
+
+def test_uncacheable_analyzer_does_not_extend_an_entry_another_process_stored(project):
+    """The structure cache re-reads nothing after a miss, so a racing clean build can store the entry
+    between this analyzer's uncacheable build and its call-site store: the layer must still be refused."""
+    _structure_only(project)
+    analyzer = _analyzer(project / "a.py")
+    analyzer._imports_uncacheable = True
+    analyzer.store_call_site_layer(analyzer.call_site_form(), {"module_call_sites": []})
+    assert ts_mod._CALL_SITE_LAYER_KEY not in _entry(project / "a.py")
+
+
+def test_same_size_edit_with_a_new_mtime_recomputes(project, spy):
+    """Positive control for the stat key: size alone is not the key; mtime_ns changes it."""
+    target = project / "b.py"
+    _scan(project)
+    before = target.stat()
+    target.write_text(target.read_text(encoding="utf-8").replace("other", "OTHER"), encoding="utf-8")
+    os.utime(target, ns=(before.st_atime_ns, before.st_mtime_ns + 5_000_000_000))
+    assert target.stat().st_size == before.st_size
+    spy.clear()
+    after, _ = _scan(project)
+    assert spy == ["b.py"]
+    assert any(site["callee"] == "OTHER" for site in after["b.py"]["module_call_sites"])
+
+
+def test_longer_edit_with_the_old_mtime_recomputes(project, spy):
+    """Positive control for the other half of the key: a restored mtime does not hide a size change."""
+    target = project / "b.py"
+    _scan(project)
+    before = target.stat()
+    target.write_text(target.read_text(encoding="utf-8") + "extra_call()\n", encoding="utf-8")
+    os.utime(target, ns=(before.st_atime_ns, before.st_mtime_ns))
+    spy.clear()
+    after, _ = _scan(project)
+    assert spy == ["b.py"]
+    assert any(site["callee"] == "extra_call" for site in after["b.py"]["module_call_sites"])
