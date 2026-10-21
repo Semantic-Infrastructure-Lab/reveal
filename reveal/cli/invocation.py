@@ -100,7 +100,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      help_guide=_SUBCOMMANDS_GUIDE),
     'health':       _spec('health',
                      'reveal health [path]',
-                     'Unified health: code rules + SSL + databases + DNS',
+                     'Ops health: SSL + databases + DNS + nginx',
                      ('text', 'json'), help_guide=_SUBCOMMANDS_GUIDE),
     'hotspots':     _declared('hotspots',
                      'reveal hotspots [path]',
@@ -189,6 +189,7 @@ RETIREMENT_KEY = re.compile(
     r'|param:[a-z][a-z0-9+.-]*\.[^.=\s]+'
     r'|value:[a-z][a-z0-9+.-]*\.[^.=\s]+=.*'
     r'|flag:--[a-z][a-z0-9-]*'
+    r'|target:[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*'  # a kind of target a subcommand stops taking
     r'|mcp:[a-z][a-z0-9_]*)$')
 
 
@@ -222,6 +223,10 @@ RETIREMENTS: Dict[str, Retirement] = {
     # the MCP tool reveal_review keeps its name until Phase 7.
     'subcommand:review': Retirement('reveal review', 'reveal check --changed RANGE (rules) and '
                                     "reveal 'diff://git://A/.:git://B/.' (structure); a directory: reveal check DIR"),
+    # health is the ops entry point (P3-1, BACK-2068 slice 3c): a local code target still answers until the cut
+    # (D5), but code quality is check's. An .conf nginx file is an ops target and stays.
+    'target:health.code': Retirement('reveal health on a code path', 'reveal check <path>; health keeps ssl://, '
+                                     'domain://, mysql://, sqlite:// and nginx .conf targets'),
     # trace merged into calls (BACK-2066): both spellings keep trace's frames shape until the cut
     # (decision c); the MCP tool reveal_trace keeps its name until Phase 7 (decision g).
     'subcommand:trace': Retirement('reveal trace', 'reveal calls <path> --callees FUNC --depth N --detail'),

@@ -249,7 +249,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal trace --from FUNC` | Retired: use reveal calls --callees FUNC --depth N --detail (the same walk); depth-indented narrative with side effects | `reveal trace --help` |
 | `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
 | `reveal review <path>` | Retired: use reveal check --changed RANGE and the diff:// adapter (structure: reveal 'diff://git://A/.:git://B/.'); still answers and prints a replaced-by note | `reveal review --help` |
-| `reveal health [path]` | Unified health: code rules + SSL + databases + DNS in one report | `reveal health --help` |
+| `reveal health [path]` | Ops health: SSL + databases + DNS + nginx | `reveal health --help` |
 | `reveal pack <path>` | Token-budgeted context snapshot for LLM consumption (use `--budget`, `--focus`, `--since`) | `reveal pack --help` |
 | `reveal dev <command>` | Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config | `reveal dev --help` |
 | `reveal scaffold <kind>` | Older alias of `reveal dev new-*` — prefer `reveal dev` for new work (compatibility reference) | `reveal scaffold --help` |
@@ -1701,16 +1701,15 @@ Both surface spellings emit `type: surface_scan` and support human-primary
 
 ---
 
-### Task: "Run a unified health check across code + infrastructure"
+### Task: "Run a unified health check across infrastructure"
 
 **Pattern:**
 ```bash
-reveal health .                    # Code quality + SSL + DB + DNS in one report
-reveal health . --select B,S       # Just bugs and security
-reveal health --all                # Check every resource detectable in context (current dir + configured targets)
+reveal health ssl://example.com domain://example.com   # Certificates + DNS in one report
+reveal check .                     # Code quality is check's (health on a code path prints a retirement note)
 ```
 
-**Use case:** A single command that aggregates `reveal check` (code), `ssl://` (cert health), `mysql://`/`sqlite://` (DB health), and `domain://` (DNS) into one operator-friendly report. Use it for production readiness checks or scheduled monitoring jobs — not for routine code-quality runs (use `reveal check` for those).
+**Use case:** A single command that aggregates `ssl://` (cert health), `mysql://`/`sqlite://` (DB health), and `domain://` (DNS) into one operator-friendly report. Use it for production readiness checks or scheduled monitoring jobs — not for routine code-quality runs (use `reveal check` for those).
 
 ---
 

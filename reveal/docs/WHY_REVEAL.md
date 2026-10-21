@@ -126,23 +126,23 @@ reveal pack src/ --budget 8000 --format json
 
 ### 4. Unified Health Checks (`reveal health`)
 
-One command. Code quality + SSL certificates + MySQL replication + domain DNS — all in the same invocation, all exit-code-governed.
+One command. SSL certificates + MySQL replication + domain DNS + nginx configs — all in the same invocation, all exit-code-governed. Code quality is `reveal check`.
 
 ```bash
-# Full health check: code + infra + certs
-reveal health
+# Targets from .reveal.yaml `health.targets`
+reveal health --all
 
-# Check specific resources (code + SSL + domain in one pass)
-reveal health ./src ssl://api.example.com domain://example.com
+# Check specific resources (SSL + domain in one pass)
+reveal health ssl://api.example.com domain://example.com
 
 # CI/CD pipeline: exit 0 clean, exit 1 warnings, exit 2 errors
-reveal health ./src && deploy.sh || alert_oncall.sh
+reveal health ssl://api.example.com && deploy.sh || alert_oncall.sh
 
 # JSON output for monitoring
-reveal health ./src --format json | jq '.overall_exit'
+reveal health ssl://api.example.com --format json | jq '.overall_exit'
 ```
 
-**What you get:** A category collapse. No other single tool runs code analysis, certificate expiry checks, DNS validation, and database health under unified exit codes and JSON output. The value isn't any individual check — it's that you stop switching tools.
+**What you get:** A category collapse. No other single tool runs certificate expiry checks, DNS validation, and database health under unified exit codes and JSON output. The value isn't any individual check — it's that you stop switching tools.
 
 ---
 
@@ -310,7 +310,7 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 
 1. **`?rank=callers`** — coupling metrics from the CLI. Not "who calls this" but "what is most called across the project." Graph analysis, not search.
 
-2. **`reveal health` spanning code + certs + DB + DNS** — a category collapse. One command, one JSON blob, one exit code.
+2. **`reveal health` spanning certs + DB + DNS** — a category collapse. One command, one JSON blob, one exit code.
 
 3. **Native MCP server (`reveal-mcp`)** — exposes all reveal capabilities as MCP tools for Claude Code, Cursor, and Windsurf. One install, ten tools: `reveal_structure`, `reveal_element`, `reveal_nav`, `reveal_query`, `reveal_pack`, `reveal_check`, `reveal_grep`, `reveal_trace`, `reveal_health`, `reveal_review` — with `reveal_query` acting as a generic URI router reaching all 34 URI adapters beyond the nine convenience wrappers. Agents get progressive disclosure, deep-dive nav (boundary / sideeffects / deps / mutations), and call-graph analysis without subprocess overhead.
 

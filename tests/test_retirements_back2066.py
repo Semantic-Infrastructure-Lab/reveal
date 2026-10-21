@@ -188,6 +188,8 @@ PRODUCTION_CASES = {
     'scheme:trace': lambda f: [f'trace://{Path(f).parent}?from=auth_gate'],
     # Phase 3 slice 3b (BACK-2068): review folded into check --changed plus diff.
     'subcommand:review': lambda f: ['review', str(Path(f).parent)],
+    # Phase 3 slice 3c (BACK-2068): health is ops-only; a code path is check's.
+    'target:health.code': lambda f: ['health', str(Path(f).parent)],
 }
 
 

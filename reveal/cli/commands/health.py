@@ -24,7 +24,7 @@ def create_health_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='reveal health',
         parents=[_build_global_options_parser()],
-        description='Unified health check across code, SSL, databases, and DNS.',
+        description='Ops health check across SSL, databases, DNS and nginx (code quality: reveal check).',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
@@ -143,6 +143,10 @@ def run_health(args: Namespace) -> None:
     results = []
     checked = []
 
+    if any(_is_code_target(t) for t in targets):
+        from ..invocation import retirement_note
+        retirement_note('target:health.code')
+
     for target in targets:
         try:
             result = _check_target(target, args)
@@ -174,6 +178,14 @@ def _overall_exit(results: List[HealthResult], fail_on) -> int:
         if lost else AnalysisCompleteness.COMPLETE
     facts = ExecutionFacts(state, findings=any(r.verdict == 'finding' for r in results))
     return execution_exit_code(facts, fail_on=fail_on)
+
+
+def _is_code_target(target: str) -> bool:
+    """A local path that is not an ops target (a URI, an nginx .conf, a missing path): check's, not health's."""
+    if '://' in target:
+        return False
+    path = Path(target)
+    return path.exists() and path.suffix.lower() not in ('.conf',)
 
 
 def _check_target(target: str, args: Namespace):

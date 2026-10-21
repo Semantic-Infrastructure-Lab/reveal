@@ -197,10 +197,9 @@ reveal check src/ --format json   # CI/CD gating
 reveal check --changed main..feature
 reveal check ./src                # Check current work
 
-# Health check (code, SSL, databases)
-reveal health src/
+# Ops health (SSL, databases, DNS, nginx); code quality is `reveal check`
 reveal health ssl://example.com
-reveal health --all               # Auto-detect targets from .reveal.yaml
+reveal health --all               # Targets from .reveal.yaml `health.targets`
 
 # Token-budgeted snapshot for LLM context
 reveal pack src/ --budget 8000

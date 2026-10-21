@@ -101,14 +101,15 @@ reveal check --changed main..HEAD --severity high
 ### See Also
 
 - `reveal check` — Run quality rules on files, directories or a git range
-- `reveal health` — Health check for services/paths
+- `reveal health` — Health check for services (ssl, domain, mysql, sqlite, nginx)
 
 ---
 
-## reveal health — Unified Health Check
+## reveal health — Ops Health Check
 
-Unified health check across all resource types. Routes automatically based on
-target type — no need to know which adapter to use.
+Health check across the operational resource types. Routes automatically based on
+target type — no need to know which adapter to use. Code quality is `reveal check`:
+a local code path still answers here until the cut, with a note naming `reveal check`.
 
 ### Usage
 
@@ -121,8 +122,8 @@ reveal health --all
 
 | Flag | Description |
 |------|-------------|
-| `--all` | Check all resources detectable in context (source dir or configured targets) |
-| `--select RULES` | Rule categories to check (e.g., `B,S,I,C`) |
+| `--all` | Check `health.targets` from `.reveal.yaml` (without it, the detected source dir: a code path, so noted) |
+| `--select RULES` | Rule categories for a code path (retired; use `reveal check --select`) |
 | `--format json` | Machine-readable output |
 | `--verbose` | Show detailed check results |
 
@@ -130,7 +131,7 @@ reveal health --all
 
 | Target | What it checks |
 |--------|----------------|
-| `./path` or `/path` | Directory quality (violations, hotspots) |
+| `site.conf` | nginx config health |
 | `ssl://example.com` | SSL certificate validity, expiry, chain |
 | `mysql://host` | MySQL connectivity, replication health |
 | `domain://example.com` | DNS, registrar, HTTPS availability |
@@ -154,26 +155,24 @@ findings retain separate labels and both require action (exit 2).
 ### Examples
 
 ```bash
-reveal health .                         # Local directory health
 reveal health ssl://example.com         # SSL cert health
 reveal health domain://example.com      # Domain + DNS health
-reveal health --all                     # Auto-detect: source dir + configured targets
 
 # Composable: check multiple targets
-reveal health ./src ssl://api.example.com mysql://localhost
+reveal health ssl://api.example.com mysql://localhost
 
 # Configure targets in .reveal.yaml for `--all`:
 # health:
 #   targets: [src/, ssl://api.example.com]
 
 # CI/CD: fail on warnings or failures
-reveal health . --format json | jq -e '.exit_code == 0'
+reveal health ssl://example.com --format json | jq -e '.overall_exit == 0'
 ```
 
 ### See Also
 
 - `reveal check --changed RANGE` — Rules on the files a PR changed
-- `reveal check` — Quality rules only
+- `reveal check` — Code quality rules
 - `reveal health --help` — Full flag reference
 
 ---

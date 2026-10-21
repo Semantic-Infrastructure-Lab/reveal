@@ -292,9 +292,10 @@ check:
 hotspots:
 	reveal hotspots src/ --top 20
 
-# Health dashboard (code + dependencies)
+# Health dashboard (code, then certificates and DNS)
 health:
-	reveal health ./src ssl://api.yoursite.com domain://yoursite.com
+	reveal check ./src
+	reveal health ssl://api.yoursite.com domain://yoursite.com
 
 # Pack PR context for AI review
 pack:

@@ -325,7 +325,7 @@ This is also the area where Reveal's help system benefits from its own markdown 
 Reveal is unusually good when the problem crosses code and operations boundaries.
 
 ```bash
-reveal health ./src ssl://api.example.com domain://example.com
+reveal health ssl://api.example.com domain://example.com
 reveal ssl://api.example.com
 reveal domain://example.com
 reveal check /etc/nginx/conf.d/users/myuser.conf
@@ -606,7 +606,7 @@ Start with the workflow that matches your job:
 | Prepare AI context | `reveal pack src/ --since main --budget 8000 --content` |
 | Discover Reveal capabilities | `reveal help://` or `reveal help://schemas` |
 | Investigate docs | `reveal 'markdown://docs/?link-graph'` |
-| Check infra health | `reveal health ./src ssl://site domain://site` |
+| Check infra health | `reveal health ssl://site domain://site` |
 | Explore workbook internals | `reveal 'xlsx:///file.xlsx?powerpivot=schema'` |
 | Audit Claude sessions | `reveal claude://sessions/` |
 
