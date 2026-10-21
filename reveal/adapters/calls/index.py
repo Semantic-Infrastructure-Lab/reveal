@@ -12,11 +12,12 @@ owner; direct helper reuse remains governed by the cheap key.
 
 import os
 import re
+import sys
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Dict, FrozenSet, Iterator, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, FrozenSet, Iterator, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from ..ast.analysis import (
     StructureList, collect_structures, environmental_failure, is_code_file, call_sources, unattributed_references,
@@ -438,7 +439,7 @@ class CallersIndex(Dict[str, List[Dict[str, Any]]]):
     traversal_failures: List[Tuple[Optional[str], str]]
 
 
-def _disclose_skipped(result: Dict[str, Any], skipped: List[Tuple[str, str]], *,
+def _disclose_skipped(result: Dict[str, Any], skipped: Sequence[Tuple[str, str]], *,
                       traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> Dict[str, Any]:
     """Carry file and directory loss separately for adapter metadata construction.
 
@@ -577,7 +578,7 @@ def find_callees(
     path: str,
     target: str,
     include_builtins: bool = False,
-    structures: Optional[StructureList] = None,
+    source: Optional['CalleeSource'] = None,
 ) -> Dict[str, Any]:
     """Find what function *target* calls, across all matching definitions.
 
@@ -595,44 +596,38 @@ def find_callees(
             languages' calls (e.g. Scala/Ruby ``.map``/``.filter``) are never
             filtered, since PYTHON_BUILTINS names can collide with other
             languages' real methods.  Pass True to see the raw list.
-        structures: ``collect_structures(<the directory>)`` the caller already holds
-            (the callee walk reads the same ones), used instead of collecting again.
+        source: ``callee_source(<the directory>)`` the caller already holds (the
+            callee walk reads the same one), used instead of collecting again.
 
     Returns:
         Dict with ``target``, ``matches`` (one entry per definition found),
         ``total_calls`` count, and ``_builtins_hidden`` (count filtered out).
     """
-    path_obj = Path(path)
-    directory = path_obj if path_obj.is_dir() else path_obj.parent
-    structures = _structures_or_collect(structures, directory)
+    if source is None:
+        source = callee_source(path)
 
     matches: List[Dict[str, Any]] = []
     builtins_hidden = 0
-    for file_struct in structures:
-        file_path = file_struct.get('file', '')
-        for elem in call_sources(file_struct):
-            # 'tests' included for the same reason as build_callers_index
-            # (BACK-663): a Zig test is a valid call *source* now that it
-            # carries a populated `calls` list (BACK-660) — "what does this
-            # test call" should work the same way "what calls X" already does.
-            if elem.get('category') not in ('functions', 'methods', 'tests', 'modules'):
-                continue
-            if not name_matches(elem.get('name', ''), target):
-                continue
-            calls = elem.get('calls', [])
-            builtins = conventions_for(_lang_family(file_path)).builtins
-            if not include_builtins and builtins:
-                filtered = [c for c in calls if c.split('.')[-1] not in builtins]
-                builtins_hidden += len(calls) - len(filtered)
-                calls = filtered
-            matches.append({
-                'file': file_path,
-                'function': elem.get('name', target),
-                'line': elem.get('line', 0),
-                'calls': calls,
-                'references': elem.get('references', []),
-                'reference_only_calls': elem.get('reference_only_calls', []),
-            })
+    # Every call source, 'tests' included for the same reason as build_callers_index
+    # (BACK-663): a Zig test carries a populated `calls` list (BACK-660), so "what does
+    # this test call" works the same way "what calls X" already does.
+    for definition in source.definitions:
+        if not name_matches(definition.name, target):
+            continue
+        calls = list(definition.calls)
+        builtins = conventions_for(_lang_family(definition.file)).builtins
+        if not include_builtins and builtins:
+            filtered = [c for c in calls if c.split('.')[-1] not in builtins]
+            builtins_hidden += len(calls) - len(filtered)
+            calls = filtered
+        matches.append({
+            'file': definition.file,
+            'function': definition.name,
+            'line': definition.line,
+            'calls': calls,
+            'references': [dict(reference) for reference in definition.references],
+            'reference_only_calls': list(definition.reference_only_calls),
+        })
 
     result: Dict[str, Any] = {
         'target': target,
@@ -641,7 +636,7 @@ def find_callees(
         'total_calls': sum(len(m['calls']) for m in matches),
         '_builtins_hidden': builtins_hidden,
     }
-    return _disclose_skipped(result, structures.skipped, traversal_failures=getattr(structures, 'traversal_failures', ()))
+    return _disclose_skipped(result, source.skipped, traversal_failures=source.traversal_failures)
 
 
 # Root selection and per-definition detail for the forward walk (moved from trace.py).
@@ -749,7 +744,7 @@ def _effects_from_calls(calls: List[str], classify_call, language=None) -> List[
 _CALL_SOURCE_CATEGORIES = ('functions', 'methods', 'tests', 'modules')
 
 
-def _call_definitions(structures: List[Dict[str, Any]]) -> Iterator[Tuple[str, str, Dict[str, Any]]]:
+def _call_definitions(structures: Sequence[Dict[str, Any]]) -> Iterator[Tuple[str, str, Dict[str, Any]]]:
     """(file, name, element) for every named call source: functions, methods, modules and
     'tests', so a Zig test block can be a root or be passed through (BACK-663)."""
     for file_struct in structures:
@@ -762,19 +757,67 @@ def _call_definitions(structures: List[Dict[str, Any]]) -> Iterator[Tuple[str, s
                 yield file_path, name, elem
 
 
-def _walk_index(structures: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
+class CallSource(NamedTuple):
+    """One named call source as collected: the structure's file spelling, calls unfiltered."""
+    file: str
+    name: str
+    line: int
+    signature: Any
+    calls: Tuple[str, ...]
+    references: Tuple[Dict[str, Any], ...]
+    reference_only_calls: Tuple[str, ...]
+
+
+class CalleeSource:
+    """What every forward query reads from one structure collection: ``find_callees``
+    (depth 1, ``FILE:NAME``), ``walk_callees`` (depth >= 2, ``?root=``, trace) and the
+    ``--detail`` params/effects. Definitions keep collection order and the file spelling of
+    the collection; builtins, names, depth and detail apply at query time, never here.
+    ``skipped``/``traversal_failures`` are the collection's loss evidence."""
+
+    __slots__ = ('definitions', 'skipped', 'traversal_failures')
+
+    def __init__(self, definitions: Tuple[CallSource, ...], skipped: Sequence[Tuple[str, str]] = (),
+                 traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> None:
+        self.definitions = definitions
+        self.skipped: Tuple[Tuple[str, str], ...] = tuple(skipped)
+        self.traversal_failures: Tuple[Tuple[Optional[str], str], ...] = tuple(traversal_failures)
+
+    @classmethod
+    def from_structures(cls, structures: Sequence[Dict[str, Any]]) -> 'CalleeSource':
+        intern = sys.intern
+        definitions = tuple(CallSource(
+            intern(file_path), intern(name), elem.get('line', 0), elem.get('signature', ''),
+            tuple(intern(call) for call in elem.get('calls', [])), tuple(elem.get('references', [])),
+            tuple(elem.get('reference_only_calls', []))) for file_path, name, elem in _call_definitions(structures))
+        return cls(definitions, getattr(structures, 'skipped', ()), getattr(structures, 'traversal_failures', ()))
+
+    def in_file(self, file_filter: str) -> 'CalleeSource':
+        """The definitions of the files FILE:NAME selects, keeping the collection's loss evidence."""
+        return CalleeSource(tuple(d for d in self.definitions if _path_matches(d.file, file_filter)),
+                            self.skipped, self.traversal_failures)
+
+
+def callee_source(path: str) -> CalleeSource:
+    """The forward queries' input for *path* (a file reads its directory)."""
+    path_obj = Path(path)
+    directory = path_obj if path_obj.is_dir() else path_obj.parent
+    return CalleeSource.from_structures(collect_structures(str(directory)))
+
+
+def _walk_index(source: CalleeSource) -> Tuple[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
     """Every definition, and name -> its definitions (lookup_keys), both in (file, line) order:
     collect_structures' file order is not stable, levels and candidates must be. Calls are
     stored unfiltered; the builtins switch applies when a definition is walked."""
     definitions = [{
-        'name': name,
-        'file': to_posix(file_path),  # '/' on every OS (BACK-1586)
-        'line': elem.get('line', 0),
-        'signature': elem.get('signature', ''),
-        'calls': elem.get('calls', []),
-        'references': elem.get('references', []),
-        'reference_only_calls': elem.get('reference_only_calls', []),
-    } for file_path, name, elem in _call_definitions(structures)]
+        'name': d.name,
+        'file': to_posix(d.file),  # '/' on every OS (BACK-1586)
+        'line': d.line,
+        'signature': d.signature,
+        'calls': list(d.calls),
+        'references': [dict(reference) for reference in d.references],
+        'reference_only_calls': list(d.reference_only_calls),
+    } for d in source.definitions]
     definitions.sort(key=lambda d: (d['file'], d['line']))
     index: Dict[str, List[Dict[str, Any]]] = {}
     for record in definitions:
@@ -859,7 +902,7 @@ def _callee_edge(node: CalleeNode, call: str, resolver: Any) -> Tuple[Dict[str, 
 
 
 def walk_callees(path: str, root: str, depth: int = 2, include_builtins: bool = False,
-                 structures: Optional[List[Dict[str, Any]]] = None) -> CalleeWalk:
+                 source: Optional[CalleeSource] = None) -> CalleeWalk:
     """Walk what *root* calls, level by level, to *depth* levels of edges (1 = direct calls).
 
     *root* is a name, matched like ``find_callees`` (``core.definition_names.name_matches``),
@@ -874,15 +917,14 @@ def walk_callees(path: str, root: str, depth: int = 2, include_builtins: bool = 
         root: Entry-point name, or ``FILE:NAME``.
         depth: Levels of edges to walk (the caller clamps it to 1..5).
         include_builtins: Keep calls to language builtins (hidden by default).
-        structures: ``collect_structures`` of the directory the caller already holds
-            (trace validates them first); collected here when None.
+        source: ``callee_source`` of the directory the caller already holds (trace builds
+            it from the structures it validated); ``callee_source(path)`` when None.
     """
     from .resolve import CallResolver  # noqa: I006 -- resolve imports this module
 
-    if structures is None:
-        path_obj = Path(path)
-        structures = collect_structures(str(path_obj if path_obj.is_dir() else path_obj.parent))
-    definitions, index = _walk_index(structures)
+    if source is None:
+        source = callee_source(path)
+    definitions, index = _walk_index(source)
     resolver = CallResolver(index)
     file_filter, root_name = _split_root(root)
     placed: Set[Tuple[str, int, str]] = set()
@@ -915,8 +957,7 @@ def walk_callees(path: str, root: str, depth: int = 2, include_builtins: bool = 
         if not frontier:
             break
     return CalleeWalk(root=root, root_name=root_name, depth=depth, roots=roots, levels=levels,
-                      skipped=list(getattr(structures, 'skipped', ())),
-                      traversal_failures=list(getattr(structures, 'traversal_failures', ())))
+                      skipped=list(source.skipped), traversal_failures=list(source.traversal_failures))
 
 
 def callee_levels(walk: CalleeWalk) -> Dict[str, Any]:

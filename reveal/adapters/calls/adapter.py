@@ -27,8 +27,8 @@ from reveal.reveal_types import CONTRACT_VERSION, RevealResult
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .confidence import build_meta as _call_graph_meta
 from .index import (find_callers, find_callees, find_uncalled, rank_by_callers, build_module_dependency_graph,
-                    walk_callees, callee_levels, CalleeWalk, _bare_callee_name, _path_matches, _split_root)
-from ..ast.analysis import StructureList, collect_structures
+                    walk_callees, callee_levels, callee_source, CalleeWalk, _bare_callee_name, _split_root)
+from ..ast.analysis import collect_structures
 from ...core.definition_names import name_matches
 from .renderer import render_calls_structure
 from ...utils.query_binding import bind_declared_params, boolean_value
@@ -816,7 +816,7 @@ class CallsAdapter(ResourceAdapter):
 
     def _callees(self, name: str, query_format: str, detail: bool) -> RevealResult:
         """Depth 1 is find_callees' per-definition answer, as before; depth 2-5 and detail add the
-        callee walk (walk_callees) to the same answer type, read from one structure collection."""
+        callee walk (walk_callees) to the same answer type, read from one callee_source."""
         params = self.query_params
         depth = _DEPTH.read(params) or 1
         include_builtins = _BUILTINS.read(params)
@@ -825,13 +825,13 @@ class CallsAdapter(ResourceAdapter):
         if not walked and not file_filter:
             data = find_callees(self.path, name, include_builtins=include_builtins)
         else:
-            structures = collect_structures(str(self._directory()))
+            source = callee_source(self.path)
             data = find_callees(self.path, bare, include_builtins=include_builtins,
-                                structures=_in_file(structures, file_filter) if file_filter else structures)
+                                source=source.in_file(file_filter) if file_filter else source)
             data['target'] = name
             if walked:
                 data.update(_walk_view(walk_callees(self.path, name, depth=depth, include_builtins=include_builtins,
-                                                    structures=structures), detail))
+                                                    source=source), detail))
         data['path'] = self.path
         return self._answer('calls_callees', data, query_format=query_format, unmeasured_walk=walked,
                             absent=lambda: not data['matches'],
@@ -853,13 +853,6 @@ class CallsAdapter(ResourceAdapter):
         return any(name_matches(elem.get('name'), want)
                    for file_struct in collect_structures(str(self._directory()))
                    for elem in file_struct.get('elements', []) for want in wanted)
-
-
-def _in_file(structures: StructureList, file_filter: str) -> StructureList:
-    """The structures of the files FILE:NAME selects, keeping the collection's loss evidence."""
-    picked = StructureList(s for s in structures if _path_matches(s.get('file', ''), file_filter))
-    picked.skipped, picked.traversal_failures = structures.skipped, structures.traversal_failures
-    return picked
 
 
 def _walk_view(walk: CalleeWalk, detail: bool) -> Dict[str, Any]:

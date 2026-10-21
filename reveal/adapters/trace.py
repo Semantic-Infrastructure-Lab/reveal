@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from reveal.reveal_types import CONTRACT_VERSION
 
 from .base import ResourceAdapter, register_adapter, register_renderer
-from .calls.index import CalleeNode, walk_callees
+from .calls.index import CalleeNode, CalleeSource, walk_callees
 from ..utils import print_json_result
 from ..utils.query_binding import bind_declared_params
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, clamped_whole,
@@ -198,7 +198,7 @@ def _build_trace(path: str, root: str, depth: int) -> Dict[str, Any]:
     from reveal.adapters.ast.analysis import collect_structures
 
     structures, meta = _trace_collection(collect_structures(path), path)
-    walk = walk_callees(path, root, depth, structures=structures)
+    walk = walk_callees(path, root, depth, source=CalleeSource.from_structures(structures))
     roots, root_name = walk.roots, walk.root_name
 
     warnings: List[str] = [entry['message'] for entry in meta.get('warnings', [])]
