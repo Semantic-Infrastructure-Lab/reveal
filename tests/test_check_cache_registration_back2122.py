@@ -265,3 +265,15 @@ def test_mcp_checks_of_a_markdown_and_a_javascript_file_alternate_across_threads
             assert error is None, f'{path.name} round {round_number}: {type(error).__name__}: {error}'
             assert marker in result, result  # positive control: the rule that needs a tree ran
             assert answers.setdefault(path.name, result) == result
+
+
+def test_scan_of_a_tree_reports_a_cache_added_to_it(tmp_path):
+    """The scan walks files: a new module with a new cache is a new, unlisted site."""
+    package = tmp_path / 'reveal'
+    package.mkdir()
+    (package / 'fresh.py').write_text("_answers = {}\n\n\ndef remember(k, v):\n    _answers[k] = v\n",
+                                      encoding='utf-8')
+    found = ccr.scan(tmp_path)
+    assert set(found.sites) == {'reveal/fresh.py::_answers'}
+    problems = ccr.check({'exempt_ceiling': 0, 'caches': {}}, found, [])
+    assert len(problems) == 1 and 'unlisted container cache reveal/fresh.py::_answers' in problems[0]

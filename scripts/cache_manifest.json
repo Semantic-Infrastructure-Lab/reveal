@@ -1,1 +1,362 @@
-{"exempt_ceiling": 0, "caches": {}}
+{
+ "exempt_ceiling": 33,
+ "caches": {
+  "disk:adapter_import_graph": {
+   "owner": "disk"
+  },
+  "disk:churn": {
+   "owner": "disk"
+  },
+  "disk:d005_literals": {
+   "owner": "disk"
+  },
+  "disk:generic_imports": {
+   "owner": "disk"
+  },
+  "disk:go_imports": {
+   "owner": "disk"
+  },
+  "disk:import_graph_v4": {
+   "owner": "disk"
+  },
+  "disk:javascript_imports": {
+   "owner": "disk"
+  },
+  "disk:markdown-headings": {
+   "owner": "disk"
+  },
+  "disk:markdown_link_graph": {
+   "owner": "disk"
+  },
+  "disk:python_imports": {
+   "owner": "disk"
+  },
+  "disk:rust_imports": {
+   "owner": "disk"
+  },
+  "disk:structure": {
+   "owner": "disk"
+  },
+  "disk:structure-outline": {
+   "owner": "disk"
+  },
+  "disk:zig_imports": {
+   "owner": "disk"
+  },
+  "reveal/adapters/ast/surface_rules.py::_call_filter": {
+   "owner": "pure"
+  },
+  "reveal/adapters/ast/surface_rules.py::_import_patterns": {
+   "owner": "pure"
+  },
+  "reveal/adapters/ast/surface_rules.py::_needles": {
+   "owner": "pure"
+  },
+  "reveal/adapters/ast/surface_rules.py::_new_filter": {
+   "owner": "pure"
+  },
+  "reveal/adapters/ast/surface_rules.py::_segment_prefixes": {
+   "owner": "pure"
+  },
+  "reveal/adapters/ast/surface_rules.py::rule_categories": {
+   "owner": "pure"
+  },
+  "reveal/adapters/ast/surface_rules.py::rules_for": {
+   "owner": "pure"
+  },
+  "reveal/adapters/calls/index.py::_CALLEE_CACHE": {
+   "owner": "validated"
+  },
+  "reveal/adapters/calls/index.py::_INDEX_CACHE": {
+   "owner": "validated"
+  },
+  "reveal/adapters/calls/index.py::_REFERENCE_CACHE": {
+   "owner": "validated"
+  },
+  "reveal/adapters/depends.py::DependsAdapter._ruby_inventory_roots_seen": {
+   "owner": "process-exempt",
+   "reason": "per adapter instance (paths); dies with the instance"
+  },
+  "reveal/adapters/factory.py::_legacy_init_warned": {
+   "owner": "process-exempt",
+   "reason": "warn-once flag: adapter class names already warned about"
+  },
+  "reveal/adapters/help_data/__init__.py::HelpDataLoader._cache": {
+   "owner": "process-exempt",
+   "reason": "reveal's own packaged help YAML, constant for the process; clear_cache() exists"
+  },
+  "reveal/adapters/registry.py::_RENDERER_REGISTRY": {
+   "owner": "process-exempt",
+   "reason": "import-time table filled by register_renderer, not an answer cache"
+  },
+  "reveal/analyzers/imports/base.py::ImportsDiskCache._mem_cache": {
+   "owner": "request",
+   "holds": "plain"
+  },
+  "reveal/analyzers/imports/base.py::_EXTRACTOR_REGISTRY": {
+   "owner": "process-exempt",
+   "reason": "import-time table filled by register_extractor, not an answer cache",
+   "holds": "plain"
+  },
+  "reveal/analyzers/imports/generic.py::_ruby_gem_inventory": {
+   "owner": "request",
+   "holds": "plain"
+  },
+  "reveal/analyzers/imports/generic.py::_ruby_inventory_facts": {
+   "owner": "request",
+   "holds": "plain"
+  },
+  "reveal/analyzers/imports/javascript.py::_TSCONFIG_ALIAS_CACHE": {
+   "owner": "request",
+   "holds": "plain"
+  },
+  "reveal/analyzers/imports/javascript.py::_TSCONFIG_FIND_CACHE": {
+   "owner": "request",
+   "holds": "plain"
+  },
+  "reveal/analyzers/imports/javascript.py::_WORKSPACE_PACKAGES_CACHE": {
+   "owner": "request",
+   "holds": "plain"
+  },
+  "reveal/analyzers/imports/python.py::_python_project_inventory": {
+   "owner": "request",
+   "holds": "plain"
+  },
+  "reveal/analyzers/imports/rust.py::_rust_crate_inventory": {
+   "owner": "request",
+   "holds": "plain"
+  },
+  "reveal/cli/defaults.py::_option_names": {
+   "owner": "process-exempt",
+   "reason": "argparse spellings of the declared flag table, built once; no input but the code"
+  },
+  "reveal/cli/defaults.py::_parser_defaults": {
+   "owner": "process-exempt",
+   "reason": "argparse defaults of the declared flag table, built once; no input but the code"
+  },
+  "reveal/cli/routing/ledger.py::FlagLedger.seen_keys": {
+   "owner": "process-exempt",
+   "reason": "per ledger instance (one CLI run or test)"
+  },
+  "reveal/config.py::RevealConfig._cache": {
+   "owner": "request"
+  },
+  "reveal/config.py::RevealConfig._root_cache": {
+   "owner": "request"
+  },
+  "reveal/config.py::_compile_glob_regex": {
+   "owner": "pure"
+  },
+  "reveal/config.py::_path_resolve_cache": {
+   "owner": "request"
+  },
+  "reveal/core/disk_cache.py::_ns_counts": {
+   "owner": "process-exempt",
+   "reason": "per-process put counters (ints) per disk namespace; conftest empties it",
+   "holds": "plain"
+  },
+  "reveal/core/disk_cache.py::_used_build_dirs": {
+   "owner": "process-exempt",
+   "reason": "build directories this process already marked used (paths)",
+   "holds": "plain"
+  },
+  "reveal/core/disk_cache.py::build_fingerprint": {
+   "owner": "process-exempt",
+   "reason": "fingerprint of the installed reveal and tree-sitter files; an edit to a running dev checkout is not seen (inventory: keep)",
+   "holds": "plain"
+  },
+  "reveal/core/treesitter_compat.py::_ACCESSORS": {
+   "owner": "process-exempt",
+   "reason": "accessor functions per binding class, resolved once; holds no node",
+   "holds": "plain"
+  },
+  "reveal/core/treesitter_compat.py::_PARSE_TAKES_BYTES": {
+   "owner": "process-exempt",
+   "reason": "one bool per parser class; holds no node",
+   "holds": "plain"
+  },
+  "reveal/core/treesitter_compat.py::_ROOT_MEMO": {
+   "owner": "thread-local",
+   "holds": "tree-sitter"
+  },
+  "reveal/core/treesitter_parse.py::_ThreadLocalMemo._local": {
+   "owner": "thread-local",
+   "holds": "tree-sitter"
+  },
+  "reveal/core/treesitter_parse.py::_pack_name": {
+   "owner": "process-exempt",
+   "reason": "which spelling of a language name the pack answered (str -> str)",
+   "holds": "plain"
+  },
+  "reveal/core/treesitter_parse.py::_parse_recent": {
+   "owner": "thread-local",
+   "holds": "tree-sitter"
+  },
+  "reveal/core/treesitter_parse.py::_ready": {
+   "owner": "process-exempt",
+   "reason": "language names a parser was already obtained for (str)",
+   "holds": "plain"
+  },
+  "reveal/core/treesitter_parse.py::_warned_uncached": {
+   "owner": "process-exempt",
+   "reason": "warn-once flag: language names (str)",
+   "holds": "plain"
+  },
+  "reveal/diff/architecture_diff.py::StructureCache._cache": {
+   "owner": "process-exempt",
+   "reason": "per StructureCache instance, built for one diff run"
+  },
+  "reveal/registry.py::get_code_extensions": {
+   "owner": "process-exempt",
+   "reason": "derived from the analyzer registry; every registry change drops it (BACK-2120)",
+   "holds": "plain"
+  },
+  "reveal/registry.py::get_markdown_extensions": {
+   "owner": "process-exempt",
+   "reason": "derived from the analyzer registry; every registry change drops it (BACK-2120)",
+   "holds": "plain"
+  },
+  "reveal/rules/__init__.py::RuleRegistry._rules": {
+   "owner": "process-exempt",
+   "reason": "import-time table filled by rule discovery, not an answer cache"
+  },
+  "reveal/rules/__init__.py::RuleRegistry._rules_by_code": {
+   "owner": "process-exempt",
+   "reason": "import-time table filled by rule discovery, not an answer cache"
+  },
+  "reveal/rules/__init__.py::_effective_codes_cache": {
+   "owner": "request"
+  },
+  "reveal/rules/base_mixins.py::_cached_ast_parse": {
+   "owner": "pure",
+   "holds": "plain"
+  },
+  "reveal/rules/base_mixins.py::_kind_buckets": {
+   "owner": "thread-local",
+   "holds": "tree-sitter"
+  },
+  "reveal/rules/duplicates/D005.py::_project_index": {
+   "owner": "validated"
+  },
+  "reveal/rules/duplicates/D005.py::_project_skip_reasons": {
+   "owner": "request",
+   "reason": "skip reasons of _project_index, evicted with it by the registered evict"
+  },
+  "reveal/rules/duplicates/_bodies.py::_file_lines": {
+   "owner": "pure"
+  },
+  "reveal/rules/imports/I002.py::_graph_cache": {
+   "owner": "validated"
+  },
+  "reveal/rules/imports/I003.py::_config_cache": {
+   "owner": "request"
+  },
+  "reveal/rules/imports/_dep_reconciliation.py::_scan_cache": {
+   "owner": "validated"
+  },
+  "reveal/rules/links/L001.py::_anchor_cache": {
+   "owner": "request"
+  },
+  "reveal/rules/maintainability/M102.py::_import_cache": {
+   "owner": "validated"
+  },
+  "reveal/rules/scan_caches.py::_preload_failures": {
+   "owner": "request"
+  },
+  "reveal/rules/types/T006.py::_project_index": {
+   "owner": "validated"
+  },
+  "reveal/rules/types/T006.py::_project_skip_reasons": {
+   "owner": "request",
+   "reason": "skip reasons of _project_index, evicted with it by the registered evict"
+  },
+  "reveal/rules/urls/U502.py::_canonical_url_cache": {
+   "owner": "request"
+  },
+  "reveal/rules/urls/U502.py::_pyproject_dir_cache": {
+   "owner": "request"
+  },
+  "reveal/schemas/frontmatter/__init__.py::SchemaLoader._schema_cache": {
+   "owner": "process-exempt",
+   "reason": "parsed schema files with no mtime; only --validate-schema reaches it (latent, inventory)"
+  },
+  "reveal/testability/boundaries.py::module_name_from_file": {
+   "owner": "process-exempt",
+   "reason": "keyed on the path as typed (cwd and symlinks), unbounded; not reproduced as wrong (inventory: low fix)"
+  },
+  "reveal/testability/report.py::_module_matches": {
+   "owner": "pure"
+  },
+  "reveal/testability/report.py::_target_module": {
+   "owner": "pure"
+  },
+  "reveal/testability/report.py::_target_symbol": {
+   "owner": "pure"
+  },
+  "reveal/treesitter.py::TreeSitterAnalyzer._node_cache": {
+   "owner": "process-exempt",
+   "reason": "per analyzer instance; holds tree-sitter nodes; analyzers are built per call (not verified for every caller)",
+   "holds": "tree-sitter"
+  },
+  "reveal/treesitter.py::_parse_cache_local": {
+   "owner": "thread-local",
+   "holds": "tree-sitter"
+  },
+  "reveal/treesitter.py::_warned_failed_languages": {
+   "owner": "process-exempt",
+   "reason": "warn-once flag: language names (str)",
+   "holds": "plain"
+  },
+  "reveal/type_system.py::TypeRegistry._by_extension": {
+   "owner": "process-exempt",
+   "reason": "import-time table, not an answer cache"
+  },
+  "reveal/type_system.py::TypeRegistry._by_scheme": {
+   "owner": "process-exempt",
+   "reason": "import-time table, not an answer cache"
+  },
+  "reveal/type_system.py::TypeRegistry._types": {
+   "owner": "process-exempt",
+   "reason": "import-time table, not an answer cache"
+  },
+  "reveal/utils/gitignore.py::_REPO_CACHE": {
+   "owner": "request"
+  },
+  "reveal/utils/gitignore.py::_ROOT_CACHE": {
+   "owner": "request"
+  },
+  "reveal/utils/gitignore.py::pattern_set": {
+   "owner": "pure"
+  },
+  "reveal/utils/path_utils.py::_SharedClimb._seen": {
+   "owner": "process-exempt",
+   "reason": "per climb instance (one walk)"
+  },
+  "reveal/utils/path_utils.py::_marker_root_cache": {
+   "owner": "request"
+  },
+  "reveal/utils/path_utils.py::_reveal_yaml_root_flag": {
+   "owner": "pure",
+   "reason": "keyed by (file, mtime_ns, size): a new file state is a new key"
+  },
+  "reveal/utils/path_utils.py::_unsafe_scan_roots_for": {
+   "owner": "process-exempt",
+   "reason": "realpath of fixed system directories keyed by (temp dir, home); a symlink retarget mid-process is not seen"
+  },
+  "reveal/utils/patterns.py::compile_pattern": {
+   "owner": "pure"
+  },
+  "reveal/utils/request_cache.py::_RESETTERS": {
+   "owner": "process-exempt",
+   "reason": "the request-cache registry itself"
+  },
+  "reveal/utils/request_cache.py::_STAMPS": {
+   "owner": "process-exempt",
+   "reason": "stamps of validated entries; pruned by reset_request_caches"
+  },
+  "reveal/utils/request_cache.py::_VALIDATED": {
+   "owner": "process-exempt",
+   "reason": "the validated-cache registry itself"
+  }
+ }
+}
