@@ -154,6 +154,51 @@
           "meta": {
             "confidence": 1.0,
             "errors": [],
+            "issue_count": {
+              "field": "local_check_issues",
+              "rule": "file-local rules only",
+              "rule_count": 37,
+              "rule_set_id": "b10cb2ea",
+              "rules": [
+                "B001",
+                "B002",
+                "B003",
+                "B004",
+                "B006",
+                "B007",
+                "C901",
+                "C902",
+                "C905",
+                "D001",
+                "E501",
+                "F001",
+                "F002",
+                "F003",
+                "F004",
+                "F005",
+                "I001",
+                "I005",
+                "I006",
+                "M101",
+                "M104",
+                "M501",
+                "N001",
+                "N004",
+                "N005",
+                "N006",
+                "N011",
+                "N012",
+                "R913",
+                "S001",
+                "S701",
+                "T004",
+                "T005",
+                "U501",
+                "V016",
+                "V017",
+                "V023"
+              ]
+            },
             "warnings": [
               {
                 "message": "complexity is McCabe cyclomatic complexity (a count of decision points), not weighted by nesting depth -- ~40 flat, sequential branches at the same level score identically to one branch nested 40 levels deep. Two functions with the same score can have very different actual structure.",
@@ -188,17 +233,14 @@
       },
       "counts": {
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"treesitter:python\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"treesitter:python\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:python\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 2,
@@ -206,7 +248,6 @@
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:python\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 2,
@@ -234,11 +275,11 @@
       },
       "stderr": "",
       "totals": {
-        "artifact": 5,
-        "attempt": 5,
+        "artifact": 4,
+        "attempt": 4,
         "failure": 0,
-        "outcome": 9,
-        "request": 9
+        "outcome": 8,
+        "request": 8
       }
     },
     "overview": {
@@ -355,6 +396,51 @@
           "meta": {
             "confidence": 1.0,
             "errors": [],
+            "issue_count": {
+              "field": "local_check_issues",
+              "rule": "file-local rules only",
+              "rule_count": 37,
+              "rule_set_id": "b10cb2ea",
+              "rules": [
+                "B001",
+                "B002",
+                "B003",
+                "B004",
+                "B006",
+                "B007",
+                "C901",
+                "C902",
+                "C905",
+                "D001",
+                "E501",
+                "F001",
+                "F002",
+                "F003",
+                "F004",
+                "F005",
+                "I001",
+                "I005",
+                "I006",
+                "M101",
+                "M104",
+                "M501",
+                "N001",
+                "N004",
+                "N005",
+                "N006",
+                "N011",
+                "N012",
+                "R913",
+                "S001",
+                "S701",
+                "T004",
+                "T005",
+                "U501",
+                "V016",
+                "V017",
+                "V023"
+              ]
+            },
             "warnings": [
               {
                 "message": "complexity is McCabe cyclomatic complexity (a count of decision points), not weighted by nesting depth -- ~40 flat, sequential branches at the same level score identically to one branch nested 40 levels deep. Two functions with the same score can have very different actual structure.",
@@ -411,8 +497,8 @@
                 },
                 "quality": {
                   "avg_function_length": 3.0,
-                  "check_issues": 0,
                   "deep_nesting": 0,
+                  "local_check_issues": 0,
                   "long_functions": 0,
                   "score": 100.0
                 }
@@ -442,8 +528,8 @@
                 },
                 "quality": {
                   "avg_function_length": 3.0,
-                  "check_issues": 0,
                   "deep_nesting": 0,
+                  "local_check_issues": 0,
                   "long_functions": 0,
                   "score": 100.0
                 }
@@ -473,14 +559,61 @@
                 },
                 "quality": {
                   "avg_function_length": 3.0,
-                  "check_issues": 0,
                   "deep_nesting": 0,
+                  "local_check_issues": 0,
                   "long_functions": 0,
                   "score": 100.0
                 }
               }
             ],
             "hotspots": [],
+            "meta": {
+              "issue_count": {
+                "field": "local_check_issues",
+                "rule": "file-local rules only",
+                "rule_count": 37,
+                "rule_set_id": "b10cb2ea",
+                "rules": [
+                  "B001",
+                  "B002",
+                  "B003",
+                  "B004",
+                  "B006",
+                  "B007",
+                  "C901",
+                  "C902",
+                  "C905",
+                  "D001",
+                  "E501",
+                  "F001",
+                  "F002",
+                  "F003",
+                  "F004",
+                  "F005",
+                  "I001",
+                  "I005",
+                  "I006",
+                  "M101",
+                  "M104",
+                  "M501",
+                  "N001",
+                  "N004",
+                  "N005",
+                  "N006",
+                  "N011",
+                  "N012",
+                  "R913",
+                  "S001",
+                  "S701",
+                  "T004",
+                  "T005",
+                  "U501",
+                  "V016",
+                  "V017",
+                  "V023"
+                ]
+              }
+            },
             "source": "<corpus>",
             "source_type": "directory",
             "summary": {
@@ -508,17 +641,14 @@
       },
       "counts": {
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"treesitter:python\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"artifact\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"python.ast\",\"phase\":\"original\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"parser\":\"treesitter:python\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"attempt\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"parser\":\"treesitter:typescript\",\"phase\":\"compatibility-wrapper\",\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:python\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 2,
@@ -526,7 +656,6 @@
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"built\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"outcome\",\"filename\":\"second.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":\"cached\",\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"51082eb17cb4d381fc3afdf1bdddd2ab8e82c36bdbd01a2db6d0f82eb89a5ace\",\"source_length\":236,\"source_variant\":\"analyzer-content\"}": 1,
-        "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"python.ast\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"config.py\",\"original_source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:python\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"c8f0af0dcc2be27d83229294450166d61df04f12ab3e4714fed8627b121929d1\",\"source_length\":237,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"source_length\":120,\"source_variant\":\"canonical\"}": 1,
         "{\"domain\":\"fullsource\",\"error\":null,\"event\":\"request\",\"filename\":\"first.ts\",\"original_source_hash\":\"6eab4cea93fbfcff4cf6d364a56a9471d552275c63ab23851c3c3640d9960471\",\"outcome\":null,\"parsed_hash\":null,\"parser\":\"treesitter:typescript\",\"phase\":null,\"scope\":\"target\",\"source_hash\":\"efb87be391ec1c630b43598e332cd6246c6df72986f720e572cdb722cddbb495\",\"source_length\":119,\"source_variant\":\"analyzer-content\"}": 2,
@@ -554,11 +683,11 @@
       },
       "stderr": "",
       "totals": {
-        "artifact": 5,
-        "attempt": 5,
+        "artifact": 4,
+        "attempt": 4,
         "failure": 0,
-        "outcome": 9,
-        "request": 9
+        "outcome": 8,
+        "request": 8
       }
     },
     "surface": {
