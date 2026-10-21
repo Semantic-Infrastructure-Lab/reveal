@@ -155,17 +155,20 @@ def test_normal_decorated_requests_repair_census_score_and_keep_sibling_exact(tm
         result = reveal_query(target, provenance=provenance)
         assert type(result) is str and not isinstance(result, _ToolFailure)
         return result
+    def stable(text):
+        # execution.git.dirty reads the process checkout, which other workers write to (BACK-2059)
+        return {k: v for k, v in json.loads(text).items() if k != 'execution'} if provenance else text
     clean = query(uri); sibling_clean = query(sibling_uri)
     with monkeypatch.context() as context:
         fault(context, {root})
         lost = query(uri)
         assert 'missing file population is unknown' in lost
-        assert query(sibling_uri) == sibling_clean
+        assert stable(query(sibling_uri)) == stable(sibling_clean)
         if provenance:
             data = json.loads(lost)
             assert data['total_callers'] == 2 and 'confidence' not in data['meta']
             assert data['execution']['command'].startswith('reveal calls://')
-    assert query(uri) == clean
+    assert stable(query(uri)) == stable(clean)
 
 
 def test_clean_empty_single_file_and_default_census_shapes_remain_compatible(tmp_path):
