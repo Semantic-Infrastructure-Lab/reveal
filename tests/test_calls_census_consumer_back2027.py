@@ -163,9 +163,13 @@ def test_warm_healthy_index_still_requires_fresh_census_on_normal_host_requests(
         assert type(response) is str and not isinstance(response, _ToolFailure)
         return response
 
+    def stable(text):
+        # execution.git.dirty reads the process checkout, which other workers write to (BACK-2059)
+        return {key: value for key, value in json.loads(text).items() if key != 'execution'} if provenance else text
+
     clean, sibling_clean = query(uri), query(sibling_uri)
     # A second clean request normally seals the retained index for actual reuse.
-    assert query(uri) == clean
+    assert stable(query(uri)) == stable(clean)
     retained = index._INDEX_CACHE[str(root)][1]
     collected = fault['collections']
     before_census = len(fault['censuses'])
@@ -175,9 +179,9 @@ def test_warm_healthy_index_still_requires_fresh_census_on_normal_host_requests(
     assert fault['collections'] == collected
     assert len(fault['censuses']) == before_census + 1
     assert 'missing file population is unknown' in lost
-    assert query(sibling_uri) == sibling_clean
+    assert stable(query(sibling_uri)) == stable(sibling_clean)
     fault['denied'] = set()
-    assert query(uri) == clean
+    assert stable(query(uri)) == stable(clean)
 
 
 def test_empty_unmeasured_and_single_file_default_contracts_stay_clean(tmp_path):

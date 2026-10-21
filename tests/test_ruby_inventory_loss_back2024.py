@@ -126,7 +126,7 @@ def test_actual_cached_inventory_loss_is_required_risk_with_main_and_load_roots_
     assert warning['directories'] == ['core' if mode == 'manifest' else 'core/lib']
     assert generic._ruby_gem_inventory.cache_info().misses == 1
     assert generic._ruby_gem_inventory.cache_info().hits >= 2
-    assert request(target) == clean
+    assert without_execution(request(target)) == without_execution(clean)
 
 
 @pytest.mark.parametrize('module', ['retained/missing', 'external_gem', 'unknown_name'])

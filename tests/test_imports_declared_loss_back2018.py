@@ -153,8 +153,10 @@ def test_loss_cli_uri_exit_and_provenance_agree(tmp_path, name):
         resource = run(uri(name, tmp_path), '--format', 'json', '--provenance')
     assert cli.returncode == resource.returncode == 3
     left, right = json.loads(cli.stdout), json.loads(resource.stdout)
-    left['execution'].pop('command')
-    right['execution'].pop('command')
+    # command differs by spelling; repo.dirty reads the process checkout, which other workers write to (BACK-2059)
+    for side in (left, right):
+        side['execution'].pop('command')
+        side['execution'].pop('repo')
     assert left == right
 
 

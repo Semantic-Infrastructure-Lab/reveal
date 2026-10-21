@@ -162,6 +162,9 @@ def test_same_adapter_and_decorated_requests_repair_and_sibling_without_clears(t
     clean = adapter.get_structure()
     sibling_uri = f'ast://{sibling}?{mode}'
     sibling_clean = reveal_query(sibling_uri, provenance=True)
+    def stable(text):
+        # execution.git.dirty reads the process checkout, which other workers write to (BACK-2059)
+        return {key: value for key, value in json.loads(text).items() if key != 'execution'}
     state = fault(monkeypatch, {child})
     lost = adapter.get_structure()
     assert state['events'] and body(lost) == body(clean)
@@ -171,7 +174,7 @@ def test_same_adapter_and_decorated_requests_repair_and_sibling_without_clears(t
     data = json.loads(wire)
     assert data['meta']['confidence'] == 1.0
     directory_warning(data)
-    assert reveal_query(sibling_uri, provenance=True) == sibling_clean
+    assert stable(reveal_query(sibling_uri, provenance=True)) == stable(sibling_clean)
     state['enabled'] = False
     assert adapter.get_structure() == clean
     repaired = json.loads(reveal_query(f'ast://{root}?{mode}', provenance=True))
