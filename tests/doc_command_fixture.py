@@ -17,7 +17,10 @@ import os
 import shutil
 import sqlite3
 import subprocess
+import warnings
 from pathlib import Path, PurePosixPath
+
+import pytest
 
 
 def _pad(prefix, count, indent='    '):
@@ -670,6 +673,16 @@ def build_session_extras(home: Path) -> None:
     conn.close()
 
 
+class TransientGitError(RuntimeError):
+    """git could not write into the object store: the signature of BACK-2133 (CI run 39537054761)."""
+
+
+# git's create_tmpfile() message; it only appears when .git/objects (or a parent) went missing
+# after git had already found the repository.
+_TRANSIENT_GIT = 'unable to create temporary file'
+BUILD_ATTEMPTS = 3
+
+
 def _git(root, *cmd, author=('John', 'john@example.com'), date='2026-01-05'):
     name, email = author
     stamp = f'{date}T12:00:00'
@@ -680,8 +693,9 @@ def _git(root, *cmd, author=('John', 'john@example.com'), date='2026-01-05'):
                        timeout=60)
     except subprocess.CalledProcessError as exc:
         # check=True + capture_output hid git's own message, so a CI exit 128 had no cause (BACK-1759)
-        raise RuntimeError(f"git {' '.join(cmd)} exited {exc.returncode} in {root}: "
-                           f"{exc.stderr.decode('utf-8', 'replace').strip()}") from exc
+        stderr = exc.stderr.decode('utf-8', 'replace').strip()
+        kind = TransientGitError if _TRANSIENT_GIT in stderr else RuntimeError
+        raise kind(f"git {' '.join(cmd)} exited {exc.returncode} in {root}: {stderr}") from exc
 
 
 def _commit(root, author, email, date, message, path, text):
@@ -690,8 +704,47 @@ def _commit(root, author, email, date, message, path, text):
     _git(root, 'commit', '-q', '-am', message, author=(author, email), date=date)
 
 
-def build_doc_command_tree(root: Path) -> Path:
-    """Write ``FILES`` under ``root`` and, when git is installed, its history. Returns root."""
+def build_doc_command_tree(root: Path, attempts: int = BUILD_ATTEMPTS) -> Path:
+    """Write ``FILES`` under ``root`` and, when git is installed, its history. Returns root.
+
+    git's transient object-store error (BACK-2133) rebuilds the whole tree, at most ``attempts``
+    times, with a warning per retry; any other failure, and the last attempt's, raise at once.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            return _build_once(root)
+        except TransientGitError as exc:
+            if attempt == attempts:
+                raise
+            warnings.warn(f'doc command fixture: attempt {attempt}/{attempts} failed, rebuilding {root}: '
+                          f'{exc}', RuntimeWarning, stacklevel=2)
+            shutil.rmtree(root, ignore_errors=True)  # the object store is gone or half there: start clean
+
+
+class FailedBuild:
+    """Stands in for a harness whose tree did not build.
+
+    A module-scoped fixture that raises is replayed as an error by every test that asks for it (231
+    in CI run 39537054761).  Handing the cause to the first test that touches the harness, and
+    skipping the rest with a pointer to it, keeps one failure carrying git's stderr.
+    """
+
+    def __init__(self, cause):
+        self._cause = cause
+        self._reported = False
+
+    def __getattr__(self, name):
+        if name.startswith('__'):
+            raise AttributeError(name)
+        if not self._reported:
+            self._reported = True
+            pytest.fail(f'doc command fixture did not build: {self._cause}', pytrace=False)
+        pytest.skip('doc command fixture did not build; the cause is already reported by the first test '
+                    'that used it on this worker')
+
+
+def _build_once(root: Path) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
     for name, content in FILES.items():
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -740,8 +740,12 @@ NAMED_KNOWN_VIOLATIONS: dict = {
 
 @pytest.fixture(scope='module')
 def named_harness(tmp_path_factory):
-    from doc_command_fixture import CLAUDE_SESSIONS, build_doc_command_tree, build_session_extras
-    root = build_doc_command_tree(tmp_path_factory.mktemp('doc_commands'))
+    from doc_command_fixture import CLAUDE_SESSIONS, FailedBuild, build_doc_command_tree, build_session_extras
+    try:
+        root = build_doc_command_tree(tmp_path_factory.mktemp('doc_commands'))
+    except RuntimeError as exc:  # git's own message; one failure, not a replay per test (BACK-2133)
+        yield FailedBuild(exc)
+        return
     build_claude_home(root / 'home', extra_sessions=CLAUDE_SESSIONS)
     build_codex_home(root / 'home')
     build_session_extras(root / 'home')
