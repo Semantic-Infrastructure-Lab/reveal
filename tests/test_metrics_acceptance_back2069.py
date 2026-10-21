@@ -74,16 +74,19 @@ def project(tmp_path):
 PROVENANCE_SPELLINGS = {
     'metrics://?view=provenance': lambda d: [f'metrics://{d}?view=provenance'],
     'classify://': lambda d: [f'classify://{d}'],
+    'reveal metrics --view provenance': lambda d: ['metrics', str(d), '--view', 'provenance'],
 }
 METRICS_SPELLINGS = {
     'metrics://': lambda d: [f'metrics://{d}'],
     'stats://': lambda d: [f'stats://{d}'],
+    'reveal metrics': lambda d: ['metrics', str(d)],
 }
 HOTSPOT_SPELLINGS = {
     'metrics://?hotspots=true': lambda d: [f'metrics://{d}?hotspots=true'],
     'metrics:// --hotspots': lambda d: [f'metrics://{d}', '--hotspots'],
     'stats://?hotspots=true': lambda d: [f'stats://{d}?hotspots=true'],
     'stats:// --hotspots': lambda d: [f'stats://{d}', '--hotspots'],
+    'reveal metrics --hotspots': lambda d: ['metrics', str(d), '--hotspots'],
 }
 # Each retired spelling, the note it prints, and the new spelling whose answer it must equal.
 RETIRED = {

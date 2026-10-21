@@ -22,6 +22,7 @@ CASES = {
     'contracts': ([], ''),
     'deps': ([], ''),
     'hotspots': ([], ''),
+    'metrics': ([], ''),
     'overview': ([], ''),
     'pack': ([], ''),
     'surface': ([], ''),
