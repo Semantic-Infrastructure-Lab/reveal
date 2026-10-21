@@ -267,6 +267,35 @@ def test_the_per_file_form_scores_the_rendered_package_view_and_refuses_a_cut(py
         gate.rendered_dependents(scan, scan / 'pkg/a.py')
 
 
+def test_the_gate_scores_one_stated_rule_and_refuses_another(python_corpus, monkeypatch):
+    # BACK-2062: the oracles' truth is every edge, function-level included, tests included,
+    # TYPE_CHECKING excluded. The gate records the rule depends:// printed and refuses an answer
+    # computed under any other rule, instead of scoring it against the wrong truth.
+    root, entry = python_corpus
+    measured = gate.measure(entry, root)
+    assert measured['edge_rule']['lazy'] == 'include' and measured['edge_rule']['tests'] == 'included'
+    real = DependsAdapter._edge_rule
+
+    def load_time_only(self):
+        return {**real(self), 'lazy': 'exclude'}
+
+    monkeypatch.setattr(DependsAdapter, '_edge_rule', load_time_only)
+    with pytest.raises(RuntimeError, match="rule lazy='exclude'"):
+        gate.measure(entry, root)
+
+
+def test_the_report_names_each_combination_it_declines(tmp_path, monkeypatch):
+    # Every other parameter combination is listed with its reason, never left as 'runs, unmeasured'.
+    monkeypatch.setattr(gate, '_selected', lambda manifest, wanted, signal='imports': ([], []))
+    output = tmp_path / 'report.json'
+    gate.main(['--corpus-root', str(tmp_path), '--output', str(output), '--baseline', str(tmp_path / 'none')])
+    report = json.loads(output.read_text(encoding='utf-8'))
+    declined = {row['combination']: row['reason'] for row in report['declined']}
+    assert set(declined) == {'lazy=exclude', 'lazy=only', 'tests=exclude'}
+    assert all(declined.values())
+    assert report['scored'] == {'lazy': 'include', 'tests': 'included', 'type_checking': 'excluded'}
+
+
 def test_unknown_oracle_and_escaping_scan_root_fail(python_corpus):
     root, entry = python_corpus
     with pytest.raises(RuntimeError, match="Unknown recall oracle 'nope'"):
