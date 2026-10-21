@@ -107,3 +107,27 @@ def test_a_clean_outline_is_still_served_from_the_cache(tmp_path, monkeypatch):
     second = _structure(path)
     assert second['imports'] == first['imports'] and len(first['imports']) == 2
     assert not builds, 'a healthy structure should come from the cache'
+
+
+def test_an_unreadable_file_at_extraction_is_not_stored_either(tmp_path, monkeypatch):
+    """BACK-2083's failure through the same door: the extractor's own read raises an OSError."""
+    from reveal import base as reveal_base
+    path = _write(tmp_path, 'a.js')
+    healthy = len(_structure(path).get('imports', []))
+    other = _cold_copy(tmp_path, 'a.js')
+    analyzer = get_analyzer(str(other))(str(other))   # reads the content now; armed below
+    fired = []
+    real = reveal_base.FileAnalyzer._read_file
+
+    def read(self):
+        if Path(str(self.path)).resolve() == other.resolve() and not fired:
+            fired.append(1)
+            raise PermissionError(13, 'Permission denied', str(self.path))
+        return real(self)
+
+    monkeypatch.setattr(reveal_base.FileAnalyzer, '_read_file', read)  # noqa: V036 reviewed: serial
+    first = analyzer.get_structure()
+    assert fired and first.get('imports', []) == [] and first.get('_imports_failed')
+    second = _structure(other)
+    assert len(second.get('imports', [])) == healthy and not second.get('_imports_failed'), (
+        'the structure built while the file was unreadable was stored and served again')

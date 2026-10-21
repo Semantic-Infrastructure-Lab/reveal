@@ -525,6 +525,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
         self._line_index: Optional[Tuple[List[int], List[int], List[Any]]] = None  # BACK-1866, see _non_code_index
         self._content_bytes: Optional[bytes] = None
         self._imports_failure: Optional[str] = None  # BACK-1852: set when the imports extractor raised
+        # BACK-2138: the failure did not come from the content (the extractor's analysis is not cacheable)
+        self._imports_uncacheable = False
         self.parse_error: Optional[str] = None  # BACK-979: set when _parse_tree()'s except branch fires
         self._outline_only: bool = False  # set only for the duration of get_outline()
 
@@ -725,7 +727,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # get_structure() -- reading self.tree there parsed every file on a hit.
         structure['_has_errors'] = self._has_recovery_artifacts()
 
-        if fingerprint is not None:
+        # A failure the file's content did not cause (BACK-2136) leaves the stat key unchanged, so
+        # the structure built around it is returned and disclosed but not stored (BACK-2138).
+        if fingerprint is not None and not self._imports_uncacheable:
             disk_cache.put(namespaces[-1], fingerprint, structure,
                            max_entries=_structure_cache_max_files())
         return structure
@@ -804,6 +808,10 @@ class TreeSitterAnalyzer(FileAnalyzer):
             logger.debug("imports extractor failed for %s: %s", path, e)
             self._imports_failure = f"{type(e).__name__}: {e}"
             return []
+        analysis = extractor.analysis
+        if not analysis.cacheable:
+            self._imports_failure = analysis.transient_error or analysis.read_error or 'imports extraction failed'
+            self._imports_uncacheable = True
         return [{'line': st.line_number, 'content': (st.source_line or st.module_name).strip()}
                 for st in statements]
 
