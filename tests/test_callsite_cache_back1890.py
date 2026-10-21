@@ -126,3 +126,158 @@ def test_cache_off_is_the_positive_control(project, spy, monkeypatch):
     off, _ = _scan(project)
     assert sorted(spy) == ["a.py", "app.jsx", "b.py", "broken.py"]  # off computes every time
     assert off == first
+
+
+# --- safety guards (each is proved by mutation in the BACK-1890 report) --------------------------
+
+def _analyzer(path):
+    from reveal.registry import get_analyzer
+    return get_analyzer(str(path))(str(path))
+
+
+def _structure_only(root):
+    """What the stats pool does: build and store the structure, collect no call sites."""
+    for name in sorted(os.listdir(root)):
+        _analyzer(root / name).get_structure()
+
+
+def _entry(path):
+    analyzer = _analyzer(path)
+    return disk_cache.get(ts_mod._STRUCTURE_CACHE_NAMESPACE, analyzer._structure_fingerprint())
+
+
+def test_layer_never_leaks_into_get_structure(project):
+    _scan(project)
+    assert ts_mod._CALL_SITE_LAYER_KEY in _entry(project / "a.py")  # it is in the stored entry...
+    structure = _analyzer(project / "a.py").get_structure()
+    assert ts_mod._CALL_SITE_LAYER_KEY not in structure  # ...and never in what consumers see
+
+
+def test_layer_for_another_content_form_is_a_miss(project, spy):
+    """BACK-1914 note 2: a layer built from one content form is not served for the other."""
+    _scan(project)
+    analyzer = _analyzer(project / "a.py")
+    analyzer.get_structure()
+    assert analyzer.load_call_site_layer(analyzer.call_site_form()) is not None
+    assert analyzer.load_call_site_layer("canonical-content/eof-lf") is None
+    flipped = _analyzer(project / "a.py")
+    flipped._ends_with_newline = not flipped._ends_with_newline
+    flipped.get_structure()
+    assert flipped.load_call_site_layer(flipped.call_site_form()) is None
+
+
+def test_js_layer_without_its_jsx_extras_is_a_miss(project, spy):
+    """The JSX references and call sites live in the same entry or the layer is not used (item 5)."""
+    _scan(project)
+    path = project / "app.jsx"
+    analyzer = _analyzer(path)
+    key = analyzer._structure_fingerprint()
+    entry = disk_cache.get(ts_mod._STRUCTURE_CACHE_NAMESPACE, key)
+    layer = dict(entry[ts_mod._CALL_SITE_LAYER_KEY])
+    assert "jsx_references" in layer and "jsx_call_sites" in layer
+    del layer["jsx_call_sites"]
+    disk_cache.put(ts_mod._STRUCTURE_CACHE_NAMESPACE, key, {**entry, ts_mod._CALL_SITE_LAYER_KEY: layer})
+    spy.clear()
+    after, _ = _scan(project)
+    assert spy == ["app.jsx"]
+    assert after["app.jsx"]["jsx_call_sites"] is not None
+
+
+def test_outline_scan_stores_nothing_and_full_request_still_computes(project, spy):
+    analysis.collect_structures(str(project), outline=True)
+    assert spy == []  # an outline collects no call sites
+    assert _entry(project / "a.py") is None  # and left no full entry for a layer to hang on
+    analyzer = _analyzer(project / "a.py")
+    analyzer.store_call_site_layer(analyzer.call_site_form(), {"module_call_sites": []})
+    assert _entry(project / "a.py") is None  # nothing is invented to hold the layer
+    full, _ = _scan(project)
+    assert sorted(spy) == ["a.py", "app.jsx", "b.py", "broken.py"]
+    assert full["a.py"]["module_call_sites"]
+
+
+def test_parse_failure_during_collection_is_not_stored(project, spy, monkeypatch):
+    """The BACK-2138 rule: a failure the content did not cause is reported every time, never filed."""
+    _structure_only(project)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("transient parser failure")
+
+    real_get_tree = ts_mod.get_tree
+    monkeypatch.setattr(ts_mod, "get_tree", boom)
+    _, skipped = _scan(project)
+    failed = sorted(os.path.basename(path) for path, failure in skipped if "ParseError" in failure)
+    assert "a.py" in failed
+    assert ts_mod._CALL_SITE_LAYER_KEY not in _entry(project / "a.py")
+    spy.clear()
+    _, skipped_again = _scan(project)  # same injection: the hit must not have hidden it
+    assert sorted(os.path.basename(path) for path, failure in skipped_again if "ParseError" in failure) == failed
+    monkeypatch.setattr(ts_mod, "get_tree", real_get_tree)
+    spy.clear()
+    clean, skipped_clean = _scan(project)
+    assert "a.py" in spy and not [f for _, f in skipped_clean if "ParseError" in f]
+    assert clean["a.py"]["module_call_sites"]
+
+
+def test_grammar_unavailable_is_reported_each_time_and_never_stored(project, monkeypatch):
+    from reveal.core.treesitter_parse import GrammarUnavailable
+    _structure_only(project)
+
+    def unavailable(file_path, analyzer):
+        raise GrammarUnavailable("python", RuntimeError("grammar missing"))
+
+    monkeypatch.setattr(analysis, "module_call_sites", unavailable)
+    for _ in range(2):
+        _, skipped = _scan(project)
+        assert any("GrammarUnavailable" in failure or "grammar" in failure.lower()
+                   for path, failure in skipped if path.endswith("a.py"))
+        assert ts_mod._CALL_SITE_LAYER_KEY not in _entry(project / "a.py")
+
+
+def test_uncacheable_structure_build_stores_no_layer(project, monkeypatch):
+    """A build whose imports failed for a reason the content did not cause (BACK-2138) files nothing."""
+    original = ts_mod.TreeSitterAnalyzer._get_or_build_structure
+
+    def uncacheable(self):
+        self._imports_uncacheable = True
+        return original(self)
+
+    monkeypatch.setattr(ts_mod.TreeSitterAnalyzer, "_get_or_build_structure", uncacheable)
+    _scan(project)
+    assert _entry(project / "a.py") is None
+
+
+def test_unreadable_file_fails_the_same_cold_and_warm(project, spy):
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        pytest.skip("root reads a mode 000 file")
+    target = project / "b.py"
+    _scan(project)
+    target.chmod(0)
+    try:
+        _, warm_skipped = _scan(project)
+        os.environ["REVEAL_DISK_CACHE"] = "0"
+        try:
+            _, cold_skipped = _scan(project)
+        finally:
+            del os.environ["REVEAL_DISK_CACHE"]
+    finally:
+        target.chmod(0o644)
+    assert warm_skipped == cold_skipped
+    assert any(path.endswith("b.py") for path, _ in warm_skipped)
+
+
+def test_same_stat_edit_is_exactly_as_stale_as_the_structure_entry(project):
+    """Item 1: the key is (path, mtime_ns, size, language). An edit that keeps mtime and size is
+    served from the old entry for the structure TODAY; the call-site layer inherits that and
+    adds no staleness of its own: both answer the old file together, never a mix."""
+    target = project / "b.py"
+    before = target.stat()
+    _scan(project)
+    text = target.read_text(encoding="utf-8")
+    target.write_text(text.replace("other", "OTHER"), encoding="utf-8")  # same length
+    os.utime(target, ns=(before.st_atime_ns, before.st_mtime_ns))
+    assert target.stat().st_size == before.st_size
+    after, _ = _scan(project)
+    functions = {e["name"] for e in after["b.py"]["elements"] if e["category"] == "functions"}
+    callees = {site["callee"] for site in after["b.py"]["module_call_sites"]}
+    assert "other" in functions and "other" in callees
+    assert "OTHER" not in functions and "OTHER" not in callees

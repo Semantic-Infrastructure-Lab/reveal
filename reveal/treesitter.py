@@ -683,25 +683,25 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return f"analyzer-content/{ends}"
 
     def load_call_site_layer(self, form: str) -> Optional[Dict[str, Any]]:
-        """The call-site layer of this file's FULL structure entry, or None (outline, other form, miss).
+        """The call-site layer of this file's FULL structure entry, or None (other form, miss).
 
         Only meaningful after get_structure(): the layer is read with the entry. A layer built from a
         different content form than ``form`` is a miss."""
         layer = self._call_site_layer
-        if self._outline_only or layer is None or layer.get('form') != form:
+        if layer is None or layer.get('form') != form:
             return None
         return layer
 
     def store_call_site_layer(self, form: str, layer: Dict[str, Any]) -> None:
         """Add ``layer`` to this file's stored full structure entry (same key, one entry per file).
 
-        The entry is read back from disk, not rebuilt from memory: only an entry the structure
-        cache actually stored is extended, so an outline, an uncacheable build (BACK-2138), an
-        evicted entry or a disabled cache stores nothing here. A build that recorded a parse
+        The entry is read back from disk, not rebuilt from memory: only a FULL entry the structure
+        cache actually stored is extended, so an outline-only build (it lives in the outline
+        namespace), an uncacheable build (BACK-2138), an evicted entry or a disabled cache stores
+        nothing here. A build that recorded a parse
         failure (``parse_error``) is never stored: the failure is not a property of the content."""
         fingerprint = self._structure_fingerprint()
-        if (fingerprint is None or self._outline_only or self._imports_uncacheable
-                or self.parse_error is not None):
+        if fingerprint is None or self._imports_uncacheable or self.parse_error is not None:
             return
         entry = disk_cache.get(_STRUCTURE_CACHE_NAMESPACE, fingerprint)
         if not isinstance(entry, dict):
