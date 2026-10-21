@@ -691,10 +691,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return {}
 
         structure: Dict[str, Any] = {}
-        if not self._outline_only:
-            structure['imports'] = self._extract_imports()
-            if self._imports_failure:
-                structure['_imports_failed'] = self._imports_failure
+        self._add_imports(structure)
         functions = self._extract_functions()
         if not self._outline_only:
             callers_index = build_callers_index(functions)
@@ -733,6 +730,14 @@ class TreeSitterAnalyzer(FileAnalyzer):
             disk_cache.put(namespaces[-1], fingerprint, structure,
                            max_entries=_structure_cache_max_files())
         return structure
+
+    def _add_imports(self, structure: Dict[str, Any]) -> None:
+        """A full build lists the imports and says so when the extractor could not (BACK-1852)."""
+        if self._outline_only:
+            return
+        structure['imports'] = self._extract_imports()
+        if self._imports_failure:
+            structure['_imports_failed'] = self._imports_failure
 
     def _extract_relationships(self, structure: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
         """Extract intra-file call graph edges from structure.
