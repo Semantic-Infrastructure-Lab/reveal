@@ -11,6 +11,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -203,3 +204,23 @@ def test_one_shot_run_runs_only_the_listing(repo, monkeypatch):
     calls.clear()
     _ask(repo, 'a.tmp')
     assert calls.count('ls-files') == 2 and 'rev-parse' in calls and 'config' in calls
+
+
+def test_a_device_file_in_the_stamp_does_not_change_it(monkeypatch):
+    """``GIT_CONFIG_GLOBAL=/dev/null`` is a common idiom, and a device file's mtime moves whenever
+    any process writes to it (macOS), so a stamp that read it invalidated an unchanged repository
+    on the next request. Only regular files carry content a stamp can compare (BACK-2143)."""
+    import stat as stat_mod
+    mtimes = iter(range(1, 100))
+
+    def fake_stat(path):
+        return SimpleNamespace(st_mode=stat_mod.S_IFCHR | 0o666, st_mtime_ns=next(mtimes), st_size=0)
+
+    class _OsWithFakeStat:  # only the gitignore module sees the fake; pathlib keeps the real os
+        stat = staticmethod(fake_stat)
+
+        def __getattr__(self, name):
+            return getattr(os, name)
+
+    monkeypatch.setattr(gitignore, 'os', _OsWithFakeStat())
+    assert gitignore._stat_stamp(['/dev/null']) == gitignore._stat_stamp(['/dev/null'])
