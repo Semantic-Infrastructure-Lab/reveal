@@ -258,7 +258,10 @@ class TestPerfLogging(unittest.TestCase):
         the main file/URI path — subcommands use their own separate argparse parsers."""
         with tempfile.TemporaryDirectory() as tmp:
             log_path = Path(tmp) / "perf.jsonl"
-            result = self.run_reveal("check", __file__, "--perf", log_path=log_path)
+            # A file outside the checkout: in it, project-wide rules walk the whole repo (~28 s, BACK-2144).
+            target = Path(tmp) / "mod.py"
+            target.write_text("def f():\n    return 1\n", encoding="utf-8")
+            result = self.run_reveal("check", str(target), "--perf", log_path=log_path)
 
             lines = log_path.read_text().strip().splitlines()
             self.assertEqual(len(lines), 1)

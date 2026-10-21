@@ -9,6 +9,7 @@ byte-identical to text everywhere but the file view, ast://, env:// and
 markdown://.
 """
 
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -27,6 +28,15 @@ pytestmark = pytest.mark.cli
 PKG = Path(__file__).resolve().parent.parent / 'reveal'
 DISPLAY = PKG / 'display'
 ELEMENT_PY = DISPLAY / 'element.py'
+
+
+@pytest.fixture(scope='module')
+def outside(tmp_path_factory):
+    """Map argv onto a copy of reveal/display outside the checkout: in place, check and overview
+    build I002's import graph of the whole repo (~30 s a case, BACK-2144)."""
+    dst = tmp_path_factory.mktemp('format') / 'display'
+    shutil.copytree(DISPLAY, dst)
+    return lambda argv: [str(a).replace(str(DISPLAY), str(dst)) for a in argv]
 
 
 def test_declared_output_formats():
@@ -105,8 +115,8 @@ def test_unrendered_format_is_rejected(argv):
     (f'ast://{DISPLAY}', '--format', 'grep'),
     ('check', ELEMENT_PY, '--format', 'grep'),
 ], ids=lambda a: ' '.join(str(x).replace(str(PKG), 'reveal') for x in a))
-def test_rendered_format_still_renders(argv):
-    result = _run_reveal_direct(*argv)
+def test_rendered_format_still_renders(outside, argv):
+    result = _run_reveal_direct(*outside(argv))
     assert 'is not supported by' not in result.stderr
     assert result.stdout
 
@@ -120,9 +130,9 @@ def test_rendered_format_still_renders(argv):
     ((DISPLAY, '--name', 'listed_item_line'), True),  # routes to ast://
     (('check', ELEMENT_PY), True),
 ], ids=lambda a: ' '.join(str(x).replace(str(PKG), 'reveal') for x in a) if isinstance(a, tuple) else str(a))
-def test_also_json_is_written_or_rejected(tmp_path, argv, honored):
+def test_also_json_is_written_or_rejected(tmp_path, outside, argv, honored):
     out = tmp_path / 'also.json'
-    result = _run_reveal_direct(*argv, '--also-json', out)
+    result = _run_reveal_direct(*outside(argv), '--also-json', out)
     if honored:
         assert out.exists()
         assert '--also-json is not supported' not in result.stderr

@@ -410,6 +410,10 @@ def _enrich(root):
 
 class _FlagHarness(harness_module._Harness):
     def run_flags(self, scheme, fmt='json', **flags):
+        if scheme == 'reveal' and flags.get('check'):
+            # Bare reveal:// --check is the ~50 s self-validation ci-local runs as its own step;
+            # one V rule shows --check is honored (BACK-2144). select is not a probe.
+            flags = {**flags, 'select': 'V001'}
         key = (scheme, fmt, tuple(sorted((k, str(v)) for k, v in flags.items())))
         if key not in self._cache:
             out, err, code = StringIO(), StringIO(), 0
