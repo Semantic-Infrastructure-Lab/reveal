@@ -636,9 +636,16 @@ class I002(BaseRule):
         Returns:
             Formatted string like "A.py -> B.py -> C.py -> A.py"
         """
-        # Use file names for brevity (full paths are too long)
-        names = [p.name for p in cycle]
-        return " -> ".join(names)
+        # File names for brevity, widened to the shortest trailing path that tells the cycle's
+        # files apart: two `mod.rs` in different directories are two nodes, and "mod.rs ->
+        # mod.rs" reads as one file repeated (BACK-2129).
+        members = list(dict.fromkeys(cycle))
+        depth = 1
+        while depth < max(len(p.parts) for p in members):
+            if len({p.parts[-depth:] for p in members}) == len(members):
+                break
+            depth += 1
+        return " -> ".join("/".join(p.parts[-depth:]) for p in cycle)
 
     def _suggest_break_point(self, cycle: List[Path], current_file: Path) -> str:
         """Suggest where to break the circular dependency.
