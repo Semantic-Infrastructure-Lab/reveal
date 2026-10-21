@@ -106,7 +106,8 @@ def observed(tmp_path, monkeypatch):
         ledger = kwargs.setdefault('coverage', [])
         value = real_registry(*args, **kwargs)
         emit({'kind': 'registry', 'file': args[0], 'coverage': [
-            row for row in ledger if row['rule'] in ('D005', 'I002', 'T006')]})
+            row for row in ledger if row['rule'] in ('D005', 'I002', 'T006')],
+            'all': [[row['rule'], row['status']] for row in ledger]})
         return value
 
     monkeypatch.setattr(D005, '_build_index', build)
@@ -312,8 +313,8 @@ def test_all_rules_disabled_ignores_unused_existing_preloaded_cap(tmp_path, obse
     assert result['files'][0]['quality']['local_check_issues'] == 0
     assert not result.get('meta', {}).get('warnings')
     assert not any(row['kind'] == 'D005_check' for row in native_events(observed))
-    ledger = next(row for row in native_events(observed) if row['kind'] == 'registry')['coverage']
-    assert ledger and all(row['status'] == 'skipped' for row in ledger)
+    ledger = next(row for row in native_events(observed) if row['kind'] == 'registry')['all']
+    assert ledger and all(status == 'skipped' for _rule, status in ledger)
 
 
 def test_plain_legacy_metrics_mock_return_pair_remains_compatible(tmp_path, observed):

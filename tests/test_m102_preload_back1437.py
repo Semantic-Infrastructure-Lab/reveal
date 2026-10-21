@@ -173,27 +173,26 @@ def _run_stats(tmp_path):
 
 
 class TestStatsPoolPreloads:
-    """BACK-1429: stats:// (overview, hotspots) runs every rule in its own pool and
-    preloaded I002 only; M102 and T006 were built once per worker (and T006's
-    ceiling warning printed once per worker)."""
+    """BACK-1429 made stats:// (overview, hotspots) build the M102 and T006 indexes once in
+    the parent. BACK-1884 counts the file-local rules only: M102 and T006 read the whole
+    project and no longer run inside stats, so no process builds either index."""
 
     @needs_forked_workers
-    def test_pool_builds_each_index_once_in_the_parent(
+    def test_pool_builds_no_index(
             self, tmp_path, monkeypatch, count_m102_builds, count_t006_builds):
         _stats_project(tmp_path)
         monkeypatch.setenv("REVEAL_MAX_WORKERS", "3")
         _run_stats(tmp_path)
-        parent = [str(os.getpid())]
-        assert count_m102_builds() == parent
-        assert count_t006_builds() == parent
+        assert count_m102_builds() == []
+        assert count_t006_builds() == []
 
-    def test_serial_builds_each_index_once(self, tmp_path, monkeypatch, count_m102_builds, count_t006_builds):
-        """Negative control: the serial path was already one build per process."""
+    def test_serial_builds_no_index(self, tmp_path, monkeypatch, count_m102_builds, count_t006_builds):
+        """The serial path built each once per process before; none now."""
         _stats_project(tmp_path)
         monkeypatch.setenv("REVEAL_MAX_WORKERS", "1")
         _run_stats(tmp_path)
-        assert count_m102_builds() == [str(os.getpid())]
-        assert count_t006_builds() == [str(os.getpid())]
+        assert count_m102_builds() == []
+        assert count_t006_builds() == []
 
     def test_pool_and_serial_results_identical(self, tmp_path, monkeypatch):
         _stats_project(tmp_path)

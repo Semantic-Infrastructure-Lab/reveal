@@ -366,9 +366,12 @@ def test_overview_is_unchanged_where_no_cross_file_rule_detects(tmp_path, monkey
     """Fixture twin of the celery-package check: a tree whose only findings are file-local gives
     the same overview whether every rule is counted or only the file-local ones."""
     root = write(tmp_path / 'pyproject.toml', '[project]\nname="local"\n').parent
-    write(root / 'pkg' / '__init__.py', '')
+    # Both modules are imported, so M102 (orphan module) has nothing to say about them.
+    write(root / 'pkg' / '__init__.py', 'from pkg import ok, risky\n\n__all__ = ["ok", "risky"]\n')
     write(root / 'pkg' / 'risky.py', BARE_EXCEPTS)
     write(root / 'pkg' / 'ok.py', 'def ok():\n    return 1\n')
+    cross_file = run('check', str(root), '--select', 'M102,I002,D005,T006,I007', '--format', 'json')
+    assert json.loads(cross_file.stdout)['files'] == [], 'precondition: no cross-file rule detects here'
     local_only = overview_json(root)
     with monkeypatch.context() as patched:
         run_with_every_rule(patched)
@@ -392,3 +395,45 @@ def test_hotspots_adapter_states_the_rule_without_file_ranking(tmp_path):
     root = project(tmp_path)
     result = HotspotsAdapter(str(root), 'functions_only=true').get_structure()
     assert_states_the_rule(issue_count_meta(result))
+
+
+def _plugin_rules():
+    """Two plugin-style rules that flag line 1 of every file; one declares its scope."""
+    from reveal.rules.base import BaseRule, RulePrefix, Severity
+
+    class Declared(BaseRule):
+        code = 'X8851'
+        message = 'plugin rule that declares scope = "file"'
+        category = RulePrefix.B
+        severity = Severity.HIGH
+        file_patterns = ['.py']
+        scope = 'file'   # a plugin may write the string, as it may for severity
+
+        def check(self, file_path, structure, content):
+            return [self.create_detection(file_path, 1)]
+
+    class Undeclared(Declared):
+        code = 'X8852'
+        message = 'plugin rule that declares no scope'
+        scope = None
+
+    return Declared, Undeclared
+
+
+def test_a_plugin_rule_counts_only_when_it_declares_a_file_scope_and_the_count_lists_the_rest(
+        tmp_path, monkeypatch):
+    declared, undeclared = _plugin_rules()
+    RuleRegistry.discover()
+    monkeypatch.setattr(RuleRegistry, '_rules', [*RuleRegistry._rules, declared, undeclared])
+    monkeypatch.setattr(RuleRegistry, '_rules_by_code',
+                        {**RuleRegistry._rules_by_code, 'X8851': declared, 'X8852': undeclared})
+    root = project(tmp_path)
+    result = StatsAdapter(str(root)).get_structure()
+    ok = stats_files(result)['pkg/lit_c.py']['quality']
+    # X8851 (HIGH) counts once per file; X8852 declares nothing, so it is not counted ...
+    assert ok['local_check_issues'] == 1 and ok['score'] == 95.0
+    basis = result['meta']['issue_count']
+    assert 'X8851' in basis['rules'] and 'X8852' not in basis['rules']
+    # ... and the count says it was left out, instead of dropping it silently.
+    assert basis['undeclared'] == ['X8852']
+    assert basis['rule_count'] == len(basis['rules'])
