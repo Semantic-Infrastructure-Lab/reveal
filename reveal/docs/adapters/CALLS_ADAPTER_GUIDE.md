@@ -712,6 +712,14 @@ snapshots or content/readability guarantees; an edit that preserves size and
 mtime can evade them. Direct adapter/helper calls outside the host request
 boundary retain the cheap-key behavior described above.
 
+`callees` (every depth, `detail`, `FILE:NAME`) keeps the structure collection it
+reads per directory only inside a host request (MCP tools, `reveal.api`), validated
+by that fingerprint alone, so a repeated query on an unchanged tree skips collection;
+call resolution still runs per query. The active exclusion and gitignore scope are
+kept with the collection, one collected with gitignore off lasts for its request only,
+and a collection that could not read a file is not kept. A CLI run or a direct helper
+call collects every time.
+
 For very large codebases (100K+ lines), point at a subdirectory:
 
 ```bash
