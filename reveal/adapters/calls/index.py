@@ -31,6 +31,7 @@ from ..ast.call_graph import (
     ClassAliasSpan, build_alias_map, build_class_attribute_aliases, build_symbol_map, class_attribute_alias,
     resolve_callees as _resolve_callees,
 )
+from .confidence import language_census
 from ...conventions import conventions_for, family_for_path, is_builtin_anywhere
 from ...defaults import TEST_FRAMEWORK_CALLEE_NAMES
 from ...utils.gitignore import gitignore_enabled
@@ -788,7 +789,7 @@ class CalleeSource:
     ``skipped``/``traversal_failures`` are the collection's loss evidence; ``scope`` is the
     walk scope a cached one was collected under (``CalleeScope``), None when uncached."""
 
-    __slots__ = ('definitions', 'skipped', 'traversal_failures', 'scope')
+    __slots__ = ('definitions', 'skipped', 'traversal_failures', 'scope', '_census', '_census_walked')
 
     def __init__(self, definitions: Tuple[CallSource, ...], skipped: Sequence[Tuple[str, str]] = (),
                  traversal_failures: Sequence[Tuple[Optional[str], str]] = (),
@@ -797,6 +798,8 @@ class CalleeSource:
         self.skipped: Tuple[Tuple[str, str], ...] = tuple(skipped)
         self.traversal_failures: Tuple[Tuple[Optional[str], str], ...] = tuple(traversal_failures)
         self.scope = scope
+        self._census: Optional[Dict[str, int]] = None
+        self._census_walked = False
 
     @classmethod
     def from_structures(cls, structures: Sequence[Dict[str, Any]],
@@ -816,6 +819,26 @@ class CalleeSource:
             family(file_path)) for file_path, name, elem in _call_definitions(structures))
         return cls(definitions, getattr(structures, 'skipped', ()), getattr(structures, 'traversal_failures', ()),
                    scope)
+
+    def language_census(self, path: str) -> Optional[Dict[str, int]]:
+        """The per-language file counts ``confidence.build_meta`` weights an answer by, walked at
+        most once for as long as this source lives (BACK-2132), or None: walk it for the answer.
+
+        Only a cached source (it has a scope, so a tree stamp validates it) whose root is *path*
+        carries one; the census walk is the collection's own walk, so the same stamp and scope
+        cover it. A census that lost input (an unreadable directory) or kept no file is never
+        carried: the first reports a loss no stamp may hide (BACK-2093), the second a
+        ``scope_hidden`` warning counting entries the stamp does not cover."""
+        scope = self.scope
+        if scope is None or os.path.abspath(path) != scope.directory:  # a file's census is its own
+            return None
+        if not self._census_walked:
+            self._census_walked = True
+            failures: List[OSError] = []
+            counts = language_census(path, on_error=failures.append)
+            if counts and not failures:
+                self._census = counts
+        return None if self._census is None else dict(self._census)
 
     def in_file(self, file_filter: str) -> 'CalleeSource':
         """The definitions of the files FILE:NAME selects, keeping the collection's loss evidence."""

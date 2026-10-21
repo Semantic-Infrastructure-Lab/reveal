@@ -729,19 +729,22 @@ class CallsAdapter(ResourceAdapter):
 
     def _answer(self, result_type: str, data: Dict[str, Any], *, query_format: str = '',
                 uncalled: bool = False, unmeasured_walk: bool = False,
+                census: Optional[Dict[str, int]] = None,
                 absent: Optional[Callable[[], bool]] = None,
                 rule: Optional[Callable[[List[str]], Dict[str, Any]]] = None) -> RevealResult:
         """One envelope for every mode: the index's loss evidence becomes the shared meta warnings.
 
         *absent* says whether an empty name answer's name has no definition; it is asked only when the
         evidence is complete and nothing was hidden, and a yes is the canonical absence error (exit 2).
-        *rule* builds the answer's ``walk_rule`` from the languages the confidence declined."""
+        *rule* builds the answer's ``walk_rule`` from the languages the confidence declined.
+        *census* is the language census a stored callee source already holds for this path (BACK-2132)."""
         if query_format:
             # Query-string format= (dot/json) applies whatever the CLI --format flag says.
             data['_query_format'] = query_format
         meta = _call_graph_meta(self.path, uncalled=uncalled, unmeasured_walk=unmeasured_walk,
                                 skipped=data.pop('analysis_skipped', ()),
-                                traversal_failures=data.pop('analysis_traversal_failures', ()))
+                                traversal_failures=data.pop('analysis_traversal_failures', ()),
+                                census=census)
         if rule is not None:
             declined: List[str] = next((w['languages'] for w in meta['warnings'] if w.get('code') == 'W-CALLS-10'), [])
             data['walk_rule'] = rule(declined)
@@ -792,10 +795,12 @@ class CallsAdapter(ResourceAdapter):
         self._warn_top_ignored()
         params = self.query_params
         depth = _DEPTH.read(params)
+        source = callee_source(self.path)
         data = callee_levels(walk_callees(self.path, root, depth=2 if depth is None else depth,
-                                          include_builtins=_BUILTINS.read(params)))
+                                          include_builtins=_BUILTINS.read(params), source=source))
         data['path'] = self.path
-        return self._answer('calls_callees_recursive', data, query_format=_FORMAT.read(params) or '')
+        return self._answer('calls_callees_recursive', data, query_format=_FORMAT.read(params) or '',
+                            census=source.language_census(self.path))
 
     def _usage(self, message: str) -> RevealResult:
         """Usage, not analysis: D6 exits 2 (it exited 1 before calls was declared, BACK-2066)."""
@@ -822,10 +827,10 @@ class CallsAdapter(ResourceAdapter):
         include_builtins = _BUILTINS.read(params)
         walked = depth > 1 or detail
         file_filter, bare = _split_root(name)
+        source = callee_source(self.path)
         if not walked and not file_filter:
-            data = find_callees(self.path, name, include_builtins=include_builtins)
+            data = find_callees(self.path, name, include_builtins=include_builtins, source=source)
         else:
-            source = callee_source(self.path)
             data = find_callees(self.path, bare, include_builtins=include_builtins,
                                 source=source.in_file(file_filter) if file_filter else source)
             data['target'] = name
@@ -834,6 +839,7 @@ class CallsAdapter(ResourceAdapter):
                                                     source=source), detail))
         data['path'] = self.path
         return self._answer('calls_callees', data, query_format=query_format, unmeasured_walk=walked,
+                            census=source.language_census(self.path),
                             absent=lambda: not data['matches'],
                             rule=lambda declined: _callees_rule(depth, include_builtins, declined))
 

@@ -129,7 +129,8 @@ def language_census(path: str, *,
 
 def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = False,
                skipped: Sequence[Tuple[str, str]] = (),
-               traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> Dict[str, Any]:
+               traversal_failures: Sequence[Tuple[Optional[str], str]] = (),
+               census: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
     """Per-request calls:// meta kwargs (BACK-1198).
 
     Replaces the prior flat ``confidence: 0.85`` (identical for a language
@@ -141,6 +142,10 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
     language's own dispatch idioms. A scanned language in UNMEASURED_CALL_SOURCE_LANGUAGES
     makes the confidence null and is named (W-CALLS-10); *unmeasured_walk* adds the
     W-CALLS-9 decline for a callee walk beyond depth 1 or --detail.
+
+    *census* is the per-language file count a caller already holds for this very *path* and scope
+    (``CalleeSource.language_census``, BACK-2132); None walks the tree for it. A held census had
+    no walk error and kept files, so there is neither a census failure nor a hidden tree to report.
     """
     census_failures: List[Tuple[Optional[str], str]] = []
 
@@ -149,7 +154,8 @@ def build_meta(path: str, *, uncalled: bool = False, unmeasured_walk: bool = Fal
                                 f'{type(error).__name__}: {error}'))
 
     hidden = HiddenTally()
-    per_language = language_census(path, on_error=_record_census_error, on_hidden=hidden)
+    per_language = census if census is not None else language_census(
+        path, on_error=_record_census_error, on_hidden=hidden)
     directory_failures = (*traversal_failures, *census_failures)
     total = sum(per_language.values())
     if total:

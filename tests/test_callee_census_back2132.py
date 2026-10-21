@@ -100,6 +100,15 @@ def test_a_repeated_callees_query_walks_for_its_census_once(tmp_path, walks):
     assert walks == ['once'], walks
 
 
+def test_outside_a_host_request_every_query_walks(tmp_path, walks, monkeypatch):
+    """Nothing revalidates a source outside a host request, so none carries a census."""
+    root = make_tree(tmp_path / 'outside')
+    monkeypatch.setattr(index, 'in_host_request', lambda: False)
+    query(root, 'callees=run')
+    query(root, 'callees=run')
+    assert walks == ['outside'] * 2, walks
+
+
 def test_other_modes_keep_their_own_census(tmp_path, walks):
     """Negative control: callers and uncalled hold no stored source; each still counts languages."""
     root = make_tree(tmp_path / 'modes')
@@ -224,3 +233,20 @@ def test_a_fully_hidden_tree_keeps_its_scope_hidden_warning(tmp_path, cache_off)
     second = answers(root, ('callees=run',))
     assert second == cache_off(root, ('callees=run',))
     assert 'scope_hidden' in second[0] and second != first
+
+
+def test_a_census_that_lost_input_is_not_carried(tmp_path, walks, monkeypatch):
+    """The census walk itself could not list a directory the collection could (a race, a mount):
+    that failure reaches this answer and every later one, never a carried census without it."""
+    root = make_tree(tmp_path / 'lost')
+    real = confidence.census_for_path
+    error = PermissionError(13, 'Permission denied', str(root / 'web'))
+
+    def failing(path, *args, on_error=None, **kwargs):
+        on_error(error)
+        return real(path, *args, on_error=on_error, **kwargs)
+
+    monkeypatch.setattr(confidence, 'census_for_path', failing)
+    first, second = answers(root, ('callees=run', 'callees=run'))
+    assert first == second
+    assert 'Permission denied' in first

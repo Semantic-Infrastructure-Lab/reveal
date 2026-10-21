@@ -715,7 +715,10 @@ boundary retain the cheap-key behavior described above.
 `callees` (every depth, `detail`, `FILE:NAME`) keeps the structure collection it
 reads per directory only inside a host request (MCP tools, `reveal.api`), validated
 by that fingerprint alone, so a repeated query on an unchanged tree skips collection;
-call resolution still runs per query. The active exclusion and gitignore scope are
+call resolution still runs per query, but each definition's language family is looked up once,
+when the collection is made, and the language census behind the confidence meta is walked once per
+kept collection (a census that lost a directory, kept no file, or was asked for a single file is
+walked again by every query). The active exclusion and gitignore scope are
 kept with the collection, one collected with gitignore off lasts for its request only,
 and a collection that could not read a file is not kept. A CLI run or a direct helper
 call collects every time.
