@@ -538,6 +538,52 @@ def test_python_call_loss_and_bad_population_fail(tmp_path, monkeypatch):
         gate.measure_calls(entry, root)
 
 
+def _call_corpus(tmp_path):
+    root, entry = _repo(tmp_path, {
+        'pkg/a.py': 'def caller():\n target()\n helper()\n',
+        'pkg/b.py': 'def target(): pass\ndef helper(): pass\ndef other():\n target()\n',
+    }, {})
+    entry['call_recall'] = {'scan_root': 'pkg', 'importer_dirs': ['pkg']}
+    return root, entry
+
+
+def test_the_calls_gate_scores_what_calls_renders_not_the_index(tmp_path, monkeypatch):
+    # BACK-2062: measure_calls read find_callers directly, so a caller lost between the index and the
+    # rendered calls:// answer stayed green. Drop pkg/b.py::other from the adapter's answer only.
+    root, entry = _call_corpus(tmp_path)
+    assert gate.measure_calls(entry, root)['recall'] == 1
+    from reveal.adapters.calls.adapter import CallsAdapter
+    real = CallsAdapter._callers
+
+    def without_other(self, name, query_format):
+        result = real(self, name, query_format)
+        for level in result['levels']:
+            level['callers'] = [row for row in level['callers'] if row['caller'] != 'other']
+        result['total_callers'] = sum(len(level['callers']) for level in result['levels'])
+        return result
+
+    monkeypatch.setattr(CallsAdapter, '_callers', without_other)
+    measured = gate.measure_calls(entry, root)
+    assert measured['differences'] == [{'target': 'target', 'missed': ['pkg/b.py::other'], 'extra': []}]
+    assert measured['recall'] == 2 / 3
+
+
+def test_a_cut_calls_answer_is_a_failure_not_a_smaller_answer(tmp_path, monkeypatch):
+    root, entry = _call_corpus(tmp_path)
+    from reveal.adapters.calls.adapter import CallsAdapter
+    real = CallsAdapter._callers
+
+    def cut(self, name, query_format):
+        result = real(self, name, query_format)
+        for level in result['levels']:
+            level['callers'] = level['callers'][:1]  # total_callers still says what the full answer held
+        return result
+
+    monkeypatch.setattr(CallsAdapter, '_callers', cut)
+    with pytest.raises(RuntimeError, match='truncated'):
+        gate.measure_calls(entry, root)
+
+
 def test_swapped_extra_and_improvement_require_reviewed_baseline():
     baseline = {'oracle': 'fixture', 'sha': 'pin', 'targets': 1, 'oracle_edges': 2,
                 'coverage': {}, 'extra_edges': 1, 'recall': 1, 'precision': 2 / 3,
