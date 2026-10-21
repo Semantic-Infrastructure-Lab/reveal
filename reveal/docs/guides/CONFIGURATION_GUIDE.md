@@ -408,7 +408,7 @@ the values, and `<namespace>` names the kind of artifact.
 
 | Namespace | Holds |
 |-----------|-------|
-| `structure` | a file's parsed structure: imports, functions, classes, declarations |
+| `structure` | a file's parsed structure: imports, functions, classes, declarations, plus (once a full scan has collected them) the file's module-level call sites and JSX references, so a warm scan re-parses nothing for them |
 | `structure-outline` | the lighter outline-only structure `--grep` uses to name each hit's enclosing function |
 | `adapter_import_graph` | the project import graph behind `imports://` |
 | `import_graph_v4` | the project import graph behind the `I002` rule, including source-scan accounting |

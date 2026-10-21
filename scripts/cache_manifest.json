@@ -35,7 +35,8 @@
    "owner": "disk"
   },
   "disk:structure": {
-   "owner": "disk"
+   "owner": "disk",
+   "note": "the entry also carries an optional private _call_site_layer (BACK-1890: module-level call sites and the JSX extras of a full scan), added by TreeSitterAnalyzer.store_call_site_layer and served only for the content form it records; stripped from every structure returned to a consumer"
   },
   "disk:structure-outline": {
    "owner": "disk"
