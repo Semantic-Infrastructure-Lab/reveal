@@ -211,6 +211,20 @@ BATCH_URIS = {
 _REQUIRED_FIELDS = ['contract_version', 'type', 'source', 'source_type']
 _UNSET = object()
 _VALID_SOURCE_TYPES = {'file', 'directory', 'database', 'runtime', 'network'}
+_GRAMMAR_CACHE_ENV = 'TREE_SITTER_LANGUAGE_PACK_CACHE_DIR'
+
+
+def _grammar_cache_root():
+    """The cache root the pack resolves its grammars under (it appends tree-sitter-language-pack/
+    <version>/libs), or None on a pack too old to report it (the 1.8.1 floor)."""
+    try:
+        from tree_sitter_language_pack import cache_dir
+    except ImportError:
+        return None
+    for parent in Path(cache_dir()).parents:
+        if parent.name == 'tree-sitter-language-pack':
+            return str(parent.parent)
+    return None
 
 
 def _registered():
@@ -369,10 +383,18 @@ class _Harness:
         from tree_sitter_language_pack import get_parser
         get_parser('python')
         cwd = os.getcwd()
-        saved_env = {k: os.environ.get(k) for k in ('HOME', 'USERPROFILE')}
+        grammar_root = _grammar_cache_root()
+        saved_env = {k: os.environ.get(k)
+                     for k in ('HOME', 'USERPROFILE', _GRAMMAR_CACHE_ENV, 'REVEAL_NO_UPDATE_CHECK')}
         redirected = [(cls, name, cls.__dict__.get(name, _UNSET), fake)
                       for cls, name, fake in self._home_paths()]
         os.environ['HOME'] = os.environ['USERPROFILE'] = str(self.home)
+        # Child processes (health runs check and URI children) resolve both from HOME too: under
+        # the empty one each refetched every grammar (~15-20 s per worker, over the network) and
+        # ran the daily PyPI check (BACK-2144).
+        if grammar_root:
+            os.environ[_GRAMMAR_CACHE_ENV] = grammar_root
+        os.environ['REVEAL_NO_UPDATE_CHECK'] = '1'
         for cls, name, _, fake in redirected:
             setattr(cls, name, fake)
         os.chdir(self.root)
