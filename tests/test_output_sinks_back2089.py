@@ -167,7 +167,8 @@ def test_one_failing_sink_exits_3_and_the_other_sinks_and_the_answer_survive(pro
     assert result.returncode == 3, result.stderr
     assert 'Hotspots:' in result.stdout
     assert json.loads(good.read_text(encoding='utf-8'))['type'] == 'hotspots_scan'
-    assert str(bad) in result.stderr
+    # the OSError text repr-quotes the path, which doubles backslashes on Windows: match the parts
+    assert 'no-such-dir' in result.stderr and bad.name in result.stderr
 
 
 def test_an_unwritable_sink_on_a_uri_exits_3_with_the_answer_not_a_traceback(project, tmp_path):
