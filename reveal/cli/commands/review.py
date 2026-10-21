@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Literal, Optional
 from ..global_flags import add_gitignore_arguments, rule_patterns
 from ..routing.ledger import complete
 from ..routing.subcommand import emit_subcommand_result
+from ...utils.git_range import changed_files as _changed_files, git_range_error as _git_range_error
 from ...utils.results import RESULT_CONTROL_WARNINGS, note_truncation, requested_fail_on
 from ...utils.warning_render import collect_meta_warnings, render_meta_warnings
 
@@ -191,27 +192,6 @@ def _review_outcome(violations: List[Dict[str, Any]], errors: List[str],
     facts = ExecutionFacts(AnalysisCompleteness.INCOMPLETE if incomplete else AnalysisCompleteness.COMPLETE,
                            findings=bool(violations))
     return status, execution_exit_code(facts, fail_on=fail_on)
-
-
-def _git_range_error(git_range: str) -> Optional[str]:
-    """Why `git_range` can't be reviewed, or None. Without this an unknown
-    ref or a cwd outside any repo produced an empty diff and a passing review."""
-    def git(*cmd: str) -> subprocess.CompletedProcess:
-        return subprocess.run(['git', *cmd], capture_output=True, text=True, timeout=10,
-                              encoding='utf-8', errors='replace', check=False)
-    try:
-        if git('rev-parse', '--show-toplevel').returncode != 0:
-            return f"not inside a git repository (cwd: {Path.cwd()})"
-        sep = '...' if '...' in git_range else '..'
-        for rev in git_range.split(sep, 1):
-            # An empty side means HEAD, as in git itself (`main..`).
-            rev = rev or 'HEAD'
-            if git('rev-parse', '--verify', '--quiet', '--end-of-options',
-                   f'{rev}^{{commit}}').returncode != 0:
-                return f"unknown revision: {rev!r}"
-    except (OSError, subprocess.SubprocessError) as e:
-        return f"could not run git: {e}"
-    return None
 
 
 def _exit_invalid_target(target: str, reason: str, output_format: str) -> None:
@@ -430,40 +410,6 @@ def _run_complexity(path: Optional[Path],
     except Exception as e:  # boundary-ok: broad-except -- the complexity section runs the ast adapter; failure is printed, recorded as an analysis_failed warning, and the section is empty
         print(f"Warning: complexity analysis failed, skipping: {e}", file=sys.stderr)
         warnings.append(_analysis_failed('complexity', None, e))
-        return []
-
-
-def _changed_files(git_range: str) -> List[Path]:
-    """Absolute paths of files changed in a git range that still exist on disk.
-
-    Deleted files are omitted (nothing to quality-check). Names are resolved
-    against the git top-level so `review` works from any subdirectory. Replaces
-    the old whole-tree `_detect_source_root()` walk (BACK-538).
-    """
-    try:
-        # --end-of-options: same git-argument-injection defense as _run_diff above.
-        result = subprocess.run(
-            ['git', 'diff', '--name-only', '--end-of-options', git_range],
-            capture_output=True, text=True, timeout=10, encoding='utf-8', errors='replace',
-        )
-        if result.returncode != 0:
-            return []
-        toplevel = subprocess.run(
-            ['git', 'rev-parse', '--show-toplevel'],
-            capture_output=True, text=True, timeout=10, encoding='utf-8', errors='replace',
-        )
-        root = Path(toplevel.stdout.strip()) if toplevel.returncode == 0 else Path.cwd()
-        files: List[Path] = []
-        for name in result.stdout.splitlines():  # boundary-ok: splitlines -- git subprocess stdout
-            name = name.strip()
-            if not name:
-                continue
-            candidate = root / name
-            if candidate.is_file():
-                files.append(candidate.resolve())
-        return files
-    except (OSError, subprocess.SubprocessError, ValueError) as e:
-        print(f"Warning: could not determine changed files for {git_range!r}: {e}", file=sys.stderr)
         return []
 
 
