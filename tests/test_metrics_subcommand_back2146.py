@@ -54,7 +54,7 @@ CASES = [
     (['--min-functions', '1'], '?min_functions=1'),
     (['--code-only'], '?code_only=true'),
     (['--summary-only'], '?summary_only=true'),
-    (['--sort', '-lines'], '?sort=-lines'),
+    (['--sort=-lines'], '?sort=-lines'),
     (['--sort', 'lines', '--limit', '2'], '?sort=lines&limit=2'),
     (['--sort', 'lines', '--limit', '1', '--offset', '1'], '?sort=lines&limit=1&offset=1'),
     (['--view', 'provenance'], '?view=provenance'),

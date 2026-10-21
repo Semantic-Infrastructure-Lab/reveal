@@ -237,10 +237,21 @@ def test_the_hotspots_noun_prints_no_retirement_note(project):
                 if w.get('code') == 'retired_spelling']
 
 
-def test_an_unknown_metrics_view_is_rejected(project):
-    """A view metrics does not have fails the query instead of answering the default view.
-    Exit 1, a raised adapter error, as every legacy (undeclared) adapter's bad query is today."""
-    result = run(f'metrics://{project}?view=everything', '--format', 'json')
+@pytest.mark.parametrize('argv', [lambda d: [f'metrics://{d}?view=everything'],
+                                  lambda d: ['metrics', str(d), '--view', 'everything']],
+                         ids=['metrics://', 'reveal metrics'])
+def test_an_unknown_metrics_view_is_rejected(project, argv):
+    """A view metrics does not have fails the query instead of answering the default view. metrics is a
+    declared noun (BACK-2146), so a bad value is a rejected request: exit 2, in both spellings."""
+    result = run(*argv(project), '--format', 'json')
+    assert result.returncode == 2, (result.returncode, result.stdout, result.stderr)
+    assert "view must be one of ('provenance',), got 'everything'" in result.stderr
+    assert json.loads(result.stdout)['error']
+
+
+def test_an_unknown_view_on_the_retired_stats_scheme_keeps_its_legacy_exit(project):
+    """stats:// stays on the legacy URI route until the cut: a raised adapter error, exit 1."""
+    result = run(f'stats://{project}?view=everything', '--format', 'json')
     assert result.returncode == 1, (result.returncode, result.stdout, result.stderr)
     assert "view='everything' is not a metrics view; the one view is provenance" in result.stderr
     assert json.loads(result.stdout)['error']

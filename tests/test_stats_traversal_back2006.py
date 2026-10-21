@@ -140,12 +140,15 @@ def test_actual_text_and_json_artifact_preserve_stats_diagnostic(tmp_path, monke
     assert diagnostic['count'] == 1
 
 
+# stats:// stays on the legacy URI route until the cut and keeps exit 0; metrics is a declared noun
+# (BACK-2146), so the same directory loss is an incomplete answer: exit 3 on the D6 outcome policy.
+@pytest.mark.parametrize('scheme,exit_code', [('stats', 0), ('metrics', 3)])
 @pytest.mark.parametrize('output', ['text', 'json'])
-def test_direct_stats_discloses_but_keeps_legacy_exit(tmp_path, monkeypatch, output):
+def test_direct_stats_discloses_and_exits_by_its_route(tmp_path, monkeypatch, output, scheme, exit_code):
     child = tree(tmp_path)
     deny_stats(monkeypatch, {child})
-    result = run(f'stats://{tmp_path}?churn=false', '--format', output)
-    assert result.returncode == 0
+    result = run(f'{scheme}://{tmp_path}?churn=false', '--format', output)
+    assert result.returncode == exit_code
     if output == 'json':
         assert json.loads(result.stdout)['summary']['total_files'] == 1
         assert warnings(json.loads(result.stdout))

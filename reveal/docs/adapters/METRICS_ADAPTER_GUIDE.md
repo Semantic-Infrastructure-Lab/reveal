@@ -278,6 +278,35 @@ Default penalties:
 
 **Note**: Legacy parameters still work but unified query syntax (below) is preferred for new queries. `churn`/`since`/`no_merges` only affect hotspot scoring (`hotspots=true`) and are ignored otherwise.
 
+### Subcommand form
+
+`reveal metrics PATH` and `metrics://PATH` are two spellings of one answer: the same JSON, the
+same exit code, and (with `--provenance`) a manifest that differs only in `execution.command`.
+Every parameter above has a flag, and so do `view` and the result controls:
+
+| Parameter | Flag |
+|-----------|------|
+| `view` | `--view provenance` |
+| `hotspots` | `--hotspots` |
+| `top` | `--top N` (0 = all) |
+| `code_only` | `--code-only` |
+| `min_lines`, `max_lines` | `--min-lines N`, `--max-lines N` |
+| `min_complexity`, `max_complexity` | `--min-complexity N`, `--max-complexity N` |
+| `min_functions` | `--min-functions N` |
+| `churn` | `--no-churn` (churn is on by default) |
+| `since`, `no_merges` | `--since DATE`, `--no-merges` |
+| `summary_only` | `--summary-only` |
+| `sort`, `limit`, `offset` | `--sort=FIELD` (`--sort=-lines` for descending), `--limit N`, `--offset N` |
+
+The operator filters (`lines>50`, `complexity=5..15`) have no flag; they stay a `metrics://` query.
+`limit` and `offset` page the `files` list only: `hotspots=true` ranks the whole filtered
+population, whatever the page.
+
+Exit codes: 0 when every file was counted, 2 for a rejected request (an unknown `view`, a negative
+`top`, a missing path, `--fail-on findings`: metrics has no findings gate), 3 when files were lost
+or not analyzed (an `analysis_failed`, `parse_degraded`, `check_rules_failed` or unreadable-directory
+warning in `meta.warnings`). The retired `stats://` spelling keeps its older exit 0 on those until the cut.
+
 ### Unified Query Syntax (Recommended)
 
 See [Unified Query Syntax](#unified-query-syntax) section for full details.

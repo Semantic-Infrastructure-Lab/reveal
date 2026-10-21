@@ -242,6 +242,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal architecture [path]` | Architectural brief: entry points, core abstractions, risks | `reveal architecture --help` |
 | `reveal deps [path]` | Dependency health: external packages, circular deps, unused imports | `reveal deps --help` |
 | `reveal hotspots [path]` | High-complexity files and functions that need attention | `reveal hotspots --help` |
+| `reveal metrics [path]` | Per-file lines, complexity and quality; --hotspots ranks files; --view provenance tags every file | `reveal metrics --help` |
 | `reveal contracts [path]` | Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal contracts --help` |
 | `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal surface --help` |
 | `reveal testability [path]` | Test patch pressure joined with production boundary fan-out *(Python and TS/JS test suites)* | `reveal testability --help` |

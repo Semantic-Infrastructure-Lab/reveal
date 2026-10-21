@@ -580,6 +580,7 @@ WALKERS = {
     'contracts': ['proj'],
     'deps': ['proj'],
     'hotspots': ['proj'],
+    'metrics': ['proj'],
     'overview': ['proj'],
     'pack': ['proj'],
     'surface': ['proj'],

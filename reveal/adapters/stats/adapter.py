@@ -18,10 +18,14 @@ from ...utils.query import (
     parse_result_control,
     unknown_sort_field_warning,
 )
-from ...utils.query_parser import split_exclude_param
+from ...utils.query_parser import (
+    CliBinding, ParamSpec, QueryParams, ResourceSpec, nonnegative_display_limit, param_schema,
+    peek_query_items, split_exclude_param, whole_number,
+)
+from ...utils.query_binding import bind_declared_params, boolean_value
 from ...utils.gitignore import respect_gitignore_param
 from ...utils.path_utils import to_posix, to_relative_display
-from ...utils.results import ResultBuilder, note_truncation, note_warning
+from ...utils.results import AnalysisCompleteness, ResultBuilder, note_truncation, note_warning, result_execution_facts
 from ...utils.validation import require_path_exists
 from ...utils.parallel import pool_worker_count, submit_each
 
@@ -32,7 +36,7 @@ from .issue_count import note_issue_count_basis, renamed_field
 from .metrics import calculate_file_stats
 from .queries import SORT_FIELDS, get_quality_config, field_value, compare, matches_filters
 from .aggregation import aggregate_stats, identify_hotspots
-from .provenance import provenance_report
+from .provenance import PROVENANCE_RESULT_TYPE, provenance_report
 
 
 def _pool_results(executor, args: list) -> list:
@@ -75,21 +79,100 @@ def _analyze_file_worker(args: tuple):
 # that classify:// answered (no file analysis, no rule pass).
 VIEWS = ('provenance',)
 
-_SCHEMA_QUERY_PARAMS = {
-    'view': {'type': 'string', 'description': 'provenance: the provenance tag (first_party/test/vendor/minified) of every analyzable file, with summary.total, by_provenance, excluded and excluded_by_extension; no file is analyzed and no rule runs (was classify://)', 'examples': ['view=provenance']},
-    'hotspots': {'type': 'boolean', 'description': 'Include hotspot analysis (files needing attention)', 'examples': ['hotspots=true']},
-    'top': {'type': 'integer', 'description': 'Max number of hotspot files to return when hotspots=true (default: 10, 0 = all)', 'examples': ['top=25']},
-    'code_only': {'type': 'boolean', 'description': 'Exclude data/config files from analysis', 'examples': ['code_only=true']},
-    'min_lines': {'type': 'integer', 'description': 'Filter files with at least this many lines', 'examples': ['min_lines=50']},
-    'max_lines': {'type': 'integer', 'description': 'Filter files with at most this many lines', 'examples': ['max_lines=500']},
-    'min_complexity': {'type': 'number', 'description': 'Filter files with avg complexity >= this', 'examples': ['min_complexity=5.0']},
-    'max_complexity': {'type': 'number', 'description': 'Filter files with avg complexity <= this', 'examples': ['max_complexity=15.0']},
-    'min_functions': {'type': 'integer', 'description': 'Filter files with at least this many functions', 'examples': ['min_functions=10']},
-    'churn': {'type': 'boolean', 'description': 'Fold commit-touch counts into hotspot scoring (default: on for git repos, silently off otherwise). Set churn=false to opt out and fall back to complexity-only scoring.', 'examples': ['churn=false']},
-    'since': {'type': 'string', 'description': 'Bound the churn walk to commits on/after this ISO date (default: full history). Only affects churn scoring, not the file list itself.', 'examples': ['since=2026-01-01']},
-    'no_merges': {'type': 'boolean', 'description': 'Exclude merge commits from the churn tally', 'examples': ['no_merges=1']},
-    'summary_only': {'type': 'boolean', 'description': 'Omit the per-file "files" array from the result — just the aggregate summary (+ hotspots, if also requested). Use on unscoped whole-repo calls, where the per-file array can reach tens of MB and dwarfs the summary block that is usually the actual signal wanted.', 'examples': ['summary_only=true']},
-}
+def _count(name: str):
+    """A whole-number parameter: 5 and 5.0 are accepted, 5.5, text and booleans are not."""
+    def convert(value: Any) -> int:
+        if isinstance(value, bool):
+            raise ValueError(f'{name} requires a whole number, not a boolean')
+        return whole_number(float(value) if isinstance(value, str) else value)
+    return convert
+
+
+def _number(name: str):
+    """A numeric threshold (an average complexity may be fractional); booleans and text are rejected."""
+    def convert(value: Any) -> float:
+        if isinstance(value, bool):
+            raise ValueError(f'{name} requires a number, not a boolean')
+        return float(value)
+    return convert
+
+
+def _text(name: str):
+    """A value-carrying parameter: bare presence (``?since``) is not a value."""
+    def convert(value: Any) -> str:
+        if isinstance(value, bool) or not isinstance(value, str) or not value.strip():
+            raise ValueError(f'{name} requires a value')
+        return str(value)
+    return convert
+
+
+def _display_count(name: str):
+    def convert(value: Any) -> int:
+        if isinstance(value, bool):
+            raise ValueError(f'{name} must be a non-negative integer, not a boolean')
+        return nonnegative_display_limit(value, name)
+    return convert
+
+
+# The declaration `reveal metrics` and metrics:// are both generated from (BACK-2146). Operator filters
+# (`lines>50`, `complexity=5..15`) are not parameters: they stay a URI-only expression language and
+# are read from the query keys no parameter claims (MetricsAdapter._expression_filters).
+_VIEW = ParamSpec('view', 'string', 'provenance: the provenance tag (first_party/test/vendor/minified) of every analyzable file, with summary.total, by_provenance, excluded and excluded_by_extension; no file is analyzed and no rule runs (was classify://)',
+                  None, _text('view'), ('view=provenance',), choices=VIEWS, role='analysis',
+                  cli=CliBinding(('--view',), metavar='VIEW'))
+_HOTSPOTS = ParamSpec('hotspots', 'boolean', 'Include hotspot analysis (files needing attention)', False,
+                      boolean_value, ('hotspots=true',), role='analysis',
+                      cli=CliBinding(('--hotspots',), action='store_true'))
+_TOP = ParamSpec('top', 'integer', 'Max number of hotspot files to return when hotspots=true (default: 10, 0 = all)',
+                 10, _display_count('top'), ('top=25',), minimum=0, zero_policy='all', role='analysis',
+                 cli=CliBinding(('--top',), metavar='N'))
+_CODE_ONLY = ParamSpec('code_only', 'boolean', 'Exclude data/config files from analysis', False,
+                       boolean_value, ('code_only=true',), role='analysis',
+                       cli=CliBinding(('--code-only',), action='store_true'))
+_MIN_LINES = ParamSpec('min_lines', 'integer', 'Filter files with at least this many lines', None,
+                       _count('min_lines'), ('min_lines=50',), role='analysis',
+                       cli=CliBinding(('--min-lines',), metavar='N'))
+_MAX_LINES = ParamSpec('max_lines', 'integer', 'Filter files with at most this many lines', None,
+                       _count('max_lines'), ('max_lines=500',), role='analysis',
+                       cli=CliBinding(('--max-lines',), metavar='N'))
+_MIN_COMPLEXITY = ParamSpec('min_complexity', 'number', 'Filter files with avg complexity >= this', None,
+                            _number('min_complexity'), ('min_complexity=5.0',), role='analysis',
+                            cli=CliBinding(('--min-complexity',), metavar='N'))
+_MAX_COMPLEXITY = ParamSpec('max_complexity', 'number', 'Filter files with avg complexity <= this', None,
+                            _number('max_complexity'), ('max_complexity=15.0',), role='analysis',
+                            cli=CliBinding(('--max-complexity',), metavar='N'))
+_MIN_FUNCTIONS = ParamSpec('min_functions', 'integer', 'Filter files with at least this many functions', None,
+                           _count('min_functions'), ('min_functions=10',), role='analysis',
+                           cli=CliBinding(('--min-functions',), metavar='N'))
+_CHURN = ParamSpec('churn', 'boolean', 'Fold commit-touch counts into hotspot scoring (default: on for git repos, silently off otherwise). Set churn=false to opt out and fall back to complexity-only scoring.',
+                   True, boolean_value, ('churn=false',), role='analysis',
+                   cli=CliBinding(('--no-churn',), action='store_false'))
+_SINCE = ParamSpec('since', 'string', 'Bound the churn walk to commits on/after this ISO date (default: full history). Only affects churn scoring, not the file list itself.',
+                   None, _text('since'), ('since=2026-01-01',), role='analysis',
+                   cli=CliBinding(('--since',), metavar='DATE'))
+_NO_MERGES = ParamSpec('no_merges', 'boolean', 'Exclude merge commits from the churn tally', False,
+                       boolean_value, ('no_merges=1',), role='analysis',
+                       cli=CliBinding(('--no-merges',), action='store_true'))
+_SUMMARY_ONLY = ParamSpec('summary_only', 'boolean', 'Omit the per-file "files" array from the result — just the aggregate summary (+ hotspots, if also requested). Use on unscoped whole-repo calls, where the per-file array can reach tens of MB and dwarfs the summary block that is usually the actual signal wanted.',
+                          False, boolean_value, ('summary_only=true',), role='analysis',
+                          cli=CliBinding(('--summary-only',), action='store_true'))
+_SORT = ParamSpec('sort', 'string', 'Sort the files by a field, ascending; a leading - sorts descending', None,
+                  _text('sort'), ('sort=-lines',), role='analysis', cli=CliBinding(('--sort',), metavar='FIELD'))
+_LIMIT = ParamSpec('limit', 'integer', 'Keep at most this many files (0 = no cap)', None,
+                   _display_count('limit'), ('limit=10',), minimum=0, zero_policy='no cap', role='analysis',
+                   cli=CliBinding(('--limit',), metavar='N'))
+_OFFSET = ParamSpec('offset', 'integer', 'Skip this many files before the first one kept', None,
+                    _display_count('offset'), ('offset=5',), minimum=0, role='analysis',
+                    cli=CliBinding(('--offset',), metavar='N'))
+
+PARAM_SPECS = (_VIEW, _HOTSPOTS, _TOP, _CODE_ONLY, _MIN_LINES, _MAX_LINES, _MIN_COMPLEXITY, _MAX_COMPLEXITY,
+               _MIN_FUNCTIONS, _CHURN, _SINCE, _NO_MERGES, _SUMMARY_ONLY, _SORT, _LIMIT, _OFFSET)
+
+# Query keys a parameter does not claim but the adapter reads: the walk's scope (overview composes them).
+_SCOPE_KEYS = frozenset({'exclude', 'respect_gitignore'})
+
+# The warning types _disclose_failures emits that say the answer lacks files it should have counted.
+REQUIRED_WARNINGS = frozenset({'analysis_failed', 'analysis_incomplete', 'parse_degraded', 'check_rules_failed'})
 
 _SCHEMA_OUTPUT_TYPES = [
     {
@@ -186,6 +269,11 @@ class MetricsAdapter(ResourceAdapter):
 
     BUDGET_LIST_FIELD = 'files'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
+    RESULT_TYPE = 'stats_summary'
+    FINDINGS_POLICIES = ('none',)  # metrics reports a count; it has no findings gate
+    DEFAULT_FAIL_ON = 'none'
+    RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
+    PARAM_SPECS = PARAM_SPECS
     CLI_QUERY_FLAGS = {
         'respect_gitignore': 'respect_gitignore=false',  # --no-gitignore (BACK-1202)
         'all': 'top=1000000',  # lifts the hotspots=true top=10 default (BACK-1379)
@@ -214,7 +302,10 @@ class MetricsAdapter(ResourceAdapter):
             'adapter': 'metrics',
             'description': 'Codebase metrics, quality analysis, file hotspots and provenance',
             'uri_syntax': 'metrics://<path>?<filter1>&<filter2>&...',
-            'query_params': _SCHEMA_QUERY_PARAMS,
+            'resource': MetricsAdapter.RESOURCE_SPEC.schema(),
+            'execution_policy': {'default_fail_on': MetricsAdapter.DEFAULT_FAIL_ON,
+                                 'fail_on': list(MetricsAdapter.FINDINGS_POLICIES)},
+            'query_params': param_schema(PARAM_SPECS),
             'operators': {},
             'elements': {},
             'cli_flags': ['--hotspots', '--format=json'],
@@ -225,23 +316,53 @@ class MetricsAdapter(ResourceAdapter):
             'notes': _SCHEMA_NOTES,
         }
 
-    def __init__(self, resource: str, query: Optional[str] = None):
-        """Initialize stats adapter.
+    @staticmethod
+    def result_type_for(params) -> str:
+        """The answer type the selected view produces, from key presence before conversion."""
+        return PROVENANCE_RESULT_TYPE if dict(peek_query_items(params)).get('view') == 'provenance' else 'stats_summary'
+
+    @staticmethod
+    def result_type_at(params, path: str) -> str:
+        """A file answers ``stats_file`` and a directory ``stats_summary``; the provenance view is
+        a ``classify_report`` for either."""
+        expected = MetricsAdapter.result_type_for(params)
+        return 'stats_file' if expected == 'stats_summary' and Path(path).is_file() else expected
+
+    @staticmethod
+    def execution_facts(result):
+        """Files the scan was meant to count and did not make the answer incomplete; a result with
+        nothing countable at all, or an error, is failed. Informational notes (excluded extensions,
+        a deprecated config key, an unavailable churn signal) are not failures."""
+        meta = result.get('meta') or {}
+        if result.get('error') or meta.get('errors'):
+            return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
+        lost = any(warning.get('type') in REQUIRED_WARNINGS for warning in meta.get('warnings', []))
+        return result_execution_facts(
+            result, completeness=AnalysisCompleteness.INCOMPLETE if lost else AnalysisCompleteness.COMPLETE)
+
+    def __init__(self, resource: str, query: Optional[str] = None, *, params: Optional[Dict[str, Any]] = None):
+        """Initialize the metrics adapter.
 
         Args:
             resource: File or directory path to analyze
             query: Query parameters (e.g., "hotspots=true&min_lines=50" or "lines>50&complexity<10")
+            params: Parameters already bound against PARAM_SPECS (the declared command and URI route);
+                    given, ``query`` is not read.
         """
-        path, query_string = resource, query
-        self.path = require_path_exists(Path(path).resolve())
+        self.path = require_path_exists(Path(resource)).resolve()  # the message names the path as spelled
         self._churn_disclosure: Optional[str] = None  # BACK-1166: set by _compute_churn_counts
         self._traversal_failures: List[Tuple[Optional[str], str]] = []
 
-        # Parse query string with type coercion (for legacy params)
-        self.query_params = parse_query_params(query_string or '', coerce=True)
-
-        # Parse result control (sort, limit, offset) - extract from query string
-        filter_query, self.result_control = parse_result_control(query_string or '')
+        if params is not None:
+            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
+                PARAM_SPECS, params, transport='typed')
+            filter_query, self.result_control = parse_result_control(self._control_query())
+            filter_query = self._expression_filters()
+        else:
+            # Parse query string with type coercion (for legacy params)
+            self.query_params = parse_query_params(query or '', coerce=True)
+            # Parse result control (sort, limit, offset) - extract from query string
+            filter_query, self.result_control = parse_result_control(query or '')
 
         # Parse query filters (new unified syntax: lines>50, complexity=5..15, etc.)
         # Only parse if the query contains new-style operators (>, <, !=, ~=, ..)
@@ -270,6 +391,23 @@ class MetricsAdapter(ResourceAdapter):
                              f"{', '.join(VIEWS)} (omit view for per-file metrics)")
         self._analysis_failures: list = []
         self._excluded_by_extension: Dict[str, int] = {}
+
+    def _control_query(self) -> str:
+        """The bound sort/limit/offset as the query text ``parse_result_control`` reads, so a bound
+        parameter and a legacy query string give one ResultControl."""
+        bound = dict(peek_query_items(self.query_params))
+        return '&'.join(f'{name}={bound[name]}' for name in ('sort', 'limit', 'offset') if name in bound)
+
+    def _expression_filters(self) -> str:
+        """The operator-filter expressions of a bound request: the query keys no parameter claims.
+
+        ``lines>50`` parses as a bare key and ``complexity>=5`` as key ``complexity>`` with value
+        ``5``; joining them back gives the text the filter parser reads. The scope keys (exclude,
+        respect_gitignore) are not expressions.
+        """
+        claimed = {spec.name for spec in PARAM_SPECS} | _SCOPE_KEYS
+        return '&'.join(key if value is True else f'{key}={value}'
+                        for key, value in peek_query_items(self.query_params) if key not in claimed)
 
     def _merge_query_params(self, hotspots, code_only, min_lines, max_lines,
                            min_complexity, max_complexity, min_functions,

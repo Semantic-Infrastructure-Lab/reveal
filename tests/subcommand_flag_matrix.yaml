@@ -235,6 +235,36 @@ subcommands:
       review: honored
       via:
       - declared-read
+  metrics:
+    all:
+      reason: --all is not declared on `reveal metrics`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap; the subcommand takes --top N
+      review: not-applicable
+      via: []
+    respect_gitignore:
+      reason: 'BACK-2146: applied to every walker by apply_global_flags; PROBES entry
+        proves an output diff'
+      review: honored
+      via:
+      - declared-global
+    since:
+      reason: 'BACK-2146: --since bounds the churn walk behind --hotspots (get_churn_counts); no
+        PROBES entry because the probe tree''s one commit is below the churn threshold, so
+        no output difference is observable on it'
+      review: honored
+      via:
+      - declared-read
+    until:
+      reason: --until is not declared on `reveal metrics`'s own parser -- argparse
+        rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    verbose:
+      reason: metrics accepts shared verbosity but nothing it prints changes with it; the
+        flag ledger names it as a no-op, as for calls:// (BACK-2146).
+      review: not-applicable
+      via:
+      - declared-unused
   offline:
     all:
       reason: --all is not declared on `reveal offline`'s own parser -- argparse rejects

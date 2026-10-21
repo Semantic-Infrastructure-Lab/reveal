@@ -121,6 +121,9 @@ notes:
   - 'New unified query syntax supports operators: >, <, >=, <=, ==, !=, ~=, ..'
   - 'Result control (sort, limit, offset) enables pagination and ordering'
   - 'Legacy parameters (min_lines, max_lines, etc.) still supported for backward compatibility'
+  - 'Operator filters (lines>50, complexity=5..15) are URI-only; the subcommand takes the named parameters (--min-lines, --max-complexity, ...)'
+  - 'hotspots=true ranks the whole filtered population; limit and offset page the files list only'
+  - 'Exit codes: 0 complete, 2 rejected request, 3 files lost or not analyzed (analysis_failed, parse_degraded, check_rules_failed, an unreadable directory); metrics has no findings gate (--fail-on findings exits 2)'
   - 'Combine filters and result control: ?lines>100&sort=-complexity&limit=10'
   - 'stats:// and classify:// are retired spellings: they answer the same as metrics:// and metrics://?view=provenance and print a replaced-by note'
 
@@ -129,6 +132,7 @@ output_formats:
   - json
 
 see_also:
+  - 'reveal metrics <path> - CLI subcommand form (the same answer; --hotspots, --view provenance, --min-lines N, --sort=-lines --limit N)'
   - 'reveal help://ast - Query code structure'
   - 'reveal --check - Run quality checks'
   - 'reveal help://tricks - Power user workflows'

@@ -79,6 +79,7 @@ PROBES = {
     ('contracts', 'respect_gitignore'): (['{tree}'], False),
     ('deps', 'respect_gitignore'): (['{tree}'], False),
     ('hotspots', 'respect_gitignore'): (['{tree}'], False),
+    ('metrics', 'respect_gitignore'): (['{tree}'], False),
     ('pack', 'respect_gitignore'): (['{tree}'], False),
     ('surface', 'respect_gitignore'): (['{tree}'], False),
     ('testability', 'respect_gitignore'): (['{tree}'], False),

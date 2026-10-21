@@ -216,18 +216,21 @@ def test_stats_pool_matches_the_serial_run(work, method):
     assert f'"total_files": {N_FILES}' in pooled.stdout
 
 
+# metrics is a declared noun (BACK-2146): a file lost to a dead worker makes the answer incomplete, which is
+# exit 3 on the D6 outcome policy. The retired stats:// spelling stays on the legacy URI route and keeps exit 0.
+@pytest.mark.parametrize('scheme,exit_code', [('metrics', 3), ('stats', 0)])
 @pytest.mark.parametrize('method', METHODS)
-def test_stats_worker_death_reports_the_lost_file_and_continues(work, method):
+def test_stats_worker_death_reports_the_lost_file_and_continues(work, method, scheme, exit_code):
     """BACK-1718: a dead worker no longer fails the whole run. The file lost with it goes
     through BACK-1614's failure channel (a named warning, not in the totals) and the files
     that did finish are still reported. Which collateral files the broken pool takes with
     it varies, so the count is a bound; every file is either counted or named once."""
     _need(method)
-    proc, calls = _run(work, method, 2, 'metrics://tree', '--format', 'json', die=True)
+    proc, calls = _run(work, method, 2, f'{scheme}://tree', '--format', 'json', die=True)
     _ran_in_pool(calls, method)
-    assert proc.returncode == 0, (proc.returncode, proc.stdout, proc.stderr)
+    assert proc.returncode == exit_code, (proc.returncode, proc.stdout, proc.stderr)
     result = json.loads(proc.stdout)
-    warning, = [w for w in result['meta']['warnings'] if w['type'] == 'analysis_failed']
+    warning, = [w for w in result['meta']['warnings'] if w.get('type') == 'analysis_failed']
     assert DYING in warning['files'], warning
     assert 1 <= warning['count'] <= N_FILES
     assert result['summary']['total_files'] + warning['count'] == N_FILES, (result['summary'], warning)

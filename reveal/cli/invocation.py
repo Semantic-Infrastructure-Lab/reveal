@@ -105,6 +105,9 @@ COMMANDS: Dict[str, CommandSpec] = {
     'hotspots':     _declared('hotspots',
                      'reveal hotspots [path]',
                      'High-complexity files and functions that need attention'),
+    'metrics':      _declared('metrics',
+                     'reveal metrics [path]',
+                     'Per-file lines, complexity and quality; --hotspots ranks files; --view provenance tags every file'),
     'offline':      _spec('offline',
                      'reveal offline',
                      'Pre-download tree-sitter grammars for offline/air-gapped use'),
@@ -138,7 +141,7 @@ COMMANDS: Dict[str, CommandSpec] = {
 
 
 # Order of the `--help-all` subcommand listing: task entry points first, tooling last.
-EPILOG_ORDER = ('overview', 'architecture', 'deps', 'hotspots', 'contracts', 'surface',
+EPILOG_ORDER = ('overview', 'architecture', 'deps', 'hotspots', 'metrics', 'contracts', 'surface',
                 'testability', 'calls', 'trace', 'check', 'review', 'health', 'pack', 'dev',
                 'scaffold', 'offline')
 

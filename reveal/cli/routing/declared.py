@@ -190,7 +190,10 @@ def _result_type_at(adapter_class, expected_type: str, params: Any, scope_path: 
     (metrics answers a file with ``stats_file`` and a directory with ``stats_summary``) declares
     ``result_type_at(params, path)``; ``result_type_for(params)`` cannot see the path."""
     refine = getattr(adapter_class, 'result_type_at', None)
-    return expected_type if refine is None else refine(params, scope_path)
+    if refine is None:
+        return expected_type
+    result_type: str = refine(params, scope_path)
+    return result_type
 
 
 def _scope_path(adapter_class, path: str) -> str:

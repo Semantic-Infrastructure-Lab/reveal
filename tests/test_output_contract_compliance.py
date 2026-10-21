@@ -164,6 +164,7 @@ SUBCOMMAND_ARGV = {
     'deps': ['proj'],
     'health': ['proj'],
     'hotspots': ['proj'],
+    'metrics': ['proj'],
     'overview': ['proj'],
     'pack': ['proj'],
     'review': ['proj'],
