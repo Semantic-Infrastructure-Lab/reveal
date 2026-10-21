@@ -713,6 +713,18 @@ class TreeSitterAnalyzer(FileAnalyzer):
                        {**entry, _CALL_SITE_LAYER_KEY: {**layer, 'form': form}},
                        max_entries=_structure_cache_max_files())
 
+    def _read_structure_entry(self, fingerprint: str, namespaces: List[str]) -> Optional[Dict[str, Any]]:
+        """The first stored entry among ``namespaces`` without its call-site layer, which a full
+        entry's hit keeps on the analyzer (``load_call_site_layer``); None on a miss."""
+        for namespace in namespaces:
+            cached = disk_cache.get(namespace, fingerprint)
+            if cached is None:
+                continue
+            if namespace == _STRUCTURE_CACHE_NAMESPACE and _CALL_SITE_LAYER_KEY in cached:
+                self._call_site_layer = cached[_CALL_SITE_LAYER_KEY]
+            return {k: v for k, v in cached.items() if k != _CALL_SITE_LAYER_KEY}
+        return None
+
     def _get_or_build_structure(self) -> Dict[str, Any]:
         """Return the unsliced structure dict, from disk cache when possible.
 
@@ -729,12 +741,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if self._outline_only:
             namespaces.append(_OUTLINE_CACHE_NAMESPACE)
         if fingerprint is not None:
-            for namespace in namespaces:
-                cached = disk_cache.get(namespace, fingerprint)
-                if cached is not None:
-                    if namespace == _STRUCTURE_CACHE_NAMESPACE and _CALL_SITE_LAYER_KEY in cached:
-                        self._call_site_layer = cached[_CALL_SITE_LAYER_KEY]
-                    return {k: v for k, v in cached.items() if k != _CALL_SITE_LAYER_KEY}
+            cached = self._read_structure_entry(fingerprint, namespaces)
+            if cached is not None:
+                return cached
 
         if not self.tree:  # first access here triggers the actual parse
             return {}
