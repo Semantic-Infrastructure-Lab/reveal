@@ -435,7 +435,9 @@ the values, and `<namespace>` names the kind of artifact.
   permission, an I/O error), that a dead worker process never parsed, or whose analysis failed in
   reveal itself (the analyzer lookup raised, or tree-sitter could not load the grammar, for example
   when the language pack's download or cache lock failed) is reported as failed but not cached,
-  nor is an `imports://` or `I002` graph that contains one, so the next run reads it again even
+  nor is an `imports://` or `I002` graph that contains one, nor the outline of a JS, PHP, Ruby,
+  Go, Lua, Zig or GDScript file whose imports it could not extract (the outline says its imports
+  are missing), nor an `I007` project scan across MCP requests, so the next run reads it again even
   though its mtime and size did not change. A syntax error is cached like any other result: the
   same content fails the same way.
 
