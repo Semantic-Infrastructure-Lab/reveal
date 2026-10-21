@@ -329,5 +329,32 @@
     },
     "partial_files": 0,
     "differences": []
+  },
+  "python-reveal": {
+    "oracle": "python-ast",
+    "sha": "4d4116cc2617cb9a064a062a3693e7e40b057775",
+    "targets": 544,
+    "oracle_edges": 4986,
+    "hit_edges": 4986,
+    "extra_edges": 0,
+    "recall": 1.0,
+    "precision": 1.0,
+    "coverage": {
+      "files": 1397,
+      "import_statements": 13322,
+      "resolved_statements": 7078,
+      "type_checking_skipped": 19
+    },
+    "partial_files": 0,
+    "edge_rule": {
+      "lazy": "include",
+      "tests": "included",
+      "type_checking": "excluded",
+      "scope": "scan_root",
+      "unclassified_languages": [
+        "cpp"
+      ]
+    },
+    "differences": []
   }
 }

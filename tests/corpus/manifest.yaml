@@ -199,6 +199,15 @@ corpora:
       scan_root: celery/utils
       importer_dirs: [celery/utils]
       oracle: python-ast-callers
+  - id: python-reveal
+    language: python
+    repo: https://github.com/Semantic-Infrastructure-Lab/reveal.git
+    sha: 4d4116cc2617cb9a064a062a3693e7e40b057775
+    license: MIT
+    role: Third Python corpus; reveal's own tree, function-level imports and absolute `import reveal.x` spellings
+    recall:
+      oracle: python-ast
+      importer_dirs: [.]
   - id: rust-ripgrep
     language: rust
     repo: https://github.com/BurntSushi/ripgrep.git
