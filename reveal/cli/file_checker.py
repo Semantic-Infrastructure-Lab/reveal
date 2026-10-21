@@ -18,7 +18,7 @@ from ..utils.json_utils import write_requested_artifact, write_text_artifact
 from ..utils.results import note_truncation, requested_fail_on
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List, Dict, Literal, Tuple, TYPE_CHECKING
+from typing import Optional, List, Dict, Literal, Set, Tuple, TYPE_CHECKING
 
 from ..utils.path_utils import (
     ScopeCensus,
@@ -256,6 +256,8 @@ class FileCollectionResult:
     # instead of silently dropping the language from scope.languages.
     no_analyzer_by_language: Dict[str, Dict[str, object]] = field(default_factory=dict)
     traversal_failures: Tuple[Tuple[Optional[str], str], ...] = ()
+    # --changed RANGE (BACK-2068): the range and how many files git listed, stated in the report.
+    changed: Optional[Dict[str, object]] = None
 
     def to_scope_census(self) -> ScopeCensus:
         """Build the BACK-884 scope census for this collection: per-language
@@ -295,6 +297,7 @@ def collect_files_to_check(
     directory: Path,
     respect_gitignore: Optional[bool] = None,
     exclude_patterns: Optional[List[str]] = None,
+    only: Optional[Set[Path]] = None,
 ) -> FileCollectionResult:
     """Collect all supported files in directory tree.
 
@@ -307,6 +310,8 @@ def collect_files_to_check(
             (BACK-1042), gitignore syntax (BACK-1576); a directory pattern
             like "wp-includes/js/dist/*" prunes the whole subtree instead of
             just filtering it out of the final report.
+        only: resolved paths to keep (``check --changed``). A file outside it is not
+            counted as skipped: it was never in the population asked for.
 
     Returns:
         FileCollectionResult: survivors (`.files`) plus skip-reason counts.
@@ -327,6 +332,8 @@ def collect_files_to_check(
     # --exclude are the seam's, so check sees the files ast:// and stats:// see.
     for file_path in _walk_code_files(directory, exclude_patterns, respect_gitignore,
                                       on_hidden=count_hidden, on_error=traversal_errors.append):
+        if only is not None and file_path.resolve() not in only:
+            continue
         # Check if file has a supported analyzer
         if get_analyzer(str(file_path), allow_fallback=False):
             files_to_check.append(file_path)
@@ -512,11 +519,14 @@ def _build_cli_overrides(args: 'Namespace') -> dict:
     return cli_overrides
 
 
-def _no_files_message(directory) -> str:
+def _no_files_message(directory, changed: Optional[Dict[str, object]] = None) -> str:
+    if changed:
+        return (f"No supported files among the {changed['files']} file(s) changed in {changed['range']} "
+                f"under {to_posix(directory)}")
     return f"No supported files found in {to_posix(directory)}"
 
 
-def _handle_no_files_found(directory: Path, args: 'Namespace') -> None:
+def _handle_no_files_found(directory: Path, args: 'Namespace', changed: Optional[Dict[str, object]] = None) -> None:
     """Answer a directory with nothing to check: an empty result, through the
     subcommand seam like every other check result (BACK-1545)."""
     from .routing.subcommand import emit_subcommand_result
@@ -529,8 +539,10 @@ def _handle_no_files_found(directory: Path, args: 'Namespace') -> None:
             "exit_code": 0
         }
     }
+    if changed:
+        result['scope'] = {'changed': changed}
     emit_subcommand_result(result, args, name='check', source=directory,
-                           render=lambda _result: print(_no_files_message(directory)))
+                           render=lambda _result: print(_no_files_message(directory, changed)))
 
 
 _SEVERITY_ORDER = ['low', 'medium', 'high', 'critical']
@@ -1072,10 +1084,16 @@ def _print_grep_output(file_results: List[dict]) -> None:
             print(f"{file_path}:{d['line']}:{d['column']}:{d['rule_code']}:{d['message']}")
 
 
+def _print_changed_scope(changed: Optional[Dict[str, object]]) -> None:
+    """The text summary's scope line for ``check --changed``: the range and its file count."""
+    if changed:
+        print(f"Scope: the {changed['files']} file(s) changed in {changed['range']}, not the whole tree")
+
+
 def _print_text_summary(
     files_checked: int, files_with_issues: int, total_issues: int, directory: Path, config,
     files_errored: int = 0, files_degraded: int = 0, scan_disclosures: Optional[List[str]] = None,
-    scan_incomplete: bool = False,
+    scan_incomplete: bool = False, changed: Optional[Dict[str, object]] = None,
 ) -> None:
     """Print text summary with breadcrumbs.
 
@@ -1101,6 +1119,7 @@ def _print_text_summary(
     """
     print(f"\n{'='*60}")
     print(f"Checked {files_checked} files")
+    _print_changed_scope(changed)
     if files_errored:
         print(f"⚠️  {files_errored} file{'s' if files_errored != 1 else ''} could not be checked (see warnings above)")
     if files_degraded:
@@ -1155,12 +1174,20 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     # Collect files to check
     respect_gitignore = getattr(args, 'respect_gitignore', True) is not False
     exclude_patterns = getattr(args, 'exclude', None) or []
-    collection = collect_files_to_check(directory, respect_gitignore, exclude_patterns)
+    changed_range = getattr(args, 'changed', None)
+    only = None
+    if changed_range:
+        from ..utils.git_range import changed_files
+        listed = changed_files(changed_range)
+        only = set(listed)
+    collection = collect_files_to_check(directory, respect_gitignore, exclude_patterns, only=only)
+    if changed_range:
+        collection.changed = {'range': changed_range, 'files': len(listed)}
     files_to_check = collection.files
 
     output_format = getattr(args, 'format', 'text')
     if not files_to_check and not collection.traversal_failures:
-        _handle_no_files_found(Path(shown), args)
+        _handle_no_files_found(Path(shown), args, collection.changed)
         return
     if output_format == 'typed':
         # Not implemented for this path (or, as of BACK-1035's follow-up audit,
@@ -1233,6 +1260,8 @@ def _report_for(files: List[Path], collection: 'FileCollectionResult', args: 'Na
             scan_incomplete=scan_incomplete,
             fail_on=requested_fail_on(args),
         )
+        if collection.changed and 'scope' in result:
+            result['scope']['changed'] = collection.changed
         result['summary']['scan_budgets'] = [
             {**row, 'root': as_spelled(row['root'], getattr(args, 'path', '.') or '.')}
             for row in get_scan_budgets(files, select, ignore)]
@@ -1315,7 +1344,7 @@ def _text_check(files: List[Path], directory: Path, collection: 'FileCollectionR
             len(files), tally.files_with_issues, tally.total_issues, directory, config,
             files_errored=tally.files_errored, files_degraded=tally.files_degraded,
             scan_disclosures=disclosures,
-            scan_incomplete=scan_incomplete,
+            scan_incomplete=scan_incomplete, changed=collection.changed,
         )
 
     return tally, result, render_text, artifact

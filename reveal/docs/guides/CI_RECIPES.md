@@ -24,7 +24,7 @@ All use `pip install reveal-cli` — no Docker required.
 
 ### PR Quality Gate
 
-Runs `reveal review` on every PR. Fails if complexity increases or quality checks fail.
+Runs `reveal check --changed` on every PR. Fails if a changed file has quality findings.
 
 ```yaml
 # .github/workflows/reveal-review.yml
@@ -45,9 +45,9 @@ jobs:
       - name: Install reveal
         run: pip install reveal-cli
 
-      - name: PR review (diff + check + hotspots)
-        run: reveal review origin/${{ github.base_ref }}..HEAD
-        # Exits 1 if quality issues or complexity regressions found
+      - name: PR check (rules on the changed files)
+        run: reveal check --changed origin/${{ github.base_ref }}..HEAD
+        # Exits 1 if quality issues are found in the changed files
 ```
 
 ### Changed-Files Quality Gate
@@ -246,7 +246,7 @@ reveal-review:
   before_script:
     - pip install reveal-cli
   script:
-    - reveal review origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME..HEAD
+    - reveal check --changed origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME..HEAD
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 ```
@@ -280,9 +280,9 @@ Add these to your `Makefile` for local use and CI parity:
 ```makefile
 .PHONY: review check hotspots quality
 
-# Full PR review (run before committing)
+# PR review (run before committing)
 review:
-	reveal review main..HEAD
+	reveal check --changed main..HEAD
 
 # Quality check (fail on any issues)
 check:
@@ -318,7 +318,7 @@ making them directly usable as CI gates with `|| exit 1`.
 
 ## Tips
 
-**Speed up CI**: `reveal check` and `reveal review` are fast (typically < 5 seconds for medium codebases). No indexing required.
+**Speed up CI**: `reveal check` and `reveal check --changed` are fast (typically < 5 seconds for medium codebases). No indexing required.
 
 **Baseline first**: Run `reveal hotspots src/` on your main branch before adding the complexity gate — this lets you set a realistic threshold rather than failing immediately.
 

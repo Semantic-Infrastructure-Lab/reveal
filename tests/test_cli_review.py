@@ -784,11 +784,12 @@ class TestReviewAgainstRealRepo(unittest.TestCase):
     @unittest.skipUnless(shutil.which('jq'), 'jq not installed')
     @unittest.skipIf(sys.platform == 'win32', "the documented gates use POSIX-shell quoting")
     def test_documented_ci_gates_work(self):
-        """Every `reveal review` line in the guide's CI/CD block, run verbatim
+        """Every `reveal check --changed` line in the guide's CI/CD block, run verbatim
         (C13: `.overall_status` did not exist and `severity=="error"` never
-        matched, so both documented gates passed on anything)."""
+        matched, so both documented gates passed on anything). The block moved from
+        `reveal review` to `check --changed` with BACK-2068 slice 3b."""
         section = _GUIDE.read_text(encoding='utf-8').split('### CI/CD Integration', 1)[1].split('```bash', 1)[1]
-        gates = [ln for ln in section.split('```', 1)[0].splitlines() if ln.startswith('reveal review')]
+        gates = [ln for ln in section.split('```', 1)[0].splitlines() if ln.startswith('reveal check --changed')]
         self.assertEqual(len(gates), 3, gates)
         cli = f"{sys.executable} -m reveal"
         env = {**os.environ, 'REVEAL_DISK_CACHE': '0'}
@@ -801,6 +802,6 @@ class TestReviewAgainstRealRepo(unittest.TestCase):
         self._commit('clean.py', "def fine():\n    return 2\n")
         self.assertEqual(outcomes(), [True, True, True], 'clean change')
         self._commit('branchy.py', _MEDIUM_ONLY)
-        self.assertEqual(outcomes(), [False, True, True], 'medium-only change')
+        self.assertEqual(outcomes(), [False, False, True], 'medium-only change')
         self._commit('swallow.py', _HIGH)
         self.assertEqual(outcomes(), [False, False, False], 'high-severity change')

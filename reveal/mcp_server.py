@@ -821,6 +821,9 @@ def reveal_health(target: str, select: str = '') -> str:
 def reveal_review(target: str, select: str = 'B,S,I,C,M') -> str:
     """Assess code quality before a PR merge — violations, hotspots, complexity spikes.
 
+    The CLI's `reveal review` is retired into `reveal check --changed RANGE` plus the `diff://git://A/.:git://B/.`
+    adapter and prints a replaced-by note; this tool keeps its name and answer until Phase 7.
+
     For a git range (e.g. 'main..feature'), scopes analysis to only the
     changed files. For a directory, reviews the whole tree.
 

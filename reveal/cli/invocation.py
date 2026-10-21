@@ -117,7 +117,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      help_guide=_SUBCOMMANDS_GUIDE),  # pack:// guide is a pointer stub
     'review':       _spec('review',
                      'reveal review <path>',
-                     'Assess quality + structural changes before a PR merge',
+                     'Retired: use reveal check --changed RANGE and the diff:// adapter',
                      ('text', 'json'), help_guide=_SUBCOMMANDS_GUIDE),
     'scaffold':     _spec('scaffold',
                      'reveal scaffold <kind>',
@@ -217,6 +217,11 @@ RETIREMENTS: Dict[str, Retirement] = {
     'flag:--search': Retirement('--search', '--name PATTERN (regex)'),
     # One row for the file route's --check and its --lint alias.
     'flag:--check': Retirement('file --check/--lint', 'reveal check <path>'),
+    # review folded into check --changed plus the diff:// adapter (D3, BACK-2068 slice 3b): it answers as before until the
+    # cut. Its hotspots and complexity sections have no new home until stats becomes metrics (BACK-2069);
+    # the MCP tool reveal_review keeps its name until Phase 7.
+    'subcommand:review': Retirement('reveal review', 'reveal check --changed RANGE (rules) and '
+                                    "reveal 'diff://git://A/.:git://B/.' (structure); a directory: reveal check DIR"),
     # trace merged into calls (BACK-2066): both spellings keep trace's frames shape until the cut
     # (decision c); the MCP tool reveal_trace keeps its name until Phase 7 (decision g).
     'subcommand:trace': Retirement('reveal trace', 'reveal calls <path> --callees FUNC --depth N --detail'),

@@ -70,6 +70,12 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help='Ignore specific rules or categories (e.g., "E501" or "C")',
     )
     parser.add_argument(
+        '--changed', type=str, metavar='RANGE',
+        help='Check only the files a git range changed (e.g. main..HEAD; a single ref such as HEAD '
+             'means uncommitted changes). PATH, default ., still bounds the search; the report '
+             'states the range in scope.changed. Replaces the rule pass of reveal review.',
+    )
+    parser.add_argument(
         '--profile', type=str, metavar='NAME',
         help='Apply a named rule preset (e.g., maintenance, security, ci-strict). '
              'Use reveal --profiles to list available profiles.',
@@ -158,6 +164,39 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _resolve_check_path(args: Namespace) -> Path:
+    """The path ``run_check`` checks, or exit 2: required, not a URI, existing, and a directory
+    when ``--changed`` bounds it to a git range (BACK-2068)."""
+    changed_range = getattr(args, 'changed', None)
+    path_str = getattr(args, 'path', None) or ('.' if changed_range else None)
+    if not path_str:
+        print("Error: path is required for reveal check", file=sys.stderr)
+        sys.exit(2)
+    args.path = path_str
+
+    # BACK-261: detect URI where a file path was expected
+    import re as _re
+    if _re.match(r'^[a-z][a-z0-9+\-.]+://', path_str):
+        print(f"Error: '{path_str}' looks like a URI, not a file path.", file=sys.stderr)
+        print(f"  Did you mean: reveal {path_str} --check", file=sys.stderr)
+        sys.exit(2)
+
+    path = Path(path_str)
+    if not path.exists():
+        print(f"Error: {path_str}: no such file or directory", file=sys.stderr)
+        sys.exit(2)
+
+    if changed_range:
+        from reveal.utils.git_range import git_range_error
+        range_error = git_range_error(changed_range)
+        if range_error is None and not path.is_dir():
+            range_error = f"{path_str} is a file; --changed bounds a directory"
+        if range_error:
+            print(f"Error: cannot check --changed {changed_range!r}: {range_error}", file=sys.stderr)
+            sys.exit(2)
+    return path
+
+
 def run_check(args: Namespace) -> None:
     """Run check mode — canonical implementation.
 
@@ -202,22 +241,7 @@ def run_check(args: Namespace) -> None:
         if not args.ignore and resolved['ignore']:
             args.ignore = ','.join(resolved['ignore'])
 
-    path_str = getattr(args, 'path', None)
-    if not path_str:
-        print("Error: path is required for reveal check", file=sys.stderr)
-        sys.exit(2)
-
-    # BACK-261: detect URI where a file path was expected
-    import re as _re
-    if _re.match(r'^[a-z][a-z0-9+\-.]+://', path_str):
-        print(f"Error: '{path_str}' looks like a URI, not a file path.", file=sys.stderr)
-        print(f"  Did you mean: reveal {path_str} --check", file=sys.stderr)
-        sys.exit(2)
-
-    path = Path(path_str)
-    if not path.exists():
-        print(f"Error: {path_str}: no such file or directory", file=sys.stderr)
-        sys.exit(2)
+    path = _resolve_check_path(args)
 
     if path.is_dir():
         args.recursive = True

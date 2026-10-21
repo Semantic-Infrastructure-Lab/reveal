@@ -49,7 +49,7 @@ def stats_loses_one_file(monkeypatch):
 def test_review_json_names_the_file_hotspots_lost(tmp_path, stats_loses_one_file):
     code, out = _review(_tree(tmp_path), 'json')
     report = json.loads(out)
-    lost, = [w for w in report['meta']['warnings'] if w['type'] == 'analysis_failed']
+    lost, = [w for w in report['meta']['warnings'] if w.get('type') == 'analysis_failed']
     assert lost['count'] == 1 and lost['files'] == [LOST]
     assert lost['message'].startswith('hotspots: 1 file(s) failed analysis')
     assert LOST not in {h.get('file') for h in report['sections']['hotspots']}
@@ -66,7 +66,7 @@ def test_review_negative_control_no_failure_no_caveat(tmp_path):
     code, out = _review(root, 'json')
     report = json.loads(out)
     warnings = report.get('meta', {}).get('warnings', [])
-    assert not [w for w in warnings if w['type'] == 'analysis_failed']
+    assert not [w for w in warnings if w.get('type') == 'analysis_failed']
     _, text = _review(root, 'text')
     assert 'Caveats:' not in text and 'failed analysis' not in text
 
@@ -108,7 +108,7 @@ def test_single_file_review_names_a_file_hotspots_could_not_analyze(tmp_path, mo
         {'analysis_failed': 'ValueError: boom', 'path': str(path)} if path.name == LOST else real(path, fn)))
     _, out = _review(root / LOST, 'json')
     report = json.loads(out)
-    lost, = [w for w in report['meta']['warnings'] if w['type'] == 'analysis_failed']
+    lost, = [w for w in report['meta']['warnings'] if w.get('type') == 'analysis_failed']
     assert LOST in lost['message'] and 'analysis failed: ValueError: boom' in lost['message']
     assert report['sections']['hotspots'] == []
 
@@ -122,7 +122,7 @@ def test_review_names_the_file_a_dead_stats_worker_lost(work, method):  # noqa: 
                        '--format', 'json', die=True)
     assert calls and set(calls) <= {f'{method} True'}, sorted(set(calls))
     report = json.loads(proc.stdout)
-    lost, = [w for w in report['meta']['warnings'] if w['type'] == 'analysis_failed']
+    lost, = [w for w in report['meta']['warnings'] if w.get('type') == 'analysis_failed']
     assert DYING in lost['files'], lost
     assert 1 <= lost['count'] <= N_FILES
     assert 'hotspot analysis failed' not in proc.stderr

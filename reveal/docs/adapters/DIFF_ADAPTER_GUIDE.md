@@ -260,8 +260,8 @@ Every function entry in `.diff.functions` now carries top-level complexity field
 reveal diff://git://main/.:git://HEAD/. --format json | \
   jq '.diff.functions[] | select(.complexity_delta > 5)'
 
-# `reveal review` surfaces this automatically as a named section
-reveal review main..feature
+# The rules on the same range's changed files
+reveal check --changed main..feature
 ```
 
 **Output**:

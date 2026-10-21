@@ -59,7 +59,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | Text search, grouped by enclosing function | `reveal src/ --grep 'pattern'` (Python regex syntax) |
 | File history / commit search | `reveal 'git://src/app.py?type=history'`, `reveal 'git://.?type=history&message~=fix'` |
 | One section of a markdown doc | `reveal doc.md "Heading"` |
-| Review a commit range | `reveal review main..HEAD` (can take minutes on a large range) |
+| Review a commit range | `reveal check --changed main..HEAD` (rules on the files the range changed); structure: `reveal 'diff://git://main/.:git://HEAD/.'` |
 | Prior Claude sessions | `reveal 'claude://sessions/?search=auth-refactor'` |
 | Databases, env, SSL, nginx, other resources | `reveal help://adapters` |
 
@@ -248,7 +248,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal calls --callers FUNC` | Call graph: callers, callees (--depth N, --detail), --rank callers, --uncalled, --modules | `reveal calls --help` |
 | `reveal trace --from FUNC` | Retired: use reveal calls --callees FUNC --depth N --detail (the same walk); depth-indented narrative with side effects | `reveal trace --help` |
 | `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
-| `reveal review <path>` | Assess quality + structural changes before a PR merge | `reveal review --help` |
+| `reveal review <path>` | Retired: use reveal check --changed RANGE and the diff:// adapter (structure: reveal 'diff://git://A/.:git://B/.'); still answers and prints a replaced-by note | `reveal review --help` |
 | `reveal health [path]` | Unified health: code rules + SSL + databases + DNS in one report | `reveal health --help` |
 | `reveal pack <path>` | Token-budgeted context snapshot for LLM consumption (use `--budget`, `--focus`, `--since`) | `reveal pack --help` |
 | `reveal dev <command>` | Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config | `reveal dev --help` |
@@ -257,7 +257,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 
 **Rule of thumb:**
 - Exploring an unfamiliar codebase → `reveal overview` first, then `reveal architecture`.
-- Pre-merge review → `reveal review` (quality + structural diff in one).
+- Pre-merge review → `reveal check --changed main..HEAD` (rules on the changed files), plus the `diff://` adapter for structure.
 - Building LLM context with a token budget → `reveal pack`.
 - Tracing what a function actually does (calls + side-effects) → `reveal calls <path> --callees <func> --depth 2 --detail`.
 - Mapping the system's external boundaries → `reveal surface`.
@@ -1187,12 +1187,16 @@ json.database.credentials.user = "admin"
 
 ### Task: "Review pull request / git changes"
 
-**Pattern (v0.57.0+: use `reveal review` for one-shot PR reviews):**
+**Pattern (`reveal review` is retired into `check --changed` plus the `diff://` adapter):**
 ```bash
-# Full PR review: diff + check + hotspots + complexity
-reveal review main..feature
-reveal review HEAD~3..HEAD      # Last 3 commits
-reveal review ./src             # Review a directory
+# Rules on the files a range changed
+reveal check --changed main..feature
+reveal check --changed HEAD~3..HEAD      # Last 3 commits
+reveal check --changed HEAD              # Uncommitted changes
+reveal check ./src                       # A directory, whole tree
+
+# Structure of the same range
+reveal 'diff://git://main/.:git://feature/.'
 
 # Manual approach (more control)
 git diff --name-only | reveal --stdin --outline   # Structure of changed files
@@ -1201,17 +1205,11 @@ reveal check src/changed_file.py
 reveal src/changed_file.py changed_function
 ```
 
-**`reveal review` output:** structural diff + quality violations + top hotspots + complex functions, unified in one pass.
+**`reveal check --changed RANGE` output:** the same report as `reveal check <dir>`, over the files the range changed under PATH (default `.`). `scope.changed` in JSON, and a `Scope:` line in text, name the range and how many files git listed, so a clean result cannot be read as a whole-tree pass. Hotspots and complexity: `reveal hotspots <path>` and `reveal 'ast://<path>?complexity>10&sort=-complexity'`.
 
-**`reveal review` is a CI gate (BACK-1401).** Exit codes:
-- `0` pass — no findings
-- `1` warn — only `low`/`medium` findings
-- `2` fail — any `high`/`critical` finding, **or** an invalid target (unknown revision such as `main..nosuchbranch`, or not inside a git repository — `Error: cannot review …`)
-- `3` incomplete — a quality check crashed or couldn't analyze some files, or the hotspot step couldn't rank some (named under Caveats), so an empty result is not proof of a clean change
-
-JSON output carries the same verdict as `overall_status` (`pass` / `warn` / `fail` / `incomplete`, or `error` for an invalid target) and `exit_code`:
+**`reveal check --changed` is a CI gate.** Exit codes are `check`'s: `0` no findings, `1` findings, `2` an unusable range (unknown revision such as `main..nosuchbranch`, not inside a git repository), `3` a file could not be checked, so an empty result is not proof of a clean change. `--fail-on none` reports findings without failing.
 ```bash
-reveal review main..feature --format json | jq -e '.overall_status == "pass"'   # non-zero unless the review passed
+reveal check --changed main..feature --format json | jq -e '.summary.total_issues == 0'
 ```
 
 **Advanced workflows:**
@@ -1222,9 +1220,9 @@ git diff main --name-only | reveal --stdin --outline
 # Check only modified (not new) files
 git diff --name-only --diff-filter=M | reveal --stdin --check
 
-# JSON output for CI/CD gating (exit 0 pass / 1 warn / 2 fail or invalid range / 3 incomplete)
-reveal review main..feature --format json
-reveal review main..feature --format json | jq -e '.overall_status == "pass"'
+# JSON output for CI/CD gating (exit 0 clean / 1 findings / 2 invalid range / 3 incomplete)
+reveal check --changed main..feature --format json
+reveal check --changed main..feature --format json | jq -e '.summary.total_issues == 0'
 
 # Check security on new files only
 git diff --name-only --diff-filter=A | reveal --stdin --check --select S
@@ -1570,7 +1568,7 @@ explicit `top`; the subcommand rejects `--all`. Required Stats/AST failures exit
 including when `--fields` omits the evidence. See the
 [hotspots guide](adapters/HOTSPOTS_ADAPTER_GUIDE.md).
 
-**Use case:** Identify the 10 worst files in a codebase — start technical debt work here. Output is the same data `reveal review` uses to surface hotspots in PR reviews.
+**Use case:** Identify the 10 worst files in a codebase — start technical debt work here. Output is the data behind the Hotspots section of the retired `reveal review`.
 
 **Find complex functions without tests:**
 ```bash
@@ -3395,8 +3393,8 @@ reveal check src/auth.py
 # 5. Extract problematic function
 reveal src/auth.py authenticate_user
 
-# 6. One-shot gate for CI: exit 0 pass, 1 findings (warn, or fail for a high/critical finding), 2 bad range, 3 incomplete
-reveal review main..HEAD --format json | jq -e '.overall_status == "pass"'
+# 6. One-shot gate for CI: exit 0 clean, 1 findings, 2 bad range, 3 incomplete
+reveal check --changed main..HEAD --format json | jq -e '.summary.total_issues == 0'
 ```
 
 **Result:** Found security issue and complexity problem before merge.
@@ -3668,8 +3666,8 @@ reveal deep_dir/
 
 | Command | `0` | `1` | `2` | `3` |
 |---------|-----|-----|-----|-----|
-| `reveal check` / `<path> --check` | no issues | issues found | request rejected before scanning (bad arguments, missing path, URI given as a path, unknown `--profile`) | scan incomplete — a file could not be parsed or checked, or a requested `--also-json` artifact could not be written (the report is still printed; beats findings and `--exit-zero`) |
-| `reveal review` | pass | findings — warnings, or a blocking `high`/`critical` issue (`overall_status` says which) | invalid target (unknown revision, not a git repo) | incomplete — a check crashed or skipped files; beats findings |
+| `reveal check` (also `--changed RANGE`) / `<path> --check` | no issues | issues found | request rejected before scanning (bad arguments, missing path, URI given as a path, unknown `--profile`, unusable `--changed` range) | scan incomplete — a file could not be parsed or checked, or a requested `--also-json` artifact could not be written (the report is still printed; beats findings and `--exit-zero`) |
+| `reveal review` (retired; prints a note) | pass | findings — warnings, or a blocking `high`/`critical` issue (`overall_status` says which) | invalid target (unknown revision, not a git repo) | incomplete — a check crashed or skipped files; beats findings |
 | `reveal health` | all targets pass | findings (warnings or failing checks, severe ones included) | usage error (no target) | a check failed, could not reach its target (a missing local path included) or was incomplete (a skipped oversized directory, a degraded parse) |
 | `ssl://… --check`, `domain://… --check` | pass | warning (e.g. cert expiring <30 days) | critical/failure (expired, <7 days, DNS/HTTP failure) | — |
 | nginx `--validate-nginx-acme` / `--check-acl` / `--cpanel-certs`, `cpanel://USER/full-audit`, `nginx:// --audit` | pass | — | failure / gaps found | — |
@@ -3678,7 +3676,7 @@ reveal deep_dir/
 | Other legacy commands given a path that doesn't exist | — | `Error: … not found` | — | — |
 | An argument the run would ignore: a path given to a mode that reads none (`reveal a.py --rules`, `--adapters`, `--languages`, `--list-schemas`, `--explain`, `--stdin`, ...), a second path given to a flag that reads no element (`reveal a.py b.py --check`, `reveal a.html b.html --metadata`, `--links`, `--typed`), an element beside `--section` (`reveal a.md b.md --section X`), `--stdin` beside `--section`, or `--stdin` beside `--decorator-stats`/`--explain-file`/`--capabilities`/`--show-ast` (those read one path; loop over the paths instead) | — | — | usage error: stderr names the flag and the ignored argument, nothing runs | — |
 
-`reveal review --format json` also carries the verdict in the payload (`overall_status` + `exit_code`), so a gate can read either the exit code or the JSON.
+The retired `reveal review --format json` also carries the verdict in the payload (`overall_status` + `exit_code`), so a gate can read either the exit code or the JSON.
 
 **`reveal check --exit-zero`** always exits 0 once the scan completed — findings and unparseable files move into the output only (a genuine usage error still exits 2). Use it to drop `check` into a `set -e` / CI pipeline.
 

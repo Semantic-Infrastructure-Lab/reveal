@@ -74,11 +74,11 @@ candidates, and graph export from the CLI.
 
 ```bash
 reveal pack src/ --since main --budget 8000 --content
-reveal review main..HEAD
+reveal check --changed main..HEAD
 ```
 
-**Why this matters:** `pack` curates token-budgeted context, and `review`
-composes structural diff, checks, hotspots, and complexity delta in one pass.
+**Why this matters:** `pack` curates token-budgeted context, and `check --changed`
+runs the quality rules on exactly the files the range touched.
 
 ### Testability pressure
 
@@ -174,17 +174,17 @@ reveal 'ast://src/?complexity>10'
 ### PR Review Workflow
 
 ```bash
-# Full PR review: structural diff + quality violations + hotspots + complexity delta
-reveal review main..HEAD
+# Quality rules on the files the PR changed
+reveal check --changed main..HEAD
 
 # Security and bugs only (fast path)
-reveal review main..HEAD --select B,S
+reveal check --changed main..HEAD --select B,S
 
 # JSON for CI/automated processing
-reveal review main..HEAD --format json
+reveal check --changed main..HEAD --format json
 
-# CI gate: exit 0 clean, 1 warnings, 2 high/critical issues or invalid range, 3 incomplete
-reveal review main..HEAD || exit 1
+# CI gate: exit 0 clean, 1 findings, 2 invalid range, 3 incomplete
+reveal check --changed main..HEAD || exit 1
 
 # See exactly what changed structurally (lower level)
 reveal diff://git://main/.:git://HEAD/.
@@ -194,7 +194,7 @@ reveal diff://git://main/.:git://HEAD/. --format json | \
   jq '.diff.functions[] | select(.complexity_delta > 5)'
 ```
 
-**What `reveal review` composes for you:** structural diff → quality checks → hotspot detection → complexity delta, all under consistent exit codes. Every changed function carries `complexity_before`, `complexity_after`, and `complexity_delta`.
+**What the two commands give you:** `check --changed` runs the quality rules on the changed files, and the `diff://` adapter reports the structural change under the same exit codes. Every changed function carries `complexity_before`, `complexity_after`, and `complexity_delta`.
 
 ---
 

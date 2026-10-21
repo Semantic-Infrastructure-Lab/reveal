@@ -55,78 +55,53 @@ Rules are added to `reveal/rules/`.
 
 ---
 
-## reveal review — PR Review Workflow
+## reveal review — Retired
 
-Automated code review orchestrator. Runs quality checks, finds hotspots, and
-reports complex functions — all in one pass.
+`reveal review` is folded into `reveal check --changed RANGE` (the rule pass) and the
+`diff://` adapter (the structural diff). It still answers as before, prints a
+replaced-by note on stderr, and carries a `retired_spelling` entry in JSON
+`meta.warnings`, until the cut release.
 
-### Usage
+### Replacements
 
-```
-reveal review PATH                 # Review a directory
-reveal review main..feature        # Review a git range (files changed vs main)
-reveal review HEAD~3..HEAD         # Review last 3 commits
-```
-
-### CLI Flags
-
-| Flag | Description |
-|------|-------------|
-| `--select RULES` | Rule categories (default: B,S,I,C,M) |
-| `--format json` | Machine-readable output for CI/CD gating |
-| `--verbose` | Show detailed violation messages |
-
-### Output Sections
-
-1. **Structural changes** — functions/classes/imports added, removed and modified (git range mode only), plus complexity spikes
-2. **Violations** — quality rule failures by severity (`critical` / `high` / `medium` / `low`, the same levels as `reveal check`)
-3. **Hotspots** — files below 100/100 quality, ranked by churn×complexity
-4. **Complex functions** — functions above complexity threshold
-5. **Caveats** — files the hotspot step could not analyze (a failing analyzer or a dead worker); they are missing from the ranking. JSON: `meta.warnings` entries of type `analysis_failed`. A missing file makes the review `incomplete` (exit 3) unless a blocking issue already fails it (exit 2).
-6. **Recommendation** — pass/fail summary
-
-JSON carries the same result as `overall_status` (`pass` / `warn` / `fail` / `incomplete`, or `error` for an invalid target) and `exit_code`.
+| Was | Now |
+|-----|-----|
+| the rule pass over a git range | `reveal check --changed main..feature` |
+| the rule pass over a directory | `reveal check ./src` |
+| the structural changes section | `reveal 'diff://git://main/.:git://feature/.'` |
+| the hotspots section | `reveal hotspots <path>` |
+| the complex-functions section | `reveal 'ast://<path>?complexity>10&sort=-complexity'` |
 
 ### Exit Codes
 
-| Code | `overall_status` | Meaning |
-|------|------------------|---------|
-| `0` | `pass` | No violations |
-| `1` | `warn` | Only `medium`/`low` violations |
-| `2` | `fail` | A `high` or `critical` violation |
-| `2` | `error` | Invalid invocation: unknown revision in the range, not inside a git repository, or a path that does not exist (nothing was reviewed) |
-| `3` | `incomplete` | The quality check failed or could not analyze some files, or the hotspot step could not rank some files, so an empty violation list is not proof the change is clean |
+The retired command keeps its own table until the cut: `0` pass, `1` warn (only
+`medium`/`low` violations), `2` fail (a `high` or `critical` violation) or an invalid
+target (unknown revision, not a git repository, missing path), `3` incomplete (a
+check crashed or skipped files, or the hotspot step could not rank some files). JSON
+carries `overall_status` (`pass` / `warn` / `fail` / `incomplete` / `error`) and
+`exit_code`. `reveal check --changed` uses `check`'s table instead: `0` clean, `1` any
+finding, `2` an unusable range, `3` incomplete; `--fail-on none` reports findings
+without failing.
 
 ### CI/CD Integration
 
 ```bash
-# Fail on anything but a clean review
-reveal review main..HEAD
+# Fail on any finding in the files a PR changed
+reveal check --changed main..HEAD
 
-# Fail on high/critical issues only; warnings pass
-reveal review main..HEAD --format json | jq -e '.overall_status == "pass" or .overall_status == "warn"'
+# The same gate written against the JSON
+reveal check --changed main..HEAD --format json | jq -e '.summary.total_issues == 0'
 
-# The same gate written against the violations themselves
-reveal review main..HEAD --format json | jq -e '.exit_code != 3 and (.sections.violations | map(select(.severity=="high" or .severity=="critical")) | length == 0)'
+# Fail on high/critical issues only
+reveal check --changed main..HEAD --severity high
 ```
 
 `jq -e` is what makes the jq line a gate: without it jq prints `false` and exits 0.
 
-### Examples
-
-```bash
-reveal review .                     # Review current directory
-reveal review ./src                 # Review src/ only
-reveal review main..feature-branch  # PR review (git range)
-reveal review . --verbose           # Show full violation details
-reveal review . --format json       # For CI/CD
-```
-
 ### See Also
 
-- `reveal check` — Run quality rules on specific files
+- `reveal check` — Run quality rules on files, directories or a git range
 - `reveal health` — Health check for services/paths
-- `reveal review --help` — Full flag reference
 
 ---
 
@@ -197,7 +172,7 @@ reveal health . --format json | jq -e '.exit_code == 0'
 
 ### See Also
 
-- `reveal review` — Code review workflow
+- `reveal check --changed RANGE` — Rules on the files a PR changed
 - `reveal check` — Quality rules only
 - `reveal health --help` — Full flag reference
 
@@ -397,7 +372,7 @@ With `--content`: also includes `content` — a list of `{file, changed, content
 
 ### See Also
 
-- `reveal review` — Code quality review
+- `reveal check --changed RANGE` — Rules on the files a PR changed
 - `reveal pack --help` — Full flag reference
 
 ---
@@ -675,7 +650,7 @@ reveal hotspots . --files-only     # Only file-level view
 ### See Also
 
 - `reveal check` — Full quality rules (not just complexity)
-- `reveal review` — Combined review with hotspots + violations
+- `reveal check --changed RANGE` — Rules on the files a PR changed
 - `reveal hotspots --help` — Full flag reference
 
 ---
@@ -914,6 +889,7 @@ reveal check [path] [flags]
 | Flag | Description |
 |------|-------------|
 | `--select RULES` | Run only specific rules or categories: `B,S` or `B001,I002` |
+| `--changed RANGE` | Check only the files a git range changed (`main..HEAD`; a single ref such as `HEAD` means uncommitted changes). PATH, default `.`, bounds the search. `scope.changed` / a `Scope:` line states the range and file count; an unusable range exits 2 |
 | `--ignore RULES` | Skip rules or categories |
 | `--profile NAME` | Apply a named rule preset (e.g., `maintenance`, `security`, `ci-strict`); list with `reveal --profiles` |
 | `--config FILE` | Config file (`.reveal.yaml` or `pyproject.toml`) |
@@ -952,6 +928,7 @@ reveal check file.py                       # single file
 reveal check src/ --select B,S            # bugs and security only
 reveal check src/ --format json           # machine-readable
 reveal check src/ --severity high         # high/critical issues only
+reveal check --changed main..HEAD          # rules on the files a PR changed
 reveal check --rules                      # list active rules
 reveal check --explain C901              # explain the complexity rule
 git diff --name-only | reveal --stdin --check  # check only changed files
@@ -972,7 +949,7 @@ A requested `--also-json PATH` that cannot be written (the path is a directory, 
 
 ### See Also
 
-- `reveal review` — Full PR review orchestrator (runs check + hotspots + summary)
+- `reveal check --changed RANGE` — Rules on the files a PR changed (replaces the retired review)
 - `reveal hotspots` — Complexity-focused view
 - `reveal check --help` — Full flag reference
 

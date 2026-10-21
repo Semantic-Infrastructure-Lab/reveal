@@ -159,8 +159,8 @@ Reveal is especially good here because it gives you both:
 Reveal is a good fit when you want review workflows to focus on structural change, complexity movement, and actual risk.
 
 ```bash
-reveal review main..HEAD
-reveal review main..HEAD --select B,S
+reveal check --changed main..HEAD
+reveal check --changed main..HEAD --select B,S
 reveal diff://git://main/.:git://HEAD/.
 reveal diff://git://main/.:git://HEAD/. --format json
 ```
@@ -601,7 +601,7 @@ Start with the workflow that matches your job:
 |------|------------|
 | Learn a repo | `reveal .` → `reveal src/` → `reveal file.py` |
 | Find risky code | `reveal overview .` and `reveal hotspots .` |
-| Review a PR | `reveal review main..HEAD` |
+| Review a PR | `reveal check --changed main..HEAD` |
 | Estimate refactor blast radius | `reveal 'calls://src/?callers=func'` and `reveal depends://path/to/module.py` |
 | Prepare AI context | `reveal pack src/ --since main --budget 8000 --content` |
 | Discover Reveal capabilities | `reveal help://` or `reveal help://schemas` |

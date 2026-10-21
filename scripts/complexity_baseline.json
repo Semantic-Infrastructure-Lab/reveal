@@ -124,7 +124,6 @@
   "reveal/analyzers/nginx.py::NginxAnalyzer.extract_ssl_domains": 21,
   "reveal/checks.py::_format_detections_text": 21,
   "reveal/checks.py::run_pattern_detection": 17,
-  "reveal/cli/commands/check.py::run_check": 18,
   "reveal/cli/commands/review.py::_run_check": 16,
   "reveal/cli/handlers/batch.py::handle_stdin_mode": 19,
   "reveal/cli/handlers/introspection.py::build_discover_payload": 19,

@@ -186,6 +186,8 @@ PRODUCTION_CASES = {
     'value:ast.show=calls': lambda f: [f'ast://{f}?show=calls'],
     'subcommand:trace': lambda f: ['trace', str(Path(f).parent), '--from', 'auth_gate'],
     'scheme:trace': lambda f: [f'trace://{Path(f).parent}?from=auth_gate'],
+    # Phase 3 slice 3b (BACK-2068): review folded into check --changed plus diff.
+    'subcommand:review': lambda f: ['review', str(Path(f).parent)],
 }
 
 

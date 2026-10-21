@@ -193,9 +193,9 @@ reveal check src/
 reveal check src/ --select C,M    # Complexity + maintainability rules only
 reveal check src/ --format json   # CI/CD gating
 
-# PR review (diff + check + hotspots in one pass)
-reveal review main..feature
-reveal review ./src               # Check current work
+# PR review: rules on the files the range changed
+reveal check --changed main..feature
+reveal check ./src                # Check current work
 
 # Health check (code, SSL, databases)
 reveal health src/
@@ -242,8 +242,8 @@ git diff main..feature | cat
 
 **Reveal way (✅):**
 ```bash
-# Structural review (what changed + quality check)
-reveal review main..feature
+# Quality check of what changed
+reveal check --changed main..feature
 
 # Or just the structural diff:
 reveal diff://git://main/.:git://feature/.

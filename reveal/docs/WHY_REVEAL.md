@@ -195,27 +195,27 @@ reveal 'markdown://docs/?body-contains=retry&type=procedure'
 
 ---
 
-### 7. Automated Code Review (`reveal review`)
+### 7. Automated Code Review (`reveal check --changed`)
 
 ```bash
-# Full PR review: structural diff → violations → hotspots → pass/fail
-reveal review main..HEAD
+# Quality rules on the files the PR changed → pass/fail
+reveal check --changed main..HEAD
 
 # Fast: security and bug rules only
-reveal review main..HEAD --select B,S
+reveal check --changed main..HEAD --select B,S
 
 # Find functions that got meaningfully more complex in this PR
 reveal diff://git://main/.:git://HEAD/. --format json | \
   jq '.diff.functions[] | select(.complexity_delta > 5)'
 
 # JSON for automated processing
-reveal review main..HEAD --format json
+reveal check --changed main..HEAD --format json
 
-# Use as a CI gate (exit codes: 0=clean, 1=findings (warnings or high/critical issues), 2=invalid range, 3=incomplete)
-reveal review main..HEAD || exit 1
+# Use as a CI gate (exit codes: 0=clean, 1=findings, 2=invalid range, 3=incomplete)
+reveal check --changed main..HEAD || exit 1
 ```
 
-**What you get:** One command that composes structural diff, quality checks, hotspot detection, and complexity analysis with consistent exit codes. Every changed function carries `complexity_before`, `complexity_after`, and `complexity_delta` — enabling the CI gate: "did this PR make anything meaningfully more complex?" Drop it in a PR check; the baseline is the same whether a human or agent runs it.
+**What you get:** Quality checks scoped to the changed files plus a structural diff, under consistent exit codes. Every changed function carries `complexity_before`, `complexity_after`, and `complexity_delta` — enabling the CI gate: "did this PR make anything meaningfully more complex?" Drop it in a PR check; the baseline is the same whether a human or agent runs it.
 
 ---
 
