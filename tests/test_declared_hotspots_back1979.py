@@ -10,7 +10,7 @@ import pytest
 from conftest import _run_reveal_direct as run
 from reveal.adapters.hotspots import HotspotsAdapter
 from reveal.adapters.ast import AstAdapter
-from reveal.adapters.stats import StatsAdapter
+from reveal.adapters.stats import MetricsAdapter
 
 
 @pytest.fixture
@@ -68,12 +68,12 @@ def test_pre_cap_findings_policy(project, transport, format, policy, expected):
 @pytest.mark.parametrize('flags,query', [([], ''), (['--functions-only'], '?functions_only=true'),
     (['--files-only'], '?files_only=true'), (['--files-only', '--functions-only'], '?files_only=true&functions_only=true')])
 def test_required_stats_failures_in_all_modes(project, monkeypatch, transport, flags, query):
-    original = StatsAdapter.get_structure
+    original = MetricsAdapter.get_structure
     def answer(self, **kwargs):
         result = original(self, **kwargs)
         result.setdefault('meta', {})['warnings'] = [{'type': 'check_rules_failed', 'message': 'required checks unavailable'}]
         return result
-    monkeypatch.setattr(StatsAdapter, 'get_structure', answer)
+    monkeypatch.setattr(MetricsAdapter, 'get_structure', answer)
     result = run(*argv(transport, query, flags), '--format', 'json', '--fail-on', 'none')
     assert result.returncode == 3, result.stderr
     assert json.loads(result.stdout)['type'] == 'hotspots_scan'
@@ -84,7 +84,7 @@ def test_required_stats_failures_in_all_modes(project, monkeypatch, transport, f
     ('ast', 'empty'), ('ast', 'results'), ('ast', 'count'), ('ast', 'boolean_count'),
     ('ast', 'boolean_complexity'), ('ast', 'nan_complexity'), ('ast', 'displayed')])
 def test_required_child_shape_before_projection(project, monkeypatch, child, kind):
-    cls = StatsAdapter if child == 'stats' else AstAdapter
+    cls = MetricsAdapter if child == 'stats' else AstAdapter
     original = cls.get_structure
     def answer(self, **kwargs):
         result = copy.deepcopy(original(self, **kwargs))

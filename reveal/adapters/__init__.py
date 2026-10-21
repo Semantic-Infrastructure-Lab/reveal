@@ -54,6 +54,7 @@ __all__ = [
     'RevealAdapter',
     'SQLiteAdapter',
     'SSLAdapter',
+    'MetricsAdapter',
     'StatsAdapter',
     'XlsxAdapter',
     'CpanelAdapter',

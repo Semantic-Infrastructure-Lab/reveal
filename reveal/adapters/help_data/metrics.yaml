@@ -1,39 +1,41 @@
-# Stats Adapter Help Data
+# Metrics Adapter Help Data (metrics:// before BACK-2069; metrics:// and classify:// are retired spellings)
 # Extracted from stats.py::get_help() to reduce function complexity
 
-name: stats
-description: 'Analyze codebase metrics, identify hotspots, and assess code quality'
-syntax: 'stats://<path>[?<filters>]'
+name: metrics
+description: 'Analyze codebase metrics, identify file hotspots, assess code quality, and tag every file''s provenance'
+syntax: 'metrics://<path>[?<filters>]'
 
 examples:
-  - uri: 'stats://./src'
+  - uri: 'metrics://./src'
     description: 'Get overview statistics for src directory'
-  - uri: 'stats://./src?hotspots=true'
+  - uri: 'metrics://./src?hotspots=true'
     description: 'Show top 10 files with quality issues (URI param - preferred)'
-  - uri: 'stats://./src --hotspots'
+  - uri: 'metrics://./src --hotspots'
     description: 'Show top 10 files with quality issues (flag - legacy)'
-  - uri: 'stats://./src/app.py'
+  - uri: 'metrics://./src/app.py'
     description: 'Get detailed statistics for a specific file'
-  - uri: 'stats://./src?min_lines=50'
+  - uri: 'metrics://./src?min_lines=50'
     description: 'Filter files with 50+ lines (legacy syntax)'
-  - uri: 'stats://./src?lines>50'
+  - uri: 'metrics://./src?lines>50'
     description: 'Filter files with 50+ lines (new syntax)'
-  - uri: 'stats://./src?max_complexity=10'
+  - uri: 'metrics://./src?max_complexity=10'
     description: 'Show files with average complexity <= 10 (legacy)'
-  - uri: 'stats://./src?complexity<10'
+  - uri: 'metrics://./src?complexity<10'
     description: 'Show files with complexity < 10 (new syntax)'
-  - uri: 'stats://./src?lines=50..200'
+  - uri: 'metrics://./src?lines=50..200'
     description: 'Filter files with 50-200 lines (range)'
-  - uri: 'stats://./src?functions!=0'
+  - uri: 'metrics://./src?functions!=0'
     description: 'Show only files with functions (not equals)'
-  - uri: 'stats://./src?complexity>10&sort=-lines'
+  - uri: 'metrics://./src?complexity>10&sort=-lines'
     description: 'Complex files sorted by size (descending)'
-  - uri: 'stats://./src?sort=complexity&limit=10'
+  - uri: 'metrics://./src?sort=complexity&limit=10'
     description: 'Top 10 files by complexity (ascending)'
-  - uri: 'stats://./src?lines>100&sort=-complexity&limit=5'
+  - uri: 'metrics://./src?lines>100&sort=-complexity&limit=5'
     description: 'Top 5 most complex large files'
-  - uri: 'stats://./src --format=json'
+  - uri: 'metrics://./src --format=json'
     description: 'JSON output for CI/CD integration'
+  - uri: 'metrics://./src?view=provenance'
+    description: 'Provenance (first_party/test/vendor/minified) of every analyzable file, no analysis or rules (was classify://)'
 
 features:
   - 'Aggregate codebase metrics (lines, functions, classes, complexity)'
@@ -43,6 +45,7 @@ features:
   - 'Result control (sort, limit, offset) for pagination'
   - 'Multi-language support (Python, JS, Go, Rust, etc.)'
   - 'CI/CD friendly JSON output'
+  - 'view=provenance: the full-population provenance report (summary.total, by_provenance, excluded, excluded_by_extension) that classify:// gave'
 
 operators:
   '>': 'Greater than (e.g., lines>50)'
@@ -83,30 +86,30 @@ workflows:
   - name: 'Find Refactoring Targets'
     scenario: 'Need to identify code that needs cleanup'
     steps:
-      - 'stats://./src --hotspots              # See worst files'
-      - 'stats://./src?min_complexity=15      # High complexity files'
+      - 'metrics://./src --hotspots              # See worst files'
+      - 'metrics://./src?min_complexity=15      # High complexity files'
       - 'reveal <hotspot-file> --check        # Analyze specific issues'
   - name: 'CI/CD Quality Gate'
     scenario: 'Fail build if complexity increases'
     steps:
-      - 'stats://./src --format=json > before.json'
+      - 'metrics://./src --format=json > before.json'
       - '# Make changes...'
-      - 'stats://./src --format=json > after.json'
+      - 'metrics://./src --format=json > after.json'
       - 'jq -r ".summary.avg_complexity" before.json after.json  # Compare'
   - name: 'Architecture Assessment'
     scenario: 'Understand codebase structure and size'
     steps:
-      - 'stats://./src                        # Overall metrics'
-      - 'stats://./src/core                   # Core subsystem'
-      - 'stats://./src/plugins                # Plugins subsystem'
+      - 'metrics://./src                        # Overall metrics'
+      - 'metrics://./src/core                   # Core subsystem'
+      - 'metrics://./src/plugins                # Plugins subsystem'
       - '# Compare metrics to identify imbalanced architecture'
 
 anti_patterns:
   - bad: 'find . -name "*.py" | xargs wc -l'
-    good: 'stats://.'
+    good: 'metrics://.'
     why: 'Provides context (functions, classes, complexity), not just line counts'
   - bad: 'grep -r "def " | wc -l'
-    good: 'stats://. --format=json | jq .summary.total_functions'
+    good: 'metrics://. --format=json | jq .summary.total_functions'
     why: 'Accurate parsing with structured output, not text munging'
 
 notes:
@@ -119,6 +122,7 @@ notes:
   - 'Result control (sort, limit, offset) enables pagination and ordering'
   - 'Legacy parameters (min_lines, max_lines, etc.) still supported for backward compatibility'
   - 'Combine filters and result control: ?lines>100&sort=-complexity&limit=10'
+  - 'stats:// and classify:// are retired spellings: they answer the same as metrics:// and metrics://?view=provenance and print a replaced-by note'
 
 output_formats:
   - text

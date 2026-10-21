@@ -1,4 +1,10 @@
-"""Statistics adapter (stats://) for codebase metrics and hotspots."""
+"""metrics:// -- per-file lines, complexity, quality and churn, file hotspots, and provenance.
+
+stats became metrics (BACK-2069, surface program D2) and absorbed classify:// (``?view=provenance``)
+and the file hotspot ranking (``?hotspots=true``, which the hotspots noun's file section reads).
+``stats://`` stays registered as a retired spelling of the same adapter: it answers the same and
+prints the replaced-by note from the RETIREMENTS table until the cut (D5).
+"""
 
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, cast
@@ -26,6 +32,7 @@ from .issue_count import note_issue_count_basis, renamed_field
 from .metrics import calculate_file_stats
 from .queries import SORT_FIELDS, get_quality_config, field_value, compare, matches_filters
 from .aggregation import aggregate_stats, identify_hotspots
+from .provenance import provenance_report
 
 
 def _pool_results(executor, args: list) -> list:
@@ -64,7 +71,12 @@ def _analyze_file_worker(args: tuple):
     )
 
 
+# metrics' views: the default per-file metrics, and the full-population provenance report
+# that classify:// answered (no file analysis, no rule pass).
+VIEWS = ('provenance',)
+
 _SCHEMA_QUERY_PARAMS = {
+    'view': {'type': 'string', 'description': 'provenance: the provenance tag (first_party/test/vendor/minified) of every analyzable file, with summary.total, by_provenance, excluded and excluded_by_extension; no file is analyzed and no rule runs (was classify://)', 'examples': ['view=provenance']},
     'hotspots': {'type': 'boolean', 'description': 'Include hotspot analysis (files needing attention)', 'examples': ['hotspots=true']},
     'top': {'type': 'integer', 'description': 'Max number of hotspot files to return when hotspots=true (default: 10, 0 = all)', 'examples': ['top=25']},
     'code_only': {'type': 'boolean', 'description': 'Exclude data/config files from analysis', 'examples': ['code_only=true']},
@@ -128,16 +140,30 @@ _SCHEMA_OUTPUT_TYPES = [
             }},
         }},
     },
+    {
+        'type': 'classify_report',
+        'description': 'view=provenance: one row per analyzable file with its provenance tag, plus a summary by tag and the files no analyzer reads',
+        'schema': {'type': 'object', 'properties': {
+            'files': {'type': 'array', 'items': {'type': 'object', 'properties': {
+                'file': {'type': 'string'}, 'provenance': {'type': 'string'},
+            }}},
+            'summary': {'type': 'object', 'properties': {
+                'total': {'type': 'integer'}, 'by_provenance': {'type': 'object'},
+                'excluded': {'type': 'integer'}, 'excluded_by_extension': {'type': 'object'},
+            }},
+        }},
+    },
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [
-    {'uri': 'stats://./src', 'description': 'Get codebase statistics for src directory', 'output_type': 'stats_summary'},
-    {'uri': 'stats://./src?hotspots=true', 'description': 'Include hotspot analysis (files needing attention)', 'output_type': 'stats_summary'},
-    {'uri': 'stats://./src?min_complexity=5.0', 'description': 'Show only files with avg complexity >= 5.0', 'output_type': 'stats_summary'},
-    {'uri': 'stats://./src?code_only=true', 'description': 'Exclude data/config files', 'output_type': 'stats_summary'},
-    {'uri': 'stats://./src?summary_only=true', 'description': 'Aggregate summary only, no per-file array — for large repos where the full file list is impractical to consume directly', 'output_type': 'stats_summary'},
-    {'uri': 'stats://src/core.py', 'description': 'File-level statistics', 'output_type': 'stats_file'},
-    {'uri': 'stats://./src?hotspots=true', 'description': 'Ranked list of files with quality issues', 'output_type': 'stats_summary'},
+    {'uri': 'metrics://./src', 'description': 'Get codebase statistics for src directory', 'output_type': 'stats_summary'},
+    {'uri': 'metrics://./src?hotspots=true', 'description': 'Include hotspot analysis (files needing attention)', 'output_type': 'stats_summary'},
+    {'uri': 'metrics://./src?min_complexity=5.0', 'description': 'Show only files with avg complexity >= 5.0', 'output_type': 'stats_summary'},
+    {'uri': 'metrics://./src?code_only=true', 'description': 'Exclude data/config files', 'output_type': 'stats_summary'},
+    {'uri': 'metrics://./src?summary_only=true', 'description': 'Aggregate summary only, no per-file array — for large repos where the full file list is impractical to consume directly', 'output_type': 'stats_summary'},
+    {'uri': 'metrics://src/core.py', 'description': 'File-level statistics', 'output_type': 'stats_file'},
+    {'uri': 'metrics://./src?hotspots=true', 'description': 'Ranked list of files with quality issues', 'output_type': 'stats_summary'},
+    {'uri': 'metrics://./src?view=provenance', 'description': 'Provenance tag of every analyzable file, with exclusions by extension (was classify://)', 'output_type': 'classify_report'},
 ]
 
 _SCHEMA_NOTES = [
@@ -146,16 +172,17 @@ _SCHEMA_NOTES = [
     'hotspots=true adds a ranked list of files most in need of refactoring',
     'quality.local_check_issues counts the findings of file-local check rules only, so a file has one count whatever else is in the tree; meta.issue_count names the rule and the rule set. Cross-file rules (import cycles, duplicate literals, ...) run under reveal check.',
     'Both files and directories are supported; directories show aggregate + per-file breakdown',
+    'view=provenance answers what classify:// did: every analyzable file tagged first_party/test/vendor/minified, without analysis or rules; stats:// and classify:// are retired spellings that answer the same',
     'On large repos, an unscoped call returns one entry per file (can reach tens of MB) — use summary_only=true when only the aggregate summary/hotspots are needed',
 ]
 
 
-@register_adapter('stats')
+@register_adapter('metrics')
 @register_renderer(StatsRenderer)
-class StatsAdapter(ResourceAdapter):
-    """Adapter for analyzing codebase statistics and identifying hotspots."""
+class MetricsAdapter(ResourceAdapter):
+    """Codebase metrics, file hotspots and provenance (was stats:// and classify://)."""
     HELP_CLUSTER = 'Code Analysis'
-    QUICK_RANK = 2
+    QUICK_RANK: Optional[int] = 2
 
     BUDGET_LIST_FIELD = 'files'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
@@ -173,20 +200,20 @@ class StatsAdapter(ResourceAdapter):
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
-        """Get help documentation for stats:// adapter.
+        """Get help documentation for metrics:// adapter.
 
-        Help data loaded from reveal/adapters/help_data/stats.yaml
+        Help data loaded from reveal/adapters/help_data/metrics.yaml
         to reduce function complexity.
         """
-        return load_help_data('stats') or {}
+        return load_help_data('metrics') or {}
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
-        """Get machine-readable schema for stats:// adapter."""
+        """Get machine-readable schema for metrics:// adapter."""
         return {
-            'adapter': 'stats',
-            'description': 'Codebase metrics, quality analysis, and hotspot detection',
-            'uri_syntax': 'stats://<path>?<filter1>&<filter2>&...',
+            'adapter': 'metrics',
+            'description': 'Codebase metrics, quality analysis, file hotspots and provenance',
+            'uri_syntax': 'metrics://<path>?<filter1>&<filter2>&...',
             'query_params': _SCHEMA_QUERY_PARAMS,
             'operators': {},
             'elements': {},
@@ -237,6 +264,10 @@ class StatsAdapter(ResourceAdapter):
             skip_filter_keys=True,
             extra_known_keys={'sort', 'limit', 'offset', 'exclude', 'respect_gitignore'},
         )
+        self.view = self.query_params.get('view')
+        if self.view is not None and self.view not in VIEWS:
+            raise ValueError(f"view={self.view!r} is not a metrics view; the one view is "
+                             f"{', '.join(VIEWS)} (omit view for per-file metrics)")
         self._analysis_failures: list = []
         self._excluded_by_extension: Dict[str, int] = {}
 
@@ -550,6 +581,9 @@ class StatsAdapter(ResourceAdapter):
         Returns:
             Dict containing statistics and optionally hotspots
         """
+        if self.view == 'provenance':
+            # classify's full population: the walk and the path/banner/locale heuristics only.
+            return provenance_report(self.path, respect_gitignore=respect_gitignore_param(self.query_params))
         self._traversal_failures = []
         self._record_analysis_results([])
         # Merge query params with flag params
@@ -659,3 +693,35 @@ class StatsAdapter(ResourceAdapter):
             'is_directory': self.path.is_dir(),
             'exists': self.path.exists(),
         }
+
+
+@register_adapter('stats')
+@register_renderer(StatsRenderer)
+class StatsAdapter(MetricsAdapter):
+    """stats://, the retired spelling of metrics:// (BACK-2069): the same adapter and answer.
+
+    The note naming metrics:// comes from the ``scheme:stats`` row of the RETIREMENTS table
+    (cli/invocation.py), printed where the URI is parsed; nothing here prints it.
+    """
+    QUICK_RANK = None
+
+    @staticmethod
+    def get_help() -> Dict[str, Any]:
+        help_data = dict(MetricsAdapter.get_help())
+        help_data.update(
+            name='stats',
+            description=('Retired: use metrics://<path>, the same answer (stats:// prints a replaced-by note). '
+                         + help_data.get('description', '')),
+            syntax='stats://<path>[?<filters>]',
+        )
+        return help_data
+
+    @staticmethod
+    def get_schema() -> Dict[str, Any]:
+        schema = dict(MetricsAdapter.get_schema())
+        # The schema of the stats:// spelling, so its examples spell it too (as trace:// keeps its own).
+        examples = [{**ex, 'uri': 'stats://' + ex['uri'][len('metrics://'):]} for ex in schema['example_queries']]
+        schema.update(adapter='stats', uri_syntax='stats://<path>?<filter1>&<filter2>&...', example_queries=examples,
+                      notes=['Retired spelling of metrics:// (the same answer); stats:// prints a '
+                             'replaced-by note until the cut release.', *schema['notes']])
+        return schema

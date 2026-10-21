@@ -64,7 +64,7 @@ Complete guides for all URI adapters:
 | [REVEAL_ADAPTER_GUIDE.md](adapters/REVEAL_ADAPTER_GUIDE.md) | Reveal introspection (analyzers, adapters) | 532 |
 | [SQLITE_ADAPTER_GUIDE.md](adapters/SQLITE_ADAPTER_GUIDE.md) | SQLite database introspection | 1157 |
 | [SSL_ADAPTER_GUIDE.md](adapters/SSL_ADAPTER_GUIDE.md) | SSL/TLS certificate analysis and on-disk cert inspection | 1449 |
-| [STATS_ADAPTER_GUIDE.md](adapters/STATS_ADAPTER_GUIDE.md) | Codebase statistics and metrics | 1864 |
+| [METRICS_ADAPTER_GUIDE.md](adapters/METRICS_ADAPTER_GUIDE.md) | Codebase metrics, file hotspots and provenance (was stats:// and classify://) | 1995 |
 | [XLSX_ADAPTER_GUIDE.md](adapters/XLSX_ADAPTER_GUIDE.md) | Excel/XLSX file analysis | 564 |
 
 ### Analyzer Guides

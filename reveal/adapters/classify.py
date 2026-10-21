@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from .base import ResourceAdapter, register_adapter, register_renderer
-from .stats.provenance import provenance_report, render_provenance
+from .stats.provenance import provenance_report
+from .stats.renderer import render_provenance
 from ..utils import print_json_result
 from ..utils.gitignore import respect_gitignore_param
 from ..utils.query import parse_query_params
@@ -35,7 +36,10 @@ class ClassifyAdapter(ResourceAdapter):
     """Provenance classification (first_party/test/vendor/minified) for
     every file in a directory, independent of any ranking or selection
     (BACK-1233) -- the full-population counterpart to overview://'s/
-    hotspots://'s/pack://'s ranked-subset provenance tags (BACK-1195)."""
+    hotspots://'s/pack://'s ranked-subset provenance tags (BACK-1195).
+
+    Retired spelling (BACK-2069): metrics://<dir>?view=provenance answers from the same owner;
+    the note comes from the ``scheme:classify`` row of the RETIREMENTS table."""
 
     HELP_CLUSTER = 'Code Analysis'
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
@@ -55,7 +59,9 @@ class ClassifyAdapter(ResourceAdapter):
     def get_help() -> Dict[str, Any]:
         return {
             'name': 'classify',
-            'description': 'Provenance tag (first_party/test/vendor/minified) for every ANALYZABLE file in a directory, over the full unranked population of those files.',
+            'description': ('Retired: use metrics://<dir>?view=provenance, the same answer (classify:// prints a '
+                            'replaced-by note). Provenance tag (first_party/test/vendor/minified) for every ANALYZABLE '
+                            'file in a directory, over the full unranked population of those files.'),
             'syntax': 'classify://<dir>',
             'examples': [
                 {'uri': 'classify://src', 'description': 'Provenance for every analyzable file under src/'},
@@ -72,6 +78,7 @@ class ClassifyAdapter(ResourceAdapter):
                 'Inclusion rule (BACK-1241): a file is in the counted population iff registry.get_analyzer() recognizes its extension -- the same rule overview:///hotspots:///pack:// use for their own totals, which is why those numbers agree with classify:// by construction, not because either is a full-disk count. Template/markup formats without a registered analyzer (.erb, .vue, .scss, .css) are invisible to all of them; check summary.excluded_by_extension before treating summary.total as "the codebase".',
             ],
             'see_also': [
+                'reveal metrics://<dir>?view=provenance - the replacement (the same answer)',
                 'reveal hotspots://<dir> - ranked complexity hotspots, each tagged with provenance',
                 'reveal overview://<dir> - directory summary, ranked sections tagged with provenance',
             ],

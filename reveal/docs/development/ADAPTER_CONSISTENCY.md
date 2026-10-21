@@ -15,7 +15,7 @@ help_category: dev_guides
 
 ## Overview
 
-Reveal has 34 URI adapters that follow a **3-tier UX model** for consistency:
+Reveal has 35 URI adapters that follow a **3-tier UX model** for consistency:
 
 1. **Resource Identity** (URI) - What to inspect
 2. **Operations** (Flags) - What to do with it

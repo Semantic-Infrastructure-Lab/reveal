@@ -20,7 +20,7 @@ from .ast import AstAdapter
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .git import GitAdapter
 from .imports import ImportsAdapter
-from .stats import StatsAdapter
+from .stats import MetricsAdapter
 from .stats.issue_count import note_issue_count_basis
 from ..analyzers.imports import service as import_analysis
 from ..utils.entry_points import entry_point_filter
@@ -96,7 +96,7 @@ def _rows(data: Dict[str, Any], field: str) -> List[Dict[str, Any]]:
 
 
 def _validate_stats(data: Any) -> None:
-    data = _object(data, 'StatsAdapter answer')
+    data = _object(data, 'MetricsAdapter answer')
     summary = _object(data.get('summary'), 'stats.summary')
     for field in ('total_files', 'total_lines', 'total_code_lines', 'total_functions', 'total_classes'):
         _count(summary, field)
@@ -282,7 +282,7 @@ def _directory_loss_error(meta, observations) -> Optional[WarningEntry]:
 
 def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int, *,
                observations: Optional[Dict[str, bool]] = None) -> Dict[str, Any]:
-    """Fetch stats and the top ``top`` hotspots via StatsAdapter.
+    """Fetch stats and the top ``top`` hotspots via MetricsAdapter.
 
     BACK-1042: forwards --exclude/--respect-gitignore as a raw query string
     (not compose()'s **params/urlencode path — nothing downstream in
@@ -299,7 +299,7 @@ def _run_stats(adapter: 'OverviewAdapter', path: Path, top: int, *,
     if exclude_patterns:
         query += f'&exclude={join_exclude_patterns(exclude_patterns)}'
     query += f'&respect_gitignore={"true" if adapter.respect_gitignore else "false"}'
-    stats = _required_child(adapter, StatsAdapter, path, _validate_stats, query=query,
+    stats = _required_child(adapter, MetricsAdapter, path, _validate_stats, query=query,
                             observations=observations,
                             cut_as=('hotspots', 'raise ?top=N'))
     if observations is not None and any(_measured_stats(entry) for entry in stats.get('files', [])):
@@ -675,7 +675,7 @@ class OverviewAdapter(ResourceAdapter):
             ],
             'features': [
                 'Language breakdown, codebase size, quality pulse',
-                'Hotspots (via stats://) and complex functions (via ast://)',
+                'Hotspots (via metrics://) and complex functions (via ast://)',
                 'Architecture summary: entry points, core abstractions, components (via imports://)',
                 'Recent git activity (via git://)',
                 "complex_functions[]/architecture.{fan_in,entrypoints,components}[] each carry a "
@@ -734,7 +734,7 @@ class OverviewAdapter(ResourceAdapter):
                 {'uri': 'overview://src', 'description': 'Dashboard for src/', 'output_type': 'overview'},
             ],
             'notes': [
-                'Composed from stats://, git://, ast://, and imports:// — not an independent scan.',
+                'Composed from metrics://, git://, ast://, and imports:// — not an independent scan.',
                 'Quality counts file-local rules only (stats.files[].quality.local_check_issues); meta.issue_count names the rule and the rule set. Cross-file rules run under reveal check.',
             ],
         }

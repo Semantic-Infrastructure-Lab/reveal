@@ -116,6 +116,7 @@ FIXTURE_URIS = {
     'imports': 'imports://proj',
     'json': 'json://proj/data.json',
     'markdown': 'markdown://proj',
+    'metrics': 'metrics://proj',
     'overview': 'overview://proj',
     'pack': 'pack://proj',
     'patches': 'patches://proj/tests',
@@ -196,6 +197,7 @@ OWN_CAP_URIS = {
     'git': ['git://wide/app.py?type=history', 'git://wide/app.py?type=history&sort=date',
             'git://.'],
     'imports': ['imports://wide?rank=fan-in'],
+    'metrics': ['metrics://wide?hotspots=true'],
     'stats': ['stats://wide?hotspots=true'],
     'xlsx': ['xlsx://wide/data.xlsx?sheet=Sheet', 'xlsx://wide/data.xlsx?search=n'],
 }
@@ -687,7 +689,7 @@ def test_a_cut_list_is_disclosed(harness, scheme):
 def test_the_truncation_invariant_bites(harness):
     """Positive control: on this fixture --head 1 really cuts some adapters' lists, so
     test_a_cut_list_is_disclosed is not vacuously green."""
-    expected = ['ast', 'classify', 'pack', 'reveal', 'stats']
+    expected = ['ast', 'classify', 'metrics', 'pack', 'reveal', 'stats']
     bitten = [scheme for scheme in expected
               if _cut_lists(harness.run_fixture(scheme)[1], harness.run_fixture(scheme, head=1)[1])]
     assert bitten == expected
@@ -847,7 +849,7 @@ def test_a_disclosed_total_is_the_real_total(harness, scheme):
 def test_the_own_cap_invariant_bites(harness):
     """Positive control: on wide/ a knob at 1 really cuts these adapters' lists, so
     test_an_adapters_own_cap_is_disclosed is not vacuously green."""
-    expected = ['ast', 'calls', 'depends', 'git', 'hotspots', 'imports', 'json', 'overview',
+    expected = ['ast', 'calls', 'depends', 'git', 'hotspots', 'imports', 'json', 'metrics', 'overview',
                 'patches', 'stats', 'xlsx']
     cuts = {scheme: _knob_cuts(harness, scheme)
             for scheme in sorted(s for s in FIXTURE_URIS if _cap_knobs(s))}

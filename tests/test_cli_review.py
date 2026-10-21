@@ -390,7 +390,7 @@ class TestRunCheck(unittest.TestCase):
 
 class TestRunHotspots(unittest.TestCase):
 
-    @patch('reveal.adapters.stats.adapter.StatsAdapter')
+    @patch('reveal.adapters.stats.adapter.MetricsAdapter')
     def test_returns_the_whole_ranking(self, MockAdapter):
         """run_review cuts it to 10 and records the cut (BACK-1543), so the runner asks
         stats for every hotspot."""
@@ -400,11 +400,11 @@ class TestRunHotspots(unittest.TestCase):
         self.assertEqual(len(result), 15)
         self.assertIn('top=0', MockAdapter.call_args.args[1])
 
-    @patch('reveal.adapters.stats.adapter.StatsAdapter', side_effect=Exception("fail"))
+    @patch('reveal.adapters.stats.adapter.MetricsAdapter', side_effect=Exception("fail"))
     def test_exception_returns_empty(self, _mock):
         self.assertEqual(_run_hotspots(Path('/tmp')), [])
 
-    @patch('reveal.adapters.stats.adapter.StatsAdapter')
+    @patch('reveal.adapters.stats.adapter.MetricsAdapter')
     def test_files_merged_and_ranked_by_score(self, MockAdapter):
         MockAdapter.return_value.get_structure.side_effect = [
             {'hotspots': [{'file': 'a.py', 'score': 5}]},
@@ -413,7 +413,7 @@ class TestRunHotspots(unittest.TestCase):
         result = _run_hotspots(None, files=[Path('a.py'), Path('b.py')])
         self.assertEqual([h['file'] for h in result], ['b.py', 'a.py'])
 
-    @patch('reveal.adapters.stats.adapter.StatsAdapter')
+    @patch('reveal.adapters.stats.adapter.MetricsAdapter')
     def test_per_file_stats_shape_is_flattened_and_perfect_files_dropped(self, MockAdapter):
         """BACK-1401: a single-file stats target returns `files` entries with
         `quality`/`complexity` as dicts; they rendered as raw Python dicts and
@@ -429,7 +429,7 @@ class TestRunHotspots(unittest.TestCase):
         self.assertEqual(result[0]['local_check_issues'], 1)  # BACK-1884: the stats field, renamed
         self.assertNotIn('check_issues', result[0])
 
-    @patch('reveal.adapters.stats.adapter.StatsAdapter')
+    @patch('reveal.adapters.stats.adapter.MetricsAdapter')
     def test_one_bad_file_does_not_sink_others(self, MockAdapter):
         MockAdapter.return_value.get_structure.side_effect = [
             Exception("unparseable"),

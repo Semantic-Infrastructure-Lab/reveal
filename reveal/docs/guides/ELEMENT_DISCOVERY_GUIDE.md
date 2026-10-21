@@ -622,7 +622,7 @@ reveal help://git      # See git:// element syntax
 reveal ssl://google.com/san
 
 # Query filter (parameter)
-reveal 'stats://src?min_complexity=10'
+reveal 'metrics://src?min_complexity=10'
 ```
 
 ### No Element Hints in Output

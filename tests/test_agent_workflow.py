@@ -39,7 +39,7 @@ FIXTURE_FILE = CONFORMANCE_DIR / "sample.py"
 # The core code-understanding adapters an agent is routed to first. Each must be
 # discoverable AND its schema must compose into an executable, JSON-returning
 # command. Query built per-adapter from the schema's own advertised surface.
-CORE_ADAPTERS = ("ast", "calls", "imports", "stats", "git", "diff", "help")
+CORE_ADAPTERS = ("ast", "calls", "imports", "metrics", "git", "diff", "help")
 
 # Every publicly-registered adapter, read live from the registry rather than
 # hardcoded — so a newly-added adapter is swept automatically instead of
@@ -53,7 +53,7 @@ ALL_PUBLIC_ADAPTERS = tuple(sorted(
 ))
 
 # The query adapters an agent builds URIs against.
-QUERY_ADAPTERS = ("ast", "calls", "imports", "stats", "git", "diff")
+QUERY_ADAPTERS = ("ast", "calls", "imports", "metrics", "git", "diff")
 
 
 def _run(*args):
@@ -252,7 +252,7 @@ _EXECUTABLE_QUERY = {
     "ast": lambda: f"ast://{CONFORMANCE_DIR}?type=function",
     "calls": lambda: f"calls://{FIXTURE_FILE}?target=process_order",
     "imports": lambda: f"imports://{FIXTURE_FILE}",
-    "stats": lambda: f"stats://{CONFORMANCE_DIR}",
+    "metrics": lambda: f"metrics://{CONFORMANCE_DIR}",
 }
 
 

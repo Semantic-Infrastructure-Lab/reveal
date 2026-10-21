@@ -243,6 +243,10 @@ RETIREMENTS: Dict[str, Retirement] = {
     'param:ast.callee_of': Retirement('ast://?callee_of=', 'calls://<path>?callees=NAME'),
     'value:ast.show=calls': Retirement('ast://?show=calls',
                                        "calls://<path>?callers=NAME or ?callees=NAME, or --grep 'PATTERN'"),
+    # stats became metrics and absorbed classify (D2, BACK-2069): both old schemes answer from the
+    # metrics owner, unchanged, until the cut. File hotspots are metrics' ?hotspots=true ranking.
+    'scheme:stats': Retirement('stats://', 'metrics://<path> (the same answer)'),
+    'scheme:classify': Retirement('classify://', 'metrics://<path>?view=provenance (the same answer)'),
 }
 
 

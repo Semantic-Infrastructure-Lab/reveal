@@ -235,7 +235,7 @@ class TestRenderDiffBreadcrumbs(unittest.TestCase):
         # A git:// right side does not split a /element suffix (BACK-1494), so the
         # deep dive passes the element positionally (BACK-1503).
         self.assertIn("1. reveal 'diff://git://HEAD/app.py:git://.//app.py' handle_request", output)
-        self.assertIn("2. reveal stats://app.py", output)
+        self.assertIn("2. reveal metrics://app.py", output)
         self.assertIn("3. reveal 'imports://.?circular'", output)
         self.assertIn("4. reveal check app.py", output)
 
@@ -250,7 +250,7 @@ class TestRenderDiffBreadcrumbs(unittest.TestCase):
         output = capture_stdout(_render_diff_breadcrumbs, left, right, details)
 
         self.assertNotIn('deep dive', output.lower())
-        self.assertIn("1. reveal stats://app.py", output)
+        self.assertIn("1. reveal metrics://app.py", output)
         self.assertIn("2. reveal 'imports://.?circular'", output)
         self.assertIn("3. reveal check app.py", output)
 
@@ -260,9 +260,9 @@ class TestRenderDiffBreadcrumbs(unittest.TestCase):
         left = {'uri': 'git://HEAD~1/src/app.py'}
         right = {'uri': 'git://src/app.py@HEAD'}
         output = capture_stdout(_render_diff_breadcrumbs, left, right, {'functions': []})
-        self.assertIn("reveal stats://src/app.py", output)
+        self.assertIn("reveal metrics://src/app.py", output)
         self.assertIn("reveal check src/app.py", output)
-        self.assertNotIn("stats://git://", output)
+        self.assertNotIn("metrics://git://", output)
 
     def test_directory_diff_has_no_element_deep_dive(self):
         left = {'uri': 'git://HEAD~1/.', 'type': 'git_directory'}
@@ -270,7 +270,7 @@ class TestRenderDiffBreadcrumbs(unittest.TestCase):
         details = {'functions': [{'type': 'modified', 'name': 'f'}]}
         output = capture_stdout(_render_diff_breadcrumbs, left, right, details)
         self.assertNotIn('Deep dive', output)
-        self.assertIn("1. reveal stats://.", output)
+        self.assertIn("1. reveal metrics://.", output)
 
     def test_render_category_summary_with_changes(self):
         """Test _render_category_summary when there are changes."""

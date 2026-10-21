@@ -308,12 +308,12 @@ def _run_hotspots(path: Optional[Path],
     if warnings is None:
         warnings = []
     try:
-        from reveal.adapters.stats.adapter import StatsAdapter
+        from reveal.adapters.stats.adapter import MetricsAdapter
         targets = files if files is not None else ([path] if path is not None else [])
         hotspots: List[Dict[str, Any]] = []
         for target in targets:
             try:
-                adapter = StatsAdapter(str(target), 'hotspots=true&top=0')  # all: cut once, above
+                adapter = MetricsAdapter(str(target), 'hotspots=true&top=0')  # all: cut once, above
                 data = adapter.get_structure(hotspots=True)
                 if data.get('error'):
                     warnings.append({'type': 'analysis_failed', 'count': 1,

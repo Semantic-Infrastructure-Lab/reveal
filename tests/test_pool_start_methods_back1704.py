@@ -1,4 +1,4 @@
-"""BACK-1704: check's and stats://'s process pools under every start method, on Linux.
+"""BACK-1704: check's and metrics://'s process pools under every start method, on Linux.
 
 Windows and macOS start pool workers with ``spawn`` and CPython 3.14 on Linux with
 ``forkserver``; the local gate runs 3.12 on Linux, which forks. A test that reaches a
@@ -205,9 +205,9 @@ def test_check_pool_matches_the_serial_run(work, method, fmt):
 
 @pytest.mark.parametrize('method', METHODS)
 def test_stats_pool_matches_the_serial_run(work, method):
-    """stats://'s pool: every file analysed, JSON identical to the serial run, exit 0."""
+    """metrics://'s pool: every file analysed, JSON identical to the serial run, exit 0."""
     _need(method)
-    argv = ('stats://tree', '--format', 'json')
+    argv = ('metrics://tree', '--format', 'json')
     serial, _ = _run(work, method, 1, *argv, log='serial-calls')
     pooled, calls = _run(work, method, 2, *argv)
     _ran_in_pool(calls, method)
@@ -223,7 +223,7 @@ def test_stats_worker_death_reports_the_lost_file_and_continues(work, method):
     that did finish are still reported. Which collateral files the broken pool takes with
     it varies, so the count is a bound; every file is either counted or named once."""
     _need(method)
-    proc, calls = _run(work, method, 2, 'stats://tree', '--format', 'json', die=True)
+    proc, calls = _run(work, method, 2, 'metrics://tree', '--format', 'json', die=True)
     _ran_in_pool(calls, method)
     assert proc.returncode == 0, (proc.returncode, proc.stdout, proc.stderr)
     result = json.loads(proc.stdout)

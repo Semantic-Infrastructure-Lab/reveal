@@ -1,8 +1,11 @@
-"""Renderer for statistics adapter results."""
+"""Renderer for metrics adapter results (and the provenance view classify:// shares)."""
+
+from typing import Any, Dict
 
 from ...utils import print_json_result
 from ...utils.warning_render import render_meta_warnings
 from .issue_count import issue_count_line
+from .provenance import PROVENANCE_RESULT_TYPE
 
 
 def _print_issue_count_line(result: dict) -> None:
@@ -10,6 +13,28 @@ def _print_issue_count_line(result: dict) -> None:
     line = issue_count_line(result)
     if line:
         print(f"\n{line}")
+
+
+def render_provenance(result: Dict[str, Any]) -> None:
+    """Text rendering of a provenance report."""
+    rows = result.get('files', [])
+    summary = result.get('summary', {})
+    print(f"Provenance classification: {result.get('source', '')}")
+    print(f"{summary.get('total', len(rows))} files")
+    for label, count in summary.get('by_provenance', {}).items():
+        print(f"  {label}: {count}")
+    excluded = summary.get('excluded', 0)
+    if excluded:
+        # BACK-1241: the count above is not the full population -- make
+        # that visible in text mode too, not just JSON.
+        by_ext = summary.get('excluded_by_extension', {})
+        top = ', '.join(f"{ext} ({n})" for ext, n in list(by_ext.items())[:5])
+        more = f", +{len(by_ext) - 5} more extensions" if len(by_ext) > 5 else ''
+        print(f"\n⚠ {excluded} more file(s) not classified — no analyzer for: {top}{more}")
+    render_meta_warnings(result)
+    print()
+    for row in rows:
+        print(f"  {row['provenance']:>11}  {row['file']}")
 
 
 class StatsRenderer:
@@ -20,11 +45,14 @@ class StatsRenderer:
         """Render codebase statistics.
 
         Args:
-            result: Structure dict from StatsAdapter.get_structure()
+            result: Structure dict from MetricsAdapter.get_structure()
             format: Output format ('text', 'json')
         """
         if format == 'json':
             print_json_result(result)
+            return
+        if result.get('type') == PROVENANCE_RESULT_TYPE:  # ?view=provenance
+            render_provenance(result)
             return
 
         # Text format - single file stats
@@ -83,7 +111,7 @@ class StatsRenderer:
         """Render file-specific statistics.
 
         Args:
-            result: Element dict from StatsAdapter.get_element()
+            result: Element dict from MetricsAdapter.get_element()
             format: Output format ('text', 'json')
         """
         if format == 'json':

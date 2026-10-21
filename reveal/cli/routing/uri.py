@@ -451,7 +451,7 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace') -> str:
     # (*.min.js), not just directory-shaped ones. It just never received the
     # CLI --exclude flag because this set predates BACK-1196 having its own
     # query param wired up.
-    _EXCLUDE_AWARE_SCHEMES = {'overview', 'stats', 'pack'}
+    _EXCLUDE_AWARE_SCHEMES = {'overview', 'metrics', 'stats', 'pack'}
     exclude_values = list(peek(args, 'exclude') or [])
 
     if exclude_values and scheme in _EXCLUDE_AWARE_SCHEMES and 'exclude=' not in resource:

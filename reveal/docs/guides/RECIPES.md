@@ -248,7 +248,7 @@ reveal 'imports://src?circular'
 reveal 'imports://src?violations'
 
 # Get statistics
-reveal stats://./src
+reveal metrics://./src
 ```
 
 ### Cross-codebase analysis
@@ -1305,7 +1305,7 @@ reveal src/app.py --format=json | jq '.functions'
 reveal src/ --format=json | jq '.functions[] | select(.line_count > 100)'
 
 # Get complexity metrics
-reveal stats://src/ --format=json | jq '.quality_score'
+reveal metrics://src/ --format=json | jq '.quality_score'
 ```
 
 ### Batch operations
@@ -1549,7 +1549,7 @@ reveal analysis.ipynb --format=json
 ## Advanced Multi-Adapter Patterns
 
 ### Pattern 1: The Complexity Drill-Down
-**Combine**: `stats://` → `ast://` → `diff://` → `git://`
+**Combine**: `metrics://` → `ast://` → `diff://` → `git://`
 
 ```bash
 # 1. Find hotspots
@@ -1634,7 +1634,7 @@ reveal diff://git://HEAD~1/docs:docs
 reveal src/
 
 # Layer 2: Stats (~200 tokens)
-reveal stats://./src
+reveal metrics://./src
 
 # Layer 3: Hotspots (~500 tokens)
 reveal hotspots ./src
@@ -1699,7 +1699,7 @@ reveal app.py --format=json | \
 ### Scenario: Technical Due Diligence
 
 ```bash
-reveal stats://./src > due_diligence/stats.txt
+reveal metrics://./src > due_diligence/stats.txt
 reveal hotspots ./src > due_diligence/hotspots.txt
 reveal 'ast://./src?complexity>20' > due_diligence/complex_functions.txt
 reveal 'imports://src?circular' > due_diligence/circular_deps.txt
@@ -1720,9 +1720,9 @@ reveal 'ast://./src?complexity>20'
 reveal 'ast://./src?lines>100'
 
 # Track improvement
-reveal stats://./src --format=json > perf_before.json
+reveal metrics://./src --format=json > perf_before.json
 # ... optimize ...
-reveal stats://./src --format=json > perf_after.json
+reveal metrics://./src --format=json > perf_after.json
 ```
 
 ### Scenario: Security Audit

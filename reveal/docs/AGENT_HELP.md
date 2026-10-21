@@ -123,7 +123,7 @@ reveal 'help://schemas/<adapter>' --format=json
 
 # File & Analysis Adapters
 reveal help://schemas/ast --format=json        # Code structure analysis
-reveal help://schemas/stats --format=json      # Code statistics
+reveal help://schemas/metrics --format=json      # Code statistics
 reveal help://schemas/imports --format=json    # Import graph analysis
 reveal help://schemas/calls --format=json      # Cross-file call graph
 reveal help://schemas/diff --format=json       # Resource comparison
@@ -3435,8 +3435,8 @@ reveal docs/setup.md --links --link-type internal
 
 **Old (still works, but deprecated):**
 ```bash
-reveal stats://. --hotspots
-reveal 'stats://.?hotspots=true'
+reveal metrics://. --hotspots
+reveal 'metrics://.?hotspots=true'
 ```
 
 **Correct — use the subcommand:**
@@ -3847,7 +3847,7 @@ CMD ["python", "app.py"]
 - Complexity > 10 suggests function is too complex
 - Consider breaking into smaller functions
 - Default threshold 10 (override in `.reveal.yaml`: `rules: {C901: {threshold: 15}}`); `reveal --explain C901` describes the rule but does not print the threshold
-- One shared score: C901, `ast://?complexity`, `stats://` and `reveal hotspots` report the same number for every language — `if`/loops/`catch`, `&&`/`||`/`??`/`?:`, and match/switch arms count (a catch-all `default`/`else`/`_` arm does not); Rust `?` and Zig `try` count as early exits
+- One shared score: C901, `ast://?complexity`, `metrics://` and `reveal hotspots` report the same number for every language — `if`/loops/`catch`, `&&`/`||`/`??`/`?:`, and match/switch arms count (a catch-all `default`/`else`/`_` arm does not); Rust `?` and Zig `try` count as early exits
 
 **C902: Function too long**
 - Function exceeds maximum line count
@@ -4611,7 +4611,7 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Complete coverage** - All adapters, all rules, all features
 - **2026-09-24 refresh (post-v0.127.0)** - Every example re-run against the live CLI. Exit codes are now a per-command table (`check` 0/1/2/3 + `--exit-zero`, `review` 0/1/2/3 + `overall_status`/`exit_code`, a missing path exits 1). New coverage: `?uncalled` per-language exclusions + `test_entrypoints_excluded`/`?test-framework=true`; `trace` one frame per definition + `--from FILE:NAME`; surface "Not implemented" block, unparsed-file warning, `--type subprocess`; Python-only `ast://` features (W-CAP-1) and `--language-info`; `check` disclosures (W-CAP-1/W-CAP-2, `scan_disclosures`); parse-recovery/partial-outline notices; `REVEAL_FORMAT`; `--copy` on subcommands; I007/I008. Fixed examples: `python://syspath`, calls:// budget flags need a query, `diff://` has no `?context=`, jq `.file`/`.content`/`.total`, typed JSON shape, JSONL `--range N-N`, claude `/prompts`/`/messages`, `reveal-cli[whois]`/`[dns]`, E501 default 100.
 - **v0.101.0** - `git://?type=ownership` — commit-share ownership for a file, directory, or whole repo (primary author, per-author %, contributor count, last-touch date; `?merges=1` includes merges, `?limit=N` caps history walk). `surface --source-only` — excludes test files/dirs from surface scans (production-only read for security review). Both carry the shallow-clone warning.
-- **v0.73.0** - `depends://` adapter (23rd adapter) — inverse module dependency graph; `depends://file.py` shows who imports it, `depends://dir/?top=N` ranks most-imported modules, `?format=dot` for GraphViz; scans from project root for full cross-directory visibility. `stats://` quality score now incorporates check rule detections by severity (CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts, cap -40); `quality.check_issues` count exposed in per-file output. PHP fixes: anonymous class detection (`anonymous_class` node type), function call tracking (`function_call_expression`), `stats://` complexity no longer stuck at 1.00
+- **v0.73.0** - `depends://` adapter (23rd adapter) — inverse module dependency graph; `depends://file.py` shows who imports it, `depends://dir/?top=N` ranks most-imported modules, `?format=dot` for GraphViz; scans from project root for full cross-directory visibility. `metrics://` quality score now incorporates check rule detections by severity (CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts, cap -40); `quality.check_issues` count exposed in per-file output. PHP fixes: anonymous class detection (`anonymous_class` node type), function call tracking (`function_call_expression`), `metrics://` complexity no longer stuck at 1.00
 - **v0.96.0** - `reveal check --profile NAME` (built-in presets: `maintenance`, `security`, `ci-strict`; project-defined via `.reveal.yaml`); S001 hardcoded secrets rule (opt-in — `sk-proj-`/`ghp_`/`AKIA*` + secret-named vars); PHP `calls://` OO support (`$obj->method()`, `new ClassName()` callers indexed cross-file); `reveal --rules` shows opt-in rules with `○` icon; I002 false positives 143→0 (TYPE_CHECKING + function-body imports excluded from cycle graph); I005 TYPE_CHECKING false positive fixed; `reveal hotspots`/`testability` perf: 74s→10.5s / 3min→9s via gitignore pruning + ProcessPoolExecutor + lru_cache; V025 relationship drift rule (`reveal:// --check`); L001 resolves directory links to index file, L003 ignores local citations.
 - **v0.95.0** - tree-sitter-language-pack 1.x migration: 300+ grammars available in the pack (was ~165), single abi3 wheel for Python 3.10–3.14+. (reveal wires up analyzers/fallback for 84 of these — see `reveal --languages`.) **Breaking**: glibc floor raised to manylinux_2_34 (Ubuntu 22.04+, Debian 12+); Alpine/musl and Ubuntu 20.04 no longer supported. `reveal/core/treesitter_compat.py` for 1.x API shims.
 - **v0.94.0** - `reveal testability` subcommand: per-target patch pressure joined with production fan-out (which seams look contained in tests but are fan-out hubs in production). `patches://tests?group=target` URI adapter. Frontmatter-driven help metadata (`help_topic`, `help_category`, `help_token_estimate` fields replace parallel Python dicts).

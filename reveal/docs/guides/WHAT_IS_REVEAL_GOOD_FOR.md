@@ -257,7 +257,7 @@ reveal hotspots src/
 reveal deps .
 reveal 'imports://src?circular'
 reveal 'imports://src?violations'
-reveal stats://src/
+reveal metrics://src/
 ```
 
 Why it is good for this:
@@ -266,7 +266,7 @@ Why it is good for this:
 - `hotspots` points to concentrated complexity and churn
 - `deps` surfaces circular imports, unused imports, and top importers
 - `imports://` adds lower-level graph queries and layer checks
-- `stats://` provides project metrics and quality signals
+- `metrics://` provides project metrics and quality signals
 
 Use Reveal for this when:
 
@@ -277,7 +277,7 @@ Use Reveal for this when:
 
 This is a good "where should I look first?" workflow.
 
-The `stats://` docs are explicit about its sweet spot:
+The `metrics://` docs are explicit about its sweet spot:
 
 - refactoring candidates
 - technical debt tracking

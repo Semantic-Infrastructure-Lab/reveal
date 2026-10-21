@@ -445,13 +445,13 @@ def _render_diff_breadcrumbs(left: Dict[str, Any], right: Dict[str, Any],
             step += 1
 
     if is_code_review:
-        print(f"  {step}. reveal stats://{path}            # Check complexity trends")
+        print(f"  {step}. reveal metrics://{path}            # Check complexity trends")
         step += 1
         print(f"  {step}. reveal 'imports://.?circular'    # Check for new cycles")
         step += 1
         print(f"  {step}. reveal check {path}            # Quality check")
     else:
-        print(f"Next: reveal stats://{path}      # Analyze complexity trends")
+        print(f"Next: reveal metrics://{path}      # Analyze complexity trends")
         print(f"      reveal check {path}      # Check quality after changes")
         print("      reveal help://diff         # Learn more about diff adapter")
 

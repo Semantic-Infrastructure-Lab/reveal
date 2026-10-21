@@ -228,7 +228,7 @@ reveal 'ast://./src?complexity>10&lines>50'
 **3. Find hotspot files:**
 ```bash
 # Identify files with quality issues
-reveal 'stats://./src' --hotspots
+reveal 'metrics://./src' --hotspots
 
 # Output:
 Hotspots (Top 10 worst files):
@@ -261,17 +261,17 @@ done
 
 ### Finding Similar File Structures
 
-Use stats:// to find files with similar characteristics (may indicate copy-paste):
+Use metrics:// to find files with similar characteristics (may indicate copy-paste):
 
 ```bash
 # Find files with 200-300 lines
-reveal 'stats://./src?min_lines=200&max_lines=300'
+reveal 'metrics://./src?min_lines=200&max_lines=300'
 
 # Find files with similar complexity
-reveal 'stats://./src?min_complexity=10&max_complexity=15'
+reveal 'metrics://./src?min_complexity=10&max_complexity=15'
 
 # Find files with many functions (>20)
-reveal 'stats://./src?min_functions=20'
+reveal 'metrics://./src?min_functions=20'
 ```
 
 ---
@@ -345,7 +345,7 @@ find src/ -name "*.py" | xargs -I {} reveal check {} --select D001
 
 5. **Combine with stats for context**
 ```bash
-reveal 'stats://./src' --hotspots
+reveal 'metrics://./src' --hotspots
 ```
 
 ### ❌ DON'T

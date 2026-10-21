@@ -1262,7 +1262,7 @@ class TestPrintBreadcrumbsQualityCheck:
             'quality-check', 'test.py', 'python',
             config=mock_config, detections=[mock_detection]
         )
-        assert 'stats://test.py' in output
+        assert 'metrics://test.py' in output
         assert 'help://rules' in output
 
     def test_complexity_issues_suggest_function(self):
@@ -1318,7 +1318,7 @@ class TestPrintBreadcrumbsQualityCheck:
         assert '# See structure' in output
 
     def test_quality_check_trailer_second_call_is_silent_but_complex_function_stays_dynamic(self):
-        """The stats://+help://rules trailer is identical every call —
+        """The metrics://+help://rules trailer is identical every call —
         boilerplate, shown once. The named complex function is real,
         file-specific data from this call's own detections — never throttled."""
         mock_config = Mock()
@@ -1340,7 +1340,7 @@ class TestPrintBreadcrumbsQualityCheck:
             config=mock_config, detections=[second_detection],
         )
 
-        assert 'stats://' not in second
+        assert 'metrics://' not in second
         assert 'help://rules' not in second
         assert 'reveal test.py second_complex' in second
 
@@ -1367,7 +1367,7 @@ class TestPrintBreadcrumbsDirectoryCheck:
         assert 'Pre-Commit Workflow:' in output
         assert 'Fix the 5 issues' in output
         assert 'diff://git://HEAD/.:.' in output
-        assert 'stats://src/' in output
+        assert 'metrics://src/' in output
 
     def test_no_issues_shows_clean_workflow(self):
         """When no issues, shows clean pre-commit workflow."""
@@ -1478,7 +1478,7 @@ class TestBlockLead:
         _isolated_hint_store.add('quality_check_see_structure')
         out = capture_breadcrumbs('quality-check', 'a.py', 'python', config=self._config(),
                                   detections=[Mock(rule_code='E501', context='')])
-        assert out.splitlines()[1] == 'Next: reveal stats://a.py      # Analyze complexity trends'
+        assert out.splitlines()[1] == 'Next: reveal metrics://a.py      # Analyze complexity trends'
 
     def test_element_block_has_no_lead(self):
         out = self._twice('element', 'a.py', 'python', element_name='f', line_count=3,

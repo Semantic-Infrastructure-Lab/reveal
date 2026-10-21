@@ -8,7 +8,7 @@ from reveal.adapters.ast import AstAdapter
 from reveal.adapters.git import GitAdapter
 from reveal.adapters.imports import ImportsAdapter
 from reveal.adapters.overview import OverviewAdapter
-from reveal.adapters.stats import StatsAdapter
+from reveal.adapters.stats import MetricsAdapter
 
 
 @pytest.fixture
@@ -24,7 +24,7 @@ def errors(result):
 @pytest.mark.parametrize('kind', ['empty', 'summary', 'boolean_count', 'missing_average',
                                  'files', 'count_mismatch', 'hotspots', 'quality'])
 def test_malformed_stats_is_attributed_before_projection(project, kind):
-    data = StatsAdapter(str(project), 'hotspots=true').get_structure()
+    data = MetricsAdapter(str(project), 'hotspots=true').get_structure()
     if kind == 'empty':
         data = {}
     elif kind == 'summary':
@@ -41,9 +41,9 @@ def test_malformed_stats_is_attributed_before_projection(project, kind):
         data['hotspots'] = None
     else:
         data['hotspots'] = [{'file': 'a.py', 'quality_score': 'unknown', 'issues': []}]
-    with patch.object(StatsAdapter, 'get_structure', return_value=data):
+    with patch.object(MetricsAdapter, 'get_structure', return_value=data):
         result = OverviewAdapter(str(project), 'no_git=true').get_structure()
-    assert any(e['code'] == 'E_COMPOSE' and 'StatsAdapter' in e['message'] for e in errors(result))
+    assert any(e['code'] == 'E_COMPOSE' and 'MetricsAdapter' in e['message'] for e in errors(result))
 
 
 @pytest.mark.parametrize('kind', ['empty', 'results', 'missing_count', 'boolean_count',
@@ -128,7 +128,7 @@ def test_malformed_import_metadata_is_attributed(project, kind):
     assert any(e['code'] == 'E_COMPOSE' and 'ImportsAdapter' in e['message'] for e in errors(result))
 
 
-@pytest.mark.parametrize('owner', [StatsAdapter, AstAdapter])
+@pytest.mark.parametrize('owner', [MetricsAdapter, AstAdapter])
 def test_existing_compose_failure_is_not_duplicated(project, owner):
     with patch.object(owner, 'get_structure', side_effect=OSError('exact child failure')):
         result = OverviewAdapter(str(project), 'no_git=true').get_structure()

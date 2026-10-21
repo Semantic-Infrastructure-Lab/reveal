@@ -118,7 +118,7 @@ class TestCli:
 
     def test_unmatched_name_is_disclosed_in_result_and_on_stderr(self, tmp_path):
         src = _module(tmp_path)
-        r = _run_reveal_direct(f'stats://{src.as_posix()}',
+        r = _run_reveal_direct(f'metrics://{src.as_posix()}',
                                '--fields=file,quality_score', '--format', 'json')
         assert r.returncode == 0, r.stderr
         data = json.loads(r.stdout)
@@ -129,7 +129,7 @@ class TestCli:
 
     def test_text_format_is_left_whole_with_a_note(self, tmp_path):
         # A text renderer needs the whole result: given a selection it printed nothing
-        # (stats://) or zeros (ast://), and git:// file history crashed.
+        # (metrics://) or zeros (ast://), and git:// file history crashed.
         src = _module(tmp_path)
         r = _run_reveal_direct(f'ast://{src.as_posix()}?type=function', '--fields=name')
         assert r.returncode == 0, r.stderr

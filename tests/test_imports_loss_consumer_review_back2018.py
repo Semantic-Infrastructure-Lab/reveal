@@ -198,14 +198,14 @@ def test_exact_healthy_and_explicitly_excluded_siblings_stay_unchanged(tmp_path,
 
 def test_actual_stats_read_failure_is_not_file_inventory_proof(tmp_path, monkeypatch):
     import builtins
-    from reveal.adapters.stats import StatsAdapter
+    from reveal.adapters.stats import MetricsAdapter
 
     root = tmp_path / 'affected'
     tree(root, 'lost')
     visible = root / 'visible.py'
     write(visible, 'VALUE = 1\n')
     fail_child(monkeypatch, root)
-    real_stats = StatsAdapter.get_structure
+    real_stats = MetricsAdapter.get_structure
     real_open = builtins.open
     active = []
     reads = []
@@ -226,7 +226,7 @@ def test_actual_stats_read_failure_is_not_file_inventory_proof(tmp_path, monkeyp
             raise PermissionError(13, 'independent Stats-only read denial', str(visible))
         return real_open(path, *args, **kwargs)
 
-    monkeypatch.setattr(StatsAdapter, 'get_structure', stats)
+    monkeypatch.setattr(MetricsAdapter, 'get_structure', stats)
     monkeypatch.setattr(builtins, 'open', open_file)
     response = invoke('overview', root)
     result = json.loads(response.stdout)
@@ -238,13 +238,13 @@ def test_actual_stats_read_failure_is_not_file_inventory_proof(tmp_path, monkeyp
 
 @pytest.mark.parametrize('malformed', ['missing_lines', 'boolean_total', 'bad_partition'])
 def test_stats_path_or_invalid_measurements_do_not_rescue_directory_loss(tmp_path, monkeypatch, malformed):
-    from reveal.adapters.stats import StatsAdapter
+    from reveal.adapters.stats import MetricsAdapter
 
     root = tmp_path / 'affected'
     tree(root, 'lost')
     write(root / 'visible.py', 'VALUE = 1\n')
     fail_child(monkeypatch, root)
-    real_stats = StatsAdapter.get_structure
+    real_stats = MetricsAdapter.get_structure
 
     def stats(self, *args, **kwargs):
         result = real_stats(self, *args, **kwargs)
@@ -257,7 +257,7 @@ def test_stats_path_or_invalid_measurements_do_not_rescue_directory_loss(tmp_pat
             entry['lines']['total'] += 1
         return result
 
-    monkeypatch.setattr(StatsAdapter, 'get_structure', stats)
+    monkeypatch.setattr(MetricsAdapter, 'get_structure', stats)
     response = invoke('overview', root)
     result = json.loads(response.stdout)
     assert response.returncode == 3

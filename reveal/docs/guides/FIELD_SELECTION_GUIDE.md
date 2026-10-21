@@ -240,17 +240,17 @@ those names aren't top-level keys, so they select in the items.
 
 **Full output** (~500 lines):
 ```bash
-reveal stats://src --format=json
+reveal metrics://src --format=json
 ```
 
 **Selected fields** (each file's name, code lines and quality score):
 ```bash
-reveal stats://src --fields=file,lines.code,quality.score --format=json
+reveal metrics://src --fields=file,lines.code,quality.score --format=json
 ```
 
 **Most complex files** (budget mode):
 ```bash
-reveal 'stats://src?sort=-complexity' --max-items=10 --fields=file,complexity --format=json
+reveal 'metrics://src?sort=-complexity' --max-items=10 --fields=file,complexity --format=json
 ```
 
 ---
@@ -411,7 +411,7 @@ Phase 3 query operators + Phase 4 field selection = powerful combination:
 
 ```bash
 # Filter, sort, limit, then select fields
-reveal 'stats://src?lines>100&sort=-complexity' --max-items=20 --fields=file,complexity,lines --format=json
+reveal 'metrics://src?lines>100&sort=-complexity' --max-items=20 --fields=file,complexity,lines --format=json
 ```
 
 ---
@@ -449,7 +449,7 @@ Access nested fields with dot notation:
 reveal ssl://example.com --fields=host,verification.chain_valid,verification.hostname_match --format=json
 
 # Access nested keys of each list item
-reveal stats://src --fields=file,quality.score,complexity.max --format=json
+reveal metrics://src --fields=file,quality.score,complexity.max --format=json
 ```
 
 ---
@@ -462,10 +462,10 @@ reveal stats://src --fields=file,quality.score,complexity.max --format=json
 
 ```bash
 # Level 1: Overview (minimal fields)
-reveal 'stats://src' --fields=file,quality.score --max-items=100 --format=json
+reveal 'metrics://src' --fields=file,quality.score --max-items=100 --format=json
 
 # Level 2: Identify hotspots
-reveal 'stats://src?hotspots=true' --fields=summary,hotspots --format=json
+reveal 'metrics://src?hotspots=true' --fields=summary,hotspots --format=json
 
 # Level 3: Deep dive on specific file
 reveal 'ast://src/problematic_file.py' --format=json
@@ -621,7 +621,7 @@ of each object (the result's `value` list). Use `jq 'keys'` to explore.
 
 **Example**:
 ```bash
-reveal 'stats://src?lines>100&sort=-complexity'
+reveal 'metrics://src?lines>100&sort=-complexity'
 ```
 
 ### Phase 4: Field Selection + Budget
@@ -632,7 +632,7 @@ reveal 'stats://src?lines>100&sort=-complexity'
 
 **Example**:
 ```bash
-reveal 'stats://src?lines>100&sort=-complexity' --max-items=20 --fields=file,quality.score --format=json
+reveal 'metrics://src?lines>100&sort=-complexity' --max-items=20 --fields=file,quality.score --format=json
 ```
 
 ### Combining Both
@@ -673,7 +673,7 @@ reveal <uri> --fields=<existing-field> --format=json
 **Cause**: Adapter returns single object, not a list
 
 **Solution**: Budget constraints work on the lists an adapter declares (ast:// `results`,
-stats:// `files`, git:// `commits`, ...); when there is nothing to cut, a note says the
+metrics:// `files`, git:// `commits`, ...); when there is nothing to cut, a note says the
 flag had no effect. For single objects, use `--fields` instead.
 
 ---

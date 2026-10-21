@@ -569,7 +569,7 @@ def _handle_quality_check(path, file_type, **kwargs):
         ])
 
     _show_hint_once('quality_check_trailer', [
-        f"      reveal stats://{path}      # Analyze complexity trends",
+        f"      reveal metrics://{path}      # Analyze complexity trends",
         "      reveal help://rules        # Learn about rules",
     ])
 
@@ -600,7 +600,7 @@ def _handle_directory_check(path, file_type, **kwargs):
             "Pre-Commit Workflow:",
             f"  1. Fix the {total_issues} issues above",
             "  2. reveal diff://git://HEAD/.:.     # Review all changes",
-            f"  3. reveal stats://{path}            # Check complexity trends",
+            f"  3. reveal metrics://{path}            # Check complexity trends",
         ])
     else:
         _show_hint_once('directory_check_workflow_clean', [

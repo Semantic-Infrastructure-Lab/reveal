@@ -875,7 +875,7 @@ Healthy inventories retain their existing validation and reuse. This handling
 covers directory enumeration, not the separate importer-file read or
 `__init__.py` fallback-read failure channels. M102 is a cross-file rule, so it is not part
 of the quality scores and rankings of `stats://`, `overview` and `hotspots`, which count
-file-local rules only ([what the issue count counts](../adapters/STATS_ADAPTER_GUIDE.md#what-the-issue-count-counts)).
+file-local rules only ([what the issue count counts](../adapters/METRICS_ADAPTER_GUIDE.md#what-the-issue-count-counts)).
 
 ### Usage
 

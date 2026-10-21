@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # tuple against what a full import registers, so it cannot drift.
 BUILTIN_SCHEMES = (
     'env', 'ast', 'claude', 'diff', 'ssl', 'domain', 'help', 'imports', 'json',
-    'markdown', 'mysql', 'python', 'reveal', 'sqlite', 'stats', 'xlsx', 'cpanel',
+    'markdown', 'mysql', 'python', 'reveal', 'sqlite', 'metrics', 'stats', 'xlsx', 'cpanel',
     'autossl', 'letsencrypt', 'nginx', 'calls', 'classify', 'depends', 'patches',
     'codex', 'surface', 'contracts', 'hotspots', 'deps', 'architecture', 'git',
     'overview', 'testability', 'trace', 'pack',

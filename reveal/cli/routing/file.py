@@ -187,13 +187,13 @@ def _build_ast_query_from_flags(path: Path, args: 'Namespace') -> str:
 def _guard_hotspots_flag(args: 'Namespace', path_str: str) -> None:
     if not getattr(args, 'hotspots', False):
         return
-    print("❌ Error: --hotspots only works with stats:// adapter", file=sys.stderr)
+    print("❌ Error: --hotspots only works with metrics:// adapter", file=sys.stderr)
     print(file=sys.stderr)
     print("Examples:", file=sys.stderr)
-    print(f"  reveal 'stats://{path_str}?hotspots=true'  # URI param (preferred)", file=sys.stderr)
-    print(f"  reveal stats://{path_str} --hotspots        # Flag (legacy)", file=sys.stderr)
+    print(f"  reveal 'metrics://{path_str}?hotspots=true'  # URI param (preferred)", file=sys.stderr)
+    print(f"  reveal metrics://{path_str} --hotspots        # Flag (legacy)", file=sys.stderr)
     print(file=sys.stderr)
-    print("Learn more: reveal help://stats", file=sys.stderr)
+    print("Learn more: reveal help://metrics", file=sys.stderr)
     sys.exit(1)
 
 

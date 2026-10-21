@@ -272,7 +272,7 @@ class TestRunStats(unittest.TestCase):
     def setUp(self):
         self.adapter = OverviewAdapter('/project')
 
-    @patch('reveal.adapters.overview.StatsAdapter')
+    @patch('reveal.adapters.overview.MetricsAdapter')
     def test_returns_adapter_data(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = json.loads(_STATS_JSON)
         result = _run_stats(self.adapter, Path('/project'), 5)
@@ -283,9 +283,9 @@ class TestRunStats(unittest.TestCase):
         # find_analyzable_files undecoded/unmangled.
         MockAdapter.assert_called_once_with(str(Path('/project')), 'hotspots=true&top=5&respect_gitignore=true')
 
-    @patch('reveal.adapters.overview.StatsAdapter')
+    @patch('reveal.adapters.overview.MetricsAdapter')
     def test_exclude_and_respect_gitignore_forwarded(self, MockAdapter):
-        """BACK-1042: overview's --exclude/--no-gitignore reach StatsAdapter
+        """BACK-1042: overview's --exclude/--no-gitignore reach MetricsAdapter
         via a raw query string (not compose()'s urlencode kwargs)."""
         MockAdapter.return_value.get_structure.return_value = json.loads(_STATS_JSON)
         adapter = OverviewAdapter('/project', 'exclude=dist/*,*.min.js&respect_gitignore=false')
@@ -294,7 +294,7 @@ class TestRunStats(unittest.TestCase):
             str(Path('/project')), 'hotspots=true&top=5&exclude=dist/*,*.min.js&respect_gitignore=false'
         )
 
-    @patch('reveal.adapters.overview.StatsAdapter')
+    @patch('reveal.adapters.overview.MetricsAdapter')
     def test_exception_returns_empty_dict(self, MockAdapter):
         MockAdapter.return_value.get_structure.side_effect = Exception('fail')
         result = _run_stats(self.adapter, Path('/project'), 5)

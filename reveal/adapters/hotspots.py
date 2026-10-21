@@ -120,7 +120,7 @@ def _hotspots_proof_error(result: Any) -> Optional[str]:
 
 def _provenance_for_file(file_str: Optional[str], base_path: Path) -> Optional[str]:
     """Classify a hotspot entry's 'test'/'vendor'/'minified'/None provenance
-    (BACK-1195). `file_str` may be relative (file_hotspots, from StatsAdapter)
+    (BACK-1195). `file_str` may be relative (file_hotspots, from MetricsAdapter)
     or absolute (function_hotspots, from AstAdapter) -- relativize first so
     classification only sees the path components under the scan root, not
     ancestor directories of the analyst's own filesystem.
@@ -133,7 +133,7 @@ def _relativize_hotspots_paths(file_hotspots: List[Dict[str, Any]], fn_hotspots:
     """Relativize both hotspot lists' 'file' fields before JSON serialization
     (BACK-1213). `fn_hotspots` comes from AstAdapter's compose() output, which
     never relativizes -- same confidentiality gap as BACK-1212/BACK-1194.
-    `file_hotspots` (from StatsAdapter) is already relative today, but is
+    `file_hotspots` (from MetricsAdapter) is already relative today, but is
     relativized here too defensively so this doesn't silently regress if that
     upstream guarantee ever changes. Mutates in place.
     """
@@ -165,8 +165,8 @@ def _scan_has_findings(adapter: 'HotspotsAdapter', files: List[Dict[str, Any]],
 
 
 def _compose_stats(adapter: 'HotspotsAdapter', path: Path, **params: Any) -> Dict[str, Any]:
-    """Run StatsAdapter through compose() and keep its summary as the scan's coverage record."""
-    from reveal.adapters.stats import StatsAdapter
+    """Run MetricsAdapter through compose() and keep its summary as the scan's coverage record."""
+    from reveal.adapters.stats import MetricsAdapter
     from reveal.utils.exclusions import active_exclusions
     # BACK-1257: stats:// filters via its own ?exclude= param, not the walk-scope
     # context, so the scope has to be forwarded explicitly here -- overview://'s
@@ -174,11 +174,11 @@ def _compose_stats(adapter: 'HotspotsAdapter', path: Path, **params: Any) -> Dic
     # for its function list (via ast://) but not its file list.
     _root, _patterns = active_exclusions()
     extra: Dict[str, Any] = {'exclude': list(_patterns)} if _patterns else {}
-    data = adapter.compose(StatsAdapter, str(path), default=_COMPOSE_FAILED, **params, **extra)
+    data = adapter.compose(MetricsAdapter, str(path), default=_COMPOSE_FAILED, **params, **extra)
     if data is _COMPOSE_FAILED:
         return {}
     if not _stats_proof_valid(data, bool(params.get('hotspots'))) and not (isinstance(data, dict) and data.get('error')):
-        adapter.record_composed_error('StatsAdapter', str(path), ValueError('Required Stats coverage/ranking evidence is missing or malformed'))
+        adapter.record_composed_error('MetricsAdapter', str(path), ValueError('Required Metrics coverage/ranking evidence is missing or malformed'))
     if not isinstance(data, dict):
         return {}
     summary = data.get('summary')
@@ -197,7 +197,7 @@ def _compose_stats(adapter: 'HotspotsAdapter', path: Path, **params: Any) -> Dic
 
 
 def _run_file_hotspots(adapter: 'HotspotsAdapter', path: Path, top: int) -> List[Dict[str, Any]]:
-    """Fetch file-level hotspots via StatsAdapter."""
+    """Fetch file-level hotspots: metrics' ?hotspots=true ranking (BACK-2069)."""
     data = _compose_stats(adapter, path, hotspots=True, top=top,
                           cut_as=('file_hotspots', 'raise ?top=N'))
     return _rank_entries(data.get('hotspots'), 'quality_score')
@@ -388,7 +388,7 @@ class HotspotsAdapter(ResourceAdapter):
                 {'uri': 'hotspots://. --all', 'description': 'Lift the default top-10 cap on both rankings'},
             ],
             'features': [
-                'File-level hotspots via StatsAdapter (quality score, complexity, issues)',
+                'File-level hotspots via MetricsAdapter (quality score, complexity, issues)',
                 'Function-level hotspots via AstAdapter (cyclomatic complexity ranking)',
                 'Heuristic test-coverage hint per function (has a matching test_* found?)',
                 "Each hotspot entry carries a 'provenance' field: 'test'/'vendor'/'minified'/null "
@@ -443,7 +443,7 @@ class HotspotsAdapter(ResourceAdapter):
                 {'uri': 'hotspots://src', 'description': 'Hotspots in src/', 'output_type': 'hotspots_scan', 'task': 'quality'},
             ],
             'notes': [
-                'Composes StatsAdapter (file quality) and AstAdapter (function complexity) — not an independent scan.',
+                'Composes MetricsAdapter (file quality) and AstAdapter (function complexity) — not an independent scan.',
                 'File quality counts file-local rules only; meta.issue_count names the rule and the rule set. Cross-file rules run under reveal check.',
             ],
         }

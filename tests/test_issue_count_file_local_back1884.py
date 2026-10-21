@@ -17,7 +17,7 @@ import pytest
 
 from conftest import _clear_module_caches, _run_reveal_direct as run, needs_forked_workers
 from reveal.adapters.hotspots import HotspotsAdapter
-from reveal.adapters.stats import StatsAdapter
+from reveal.adapters.stats import MetricsAdapter
 from reveal.rules import RuleRegistry
 from reveal.rules.base import RuleScope
 
@@ -69,7 +69,7 @@ def warning_types(result):
 
 def test_stats_counts_the_file_local_rules_only(tmp_path):
     root = project(tmp_path)
-    rows = stats_files(StatsAdapter(str(root)).get_structure())
+    rows = stats_files(MetricsAdapter(str(root)).get_structure())
     risky = rows['pkg/risky.py']['quality']
     expected = len(local_detections(root / 'pkg' / 'risky.py'))
     assert expected >= 9, 'positive control: the nine bare excepts are file-local findings'
@@ -104,10 +104,10 @@ def test_stats_overview_and_hotspots_agree_on_one_file(tmp_path):
 @pytest.mark.parametrize('cap', ['REVEAL_D005_MAX_FILES', 'REVEAL_T006_MAX_FILES', 'REVEAL_I002_MAX_FILES'])
 def test_the_count_does_not_move_with_a_cross_file_scan_cap(tmp_path, monkeypatch, cap):
     root = project(tmp_path)
-    open_ended = StatsAdapter(str(root)).get_structure()
+    open_ended = MetricsAdapter(str(root)).get_structure()
     _clear_module_caches()  # a cap acts when an index is built: the first run's index must not serve the second
     monkeypatch.setenv(cap, '2')
-    capped = StatsAdapter(str(root)).get_structure()
+    capped = MetricsAdapter(str(root)).get_structure()
     assert capped['files'] == open_ended['files'], 'a scan cap changed a count or a score'
     assert 'analysis_incomplete' not in warning_types(capped)
 
@@ -218,7 +218,7 @@ def test_stats_builds_no_project_wide_index(tmp_path):
     D005, I002, M102 = (importlib.import_module(f'reveal.rules.{name}') for name in
                         ('duplicates.D005', 'imports.I002', 'maintainability.M102'))
     root = project(tmp_path)
-    StatsAdapter(str(root)).get_structure()
+    MetricsAdapter(str(root)).get_structure()
     assert I002._graph_cache == {}
     assert D005._project_index == {}
     assert M102._import_cache == {}
@@ -233,7 +233,7 @@ def test_stats_pool_does_not_preload_the_indexes(tmp_path, monkeypatch):
     for number in range(25):
         write(root / 'pkg' / f'plain{number}.py', f'VALUE_{number} = {number}\n')
     monkeypatch.setenv('REVEAL_MAX_WORKERS', '2')
-    result = StatsAdapter(str(root)).get_structure()
+    result = MetricsAdapter(str(root)).get_structure()
     assert result['summary']['total_files'] >= 30
     assert I002._graph_cache == {} and D005._project_index == {}, 'the parent preloaded an index'
 
@@ -281,12 +281,12 @@ def test_the_text_footer_names_the_rule_and_the_rule_set(tmp_path, args):
 
 def test_the_field_is_renamed_in_every_stats_view(tmp_path):
     root = project(tmp_path)
-    directory = StatsAdapter(str(root)).get_structure()
-    single = StatsAdapter(str(root / 'pkg' / 'risky.py')).get_structure()
-    element = StatsAdapter(str(root)).get_element('pkg/risky.py')
+    directory = MetricsAdapter(str(root)).get_structure()
+    single = MetricsAdapter(str(root / 'pkg' / 'risky.py')).get_structure()
+    element = MetricsAdapter(str(root)).get_element('pkg/risky.py')
     for quality in (directory['files'][0]['quality'], single['files'][0]['quality'], element['quality']):
         assert 'local_check_issues' in quality and 'check_issues' not in quality
-    schema = json.dumps(StatsAdapter.get_schema())
+    schema = json.dumps(MetricsAdapter.get_schema())
     assert 'local_check_issues' in schema and '"check_issues"' not in schema
 
 
@@ -297,7 +297,7 @@ def config_project(tmp_path, text):
 
 
 def risky_score(root):
-    return stats_files(StatsAdapter(str(root)).get_structure())['pkg/risky.py']['quality']['score']
+    return stats_files(MetricsAdapter(str(root)).get_structure())['pkg/risky.py']['quality']['score']
 
 
 def test_penalty_config_key_is_renamed_and_the_old_spelling_still_applies_with_a_warning(tmp_path):
@@ -305,9 +305,9 @@ def test_penalty_config_key_is_renamed_and_the_old_spelling_still_applies_with_a
     new_root = config_project(tmp_path / 'new', 'penalties:\n  local_check_issues:\n    high: 0\n    max: 0\n')
     old_root = config_project(tmp_path / 'old', 'penalties:\n  check_issues:\n    high: 0\n    max: 0\n')
     assert risky_score(new_root) > base, 'the new key is read'
-    assert 'deprecated_config_key' not in warning_types(StatsAdapter(str(new_root)).get_structure())
+    assert 'deprecated_config_key' not in warning_types(MetricsAdapter(str(new_root)).get_structure())
     assert risky_score(old_root) == risky_score(new_root), 'the old key is an alias'
-    old = StatsAdapter(str(old_root)).get_structure()
+    old = MetricsAdapter(str(old_root)).get_structure()
     note, = [w for w in old['meta']['warnings'] if w.get('type') == 'deprecated_config_key']
     assert 'check_issues' in note['message'] and 'local_check_issues' in note['message']
 
@@ -321,8 +321,8 @@ def test_the_new_penalty_key_wins_over_the_old_one(tmp_path):
 def test_a_filter_on_the_old_field_name_is_honoured_and_says_it_is_deprecated(tmp_path):
     """A renamed field must not turn an existing filter into a silent empty answer."""
     root = project(tmp_path)
-    new = StatsAdapter(str(root), 'quality.local_check_issues>0').get_structure()
-    old = StatsAdapter(str(root), 'quality.check_issues>0').get_structure()
+    new = MetricsAdapter(str(root), 'quality.local_check_issues>0').get_structure()
+    old = MetricsAdapter(str(root), 'quality.check_issues>0').get_structure()
     assert [r['file'] for r in new['files']] == ['pkg/risky.py']
     assert [r['file'] for r in old['files']] == ['pkg/risky.py']
     assert 'deprecated_field' in warning_types(old)
@@ -334,7 +334,7 @@ def test_review_hotspot_rows_use_the_new_field(monkeypatch):
     from reveal.cli.commands.review import _run_hotspots
     row = {'files': [{'file': 'q60.py', 'quality': {'score': 60.0, 'local_check_issues': 4},
                       'complexity': {'average': 31, 'max': 31, 'min': 31}}]}
-    with patch('reveal.adapters.stats.adapter.StatsAdapter') as adapter:
+    with patch('reveal.adapters.stats.adapter.MetricsAdapter') as adapter:
         adapter.return_value.get_structure.return_value = row
         (found,) = _run_hotspots(None, files=[Path('a.py')])
     assert found['local_check_issues'] == 4 and 'check_issues' not in found
@@ -428,7 +428,7 @@ def test_a_plugin_rule_counts_only_when_it_declares_a_file_scope_and_the_count_l
     monkeypatch.setattr(RuleRegistry, '_rules_by_code',
                         {**RuleRegistry._rules_by_code, 'X8851': declared, 'X8852': undeclared})
     root = project(tmp_path)
-    result = StatsAdapter(str(root)).get_structure()
+    result = MetricsAdapter(str(root)).get_structure()
     ok = stats_files(result)['pkg/lit_c.py']['quality']
     # X8851 (HIGH) counts once per file; X8852 declares nothing, so it is not counted ...
     assert ok['local_check_issues'] == 1 and ok['score'] == 95.0

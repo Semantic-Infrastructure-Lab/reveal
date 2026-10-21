@@ -116,19 +116,19 @@ class TestCreateHotspotsParser(unittest.TestCase):
 
 
 class TestRunFileHotspots(unittest.TestCase):
-    """_run_file_hotspots: StatsAdapter mocked, composed via adapter.compose()."""
+    """_run_file_hotspots: MetricsAdapter mocked, composed via adapter.compose()."""
 
     def setUp(self):
         self.adapter = HotspotsAdapter('.')
 
-    @patch('reveal.adapters.stats.StatsAdapter.get_structure')
+    @patch('reveal.adapters.stats.MetricsAdapter.get_structure')
     def test_returns_hotspots_list(self, mock_gs):
         mock_gs.return_value = {'hotspots': [_file_hotspot('a.py', 60), _file_hotspot('b.py', 75)]}
         result = _run_file_hotspots(self.adapter, Path('.'), top=10)
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0]['file'], 'a.py')
 
-    @patch('reveal.adapters.stats.StatsAdapter.get_structure')
+    @patch('reveal.adapters.stats.MetricsAdapter.get_structure')
     def test_stats_cut_is_restated_as_file_hotspots(self, mock_gs):
         """BACK-1543: stats cuts to ?top=N and records it; this report shows that list
         as file_hotspots, raised by its own ?top=N. A second [:top] here hid the total."""
@@ -141,18 +141,18 @@ class TestRunFileHotspots(unittest.TestCase):
         self.assertEqual((cut['field'], cut['shown'], cut['total']), ('file_hotspots', 5, 20))
         self.assertIn('raise ?top=N', cut['message'])
 
-    @patch('reveal.adapters.stats.StatsAdapter.get_structure')
+    @patch('reveal.adapters.stats.MetricsAdapter.get_structure')
     def test_missing_hotspots_key_returns_empty(self, mock_gs):
         mock_gs.return_value = {'other': []}
         result = _run_file_hotspots(self.adapter, Path('.'), top=10)
         self.assertEqual(result, [])
 
-    @patch('reveal.adapters.stats.StatsAdapter.get_structure', side_effect=Exception("boom"))
+    @patch('reveal.adapters.stats.MetricsAdapter.get_structure', side_effect=Exception("boom"))
     def test_exception_returns_empty(self, _mock):
         result = _run_file_hotspots(self.adapter, Path('.'), top=10)
         self.assertEqual(result, [])
 
-    @patch('reveal.adapters.stats.StatsAdapter.get_structure', side_effect=Exception("boom"))
+    @patch('reveal.adapters.stats.MetricsAdapter.get_structure', side_effect=Exception("boom"))
     def test_exception_records_attributed_error(self, _mock):
         """BACK-984: a crashed sub-scan must not be silently indistinguishable
         from a clean empty result — it records an attributed error."""
@@ -168,7 +168,7 @@ class TestGetStructureFalsyDefaults(unittest.TestCase):
     replaced by the adapter's default."""
 
     @patch('reveal.adapters.ast.AstAdapter.get_structure')
-    @patch('reveal.adapters.stats.StatsAdapter.get_structure')
+    @patch('reveal.adapters.stats.MetricsAdapter.get_structure')
     def test_top_zero_means_no_cap(self, mock_stats, mock_ast):
         # top=0 is still honoured rather than replaced by the default 10 -- it
         # means "no cap" (BACK-1505; it used to mean "none", then print a clean verdict).
@@ -179,7 +179,7 @@ class TestGetStructureFalsyDefaults(unittest.TestCase):
         self.assertEqual(len(result['file_hotspots']), 1)
         self.assertEqual(len(result['function_hotspots']), 1)
 
-    @patch('reveal.adapters.stats.StatsAdapter.get_structure', return_value={'hotspots': []})
+    @patch('reveal.adapters.stats.MetricsAdapter.get_structure', return_value={'hotspots': []})
     @patch('reveal.adapters.ast.AstAdapter.__init__', return_value=None)
     @patch('reveal.adapters.ast.AstAdapter.get_structure', return_value={'results': []})
     def test_min_complexity_zero_is_respected(self, _mock_gs, mock_init, _mock_stats):
@@ -635,7 +635,7 @@ class TestRunHotspotsTestCoverage(unittest.TestCase):
 class TestHotspotsTopAppliesToFileHotspots:
     """BACK-1179 end-to-end: hotspots://?top=N reached function_hotspots
     (via AstAdapter's own limit) but silently had no effect on
-    file_hotspots — StatsAdapter's identify_hotspots() hardcoded a top-10
+    file_hotspots — MetricsAdapter's identify_hotspots() hardcoded a top-10
     cap regardless of what HotspotsAdapter asked for."""
 
     # 16 levels of nesting -> deep_nesting flags well past identify_hotspots'
@@ -696,7 +696,7 @@ class TestProvenanceForFile(unittest.TestCase):
     classification so a reader can discount vendored/generated/test noise
     in place. Relativizes first since function_hotspots' 'file' arrives
     absolute (from AstAdapter) while file_hotspots' arrives relative (from
-    StatsAdapter) -- both must classify correctly either way."""
+    MetricsAdapter) -- both must classify correctly either way."""
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -732,7 +732,7 @@ class TestProvenanceForFile(unittest.TestCase):
 class TestJsonFormatDoesNotLeakAbsolutePaths(unittest.TestCase):
     """BACK-1213: function_hotspots[].file came straight from AstAdapter's
     raw compose() output and was never relativized, unlike file_hotspots[]
-    (from StatsAdapter, already relative) -- same confidentiality gap as
+    (from MetricsAdapter, already relative) -- same confidentiality gap as
     BACK-1212/BACK-1194. Anchors fixture paths under a REAL tmp dir so
     relativization can actually resolve (a synthetic root would make
     relative_to() fail silently and mask the bug either way)."""

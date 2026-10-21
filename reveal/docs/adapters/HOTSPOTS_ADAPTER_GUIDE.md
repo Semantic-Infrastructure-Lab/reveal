@@ -78,7 +78,7 @@ rankings empty while retaining the statistics coverage scan.
 File quality counts file-local check rules only, the same count `stats://` and `overview`
 print; `meta.issue_count` and the text footer name the rule set, and cross-file rules run under
 `reveal check`. A scan cap on a cross-file rule neither changes a score nor fails the scan
-([what the issue count counts](STATS_ADAPTER_GUIDE.md#what-the-issue-count-counts)).
+([what the issue count counts](METRICS_ADAPTER_GUIDE.md#what-the-issue-count-counts)).
 
 Empty rankings say that no hotspots were found in the requested analyzed
 population. This is a scoped observation rather than an overall quality verdict.

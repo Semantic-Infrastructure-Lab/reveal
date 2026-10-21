@@ -7,7 +7,7 @@ import pytest
 from conftest import _run_reveal_direct as run
 from reveal.adapters.hotspots import HotspotsAdapter
 from reveal.adapters.stats import metrics
-from reveal.adapters.stats.adapter import StatsAdapter
+from reveal.adapters.stats.adapter import MetricsAdapter
 from reveal.rendering.adapters.hotspots import HotspotsRenderer, _render_function_hotspots
 
 
@@ -24,7 +24,7 @@ def critical_file(tmp_path):
 
 
 def test_real_single_file_hotspots_retains_quality_ranking(critical_file):
-    stats = StatsAdapter(str(critical_file)).get_structure(hotspots=True)
+    stats = MetricsAdapter(str(critical_file)).get_structure(hotspots=True)
     assert stats['summary']['avg_quality_score'] < 70  # real producer prerequisite
     assert len(stats['hotspots']) == 1
     assert stats['hotspots'][0]['quality_score'] == stats['summary']['avg_quality_score']
@@ -39,7 +39,7 @@ def test_check_rule_failure_disclosed_for_each_stats_resource(tmp_path, single):
     file.write_text(function('small', 0), encoding='utf-8')
     with patch.object(metrics, '_count_local_check_issues', return_value=(
             {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}, ['E501'])):
-        result = StatsAdapter(str(file if single else tmp_path)).get_structure(hotspots=True)
+        result = MetricsAdapter(str(file if single else tmp_path)).get_structure(hotspots=True)
     assert result['files'][0]['check_rules_failed'] == ['E501']
     warning, = [w for w in result.get('meta', {}).get('warnings', [])
                  if w.get('type') == 'check_rules_failed']
@@ -171,7 +171,7 @@ def test_empty_rankings_only_claim_requested_analyzed_population(tmp_path, kind)
 def test_reused_adapter_clears_failure_and_finding_state(tmp_path):
     (tmp_path/'source.py').write_text(function('small', 0), encoding='utf-8')
     adapter = HotspotsAdapter(str(tmp_path), 'files_only=true')
-    with patch.object(StatsAdapter, 'get_structure', side_effect=OSError('required stats unavailable')):
+    with patch.object(MetricsAdapter, 'get_structure', side_effect=OSError('required stats unavailable')):
         failed = adapter.get_structure()
     assert failed['meta']['errors']
     restored = adapter.get_structure()
@@ -188,20 +188,20 @@ def test_reused_adapter_clears_previous_adverse_file_evidence(controlled_rank):
 
 def test_optional_churn_warning_metadata_is_not_a_finding(tmp_path):
     (tmp_path/'source.py').write_text(function('small', 0), encoding='utf-8')
-    original = StatsAdapter.get_structure
+    original = MetricsAdapter.get_structure
     def observed(self, **kwargs):
         result = original(self, **kwargs)
         result.setdefault('meta', {}).setdefault('warnings', []).append(
             {'type': 'churn_unavailable', 'message': 'controlled optional churn unavailable'})
         return result
-    with patch.object(StatsAdapter, 'get_structure', observed):
+    with patch.object(MetricsAdapter, 'get_structure', observed):
         result = HotspotsAdapter(str(tmp_path), 'files_only=true').get_structure()
     assert any(w.get('type') == 'churn_unavailable' for w in result['meta']['warnings'])
     assert result['summary']['has_findings'] is False
 
 
 def test_single_file_without_hotspots_retains_existing_summary_shape(critical_file):
-    result = StatsAdapter(str(critical_file)).get_structure()
+    result = MetricsAdapter(str(critical_file)).get_structure()
     assert result['type'] == 'stats_file'
     assert result['summary']['total_files'] == 1
     assert 'hotspots' not in result
@@ -227,8 +227,8 @@ def test_actual_optional_churn_warning_survives_stats_composition(tmp_path):
     def unavailable(self, stats):
         self._churn_disclosure = 'controlled optional churn unavailable'
         return None
-    with patch.object(StatsAdapter, '_compute_churn_counts', unavailable):
-        child = StatsAdapter(str(tmp_path)).get_structure(hotspots=True)
+    with patch.object(MetricsAdapter, '_compute_churn_counts', unavailable):
+        child = MetricsAdapter(str(tmp_path)).get_structure(hotspots=True)
         assert child['warnings'][0]['type'] == 'churn_unavailable'
         assert not any(w.get('type') == 'churn_unavailable'
                        for w in child.get('meta', {}).get('warnings', []))

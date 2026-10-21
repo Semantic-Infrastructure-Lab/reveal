@@ -9,7 +9,8 @@ already selects for its own purpose). This reuses BACK-1195's
 classify_path_provenance() and the stats walker find_analyzable_files()
 rather than building a new classifier or a new directory walk.
 
-The one owner of the classification and its report (classify:// answers from it).
+The one owner of the classification and its report (metrics://?view=provenance and the retired
+classify:// answer from it; stats/renderer.py renders it).
 No file is analyzed and no rule runs: paths, plus at most the first few lines of
 a file the path did not already classify.
 """
@@ -19,11 +20,10 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 from ...utils.path_utils import classify_path_provenance, is_vendor_dir, looks_vendored_by_banner, to_posix
 from ...utils.results import ResultBuilder
-from ...utils.warning_render import render_meta_warnings
 from .analysis import find_analyzable_files, get_file_display_path
 
 PROVENANCE_RESULT_TYPE = 'classify_report'
@@ -151,31 +151,10 @@ def provenance_report(path: Path, respect_gitignore: Optional[bool] = None) -> D
         },
     }
 
-    return ResultBuilder.create(
+    return cast(Dict[str, Any], ResultBuilder.create(
         result_type=PROVENANCE_RESULT_TYPE,
         source=str(path),
         data=data,
         warnings=[warning] if warning else None,
-    )
+    ))
 
-
-def render_provenance(result: Dict[str, Any]) -> None:
-    """Text rendering of a provenance report."""
-    rows = result.get('files', [])
-    summary = result.get('summary', {})
-    print(f"Provenance classification: {result.get('source', '')}")
-    print(f"{summary.get('total', len(rows))} files")
-    for label, count in summary.get('by_provenance', {}).items():
-        print(f"  {label}: {count}")
-    excluded = summary.get('excluded', 0)
-    if excluded:
-        # BACK-1241: the count above is not the full population -- make
-        # that visible in text mode too, not just JSON.
-        by_ext = summary.get('excluded_by_extension', {})
-        top = ', '.join(f"{ext} ({n})" for ext, n in list(by_ext.items())[:5])
-        more = f", +{len(by_ext) - 5} more extensions" if len(by_ext) > 5 else ''
-        print(f"\n⚠ {excluded} more file(s) not classified — no analyzer for: {top}{more}")
-    render_meta_warnings(result)
-    print()
-    for row in rows:
-        print(f"  {row['provenance']:>11}  {row['file']}")

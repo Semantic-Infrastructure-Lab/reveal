@@ -494,6 +494,25 @@ adapters:
         with any doc that has a real verbose: frontmatter key (adapter.py:282)'
       review: not-applicable
       via: []
+  metrics:
+    all:
+      via:
+      - declared
+    respect_gitignore:
+      via:
+      - declared
+    since:
+      via:
+      - declared
+    until:
+      review: unreviewed
+      via: []
+    verbose:
+      reason: 'stats:// renamed (BACK-2069), the same adapter class: CLI_QUERY_FLAGS declares only
+        respect_gitignore/all; get_structure''s summary_only already defaults to the fuller
+        (non-summarized) shape -- nothing left for verbose to add'
+      review: not-applicable
+      via: []
   mysql:
     all:
       review: unreviewed

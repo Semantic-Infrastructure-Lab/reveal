@@ -235,6 +235,23 @@ def test_the_hotspots_noun_prints_no_retirement_note(project):
 
 
 def test_an_unknown_metrics_view_is_rejected(project):
+    """A view metrics does not have fails the query instead of answering the default view.
+    Exit 1, a raised adapter error, as every legacy (undeclared) adapter's bad query is today."""
     result = run(f'metrics://{project}?view=everything', '--format', 'json')
-    assert result.returncode == 2, (result.returncode, result.stdout, result.stderr)
-    assert 'provenance' in result.stdout + result.stderr
+    assert result.returncode == 1, (result.returncode, result.stdout, result.stderr)
+    assert "view='everything' is not a metrics view; the one view is provenance" in result.stderr
+    assert json.loads(result.stdout)['error']
+
+
+@pytest.mark.parametrize('scheme', ['stats', 'metrics'])
+def test_health_answers_a_retired_uri_target_and_notes_it_once(tmp_path, scheme):
+    """`reveal health stats://DIR` reads its child's JSON: the child's retired_spelling warning is
+    a fact about the spelling, not an incomplete answer, so the target stays ok (it was 'partial',
+    exit 3, before health learned that). health prints the note itself, once; metrics:// none.
+    A clean tree: any other child warning (an excluded extension) makes health 'partial' anyway."""
+    _write(tmp_path / 'clean' / 'ok.py', 'value = 1\n')
+    result = run('health', f'{scheme}://{tmp_path / "clean"}', '--format', 'json')
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    assert json.loads(result.stdout)['results'][0]['outcome'] == 'ok'
+    notes = result.stderr.count('note: stats:// is deprecated; use metrics://<path> (the same answer).')
+    assert notes == (1 if scheme == 'stats' else 0)

@@ -67,7 +67,8 @@ Complete guides for all URI protocol adapters.
 | [REVEAL_ADAPTER_GUIDE.md](adapters/REVEAL_ADAPTER_GUIDE.md) | 536 | Reveal introspection (analyzers, adapters, config) |
 | [SQLITE_ADAPTER_GUIDE.md](adapters/SQLITE_ADAPTER_GUIDE.md) | 1161 | SQLite database introspection and schema analysis |
 | [SSL_ADAPTER_GUIDE.md](adapters/SSL_ADAPTER_GUIDE.md) | 1488 | SSL/TLS certificate analysis and validation |
-| [STATS_ADAPTER_GUIDE.md](adapters/STATS_ADAPTER_GUIDE.md) | 1874 | Codebase statistics and metrics collection |
+| [METRICS_ADAPTER_GUIDE.md](adapters/METRICS_ADAPTER_GUIDE.md) | 1995 | Codebase metrics, file hotspots and provenance (was stats:// and classify://) |
+| [STATS_ADAPTER_GUIDE.md](adapters/STATS_ADAPTER_GUIDE.md) | 31 | Retired: stats:// is metrics:// |
 | [SURFACE_ADAPTER_GUIDE.md](adapters/SURFACE_ADAPTER_GUIDE.md) | 89 | External boundary map: CLI args, HTTP routes, env vars, exported symbols |
 | [TRACE_ADAPTER_GUIDE.md](adapters/TRACE_ADAPTER_GUIDE.md) | 43 | Retired: trace:// and `reveal trace` map to `calls://?callees=&depth=&detail` |
 | [XLSX_ADAPTER_GUIDE.md](adapters/XLSX_ADAPTER_GUIDE.md) | 651 | Excel/XLSX file analysis and data extraction |

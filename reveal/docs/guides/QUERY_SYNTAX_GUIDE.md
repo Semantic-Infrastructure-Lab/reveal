@@ -25,7 +25,7 @@ reveal 'markdown://docs/?status=draft&priority=high'
 reveal 'git://.?type=history&author=John&sort=-date&limit=10'
 
 # Range queries
-reveal 'stats://src/?lines=100..500&sort=-complexity'
+reveal 'metrics://src/?lines=100..500&sort=-complexity'
 
 # Regex matching
 reveal 'git://.?message~=bug.*fix'
@@ -116,7 +116,7 @@ These 5 adapters support the unified query syntax:
 |---------|--------------|---------|
 | **json://** | Any JSON field | `json://data.json?age>25&role=admin` |
 | **markdown://** | Frontmatter fields | `markdown://docs/?status=draft&tags~=python` |
-| **stats://** | File metrics | `stats://src/?complexity>10&lines<100` |
+| **metrics://** | File metrics | `metrics://src/?complexity>10&lines<100` |
 | **ast://** | Code elements | `ast://src/?type=function&lines>50` |
 | **git://** | Commit metadata | `git://.?author=John&message~=fix` |
 
@@ -173,7 +173,7 @@ Control how results are sorted and paginated:
 reveal 'ast://src/?type=function&sort=-complexity&limit=10'
 
 # Files 50-100 lines, by complexity
-reveal 'stats://src/?lines=50..100&sort=-complexity'
+reveal 'metrics://src/?lines=50..100&sort=-complexity'
 
 # Recent commits by John, newest first
 reveal 'git://.?author=John&sort=-date&limit=20'
@@ -254,37 +254,37 @@ reveal 'markdown://docs/?!published'                # No published date
 
 ---
 
-### stats:// - File Metrics Filtering
+### metrics:// - File Metrics Filtering
 
 **Complexity filtering**:
 ```bash
-reveal 'stats://src/?complexity>10'                 # Complex files
-reveal 'stats://src/?complexity=5..15'              # Medium complexity
+reveal 'metrics://src/?complexity>10'                 # Complex files
+reveal 'metrics://src/?complexity=5..15'              # Medium complexity
 ```
 
 **Size filtering**:
 ```bash
-reveal 'stats://src/?lines>500'                     # Large files
-reveal 'stats://src/?lines<50'                      # Small files
-reveal 'stats://src/?lines=100..500'                # Medium files
+reveal 'metrics://src/?lines>500'                     # Large files
+reveal 'metrics://src/?lines<50'                      # Small files
+reveal 'metrics://src/?lines=100..500'                # Medium files
 ```
 
 **Quality filtering**:
 ```bash
-reveal 'stats://src/?quality_score<50'              # Low quality
-reveal 'stats://src/?functions>20'                  # Many functions
+reveal 'metrics://src/?quality_score<50'              # Low quality
+reveal 'metrics://src/?functions>20'                  # Many functions
 ```
 
 **Hotspot analysis**:
 ```bash
 # 20 most complex files
-reveal 'stats://src/?sort=-complexity&limit=20'
+reveal 'metrics://src/?sort=-complexity&limit=20'
 
 # Large, complex files (refactoring candidates)
-reveal 'stats://src/?lines>200&complexity>10&sort=-complexity'
+reveal 'metrics://src/?lines>200&complexity>10&sort=-complexity'
 
 # Small but complex (needs splitting)
-reveal 'stats://src/?lines<100&complexity>15'
+reveal 'metrics://src/?lines<100&complexity>15'
 ```
 
 ---
@@ -468,7 +468,7 @@ reveal 'json://data.json?role=admin&age>30'
 reveal 'markdown://docs/?tags~=python&priority>=5&status=draft'
 
 # Stats: Large, complex files
-reveal 'stats://src/?lines>200&complexity>10'
+reveal 'metrics://src/?lines>200&complexity>10'
 
 # Git: John's bug fixes this year
 reveal 'git://.?author=John&message~=bug&date>2026-01-01'
@@ -492,16 +492,16 @@ Start broad, narrow down:
 
 ```bash
 # 1. See all files
-reveal 'stats://src/'
+reveal 'metrics://src/'
 
 # 2. Filter to large files
-reveal 'stats://src/?lines>100'
+reveal 'metrics://src/?lines>100'
 
 # 3. Add complexity filter
-reveal 'stats://src/?lines>100&complexity>10'
+reveal 'metrics://src/?lines>100&complexity>10'
 
 # 4. Sort and limit
-reveal 'stats://src/?lines>100&complexity>10&sort=-complexity&limit=10'
+reveal 'metrics://src/?lines>100&complexity>10&sort=-complexity&limit=10'
 ```
 
 ---
@@ -515,13 +515,13 @@ Find worst/best items:
 reveal 'ast://src/?type=function&sort=-complexity&limit=10'
 
 # 20 largest files
-reveal 'stats://src/?sort=-lines&limit=20'
+reveal 'metrics://src/?sort=-lines&limit=20'
 
 # Most active committers (recent)
 reveal 'git://.?sort=-date&limit=50' | jq '.items | group_by(.author) | map({author: .[0].author, count: length}) | sort_by(-.count)'
 
 # Worst quality files
-reveal 'stats://src/?sort=quality_score&limit=10'
+reveal 'metrics://src/?sort=quality_score&limit=10'
 ```
 
 ---
@@ -532,7 +532,7 @@ Filter by range, sort within range:
 
 ```bash
 # Medium-sized files by complexity
-reveal 'stats://src/?lines=100..500&sort=-complexity'
+reveal 'metrics://src/?lines=100..500&sort=-complexity'
 
 # Functions 20-50 lines, most complex first
 reveal 'ast://src/?lines=20..50&sort=-complexity'
@@ -569,7 +569,7 @@ Use regex for OR logic:
 reveal 'git://.?message~=(bug|feat)'
 
 # Python or JavaScript files
-reveal 'stats://src/?path~=\.(py|js)$'
+reveal 'metrics://src/?path~=\.(py|js)$'
 
 # Test or spec files
 reveal 'ast://src/?name~=(test_|spec_)'
@@ -588,7 +588,7 @@ The `compare_values()` function accepts options to configure behavior per adapte
 |---------|---------------|----------------|------------------|---------|
 | **json://** | ✅ Any | ❌ No | ✅ Yes | ✅ Yes |
 | **markdown://** | ✅ Any | ❌ No | ✅ Yes | ✅ Yes |
-| **stats://** | ❌ No | ❌ No | ✅ Yes | ❌ No |
+| **metrics://** | ❌ No | ❌ No | ✅ Yes | ❌ No |
 | **ast://** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
 | **git://** | ❌ No | ❌ No | ✅ Yes | ✅ Yes |
 
@@ -606,10 +606,10 @@ The `compare_values()` function accepts options to configure behavior per adapte
 
 ```bash
 # Refactoring candidates (large + complex)
-reveal 'stats://src/?lines>200&complexity>10&sort=-complexity'
+reveal 'metrics://src/?lines>200&complexity>10&sort=-complexity'
 
 # Technical debt hotspots
-reveal 'stats://src/?quality_score<50&sort=quality_score&limit=20'
+reveal 'metrics://src/?quality_score<50&sort=quality_score&limit=20'
 
 # Overly complex small functions
 reveal 'ast://src/?type=function&lines<50&complexity>10'
@@ -691,13 +691,13 @@ reveal json://data.json?age>25        # ❌ Shell may break this
 
 ```bash
 # 1. See structure
-reveal 'stats://src/'
+reveal 'metrics://src/'
 
 # 2. Filter
-reveal 'stats://src/?complexity>10'
+reveal 'metrics://src/?complexity>10'
 
 # 3. Sort and limit
-reveal 'stats://src/?complexity>10&sort=-complexity&limit=10'
+reveal 'metrics://src/?complexity>10&sort=-complexity&limit=10'
 ```
 
 ---
@@ -706,10 +706,10 @@ reveal 'stats://src/?complexity>10&sort=-complexity&limit=10'
 
 ```bash
 # Good: Specific, actionable query
-reveal 'stats://src/?lines>200&complexity>10&sort=-complexity&limit=20'
+reveal 'metrics://src/?lines>200&complexity>10&sort=-complexity&limit=20'
 
 # Less useful: Too broad
-reveal 'stats://src/?lines>100'
+reveal 'metrics://src/?lines>100'
 ```
 
 ---

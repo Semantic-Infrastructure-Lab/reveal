@@ -9,7 +9,7 @@ from conftest import _run_reveal_direct as run
 from reveal.adapters.git import GitAdapter
 from reveal.adapters.imports import ImportsAdapter, _lost_extraction
 from reveal.adapters.overview import OverviewAdapter, _relativize_paths, _run_git_log, _run_imports_analysis
-from reveal.adapters.stats import StatsAdapter
+from reveal.adapters.stats import MetricsAdapter
 from reveal.errors import NotApplicableError
 from reveal.rendering.adapters.overview import _render_quality_pulse
 from reveal.utils.path_utils import to_posix
@@ -149,7 +149,7 @@ def test_raw_optional_churn_warning_is_folded_once_and_visible(project):
     def unavailable(self, stats):
         self._churn_disclosure = 'exact optional churn unavailable'
         return None
-    with patch.object(StatsAdapter, '_compute_churn_counts', unavailable):
+    with patch.object(MetricsAdapter, '_compute_churn_counts', unavailable):
         result = OverviewAdapter(str(project), 'no_git=true').get_structure()
         cli = run('overview', str(project), '--no-git')
     assert result['stats']['warnings'][0]['type'] == 'churn_unavailable'

@@ -60,6 +60,7 @@ PROBES = {
     ('git', 'since'): ('git://{tree}', '2099-01-01'),
     ('git', 'until'): ('git://{tree}', '1970-01-02'),
     ('stats', 'respect_gitignore'): ('stats://{tree}', False),
+    ('metrics', 'respect_gitignore'): ('metrics://{tree}', False),
     ('overview', 'respect_gitignore'): ('overview://{tree}', False),
     # BACK-1379: adapters whose --all now lifts a real default cap.
     ('ast', 'all'): ('ast://{pkg}', True),
@@ -67,6 +68,7 @@ PROBES = {
     ('patches', 'all'): ('patches://{tests}', True),
     ('testability', 'all'): ('testability://{pkg}', True),
     ('stats', 'all'): ('stats://{pkg}?hotspots=true', True),
+    ('metrics', 'all'): ('metrics://{pkg}?hotspots=true', True),
     ('architecture', 'all'): ('architecture://{pkg}', True),
     ('deps', 'all'): ('deps://{pkg}', True),
     ('git', 'all'): ('git://{tree}?type=log', True),
@@ -106,6 +108,7 @@ PROBES = {
     # CODEX_HOME/CODEX_DB (see tests/adapters/test_codex_adapter.py), which a
     # (uri, value) PROBES tuple can't express.
     ('stats', 'since'): ('stats://{churn_tree}?hotspots=true', '2099-01-01'),
+    ('metrics', 'since'): ('metrics://{churn_tree}?hotspots=true', '2099-01-01'),
 }
 
 

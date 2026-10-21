@@ -672,7 +672,7 @@ class XlsxAdapter(ResourceAdapter):
             'try_now': _HELP_TRY_NOW,
             'workflows': _HELP_WORKFLOWS,
             'output_formats': ['text', 'json', 'csv'],
-            'see_also': ['stats://']
+            'see_also': ['metrics://']
         }
 
     def __init__(self, resource: str, query: Optional[str] = None):

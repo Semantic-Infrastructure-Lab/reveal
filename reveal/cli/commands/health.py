@@ -143,9 +143,14 @@ def run_health(args: Namespace) -> None:
     results = []
     checked = []
 
+    from ..invocation import retirement_note, uri_retirement_keys
     if any(_is_code_target(t) for t in targets):
-        from ..invocation import retirement_note
         retirement_note('target:health.code')
+    # A retired URI spelling (stats://, BACK-2069) is noted here, where the target is read; the
+    # child that answers it says so in its own meta, which is not a fact about the target.
+    for target in targets:
+        for key in uri_retirement_keys(target):
+            retirement_note(key)
 
     for target in targets:
         try:
@@ -365,6 +370,7 @@ def _check_uri(scheme: str, uri: str, args: Namespace) -> HealthResult:
         'ssl': ['--check', '--advanced'],
         'mysql': ['--check', '--advanced'],
         'domain': ['--check'],
+        'metrics': [],
         'stats': [],
     }
     flags = _URI_FLAGS.get(scheme, [])
@@ -407,6 +413,13 @@ def _failing_check_result(scheme: str, output: str) -> Optional[HealthResult]:
                         'ok', verdict='finding')
 
 
+def _answer_warnings(meta: dict) -> list:
+    """The child's warnings about its answer. A retired spelling (stats://) is noted by run_health and
+    says nothing about the answer's completeness, so its ``retired_spelling`` entry is not one."""
+    return [w for w in meta.get('warnings') or []
+            if not (isinstance(w, dict) and w.get('code') == 'retired_spelling')]
+
+
 def _completed_uri_result(scheme: str, returncode: int, output: str) -> HealthResult:
     """Judge a child that exited 0 or 1 by its parsed answer; ValueError/TypeError mean malformed."""
     import json
@@ -425,7 +438,7 @@ def _completed_uri_result(scheme: str, returncode: int, output: str) -> HealthRe
     if type(reported) is int and reported >= 2:
         # The answer itself says it failed, whatever the process exit code was.
         return HealthResult(2, f"{scheme}: critical failure (reported exit {reported})", 'failed')
-    if meta.get('errors') or meta.get('warnings') or data.get('warnings'):
+    if meta.get('errors') or _answer_warnings(meta) or data.get('warnings'):
         return HealthResult(1, f"{scheme}: incomplete or warning result", 'partial')
     if returncode:
         # A completed answer whose findings set the exit code is not partial.
