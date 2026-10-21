@@ -168,6 +168,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
                 consume(_invalid_answer(adapter, name, path, str(exc), args, FailureCause.ANALYSIS, result_type=expected_type))
                 return
             scope_path = _scope_path(adapter, path)
+            expected_type = _result_type_at(adapter, expected_type, source, scope_path)
             try:
                 root, excludes = dispatch_scope(scope_path, peek(args, 'exclude'))
             except OSError as exc:
@@ -182,6 +183,14 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
     finally:
         if ledger is not None and ledger.complete:
             ledger.report(name)
+
+
+def _result_type_at(adapter_class, expected_type: str, params: Any, scope_path: str) -> str:
+    """The answer type once the path is known: an adapter whose type depends on what the path is
+    (metrics answers a file with ``stats_file`` and a directory with ``stats_summary``) declares
+    ``result_type_at(params, path)``; ``result_type_for(params)`` cannot see the path."""
+    refine = getattr(adapter_class, 'result_type_at', None)
+    return expected_type if refine is None else refine(params, scope_path)
 
 
 def _scope_path(adapter_class, path: str) -> str:
