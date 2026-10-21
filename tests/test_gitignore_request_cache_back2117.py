@@ -166,3 +166,26 @@ def test_entry_older_than_the_ttl_is_reloaded_by_the_next_request(repo, monkeypa
     monkeypatch.setattr(gitignore.time, 'monotonic', lambda: real() + gitignore._CACHE_TTL_S + 1)
     _ask(repo, 'a.tmp')
     assert len(loads) == 2
+
+
+def test_an_entry_does_not_expire_inside_one_request(repo, monkeypatch):
+    """One request sees one answer: the TTL is checked on entry, not between two paths."""
+    _write(repo, '.gitignore', '*.tmp\n')
+    _write(repo, 'a.tmp', 'x\n')
+    loads = _count_loads(monkeypatch)
+    real = gitignore.time.monotonic
+    with host_request():
+        flt = GitIgnoreFilter(repo)
+        assert flt.ignored(repo / 'a.tmp') is True
+        monkeypatch.setattr(gitignore.time, 'monotonic', lambda: real() + gitignore._CACHE_TTL_S + 1)
+        assert flt.ignored(repo / 'a.tmp') is True
+    assert len(loads) == 1
+
+
+def test_a_request_forgets_the_directory_to_root_map(repo):
+    """The map is emptied at every request, so it is bounded by one request's directories."""
+    _write(repo, 'sub/a.py', 'x\n')
+    _ask(repo, 'sub/a.py')
+    assert gitignore._ROOT_CACHE
+    with host_request():
+        assert not gitignore._ROOT_CACHE

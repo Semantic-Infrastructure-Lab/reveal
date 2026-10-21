@@ -32,6 +32,18 @@ nested repository the outer one ignores is pruned as a whole, as git does.
 Results are cached per repository root for ``_CACHE_TTL_S`` seconds: one
 ``ls-files`` per repo per CLI run, while a long-lived host (the MCP server)
 still sees files created since.
+
+A host request (``request_cache.host_request``) revalidates on entry (BACK-2117): the
+directory-to-root map is forgotten (a ``git init`` between requests), and a repository's
+entry survives only while it is younger than the TTL and a stat stamp of the files that can
+change the answer is unchanged: the root and every known nested ``.gitignore``,
+``info/exclude``, the index (tracked files are never ignored), the repository config and the
+global config files, and the excludes file. Inside a request an entry is not expired, so one
+request sees one answer. Not stamped, so bounded by the TTL: a new ignored file, a
+``.gitignore`` created after the entry was built, a system-level ``/etc/gitconfig`` edit.
+Memory: one entry per repository touched (the ignored untracked paths, collapsed to
+directories, plus a stamp of about ten ``(path, mtime, size)`` tuples and the nested
+``.gitignore`` files); the directory map is emptied at every request.
 """
 
 import functools
@@ -43,6 +55,8 @@ import threading
 import time
 from contextlib import contextmanager
 from typing import Dict, List, Optional, Tuple, Union
+
+from .request_cache import in_host_request, register_request_cache
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +73,16 @@ PathLike = Union[str, 'os.PathLike[str]']
 class _RepoIgnores:
     """The ignored untracked paths of one work tree, relative to its root."""
 
-    __slots__ = ('files', 'dirs', 'loaded_at')
+    __slots__ = ('files', 'dirs', 'loaded_at', 'stamp')
 
     def __init__(self, files: frozenset, dirs: frozenset, loaded_at: float):
         self.files = files
         self.dirs = dirs
         self.loaded_at = loaded_at
+        # (path, mtime_ns, size) of the files that decide the answer, taken BEFORE the
+        # listing so an edit that races the load shows as a change; None when git could not
+        # name them, which makes the entry live for one request only.
+        self.stamp: Optional[Tuple[Tuple[str, Optional[Tuple[int, int]]], ...]] = None
 
     def ignored(self, rel: str, is_dir: bool) -> bool:
         if (rel in self.dirs) if is_dir else (rel in self.files):
@@ -145,16 +163,85 @@ def _load_repo(root: str) -> Optional[_RepoIgnores]:
     return _RepoIgnores(frozenset(files), frozenset(dirs), time.monotonic())
 
 
+def _stamp_paths(root: str) -> Optional[List[str]]:
+    """The files whose content can change what git ignores in *root*; None when git can't say."""
+    where = _run_git(root, 'rev-parse', '--git-path', 'info/exclude', '--git-path', 'index',
+                     '--git-path', 'config')
+    if where is None or where.returncode != 0:
+        return None
+    paths = [os.path.join(root, line) for line in os.fsdecode(where.stdout).splitlines() if line]
+    # Nested ignore files at the time of the load (tracked, or untracked and not ignored).
+    nested = _run_git(root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard',
+                      '--', ':(glob)**/.gitignore')
+    if nested is None or nested.returncode != 0:
+        return None
+    paths.extend(os.path.join(root, os.fsdecode(raw)) for raw in nested.stdout.split(b'\0') if raw)
+    excludes = _run_git(root, 'config', '--path', '--get', 'core.excludesFile')
+    if excludes is None or excludes.returncode not in (0, 1):  # 1: the key is unset
+        return None
+    configured = os.fsdecode(excludes.stdout).strip()
+    if configured:
+        paths.append(os.path.join(root, configured))
+    else:  # git's default global excludes file
+        base = os.environ.get('XDG_CONFIG_HOME') or os.path.join(os.path.expanduser('~'), '.config')
+        paths.append(os.path.join(base, 'git', 'ignore'))
+    home = os.path.expanduser('~')
+    global_config = os.environ.get('GIT_CONFIG_GLOBAL')
+    paths.extend([global_config] if global_config else [
+        os.path.join(home, '.gitconfig'),
+        os.path.join(os.environ.get('XDG_CONFIG_HOME') or os.path.join(home, '.config'), 'git', 'config')])
+    paths.append(os.path.join(root, '.gitignore'))
+    return list(dict.fromkeys(paths))
+
+
+def _stat_stamp(paths) -> Tuple[Tuple[str, Optional[Tuple[int, int]]], ...]:
+    """(path, (mtime_ns, size)) per path; (path, None) for a path that does not exist."""
+    stamp = []
+    for path in paths:
+        try:
+            st = os.stat(path)
+            stamp.append((path, (st.st_mtime_ns, st.st_size)))
+        except OSError:
+            stamp.append((path, None))
+    return tuple(stamp)
+
+
 def _repo_ignores(root: str) -> Optional[_RepoIgnores]:
     now = time.monotonic()
+    in_request = in_host_request()
     with _LOCK:
         hit = _REPO_CACHE.get(root)
-        if hit is not None and now - hit[0] < _CACHE_TTL_S:
+        # A host request revalidated its entries on entry (_begin_request): inside it an
+        # entry does not expire, so one request sees one answer.
+        if hit is not None and (in_request or now - hit[0] < _CACHE_TTL_S):
             return hit[1]
+    paths = _stamp_paths(root)
+    stamp = _stat_stamp(paths) if paths is not None else None
     loaded = _load_repo(root)
+    if loaded is not None:
+        loaded.stamp = stamp
     with _LOCK:
         _REPO_CACHE[root] = (now, loaded)
     return loaded
+
+
+def _begin_request() -> None:
+    """Host request entry: forget the directory map, keep only entries that are provably current.
+
+    An entry is kept while it is younger than the TTL and its stamp is unchanged. A failed
+    listing (None) and an entry git could not stamp are dropped: they are retried.
+    """
+    now = time.monotonic()
+    with _LOCK:
+        _ROOT_CACHE.clear()
+        for root, (loaded_at, repo) in tuple(_REPO_CACHE.items()):
+            keep = (repo is not None and repo.stamp is not None and now - loaded_at < _CACHE_TTL_S
+                    and _stat_stamp([path for path, _ in repo.stamp]) == repo.stamp)
+            if not keep:
+                del _REPO_CACHE[root]
+
+
+register_request_cache('gitignore', _begin_request)
 
 
 # --------------------------------------------------------------------------
