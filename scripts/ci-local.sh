@@ -197,7 +197,9 @@ STEP_NAME=""; STEP_START=$SECONDS; STEP_TIMES=()
 _close_step() { [[ -n "$STEP_NAME" ]] && STEP_TIMES+=("$((SECONDS - STEP_START))"$'\t'"$STEP_NAME"); return 0; }
 step() { _close_step; STEP_NAME="$1"; STEP_START=$SECONDS; printf '\n== %s ==\n' "$1" | tee -a "$LOG"; }
 _timing_report() {
-    local rc=$?; _close_step; STEP_NAME=""
+    local rc=$? pid; _close_step; STEP_NAME=""
+    for pid in ${BG_PIDS[@]+"${BG_PIDS[@]}"}; do kill "$pid" 2>/dev/null || true; done
+    rm -f "$LOG".bg*
     local row stamp; stamp="$(date -Iseconds)"
     { printf '\n== Step timings (s) ==\n'
       for row in "${STEP_TIMES[@]}"; do printf '%6ss  %s\n' "${row%%$'\t'*}" "${row#*$'\t'}"; done
@@ -208,6 +210,31 @@ _timing_report() {
 }
 trap _timing_report EXIT
 fail() { printf 'FAIL: %s (log: %s)\n' "$1" "$LOG" >&2; exit 1; }
+
+# The slow ratchets (~60 s together) run beside the suite instead of before it (BACK-2144).
+# Each gets its own log and clock; bg_wait merges the logs and fails if any step failed.
+BG_PIDS=(); BG_NAMES=(); BG_LOGS=()
+bg_step() {
+    local name="$1" log="$LOG.bg${#BG_PIDS[@]}"; shift
+    printf '\n== %s (in parallel) ==\n' "$name" | tee -a "$LOG"
+    ( start=$SECONDS; rc=0; "$@" || rc=$?; echo "$((SECONDS - start))" >"$log.secs"; exit $rc ) >"$log" 2>&1 &
+    BG_PIDS+=("$!"); BG_NAMES+=("$name"); BG_LOGS+=("$log")
+}
+bg_wait() {
+    local i rc failed=""
+    for i in "${!BG_PIDS[@]}"; do
+        rc=0; wait "${BG_PIDS[$i]}" || rc=$?
+        { printf '\n== %s (parallel, exit %s) ==\n' "${BG_NAMES[$i]}" "$rc"; cat "${BG_LOGS[$i]}"; } >>"$LOG"
+        STEP_TIMES+=("$(cat "${BG_LOGS[$i]}.secs" 2>/dev/null || echo '?')"$'\t'"${BG_NAMES[$i]} (parallel)")
+        if [[ $rc -ne 0 ]]; then
+            tail -12 "${BG_LOGS[$i]}" >&2; failed+=" ${BG_NAMES[$i]};"
+        else
+            tail -3 "${BG_LOGS[$i]}"
+        fi
+    done
+    BG_PIDS=()
+    [[ -z "$failed" ]] || fail "parallel step(s) failed:$failed"
+}
 
 [[ $FRESH -eq 1 ]] && rm -rf "$VENV"
 # A venv whose interpreter cannot import pip is broken (e.g. a half-created one); rebuild it.
@@ -274,26 +301,25 @@ if [[ $PRIMARY -eq 1 ]]; then
     fi
 
     # Bare --check, not --select V: also runs the general rules (C901, D001, E501, ...) over reveal's own source.
-    step "Reveal self-validation (reveal:// --check)"
-    "$VENV/bin/reveal" reveal:// --check >>"$LOG" 2>&1 || { tail -12 "$LOG"; fail "reveal:// --check self-validation"; }
+    bg_step "Reveal self-validation (reveal:// --check)" "$VENV/bin/reveal" reveal:// --check
 
     # The baseline is keyed to the maintainer mypy (system python3, as
     # pre-release-check.sh runs it) -- not the venv's eagerly-upgraded one, whose
     # counts drift. mypy is in neither test.yml nor the test run, so without this
     # step the ratchet only turns red at release time (BACK-1486).
-    step "mypy ratchet (system python3)"
-    if python3 -c 'import mypy' 2>/dev/null; then
-        python3 scripts/check_mypy_baseline.py 2>&1 | tee -a "$LOG" | tail -20
-        [[ ${PIPESTATUS[0]} -eq 0 ]] || fail "mypy ratchet (fix the new errors, or --update after improvements)"
-    else
-        echo "system python3 has no mypy -- ratchet SKIPPED (release gate will still run it)" | tee -a "$LOG"
-    fi
+    _mypy_ratchet() {
+        if python3 -c 'import mypy' 2>/dev/null; then
+            python3 scripts/check_mypy_baseline.py \
+                || { echo "mypy ratchet: fix the new errors, or --update after improvements"; return 1; }
+        else
+            echo "system python3 has no mypy -- ratchet SKIPPED (release gate will still run it)"
+        fi
+    }
+    bg_step "mypy ratchet (system python3)" _mypy_ratchet
 
     # Runs only in pre-release-check.sh otherwise, so internal-docs references and
     # broken links slipped into shipped docs between releases (BACK-1474).
-    step "Doc hygiene ratchet"
-    "$PY" scripts/check_doc_hygiene.py --baseline .github/doc_hygiene_baseline.txt >>"$LOG" 2>&1 \
-        || { tail -12 "$LOG"; fail "doc hygiene regressed vs .github/doc_hygiene_baseline.txt"; }
+    bg_step "Doc hygiene ratchet" "$PY" scripts/check_doc_hygiene.py --baseline .github/doc_hygiene_baseline.txt
 
     # A warning, not a gate: a push should not wait on prose. pre-release-check.sh fails
     # on the same script, so the list only grows if it is ignored until release day.
@@ -316,13 +342,29 @@ if [[ $PRIMARY -eq 1 ]]; then
     [[ "$COUNT" -le "$BASELINE" ]] || fail "B006 count increased ($BASELINE -> $COUNT)"
 fi
 
-# The suite runs last: the lints and ratchets above fail in seconds, the suite takes minutes.
+# The suite runs last: the quick lints and ratchets above fail in seconds, the suite takes minutes.
+# CPU seconds (user+sys, xdist workers included) are logged beside wall time: they barely move
+# when other jobs share the machine, so they compare across runs where wall time cannot.
 if [[ $RUN_TESTS -eq 1 ]]; then
     step "Run tests (pytest ${PYTEST_TARGETS[*]})"
-    "$PY" -m pytest "${PYTEST_TARGETS[@]}" -q -p no:cacheprovider -n auto \
+    TIME_CMD=(); command -v /usr/bin/time >/dev/null 2>&1 && TIME_CMD=(/usr/bin/time -f '%U %S' -o "$LOG.cpu")
+    "${TIME_CMD[@]}" "$PY" -m pytest "${PYTEST_TARGETS[@]}" -q -p no:cacheprovider -n auto \
         --durations=0 --durations-min=0.5 >>"$LOG" 2>&1 \
         || { grep -E '^FAILED |^ERROR ' "$LOG" | head -30; fail "pytest"; }
     tail -1 "$LOG"
+    if [[ -s "$LOG.cpu" ]]; then
+        read -r CPU_USER CPU_SYS <"$LOG.cpu"
+        printf 'pytest CPU: %ss user + %ss sys\n' "$CPU_USER" "$CPU_SYS" | tee -a "$LOG"
+        printf '%s\t%s\t%s\t%s\t%s\n' "$(date -Iseconds)" "py$PY_VERSION${LP_VERSION:+-lp$LP_VERSION}" \
+            "$(awk -v u="$CPU_USER" -v s="$CPU_SYS" 'BEGIN{printf "%.0f", u+s}')" "pytest CPU seconds" 0 \
+            >>"$LOG_DIR/timings.tsv"
+        rm -f "$LOG.cpu"
+    fi
+fi
+
+if [[ ${#BG_PIDS[@]} -gt 0 ]]; then
+    step "Wait for parallel steps"
+    bg_wait
 fi
 
 printf '\nCI-parity run passed (python %s%s%s). Log: %s\n' "$PY_VERSION" \
