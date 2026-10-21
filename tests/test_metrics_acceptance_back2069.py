@@ -10,6 +10,9 @@ merge that quietly drops a field fails here (Phase 3 plan, step 5; preflight sec
 - the file-local issue count (``quality.local_check_issues``) and its printed rule set
   (``meta.issue_count`` and the text footer, BACK-1884);
 - the file hotspot ranking, which the ``hotspots`` noun's file section reads from the same owner.
+
+``metrics://`` is the new spelling of all three (D2); ``stats://`` and ``classify://`` are retired
+spellings that answer the same and print a replaced-by note until the cut (D5).
 """
 import json
 
@@ -69,14 +72,25 @@ def project(tmp_path):
 
 # The spellings that answer each question. Each is a function of the project directory.
 PROVENANCE_SPELLINGS = {
+    'metrics://?view=provenance': lambda d: [f'metrics://{d}?view=provenance'],
     'classify://': lambda d: [f'classify://{d}'],
 }
 METRICS_SPELLINGS = {
+    'metrics://': lambda d: [f'metrics://{d}'],
     'stats://': lambda d: [f'stats://{d}'],
 }
 HOTSPOT_SPELLINGS = {
+    'metrics://?hotspots=true': lambda d: [f'metrics://{d}?hotspots=true'],
+    'metrics:// --hotspots': lambda d: [f'metrics://{d}', '--hotspots'],
     'stats://?hotspots=true': lambda d: [f'stats://{d}?hotspots=true'],
     'stats:// --hotspots': lambda d: [f'stats://{d}', '--hotspots'],
+}
+# Each retired spelling, the note it prints, and the new spelling whose answer it must equal.
+RETIRED = {
+    'stats://': ('stats://', 'metrics://<path> (the same answer)',
+                 lambda d: [f'stats://{d}?hotspots=true'], lambda d: [f'metrics://{d}?hotspots=true']),
+    'classify://': ('classify://', 'metrics://<path>?view=provenance (the same answer)',
+                    lambda d: [f'classify://{d}'], lambda d: [f'metrics://{d}?view=provenance']),
 }
 
 
@@ -169,3 +183,58 @@ def test_file_hotspots_rank_the_same_files_the_hotspots_noun_shows(project, spel
     assert [(h['file'], h['hotspot_score'], h['quality_score']) for h in noun['file_hotspots']] == [
         (h['file'], h['hotspot_score'], h['quality_score']) for h in ranked]
     assert noun['meta']['issue_count']['rule'] == COUNTING_RULE
+
+
+def _answer(doc):
+    """The answer without the retirement fact and without the echoed source spelling."""
+    doc = dict(doc)
+    doc.pop('source', None)
+    meta = dict(doc.get('meta') or {})
+    warnings = [w for w in meta.get('warnings', []) if w.get('code') != 'retired_spelling']
+    if warnings:
+        meta['warnings'] = warnings
+    else:
+        meta.pop('warnings', None)
+    if meta:
+        doc['meta'] = meta
+    else:
+        doc.pop('meta', None)
+    if isinstance(doc.get('files'), list):
+        doc['files'] = sorted(doc['files'], key=lambda row: row['file'])
+    return doc
+
+
+@pytest.mark.parametrize('retired', RETIRED)
+def test_a_retired_spelling_prints_its_replacement_and_answers_like_metrics(project, retired):
+    old, replacement, old_argv, new_argv = RETIRED[retired]
+    note = f'note: {old} is deprecated; use {replacement}.'
+
+    as_old = run(*old_argv(project), '--format', 'json')
+    as_new = run(*new_argv(project), '--format', 'json')
+    assert as_old.returncode == as_new.returncode == 0, as_old.stderr + as_new.stderr
+    assert as_old.stderr.count(note) == 1
+    assert 'deprecated' not in as_new.stderr, 'the new spelling prints no note'
+
+    old_doc, new_doc = json.loads(as_old.stdout), json.loads(as_new.stdout)
+    retirement = [w for w in old_doc['meta']['warnings'] if w.get('code') == 'retired_spelling']
+    assert [(w['old'], w['replacement'], w['stage']) for w in retirement] == [(old, replacement, 'note')]
+    assert _answer(old_doc) == _answer(new_doc)
+
+    text = run(*old_argv(project))
+    assert text.returncode == 0 and text.stderr.count(note) == 1
+
+
+def test_the_hotspots_noun_prints_no_retirement_note(project):
+    """Negative control on a sibling: the hotspots noun composes metrics in-process and is not
+    a retired spelling, so it says nothing about stats://."""
+    result = run('hotspots', str(project), '--format', 'json')
+    assert result.returncode == 0, result.stderr
+    assert 'deprecated' not in result.stderr
+    assert not [w for w in json.loads(result.stdout).get('meta', {}).get('warnings', [])
+                if w.get('code') == 'retired_spelling']
+
+
+def test_an_unknown_metrics_view_is_rejected(project):
+    result = run(f'metrics://{project}?view=everything', '--format', 'json')
+    assert result.returncode == 2, (result.returncode, result.stdout, result.stderr)
+    assert 'provenance' in result.stdout + result.stderr
