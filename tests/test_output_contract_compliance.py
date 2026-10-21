@@ -854,6 +854,35 @@ def test_the_own_cap_invariant_bites(harness):
     assert bitten == expected
 
 
+class _EmptyDepends:
+    """The harness, except that depends://wide finds no import edges (as on a worker whose
+    import extraction failed): the failure that BACK-1647's CI recurrences looked like."""
+
+    def __init__(self, real):
+        self._real = real
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+    def run(self, uri, **flags):
+        code, payload, err = self._real.run(uri, **flags)
+        if uri.startswith('depends://wide?') and payload:
+            payload = {**payload, 'modules': [], 'total_modules': 0,
+                       'metadata': {**payload['metadata'], 'total_import_edges': 0}}
+        return code, payload, err
+
+
+def test_the_own_cap_failure_carries_what_the_probe_returned(harness):
+    """BACK-1647: when a scheme is not bitten the assertion names the payload its probe returned,
+    so a CI recurrence is diagnosable from the log alone (four recurrences were not)."""
+    with pytest.raises(AssertionError) as raised:
+        test_the_own_cap_invariant_bites(_EmptyDepends(harness))
+    message = str(raised.value)
+    assert "depends://wide?top=1: shortened=[]" in message
+    assert "'modules': []" in message and "'total_import_edges': 0" in message and 'total_files_scanned' in message
+    assert 'ast://' not in message  # only the schemes that were not bitten are reported
+
+
 def _batch_uris(harness, scheme):
     return (harness.fixture_uri(scheme), _missing_uri(scheme), *BATCH_URIS.get(scheme, ()))
 
