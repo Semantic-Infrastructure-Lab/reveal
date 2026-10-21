@@ -8,6 +8,9 @@ The cache key uses directory mtimes and active scope. It does not detect every
 file overwrite or deeper membership change. Known incomplete collections are not
 retained. Host requests validate retained roots through the shared request-cache
 owner; direct helper reuse remains governed by the cheap key.
+
+The forward queries (?callees=, depth, --detail, ?root=) read one CalleeSource per root,
+kept only inside host requests and validated by the tree stamp alone (BACK-2109).
 """
 
 import os
@@ -23,7 +26,7 @@ from ..ast.analysis import (
     StructureList, collect_structures, environmental_failure, is_code_file, call_sources, unattributed_references,
 )
 from ...utils.pyparse import parse_python
-from ...utils.request_cache import register_validated_cache
+from ...utils.request_cache import in_host_request, register_request_cache, register_validated_cache
 from ..ast.call_graph import (
     ClassAliasSpan, build_alias_map, build_class_attribute_aliases, build_symbol_map, class_attribute_alias,
     resolve_callees as _resolve_callees,
@@ -780,24 +783,29 @@ class CalleeSource:
     (depth 1, ``FILE:NAME``), ``walk_callees`` (depth >= 2, ``?root=``, trace) and the
     ``--detail`` params/effects. Definitions keep collection order and the file spelling of
     the collection; builtins, names, depth and detail apply at query time, never here.
-    ``skipped``/``traversal_failures`` are the collection's loss evidence."""
+    ``skipped``/``traversal_failures`` are the collection's loss evidence; ``scope`` is the
+    walk scope a cached one was collected under (``CalleeScope``), None when uncached."""
 
-    __slots__ = ('definitions', 'skipped', 'traversal_failures')
+    __slots__ = ('definitions', 'skipped', 'traversal_failures', 'scope')
 
     def __init__(self, definitions: Tuple[CallSource, ...], skipped: Sequence[Tuple[str, str]] = (),
-                 traversal_failures: Sequence[Tuple[Optional[str], str]] = ()) -> None:
+                 traversal_failures: Sequence[Tuple[Optional[str], str]] = (),
+                 scope: Optional['CalleeScope'] = None) -> None:
         self.definitions = definitions
         self.skipped: Tuple[Tuple[str, str], ...] = tuple(skipped)
         self.traversal_failures: Tuple[Tuple[Optional[str], str], ...] = tuple(traversal_failures)
+        self.scope = scope
 
     @classmethod
-    def from_structures(cls, structures: Sequence[Dict[str, Any]]) -> 'CalleeSource':
+    def from_structures(cls, structures: Sequence[Dict[str, Any]],
+                        scope: Optional['CalleeScope'] = None) -> 'CalleeSource':
         intern = sys.intern
         definitions = tuple(CallSource(
             intern(file_path), intern(name), elem.get('line', 0), elem.get('signature', ''),
             tuple(intern(call) for call in elem.get('calls', [])), tuple(elem.get('references', [])),
             tuple(elem.get('reference_only_calls', []))) for file_path, name, elem in _call_definitions(structures))
-        return cls(definitions, getattr(structures, 'skipped', ()), getattr(structures, 'traversal_failures', ()))
+        return cls(definitions, getattr(structures, 'skipped', ()), getattr(structures, 'traversal_failures', ()),
+                   scope)
 
     def in_file(self, file_filter: str) -> 'CalleeSource':
         """The definitions of the files FILE:NAME selects, keeping the collection's loss evidence."""
@@ -805,11 +813,77 @@ class CalleeSource:
                             self.skipped, self.traversal_failures)
 
 
+# BACK-2109: the forward queries' collection, kept across host requests while the tree stamp
+# of its root is unchanged (register_validated_cache), so a repeated ?callees= skips
+# collect_structures, most of a warm query. Keyed by the scan root alone, as spelled; a root
+# holds at most _CALLEE_SCOPES_MAX sources, each carrying the scope it was collected under.
+# The tree stamp, not directory mtimes: an in-place edit or a file two levels down moves no
+# directory mtime the callers key stats (BACK-2093 R5/R13). CallResolver's alias and symbol
+# maps read import targets outside any stamp, so the resolver is built per query. Bound:
+# 4 roots x 2 scopes. Measured (tracemalloc): 26.9 MiB for 64,624 definitions in 4,660 java
+# files, about 6 KiB per file, against 105.4 MiB for the structures it replaces.
+_CALLEE_CACHE: 'OrderedDict[str, List[CalleeSource]]' = OrderedDict()
+_CALLEE_CACHE_MAX = 4
+_CALLEE_SCOPES_MAX = 2
+
+
+def _evict_callee_root(root: str) -> None:
+    _CALLEE_CACHE.pop(root, None)
+
+
+def _drop_request_local_callee_sources() -> None:
+    """A source collected with the gitignore switch off lives for its request only: the tree
+    stamp that validates a kept one is taken with the default switch, so it cannot see an
+    edit to an ignored file (the BACK-2118 rule)."""
+    for root, sources in tuple(_CALLEE_CACHE.items()):
+        kept = [source for source in sources if source.scope and source.scope.gitignore]
+        if kept:
+            _CALLEE_CACHE[root] = kept
+        else:
+            del _CALLEE_CACHE[root]
+
+
+register_request_cache(__name__ + '.callees_request_local', _drop_request_local_callee_sources)
+register_validated_cache(__name__ + '.callees', _CALLEE_CACHE, _evict_callee_root)
+
+
+class CalleeScope(NamedTuple):
+    """What a collection depends on beyond the files a tree stamp covers: where a relative
+    root points, the active --exclude scope (the stamp walk ignores it), the gitignore switch."""
+    directory: str
+    exclusions: Tuple[Optional[Path], Tuple[str, ...]]
+    gitignore: bool
+
+
+def _callee_scope(root: str) -> CalleeScope:
+    from ...utils.exclusions import active_exclusions
+    return CalleeScope(os.path.abspath(root), active_exclusions(), gitignore_enabled())
+
+
 def callee_source(path: str) -> CalleeSource:
-    """The forward queries' input for *path* (a file reads its directory)."""
+    """The forward queries' input for *path* (a file reads its directory).
+
+    Inside a host request it is read from and stored in ``_CALLEE_CACHE``; outside one (a CLI
+    run, a direct library call) nothing would revalidate an entry, so it is always collected.
+    A collection with environmental loss (``_environmental_loss``) is returned, never stored.
+    """
     path_obj = Path(path)
-    directory = path_obj if path_obj.is_dir() else path_obj.parent
-    return CalleeSource.from_structures(collect_structures(str(directory)))
+    root = str(path_obj if path_obj.is_dir() else path_obj.parent)
+    if not in_host_request():
+        return CalleeSource.from_structures(collect_structures(root))
+    scope = _callee_scope(root)
+    sources = _CALLEE_CACHE.get(root, [])
+    for source in sources:
+        if source.scope == scope:
+            _CALLEE_CACHE.move_to_end(root)
+            return source
+    source = CalleeSource.from_structures(collect_structures(root), scope)
+    if not _environmental_loss(source.skipped, source.traversal_failures):
+        _CALLEE_CACHE[root] = [*sources, source][-_CALLEE_SCOPES_MAX:]
+        _CALLEE_CACHE.move_to_end(root)
+        if len(_CALLEE_CACHE) > _CALLEE_CACHE_MAX:
+            _CALLEE_CACHE.popitem(last=False)
+    return source
 
 
 def _walk_index(source: CalleeSource) -> Tuple[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
