@@ -38,7 +38,8 @@ directory-to-root map is forgotten (a ``git init`` between requests), and a repo
 entry survives only while it is younger than the TTL and a stat stamp of the files that can
 change the answer is unchanged: the root and every known nested ``.gitignore``,
 ``info/exclude``, the index (tracked files are never ignored), the repository config and the
-global config files, and the excludes file. Inside a request an entry is not expired, so one
+global config files, and the excludes file (taken only inside a request: a CLI run runs one
+``git`` call per repository, as before). Inside a request an entry is not expired, so one
 request sees one answer. Not stamped, so bounded by the TTL: a new ignored file, a
 ``.gitignore`` created after the entry was built, a system-level ``/etc/gitconfig`` edit.
 Memory: one entry per repository touched (the ignored untracked paths, collapsed to
@@ -215,7 +216,8 @@ def _repo_ignores(root: str) -> Optional[_RepoIgnores]:
         # entry does not expire, so one request sees one answer.
         if hit is not None and (in_request or now - hit[0] < _CACHE_TTL_S):
             return hit[1]
-    paths = _stamp_paths(root)
+    # Only a host request ever revalidates a stamp; a one-shot run does not pay for one.
+    paths = _stamp_paths(root) if in_request else None
     stamp = _stat_stamp(paths) if paths is not None else None
     loaded = _load_repo(root)
     if loaded is not None:

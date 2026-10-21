@@ -189,3 +189,17 @@ def test_a_request_forgets_the_directory_to_root_map(repo):
     assert gitignore._ROOT_CACHE
     with host_request():
         assert not gitignore._ROOT_CACHE
+
+
+def test_one_shot_run_runs_only_the_listing(repo, monkeypatch):
+    """The stamp inputs cost three more git calls: a CLI run, which never revalidates, skips them."""
+    _write(repo, '.gitignore', '*.tmp\n')
+    calls: list = []
+    real = gitignore._run_git
+    monkeypatch.setattr(gitignore, '_run_git', lambda root, *args: calls.append(args[0]) or real(root, *args))
+    GitIgnoreFilter(repo).ignored(repo / 'a.tmp')
+    assert calls == ['ls-files']
+    gitignore.clear_cache()
+    calls.clear()
+    _ask(repo, 'a.tmp')
+    assert calls.count('ls-files') == 2 and 'rev-parse' in calls and 'config' in calls
