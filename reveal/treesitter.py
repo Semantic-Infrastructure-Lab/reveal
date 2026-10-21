@@ -2012,6 +2012,20 @@ class TreeSitterAnalyzer(FileAnalyzer):
         end = min(_zero_arg(c, 'start_byte') for c in ends)
         return self._get_text_span(_zero_arg(node, 'start_byte'), end)
 
+    @staticmethod
+    def _signature_paren(head: str, name: Optional[str]) -> int:
+        """Index of the `(` that opens the parameter list in a declaration's head text.
+
+        The first `(` is not always it: a GNU attribute before the name carries its own
+        (`static __attribute__((noinline)) void f(int a)`), so look for the function's own
+        name followed by `(` first (BACK-2150), then fall back to the first one.
+        """
+        if name:
+            found = re.search(r'(?<![A-Za-z0-9_])' + re.escape(name.rsplit('.', 1)[-1]) + r'\s*\(', head)
+            if found:
+                return found.end() - 1
+        return head.index('(')
+
     def _get_signature(self, node) -> str:
         """Get function signature (parameters and return type only).
 
@@ -2063,7 +2077,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # Extract just the signature part (name + params + return)
         # Remove the name to leave just params + return type
         if '(' in first_line:
-            name_end = first_line.index('(')
+            name_end = self._signature_paren(first_line, self._get_node_name(node))
             signature = first_line[name_end:].rstrip(':{').strip()
             return signature
 
