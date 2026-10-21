@@ -56,14 +56,14 @@ def _scan_cap(cap: int):
         DependsAdapter._SCAN_FILE_CAP = before
 
 
-def _depends_request(target: Path, scan: Path) -> dict[str, Any]:
-    """One ``depends://`` request through ``reveal.main.main`` with the argv a user would type.
+def _cli_json(uri: str, label: str) -> dict[str, Any]:
+    """One request through ``reveal.main.main`` with the argv a user would type, read back as JSON.
 
     Flag routing, the project-root choice, the rendered path spelling and the disclosures are the
-    CLI's own; the adapter's private graph is never read. A failed, capped or cut answer raises
-    instead of becoming a smaller truth (BACK-2062).
+    CLI's own; no adapter internals are read. A failed answer raises instead of becoming a smaller
+    truth (BACK-2062).
     """
-    uri = f'depends://{target.as_posix()}?root={urllib.parse.quote(scan.as_posix(), safe="/:")}'
+    scheme = uri.split('://', 1)[0]
     out, err = io.StringIO(), io.StringIO()
     code = 0
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
@@ -74,9 +74,16 @@ def _depends_request(target: Path, scan: Path) -> dict[str, Any]:
     try:
         result = json.loads(out.getvalue())
     except json.JSONDecodeError as exc:
-        raise RuntimeError(f'depends:// printed no JSON for {target.name} (exit {code}): {err.getvalue()[:200]}') from exc
+        raise RuntimeError(f'{scheme}:// printed no JSON for {label} (exit {code}): {err.getvalue()[:200]}') from exc
     if code or result.get('error'):
-        raise RuntimeError(f'depends:// failed for {target.name} (exit {code}): {result.get("error") or err.getvalue()[:200]}')
+        raise RuntimeError(f'{scheme}:// failed for {label} (exit {code}): {result.get("error") or err.getvalue()[:200]}')
+    return result
+
+
+def _depends_request(target: Path, scan: Path) -> dict[str, Any]:
+    """One ``depends://`` request; a capped scan raises like any other failed answer."""
+    result = _cli_json(f'depends://{target.as_posix()}?root={urllib.parse.quote(scan.as_posix(), safe="/:")}',
+                       target.name)
     if result.get('metadata', {}).get('scan_capped'):
         raise RuntimeError('Reveal scan was capped; measurement unavailable')
     return result
