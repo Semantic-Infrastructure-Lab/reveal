@@ -113,16 +113,21 @@ def _repo_root(directory: str) -> Optional[str]:
     return root
 
 
-def _load_repo(root: str) -> Optional[_RepoIgnores]:
-    """Ask git for *root*'s ignored untracked paths; None when git can't say."""
+def _run_git(root: str, *args: str) -> Optional['subprocess.CompletedProcess[bytes]']:
+    """Run ``git *args`` in *root*; None when git cannot be run at all."""
     try:
-        proc = subprocess.run(
-            ['git', 'ls-files', '-z', '--others', '--ignored',
-             '--exclude-standard', '--directory'],
-            cwd=root, capture_output=True, timeout=_GIT_TIMEOUT_S, check=False,
-        )
+        return subprocess.run(['git', *args], cwd=root, capture_output=True,
+                              timeout=_GIT_TIMEOUT_S, check=False)
     except (OSError, subprocess.SubprocessError) as exc:
         logger.debug('gitignore: git unavailable for %s (%s); using patterns', root, exc)
+        return None
+
+
+def _load_repo(root: str) -> Optional[_RepoIgnores]:
+    """Ask git for *root*'s ignored untracked paths; None when git can't say."""
+    proc = _run_git(root, 'ls-files', '-z', '--others', '--ignored',
+                    '--exclude-standard', '--directory')
+    if proc is None:
         return None
     if proc.returncode != 0:
         logger.debug('gitignore: git ls-files failed in %s: %s', root,
