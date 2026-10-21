@@ -22,7 +22,8 @@ Definition = Dict[str, Any]
 class CallResolver:
     """Resolves call-site text against a name -> [definition] index.
 
-    Each definition is a dict with at least `file` and `line`; the index maps
+    Each definition is a dict with at least `file`, `line` and `family` (its file's language
+    family, looked up once when the definitions were collected, BACK-2131); the index maps
     every lookup key (core.definition_names.lookup_keys) to its definitions.
     """
 
@@ -30,6 +31,7 @@ class CallResolver:
         self.index = index
         self._alias_maps: Dict[str, Dict[str, str]] = {}
         self._symbol_maps: Dict[str, Dict[str, Optional[str]]] = {}
+        self._families: Dict[str, str] = {}
 
     def resolve(self, call: str, caller_file: str) -> Tuple[str, Any]:
         """(bare name, target): target is one definition, a list of candidate
@@ -40,14 +42,19 @@ class CallResolver:
             self._alias_maps[caller_file] = build_alias_map(caller_file)
         if '.' not in call:
             tail = self._alias_maps[caller_file].get(tail, tail)
-        family = _lang_family(caller_file)
+        family = self._caller_family(caller_file)
         candidates = [d for d in self.index.get(tail, [])
-                      if not family or _lang_family(d['file']) == family]
+                      if not family or d['family'] == family]
         if not candidates:
             return tail, None
         if len(candidates) == 1:
             return tail, candidates[0]
         return tail, self._disambiguate(call, tail, caller_file, candidates) or candidates
+
+    def _caller_family(self, caller_file: str) -> str:
+        if caller_file not in self._families:
+            self._families[caller_file] = _lang_family(caller_file)
+        return self._families[caller_file]
 
     def _disambiguate(self, call: str, tail: str, caller_file: str,
                       candidates: List[Definition]) -> Optional[Definition]:

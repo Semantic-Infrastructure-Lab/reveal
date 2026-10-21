@@ -40,6 +40,7 @@ def make_tree(root):
         write(root / f'mod{number}.py',
               'def run():\n    helper()\n    helper()\n    leaf()\n    run()\n\n'
               'def helper():\n    leaf()\n    leaf()\n\ndef leaf():\n    pass\n')
+    write(root / 'app.py', 'def entry():\n    run()\n')
     write(root / 'other.js', 'function run() { helper(); }\nfunction helper() { leaf(); }\nfunction leaf() {}\n')
     return root
 
@@ -81,7 +82,7 @@ def test_family_lookups_do_not_scale_with_calls_times_candidates(tmp_path, famil
     lookup per candidate per call site (236 on a warm repeat of this tree). The family is a property of the file:
     at most one lookup per file, whatever the number of call sites or candidates."""
     root = make_tree(tmp_path / 'fan')
-    files = FILES + 1
+    files = FILES + 2
     answer = query(root, 'callees=run&depth=3')
     assert answer['total_edges'] >= 20, 'the tree must make many call sites'
     assert len(family_lookups) <= 2 * files, len(family_lookups)
@@ -94,7 +95,7 @@ def test_a_repeated_query_asks_for_families_of_callers_only(tmp_path, family_loo
     query(root, 'callees=run&depth=3')
     family_lookups.clear()
     query(root, 'callees=run&depth=3')
-    assert len(family_lookups) <= FILES + 1, len(family_lookups)
+    assert len(family_lookups) <= FILES + 2, len(family_lookups)
 
 
 def test_family_filter_still_drops_other_languages(tmp_path, family_lookups):
@@ -102,6 +103,8 @@ def test_family_filter_still_drops_other_languages(tmp_path, family_lookups):
     helper in a python file, never other.js's helper, and a JS caller never reaches python."""
     root = make_tree(tmp_path / 'filter')
     walked = query(root, 'callees=run&depth=2')
+    entry = query(root, 'callees=entry&depth=2')['levels'][0]['callees']
+    assert [len(e['candidates']) for e in entry] == [FILES], 'app.py has no run(): python files only, never other.js'
     edges = [e for level in walked['levels'] for e in level['callees']]
     py_edges = [e for e in edges if e['caller_file'].endswith('.py') and e['callee'] == 'leaf'
                 and e.get('callee_file')]
@@ -113,6 +116,10 @@ def test_family_filter_still_drops_other_languages(tmp_path, family_lookups):
         assert not any(c['file'].endswith('.py') for c in e.get('candidates', []))
     assert any(e['caller_file'].endswith('.js') and e['resolved'] and e['callee_file'].endswith('.js')
                for e in edges)
+    for e in edges:
+        suffix = os.path.splitext(e['caller_file'])[1]
+        reached = [e['callee_file']] if e.get('callee_file') else [c['file'] for c in e.get('candidates', [])]
+        assert all(os.path.splitext(f)[1] == suffix for f in reached), e
 
 
 def test_answers_equal_the_cache_off_answer(tmp_path, monkeypatch):
@@ -127,3 +134,24 @@ def test_answers_equal_the_cache_off_answer(tmp_path, monkeypatch):
     cold = [dump(query(root, shape)) for shape in shapes]
     warm = [dump(query(root, shape)) for shape in shapes]
     assert cold == off and warm == off
+
+
+def test_edit_and_new_file_of_another_family_match_the_cache_off_answer(tmp_path, monkeypatch):
+    """The family travels with the stored source, so it must follow the tree stamp: an in-place
+    edit and a new file of a third language (rust, same names) are seen, equal to cache-off."""
+    root = make_tree(tmp_path / 'edit')
+    shapes = ('callees=run&depth=3', 'callees=helper&depth=2&detail')
+
+    def off():
+        with monkeypatch.context() as patch:
+            patch.setattr(index, 'in_host_request', lambda: False)
+            return [dump(query(root, shape)) for shape in shapes]
+
+    first = [dump(query(root, shape)) for shape in shapes]
+    assert first == off()
+    with open(root / 'mod0.py', 'a', encoding='utf-8') as handle:
+        handle.write('\ndef extra():\n    run()\n    leaf()\n')
+    write(root / 'deep' / 'lib.rs', 'fn run() { helper(); }\nfn helper() { leaf(); }\nfn leaf() {}\n')
+    after = [dump(query(root, shape)) for shape in shapes]
+    assert after == off() and after != first
+    assert 'lib.rs' in after[0]

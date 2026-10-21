@@ -625,7 +625,7 @@ def find_callees(
         if not name_matches(definition.name, target):
             continue
         calls = list(definition.calls)
-        builtins = conventions_for(_lang_family(definition.file)).builtins
+        builtins = conventions_for(definition.family).builtins
         if not include_builtins and builtins:
             filtered = [c for c in calls if c.split('.')[-1] not in builtins]
             builtins_hidden += len(calls) - len(filtered)
@@ -768,7 +768,8 @@ def _call_definitions(structures: Sequence[Dict[str, Any]]) -> Iterator[Tuple[st
 
 
 class CallSource(NamedTuple):
-    """One named call source as collected: the structure's file spelling, calls unfiltered."""
+    """One named call source as collected: the structure's file spelling, calls unfiltered.
+    ``family`` is the language family of ``file``, looked up once per file at collection (BACK-2131)."""
     file: str
     name: str
     line: int
@@ -776,6 +777,7 @@ class CallSource(NamedTuple):
     calls: Tuple[str, ...]
     references: Tuple[Dict[str, Any], ...]
     reference_only_calls: Tuple[str, ...]
+    family: str
 
 
 class CalleeSource:
@@ -800,10 +802,18 @@ class CalleeSource:
     def from_structures(cls, structures: Sequence[Dict[str, Any]],
                         scope: Optional['CalleeScope'] = None) -> 'CalleeSource':
         intern = sys.intern
+        families: Dict[str, str] = {}  # one lookup per file, not per definition (BACK-2131)
+
+        def family(file_path: str) -> str:
+            if file_path not in families:
+                families[file_path] = _lang_family(file_path)
+            return families[file_path]
+
         definitions = tuple(CallSource(
             intern(file_path), intern(name), elem.get('line', 0), elem.get('signature', ''),
             tuple(intern(call) for call in elem.get('calls', [])), tuple(elem.get('references', [])),
-            tuple(elem.get('reference_only_calls', []))) for file_path, name, elem in _call_definitions(structures))
+            tuple(elem.get('reference_only_calls', [])),
+            family(file_path)) for file_path, name, elem in _call_definitions(structures))
         return cls(definitions, getattr(structures, 'skipped', ()), getattr(structures, 'traversal_failures', ()),
                    scope)
 
@@ -898,6 +908,7 @@ def _walk_index(source: CalleeSource) -> Tuple[List[Dict[str, Any]], Dict[str, L
         'calls': list(d.calls),
         'references': [dict(reference) for reference in d.references],
         'reference_only_calls': list(d.reference_only_calls),
+        'family': d.family,
     } for d in source.definitions]
     definitions.sort(key=lambda d: (d['file'], d['line']))
     index: Dict[str, List[Dict[str, Any]]] = {}
@@ -912,7 +923,7 @@ def _walk_index(source: CalleeSource) -> Tuple[List[Dict[str, Any]], Dict[str, L
 def _walked_calls(record: Dict[str, Any], include_builtins: bool) -> List[str]:
     """A definition's call sites, de-duplicated by call text, builtins hidden unless asked."""
     calls = record['calls']
-    builtins = conventions_for(_lang_family(record['file'])).builtins
+    builtins = conventions_for(record['family']).builtins
     if not include_builtins and builtins:
         calls = [c for c in calls if c.split('.')[-1] not in builtins]
     return list(dict.fromkeys(calls))
